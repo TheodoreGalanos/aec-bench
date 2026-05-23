@@ -1048,7 +1048,7 @@ def test_prime_eval_hosted_pushes_and_runs_remote_environment(monkeypatch, tmp_p
             metadata_dir = cwd / ".prime"
             metadata_dir.mkdir()
             (metadata_dir / ".env-metadata.json").write_text(
-                json.dumps({"owner": "gabriel-syme", "name": "aec_prime_50_suite"}),
+                json.dumps({"owner": "example-org", "name": "aec_prime_50_suite"}),
                 encoding="utf-8",
             )
         return subprocess.CompletedProcess(command, 0)
@@ -1094,7 +1094,7 @@ def test_prime_eval_hosted_pushes_and_runs_remote_environment(monkeypatch, tmp_p
             "--plain",
             "eval",
             "run",
-            "gabriel-syme/aec_prime_50_suite",
+            "example-org/aec_prime_50_suite",
             "--model",
             "Qwen/Qwen3.5-4B",
             "--num-examples",
@@ -1113,7 +1113,7 @@ def test_prime_eval_hosted_pushes_and_runs_remote_environment(monkeypatch, tmp_p
         output_dir / "aec_prime_50_suite",
         True,
     )
-    assert '"environment": "gabriel-syme/aec_prime_50_suite"' in result.output
+    assert '"environment": "example-org/aec_prime_50_suite"' in result.output
 
 
 def test_prime_eval_passes_env_args_and_adapter_model(monkeypatch, tmp_path: Path) -> None:
@@ -1132,7 +1132,7 @@ def test_prime_eval_passes_env_args_and_adapter_model(monkeypatch, tmp_path: Pat
             "prime",
             "eval",
             "--remote-env",
-            "gabriel-syme/aec_prime_50_suite",
+            "example-org/aec_prime_50_suite",
             "--model",
             "Qwen/Qwen3.5-4B",
             "--adapter-id",
@@ -1170,7 +1170,7 @@ def test_prime_eval_passes_env_args_and_adapter_model(monkeypatch, tmp_path: Pat
                 "--plain",
                 "eval",
                 "run",
-                "gabriel-syme/aec_prime_50_suite",
+                "example-org/aec_prime_50_suite",
                 "--model",
                 "Qwen/Qwen3.5-4B:uv124zgh7ttg3in94f7jzmv2",
                 "--env-args",
@@ -1242,7 +1242,7 @@ def test_prime_eval_resolves_deployed_adapter_from_training_run(monkeypatch) -> 
             "prime",
             "eval",
             "--remote-env",
-            "gabriel-syme/aec_prime_50_suite",
+            "example-org/aec_prime_50_suite",
             "--model",
             "Qwen/Qwen3.5-4B",
             "--adapter-from-run",
@@ -1257,7 +1257,7 @@ def test_prime_eval_resolves_deployed_adapter_from_training_run(monkeypatch) -> 
     assert result.exit_code == 0, result.output
     assert calls[0][0] == ["prime", "--plain", "deployments", "list", "--output", "json"]
     assert calls[1][0][4:7] == [
-        "gabriel-syme/aec_prime_50_suite",
+        "example-org/aec_prime_50_suite",
         "--model",
         "Qwen/Qwen3.5-4B:uv124zgh7ttg3in94f7jzmv2",
     ]
@@ -1313,7 +1313,7 @@ def test_prime_train_config_writes_hosted_baby_qwen_config(tmp_path: Path) -> No
             "prime",
             "train-config",
             "--environment",
-            "gabriel-syme/aec_prime_50_suite",
+            "example-org/aec_prime_50_suite",
             "--output",
             str(config_path),
             "--model",
@@ -1348,7 +1348,7 @@ def test_prime_train_config_writes_hosted_baby_qwen_config(tmp_path: Path) -> No
     assert payload["batch_size"] == 32
     assert payload["rollouts_per_example"] == 4
     assert payload["sampling"]["max_tokens"] == 2048
-    assert payload["env"][0]["id"] == "gabriel-syme/aec_prime_50_suite"
+    assert payload["env"][0]["id"] == "example-org/aec_prime_50_suite"
     assert payload["env"][0]["args"] == {
         "split": "train",
         "difficulty": ["easy", "medium"],

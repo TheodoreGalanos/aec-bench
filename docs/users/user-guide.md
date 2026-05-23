@@ -77,16 +77,16 @@ aec-bench generate task terzaghi-bearing-capacity --instances 3 --seed 42
 
 # Run with a tool-loop agent (default)
 aec-bench run tasks/ground/shallow-foundations/terzaghi-bearing-capacity \
-  --model claude-sonnet-4-20250514
+  --model "<model-id>"
 
 # Run with the PydanticAI agent (required for multimodal tasks)
 aec-bench run tasks/electrical/pf-droop \
-  --model claude-sonnet-4-20250514 \
+  --model "<model-id>" \
   --adapter pydantic_ai
 
 # Dry run to preview the trial plan
 aec-bench run tasks/ground/shallow-foundations/terzaghi-bearing-capacity \
-  --model claude-sonnet-4-20250514 --dry-run
+  --model "<model-id>" --dry-run
 
 # Evaluate results
 aec-bench evaluate
@@ -121,7 +121,7 @@ aec-bench generate task <template-name> --instances 5
 
 # Step 4: Run
 aec-bench run tasks/<discipline>/<category>/<template-name> \
-  --model claude-sonnet-4-20250514
+  --model "<model-id>"
 
 # Step 5: Harden (via agent skill)
 /hardening-pass
@@ -188,7 +188,7 @@ aec-bench generate dockerfiles tasks/
 
 ```bash
 aec-bench run tasks/electrical/my-task \
-  --model claude-sonnet-4-20250514 \
+  --model "<model-id>" \
   --adapter pydantic_ai
 ```
 

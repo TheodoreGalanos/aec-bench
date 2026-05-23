@@ -85,13 +85,13 @@ the public docs site.
 
 ```bash
 # Run a single task path against a model
-uv run aec-bench run tasks/ground/shallow-foundations --model claude-sonnet-4-20250514
+uv run aec-bench run tasks/ground/shallow-foundations --model "<model-id>"
 
 # Run from an experiment config
 uv run aec-bench run --config experiment.yaml --tasks-root tasks/
 
 # Dry run to see the plan
-uv run aec-bench run tasks/mechanical/heat-load --model claude-sonnet-4-20250514 --dry-run
+uv run aec-bench run tasks/mechanical/heat-load --model "<model-id>" --dry-run
 ```
 
 ### Prime Lab Export
@@ -111,9 +111,9 @@ Run a hosted Prime eval against an existing Hub environment:
 
 ```bash
 uv run aec-bench prime eval \
-  --remote-env gabriel-syme/aec_prime_50_suite \
+  --remote-env <prime-namespace>/<environment-name> \
   --hosted \
-  --model "Qwen/Qwen3.5-4B" \
+  --model "<base-model-id>" \
   --split eval \
   --difficulty medium \
   --harness stateful \
@@ -132,10 +132,10 @@ Prime's `--env-args`.
 
 ```bash
 uv run aec-bench prime eval \
-  --remote-env gabriel-syme/aec_prime_50_suite \
+  --remote-env <prime-namespace>/<environment-name> \
   --hosted \
-  --model "Qwen/Qwen3.5-4B" \
-  --adapter-id uv124zgh7ttg3in94f7jzmv2 \
+  --model "<base-model-id>" \
+  --adapter-id <adapter-id> \
   --split eval \
   --difficulty medium \
   --harness stateful \
@@ -172,7 +172,7 @@ uv run aec-bench dataset list
 uv run aec-bench dataset info electrical-v1
 
 # Generate an experiment config from a dataset
-uv run aec-bench dataset config electrical-v1 --model gpt-41-mini -o experiment.yaml
+uv run aec-bench dataset config electrical-v1 --model "<model-id>" -o experiment.yaml
 
 # Verify integrity (for CI — exits 0 if clean, 1 if drifted)
 uv run aec-bench dataset validate electrical-v1@1.0.0
@@ -191,7 +191,7 @@ The typical workflow:
 uv run aec-bench dataset create --name electrical-v1 --version 1.0.0 --domain electrical
 
 # 2. Generate experiment config
-uv run aec-bench dataset config electrical-v1 --model gpt-41-mini -o experiment.yaml
+uv run aec-bench dataset config electrical-v1 --model "<model-id>" -o experiment.yaml
 
 # 3. Run it
 uv run aec-bench run --config experiment.yaml
@@ -225,7 +225,7 @@ uv run aec-bench evaluate -e experiment-001 -o json
 uv run aec-bench evaluate -e experiment-001 --report report.html
 
 # Filter by model or adapter
-uv run aec-bench evaluate -e experiment-001 --model claude-sonnet-4-20250514
+uv run aec-bench evaluate -e experiment-001 --model "<model-id>"
 ```
 
 ### Reports

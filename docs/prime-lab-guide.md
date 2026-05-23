@@ -113,9 +113,9 @@ slice.
 
 ```bash
 uv run aec-bench prime eval \
-  --remote-env gabriel-syme/aec_prime_50_suite \
+  --remote-env <prime-namespace>/<environment-name> \
   --hosted \
-  --model "Qwen/Qwen3.5-4B" \
+  --model "<base-model-id>" \
   --split eval \
   --difficulty medium \
   --harness stateful \
@@ -151,10 +151,10 @@ Prime inference model string as `<base-model>:<adapter-id>`.
 
 ```bash
 uv run aec-bench prime eval \
-  --remote-env gabriel-syme/aec_prime_50_suite \
+  --remote-env <prime-namespace>/<environment-name> \
   --hosted \
-  --model "Qwen/Qwen3.5-4B" \
-  --adapter-id uv124zgh7ttg3in94f7jzmv2 \
+  --model "<base-model-id>" \
+  --adapter-id <adapter-id> \
   --split eval \
   --difficulty medium \
   --harness stateful \
@@ -169,8 +169,8 @@ uv run aec-bench prime eval \
 This is equivalent to calling Prime with:
 
 ```bash
-prime eval run gabriel-syme/aec_prime_50_suite \
-  --model "Qwen/Qwen3.5-4B:uv124zgh7ttg3in94f7jzmv2" \
+prime eval run <prime-namespace>/<environment-name> \
+  --model "<base-model-id>:<adapter-id>" \
   --env-args '{"split":"eval","difficulty":"medium","harness":"stateful","num_examples":10,"seed":20260509}' \
   --num-examples 5 \
   --rollouts-per-example 3 \
@@ -182,9 +182,9 @@ Use repeated `--difficulty` flags for mixed slices:
 
 ```bash
 uv run aec-bench prime eval \
-  --remote-env gabriel-syme/aec_prime_50_suite \
+  --remote-env <prime-namespace>/<environment-name> \
   --hosted \
-  --model "Qwen/Qwen3.5-4B" \
+  --model "<base-model-id>" \
   --adapter-id <adapter-id> \
   --difficulty easy \
   --difficulty medium
@@ -227,10 +227,9 @@ Before launching hosted training:
    `submit_answer_calls`, and `total_tool_calls`.
 5. Choose trainable open-weight base models from `prime train models`.
 
-Closed hosted inference models such as Claude Sonnet or Haiku are useful for
-baseline evaluation and teacher rollouts, but they are not hosted fine-tuning
-targets. Training configs should use Prime trainable models such as Qwen,
-Llama, Nemotron, or GPT-OSS models exposed by the account.
+Closed hosted inference models are useful for baseline evaluation and teacher
+rollouts, but they are not hosted fine-tuning targets. Training configs should
+use trainable models exposed by the Prime account.
 
 ## Design Direction
 
