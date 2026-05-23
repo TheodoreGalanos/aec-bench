@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "ground",
+    "community": "geotechnical",
+    "category_id": "slope-stability",
+    "category_name": "Slope Stability Analysis",
+    "task_id": "infinite-slope",
+    "task_name": "Infinite Slope Analysis",
+    "description": "Calculate FoS for infinite slope failure (shallow planar slides)",
+    "complexity": "low",
+    "standards": [
+      "Standard geotechnical texts"
+    ],
+    "inputs": [
+      "Slope angle \u03b2 (degrees)",
+      "Soil friction angle \u03c6' (degrees)",
+      "Cohesion c' (kPa)",
+      "Unit weight \u03b3 (kN/m\u00b3)",
+      "Depth to failure surface z (m)",
+      "Water table depth"
+    ],
+    "outputs": [
+      "Factor of Safety FoS"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/ground/geotechnical.json",
+    "suggested_relative_path": "ground/slope-stability/infinite-slope"
+  }
+}

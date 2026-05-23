@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "industrial_structures",
+    "category_id": "crane-runway-design",
+    "category_name": "Crane Runway Beam Design",
+    "task_id": "crane-wheel-loads",
+    "task_name": "Crane Wheel Load Distribution",
+    "description": "Calculate maximum vertical wheel loads and impact factors for overhead crane",
+    "complexity": "medium",
+    "standards": [
+      "AS 1418.1",
+      "AIST TR-13",
+      "CMAA 70"
+    ],
+    "inputs": [
+      "Crane capacity (t)",
+      "Bridge span (m)",
+      "Wheel base (m)",
+      "Number of wheels",
+      "Crane type (cab/pendant)",
+      "Hoist position"
+    ],
+    "outputs": [
+      "Static wheel load (kN)",
+      "Dynamic factor",
+      "Design wheel load (kN)",
+      "Side thrust (kN)",
+      "Longitudinal force (kN)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "capacity",
+      "load"
+    ],
+    "source_file": "data/tasks/structural/industrial_structures.json",
+    "suggested_relative_path": "structural/crane-runway-design/crane-wheel-loads"
+  }
+}

@@ -1,0 +1,63 @@
+[meta]
+name = "sprinkler-discharge"
+description = "Sprinkler discharge calculation from K factor and pressure"
+long_description = "Calculates sprinkler discharge from an explicit K factor and operating pressure using Q = K sqrt(P). The template reports flow in L/min and L/s plus operating pressure in kPa."
+discipline = "mechanical"
+category = "sprinkler-hydraulics"
+standards = ["NFPA 13", "AS 2118.1"]
+tags = ["mechanical", "fire-services", "sprinkler", "discharge", "deterministic"]
+tool_mode = "with-tool"
+
+[params.k_factor_l_min_sqrt_bar]
+type = "float"
+unit = "L/min/sqrt(bar)"
+description = "Sprinkler K factor"
+min = 10.0
+max = 400.0
+
+[params.pressure_bar]
+type = "float"
+unit = "bar"
+description = "Operating pressure at the sprinkler"
+min = 0.1
+max = 20.0
+
+[outputs.discharge_l_min]
+description = "Sprinkler discharge"
+tolerance = 0.03
+
+[outputs.discharge_l_s]
+description = "Sprinkler discharge in litres per second"
+tolerance = 0.03
+
+[outputs.pressure_kpa]
+description = "Operating pressure in kilopascals"
+tolerance = 0.03
+
+[archetypes.standard_spray]
+description = "Standard spray sprinkler discharge check"
+k_factor_l_min_sqrt_bar = {min = 50.0, max = 120.0}
+pressure_bar = {min = 0.5, max = 5.0}
+site_contexts = ["commercial-sprinkler-zone", "standard-spray-head"]
+
+[archetypes.large_drop]
+description = "Large drop or high-flow sprinkler discharge check"
+k_factor_l_min_sqrt_bar = {min = 120.0, max = 300.0}
+pressure_bar = {min = 1.0, max = 10.0}
+site_contexts = ["warehouse-sprinkler-zone", "large-drop-head"]
+
+[difficulty.easy]
+description = "All parameters given for standard spray sprinklers"
+visibility = "all_given"
+archetypes = ["standard_spray"]
+
+[difficulty.medium]
+description = "All parameters given across sprinkler types"
+visibility = "all_given"
+archetypes = ["standard_spray", "large_drop"]
+
+[difficulty.hard]
+description = "All parameters given for high-flow sprinklers"
+visibility = "all_given"
+archetypes = ["large_drop"]
+

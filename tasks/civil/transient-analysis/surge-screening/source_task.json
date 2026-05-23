@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "water_infrastructure",
+    "category_id": "transient-analysis",
+    "category_name": "Transient & Surge Analysis",
+    "task_id": "surge-screening",
+    "task_name": "Water Hammer Screening Calculation",
+    "description": "Perform preliminary water hammer screening using Joukowsky equation",
+    "complexity": "medium",
+    "standards": [
+      "AWWA M51",
+      "Transient analysis guidelines"
+    ],
+    "inputs": [
+      "Pipeline length (m)",
+      "Pipe diameter (mm)",
+      "Wall thickness (mm)",
+      "Pipe material",
+      "Steady-state velocity (m/s)"
+    ],
+    "outputs": [
+      "Wave speed (m/s)",
+      "Pressure rise (m or kPa)",
+      "Critical time (s)",
+      "Surge risk classification"
+    ],
+    "keyword_hits": [
+      "calculation",
+      "pipe",
+      "pressure"
+    ],
+    "source_file": "data/tasks/civil/water_infrastructure.json",
+    "suggested_relative_path": "civil/transient-analysis/surge-screening"
+  }
+}

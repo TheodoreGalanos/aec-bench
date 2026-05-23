@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "ict_comms_security",
+    "category_id": "poe-network",
+    "category_name": "Power over Ethernet",
+    "task_id": "poe-power-budget",
+    "task_name": "PoE Power Budget Calculation",
+    "description": "Calculate total PoE power requirement and verify against switch capacity",
+    "complexity": "low",
+    "standards": [
+      "IEEE 802.3bt",
+      "IEEE 802.3at"
+    ],
+    "inputs": [
+      "Device list with PoE class",
+      "Power draw per device (W)",
+      "Switch PoE budget (W)",
+      "Headroom percentage required"
+    ],
+    "outputs": [
+      "Total power requirement (W)",
+      "Utilization percentage",
+      "Available headroom (W)",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "capacity",
+      "power"
+    ],
+    "source_file": "data/tasks/electrical/ict_comms_security.json",
+    "suggested_relative_path": "electrical/poe-network/poe-power-budget"
+  }
+}

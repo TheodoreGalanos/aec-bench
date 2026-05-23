@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_systems_studies",
+    "category_id": "load-flow",
+    "category_name": "Load Flow Analysis",
+    "task_id": "network-load-flow",
+    "task_name": "Network Load Flow Study",
+    "description": "Perform AC load flow analysis for meshed network with multiple generators",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 3002.2",
+      "IEC 60909"
+    ],
+    "inputs": [
+      "Network topology (buses, lines, transformers)",
+      "Generator data (P, V setpoint, Q limits)",
+      "Load data (P, Q or PF)",
+      "Transformer tap positions",
+      "Base MVA and kV"
+    ],
+    "outputs": [
+      "Bus voltages and angles",
+      "Branch flows (MW, MVAr)",
+      "System losses (MW, MVAr)",
+      "Limit violations (voltage, thermal)"
+    ],
+    "keyword_hits": [
+      "flow",
+      "load",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/energy_systems_studies.json",
+    "suggested_relative_path": "electrical/load-flow/network-load-flow"
+  }
+}

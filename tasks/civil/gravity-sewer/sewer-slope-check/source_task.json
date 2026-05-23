@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "water_infrastructure",
+    "category_id": "gravity-sewer",
+    "category_name": "Gravity Sewer Design",
+    "task_id": "sewer-slope-check",
+    "task_name": "Sewer Slope Adequacy Check",
+    "description": "Verify gravity sewer slope is adequate for self-cleansing velocity",
+    "complexity": "low",
+    "standards": [
+      "WSAA WSA 02",
+      "BS EN 752"
+    ],
+    "inputs": [
+      "Pipe diameter (mm)",
+      "Pipe slope (%)",
+      "Design flow (L/s)",
+      "Manning's n"
+    ],
+    "outputs": [
+      "Calculated velocity (m/s)",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "flow",
+      "pipe"
+    ],
+    "source_file": "data/tasks/civil/water_infrastructure.json",
+    "suggested_relative_path": "civil/gravity-sewer/sewer-slope-check"
+  }
+}

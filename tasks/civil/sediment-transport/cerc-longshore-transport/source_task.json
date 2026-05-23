@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "coastal_engineering",
+    "category_id": "sediment-transport",
+    "category_name": "Sediment Transport & Morphology",
+    "task_id": "cerc-longshore-transport",
+    "task_name": "CERC Longshore Transport Rate",
+    "description": "Calculate longshore sediment transport rate using CERC formula",
+    "complexity": "medium",
+    "standards": [
+      "USACE CEM",
+      "SPM"
+    ],
+    "inputs": [
+      "Breaking wave height (m)",
+      "Wave angle at breaking (degrees)",
+      "K coefficient"
+    ],
+    "outputs": [
+      "Longshore transport rate Q (m\u00b3/year)",
+      "Transport direction"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/coastal_engineering.json",
+    "suggested_relative_path": "civil/sediment-transport/cerc-longshore-transport"
+  }
+}

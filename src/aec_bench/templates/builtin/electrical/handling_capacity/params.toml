@@ -1,0 +1,85 @@
+[meta]
+name = "handling-capacity"
+description = "Five-minute lift handling capacity percentage"
+long_description = "Calculates the five-minute handling capacity of a lift group from building population, round-trip time, car capacity, number of lifts, and car loading factor. The reduced method reports passengers carried in five minutes and capacity as a percentage of population."
+discipline = "electrical"
+category = "traffic-analysis"
+standards = ["CIBSE Guide D"]
+tags = ["electrical", "lifts", "handling-capacity", "vertical-transportation", "deterministic"]
+tool_mode = "with-tool"
+
+[params.building_population]
+type = "float"
+description = "Population served by the lift group"
+min = 10
+max = 20000
+
+[params.round_trip_time_s]
+type = "float"
+unit = "s"
+description = "Lift round-trip time"
+min = 20
+max = 600
+
+[params.car_capacity_persons]
+type = "float"
+description = "Rated lift car capacity in persons"
+min = 2
+max = 40
+
+[params.lift_count]
+type = "float"
+description = "Number of lifts in the group"
+min = 1
+max = 16
+
+[params.car_loading_factor_pct]
+type = "float"
+unit = "%"
+description = "Effective car loading factor"
+min = 30
+max = 100
+
+[outputs.passengers_per_5min]
+description = "Passengers transported in five minutes"
+tolerance = 0.03
+
+[outputs.handling_capacity_pct]
+description = "Five-minute handling capacity as population percentage"
+tolerance = 0.03
+
+[archetypes.residential_group]
+description = "Residential lift group"
+building_population = {min = 100, max = 1500}
+round_trip_time_s = {min = 60, max = 220}
+car_capacity_persons = {min = 6, max = 18}
+lift_count = {min = 1, max = 6}
+car_loading_factor_pct = {min = 50, max = 80}
+site_contexts = ["apartment-core", "mixed-use-tower"]
+
+[archetypes.office_group]
+description = "Commercial office lift group"
+building_population = {min = 500, max = 10000}
+round_trip_time_s = {min = 90, max = 300}
+car_capacity_persons = {min = 12, max = 28}
+lift_count = {min = 4, max = 12}
+car_loading_factor_pct = {min = 70, max = 90}
+site_contexts = ["office-tower", "campus-office"]
+
+[difficulty.easy]
+description = "Residential group with all inputs visible"
+visibility = "all_given"
+archetypes = ["residential_group"]
+
+[difficulty.medium]
+description = "Residential or office lift group"
+visibility = "all_given"
+archetypes = ["residential_group", "office_group"]
+
+[difficulty.hard]
+description = "Loading factor hidden in traffic design context"
+visibility = "partial"
+hidden_params = ["car_loading_factor_pct"]
+replacement_text = "Use the car loading factor implied by {{ archetype.description }}."
+archetypes = ["office_group"]
+car_loading_factor_pct = [80]

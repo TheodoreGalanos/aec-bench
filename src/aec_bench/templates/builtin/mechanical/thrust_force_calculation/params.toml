@@ -1,0 +1,72 @@
+[meta]
+name = "thrust-force-calculation"
+description = "Pipe bend thrust force calculation"
+long_description = "Calculates unbalanced thrust force at a pressurised pipe bend from internal pressure, pipe internal diameter, and bend angle. The template reports pipe area, straight pressure force, and bend thrust force."
+discipline = "mechanical"
+category = "thrust-restraint"
+standards = ["AWWA M11", "AS 2566.1"]
+tags = ["mechanical", "pipe", "thrust", "restraint", "deterministic"]
+tool_mode = "with-tool"
+
+[params.internal_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "Internal pipe pressure"
+min = 0.0
+max = 5000.0
+
+[params.pipe_internal_diameter_mm]
+type = "float"
+unit = "mm"
+description = "Pipe internal diameter"
+min = 10.0
+max = 3000.0
+
+[params.bend_angle_deg]
+type = "float"
+unit = "degrees"
+description = "Pipe bend angle"
+min = 0.0
+max = 180.0
+
+[outputs.pipe_area_m2]
+description = "Pipe internal area"
+tolerance = 0.03
+
+[outputs.pressure_force_kn]
+description = "Straight pressure force"
+tolerance = 0.03
+
+[outputs.bend_thrust_force_kn]
+description = "Unbalanced bend thrust force"
+tolerance = 0.03
+
+[archetypes.water_main_bend]
+description = "Water main bend thrust check"
+internal_pressure_kpa = {min = 300.0, max = 2000.0}
+pipe_internal_diameter_mm = {min = 100.0, max = 1500.0}
+bend_angle_deg = {min = 11.25, max = 90.0}
+site_contexts = ["water-main", "thrust-block"]
+
+[archetypes.rising_main_bend]
+description = "Wastewater rising main bend thrust check"
+internal_pressure_kpa = {min = 100.0, max = 1500.0}
+pipe_internal_diameter_mm = {min = 80.0, max = 1200.0}
+bend_angle_deg = {min = 11.25, max = 90.0}
+site_contexts = ["wastewater-rising-main", "restrained-joint"]
+
+[difficulty.easy]
+description = "All parameters given for a water main bend"
+visibility = "all_given"
+archetypes = ["water_main_bend"]
+
+[difficulty.medium]
+description = "All parameters given across restrained pipe bends"
+visibility = "all_given"
+archetypes = ["water_main_bend", "rising_main_bend"]
+
+[difficulty.hard]
+description = "All parameters given for larger rising mains"
+visibility = "all_given"
+archetypes = ["rising_main_bend"]
+

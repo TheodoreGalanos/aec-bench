@@ -1,0 +1,107 @@
+[meta]
+name = "por-aor-compliance"
+description = "Pump preferred and allowable operating range compliance"
+long_description = "Checks pump operating flow against explicit preferred and allowable operating range ratios relative to best efficiency point flow. The template reports flow ratio, POR margins, and numeric POR/AOR flags."
+discipline = "mechanical"
+category = "system-curves"
+standards = ["HI 9.6.3"]
+tags = ["mechanical", "pump", "operating-range", "por", "aor", "deterministic"]
+tool_mode = "with-tool"
+
+[params.operating_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "Pump operating flow"
+min = 0.0
+max = 100000.0
+
+[params.best_efficiency_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "Best efficiency point flow"
+min = 0.1
+max = 100000.0
+
+[params.por_min_ratio]
+type = "float"
+unit = "-"
+description = "Minimum preferred operating range ratio"
+min = 0.0
+max = 2.0
+
+[params.por_max_ratio]
+type = "float"
+unit = "-"
+description = "Maximum preferred operating range ratio"
+min = 0.0
+max = 3.0
+
+[params.aor_min_ratio]
+type = "float"
+unit = "-"
+description = "Minimum allowable operating range ratio"
+min = 0.0
+max = 2.0
+
+[params.aor_max_ratio]
+type = "float"
+unit = "-"
+description = "Maximum allowable operating range ratio"
+min = 0.0
+max = 3.0
+
+[outputs.flow_ratio]
+description = "Operating flow divided by best efficiency point flow"
+tolerance = 0.03
+
+[outputs.por_margin_low]
+description = "Margin above lower preferred operating range limit"
+tolerance = 0.03
+
+[outputs.por_margin_high]
+description = "Margin below upper preferred operating range limit"
+tolerance = 0.03
+
+[outputs.within_por]
+description = "Numeric flag where 1 means operating flow is inside POR"
+tolerance = 0.01
+
+[outputs.within_aor]
+description = "Numeric flag where 1 means operating flow is inside AOR"
+tolerance = 0.01
+
+[archetypes.water_pump]
+description = "Water pump operating range check"
+operating_flow_l_s = {min = 10.0, max = 1000.0}
+best_efficiency_flow_l_s = {min = 10.0, max = 1000.0}
+por_min_ratio = {min = 0.7, max = 0.8}
+por_max_ratio = {min = 1.1, max = 1.2}
+aor_min_ratio = {min = 0.4, max = 0.6}
+aor_max_ratio = {min = 1.2, max = 1.4}
+site_contexts = ["water-pump-station", "transfer-pump"]
+
+[archetypes.process_pump]
+description = "Process pump operating range check"
+operating_flow_l_s = {min = 1.0, max = 500.0}
+best_efficiency_flow_l_s = {min = 1.0, max = 500.0}
+por_min_ratio = {min = 0.6, max = 0.8}
+por_max_ratio = {min = 1.1, max = 1.3}
+aor_min_ratio = {min = 0.3, max = 0.6}
+aor_max_ratio = {min = 1.3, max = 1.6}
+site_contexts = ["process-plant", "chemical-transfer"]
+
+[difficulty.easy]
+description = "All parameters given for a water pump"
+visibility = "all_given"
+archetypes = ["water_pump"]
+
+[difficulty.medium]
+description = "All parameters given across pump services"
+visibility = "all_given"
+archetypes = ["water_pump", "process_pump"]
+
+[difficulty.hard]
+description = "All parameters given for process pump range checks"
+visibility = "all_given"
+archetypes = ["process_pump"]
+

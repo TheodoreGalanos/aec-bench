@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "rolling_stock_rail",
+    "category_id": "fatigue-analysis",
+    "category_name": "Fatigue Life Assessment",
+    "task_id": "miner-fatigue",
+    "task_name": "Cumulative Fatigue Damage (Miner's Rule)",
+    "description": "Calculate cumulative fatigue damage using Miner's linear damage rule",
+    "complexity": "medium",
+    "standards": [
+      "EN 12663-1",
+      "BS 7608"
+    ],
+    "inputs": [
+      "Load spectrum",
+      "S-N curve data",
+      "Stress concentration factors",
+      "Weld classifications"
+    ],
+    "outputs": [
+      "Damage sum (D)",
+      "Fatigue life (years)",
+      "Pass/fail assessment (D < 1.0)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "load",
+      "stress"
+    ],
+    "source_file": "data/tasks/mechanical/rolling_stock_rail.json",
+    "suggested_relative_path": "mechanical/fatigue-analysis/miner-fatigue"
+  }
+}

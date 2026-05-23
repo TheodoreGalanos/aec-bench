@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "underground-cables",
+    "category_name": "Underground Cable Engineering",
+    "task_id": "cable-pulling-tension",
+    "task_name": "Cable Pulling Tension Calculation",
+    "description": "Calculate maximum pulling tension and sidewall pressure for cable installation in duct",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 1185",
+      "IEC 60840"
+    ],
+    "inputs": [
+      "Cable weight (kg/m)",
+      "Duct route length (m)",
+      "Duct bends (angle, radius)",
+      "Coefficient of friction",
+      "Cable maximum tension limit (N)",
+      "Maximum sidewall pressure (N/m)"
+    ],
+    "outputs": [
+      "Maximum pulling tension (N)",
+      "Sidewall pressure at each bend (N/m)",
+      "Tension profile along route",
+      "Pull feasibility assessment"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "calculation",
+      "pressure",
+      "radius"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/underground-cables/cable-pulling-tension"
+  }
+}

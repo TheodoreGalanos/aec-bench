@@ -1,0 +1,30 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "ground",
+    "community": "geotechnical",
+    "category_id": "design-review-qa",
+    "category_name": "Design Review & QA Checks",
+    "task_id": "parameter-consistency",
+    "task_name": "Parameter Consistency Check",
+    "description": "Verify soil parameters are consistent across calculations",
+    "complexity": "low",
+    "standards": [
+      "QA best practice"
+    ],
+    "inputs": [
+      "GDR sections",
+      "Calculation sheets"
+    ],
+    "outputs": [
+      "Parameter usage summary",
+      "Inconsistency flags"
+    ],
+    "keyword_hits": [
+      "calculation"
+    ],
+    "source_file": "data/tasks/ground/geotechnical.json",
+    "suggested_relative_path": "ground/design-review-qa/parameter-consistency"
+  }
+}

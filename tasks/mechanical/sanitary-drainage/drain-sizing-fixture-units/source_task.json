@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "hydraulics_buildings",
+    "category_id": "sanitary-drainage",
+    "category_name": "Sanitary Drainage Design",
+    "task_id": "drain-sizing-fixture-units",
+    "task_name": "Drain Pipe Sizing from Fixture Units",
+    "description": "Size sanitary drain pipes using AS/NZS 3500.2 fixture unit tables",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3500.2"
+    ],
+    "inputs": [
+      "Fixture types and quantities",
+      "Drain unit values per fixture",
+      "Pipe grade available"
+    ],
+    "outputs": [
+      "Pipe diameter (mm)",
+      "Maximum drain units for diameter",
+      "Required grade (%)"
+    ],
+    "keyword_hits": [
+      "pipe",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/mechanical/hydraulics_buildings.json",
+    "suggested_relative_path": "mechanical/sanitary-drainage/drain-sizing-fixture-units"
+  }
+}

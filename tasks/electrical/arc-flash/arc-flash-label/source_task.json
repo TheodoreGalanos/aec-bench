@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "buildings_electrical",
+    "category_id": "arc-flash",
+    "category_name": "Arc Flash Assessment",
+    "task_id": "arc-flash-label",
+    "task_name": "Arc Flash Warning Label Generation",
+    "description": "Generate compliant arc flash warning label from analysis results",
+    "complexity": "low",
+    "standards": [
+      "IEEE 1584",
+      "NFPA 70E",
+      "AS 4024.1603"
+    ],
+    "inputs": [
+      "Incident energy (cal/cm2)",
+      "Arc flash boundary (mm)",
+      "PPE requirements",
+      "Equipment identification",
+      "Analysis date"
+    ],
+    "outputs": [
+      "Compliant warning label content",
+      "Working distance",
+      "PPE requirements",
+      "Limited/restricted approach boundaries"
+    ],
+    "keyword_hits": [
+      "arc flash",
+      "energy",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/buildings_electrical.json",
+    "suggested_relative_path": "electrical/arc-flash/arc-flash-label"
+  }
+}

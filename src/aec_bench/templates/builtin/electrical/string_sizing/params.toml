@@ -1,0 +1,155 @@
+[meta]
+name = "string-sizing"
+description = "Solar PV string sizing with temperature-corrected voltage limits per AS/NZS 5033"
+long_description = "Calculates the maximum and minimum number of PV modules per string by applying temperature coefficients to open-circuit and maximum-power-point voltages at site extremes, per AS/NZS 5033 and IEC 62548. Cold-corrected Voc must not exceed the inverter maximum DC voltage, and hot-corrected Vmp must remain above the inverter minimum MPPT tracking voltage."
+discipline = "electrical"
+category = "solar-pv-design"
+standards = ["AS/NZS 5033", "IEC 62548"]
+tags = ["electrical", "solar", "pv", "string-sizing", "temperature-correction", "deterministic"]
+tool_mode = "both"
+
+[params.voc_stc_v]
+type = "float"
+unit = "V"
+description = "PV module open-circuit voltage at STC (25 degC, 1000 W/m2)"
+min = 20.0
+max = 60.0
+
+[params.vmp_stc_v]
+type = "float"
+unit = "V"
+description = "PV module maximum power point voltage at STC"
+min = 15.0
+max = 55.0
+
+[params.temp_coeff_voc_pct_per_c]
+type = "float"
+unit = "%/degC"
+description = "Temperature coefficient of Voc (negative value)"
+min = -0.45
+max = -0.20
+
+[params.temp_coeff_vmp_pct_per_c]
+type = "float"
+unit = "%/degC"
+description = "Temperature coefficient of Vmp (negative value)"
+min = -0.50
+max = -0.25
+
+[params.site_min_temp_c]
+type = "float"
+unit = "degC"
+description = "Site minimum ambient temperature"
+min = -10.0
+max = 10.0
+derivable_from = "archetype"
+
+[params.site_max_temp_c]
+type = "float"
+unit = "degC"
+description = "Site maximum ambient temperature"
+min = 30.0
+max = 50.0
+derivable_from = "archetype"
+
+[params.inverter_max_dc_voltage_v]
+type = "float"
+unit = "V"
+description = "Inverter maximum DC input voltage"
+min = 450.0
+max = 1500.0
+
+[params.inverter_min_mppt_voltage_v]
+type = "float"
+unit = "V"
+description = "Inverter minimum MPPT tracking voltage"
+min = 100.0
+max = 500.0
+
+[params.inverter_nominal_mppt_voltage_v]
+type = "float"
+unit = "V"
+description = "Inverter nominal (midpoint) MPPT voltage"
+min = 200.0
+max = 900.0
+
+# --- Outputs ---
+
+[outputs.voc_corrected_cold_v]
+description = "Temperature-corrected Voc at site minimum temperature (V)"
+tolerance = 0.03
+
+[outputs.vmp_corrected_hot_v]
+description = "Temperature-corrected Vmp at site maximum temperature (V)"
+tolerance = 0.03
+
+[outputs.max_modules_per_string]
+description = "Maximum number of modules per string (integer, rounded down)"
+tolerance = 0.01
+
+[outputs.min_modules_per_string]
+description = "Minimum number of modules per string (integer, rounded up)"
+tolerance = 0.01
+
+# --- Archetypes ---
+# PV module families with representative voltage characteristics.
+
+[archetypes.residential_mono_perc]
+description = "Residential rooftop monocrystalline PERC module (~400 W)"
+voc_stc_v = {min = 37.0, max = 42.0}
+vmp_stc_v = {min = 31.0, max = 35.0}
+temp_coeff_voc_pct_per_c = {min = -0.30, max = -0.25}
+temp_coeff_vmp_pct_per_c = {min = -0.38, max = -0.30}
+site_contexts = ["sydney-suburban-rooftop", "melbourne-suburban-rooftop", "brisbane-suburban-rooftop"]
+
+[archetypes.commercial_bifacial]
+description = "Commercial bifacial monocrystalline module (~550 W) in Sydney/Melbourne temperate climate"
+voc_stc_v = {min = 45.0, max = 52.0}
+vmp_stc_v = {min = 38.0, max = 44.0}
+temp_coeff_voc_pct_per_c = {min = -0.30, max = -0.25}
+temp_coeff_vmp_pct_per_c = {min = -0.35, max = -0.28}
+site_min_temp_c = {min = 0.0, max = 5.0}
+site_max_temp_c = {min = 35.0, max = 42.0}
+site_contexts = ["sydney-commercial-rooftop", "perth-commercial-rooftop"]
+
+[archetypes.utility_scale_hjt]
+description = "Utility-scale heterojunction (HJT) module (~600 W) in arid inland Australia (Alice Springs/Broken Hill climate)"
+voc_stc_v = {min = 48.0, max = 55.0}
+vmp_stc_v = {min = 40.0, max = 47.0}
+temp_coeff_voc_pct_per_c = {min = -0.28, max = -0.22}
+temp_coeff_vmp_pct_per_c = {min = -0.32, max = -0.26}
+site_min_temp_c = {min = -5.0, max = 5.0}
+site_max_temp_c = {min = 40.0, max = 48.0}
+site_contexts = ["western-nsw-ground-mount", "queensland-ground-mount", "south-australia-ground-mount"]
+
+[archetypes.thin_film_cdte]
+description = "Thin-film cadmium telluride (CdTe) module (~450 W) in tropical northern Australia (Darwin/Cairns climate)"
+voc_stc_v = {min = 24.0, max = 30.0}
+vmp_stc_v = {min = 16.0, max = 22.0}
+temp_coeff_voc_pct_per_c = {min = -0.35, max = -0.28}
+temp_coeff_vmp_pct_per_c = {min = -0.40, max = -0.32}
+site_min_temp_c = {min = 15.0, max = 20.0}
+site_max_temp_c = {min = 35.0, max = 40.0}
+site_contexts = ["darwin-commercial-rooftop", "townsville-ground-mount"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "All parameters given, residential module with small inverter"
+visibility = "all_given"
+archetypes = ["residential_mono_perc"]
+inverter_max_dc_voltage_v = {min = 450, max = 600}
+inverter_min_mppt_voltage_v = {min = 100, max = 200}
+inverter_nominal_mppt_voltage_v = {min = 200, max = 380}
+
+[difficulty.medium]
+description = "All parameters given, any module type and larger inverters"
+visibility = "all_given"
+archetypes = ["residential_mono_perc", "commercial_bifacial", "utility_scale_hjt", "thin_film_cdte"]
+
+[difficulty.hard]
+description = "Site temperatures hidden, agent infers from location context"
+visibility = "partial"
+hidden_params = ["site_min_temp_c", "site_max_temp_c"]
+replacement_text = "The installation is a {{ archetype.description }} system at {{ archetype.site_context }}"
+archetypes = ["commercial_bifacial", "utility_scale_hjt", "thin_film_cdte"]

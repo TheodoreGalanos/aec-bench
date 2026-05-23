@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_coastal",
+    "category_id": "tidal-datums",
+    "category_name": "Tidal Datum Transformation",
+    "task_id": "tidal-datum-calculation",
+    "task_name": "Tidal Datum Calculation from Observations",
+    "description": "Calculate tidal datums (MSL, MHHW, LAT) from tide gauge observations",
+    "complexity": "medium",
+    "standards": [
+      "NOAA Computational Techniques for Tidal Datums"
+    ],
+    "inputs": [
+      "Tide time series (19-year epoch or shorter)",
+      "Benchmark elevations",
+      "Reference gauge data"
+    ],
+    "outputs": [
+      "Mean Sea Level (m)",
+      "Mean Higher High Water (m)",
+      "Lowest Astronomical Tide (m)",
+      "Tide range statistics"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/civil/civil_coastal.json",
+    "suggested_relative_path": "civil/tidal-datums/tidal-datum-calculation"
+  }
+}

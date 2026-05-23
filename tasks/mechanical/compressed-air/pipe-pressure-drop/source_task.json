@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_mechanical",
+    "category_id": "compressed-air",
+    "category_name": "Compressed Air Systems",
+    "task_id": "pipe-pressure-drop",
+    "task_name": "Compressed Air Pipe Pressure Drop",
+    "description": "Calculate pressure drop in compressed air piping",
+    "complexity": "low",
+    "standards": [
+      "Compressed Air Handbook",
+      "Darcy-Weisbach"
+    ],
+    "inputs": [
+      "Pipe length (m)",
+      "Pipe diameter (mm)",
+      "Flow rate (L/s)",
+      "Fittings (type and quantity)",
+      "Operating pressure (bar)"
+    ],
+    "outputs": [
+      "Total pressure drop (bar)",
+      "Friction loss",
+      "Fitting losses"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "drop",
+      "flow",
+      "pipe",
+      "pressure",
+      "quantity",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_mechanical.json",
+    "suggested_relative_path": "mechanical/compressed-air/pipe-pressure-drop"
+  }
+}

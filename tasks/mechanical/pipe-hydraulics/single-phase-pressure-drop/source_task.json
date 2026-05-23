@@ -1,0 +1,43 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "pipe-hydraulics",
+    "category_name": "Pipe Hydraulics and Pressure Drop",
+    "task_id": "single-phase-pressure-drop",
+    "task_name": "Single-Phase Pipe Pressure Drop",
+    "description": "Calculate pressure drop in a pipe section for single-phase liquid or gas flow using Darcy-Weisbach",
+    "complexity": "low",
+    "standards": [
+      "Crane Technical Paper 410"
+    ],
+    "inputs": [
+      "Fluid flow rate (kg/h)",
+      "Fluid density (kg/m3)",
+      "Fluid viscosity (cP)",
+      "Pipe ID (mm)",
+      "Pipe length (m)",
+      "Pipe roughness (mm)",
+      "Fittings and valves (K factors)"
+    ],
+    "outputs": [
+      "Reynolds number",
+      "Friction factor (Darcy)",
+      "Pressure drop - friction (kPa)",
+      "Pressure drop - fittings (kPa)",
+      "Total pressure drop (kPa)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "drop",
+      "flow",
+      "pipe",
+      "pressure",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/pipe-hydraulics/single-phase-pressure-drop"
+  }
+}

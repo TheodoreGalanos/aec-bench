@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "instrumentation_controls",
+    "category_id": "sil-verification",
+    "category_name": "SIL Verification",
+    "task_id": "pfdavg-1oo1",
+    "task_name": "PFDavg Calculation - 1oo1 Architecture",
+    "description": "Calculate average probability of failure on demand for 1oo1 architecture",
+    "complexity": "medium",
+    "standards": [
+      "IEC 61508",
+      "IEC 61511"
+    ],
+    "inputs": [
+      "Dangerous undetected failure rate lambdaDU (per hour)",
+      "Proof test interval TI (years)",
+      "Mean time to repair MTTR (hours)",
+      "Mission time LT (years)"
+    ],
+    "outputs": [
+      "PFDavg",
+      "Risk Reduction Factor (RRF)",
+      "Achieved SIL",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "demand",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/instrumentation_controls.json",
+    "suggested_relative_path": "electrical/sil-verification/pfdavg-1oo1"
+  }
+}

@@ -1,0 +1,100 @@
+[meta]
+name = "pressure-loss-calculation"
+description = "Water pipe pressure loss from Hazen-Williams and fittings"
+long_description = "Calculates water pipe pressure loss using the Hazen-Williams equation for straight-pipe friction and a total K value for fittings and valves. The template reports pipe velocity, friction loss, fitting loss, and total pressure loss in kPa."
+discipline = "mechanical"
+category = "pipe-sizing-water"
+standards = ["AS/NZS 3500.1", "Hazen-Williams"]
+tags = ["mechanical", "hydraulics", "pipe", "pressure-loss", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_rate_l_s]
+type = "float"
+unit = "L/s"
+description = "Water flow rate"
+min = 0.01
+max = 1000.0
+
+[params.pipe_internal_diameter_mm]
+type = "float"
+unit = "mm"
+description = "Internal pipe diameter"
+min = 10.0
+max = 1000.0
+
+[params.pipe_length_m]
+type = "float"
+unit = "m"
+description = "Pipe length"
+min = 0.1
+max = 5000.0
+
+[params.hazen_williams_c]
+type = "float"
+description = "Hazen-Williams roughness coefficient"
+min = 40.0
+max = 160.0
+
+[params.total_fitting_k]
+type = "float"
+description = "Total fitting and valve K value"
+min = 0.0
+max = 100.0
+
+[params.fluid_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "Fluid density"
+min = 900.0
+max = 1200.0
+
+[outputs.velocity_m_s]
+description = "Pipe flow velocity"
+tolerance = 0.03
+
+[outputs.friction_loss_kpa]
+description = "Straight-pipe friction pressure loss"
+tolerance = 0.03
+
+[outputs.fitting_loss_kpa]
+description = "Fitting and valve pressure loss"
+tolerance = 0.03
+
+[outputs.total_pressure_loss_kpa]
+description = "Total pipe pressure loss"
+tolerance = 0.03
+
+[archetypes.building_water_service]
+description = "Building water service pressure-loss check"
+flow_rate_l_s = {min = 0.5, max = 50.0}
+pipe_internal_diameter_mm = {min = 25.0, max = 150.0}
+pipe_length_m = {min = 5.0, max = 200.0}
+hazen_williams_c = {min = 100.0, max = 150.0}
+total_fitting_k = {min = 2.0, max = 30.0}
+fluid_density_kg_m3 = {min = 990.0, max = 1030.0}
+site_contexts = ["building-water-service", "domestic-water-riser"]
+
+[archetypes.site_water_main]
+description = "Site water main pressure-loss check"
+flow_rate_l_s = {min = 10.0, max = 300.0}
+pipe_internal_diameter_mm = {min = 100.0, max = 600.0}
+pipe_length_m = {min = 50.0, max = 1500.0}
+hazen_williams_c = {min = 100.0, max = 150.0}
+total_fitting_k = {min = 1.0, max = 20.0}
+fluid_density_kg_m3 = {min = 990.0, max = 1030.0}
+site_contexts = ["site-water-main", "campus-water-ring-main"]
+
+[difficulty.easy]
+description = "All parameters given for a building water service"
+visibility = "all_given"
+archetypes = ["building_water_service"]
+
+[difficulty.medium]
+description = "All parameters given across water pipe contexts"
+visibility = "all_given"
+archetypes = ["building_water_service", "site_water_main"]
+
+[difficulty.hard]
+description = "All parameters given for a site water main"
+visibility = "all_given"
+archetypes = ["site_water_main"]

@@ -1,0 +1,142 @@
+[meta]
+name = "fos-rapid-drawdown"
+description = "Calculate factor of safety for upstream slope during rapid reservoir drawdown"
+long_description = "Computes the factor of safety before and after rapid reservoir drawdown on an embankment dam upstream slope using the simplified infinite slope method per USACE EM 1110-2-1902. Assumes undrained pore-pressure response in low-permeability core materials, comparing the submerged steady-state condition to the post-drawdown condition where full saturated weight drives shear but pore pressures remain elevated."
+discipline = "civil"
+category = "slope-stability"
+standards = ["USACE EM 1110-2-1902"]
+tags = ["civil", "dams", "slope-stability", "drawdown", "geotechnical", "embankment"]
+tool_mode = "with-tool"
+
+[params.slope_angle_deg]
+type = "float"
+unit = "degrees"
+description = "Upstream slope angle measured from horizontal"
+min = 5.0
+max = 45.0
+
+[params.slip_depth_m]
+type = "float"
+unit = "m"
+description = "Depth of potential slip surface below the slope face"
+min = 0.5
+max = 10.0
+
+[params.cohesion_kpa]
+type = "float"
+unit = "kPa"
+description = "Effective cohesion c' of the embankment material"
+min = 0.0
+max = 50.0
+derivable_from = "archetype"
+
+[params.friction_angle_deg]
+type = "float"
+unit = "degrees"
+description = "Effective friction angle phi' of the embankment material"
+min = 10.0
+max = 40.0
+derivable_from = "archetype"
+
+[params.saturated_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m3"
+description = "Saturated unit weight of the embankment material gamma_sat"
+min = 16.0
+max = 22.0
+derivable_from = "archetype"
+
+[params.initial_reservoir_level_m]
+type = "float"
+unit = "m"
+description = "Initial (pre-drawdown) reservoir water level above the dam base"
+min = 3.0
+max = 80.0
+
+[params.final_reservoir_level_m]
+type = "float"
+unit = "m"
+description = "Final (post-drawdown) reservoir water level above the dam base"
+min = 0.0
+max = 40.0
+
+[outputs.fos_before_drawdown]
+description = "Factor of safety of the upstream slope before drawdown (submerged steady state)"
+tolerance = 0.03
+
+[outputs.fos_after_drawdown]
+description = "Factor of safety of the upstream slope after rapid drawdown (undrained pore pressures)"
+tolerance = 0.03
+
+[outputs.drawdown_ratio]
+description = "Drawdown ratio R = (initial_level - final_level) / initial_level (dimensionless)"
+tolerance = 0.03
+
+[outputs.pore_pressure_kpa]
+description = "Undrained pore pressure at the slip surface after drawdown u (kPa)"
+tolerance = 0.03
+
+# --- Archetypes ---
+
+[archetypes.homogeneous_earth_dam]
+description = "Homogeneous compacted clay embankment dam with moderate upstream slope"
+slope_angle_deg = {min = 14.0, max = 22.0}
+slip_depth_m = {min = 1.5, max = 4.0}
+cohesion_kpa = {min = 8.0, max = 20.0}
+friction_angle_deg = {min = 20.0, max = 28.0}
+saturated_unit_weight_kn_m3 = {min = 18.0, max = 20.0}
+initial_reservoir_level_m = {min = 8.0, max = 25.0}
+final_reservoir_level_m = {min = 1.0, max = 8.0}
+site_contexts = ["queensland-irrigation-dam", "darling-downs-farm-dam"]
+
+[archetypes.zoned_embankment]
+description = "Zoned embankment dam with clay core and granular shells on upstream slope"
+slope_angle_deg = {min = 12.0, max = 20.0}
+slip_depth_m = {min = 2.0, max = 6.0}
+cohesion_kpa = {min = 10.0, max = 30.0}
+friction_angle_deg = {min = 22.0, max = 32.0}
+saturated_unit_weight_kn_m3 = {min = 19.0, max = 21.0}
+initial_reservoir_level_m = {min = 15.0, max = 50.0}
+final_reservoir_level_m = {min = 2.0, max = 15.0}
+site_contexts = ["snowy-mountains-hydro-dam", "tasmania-power-dam"]
+
+[archetypes.tailings_dam]
+description = "Mining tailings storage facility with upstream-raise embankment"
+slope_angle_deg = {min = 10.0, max = 18.0}
+slip_depth_m = {min = 2.0, max = 5.0}
+cohesion_kpa = {min = 5.0, max = 15.0}
+friction_angle_deg = {min = 18.0, max = 26.0}
+saturated_unit_weight_kn_m3 = {min = 17.0, max = 19.5}
+initial_reservoir_level_m = {min = 5.0, max = 20.0}
+final_reservoir_level_m = {min = 0.5, max = 5.0}
+site_contexts = ["pilbara-iron-ore-tsf", "bowen-basin-coal-tsf"]
+
+[archetypes.flood_levee]
+description = "Flood protection levee with steep upstream face on alluvial foundation"
+slope_angle_deg = {min = 18.0, max = 30.0}
+slip_depth_m = {min = 1.0, max = 3.0}
+cohesion_kpa = {min = 3.0, max = 12.0}
+friction_angle_deg = {min = 24.0, max = 34.0}
+saturated_unit_weight_kn_m3 = {min = 18.5, max = 20.5}
+initial_reservoir_level_m = {min = 3.0, max = 10.0}
+final_reservoir_level_m = {min = 0.0, max = 3.0}
+site_contexts = ["murray-river-levee", "fitzroy-river-flood-levee"]
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Homogeneous dam scenario, all parameters given including material properties"
+visibility = "all_given"
+archetypes = ["homogeneous_earth_dam", "flood_levee"]
+
+[difficulty.medium]
+description = "All parameters given, wider range of dam types and operating conditions"
+visibility = "all_given"
+archetypes = ["homogeneous_earth_dam", "zoned_embankment", "tailings_dam", "flood_levee"]
+
+[difficulty.hard]
+description = "Material properties hidden; agent must infer cohesion, friction angle, and unit weight from site context"
+visibility = "partial"
+hidden_params = ["cohesion_kpa", "friction_angle_deg", "saturated_unit_weight_kn_m3"]
+replacement_text = "The embankment is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["zoned_embankment", "tailings_dam"]

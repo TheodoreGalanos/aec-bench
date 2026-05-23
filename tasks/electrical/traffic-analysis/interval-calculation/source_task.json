@@ -1,0 +1,31 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "vertical_transportation",
+    "category_id": "traffic-analysis",
+    "category_name": "Lift Traffic Analysis",
+    "task_id": "interval-calculation",
+    "task_name": "Interval (INT) Calculation",
+    "description": "Calculate average waiting interval between lift arrivals",
+    "complexity": "low",
+    "standards": [
+      "CIBSE Guide D"
+    ],
+    "inputs": [
+      "Round Trip Time RTT (s)",
+      "Number of lifts"
+    ],
+    "outputs": [
+      "Interval INT (s)",
+      "Quality of Service rating"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/vertical_transportation.json",
+    "suggested_relative_path": "electrical/traffic-analysis/interval-calculation"
+  }
+}

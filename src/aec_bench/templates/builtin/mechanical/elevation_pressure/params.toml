@@ -1,0 +1,63 @@
+[meta]
+name = "elevation-pressure"
+description = "Static pressure change from elevation difference"
+long_description = "Calculates hydraulic static pressure change from fluid density and elevation difference using the hydrostatic pressure equation. The template reports elevation head, pressure change in kPa, and pressure change in bar."
+discipline = "mechanical"
+category = "sprinkler-hydraulics"
+standards = ["NFPA 13", "AS 2118.1"]
+tags = ["mechanical", "hydraulics", "elevation", "pressure", "deterministic"]
+tool_mode = "with-tool"
+
+[params.fluid_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "Fluid density"
+min = 500.0
+max = 1400.0
+
+[params.elevation_change_m]
+type = "float"
+unit = "m"
+description = "Elevation change, positive for pressure increase with lower elevation"
+min = -200.0
+max = 200.0
+
+[outputs.elevation_head_m]
+description = "Elevation head"
+tolerance = 0.03
+
+[outputs.pressure_change_kpa]
+description = "Static pressure change"
+tolerance = 0.03
+
+[outputs.pressure_change_bar]
+description = "Static pressure change in bar"
+tolerance = 0.03
+
+[archetypes.fire_sprinkler_riser]
+description = "Fire sprinkler riser elevation pressure check"
+fluid_density_kg_m3 = {min = 990.0, max = 1020.0}
+elevation_change_m = {min = -60.0, max = 120.0}
+site_contexts = ["fire-sprinkler-riser", "multi-level-building"]
+
+[archetypes.water_transfer_main]
+description = "Water transfer main elevation pressure check"
+fluid_density_kg_m3 = {min = 990.0, max = 1030.0}
+elevation_change_m = {min = -150.0, max = 150.0}
+site_contexts = ["water-transfer-main", "pump-station"]
+
+[difficulty.easy]
+description = "All parameters given for a sprinkler riser"
+visibility = "all_given"
+archetypes = ["fire_sprinkler_riser"]
+
+[difficulty.medium]
+description = "All parameters given across hydraulic systems"
+visibility = "all_given"
+archetypes = ["fire_sprinkler_riser", "water_transfer_main"]
+
+[difficulty.hard]
+description = "All parameters given for larger transfer mains"
+visibility = "all_given"
+archetypes = ["water_transfer_main"]
+

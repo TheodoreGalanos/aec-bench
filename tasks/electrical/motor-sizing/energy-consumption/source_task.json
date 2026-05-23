@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "vertical_transportation",
+    "category_id": "motor-sizing",
+    "category_name": "Motor and Drive Sizing",
+    "task_id": "energy-consumption",
+    "task_name": "Lift Energy Consumption Estimation",
+    "description": "Estimate annual energy consumption for lift system",
+    "complexity": "medium",
+    "standards": [
+      "ISO 25745",
+      "VDI 4707"
+    ],
+    "inputs": [
+      "Motor power (kW)",
+      "Usage category",
+      "Annual operating hours per mode",
+      "Standby power (W)",
+      "Drive type (regenerative/non-regen)"
+    ],
+    "outputs": [
+      "Annual energy consumption (kWh/year)",
+      "Energy class (A-G)",
+      "Standby energy contribution"
+    ],
+    "keyword_hits": [
+      "energy",
+      "power"
+    ],
+    "source_file": "data/tasks/electrical/vertical_transportation.json",
+    "suggested_relative_path": "electrical/motor-sizing/energy-consumption"
+  }
+}

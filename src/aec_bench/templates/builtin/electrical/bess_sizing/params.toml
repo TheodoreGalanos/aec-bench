@@ -1,0 +1,120 @@
+[meta]
+name = "bess-sizing"
+description = "Battery energy storage system sizing calculation per IEC 62933"
+long_description = "Determines the beginning-of-life installed capacity for a battery energy storage system using E_bol = (P * t) / (DoD * eta_rt * (1 - degradation)), accounting for depth of discharge, round-trip efficiency, and end-of-life degradation. Supports grid-scale peaking, renewable firming, and microgrid applications per IEC 62933 methodology."
+discipline = "electrical"
+category = "bess-design"
+standards = ["IEC 62933", "IEEE 2030.2.1"]
+tags = ["electrical", "bess", "battery", "energy-storage", "sizing", "capacity"]
+tool_mode = "with-tool"
+
+[params.power_requirement_mw]
+type = "float"
+unit = "MW"
+description = "Required discharge power (peak demand to be served)"
+min = 0.5
+max = 500
+
+[params.discharge_duration_hours]
+type = "float"
+unit = "h"
+description = "Required discharge duration at rated power"
+min = 0.5
+max = 12
+
+[params.depth_of_discharge_pct]
+type = "float"
+unit = "%"
+description = "Allowable depth of discharge (usable SOC range)"
+min = 50
+max = 95
+derivable_from = "archetype"
+
+[params.round_trip_efficiency_pct]
+type = "float"
+unit = "%"
+description = "AC-to-AC round-trip efficiency of the BESS"
+min = 80
+max = 96
+derivable_from = "archetype"
+
+[params.degradation_allowance_pct]
+type = "float"
+unit = "%"
+description = "End-of-life capacity degradation allowance"
+min = 5
+max = 30
+
+[outputs.nominal_power_mw]
+description = "Nominal power rating of the BESS (MW)"
+tolerance = 0.01
+
+[outputs.required_energy_mwh]
+description = "Required energy capacity (MWh)"
+tolerance = 0.03
+
+[outputs.bol_capacity_mwh]
+description = "Beginning-of-life installed capacity (MWh)"
+tolerance = 0.03
+
+[outputs.usable_energy_mwh]
+description = "Usable energy at BOL after DoD and efficiency (MWh)"
+tolerance = 0.03
+
+# --- Archetypes ---
+# BESS installation scenarios across different applications and scales.
+
+[archetypes.grid_peaking]
+description = "Grid-scale peaking and load-shifting BESS"
+power_requirement_mw = {min = 50, max = 500}
+discharge_duration_hours = {min = 2, max = 4}
+depth_of_discharge_pct = {min = 80, max = 90}
+round_trip_efficiency_pct = {min = 85, max = 92}
+degradation_allowance_pct = {min = 15, max = 25}
+site_contexts = ["hunter-valley-grid", "latrobe-valley-grid", "pilbara-grid"]
+
+[archetypes.renewable_firming]
+description = "Renewable energy firming and smoothing BESS"
+power_requirement_mw = {min = 10, max = 200}
+discharge_duration_hours = {min = 2, max = 6}
+depth_of_discharge_pct = {min = 80, max = 90}
+round_trip_efficiency_pct = {min = 86, max = 93}
+degradation_allowance_pct = {min = 10, max = 20}
+site_contexts = ["north-queensland-solar-farm", "south-australia-wind-farm", "western-nsw-solar-farm"]
+
+[archetypes.commercial_demand]
+description = "Commercial behind-the-meter demand management BESS"
+power_requirement_mw = {min = 0.5, max = 10}
+discharge_duration_hours = {min = 1, max = 4}
+depth_of_discharge_pct = {min = 80, max = 95}
+round_trip_efficiency_pct = {min = 88, max = 96}
+degradation_allowance_pct = {min = 10, max = 20}
+site_contexts = ["sydney-cbd-commercial", "melbourne-cbd-commercial", "brisbane-commercial"]
+
+[archetypes.microgrid_island]
+description = "Remote microgrid or island BESS for energy autonomy"
+power_requirement_mw = {min = 0.5, max = 20}
+discharge_duration_hours = {min = 4, max = 12}
+depth_of_discharge_pct = {min = 70, max = 85}
+round_trip_efficiency_pct = {min = 83, max = 90}
+degradation_allowance_pct = {min = 15, max = 30}
+site_contexts = ["torres-strait-island", "coober-pedy-microgrid", "king-island-microgrid"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "Commercial scale, all parameters given, moderate DoD and efficiency"
+visibility = "all_given"
+archetypes = ["commercial_demand"]
+
+[difficulty.medium]
+description = "Any application scale, all parameters given, full parameter ranges"
+visibility = "all_given"
+archetypes = ["commercial_demand", "renewable_firming", "grid_peaking", "microgrid_island"]
+
+[difficulty.hard]
+description = "DoD and efficiency hidden, agent must infer from battery chemistry and application context"
+visibility = "partial"
+hidden_params = ["depth_of_discharge_pct", "round_trip_efficiency_pct"]
+replacement_text = "The project uses a {{ archetype.description | lower }} configuration at {{ archetype.site_context }}."
+archetypes = ["renewable_firming", "grid_peaking", "microgrid_island"]

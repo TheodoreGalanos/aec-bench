@@ -1,0 +1,42 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_systems_studies",
+    "category_id": "load-flow",
+    "category_name": "Load Flow Analysis",
+    "task_id": "radial-feeder-voltage-drop",
+    "task_name": "Radial Feeder Voltage Drop Calculation",
+    "description": "Calculate voltage drop along radial distribution feeder",
+    "complexity": "low",
+    "standards": [
+      "IEEE 3002.2",
+      "AS/NZS 3008.1"
+    ],
+    "inputs": [
+      "Feeder impedance (R, X per km)",
+      "Feeder length (km)",
+      "Load power (kW, kVAr) at each node",
+      "Source voltage (V)",
+      "Power factor"
+    ],
+    "outputs": [
+      "Voltage at each node (V, pu)",
+      "Voltage drop (%, V)",
+      "Total losses (kW)",
+      "Current in each section (A)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "current",
+      "drop",
+      "load",
+      "power",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/energy_systems_studies.json",
+    "suggested_relative_path": "electrical/load-flow/radial-feeder-voltage-drop"
+  }
+}

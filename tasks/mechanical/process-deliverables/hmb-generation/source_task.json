@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "process-deliverables",
+    "category_name": "Process Deliverables Generation",
+    "task_id": "hmb-generation",
+    "task_name": "Heat and Material Balance Generation",
+    "description": "Generate heat and material balance table from simulation results",
+    "complexity": "medium",
+    "standards": [
+      "Project Documentation Standards"
+    ],
+    "inputs": [
+      "Simulation case results",
+      "Stream list",
+      "Equipment list",
+      "Operating conditions",
+      "Composition data"
+    ],
+    "outputs": [
+      "H&MB table (mass flow, composition, T, P, phase)",
+      "Mass balance closure verification",
+      "Energy balance verification",
+      "Stream property summary"
+    ],
+    "keyword_hits": [
+      "balance",
+      "energy",
+      "flow",
+      "heat",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/process-deliverables/hmb-generation"
+  }
+}

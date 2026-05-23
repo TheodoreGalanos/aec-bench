@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "rolling_stock_rail",
+    "category_id": "train-resistance-dynamics",
+    "category_name": "Train Resistance and Dynamics",
+    "task_id": "davis-resistance",
+    "task_name": "Train Resistance Calculation (Davis Equation)",
+    "description": "Calculate total train resistance using Davis equation R = A + Bv + Cv^2",
+    "complexity": "low",
+    "standards": [
+      "EN 14531-1"
+    ],
+    "inputs": [
+      "Vehicle mass (tonnes)",
+      "Train speed (km/h)",
+      "Davis coefficients A, B, C",
+      "Track gradient (%)"
+    ],
+    "outputs": [
+      "Total resistance force (kN)",
+      "Resistance components breakdown"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/mechanical/rolling_stock_rail.json",
+    "suggested_relative_path": "mechanical/train-resistance-dynamics/davis-resistance"
+  }
+}

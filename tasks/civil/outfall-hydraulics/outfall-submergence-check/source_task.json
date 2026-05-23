@@ -1,0 +1,32 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_coastal",
+    "category_id": "outfall-hydraulics",
+    "category_name": "Stormwater Outfall Hydraulics",
+    "task_id": "outfall-submergence-check",
+    "task_name": "Outfall Submergence Analysis",
+    "description": "Calculate percentage of time outfall is submerged under future conditions",
+    "complexity": "medium",
+    "standards": [
+      "MfE Coastal Hazards Guidance 2024"
+    ],
+    "inputs": [
+      "Outfall invert level (m)",
+      "Tidal time series",
+      "Future SLR projection"
+    ],
+    "outputs": [
+      "Present-day submergence (%)",
+      "Future submergence (%)",
+      "Hours per day submerged"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/civil/civil_coastal.json",
+    "suggested_relative_path": "civil/outfall-hydraulics/outfall-submergence-check"
+  }
+}

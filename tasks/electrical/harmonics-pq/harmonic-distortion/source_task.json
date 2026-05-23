@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "industrial_electrical",
+    "category_id": "harmonics-pq",
+    "category_name": "Harmonics and Power Quality",
+    "task_id": "harmonic-distortion",
+    "task_name": "Harmonic Distortion Assessment",
+    "description": "Calculate harmonic distortion from VFDs and assess compliance with IEEE 519",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 519",
+      "IEC 61000-3-6"
+    ],
+    "inputs": [
+      "VFD ratings and topology",
+      "System short-circuit ratio (SCR)",
+      "Existing harmonic levels",
+      "PCC voltage level"
+    ],
+    "outputs": [
+      "Current THD (%)",
+      "Voltage THD (%)",
+      "Individual harmonic levels",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "current",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/industrial_electrical.json",
+    "suggested_relative_path": "electrical/harmonics-pq/harmonic-distortion"
+  }
+}

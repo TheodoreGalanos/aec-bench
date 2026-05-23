@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "roads",
+    "category_id": "horizontal-geometry",
+    "category_name": "Horizontal Curve Geometry",
+    "task_id": "curve-elements",
+    "task_name": "Horizontal Curve Element Calculation",
+    "description": "Calculate full set of horizontal curve elements (tangent length, arc length, external, mid-ordinate)",
+    "complexity": "low",
+    "standards": [
+      "AGRD Part 3"
+    ],
+    "inputs": [
+      "Curve radius (m)",
+      "Deflection angle (degrees)",
+      "IP chainage"
+    ],
+    "outputs": [
+      "Tangent length (m)",
+      "Arc length (m)",
+      "External distance (m)",
+      "Mid-ordinate (m)",
+      "PC and PT chainages"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "deflection",
+      "radius"
+    ],
+    "source_file": "data/tasks/civil/roads.json",
+    "suggested_relative_path": "civil/horizontal-geometry/curve-elements"
+  }
+}

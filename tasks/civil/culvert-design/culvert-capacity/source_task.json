@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "drainage_hydrology",
+    "category_id": "culvert-design",
+    "category_name": "Culvert Hydraulics",
+    "task_id": "culvert-capacity",
+    "task_name": "Culvert Capacity Analysis",
+    "description": "Determine culvert capacity under inlet and outlet control",
+    "complexity": "medium",
+    "standards": [
+      "HDS-5",
+      "ARR"
+    ],
+    "inputs": [
+      "Culvert size and shape",
+      "Culvert length and slope",
+      "Inlet type (projecting, headwall, wingwalls)",
+      "Tailwater conditions",
+      "Allowable headwater HW (m)"
+    ],
+    "outputs": [
+      "Inlet control capacity (m\u00b3/s)",
+      "Outlet control capacity (m\u00b3/s)",
+      "Controlling condition",
+      "Headwater elevation (m)"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "size"
+    ],
+    "source_file": "data/tasks/civil/drainage_hydrology.json",
+    "suggested_relative_path": "civil/culvert-design/culvert-capacity"
+  }
+}

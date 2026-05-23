@@ -1,0 +1,130 @@
+[meta]
+name = "minor-losses-calculation"
+description = "Pipe fitting minor losses calculation"
+long_description = "Calculates total minor head loss through fittings from explicit K factors and quantities. The template reports summed K factor, velocity head, total minor loss, and equivalent straight-pipe length using an explicit Darcy friction factor."
+discipline = "mechanical"
+category = "pipe-hydraulics"
+standards = ["Crane TP-410", "AWWA M11"]
+tags = ["mechanical", "pipe-hydraulics", "minor-losses", "fittings", "deterministic"]
+tool_mode = "with-tool"
+
+[params.fitting_1_k]
+type = "float"
+unit = "-"
+description = "K factor for the first fitting group"
+min = 0.0
+max = 20.0
+
+[params.fitting_1_quantity]
+type = "float"
+unit = "-"
+description = "Quantity of first fitting group"
+min = 0.0
+max = 30.0
+
+[params.fitting_2_k]
+type = "float"
+unit = "-"
+description = "K factor for the second fitting group"
+min = 0.0
+max = 20.0
+
+[params.fitting_2_quantity]
+type = "float"
+unit = "-"
+description = "Quantity of second fitting group"
+min = 0.0
+max = 30.0
+
+[params.fitting_3_k]
+type = "float"
+unit = "-"
+description = "K factor for the third fitting group"
+min = 0.0
+max = 20.0
+
+[params.fitting_3_quantity]
+type = "float"
+unit = "-"
+description = "Quantity of third fitting group"
+min = 0.0
+max = 30.0
+
+[params.flow_velocity_m_s]
+type = "float"
+unit = "m/s"
+description = "Mean pipe flow velocity"
+min = 0.1
+max = 8.0
+
+[params.pipe_diameter_mm]
+type = "float"
+unit = "mm"
+description = "Pipe internal diameter"
+min = 10.0
+max = 3000.0
+
+[params.darcy_friction_factor]
+type = "float"
+unit = "-"
+description = "Darcy friction factor used for equivalent length"
+min = 0.005
+max = 0.08
+
+[outputs.total_k]
+description = "Summed fitting K factor"
+tolerance = 0.03
+
+[outputs.velocity_head_m]
+description = "Velocity head"
+tolerance = 0.03
+
+[outputs.total_minor_loss_m]
+description = "Total minor head loss"
+tolerance = 0.03
+
+[outputs.equivalent_length_m]
+description = "Equivalent straight pipe length"
+tolerance = 0.03
+
+[archetypes.pump_station_header]
+description = "Pump station header with valves and bends"
+fitting_1_k = {min = 0.2, max = 1.5}
+fitting_1_quantity = {min = 2.0, max = 12.0}
+fitting_2_k = {min = 0.5, max = 5.0}
+fitting_2_quantity = {min = 1.0, max = 8.0}
+fitting_3_k = {min = 0.0, max = 3.0}
+fitting_3_quantity = {min = 0.0, max = 8.0}
+flow_velocity_m_s = {min = 0.8, max = 3.0}
+pipe_diameter_mm = {min = 100.0, max = 1200.0}
+darcy_friction_factor = {min = 0.012, max = 0.04}
+site_contexts = ["water-pump-station", "wastewater-pump-station"]
+
+[archetypes.process_pipework]
+description = "Industrial process pipework fitting loss check"
+fitting_1_k = {min = 0.1, max = 3.0}
+fitting_1_quantity = {min = 1.0, max = 20.0}
+fitting_2_k = {min = 0.2, max = 8.0}
+fitting_2_quantity = {min = 1.0, max = 15.0}
+fitting_3_k = {min = 0.0, max = 10.0}
+fitting_3_quantity = {min = 0.0, max = 10.0}
+flow_velocity_m_s = {min = 1.0, max = 5.0}
+pipe_diameter_mm = {min = 25.0, max = 500.0}
+darcy_friction_factor = {min = 0.01, max = 0.05}
+site_contexts = ["industrial-process-plant", "chemical-dosing-skid"]
+
+[difficulty.easy]
+description = "All parameters given for pump station pipework"
+visibility = "all_given"
+archetypes = ["pump_station_header"]
+
+[difficulty.medium]
+description = "All parameters given across pump station and process pipework"
+visibility = "all_given"
+archetypes = ["pump_station_header", "process_pipework"]
+
+[difficulty.hard]
+description = "All parameters given for process pipework"
+visibility = "all_given"
+archetypes = ["process_pipework"]
+

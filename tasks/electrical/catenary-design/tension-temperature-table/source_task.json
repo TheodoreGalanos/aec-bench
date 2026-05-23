@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "overhead_wiring_rail",
+    "category_id": "catenary-design",
+    "category_name": "Catenary Sag-Tension Design",
+    "task_id": "tension-temperature-table",
+    "task_name": "Tension-Temperature Table Generation",
+    "description": "Generate tension values across temperature range for stringing operations",
+    "complexity": "medium",
+    "standards": [
+      "EN 50119",
+      "EN 50367"
+    ],
+    "inputs": [
+      "Wire properties",
+      "Span configuration",
+      "Temperature range (-20C to +60C)",
+      "Initial tension at reference",
+      "Wind and ice load cases"
+    ],
+    "outputs": [
+      "Tension vs temperature table",
+      "Maximum tension identification",
+      "Stringing chart",
+      "Sag profile at each temperature"
+    ],
+    "keyword_hits": [
+      "load",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/overhead_wiring_rail.json",
+    "suggested_relative_path": "electrical/catenary-design/tension-temperature-table"
+  }
+}

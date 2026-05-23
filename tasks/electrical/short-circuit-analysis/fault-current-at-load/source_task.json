@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "buildings_electrical",
+    "category_id": "short-circuit-analysis",
+    "category_name": "Short-Circuit Analysis",
+    "task_id": "fault-current-at-load",
+    "task_name": "Fault Current at Load Point",
+    "description": "Calculate fault current at end of cable run for protection device selection",
+    "complexity": "low",
+    "standards": [
+      "IEC 60909",
+      "AS/NZS 3000"
+    ],
+    "inputs": [
+      "Switchboard fault level (kA)",
+      "Cable length (m)",
+      "Cable impedance (ohm/km)",
+      "Load voltage (V)"
+    ],
+    "outputs": [
+      "Fault current at load (kA)",
+      "Loop impedance (ohm)",
+      "Protection device requirements"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "current",
+      "fault",
+      "load",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/buildings_electrical.json",
+    "suggested_relative_path": "electrical/short-circuit-analysis/fault-current-at-load"
+  }
+}

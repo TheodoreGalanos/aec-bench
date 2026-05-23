@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "building_structures",
+    "category_id": "steel-connections",
+    "category_name": "Steel Connection Design",
+    "task_id": "weld-design",
+    "task_name": "Fillet Weld Design",
+    "description": "Design fillet welds for force transfer",
+    "complexity": "low",
+    "standards": [
+      "AS 4100 Sec 9.7",
+      "AISC 360 Ch J2"
+    ],
+    "inputs": [
+      "Design force (kN)",
+      "Weld length available (mm)",
+      "Parent metal grade",
+      "Weld electrode grade"
+    ],
+    "outputs": [
+      "Required weld size (mm)",
+      "Weld capacity (kN/mm)",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "size"
+    ],
+    "source_file": "data/tasks/structural/building_structures.json",
+    "suggested_relative_path": "structural/steel-connections/weld-design"
+  }
+}

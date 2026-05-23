@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "ict_comms_security",
+    "category_id": "cctv-design",
+    "category_name": "CCTV System Design",
+    "task_id": "ppm-calculation",
+    "task_name": "CCTV Pixels Per Meter Calculation",
+    "description": "Calculate pixel density (PPM) for camera and lens combination at target distance",
+    "complexity": "low",
+    "standards": [
+      "IEC 62676-4",
+      "EN 62676-4"
+    ],
+    "inputs": [
+      "Camera resolution (horizontal pixels)",
+      "Sensor width (mm)",
+      "Lens focal length (mm)",
+      "Target distance (m)"
+    ],
+    "outputs": [
+      "Horizontal field of view (m)",
+      "Pixels per meter (PPM)",
+      "Surveillance objective achieved",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/ict_comms_security.json",
+    "suggested_relative_path": "electrical/cctv-design/ppm-calculation"
+  }
+}

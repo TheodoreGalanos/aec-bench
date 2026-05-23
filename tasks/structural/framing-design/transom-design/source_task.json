@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "facades",
+    "category_id": "framing-design",
+    "category_name": "Framing Design",
+    "task_id": "transom-design",
+    "task_name": "Transom Member Design",
+    "description": "Design horizontal transom member for dead load and wind load combinations",
+    "complexity": "medium",
+    "standards": [
+      "EN 13830",
+      "EN 1999-1-1"
+    ],
+    "inputs": [
+      "Span (mm)",
+      "Dead load (kN/m)",
+      "Wind load (kN/m)",
+      "Profile options",
+      "Connection type"
+    ],
+    "outputs": [
+      "Selected profile",
+      "Combined utilisation",
+      "Deflection check",
+      "Connection forces"
+    ],
+    "keyword_hits": [
+      "deflection",
+      "load"
+    ],
+    "source_file": "data/tasks/structural/facades.json",
+    "suggested_relative_path": "structural/framing-design/transom-design"
+  }
+}

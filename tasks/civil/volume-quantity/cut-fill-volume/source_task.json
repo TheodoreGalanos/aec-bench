@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "land_infrastructure",
+    "category_id": "volume-quantity",
+    "category_name": "Volume & Quantity Calculations",
+    "task_id": "cut-fill-volume",
+    "task_name": "Cut/Fill Volume Calculation",
+    "description": "Calculate total cut and fill volumes from existing and proposed surfaces using grid or TIN methods",
+    "complexity": "low",
+    "standards": [
+      "AS 3798-2007"
+    ],
+    "inputs": [
+      "Existing surface (LandXML TIN)",
+      "Proposed surface (LandXML TIN)",
+      "Site boundary",
+      "Swell/shrink factors (%)"
+    ],
+    "outputs": [
+      "Cut volume (m\u00b3)",
+      "Fill volume (m\u00b3)",
+      "Net volume (m\u00b3)",
+      "Volume difference map"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/civil/land_infrastructure.json",
+    "suggested_relative_path": "civil/volume-quantity/cut-fill-volume"
+  }
+}

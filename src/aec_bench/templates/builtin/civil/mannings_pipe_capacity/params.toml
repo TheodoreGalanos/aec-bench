@@ -1,0 +1,92 @@
+[meta]
+name = "mannings-pipe-capacity"
+description = "Flow capacity and velocity in circular pipes using Manning's equation"
+long_description = "Computes the flow capacity, velocity, flow area, and hydraulic radius of circular drainage pipes using Manning's equation Q = (1/n) * A * R^(2/3) * S^(1/2), supporting both full and partially full pipe flow via the central angle geometry method. Used in stormwater and sewer pipe sizing per HEC-22 and QUDM to verify that pipe capacity meets the design discharge."
+discipline = "civil"
+category = "hydraulic-calculations"
+standards = ["HEC-22", "QUDM", "PUB Code of Practice"]
+tags = ["civil", "hydraulics", "drainage", "pipe-flow", "deterministic"]
+tool_mode = "with-tool"
+
+[params.pipe_diameter_m]
+type = "float"
+unit = "m"
+description = "Internal pipe diameter D"
+min = 0.15
+max = 3.0
+
+[params.mannings_n]
+type = "float"
+description = "Manning's roughness coefficient n"
+min = 0.009
+max = 0.025
+derivable_from = "archetype"
+
+[params.slope_m_per_m]
+type = "float"
+unit = "m/m"
+description = "Longitudinal pipe slope S"
+min = 0.001
+max = 0.10
+
+[params.flow_depth_ratio]
+type = "float"
+description = "Flow depth to diameter ratio d/D (1.0 = full)"
+min = 0.1
+max = 1.0
+default = 1.0
+optional = true
+
+[outputs.flow_area_m2]
+description = "Flow cross-sectional area A (m²)"
+tolerance = 0.03
+
+[outputs.hydraulic_radius_m]
+description = "Hydraulic radius R (m)"
+tolerance = 0.03
+
+[outputs.flow_velocity_m_s]
+description = "Flow velocity V (m/s)"
+tolerance = 0.03
+
+[outputs.flow_capacity_m3_s]
+description = "Flow capacity Q (m³/s)"
+tolerance = 0.03
+
+[archetypes.concrete_pipe]
+description = "Concrete stormwater pipe"
+mannings_n = {min = 0.011, max = 0.015}
+site_contexts = ["brisbane-suburban-drainage", "sydney-trunk-stormwater"]
+
+[archetypes.pvc_pipe]
+description = "PVC or HDPE smooth-wall pipe"
+mannings_n = {min = 0.009, max = 0.011}
+site_contexts = ["perth-residential-drainage", "melbourne-subdivision"]
+
+[archetypes.corrugated_metal_pipe]
+description = "Corrugated metal pipe (CMP)"
+mannings_n = {min = 0.019, max = 0.025}
+site_contexts = ["darwin-rural-crossing", "cairns-temporary-diversion"]
+
+[archetypes.vitrified_clay_pipe]
+description = "Vitrified clay sewer pipe"
+mannings_n = {min = 0.011, max = 0.015}
+site_contexts = ["adelaide-heritage-sewer", "hobart-infill-drainage"]
+
+[difficulty.easy]
+description = "Full pipe flow, all parameters given"
+visibility = "all_given"
+archetypes = ["concrete_pipe", "pvc_pipe"]
+flow_depth_ratio = [1.0]
+
+[difficulty.medium]
+description = "Partially full flow, all parameters given"
+visibility = "all_given"
+archetypes = ["concrete_pipe", "pvc_pipe", "corrugated_metal_pipe", "vitrified_clay_pipe"]
+
+[difficulty.hard]
+description = "Partially full flow, roughness coefficient hidden"
+visibility = "partial"
+hidden_params = ["mannings_n"]
+replacement_text = "The pipe is {{ archetype.description }} installed at {{ archetype.site_context }}"
+archetypes = ["concrete_pipe", "pvc_pipe", "corrugated_metal_pipe", "vitrified_clay_pipe"]

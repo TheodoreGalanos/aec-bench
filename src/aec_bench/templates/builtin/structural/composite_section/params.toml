@@ -1,0 +1,150 @@
+[meta]
+name = "composite-section"
+description = "Steel-concrete composite transformed section properties"
+long_description = "Calculates transformed section properties for a simplified steel I-girder with concrete slab and haunch using the modular ratio method. The template reports transformed area, neutral axis, second moment of area, and top and bottom section moduli."
+discipline = "structural"
+category = "superstructure-design"
+standards = ["AASHTO LRFD 6.10", "AS/NZS 5100.6"]
+tags = ["structural", "bridge", "composite-section", "section-properties", "deterministic"]
+tool_mode = "with-tool"
+
+[params.top_flange_width_mm]
+type = "float"
+unit = "mm"
+description = "Steel top flange width"
+min = 50.0
+max = 2000.0
+
+[params.top_flange_thickness_mm]
+type = "float"
+unit = "mm"
+description = "Steel top flange thickness"
+min = 5.0
+max = 150.0
+
+[params.web_depth_mm]
+type = "float"
+unit = "mm"
+description = "Clear steel web depth between flanges"
+min = 100.0
+max = 5000.0
+
+[params.web_thickness_mm]
+type = "float"
+unit = "mm"
+description = "Steel web thickness"
+min = 5.0
+max = 100.0
+
+[params.bottom_flange_width_mm]
+type = "float"
+unit = "mm"
+description = "Steel bottom flange width"
+min = 50.0
+max = 2000.0
+
+[params.bottom_flange_thickness_mm]
+type = "float"
+unit = "mm"
+description = "Steel bottom flange thickness"
+min = 5.0
+max = 150.0
+
+[params.slab_width_mm]
+type = "float"
+unit = "mm"
+description = "Effective concrete slab width"
+min = 100.0
+max = 10000.0
+
+[params.slab_thickness_mm]
+type = "float"
+unit = "mm"
+description = "Concrete slab thickness"
+min = 50.0
+max = 500.0
+
+[params.haunch_width_mm]
+type = "float"
+unit = "mm"
+description = "Concrete haunch width"
+min = 50.0
+max = 3000.0
+
+[params.haunch_thickness_mm]
+type = "float"
+unit = "mm"
+description = "Concrete haunch thickness"
+min = 10.0
+max = 500.0
+
+[params.modular_ratio]
+type = "float"
+description = "Steel-to-concrete modular ratio"
+min = 1.0
+max = 20.0
+
+[outputs.transformed_area_mm2]
+description = "Transformed composite section area"
+tolerance = 0.03
+
+[outputs.neutral_axis_from_bottom_mm]
+description = "Neutral axis from bottom of steel section"
+tolerance = 0.03
+
+[outputs.transformed_inertia_mm4]
+description = "Transformed second moment of area"
+tolerance = 0.03
+
+[outputs.bottom_section_modulus_mm3]
+description = "Bottom section modulus"
+tolerance = 0.03
+
+[outputs.top_section_modulus_mm3]
+description = "Top section modulus"
+tolerance = 0.03
+
+[archetypes.plate_girder]
+description = "Bridge plate-girder composite section"
+top_flange_width_mm = {min = 300.0, max = 700.0}
+top_flange_thickness_mm = {min = 20.0, max = 60.0}
+web_depth_mm = {min = 900.0, max = 2500.0}
+web_thickness_mm = {min = 10.0, max = 30.0}
+bottom_flange_width_mm = {min = 400.0, max = 900.0}
+bottom_flange_thickness_mm = {min = 25.0, max = 80.0}
+slab_width_mm = {min = 2000.0, max = 5000.0}
+slab_thickness_mm = {min = 180.0, max = 300.0}
+haunch_width_mm = {min = 300.0, max = 800.0}
+haunch_thickness_mm = {min = 50.0, max = 200.0}
+modular_ratio = {min = 6.0, max = 12.0}
+site_contexts = ["bridge-plate-girder", "composite-road-bridge"]
+
+[archetypes.rolled_girder]
+description = "Rolled-girder composite section"
+top_flange_width_mm = {min = 150.0, max = 350.0}
+top_flange_thickness_mm = {min = 10.0, max = 35.0}
+web_depth_mm = {min = 400.0, max = 1000.0}
+web_thickness_mm = {min = 8.0, max = 20.0}
+bottom_flange_width_mm = {min = 150.0, max = 350.0}
+bottom_flange_thickness_mm = {min = 10.0, max = 40.0}
+slab_width_mm = {min = 1000.0, max = 3000.0}
+slab_thickness_mm = {min = 150.0, max = 250.0}
+haunch_width_mm = {min = 150.0, max = 500.0}
+haunch_thickness_mm = {min = 40.0, max = 150.0}
+modular_ratio = {min = 6.0, max = 12.0}
+site_contexts = ["rolled-girder-bridge", "short-span-composite-deck"]
+
+[difficulty.easy]
+description = "All parameters given for a rolled girder"
+visibility = "all_given"
+archetypes = ["rolled_girder"]
+
+[difficulty.medium]
+description = "All parameters given across composite girder types"
+visibility = "all_given"
+archetypes = ["rolled_girder", "plate_girder"]
+
+[difficulty.hard]
+description = "All parameters given for a bridge plate girder"
+visibility = "all_given"
+archetypes = ["plate_girder"]

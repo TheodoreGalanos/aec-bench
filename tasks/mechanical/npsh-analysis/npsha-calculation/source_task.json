@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_pumps_pipes",
+    "category_id": "npsh-analysis",
+    "category_name": "NPSH Analysis",
+    "task_id": "npsha-calculation",
+    "task_name": "NPSH Available Calculation",
+    "description": "Calculate Net Positive Suction Head Available at pump inlet",
+    "complexity": "medium",
+    "standards": [
+      "ANSI/HI 9.6.1",
+      "AWWA E103"
+    ],
+    "inputs": [
+      "Suction source pressure (kPa abs)",
+      "Static suction head (m)",
+      "Suction pipe friction loss (m)",
+      "Fluid vapor pressure at temperature (kPa)",
+      "Elevation above sea level (m)"
+    ],
+    "outputs": [
+      "NPSH Available (m)",
+      "Atmospheric pressure adjusted for elevation (kPa)",
+      "Breakdown of NPSHA components"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "pipe",
+      "pressure",
+      "pump"
+    ],
+    "source_file": "data/tasks/mechanical/water_pumps_pipes.json",
+    "suggested_relative_path": "mechanical/npsh-analysis/npsha-calculation"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "track_rail",
+    "category_id": "track-geometry",
+    "category_name": "Track Geometry Design",
+    "task_id": "cant-calculation",
+    "task_name": "Cant/Superelevation Calculation",
+    "description": "Calculate required superelevation (cant) and cant deficiency for a curved track section",
+    "complexity": "low",
+    "standards": [
+      "AREMA MRE Chapter 5",
+      "FRA 49 CFR Part 213",
+      "ARTC ETS-05-00"
+    ],
+    "inputs": [
+      "Design speed (km/h or mph)",
+      "Curve radius (m or ft)",
+      "Track gauge (mm)",
+      "Desired cant deficiency (mm)"
+    ],
+    "outputs": [
+      "Equilibrium superelevation (mm)",
+      "Actual superelevation (mm)",
+      "Cant deficiency (mm)",
+      "Maximum allowable speed (km/h)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "radius"
+    ],
+    "source_file": "data/tasks/civil/track_rail.json",
+    "suggested_relative_path": "civil/track-geometry/cant-calculation"
+  }
+}

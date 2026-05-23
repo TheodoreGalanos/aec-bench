@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "industrial_structures",
+    "category_id": "crane-runway-fatigue",
+    "category_name": "Crane Runway Fatigue",
+    "task_id": "stress-range-calc",
+    "task_name": "Stress Range Calculation",
+    "description": "Calculate fatigue stress range at critical detail for crane load spectrum",
+    "complexity": "high",
+    "standards": [
+      "AS 4100 Section 11",
+      "AS 1418.1"
+    ],
+    "inputs": [
+      "Crane load spectrum",
+      "Section properties at detail",
+      "Stress concentration factor",
+      "Load position envelope"
+    ],
+    "outputs": [
+      "Maximum stress (MPa)",
+      "Minimum stress (MPa)",
+      "Stress range (MPa)",
+      "Equivalent constant amplitude stress range"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "load",
+      "stress"
+    ],
+    "source_file": "data/tasks/structural/industrial_structures.json",
+    "suggested_relative_path": "structural/crane-runway-fatigue/stress-range-calc"
+  }
+}

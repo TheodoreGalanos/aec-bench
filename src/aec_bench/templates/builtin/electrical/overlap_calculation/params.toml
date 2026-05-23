@@ -1,0 +1,113 @@
+[meta]
+name = "overlap-calculation"
+description = "Calculate rail signal overlap distance"
+long_description = "Calculates a reduced rail signalling overlap distance from approach speed, braking rate, track gradient, reaction time, danger point distance, and low-adhesion factor. The template reports full-speed overlap, braking-only timed overlap, and residual danger point clearance."
+discipline = "electrical"
+category = "signal-sighting"
+standards = ["Network Rail NR/L2/SIG/10158", "AS 7711"]
+tags = ["electrical", "rail", "signalling", "overlap", "braking", "deterministic"]
+tool_mode = "with-tool"
+
+[params.maximum_approach_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "Maximum train approach speed"
+min = 10
+max = 160
+
+[params.emergency_braking_rate_m_s2]
+type = "float"
+unit = "m/s2"
+description = "Emergency braking deceleration rate before adhesion and gradient adjustments"
+min = 0.3
+max = 1.5
+
+[params.track_gradient_pct]
+type = "float"
+unit = "%"
+description = "Track gradient, positive for rising grade in the direction of travel"
+min = -4
+max = 4
+
+[params.reaction_time_s]
+type = "float"
+unit = "s"
+description = "Reaction or system allowance time"
+min = 0.5
+max = 5
+
+[params.danger_point_distance_m]
+type = "float"
+unit = "m"
+description = "Available distance from stop signal to danger point"
+min = 20
+max = 2000
+
+[params.low_adhesion_factor]
+type = "float"
+unit = "-"
+description = "Multiplier applied to braking rate for low adhesion"
+min = 0.4
+max = 1
+
+[outputs.approach_speed_m_s]
+description = "Approach speed converted to metres per second"
+tolerance = 0.03
+
+[outputs.gradient_adjusted_braking_rate_m_s2]
+description = "Effective braking rate after adhesion and gradient effects"
+tolerance = 0.03
+
+[outputs.reaction_distance_m]
+description = "Distance travelled during reaction time"
+tolerance = 0.03
+
+[outputs.full_speed_overlap_m]
+description = "Full-speed overlap including reaction and braking distance"
+tolerance = 0.03
+
+[outputs.timed_overlap_option_m]
+description = "Braking-only timed overlap distance"
+tolerance = 0.03
+
+[outputs.danger_point_clearance_m]
+description = "Residual distance to the danger point after full-speed overlap"
+tolerance = 0.03
+
+[archetypes.metro_signal]
+description = "Metro rail signal overlap"
+maximum_approach_speed_kmh = {min = 30, max = 90}
+emergency_braking_rate_m_s2 = {min = 0.7, max = 1.2}
+track_gradient_pct = {min = -2.5, max = 2.5}
+reaction_time_s = {min = 1, max = 3}
+danger_point_distance_m = {min = 150, max = 900}
+low_adhesion_factor = {min = 0.7, max = 1}
+site_contexts = ["metro-rail", "signal-overlap"]
+
+[archetypes.regional_signal]
+description = "Regional rail signal overlap"
+maximum_approach_speed_kmh = {min = 70, max = 140}
+emergency_braking_rate_m_s2 = {min = 0.5, max = 1.0}
+track_gradient_pct = {min = -3, max = 2}
+reaction_time_s = {min = 1.5, max = 4}
+danger_point_distance_m = {min = 300, max = 1800}
+low_adhesion_factor = {min = 0.6, max = 0.95}
+site_contexts = ["regional-rail", "signal-overlap"]
+
+[difficulty.easy]
+description = "Metro overlap case with all values visible"
+visibility = "all_given"
+archetypes = ["metro_signal"]
+
+[difficulty.medium]
+description = "Signal overlap case selected from metro or regional lines"
+visibility = "all_given"
+archetypes = ["metro_signal", "regional_signal"]
+
+[difficulty.hard]
+description = "Regional signal with low adhesion factor embedded in context"
+visibility = "partial"
+hidden_params = ["low_adhesion_factor"]
+replacement_text = "Use the low adhesion factor implied by {{ archetype.description }}."
+archetypes = ["regional_signal"]
+low_adhesion_factor = [0.75]

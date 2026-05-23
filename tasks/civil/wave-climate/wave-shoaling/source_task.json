@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "coastal_engineering",
+    "category_id": "wave-climate",
+    "category_name": "Wave Climate & Transformations",
+    "task_id": "wave-shoaling",
+    "task_name": "Wave Shoaling and Refraction",
+    "description": "Calculate wave height transformation from deep to shallow water",
+    "complexity": "medium",
+    "standards": [
+      "USACE CEM"
+    ],
+    "inputs": [
+      "Deep water wave height (m)",
+      "Deep water wave period (s)",
+      "Nearshore depth (m)",
+      "Bottom contour angles"
+    ],
+    "outputs": [
+      "Shoaling coefficient (Ks)",
+      "Refraction coefficient (Kr)",
+      "Nearshore wave height (m)"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/civil/coastal_engineering.json",
+    "suggested_relative_path": "civil/wave-climate/wave-shoaling"
+  }
+}

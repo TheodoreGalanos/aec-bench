@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "buildings_electrical",
+    "category_id": "maximum-demand",
+    "category_name": "Maximum Demand Estimation",
+    "task_id": "residential-max-demand",
+    "task_name": "Residential Maximum Demand Calculation",
+    "description": "Calculate maximum demand for residential installation using AS/NZS 3000 Appendix C method",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3000"
+    ],
+    "inputs": [
+      "Number of dwelling units",
+      "Floor area (m2)",
+      "Installed appliance loads (kW)",
+      "Hot water system type",
+      "Air conditioning load (kW)"
+    ],
+    "outputs": [
+      "Maximum demand (A)",
+      "Maximum demand (kVA)",
+      "Main switch size",
+      "Service cable size"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "calculation",
+      "demand",
+      "load",
+      "size"
+    ],
+    "source_file": "data/tasks/electrical/buildings_electrical.json",
+    "suggested_relative_path": "electrical/maximum-demand/residential-max-demand"
+  }
+}

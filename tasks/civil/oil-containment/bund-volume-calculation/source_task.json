@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_energy",
+    "category_id": "oil-containment",
+    "category_name": "Oil Containment & Bunding",
+    "task_id": "bund-volume-calculation",
+    "task_name": "Oil Containment Bund Volume",
+    "description": "Calculate required internal volume of oil containment bund",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 1940",
+      "Utility Standards"
+    ],
+    "inputs": [
+      "Volume of oil in largest equipment (L)",
+      "Number of oil-filled equipment items",
+      "Equipment footprint dimensions"
+    ],
+    "outputs": [
+      "Required bund volume (L)",
+      "Bund internal dimensions",
+      "Wall height (mm)"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/civil/civil_energy.json",
+    "suggested_relative_path": "civil/oil-containment/bund-volume-calculation"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "buildings_civil",
+    "category_id": "stormwater-piped",
+    "category_name": "Piped Stormwater Drainage",
+    "task_id": "hgl-check",
+    "task_name": "Hydraulic Grade Line Check",
+    "description": "Verify HGL remains below specified clearance levels to prevent surcharging",
+    "complexity": "medium",
+    "standards": [
+      "ARR 2019",
+      "Local Council DCPs"
+    ],
+    "inputs": [
+      "Pipe network (sizes, grades, lengths)",
+      "Design flows",
+      "Pit losses",
+      "Downstream tailwater level"
+    ],
+    "outputs": [
+      "HGL at each pit (m AHD)",
+      "Clearance below surface (mm)",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "flow",
+      "pipe",
+      "size"
+    ],
+    "source_file": "data/tasks/civil/buildings_civil.json",
+    "suggested_relative_path": "civil/stormwater-piped/hgl-check"
+  }
+}

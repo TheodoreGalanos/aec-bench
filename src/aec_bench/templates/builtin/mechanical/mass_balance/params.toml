@@ -1,0 +1,98 @@
+[meta]
+name = "mass-balance"
+description = "Global process mass balance closure check"
+long_description = "Calculates global mass balance closure from two inlet and two outlet streams using an explicit closure tolerance. The template reports total inlet, total outlet, imbalance, closure error percentage, and a numeric closure flag."
+discipline = "mechanical"
+category = "convergence-assessment"
+standards = ["ISO 15926"]
+tags = ["mechanical", "process", "mass-balance", "closure", "deterministic"]
+tool_mode = "with-tool"
+
+[params.inlet_1_kg_h]
+type = "float"
+unit = "kg/h"
+description = "First inlet mass flow"
+min = 0.0
+max = 100000000.0
+
+[params.inlet_2_kg_h]
+type = "float"
+unit = "kg/h"
+description = "Second inlet mass flow"
+min = 0.0
+max = 100000000.0
+
+[params.outlet_1_kg_h]
+type = "float"
+unit = "kg/h"
+description = "First outlet mass flow"
+min = 0.0
+max = 100000000.0
+
+[params.outlet_2_kg_h]
+type = "float"
+unit = "kg/h"
+description = "Second outlet mass flow"
+min = 0.0
+max = 100000000.0
+
+[params.closure_tolerance_pct]
+type = "float"
+unit = "%"
+description = "Allowed absolute closure error percentage"
+min = 0.0
+max = 20.0
+
+[outputs.total_inlet_kg_h]
+description = "Total inlet mass flow"
+tolerance = 0.03
+
+[outputs.total_outlet_kg_h]
+description = "Total outlet mass flow"
+tolerance = 0.03
+
+[outputs.imbalance_kg_h]
+description = "Mass imbalance, positive when inlet exceeds outlet"
+tolerance = 0.03
+
+[outputs.closure_error_pct]
+description = "Absolute closure error percentage"
+tolerance = 0.03
+
+[outputs.closure_satisfied]
+description = "Numeric flag where 1 means closure is within tolerance"
+tolerance = 0.01
+
+[archetypes.process_unit]
+description = "Industrial process unit mass balance"
+inlet_1_kg_h = {min = 100.0, max = 100000.0}
+inlet_2_kg_h = {min = 0.0, max = 50000.0}
+outlet_1_kg_h = {min = 100.0, max = 100000.0}
+outlet_2_kg_h = {min = 0.0, max = 50000.0}
+closure_tolerance_pct = {min = 0.1, max = 5.0}
+site_contexts = ["process-unit", "steady-state-model"]
+
+[archetypes.treatment_train]
+description = "Water or wastewater treatment train mass balance"
+inlet_1_kg_h = {min = 1000.0, max = 1000000.0}
+inlet_2_kg_h = {min = 0.0, max = 250000.0}
+outlet_1_kg_h = {min = 1000.0, max = 1000000.0}
+outlet_2_kg_h = {min = 0.0, max = 250000.0}
+closure_tolerance_pct = {min = 0.1, max = 3.0}
+site_contexts = ["treatment-train", "process-simulation"]
+
+[difficulty.easy]
+description = "All parameters given for a process unit"
+visibility = "all_given"
+archetypes = ["process_unit"]
+
+[difficulty.medium]
+description = "All parameters given across process balance settings"
+visibility = "all_given"
+archetypes = ["process_unit", "treatment_train"]
+
+[difficulty.hard]
+description = "All parameters given for treatment train balances"
+visibility = "all_given"
+archetypes = ["treatment_train"]
+

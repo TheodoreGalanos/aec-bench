@@ -1,0 +1,42 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_systems_studies",
+    "category_id": "short-circuit",
+    "category_name": "Short Circuit Analysis",
+    "task_id": "three-phase-fault-current",
+    "task_name": "Three-Phase Fault Current Calculation",
+    "description": "Calculate three-phase short circuit current at specified location using IEC 60909",
+    "complexity": "low",
+    "standards": [
+      "IEC 60909-0:2016",
+      "AS 3851"
+    ],
+    "inputs": [
+      "Fault location",
+      "Source impedance (Z1)",
+      "Equipment impedances (transformers, cables, motors)",
+      "Voltage factor c",
+      "System nominal voltage (kV)"
+    ],
+    "outputs": [
+      "Initial symmetrical current Ik'' (kA)",
+      "Peak current ip (kA)",
+      "Breaking current Ib (kA)",
+      "Steady-state current Ik (kA)"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "calculation",
+      "current",
+      "fault",
+      "short circuit",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/energy_systems_studies.json",
+    "suggested_relative_path": "electrical/short-circuit/three-phase-fault-current"
+  }
+}

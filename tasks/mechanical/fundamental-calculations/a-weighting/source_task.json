@@ -1,0 +1,29 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "acoustics",
+    "category_id": "fundamental-calculations",
+    "category_name": "Fundamental Acoustic Calculations",
+    "task_id": "a-weighting",
+    "task_name": "A-Weighting Calculation",
+    "description": "Convert linear spectrum to A-weighted level",
+    "complexity": "low",
+    "standards": [
+      "IEC 61672"
+    ],
+    "inputs": [
+      "1/3 octave or octave band levels (dB)",
+      "Center frequencies"
+    ],
+    "outputs": [
+      "A-weighted total level (dBA)"
+    ],
+    "keyword_hits": [
+      "calculation"
+    ],
+    "source_file": "data/tasks/mechanical/acoustics.json",
+    "suggested_relative_path": "mechanical/fundamental-calculations/a-weighting"
+  }
+}

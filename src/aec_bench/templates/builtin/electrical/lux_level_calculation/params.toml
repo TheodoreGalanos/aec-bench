@@ -1,0 +1,132 @@
+[meta]
+name = "lux-level-calculation"
+description = "Calculate average room illuminance using the lumen method"
+long_description = "Calculates reduced room lighting performance using the lumen method. The template uses room area, luminaire count, luminous flux, utilisation factor, maintenance factor, total lighting power, and target illuminance to report average illuminance, uniformity, power density, and target margin."
+discipline = "electrical"
+category = "lighting-design"
+standards = ["AS/NZS 1680.1", "AS/NZS 1680.2.2"]
+tags = ["electrical", "lighting", "lumen-method", "illuminance", "deterministic"]
+tool_mode = "with-tool"
+
+[params.room_length_m]
+type = "float"
+unit = "m"
+description = "Room length"
+min = 2
+max = 100
+
+[params.room_width_m]
+type = "float"
+unit = "m"
+description = "Room width"
+min = 2
+max = 80
+
+[params.luminaire_count]
+type = "float"
+unit = "count"
+description = "Number of luminaires"
+min = 1
+max = 500
+
+[params.luminaire_luminous_flux_lm]
+type = "float"
+unit = "lm"
+description = "Luminous flux per luminaire"
+min = 500
+max = 80000
+
+[params.utilisation_factor]
+type = "float"
+unit = "-"
+description = "Utilisation factor"
+min = 0.2
+max = 0.9
+
+[params.maintenance_factor]
+type = "float"
+unit = "-"
+description = "Maintenance factor"
+min = 0.5
+max = 0.95
+
+[params.total_lighting_power_w]
+type = "float"
+unit = "W"
+description = "Total installed lighting power"
+min = 20
+max = 100000
+
+[params.minimum_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "Minimum calculated illuminance"
+min = 0
+max = 2000
+
+[params.target_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "Target average illuminance"
+min = 50
+max = 2000
+
+[outputs.average_illuminance_lux]
+description = "Average maintained illuminance"
+tolerance = 0.03
+
+[outputs.uniformity_ratio_uo]
+description = "Minimum to average illuminance uniformity ratio"
+tolerance = 0.03
+
+[outputs.specific_luminaire_power_density_w_m2_100lux]
+description = "Lighting power density normalised to 100 lux"
+tolerance = 0.03
+
+[outputs.target_illuminance_margin_pct]
+description = "Percentage margin against target illuminance"
+tolerance = 0.03
+
+[archetypes.office_room]
+description = "Office room lighting layout"
+room_length_m = {min = 6, max = 30}
+room_width_m = {min = 4, max = 20}
+luminaire_count = {min = 4, max = 80}
+luminaire_luminous_flux_lm = {min = 2500, max = 10000}
+utilisation_factor = {min = 0.45, max = 0.75}
+maintenance_factor = {min = 0.7, max = 0.9}
+total_lighting_power_w = {min = 100, max = 5000}
+minimum_illuminance_lux = {min = 150, max = 500}
+target_illuminance_lux = {min = 200, max = 500}
+site_contexts = ["office-lighting", "lumen-method"]
+
+[archetypes.warehouse_room]
+description = "Warehouse lighting layout"
+room_length_m = {min = 20, max = 100}
+room_width_m = {min = 10, max = 60}
+luminaire_count = {min = 20, max = 300}
+luminaire_luminous_flux_lm = {min = 8000, max = 60000}
+utilisation_factor = {min = 0.4, max = 0.75}
+maintenance_factor = {min = 0.6, max = 0.85}
+total_lighting_power_w = {min = 1000, max = 50000}
+minimum_illuminance_lux = {min = 75, max = 300}
+target_illuminance_lux = {min = 100, max = 400}
+site_contexts = ["warehouse-lighting", "lumen-method"]
+
+[difficulty.easy]
+description = "Office room with all values visible"
+visibility = "all_given"
+archetypes = ["office_room"]
+
+[difficulty.medium]
+description = "Room lighting case selected from office or warehouse layouts"
+visibility = "all_given"
+archetypes = ["office_room", "warehouse_room"]
+
+[difficulty.hard]
+description = "Warehouse lighting case with utilisation factor embedded in context"
+visibility = "partial"
+hidden_params = ["utilisation_factor"]
+replacement_text = "Use the utilisation factor implied by {{ archetype.description }}."
+archetypes = ["warehouse_room"]
+utilisation_factor = [0.62]

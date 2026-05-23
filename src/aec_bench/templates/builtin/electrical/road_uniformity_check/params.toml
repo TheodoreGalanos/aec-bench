@@ -1,0 +1,92 @@
+[meta]
+name = "road-uniformity-check"
+description = "Calculate road lighting uniformity ratios"
+long_description = "Calculates overall and longitudinal road lighting uniformity ratios and the margin against a target overall uniformity class requirement."
+discipline = "electrical"
+category = "road-lighting"
+standards = ["EN 13201-2", "AS/NZS 1158.2"]
+tags = ["electrical", "lighting", "road-lighting", "uniformity", "deterministic"]
+tool_mode = "with-tool"
+
+[params.minimum_luminance_cd_m2]
+type = "float"
+unit = "cd/m2"
+description = "Minimum calculated luminance on the road grid"
+min = 0
+max = 5
+
+[params.average_luminance_cd_m2]
+type = "float"
+unit = "cd/m2"
+description = "Average calculated luminance on the road grid"
+min = 0.1
+max = 10
+
+[params.longitudinal_min_luminance_cd_m2]
+type = "float"
+unit = "cd/m2"
+description = "Minimum luminance along the relevant lane line"
+min = 0
+max = 5
+
+[params.longitudinal_max_luminance_cd_m2]
+type = "float"
+unit = "cd/m2"
+description = "Maximum luminance along the relevant lane line"
+min = 0.1
+max = 10
+
+[params.target_overall_uniformity]
+type = "float"
+unit = "-"
+description = "Target overall uniformity ratio"
+min = 0.1
+max = 0.8
+
+[outputs.overall_uniformity_uo]
+description = "Overall uniformity ratio"
+tolerance = 0.03
+
+[outputs.longitudinal_uniformity_ul]
+description = "Longitudinal uniformity ratio"
+tolerance = 0.03
+
+[outputs.overall_uniformity_margin_pct]
+description = "Percentage margin against target overall uniformity"
+tolerance = 0.03
+
+[archetypes.local_road_grid]
+description = "Local road lighting calculation grid"
+minimum_luminance_cd_m2 = {min = 0.2, max = 0.8}
+average_luminance_cd_m2 = {min = 0.8, max = 2.0}
+longitudinal_min_luminance_cd_m2 = {min = 0.3, max = 1.0}
+longitudinal_max_luminance_cd_m2 = {min = 0.8, max = 2.5}
+target_overall_uniformity = {min = 0.3, max = 0.5}
+site_contexts = ["local-road", "lighting-grid"]
+
+[archetypes.arterial_road_grid]
+description = "Arterial road luminance calculation grid"
+minimum_luminance_cd_m2 = {min = 0.5, max = 1.5}
+average_luminance_cd_m2 = {min = 1.2, max = 4.0}
+longitudinal_min_luminance_cd_m2 = {min = 0.6, max = 2.0}
+longitudinal_max_luminance_cd_m2 = {min = 1.2, max = 5.0}
+target_overall_uniformity = {min = 0.35, max = 0.5}
+site_contexts = ["arterial-road", "lighting-grid"]
+
+[difficulty.easy]
+description = "Local road grid with all values visible"
+visibility = "all_given"
+archetypes = ["local_road_grid"]
+
+[difficulty.medium]
+description = "Road lighting grid selected from local or arterial cases"
+visibility = "all_given"
+archetypes = ["local_road_grid", "arterial_road_grid"]
+
+[difficulty.hard]
+description = "Arterial road grid with target class embedded in context"
+visibility = "partial"
+hidden_params = ["target_overall_uniformity"]
+replacement_text = "Use the target overall uniformity ratio implied by {{ archetype.description }}."
+archetypes = ["arterial_road_grid"]
+target_overall_uniformity = [0.4]

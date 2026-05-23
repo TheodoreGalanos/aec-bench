@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_pumps_pipes",
+    "category_id": "system-curves",
+    "category_name": "System Curve Development",
+    "task_id": "operating-point-determination",
+    "task_name": "Operating Point Determination",
+    "description": "Find the intersection of pump and system curves to determine operating point",
+    "complexity": "medium",
+    "standards": [
+      "ANSI/HI 9.6.3"
+    ],
+    "inputs": [
+      "System curve data",
+      "Pump curve data (Q, H, efficiency, NPSHr)"
+    ],
+    "outputs": [
+      "Operating point flow (L/s)",
+      "Operating point head (m)",
+      "Pump efficiency at operating point (%)",
+      "NPSHr at operating point (m)"
+    ],
+    "keyword_hits": [
+      "flow",
+      "pump"
+    ],
+    "source_file": "data/tasks/mechanical/water_pumps_pipes.json",
+    "suggested_relative_path": "mechanical/system-curves/operating-point-determination"
+  }
+}

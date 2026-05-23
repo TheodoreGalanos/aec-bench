@@ -1,0 +1,170 @@
+[meta]
+name = "hgl-check"
+description = "Hydraulic grade line check for a single stormwater pipe reach"
+long_description = "Computes the hydraulic grade line (HGL) at the upstream pit of a single stormwater pipe reach using Manning's equation for friction loss and a pit loss coefficient for junction losses. Checks whether the HGL remains below the pit surface level with adequate clearance to prevent surcharging, following ARR 2019 and local council DCP methods."
+discipline = "civil"
+category = "stormwater-piped"
+standards = ["ARR 2019", "QUDM", "Local Council DCPs"]
+tags = ["civil", "stormwater", "hydraulic-grade-line", "surcharge", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.design_flow_m3_per_s]
+type = "float"
+unit = "m³/s"
+description = "Design peak flow Q at the pipe reach"
+min = 0.01
+max = 4.0
+
+[params.pipe_diameter_mm]
+type = "enum"
+unit = "mm"
+description = "Nominal internal pipe diameter DN"
+values = ["225", "300", "375", "450", "525", "600", "750", "900", "1050", "1200"]
+
+[params.pipe_length_m]
+type = "float"
+unit = "m"
+description = "Pipe reach length L between pits"
+min = 10.0
+max = 150.0
+
+[params.mannings_n]
+type = "float"
+description = "Manning's roughness coefficient n for the pipe material"
+min = 0.009
+max = 0.025
+derivable_from = "archetype"
+
+[params.pit_loss_coefficient]
+type = "float"
+description = "Pit/junction loss coefficient K (dimensionless)"
+min = 0.0
+max = 5.0
+derivable_from = "archetype"
+
+[params.tailwater_level_m]
+type = "float"
+unit = "m AHD"
+description = "HGL at the downstream pit (tailwater condition)"
+min = 2.0
+max = 30.0
+
+[params.surface_level_m]
+type = "float"
+unit = "m AHD"
+description = "Surface level at the upstream pit"
+min = 4.0
+max = 35.0
+
+[params.minimum_clearance_mm]
+type = "float"
+unit = "mm"
+description = "Minimum required clearance between HGL and surface level"
+min = 50.0
+max = 500.0
+default = 150.0
+optional = true
+
+# --- Outputs ---
+
+[outputs.flow_velocity_m_per_s]
+description = "Pipe flow velocity V (m/s)"
+tolerance = 0.03
+
+[outputs.friction_loss_m]
+description = "Friction head loss h_f through the pipe (m)"
+tolerance = 0.03
+
+[outputs.pit_loss_m]
+description = "Pit/junction head loss h_pit (m)"
+tolerance = 0.03
+
+[outputs.hgl_upstream_m]
+description = "HGL elevation at the upstream pit (m AHD)"
+tolerance = 0.03
+
+[outputs.clearance_mm]
+description = "Clearance between surface level and HGL (mm), positive = below surface"
+tolerance = 10.0
+
+[outputs.surcharge_ratio]
+description = "HGL to surface level ratio (> 1.0 indicates surcharging)"
+tolerance = 0.03
+
+[outputs.pass_fail]
+description = "Surcharge compliance (1.0 = pass, clearance adequate; 0.0 = fail)"
+tolerance = 0.01
+
+# --- Archetypes ---
+# Flow and level ranges are sized to the pipe diameters in each archetype so
+# that any independent draw produces a physically plausible scenario.
+
+[archetypes.concrete_pipe_straight]
+description = "Reinforced concrete pipe through a straight-through pit with benched invert"
+mannings_n = {min = 0.011, max = 0.015}
+pit_loss_coefficient = {min = 0.1, max = 0.5}
+pipe_diameter_mm = ["300", "375", "450", "525", "600", "750"]
+design_flow_m3_per_s = {min = 0.03, max = 0.21}
+pipe_length_m = {min = 20.0, max = 80.0}
+tailwater_level_m = {min = 8.0, max = 14.0}
+surface_level_m = {min = 16.0, max = 20.0}
+minimum_clearance_mm = {min = 100.0, max = 300.0}
+site_contexts = ["brisbane-suburban-drainage", "sydney-greenfield-subdivision"]
+
+[archetypes.concrete_pipe_bend]
+description = "Reinforced concrete pipe through a pit with a change in direction"
+mannings_n = {min = 0.011, max = 0.015}
+pit_loss_coefficient = {min = 0.5, max = 2.5}
+pipe_diameter_mm = ["375", "450", "600", "750", "900"]
+design_flow_m3_per_s = {min = 0.05, max = 0.33}
+pipe_length_m = {min = 20.0, max = 100.0}
+tailwater_level_m = {min = 6.0, max = 12.0}
+surface_level_m = {min = 14.0, max = 18.0}
+minimum_clearance_mm = {min = 100.0, max = 300.0}
+site_contexts = ["melbourne-trunk-stormwater", "adelaide-urban-renewal"]
+
+[archetypes.pvc_pipe_residential]
+description = "PVC pipe in a residential inter-allotment drainage pit"
+mannings_n = {min = 0.009, max = 0.011}
+pit_loss_coefficient = {min = 0.1, max = 0.5}
+pipe_diameter_mm = ["225", "300", "375"]
+design_flow_m3_per_s = {min = 0.01, max = 0.12}
+pipe_length_m = {min = 10.0, max = 50.0}
+tailwater_level_m = {min = 4.0, max = 8.0}
+surface_level_m = {min = 10.0, max = 14.0}
+minimum_clearance_mm = {min = 100.0, max = 200.0}
+site_contexts = ["perth-residential-estate", "gold-coast-infill-development"]
+
+[archetypes.large_trunk_main]
+description = "Large reinforced concrete trunk main through a junction pit with multiple inlets"
+mannings_n = {min = 0.012, max = 0.015}
+pit_loss_coefficient = {min = 1.0, max = 5.0}
+pipe_diameter_mm = ["750", "900", "1050", "1200"]
+design_flow_m3_per_s = {min = 0.20, max = 1.30}
+pipe_length_m = {min = 30.0, max = 150.0}
+tailwater_level_m = {min = 3.0, max = 10.0}
+surface_level_m = {min = 12.0, max = 18.0}
+minimum_clearance_mm = {min = 150.0, max = 500.0}
+site_contexts = ["sydney-trunk-stormwater", "brisbane-creek-diversion"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "Small pipe, straight pit, all parameters given including Manning's n and pit loss K"
+visibility = "all_given"
+archetypes = ["concrete_pipe_straight", "pvc_pipe_residential"]
+pipe_diameter_mm = ["225", "300", "375", "450"]
+
+[difficulty.medium]
+description = "Any pipe size and pit configuration, all parameters given"
+visibility = "all_given"
+archetypes = ["concrete_pipe_straight", "concrete_pipe_bend", "pvc_pipe_residential", "large_trunk_main"]
+
+[difficulty.hard]
+description = "Manning's n and pit loss K hidden, agent must infer from pipe material and junction description"
+visibility = "partial"
+hidden_params = ["mannings_n", "pit_loss_coefficient"]
+replacement_text = "The pipe is {{ archetype.description }} installed at {{ archetype.site_context }}"
+archetypes = ["concrete_pipe_straight", "concrete_pipe_bend", "pvc_pipe_residential", "large_trunk_main"]

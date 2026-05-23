@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "substations",
+    "category_id": "dc-systems",
+    "category_name": "DC Systems & Battery Sizing",
+    "task_id": "dc-system-study",
+    "task_name": "DC System Voltage Study",
+    "description": "Verify DC voltage at loads during battery discharge",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 946"
+    ],
+    "inputs": [
+      "Battery voltage (end of discharge)",
+      "DC cable lengths and sizes",
+      "Load currents",
+      "Equipment voltage ranges"
+    ],
+    "outputs": [
+      "Minimum voltage at each load (V)",
+      "Voltage drop summary",
+      "Equipment compatibility check"
+    ],
+    "keyword_hits": [
+      "cable",
+      "current",
+      "drop",
+      "load",
+      "size",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/substations.json",
+    "suggested_relative_path": "electrical/dc-systems/dc-system-study"
+  }
+}

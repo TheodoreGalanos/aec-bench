@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_mechanical",
+    "category_id": "industrial-ventilation",
+    "category_name": "Industrial Ventilation Design",
+    "task_id": "air-changes",
+    "task_name": "Air Changes per Hour Calculation",
+    "description": "Calculate ACH from room volume and airflow rate",
+    "complexity": "low",
+    "standards": [
+      "ACGIH Manual",
+      "ASHRAE"
+    ],
+    "inputs": [
+      "Room volume (m3)",
+      "Supply or exhaust airflow rate Q (m3/s)"
+    ],
+    "outputs": [
+      "ACH (air changes per hour)",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "airflow",
+      "calculate",
+      "calculation",
+      "flow",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_mechanical.json",
+    "suggested_relative_path": "mechanical/industrial-ventilation/air-changes"
+  }
+}

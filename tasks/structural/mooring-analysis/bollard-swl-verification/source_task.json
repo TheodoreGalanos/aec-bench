@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "ports_marine",
+    "category_id": "mooring-analysis",
+    "category_name": "Mooring Load Analysis",
+    "task_id": "bollard-swl-verification",
+    "task_name": "Bollard SWL Verification",
+    "description": "Verify bollard safe working load is adequate for design mooring loads",
+    "complexity": "medium",
+    "standards": [
+      "BS 6349-4",
+      "AS 4997"
+    ],
+    "inputs": [
+      "Design bollard load (kN)",
+      "Bollard SWL (kN)",
+      "Load angle (degrees)",
+      "Foundation capacity"
+    ],
+    "outputs": [
+      "Bollard utilisation",
+      "Foundation adequacy",
+      "Pass/Fail"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "load"
+    ],
+    "source_file": "data/tasks/structural/ports_marine.json",
+    "suggested_relative_path": "structural/mooring-analysis/bollard-swl-verification"
+  }
+}

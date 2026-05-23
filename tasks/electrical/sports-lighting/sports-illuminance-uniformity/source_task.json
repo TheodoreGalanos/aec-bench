@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "lighting",
+    "category_id": "sports-lighting",
+    "category_name": "Sports Lighting Design",
+    "task_id": "sports-illuminance-uniformity",
+    "task_name": "Sports Field Illuminance and Uniformity",
+    "description": "Calculate horizontal illuminance and uniformity for sports field",
+    "complexity": "medium",
+    "standards": [
+      "EN 12193",
+      "AS 2560"
+    ],
+    "inputs": [
+      "Luminaire photometric data (IES/LDT)",
+      "Field geometry",
+      "Mounting positions and aiming",
+      "Maintenance factor",
+      "Grid specification"
+    ],
+    "outputs": [
+      "Average horizontal illuminance E_av (lux)",
+      "Uniformity ratios U1 (E_min/E_max), U2 (E_min/E_av)",
+      "Pass/fail vs class requirements"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/electrical/lighting.json",
+    "suggested_relative_path": "electrical/sports-lighting/sports-illuminance-uniformity"
+  }
+}

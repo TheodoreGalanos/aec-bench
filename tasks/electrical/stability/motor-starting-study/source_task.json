@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_systems_studies",
+    "category_id": "stability",
+    "category_name": "Stability Analysis",
+    "task_id": "motor-starting-study",
+    "task_name": "Motor Starting Voltage Dip Study",
+    "description": "Analyze voltage dip during large motor starting",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 3002.7",
+      "IEC 60034"
+    ],
+    "inputs": [
+      "Motor data (kW, starting current multiplier, PF)",
+      "System impedance to motor terminals",
+      "Source short circuit capacity",
+      "Other loads on bus",
+      "Starting method (DOL, soft starter, VFD)"
+    ],
+    "outputs": [
+      "Voltage dip at motor terminals (%)",
+      "Voltage dip at PCC (%)",
+      "Starting current (A)",
+      "Starting time (s)",
+      "Acceptability assessment"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "current",
+      "load",
+      "short circuit",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/energy_systems_studies.json",
+    "suggested_relative_path": "electrical/stability/motor-starting-study"
+  }
+}

@@ -1,0 +1,104 @@
+[meta]
+name = "sabine-rt60"
+description = "Single-band reverberation time calculation using Sabine formula"
+long_description = "Calculates room reverberation time using the Sabine formula RT60 = 0.161 V / A, where A is the equivalent absorption area. The template uses explicit floor, wall, and ceiling areas and absorption coefficients for a deterministic room acoustics calculation."
+discipline = "mechanical"
+category = "fundamental-calculations"
+standards = ["ISO 3382"]
+tags = ["mechanical", "acoustics", "rt60", "sabine", "deterministic"]
+tool_mode = "with-tool"
+
+[params.room_volume_m3]
+type = "float"
+unit = "m3"
+description = "Room volume"
+min = 10.0
+max = 100000.0
+
+[params.floor_area_m2]
+type = "float"
+unit = "m2"
+description = "Floor surface area"
+min = 5.0
+max = 10000.0
+
+[params.floor_absorption]
+type = "float"
+description = "Floor absorption coefficient"
+min = 0.01
+max = 1.0
+
+[params.wall_area_m2]
+type = "float"
+unit = "m2"
+description = "Total wall surface area"
+min = 5.0
+max = 30000.0
+
+[params.wall_absorption]
+type = "float"
+description = "Wall absorption coefficient"
+min = 0.01
+max = 1.0
+
+[params.ceiling_area_m2]
+type = "float"
+unit = "m2"
+description = "Ceiling surface area"
+min = 5.0
+max = 10000.0
+
+[params.ceiling_absorption]
+type = "float"
+description = "Ceiling absorption coefficient"
+min = 0.01
+max = 1.0
+
+[outputs.equivalent_absorption_area_m2]
+description = "Equivalent absorption area"
+tolerance = 0.03
+
+[outputs.average_absorption_coefficient]
+description = "Area-weighted average absorption coefficient"
+tolerance = 0.03
+
+[outputs.rt60_s]
+description = "Sabine reverberation time"
+tolerance = 0.03
+
+[archetypes.small_meeting_room]
+description = "Small meeting room with moderate finishes"
+room_volume_m3 = {min = 40.0, max = 250.0}
+floor_area_m2 = {min = 15.0, max = 80.0}
+floor_absorption = {min = 0.08, max = 0.35}
+wall_area_m2 = {min = 40.0, max = 250.0}
+wall_absorption = {min = 0.05, max = 0.25}
+ceiling_area_m2 = {min = 15.0, max = 80.0}
+ceiling_absorption = {min = 0.2, max = 0.8}
+site_contexts = ["office-meeting-room", "clinical-consult-room"]
+
+[archetypes.large_hall]
+description = "Large hall or concourse acoustic volume"
+room_volume_m3 = {min = 1000.0, max = 50000.0}
+floor_area_m2 = {min = 300.0, max = 8000.0}
+floor_absorption = {min = 0.03, max = 0.25}
+wall_area_m2 = {min = 600.0, max = 20000.0}
+wall_absorption = {min = 0.03, max = 0.35}
+ceiling_area_m2 = {min = 300.0, max = 8000.0}
+ceiling_absorption = {min = 0.05, max = 0.7}
+site_contexts = ["station-concourse", "school-assembly-hall"]
+
+[difficulty.easy]
+description = "All parameters given for a small room"
+visibility = "all_given"
+archetypes = ["small_meeting_room"]
+
+[difficulty.medium]
+description = "All parameters given across small and large acoustic rooms"
+visibility = "all_given"
+archetypes = ["small_meeting_room", "large_hall"]
+
+[difficulty.hard]
+description = "All parameters given for large-volume reverberation checks"
+visibility = "all_given"
+archetypes = ["large_hall"]

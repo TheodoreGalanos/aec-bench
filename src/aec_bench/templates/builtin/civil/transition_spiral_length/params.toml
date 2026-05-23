@@ -1,0 +1,135 @@
+[meta]
+name = "transition-spiral-length"
+description = "Minimum transition spiral length from cant runoff, cant deficiency rate of change, and twist criteria per ARTC ETS-05-00 / AREMA"
+long_description = "Determines the governing minimum transition spiral length at rail curve entries by evaluating three independent criteria: cant runoff rate, cant deficiency rate of change, and twist limit. The maximum of L_cant, L_cd, and L_twist governs, ensuring passenger comfort and track stability per ARTC ETS-05-00 and AREMA Chapter 5."
+discipline = "civil"
+category = "track-geometry"
+standards = ["ARTC ETS-05-00", "AREMA MRE Chapter 5", "EN 13803"]
+tags = ["civil", "rail", "track-geometry", "spiral", "transition", "cant", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.actual_cant_mm]
+type = "float"
+unit = "mm"
+description = "Applied (actual) cant E_a"
+min = 0
+max = 150
+
+[params.cant_deficiency_mm]
+type = "float"
+unit = "mm"
+description = "Cant deficiency C_d at design speed"
+min = 0
+max = 110
+
+[params.max_speed_km_h]
+type = "float"
+unit = "km/h"
+description = "Maximum operating speed V_max"
+min = 20
+max = 250
+
+[params.rate_of_change_cant_mm_s]
+type = "float"
+unit = "mm/s"
+description = "Maximum rate of change of cant D_cant"
+min = 25
+max = 55
+derivable_from = "archetype"
+
+[params.rate_of_change_cd_mm_s]
+type = "float"
+unit = "mm/s"
+description = "Maximum rate of change of cant deficiency D_cd"
+min = 25
+max = 55
+derivable_from = "archetype"
+
+[params.min_twist_ratio]
+type = "float"
+unit = "-"
+description = "Minimum twist ratio (e.g. 400 means 1 mm cant per 400 mm length)"
+min = 400
+max = 800
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.spiral_length_cant_m]
+description = "Minimum spiral length from cant runoff criterion (m)"
+tolerance = 0.03
+
+[outputs.spiral_length_cd_m]
+description = "Minimum spiral length from cant deficiency rate criterion (m)"
+tolerance = 0.03
+
+[outputs.spiral_length_twist_m]
+description = "Minimum spiral length from twist rate criterion (m)"
+tolerance = 0.03
+
+[outputs.governing_spiral_length_m]
+description = "Governing (maximum) minimum spiral length (m)"
+tolerance = 0.03
+
+# --- Archetypes: rail corridor types ---
+
+[archetypes.urban_metro]
+description = "Urban metro or light rail line with tight curves and frequent stops"
+actual_cant_mm = {min = 40, max = 100}
+cant_deficiency_mm = {min = 30, max = 75}
+max_speed_km_h = {min = 40, max = 80}
+rate_of_change_cant_mm_s = {min = 35, max = 55}
+rate_of_change_cd_mm_s = {min = 35, max = 55}
+min_twist_ratio = {min = 400, max = 500}
+site_contexts = ["sydney-metro-northwest", "melbourne-metro-tunnel", "brisbane-cross-river-rail"]
+
+[archetypes.mainline_freight]
+description = "Mainline freight corridor with gentle curves and heavy axle loads"
+actual_cant_mm = {min = 30, max = 80}
+cant_deficiency_mm = {min = 20, max = 60}
+max_speed_km_h = {min = 60, max = 115}
+rate_of_change_cant_mm_s = {min = 35, max = 45}
+rate_of_change_cd_mm_s = {min = 25, max = 40}
+min_twist_ratio = {min = 500, max = 800}
+site_contexts = ["artc-hunter-valley-coal", "artc-north-south-corridor", "pilbara-iron-ore-wa"]
+
+[archetypes.high_speed_passenger]
+description = "High-speed passenger rail corridor with sweeping curves"
+actual_cant_mm = {min = 80, max = 150}
+cant_deficiency_mm = {min = 50, max = 110}
+max_speed_km_h = {min = 130, max = 250}
+rate_of_change_cant_mm_s = {min = 25, max = 40}
+rate_of_change_cd_mm_s = {min = 25, max = 40}
+min_twist_ratio = {min = 600, max = 800}
+site_contexts = ["sydney-melbourne-hsr", "brisbane-gold-coast-fast-rail", "perth-bunbury-fast-rail"]
+
+[archetypes.branch_line]
+description = "Regional branch line with moderate curves and mixed traffic"
+actual_cant_mm = {min = 20, max = 80}
+cant_deficiency_mm = {min = 15, max = 60}
+max_speed_km_h = {min = 20, max = 80}
+rate_of_change_cant_mm_s = {min = 35, max = 55}
+rate_of_change_cd_mm_s = {min = 35, max = 55}
+min_twist_ratio = {min = 400, max = 600}
+site_contexts = ["nsw-north-coast-line", "vic-geelong-warrnambool", "qld-western-line"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "All parameters given, gentle curves on mainline or branch line"
+visibility = "all_given"
+archetypes = ["mainline_freight", "branch_line"]
+
+[difficulty.medium]
+description = "All parameters given, any corridor type including tight metro curves and high speed"
+visibility = "all_given"
+archetypes = ["urban_metro", "mainline_freight", "high_speed_passenger", "branch_line"]
+
+[difficulty.hard]
+description = "Rate-of-change limits and twist ratio hidden — agent must infer from corridor type and operating context"
+visibility = "partial"
+hidden_params = ["rate_of_change_cant_mm_s", "rate_of_change_cd_mm_s", "min_twist_ratio"]
+replacement_text = "The track is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["urban_metro", "mainline_freight", "high_speed_passenger", "branch_line"]

@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "mass-energy-balances",
+    "category_name": "Mass and Energy Balances",
+    "task_id": "energy-balance-calculation",
+    "task_name": "Energy Balance Calculation",
+    "description": "Calculate heat duties, stream temperatures, or enthalpies using conservation of energy",
+    "complexity": "low",
+    "standards": [
+      "Chemical Engineering Fundamentals"
+    ],
+    "inputs": [
+      "Stream flow rates",
+      "Inlet/outlet temperatures",
+      "Heat capacities or enthalpy data",
+      "Heat of reaction (if applicable)",
+      "Work inputs/outputs"
+    ],
+    "outputs": [
+      "Heat duty (kW)",
+      "Unknown stream temperatures (degC)",
+      "Energy balance closure check (%)"
+    ],
+    "keyword_hits": [
+      "balance",
+      "cable",
+      "calculate",
+      "calculation",
+      "energy",
+      "flow",
+      "heat",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/mass-energy-balances/energy-balance-calculation"
+  }
+}

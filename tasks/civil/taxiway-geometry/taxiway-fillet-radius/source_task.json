@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_aviation",
+    "category_id": "taxiway-geometry",
+    "category_name": "Taxiway Geometry & Fillets",
+    "task_id": "taxiway-fillet-radius",
+    "task_name": "Taxiway Fillet Radius Calculation",
+    "description": "Calculate minimum required fillet radius for taxiway design group",
+    "complexity": "low",
+    "standards": [
+      "FAA AC 150/5300-13B"
+    ],
+    "inputs": [
+      "Taxiway Design Group (TDG)",
+      "Intersection angle (degrees)",
+      "Critical aircraft wheelbase"
+    ],
+    "outputs": [
+      "Minimum fillet radius (m)",
+      "Fillet geometry"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "radius"
+    ],
+    "source_file": "data/tasks/civil/civil_aviation.json",
+    "suggested_relative_path": "civil/taxiway-geometry/taxiway-fillet-radius"
+  }
+}

@@ -1,0 +1,62 @@
+[meta]
+name = "hrt-calculation"
+description = "Hydraulic retention time calculation for treatment units"
+long_description = "Calculates hydraulic retention time from treatment volume and flow rate using HRT = V/Q. The template reports retention time in days and hours plus the hourly flow rate, providing a deterministic first-pass wastewater and water treatment sizing calculation."
+discipline = "mechanical"
+category = "fundamental-calculations"
+standards = ["WEF MOP 8"]
+tags = ["mechanical", "water-treatment", "wastewater", "hrt", "deterministic"]
+tool_mode = "with-tool"
+
+[params.reactor_volume_m3]
+type = "float"
+unit = "m3"
+description = "Treatment reactor or tank volume"
+min = 1.0
+max = 200000.0
+
+[params.flow_rate_m3_d]
+type = "float"
+unit = "m3/d"
+description = "Average flow rate through the treatment unit"
+min = 1.0
+max = 1000000.0
+
+[outputs.hrt_days]
+description = "Hydraulic retention time in days"
+tolerance = 0.03
+
+[outputs.hrt_hours]
+description = "Hydraulic retention time in hours"
+tolerance = 0.03
+
+[outputs.flow_rate_m3_h]
+description = "Flow rate in cubic metres per hour"
+tolerance = 0.03
+
+[archetypes.package_treatment_unit]
+description = "Small package treatment unit"
+reactor_volume_m3 = {min = 10.0, max = 500.0}
+flow_rate_m3_d = {min = 20.0, max = 1500.0}
+site_contexts = ["remote-community-wwtp", "industrial-package-plant"]
+
+[archetypes.municipal_basin]
+description = "Municipal treatment basin"
+reactor_volume_m3 = {min = 1000.0, max = 80000.0}
+flow_rate_m3_d = {min = 2000.0, max = 250000.0}
+site_contexts = ["regional-wwtp", "water-treatment-clarifier"]
+
+[difficulty.easy]
+description = "All parameters given for a small treatment unit"
+visibility = "all_given"
+archetypes = ["package_treatment_unit"]
+
+[difficulty.medium]
+description = "All parameters given across package and municipal units"
+visibility = "all_given"
+archetypes = ["package_treatment_unit", "municipal_basin"]
+
+[difficulty.hard]
+description = "All parameters given for larger treatment basins"
+visibility = "all_given"
+archetypes = ["municipal_basin"]

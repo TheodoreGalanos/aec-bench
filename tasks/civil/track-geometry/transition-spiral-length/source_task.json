@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "track_rail",
+    "category_id": "track-geometry",
+    "category_name": "Track Geometry Design",
+    "task_id": "transition-spiral-length",
+    "task_name": "Transition Spiral Length Calculation",
+    "description": "Calculate minimum transition spiral length to smoothly introduce curvature and superelevation",
+    "complexity": "low",
+    "standards": [
+      "AREMA MRE Chapter 5",
+      "ARTC ETS-05-00",
+      "EN 13803"
+    ],
+    "inputs": [
+      "Actual superelevation (mm)",
+      "Unbalanced superelevation (mm)",
+      "Maximum train speed (km/h or mph)",
+      "Rate of change of cant (mm/s)"
+    ],
+    "outputs": [
+      "Minimum spiral length - cant runoff (m)",
+      "Minimum spiral length - rate of change (m)",
+      "Governing minimum spiral length (m)"
+    ],
+    "keyword_hits": [
+      "balance",
+      "calculate",
+      "calculation",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/track_rail.json",
+    "suggested_relative_path": "civil/track-geometry/transition-spiral-length"
+  }
+}

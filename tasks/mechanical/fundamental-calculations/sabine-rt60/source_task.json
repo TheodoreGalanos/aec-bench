@@ -1,0 +1,30 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "acoustics",
+    "category_id": "fundamental-calculations",
+    "category_name": "Fundamental Acoustic Calculations",
+    "task_id": "sabine-rt60",
+    "task_name": "Reverberation Time (Sabine Formula)",
+    "description": "Calculate RT60 using Sabine formula from room volume and absorption",
+    "complexity": "low",
+    "standards": [
+      "ISO 3382"
+    ],
+    "inputs": [
+      "Room volume (m3)",
+      "Surface areas (m2)",
+      "Absorption coefficients per frequency"
+    ],
+    "outputs": [
+      "RT60 per octave band (seconds)"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/mechanical/acoustics.json",
+    "suggested_relative_path": "mechanical/fundamental-calculations/sabine-rt60"
+  }
+}

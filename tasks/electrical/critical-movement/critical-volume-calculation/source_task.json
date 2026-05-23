@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "intelligent_transport_systems",
+    "category_id": "critical-movement",
+    "category_name": "Critical Movement Analysis",
+    "task_id": "critical-volume-calculation",
+    "task_name": "Critical Volume Sum Calculation",
+    "description": "Calculate sum of critical volumes (CS) for intersection capacity assessment",
+    "complexity": "low",
+    "standards": [
+      "TRB Planning Method",
+      "HCM"
+    ],
+    "inputs": [
+      "Turning movement counts per approach",
+      "Lane configurations",
+      "Signal phasing"
+    ],
+    "outputs": [
+      "Critical volume sum CS",
+      "Critical movements identified",
+      "Volume-to-capacity ratio Xcm"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "capacity"
+    ],
+    "source_file": "data/tasks/electrical/intelligent_transport_systems.json",
+    "suggested_relative_path": "electrical/critical-movement/critical-volume-calculation"
+  }
+}

@@ -1,0 +1,102 @@
+[meta]
+name = "roadway-spread"
+description = "Roadway gutter spread width and curb depth from HEC-22 Manning's equation for triangular cross-sections"
+long_description = "Determines the width of water spread across a roadway pavement and curb flow depth using the HEC-22 Manning's equation for triangular gutter sections: T = (Q*n / (K_u * Sx^(5/3) * S_L^(1/2)))^(3/8). Used for inlet spacing design and pavement drainage adequacy checks to ensure roadway safety during design storms."
+discipline = "civil"
+category = "hydraulic-calculations"
+standards = ["HEC-22"]
+tags = ["civil", "hydraulics", "drainage", "roadway", "gutter", "spread", "inlet-spacing"]
+tool_mode = "both"
+
+# --- Parameters ---
+
+[params.gutter_flow_m3_s]
+type = "float"
+unit = "m\u00b3/s"
+description = "Design gutter flow rate Q"
+min = 0.001
+max = 0.200
+
+[params.cross_slope_pct]
+type = "float"
+unit = "%"
+description = "Roadway cross-slope Sx (percentage)"
+min = 1.0
+max = 6.0
+
+[params.longitudinal_slope_pct]
+type = "float"
+unit = "%"
+description = "Longitudinal road gradient S_L (percentage)"
+min = 0.3
+max = 10.0
+
+[params.mannings_n]
+type = "float"
+description = "Manning's roughness coefficient n for the pavement surface"
+min = 0.011
+max = 0.020
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.spread_width_m]
+description = "Width of water spread on the roadway T (m)"
+tolerance = 0.03
+
+[outputs.curb_depth_m]
+description = "Flow depth at the curb face d (m)"
+tolerance = 0.03
+
+# --- Archetypes ---
+
+[archetypes.urban_local_road]
+description = "Urban local road with steep cross-slope and smooth asphalt pavement"
+gutter_flow_m3_s = {min = 0.005, max = 0.040}
+cross_slope_pct = {min = 2.5, max = 4.0}
+longitudinal_slope_pct = {min = 0.5, max = 3.0}
+mannings_n = {min = 0.013, max = 0.016}
+site_contexts = ["sydney-suburban-street", "melbourne-residential-road", "brisbane-local-access"]
+
+[archetypes.suburban_collector]
+description = "Suburban collector road with moderate cross-slope and aged asphalt surface"
+gutter_flow_m3_s = {min = 0.010, max = 0.080}
+cross_slope_pct = {min = 2.0, max = 3.0}
+longitudinal_slope_pct = {min = 0.5, max = 5.0}
+mannings_n = {min = 0.014, max = 0.018}
+site_contexts = ["perth-suburban-collector", "adelaide-ring-route", "canberra-distributor-road"]
+
+[archetypes.arterial_road]
+description = "Major arterial road with standard cross-slope and concrete gutter channel"
+gutter_flow_m3_s = {min = 0.020, max = 0.120}
+cross_slope_pct = {min = 1.5, max = 2.5}
+longitudinal_slope_pct = {min = 0.5, max = 6.0}
+mannings_n = {min = 0.012, max = 0.016}
+site_contexts = ["sydney-arterial-corridor", "melbourne-main-road", "gold-coast-boulevard"]
+
+[archetypes.highway_shoulder]
+description = "Highway shoulder with shallow cross-slope and textured asphalt surface"
+gutter_flow_m3_s = {min = 0.030, max = 0.200}
+cross_slope_pct = {min = 1.0, max = 2.0}
+longitudinal_slope_pct = {min = 0.3, max = 8.0}
+mannings_n = {min = 0.014, max = 0.020}
+site_contexts = ["bruce-highway-shoulder", "hume-motorway-verge", "pacific-highway-shoulder"]
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Small urban road, all parameters given, straightforward spread calculation"
+visibility = "all_given"
+archetypes = ["urban_local_road", "suburban_collector"]
+
+[difficulty.medium]
+description = "Arterial or highway with higher flows, all parameters given"
+visibility = "all_given"
+archetypes = ["arterial_road", "highway_shoulder"]
+
+[difficulty.hard]
+description = "Manning's n hidden, agent must infer roughness from road surface description"
+visibility = "partial"
+hidden_params = ["mannings_n"]
+replacement_text = "The road is {{ archetype.description }} located at {{ archetype.site_context }}"
+archetypes = ["urban_local_road", "suburban_collector", "arterial_road", "highway_shoulder"]

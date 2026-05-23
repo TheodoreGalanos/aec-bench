@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "intelligent_transport_systems",
+    "category_id": "power-systems",
+    "category_name": "ITS Power Systems",
+    "task_id": "solar-power-sizing",
+    "task_name": "Solar Power System Sizing for ITS",
+    "description": "Size solar panel and battery for off-grid ITS device",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 1562"
+    ],
+    "inputs": [
+      "Daily energy consumption (Wh)",
+      "Peak sun hours",
+      "Autonomy days required",
+      "System voltage (V)",
+      "Panel derating factors"
+    ],
+    "outputs": [
+      "Solar panel size (W)",
+      "Battery bank capacity (Ah)",
+      "Charge controller rating (A)"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "energy",
+      "power",
+      "size",
+      "sizing",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/intelligent_transport_systems.json",
+    "suggested_relative_path": "electrical/power-systems/solar-power-sizing"
+  }
+}

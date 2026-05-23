@@ -1,0 +1,102 @@
+[meta]
+name = "construction-tolerance"
+description = "Construction tolerance allowance and required slot length calculation"
+long_description = "Sums fabrication, erection, survey, movement, and clearance allowances for a deterministic construction tolerance check. The template also reports root-sum-square tolerance for the first four components and calculates the required slot length using the total allowance at both slot ends."
+discipline = "structural"
+category = "construction-tolerance"
+standards = ["AISC 303", "EN 1090-2", "AS 4100"]
+tags = ["structural", "construction", "tolerance", "fit-up", "deterministic"]
+tool_mode = "with-tool"
+
+[params.fabrication_tolerance_mm]
+type = "float"
+unit = "mm"
+description = "Fabrication tolerance component"
+min = 0.0
+max = 50.0
+
+[params.erection_tolerance_mm]
+type = "float"
+unit = "mm"
+description = "Erection tolerance component"
+min = 0.0
+max = 75.0
+
+[params.survey_tolerance_mm]
+type = "float"
+unit = "mm"
+description = "Survey tolerance component"
+min = 0.0
+max = 30.0
+
+[params.movement_allowance_mm]
+type = "float"
+unit = "mm"
+description = "Movement allowance component"
+min = 0.0
+max = 100.0
+
+[params.clearance_mm]
+type = "float"
+unit = "mm"
+description = "Installation clearance allowance"
+min = 0.0
+max = 50.0
+
+[params.component_length_mm]
+type = "float"
+unit = "mm"
+description = "Nominal component length accommodated by the slot"
+min = 50.0
+max = 5000.0
+
+[outputs.total_allowance_mm]
+description = "Arithmetic sum of tolerance and clearance components"
+tolerance = 0.03
+
+[outputs.rss_tolerance_mm]
+description = "Root-sum-square tolerance from fabrication, erection, survey, and movement components"
+tolerance = 0.03
+
+[outputs.required_slot_length_mm]
+description = "Slot length required for the component and allowance at both ends"
+tolerance = 0.03
+
+[outputs.clearance_included_mm]
+description = "Clearance allowance included in the total allowance"
+tolerance = 0.03
+
+[archetypes.steel_bracket_slot]
+description = "Steel bracket slotted connection tolerance check"
+fabrication_tolerance_mm = {min = 2.0, max = 12.0}
+erection_tolerance_mm = {min = 5.0, max = 25.0}
+survey_tolerance_mm = {min = 2.0, max = 10.0}
+movement_allowance_mm = {min = 2.0, max = 20.0}
+clearance_mm = {min = 2.0, max = 12.0}
+component_length_mm = {min = 100.0, max = 600.0}
+site_contexts = ["steel-frame", "industrial-platform"]
+
+[archetypes.facade_panel_slot]
+description = "Facade panel slotted fixing tolerance check"
+fabrication_tolerance_mm = {min = 3.0, max = 20.0}
+erection_tolerance_mm = {min = 10.0, max = 40.0}
+survey_tolerance_mm = {min = 3.0, max = 15.0}
+movement_allowance_mm = {min = 10.0, max = 60.0}
+clearance_mm = {min = 5.0, max = 20.0}
+component_length_mm = {min = 300.0, max = 2000.0}
+site_contexts = ["facade-support", "building-envelope"]
+
+[difficulty.easy]
+description = "All parameters given for a steel bracket slot"
+visibility = "all_given"
+archetypes = ["steel_bracket_slot"]
+
+[difficulty.medium]
+description = "All parameters given across bracket and facade slot checks"
+visibility = "all_given"
+archetypes = ["steel_bracket_slot", "facade_panel_slot"]
+
+[difficulty.hard]
+description = "All parameters given for a facade panel slot"
+visibility = "all_given"
+archetypes = ["facade_panel_slot"]

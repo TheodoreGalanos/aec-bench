@@ -1,0 +1,132 @@
+[project]
+name = "aec-bench"
+version = "0.1.0"
+description = "Benchmark platform for evaluating AI agents on AEC engineering tasks"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "harbor>=0.1.45",
+    "httpx>=0.28,<1",
+    "jinja2>=3.1,<4",
+    "modal>=1.3,<2",
+    "polars>=1.30,<2",
+    "pydantic>=2.11,<3",
+    "python-dotenv>=1.2.2",
+    "PyYAML>=6.0,<7",
+    "rich-pixels>=3.0.1",
+    "rich>=14.1,<15",
+    "textual>=8.1,<9",
+    "typer>=0.16,<1",
+    "ribs[visualize]>=0.9.0",
+    "pdfplumber>=0.11.9",
+    "pymupdf>=1.27.2.2",
+]
+
+[project.scripts]
+aec-bench = "aec_bench.cli.main:run"
+
+[dependency-groups]
+dev = [
+    "fastapi>=0.128,<1",
+    "hypothesis>=6.130,<7",
+    "jsonschema>=4.26.0",
+    "mypy>=1.16,<2",
+    "pillow>=12.1.1",
+    "pydantic-ai>=0.1",
+    "pyfiglet>=1.0.4",
+    "pytest-asyncio>=1.3.0",
+    "pytest>=9.0,<10",
+    "rich-pixels>=3.0.1",
+    "ruff>=0.11,<0.12",
+    "uvicorn>=0.38,<1",
+    "verifiers>=0.1.14",
+]
+
+[project.optional-dependencies]
+pydantic-ai = ["pydantic-ai>=0.1"]
+prime = ["verifiers>=0.1.14"]
+webui = [
+    "fastapi>=0.128,<1",
+    "uvicorn>=0.38,<1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/README.md",
+    "/.env.example",
+    "/pyproject.toml",
+    "/uv.lock",
+    "/src",
+    "/tasks",
+    "/tests",
+]
+exclude = [
+    "/.agents",
+    "/.claude",
+    "/.prime",
+    "/.superpowers",
+    "/.tmp",
+    "/.venv",
+    "/.worktrees",
+    "/_archive",
+    "/artefacts",
+    "/configs",
+    "/dist",
+    "/docs/blog-drafts",
+    "/docs/superpowers",
+    "/environments",
+    "/examples",
+    "/jobs",
+    "/journal",
+    "/memento-test",
+    "/node_modules",
+    "/packages",
+    "/prime-rl",
+    "/research",
+    "/superpowers",
+    "/task_decompositions",
+    "/task_genomes",
+    "/tasks/generated",
+    "/workspaces",
+]
+artifacts = [
+    "/src/aec_bench/web/frontend/dist/**",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aec_bench"]
+artifacts = [
+    "/src/aec_bench/web/frontend/dist/**",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/aec_bench/cli/**" = ["B008"]
+"tests/generation/test_instruction_renderer.py" = ["E501"]
+"src/aec_bench/agents/tool_loop_agent.py" = ["E501"]
+"src/aec_bench/agents/scripts.py" = ["E501"]
+"src/aec_bench/agents/rlm_script.py" = ["E501"]
+"examples/agents/script_anthropic.py" = ["E501"]
+"examples/agents/script_azure_openai.py" = ["E501"]
+"agents/script_anthropic.py" = ["E501"]
+"agents/script_azure_openai.py" = ["E501"]
+"src/aec_bench/tui/assets/pixel_art.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["src", "tests"]
+strict = true

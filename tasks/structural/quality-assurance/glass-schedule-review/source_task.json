@@ -1,0 +1,32 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "facades",
+    "category_id": "quality-assurance",
+    "category_name": "Quality Assurance",
+    "task_id": "glass-schedule-review",
+    "task_name": "Glass Schedule Consistency Review",
+    "description": "Review glass schedule for consistency with calculations and drawings",
+    "complexity": "low",
+    "standards": [
+      "Project specifications"
+    ],
+    "inputs": [
+      "Glass schedule",
+      "Structural calculations",
+      "Facade drawings"
+    ],
+    "outputs": [
+      "Consistency check",
+      "Discrepancies identified",
+      "Risk assessment"
+    ],
+    "keyword_hits": [
+      "calculation"
+    ],
+    "source_file": "data/tasks/structural/facades.json",
+    "suggested_relative_path": "structural/quality-assurance/glass-schedule-review"
+  }
+}

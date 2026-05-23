@@ -1,0 +1,109 @@
+[meta]
+name = "radial-feeder-voltage-drop"
+description = "Single-section radial distribution feeder voltage drop"
+long_description = "Calculates current, voltage drop, receiving voltage, and real losses for a balanced single-section radial feeder. The reduced method uses feeder R and X over the route length, load kW and kVAr, and source line-to-line voltage."
+discipline = "electrical"
+category = "load-flow"
+standards = ["IEEE 3002.2", "AS/NZS 3008.1"]
+tags = ["electrical", "radial-feeder", "voltage-drop", "distribution", "deterministic"]
+tool_mode = "with-tool"
+
+[params.feeder_resistance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "Feeder resistance per kilometre"
+min = 0
+max = 5
+
+[params.feeder_reactance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "Feeder reactance per kilometre"
+min = 0
+max = 5
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "Feeder route length"
+min = 0.01
+max = 100
+
+[params.load_real_power_kw]
+type = "float"
+unit = "kW"
+description = "Three-phase real load"
+min = 1
+max = 50000
+
+[params.load_reactive_power_kvar]
+type = "float"
+unit = "kVAr"
+description = "Three-phase reactive load"
+min = -20000
+max = 20000
+
+[params.source_voltage_v]
+type = "float"
+unit = "V"
+description = "Source line-to-line voltage"
+min = 100
+max = 132000
+
+[outputs.feeder_current_a]
+description = "Three-phase feeder current"
+tolerance = 0.03
+
+[outputs.voltage_drop_v]
+description = "Line-to-line feeder voltage drop"
+tolerance = 0.03
+
+[outputs.voltage_drop_pct]
+description = "Voltage drop percentage"
+tolerance = 0.03
+
+[outputs.receiving_end_voltage_v]
+description = "Receiving-end line-to-line voltage"
+tolerance = 0.03
+
+[outputs.feeder_loss_kw]
+description = "Three-phase real feeder loss"
+tolerance = 0.03
+
+[archetypes.lv_feeder]
+description = "Low-voltage radial distribution feeder"
+feeder_resistance_ohm_per_km = {min = 0.2, max = 1.5}
+feeder_reactance_ohm_per_km = {min = 0.05, max = 0.4}
+feeder_length_km = {min = 0.05, max = 2}
+load_real_power_kw = {min = 20, max = 1000}
+load_reactive_power_kvar = {min = 0, max = 400}
+source_voltage_v = {min = 400, max = 415}
+site_contexts = ["industrial-lv-feeder", "campus-switchboard"]
+
+[archetypes.mv_feeder]
+description = "Medium-voltage radial distribution feeder"
+feeder_resistance_ohm_per_km = {min = 0.05, max = 0.8}
+feeder_reactance_ohm_per_km = {min = 0.05, max = 0.5}
+feeder_length_km = {min = 1, max = 50}
+load_real_power_kw = {min = 500, max = 20000}
+load_reactive_power_kvar = {min = 0, max = 8000}
+source_voltage_v = {min = 11000, max = 33000}
+site_contexts = ["rural-mv-feeder", "mine-site-feeder"]
+
+[difficulty.easy]
+description = "Low-voltage feeder with all values visible"
+visibility = "all_given"
+archetypes = ["lv_feeder"]
+
+[difficulty.medium]
+description = "Low-voltage or medium-voltage feeder"
+visibility = "all_given"
+archetypes = ["lv_feeder", "mv_feeder"]
+
+[difficulty.hard]
+description = "Reactive load hidden in feeder context"
+visibility = "partial"
+hidden_params = ["load_reactive_power_kvar"]
+replacement_text = "Use the reactive load implied by {{ archetype.description }}."
+archetypes = ["mv_feeder"]
+load_reactive_power_kvar = [2000]

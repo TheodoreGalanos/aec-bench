@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "rolling_stock_rail",
+    "category_id": "braking-systems",
+    "category_name": "Braking System Design",
+    "task_id": "braking-distance",
+    "task_name": "Braking Distance Calculation",
+    "description": "Calculate train stopping distance from given initial conditions",
+    "complexity": "low",
+    "standards": [
+      "EN 14531-1",
+      "AS 7520.3"
+    ],
+    "inputs": [
+      "Train mass (tonnes)",
+      "Initial speed (km/h)",
+      "Brake effort (kN)",
+      "Adhesion coefficient",
+      "Track gradient (%)"
+    ],
+    "outputs": [
+      "Stopping distance (m)",
+      "Deceleration rate (m/s^2)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/rolling_stock_rail.json",
+    "suggested_relative_path": "mechanical/braking-systems/braking-distance"
+  }
+}

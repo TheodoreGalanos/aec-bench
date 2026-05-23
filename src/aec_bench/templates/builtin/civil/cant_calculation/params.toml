@@ -1,0 +1,116 @@
+[meta]
+name = "cant-calculation"
+description = "Rail cant (superelevation) and cant deficiency for curved track using E_eq = 11.82 * V^2 / R"
+long_description = "Computes equilibrium cant, cant deficiency, and maximum allowable speed for curved railway track sections using the ARTC ETS-05-00 / AREMA formula E_eq = C * V^2 / R. Supports both standard and narrow gauge constants, and is used in track geometry design to balance passenger comfort against derailment risk on curves."
+discipline = "civil"
+category = "track-geometry"
+standards = ["ARTC ETS-05-00", "AREMA MRE Chapter 5", "FRA 49 CFR Part 213"]
+tags = ["civil", "rail", "track-geometry", "cant", "superelevation", "curves", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.design_speed_km_h]
+type = "float"
+unit = "km/h"
+description = "Design operating speed V"
+min = 20
+max = 250
+
+[params.curve_radius_m]
+type = "float"
+unit = "m"
+description = "Horizontal curve radius R"
+min = 150
+max = 5000
+
+[params.actual_cant_mm]
+type = "float"
+unit = "mm"
+description = "Applied (actual) cant E_a"
+min = 0
+max = 150
+derivable_from = "archetype"
+
+[params.max_cant_deficiency_mm]
+type = "float"
+unit = "mm"
+description = "Maximum allowable cant deficiency C_d_max"
+min = 50
+max = 110
+derivable_from = "archetype"
+
+[params.gauge_type]
+type = "enum"
+description = "Track gauge classification"
+values = ["standard", "narrow"]
+default = "standard"
+optional = true
+
+# --- Outputs ---
+
+[outputs.equilibrium_cant_mm]
+description = "Equilibrium cant E_eq (mm)"
+tolerance = 0.03
+
+[outputs.cant_deficiency_mm]
+description = "Cant deficiency C_d = E_eq - E_a (mm)"
+tolerance = 0.03
+
+[outputs.maximum_speed_km_h]
+description = "Maximum allowable speed V_max (km/h)"
+tolerance = 0.03
+
+# --- Archetypes: rail corridor types ---
+
+[archetypes.urban_metro]
+description = "Urban metro or light rail line with tight curves and frequent stops"
+curve_radius_m = {min = 150, max = 400}
+design_speed_km_h = {min = 40, max = 80}
+actual_cant_mm = {min = 40, max = 100}
+max_cant_deficiency_mm = {min = 50, max = 75}
+site_contexts = ["sydney-metro-northwest", "melbourne-metro-tunnel", "brisbane-cross-river-rail"]
+
+[archetypes.mainline_freight]
+description = "Mainline freight corridor with gentle curves and heavy axle loads"
+curve_radius_m = {min = 800, max = 3000}
+design_speed_km_h = {min = 60, max = 115}
+actual_cant_mm = {min = 30, max = 80}
+max_cant_deficiency_mm = {min = 50, max = 75}
+site_contexts = ["artc-hunter-valley-coal", "artc-north-south-corridor", "pilbara-iron-ore-wa"]
+
+[archetypes.high_speed_passenger]
+description = "High-speed passenger rail corridor with sweeping curves"
+curve_radius_m = {min = 1500, max = 5000}
+design_speed_km_h = {min = 130, max = 250}
+actual_cant_mm = {min = 80, max = 150}
+max_cant_deficiency_mm = {min = 75, max = 110}
+site_contexts = ["sydney-melbourne-hsr", "brisbane-gold-coast-fast-rail", "perth-bunbury-fast-rail"]
+
+[archetypes.branch_line]
+description = "Regional branch line with moderate curves and mixed traffic"
+curve_radius_m = {min = 200, max = 800}
+design_speed_km_h = {min = 20, max = 80}
+actual_cant_mm = {min = 20, max = 80}
+max_cant_deficiency_mm = {min = 50, max = 75}
+site_contexts = ["nsw-north-coast-line", "vic-geelong-warrnambool", "qld-western-line"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "All parameters given, gentle curves on mainline or branch"
+visibility = "all_given"
+archetypes = ["mainline_freight", "branch_line"]
+gauge_type = ["standard"]
+
+[difficulty.medium]
+description = "All parameters given, any corridor type including tight metro curves and high speed"
+visibility = "all_given"
+archetypes = ["urban_metro", "mainline_freight", "high_speed_passenger", "branch_line"]
+
+[difficulty.hard]
+description = "Actual cant and max deficiency hidden — agent must infer from corridor type and operating context"
+visibility = "partial"
+hidden_params = ["actual_cant_mm", "max_cant_deficiency_mm"]
+replacement_text = "The track is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["urban_metro", "mainline_freight", "high_speed_passenger", "branch_line"]

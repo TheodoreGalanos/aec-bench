@@ -1,0 +1,44 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_energy",
+    "category_id": "foundation-design",
+    "category_name": "Foundation Design",
+    "task_id": "transformer-pad-sizing",
+    "task_name": "Transformer Pad Foundation Sizing",
+    "description": "Design reinforced concrete slab foundation for transformer support",
+    "complexity": "low",
+    "standards": [
+      "AS 3600",
+      "AS 1170",
+      "AS 2067",
+      "IEEE C57.114"
+    ],
+    "inputs": [
+      "Transformer weight (tonnes)",
+      "Transformer dimensions (L x W x H)",
+      "Centre of gravity height (m)",
+      "Allowable bearing pressure (kPa)",
+      "Seismic zone",
+      "Wind loads"
+    ],
+    "outputs": [
+      "Foundation dimensions (m)",
+      "Slab thickness (mm)",
+      "Reinforcement schedule",
+      "FoS against overturning",
+      "FoS against sliding",
+      "Bearing pressure (kPa)"
+    ],
+    "keyword_hits": [
+      "bearing",
+      "load",
+      "pressure",
+      "sizing"
+    ],
+    "source_file": "data/tasks/civil/civil_energy.json",
+    "suggested_relative_path": "civil/foundation-design/transformer-pad-sizing"
+  }
+}

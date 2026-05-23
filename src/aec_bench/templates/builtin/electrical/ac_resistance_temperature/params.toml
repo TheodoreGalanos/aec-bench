@@ -1,0 +1,97 @@
+[meta]
+name = "ac-resistance-temperature"
+description = "AC resistance of conductor at operating temperature including skin effect per IEC 60287"
+long_description = "Computes the AC resistance of a power cable conductor at operating temperature by first correcting DC resistance from 20 deg C using R'(T) = R_20 * [1 + alpha_20 * (T - 20)], then applying the IEC 60287-1-1 skin effect factor ys to obtain R_ac = R_dc(T) * (1 + ys). Essential for cable thermal rating and power loss calculations in transmission and distribution systems."
+discipline = "electrical"
+category = "electrical-parameters"
+standards = ["IEC 60287-1-1", "IEEE 738"]
+tags = ["electrical", "ac-resistance", "skin-effect", "temperature", "transmission-lines", "deterministic"]
+tool_mode = "with-tool"
+
+[params.dc_resistance_20c_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "DC resistance of conductor at 20 deg C"
+min = 0.01
+max = 5.0
+
+[params.conductor_material]
+type = "enum"
+description = "Conductor material"
+values = ["copper", "aluminium"]
+derivable_from = "archetype"
+
+[params.operating_temp_c]
+type = "float"
+unit = "deg C"
+description = "Operating temperature of the conductor"
+min = 20
+max = 200
+
+[params.frequency_hz]
+type = "float"
+unit = "Hz"
+description = "System frequency"
+min = 16.7
+max = 60
+
+# --- Outputs ---
+
+[outputs.dc_resistance_at_temp_ohm_per_km]
+description = "DC resistance at operating temperature (ohm/km)"
+tolerance = 0.03
+
+[outputs.skin_effect_factor]
+description = "Skin effect factor ys (dimensionless)"
+tolerance = 0.05
+
+[outputs.ac_resistance_ohm_per_km]
+description = "AC resistance at operating temperature (ohm/km)"
+tolerance = 0.03
+
+# --- Archetypes ---
+# Transmission and distribution conductor scenarios.
+
+[archetypes.distribution_copper]
+description = "Copper distribution cable at moderate temperature"
+dc_resistance_20c_ohm_per_km = {min = 0.1, max = 2.0}
+operating_temp_c = {min = 30, max = 70}
+site_contexts = ["sydney-urban", "melbourne-urban"]
+
+[archetypes.distribution_aluminium]
+description = "Aluminium distribution cable at moderate temperature"
+dc_resistance_20c_ohm_per_km = {min = 0.08, max = 1.5}
+operating_temp_c = {min = 30, max = 70}
+site_contexts = ["brisbane-suburban", "perth-suburban"]
+
+[archetypes.transmission_copper]
+description = "Copper transmission conductor at elevated temperature"
+dc_resistance_20c_ohm_per_km = {min = 0.01, max = 0.15}
+operating_temp_c = {min = 50, max = 120}
+site_contexts = ["hunter-valley-transmission", "latrobe-valley-transmission"]
+
+[archetypes.transmission_aluminium]
+description = "Aluminium transmission conductor at high temperature"
+dc_resistance_20c_ohm_per_km = {min = 0.02, max = 0.2}
+operating_temp_c = {min = 60, max = 200}
+site_contexts = ["queensland-overhead", "south-australia-overhead"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "Standard 50 Hz copper, moderate temperature, all params given"
+visibility = "all_given"
+archetypes = ["distribution_copper", "distribution_aluminium"]
+frequency_hz = [50]
+
+[difficulty.medium]
+description = "Any material and frequency, transmission-level conductors"
+visibility = "all_given"
+archetypes = ["distribution_copper", "distribution_aluminium", "transmission_copper", "transmission_aluminium"]
+
+[difficulty.hard]
+description = "Conductor material hidden, agent must infer from context and resistance value"
+visibility = "partial"
+hidden_params = ["conductor_material"]
+replacement_text = "The installation uses {{ archetype.description }} practices ({{ archetype.site_context }})"
+archetypes = ["transmission_copper", "transmission_aluminium"]

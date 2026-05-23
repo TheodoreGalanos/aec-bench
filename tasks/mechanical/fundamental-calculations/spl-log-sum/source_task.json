@@ -1,0 +1,29 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "acoustics",
+    "category_id": "fundamental-calculations",
+    "category_name": "Fundamental Acoustic Calculations",
+    "task_id": "spl-log-sum",
+    "task_name": "Sound Pressure Level Logarithmic Summation",
+    "description": "Calculate total SPL from multiple sources using logarithmic addition",
+    "complexity": "low",
+    "standards": [
+      "Acoustic Fundamentals"
+    ],
+    "inputs": [
+      "List of individual SPL values (dB)"
+    ],
+    "outputs": [
+      "Total combined SPL (dB)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "pressure"
+    ],
+    "source_file": "data/tasks/mechanical/acoustics.json",
+    "suggested_relative_path": "mechanical/fundamental-calculations/spl-log-sum"
+  }
+}

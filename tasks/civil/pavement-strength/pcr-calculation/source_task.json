@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_aviation",
+    "category_id": "pavement-strength",
+    "category_name": "Pavement Strength Reporting (ACR-PCR)",
+    "task_id": "pcr-calculation",
+    "task_name": "PCR Value Calculation",
+    "description": "Calculate five-part PCR code for pavement strength reporting",
+    "complexity": "medium",
+    "standards": [
+      "FAA AC 150/5335-5D",
+      "ICAO Annex 14"
+    ],
+    "inputs": [
+      "Pavement type (R/F)",
+      "Subgrade category (A/B/C/D)",
+      "Tire pressure category (W/X/Y/Z)",
+      "Evaluation method (T/U)",
+      "Pavement structure"
+    ],
+    "outputs": [
+      "PCR numeric value",
+      "Five-part PCR code (e.g., 740/R/B/W/U)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "pressure"
+    ],
+    "source_file": "data/tasks/civil/civil_aviation.json",
+    "suggested_relative_path": "civil/pavement-strength/pcr-calculation"
+  }
+}

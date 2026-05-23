@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_mechanical",
+    "category_id": "conveyor-design",
+    "category_name": "Conveyor System Design",
+    "task_id": "belt-tension-power",
+    "task_name": "Belt Tension and Power Calculation",
+    "description": "Calculate conveyor effective tension (Te), maximum tension (T1), and required motor power using CEMA or ISO 5048 methods",
+    "complexity": "medium",
+    "standards": [
+      "CEMA Belt Book",
+      "ISO 5048:1989"
+    ],
+    "inputs": [
+      "Conveyor geometry (length, lift, angles)",
+      "Capacity (tph)",
+      "Belt speed (m/s)",
+      "Material properties (density, angle of repose)",
+      "Idler specifications",
+      "Belt type"
+    ],
+    "outputs": [
+      "Effective tension Te (kN)",
+      "Maximum tension T1 (kN)",
+      "Required motor power (kW)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "capacity",
+      "power"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_mechanical.json",
+    "suggested_relative_path": "mechanical/conveyor-design/belt-tension-power"
+  }
+}

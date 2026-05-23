@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "rail_signalling",
+    "category_id": "power-supply",
+    "category_name": "Signalling Power Supply",
+    "task_id": "battery-sizing",
+    "task_name": "Battery Backup Sizing",
+    "description": "Size battery/UPS for required signalling autonomy period",
+    "complexity": "medium",
+    "standards": [
+      "EN 50125",
+      "IEEE 485"
+    ],
+    "inputs": [
+      "Critical load (W)",
+      "Required autonomy (hours)",
+      "System voltage (V)",
+      "Minimum end voltage (V)",
+      "Temperature range (degC)",
+      "Battery type"
+    ],
+    "outputs": [
+      "Required battery capacity (Ah)",
+      "UPS rating (VA)",
+      "Number of battery cells/blocks",
+      "Temperature derating factor"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "load",
+      "size",
+      "sizing",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/rail_signalling.json",
+    "suggested_relative_path": "electrical/power-supply/battery-sizing"
+  }
+}

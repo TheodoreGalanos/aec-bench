@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "buildings_mechanical",
+    "category_id": "energy-compliance",
+    "category_name": "Energy Code Compliance",
+    "task_id": "ashrae-90-1-prescriptive",
+    "task_name": "ASHRAE 90.1 Prescriptive Compliance Check",
+    "description": "Verify HVAC equipment meets ASHRAE 90.1 prescriptive efficiency requirements",
+    "complexity": "medium",
+    "standards": [
+      "ASHRAE 90.1"
+    ],
+    "inputs": [
+      "Equipment type",
+      "Equipment capacity (kW or tons)",
+      "Equipment efficiency (COP, EER, SEER, IEER)",
+      "Climate zone"
+    ],
+    "outputs": [
+      "Minimum required efficiency",
+      "Compliance status (pass/fail)",
+      "Efficiency margin",
+      "Fan power allowance check"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "power"
+    ],
+    "source_file": "data/tasks/mechanical/buildings_mechanical.json",
+    "suggested_relative_path": "mechanical/energy-compliance/ashrae-90-1-prescriptive"
+  }
+}

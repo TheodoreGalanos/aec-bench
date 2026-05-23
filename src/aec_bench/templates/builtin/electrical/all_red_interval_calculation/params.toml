@@ -1,0 +1,74 @@
+[meta]
+name = "all-red-interval-calculation"
+description = "Traffic signal all-red clearance interval"
+long_description = "Calculates the all-red clearance interval for a vehicle to clear an intersection after yellow. The reduced method divides intersection width plus vehicle length by vehicle speed, rounds the operational interval to one decimal place, and caps it at six seconds."
+discipline = "electrical"
+category = "signal-timing"
+standards = ["MUTCD", "AS 1742.14"]
+tags = ["electrical", "traffic-signals", "all-red", "clearance", "deterministic"]
+tool_mode = "with-tool"
+
+[params.intersection_width_m]
+type = "float"
+unit = "m"
+description = "Distance across the conflict area"
+min = 3
+max = 80
+
+[params.vehicle_length_m]
+type = "float"
+unit = "m"
+description = "Design vehicle length"
+min = 3
+max = 30
+
+[params.vehicle_speed_m_s]
+type = "float"
+unit = "m/s"
+description = "Vehicle clearance speed"
+min = 1
+max = 35
+
+[outputs.clearance_distance_m]
+description = "Total clearance distance"
+tolerance = 0.03
+
+[outputs.raw_all_red_interval_s]
+description = "Uncapped clearance interval"
+tolerance = 0.03
+
+[outputs.all_red_interval_s]
+description = "Rounded all-red interval capped at six seconds"
+tolerance = 0.01
+
+[archetypes.urban_intersection]
+description = "Urban signalised intersection"
+intersection_width_m = {min = 8, max = 25}
+vehicle_length_m = {min = 4, max = 12}
+vehicle_speed_m_s = {min = 6, max = 16}
+site_contexts = ["urban-intersection", "arterial-road"]
+
+[archetypes.wide_intersection]
+description = "Wide intersection with longer design vehicles"
+intersection_width_m = {min = 20, max = 60}
+vehicle_length_m = {min = 8, max = 25}
+vehicle_speed_m_s = {min = 5, max = 18}
+site_contexts = ["freight-route", "multi-lane-arterial"]
+
+[difficulty.easy]
+description = "Urban intersection with all values visible"
+visibility = "all_given"
+archetypes = ["urban_intersection"]
+
+[difficulty.medium]
+description = "Urban or wide intersection"
+visibility = "all_given"
+archetypes = ["urban_intersection", "wide_intersection"]
+
+[difficulty.hard]
+description = "Vehicle speed hidden in clearance context"
+visibility = "partial"
+hidden_params = ["vehicle_speed_m_s"]
+replacement_text = "Use the clearance speed implied by {{ archetype.description }}."
+archetypes = ["wide_intersection"]
+vehicle_speed_m_s = [12]

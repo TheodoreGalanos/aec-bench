@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "clearance-verification",
+    "category_name": "Clearance Verification",
+    "task_id": "phase-to-phase-clearance",
+    "task_name": "Inter-Phase Clearance Verification",
+    "description": "Verify minimum clearance between phase conductors under differential wind loading",
+    "complexity": "medium",
+    "standards": [
+      "AS/NZS 7000",
+      "IEC 60826"
+    ],
+    "inputs": [
+      "Phase spacing (m)",
+      "Conductor sag (m)",
+      "Wind pressure (Pa)",
+      "Conductor properties",
+      "Voltage level (kV)"
+    ],
+    "outputs": [
+      "Minimum inter-phase clearance (m)",
+      "Required clearance (m)",
+      "Critical condition identification",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "load",
+      "pressure",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/clearance-verification/phase-to-phase-clearance"
+  }
+}

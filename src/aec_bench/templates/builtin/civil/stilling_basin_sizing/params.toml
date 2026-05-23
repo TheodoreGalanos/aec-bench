@@ -1,0 +1,96 @@
+[meta]
+name = "stilling-basin-sizing"
+description = "Estimate stilling basin length required for energy dissipation based on Froude number and USBR basin type"
+long_description = "Estimates the required stilling basin length for energy dissipation downstream of a spillway using USBR hydraulic design methods. Calculates the entry Froude number, derives the sequent (conjugate) depth from the Belanger equation d2 = (d1/2)*(sqrt(1+8*Fr^2)-1), then selects the appropriate USBR basin type (I, II, or III) and corresponding basin length factor."
+discipline = "civil"
+category = "spillway-hydraulics"
+standards = ["USBR Hydraulic Design of Stilling Basins", "USACE EM 1110-2-1603"]
+tags = ["civil", "hydraulics", "dams", "spillway", "stilling-basin", "energy-dissipation"]
+tool_mode = "with-tool"
+
+[params.unit_discharge_m3_s_m]
+type = "float"
+unit = "m³/s/m"
+description = "Unit discharge at the spillway toe q (discharge per metre width)"
+min = 0.5
+max = 80.0
+
+[params.drop_height_m]
+type = "float"
+unit = "m"
+description = "Vertical drop height from reservoir level to basin floor ΔH"
+min = 1.0
+max = 50.0
+
+[params.tailwater_depth_m]
+type = "float"
+unit = "m"
+description = "Tailwater depth downstream of the basin d_tw"
+min = 0.0
+max = 20.0
+derivable_from = "archetype"
+
+[outputs.froude_number]
+description = "Froude number at basin entry Fr₁"
+tolerance = 0.03
+
+[outputs.sequent_depth_m]
+description = "Sequent (conjugate) depth from Belanger equation d₂ (m)"
+tolerance = 0.03
+
+[outputs.basin_length_m]
+description = "Required stilling basin length L_basin (m)"
+tolerance = 0.03
+
+[outputs.basin_type]
+description = "USBR basin type code (0.0 = none, 1.0 = Type I, 2.0 = Type II, 3.0 = Type III)"
+tolerance = 0.01
+
+# --- Archetypes ---
+
+[archetypes.low_weir]
+description = "Low overflow weir or small check dam with moderate unit discharge"
+unit_discharge_m3_s_m = {min = 0.5, max = 5.0}
+drop_height_m = {min = 2.0, max = 5.0}
+tailwater_depth_m = {min = 0.3, max = 2.0}
+site_contexts = ["victoria-farm-dam-weir", "south-australia-creek-weir"]
+
+[archetypes.medium_dam]
+description = "Medium-height dam spillway with significant energy to dissipate"
+unit_discharge_m3_s_m = {min = 5.0, max = 30.0}
+drop_height_m = {min = 5.0, max = 20.0}
+tailwater_depth_m = {min = 1.5, max = 8.0}
+site_contexts = ["nsw-water-supply-dam", "queensland-irrigation-dam"]
+
+[archetypes.high_dam]
+description = "High dam spillway with large energy head and high Froude number flow"
+unit_discharge_m3_s_m = {min = 15.0, max = 80.0}
+drop_height_m = {min = 20.0, max = 50.0}
+tailwater_depth_m = {min = 3.0, max = 20.0}
+site_contexts = ["snowy-mountains-major-dam", "north-queensland-flood-dam"]
+
+[archetypes.overflow_structure]
+description = "Low-head overflow structure or diversion weir with small drop"
+unit_discharge_m3_s_m = {min = 0.5, max = 8.0}
+drop_height_m = {min = 1.0, max = 5.0}
+tailwater_depth_m = {min = 0.2, max = 2.5}
+site_contexts = ["western-australia-diversion-weir", "tasmania-small-hydro-outlet"]
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Low weir with all parameters given, straightforward Froude calculation"
+visibility = "all_given"
+archetypes = ["low_weir", "overflow_structure"]
+
+[difficulty.medium]
+description = "Medium to high dam, all parameters given, wider range of Froude numbers and basin types"
+visibility = "all_given"
+archetypes = ["medium_dam", "high_dam"]
+
+[difficulty.hard]
+description = "Tailwater depth hidden; agent must infer from site context and typical downstream conditions"
+visibility = "partial"
+hidden_params = ["tailwater_depth_m"]
+replacement_text = "The structure is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["medium_dam", "high_dam"]

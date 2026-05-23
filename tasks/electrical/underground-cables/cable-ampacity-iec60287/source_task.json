@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "underground-cables",
+    "category_name": "Underground Cable Engineering",
+    "task_id": "cable-ampacity-iec60287",
+    "task_name": "Cable Ampacity Calculation (IEC 60287)",
+    "description": "Calculate continuous current rating of underground cable using IEC 60287 methodology",
+    "complexity": "medium",
+    "standards": [
+      "IEC 60287-1-1",
+      "IEC 60287-2-1"
+    ],
+    "inputs": [
+      "Cable construction data",
+      "Maximum conductor temperature (degC)",
+      "Soil thermal resistivity (K.m/W)",
+      "Ambient soil temperature (degC)",
+      "Burial depth (m)",
+      "Installation type (direct/duct)"
+    ],
+    "outputs": [
+      "Continuous ampacity (A)",
+      "Thermal resistances T1-T4 (K.m/W)",
+      "Temperature rise (degC)",
+      "Losses breakdown (W/m)"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "calculation",
+      "current"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/underground-cables/cable-ampacity-iec60287"
+  }
+}

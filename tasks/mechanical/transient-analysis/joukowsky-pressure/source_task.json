@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_pumps_pipes",
+    "category_id": "transient-analysis",
+    "category_name": "Transient (Water Hammer) Analysis",
+    "task_id": "joukowsky-pressure",
+    "task_name": "Joukowsky Pressure Rise Calculation",
+    "description": "Calculate instantaneous pressure rise from sudden velocity change",
+    "complexity": "medium",
+    "standards": [
+      "AWWA M11",
+      "Transient Analysis Fundamentals"
+    ],
+    "inputs": [
+      "Initial velocity (m/s)",
+      "Final velocity (m/s)",
+      "Wave speed (m/s)",
+      "Fluid density (kg/m3)"
+    ],
+    "outputs": [
+      "Velocity change (m/s)",
+      "Joukowsky pressure rise (kPa)",
+      "Pressure rise in head (m)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "pressure"
+    ],
+    "source_file": "data/tasks/mechanical/water_pumps_pipes.json",
+    "suggested_relative_path": "mechanical/transient-analysis/joukowsky-pressure"
+  }
+}

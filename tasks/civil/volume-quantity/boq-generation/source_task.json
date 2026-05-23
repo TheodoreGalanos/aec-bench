@@ -1,0 +1,32 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "land_infrastructure",
+    "category_id": "volume-quantity",
+    "category_name": "Volume & Quantity Calculations",
+    "task_id": "boq-generation",
+    "task_name": "Schedule of Quantities (BoQ) Generation",
+    "description": "Generate bill of quantities from 3D model with itemized earthworks quantities",
+    "complexity": "low",
+    "standards": [],
+    "inputs": [
+      "3D design model (DWG/LandXML)",
+      "Item codes and descriptions",
+      "Measurement rules"
+    ],
+    "outputs": [
+      "Itemized quantity schedule",
+      "Total volumes by category",
+      "Cost estimate (if rates provided)"
+    ],
+    "keyword_hits": [
+      "cost",
+      "quantity",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/land_infrastructure.json",
+    "suggested_relative_path": "civil/volume-quantity/boq-generation"
+  }
+}

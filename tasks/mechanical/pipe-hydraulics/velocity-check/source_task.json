@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_pumps_pipes",
+    "category_id": "pipe-hydraulics",
+    "category_name": "Pipe Hydraulics",
+    "task_id": "velocity-check",
+    "task_name": "Pipe Velocity Compliance Check",
+    "description": "Calculate flow velocity and verify against acceptable ranges for water mains",
+    "complexity": "low",
+    "standards": [
+      "AWWA M11",
+      "WSAA Codes"
+    ],
+    "inputs": [
+      "Flow rate (L/s)",
+      "Pipe internal diameter (mm)"
+    ],
+    "outputs": [
+      "Flow velocity (m/s)",
+      "Compliance status",
+      "Recommendation"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "flow",
+      "pipe",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/water_pumps_pipes.json",
+    "suggested_relative_path": "mechanical/pipe-hydraulics/velocity-check"
+  }
+}

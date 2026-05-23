@@ -1,0 +1,42 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "hydraulics_buildings",
+    "category_id": "pressure-boosting",
+    "category_name": "Pressure Boosting Systems",
+    "task_id": "pump-duty-calculation",
+    "task_name": "Booster Pump Duty Calculation",
+    "description": "Calculate required pump duty for pressure boosting system",
+    "complexity": "medium",
+    "standards": [
+      "AS/NZS 3500.1",
+      "HI Standards"
+    ],
+    "inputs": [
+      "Design flow rate (L/s)",
+      "Static lift (m)",
+      "Friction losses (kPa)",
+      "Minimum outlet pressure (kPa)",
+      "Available inlet pressure (kPa)"
+    ],
+    "outputs": [
+      "Required pump head (m)",
+      "Pump flow (L/s)",
+      "Pump power (kW)",
+      "Duty point on curve"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "power",
+      "pressure",
+      "pump",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/hydraulics_buildings.json",
+    "suggested_relative_path": "mechanical/pressure-boosting/pump-duty-calculation"
+  }
+}

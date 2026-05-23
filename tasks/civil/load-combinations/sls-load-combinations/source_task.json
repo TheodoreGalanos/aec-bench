@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_energy",
+    "category_id": "load-combinations",
+    "category_name": "Load Combinations",
+    "task_id": "sls-load-combinations",
+    "task_name": "SLS Load Combination Check",
+    "description": "Generate and apply serviceability limit state load combinations",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 1170.0"
+    ],
+    "inputs": [
+      "Dead load G (kN)",
+      "Live load Q (kN)",
+      "Wind load W_s (kN)"
+    ],
+    "outputs": [
+      "SLS combinations",
+      "Deflection check values"
+    ],
+    "keyword_hits": [
+      "deflection",
+      "load",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/civil_energy.json",
+    "suggested_relative_path": "civil/load-combinations/sls-load-combinations"
+  }
+}

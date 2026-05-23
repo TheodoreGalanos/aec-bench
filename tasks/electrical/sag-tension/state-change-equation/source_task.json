@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "sag-tension",
+    "category_name": "Sag-Tension Calculations",
+    "task_id": "state-change-equation",
+    "task_name": "Conductor State Change Calculation",
+    "description": "Calculate final tension and sag at different temperature and loading from initial state using state change equation",
+    "complexity": "medium",
+    "standards": [
+      "IEC 60826",
+      "AS/NZS 7000"
+    ],
+    "inputs": [
+      "Initial tension (N)",
+      "Initial temperature (degC)",
+      "Initial unit load (N/m)",
+      "Final temperature (degC)",
+      "Final unit load (N/m)",
+      "Conductor properties (E, alpha, area)",
+      "Ruling span (m)"
+    ],
+    "outputs": [
+      "Final horizontal tension (N)",
+      "Final sag (m)",
+      "Tension as % of RTS"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "load"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/sag-tension/state-change-equation"
+  }
+}

@@ -1,0 +1,93 @@
+[meta]
+name = "davis-resistance"
+description = "Davis train running resistance and tractive power"
+long_description = "Calculates train running resistance using the Davis equation with constant, speed-linear, and speed-squared coefficients. The template reports resistance per tonne, total resistance, converted speed, and the tractive power needed to overcome that resistance."
+discipline = "mechanical"
+category = "train-resistance-dynamics"
+standards = ["Davis equation"]
+tags = ["mechanical", "rail", "train-resistance", "tractive-power", "deterministic"]
+tool_mode = "with-tool"
+
+[params.train_mass_t]
+type = "float"
+unit = "t"
+description = "Train mass"
+min = 1.0
+max = 50000.0
+
+[params.speed_km_h]
+type = "float"
+unit = "km/h"
+description = "Train speed"
+min = 0.0
+max = 300.0
+
+[params.coefficient_a_n_t]
+type = "float"
+unit = "N/t"
+description = "Davis constant resistance coefficient"
+min = 0.0
+max = 100.0
+
+[params.coefficient_b_n_t_km_h]
+type = "float"
+unit = "N/t per km/h"
+description = "Davis speed-linear resistance coefficient"
+min = 0.0
+max = 5.0
+
+[params.coefficient_c_n_t_km_h2]
+type = "float"
+unit = "N/t per (km/h)^2"
+description = "Davis speed-squared resistance coefficient"
+min = 0.0
+max = 0.2
+
+[outputs.speed_m_s]
+description = "Train speed in metres per second"
+tolerance = 0.03
+
+[outputs.resistance_n_per_t]
+description = "Running resistance per tonne"
+tolerance = 0.03
+
+[outputs.total_resistance_kn]
+description = "Total running resistance"
+tolerance = 0.03
+
+[outputs.tractive_power_kw]
+description = "Tractive power to overcome running resistance"
+tolerance = 0.03
+
+[archetypes.passenger_train]
+description = "Passenger train Davis resistance check"
+train_mass_t = {min = 100.0, max = 800.0}
+speed_km_h = {min = 40.0, max = 160.0}
+coefficient_a_n_t = {min = 10.0, max = 30.0}
+coefficient_b_n_t_km_h = {min = 0.2, max = 0.8}
+coefficient_c_n_t_km_h2 = {min = 0.005, max = 0.03}
+site_contexts = ["passenger-rail-corridor", "interurban-service"]
+
+[archetypes.freight_train]
+description = "Freight train Davis resistance check"
+train_mass_t = {min = 1000.0, max = 12000.0}
+speed_km_h = {min = 20.0, max = 110.0}
+coefficient_a_n_t = {min = 15.0, max = 45.0}
+coefficient_b_n_t_km_h = {min = 0.1, max = 0.6}
+coefficient_c_n_t_km_h2 = {min = 0.002, max = 0.02}
+site_contexts = ["freight-rail-corridor", "heavy-haul-service"]
+
+[difficulty.easy]
+description = "All parameters given for a passenger train"
+visibility = "all_given"
+archetypes = ["passenger_train"]
+
+[difficulty.medium]
+description = "All parameters given across train types"
+visibility = "all_given"
+archetypes = ["passenger_train", "freight_train"]
+
+[difficulty.hard]
+description = "All parameters given for freight train resistance"
+visibility = "all_given"
+archetypes = ["freight_train"]

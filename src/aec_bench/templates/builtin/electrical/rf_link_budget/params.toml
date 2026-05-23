@@ -1,0 +1,114 @@
+[meta]
+name = "rf-link-budget"
+description = "Wireless RF link budget with free-space path loss"
+long_description = "Calculates wireless link budget using transmit power, antenna gains, distance, frequency, obstacle losses, and receive sensitivity. The template computes free-space path loss, total path loss, received signal level, and link margin."
+discipline = "electrical"
+category = "wireless-design"
+standards = ["IEEE 802.11", "FCC Part 15"]
+tags = ["electrical", "wireless", "rf", "link-budget", "path-loss", "deterministic"]
+tool_mode = "with-tool"
+
+[params.transmit_power_dbm]
+type = "float"
+unit = "dBm"
+description = "Transmit power"
+min = -20
+max = 40
+
+[params.transmit_antenna_gain_dbi]
+type = "float"
+unit = "dBi"
+description = "Transmit antenna gain"
+min = -5
+max = 30
+
+[params.distance_m]
+type = "float"
+unit = "m"
+description = "Link distance"
+min = 1
+max = 50000
+
+[params.frequency_ghz]
+type = "float"
+unit = "GHz"
+description = "Carrier frequency"
+min = 0.4
+max = 80
+
+[params.receive_antenna_gain_dbi]
+type = "float"
+unit = "dBi"
+description = "Receive antenna gain"
+min = -5
+max = 30
+
+[params.obstacle_losses_db]
+type = "float"
+unit = "dB"
+description = "Additional obstacle and miscellaneous losses"
+min = 0
+max = 60
+
+[params.required_receive_sensitivity_dbm]
+type = "float"
+unit = "dBm"
+description = "Required receive sensitivity"
+min = -120
+max = -40
+
+[outputs.free_space_path_loss_db]
+description = "Free-space path loss"
+tolerance = 0.03
+
+[outputs.total_path_loss_db]
+description = "Total path loss including obstacles"
+tolerance = 0.03
+
+[outputs.received_signal_level_dbm]
+description = "Received signal level"
+tolerance = 0.03
+
+[outputs.link_margin_db]
+description = "Margin above required receive sensitivity"
+tolerance = 0.03
+
+[archetypes.short_wifi_link]
+description = "Short Wi-Fi or telemetry link"
+transmit_power_dbm = {min = 10, max = 25}
+transmit_antenna_gain_dbi = {min = 0, max = 8}
+distance_m = {min = 10, max = 500}
+frequency_ghz = {min = 2.4, max = 6}
+receive_antenna_gain_dbi = {min = 0, max = 8}
+obstacle_losses_db = {min = 0, max = 15}
+required_receive_sensitivity_dbm = {min = -90, max = -65}
+site_contexts = ["station-platform", "campus-wireless"]
+
+[archetypes.long_field_link]
+description = "Longer directional field wireless link"
+transmit_power_dbm = {min = 15, max = 35}
+transmit_antenna_gain_dbi = {min = 8, max = 25}
+distance_m = {min = 500, max = 50000}
+frequency_ghz = {min = 0.9, max = 24}
+receive_antenna_gain_dbi = {min = 8, max = 25}
+obstacle_losses_db = {min = 0, max = 30}
+required_receive_sensitivity_dbm = {min = -105, max = -70}
+site_contexts = ["roadside-radio", "remote-pump-station"]
+
+[difficulty.easy]
+description = "Short wireless link with all losses visible"
+visibility = "all_given"
+archetypes = ["short_wifi_link"]
+
+[difficulty.medium]
+description = "Short or long wireless link"
+visibility = "all_given"
+archetypes = ["short_wifi_link", "long_field_link"]
+
+[difficulty.hard]
+description = "Obstacle loss hidden in path context"
+visibility = "partial"
+hidden_params = ["obstacle_losses_db"]
+replacement_text = "Use the additional path loss implied by {{ archetype.description }}."
+archetypes = ["long_field_link"]
+obstacle_losses_db = [10]

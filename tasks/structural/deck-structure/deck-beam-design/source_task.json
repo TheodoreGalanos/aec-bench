@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "ports_marine",
+    "category_id": "deck-structure",
+    "category_name": "Deck Structure Design",
+    "task_id": "deck-beam-design",
+    "task_name": "Deck Beam Design",
+    "description": "Design precast or cast-in-place deck beams for wharf structure",
+    "complexity": "medium",
+    "standards": [
+      "AS 3600",
+      "AS 5100",
+      "EN 1992-1-1"
+    ],
+    "inputs": [
+      "Beam span (m)",
+      "Tributary width (m)",
+      "Dead and live loads",
+      "Prestress requirements",
+      "Exposure classification"
+    ],
+    "outputs": [
+      "Section dimensions",
+      "Reinforcement/strand layout",
+      "Shear reinforcement",
+      "Deflection and camber"
+    ],
+    "keyword_hits": [
+      "deflection",
+      "load",
+      "shear",
+      "stress"
+    ],
+    "source_file": "data/tasks/structural/ports_marine.json",
+    "suggested_relative_path": "structural/deck-structure/deck-beam-design"
+  }
+}

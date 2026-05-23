@@ -1,0 +1,88 @@
+[meta]
+name = "road-aeci-calculation"
+description = "Calculate road lighting Annual Energy Consumption Index"
+long_description = "Calculates annual road lighting energy consumption and Annual Energy Consumption Index from system power, full-output hours, dimmed hours, dimming level, and illuminated area."
+discipline = "electrical"
+category = "energy-performance"
+standards = ["EN 13201-5", "AS/NZS 1158.3.1"]
+tags = ["electrical", "lighting", "road-lighting", "aeci", "energy", "deterministic"]
+tool_mode = "with-tool"
+
+[params.system_power_w]
+type = "float"
+unit = "W"
+description = "Total road lighting system power at full output"
+min = 100
+max = 200000
+
+[params.full_output_hours_per_year]
+type = "float"
+unit = "h/year"
+description = "Annual hours at full lighting output"
+min = 0
+max = 8760
+
+[params.dimmed_hours_per_year]
+type = "float"
+unit = "h/year"
+description = "Annual hours at dimmed lighting output"
+min = 0
+max = 8760
+
+[params.dimming_level_pct]
+type = "float"
+unit = "%"
+description = "Dimmed output level relative to full power"
+min = 0
+max = 100
+
+[params.illuminated_area_m2]
+type = "float"
+unit = "m2"
+description = "Illuminated road or pathway area"
+min = 100
+max = 100000
+
+[outputs.annual_energy_kwh]
+description = "Annual lighting energy consumption"
+tolerance = 0.03
+
+[outputs.aeci_kwh_per_m2_year]
+description = "Annual Energy Consumption Index"
+tolerance = 0.03
+
+[archetypes.local_road_night_dimming]
+description = "Local road with overnight dimming"
+system_power_w = {min = 500, max = 6000}
+full_output_hours_per_year = {min = 1800, max = 3500}
+dimmed_hours_per_year = {min = 1500, max = 4500}
+dimming_level_pct = {min = 30, max = 70}
+illuminated_area_m2 = {min = 300, max = 5000}
+site_contexts = ["local-road", "night-dimming"]
+
+[archetypes.arterial_road_night_dimming]
+description = "Arterial road with adaptive lighting control"
+system_power_w = {min = 5000, max = 70000}
+full_output_hours_per_year = {min = 2000, max = 4500}
+dimmed_hours_per_year = {min = 1000, max = 4000}
+dimming_level_pct = {min = 40, max = 80}
+illuminated_area_m2 = {min = 3000, max = 50000}
+site_contexts = ["arterial-road", "adaptive-lighting"]
+
+[difficulty.easy]
+description = "Local road with all values visible"
+visibility = "all_given"
+archetypes = ["local_road_night_dimming"]
+
+[difficulty.medium]
+description = "Road lighting dimming scenario"
+visibility = "all_given"
+archetypes = ["local_road_night_dimming", "arterial_road_night_dimming"]
+
+[difficulty.hard]
+description = "Arterial road with dimmed hours embedded in context"
+visibility = "partial"
+hidden_params = ["dimmed_hours_per_year"]
+replacement_text = "Use the annual dimmed operating hours implied by {{ archetype.description }}."
+archetypes = ["arterial_road_night_dimming"]
+dimmed_hours_per_year = [2500]

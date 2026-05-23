@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "coastal_engineering",
+    "category_id": "design-review-qa",
+    "category_name": "Design Review & QA Checks",
+    "task_id": "datum-unit-validation",
+    "task_name": "Datum and Unit Consistency Check",
+    "description": "Verify consistent use of vertical datums and SI units throughout design",
+    "complexity": "low",
+    "standards": [
+      "ISO 19115",
+      "Project QA requirements"
+    ],
+    "inputs": [
+      "Design documents",
+      "Metadata declarations",
+      "Calculation sheets"
+    ],
+    "outputs": [
+      "Datum consistency report",
+      "Unit compliance report",
+      "Discrepancies list"
+    ],
+    "keyword_hits": [
+      "calculation"
+    ],
+    "source_file": "data/tasks/civil/coastal_engineering.json",
+    "suggested_relative_path": "civil/design-review-qa/datum-unit-validation"
+  }
+}

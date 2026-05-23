@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "tunnel_systems",
+    "category_id": "fire-smoke-management",
+    "category_name": "Fire and Smoke Management",
+    "task_id": "chimney-effect",
+    "task_name": "Chimney Effect Calculation",
+    "description": "Calculate natural buoyancy-driven pressure in sloped tunnels",
+    "complexity": "medium",
+    "standards": [
+      "PIARC 1996 05.02",
+      "NFPA 502"
+    ],
+    "inputs": [
+      "Tunnel length (m)",
+      "Tunnel grade (%)",
+      "Temperature difference (fire vs ambient)",
+      "Air density"
+    ],
+    "outputs": [
+      "Stack pressure (Pa)",
+      "Natural airflow direction",
+      "Fan compensation required"
+    ],
+    "keyword_hits": [
+      "airflow",
+      "calculate",
+      "calculation",
+      "flow",
+      "pressure"
+    ],
+    "source_file": "data/tasks/mechanical/tunnel_systems.json",
+    "suggested_relative_path": "mechanical/fire-smoke-management/chimney-effect"
+  }
+}

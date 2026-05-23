@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "dams",
+    "category_id": "spillway-hydraulics",
+    "category_name": "Spillway Hydraulics",
+    "task_id": "spillway-weir-capacity",
+    "task_name": "Spillway Weir Capacity Calculation",
+    "description": "Calculate spillway discharge capacity using the standard weir equation for a given geometry and head",
+    "complexity": "low",
+    "standards": [
+      "USBR Design Standard No. 14",
+      "USACE EM 1110-2-1603"
+    ],
+    "inputs": [
+      "Spillway type (ogee/broad-crested)",
+      "Effective crest length (m)",
+      "Design head (m)",
+      "Discharge coefficient (C)"
+    ],
+    "outputs": [
+      "Discharge capacity (m\u00b3/s)",
+      "Unit discharge (m\u00b3/s/m)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "capacity"
+    ],
+    "source_file": "data/tasks/civil/dams.json",
+    "suggested_relative_path": "civil/spillway-hydraulics/spillway-weir-capacity"
+  }
+}

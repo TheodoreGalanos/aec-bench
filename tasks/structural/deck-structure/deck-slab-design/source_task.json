@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "ports_marine",
+    "category_id": "deck-structure",
+    "category_name": "Deck Structure Design",
+    "task_id": "deck-slab-design",
+    "task_name": "Deck Slab Flexural Design",
+    "description": "Design reinforced concrete deck slab for uniformly distributed and concentrated loads",
+    "complexity": "low",
+    "standards": [
+      "AS 3600",
+      "EN 1992-1-1",
+      "ACI 318"
+    ],
+    "inputs": [
+      "Slab span (m)",
+      "Slab thickness (mm)",
+      "UDL (kPa)",
+      "Wheel load (kN)",
+      "Concrete strength f'c (MPa)"
+    ],
+    "outputs": [
+      "Design moments (kNm/m)",
+      "Required reinforcement (mm2/m)",
+      "Deflection check",
+      "Crack width check"
+    ],
+    "keyword_hits": [
+      "deflection",
+      "load",
+      "moment",
+      "rate"
+    ],
+    "source_file": "data/tasks/structural/ports_marine.json",
+    "suggested_relative_path": "structural/deck-structure/deck-slab-design"
+  }
+}

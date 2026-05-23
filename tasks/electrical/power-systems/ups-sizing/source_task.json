@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "intelligent_transport_systems",
+    "category_id": "power-systems",
+    "category_name": "ITS Power Systems",
+    "task_id": "ups-sizing",
+    "task_name": "UPS Sizing for ITS Cabinet",
+    "description": "Size UPS and battery for desired backup duration",
+    "complexity": "low",
+    "standards": [
+      "IEEE 485",
+      "NEMA TS 2"
+    ],
+    "inputs": [
+      "Equipment power consumption (W)",
+      "System voltage (V)",
+      "Desired backup duration (hours)",
+      "Efficiency factor",
+      "Temperature derating"
+    ],
+    "outputs": [
+      "UPS capacity (VA)",
+      "Battery capacity (Ah)",
+      "Runtime verification"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "power",
+      "size",
+      "sizing",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/intelligent_transport_systems.json",
+    "suggested_relative_path": "electrical/power-systems/ups-sizing"
+  }
+}

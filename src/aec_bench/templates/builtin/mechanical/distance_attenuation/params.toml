@@ -1,0 +1,78 @@
+[meta]
+name = "distance-attenuation"
+description = "Point-source sound pressure level adjustment for a change in distance"
+long_description = "Calculates the free-field sound pressure level at a target distance from a known reference level and distance. The template uses inverse-square geometric spreading, expressed as L2 = L1 - 20 log10(r2/r1), for deterministic first-pass acoustic propagation checks."
+discipline = "mechanical"
+category = "fundamental-calculations"
+standards = ["ISO 9613-2"]
+tags = ["mechanical", "acoustics", "sound-pressure-level", "distance-attenuation", "deterministic"]
+tool_mode = "with-tool"
+
+[params.reference_spl_db]
+type = "float"
+unit = "dB"
+description = "Sound pressure level at the reference distance"
+min = 40.0
+max = 130.0
+
+[params.reference_distance_m]
+type = "float"
+unit = "m"
+description = "Reference distance from the point source"
+min = 0.5
+max = 50.0
+
+[params.target_distance_m]
+type = "float"
+unit = "m"
+description = "Target distance from the point source"
+min = 1.0
+max = 500.0
+
+[outputs.distance_ratio]
+description = "Distance ratio r2/r1"
+tolerance = 0.03
+
+[outputs.attenuation_db]
+description = "Geometric spreading attenuation"
+tolerance = 0.03
+
+[outputs.target_spl_db]
+description = "Sound pressure level at the target distance"
+tolerance = 0.03
+
+[archetypes.plant_room_equipment]
+description = "Mechanical plant item assessed at occupied-area setback"
+reference_spl_db = {min = 75.0, max = 100.0}
+reference_distance_m = {min = 1.0, max = 3.0}
+target_distance_m = {min = 5.0, max = 50.0}
+site_contexts = ["hospital-plant-room", "commercial-rooftop-plant"]
+
+[archetypes.industrial_fan]
+description = "Industrial fan or blower assessed at site boundary"
+reference_spl_db = {min = 85.0, max = 115.0}
+reference_distance_m = {min = 1.0, max = 10.0}
+target_distance_m = {min = 25.0, max = 250.0}
+site_contexts = ["water-treatment-plant", "industrial-process-building"]
+
+[archetypes.construction_noise]
+description = "Temporary construction equipment assessed at a receiver"
+reference_spl_db = {min = 80.0, max = 120.0}
+reference_distance_m = {min = 5.0, max = 15.0}
+target_distance_m = {min = 20.0, max = 500.0}
+site_contexts = ["urban-construction-site", "rail-corridor-works"]
+
+[difficulty.easy]
+description = "All parameters given for nearby plant equipment"
+visibility = "all_given"
+archetypes = ["plant_room_equipment"]
+
+[difficulty.medium]
+description = "All parameters given across plant and industrial noise scenarios"
+visibility = "all_given"
+archetypes = ["plant_room_equipment", "industrial_fan"]
+
+[difficulty.hard]
+description = "All parameters given for longer-distance environmental noise checks"
+visibility = "all_given"
+archetypes = ["industrial_fan", "construction_noise"]

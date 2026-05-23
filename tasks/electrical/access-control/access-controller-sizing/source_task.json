@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "ict_comms_security",
+    "category_id": "access-control",
+    "category_name": "Access Control Systems",
+    "task_id": "access-controller-sizing",
+    "task_name": "Access Controller and Power Sizing",
+    "description": "Size access controllers and power supplies for door count and device loads",
+    "complexity": "medium",
+    "standards": [
+      "SIA OSDP",
+      "UL 294"
+    ],
+    "inputs": [
+      "Number of doors",
+      "Reader type per door",
+      "Electric lock type per door",
+      "Controller specifications",
+      "Power supply capacity"
+    ],
+    "outputs": [
+      "Number of controllers required",
+      "Door allocation to controllers",
+      "Power supply sizing (A)",
+      "Battery backup calculation"
+    ],
+    "keyword_hits": [
+      "calculation",
+      "capacity",
+      "load",
+      "power",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/electrical/ict_comms_security.json",
+    "suggested_relative_path": "electrical/access-control/access-controller-sizing"
+  }
+}

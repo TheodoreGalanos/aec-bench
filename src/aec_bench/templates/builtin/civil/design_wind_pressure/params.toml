@@ -1,0 +1,137 @@
+[meta]
+name = "design-wind-pressure"
+description = "Calculate design wind pressure from wind speed and aerodynamic factors per AS/NZS 1170.2"
+long_description = "Computes design wind pressure on a building surface using the AS/NZS 1170.2 Section 2.4 formula p = 0.5 * rho_air * V_des^2 * C_fig * C_dyn. Determines the basic dynamic pressure from wind speed, applies aerodynamic shape and dynamic response factors, and calculates the total wind force on a tributary area for structural design."
+discipline = "civil"
+category = "wind-load-derivation"
+standards = ["AS/NZS 1170.2"]
+tags = ["civil", "wind", "pressure", "aerodynamic", "wind-load", "structural-actions", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.design_wind_speed_m_per_s]
+type = "float"
+unit = "m/s"
+description = "Design wind speed V_des,theta for the chosen cardinal direction"
+min = 20.0
+max = 80.0
+
+[params.cfig]
+type = "float"
+unit = "dimensionless"
+description = "Aerodynamic shape factor C_fig (positive = pressure, negative = suction)"
+min = -2.0
+max = 2.0
+
+[params.cdyn]
+type = "float"
+unit = "dimensionless"
+description = "Dynamic response factor C_dyn (1.0 for most low-rise structures)"
+min = 0.8
+max = 1.2
+derivable_from = "archetype"
+
+[params.air_density_kg_per_m3]
+type = "float"
+unit = "kg/m3"
+description = "Air density rho_air (standard value 1.2 kg/m3)"
+min = 1.0
+max = 1.4
+derivable_from = "archetype"
+
+[params.tributary_area_m2]
+type = "float"
+unit = "m2"
+description = "Tributary area of the surface being loaded"
+min = 1.0
+max = 200.0
+
+# --- Outputs ---
+
+[outputs.dynamic_pressure_kpa]
+description = "Basic dynamic wind pressure q = 0.5 * rho * V^2 (kPa)"
+tolerance = 0.03
+
+[outputs.design_pressure_kpa]
+description = "Design wind pressure p = q * C_fig * C_dyn (kPa)"
+tolerance = 0.03
+
+[outputs.total_force_kn]
+description = "Total wind force on the tributary area F = p * A (kN)"
+tolerance = 0.03
+
+# --- Archetypes ---
+
+[archetypes.low_rise_windward_wall]
+description = "Windward wall of a low-rise building in suburban terrain"
+design_wind_speed_m_per_s = {min = 30.0, max = 46.0}
+cfig = {min = 0.5, max = 0.8}
+cdyn = {min = 1.0, max = 1.0}
+air_density_kg_per_m3 = {min = 1.2, max = 1.2}
+tributary_area_m2 = {min = 5.0, max = 30.0}
+site_contexts = ["suburban-residential-house", "small-commercial-warehouse"]
+
+[archetypes.low_rise_roof_suction]
+description = "Roof surface under suction on a low-rise building in open terrain"
+design_wind_speed_m_per_s = {min = 35.0, max = 55.0}
+cfig = {min = -1.3, max = -0.5}
+cdyn = {min = 1.0, max = 1.0}
+air_density_kg_per_m3 = {min = 1.2, max = 1.2}
+tributary_area_m2 = {min = 10.0, max = 60.0}
+site_contexts = ["rural-farm-shed-roof", "coastal-industrial-roof"]
+
+[archetypes.mid_rise_facade]
+description = "Facade panel on a mid-rise office building in city fringe terrain"
+design_wind_speed_m_per_s = {min = 35.0, max = 55.0}
+cfig = {min = 0.6, max = 1.2}
+cdyn = {min = 1.0, max = 1.05}
+air_density_kg_per_m3 = {min = 1.2, max = 1.2}
+tributary_area_m2 = {min = 8.0, max = 50.0}
+site_contexts = ["city-fringe-office-block", "university-campus-building"]
+
+[archetypes.high_rise_cladding]
+description = "Cladding panel on a tall building in urban terrain with dynamic amplification"
+design_wind_speed_m_per_s = {min = 40.0, max = 70.0}
+cfig = {min = -1.5, max = 1.5}
+cdyn = {min = 1.0, max = 1.15}
+air_density_kg_per_m3 = {min = 1.2, max = 1.2}
+tributary_area_m2 = {min = 2.0, max = 15.0}
+site_contexts = ["cbd-high-rise-tower", "waterfront-residential-tower"]
+
+[archetypes.industrial_large_opening]
+description = "Large wall opening on an industrial building in open terrain"
+design_wind_speed_m_per_s = {min = 40.0, max = 65.0}
+cfig = {min = 0.7, max = 1.8}
+cdyn = {min = 1.0, max = 1.0}
+air_density_kg_per_m3 = {min = 1.2, max = 1.2}
+tributary_area_m2 = {min = 15.0, max = 120.0}
+site_contexts = ["port-warehouse-roller-door", "regional-aircraft-hangar"]
+
+[archetypes.cyclonic_coastal]
+description = "Coastal structure in a cyclonic wind region with high design wind speeds"
+design_wind_speed_m_per_s = {min = 55.0, max = 80.0}
+cfig = {min = -1.5, max = 1.2}
+cdyn = {min = 1.0, max = 1.1}
+air_density_kg_per_m3 = {min = 1.2, max = 1.2}
+tributary_area_m2 = {min = 5.0, max = 40.0}
+site_contexts = ["north-qld-cyclonic-house", "darwin-commercial-building"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "All parameters given, low-rise buildings with C_dyn = 1.0 and standard air density"
+visibility = "all_given"
+archetypes = ["low_rise_windward_wall", "low_rise_roof_suction"]
+
+[difficulty.medium]
+description = "All parameters given, wider range of building types including mid-rise and industrial"
+visibility = "all_given"
+archetypes = ["low_rise_windward_wall", "low_rise_roof_suction", "mid_rise_facade", "industrial_large_opening", "cyclonic_coastal"]
+
+[difficulty.hard]
+description = "C_dyn and air density hidden; agent must adopt standard values from engineering knowledge"
+visibility = "partial"
+hidden_params = ["cdyn", "air_density_kg_per_m3"]
+replacement_text = "The structure is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["mid_rise_facade", "high_rise_cladding", "industrial_large_opening", "cyclonic_coastal"]

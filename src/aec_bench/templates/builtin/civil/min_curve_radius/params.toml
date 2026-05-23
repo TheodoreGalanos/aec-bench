@@ -1,0 +1,90 @@
+[meta]
+name = "min-curve-radius"
+description = "Minimum horizontal curve radius using R = V^2 / (127 * (e_max + f)) per AGRD Part 3 §7"
+long_description = "Calculates the absolute minimum and desirable minimum horizontal curve radius for road design using R_min = V^2 / (127 * (e_max + f)) per Austroads Guide to Road Design Part 3 Section 7. The desirable radius uses a reduced friction factor (0.7f) for an additional safety margin. Used in road geometric design to ensure vehicle stability and driver comfort on horizontal curves."
+discipline = "civil"
+category = "horizontal-geometry"
+standards = ["AGRD Part 3 §7"]
+tags = ["civil", "roads", "horizontal-geometry", "curves", "radius", "deterministic"]
+tool_mode = "with-tool"
+
+[params.design_speed_km_h]
+type = "float"
+unit = "km/h"
+description = "Design speed V"
+min = 40
+max = 130
+
+[params.max_superelevation_pct]
+type = "float"
+unit = "%"
+description = "Maximum superelevation rate e_max"
+min = 3.0
+max = 8.0
+
+[params.side_friction_factor]
+type = "float"
+unit = "-"
+description = "Side friction factor f (speed-dependent, from AGRD Table 7.5)"
+min = 0.09
+max = 0.35
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.min_radius_m]
+description = "Absolute minimum horizontal curve radius R_min (m)"
+tolerance = 0.03
+
+[outputs.desirable_min_radius_m]
+description = "Desirable minimum horizontal curve radius R_desirable (m)"
+tolerance = 0.03
+
+# --- Archetypes: road type / speed environment scenarios ---
+
+[archetypes.urban_local]
+description = "Low-speed urban local road with frequent intersections and pedestrian activity"
+design_speed_km_h = {min = 40, max = 60}
+max_superelevation_pct = {min = 3.0, max = 4.0}
+side_friction_factor = {min = 0.30, max = 0.35}
+site_contexts = ["sydney-local-street", "melbourne-inner-suburb", "brisbane-residential-road"]
+
+[archetypes.suburban_arterial]
+description = "Suburban arterial road with moderate traffic and signalised intersections"
+design_speed_km_h = {min = 60, max = 80}
+max_superelevation_pct = {min = 5.0, max = 6.0}
+side_friction_factor = {min = 0.22, max = 0.30}
+site_contexts = ["sydney-parramatta-road", "melbourne-springvale-road", "brisbane-waterworks-road"]
+
+[archetypes.rural_highway]
+description = "Rural two-lane highway through open terrain with higher operating speeds"
+design_speed_km_h = {min = 80, max = 110}
+max_superelevation_pct = {min = 6.0, max = 7.0}
+side_friction_factor = {min = 0.13, max = 0.22}
+site_contexts = ["bruce-highway-qld", "princes-highway-vic", "great-western-highway-nsw"]
+
+[archetypes.motorway]
+description = "High-speed divided motorway with grade-separated interchanges"
+design_speed_km_h = {min = 100, max = 130}
+max_superelevation_pct = {min = 5.0, max = 6.0}
+side_friction_factor = {min = 0.09, max = 0.16}
+site_contexts = ["m1-pacific-motorway", "m2-hills-motorway", "western-ring-road-melbourne"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "All parameters given, low-speed urban or suburban road"
+visibility = "all_given"
+archetypes = ["urban_local", "suburban_arterial"]
+
+[difficulty.medium]
+description = "All parameters given, any road type and speed environment"
+visibility = "all_given"
+archetypes = ["urban_local", "suburban_arterial", "rural_highway", "motorway"]
+
+[difficulty.hard]
+description = "Side friction factor hidden — agent must infer f from design speed using AGRD Table 7.5"
+visibility = "partial"
+hidden_params = ["side_friction_factor"]
+replacement_text = "The road is a {{ archetype.description }} ({{ archetype.site_context }}). Determine the appropriate side friction factor from AGRD Table 7.5 for the given design speed."
+archetypes = ["suburban_arterial", "rural_highway", "motorway"]

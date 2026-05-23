@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "overhead_wiring_rail",
+    "category_id": "traction-power",
+    "category_name": "Traction Power Supply",
+    "task_id": "voltage-drop-calculation",
+    "task_name": "Traction Power Voltage Drop Calculation",
+    "description": "Calculate voltage drop along traction power supply to verify compliance with limits",
+    "complexity": "medium",
+    "standards": [
+      "EN 50163",
+      "IEC 60850"
+    ],
+    "inputs": [
+      "OLE impedance (ohm/km)",
+      "Train load profile (MW)",
+      "Train positions",
+      "Substation locations and voltage",
+      "Feeder impedance"
+    ],
+    "outputs": [
+      "Voltage at each train location (V)",
+      "Minimum voltage identification",
+      "Compliance with Umin1/Umin2",
+      "Voltage profile plot"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "drop",
+      "load",
+      "power",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/overhead_wiring_rail.json",
+    "suggested_relative_path": "electrical/traction-power/voltage-drop-calculation"
+  }
+}

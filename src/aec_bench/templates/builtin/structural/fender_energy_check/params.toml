@@ -1,0 +1,98 @@
+[meta]
+name = "fender-energy-check"
+description = "Corrected fender energy capacity check for marine berths"
+long_description = "Calculates corrected fender energy absorption capacity from rated energy and explicit temperature, velocity, angular, and manufacturing tolerance factors. The template reports corrected capacity, utilisation ratio, and capacity margin against the supplied design berthing energy."
+discipline = "structural"
+category = "fender-design"
+standards = ["PIANC WG211", "BS 6349-4"]
+tags = ["structural", "marine", "fender", "energy-capacity", "deterministic"]
+tool_mode = "with-tool"
+
+[params.design_berthing_energy_knm]
+type = "float"
+unit = "kNm"
+description = "Design berthing energy ED"
+min = 5.0
+max = 20000.0
+
+[params.fender_rated_energy_knm]
+type = "float"
+unit = "kNm"
+description = "Manufacturer rated fender energy ER"
+min = 10.0
+max = 50000.0
+
+[params.temperature_factor]
+type = "float"
+description = "Temperature correction factor"
+min = 0.6
+max = 1.3
+
+[params.velocity_factor]
+type = "float"
+description = "Velocity correction factor"
+min = 0.7
+max = 1.3
+
+[params.angular_factor]
+type = "float"
+description = "Angular compression correction factor"
+min = 0.5
+max = 1.1
+
+[params.manufacturing_tolerance_factor]
+type = "float"
+description = "Manufacturing tolerance correction factor"
+min = 0.8
+max = 1.0
+
+[outputs.correction_factor]
+description = "Total fender energy correction factor"
+tolerance = 0.03
+
+[outputs.corrected_capacity_knm]
+description = "Corrected fender energy capacity"
+tolerance = 0.03
+
+[outputs.energy_utilisation_ratio]
+description = "Design energy divided by corrected capacity"
+tolerance = 0.03
+
+[outputs.capacity_margin_knm]
+description = "Corrected capacity minus design berthing energy"
+tolerance = 0.03
+
+[archetypes.rubber_cell_fender]
+description = "Rubber cell fender under near-normal vessel approach"
+design_berthing_energy_knm = {min = 100.0, max = 3000.0}
+fender_rated_energy_knm = {min = 500.0, max = 6000.0}
+temperature_factor = {min = 0.85, max = 1.1}
+velocity_factor = {min = 0.9, max = 1.15}
+angular_factor = {min = 0.8, max = 1.0}
+manufacturing_tolerance_factor = {min = 0.9, max = 1.0}
+site_contexts = ["ferry-terminal", "general-cargo-berth"]
+
+[archetypes.large_cone_fender]
+description = "Large cone fender for high-energy industrial berth"
+design_berthing_energy_knm = {min = 2000.0, max = 15000.0}
+fender_rated_energy_knm = {min = 5000.0, max = 30000.0}
+temperature_factor = {min = 0.75, max = 1.15}
+velocity_factor = {min = 0.85, max = 1.25}
+angular_factor = {min = 0.65, max = 1.0}
+manufacturing_tolerance_factor = {min = 0.85, max = 1.0}
+site_contexts = ["bulk-export-berth", "container-terminal"]
+
+[difficulty.easy]
+description = "All parameters given for a rubber cell fender"
+visibility = "all_given"
+archetypes = ["rubber_cell_fender"]
+
+[difficulty.medium]
+description = "All parameters given across common fender systems"
+visibility = "all_given"
+archetypes = ["rubber_cell_fender", "large_cone_fender"]
+
+[difficulty.hard]
+description = "All parameters given for high-energy berth fender systems"
+visibility = "all_given"
+archetypes = ["large_cone_fender"]

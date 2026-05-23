@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "lighting",
+    "category_id": "interior-lighting",
+    "category_name": "Interior Workplace Lighting",
+    "task_id": "interior-uniformity",
+    "task_name": "Interior Illuminance Uniformity Check",
+    "description": "Calculate illuminance uniformity for task and surrounding areas",
+    "complexity": "low",
+    "standards": [
+      "EN 12464-1",
+      "AS/NZS 1680"
+    ],
+    "inputs": [
+      "Illuminance grid values",
+      "Task area boundaries",
+      "Surrounding area boundaries"
+    ],
+    "outputs": [
+      "Task area uniformity Uo",
+      "Immediate surround illuminance",
+      "Background illuminance",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/electrical/lighting.json",
+    "suggested_relative_path": "electrical/interior-lighting/interior-uniformity"
+  }
+}

@@ -1,0 +1,136 @@
+[meta]
+name = "access-controller-sizing"
+description = "Size access controllers, power supplies, and backup battery capacity"
+long_description = "Calculates a reduced access control system sizing case from door count, controller capacity, per-door device currents, controller current, power supply capacity, and backup duration. The template reports controller count, current demand, supply count, and battery capacity."
+discipline = "electrical"
+category = "access-control"
+standards = ["SIA OSDP", "UL 294"]
+tags = ["electrical", "security", "access-control", "power-supply", "battery", "deterministic"]
+tool_mode = "with-tool"
+
+[params.door_count]
+type = "float"
+unit = "count"
+description = "Number of controlled doors"
+min = 1
+max = 500
+
+[params.doors_per_controller]
+type = "float"
+unit = "doors/controller"
+description = "Controller door capacity"
+min = 1
+max = 16
+
+[params.reader_current_ma_per_door]
+type = "float"
+unit = "mA"
+description = "Reader current per controlled door"
+min = 0
+max = 1000
+
+[params.lock_current_ma_per_door]
+type = "float"
+unit = "mA"
+description = "Electric lock current per controlled door"
+min = 0
+max = 3000
+
+[params.request_to_exit_current_ma_per_door]
+type = "float"
+unit = "mA"
+description = "Request-to-exit device current per controlled door"
+min = 0
+max = 1000
+
+[params.controller_current_ma]
+type = "float"
+unit = "mA"
+description = "Current draw per access controller"
+min = 0
+max = 3000
+
+[params.power_supply_capacity_a]
+type = "float"
+unit = "A"
+description = "Usable current capacity per power supply"
+min = 0.5
+max = 50
+
+[params.backup_duration_h]
+type = "float"
+unit = "h"
+description = "Required backup battery duration"
+min = 0.5
+max = 72
+
+[params.battery_derating_factor]
+type = "float"
+unit = "-"
+description = "Battery derating factor applied to backup capacity"
+min = 0.4
+max = 1
+
+[outputs.controllers_required]
+description = "Number of access controllers required"
+tolerance = 0.01
+
+[outputs.door_device_load_a]
+description = "Total current for door devices"
+tolerance = 0.03
+
+[outputs.total_system_load_a]
+description = "Total access control system current"
+tolerance = 0.03
+
+[outputs.power_supplies_required]
+description = "Number of power supplies required"
+tolerance = 0.01
+
+[outputs.battery_capacity_ah]
+description = "Required battery capacity"
+tolerance = 0.03
+
+[archetypes.small_office_access]
+description = "Small office access control system"
+door_count = {min = 2, max = 20}
+doors_per_controller = {min = 2, max = 8}
+reader_current_ma_per_door = {min = 80, max = 250}
+lock_current_ma_per_door = {min = 250, max = 900}
+request_to_exit_current_ma_per_door = {min = 20, max = 150}
+controller_current_ma = {min = 150, max = 600}
+power_supply_capacity_a = {min = 2, max = 10}
+backup_duration_h = {min = 2, max = 12}
+battery_derating_factor = {min = 0.65, max = 0.9}
+site_contexts = ["office-security", "access-control"]
+
+[archetypes.campus_access]
+description = "Campus access control system"
+door_count = {min = 20, max = 200}
+doors_per_controller = {min = 4, max = 16}
+reader_current_ma_per_door = {min = 100, max = 300}
+lock_current_ma_per_door = {min = 300, max = 1200}
+request_to_exit_current_ma_per_door = {min = 20, max = 200}
+controller_current_ma = {min = 250, max = 1000}
+power_supply_capacity_a = {min = 5, max = 30}
+backup_duration_h = {min = 4, max = 24}
+battery_derating_factor = {min = 0.6, max = 0.85}
+site_contexts = ["campus-security", "access-control"]
+
+[difficulty.easy]
+description = "Small office access control with all values visible"
+visibility = "all_given"
+archetypes = ["small_office_access"]
+
+[difficulty.medium]
+description = "Access control case selected from office or campus systems"
+visibility = "all_given"
+archetypes = ["small_office_access", "campus_access"]
+
+[difficulty.hard]
+description = "Campus access control with battery derating embedded in context"
+visibility = "partial"
+hidden_params = ["battery_derating_factor"]
+replacement_text = "Use the battery derating factor implied by {{ archetype.description }}."
+archetypes = ["campus_access"]
+battery_derating_factor = [0.8]

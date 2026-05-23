@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_systems_studies",
+    "category_id": "short-circuit",
+    "category_name": "Short Circuit Analysis",
+    "task_id": "unsymmetrical-fault",
+    "task_name": "Unsymmetrical Fault Analysis",
+    "description": "Calculate single-line-to-ground and line-to-line fault currents using symmetrical components",
+    "complexity": "medium",
+    "standards": [
+      "IEC 60909-0:2016",
+      "IEEE 3002.3"
+    ],
+    "inputs": [
+      "Fault location and type",
+      "Positive sequence impedance Z1",
+      "Negative sequence impedance Z2",
+      "Zero sequence impedance Z0",
+      "Grounding configuration"
+    ],
+    "outputs": [
+      "Fault current magnitude (kA)",
+      "Sequence current components (I0, I1, I2)",
+      "Phase currents (Ia, Ib, Ic)",
+      "Ground fault current"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "current",
+      "fault"
+    ],
+    "source_file": "data/tasks/electrical/energy_systems_studies.json",
+    "suggested_relative_path": "electrical/short-circuit/unsymmetrical-fault"
+  }
+}

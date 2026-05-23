@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "rail_signalling",
+    "category_id": "capacity-headway",
+    "category_name": "Capacity and Headway Analysis",
+    "task_id": "minimum-headway",
+    "task_name": "Minimum Headway Calculation",
+    "description": "Calculate minimum safe time separation between following trains",
+    "complexity": "medium",
+    "standards": [
+      "UIC 406",
+      "AS 7711"
+    ],
+    "inputs": [
+      "Train length (m)",
+      "Maximum speed (km/h)",
+      "Acceleration/deceleration rates (m/s2)",
+      "Station dwell time (s)",
+      "Operating margins (s)",
+      "Signal spacing (m)"
+    ],
+    "outputs": [
+      "Minimum headway (s)",
+      "Theoretical capacity (trains/hour)",
+      "Limiting section identification"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "capacity",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/rail_signalling.json",
+    "suggested_relative_path": "electrical/capacity-headway/minimum-headway"
+  }
+}

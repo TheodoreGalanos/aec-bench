@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "instrumentation_controls",
+    "category_id": "signal-processing",
+    "category_name": "Signal Processing and Scaling",
+    "task_id": "4-20ma-scaling",
+    "task_name": "4-20 mA Signal Scaling Calculation",
+    "description": "Calculate 4-20 mA current signal for given process variable or vice versa",
+    "complexity": "low",
+    "standards": [
+      "ISA-5.1",
+      "IEC 60381"
+    ],
+    "inputs": [
+      "Process variable value",
+      "Lower range value (LRV)",
+      "Upper range value (URV)",
+      "Signal range (4-20 mA)"
+    ],
+    "outputs": [
+      "Current signal (mA)",
+      "Percentage of span (%)",
+      "Process variable from mA"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "current"
+    ],
+    "source_file": "data/tasks/electrical/instrumentation_controls.json",
+    "suggested_relative_path": "electrical/signal-processing/4-20ma-scaling"
+  }
+}

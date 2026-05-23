@@ -1,0 +1,109 @@
+[meta]
+name = "linear-wave-theory"
+description = "Linear (Airy) wave theory: wavelength, celerity, and group velocity via dispersion relation (USACE CEM)"
+long_description = "Solves the linear wave dispersion relation using Newton-Raphson iteration to compute wavelength, phase celerity, and group velocity for monochromatic waves. Also derives wave steepness and relative depth (d/L) for water depth classification. Follows the USACE Coastal Engineering Manual Part II Chapter 1 formulation applicable across deep, intermediate, and shallow water regimes."
+discipline = "civil"
+category = "wave-climate"
+standards = ["USACE Coastal Engineering Manual (CEM)"]
+tags = ["coastal", "wave", "dispersion", "wavelength", "celerity", "group-velocity"]
+tool_mode = "both"
+
+[params.wave_period_s]
+type = "float"
+unit = "s"
+description = "Wave period T"
+min = 3.0
+max = 18.0
+
+[params.water_depth_m]
+type = "float"
+unit = "m"
+description = "Water depth d"
+min = 0.5
+max = 100.0
+
+[params.wave_height_m]
+type = "float"
+unit = "m"
+description = "Wave height H"
+min = 0.1
+max = 10.0
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.wavelength_m]
+description = "Wavelength L (m)"
+tolerance = 0.05
+
+[outputs.wave_celerity_m_per_s]
+description = "Wave phase celerity C = L / T (m/s)"
+tolerance = 0.05
+
+[outputs.group_velocity_m_per_s]
+description = "Group velocity C_g = n * C (m/s)"
+tolerance = 0.05
+
+[outputs.wave_steepness]
+description = "Wave steepness S = H / L (dimensionless)"
+tolerance = 0.02
+
+[outputs.relative_depth]
+description = "Relative depth d/L (dimensionless); >0.5 deep, <0.05 shallow, else intermediate"
+tolerance = 0.02
+
+# --- Archetypes: water depth regime scenarios ---
+
+[archetypes.deep_ocean_swell]
+description = "Deep ocean swell with long period waves in open water"
+wave_period_s = {min = 10.0, max = 18.0}
+water_depth_m = {min = 50.0, max = 100.0}
+wave_height_m = {min = 0.5, max = 4.0}
+site_contexts = ["tasman-sea-offshore", "great-australian-bight", "coral-sea-deep"]
+
+[archetypes.continental_shelf]
+description = "Continental shelf with moderate depth and intermediate-period waves"
+wave_period_s = {min = 6.0, max = 12.0}
+water_depth_m = {min = 10.0, max = 40.0}
+wave_height_m = {min = 0.5, max = 5.0}
+site_contexts = ["gold-coast-shelf", "sydney-offshore-buoy", "perth-canyon-approach"]
+
+[archetypes.nearshore_approach]
+description = "Nearshore zone with waves approaching the coastline"
+wave_period_s = {min = 5.0, max = 12.0}
+water_depth_m = {min = 2.0, max = 10.0}
+wave_height_m = {min = 0.3, max = 3.0}
+site_contexts = ["bondi-beach-nearshore", "manly-surf-zone", "noosa-heads-approach"]
+
+[archetypes.shallow_estuary]
+description = "Shallow estuary or harbour entrance with short-period waves"
+wave_period_s = {min = 3.0, max = 7.0}
+water_depth_m = {min = 0.5, max = 4.0}
+wave_height_m = {min = 0.1, max = 1.5}
+site_contexts = ["moreton-bay-entrance", "darwin-harbour-channel", "port-phillip-heads"]
+
+[archetypes.reef_platform]
+description = "Shallow reef platform with long-period ocean swell"
+wave_period_s = {min = 8.0, max = 16.0}
+water_depth_m = {min = 1.0, max = 5.0}
+wave_height_m = {min = 0.3, max = 2.5}
+site_contexts = ["ningaloo-reef-flat", "great-barrier-reef-lagoon", "heron-island-platform"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "Moderate period and depth — all parameters given, straightforward dispersion solve"
+visibility = "all_given"
+archetypes = ["deep_ocean_swell", "continental_shelf", "nearshore_approach", "shallow_estuary", "reef_platform"]
+
+[difficulty.medium]
+description = "Extreme depth ratio conditions — all parameters given, deep or very shallow regime"
+visibility = "all_given"
+archetypes = ["deep_ocean_swell", "continental_shelf", "nearshore_approach", "shallow_estuary", "reef_platform"]
+
+[difficulty.hard]
+description = "Wave period hidden — agent must estimate from wave height via empirical wind-wave relationships (T approx 3.5-5.5 * sqrt(H))"
+visibility = "partial"
+hidden_params = ["wave_period_s"]
+replacement_text = "The site is {{ archetype.description }} ({{ archetype.site_context }}). Estimate the wave period from the given wave height using standard empirical relationships for the wave regime."
+archetypes = ["deep_ocean_swell", "continental_shelf", "nearshore_approach", "shallow_estuary", "reef_platform"]

@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "dams",
+    "category_id": "seepage-analysis",
+    "category_name": "Seepage Analysis",
+    "task_id": "exit-gradient",
+    "task_name": "Exit Gradient Check",
+    "description": "Calculate exit gradient at downstream toe and compare to critical gradient for piping",
+    "complexity": "medium",
+    "standards": [
+      "USACE EM 1110-2-1901",
+      "FEMA P-1032"
+    ],
+    "inputs": [
+      "Seepage analysis results",
+      "Foundation material properties",
+      "Toe drain configuration"
+    ],
+    "outputs": [
+      "Maximum exit gradient",
+      "Critical gradient",
+      "Factor of Safety against piping"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/civil/dams.json",
+    "suggested_relative_path": "civil/seepage-analysis/exit-gradient"
+  }
+}

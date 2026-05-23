@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "energy_structures",
+    "category_id": "qa-energy-structures",
+    "category_name": "Quality Assurance",
+    "task_id": "foundation-drawing-check",
+    "task_name": "Energy Foundation Drawing Review",
+    "description": "Check foundation drawings against design calculations for energy structures",
+    "complexity": "low",
+    "standards": [
+      "AS 1100.501",
+      "AS 3600",
+      "IEC 61400-6"
+    ],
+    "inputs": [
+      "Foundation drawings",
+      "Design calculations",
+      "Specification requirements",
+      "Geotechnical report"
+    ],
+    "outputs": [
+      "Drawing discrepancy list",
+      "Dimension verification",
+      "Reinforcement check",
+      "Specification compliance"
+    ],
+    "keyword_hits": [
+      "calculation",
+      "energy"
+    ],
+    "source_file": "data/tasks/structural/energy_structures.json",
+    "suggested_relative_path": "structural/qa-energy-structures/foundation-drawing-check"
+  }
+}

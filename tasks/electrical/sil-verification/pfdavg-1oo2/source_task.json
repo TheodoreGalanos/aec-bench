@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "instrumentation_controls",
+    "category_id": "sil-verification",
+    "category_name": "SIL Verification",
+    "task_id": "pfdavg-1oo2",
+    "task_name": "PFDavg Calculation - 1oo2 Architecture",
+    "description": "Calculate PFDavg for redundant 1oo2 architecture including common cause",
+    "complexity": "medium",
+    "standards": [
+      "IEC 61508",
+      "IEC 61511"
+    ],
+    "inputs": [
+      "Dangerous undetected failure rate lambdaDU",
+      "Proof test interval TI",
+      "Common cause failure factor beta",
+      "Diagnostic coverage DC",
+      "MTTR"
+    ],
+    "outputs": [
+      "PFDavg (independent failures)",
+      "PFDavg (common cause)",
+      "Total PFDavg",
+      "Achieved SIL"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/instrumentation_controls.json",
+    "suggested_relative_path": "electrical/sil-verification/pfdavg-1oo2"
+  }
+}

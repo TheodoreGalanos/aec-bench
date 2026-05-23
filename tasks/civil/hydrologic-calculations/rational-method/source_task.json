@@ -1,0 +1,32 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "drainage_hydrology",
+    "category_id": "hydrologic-calculations",
+    "category_name": "Hydrologic Calculations",
+    "task_id": "rational-method",
+    "task_name": "Rational Method Peak Runoff",
+    "description": "Calculate peak runoff using Q=CiA for small drainage areas (<80 hectares)",
+    "complexity": "low",
+    "standards": [
+      "ARR",
+      "HEC-22"
+    ],
+    "inputs": [
+      "Drainage area A (ha or acres)",
+      "Runoff coefficient C",
+      "Rainfall intensity i (mm/hr or in/hr)",
+      "Time of concentration Tc"
+    ],
+    "outputs": [
+      "Peak runoff Q (m\u00b3/s or cfs)"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/civil/drainage_hydrology.json",
+    "suggested_relative_path": "civil/hydrologic-calculations/rational-method"
+  }
+}

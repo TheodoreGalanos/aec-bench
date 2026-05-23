@@ -1,0 +1,43 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "control-valve-sizing",
+    "category_name": "Control Valve Sizing",
+    "task_id": "cv-gas-sizing",
+    "task_name": "Gas Control Valve Cv Calculation",
+    "description": "Calculate required Cv for a gas or vapor control valve",
+    "complexity": "medium",
+    "standards": [
+      "IEC 60534",
+      "ISA 75.01"
+    ],
+    "inputs": [
+      "Mass flow rate (kg/h)",
+      "Inlet pressure P1 (kPa abs)",
+      "Outlet pressure P2 (kPa abs)",
+      "Inlet temperature T1 (K)",
+      "Gas molecular weight",
+      "Compressibility factor Z",
+      "Specific heat ratio k"
+    ],
+    "outputs": [
+      "Pressure ratio P2/P1",
+      "Flow regime (subcritical/critical)",
+      "Calculated Cv",
+      "Expansion factor Y"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "heat",
+      "pressure",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/control-valve-sizing/cv-gas-sizing"
+  }
+}

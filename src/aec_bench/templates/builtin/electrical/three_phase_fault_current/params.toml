@@ -1,0 +1,152 @@
+[meta]
+name = "three-phase-fault-current"
+description = "Three-phase fault current calculation per IEC 60909-0"
+long_description = "Computes initial symmetrical (Ik'') and peak (ip) short-circuit currents for a radial network using the IEC 60909-0 simplified method. Sums source, transformer, and cable impedances in series referred to the system voltage level, then applies the voltage factor c and peak factor kappa to determine fault currents for switchgear rating and protection coordination."
+discipline = "electrical"
+category = "short-circuit"
+standards = ["IEC 60909-0:2016", "AS 3851"]
+tags = ["electrical", "short-circuit", "fault-current", "iec-60909", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.system_voltage_kv]
+type = "float"
+unit = "kV"
+description = "Nominal system voltage at the fault location"
+min = 0.4
+max = 33.0
+
+[params.source_fault_level_mva]
+type = "float"
+unit = "MVA"
+description = "Upstream source fault level (short-circuit power)"
+min = 50
+max = 2000
+
+[params.transformer_rated_power_mva]
+type = "float"
+unit = "MVA"
+description = "Transformer rated apparent power"
+min = 0.1
+max = 100
+
+[params.transformer_impedance_percent]
+type = "float"
+unit = "%"
+description = "Transformer short-circuit impedance (uk%)"
+min = 4.0
+max = 12.0
+
+[params.cable_resistance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "Cable resistance per unit length"
+min = 0.05
+max = 1.5
+
+[params.cable_reactance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "Cable reactance per unit length"
+min = 0.06
+max = 0.15
+
+[params.cable_length_m]
+type = "float"
+unit = "m"
+description = "Cable route length from transformer to fault point"
+min = 5
+max = 500
+
+[params.voltage_factor_c]
+type = "float"
+description = "IEC 60909 voltage factor c for maximum fault current"
+min = 1.0
+max = 1.10
+default = 1.10
+optional = true
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.source_impedance_ohm]
+description = "Source impedance referred to system voltage (ohm)"
+tolerance = 0.03
+
+[outputs.transformer_impedance_ohm]
+description = "Transformer impedance referred to system voltage (ohm)"
+tolerance = 0.03
+
+[outputs.cable_impedance_ohm]
+description = "Cable impedance magnitude (ohm)"
+tolerance = 0.03
+
+[outputs.total_impedance_ohm]
+description = "Total short-circuit impedance at fault point (ohm)"
+tolerance = 0.03
+
+[outputs.initial_symmetrical_current_ka]
+description = "Initial symmetrical short-circuit current Ik'' (kA)"
+tolerance = 0.03
+
+[outputs.peak_current_ka]
+description = "Peak short-circuit current ip (kA)"
+tolerance = 0.03
+
+# --- Archetypes ---
+
+[archetypes.lv_commercial]
+description = "Low-voltage commercial distribution board"
+system_voltage_kv = {min = 0.4, max = 0.4}
+source_fault_level_mva = {min = 150, max = 500}
+transformer_rated_power_mva = {min = 0.5, max = 2.0}
+transformer_impedance_percent = {min = 4.0, max = 6.0}
+cable_length_m = {min = 5, max = 50}
+site_contexts = ["sydney-commercial", "melbourne-commercial"]
+
+[archetypes.lv_industrial]
+description = "Low-voltage industrial motor control centre"
+system_voltage_kv = {min = 0.4, max = 0.4}
+source_fault_level_mva = {min = 200, max = 750}
+transformer_rated_power_mva = {min = 1.0, max = 5.0}
+transformer_impedance_percent = {min = 5.0, max = 6.5}
+cable_length_m = {min = 10, max = 100}
+site_contexts = ["hunter-valley-industrial", "gladstone-industrial"]
+
+[archetypes.mv_distribution]
+description = "Medium-voltage distribution switchboard"
+system_voltage_kv = {min = 11.0, max = 11.0}
+source_fault_level_mva = {min = 250, max = 1000}
+transformer_rated_power_mva = {min = 5.0, max = 30.0}
+transformer_impedance_percent = {min = 6.0, max = 10.0}
+cable_length_m = {min = 50, max = 500}
+site_contexts = ["perth-substation", "brisbane-substation"]
+
+[archetypes.mv_heavy_industrial]
+description = "Medium-voltage heavy industrial switchgear"
+system_voltage_kv = {min = 22.0, max = 33.0}
+source_fault_level_mva = {min = 500, max = 2000}
+transformer_rated_power_mva = {min = 10.0, max = 100.0}
+transformer_impedance_percent = {min = 7.0, max = 12.0}
+cable_length_m = {min = 100, max = 500}
+site_contexts = ["pilbara-mining", "bowen-basin-mining"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "LV system, short cable, all parameters given including voltage factor"
+visibility = "all_given"
+archetypes = ["lv_commercial", "lv_industrial"]
+
+[difficulty.medium]
+description = "Any voltage level and archetype, all parameters given"
+visibility = "all_given"
+archetypes = ["lv_commercial", "lv_industrial", "mv_distribution", "mv_heavy_industrial"]
+
+[difficulty.hard]
+description = "Voltage factor hidden, agent must determine c from IEC 60909 Table 1"
+visibility = "partial"
+hidden_params = ["voltage_factor_c"]
+replacement_text = "The installation is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["mv_distribution", "mv_heavy_industrial"]

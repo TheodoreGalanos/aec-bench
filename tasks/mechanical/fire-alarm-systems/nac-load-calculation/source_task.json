@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_protection",
+    "category_id": "fire-alarm-systems",
+    "category_name": "Fire Detection and Alarm Systems",
+    "task_id": "nac-load-calculation",
+    "task_name": "NAC Load Calculation",
+    "description": "Calculate Notification Appliance Circuit load and voltage drop",
+    "complexity": "low",
+    "standards": [
+      "NFPA 72"
+    ],
+    "inputs": [
+      "Device list with current draw (mA)",
+      "Wire lengths per segment (ft)",
+      "Wire gauge (AWG)",
+      "Panel NAC output capacity (A)",
+      "System voltage (24VDC)"
+    ],
+    "outputs": [
+      "Total current draw (A)",
+      "End-of-line voltage drop (V)",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "capacity",
+      "current",
+      "drop",
+      "load",
+      "voltage"
+    ],
+    "source_file": "data/tasks/mechanical/fire_protection.json",
+    "suggested_relative_path": "mechanical/fire-alarm-systems/nac-load-calculation"
+  }
+}

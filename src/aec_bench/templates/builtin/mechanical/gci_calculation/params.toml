@@ -1,0 +1,84 @@
+[meta]
+name = "gci-calculation"
+description = "Grid convergence index for a three-grid CFD study"
+long_description = "Calculates observed order of accuracy, Richardson extrapolated value, and fine-grid convergence index for a monotonic three-grid study with equal refinement ratio. The template uses a fixed safety factor of 1.25 and requires the three QoI values to show monotonic convergence."
+discipline = "mechanical"
+category = "mesh-independence"
+standards = ["ASME V&V 20-2009"]
+tags = ["mechanical", "cfd", "mesh", "gci", "deterministic"]
+tool_mode = "with-tool"
+
+[params.coarse_grid_value]
+type = "float"
+description = "Quantity of interest on the coarse grid"
+min = -1000000.0
+max = 1000000.0
+
+[params.medium_grid_value]
+type = "float"
+description = "Quantity of interest on the medium grid"
+min = -1000000.0
+max = 1000000.0
+
+[params.fine_grid_value]
+type = "float"
+description = "Quantity of interest on the fine grid"
+min = -1000000.0
+max = 1000000.0
+
+[params.refinement_ratio]
+type = "float"
+description = "Grid refinement ratio between successive grids"
+min = 1.01
+max = 4.0
+
+[outputs.observed_order]
+description = "Observed order of accuracy"
+tolerance = 0.03
+
+[outputs.extrapolated_value]
+description = "Richardson extrapolated fine-grid value"
+tolerance = 0.03
+
+[outputs.approximate_relative_error_pct]
+description = "Approximate relative error between fine and medium grids"
+tolerance = 0.03
+
+[outputs.gci_fine_pct]
+description = "Fine-grid convergence index"
+tolerance = 0.03
+
+[outputs.asymptotic_range_ratio]
+description = "Asymptotic range ratio"
+tolerance = 0.03
+
+[archetypes.drag_coefficient]
+description = "Monotonic drag coefficient mesh convergence study"
+coarse_grid_value = {min = 0.65, max = 0.85}
+medium_grid_value = {min = 0.43, max = 0.48}
+fine_grid_value = {min = 0.34, max = 0.38}
+refinement_ratio = {min = 1.5, max = 2.0}
+site_contexts = ["cfd-drag-study", "external-flow-model"]
+
+[archetypes.pressure_drop]
+description = "Monotonic pressure-drop mesh convergence study"
+coarse_grid_value = {min = 380.0, max = 520.0}
+medium_grid_value = {min = 220.0, max = 260.0}
+fine_grid_value = {min = 170.0, max = 200.0}
+refinement_ratio = {min = 1.5, max = 2.0}
+site_contexts = ["duct-cfd-model", "pipe-loss-cfd-study"]
+
+[difficulty.easy]
+description = "All parameters given for a drag coefficient convergence study"
+visibility = "all_given"
+archetypes = ["drag_coefficient"]
+
+[difficulty.medium]
+description = "All parameters given across convergence study types"
+visibility = "all_given"
+archetypes = ["drag_coefficient", "pressure_drop"]
+
+[difficulty.hard]
+description = "All parameters given for a pressure-drop convergence study"
+visibility = "all_given"
+archetypes = ["pressure_drop"]

@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "vertical_transportation",
+    "category_id": "traffic-analysis",
+    "category_name": "Lift Traffic Analysis",
+    "task_id": "round-trip-time",
+    "task_name": "Round Trip Time (RTT) Calculation",
+    "description": "Calculate lift round trip time using CIBSE Guide D methodology",
+    "complexity": "low",
+    "standards": [
+      "CIBSE Guide D"
+    ],
+    "inputs": [
+      "Building floors and heights (m)",
+      "Lift speed (m/s)",
+      "Lift acceleration (m/s2)",
+      "Door times (open, close, dwell) (s)",
+      "Number of passengers (P)",
+      "Expected number of stops (S)"
+    ],
+    "outputs": [
+      "Round Trip Time RTT (s)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/vertical_transportation.json",
+    "suggested_relative_path": "electrical/traffic-analysis/round-trip-time"
+  }
+}

@@ -1,0 +1,91 @@
+[meta]
+name = "cctv-storage-calculation"
+description = "CCTV video storage sizing from bitrate and retention"
+long_description = "Calculates surveillance video storage from camera count, average bitrate, recording hours, retention period, and storage overhead. The template converts Mbps to daily gigabytes per camera, then reports usable retained storage and raw storage including overhead."
+discipline = "electrical"
+category = "cctv-design"
+standards = ["IEC 62676-4"]
+tags = ["electrical", "cctv", "storage", "video", "security", "deterministic"]
+tool_mode = "with-tool"
+
+[params.camera_count]
+type = "float"
+description = "Number of cameras"
+min = 1
+max = 1000
+
+[params.average_bitrate_mbps]
+type = "float"
+unit = "Mbps"
+description = "Average video bitrate per camera"
+min = 0.1
+max = 50
+
+[params.recording_hours_per_day]
+type = "float"
+unit = "h/day"
+description = "Recording hours per day"
+min = 1
+max = 24
+
+[params.retention_days]
+type = "float"
+unit = "days"
+description = "Required retention period"
+min = 1
+max = 365
+
+[params.storage_overhead_pct]
+type = "float"
+unit = "%"
+description = "Storage overhead for RAID, filesystem, or spare capacity"
+min = 0
+max = 100
+
+[outputs.daily_storage_per_camera_gb]
+description = "Daily storage per camera"
+tolerance = 0.03
+
+[outputs.usable_storage_required_tb]
+description = "Usable retained storage required"
+tolerance = 0.03
+
+[outputs.raw_storage_with_overhead_tb]
+description = "Raw storage after overhead allowance"
+tolerance = 0.03
+
+[archetypes.small_site]
+description = "Small CCTV site with continuous or business-hours recording"
+camera_count = {min = 2, max = 24}
+average_bitrate_mbps = {min = 1, max = 8}
+recording_hours_per_day = {min = 8, max = 24}
+retention_days = {min = 7, max = 60}
+storage_overhead_pct = {min = 10, max = 30}
+site_contexts = ["building-security", "car-park"]
+
+[archetypes.large_precinct]
+description = "Large surveillance precinct with many IP cameras"
+camera_count = {min = 25, max = 300}
+average_bitrate_mbps = {min = 2, max = 12}
+recording_hours_per_day = {min = 12, max = 24}
+retention_days = {min = 14, max = 120}
+storage_overhead_pct = {min = 15, max = 50}
+site_contexts = ["transport-hub", "campus-security"]
+
+[difficulty.easy]
+description = "Small site storage calculation"
+visibility = "all_given"
+archetypes = ["small_site"]
+
+[difficulty.medium]
+description = "Small or large CCTV storage calculation"
+visibility = "all_given"
+archetypes = ["small_site", "large_precinct"]
+
+[difficulty.hard]
+description = "Retention hidden in the site security context"
+visibility = "partial"
+hidden_params = ["retention_days"]
+replacement_text = "Use the retention period implied by {{ archetype.description }}."
+archetypes = ["large_precinct"]
+retention_days = [30]

@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "water_infrastructure",
+    "category_id": "pipe-hydraulics",
+    "category_name": "Pipe Hydraulics Calculations",
+    "task_id": "pipe-velocity-check",
+    "task_name": "Pipe Velocity Compliance Check",
+    "description": "Verify water velocity in pipes meets minimum and maximum limits",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3500.1 Clause 3.4"
+    ],
+    "inputs": [
+      "Pipe diameter (mm)",
+      "Flow rate (L/s)",
+      "Pipe service type"
+    ],
+    "outputs": [
+      "Velocity (m/s)",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "flow",
+      "pipe",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/water_infrastructure.json",
+    "suggested_relative_path": "civil/pipe-hydraulics/pipe-velocity-check"
+  }
+}

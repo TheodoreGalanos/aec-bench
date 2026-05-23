@@ -1,0 +1,93 @@
+[meta]
+name = "ssd-on-grade"
+description = "Stopping sight distance on a longitudinal grade using d_r + d_b per AGRD Part 3 §5"
+long_description = "Computes stopping sight distance (SSD) on graded road segments as the sum of reaction distance d_r = V*t_r/3.6 and braking distance d_b = V^2/(254*(f+g)), using speed-dependent longitudinal friction coefficients from AGRD Part 3 Table 5.5. Accounts for uphill and downhill grades to verify geometric design adequacy for safe vehicle stopping."
+discipline = "civil"
+category = "sight-distance"
+standards = ["AGRD Part 3 §5"]
+tags = ["civil", "roads", "sight-distance", "stopping", "grade", "deterministic"]
+tool_mode = "with-tool"
+
+[params.design_speed_km_h]
+type = "float"
+unit = "km/h"
+description = "Design speed V"
+min = 40
+max = 130
+
+[params.grade_pct]
+type = "float"
+unit = "%"
+description = "Longitudinal grade (positive = uphill, negative = downhill)"
+min = -10.0
+max = 10.0
+
+[params.reaction_time_s]
+type = "float"
+unit = "s"
+description = "Driver reaction time t_r"
+min = 1.5
+max = 2.5
+
+# --- Outputs ---
+
+[outputs.reaction_distance_m]
+description = "Reaction distance component d_r (m)"
+tolerance = 0.03
+
+[outputs.braking_distance_m]
+description = "Braking distance component d_b (m)"
+tolerance = 0.03
+
+[outputs.stopping_sight_distance_m]
+description = "Total stopping sight distance SSD (m)"
+tolerance = 0.03
+
+# --- Archetypes: road type / site condition scenarios ---
+
+[archetypes.urban_local_street]
+description = "Low-speed urban local street with pedestrian activity and on-street parking"
+design_speed_km_h = {min = 40, max = 60}
+reaction_time_s = {min = 2.0, max = 2.5}
+grade_pct = {min = -5.0, max = 5.0}
+site_contexts = ["sydney-residential-street", "melbourne-local-road", "brisbane-suburban-street"]
+
+[archetypes.suburban_arterial]
+description = "Suburban arterial road with moderate speeds and intersection access"
+design_speed_km_h = {min = 60, max = 80}
+reaction_time_s = {min = 1.5, max = 2.5}
+grade_pct = {min = -6.0, max = 6.0}
+site_contexts = ["sydney-pennant-hills-road", "melbourne-springvale-road", "brisbane-waterworks-road"]
+
+[archetypes.rural_highway]
+description = "Rural two-lane highway through open terrain with higher operating speeds"
+design_speed_km_h = {min = 80, max = 110}
+reaction_time_s = {min = 1.5, max = 2.5}
+grade_pct = {min = -8.0, max = 8.0}
+site_contexts = ["bruce-highway-qld", "princes-highway-vic", "pacific-highway-nsw"]
+
+[archetypes.mountain_road]
+description = "Winding mountain road with steep grades and limited sight lines"
+design_speed_km_h = {min = 60, max = 100}
+reaction_time_s = {min = 2.0, max = 2.5}
+grade_pct = {min = -10.0, max = 10.0}
+site_contexts = ["great-ocean-road-vic", "bells-line-of-road-nsw", "gillies-highway-qld"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "All parameters given, flat to gentle grade on a suburban arterial"
+visibility = "all_given"
+archetypes = ["urban_local_street", "suburban_arterial"]
+
+[difficulty.medium]
+description = "All parameters given, any road type including steep grades"
+visibility = "all_given"
+archetypes = ["urban_local_street", "suburban_arterial", "rural_highway", "mountain_road"]
+
+[difficulty.hard]
+description = "Reaction time hidden — agent must infer t_r from road type and driver alertness context"
+visibility = "partial"
+hidden_params = ["reaction_time_s"]
+replacement_text = "The site is a {{ archetype.description }} ({{ archetype.site_context }}). Assume an appropriate driver reaction time for this road environment."
+archetypes = ["suburban_arterial", "rural_highway", "mountain_road"]

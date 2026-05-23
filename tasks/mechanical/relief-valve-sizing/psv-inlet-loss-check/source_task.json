@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "relief-valve-sizing",
+    "category_name": "Relief Valve Sizing",
+    "task_id": "psv-inlet-loss-check",
+    "task_name": "PSV Inlet Pressure Loss Verification",
+    "description": "Verify PSV inlet piping meets the 3% pressure loss rule",
+    "complexity": "low",
+    "standards": [
+      "API 520 Part II"
+    ],
+    "inputs": [
+      "Relief flow rate",
+      "Inlet pipe size and length",
+      "Inlet fittings",
+      "Set pressure",
+      "Fluid properties"
+    ],
+    "outputs": [
+      "Inlet pressure drop (kPa)",
+      "Pressure drop as % of set pressure",
+      "Compliance status (pass/fail)"
+    ],
+    "keyword_hits": [
+      "drop",
+      "flow",
+      "pipe",
+      "pressure",
+      "rate",
+      "size"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/relief-valve-sizing/psv-inlet-loss-check"
+  }
+}

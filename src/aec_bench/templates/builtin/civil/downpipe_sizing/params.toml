@@ -1,0 +1,92 @@
+[meta]
+name = "downpipe-sizing"
+description = "Size roof downpipes per AS/NZS 3500.3 using catchment area and rainfall intensity"
+long_description = "Sizes roof downpipes by calculating the design stormwater flow per downpipe from the catchment area and rainfall intensity, then selecting the smallest standard uPVC round diameter whose full-bore capacity meets or exceeds the demand per AS/NZS 3500.3 Table 4.3. Used in building plumbing and roof drainage design to ensure adequate stormwater disposal from roofs."
+discipline = "civil"
+category = "stormwater-roof"
+standards = ["AS/NZS 3500.3:2025"]
+tags = ["civil", "drainage", "stormwater", "plumbing", "roof-drainage"]
+tool_mode = "with-tool"
+
+[params.roof_catchment_area_m2]
+type = "float"
+unit = "m²"
+description = "Effective roof catchment area served by each group of downpipes"
+min = 20
+max = 5000
+
+[params.rainfall_intensity_mm_hr]
+type = "float"
+unit = "mm/hr"
+description = "Design rainfall intensity for the ARI and duration"
+min = 50
+max = 300
+derivable_from = "archetype"
+
+[params.num_downpipes]
+type = "int"
+unit = "-"
+description = "Number of downpipes draining the catchment area"
+min = 1
+max = 20
+
+[outputs.design_flow_l_s]
+description = "Design flow per downpipe (L/s)"
+tolerance = 0.03
+
+[outputs.selected_diameter_mm]
+description = "Selected standard downpipe diameter (mm)"
+tolerance = 0.01
+
+[outputs.selected_capacity_l_s]
+description = "Full-bore capacity of the selected downpipe (L/s)"
+tolerance = 0.03
+
+[outputs.compliance]
+description = "Compliance flag: 1.0 if capacity >= design flow, else 0.0"
+tolerance = 0.01
+
+# --- Archetypes ---
+
+[archetypes.residential_house]
+description = "Single-storey or two-storey residential dwelling with pitched roof"
+roof_catchment_area_m2 = {min = 50, max = 250}
+num_downpipes = {min = 2, max = 6}
+site_contexts = ["sydney-inner-west-house", "melbourne-bayside-cottage", "brisbane-queenslander"]
+
+[archetypes.commercial_warehouse]
+description = "Large commercial warehouse or retail shed with flat or low-pitch metal roof"
+roof_catchment_area_m2 = {min = 500, max = 5000}
+num_downpipes = {min = 4, max = 20}
+site_contexts = ["sydney-industrial-park", "melbourne-western-logistics", "brisbane-trade-coast"]
+
+[archetypes.covered_car_park]
+description = "Multi-level or single-level covered car park with exposed upper deck"
+roof_catchment_area_m2 = {min = 200, max = 2000}
+num_downpipes = {min = 4, max = 12}
+site_contexts = ["perth-cbd-car-park", "adelaide-airport-parking", "gold-coast-shopping-centre"]
+
+[archetypes.industrial_shed]
+description = "Industrial manufacturing or storage shed with large-span metal roof"
+roof_catchment_area_m2 = {min = 800, max = 4000}
+num_downpipes = {min = 6, max = 16}
+site_contexts = ["darwin-industrial-estate", "townsville-port-shed", "cairns-processing-facility"]
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Small residential roof, all parameters given — straightforward table lookup"
+visibility = "all_given"
+archetypes = ["residential_house"]
+
+[difficulty.medium]
+description = "Larger commercial or industrial roof, all parameters given, higher flows"
+visibility = "all_given"
+archetypes = ["commercial_warehouse", "covered_car_park", "industrial_shed"]
+
+[difficulty.hard]
+description = "Rainfall intensity hidden — agent must infer I from site context and ARI"
+visibility = "partial"
+hidden_params = ["rainfall_intensity_mm_hr"]
+replacement_text = "The building is {{ archetype.description }} located at {{ archetype.site_context }}"
+archetypes = ["residential_house", "commercial_warehouse", "covered_car_park", "industrial_shed"]

@@ -1,0 +1,113 @@
+[meta]
+name = "spt-corrections"
+description = "SPT N-value corrections using Liao & Whitman (1986)"
+long_description = "Applies standard corrections to raw SPT blow counts following the Liao and Whitman (1986) procedure per ASTM D1586 practice. Applies energy (CE), borehole diameter (CB), sampler (CS), and rod length (CR) corrections to obtain N60, then normalizes to a reference overburden pressure of 100 kPa using CN = sqrt(Pa/sigma'v) to produce the corrected (N1)60 value for liquefaction and strength correlations."
+discipline = "ground"
+category = "soil-interpretation"
+standards = ["Liao and Whitman (1986)", "ASTM D1586"]
+tags = ["geotechnical", "spt", "deterministic"]
+tool_mode = "with-tool"
+
+[params.raw_n_value]
+type = "int"
+description = "Raw field-measured SPT blow count"
+min = 5
+max = 60
+
+[params.effective_overburden_kpa]
+type = "float"
+unit = "kPa"
+description = "Effective overburden stress at test depth"
+min = 10
+max = 400
+
+[params.hammer_type]
+type = "enum"
+description = "SPT hammer type"
+values = ["auto", "safety", "donut"]
+
+[params.borehole_diameter_mm]
+type = "enum"
+description = "Borehole diameter"
+values = ["65", "115", "150", "200"]
+
+[params.sampler_type]
+type = "enum"
+description = "Sampler liner configuration"
+values = ["with_liner", "without_liner"]
+
+[params.rod_length_m]
+type = "float"
+unit = "m"
+description = "Total rod length from surface to sampler"
+min = 3
+max = 30
+
+[outputs.ce]
+description = "Energy correction factor CE"
+tolerance = 0.01
+
+[outputs.cb]
+description = "Borehole diameter correction factor CB"
+tolerance = 0.01
+
+[outputs.cs]
+description = "Sampler correction factor CS"
+tolerance = 0.01
+
+[outputs.cr]
+description = "Rod length correction factor CR"
+tolerance = 0.01
+
+[outputs.n60]
+description = "Energy-corrected N-value N60"
+tolerance = 0.03
+
+[outputs.cn]
+description = "Overburden correction factor CN"
+tolerance = 0.03
+
+[outputs.n1_60]
+description = "Normalised corrected N-value (N1)60"
+tolerance = 0.03
+
+[archetypes.shallow_loose]
+description = "Shallow test in loose material"
+raw_n_value = {min = 5, max = 15}
+effective_overburden_kpa = {min = 20, max = 80}
+rod_length_m = {min = 3, max = 6}
+site_contexts = ["brisbane-alluvial", "darwin-estuarine"]
+
+[archetypes.medium_depth]
+description = "Typical mid-depth test"
+raw_n_value = {min = 15, max = 30}
+effective_overburden_kpa = {min = 80, max = 200}
+rod_length_m = {min = 6, max = 15}
+site_contexts = ["sydney-hawkesbury", "melbourne-basalt", "hunter-valley-alluvial"]
+
+[archetypes.deep_dense]
+description = "Deep test in dense stratum"
+raw_n_value = {min = 30, max = 50}
+effective_overburden_kpa = {min = 200, max = 400}
+rod_length_m = {min = 15, max = 30}
+site_contexts = ["perth-coastal", "adelaide-stiff", "cairns-coral"]
+
+[difficulty.easy]
+description = "Standard auto hammer, standard borehole, all params given"
+visibility = "all_given"
+archetypes = ["shallow_loose", "medium_depth"]
+hammer_type = ["auto"]
+borehole_diameter_mm = ["115"]
+sampler_type = ["with_liner"]
+
+[difficulty.medium]
+description = "Any equipment combination, all params given"
+visibility = "all_given"
+archetypes = ["shallow_loose", "medium_depth", "deep_dense"]
+
+[difficulty.hard]
+description = "Equipment parameters hidden, agent infers from context"
+visibility = "partial"
+hidden_params = ["hammer_type", "sampler_type", "borehole_diameter_mm"]
+replacement_text = "The SPT was conducted using standard Australian practice equipment."
+archetypes = ["shallow_loose", "medium_depth", "deep_dense"]

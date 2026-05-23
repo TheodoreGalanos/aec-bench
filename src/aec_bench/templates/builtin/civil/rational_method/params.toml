@@ -1,0 +1,85 @@
+[meta]
+name = "rational-method"
+description = "Peak runoff using the rational method Q = CIA / 360"
+long_description = "Computes peak stormwater runoff discharge using the rational method formula Q = C*I*A/360, where C is the runoff coefficient, I is the design rainfall intensity, and A is the catchment area. Applicable to small catchments up to 80 hectares per ARR and HEC-22, widely used for sizing drainage infrastructure in urban and rural settings."
+discipline = "civil"
+category = "hydrologic-calculations"
+standards = ["ARR", "HEC-22"]
+tags = ["hydrology", "drainage", "runoff", "stormwater"]
+tool_mode = "with-tool"
+
+[params.runoff_coefficient]
+type = "float"
+unit = "-"
+description = "Runoff coefficient C (dimensionless)"
+min = 0.1
+max = 0.95
+derivable_from = "archetype"
+
+[params.rainfall_intensity_mm_hr]
+type = "float"
+unit = "mm/hr"
+description = "Design rainfall intensity I"
+min = 10
+max = 300
+
+[params.catchment_area_ha]
+type = "float"
+unit = "ha"
+description = "Catchment area A"
+min = 0.1
+max = 80
+
+[outputs.peak_runoff_m3_s]
+description = "Peak runoff Q (m³/s)"
+tolerance = 0.03
+
+[outputs.peak_runoff_l_s]
+description = "Peak runoff Q (L/s)"
+tolerance = 0.03
+
+# --- Archetypes: surface-type / land-use categories ---
+
+[archetypes.paved_commercial]
+description = "Dense commercial area with impervious surfaces"
+runoff_coefficient = {min = 0.70, max = 0.95}
+site_contexts = ["sydney-cbd", "melbourne-cbd", "brisbane-cbd"]
+
+[archetypes.suburban_residential]
+description = "Suburban residential area with mixed surfaces"
+runoff_coefficient = {min = 0.30, max = 0.50}
+site_contexts = ["sydney-western-suburbs", "melbourne-outer", "perth-northern-suburbs"]
+
+[archetypes.low_density_rural]
+description = "Low-density rural or semi-rural area"
+runoff_coefficient = {min = 0.10, max = 0.30}
+site_contexts = ["hunter-valley-rural", "darling-downs-pastoral", "barossa-valley"]
+
+[archetypes.industrial_warehouse]
+description = "Industrial or warehouse precinct with large roof areas"
+runoff_coefficient = {min = 0.60, max = 0.90}
+site_contexts = ["sydney-western-industrial", "melbourne-northern-industrial"]
+
+[archetypes.parkland_open_space]
+description = "Parks, playing fields, and open green space"
+runoff_coefficient = {min = 0.10, max = 0.25}
+site_contexts = ["brisbane-parkland", "adelaide-parklands", "canberra-green-belt"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "Small catchment, moderate intensity — straightforward application of Q = CIA / 360"
+visibility = "all_given"
+archetypes = ["paved_commercial", "suburban_residential", "industrial_warehouse", "parkland_open_space", "low_density_rural"]
+
+[difficulty.medium]
+description = "Larger catchment with higher intensity — same formula, bigger numbers"
+visibility = "all_given"
+archetypes = ["paved_commercial", "suburban_residential", "industrial_warehouse", "parkland_open_space", "low_density_rural"]
+
+[difficulty.hard]
+description = "Runoff coefficient hidden — agent must infer C from site description"
+visibility = "partial"
+hidden_params = ["runoff_coefficient"]
+replacement_text = "The catchment is {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["paved_commercial", "suburban_residential", "industrial_warehouse", "parkland_open_space", "low_density_rural"]

@@ -1,0 +1,70 @@
+[meta]
+name = "road-pdi-calculation"
+description = "Calculate road lighting Power Density Index"
+long_description = "Calculates Power Density Index and specific power density for a road lighting installation from total system power, maintained illuminance, and illuminated area."
+discipline = "electrical"
+category = "energy-performance"
+standards = ["EN 13201-5", "AS/NZS 1158.3.1"]
+tags = ["electrical", "lighting", "road-lighting", "pdi", "energy", "deterministic"]
+tool_mode = "with-tool"
+
+[params.total_system_power_w]
+type = "float"
+unit = "W"
+description = "Total installed road lighting system power"
+min = 100
+max = 200000
+
+[params.maintained_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "Maintained average illuminance over the lit area"
+min = 1
+max = 50
+
+[params.illuminated_area_m2]
+type = "float"
+unit = "m2"
+description = "Illuminated road or pathway area"
+min = 100
+max = 100000
+
+[outputs.power_density_index_w_per_lux_m2]
+description = "Power Density Index in watts per lux per square metre"
+tolerance = 0.03
+
+[outputs.specific_power_density_w_per_m2]
+description = "Installed power divided by illuminated area"
+tolerance = 0.03
+
+[archetypes.local_road]
+description = "Local road lighting section"
+total_system_power_w = {min = 500, max = 5000}
+maintained_illuminance_lux = {min = 3, max = 15}
+illuminated_area_m2 = {min = 300, max = 4000}
+site_contexts = ["local-road", "pedestrian-route"]
+
+[archetypes.arterial_road]
+description = "Arterial road lighting section"
+total_system_power_w = {min = 5000, max = 60000}
+maintained_illuminance_lux = {min = 10, max = 35}
+illuminated_area_m2 = {min = 3000, max = 40000}
+site_contexts = ["arterial-road", "transport-corridor"]
+
+[difficulty.easy]
+description = "Local road with all values visible"
+visibility = "all_given"
+archetypes = ["local_road"]
+
+[difficulty.medium]
+description = "Road lighting section selected from local or arterial cases"
+visibility = "all_given"
+archetypes = ["local_road", "arterial_road"]
+
+[difficulty.hard]
+description = "Arterial road with illuminated area embedded in context"
+visibility = "partial"
+hidden_params = ["illuminated_area_m2"]
+replacement_text = "Use the illuminated area implied by {{ archetype.description }}."
+archetypes = ["arterial_road"]
+illuminated_area_m2 = [12000]

@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "track_rail",
+    "category_id": "track-geometry",
+    "category_name": "Track Geometry Design",
+    "task_id": "vertical-curve-design",
+    "task_name": "Vertical Curve Design",
+    "description": "Calculate minimum vertical curve length and radius for grade transitions",
+    "complexity": "low",
+    "standards": [
+      "AREMA MRE Chapter 5",
+      "ARTC ETS-05-00"
+    ],
+    "inputs": [
+      "Initial grade (%)",
+      "Final grade (%)",
+      "Design speed (km/h)",
+      "Acceptable vertical acceleration (m/s\u00b2)"
+    ],
+    "outputs": [
+      "Algebraic grade difference (%)",
+      "Minimum vertical curve radius (m)",
+      "Minimum vertical curve length (m)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "radius"
+    ],
+    "source_file": "data/tasks/civil/track_rail.json",
+    "suggested_relative_path": "civil/track-geometry/vertical-curve-design"
+  }
+}

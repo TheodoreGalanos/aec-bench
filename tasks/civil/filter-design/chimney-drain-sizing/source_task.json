@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "dams",
+    "category_id": "filter-design",
+    "category_name": "Filter & Drain Design",
+    "task_id": "chimney-drain-sizing",
+    "task_name": "Chimney Drain Flow Capacity",
+    "description": "Size chimney drain to convey maximum seepage flow without buildup of head",
+    "complexity": "medium",
+    "standards": [
+      "USACE EM 1110-2-1901",
+      "USBR Design Standard No. 13"
+    ],
+    "inputs": [
+      "Maximum seepage inflow (L/s/m)",
+      "Drain material permeability (m/s)",
+      "Drain height (m)",
+      "Factor of Safety on capacity"
+    ],
+    "outputs": [
+      "Minimum drain thickness (m)",
+      "Flow capacity (L/s/m)",
+      "Adequacy assessment"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "flow",
+      "size"
+    ],
+    "source_file": "data/tasks/civil/dams.json",
+    "suggested_relative_path": "civil/filter-design/chimney-drain-sizing"
+  }
+}

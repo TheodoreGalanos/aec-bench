@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "ports_marine",
+    "category_id": "deck-structure",
+    "category_name": "Deck Structure Design",
+    "task_id": "crane-beam-design",
+    "task_name": "Crane Rail Beam Design",
+    "description": "Design crane rail beams for port container cranes or ship loaders",
+    "complexity": "medium",
+    "standards": [
+      "AS 4100",
+      "AS 1418",
+      "FEM/ISO"
+    ],
+    "inputs": [
+      "Crane wheel loads (kN)",
+      "Wheel spacing (m)",
+      "Beam span (m)",
+      "Dynamic factors",
+      "Fatigue requirements"
+    ],
+    "outputs": [
+      "Beam section",
+      "Utilisation ratio",
+      "Fatigue detail category",
+      "Deflection check"
+    ],
+    "keyword_hits": [
+      "deflection",
+      "load"
+    ],
+    "source_file": "data/tasks/structural/ports_marine.json",
+    "suggested_relative_path": "structural/deck-structure/crane-beam-design"
+  }
+}

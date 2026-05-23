@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "control-valve-sizing",
+    "category_name": "Control Valve Sizing",
+    "task_id": "valve-authority-check",
+    "task_name": "Control Valve Authority Verification",
+    "description": "Verify control valve authority and operating range for good control",
+    "complexity": "low",
+    "standards": [
+      "ISA 75"
+    ],
+    "inputs": [
+      "Valve Cv",
+      "System Cv (piping, equipment)",
+      "Minimum, normal, maximum flow rates",
+      "Valve inherent characteristic"
+    ],
+    "outputs": [
+      "Valve authority",
+      "Valve position at min/normal/max flow (%)",
+      "Rangeability check",
+      "Control quality assessment"
+    ],
+    "keyword_hits": [
+      "flow",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/control-valve-sizing/valve-authority-check"
+  }
+}

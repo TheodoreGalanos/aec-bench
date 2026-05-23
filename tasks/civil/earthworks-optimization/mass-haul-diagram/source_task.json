@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "land_infrastructure",
+    "category_id": "earthworks-optimization",
+    "category_name": "Earthworks Balance & Optimization",
+    "task_id": "mass-haul-diagram",
+    "task_name": "Mass Haul Diagram Generation",
+    "description": "Generate mass haul diagram from alignment volumes and identify optimal haul partitions",
+    "complexity": "medium",
+    "standards": [
+      "Austroads"
+    ],
+    "inputs": [
+      "Cut/fill volumes by chainage",
+      "Project alignment",
+      "Swell/shrink factors",
+      "Haul cost rates (optional)"
+    ],
+    "outputs": [
+      "Mass haul diagram (cumulative volume vs chainage)",
+      "Balance points",
+      "Borrow/waste locations",
+      "Optimal haul partitions"
+    ],
+    "keyword_hits": [
+      "balance",
+      "cost",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/land_infrastructure.json",
+    "suggested_relative_path": "civil/earthworks-optimization/mass-haul-diagram"
+  }
+}

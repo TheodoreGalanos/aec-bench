@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "buildings_electrical",
+    "category_id": "qa-electrical",
+    "category_name": "Quality Assurance",
+    "task_id": "calculation-review",
+    "task_name": "Electrical Calculation Report Review",
+    "description": "Review electrical calculation report for accuracy and completeness",
+    "complexity": "medium",
+    "standards": [
+      "AS/NZS 3008.1",
+      "AS/NZS 3000",
+      "IEC 60909"
+    ],
+    "inputs": [
+      "Calculation report",
+      "Design assumptions",
+      "Input data sources",
+      "Standard references"
+    ],
+    "outputs": [
+      "Calculation verification",
+      "Assumption validation",
+      "Standard compliance check",
+      "Error list"
+    ],
+    "keyword_hits": [
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/buildings_electrical.json",
+    "suggested_relative_path": "electrical/qa-electrical/calculation-review"
+  }
+}

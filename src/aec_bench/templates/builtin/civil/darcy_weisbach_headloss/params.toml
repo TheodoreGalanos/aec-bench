@@ -1,0 +1,107 @@
+[meta]
+name = "darcy-weisbach-headloss"
+description = "Friction head loss calculation using Darcy-Weisbach equation with Swamee-Jain friction factor"
+long_description = "Calculates friction head loss in pressurised pipe flow using the Darcy-Weisbach equation hf = f * (L/D) * V^2/(2g), with the friction factor determined by the Swamee-Jain explicit approximation for turbulent flow or f = 64/Re for laminar flow. Computes Reynolds number and flow velocity as intermediate results. Used in water supply and hydraulic pipeline design to size pipes and evaluate pressure losses."
+discipline = "civil"
+category = "pipe-hydraulics"
+standards = ["AWWA", "Darcy-Weisbach", "Swamee-Jain (1976)"]
+tags = ["civil", "pipe-hydraulics", "head-loss", "friction-factor", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_rate_m3_s]
+type = "float"
+unit = "m³/s"
+description = "Volumetric flow rate Q"
+min = 0.01
+max = 2.0
+
+[params.pipe_diameter_m]
+type = "float"
+unit = "m"
+description = "Internal pipe diameter D"
+min = 0.05
+max = 2.0
+
+[params.pipe_length_m]
+type = "float"
+unit = "m"
+description = "Pipe length L"
+min = 10
+max = 5000
+
+[params.roughness_height_mm]
+type = "float"
+unit = "mm"
+description = "Absolute roughness height epsilon"
+min = 0.01
+max = 5.0
+derivable_from = "archetype"
+
+[params.kinematic_viscosity_m2_s]
+type = "float"
+unit = "m²/s"
+description = "Kinematic viscosity of the fluid nu"
+min = 5.0e-7
+max = 1.5e-5
+default = 1.004e-6
+optional = true
+
+# --- Outputs ---
+
+[outputs.flow_velocity_m_s]
+description = "Mean flow velocity V (m/s)"
+tolerance = 0.03
+
+[outputs.reynolds_number]
+description = "Reynolds number Re"
+tolerance = 0.03
+
+[outputs.friction_factor]
+description = "Darcy friction factor f"
+tolerance = 0.05
+
+[outputs.head_loss_m]
+description = "Friction head loss hf (m)"
+tolerance = 0.03
+
+# --- Archetypes ---
+# Pipe material scenarios that determine surface roughness.
+
+[archetypes.new_pvc]
+description = "New PVC or HDPE pipeline"
+roughness_height_mm = {min = 0.01, max = 0.03}
+site_contexts = ["sydney-greenfield", "brisbane-suburban"]
+
+[archetypes.new_ductile_iron]
+description = "New cement-lined ductile iron pipeline"
+roughness_height_mm = {min = 0.03, max = 0.1}
+site_contexts = ["melbourne-trunk-main", "adelaide-distribution"]
+
+[archetypes.aged_cast_iron]
+description = "Aged unlined cast iron pipeline with moderate tuberculation"
+roughness_height_mm = {min = 0.5, max = 2.0}
+site_contexts = ["sydney-inner-west-legacy", "melbourne-inner-legacy"]
+
+[archetypes.corrugated_steel]
+description = "Corrugated steel drainage culvert"
+roughness_height_mm = {min = 1.5, max = 5.0}
+site_contexts = ["darwin-rural-crossing", "cairns-rural-crossing"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "All parameters given, smooth pipe, moderate flow"
+visibility = "all_given"
+archetypes = ["new_pvc", "new_ductile_iron"]
+
+[difficulty.medium]
+description = "All parameters given, any pipe material and flow regime"
+visibility = "all_given"
+archetypes = ["new_pvc", "new_ductile_iron", "aged_cast_iron", "corrugated_steel"]
+
+[difficulty.hard]
+description = "Roughness hidden, agent must infer from pipe material description"
+visibility = "partial"
+hidden_params = ["roughness_height_mm"]
+replacement_text = "The pipe is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["new_pvc", "new_ductile_iron", "aged_cast_iron", "corrugated_steel"]

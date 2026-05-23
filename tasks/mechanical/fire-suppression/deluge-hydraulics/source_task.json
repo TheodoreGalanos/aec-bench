@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "tunnel_systems",
+    "category_id": "fire-suppression",
+    "category_name": "Fixed Fire Fighting Systems",
+    "task_id": "deluge-hydraulics",
+    "task_name": "Deluge System Hydraulic Design",
+    "description": "Design hydraulic components for water-based fire suppression system",
+    "complexity": "medium",
+    "standards": [
+      "NFPA 502",
+      "NFPA 13",
+      "NFPA 15"
+    ],
+    "inputs": [
+      "Protected area (m2)",
+      "Water application density (L/min/m2)",
+      "Pipe layout",
+      "Water supply pressure"
+    ],
+    "outputs": [
+      "Required flow rate (L/min)",
+      "Pipe diameters",
+      "Pump capacity (flow and head)"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "flow",
+      "pipe",
+      "pressure",
+      "pump",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/tunnel_systems.json",
+    "suggested_relative_path": "mechanical/fire-suppression/deluge-hydraulics"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "rail_signalling",
+    "category_id": "sil-assessment",
+    "category_name": "SIL Assessment",
+    "task_id": "sil-verification",
+    "task_name": "SIL Verification Calculation",
+    "description": "Verify achieved SIL meets target through PFH/PFDavg calculation",
+    "complexity": "high",
+    "standards": [
+      "EN 50129",
+      "IEC 61508",
+      "IEC 62425"
+    ],
+    "inputs": [
+      "Component failure rates (lambda)",
+      "Diagnostic coverage (DC)",
+      "Proof test interval",
+      "System architecture",
+      "Common cause factor (beta)"
+    ],
+    "outputs": [
+      "PFH or PFDavg",
+      "Safe Failure Fraction (SFF)",
+      "Hardware Fault Tolerance (HFT)",
+      "Achieved SIL",
+      "Target compliance status"
+    ],
+    "keyword_hits": [
+      "calculation",
+      "fault",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/rail_signalling.json",
+    "suggested_relative_path": "electrical/sil-assessment/sil-verification"
+  }
+}

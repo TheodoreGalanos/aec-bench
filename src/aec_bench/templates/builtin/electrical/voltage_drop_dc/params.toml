@@ -1,0 +1,114 @@
+[meta]
+name = "voltage-drop-dc"
+description = "Calculate DC string cable voltage drop"
+long_description = "Calculates two-way DC cable voltage drop for a solar PV string using current, one-way length, cable cross-section, resistivity, and string voltage. The template also estimates annual resistive energy loss and voltage-drop margin."
+discipline = "electrical"
+category = "solar-pv-design"
+standards = ["AS/NZS 5033", "AS/NZS 3008.1"]
+tags = ["electrical", "solar-pv", "dc", "voltage-drop", "cable", "deterministic"]
+tool_mode = "with-tool"
+
+[params.string_current_a]
+type = "float"
+unit = "A"
+description = "PV string current at maximum power"
+min = 1
+max = 30
+
+[params.dc_cable_length_m]
+type = "float"
+unit = "m"
+description = "One-way DC cable length from string to inverter"
+min = 1
+max = 300
+
+[params.cable_cross_section_mm2]
+type = "float"
+unit = "mm2"
+description = "Cable conductor cross-section"
+min = 1.5
+max = 240
+
+[params.cable_resistivity_ohm_mm2_m]
+type = "float"
+unit = "ohm.mm2/m"
+description = "Cable conductor resistivity"
+min = 0.015
+max = 0.03
+
+[params.string_voltage_v]
+type = "float"
+unit = "V"
+description = "PV string operating voltage"
+min = 100
+max = 1500
+
+[params.annual_operating_hours]
+type = "float"
+unit = "h/year"
+description = "Equivalent annual operating hours at the modelled current"
+min = 500
+max = 3000
+
+[params.maximum_voltage_drop_pct]
+type = "float"
+unit = "%"
+description = "Maximum permitted voltage drop percentage"
+min = 0.5
+max = 5
+
+[outputs.voltage_drop_v]
+description = "Two-way DC cable voltage drop"
+tolerance = 0.03
+
+[outputs.voltage_drop_pct]
+description = "Voltage drop as a percentage of string voltage"
+tolerance = 0.03
+
+[outputs.annual_energy_loss_kwh]
+description = "Annual resistive energy loss"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_pct]
+description = "Margin against the maximum voltage drop criterion"
+tolerance = 0.03
+
+[archetypes.rooftop_pv_string]
+description = "Rooftop PV string cable run"
+string_current_a = {min = 6, max = 14}
+dc_cable_length_m = {min = 10, max = 80}
+cable_cross_section_mm2 = {min = 4, max = 16}
+cable_resistivity_ohm_mm2_m = {min = 0.017, max = 0.022}
+string_voltage_v = {min = 300, max = 900}
+annual_operating_hours = {min = 1000, max = 2200}
+maximum_voltage_drop_pct = {min = 1.5, max = 3}
+site_contexts = ["rooftop-pv", "dc-cable"]
+
+[archetypes.utility_pv_string]
+description = "Utility PV string home-run cable"
+string_current_a = {min = 10, max = 22}
+dc_cable_length_m = {min = 50, max = 250}
+cable_cross_section_mm2 = {min = 10, max = 95}
+cable_resistivity_ohm_mm2_m = {min = 0.017, max = 0.022}
+string_voltage_v = {min = 800, max = 1500}
+annual_operating_hours = {min = 1400, max = 2600}
+maximum_voltage_drop_pct = {min = 1, max = 3}
+site_contexts = ["utility-pv", "dc-cable"]
+
+[difficulty.easy]
+description = "Rooftop PV string with all values visible"
+visibility = "all_given"
+archetypes = ["rooftop_pv_string"]
+
+[difficulty.medium]
+description = "PV string selected from rooftop or utility cases"
+visibility = "all_given"
+archetypes = ["rooftop_pv_string", "utility_pv_string"]
+
+[difficulty.hard]
+description = "Utility PV string with conductor resistivity embedded in context"
+visibility = "partial"
+hidden_params = ["cable_resistivity_ohm_mm2_m"]
+replacement_text = "Use the conductor resistivity implied by {{ archetype.description }}."
+archetypes = ["utility_pv_string"]
+cable_resistivity_ohm_mm2_m = [0.0175]

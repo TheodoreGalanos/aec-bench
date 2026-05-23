@@ -1,0 +1,121 @@
+[meta]
+name = "battery-sizing"
+description = "Backup battery capacity and UPS apparent power sizing"
+long_description = "Calculates battery energy, required amp-hour capacity, UPS apparent power, and block count for a critical load autonomy requirement. The reduced method explicitly applies system voltage, depth of discharge, temperature derating, inverter efficiency, load power factor, and block voltage."
+discipline = "electrical"
+category = "power-supply"
+standards = ["EN 50125", "IEEE 485"]
+tags = ["electrical", "battery", "ups", "backup-power", "autonomy", "deterministic"]
+tool_mode = "with-tool"
+
+[params.critical_load_w]
+type = "float"
+unit = "W"
+description = "Critical load power"
+min = 1
+max = 100000
+
+[params.required_autonomy_h]
+type = "float"
+unit = "h"
+description = "Required autonomy duration"
+min = 0.1
+max = 168
+
+[params.system_voltage_v]
+type = "float"
+unit = "V"
+description = "Nominal DC system voltage"
+min = 12
+max = 1000
+
+[params.depth_of_discharge_pct]
+type = "float"
+unit = "%"
+description = "Allowed depth of discharge"
+min = 10
+max = 100
+
+[params.temperature_derating_factor]
+type = "float"
+description = "Capacity derating factor for temperature"
+min = 0.3
+max = 1.0
+
+[params.inverter_efficiency_pct]
+type = "float"
+unit = "%"
+description = "Inverter or UPS efficiency"
+min = 50
+max = 100
+
+[params.load_power_factor]
+type = "float"
+description = "Load power factor for UPS VA sizing"
+min = 0.5
+max = 1.0
+
+[params.battery_block_voltage_v]
+type = "float"
+unit = "V"
+description = "Nominal voltage of each battery block"
+min = 1.2
+max = 48
+
+[outputs.required_energy_kwh]
+description = "Critical load energy over autonomy duration"
+tolerance = 0.03
+
+[outputs.required_battery_capacity_ah]
+description = "Required battery amp-hour capacity"
+tolerance = 0.03
+
+[outputs.ups_rating_va]
+description = "Required UPS apparent power rating"
+tolerance = 0.03
+
+[outputs.battery_block_count]
+description = "Minimum number of battery blocks in series"
+tolerance = 0.01
+
+[archetypes.signalling_backup]
+description = "Rail signalling backup battery set"
+critical_load_w = {min = 100, max = 5000}
+required_autonomy_h = {min = 2, max = 24}
+system_voltage_v = {min = 24, max = 120}
+depth_of_discharge_pct = {min = 50, max = 90}
+temperature_derating_factor = {min = 0.7, max = 1.0}
+inverter_efficiency_pct = {min = 85, max = 98}
+load_power_factor = {min = 0.8, max = 0.98}
+battery_block_voltage_v = {min = 2, max = 12}
+site_contexts = ["signal-location", "level-crossing-cabinet"]
+
+[archetypes.comms_backup]
+description = "Communications or control cabinet UPS battery set"
+critical_load_w = {min = 50, max = 10000}
+required_autonomy_h = {min = 0.5, max = 12}
+system_voltage_v = {min = 24, max = 240}
+depth_of_discharge_pct = {min = 60, max = 95}
+temperature_derating_factor = {min = 0.7, max = 1.0}
+inverter_efficiency_pct = {min = 85, max = 98}
+load_power_factor = {min = 0.75, max = 0.98}
+battery_block_voltage_v = {min = 6, max = 48}
+site_contexts = ["comms-room", "roadside-cabinet"]
+
+[difficulty.easy]
+description = "Cabinet backup battery with all factors visible"
+visibility = "all_given"
+archetypes = ["comms_backup"]
+
+[difficulty.medium]
+description = "Comms or signalling backup battery"
+visibility = "all_given"
+archetypes = ["comms_backup", "signalling_backup"]
+
+[difficulty.hard]
+description = "Temperature derating hidden in site context"
+visibility = "partial"
+hidden_params = ["temperature_derating_factor"]
+replacement_text = "Use the temperature derating factor implied by {{ archetype.description }}."
+archetypes = ["signalling_backup"]
+temperature_derating_factor = [0.9]

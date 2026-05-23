@@ -1,0 +1,116 @@
+[meta]
+name = "design-wind-speed"
+description = "Site wind speed V_sit,beta from regional speed and multipliers per AS/NZS 1170.2"
+long_description = "Calculates the design site wind speed using the AS/NZS 1170.2 Section 2.2 equation V_sit,beta = V_R * M_d * M_z,cat * M_s * M_t. The terrain/height multiplier M_z,cat is looked up from Table 4.1(A) with linear interpolation for intermediate heights across five terrain categories. Applicable to buildings and structures in Australian and New Zealand wind regions."
+discipline = "civil"
+category = "wind-load-derivation"
+standards = ["AS/NZS 1170.2"]
+tags = ["civil", "wind", "loading", "structural", "deterministic"]
+tool_mode = "with-tool"
+
+[params.regional_wind_speed_m_per_s]
+type = "float"
+unit = "m/s"
+description = "Regional 3-second gust wind speed V_R"
+min = 25
+max = 70
+
+[params.terrain_category]
+type = "enum"
+description = "Terrain category per AS/NZS 1170.2 Section 4.2"
+values = ["1", "2", "2.5", "3", "4"]
+derivable_from = "archetype"
+
+[params.building_height_m]
+type = "float"
+unit = "m"
+description = "Building height above ground z"
+min = 2
+max = 200
+
+[params.topographic_multiplier]
+type = "float"
+unit = "-"
+description = "Topographic multiplier M_t"
+min = 1.0
+max = 1.5
+
+[params.shielding_multiplier]
+type = "float"
+unit = "-"
+description = "Shielding multiplier M_s"
+min = 0.7
+max = 1.0
+derivable_from = "archetype"
+
+[params.wind_direction_multiplier]
+type = "float"
+unit = "-"
+description = "Wind direction multiplier M_d"
+min = 0.8
+max = 1.0
+default = 1.0
+optional = true
+
+# --- Outputs ---
+
+[outputs.mz_cat]
+description = "Terrain/height multiplier M_z,cat from Table 4.1(A)"
+tolerance = 0.03
+
+[outputs.site_wind_speed_m_per_s]
+description = "Site wind speed V_sit,beta (m/s)"
+tolerance = 0.03
+
+# --- Archetypes: exposure and shielding scenarios ---
+# Archetypes constrain topographic_multiplier and shielding_multiplier ranges.
+# Terrain category is an enum sampled from the global values list; archetype
+# descriptions intentionally avoid terrain-specific language for easy/medium
+# modes where all params including TC are visible.
+
+[archetypes.flat_unshielded]
+description = "Flat open terrain site with no surrounding obstructions (terrain category 1 or 2) and no topographic amplification"
+topographic_multiplier = {min = 1.0, max = 1.0}
+shielding_multiplier = {min = 1.0, max = 1.0}
+terrain_category = ["1", "2"]
+site_contexts = ["darling-downs-qld", "riverina-nsw", "gold-coast-beachfront", "darwin-coastal"]
+
+[archetypes.lightly_shielded]
+description = "Site in suburban area with partial shielding from nearby low-rise buildings or vegetation (terrain category 2.5 or 3)"
+topographic_multiplier = {min = 1.0, max = 1.05}
+shielding_multiplier = {min = 0.85, max = 1.0}
+terrain_category = ["2.5", "3"]
+site_contexts = ["sydney-western-suburbs", "melbourne-outer-east", "brisbane-northside", "wetherill-park-nsw"]
+
+[archetypes.heavily_shielded]
+description = "Site in dense urban centre heavily shielded by closely spaced multi-storey buildings (terrain category 4)"
+topographic_multiplier = {min = 1.0, max = 1.0}
+shielding_multiplier = {min = 0.7, max = 0.85}
+terrain_category = ["4"]
+site_contexts = ["sydney-cbd", "melbourne-cbd", "brisbane-cbd"]
+
+[archetypes.hilltop_exposed]
+description = "Building on or near a hilltop or escarpment with topographic wind acceleration in open terrain (terrain category 1 or 2)"
+topographic_multiplier = {min = 1.1, max = 1.5}
+shielding_multiplier = {min = 1.0, max = 1.0}
+terrain_category = ["1", "2"]
+site_contexts = ["blue-mountains-nsw", "mt-coot-tha-qld", "adelaide-hills-sa"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "All parameters given, flat terrain with no shielding or topographic effects"
+visibility = "all_given"
+archetypes = ["flat_unshielded"]
+
+[difficulty.medium]
+description = "All parameters given, includes shielding and topographic effects"
+visibility = "all_given"
+archetypes = ["flat_unshielded", "lightly_shielded", "heavily_shielded", "hilltop_exposed"]
+
+[difficulty.hard]
+description = "Terrain category and shielding hidden — agent must infer from site description"
+visibility = "partial"
+hidden_params = ["terrain_category", "shielding_multiplier"]
+replacement_text = "The site is {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["flat_unshielded", "lightly_shielded", "heavily_shielded", "hilltop_exposed"]

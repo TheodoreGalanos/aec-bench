@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "buildings_civil",
+    "category_id": "stormwater-roof",
+    "category_name": "Roof & Gutter Drainage",
+    "task_id": "downpipe-sizing",
+    "task_name": "Downpipe Sizing",
+    "description": "Size downpipes based on roof catchment and rainfall intensity",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3500.3:2025 Table 4.3"
+    ],
+    "inputs": [
+      "Roof catchment area (m2)",
+      "Rainfall intensity (mm/hr)",
+      "Number of downpipes",
+      "Downpipe configuration"
+    ],
+    "outputs": [
+      "Required downpipe diameter (mm)",
+      "Flow capacity (L/s)",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "flow",
+      "pipe",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/civil/buildings_civil.json",
+    "suggested_relative_path": "civil/stormwater-roof/downpipe-sizing"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "facades",
+    "category_id": "glass-design",
+    "category_name": "Glass Design",
+    "task_id": "glass-deflection-check",
+    "task_name": "Glass Deflection Check",
+    "description": "Check glass center deflection against serviceability limits",
+    "complexity": "low",
+    "standards": [
+      "AS 1288",
+      "ASTM E1300",
+      "EN 13830"
+    ],
+    "inputs": [
+      "Panel dimensions (mm)",
+      "Glass thickness (mm)",
+      "Applied load (kPa)",
+      "Support conditions"
+    ],
+    "outputs": [
+      "Center deflection (mm)",
+      "Span ratio (L/deflection)",
+      "Pass/Fail against limit"
+    ],
+    "keyword_hits": [
+      "deflection",
+      "load"
+    ],
+    "source_file": "data/tasks/structural/facades.json",
+    "suggested_relative_path": "structural/glass-design/glass-deflection-check"
+  }
+}

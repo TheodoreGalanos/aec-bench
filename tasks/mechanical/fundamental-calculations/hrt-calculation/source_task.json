@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_wastewater_treatment",
+    "category_id": "fundamental-calculations",
+    "category_name": "Fundamental Treatment Calculations",
+    "task_id": "hrt-calculation",
+    "task_name": "Hydraulic Retention Time Calculation",
+    "description": "Calculate hydraulic retention time for a treatment unit",
+    "complexity": "low",
+    "standards": [
+      "WEF MOP 8"
+    ],
+    "inputs": [
+      "Reactor volume (m3)",
+      "Flow rate (m3/d or L/s)"
+    ],
+    "outputs": [
+      "HRT (hours or days)",
+      "Comparison to typical range for process type"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/water_wastewater_treatment.json",
+    "suggested_relative_path": "mechanical/fundamental-calculations/hrt-calculation"
+  }
+}

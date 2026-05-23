@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "buildings_mechanical",
+    "category_id": "duct-design",
+    "category_name": "Duct Sizing and Pressure Loss",
+    "task_id": "duct-leakage-class",
+    "task_name": "Duct Leakage Classification",
+    "description": "Determine duct leakage class and calculate expected air leakage",
+    "complexity": "low",
+    "standards": [
+      "SMACNA HVAC Duct Construction Standards",
+      "ASHRAE 90.1"
+    ],
+    "inputs": [
+      "Duct construction type",
+      "Sealing level",
+      "Operating pressure class",
+      "Duct surface area (m2)"
+    ],
+    "outputs": [
+      "Leakage class (CL)",
+      "Predicted leakage rate (L/s)",
+      "Leakage as percentage of supply air (%)",
+      "Compliance with ASHRAE 90.1"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "pressure",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/buildings_mechanical.json",
+    "suggested_relative_path": "mechanical/duct-design/duct-leakage-class"
+  }
+}

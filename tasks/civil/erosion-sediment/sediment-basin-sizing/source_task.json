@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "buildings_civil",
+    "category_id": "erosion-sediment",
+    "category_name": "Erosion & Sediment Control",
+    "task_id": "sediment-basin-sizing",
+    "task_name": "Sediment Basin Sizing",
+    "description": "Size construction sediment basin per Blue Book requirements",
+    "complexity": "medium",
+    "standards": [
+      "Managing Urban Stormwater: Soils and Construction (Blue Book)"
+    ],
+    "inputs": [
+      "Contributing catchment area (ha)",
+      "Soil type",
+      "Basin type (Type D/F)",
+      "Rainfall data"
+    ],
+    "outputs": [
+      "Settling zone volume (m3)",
+      "Sediment storage volume (m3)",
+      "Total basin volume (m3)"
+    ],
+    "keyword_hits": [
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/civil/buildings_civil.json",
+    "suggested_relative_path": "civil/erosion-sediment/sediment-basin-sizing"
+  }
+}

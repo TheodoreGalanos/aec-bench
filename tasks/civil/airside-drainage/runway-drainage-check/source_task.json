@@ -1,0 +1,32 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_aviation",
+    "category_id": "airside-drainage",
+    "category_name": "Airside Drainage Design",
+    "task_id": "runway-drainage-check",
+    "task_name": "Runway Drainage Adequacy",
+    "description": "Verify runway surface drainage prevents hydroplaning conditions",
+    "complexity": "low",
+    "standards": [
+      "FAA AC 150/5320-5D"
+    ],
+    "inputs": [
+      "Runway cross-slopes",
+      "Rainfall intensity",
+      "Water film depth calculations"
+    ],
+    "outputs": [
+      "Maximum water film depth (mm)",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "calculation",
+      "drop"
+    ],
+    "source_file": "data/tasks/civil/civil_aviation.json",
+    "suggested_relative_path": "civil/airside-drainage/runway-drainage-check"
+  }
+}

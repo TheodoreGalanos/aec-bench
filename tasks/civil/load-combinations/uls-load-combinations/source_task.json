@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_energy",
+    "category_id": "load-combinations",
+    "category_name": "Load Combinations",
+    "task_id": "uls-load-combinations",
+    "task_name": "ULS Load Combination Check",
+    "description": "Generate and apply ultimate limit state load combinations",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 1170.0"
+    ],
+    "inputs": [
+      "Dead load G (kN)",
+      "Live load Q (kN)",
+      "Wind load W (kN)",
+      "Earthquake load E (kN)"
+    ],
+    "outputs": [
+      "All required ULS combinations",
+      "Governing combination",
+      "Design action Ed (kN)"
+    ],
+    "keyword_hits": [
+      "load",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/civil_energy.json",
+    "suggested_relative_path": "civil/load-combinations/uls-load-combinations"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_energy",
+    "category_id": "qa-error-detection",
+    "category_name": "QA & Error Detection",
+    "task_id": "unit-conversion-check",
+    "task_name": "Unit Conversion Error Detection",
+    "description": "Detect unit conversion errors in calculations and drawings",
+    "complexity": "low",
+    "standards": [],
+    "inputs": [
+      "Calculation sheets",
+      "Drawing dimensions",
+      "Specification values"
+    ],
+    "outputs": [
+      "Potential unit errors identified",
+      "Sanity check results",
+      "Flagged values"
+    ],
+    "keyword_hits": [
+      "calculation"
+    ],
+    "source_file": "data/tasks/civil/civil_energy.json",
+    "suggested_relative_path": "civil/qa-error-detection/unit-conversion-check"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "relief-valve-sizing",
+    "category_name": "Relief Valve Sizing",
+    "task_id": "psv-liquid-sizing",
+    "task_name": "PSV Sizing for Liquid Service",
+    "description": "Size pressure safety valve for liquid (hydraulic) relief",
+    "complexity": "medium",
+    "standards": [
+      "API 520 Part I",
+      "API 526"
+    ],
+    "inputs": [
+      "Relief flow rate (L/min)",
+      "Set pressure (kPag)",
+      "Allowable overpressure (%)",
+      "Backpressure (kPag)",
+      "Fluid density (kg/m3)",
+      "Fluid viscosity (cP)",
+      "Discharge coefficient Kd"
+    ],
+    "outputs": [
+      "Preliminary area (mm2)",
+      "Reynolds number",
+      "Viscosity correction Kv",
+      "Final required area (mm2)",
+      "Selected API 526 orifice"
+    ],
+    "keyword_hits": [
+      "flow",
+      "pressure",
+      "rate",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/relief-valve-sizing/psv-liquid-sizing"
+  }
+}

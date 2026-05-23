@@ -1,0 +1,118 @@
+[meta]
+name = "car-dimensions-check"
+description = "Calculate lift car dimension margins"
+long_description = "Calculates numeric margins for lift car internal width, internal depth, and clear door opening against explicit minimum requirements. The template also reports car floor area and rated load density for reduced vertical transportation checks."
+discipline = "electrical"
+category = "shaft-sizing"
+standards = ["ISO 4190-1", "AS 1735.12", "EN 81-70"]
+tags = ["electrical", "vertical-transportation", "lift", "accessibility", "dimensions", "deterministic"]
+tool_mode = "with-tool"
+
+[params.car_internal_width_mm]
+type = "float"
+unit = "mm"
+description = "Lift car internal width"
+min = 600
+max = 3000
+
+[params.car_internal_depth_mm]
+type = "float"
+unit = "mm"
+description = "Lift car internal depth"
+min = 800
+max = 4000
+
+[params.door_clear_opening_mm]
+type = "float"
+unit = "mm"
+description = "Clear door opening width"
+min = 500
+max = 2000
+
+[params.rated_load_kg]
+type = "float"
+unit = "kg"
+description = "Lift rated load"
+min = 100
+max = 5000
+
+[params.minimum_width_mm]
+type = "float"
+unit = "mm"
+description = "Required minimum car width"
+min = 500
+max = 2500
+
+[params.minimum_depth_mm]
+type = "float"
+unit = "mm"
+description = "Required minimum car depth"
+min = 500
+max = 3500
+
+[params.minimum_door_opening_mm]
+type = "float"
+unit = "mm"
+description = "Required minimum clear door opening"
+min = 500
+max = 1800
+
+[outputs.width_margin_mm]
+description = "Actual car width minus minimum width"
+tolerance = 0.03
+
+[outputs.depth_margin_mm]
+description = "Actual car depth minus minimum depth"
+tolerance = 0.03
+
+[outputs.door_opening_margin_mm]
+description = "Actual door opening minus minimum door opening"
+tolerance = 0.03
+
+[outputs.car_floor_area_m2]
+description = "Car floor area"
+tolerance = 0.03
+
+[outputs.rated_load_density_kg_m2]
+description = "Rated load divided by car floor area"
+tolerance = 0.03
+
+[archetypes.accessible_passenger_lift]
+description = "Accessible passenger lift car"
+car_internal_width_mm = {min = 1100, max = 1800}
+car_internal_depth_mm = {min = 1400, max = 2200}
+door_clear_opening_mm = {min = 850, max = 1200}
+rated_load_kg = {min = 630, max = 1600}
+minimum_width_mm = {min = 1000, max = 1200}
+minimum_depth_mm = {min = 1300, max = 1500}
+minimum_door_opening_mm = {min = 800, max = 950}
+site_contexts = ["passenger-lift", "accessibility"]
+
+[archetypes.goods_lift_car]
+description = "Goods lift car"
+car_internal_width_mm = {min = 1600, max = 2800}
+car_internal_depth_mm = {min = 2000, max = 3600}
+door_clear_opening_mm = {min = 1200, max = 2400}
+rated_load_kg = {min = 1000, max = 4000}
+minimum_width_mm = {min = 1400, max = 2200}
+minimum_depth_mm = {min = 1800, max = 3000}
+minimum_door_opening_mm = {min = 1000, max = 1800}
+site_contexts = ["goods-lift", "car-sizing"]
+
+[difficulty.easy]
+description = "Accessible passenger lift with all values visible"
+visibility = "all_given"
+archetypes = ["accessible_passenger_lift"]
+
+[difficulty.medium]
+description = "Lift car selected from passenger or goods cases"
+visibility = "all_given"
+archetypes = ["accessible_passenger_lift", "goods_lift_car"]
+
+[difficulty.hard]
+description = "Goods lift car with minimum door opening embedded in context"
+visibility = "partial"
+hidden_params = ["minimum_door_opening_mm"]
+replacement_text = "Use the minimum clear door opening implied by {{ archetype.description }}."
+archetypes = ["goods_lift_car"]
+minimum_door_opening_mm = [1400]

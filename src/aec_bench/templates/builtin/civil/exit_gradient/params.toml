@@ -1,0 +1,121 @@
+[meta]
+name = "exit-gradient"
+description = "Calculate exit gradient at downstream toe and factor of safety against piping"
+long_description = "Computes the exit hydraulic gradient at a dam or levee downstream toe using i_exit = delta_h / L_seepage, and the critical gradient for piping initiation from i_cr = (G_s - 1) / (1 + e), per USACE EM 1110-2-1901. Derives the factor of safety against piping and the saturated and buoyant unit weights of the foundation soil. Used in dam safety and geotechnical seepage analysis."
+discipline = "civil"
+category = "seepage-analysis"
+standards = ["USACE EM 1110-2-1901", "FEMA P-1032"]
+tags = ["civil", "dams", "seepage", "piping", "gradient", "hydraulics"]
+tool_mode = "with-tool"
+
+[params.head_difference_m]
+type = "float"
+unit = "m"
+description = "Head difference across the structure (upstream pool minus tailwater level)"
+min = 0.5
+max = 40.0
+
+[params.seepage_path_length_m]
+type = "float"
+unit = "m"
+description = "Total seepage path length through the foundation from upstream to downstream toe"
+min = 5.0
+max = 300.0
+
+[params.specific_gravity]
+type = "float"
+description = "Specific gravity of foundation soil solids G_s"
+min = 2.55
+max = 2.80
+derivable_from = "archetype"
+
+[params.void_ratio]
+type = "float"
+description = "Void ratio of the foundation soil e"
+min = 0.25
+max = 1.10
+derivable_from = "archetype"
+
+[params.foundation_soil_type]
+type = "enum"
+description = "Foundation soil classification"
+values = ["clean_sand", "silty_sand", "sandy_silt", "clayey_silt", "silty_clay"]
+derivable_from = "archetype"
+
+[outputs.exit_gradient]
+description = "Exit gradient at the downstream toe i_exit (dimensionless)"
+tolerance = 0.03
+
+[outputs.critical_gradient]
+description = "Critical hydraulic gradient for piping initiation i_cr (dimensionless)"
+tolerance = 0.03
+
+[outputs.factor_of_safety]
+description = "Factor of safety against piping FoS = i_cr / i_exit (dimensionless)"
+tolerance = 0.03
+
+[outputs.saturated_unit_weight_kn_m3]
+description = "Saturated unit weight of foundation soil gamma_sat (kN/m3)"
+tolerance = 0.03
+
+[outputs.buoyant_unit_weight_kn_m3]
+description = "Buoyant (submerged) unit weight of foundation soil gamma_b (kN/m3)"
+tolerance = 0.03
+
+# --- Archetypes ---
+
+[archetypes.earth_dam_sand]
+description = "Earth embankment dam on clean sand foundation with moderate head"
+head_difference_m = {min = 3.0, max = 15.0}
+seepage_path_length_m = {min = 30.0, max = 120.0}
+specific_gravity = {min = 2.63, max = 2.67}
+void_ratio = {min = 0.55, max = 0.75}
+foundation_soil_type = ["clean_sand"]
+site_contexts = ["darling-downs-farm-dam", "hunter-valley-irrigation-dam"]
+
+[archetypes.concrete_gravity_dam]
+description = "Concrete gravity dam on silty sand foundation with high head"
+head_difference_m = {min = 10.0, max = 35.0}
+seepage_path_length_m = {min = 50.0, max = 200.0}
+specific_gravity = {min = 2.64, max = 2.68}
+void_ratio = {min = 0.45, max = 0.65}
+foundation_soil_type = ["silty_sand"]
+site_contexts = ["snowy-mountains-hydro-dam", "tasmania-power-dam"]
+
+[archetypes.levee_alluvial]
+description = "Levee on alluvial soil foundation with low to moderate head"
+head_difference_m = {min = 1.5, max = 8.0}
+seepage_path_length_m = {min = 15.0, max = 80.0}
+specific_gravity = {min = 2.65, max = 2.72}
+void_ratio = {min = 0.50, max = 0.80}
+foundation_soil_type = ["sandy_silt", "silty_sand"]
+site_contexts = ["murray-river-levee", "fitzroy-river-flood-levee"]
+
+[archetypes.sheet_pile_cofferdam]
+description = "Sheet pile cofferdam on sandy foundation with low head"
+head_difference_m = {min = 0.5, max = 5.0}
+seepage_path_length_m = {min = 5.0, max = 30.0}
+specific_gravity = {min = 2.63, max = 2.67}
+void_ratio = {min = 0.55, max = 0.80}
+foundation_soil_type = ["clean_sand", "silty_sand"]
+site_contexts = ["sydney-harbour-cofferdam", "brisbane-river-cofferdam"]
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Simple earth dam scenario, all parameters given including soil properties"
+visibility = "all_given"
+archetypes = ["earth_dam_sand", "sheet_pile_cofferdam"]
+foundation_soil_type = ["clean_sand"]
+
+[difficulty.medium]
+description = "All parameters given, wider range of structure types and soil conditions"
+visibility = "all_given"
+archetypes = ["earth_dam_sand", "concrete_gravity_dam", "levee_alluvial", "sheet_pile_cofferdam"]
+
+[difficulty.hard]
+description = "Specific gravity, void ratio, and soil type hidden; agent infers from site context"
+visibility = "partial"
+hidden_params = ["specific_gravity", "void_ratio", "foundation_soil_type"]
+replacement_text = "The structure is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["concrete_gravity_dam", "levee_alluvial"]

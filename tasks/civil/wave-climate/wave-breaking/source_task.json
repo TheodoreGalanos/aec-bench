@@ -1,0 +1,32 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "coastal_engineering",
+    "category_id": "wave-climate",
+    "category_name": "Wave Climate & Transformations",
+    "task_id": "wave-breaking",
+    "task_name": "Wave Breaking Criteria",
+    "description": "Determine if waves break and calculate breaking wave height",
+    "complexity": "low",
+    "standards": [
+      "USACE CEM"
+    ],
+    "inputs": [
+      "Incident wave height (m)",
+      "Water depth (m)",
+      "Bottom slope"
+    ],
+    "outputs": [
+      "Breaking wave height (m)",
+      "Breaker type (spilling/plunging/surging)",
+      "Breaking depth (m)"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/civil/coastal_engineering.json",
+    "suggested_relative_path": "civil/wave-climate/wave-breaking"
+  }
+}

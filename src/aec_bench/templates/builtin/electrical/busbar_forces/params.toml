@@ -1,0 +1,124 @@
+[meta]
+name = "busbar-forces"
+description = "Busbar short-circuit electromagnetic force and stress calculation per IEEE 605 / IEC 60865-1"
+long_description = "Calculates the electromagnetic force per unit length on the centre phase of a three-phase flat busbar arrangement during a symmetrical short circuit using Fm = (mu_0 / 2pi) * (sqrt(3)/2) * ip^2 / a, then derives peak span force and bending stress. Used to verify busbar mechanical adequacy in switchgear and substation design per IEEE 605 and IEC 60865-1."
+discipline = "electrical"
+category = "busbar-design"
+standards = ["IEEE 605-2008", "IEC 60865-1:2011"]
+tags = ["electrical", "busbar", "short-circuit", "electromagnetic-force", "substation"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.peak_short_circuit_current_ka]
+type = "float"
+unit = "kA"
+description = "Peak (asymmetrical) short-circuit current ip"
+min = 5
+max = 200
+
+[params.phase_spacing_mm]
+type = "float"
+unit = "mm"
+description = "Centre-to-centre spacing between adjacent busbar phases"
+min = 50
+max = 1000
+
+[params.span_length_m]
+type = "float"
+unit = "m"
+description = "Span length between busbar supports"
+min = 0.3
+max = 3.0
+
+[params.busbar_width_mm]
+type = "float"
+unit = "mm"
+description = "Width of rectangular busbar cross-section"
+min = 20
+max = 200
+
+[params.busbar_thickness_mm]
+type = "float"
+unit = "mm"
+description = "Thickness of rectangular busbar cross-section (bending direction)"
+min = 3
+max = 20
+
+[params.support_condition]
+type = "enum"
+description = "End support condition for the busbar span"
+values = ["simply_supported", "fixed_both_ends"]
+default = "simply_supported"
+optional = true
+derivable_from = "archetype"
+
+[params.busbar_material]
+type = "enum"
+description = "Busbar conductor material"
+values = ["copper", "aluminium"]
+default = "copper"
+optional = true
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.force_per_m_n]
+description = "Electromagnetic force per unit length on centre phase (N/m)"
+tolerance = 0.03
+
+[outputs.peak_force_n]
+description = "Total peak force over one busbar span (N)"
+tolerance = 0.03
+
+[outputs.busbar_stress_mpa]
+description = "Maximum bending stress in the busbar (MPa)"
+tolerance = 0.03
+
+# --- Archetypes ---
+
+[archetypes.lv_switchboard]
+description = "Low-voltage switchboard busbar (400-480 V)"
+peak_short_circuit_current_ka = {min = 10, max = 50}
+phase_spacing_mm = {min = 60, max = 185}
+span_length_m = {min = 0.3, max = 0.8}
+busbar_width_mm = {min = 20, max = 60}
+busbar_thickness_mm = {min = 3, max = 10}
+site_contexts = ["commercial-switchroom", "industrial-mcc-room"]
+
+[archetypes.mv_switchgear]
+description = "Medium-voltage metal-clad switchgear busbar (11-33 kV)"
+peak_short_circuit_current_ka = {min = 25, max = 80}
+phase_spacing_mm = {min = 150, max = 300}
+span_length_m = {min = 0.5, max = 1.5}
+busbar_width_mm = {min = 40, max = 100}
+busbar_thickness_mm = {min = 5, max = 12}
+site_contexts = ["zone-substation-switchroom", "industrial-hv-room"]
+
+[archetypes.outdoor_substation]
+description = "Outdoor air-insulated substation rigid bus (66-132 kV)"
+peak_short_circuit_current_ka = {min = 50, max = 200}
+phase_spacing_mm = {min = 300, max = 1000}
+span_length_m = {min = 1.0, max = 3.0}
+busbar_width_mm = {min = 80, max = 200}
+busbar_thickness_mm = {min = 8, max = 20}
+site_contexts = ["transmission-substation", "bulk-supply-substation"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "LV switchboard, short span, all parameters given including support condition and material"
+visibility = "all_given"
+archetypes = ["lv_switchboard"]
+
+[difficulty.medium]
+description = "Any voltage level and archetype, all parameters given"
+visibility = "all_given"
+archetypes = ["lv_switchboard", "mv_switchgear", "outdoor_substation"]
+
+[difficulty.hard]
+description = "Support condition and material hidden, agent must infer from installation context"
+visibility = "partial"
+hidden_params = ["support_condition", "busbar_material"]
+replacement_text = "The installation is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["mv_switchgear", "outdoor_substation"]

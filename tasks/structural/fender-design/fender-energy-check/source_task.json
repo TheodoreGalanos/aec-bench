@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "ports_marine",
+    "category_id": "fender-design",
+    "category_name": "Fender System Design",
+    "task_id": "fender-energy-check",
+    "task_name": "Fender Energy Capacity Check",
+    "description": "Verify fender energy absorption capacity exceeds design berthing energy",
+    "complexity": "low",
+    "standards": [
+      "PIANC WG211",
+      "BS 6349-4"
+    ],
+    "inputs": [
+      "Design berthing energy ED (kNm)",
+      "Fender rated energy ER (kNm)",
+      "Temperature factor",
+      "Velocity factor",
+      "Angular factor",
+      "Manufacturing tolerance"
+    ],
+    "outputs": [
+      "Corrected fender capacity (kNm)",
+      "Energy ratio ED/ER",
+      "Pass/Fail"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "energy",
+      "rate"
+    ],
+    "source_file": "data/tasks/structural/ports_marine.json",
+    "suggested_relative_path": "structural/fender-design/fender-energy-check"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "facades",
+    "category_id": "glass-design",
+    "category_name": "Glass Design",
+    "task_id": "igu-load-sharing",
+    "task_name": "IGU Load Sharing Calculation",
+    "description": "Calculate load sharing between lites in insulating glass unit",
+    "complexity": "medium",
+    "standards": [
+      "ASTM E1300",
+      "EN 16612",
+      "AS 1288"
+    ],
+    "inputs": [
+      "Outer lite thickness (mm)",
+      "Inner lite thickness (mm)",
+      "Cavity width (mm)",
+      "Applied load (kPa)"
+    ],
+    "outputs": [
+      "Load on outer lite (%)",
+      "Load on inner lite (%)",
+      "Load sharing factor"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "load"
+    ],
+    "source_file": "data/tasks/structural/facades.json",
+    "suggested_relative_path": "structural/glass-design/igu-load-sharing"
+  }
+}

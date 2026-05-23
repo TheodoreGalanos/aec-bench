@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "facades",
+    "category_id": "wind-load-analysis",
+    "category_name": "Wind Load Analysis",
+    "task_id": "effective-wind-area",
+    "task_name": "Effective Wind Area Calculation",
+    "description": "Calculate effective wind area for pressure coefficient selection",
+    "complexity": "low",
+    "standards": [
+      "ASCE 7",
+      "AS/NZS 1170.2"
+    ],
+    "inputs": [
+      "Panel dimensions",
+      "Span of supporting member",
+      "Tributary width"
+    ],
+    "outputs": [
+      "Effective wind area (m2)",
+      "Coefficient selection",
+      "Area-averaged vs peak pressure"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "pressure"
+    ],
+    "source_file": "data/tasks/structural/facades.json",
+    "suggested_relative_path": "structural/wind-load-analysis/effective-wind-area"
+  }
+}

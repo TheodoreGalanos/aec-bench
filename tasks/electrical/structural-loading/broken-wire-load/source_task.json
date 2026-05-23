@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "structural-loading",
+    "category_name": "Structural Loading Analysis",
+    "task_id": "broken-wire-load",
+    "task_name": "Broken Wire (Security) Load Case",
+    "description": "Calculate unbalanced longitudinal load from broken conductor condition",
+    "complexity": "medium",
+    "standards": [
+      "IEC 60826",
+      "AS/NZS 7000"
+    ],
+    "inputs": [
+      "Conductor tension at break (N)",
+      "Number of subconductors",
+      "Structure type (suspension/strain)",
+      "Adjacent span lengths (m)",
+      "Residual static load factor"
+    ],
+    "outputs": [
+      "Longitudinal load (N)",
+      "Torsional moment (N-m)",
+      "Residual unbalanced load",
+      "Load case classification"
+    ],
+    "keyword_hits": [
+      "balance",
+      "calculate",
+      "load",
+      "moment"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/structural-loading/broken-wire-load"
+  }
+}

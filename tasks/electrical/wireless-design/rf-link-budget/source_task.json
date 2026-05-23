@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "ict_comms_security",
+    "category_id": "wireless-design",
+    "category_name": "Wireless Network Design",
+    "task_id": "rf-link-budget",
+    "task_name": "RF Link Budget Calculation",
+    "description": "Calculate wireless link budget to verify adequate signal strength",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 802.11",
+      "FCC Part 15"
+    ],
+    "inputs": [
+      "Transmit power (dBm)",
+      "Transmit antenna gain (dBi)",
+      "Distance (m)",
+      "Frequency (GHz)",
+      "Receive antenna gain (dBi)",
+      "Obstacle losses (dB)",
+      "Required receive sensitivity (dBm)"
+    ],
+    "outputs": [
+      "Free space path loss (dB)",
+      "Total path loss (dB)",
+      "Received signal level (dBm)",
+      "Link margin (dB)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "power"
+    ],
+    "source_file": "data/tasks/electrical/ict_comms_security.json",
+    "suggested_relative_path": "electrical/wireless-design/rf-link-budget"
+  }
+}

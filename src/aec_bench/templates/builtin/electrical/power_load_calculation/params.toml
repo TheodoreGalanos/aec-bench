@@ -1,0 +1,93 @@
+[meta]
+name = "power-load-calculation"
+description = "Signalling equipment connected load and supply kVA"
+long_description = "Calculates total connected load for a repeated signalling equipment item, applies a diversity factor and future expansion allowance, then converts the resulting demand to recommended supply kVA using the supply power factor."
+discipline = "electrical"
+category = "power-supply"
+standards = ["EN 50125", "AS 7717"]
+tags = ["electrical", "signalling", "power-load", "supply-sizing", "deterministic"]
+tool_mode = "with-tool"
+
+[params.equipment_power_w]
+type = "float"
+unit = "W"
+description = "Power rating per equipment item"
+min = 1
+max = 5000
+
+[params.equipment_quantity]
+type = "float"
+description = "Number of equipment items"
+min = 1
+max = 500
+
+[params.diversity_factor]
+type = "float"
+description = "Demand diversity factor"
+min = 0.1
+max = 1.0
+
+[params.future_expansion_pct]
+type = "float"
+unit = "%"
+description = "Future expansion allowance"
+min = 0
+max = 100
+
+[params.supply_power_factor]
+type = "float"
+description = "Assumed supply power factor"
+min = 0.5
+max = 1.0
+
+[outputs.total_connected_load_w]
+description = "Total connected load"
+tolerance = 0.03
+
+[outputs.maximum_demand_w]
+description = "Maximum demand after diversity"
+tolerance = 0.03
+
+[outputs.future_allowance_w]
+description = "Future expansion allowance"
+tolerance = 0.03
+
+[outputs.recommended_supply_size_kva]
+description = "Recommended apparent supply size"
+tolerance = 0.03
+
+[archetypes.signalling_cabinet]
+description = "Small signalling cabinet equipment load"
+equipment_power_w = {min = 20, max = 250}
+equipment_quantity = {min = 4, max = 30}
+diversity_factor = {min = 0.6, max = 1.0}
+future_expansion_pct = {min = 10, max = 40}
+supply_power_factor = {min = 0.85, max = 0.98}
+site_contexts = ["rail-signal-location", "roadside-controller"]
+
+[archetypes.equipment_room]
+description = "Equipment room or larger signalling supply"
+equipment_power_w = {min = 100, max = 1500}
+equipment_quantity = {min = 10, max = 150}
+diversity_factor = {min = 0.5, max = 0.9}
+future_expansion_pct = {min = 15, max = 60}
+supply_power_factor = {min = 0.8, max = 0.95}
+site_contexts = ["station-equipment-room", "interlocking-room"]
+
+[difficulty.easy]
+description = "Small cabinet with all inputs visible"
+visibility = "all_given"
+archetypes = ["signalling_cabinet"]
+
+[difficulty.medium]
+description = "Cabinet or room supply sizing"
+visibility = "all_given"
+archetypes = ["signalling_cabinet", "equipment_room"]
+
+[difficulty.hard]
+description = "Future allowance hidden in expansion context"
+visibility = "partial"
+hidden_params = ["future_expansion_pct"]
+replacement_text = "Use the expansion allowance implied by {{ archetype.description }}."
+archetypes = ["equipment_room"]
+future_expansion_pct = [25]

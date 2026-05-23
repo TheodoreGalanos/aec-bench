@@ -1,0 +1,42 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "pipe-hydraulics",
+    "category_name": "Pipe Hydraulics and Pressure Drop",
+    "task_id": "compressible-flow-check",
+    "task_name": "Compressible Flow Assessment",
+    "description": "Determine if compressible flow equations are required and calculate pressure drop accordingly",
+    "complexity": "medium",
+    "standards": [
+      "Crane Technical Paper 410",
+      "API RP 14E"
+    ],
+    "inputs": [
+      "Gas flow rate (kg/h)",
+      "Gas properties (MW, k, Z)",
+      "Inlet pressure (kPa)",
+      "Pipe geometry",
+      "Temperature (degC)"
+    ],
+    "outputs": [
+      "Pressure drop ratio (delta_P/P_inlet)",
+      "Mach number at inlet",
+      "Flow regime classification",
+      "Recommended calculation method"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "drop",
+      "flow",
+      "pipe",
+      "pressure",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/pipe-hydraulics/compressible-flow-check"
+  }
+}

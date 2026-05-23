@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_wastewater_treatment",
+    "category_id": "fundamental-calculations",
+    "category_name": "Fundamental Treatment Calculations",
+    "task_id": "srt-calculation",
+    "task_name": "Solids Retention Time Calculation",
+    "description": "Calculate solids retention time (mean cell residence time) for activated sludge",
+    "complexity": "low",
+    "standards": [
+      "WEF MOP 8",
+      "Ten States Standards"
+    ],
+    "inputs": [
+      "Aeration tank volume (m3)",
+      "MLSS concentration (mg/L)",
+      "WAS flow rate (m3/d)",
+      "WAS TSS concentration (mg/L)",
+      "Effluent TSS (mg/L)",
+      "Effluent flow rate (m3/d)"
+    ],
+    "outputs": [
+      "SRT (days)",
+      "Mass of solids in system (kg)",
+      "Mass wasted per day (kg/d)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/water_wastewater_treatment.json",
+    "suggested_relative_path": "mechanical/fundamental-calculations/srt-calculation"
+  }
+}

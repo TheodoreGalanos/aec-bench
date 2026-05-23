@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_protection",
+    "category_id": "fire-pump-design",
+    "category_name": "Fire Pump Design",
+    "task_id": "pump-curve-verification",
+    "task_name": "Fire Pump Curve Verification",
+    "description": "Verify pump performance curve meets NFPA 20 requirements",
+    "complexity": "low",
+    "standards": [
+      "NFPA 20"
+    ],
+    "inputs": [
+      "Pump performance curve data",
+      "Rated flow (gpm)",
+      "Rated pressure (psi)"
+    ],
+    "outputs": [
+      "Pressure at 150% flow",
+      "Churn (shutoff) pressure",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "flow",
+      "pressure",
+      "pump",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/fire_protection.json",
+    "suggested_relative_path": "mechanical/fire-pump-design/pump-curve-verification"
+  }
+}

@@ -1,0 +1,105 @@
+[meta]
+name = "voltage-regulation"
+description = "Approximate three-phase transmission line voltage regulation"
+long_description = "Calculates voltage drop, voltage regulation, receiving-end voltage, and real power loss for a balanced three-phase line. The reduced method uses per-kilometre R and X, line length, real and reactive load, and sending-end voltage."
+discipline = "electrical"
+category = "electrical-parameters"
+standards = ["IEC 60909", "AS 2067"]
+tags = ["electrical", "voltage-regulation", "line-drop", "transmission", "deterministic"]
+tool_mode = "with-tool"
+
+[params.line_resistance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "Positive-sequence line resistance"
+min = 0
+max = 5
+
+[params.line_reactance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "Positive-sequence line reactance"
+min = 0
+max = 5
+
+[params.line_length_km]
+type = "float"
+unit = "km"
+description = "Line length"
+min = 0.1
+max = 500
+
+[params.load_real_power_mw]
+type = "float"
+unit = "MW"
+description = "Three-phase real load"
+min = 0.1
+max = 1000
+
+[params.load_reactive_power_mvar]
+type = "float"
+unit = "MVAr"
+description = "Three-phase reactive load"
+min = -500
+max = 500
+
+[params.sending_voltage_kv]
+type = "float"
+unit = "kV"
+description = "Sending-end line-to-line voltage"
+min = 1
+max = 765
+
+[outputs.voltage_drop_kv]
+description = "Approximate line voltage drop"
+tolerance = 0.03
+
+[outputs.voltage_regulation_pct]
+description = "Voltage drop as a percentage of sending voltage"
+tolerance = 0.03
+
+[outputs.receiving_end_voltage_kv]
+description = "Receiving-end line-to-line voltage"
+tolerance = 0.03
+
+[outputs.power_loss_mw]
+description = "Three-phase real power loss"
+tolerance = 0.03
+
+[archetypes.subtransmission_line]
+description = "Subtransmission feeder supplying a regional load"
+line_resistance_ohm_per_km = {min = 0.05, max = 0.4}
+line_reactance_ohm_per_km = {min = 0.1, max = 0.6}
+line_length_km = {min = 5, max = 100}
+load_real_power_mw = {min = 5, max = 100}
+load_reactive_power_mvar = {min = 0, max = 40}
+sending_voltage_kv = {min = 33, max = 132}
+site_contexts = ["regional-feeder", "subtransmission-line"]
+
+[archetypes.transmission_line]
+description = "Transmission line supplying a bulk load"
+line_resistance_ohm_per_km = {min = 0.01, max = 0.15}
+line_reactance_ohm_per_km = {min = 0.1, max = 0.5}
+line_length_km = {min = 50, max = 300}
+load_real_power_mw = {min = 50, max = 600}
+load_reactive_power_mvar = {min = 0, max = 250}
+sending_voltage_kv = {min = 132, max = 500}
+site_contexts = ["bulk-transmission", "interconnector"]
+
+[difficulty.easy]
+description = "Subtransmission line with all values visible"
+visibility = "all_given"
+archetypes = ["subtransmission_line"]
+
+[difficulty.medium]
+description = "Subtransmission or transmission line"
+visibility = "all_given"
+archetypes = ["subtransmission_line", "transmission_line"]
+
+[difficulty.hard]
+description = "Reactive load hidden in power factor context"
+visibility = "partial"
+hidden_params = ["load_reactive_power_mvar"]
+replacement_text = "Use the lagging reactive load implied by {{ archetype.description }}."
+archetypes = ["transmission_line"]
+load_reactive_power_mvar = [100]

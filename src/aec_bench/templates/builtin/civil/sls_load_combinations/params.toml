@@ -1,0 +1,144 @@
+[meta]
+name = "sls-load-combinations"
+description = "Generate and check serviceability limit state load combinations per AS/NZS 1170.0 Table 4.1"
+long_description = "Computes serviceability limit state load combinations for structural deflection checks using AS/NZS 1170.0 Table 4.1. Determines short-term and long-term combination factors from the imposed-action category, applies them to dead and live loads, adds wind serviceability actions where applicable, and identifies the governing SLS combination for design."
+discipline = "civil"
+category = "load-combinations"
+standards = ["AS/NZS 1170.0"]
+tags = ["civil", "loading", "serviceability", "load-combinations", "SLS", "structural-actions", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.dead_load_kn]
+type = "float"
+unit = "kN"
+description = "Permanent (dead) load G acting on the member"
+min = 1.0
+max = 500.0
+
+[params.live_load_kn]
+type = "float"
+unit = "kN"
+description = "Imposed (live) load Q acting on the member"
+min = 1.0
+max = 400.0
+
+[params.wind_serviceability_kn]
+type = "float"
+unit = "kN"
+description = "Serviceability wind action W_s on the member (zero if wind not applicable)"
+min = 0.0
+max = 150.0
+optional = true
+default = 0.0
+
+[params.load_category]
+type = "enum"
+description = "Imposed-action category per AS 1170.1 (A = domestic, B = offices, C = public assembly, D = retail, E = storage)"
+values = ["A", "B", "C", "D", "E"]
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.psi_s]
+description = "Short-term combination factor from AS/NZS 1170.0 Table 4.1"
+tolerance = 0.01
+
+[outputs.psi_l]
+description = "Long-term combination factor from AS/NZS 1170.0 Table 4.1"
+tolerance = 0.01
+
+[outputs.sls_short_term_kn]
+description = "Short-term SLS combination G + psi_s * Q (kN)"
+tolerance = 0.03
+
+[outputs.sls_long_term_kn]
+description = "Long-term SLS combination G + psi_l * Q (kN)"
+tolerance = 0.03
+
+[outputs.sls_wind_kn]
+description = "Wind SLS combination G + psi_s * Q + W_s (kN)"
+tolerance = 0.03
+
+[outputs.governing_sls_kn]
+description = "Governing (maximum) SLS combination value (kN)"
+tolerance = 0.03
+
+# --- Archetypes ---
+
+[archetypes.residential_floor]
+description = "Residential house floor with light dead load and domestic imposed loads"
+dead_load_kn = {min = 5.0, max = 30.0}
+live_load_kn = {min = 3.0, max = 20.0}
+wind_serviceability_kn = {min = 0.0, max = 0.0}
+load_category = ["A"]
+site_contexts = ["suburban-house-timber-floor", "townhouse-concrete-slab"]
+
+[archetypes.office_floor]
+description = "Office building floor with moderate dead and live loads"
+dead_load_kn = {min = 20.0, max = 80.0}
+live_load_kn = {min = 15.0, max = 60.0}
+wind_serviceability_kn = {min = 0.0, max = 10.0}
+load_category = ["B"]
+site_contexts = ["cbd-office-tower-floor", "suburban-office-park-slab"]
+
+[archetypes.assembly_floor]
+description = "Public assembly area such as a theatre or restaurant floor"
+dead_load_kn = {min = 25.0, max = 100.0}
+live_load_kn = {min = 20.0, max = 80.0}
+wind_serviceability_kn = {min = 0.0, max = 15.0}
+load_category = ["C"]
+site_contexts = ["convention-centre-mezzanine", "stadium-concourse-slab"]
+
+[archetypes.retail_floor]
+description = "Retail/shopping floor with moderate imposed loads"
+dead_load_kn = {min = 15.0, max = 70.0}
+live_load_kn = {min = 10.0, max = 50.0}
+wind_serviceability_kn = {min = 0.0, max = 8.0}
+load_category = ["D"]
+site_contexts = ["shopping-centre-ground-floor", "mixed-use-retail-podium"]
+
+[archetypes.storage_floor]
+description = "Storage or warehouse floor with heavy imposed loads"
+dead_load_kn = {min = 30.0, max = 150.0}
+live_load_kn = {min = 40.0, max = 200.0}
+wind_serviceability_kn = {min = 0.0, max = 5.0}
+load_category = ["E"]
+site_contexts = ["logistics-warehouse-slab", "cold-store-mezzanine"]
+
+[archetypes.exposed_office_with_wind]
+description = "Office building member exposed to serviceability wind on an upper storey"
+dead_load_kn = {min = 30.0, max = 120.0}
+live_load_kn = {min = 20.0, max = 80.0}
+wind_serviceability_kn = {min = 5.0, max = 60.0}
+load_category = ["B"]
+site_contexts = ["coastal-office-tower-facade", "high-rise-office-beam"]
+
+[archetypes.assembly_with_wind]
+description = "Public assembly structure with significant serviceability wind actions"
+dead_load_kn = {min = 40.0, max = 200.0}
+live_load_kn = {min = 30.0, max = 150.0}
+wind_serviceability_kn = {min = 10.0, max = 80.0}
+load_category = ["C"]
+site_contexts = ["grandstand-roof-beam", "airport-terminal-long-span"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "All parameters given including category, no wind action — straightforward factor lookup and arithmetic"
+visibility = "all_given"
+wind_serviceability_kn = {min = 0.0, max = 0.0}
+archetypes = ["residential_floor", "office_floor", "retail_floor"]
+
+[difficulty.medium]
+description = "All parameters given, includes wind serviceability actions across multiple categories"
+visibility = "all_given"
+archetypes = ["residential_floor", "office_floor", "assembly_floor", "retail_floor", "storage_floor", "exposed_office_with_wind"]
+
+[difficulty.hard]
+description = "Load category hidden — agent must infer the correct psi factors from the building use description"
+visibility = "partial"
+hidden_params = ["load_category"]
+replacement_text = "The member is in a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["office_floor", "assembly_floor", "storage_floor", "exposed_office_with_wind", "assembly_with_wind"]

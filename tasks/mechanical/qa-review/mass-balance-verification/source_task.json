@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_wastewater_treatment",
+    "category_id": "qa-review",
+    "category_name": "Quality Assurance Review",
+    "task_id": "mass-balance-verification",
+    "task_name": "Mass Balance Verification",
+    "description": "Verify mass balance closure across treatment train",
+    "complexity": "medium",
+    "standards": [
+      "Engineering Practice"
+    ],
+    "inputs": [
+      "Mass balance workbook (XLSX)",
+      "Process flow diagram",
+      "Design basis document"
+    ],
+    "outputs": [
+      "Mass closure check per unit (%)",
+      "Overall closure (%)",
+      "Identified discrepancies",
+      "Side stream accounting check"
+    ],
+    "keyword_hits": [
+      "balance",
+      "flow"
+    ],
+    "source_file": "data/tasks/mechanical/water_wastewater_treatment.json",
+    "suggested_relative_path": "mechanical/qa-review/mass-balance-verification"
+  }
+}

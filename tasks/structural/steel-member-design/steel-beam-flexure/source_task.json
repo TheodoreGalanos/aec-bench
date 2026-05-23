@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "building_structures",
+    "category_id": "steel-member-design",
+    "category_name": "Steel Member Design",
+    "task_id": "steel-beam-flexure",
+    "task_name": "Steel Beam Flexural Design",
+    "description": "Check or design steel beam for bending capacity",
+    "complexity": "low",
+    "standards": [
+      "AS 4100 Sec 5",
+      "AISC 360 Ch F"
+    ],
+    "inputs": [
+      "Factored moment M* (kNm)",
+      "Section properties (Zx, Sx)",
+      "Steel grade fy (MPa)",
+      "Unbraced length Lb (m)",
+      "Lateral restraint conditions"
+    ],
+    "outputs": [
+      "Section capacity PhiMs (kNm)",
+      "Member capacity PhiMb (kNm)",
+      "Utilization ratio",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "moment"
+    ],
+    "source_file": "data/tasks/structural/building_structures.json",
+    "suggested_relative_path": "structural/steel-member-design/steel-beam-flexure"
+  }
+}

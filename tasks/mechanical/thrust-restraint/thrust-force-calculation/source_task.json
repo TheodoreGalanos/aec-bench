@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_pumps_pipes",
+    "category_id": "thrust-restraint",
+    "category_name": "Thrust Restraint Design",
+    "task_id": "thrust-force-calculation",
+    "task_name": "Thrust Force Calculation",
+    "description": "Calculate thrust force at pipe bends and fittings",
+    "complexity": "low",
+    "standards": [
+      "AWWA M11",
+      "USACE EM 1110-2-2902"
+    ],
+    "inputs": [
+      "Pipe diameter (mm)",
+      "Maximum internal pressure including surge (kPa)",
+      "Bend angle (degrees)",
+      "Fitting type"
+    ],
+    "outputs": [
+      "Thrust force (kN)",
+      "Direction of thrust",
+      "Force components (if applicable)"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "calculation",
+      "pipe",
+      "pressure"
+    ],
+    "source_file": "data/tasks/mechanical/water_pumps_pipes.json",
+    "suggested_relative_path": "mechanical/thrust-restraint/thrust-force-calculation"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "buildings_mechanical",
+    "category_id": "ventilation-calculations",
+    "category_name": "Ventilation Rate Calculations",
+    "task_id": "vrp-single-zone",
+    "task_name": "Single Zone Ventilation Rate Procedure",
+    "description": "Calculate required outdoor air rate for a single zone using ASHRAE 62.1 Ventilation Rate Procedure",
+    "complexity": "low",
+    "standards": [
+      "ASHRAE 62.1"
+    ],
+    "inputs": [
+      "Space type/occupancy category",
+      "Zone floor area (m2)",
+      "Zone population (persons)",
+      "Zone air distribution effectiveness (Ez)"
+    ],
+    "outputs": [
+      "Outdoor air rate per person (L/s/person)",
+      "Outdoor air rate per area (L/s/m2)",
+      "Total zone outdoor air requirement (L/s)",
+      "Breathing zone outdoor airflow (Vbz)"
+    ],
+    "keyword_hits": [
+      "airflow",
+      "calculate",
+      "flow",
+      "rate",
+      "ventilation"
+    ],
+    "source_file": "data/tasks/mechanical/buildings_mechanical.json",
+    "suggested_relative_path": "mechanical/ventilation-calculations/vrp-single-zone"
+  }
+}

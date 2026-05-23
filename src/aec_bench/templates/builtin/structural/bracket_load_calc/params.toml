@@ -1,0 +1,103 @@
+[meta]
+name = "bracket-load-calc"
+description = "Reduced bracket service and factored resultant load calculation"
+long_description = "Calculates service vertical load, factored vertical load, factored lateral load, and resultant bracket action using explicit load effects and factors. The template is a reduced deterministic load calculation, not a full bracket capacity design."
+discipline = "structural"
+category = "bracket-connection"
+standards = ["AS 4100", "AISC 360"]
+tags = ["structural", "bracket", "load", "resultant", "deterministic"]
+tool_mode = "with-tool"
+
+[params.dead_load_kn]
+type = "float"
+unit = "kN"
+description = "Unfactored dead load on the bracket"
+min = 0.0
+max = 1000.0
+
+[params.live_load_kn]
+type = "float"
+unit = "kN"
+description = "Unfactored live load on the bracket"
+min = 0.0
+max = 1000.0
+
+[params.wind_load_kn]
+type = "float"
+unit = "kN"
+description = "Unfactored lateral wind load on the bracket"
+min = 0.0
+max = 1000.0
+
+[params.dead_load_factor]
+type = "float"
+unit = "-"
+description = "Dead load factor"
+min = 0.0
+max = 2.0
+
+[params.live_load_factor]
+type = "float"
+unit = "-"
+description = "Live load factor"
+min = 0.0
+max = 2.0
+
+[params.wind_load_factor]
+type = "float"
+unit = "-"
+description = "Wind load factor"
+min = 0.0
+max = 2.0
+
+[outputs.service_vertical_load_kn]
+description = "Service vertical bracket load"
+tolerance = 0.03
+
+[outputs.factored_vertical_load_kn]
+description = "Factored vertical bracket load"
+tolerance = 0.03
+
+[outputs.factored_lateral_load_kn]
+description = "Factored lateral bracket load"
+tolerance = 0.03
+
+[outputs.factored_resultant_load_kn]
+description = "Factored resultant bracket load"
+tolerance = 0.03
+
+[archetypes.facade_bracket]
+description = "Facade or cladding support bracket"
+dead_load_kn = {min = 1.0, max = 50.0}
+live_load_kn = {min = 0.0, max = 20.0}
+wind_load_kn = {min = 1.0, max = 80.0}
+dead_load_factor = {min = 1.1, max = 1.4}
+live_load_factor = {min = 1.0, max = 1.6}
+wind_load_factor = {min = 1.0, max = 1.6}
+site_contexts = ["facade-support", "cladding-bracket"]
+
+[archetypes.equipment_bracket]
+description = "Plant or equipment support bracket"
+dead_load_kn = {min = 5.0, max = 250.0}
+live_load_kn = {min = 0.0, max = 100.0}
+wind_load_kn = {min = 0.0, max = 120.0}
+dead_load_factor = {min = 1.1, max = 1.5}
+live_load_factor = {min = 1.0, max = 1.8}
+wind_load_factor = {min = 1.0, max = 1.6}
+site_contexts = ["plant-platform", "equipment-support"]
+
+[difficulty.easy]
+description = "All parameters given for a facade bracket"
+visibility = "all_given"
+archetypes = ["facade_bracket"]
+
+[difficulty.medium]
+description = "All parameters given across bracket types"
+visibility = "all_given"
+archetypes = ["facade_bracket", "equipment_bracket"]
+
+[difficulty.hard]
+description = "All parameters given for equipment brackets"
+visibility = "all_given"
+archetypes = ["equipment_bracket"]
+

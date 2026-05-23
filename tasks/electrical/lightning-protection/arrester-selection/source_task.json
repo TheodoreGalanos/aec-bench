@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "substations",
+    "category_id": "lightning-protection",
+    "category_name": "Lightning Protection",
+    "task_id": "arrester-selection",
+    "task_name": "Surge Arrester Selection",
+    "description": "Select and coordinate surge arresters for equipment protection",
+    "complexity": "medium",
+    "standards": [
+      "IEC 60099",
+      "IEEE C62.11"
+    ],
+    "inputs": [
+      "System voltage (kV)",
+      "Maximum continuous operating voltage MCOV",
+      "TOV capability requirements",
+      "Energy handling requirements"
+    ],
+    "outputs": [
+      "Arrester rating (kV)",
+      "Protective level (kV)",
+      "Margin over equipment BIL",
+      "Energy class"
+    ],
+    "keyword_hits": [
+      "energy",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/substations.json",
+    "suggested_relative_path": "electrical/lightning-protection/arrester-selection"
+  }
+}

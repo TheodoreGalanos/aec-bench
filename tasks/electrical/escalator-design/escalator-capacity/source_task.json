@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "vertical_transportation",
+    "category_id": "escalator-design",
+    "category_name": "Escalator Design",
+    "task_id": "escalator-capacity",
+    "task_name": "Escalator Capacity Calculation",
+    "description": "Calculate theoretical escalator passenger capacity",
+    "complexity": "low",
+    "standards": [
+      "EN 115-1",
+      "AS 1735.10"
+    ],
+    "inputs": [
+      "Escalator speed (m/s)",
+      "Step width (mm)",
+      "Step pitch (mm)"
+    ],
+    "outputs": [
+      "Theoretical capacity (persons/hour)",
+      "Practical capacity at different loading"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "capacity",
+      "load"
+    ],
+    "source_file": "data/tasks/electrical/vertical_transportation.json",
+    "suggested_relative_path": "electrical/escalator-design/escalator-capacity"
+  }
+}

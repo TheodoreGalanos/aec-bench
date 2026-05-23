@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_mechanical",
+    "category_id": "conveyor-design",
+    "category_name": "Conveyor System Design",
+    "task_id": "belt-width-capacity",
+    "task_name": "Belt Width and Capacity Calculation",
+    "description": "Calculate minimum belt width for required capacity or capacity for given width",
+    "complexity": "low",
+    "standards": [
+      "CEMA Belt Book",
+      "ISO 5048"
+    ],
+    "inputs": [
+      "Required capacity (tph)",
+      "Belt speed (m/s)",
+      "Material bulk density (kg/m3)",
+      "Troughing angle",
+      "Surcharge angle"
+    ],
+    "outputs": [
+      "Minimum belt width (mm)",
+      "Cross-sectional load area (m2)",
+      "Actual capacity (tph)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "capacity",
+      "load"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_mechanical.json",
+    "suggested_relative_path": "mechanical/conveyor-design/belt-width-capacity"
+  }
+}

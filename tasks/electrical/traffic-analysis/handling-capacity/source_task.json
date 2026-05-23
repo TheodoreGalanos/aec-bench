@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "vertical_transportation",
+    "category_id": "traffic-analysis",
+    "category_name": "Lift Traffic Analysis",
+    "task_id": "handling-capacity",
+    "task_name": "Handling Capacity (HC) Calculation",
+    "description": "Calculate 5-minute handling capacity as percentage of population",
+    "complexity": "low",
+    "standards": [
+      "CIBSE Guide D"
+    ],
+    "inputs": [
+      "Building population",
+      "Round Trip Time RTT (s)",
+      "Car capacity (persons)",
+      "Number of lifts",
+      "Car loading factor (typically 80%)"
+    ],
+    "outputs": [
+      "Handling Capacity HC (%)",
+      "Passengers per 5 minutes"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "capacity",
+      "load"
+    ],
+    "source_file": "data/tasks/electrical/vertical_transportation.json",
+    "suggested_relative_path": "electrical/traffic-analysis/handling-capacity"
+  }
+}

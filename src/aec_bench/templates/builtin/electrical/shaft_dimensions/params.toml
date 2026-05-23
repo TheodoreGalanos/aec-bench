@@ -1,0 +1,132 @@
+[meta]
+name = "shaft-dimensions"
+description = "Calculate reduced lift shaft dimensions"
+long_description = "Calculates a reduced lift shaft envelope from car dimensions, clearances, counterweight allowance, rated speed, and car count. The template reports shaft width, shaft depth, pit depth, and headroom using explicit clearance formulas for vertical transportation planning."
+discipline = "electrical"
+category = "shaft-sizing"
+standards = ["ISO 4190-1", "EN 81-20", "AS 1735.1"]
+tags = ["electrical", "vertical-transportation", "lift", "shaft", "dimensions", "deterministic"]
+tool_mode = "with-tool"
+
+[params.car_internal_width_mm]
+type = "float"
+unit = "mm"
+description = "Lift car internal width"
+min = 600
+max = 3000
+
+[params.car_internal_depth_mm]
+type = "float"
+unit = "mm"
+description = "Lift car internal depth"
+min = 800
+max = 4000
+
+[params.side_clearance_mm]
+type = "float"
+unit = "mm"
+description = "Clearance on each side of the car"
+min = 50
+max = 500
+
+[params.front_clearance_mm]
+type = "float"
+unit = "mm"
+description = "Front shaft clearance allowance"
+min = 50
+max = 800
+
+[params.rear_clearance_mm]
+type = "float"
+unit = "mm"
+description = "Rear shaft clearance allowance"
+min = 50
+max = 800
+
+[params.counterweight_width_mm]
+type = "float"
+unit = "mm"
+description = "Counterweight width allowance"
+min = 0
+max = 800
+
+[params.rated_speed_m_s]
+type = "float"
+unit = "m/s"
+description = "Lift rated speed"
+min = 0.4
+max = 8
+
+[params.car_count]
+type = "float"
+unit = "count"
+description = "Number of cars in the shaft group"
+min = 1
+max = 8
+
+[params.inter_car_clearance_mm]
+type = "float"
+unit = "mm"
+description = "Clearance between adjacent cars"
+min = 0
+max = 800
+
+[outputs.shaft_width_mm]
+description = "Required shaft width"
+tolerance = 0.03
+
+[outputs.shaft_depth_mm]
+description = "Required shaft depth"
+tolerance = 0.03
+
+[outputs.pit_depth_mm]
+description = "Reduced pit depth allowance"
+tolerance = 0.03
+
+[outputs.headroom_mm]
+description = "Reduced headroom allowance"
+tolerance = 0.03
+
+[archetypes.passenger_lift]
+description = "Passenger lift shaft"
+car_internal_width_mm = {min = 1000, max = 1800}
+car_internal_depth_mm = {min = 1200, max = 2200}
+side_clearance_mm = {min = 150, max = 300}
+front_clearance_mm = {min = 200, max = 500}
+rear_clearance_mm = {min = 100, max = 350}
+counterweight_width_mm = {min = 250, max = 500}
+rated_speed_m_s = {min = 1, max = 2.5}
+car_count = {min = 1, max = 3}
+inter_car_clearance_mm = {min = 150, max = 350}
+site_contexts = ["passenger-lift", "shaft-planning"]
+
+[archetypes.goods_lift]
+description = "Goods lift shaft"
+car_internal_width_mm = {min = 1600, max = 2800}
+car_internal_depth_mm = {min = 2000, max = 3600}
+side_clearance_mm = {min = 200, max = 450}
+front_clearance_mm = {min = 300, max = 700}
+rear_clearance_mm = {min = 150, max = 500}
+counterweight_width_mm = {min = 300, max = 700}
+rated_speed_m_s = {min = 0.5, max = 1.6}
+car_count = {min = 1, max = 2}
+inter_car_clearance_mm = {min = 200, max = 500}
+site_contexts = ["goods-lift", "shaft-planning"]
+
+[difficulty.easy]
+description = "Passenger lift with all values visible"
+visibility = "all_given"
+archetypes = ["passenger_lift"]
+
+[difficulty.medium]
+description = "Lift shaft selected from passenger or goods cases"
+visibility = "all_given"
+archetypes = ["passenger_lift", "goods_lift"]
+
+[difficulty.hard]
+description = "Goods lift with rear clearance embedded in context"
+visibility = "partial"
+hidden_params = ["rear_clearance_mm"]
+replacement_text = "Use the rear clearance allowance implied by {{ archetype.description }}."
+archetypes = ["goods_lift"]
+rear_clearance_mm = [300]

@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_protection",
+    "category_id": "clean-agent-suppression",
+    "category_name": "Clean Agent Suppression Systems",
+    "task_id": "agent-quantity",
+    "task_name": "Clean Agent Quantity Calculation",
+    "description": "Calculate clean agent quantity for protected enclosure",
+    "complexity": "medium",
+    "standards": [
+      "NFPA 2001"
+    ],
+    "inputs": [
+      "Enclosure volume (ft3)",
+      "Hazard type (Class A, B, C)",
+      "Agent type (FM-200, Novec 1230)",
+      "Minimum design concentration (%)",
+      "Altitude and temperature"
+    ],
+    "outputs": [
+      "Required agent weight (lb)",
+      "Number of containers",
+      "Agent volume at discharge"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "quantity"
+    ],
+    "source_file": "data/tasks/mechanical/fire_protection.json",
+    "suggested_relative_path": "mechanical/clean-agent-suppression/agent-quantity"
+  }
+}

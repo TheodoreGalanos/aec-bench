@@ -1,0 +1,76 @@
+[meta]
+name = "egress-width"
+description = "Egress width calculation from occupant load"
+long_description = "Calculates required egress width from occupant load and an explicit width-per-occupant criterion, then compares it with provided width. The template reports required width, margin, utilisation, and a numeric pass flag."
+discipline = "mechanical"
+category = "egress-modeling"
+standards = ["IBC", "NCC"]
+tags = ["mechanical", "life-safety", "egress", "width", "deterministic"]
+tool_mode = "with-tool"
+
+[params.occupant_load]
+type = "float"
+unit = "persons"
+description = "Design occupant load"
+min = 1.0
+max = 100000.0
+
+[params.width_per_occupant_mm]
+type = "float"
+unit = "mm/person"
+description = "Required egress width per occupant"
+min = 1.0
+max = 50.0
+
+[params.provided_width_mm]
+type = "float"
+unit = "mm"
+description = "Provided aggregate egress width"
+min = 1.0
+max = 100000.0
+
+[outputs.required_width_mm]
+description = "Required aggregate egress width"
+tolerance = 0.03
+
+[outputs.provided_margin_mm]
+description = "Provided width minus required width"
+tolerance = 0.03
+
+[outputs.utilisation_ratio]
+description = "Required width divided by provided width"
+tolerance = 0.03
+
+[outputs.width_satisfies]
+description = "Numeric flag where 1 means the provided width satisfies the requirement"
+tolerance = 0.01
+
+[archetypes.office_exit]
+description = "Office exit width check"
+occupant_load = {min = 20.0, max = 800.0}
+width_per_occupant_mm = {min = 4.0, max = 8.0}
+provided_width_mm = {min = 800.0, max = 8000.0}
+site_contexts = ["office-exit", "commercial-building"]
+
+[archetypes.station_concourse]
+description = "Station concourse egress width check"
+occupant_load = {min = 500.0, max = 20000.0}
+width_per_occupant_mm = {min = 4.0, max = 12.0}
+provided_width_mm = {min = 3000.0, max = 60000.0}
+site_contexts = ["station-concourse", "public-transport"]
+
+[difficulty.easy]
+description = "All parameters given for office exits"
+visibility = "all_given"
+archetypes = ["office_exit"]
+
+[difficulty.medium]
+description = "All parameters given across egress settings"
+visibility = "all_given"
+archetypes = ["office_exit", "station_concourse"]
+
+[difficulty.hard]
+description = "All parameters given for high-occupancy concourses"
+visibility = "all_given"
+archetypes = ["station_concourse"]
+

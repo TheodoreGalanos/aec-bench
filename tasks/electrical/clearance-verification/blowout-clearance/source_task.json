@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "clearance-verification",
+    "category_name": "Clearance Verification",
+    "task_id": "blowout-clearance",
+    "task_name": "Conductor Blowout Clearance",
+    "description": "Calculate conductor lateral displacement under wind and verify clearance to structures",
+    "complexity": "medium",
+    "standards": [
+      "AS/NZS 7000",
+      "IEC 60826"
+    ],
+    "inputs": [
+      "Wind pressure (Pa)",
+      "Conductor diameter (mm)",
+      "Span length (m)",
+      "Conductor weight (N/m)",
+      "Sag (m)",
+      "Distance to structure (m)"
+    ],
+    "outputs": [
+      "Blowout angle (degrees)",
+      "Lateral displacement (m)",
+      "Clearance to structure (m)",
+      "Pass/Fail status"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "pressure"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/clearance-verification/blowout-clearance"
+  }
+}

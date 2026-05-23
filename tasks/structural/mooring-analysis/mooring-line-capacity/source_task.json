@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "ports_marine",
+    "category_id": "mooring-analysis",
+    "category_name": "Mooring Load Analysis",
+    "task_id": "mooring-line-capacity",
+    "task_name": "Mooring Line Capacity Check",
+    "description": "Check mooring line minimum breaking load against design tension",
+    "complexity": "low",
+    "standards": [
+      "BS 6349-4",
+      "OCIMF MEG4"
+    ],
+    "inputs": [
+      "Design line tension (kN)",
+      "Line material and size",
+      "Minimum breaking load MBL (kN)",
+      "Required factor of safety"
+    ],
+    "outputs": [
+      "Utilisation ratio",
+      "Factor of safety achieved",
+      "Pass/Fail"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "load",
+      "size"
+    ],
+    "source_file": "data/tasks/structural/ports_marine.json",
+    "suggested_relative_path": "structural/mooring-analysis/mooring-line-capacity"
+  }
+}

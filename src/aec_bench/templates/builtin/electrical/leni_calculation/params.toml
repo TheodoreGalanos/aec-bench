@@ -1,0 +1,101 @@
+[meta]
+name = "leni-calculation"
+description = "Calculate interior lighting LENI"
+long_description = "Calculates annual lighting energy, Lighting Energy Numeric Indicator, and percentage saving against a reference LENI for an interior lighting zone."
+discipline = "electrical"
+category = "energy-performance"
+standards = ["EN 15193-1"]
+tags = ["electrical", "lighting", "interior-lighting", "leni", "energy", "deterministic"]
+tool_mode = "with-tool"
+
+[params.installed_lighting_power_w]
+type = "float"
+unit = "W"
+description = "Installed lighting power in the zone"
+min = 100
+max = 200000
+
+[params.annual_operating_hours]
+type = "float"
+unit = "h/year"
+description = "Annual lighting operating hours"
+min = 100
+max = 8760
+
+[params.control_factor]
+type = "float"
+unit = "-"
+description = "Lighting control factor"
+min = 0
+max = 1
+
+[params.daylight_factor]
+type = "float"
+unit = "-"
+description = "Daylight availability factor"
+min = 0
+max = 1
+
+[params.zone_area_m2]
+type = "float"
+unit = "m2"
+description = "Interior lighting zone area"
+min = 10
+max = 50000
+
+[params.reference_leni_kwh_m2_year]
+type = "float"
+unit = "kWh/m2/year"
+description = "Reference LENI used for comparison"
+min = 1
+max = 100
+
+[outputs.annual_lighting_energy_kwh]
+description = "Annual lighting energy consumption"
+tolerance = 0.03
+
+[outputs.leni_kwh_m2_year]
+description = "Lighting Energy Numeric Indicator"
+tolerance = 0.03
+
+[outputs.reference_saving_pct]
+description = "Percentage saving against the reference LENI"
+tolerance = 0.03
+
+[archetypes.office_zone]
+description = "Open office lighting zone"
+installed_lighting_power_w = {min = 1000, max = 30000}
+annual_operating_hours = {min = 1800, max = 3500}
+control_factor = {min = 0.6, max = 0.9}
+daylight_factor = {min = 0.5, max = 0.9}
+zone_area_m2 = {min = 100, max = 3000}
+reference_leni_kwh_m2_year = {min = 12, max = 30}
+site_contexts = ["office-floor", "workplace-lighting"]
+
+[archetypes.healthcare_zone]
+description = "Healthcare interior lighting zone"
+installed_lighting_power_w = {min = 5000, max = 80000}
+annual_operating_hours = {min = 3000, max = 7000}
+control_factor = {min = 0.7, max = 1.0}
+daylight_factor = {min = 0.6, max = 1.0}
+zone_area_m2 = {min = 300, max = 10000}
+reference_leni_kwh_m2_year = {min = 20, max = 60}
+site_contexts = ["healthcare", "clinical-lighting"]
+
+[difficulty.easy]
+description = "Office zone with all values visible"
+visibility = "all_given"
+archetypes = ["office_zone"]
+
+[difficulty.medium]
+description = "Interior lighting zone selected from office or healthcare cases"
+visibility = "all_given"
+archetypes = ["office_zone", "healthcare_zone"]
+
+[difficulty.hard]
+description = "Healthcare zone with daylight factor embedded in context"
+visibility = "partial"
+hidden_params = ["daylight_factor"]
+replacement_text = "Use the daylight availability factor implied by {{ archetype.description }}."
+archetypes = ["healthcare_zone"]
+daylight_factor = [0.75]

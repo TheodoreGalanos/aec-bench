@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "instrumentation_controls",
+    "category_id": "control-valve-sizing",
+    "category_name": "Control Valve Sizing",
+    "task_id": "cv-gas-compressible",
+    "task_name": "Control Valve Cv - Compressible Flow",
+    "description": "Calculate required Cv for control valve in gas or steam service",
+    "complexity": "medium",
+    "standards": [
+      "ISA-75.01.01",
+      "IEC 60534-2-1"
+    ],
+    "inputs": [
+      "Mass flow rate (kg/h)",
+      "Upstream pressure P1 (bar abs)",
+      "Downstream pressure P2 (bar abs)",
+      "Temperature (degC)",
+      "Gas specific gravity",
+      "Specific heat ratio k"
+    ],
+    "outputs": [
+      "Required Cv",
+      "Expansion factor Y",
+      "Choked flow verification",
+      "Critical pressure ratio xT"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "flow",
+      "heat",
+      "pressure",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/instrumentation_controls.json",
+    "suggested_relative_path": "electrical/control-valve-sizing/cv-gas-compressible"
+  }
+}

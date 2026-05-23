@@ -1,0 +1,127 @@
+[meta]
+name = "incident-energy"
+description = "Arc flash incident energy calculation per IEEE 1584 and NFPA 70E"
+long_description = "Calculates arc flash incident energy, arcing current, arc flash boundary distance, and required PPE category using the IEEE 1584-2002 empirical method for systems from 208 V to 15 kV. Models both low-voltage and medium-voltage arcing current equations and normalized energy formulas, supporting electrical safety assessments and arc flash labelling per NFPA 70E."
+discipline = "electrical"
+category = "arc-flash"
+standards = ["IEEE 1584", "NFPA 70E"]
+tags = ["electrical", "arc-flash", "incident-energy", "safety", "PPE"]
+tool_mode = "with-tool"
+
+[params.system_voltage_v]
+type = "float"
+unit = "V"
+description = "System three-phase RMS voltage"
+min = 208
+max = 15000
+
+[params.bolted_fault_current_ka]
+type = "float"
+unit = "kA"
+description = "Available bolted (symmetrical) three-phase fault current"
+min = 0.5
+max = 106
+
+[params.clearing_time_s]
+type = "float"
+unit = "s"
+description = "Protective device clearing time (arc duration)"
+min = 0.01
+max = 2.0
+
+[params.working_distance_mm]
+type = "float"
+unit = "mm"
+description = "Distance from arc source to worker"
+min = 300
+max = 1800
+
+[params.electrode_gap_mm]
+type = "float"
+unit = "mm"
+description = "Electrode gap (conductor spacing)"
+min = 6
+max = 254
+default = 32.0
+derivable_from = "archetype"
+
+[params.enclosure_type]
+type = "enum"
+description = "Equipment enclosure type"
+values = ["open", "box", "MCC"]
+derivable_from = "archetype"
+
+[outputs.arcing_current_ka]
+description = "Predicted arcing fault current (kA)"
+tolerance = 0.05
+
+[outputs.incident_energy_cal_cm2]
+description = "Incident energy at working distance (cal/cm2)"
+tolerance = 0.05
+
+[outputs.arc_flash_boundary_mm]
+description = "Arc flash boundary distance where E = 1.2 cal/cm2 (mm)"
+tolerance = 0.05
+
+[outputs.ppe_category]
+description = "Required PPE category (0-4 per NFPA 70E)"
+tolerance = 0.01
+
+# --- Archetypes ---
+# Typical electrical installation scenarios for arc flash assessment.
+
+[archetypes.lv_switchboard]
+description = "Low voltage switchboard (400-480 V)"
+system_voltage_v = {min = 400, max = 480}
+bolted_fault_current_ka = {min = 10, max = 65}
+clearing_time_s = {min = 0.03, max = 0.5}
+working_distance_mm = {min = 450, max = 610}
+electrode_gap_mm = {min = 25, max = 40}
+site_contexts = ["commercial-building-switchroom", "industrial-plant-mcc-room"]
+
+[archetypes.lv_mcc]
+description = "Low voltage motor control centre (400-480 V)"
+system_voltage_v = {min = 400, max = 480}
+bolted_fault_current_ka = {min = 15, max = 50}
+clearing_time_s = {min = 0.02, max = 0.3}
+working_distance_mm = {min = 450, max = 610}
+electrode_gap_mm = {min = 20, max = 32}
+site_contexts = ["industrial-plant-mcc-lineup", "water-treatment-mcc"]
+
+[archetypes.lv_panelboard]
+description = "Low voltage panelboard or distribution board (230-480 V)"
+system_voltage_v = {min = 230, max = 480}
+bolted_fault_current_ka = {min = 0.5, max = 25}
+clearing_time_s = {min = 0.02, max = 0.5}
+working_distance_mm = {min = 450, max = 610}
+electrode_gap_mm = {min = 20, max = 32}
+site_contexts = ["office-building-db", "retail-distribution-board"]
+
+[archetypes.mv_switchgear]
+description = "Medium voltage switchgear (4160-13800 V)"
+system_voltage_v = {min = 4160, max = 13800}
+bolted_fault_current_ka = {min = 1, max = 40}
+clearing_time_s = {min = 0.05, max = 1.0}
+working_distance_mm = {min = 610, max = 910}
+electrode_gap_mm = {min = 102, max = 152}
+site_contexts = ["substation-switchgear-room", "industrial-hv-switchroom"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "Low voltage box/MCC with all parameters given, moderate fault levels"
+visibility = "all_given"
+archetypes = ["lv_panelboard", "lv_mcc"]
+enclosure_type = ["box", "MCC"]
+
+[difficulty.medium]
+description = "Any voltage level and enclosure type, all parameters given"
+visibility = "all_given"
+archetypes = ["lv_switchboard", "lv_mcc", "lv_panelboard", "mv_switchgear"]
+
+[difficulty.hard]
+description = "Enclosure type and electrode gap hidden, agent must infer from equipment context"
+visibility = "partial"
+hidden_params = ["enclosure_type", "electrode_gap_mm"]
+replacement_text = "The equipment is a {{ archetype.description }} at a {{ archetype.site_context }} facility"
+archetypes = ["lv_switchboard", "lv_mcc", "mv_switchgear"]

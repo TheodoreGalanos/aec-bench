@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "instrumentation_controls",
+    "category_id": "control-valve-sizing",
+    "category_name": "Control Valve Sizing",
+    "task_id": "cv-liquid-incompressible",
+    "task_name": "Control Valve Cv - Incompressible Flow",
+    "description": "Calculate required Cv for control valve in liquid service (non-choked flow)",
+    "complexity": "low",
+    "standards": [
+      "ISA-75.01.01",
+      "IEC 60534-2-1"
+    ],
+    "inputs": [
+      "Flow rate (m3/h or gpm)",
+      "Upstream pressure P1 (bar)",
+      "Downstream pressure P2 (bar)",
+      "Specific gravity",
+      "Piping geometry factor Fp"
+    ],
+    "outputs": [
+      "Required Cv",
+      "Pressure drop ratio",
+      "Choked flow check",
+      "Recommended valve size"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "drop",
+      "flow",
+      "pressure",
+      "rate",
+      "size"
+    ],
+    "source_file": "data/tasks/electrical/instrumentation_controls.json",
+    "suggested_relative_path": "electrical/control-valve-sizing/cv-liquid-incompressible"
+  }
+}

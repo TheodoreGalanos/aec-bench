@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "buildings_civil",
+    "category_id": "stormwater-piped",
+    "category_name": "Piped Stormwater Drainage",
+    "task_id": "pipe-sizing-rational",
+    "task_name": "Pipe Sizing (Rational Method)",
+    "description": "Size stormwater pipes using Rational Method and Manning's equation",
+    "complexity": "medium",
+    "standards": [
+      "ARR 2019",
+      "Local Council DCPs"
+    ],
+    "inputs": [
+      "Catchment area (ha)",
+      "Runoff coefficient (C)",
+      "Time of concentration (min)",
+      "Rainfall intensity (mm/hr)",
+      "Pipe material"
+    ],
+    "outputs": [
+      "Design flow Q (L/s)",
+      "Required pipe diameter (mm)",
+      "Pipe velocity (m/s)"
+    ],
+    "keyword_hits": [
+      "flow",
+      "pipe",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/civil/buildings_civil.json",
+    "suggested_relative_path": "civil/stormwater-piped/pipe-sizing-rational"
+  }
+}

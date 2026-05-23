@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "lighting",
+    "category_id": "qa-review",
+    "category_name": "QA and Review",
+    "task_id": "calculation-grid-check",
+    "task_name": "Calculation Grid Adequacy Check",
+    "description": "Verify calculation grid resolution is appropriate for space",
+    "complexity": "low",
+    "standards": [
+      "EN 12464-1",
+      "CIE 140"
+    ],
+    "inputs": [
+      "Room/area dimensions",
+      "Grid spacing used",
+      "Luminaire spacing"
+    ],
+    "outputs": [
+      "Grid adequacy status",
+      "Recommended grid size",
+      "Compliance with standard formula"
+    ],
+    "keyword_hits": [
+      "calculation",
+      "size"
+    ],
+    "source_file": "data/tasks/electrical/lighting.json",
+    "suggested_relative_path": "electrical/qa-review/calculation-grid-check"
+  }
+}

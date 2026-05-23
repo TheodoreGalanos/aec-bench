@@ -1,0 +1,143 @@
+[meta]
+name = "wall-bearing"
+description = "Retaining wall base bearing check with eccentricity using Meyerhof effective width"
+long_description = "Checks bearing pressure adequacy beneath a retaining wall base by computing the eccentricity of the resultant vertical load and applying Meyerhof's effective width method (B' = B - 2e). Compares the maximum bearing pressure on the reduced contact area against the allowable bearing capacity, using Meyerhof bearing capacity factors with depth corrections per AS 4678."
+discipline = "ground"
+category = "retaining-walls"
+standards = ["AS 4678", "Meyerhof (1963)"]
+tags = ["geotechnical", "retaining-wall", "bearing-capacity", "eccentricity"]
+tool_mode = "with-tool"
+
+[params.base_width_m]
+type = "float"
+unit = "m"
+description = "Base width of the retaining wall footing B"
+min = 1.0
+max = 6.0
+
+[params.total_vertical_load_kn_per_m]
+type = "float"
+unit = "kN/m"
+description = "Total vertical load on wall base per metre run V"
+min = 20
+max = 500
+
+[params.net_moment_knm_per_m]
+type = "float"
+unit = "kN.m/m"
+description = "Net moment about base toe per metre run M"
+min = 10
+max = 800
+
+[params.soil_cohesion_kpa]
+type = "float"
+unit = "kPa"
+description = "Foundation soil effective cohesion c'"
+min = 0
+max = 150
+derivable_from = "archetype"
+
+[params.soil_friction_angle_deg]
+type = "float"
+unit = "degrees"
+description = "Foundation soil effective friction angle phi'"
+min = 0
+max = 50
+derivable_from = "archetype"
+
+[params.soil_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m³"
+description = "Foundation soil unit weight gamma"
+min = 14
+max = 23
+derivable_from = "archetype"
+
+[params.embedment_depth_m]
+type = "float"
+unit = "m"
+description = "Embedment depth of wall base below ground surface Df"
+min = 0.3
+max = 3.0
+optional = true
+default = 0.5
+
+[params.allowable_bearing_capacity_kpa]
+type = "float"
+unit = "kPa"
+description = "Allowable bearing capacity of the foundation soil q_all"
+min = 50
+max = 600
+default = 200.0
+
+[outputs.eccentricity_m]
+description = "Eccentricity of resultant from base centre e (m)"
+tolerance = 0.03
+
+[outputs.effective_width_m]
+description = "Meyerhof effective base width B' (m)"
+tolerance = 0.03
+
+[outputs.max_bearing_pressure_kpa]
+description = "Maximum bearing pressure q_max (kPa)"
+tolerance = 0.03
+
+[outputs.ultimate_bearing_capacity_kpa]
+description = "Ultimate bearing capacity q_ult (kPa)"
+tolerance = 0.05
+
+[outputs.factor_of_safety]
+description = "Factor of safety against bearing failure FoS"
+tolerance = 0.03
+
+[archetypes.soft_nc_clay]
+description = "Soft normally consolidated clay"
+soil_cohesion_kpa = {min = 5, max = 15}
+soil_friction_angle_deg = {min = 0, max = 5}
+soil_unit_weight_kn_m3 = {min = 15, max = 17}
+site_contexts = ["brisbane-alluvial", "darwin-estuarine"]
+
+[archetypes.medium_dense_sand]
+description = "Medium dense sand"
+soil_cohesion_kpa = {min = 0, max = 0}
+soil_friction_angle_deg = {min = 32, max = 36}
+soil_unit_weight_kn_m3 = {min = 17, max = 19}
+site_contexts = ["perth-coastal", "hunter-valley-alluvial"]
+
+[archetypes.stiff_oc_clay]
+description = "Stiff overconsolidated clay"
+soil_cohesion_kpa = {min = 50, max = 150}
+soil_friction_angle_deg = {min = 5, max = 15}
+soil_unit_weight_kn_m3 = {min = 18, max = 21}
+site_contexts = ["sydney-hawkesbury", "adelaide-stiff", "melbourne-basalt"]
+
+[archetypes.dense_sand]
+description = "Dense sand"
+soil_cohesion_kpa = {min = 0, max = 0}
+soil_friction_angle_deg = {min = 36, max = 42}
+soil_unit_weight_kn_m3 = {min = 19, max = 21}
+site_contexts = ["perth-coastal", "cairns-coral"]
+
+[archetypes.firm_clay]
+description = "Firm clay"
+soil_cohesion_kpa = {min = 20, max = 50}
+soil_friction_angle_deg = {min = 2, max = 8}
+soil_unit_weight_kn_m3 = {min = 17, max = 19}
+site_contexts = ["brisbane-alluvial", "melbourne-basalt"]
+
+[difficulty.easy]
+description = "All parameters given, stiff soil, low eccentricity expected"
+visibility = "all_given"
+archetypes = ["medium_dense_sand", "stiff_oc_clay", "dense_sand"]
+
+[difficulty.medium]
+description = "All parameters given, any soil type including soft clay"
+visibility = "all_given"
+archetypes = ["soft_nc_clay", "medium_dense_sand", "stiff_oc_clay", "dense_sand", "firm_clay"]
+
+[difficulty.hard]
+description = "Soil parameters hidden, agent must infer from site description"
+visibility = "partial"
+hidden_params = ["soil_cohesion_kpa", "soil_friction_angle_deg", "soil_unit_weight_kn_m3"]
+replacement_text = "The foundation soil is {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["soft_nc_clay", "medium_dense_sand", "stiff_oc_clay", "dense_sand", "firm_clay"]

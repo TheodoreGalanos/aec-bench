@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "drainage_hydrology",
+    "category_id": "water-quality",
+    "category_name": "Stormwater Quality Management",
+    "task_id": "pollutant-load-estimate",
+    "task_name": "Pollutant Load Estimation",
+    "description": "Estimate annual pollutant loads from catchment",
+    "complexity": "low",
+    "standards": [
+      "MUSIC guidelines",
+      "Local water quality objectives"
+    ],
+    "inputs": [
+      "Catchment area (ha)",
+      "Land use breakdown",
+      "Pollutant generation rates (kg/ha/yr)",
+      "Annual rainfall (mm)"
+    ],
+    "outputs": [
+      "Total Suspended Solids load (kg/yr)",
+      "Total Phosphorus load (kg/yr)",
+      "Total Nitrogen load (kg/yr)"
+    ],
+    "keyword_hits": [
+      "load",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/drainage_hydrology.json",
+    "suggested_relative_path": "civil/water-quality/pollutant-load-estimate"
+  }
+}

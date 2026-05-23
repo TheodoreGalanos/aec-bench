@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "rail_signalling",
+    "category_id": "signal-sighting",
+    "category_name": "Signal Sighting and Spacing",
+    "task_id": "signal-sighting-distance",
+    "task_name": "Signal Sighting Distance Calculation",
+    "description": "Calculate minimum distance for driver to see, react, and brake to stop at signal",
+    "complexity": "low",
+    "standards": [
+      "Network Rail NR/L2/SIG/10158",
+      "AS 7711"
+    ],
+    "inputs": [
+      "Maximum line speed (km/h)",
+      "Service braking rate (m/s2)",
+      "Driver reaction time (s)",
+      "Track gradient (%)",
+      "Signal aspect"
+    ],
+    "outputs": [
+      "Required sighting distance (m)",
+      "Braking distance component (m)",
+      "Reaction distance component (m)",
+      "Gradient adjustment factor"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/rail_signalling.json",
+    "suggested_relative_path": "electrical/signal-sighting/signal-sighting-distance"
+  }
+}

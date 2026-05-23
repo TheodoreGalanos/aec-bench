@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_protection",
+    "category_id": "fire-alarm-systems",
+    "category_name": "Fire Detection and Alarm Systems",
+    "task_id": "detector-spacing",
+    "task_name": "Smoke Detector Spacing Calculation",
+    "description": "Calculate detector spacing for room coverage per NFPA 72",
+    "complexity": "low",
+    "standards": [
+      "NFPA 72",
+      "AS 1670"
+    ],
+    "inputs": [
+      "Room dimensions",
+      "Ceiling type (flat, sloped, beam)",
+      "Detector type (spot smoke, heat)",
+      "Ceiling height"
+    ],
+    "outputs": [
+      "Maximum detector spacing (ft)",
+      "Number of detectors required",
+      "Detector layout"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "heat"
+    ],
+    "source_file": "data/tasks/mechanical/fire_protection.json",
+    "suggested_relative_path": "mechanical/fire-alarm-systems/detector-spacing"
+  }
+}

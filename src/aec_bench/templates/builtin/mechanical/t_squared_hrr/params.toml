@@ -1,0 +1,82 @@
+[meta]
+name = "t-squared-hrr"
+description = "T-squared fire growth heat release rate calculation"
+long_description = "Calculates design fire heat release rate using the t-squared growth model HRR = alpha t^2, with an explicit peak HRR cap. The template reports the unclipped HRR, peak-limited HRR, time to peak, and a numeric cap indicator for deterministic fire safety scenario checks."
+discipline = "mechanical"
+category = "design-fire"
+standards = ["ISO/TS 16733", "SFPE Handbook"]
+tags = ["mechanical", "fire-safety", "design-fire", "heat-release-rate", "deterministic"]
+tool_mode = "with-tool"
+
+[params.growth_coefficient_kw_s2]
+type = "float"
+unit = "kW/s^2"
+description = "T-squared fire growth coefficient alpha"
+min = 0.001
+max = 0.2
+
+[params.time_from_ignition_s]
+type = "float"
+unit = "s"
+description = "Time from ignition"
+min = 0.0
+max = 1800.0
+
+[params.peak_hrr_kw]
+type = "float"
+unit = "kW"
+description = "Peak heat release rate cap"
+min = 100.0
+max = 20000.0
+
+[outputs.unclipped_hrr_kw]
+description = "Unclipped t-squared heat release rate"
+tolerance = 0.03
+
+[outputs.hrr_at_time_kw]
+description = "Heat release rate at time after applying peak cap"
+tolerance = 0.03
+
+[outputs.time_to_peak_s]
+description = "Time from ignition to reach peak HRR"
+tolerance = 0.03
+
+[outputs.peak_limited]
+description = "Numeric peak-limit indicator: 0 no, 1 yes"
+tolerance = 0.01
+
+[archetypes.slow_growth_fire]
+description = "Slow-growth design fire for low-combustibility occupancy"
+growth_coefficient_kw_s2 = {min = 0.002, max = 0.006}
+time_from_ignition_s = {min = 120.0, max = 900.0}
+peak_hrr_kw = {min = 1000.0, max = 6000.0}
+site_contexts = ["office-tenancy", "station-concourse"]
+
+[archetypes.medium_growth_fire]
+description = "Medium-growth design fire for mixed fuel load occupancy"
+growth_coefficient_kw_s2 = {min = 0.008, max = 0.02}
+time_from_ignition_s = {min = 90.0, max = 700.0}
+peak_hrr_kw = {min = 2000.0, max = 10000.0}
+site_contexts = ["retail-tenancy", "workshop-area"]
+
+[archetypes.fast_growth_fire]
+description = "Fast-growth design fire for high fuel load storage or plant areas"
+growth_coefficient_kw_s2 = {min = 0.04, max = 0.12}
+time_from_ignition_s = {min = 60.0, max = 500.0}
+peak_hrr_kw = {min = 3000.0, max = 20000.0}
+site_contexts = ["warehouse-storage", "plant-room-fire"]
+
+[difficulty.easy]
+description = "All parameters given for a slow-growth design fire"
+visibility = "all_given"
+archetypes = ["slow_growth_fire"]
+
+[difficulty.medium]
+description = "All parameters given across slow and medium growth fires"
+visibility = "all_given"
+archetypes = ["slow_growth_fire", "medium_growth_fire"]
+
+[difficulty.hard]
+description = "All parameters given for faster growth or peak-limited fire scenarios"
+visibility = "all_given"
+archetypes = ["medium_growth_fire", "fast_growth_fire"]

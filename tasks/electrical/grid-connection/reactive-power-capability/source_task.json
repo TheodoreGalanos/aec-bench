@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_generation_storage",
+    "category_id": "grid-connection",
+    "category_name": "Grid Connection Studies",
+    "task_id": "reactive-power-capability",
+    "task_name": "Reactive Power Capability Assessment",
+    "description": "Verify reactive power capability meets grid code requirements",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 1547",
+      "IEEE 2800",
+      "AEMO NER S5.2"
+    ],
+    "inputs": [
+      "Inverter kVA rating",
+      "Active power output (P)",
+      "Power factor range",
+      "Voltage at connection point",
+      "Grid code requirements"
+    ],
+    "outputs": [
+      "P-Q capability chart",
+      "Reactive power range at each P level",
+      "Power factor at rated output",
+      "Compliance verification"
+    ],
+    "keyword_hits": [
+      "power",
+      "rate",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/energy_generation_storage.json",
+    "suggested_relative_path": "electrical/grid-connection/reactive-power-capability"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "lighting",
+    "category_id": "road-lighting",
+    "category_name": "Road Lighting Design",
+    "task_id": "average-luminance-calculation",
+    "task_name": "Average Pavement Luminance Calculation",
+    "description": "Calculate average pavement luminance (L_av) for road lighting to verify class compliance",
+    "complexity": "medium",
+    "standards": [
+      "EN 13201-3",
+      "AS/NZS 1158.2"
+    ],
+    "inputs": [
+      "Luminaire photometric data (i-table)",
+      "Road surface reflectance (r-table)",
+      "Geometry (height, spacing, tilt)",
+      "Observer position",
+      "Calculation grid"
+    ],
+    "outputs": [
+      "Average luminance L_av (cd/m2)",
+      "Pass/fail vs class target (M1-M6)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/lighting.json",
+    "suggested_relative_path": "electrical/road-lighting/average-luminance-calculation"
+  }
+}

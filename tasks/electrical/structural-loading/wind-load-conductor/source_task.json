@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "structural-loading",
+    "category_name": "Structural Loading Analysis",
+    "task_id": "wind-load-conductor",
+    "task_name": "Wind Load on Conductor Calculation",
+    "description": "Calculate wind load on conductor span for structure design",
+    "complexity": "low",
+    "standards": [
+      "IEC 60826",
+      "AS/NZS 7000"
+    ],
+    "inputs": [
+      "Wind pressure (Pa)",
+      "Conductor diameter (mm)",
+      "Span length (m)",
+      "Drag coefficient",
+      "Terrain category",
+      "Height above ground (m)"
+    ],
+    "outputs": [
+      "Transverse wind load (N)",
+      "Wind load per unit length (N/m)",
+      "Height-adjusted wind pressure"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "load",
+      "pressure"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/structural-loading/wind-load-conductor"
+  }
+}

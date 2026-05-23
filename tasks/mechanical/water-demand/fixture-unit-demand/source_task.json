@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "hydraulics_buildings",
+    "category_id": "water-demand",
+    "category_name": "Water Demand Estimation",
+    "task_id": "fixture-unit-demand",
+    "task_name": "Fixture Unit Water Demand Calculation",
+    "description": "Calculate peak water demand from fixture units using AS/NZS 3500.1 tables",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3500.1"
+    ],
+    "inputs": [
+      "Fixture schedule with types and quantities",
+      "Loading unit values from AS/NZS 3500.1 tables",
+      "Building type"
+    ],
+    "outputs": [
+      "Total loading units",
+      "Probable simultaneous demand (L/s)",
+      "Peak hourly demand (L/h)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "demand",
+      "load"
+    ],
+    "source_file": "data/tasks/mechanical/hydraulics_buildings.json",
+    "suggested_relative_path": "mechanical/water-demand/fixture-unit-demand"
+  }
+}

@@ -1,0 +1,106 @@
+[meta]
+name = "flap-gate-headloss"
+description = "Flap gate headloss calculation for stormwater outfalls"
+long_description = "Calculates energy loss through flap gates (tide gates / non-return valves) installed on stormwater outfalls using the orifice equation h = V^2/(2gCd^2). Determines the discharge coefficient from gate type, looks up unseating head from pipe diameter, and computes the effective capacity reduction compared to an open pipe. Used in drainage design to verify that outfall losses remain within acceptable limits for the catchment."
+discipline = "civil"
+category = "outfall-hydraulics"
+standards = ["Manufacturer data", "Hydraulic references"]
+tags = ["civil", "outfall-hydraulics", "flap-gate", "headloss", "drainage", "deterministic"]
+tool_mode = "both"
+
+[params.pipe_diameter_mm]
+type = "enum"
+unit = "mm"
+description = "Nominal pipe diameter at the outfall"
+values = ["150", "225", "300", "375", "450", "600", "750", "900", "1200"]
+
+[params.flow_velocity_m_per_s]
+type = "float"
+unit = "m/s"
+description = "Mean flow velocity in the outfall pipe V"
+min = 0.3
+max = 4.0
+
+[params.gate_type]
+type = "enum"
+description = "Flap gate hinge configuration"
+values = ["side_hinged", "top_hinged", "duckbill"]
+derivable_from = "archetype"
+
+[params.upstream_head_m]
+type = "float"
+unit = "m"
+description = "Upstream head driving flow through the gate"
+min = 0.1
+max = 3.0
+
+# --- Outputs ---
+
+[outputs.headloss_m]
+description = "Energy loss through the flap gate (m)"
+tolerance = 0.05
+
+[outputs.unseating_head_m]
+description = "Minimum head to open the gate against its own weight (m)"
+tolerance = 0.01
+
+[outputs.capacity_reduction_percent]
+description = "Effective capacity reduction compared to open pipe (%)"
+tolerance = 0.03
+
+[outputs.discharge_coefficient]
+description = "Discharge coefficient Cd for the gate type"
+tolerance = 0.03
+
+# --- Archetypes ---
+
+[archetypes.suburban_stormwater]
+description = "Suburban stormwater outfall with side-hinged flap gate"
+pipe_diameter_mm = ["300", "375", "450", "600"]
+flow_velocity_m_per_s = {min = 0.5, max = 2.0}
+upstream_head_m = {min = 0.2, max = 1.5}
+gate_type = ["side_hinged"]
+site_contexts = ["sydney-suburban-outfall", "brisbane-creek-outfall"]
+
+[archetypes.tidal_outfall]
+description = "Tidal outfall with top-hinged flap gate to prevent saltwater intrusion"
+pipe_diameter_mm = ["450", "600", "750", "900", "1200"]
+flow_velocity_m_per_s = {min = 0.8, max = 3.0}
+upstream_head_m = {min = 0.3, max = 2.5}
+gate_type = ["top_hinged"]
+site_contexts = ["melbourne-tidal-creek", "gold-coast-canal-outfall"]
+
+[archetypes.small_lot_drainage]
+description = "Small lot or car park drainage outfall with duckbill elastomeric valve"
+pipe_diameter_mm = ["150", "225", "300"]
+flow_velocity_m_per_s = {min = 0.3, max = 1.5}
+upstream_head_m = {min = 0.1, max = 0.8}
+gate_type = ["duckbill"]
+site_contexts = ["perth-carpark-outfall", "adelaide-lot-drain"]
+
+[archetypes.trunk_drainage]
+description = "Trunk stormwater outfall with heavy-duty top-hinged flap gate"
+pipe_diameter_mm = ["750", "900", "1200"]
+flow_velocity_m_per_s = {min = 1.0, max = 4.0}
+upstream_head_m = {min = 0.5, max = 3.0}
+gate_type = ["top_hinged"]
+site_contexts = ["darwin-trunk-outfall", "cairns-coastal-outfall"]
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "All parameters given, common suburban gate and pipe size"
+visibility = "all_given"
+archetypes = ["suburban_stormwater", "small_lot_drainage"]
+
+[difficulty.medium]
+description = "All parameters given, any gate type and pipe size"
+visibility = "all_given"
+archetypes = ["suburban_stormwater", "tidal_outfall", "small_lot_drainage", "trunk_drainage"]
+
+[difficulty.hard]
+description = "Gate type hidden, agent must infer from site description"
+visibility = "partial"
+hidden_params = ["gate_type"]
+replacement_text = "The outfall uses a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["suburban_stormwater", "tidal_outfall", "small_lot_drainage", "trunk_drainage"]

@@ -1,0 +1,89 @@
+[meta]
+name = "slr-calculation"
+description = "Secondary clarifier solids loading rate calculation"
+long_description = "Calculates secondary clarifier solids loading rate from total clarifier flow, MLSS concentration, and surface area, then compares the result with an explicit maximum criterion. The template reports solids mass flow, area-normalised loading, utilisation, margin, and a numeric criterion flag."
+discipline = "mechanical"
+category = "clarifier-design"
+standards = ["Ten States Standards", "WEF MOP 8"]
+tags = ["mechanical", "wastewater", "clarifier", "solids-loading-rate", "deterministic"]
+tool_mode = "with-tool"
+
+[params.total_flow_m3_d]
+type = "float"
+unit = "m3/d"
+description = "Total flow to the clarifier including return activated sludge"
+min = 1.0
+max = 1500000.0
+
+[params.mlss_concentration_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Mixed liquor suspended solids concentration"
+min = 500.0
+max = 8000.0
+
+[params.clarifier_surface_area_m2]
+type = "float"
+unit = "m2"
+description = "Clarifier plan surface area"
+min = 1.0
+max = 100000.0
+
+[params.maximum_slr_kg_m2_h]
+type = "float"
+unit = "kg/m2.h"
+description = "Maximum allowable solids loading rate criterion"
+min = 1.0
+max = 20.0
+
+[outputs.solids_mass_flow_kg_d]
+description = "Clarifier solids mass flow"
+tolerance = 0.03
+
+[outputs.solids_loading_rate_kg_m2_h]
+description = "Calculated solids loading rate"
+tolerance = 0.03
+
+[outputs.utilisation_ratio]
+description = "Ratio of calculated SLR to maximum criterion"
+tolerance = 0.03
+
+[outputs.compliance_margin_kg_m2_h]
+description = "Positive margin below the maximum criterion"
+tolerance = 0.03
+
+[outputs.criterion_satisfied]
+description = "Numeric flag where 1 means the criterion is satisfied"
+tolerance = 0.01
+
+[archetypes.secondary_clarifier]
+description = "Secondary clarifier solids loading check"
+total_flow_m3_d = {min = 2000.0, max = 120000.0}
+mlss_concentration_mg_l = {min = 1800.0, max = 4500.0}
+clarifier_surface_area_m2 = {min = 100.0, max = 5000.0}
+maximum_slr_kg_m2_h = {min = 4.0, max = 10.0}
+site_contexts = ["municipal-wwtp", "secondary-clarifier"]
+
+[archetypes.high_rate_clarifier]
+description = "High-rate secondary clarifier solids loading check"
+total_flow_m3_d = {min = 50000.0, max = 500000.0}
+mlss_concentration_mg_l = {min = 2500.0, max = 6000.0}
+clarifier_surface_area_m2 = {min = 2000.0, max = 20000.0}
+maximum_slr_kg_m2_h = {min = 6.0, max = 14.0}
+site_contexts = ["large-wwtp", "peak-wet-weather"]
+
+[difficulty.easy]
+description = "All parameters given for a secondary clarifier"
+visibility = "all_given"
+archetypes = ["secondary_clarifier"]
+
+[difficulty.medium]
+description = "All parameters given across secondary clarifier archetypes"
+visibility = "all_given"
+archetypes = ["secondary_clarifier", "high_rate_clarifier"]
+
+[difficulty.hard]
+description = "All parameters given for a high-rate clarifier"
+visibility = "all_given"
+archetypes = ["high_rate_clarifier"]
+

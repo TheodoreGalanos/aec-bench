@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "buildings_electrical",
+    "category_id": "lighting-design",
+    "category_name": "Lighting Design",
+    "task_id": "lux-level-calculation",
+    "task_name": "Illuminance Level Calculation",
+    "description": "Calculate average illuminance and uniformity for a room using lumen method",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 1680.1",
+      "AS/NZS 1680.2.2"
+    ],
+    "inputs": [
+      "Room dimensions (L, W, H)",
+      "Surface reflectances",
+      "Luminaire type and lumen output",
+      "Number and layout of luminaires",
+      "Maintenance factor"
+    ],
+    "outputs": [
+      "Average illuminance (lux)",
+      "Uniformity ratio (Uo)",
+      "Specific luminaire power density (W/m2/100lux)",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "power"
+    ],
+    "source_file": "data/tasks/electrical/buildings_electrical.json",
+    "suggested_relative_path": "electrical/lighting-design/lux-level-calculation"
+  }
+}

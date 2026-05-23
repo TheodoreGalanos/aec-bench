@@ -1,0 +1,143 @@
+[meta]
+name = "wall-overturning"
+description = "Overturning stability check for gravity/cantilever retaining walls"
+long_description = "Evaluates overturning stability of cantilever retaining walls by computing the factor of safety as the ratio of resisting to overturning moments about the wall toe. Uses Rankine active earth pressure (Ka) to determine lateral forces from backfill and surcharge, and sums stabilising moments from the self-weight of the stem, base slab, and backfill soil per AS 4678 and Eurocode 7."
+discipline = "ground"
+category = "retaining-walls"
+standards = ["AS 4678", "Eurocode 7"]
+tags = ["geotechnical", "retaining-wall", "overturning", "stability"]
+tool_mode = "with-tool"
+
+[params.wall_height_m]
+type = "float"
+unit = "m"
+description = "Height of the wall stem above the base slab"
+min = 2.0
+max = 10.0
+
+[params.base_width_m]
+type = "float"
+unit = "m"
+description = "Total width of the base slab"
+min = 1.5
+max = 8.0
+
+[params.stem_thickness_m]
+type = "float"
+unit = "m"
+description = "Thickness of the wall stem"
+min = 0.2
+max = 1.0
+
+[params.base_thickness_m]
+type = "float"
+unit = "m"
+description = "Thickness of the base slab"
+min = 0.3
+max = 1.2
+
+[params.backfill_friction_angle_deg]
+type = "float"
+unit = "degrees"
+description = "Effective friction angle of the backfill soil"
+min = 20
+max = 45
+derivable_from = "archetype"
+
+[params.backfill_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m³"
+description = "Unit weight of the backfill soil"
+min = 15
+max = 22
+derivable_from = "archetype"
+
+[params.concrete_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m³"
+description = "Unit weight of the reinforced concrete"
+min = 23
+max = 25
+
+[params.surcharge_kpa]
+type = "float"
+unit = "kPa"
+description = "Uniform surcharge load on the backfill surface"
+min = 0
+max = 30
+optional = true
+default = 0.0
+
+[params.water_table_depth_m]
+type = "float"
+unit = "m"
+description = "Depth to water table from the top of the wall"
+min = 0
+max = 20
+optional = true
+default = 20.0
+
+[outputs.ka]
+description = "Rankine active earth pressure coefficient Ka"
+tolerance = 0.03
+
+[outputs.active_force_kn_m]
+description = "Total active force per metre of wall Pa (kN/m)"
+tolerance = 0.05
+
+[outputs.overturning_moment_knm_m]
+description = "Overturning moment about the toe Mo (kNm/m)"
+tolerance = 0.05
+
+[outputs.resisting_moment_knm_m]
+description = "Resisting moment about the toe Mr (kNm/m)"
+tolerance = 0.05
+
+[outputs.factor_of_safety_overturning]
+description = "Factor of safety against overturning FoS"
+tolerance = 0.05
+
+[archetypes.loose_granular_fill]
+description = "Loose granular fill"
+backfill_friction_angle_deg = {min = 25, max = 30}
+backfill_unit_weight_kn_m3 = {min = 16, max = 18}
+site_contexts = ["brisbane-alluvial", "darwin-reclaimed"]
+
+[archetypes.medium_dense_sand]
+description = "Medium dense sand backfill"
+backfill_friction_angle_deg = {min = 30, max = 36}
+backfill_unit_weight_kn_m3 = {min = 17, max = 19}
+site_contexts = ["perth-coastal", "hunter-valley-alluvial"]
+
+[archetypes.dense_gravel]
+description = "Dense compacted gravel"
+backfill_friction_angle_deg = {min = 35, max = 42}
+backfill_unit_weight_kn_m3 = {min = 19, max = 22}
+site_contexts = ["sydney-hawkesbury", "melbourne-basalt"]
+
+[archetypes.stiff_clay_fill]
+description = "Stiff clay fill"
+backfill_friction_angle_deg = {min = 20, max = 28}
+backfill_unit_weight_kn_m3 = {min = 17, max = 20}
+site_contexts = ["adelaide-stiff", "canberra-residual"]
+
+[difficulty.easy]
+description = "All parameters given, no surcharge, no water table"
+visibility = "all_given"
+archetypes = ["medium_dense_sand", "dense_gravel"]
+surcharge_kpa = [0.0]
+water_table = false
+
+[difficulty.medium]
+description = "All parameters given, surcharge and water table present"
+visibility = "all_given"
+archetypes = ["loose_granular_fill", "medium_dense_sand", "dense_gravel", "stiff_clay_fill"]
+water_table = true
+
+[difficulty.hard]
+description = "Soil parameters hidden, surcharge and water table present"
+visibility = "partial"
+hidden_params = ["backfill_friction_angle_deg", "backfill_unit_weight_kn_m3"]
+replacement_text = "The backfill soil is {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["loose_granular_fill", "medium_dense_sand", "dense_gravel", "stiff_clay_fill"]
+water_table = true

@@ -1,0 +1,32 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_protection",
+    "category_id": "sprinkler-hydraulics",
+    "category_name": "Sprinkler Hydraulic Calculations",
+    "task_id": "elevation-pressure",
+    "task_name": "Elevation Pressure Change Calculation",
+    "description": "Calculate pressure change due to elevation difference",
+    "complexity": "low",
+    "standards": [
+      "NFPA 13"
+    ],
+    "inputs": [
+      "Elevation change (ft)",
+      "Direction (up or down)"
+    ],
+    "outputs": [
+      "Pressure change (psi)",
+      "Sign (+ for down, - for up)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "pressure"
+    ],
+    "source_file": "data/tasks/mechanical/fire_protection.json",
+    "suggested_relative_path": "mechanical/sprinkler-hydraulics/elevation-pressure"
+  }
+}

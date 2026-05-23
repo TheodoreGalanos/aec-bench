@@ -1,0 +1,116 @@
+[meta]
+name = "pump-head-calculation"
+description = "Total dynamic head calculation for pump installations"
+long_description = "Calculates total dynamic head for a pump duty point by converting suction and discharge pressure difference, pipe losses, and static elevation difference into metres of fluid head. The template also calculates hydraulic power from flow, fluid density, gravitational acceleration, and total dynamic head."
+discipline = "mechanical"
+category = "pump-hydraulics"
+standards = ["Hydraulic Institute Standards"]
+tags = ["mechanical", "pump-hydraulics", "total-dynamic-head", "hydraulic-power", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_rate_m3_h]
+type = "float"
+unit = "m3/h"
+description = "Pump flow rate"
+min = 1.0
+max = 5000.0
+
+[params.suction_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "Suction pressure at pump inlet"
+min = -80.0
+max = 1000.0
+
+[params.discharge_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "Discharge pressure at pump outlet"
+min = -50.0
+max = 3000.0
+
+[params.elevation_difference_m]
+type = "float"
+unit = "m"
+description = "Discharge elevation minus suction elevation"
+min = -20.0
+max = 200.0
+
+[params.pipe_friction_losses_kpa]
+type = "float"
+unit = "kPa"
+description = "Pipe friction and minor losses"
+min = 0.0
+max = 1000.0
+
+[params.fluid_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "Fluid density"
+min = 600.0
+max = 1300.0
+
+[outputs.static_head_m]
+description = "Static elevation head"
+tolerance = 0.03
+
+[outputs.pressure_head_differential_m]
+description = "Pressure head differential"
+tolerance = 0.03
+
+[outputs.friction_head_m]
+description = "Friction loss head"
+tolerance = 0.03
+
+[outputs.total_dynamic_head_m]
+description = "Total dynamic head"
+tolerance = 0.03
+
+[outputs.hydraulic_power_kw]
+description = "Hydraulic power"
+tolerance = 0.03
+
+[archetypes.water_transfer_pump]
+description = "Water transfer pump with moderate pressure rise"
+flow_rate_m3_h = {min = 30.0, max = 500.0}
+suction_pressure_kpa = {min = 0.0, max = 150.0}
+discharge_pressure_kpa = {min = 200.0, max = 900.0}
+elevation_difference_m = {min = 5.0, max = 60.0}
+pipe_friction_losses_kpa = {min = 20.0, max = 200.0}
+fluid_density_kg_m3 = {min = 990.0, max = 1000.0}
+site_contexts = ["water-treatment-transfer", "reservoir-booster"]
+
+[archetypes.process_liquid_pump]
+description = "Industrial process liquid pump"
+flow_rate_m3_h = {min = 10.0, max = 300.0}
+suction_pressure_kpa = {min = -20.0, max = 300.0}
+discharge_pressure_kpa = {min = 300.0, max = 1500.0}
+elevation_difference_m = {min = -5.0, max = 80.0}
+pipe_friction_losses_kpa = {min = 30.0, max = 400.0}
+fluid_density_kg_m3 = {min = 800.0, max = 1200.0}
+site_contexts = ["industrial-process-skid", "chemical-transfer-loop"]
+
+[archetypes.high_head_booster]
+description = "High-head booster pump"
+flow_rate_m3_h = {min = 100.0, max = 1500.0}
+suction_pressure_kpa = {min = 50.0, max = 600.0}
+discharge_pressure_kpa = {min = 800.0, max = 3000.0}
+elevation_difference_m = {min = 30.0, max = 180.0}
+pipe_friction_losses_kpa = {min = 100.0, max = 800.0}
+fluid_density_kg_m3 = {min = 950.0, max = 1050.0}
+site_contexts = ["mine-water-booster", "district-pressure-zone"]
+
+[difficulty.easy]
+description = "All parameters given for a water transfer pump"
+visibility = "all_given"
+archetypes = ["water_transfer_pump"]
+
+[difficulty.medium]
+description = "All parameters given for water and process liquid pumps"
+visibility = "all_given"
+archetypes = ["water_transfer_pump", "process_liquid_pump"]
+
+[difficulty.hard]
+description = "All parameters given for higher-head pump duties"
+visibility = "all_given"
+archetypes = ["process_liquid_pump", "high_head_booster"]

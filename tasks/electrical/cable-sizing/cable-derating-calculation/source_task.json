@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "buildings_electrical",
+    "category_id": "cable-sizing",
+    "category_name": "Cable Sizing and Selection",
+    "task_id": "cable-derating-calculation",
+    "task_name": "Cable Derating Factor Application",
+    "description": "Calculate combined derating factors for cables based on installation conditions",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3008.1"
+    ],
+    "inputs": [
+      "Ambient temperature (degC)",
+      "Number of grouped cables",
+      "Installation method",
+      "Soil thermal resistivity (if buried)",
+      "Depth of burial (m)"
+    ],
+    "outputs": [
+      "Temperature derating factor",
+      "Grouping derating factor",
+      "Combined derating factor",
+      "Derated current capacity (A)"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "capacity",
+      "current",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/buildings_electrical.json",
+    "suggested_relative_path": "electrical/cable-sizing/cable-derating-calculation"
+  }
+}

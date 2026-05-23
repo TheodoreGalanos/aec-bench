@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_generation_storage",
+    "category_id": "solar-pv-design",
+    "category_name": "Solar PV Design",
+    "task_id": "voltage-drop-dc",
+    "task_name": "DC String Voltage Drop",
+    "description": "Calculate DC cable voltage drop from string to inverter",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 5033",
+      "AS/NZS 3008.1"
+    ],
+    "inputs": [
+      "String current at Impp (A)",
+      "DC cable length (m)",
+      "Cable size (mm2)",
+      "Cable resistivity"
+    ],
+    "outputs": [
+      "Voltage drop (V)",
+      "Voltage drop (%)",
+      "Annual energy loss (kWh)",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "current",
+      "drop",
+      "energy",
+      "size",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/energy_generation_storage.json",
+    "suggested_relative_path": "electrical/solar-pv-design/voltage-drop-dc"
+  }
+}

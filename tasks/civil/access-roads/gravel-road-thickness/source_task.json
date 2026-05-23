@@ -1,0 +1,32 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_energy",
+    "category_id": "access-roads",
+    "category_name": "Access Road Design",
+    "task_id": "gravel-road-thickness",
+    "task_name": "Gravel Road Pavement Thickness",
+    "description": "Calculate required pavement thickness for light-duty gravel access road",
+    "complexity": "low",
+    "standards": [
+      "Austroads Guides"
+    ],
+    "inputs": [
+      "Subgrade CBR (%)",
+      "Design traffic (ESAs)",
+      "Gravel material properties"
+    ],
+    "outputs": [
+      "Required base course thickness (mm)",
+      "Compaction standard",
+      "Crossfall (%)"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/civil/civil_energy.json",
+    "suggested_relative_path": "civil/access-roads/gravel-road-thickness"
+  }
+}

@@ -1,0 +1,86 @@
+[meta]
+name = "conduit-fill-calculation"
+description = "Structured cabling conduit fill percentage"
+long_description = "Calculates conduit fill for identical circular cables in a circular conduit. The deterministic method sums cable cross-sectional area, computes conduit internal area, reports fill percentage, and gives margin against an explicit maximum fill percentage."
+discipline = "electrical"
+category = "structured-cabling"
+standards = ["ANSI/TIA-569", "AS/NZS 3080"]
+tags = ["electrical", "conduit", "fill", "structured-cabling", "deterministic"]
+tool_mode = "with-tool"
+
+[params.conduit_internal_diameter_mm]
+type = "float"
+unit = "mm"
+description = "Conduit internal diameter"
+min = 10
+max = 200
+
+[params.cable_count]
+type = "float"
+description = "Number of identical cables"
+min = 1
+max = 200
+
+[params.cable_outer_diameter_mm]
+type = "float"
+unit = "mm"
+description = "Cable outer diameter"
+min = 1
+max = 50
+
+[params.maximum_fill_pct]
+type = "float"
+unit = "%"
+description = "Maximum permitted fill percentage"
+min = 10
+max = 80
+
+[outputs.total_cable_area_mm2]
+description = "Total cable cross-sectional area"
+tolerance = 0.03
+
+[outputs.conduit_area_mm2]
+description = "Conduit internal cross-sectional area"
+tolerance = 0.03
+
+[outputs.fill_percentage]
+description = "Conduit fill percentage"
+tolerance = 0.03
+
+[outputs.fill_margin_pct]
+description = "Margin below the maximum fill percentage"
+tolerance = 0.03
+
+[archetypes.small_data_conduit]
+description = "Small structured cabling conduit"
+conduit_internal_diameter_mm = {min = 16, max = 40}
+cable_count = {min = 2, max = 24}
+cable_outer_diameter_mm = {min = 4, max = 8}
+maximum_fill_pct = {min = 35, max = 50}
+site_contexts = ["office-cabling", "comms-room"]
+
+[archetypes.large_cable_pathway]
+description = "Larger pathway for multiple communications cables"
+conduit_internal_diameter_mm = {min = 40, max = 120}
+cable_count = {min = 12, max = 100}
+cable_outer_diameter_mm = {min = 5, max = 15}
+maximum_fill_pct = {min = 35, max = 60}
+site_contexts = ["station-cabling", "campus-backbone"]
+
+[difficulty.easy]
+description = "Small conduit with all dimensions visible"
+visibility = "all_given"
+archetypes = ["small_data_conduit"]
+
+[difficulty.medium]
+description = "Small or larger conduit fill"
+visibility = "all_given"
+archetypes = ["small_data_conduit", "large_cable_pathway"]
+
+[difficulty.hard]
+description = "Maximum fill hidden in cabling standard context"
+visibility = "partial"
+hidden_params = ["maximum_fill_pct"]
+replacement_text = "Use the maximum fill percentage implied by {{ archetype.description }}."
+archetypes = ["large_cable_pathway"]
+maximum_fill_pct = [40]

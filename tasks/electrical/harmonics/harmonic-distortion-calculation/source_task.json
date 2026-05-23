@@ -1,0 +1,43 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_systems_studies",
+    "category_id": "harmonics",
+    "category_name": "Harmonic Analysis",
+    "task_id": "harmonic-distortion-calculation",
+    "task_name": "Harmonic Distortion Calculation",
+    "description": "Calculate voltage and current harmonic distortion levels at PCC",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 519-2022",
+      "IEC 61000-3-6"
+    ],
+    "inputs": [
+      "System impedance vs frequency",
+      "Non-linear load harmonic spectrum",
+      "Network topology",
+      "PCC location",
+      "Short circuit capacity at PCC"
+    ],
+    "outputs": [
+      "Individual harmonic levels (IHD) for V and I",
+      "Total Harmonic Distortion (THD)",
+      "Total Demand Distortion (TDD)",
+      "Frequency scan plot"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "capacity",
+      "current",
+      "demand",
+      "load",
+      "short circuit",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/energy_systems_studies.json",
+    "suggested_relative_path": "electrical/harmonics/harmonic-distortion-calculation"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "pump-hydraulics",
+    "category_name": "Pump Hydraulics and Selection",
+    "task_id": "pump-head-calculation",
+    "task_name": "Total Dynamic Head Calculation",
+    "description": "Calculate total dynamic head required for a pump installation",
+    "complexity": "low",
+    "standards": [
+      "Hydraulic Institute Standards"
+    ],
+    "inputs": [
+      "Flow rate (m3/h)",
+      "Suction and discharge pressures (kPa)",
+      "Elevation difference (m)",
+      "Pipe friction losses (kPa)",
+      "Fluid density (kg/m3)"
+    ],
+    "outputs": [
+      "Static head (m)",
+      "Friction head (m)",
+      "Pressure head differential (m)",
+      "Total dynamic head (m)",
+      "Hydraulic power (kW)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "pipe",
+      "power",
+      "pressure",
+      "pump",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/pump-hydraulics/pump-head-calculation"
+  }
+}

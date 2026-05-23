@@ -1,0 +1,126 @@
+[meta]
+name = "lmtd-calculation"
+description = "Log mean temperature difference and heat duty calculation"
+long_description = "Calculates heat exchanger LMTD from hot and cold terminal temperatures for counterflow or parallel flow arrangements. The template applies an explicit correction factor, calculates corrected mean temperature difference, and estimates heat duty from U, area, and corrected MTD."
+discipline = "mechanical"
+category = "heat-exchanger-design"
+standards = ["TEMA Standards"]
+tags = ["mechanical", "heat-exchanger", "lmtd", "heat-duty", "deterministic"]
+tool_mode = "with-tool"
+
+[params.hot_inlet_c]
+type = "float"
+unit = "C"
+description = "Hot fluid inlet temperature"
+min = 30.0
+max = 400.0
+
+[params.hot_outlet_c]
+type = "float"
+unit = "C"
+description = "Hot fluid outlet temperature"
+min = 20.0
+max = 350.0
+
+[params.cold_inlet_c]
+type = "float"
+unit = "C"
+description = "Cold fluid inlet temperature"
+min = -10.0
+max = 200.0
+
+[params.cold_outlet_c]
+type = "float"
+unit = "C"
+description = "Cold fluid outlet temperature"
+min = 0.0
+max = 250.0
+
+[params.overall_u_kw_m2_c]
+type = "float"
+unit = "kW/m2.C"
+description = "Overall heat transfer coefficient"
+min = 0.02
+max = 5.0
+
+[params.heat_transfer_area_m2]
+type = "float"
+unit = "m2"
+description = "Heat transfer surface area"
+min = 1.0
+max = 10000.0
+
+[params.correction_factor]
+type = "float"
+description = "LMTD correction factor"
+min = 0.5
+max = 1.0
+
+[params.flow_arrangement]
+type = "enum"
+description = "Heat exchanger flow arrangement"
+values = ["counterflow", "parallel"]
+
+[outputs.delta_t1_c]
+description = "First terminal temperature difference"
+tolerance = 0.03
+
+[outputs.delta_t2_c]
+description = "Second terminal temperature difference"
+tolerance = 0.03
+
+[outputs.lmtd_c]
+description = "Log mean temperature difference"
+tolerance = 0.03
+
+[outputs.corrected_mtd_c]
+description = "Corrected mean temperature difference"
+tolerance = 0.03
+
+[outputs.heat_duty_kw]
+description = "Estimated heat duty"
+tolerance = 0.03
+
+[outputs.minimum_approach_c]
+description = "Minimum terminal temperature approach"
+tolerance = 0.03
+
+[archetypes.process_cooler]
+description = "Process liquid cooler with counterflow exchanger"
+hot_inlet_c = {min = 80.0, max = 180.0}
+hot_outlet_c = {min = 40.0, max = 100.0}
+cold_inlet_c = {min = 10.0, max = 35.0}
+cold_outlet_c = {min = 25.0, max = 70.0}
+overall_u_kw_m2_c = {min = 0.2, max = 1.5}
+heat_transfer_area_m2 = {min = 20.0, max = 800.0}
+correction_factor = {min = 0.75, max = 1.0}
+site_contexts = ["industrial-process-cooler", "plant-utility-exchanger"]
+
+[archetypes.hot_water_heat_exchanger]
+description = "Hot water heat exchanger for building or process service"
+hot_inlet_c = {min = 60.0, max = 120.0}
+hot_outlet_c = {min = 40.0, max = 90.0}
+cold_inlet_c = {min = 5.0, max = 30.0}
+cold_outlet_c = {min = 30.0, max = 70.0}
+overall_u_kw_m2_c = {min = 0.3, max = 2.0}
+heat_transfer_area_m2 = {min = 5.0, max = 300.0}
+correction_factor = {min = 0.8, max = 1.0}
+site_contexts = ["district-heating-skid", "building-services-heat-exchanger"]
+
+[difficulty.easy]
+description = "All parameters given for a counterflow process cooler"
+visibility = "all_given"
+archetypes = ["process_cooler"]
+flow_arrangement = ["counterflow"]
+
+[difficulty.medium]
+description = "All parameters given across common heat exchanger duties"
+visibility = "all_given"
+archetypes = ["process_cooler", "hot_water_heat_exchanger"]
+flow_arrangement = ["counterflow", "parallel"]
+
+[difficulty.hard]
+description = "All parameters given with explicit correction factor and arrangement"
+visibility = "all_given"
+archetypes = ["process_cooler", "hot_water_heat_exchanger"]
+flow_arrangement = ["counterflow", "parallel"]

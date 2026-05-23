@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-04-19T12:00:00Z",
+  "library_version": "0.1.0",
+  "library_commit": "abc1234",
+  "templates": [
+    {
+      "task_id": "voltage-drop",
+      "discipline": "electrical",
+      "category": "cable-sizing",
+      "category_label": null,
+      "standards": ["AS/NZS 3008.1.1", "AS/NZS 3000:2018"],
+      "inputs": [
+        {"name": "cable_size_mm2", "description": "Cable conductor cross-sectional area", "unit": "mm²", "type": "enum"},
+        {"name": "length_m", "description": "Cable route length", "unit": "m", "type": "float"}
+      ],
+      "outputs": [
+        {"name": "voltage_drop_percent", "description": "Voltage drop as % of supply", "unit": null, "tolerance": 0.03}
+      ],
+      "status": "built",
+      "task_name": "Voltage Drop",
+      "description": "Cable voltage drop calculation per AS/NZS 3008.1.1",
+      "long_description": "Calculates voltage drop along a cable run.",
+      "tags": ["electrical", "voltage-drop", "cable-sizing"],
+      "tool_mode": "with-tool",
+      "difficulty_tiers": ["easy", "medium", "hard"],
+      "archetype_count": 4
+    }
+  ],
+  "seeds": [
+    {
+      "task_id": "busbar-thermal",
+      "discipline": "electrical",
+      "category": "busbar-design",
+      "category_label": "Busbar Design & Analysis",
+      "standards": ["IEEE 605"],
+      "inputs": [
+        {"name": "Continuous current (A)", "description": null, "unit": null, "type": null}
+      ],
+      "outputs": [
+        {"name": "Required cross-section (mm²)", "description": null, "unit": null, "tolerance": null}
+      ],
+      "status": "proposed",
+      "task_name": "Busbar Thermal Sizing",
+      "description": "Size busbar for continuous current",
+      "complexity": "low"
+    }
+  ],
+  "counts": {
+    "total_templates": 1,
+    "total_seeds": 1,
+    "by_discipline": {
+      "electrical": {"templates": 1, "seeds": 1}
+    }
+  }
+}

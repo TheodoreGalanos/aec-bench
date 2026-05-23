@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "energy_structures",
+    "category_id": "wind-turbine-foundations",
+    "category_name": "Wind Turbine Foundations",
+    "task_id": "wtg-fatigue-check",
+    "task_name": "Wind Turbine Foundation Fatigue Check",
+    "description": "Verify foundation fatigue life under cyclic loading using damage equivalent loads",
+    "complexity": "high",
+    "standards": [
+      "IEC 61400-6",
+      "EN 1992-1-1",
+      "fib Model Code"
+    ],
+    "inputs": [
+      "Fatigue DEL moment (kNm)",
+      "Reference cycle count (typically 1e7)",
+      "Woehler slope (m)",
+      "Foundation geometry",
+      "Reinforcement details"
+    ],
+    "outputs": [
+      "Concrete fatigue utilization",
+      "Reinforcement fatigue utilization",
+      "Damage accumulation D",
+      "Pass/Fail status"
+    ],
+    "keyword_hits": [
+      "load",
+      "moment"
+    ],
+    "source_file": "data/tasks/structural/energy_structures.json",
+    "suggested_relative_path": "structural/wind-turbine-foundations/wtg-fatigue-check"
+  }
+}

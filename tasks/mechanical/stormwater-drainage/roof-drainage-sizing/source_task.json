@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "hydraulics_buildings",
+    "category_id": "stormwater-drainage",
+    "category_name": "Stormwater Drainage Design",
+    "task_id": "roof-drainage-sizing",
+    "task_name": "Roof Drainage Pipe Sizing",
+    "description": "Size roof drainage pipes using AS/NZS 3500.3",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3500.3"
+    ],
+    "inputs": [
+      "Roof catchment area (m2)",
+      "Design rainfall intensity (mm/h)",
+      "Gutter capacity",
+      "Downpipe locations"
+    ],
+    "outputs": [
+      "Gutter size",
+      "Downpipe diameter (mm)",
+      "Underground drain size (mm)",
+      "Number of outlets required"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "pipe",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/mechanical/hydraulics_buildings.json",
+    "suggested_relative_path": "mechanical/stormwater-drainage/roof-drainage-sizing"
+  }
+}

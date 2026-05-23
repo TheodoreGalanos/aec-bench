@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_systems_studies",
+    "category_id": "harmonics",
+    "category_name": "Harmonic Analysis",
+    "task_id": "ieee519-compliance",
+    "task_name": "IEEE 519 Compliance Verification",
+    "description": "Verify harmonic distortion levels against IEEE 519 limits",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 519-2022",
+      "AS/NZS 61000.3.6"
+    ],
+    "inputs": [
+      "THD and TDD calculations",
+      "Voltage level at PCC",
+      "Short circuit ratio (Isc/IL)",
+      "Individual harmonic levels"
+    ],
+    "outputs": [
+      "Compliance status per harmonic order",
+      "THD compliance",
+      "TDD compliance",
+      "Margin to limit (%)"
+    ],
+    "keyword_hits": [
+      "calculation",
+      "short circuit",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/energy_systems_studies.json",
+    "suggested_relative_path": "electrical/harmonics/ieee519-compliance"
+  }
+}

@@ -1,0 +1,108 @@
+[meta]
+name = "driveway-gradient-check"
+description = "Driveway gradient calculation and compliance check per AS/NZS 2890.1:2004"
+long_description = "Calculates the driveway gradient as a percentage from the level difference and horizontal distance, then checks compliance against location-specific maximum gradients defined in AS/NZS 2890.1:2004 and typical Australian council development control plans. Covers transition zones, residential and commercial internal sections, garage approaches, and shared pedestrian/vehicle paths."
+discipline = "civil"
+category = "driveway-access"
+standards = ["AS/NZS 2890.1:2004", "Local Council DCPs"]
+tags = ["civil", "driveway", "gradient", "compliance", "access", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.start_level_m]
+type = "float"
+unit = "m AHD"
+description = "Start level of the driveway section (reduced level)"
+min = 0.0
+max = 200.0
+
+[params.end_level_m]
+type = "float"
+unit = "m AHD"
+description = "End level of the driveway section (reduced level)"
+min = 0.0
+max = 200.0
+
+[params.horizontal_length_m]
+type = "float"
+unit = "m"
+description = "Horizontal distance of the driveway section"
+min = 1.0
+max = 50.0
+
+[params.location_type]
+type = "enum"
+description = "Driveway section location type determining the maximum allowable gradient"
+values = ["transition_zone", "internal_residential", "internal_commercial", "near_garage", "pedestrian_shared"]
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.gradient_pct]
+description = "Calculated driveway gradient (%)"
+tolerance = 0.03
+
+[outputs.max_allowable_gradient_pct]
+description = "Maximum allowable gradient for the location type (%)"
+tolerance = 0.01
+
+[outputs.compliance]
+description = "Compliance with maximum gradient (1.0 = pass, 0.0 = fail)"
+tolerance = 0.01
+
+# --- Archetypes ---
+# Level ranges are kept tight so independent sampling of start/end levels
+# produces physically realistic gradients for each site type.
+
+[archetypes.steep_hillside_house]
+description = "Steep hillside residential driveway with significant level change"
+start_level_m = {min = 32.0, max = 48.0}
+end_level_m = {min = 34.0, max = 52.0}
+horizontal_length_m = {min = 8.0, max = 20.0}
+location_type = ["internal_residential", "near_garage"]
+site_contexts = ["sydney-north-shore-hillside", "hobart-steep-residential"]
+
+[archetypes.flat_suburban]
+description = "Flat suburban residential driveway with gentle grade"
+start_level_m = {min = 14.0, max = 16.0}
+end_level_m = {min = 14.0, max = 16.5}
+horizontal_length_m = {min = 5.0, max = 12.0}
+location_type = ["transition_zone", "internal_residential"]
+site_contexts = ["brisbane-suburban-flat", "adelaide-plains-residential"]
+
+[archetypes.commercial_carpark]
+description = "Commercial car park driveway access from street to parking level"
+start_level_m = {min = 18.0, max = 22.0}
+end_level_m = {min = 18.5, max = 24.0}
+horizontal_length_m = {min = 8.0, max = 30.0}
+location_type = ["transition_zone", "internal_commercial", "near_garage"]
+site_contexts = ["melbourne-cbd-carpark", "perth-commercial-precinct"]
+
+[archetypes.shared_access]
+description = "Shared pedestrian and vehicle access path in a mixed-use development"
+start_level_m = {min = 10.0, max = 12.0}
+end_level_m = {min = 10.0, max = 12.5}
+horizontal_length_m = {min = 6.0, max = 15.0}
+location_type = ["pedestrian_shared", "transition_zone"]
+site_contexts = ["canberra-mixed-use-development", "gold-coast-shared-access"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "Flat suburban site, all parameters given, transition zone only"
+visibility = "all_given"
+archetypes = ["flat_suburban"]
+location_type = ["transition_zone"]
+
+[difficulty.medium]
+description = "Any archetype, all parameters given, any location type"
+visibility = "all_given"
+archetypes = ["steep_hillside_house", "flat_suburban", "commercial_carpark", "shared_access"]
+
+[difficulty.hard]
+description = "Location type hidden, agent must infer from site and driveway description"
+visibility = "partial"
+hidden_params = ["location_type"]
+replacement_text = "The driveway is at a {{ archetype.description }} site located in {{ archetype.site_context }}"
+archetypes = ["steep_hillside_house", "flat_suburban", "commercial_carpark", "shared_access"]

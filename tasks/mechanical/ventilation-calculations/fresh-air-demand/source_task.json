@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "tunnel_systems",
+    "category_id": "ventilation-calculations",
+    "category_name": "Ventilation System Calculations",
+    "task_id": "fresh-air-demand",
+    "task_name": "Fresh Air Demand Calculation",
+    "description": "Calculate airflow needed to dilute vehicle pollutants (CO, NOx, PM) to safe levels",
+    "complexity": "low",
+    "standards": [
+      "PIARC 2019 R02",
+      "NFPA 502",
+      "ASHRAE"
+    ],
+    "inputs": [
+      "Traffic volume (vehicles/hour)",
+      "Vehicle mix (cars/HGVs)",
+      "Traffic speed (km/h)",
+      "Tunnel geometry (length, area)",
+      "Pollutant concentration limits (ppm)"
+    ],
+    "outputs": [
+      "Required fresh air flow rate (m3/s)",
+      "Dilution ratio",
+      "Pollutant concentrations"
+    ],
+    "keyword_hits": [
+      "airflow",
+      "calculate",
+      "calculation",
+      "demand",
+      "flow",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/tunnel_systems.json",
+    "suggested_relative_path": "mechanical/ventilation-calculations/fresh-air-demand"
+  }
+}

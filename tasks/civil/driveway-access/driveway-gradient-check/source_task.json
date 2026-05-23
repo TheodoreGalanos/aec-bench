@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "buildings_civil",
+    "category_id": "driveway-access",
+    "category_name": "Driveway & Access Design",
+    "task_id": "driveway-gradient-check",
+    "task_name": "Driveway Gradient Calculation",
+    "description": "Calculate the gradient of a driveway section and verify compliance with maximum allowable slopes",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 2890.1:2004",
+      "Local Council DCPs"
+    ],
+    "inputs": [
+      "Start level (m AHD)",
+      "End level (m AHD)",
+      "Horizontal length (m)",
+      "Location (near street/internal)"
+    ],
+    "outputs": [
+      "Gradient (%)",
+      "Maximum allowable gradient (%)",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/civil/buildings_civil.json",
+    "suggested_relative_path": "civil/driveway-access/driveway-gradient-check"
+  }
+}

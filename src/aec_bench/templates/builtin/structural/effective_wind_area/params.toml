@@ -1,0 +1,93 @@
+[meta]
+name = "effective-wind-area"
+description = "Effective wind area calculation for facade pressure coefficient selection"
+long_description = "Calculates effective wind area for cladding or supporting-member pressure checks from panel dimensions, support span, tributary width, and an explicit minimum area. The template reports panel area, member tributary area, governing effective area, and the ratio to the minimum pressure area."
+discipline = "structural"
+category = "wind-load-analysis"
+standards = ["ASCE 7", "AS/NZS 1170.2"]
+tags = ["structural", "facades", "wind-load", "effective-area", "deterministic"]
+tool_mode = "with-tool"
+
+[params.panel_width_m]
+type = "float"
+unit = "m"
+description = "Cladding panel width"
+min = 0.2
+max = 6.0
+
+[params.panel_height_m]
+type = "float"
+unit = "m"
+description = "Cladding panel height"
+min = 0.2
+max = 6.0
+
+[params.supporting_member_span_m]
+type = "float"
+unit = "m"
+description = "Span of supporting member"
+min = 0.5
+max = 12.0
+
+[params.tributary_width_m]
+type = "float"
+unit = "m"
+description = "Tributary width to supporting member"
+min = 0.2
+max = 6.0
+
+[params.minimum_effective_area_m2]
+type = "float"
+unit = "m2"
+description = "Minimum effective area used for pressure coefficient selection"
+min = 0.1
+max = 10.0
+
+[outputs.panel_area_m2]
+description = "Cladding panel area"
+tolerance = 0.03
+
+[outputs.member_tributary_area_m2]
+description = "Supporting member tributary area"
+tolerance = 0.03
+
+[outputs.effective_wind_area_m2]
+description = "Effective wind area for pressure coefficient selection"
+tolerance = 0.03
+
+[outputs.area_averaging_ratio]
+description = "Effective area divided by minimum effective area"
+tolerance = 0.03
+
+[archetypes.small_cladding_panel]
+description = "Small facade cladding panel on closely spaced supports"
+panel_width_m = {min = 0.6, max = 1.5}
+panel_height_m = {min = 0.8, max = 2.5}
+supporting_member_span_m = {min = 1.5, max = 4.0}
+tributary_width_m = {min = 0.6, max = 1.5}
+minimum_effective_area_m2 = {min = 0.5, max = 1.0}
+site_contexts = ["commercial-facade", "station-glazing"]
+
+[archetypes.large_curtain_wall_bay]
+description = "Large curtain wall bay with long support spans"
+panel_width_m = {min = 1.2, max = 3.0}
+panel_height_m = {min = 2.0, max = 4.5}
+supporting_member_span_m = {min = 3.0, max = 8.0}
+tributary_width_m = {min = 1.2, max = 3.0}
+minimum_effective_area_m2 = {min = 0.8, max = 2.0}
+site_contexts = ["high-rise-curtain-wall", "airport-terminal-facade"]
+
+[difficulty.easy]
+description = "All parameters given for a small cladding panel"
+visibility = "all_given"
+archetypes = ["small_cladding_panel"]
+
+[difficulty.medium]
+description = "All parameters given across small and large facade areas"
+visibility = "all_given"
+archetypes = ["small_cladding_panel", "large_curtain_wall_bay"]
+
+[difficulty.hard]
+description = "All parameters given for large facade support areas"
+visibility = "all_given"
+archetypes = ["large_curtain_wall_bay"]

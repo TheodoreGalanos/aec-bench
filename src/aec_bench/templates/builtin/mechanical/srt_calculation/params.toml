@@ -1,0 +1,106 @@
+[meta]
+name = "srt-calculation"
+description = "Activated sludge solids retention time calculation"
+long_description = "Calculates solids retention time for an activated sludge process from aeration basin solids inventory and daily solids losses through waste activated sludge and effluent TSS. The template reports system solids, wasted solids, effluent solids loss, total loss, and SRT."
+discipline = "mechanical"
+category = "fundamental-calculations"
+standards = ["WEF MOP 8", "Ten States Standards"]
+tags = ["mechanical", "wastewater", "activated-sludge", "srt", "deterministic"]
+tool_mode = "with-tool"
+
+[params.aeration_volume_m3]
+type = "float"
+unit = "m3"
+description = "Aeration tank volume"
+min = 10.0
+max = 200000.0
+
+[params.mlss_concentration_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Mixed liquor suspended solids concentration"
+min = 500.0
+max = 8000.0
+
+[params.was_flow_m3_d]
+type = "float"
+unit = "m3/d"
+description = "Waste activated sludge flow rate"
+min = 1.0
+max = 50000.0
+
+[params.was_tss_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Waste activated sludge TSS concentration"
+min = 1000.0
+max = 20000.0
+
+[params.effluent_tss_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Effluent TSS concentration"
+min = 0.0
+max = 100.0
+
+[params.effluent_flow_m3_d]
+type = "float"
+unit = "m3/d"
+description = "Effluent flow rate"
+min = 1.0
+max = 1000000.0
+
+[outputs.solids_in_system_kg]
+description = "Mass of solids in aeration system"
+tolerance = 0.03
+
+[outputs.solids_wasted_kg_d]
+description = "Mass of solids wasted per day"
+tolerance = 0.03
+
+[outputs.effluent_solids_loss_kg_d]
+description = "Mass of solids lost in effluent per day"
+tolerance = 0.03
+
+[outputs.total_solids_loss_kg_d]
+description = "Total daily solids loss"
+tolerance = 0.03
+
+[outputs.srt_days]
+description = "Solids retention time"
+tolerance = 0.03
+
+[archetypes.package_activated_sludge]
+description = "Package activated sludge plant"
+aeration_volume_m3 = {min = 100.0, max = 2000.0}
+mlss_concentration_mg_l = {min = 2500.0, max = 5000.0}
+was_flow_m3_d = {min = 5.0, max = 300.0}
+was_tss_mg_l = {min = 6000.0, max = 15000.0}
+effluent_tss_mg_l = {min = 5.0, max = 30.0}
+effluent_flow_m3_d = {min = 100.0, max = 5000.0}
+site_contexts = ["remote-community-wwtp", "industrial-package-wwtp"]
+
+[archetypes.municipal_activated_sludge]
+description = "Municipal activated sludge process"
+aeration_volume_m3 = {min = 2000.0, max = 100000.0}
+mlss_concentration_mg_l = {min = 2000.0, max = 4500.0}
+was_flow_m3_d = {min = 100.0, max = 10000.0}
+was_tss_mg_l = {min = 5000.0, max = 12000.0}
+effluent_tss_mg_l = {min = 3.0, max = 20.0}
+effluent_flow_m3_d = {min = 5000.0, max = 500000.0}
+site_contexts = ["regional-wwtp", "urban-nutrient-removal-plant"]
+
+[difficulty.easy]
+description = "All parameters given for a package activated sludge plant"
+visibility = "all_given"
+archetypes = ["package_activated_sludge"]
+
+[difficulty.medium]
+description = "All parameters given across package and municipal activated sludge systems"
+visibility = "all_given"
+archetypes = ["package_activated_sludge", "municipal_activated_sludge"]
+
+[difficulty.hard]
+description = "All parameters given for municipal activated sludge SRT checks"
+visibility = "all_given"
+archetypes = ["municipal_activated_sludge"]

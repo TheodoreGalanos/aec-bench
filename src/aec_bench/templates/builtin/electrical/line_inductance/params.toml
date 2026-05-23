@@ -1,0 +1,108 @@
+[meta]
+name = "line-inductance"
+description = "Three-phase overhead line inductance from GMD and GMR"
+long_description = "Calculates per-phase line inductance for a reduced transposed three-phase overhead line model. The template computes geometric mean distance from phase spacings, equivalent GMR for simple bundled conductors, and inductance using L = 0.2 ln(GMD/GMR) mH/km."
+discipline = "electrical"
+category = "electrical-parameters"
+standards = ["IEC 60909", "IEEE 738"]
+tags = ["electrical", "line-inductance", "gmd", "gmr", "transmission-lines", "deterministic"]
+tool_mode = "with-tool"
+
+[params.conductor_gmr_m]
+type = "float"
+unit = "m"
+description = "Geometric mean radius of one subconductor"
+min = 0.001
+max = 0.05
+
+[params.phase_spacing_ab_m]
+type = "float"
+unit = "m"
+description = "Spacing between phase A and phase B"
+min = 0.2
+max = 20
+
+[params.phase_spacing_bc_m]
+type = "float"
+unit = "m"
+description = "Spacing between phase B and phase C"
+min = 0.2
+max = 20
+
+[params.phase_spacing_ca_m]
+type = "float"
+unit = "m"
+description = "Spacing between phase C and phase A"
+min = 0.2
+max = 40
+
+[params.bundle_count]
+type = "enum"
+description = "Number of subconductors in each phase bundle"
+values = ["single", "two", "three", "four"]
+derivable_from = "archetype"
+
+[params.bundle_spacing_m]
+type = "float"
+unit = "m"
+description = "Spacing between subconductors in the bundle"
+min = 0.1
+max = 0.8
+
+[outputs.geometric_mean_distance_m]
+description = "Geometric mean distance between phases"
+tolerance = 0.03
+
+[outputs.equivalent_gmr_mm]
+description = "Equivalent bundle GMR"
+tolerance = 0.05
+
+[outputs.inductance_mh_per_km]
+description = "Per-phase inductance per kilometre"
+tolerance = 0.03
+
+[archetypes.distribution_single]
+description = "Single-conductor distribution line"
+conductor_gmr_m = {min = 0.003, max = 0.015}
+phase_spacing_ab_m = {min = 0.6, max = 2.0}
+phase_spacing_bc_m = {min = 0.6, max = 2.0}
+phase_spacing_ca_m = {min = 1.2, max = 4.0}
+site_contexts = ["urban-distribution", "rural-feeder"]
+
+[archetypes.transmission_single]
+description = "Single-conductor transmission line"
+conductor_gmr_m = {min = 0.006, max = 0.02}
+phase_spacing_ab_m = {min = 3.0, max = 8.0}
+phase_spacing_bc_m = {min = 3.0, max = 8.0}
+phase_spacing_ca_m = {min = 5.0, max = 16.0}
+site_contexts = ["132kv-overhead", "220kv-overhead"]
+
+[archetypes.bundled_transmission]
+description = "Bundled high-voltage transmission line"
+conductor_gmr_m = {min = 0.006, max = 0.025}
+phase_spacing_ab_m = {min = 5.0, max = 15.0}
+phase_spacing_bc_m = {min = 5.0, max = 15.0}
+phase_spacing_ca_m = {min = 8.0, max = 30.0}
+bundle_spacing_m = {min = 0.3, max = 0.6}
+site_contexts = ["330kv-overhead", "500kv-overhead"]
+
+[difficulty.easy]
+description = "Single-conductor line with all dimensions given"
+visibility = "all_given"
+archetypes = ["distribution_single", "transmission_single"]
+bundle_count = ["single"]
+bundle_spacing_m = [0.45]
+
+[difficulty.medium]
+description = "Single or two-conductor bundle"
+visibility = "all_given"
+archetypes = ["transmission_single", "bundled_transmission"]
+bundle_count = ["single", "two"]
+
+[difficulty.hard]
+description = "Bundle count inferred from transmission-line context"
+visibility = "partial"
+hidden_params = ["bundle_count"]
+replacement_text = "Use the conductor arrangement implied by {{ archetype.description }}."
+archetypes = ["bundled_transmission"]
+bundle_count = ["two", "three", "four"]

@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "rail_signalling",
+    "category_id": "level-crossings",
+    "category_name": "Level Crossing Design",
+    "task_id": "warning-time-calculation",
+    "task_name": "Level Crossing Warning Time Calculation",
+    "description": "Calculate strike-in point distance to provide minimum warning time for road users",
+    "complexity": "low",
+    "standards": [
+      "AS 7711",
+      "Network Rail standards"
+    ],
+    "inputs": [
+      "Maximum train speed (km/h)",
+      "Minimum warning time (s)",
+      "Road user clearance time (s)",
+      "Barrier lowering time (s)",
+      "System delay (s)"
+    ],
+    "outputs": [
+      "Strike-in distance (m)",
+      "Total warning time (s)",
+      "Component time breakdown",
+      "Margin verification"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/rail_signalling.json",
+    "suggested_relative_path": "electrical/level-crossings/warning-time-calculation"
+  }
+}

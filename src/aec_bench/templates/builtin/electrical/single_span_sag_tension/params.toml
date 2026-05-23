@@ -1,0 +1,103 @@
+[meta]
+name = "single-span-sag-tension"
+description = "Single span sag-tension calculation for overhead contact wires per EN 50119"
+long_description = "Computes mid-span sag, wire length, and catenary constant for a single level span of overhead contact wire used in rail electrification. Applies both the parabolic approximation (S = wL^2/8T) and exact catenary equations per EN 50119, enabling comparison of the two methods across light rail, mainline, and high-speed catenary scenarios."
+discipline = "electrical"
+category = "catenary-design"
+standards = ["EN 50119", "EN 50367"]
+tags = ["electrical", "catenary", "sag-tension", "overhead-wire", "deterministic"]
+tool_mode = "with-tool"
+
+[params.span_length_m]
+type = "float"
+unit = "m"
+description = "Horizontal span length between supports"
+min = 20.0
+max = 120.0
+
+[params.wire_weight_per_m_n]
+type = "float"
+unit = "N/m"
+description = "Wire weight per unit length (gravitational force per metre)"
+min = 3.0
+max = 30.0
+derivable_from = "archetype"
+
+[params.horizontal_tension_n]
+type = "float"
+unit = "N"
+description = "Horizontal component of wire tension at mid-span"
+min = 5000.0
+max = 30000.0
+
+[params.wire_diameter_mm]
+type = "float"
+unit = "mm"
+description = "Outer diameter of the contact wire"
+min = 8.0
+max = 16.0
+
+# --- Outputs ---
+
+[outputs.sag_m]
+description = "Mid-span sag using parabolic approximation (m)"
+tolerance = 0.03
+
+[outputs.sag_catenary_m]
+description = "Mid-span sag using exact catenary equation (m)"
+tolerance = 0.03
+
+[outputs.wire_length_m]
+description = "Total wire length in the span using catenary equation (m)"
+tolerance = 0.03
+
+[outputs.catenary_constant_m]
+description = "Catenary constant C = T / w (m)"
+tolerance = 0.03
+
+# --- Archetypes ---
+# Overhead contact wire scenarios for rail electrification.
+
+[archetypes.light_rail_copper]
+description = "Light rail copper contact wire (Cu AC-100)"
+span_length_m = {min = 25.0, max = 50.0}
+wire_weight_per_m_n = {min = 8.0, max = 10.0}
+horizontal_tension_n = {min = 8000.0, max = 12000.0}
+wire_diameter_mm = {min = 10.0, max = 12.0}
+site_contexts = ["sydney-light-rail", "melbourne-tram-network"]
+
+[archetypes.mainline_catenary]
+description = "Mainline rail catenary with CuAg AC-120 contact wire (nominal 10.8-12.5 N/m)"
+span_length_m = {min = 45.0, max = 75.0}
+wire_weight_per_m_n = {min = 10.8, max = 12.5}
+horizontal_tension_n = {min = 10000.0, max = 20000.0}
+wire_diameter_mm = {min = 12.0, max = 14.0}
+site_contexts = ["brisbane-cross-river-rail", "sydney-metro-northwest"]
+
+[archetypes.high_speed_catenary]
+description = "High-speed rail catenary with CuAg AC-150 contact wire (nominal 14.5-16.0 N/m)"
+span_length_m = {min = 55.0, max = 120.0}
+wire_weight_per_m_n = {min = 14.5, max = 16.0}
+horizontal_tension_n = {min = 15000.0, max = 30000.0}
+wire_diameter_mm = {min = 13.0, max = 16.0}
+site_contexts = ["melbourne-geelong-fast-rail", "sydney-newcastle-corridor"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "Short spans, all params given, light rail scenarios"
+visibility = "all_given"
+archetypes = ["light_rail_copper"]
+span_length_m = {min = 25.0, max = 40.0}
+
+[difficulty.medium]
+description = "Any span length and wire type, all params given"
+visibility = "all_given"
+archetypes = ["light_rail_copper", "mainline_catenary", "high_speed_catenary"]
+
+[difficulty.hard]
+description = "Wire weight hidden, agent must infer from wire diameter and material context"
+visibility = "partial"
+hidden_params = ["wire_weight_per_m_n"]
+replacement_text = "The installation uses {{ archetype.description }} practices along the {{ archetype.site_context }} corridor"
+archetypes = ["mainline_catenary", "high_speed_catenary"]

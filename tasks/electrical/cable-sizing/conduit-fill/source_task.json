@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "substations",
+    "category_id": "cable-sizing",
+    "category_name": "Cable Sizing & Voltage Drop",
+    "task_id": "conduit-fill",
+    "task_name": "Conduit Fill Calculation",
+    "description": "Calculate conduit fill percentage and select appropriate conduit size",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3000",
+      "NEC Chapter 9"
+    ],
+    "inputs": [
+      "Number and size of cables",
+      "Cable outer diameters (mm)",
+      "Conduit type"
+    ],
+    "outputs": [
+      "Required conduit size (mm)",
+      "Fill percentage (%)",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "calculation",
+      "size"
+    ],
+    "source_file": "data/tasks/electrical/substations.json",
+    "suggested_relative_path": "electrical/cable-sizing/conduit-fill"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "ground",
+    "community": "geotechnical",
+    "category_id": "retaining-walls",
+    "category_name": "Retaining Wall Design",
+    "task_id": "lateral-earth-pressure",
+    "task_name": "Lateral Earth Pressure Calculation",
+    "description": "Calculate active and passive earth pressures using Rankine or Coulomb theory",
+    "complexity": "low",
+    "standards": [
+      "Rankine (1857)",
+      "Coulomb (1776)"
+    ],
+    "inputs": [
+      "Soil friction angle \u03c6' (degrees)",
+      "Cohesion c' (kPa)",
+      "Unit weight \u03b3 (kN/m\u00b3)",
+      "Wall height H (m)",
+      "Backfill slope angle \u03b2 (degrees)",
+      "Wall friction angle \u03b4 (degrees)"
+    ],
+    "outputs": [
+      "Active pressure coefficient Ka",
+      "Passive pressure coefficient Kp",
+      "Active thrust Pa (kN/m)",
+      "Passive resistance Pp (kN/m)",
+      "Point of application"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "pressure"
+    ],
+    "source_file": "data/tasks/ground/geotechnical.json",
+    "suggested_relative_path": "ground/retaining-walls/lateral-earth-pressure"
+  }
+}

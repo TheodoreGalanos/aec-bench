@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "ict_comms_security",
+    "category_id": "cctv-design",
+    "category_name": "CCTV System Design",
+    "task_id": "cctv-storage-calculation",
+    "task_name": "CCTV Storage Capacity Calculation",
+    "description": "Calculate storage requirements for video surveillance system",
+    "complexity": "medium",
+    "standards": [
+      "IEC 62676-4"
+    ],
+    "inputs": [
+      "Number of cameras",
+      "Resolution per camera",
+      "Frame rate (fps)",
+      "Recording hours per day",
+      "Retention period (days)",
+      "Compression codec",
+      "Average bitrate (Mbps)"
+    ],
+    "outputs": [
+      "Daily storage per camera (GB)",
+      "Total storage required (TB)",
+      "Recording capacity in days",
+      "RAID overhead consideration"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "capacity",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/ict_comms_security.json",
+    "suggested_relative_path": "electrical/cctv-design/cctv-storage-calculation"
+  }
+}

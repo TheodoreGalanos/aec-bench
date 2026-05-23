@@ -1,0 +1,115 @@
+[meta]
+name = "oxygen-requirements"
+description = "Activated sludge oxygen demand calculation"
+long_description = "Calculates activated sludge oxygen demand from BOD removal, nitrogen oxidation, sludge production, and denitrification credit. The template uses explicit stoichiometric factors for carbonaceous demand adjustment, nitrification oxygen demand, and denitrification oxygen recovery."
+discipline = "mechanical"
+category = "activated-sludge"
+standards = ["WEF MOP 8"]
+tags = ["mechanical", "wastewater", "activated-sludge", "oxygen-demand", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_rate_m3_d]
+type = "float"
+unit = "m3/d"
+description = "Process flow rate"
+min = 10.0
+max = 1000000.0
+
+[params.influent_bod_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Influent BOD concentration"
+min = 10.0
+max = 1000.0
+
+[params.effluent_bod_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Effluent BOD concentration"
+min = 0.0
+max = 100.0
+
+[params.influent_tkn_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Influent TKN concentration"
+min = 1.0
+max = 150.0
+
+[params.effluent_tkn_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Effluent TKN concentration"
+min = 0.0
+max = 50.0
+
+[params.sludge_production_kg_d]
+type = "float"
+unit = "kg/d"
+description = "Biomass sludge production"
+min = 0.0
+max = 100000.0
+
+[params.denitrified_nitrogen_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Nitrate-nitrogen denitrified for oxygen credit"
+min = 0.0
+max = 100.0
+
+[outputs.bod_removed_kg_d]
+description = "BOD removed"
+tolerance = 0.03
+
+[outputs.carbonaceous_oxygen_kg_d]
+description = "Carbonaceous oxygen demand after sludge credit"
+tolerance = 0.03
+
+[outputs.nitrogenous_oxygen_kg_d]
+description = "Nitrogenous oxygen demand"
+tolerance = 0.03
+
+[outputs.denitrification_credit_kg_d]
+description = "Denitrification oxygen credit"
+tolerance = 0.03
+
+[outputs.total_oxygen_kg_d]
+description = "Total oxygen demand"
+tolerance = 0.03
+
+[archetypes.package_plant]
+description = "Package activated sludge plant"
+flow_rate_m3_d = {min = 100.0, max = 5000.0}
+influent_bod_mg_l = {min = 150.0, max = 400.0}
+effluent_bod_mg_l = {min = 5.0, max = 30.0}
+influent_tkn_mg_l = {min = 20.0, max = 80.0}
+effluent_tkn_mg_l = {min = 2.0, max = 25.0}
+sludge_production_kg_d = {min = 20.0, max = 1500.0}
+denitrified_nitrogen_mg_l = {min = 0.0, max = 30.0}
+site_contexts = ["remote-community-wwtp", "industrial-package-wwtp"]
+
+[archetypes.municipal_nutrient_removal]
+description = "Municipal nutrient removal activated sludge plant"
+flow_rate_m3_d = {min = 5000.0, max = 500000.0}
+influent_bod_mg_l = {min = 150.0, max = 350.0}
+effluent_bod_mg_l = {min = 2.0, max = 20.0}
+influent_tkn_mg_l = {min = 25.0, max = 90.0}
+effluent_tkn_mg_l = {min = 1.0, max = 15.0}
+sludge_production_kg_d = {min = 1000.0, max = 80000.0}
+denitrified_nitrogen_mg_l = {min = 5.0, max = 60.0}
+site_contexts = ["regional-wwtp", "urban-nutrient-removal-plant"]
+
+[difficulty.easy]
+description = "All parameters given for a package activated sludge plant"
+visibility = "all_given"
+archetypes = ["package_plant"]
+
+[difficulty.medium]
+description = "All parameters given across package and municipal plants"
+visibility = "all_given"
+archetypes = ["package_plant", "municipal_nutrient_removal"]
+
+[difficulty.hard]
+description = "All parameters given for nutrient removal oxygen demand"
+visibility = "all_given"
+archetypes = ["municipal_nutrient_removal"]

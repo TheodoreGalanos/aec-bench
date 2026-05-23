@@ -1,0 +1,108 @@
+[meta]
+name = "thermal-stress-calculation"
+description = "Rail thermal stress and force in CWR using sigma = E * alpha * dT (AREMA / ARTC)"
+long_description = "Computes the longitudinal thermal stress and force in continuously welded rail (CWR) using sigma = E * alpha * delta_T. Critical for managing rail buckling risk in hot conditions and rail pull-apart risk in cold conditions, per AREMA Chapter 5 and ARTC ETS-05-00."
+discipline = "civil"
+category = "rail-stress"
+standards = ["AREMA MRE Chapter 5", "UIC 720 R", "ARTC ETS-05-00"]
+tags = ["civil", "rail", "CWR", "thermal-stress", "longitudinal-force", "track", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.rail_area_mm2]
+type = "float"
+unit = "mm²"
+description = "Rail cross-sectional area A"
+min = 4000
+max = 9000
+
+[params.thermal_expansion_coeff_micro_per_c]
+type = "float"
+unit = "×10⁻⁶ per °C"
+description = "Coefficient of linear thermal expansion α"
+min = 1.0
+max = 15.0
+derivable_from = "archetype"
+
+[params.elastic_modulus_mpa]
+type = "float"
+unit = "MPa"
+description = "Modulus of elasticity E of rail steel"
+min = 195000
+max = 215000
+derivable_from = "archetype"
+
+[params.temperature_change_c]
+type = "float"
+unit = "°C"
+description = "Temperature change from neutral temperature ΔT = T_rail − T_neutral"
+min = -50
+max = 50
+
+# --- Outputs ---
+
+[outputs.thermal_stress_mpa]
+description = "Thermal stress magnitude σ (MPa)"
+tolerance = 0.03
+
+[outputs.thermal_force_kn]
+description = "Thermal force magnitude F (kN)"
+tolerance = 0.03
+
+[outputs.stress_state]
+description = "Stress state: 1.0 = compression, -1.0 = tension, 0.0 = neutral"
+tolerance = 0.01
+
+# --- Archetypes: climate/corridor types ---
+
+[archetypes.hot_inland]
+description = "Hot inland corridor with large positive temperature rise above neutral"
+rail_area_mm2 = {min = 6500, max = 9000}
+thermal_expansion_coeff_micro_per_c = {min = 11.0, max = 12.0}
+elastic_modulus_mpa = {min = 205000, max = 210000}
+temperature_change_c = {min = 20, max = 50}
+site_contexts = ["artc-broken-hill-corridor", "alice-springs-adelaide-rail", "pilbara-port-hedland-wa"]
+
+[archetypes.cold_alpine]
+description = "Cold alpine or highland corridor with large negative temperature drop below neutral"
+rail_area_mm2 = {min = 6500, max = 9000}
+thermal_expansion_coeff_micro_per_c = {min = 11.0, max = 12.0}
+elastic_modulus_mpa = {min = 205000, max = 210000}
+temperature_change_c = {min = -50, max = -15}
+site_contexts = ["nsw-blue-mountains-line", "vic-alpine-northeast", "tas-western-explorer"]
+
+[archetypes.coastal_temperate]
+description = "Coastal temperate corridor with moderate temperature variation"
+rail_area_mm2 = {min = 5500, max = 8000}
+thermal_expansion_coeff_micro_per_c = {min = 11.0, max = 12.0}
+elastic_modulus_mpa = {min = 200000, max = 210000}
+temperature_change_c = {min = -15, max = 20}
+site_contexts = ["sydney-illawarra-line", "melbourne-geelong-corridor", "perth-fremantle-coastal"]
+
+[archetypes.tropical_north]
+description = "Tropical northern corridor with sustained high temperatures above neutral"
+rail_area_mm2 = {min = 6000, max = 8500}
+thermal_expansion_coeff_micro_per_c = {min = 11.0, max = 12.0}
+elastic_modulus_mpa = {min = 205000, max = 210000}
+temperature_change_c = {min = 15, max = 40}
+site_contexts = ["cairns-townsville-north-coast", "darwin-adelaide-ghan-corridor", "mt-isa-rail-qld"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "All parameters given, moderate temperature changes on mainline corridors"
+visibility = "all_given"
+archetypes = ["coastal_temperate", "tropical_north"]
+
+[difficulty.medium]
+description = "All parameters given, any corridor type including extreme inland and alpine conditions"
+visibility = "all_given"
+archetypes = ["hot_inland", "cold_alpine", "coastal_temperate", "tropical_north"]
+
+[difficulty.hard]
+description = "Material properties hidden — agent must infer E and α for standard rail steel from engineering knowledge"
+visibility = "partial"
+hidden_params = ["thermal_expansion_coeff_micro_per_c", "elastic_modulus_mpa"]
+replacement_text = "The rail is standard carbon-manganese rail steel on a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["hot_inland", "cold_alpine", "coastal_temperate", "tropical_north"]

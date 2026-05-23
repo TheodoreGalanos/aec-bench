@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "energy_structures",
+    "category_id": "substation-foundations",
+    "category_name": "Substation Equipment Foundations",
+    "task_id": "transformer-foundation",
+    "task_name": "Power Transformer Foundation Design",
+    "description": "Design reinforced concrete foundation for power transformer including oil containment",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 693",
+      "AS 3600",
+      "AS 1940",
+      "EPA Guidelines"
+    ],
+    "inputs": [
+      "Transformer weight (tonnes)",
+      "Transformer dimensions",
+      "Seismic zone",
+      "Oil volume (L)",
+      "Bushing loads",
+      "Short-circuit forces"
+    ],
+    "outputs": [
+      "Foundation dimensions (m)",
+      "Slab thickness (mm)",
+      "Reinforcement details",
+      "Containment volume (L)",
+      "Anchor bolt pattern"
+    ],
+    "keyword_hits": [
+      "load",
+      "power"
+    ],
+    "source_file": "data/tasks/structural/energy_structures.json",
+    "suggested_relative_path": "structural/substation-foundations/transformer-foundation"
+  }
+}

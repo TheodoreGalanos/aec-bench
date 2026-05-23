@@ -1,0 +1,42 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "industrial_electrical",
+    "category_id": "arc-flash-industrial",
+    "category_name": "Industrial Arc Flash Assessment",
+    "task_id": "arc-flash-study",
+    "task_name": "Arc Flash Hazard Analysis",
+    "description": "Perform arc flash study for industrial switchboard using IEEE 1584",
+    "complexity": "high",
+    "standards": [
+      "IEEE 1584",
+      "NFPA 70E"
+    ],
+    "inputs": [
+      "System voltage",
+      "Bolted fault current (kA)",
+      "Protection device TCC data",
+      "Equipment configuration",
+      "Working distance (mm)",
+      "Electrode gap (mm)"
+    ],
+    "outputs": [
+      "Arcing current (kA)",
+      "Incident energy (cal/cm2)",
+      "Arc flash boundary (mm)",
+      "PPE category",
+      "Equipment labels"
+    ],
+    "keyword_hits": [
+      "arc flash",
+      "current",
+      "energy",
+      "fault",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/industrial_electrical.json",
+    "suggested_relative_path": "electrical/arc-flash-industrial/arc-flash-study"
+  }
+}

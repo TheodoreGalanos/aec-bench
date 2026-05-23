@@ -1,0 +1,138 @@
+[meta]
+name = "pipe-invert-calculation"
+description = "Downstream pipe invert level calculation for stormwater drainage"
+long_description = "Calculates the downstream invert level, obvert (crown) level, cover depth, and grade fall for a stormwater drainage pipe given upstream invert, length, grade, diameter, and downstream surface level. Checks cover adequacy against minimum requirements for the installation context per Australian local-authority stormwater drainage standards."
+discipline = "civil"
+category = "stormwater-piped"
+standards = ["AS/NZS 3500.3", "QUDM Section 7"]
+tags = ["civil", "stormwater", "invert-level", "drainage", "cover-depth", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.upstream_invert_m]
+type = "float"
+unit = "m AHD"
+description = "Upstream invert level IL_us"
+min = 0.0
+max = 500.0
+
+[params.pipe_length_m]
+type = "float"
+unit = "m"
+description = "Pipe length between pits L"
+min = 1.0
+max = 200.0
+
+[params.pipe_grade_percent]
+type = "float"
+unit = "%"
+description = "Pipe longitudinal grade as a percentage"
+min = 0.1
+max = 10.0
+
+[params.pipe_diameter_mm]
+type = "enum"
+unit = "mm"
+description = "Nominal pipe internal diameter D"
+values = ["225", "300", "375", "450", "600", "750", "900"]
+
+[params.surface_level_ds_m]
+type = "float"
+unit = "m AHD"
+description = "Surface level at downstream pit"
+min = 0.0
+max = 500.0
+
+[params.minimum_cover_mm]
+type = "float"
+unit = "mm"
+description = "Minimum required cover depth over pipe crown"
+min = 150
+max = 1200
+default = 600
+optional = true
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.downstream_invert_m]
+description = "Downstream invert level IL_ds (m AHD)"
+tolerance = 0.03
+
+[outputs.obvert_level_m]
+description = "Obvert (crown) level at downstream end OL_ds (m AHD)"
+tolerance = 0.03
+
+[outputs.cover_depth_mm]
+description = "Cover depth at downstream end (mm)"
+tolerance = 5.0
+
+[outputs.grade_fall_m]
+description = "Total fall over pipe length (m)"
+tolerance = 0.03
+
+[outputs.cover_adequate]
+description = "Cover adequacy (1.0 = adequate, 0.0 = insufficient)"
+tolerance = 0.01
+
+# --- Archetypes ---
+
+[archetypes.suburban_road_drainage]
+description = "PVC stormwater pipe under suburban road pavement"
+upstream_invert_m = {min = 8.0, max = 50.0}
+pipe_length_m = {min = 20.0, max = 80.0}
+pipe_grade_percent = {min = 0.5, max = 3.0}
+pipe_diameter_mm = ["300", "375", "450"]
+surface_level_ds_m = {min = 9.0, max = 52.0}
+minimum_cover_mm = {min = 600, max = 600}
+site_contexts = ["brisbane-suburban-road-drainage", "sydney-residential-road-stormwater"]
+
+[archetypes.verge_and_footpath]
+description = "PVC stormwater pipe under grass verge or footpath"
+upstream_invert_m = {min = 8.0, max = 50.0}
+pipe_length_m = {min = 5.0, max = 40.0}
+pipe_grade_percent = {min = 0.5, max = 5.0}
+pipe_diameter_mm = ["225", "300", "375"]
+surface_level_ds_m = {min = 8.5, max = 51.0}
+minimum_cover_mm = {min = 450, max = 450}
+site_contexts = ["perth-verge-drainage", "adelaide-footpath-stormwater"]
+
+[archetypes.trunk_stormwater]
+description = "Reinforced concrete trunk stormwater main under road reserve"
+upstream_invert_m = {min = 5.0, max = 40.0}
+pipe_length_m = {min = 40.0, max = 150.0}
+pipe_grade_percent = {min = 0.2, max = 1.5}
+pipe_diameter_mm = ["600", "750", "900"]
+surface_level_ds_m = {min = 6.5, max = 42.0}
+minimum_cover_mm = {min = 600, max = 900}
+site_contexts = ["melbourne-trunk-stormwater", "gold-coast-catchment-drainage"]
+
+[archetypes.steep_hillside]
+description = "HDPE or PVC stormwater pipe on steep hillside terrain"
+upstream_invert_m = {min = 20.0, max = 80.0}
+pipe_length_m = {min = 10.0, max = 60.0}
+pipe_grade_percent = {min = 3.0, max = 10.0}
+pipe_diameter_mm = ["225", "300", "375", "450"]
+surface_level_ds_m = {min = 18.0, max = 76.0}
+minimum_cover_mm = {min = 450, max = 600}
+site_contexts = ["cairns-hillside-subdivision", "hobart-steep-terrain-drainage"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "Small pipe under footpath, all parameters given, generous cover"
+visibility = "all_given"
+archetypes = ["verge_and_footpath"]
+
+[difficulty.medium]
+description = "Any pipe size and archetype, all parameters given"
+visibility = "all_given"
+archetypes = ["suburban_road_drainage", "verge_and_footpath", "trunk_stormwater", "steep_hillside"]
+
+[difficulty.hard]
+description = "Minimum cover hidden, agent must infer from installation context"
+visibility = "partial"
+hidden_params = ["minimum_cover_mm"]
+replacement_text = "The pipe is {{ archetype.description }} installed at {{ archetype.site_context }}"
+archetypes = ["suburban_road_drainage", "verge_and_footpath", "trunk_stormwater", "steep_hillside"]

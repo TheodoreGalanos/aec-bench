@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "facades",
+    "category_id": "movement-tolerance",
+    "category_name": "Movement and Tolerance",
+    "task_id": "construction-tolerance",
+    "task_name": "Construction Tolerance Allowance",
+    "description": "Calculate slot sizes and adjustments for construction tolerances",
+    "complexity": "low",
+    "standards": [
+      "CWCT",
+      "Project specifications"
+    ],
+    "inputs": [
+      "Structure tolerance (mm)",
+      "Facade tolerance (mm)",
+      "Installation method",
+      "Adjustment range required"
+    ],
+    "outputs": [
+      "Minimum slot length (mm)",
+      "Minimum slot width (mm)",
+      "Adjustment allowance"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "size"
+    ],
+    "source_file": "data/tasks/structural/facades.json",
+    "suggested_relative_path": "structural/movement-tolerance/construction-tolerance"
+  }
+}

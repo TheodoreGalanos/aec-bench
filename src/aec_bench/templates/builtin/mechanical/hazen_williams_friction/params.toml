@@ -1,0 +1,92 @@
+[meta]
+name = "hazen-williams-friction"
+description = "Hazen-Williams pressure pipe friction loss"
+long_description = "Calculates head loss and equivalent pressure loss for pressurised water flow using the Hazen-Williams equation. The template converts flow and diameter to SI units, reports hydraulic gradient, and supports water distribution and fire-service pipe checks."
+discipline = "mechanical"
+category = "pipe-hydraulics"
+standards = ["Hazen-Williams"]
+tags = ["mechanical", "hydraulics", "pipe", "friction", "deterministic"]
+tool_mode = "with-tool"
+
+[params.pipe_length_m]
+type = "float"
+unit = "m"
+description = "Pipe length"
+min = 0.1
+max = 10000.0
+
+[params.pipe_internal_diameter_mm]
+type = "float"
+unit = "mm"
+description = "Internal pipe diameter"
+min = 10.0
+max = 3000.0
+
+[params.flow_rate_l_s]
+type = "float"
+unit = "L/s"
+description = "Volumetric flow rate"
+min = 0.01
+max = 10000.0
+
+[params.hazen_williams_c]
+type = "float"
+description = "Hazen-Williams roughness coefficient"
+min = 40.0
+max = 160.0
+
+[params.fluid_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "Fluid density"
+min = 900.0
+max = 1200.0
+
+[outputs.flow_rate_m3_s]
+description = "Flow rate in cubic metres per second"
+tolerance = 0.03
+
+[outputs.head_loss_m]
+description = "Friction head loss"
+tolerance = 0.03
+
+[outputs.pressure_loss_kpa]
+description = "Equivalent pressure loss"
+tolerance = 0.03
+
+[outputs.hydraulic_gradient_m_per_m]
+description = "Hydraulic gradient"
+tolerance = 0.03
+
+[archetypes.distribution_main]
+description = "Water distribution main friction loss"
+pipe_length_m = {min = 50.0, max = 2000.0}
+pipe_internal_diameter_mm = {min = 100.0, max = 900.0}
+flow_rate_l_s = {min = 5.0, max = 800.0}
+hazen_williams_c = {min = 100.0, max = 150.0}
+fluid_density_kg_m3 = {min = 990.0, max = 1030.0}
+site_contexts = ["water-distribution-main", "trunk-main"]
+
+[archetypes.fire_service]
+description = "Fire-service pipe friction loss"
+pipe_length_m = {min = 20.0, max = 500.0}
+pipe_internal_diameter_mm = {min = 50.0, max = 300.0}
+flow_rate_l_s = {min = 5.0, max = 200.0}
+hazen_williams_c = {min = 100.0, max = 140.0}
+fluid_density_kg_m3 = {min = 990.0, max = 1030.0}
+site_contexts = ["fire-service-pipe", "hydrant-feed"]
+
+[difficulty.easy]
+description = "All parameters given for a distribution main"
+visibility = "all_given"
+archetypes = ["distribution_main"]
+
+[difficulty.medium]
+description = "All parameters given across water pipe contexts"
+visibility = "all_given"
+archetypes = ["distribution_main", "fire_service"]
+
+[difficulty.hard]
+description = "All parameters given for fire-service pipework"
+visibility = "all_given"
+archetypes = ["fire_service"]

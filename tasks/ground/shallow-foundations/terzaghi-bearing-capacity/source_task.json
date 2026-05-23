@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "ground",
+    "community": "geotechnical",
+    "category_id": "shallow-foundations",
+    "category_name": "Shallow Foundation Design",
+    "task_id": "terzaghi-bearing-capacity",
+    "task_name": "Terzaghi Bearing Capacity",
+    "description": "Calculate ultimate bearing capacity using Terzaghi's equation for strip/square/circular footings",
+    "complexity": "low",
+    "standards": [
+      "Terzaghi (1943)"
+    ],
+    "inputs": [
+      "Cohesion c' (kPa)",
+      "Friction angle \u03c6' (degrees)",
+      "Unit weight \u03b3 (kN/m\u00b3)",
+      "Footing width B (m)",
+      "Embedment depth Df (m)",
+      "Water table depth (m)"
+    ],
+    "outputs": [
+      "Bearing capacity factors Nc, Nq, N\u03b3",
+      "Ultimate bearing capacity qu (kPa)",
+      "Allowable bearing capacity qa (kPa)"
+    ],
+    "keyword_hits": [
+      "bearing",
+      "calculate",
+      "capacity"
+    ],
+    "source_file": "data/tasks/ground/geotechnical.json",
+    "suggested_relative_path": "ground/shallow-foundations/terzaghi-bearing-capacity"
+  }
+}

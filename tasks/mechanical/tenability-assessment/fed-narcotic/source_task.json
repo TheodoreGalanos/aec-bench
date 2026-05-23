@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_safety",
+    "category_id": "tenability-assessment",
+    "category_name": "Tenability Criteria Assessment",
+    "task_id": "fed-narcotic",
+    "task_name": "Fractional Effective Dose (FED) Calculation - Narcotic Gases",
+    "description": "Calculate FED for asphyxiant gases (CO, HCN, CO2, low O2) per ISO 13571",
+    "complexity": "medium",
+    "standards": [
+      "ISO 13571",
+      "AS ISO 13571"
+    ],
+    "inputs": [
+      "CO concentration time-history (ppm)",
+      "CO2 concentration (%)",
+      "O2 concentration (%)",
+      "HCN concentration (ppm)",
+      "Exposure duration"
+    ],
+    "outputs": [
+      "FED value (dimensionless)",
+      "Time to FED threshold",
+      "Dominant toxicant"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/mechanical/fire_safety.json",
+    "suggested_relative_path": "mechanical/tenability-assessment/fed-narcotic"
+  }
+}

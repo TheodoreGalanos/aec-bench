@@ -1,0 +1,118 @@
+[meta]
+name = "uplift-pressure"
+description = "Calculate uplift pressure distribution on concrete gravity dam foundation for stability analysis"
+long_description = "Calculates the bilinear uplift pressure distribution beneath a concrete gravity dam using the simplified method from USACE EM 1110-2-2200. Computes pressures at the upstream face, drainage gallery, and downstream face, then integrates the trapezoidal distribution to obtain total uplift force per unit length for sliding and overturning stability checks."
+discipline = "civil"
+category = "seepage-analysis"
+standards = ["USACE EM 1110-2-2200", "USBR Design Standard No. 13"]
+tags = ["civil", "dams", "uplift", "pressure", "seepage", "stability", "hydraulics"]
+tool_mode = "with-tool"
+
+[params.headwater_depth_m]
+type = "float"
+unit = "m"
+description = "Headwater depth (hydraulic head) upstream of the dam"
+min = 1.0
+max = 80.0
+
+[params.tailwater_depth_m]
+type = "float"
+unit = "m"
+description = "Tailwater depth (hydraulic head) downstream of the dam"
+min = 0.0
+max = 20.0
+
+[params.base_width_m]
+type = "float"
+unit = "m"
+description = "Total base width of the dam from upstream to downstream face"
+min = 3.0
+max = 80.0
+
+[params.drain_distance_m]
+type = "float"
+unit = "m"
+description = "Distance from the upstream face to the drainage gallery line"
+min = 1.0
+max = 25.0
+
+[params.drain_efficiency_pct]
+type = "float"
+unit = "%"
+description = "Drainage gallery efficiency as a percentage (0 = no drain, 100 = full relief)"
+min = 0.0
+max = 100.0
+derivable_from = "archetype"
+
+[outputs.upstream_pressure_kpa]
+description = "Uplift pressure at the upstream face P_upstream (kPa)"
+tolerance = 0.03
+
+[outputs.drain_pressure_kpa]
+description = "Uplift pressure at the drain line P_drain (kPa)"
+tolerance = 0.03
+
+[outputs.downstream_pressure_kpa]
+description = "Uplift pressure at the downstream face P_downstream (kPa)"
+tolerance = 0.03
+
+[outputs.total_uplift_force_kn_m]
+description = "Total uplift force per unit length of dam U (kN/m)"
+tolerance = 0.03
+
+# --- Archetypes ---
+
+[archetypes.small_weir]
+description = "Small weir or low-head diversion structure on alluvial foundation"
+headwater_depth_m = {min = 1.0, max = 4.0}
+tailwater_depth_m = {min = 0.0, max = 1.5}
+base_width_m = {min = 3.0, max = 8.0}
+drain_distance_m = {min = 1.0, max = 2.5}
+drain_efficiency_pct = {min = 25.0, max = 50.0}
+site_contexts = ["rural-irrigation-weir", "creek-crossing-diversion"]
+
+[archetypes.medium_gravity_dam]
+description = "Medium-height concrete gravity dam with foundation drainage gallery"
+headwater_depth_m = {min = 10.0, max = 30.0}
+tailwater_depth_m = {min = 1.0, max = 6.0}
+base_width_m = {min = 15.0, max = 35.0}
+drain_distance_m = {min = 3.0, max = 8.0}
+drain_efficiency_pct = {min = 40.0, max = 67.0}
+site_contexts = ["regional-water-supply-dam", "hydropower-gravity-dam"]
+
+[archetypes.large_flood_dam]
+description = "Large concrete gravity dam designed for flood control and water storage"
+headwater_depth_m = {min = 30.0, max = 70.0}
+tailwater_depth_m = {min = 3.0, max = 15.0}
+base_width_m = {min = 40.0, max = 80.0}
+drain_distance_m = {min = 8.0, max = 20.0}
+drain_efficiency_pct = {min = 50.0, max = 67.0}
+site_contexts = ["major-flood-control-dam", "multi-purpose-reservoir-dam"]
+
+[archetypes.run_of_river_barrage]
+description = "Run-of-river barrage with low head differential and gated spillway"
+headwater_depth_m = {min = 3.0, max = 10.0}
+tailwater_depth_m = {min = 0.5, max = 5.0}
+base_width_m = {min = 6.0, max = 20.0}
+drain_distance_m = {min = 2.0, max = 5.0}
+drain_efficiency_pct = {min = 30.0, max = 50.0}
+site_contexts = ["river-barrage-navigation", "tidal-barrage-estuary"]
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Small weir scenario, all parameters given including drain efficiency"
+visibility = "all_given"
+archetypes = ["small_weir", "run_of_river_barrage"]
+
+[difficulty.medium]
+description = "All parameters given, wider range of dam types and operating conditions"
+visibility = "all_given"
+archetypes = ["small_weir", "medium_gravity_dam", "large_flood_dam", "run_of_river_barrage"]
+
+[difficulty.hard]
+description = "Drain efficiency hidden; agent must estimate from structure type and site context"
+visibility = "partial"
+hidden_params = ["drain_efficiency_pct"]
+replacement_text = "The structure is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["medium_gravity_dam", "large_flood_dam"]

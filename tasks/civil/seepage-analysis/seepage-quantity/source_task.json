@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "dams",
+    "category_id": "seepage-analysis",
+    "category_name": "Seepage Analysis",
+    "task_id": "seepage-quantity",
+    "task_name": "Seepage Flow Rate Calculation",
+    "description": "Calculate total seepage flow rate through dam and foundation using finite element analysis",
+    "complexity": "medium",
+    "standards": [
+      "USACE EM 1110-2-1901",
+      "USBR Design Standard No. 13"
+    ],
+    "inputs": [
+      "Dam cross-section geometry",
+      "Material hydraulic conductivity (k)",
+      "Reservoir level (m)",
+      "Tailwater level (m)",
+      "Foundation depth to impermeable layer (m)"
+    ],
+    "outputs": [
+      "Total seepage flow rate (L/s/m)",
+      "Phreatic surface location",
+      "Flow net (optional)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/dams.json",
+    "suggested_relative_path": "civil/seepage-analysis/seepage-quantity"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_systems_studies",
+    "category_id": "grid-code",
+    "category_name": "Grid Code Compliance",
+    "task_id": "fault-ride-through",
+    "task_name": "Fault Ride-Through Verification",
+    "description": "Verify generator FRT capability against grid code requirements",
+    "complexity": "high",
+    "standards": [
+      "AEMO GPS",
+      "IEEE 2800",
+      "VDE-AR-N 4120"
+    ],
+    "inputs": [
+      "Generator dynamic model",
+      "FRT voltage-time profile from code",
+      "Fault scenarios (type, location, duration)",
+      "Active and reactive power recovery requirements"
+    ],
+    "outputs": [
+      "Voltage and power recovery plots",
+      "FRT compliance status",
+      "MFRT counter results",
+      "Recovery time verification"
+    ],
+    "keyword_hits": [
+      "fault",
+      "power",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/energy_systems_studies.json",
+    "suggested_relative_path": "electrical/grid-code/fault-ride-through"
+  }
+}

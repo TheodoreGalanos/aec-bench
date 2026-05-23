@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "buildings_mechanical",
+    "category_id": "psychrometrics",
+    "category_name": "Psychrometric Analysis",
+    "task_id": "state-point-calculation",
+    "task_name": "Psychrometric State Point Calculation",
+    "description": "Given two independent air properties, calculate all other psychrometric properties of the air-water vapor mixture",
+    "complexity": "low",
+    "standards": [
+      "ASHRAE Fundamentals Handbook"
+    ],
+    "inputs": [
+      "Dry-bulb temperature (degC or degF)",
+      "One other property (RH, wet-bulb, dew point, enthalpy, or humidity ratio)",
+      "Atmospheric pressure (kPa)"
+    ],
+    "outputs": [
+      "Dry-bulb temperature",
+      "Wet-bulb temperature",
+      "Relative humidity (%)",
+      "Humidity ratio (kg/kg)",
+      "Enthalpy (kJ/kg)",
+      "Dew point temperature",
+      "Specific volume (m3/kg)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "pressure",
+      "state point"
+    ],
+    "source_file": "data/tasks/mechanical/buildings_mechanical.json",
+    "suggested_relative_path": "mechanical/psychrometrics/state-point-calculation"
+  }
+}

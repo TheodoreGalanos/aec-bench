@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "drainage_hydrology",
+    "category_id": "detention-design",
+    "category_name": "Detention & Storage Design",
+    "task_id": "detention-volume-preliminary",
+    "task_name": "Preliminary Detention Volume Estimate",
+    "description": "Estimate required detention volume using simplified methods",
+    "complexity": "low",
+    "standards": [
+      "TR-55",
+      "Local requirements"
+    ],
+    "inputs": [
+      "Pre-development peak flow (m\u00b3/s)",
+      "Post-development peak flow (m\u00b3/s)",
+      "Storm duration (hr)",
+      "Allowable release rate (m\u00b3/s)"
+    ],
+    "outputs": [
+      "Required storage volume (m\u00b3)",
+      "Approximate surface area (m\u00b2)"
+    ],
+    "keyword_hits": [
+      "flow",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/drainage_hydrology.json",
+    "suggested_relative_path": "civil/detention-design/detention-volume-preliminary"
+  }
+}

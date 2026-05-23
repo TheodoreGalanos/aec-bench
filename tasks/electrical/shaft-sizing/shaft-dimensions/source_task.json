@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "vertical_transportation",
+    "category_id": "shaft-sizing",
+    "category_name": "Lift Shaft and Car Sizing",
+    "task_id": "shaft-dimensions",
+    "task_name": "Shaft Dimension Calculation",
+    "description": "Calculate required shaft dimensions from car size and clearances",
+    "complexity": "medium",
+    "standards": [
+      "ISO 4190-1",
+      "EN 81-20",
+      "AS 1735.1"
+    ],
+    "inputs": [
+      "Car internal dimensions (mm)",
+      "Counterweight position",
+      "Door type (center/side)",
+      "Speed (m/s)",
+      "Number of cars in shaft"
+    ],
+    "outputs": [
+      "Shaft width (mm)",
+      "Shaft depth (mm)",
+      "Pit depth (mm)",
+      "Headroom (mm)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "size"
+    ],
+    "source_file": "data/tasks/electrical/vertical_transportation.json",
+    "suggested_relative_path": "electrical/shaft-sizing/shaft-dimensions"
+  }
+}

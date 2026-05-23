@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "distillation-design",
+    "category_name": "Distillation Column Design",
+    "task_id": "minimum-reflux",
+    "task_name": "Minimum Reflux Ratio Calculation",
+    "description": "Calculate minimum reflux ratio using Underwood equations",
+    "complexity": "medium",
+    "standards": [
+      "Distillation Design Fundamentals"
+    ],
+    "inputs": [
+      "Feed composition",
+      "Feed thermal condition (q)",
+      "Relative volatilities",
+      "Distillate and bottoms specifications"
+    ],
+    "outputs": [
+      "Underwood theta parameter",
+      "Minimum reflux ratio Rmin",
+      "Minimum vapor rate Vmin"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/distillation-design/minimum-reflux"
+  }
+}

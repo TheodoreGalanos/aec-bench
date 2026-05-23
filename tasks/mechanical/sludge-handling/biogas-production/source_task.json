@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_wastewater_treatment",
+    "category_id": "sludge-handling",
+    "category_name": "Sludge Handling and Treatment",
+    "task_id": "biogas-production",
+    "task_name": "Biogas Production Estimation",
+    "description": "Estimate biogas production from anaerobic digestion",
+    "complexity": "low",
+    "standards": [
+      "WEF MOP 8"
+    ],
+    "inputs": [
+      "VS loading (kg/d)",
+      "VS destruction efficiency (%)",
+      "Gas production rate (m3/kg VS destroyed)"
+    ],
+    "outputs": [
+      "VS destroyed (kg/d)",
+      "Biogas production (m3/d)",
+      "Methane production (m3/d)",
+      "Energy potential (kWh/d)"
+    ],
+    "keyword_hits": [
+      "energy",
+      "load",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/water_wastewater_treatment.json",
+    "suggested_relative_path": "mechanical/sludge-handling/biogas-production"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_systems_studies",
+    "category_id": "short-circuit",
+    "category_name": "Short Circuit Analysis",
+    "task_id": "equipment-duty-check",
+    "task_name": "Equipment Short Circuit Duty Verification",
+    "description": "Verify equipment ratings against calculated fault currents",
+    "complexity": "medium",
+    "standards": [
+      "IEC 60909",
+      "IEC 62271",
+      "IEEE C37"
+    ],
+    "inputs": [
+      "Calculated fault currents (Ik'', ip)",
+      "Switchgear ratings (making, breaking)",
+      "Cable short-time rating (I^2t)",
+      "Transformer withstand rating"
+    ],
+    "outputs": [
+      "Equipment adequacy status",
+      "Margin to rating (%)",
+      "Critical equipment identification",
+      "Upgrade recommendations"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "current",
+      "fault",
+      "short circuit"
+    ],
+    "source_file": "data/tasks/electrical/energy_systems_studies.json",
+    "suggested_relative_path": "electrical/short-circuit/equipment-duty-check"
+  }
+}

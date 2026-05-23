@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "electrical-parameters",
+    "category_name": "Electrical Parameters",
+    "task_id": "voltage-regulation",
+    "task_name": "Voltage Regulation Calculation",
+    "description": "Calculate voltage regulation (drop) along transmission line under load",
+    "complexity": "medium",
+    "standards": [
+      "IEC 60909",
+      "AS 2067"
+    ],
+    "inputs": [
+      "Line R and X (ohm/km)",
+      "Line length (km)",
+      "Load power (MW, MVAr)",
+      "Sending end voltage (kV)",
+      "Load power factor"
+    ],
+    "outputs": [
+      "Voltage drop (kV)",
+      "Voltage regulation (%)",
+      "Receiving end voltage (kV)",
+      "Power loss (MW)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "drop",
+      "load",
+      "power",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/electrical-parameters/voltage-regulation"
+  }
+}

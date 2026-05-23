@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "buildings_electrical",
+    "category_id": "qa-electrical",
+    "category_name": "Quality Assurance",
+    "task_id": "cable-schedule-review",
+    "task_name": "Cable Schedule QA Review",
+    "description": "Review cable schedule for consistency with single line diagram and compliance",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3008.1",
+      "AS/NZS 3000"
+    ],
+    "inputs": [
+      "Cable schedule",
+      "Single line diagram",
+      "Load schedule",
+      "Switchboard schedule"
+    ],
+    "outputs": [
+      "Discrepancy list",
+      "Missing cables",
+      "Sizing verification",
+      "Compliance issues"
+    ],
+    "keyword_hits": [
+      "cable",
+      "load",
+      "sizing"
+    ],
+    "source_file": "data/tasks/electrical/buildings_electrical.json",
+    "suggested_relative_path": "electrical/qa-electrical/cable-schedule-review"
+  }
+}

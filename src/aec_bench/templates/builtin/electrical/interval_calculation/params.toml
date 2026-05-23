@@ -1,0 +1,60 @@
+[meta]
+name = "interval-calculation"
+description = "Average lift interval from round-trip time and lift count"
+long_description = "Calculates the average waiting interval between lift arrivals by dividing round-trip time by the number of lifts. The template also reports the number of lift arrivals available in a five-minute assessment period."
+discipline = "electrical"
+category = "traffic-analysis"
+standards = ["CIBSE Guide D"]
+tags = ["electrical", "lifts", "vertical-transportation", "interval", "deterministic"]
+tool_mode = "with-tool"
+
+[params.round_trip_time_s]
+type = "float"
+unit = "s"
+description = "Lift round-trip time"
+min = 20
+max = 600
+
+[params.lift_count]
+type = "float"
+description = "Number of lifts in the group"
+min = 1
+max = 16
+
+[outputs.interval_s]
+description = "Average interval between lift arrivals"
+tolerance = 0.03
+
+[outputs.arrivals_per_5min]
+description = "Lift arrivals in a five-minute period"
+tolerance = 0.03
+
+[archetypes.small_group]
+description = "Small lift group in a low- or mid-rise building"
+round_trip_time_s = {min = 60, max = 180}
+lift_count = {min = 1, max = 4}
+site_contexts = ["low-rise-office", "apartment-core"]
+
+[archetypes.large_group]
+description = "Larger lift group in a commercial building"
+round_trip_time_s = {min = 100, max = 360}
+lift_count = {min = 4, max = 12}
+site_contexts = ["commercial-tower", "hospital-core"]
+
+[difficulty.easy]
+description = "Small lift group with all values visible"
+visibility = "all_given"
+archetypes = ["small_group"]
+
+[difficulty.medium]
+description = "Small or large lift group"
+visibility = "all_given"
+archetypes = ["small_group", "large_group"]
+
+[difficulty.hard]
+description = "Lift count hidden in group context"
+visibility = "partial"
+hidden_params = ["lift_count"]
+replacement_text = "Use the lift group size implied by {{ archetype.description }}."
+archetypes = ["large_group"]
+lift_count = [6]

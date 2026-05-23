@@ -1,0 +1,94 @@
+[meta]
+name = "thermal-movement-calc"
+description = "Thermal expansion and contraction calculation for structural components"
+long_description = "Calculates the expected thermal movement of a facade or structural member from its length, temperature range, and coefficient of thermal expansion. The template uses the first-principles relationship delta L = alpha L delta T and applies an explicit allowance factor to size movement accommodation."
+discipline = "structural"
+category = "movement-tolerance"
+standards = ["First principles", "Material data"]
+tags = ["structural", "facades", "thermal-movement", "movement-joints", "deterministic"]
+tool_mode = "with-tool"
+
+[params.member_length_mm]
+type = "float"
+unit = "mm"
+description = "Member length L"
+min = 500.0
+max = 60000.0
+
+[params.temperature_range_c]
+type = "float"
+unit = "C"
+description = "Total design temperature range delta T"
+min = 10.0
+max = 90.0
+
+[params.coefficient_thermal_expansion_microstrain_c]
+type = "float"
+unit = "microstrain/C"
+description = "Coefficient of thermal expansion alpha"
+min = 4.0
+max = 30.0
+derivable_from = "archetype"
+
+[params.joint_safety_factor]
+type = "float"
+description = "Allowance factor applied to calculated movement"
+min = 1.0
+max = 2.0
+
+[outputs.thermal_movement_mm]
+description = "Total thermal movement over the design temperature range"
+tolerance = 0.03
+
+[outputs.expansion_movement_mm]
+description = "Expansion movement from the neutral temperature"
+tolerance = 0.03
+
+[outputs.contraction_movement_mm]
+description = "Contraction movement from the neutral temperature"
+tolerance = 0.03
+
+[outputs.accommodation_required_mm]
+description = "Movement accommodation required after applying allowance factor"
+tolerance = 0.03
+
+[archetypes.aluminium_facade_member]
+description = "Aluminium facade mullion or rail"
+member_length_mm = {min = 2500.0, max = 9000.0}
+temperature_range_c = {min = 35.0, max = 70.0}
+coefficient_thermal_expansion_microstrain_c = {min = 22.0, max = 24.0}
+joint_safety_factor = {min = 1.1, max = 1.5}
+site_contexts = ["commercial-facade", "transport-station-facade"]
+
+[archetypes.steel_frame_member]
+description = "Exposed steel frame member"
+member_length_mm = {min = 3000.0, max = 20000.0}
+temperature_range_c = {min = 25.0, max = 60.0}
+coefficient_thermal_expansion_microstrain_c = {min = 11.0, max = 13.0}
+joint_safety_factor = {min = 1.1, max = 1.4}
+site_contexts = ["industrial-platform", "roof-framing"]
+
+[archetypes.glass_panel_edge]
+description = "Glass panel edge allowance check"
+member_length_mm = {min = 1000.0, max = 4500.0}
+temperature_range_c = {min = 25.0, max = 55.0}
+coefficient_thermal_expansion_microstrain_c = {min = 8.0, max = 10.0}
+joint_safety_factor = {min = 1.2, max = 1.6}
+site_contexts = ["curtain-wall-panel", "atrium-glazing"]
+
+[difficulty.easy]
+description = "All parameters given for aluminium facade members"
+visibility = "all_given"
+archetypes = ["aluminium_facade_member"]
+
+[difficulty.medium]
+description = "All parameters given across common facade and frame materials"
+visibility = "all_given"
+archetypes = ["aluminium_facade_member", "steel_frame_member", "glass_panel_edge"]
+
+[difficulty.hard]
+description = "Material coefficient hidden but inferable from component description"
+visibility = "partial"
+hidden_params = ["coefficient_thermal_expansion_microstrain_c"]
+replacement_text = "The component is a {{ archetype.description }} ({{ archetype.site_context }})."
+archetypes = ["aluminium_facade_member", "steel_frame_member", "glass_panel_edge"]

@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "rail_signalling",
+    "category_id": "power-supply",
+    "category_name": "Signalling Power Supply",
+    "task_id": "power-load-calculation",
+    "task_name": "Signalling Power Load Calculation",
+    "description": "Calculate total power load for signalling equipment installation",
+    "complexity": "low",
+    "standards": [
+      "EN 50125",
+      "AS 7717"
+    ],
+    "inputs": [
+      "Equipment list with power ratings (W)",
+      "Quantity of each equipment type",
+      "Diversity factor",
+      "Future expansion allowance (%)"
+    ],
+    "outputs": [
+      "Total connected load (W)",
+      "Maximum demand (W)",
+      "Recommended transformer/supply size (kVA)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "demand",
+      "load",
+      "power",
+      "quantity",
+      "size"
+    ],
+    "source_file": "data/tasks/electrical/rail_signalling.json",
+    "suggested_relative_path": "electrical/power-supply/power-load-calculation"
+  }
+}

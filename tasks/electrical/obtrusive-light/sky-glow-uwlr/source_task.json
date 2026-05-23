@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "lighting",
+    "category_id": "obtrusive-light",
+    "category_name": "Obtrusive Light Control",
+    "task_id": "sky-glow-uwlr",
+    "task_name": "Sky Glow (UWLR) Calculation",
+    "description": "Calculate Upward Waste Light Ratio for sky glow assessment",
+    "complexity": "medium",
+    "standards": [
+      "AS 4282",
+      "CIE 150"
+    ],
+    "inputs": [
+      "Luminaire photometric data (IES/LDT)",
+      "Luminaire quantities and positions",
+      "Installation area"
+    ],
+    "outputs": [
+      "Upward Waste Light Ratio (UWLR) %",
+      "Pass/fail vs zone limit"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/lighting.json",
+    "suggested_relative_path": "electrical/obtrusive-light/sky-glow-uwlr"
+  }
+}

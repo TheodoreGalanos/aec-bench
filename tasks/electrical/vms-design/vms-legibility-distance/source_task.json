@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "intelligent_transport_systems",
+    "category_id": "vms-design",
+    "category_name": "Variable Message Sign Design",
+    "task_id": "vms-legibility-distance",
+    "task_name": "VMS Legibility Distance Calculation",
+    "description": "Calculate minimum legibility distance for VMS based on character height and speed",
+    "complexity": "low",
+    "standards": [
+      "MUTCD",
+      "NYSDOT VMS Guidelines"
+    ],
+    "inputs": [
+      "Character height (inches)",
+      "Design speed (mph)",
+      "Font type",
+      "Ambient light conditions"
+    ],
+    "outputs": [
+      "Minimum legibility distance (ft)",
+      "Reading time available (s)",
+      "Message length limit (characters)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/intelligent_transport_systems.json",
+    "suggested_relative_path": "electrical/vms-design/vms-legibility-distance"
+  }
+}

@@ -1,0 +1,120 @@
+[meta]
+name = "sediment-basin-sizing"
+description = "Size construction sediment basin per Blue Book (Soils and Construction)"
+long_description = "Sizes construction-phase sediment basins for erosion and sediment control per the Blue Book (Managing Urban Stormwater: Soils and Construction). Calculates settling zone volume (V_s = Cv*A), sediment storage volume (V_sed = R*A*D), and total basin volume for Type D (dry) or Type F (wet with permanent pool) configurations based on soil loss rates and climate region."
+discipline = "civil"
+category = "erosion-sediment"
+standards = ["Managing Urban Stormwater: Soils and Construction (Blue Book)"]
+tags = ["civil", "erosion", "sediment", "stormwater", "basin", "construction"]
+tool_mode = "with-tool"
+
+[params.catchment_area_ha]
+type = "float"
+unit = "ha"
+description = "Contributing catchment area A"
+min = 0.1
+max = 50.0
+
+[params.volumetric_runoff_coeff_m3_ha]
+type = "float"
+unit = "m³/ha"
+description = "Volumetric runoff coefficient Cv (varies by rainfall region)"
+min = 150
+max = 400
+derivable_from = "archetype"
+
+[params.soil_loss_rate_m3_ha_yr]
+type = "float"
+unit = "m³/ha/yr"
+description = "Soil loss rate R"
+min = 1
+max = 50
+derivable_from = "archetype"
+
+[params.cleanout_interval_yr]
+type = "float"
+unit = "years"
+description = "Sediment clean-out interval D"
+min = 0.25
+max = 2.0
+
+[params.basin_type]
+type = "enum"
+description = "Basin type: D (dry) or F (wet with permanent pool)"
+values = ["D", "F"]
+default = "D"
+
+[params.permanent_pool_volume_m3]
+type = "float"
+unit = "m³"
+description = "Permanent pool volume for Type F basins"
+min = 0
+max = 5000
+optional = true
+default = 0.0
+
+[outputs.settling_volume_m3]
+description = "Settling zone volume V_s (m³)"
+tolerance = 0.03
+
+[outputs.sediment_storage_volume_m3]
+description = "Sediment storage volume V_sed (m³)"
+tolerance = 0.03
+
+[outputs.total_basin_volume_m3]
+description = "Total basin volume V_total (m³)"
+tolerance = 0.03
+
+# --- Archetypes: Australian construction site soil and climate types ---
+
+[archetypes.dispersive_clay]
+description = "Dispersive clay soil construction site in a high-rainfall coastal region"
+volumetric_runoff_coeff_m3_ha = {min = 300, max = 400}
+soil_loss_rate_m3_ha_yr = {min = 20, max = 50}
+site_contexts = ["sydney-western-suburbs", "wollongong-escarpment", "brisbane-southern-suburbs"]
+
+[archetypes.reactive_clay]
+description = "Reactive clay soil construction site in a moderate-rainfall inland region"
+volumetric_runoff_coeff_m3_ha = {min = 200, max = 300}
+soil_loss_rate_m3_ha_yr = {min = 10, max = 25}
+site_contexts = ["melbourne-western-suburbs", "geelong-growth-corridor", "ballarat-residential"]
+
+[archetypes.sandy_coastal]
+description = "Sandy soil construction site in a coastal region with moderate rainfall"
+volumetric_runoff_coeff_m3_ha = {min = 150, max = 250}
+soil_loss_rate_m3_ha_yr = {min = 1, max = 8}
+site_contexts = ["perth-northern-coastal", "gold-coast-hinterland", "sunshine-coast-subdivision"]
+
+[archetypes.rocky_terrain]
+description = "Rocky terrain construction site with shallow topsoil and steep grades"
+volumetric_runoff_coeff_m3_ha = {min = 250, max = 350}
+soil_loss_rate_m3_ha_yr = {min = 5, max = 15}
+site_contexts = ["cairns-hillside", "townsville-range", "hobart-derwent-valley"]
+
+[archetypes.alluvial_floodplain]
+description = "Alluvial floodplain construction site with silty soils in a tropical region"
+volumetric_runoff_coeff_m3_ha = {min = 300, max = 400}
+soil_loss_rate_m3_ha_yr = {min = 15, max = 40}
+site_contexts = ["darwin-palmerston", "mackay-river-flats", "bundaberg-burnett-river"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "Type D basin with all parameters given — straightforward volume calculation"
+visibility = "all_given"
+archetypes = ["sandy_coastal", "reactive_clay", "rocky_terrain"]
+basin_type = ["D"]
+permanent_pool_volume_m3 = [0.0]
+
+[difficulty.medium]
+description = "Type F basin with permanent pool — agent must combine three volume components"
+visibility = "all_given"
+archetypes = ["dispersive_clay", "reactive_clay", "alluvial_floodplain", "rocky_terrain", "sandy_coastal"]
+basin_type = ["F"]
+
+[difficulty.hard]
+description = "Soil parameters hidden — agent must infer Cv and R from site description and soil type"
+visibility = "partial"
+hidden_params = ["volumetric_runoff_coeff_m3_ha", "soil_loss_rate_m3_ha_yr"]
+replacement_text = "The construction site has {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["dispersive_clay", "reactive_clay", "sandy_coastal", "alluvial_floodplain", "rocky_terrain"]

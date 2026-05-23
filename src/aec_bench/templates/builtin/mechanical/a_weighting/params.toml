@@ -1,0 +1,116 @@
+[meta]
+name = "a-weighting"
+description = "A-weighted octave-band sound level calculation"
+long_description = "Calculates total unweighted and A-weighted sound pressure level from eight octave-band levels using fixed A-weighting corrections. The template makes the band corrections explicit so the task remains a deterministic logarithmic summation rather than a standards lookup exercise."
+discipline = "mechanical"
+category = "fundamental-calculations"
+standards = ["IEC 61672"]
+tags = ["mechanical", "acoustics", "a-weighting", "log-sum", "deterministic"]
+tool_mode = "with-tool"
+
+[params.level_31_5_hz_db]
+type = "float"
+unit = "dB"
+description = "31.5 Hz octave-band level"
+min = 0.0
+max = 140.0
+
+[params.level_63_hz_db]
+type = "float"
+unit = "dB"
+description = "63 Hz octave-band level"
+min = 0.0
+max = 140.0
+
+[params.level_125_hz_db]
+type = "float"
+unit = "dB"
+description = "125 Hz octave-band level"
+min = 0.0
+max = 140.0
+
+[params.level_250_hz_db]
+type = "float"
+unit = "dB"
+description = "250 Hz octave-band level"
+min = 0.0
+max = 140.0
+
+[params.level_500_hz_db]
+type = "float"
+unit = "dB"
+description = "500 Hz octave-band level"
+min = 0.0
+max = 140.0
+
+[params.level_1000_hz_db]
+type = "float"
+unit = "dB"
+description = "1000 Hz octave-band level"
+min = 0.0
+max = 140.0
+
+[params.level_2000_hz_db]
+type = "float"
+unit = "dB"
+description = "2000 Hz octave-band level"
+min = 0.0
+max = 140.0
+
+[params.level_4000_hz_db]
+type = "float"
+unit = "dB"
+description = "4000 Hz octave-band level"
+min = 0.0
+max = 140.0
+
+[outputs.total_linear_level_db]
+description = "Logarithmic sum of unweighted octave-band levels"
+tolerance = 0.03
+
+[outputs.a_weighted_total_dba]
+description = "Logarithmic sum after A-weighting corrections"
+tolerance = 0.03
+
+[outputs.a_weighting_adjustment_db]
+description = "Difference between A-weighted and unweighted total levels"
+tolerance = 0.03
+
+[archetypes.plant_room_noise]
+description = "Plant room octave-band noise spectrum"
+level_31_5_hz_db = {min = 60.0, max = 95.0}
+level_63_hz_db = {min = 60.0, max = 95.0}
+level_125_hz_db = {min = 55.0, max = 90.0}
+level_250_hz_db = {min = 50.0, max = 85.0}
+level_500_hz_db = {min = 45.0, max = 80.0}
+level_1000_hz_db = {min = 40.0, max = 80.0}
+level_2000_hz_db = {min = 35.0, max = 75.0}
+level_4000_hz_db = {min = 30.0, max = 70.0}
+site_contexts = ["plant-room", "mechanical-services-noise"]
+
+[archetypes.environmental_noise]
+description = "Environmental octave-band noise spectrum"
+level_31_5_hz_db = {min = 35.0, max = 75.0}
+level_63_hz_db = {min = 35.0, max = 75.0}
+level_125_hz_db = {min = 35.0, max = 70.0}
+level_250_hz_db = {min = 35.0, max = 70.0}
+level_500_hz_db = {min = 30.0, max = 65.0}
+level_1000_hz_db = {min = 30.0, max = 65.0}
+level_2000_hz_db = {min = 25.0, max = 60.0}
+level_4000_hz_db = {min = 20.0, max = 55.0}
+site_contexts = ["environmental-noise", "boundary-noise-assessment"]
+
+[difficulty.easy]
+description = "All octave bands given for plant-room noise"
+visibility = "all_given"
+archetypes = ["plant_room_noise"]
+
+[difficulty.medium]
+description = "All octave bands given across acoustic contexts"
+visibility = "all_given"
+archetypes = ["plant_room_noise", "environmental_noise"]
+
+[difficulty.hard]
+description = "All octave bands given for environmental noise"
+visibility = "all_given"
+archetypes = ["environmental_noise"]

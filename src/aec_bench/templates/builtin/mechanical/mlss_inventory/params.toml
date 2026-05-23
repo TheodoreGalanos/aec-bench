@@ -1,0 +1,70 @@
+[meta]
+name = "mlss-inventory"
+description = "Mixed liquor suspended solids inventory calculation"
+long_description = "Calculates total mixed liquor suspended solids inventory in an aeration basin from basin volume and MLSS concentration. The template also applies an explicit volatile-solids fraction to estimate MLVSS inventory and inert solids mass for activated sludge process checks."
+discipline = "mechanical"
+category = "fundamental-calculations"
+standards = ["WEF MOP 8"]
+tags = ["mechanical", "wastewater", "activated-sludge", "mlss", "deterministic"]
+tool_mode = "with-tool"
+
+[params.aeration_volume_m3]
+type = "float"
+unit = "m3"
+description = "Aeration basin volume"
+min = 10.0
+max = 200000.0
+
+[params.mlss_concentration_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Mixed liquor suspended solids concentration"
+min = 500.0
+max = 8000.0
+
+[params.mlvss_fraction]
+type = "float"
+description = "Fraction of MLSS that is volatile suspended solids"
+min = 0.4
+max = 0.9
+
+[outputs.mlss_inventory_kg]
+description = "Total MLSS inventory"
+tolerance = 0.03
+
+[outputs.mlvss_inventory_kg]
+description = "Estimated MLVSS inventory"
+tolerance = 0.03
+
+[outputs.inert_solids_inventory_kg]
+description = "Estimated inert suspended solids inventory"
+tolerance = 0.03
+
+[archetypes.package_activated_sludge]
+description = "Package activated sludge plant"
+aeration_volume_m3 = {min = 50.0, max = 1500.0}
+mlss_concentration_mg_l = {min = 2500.0, max = 5000.0}
+mlvss_fraction = {min = 0.65, max = 0.85}
+site_contexts = ["remote-community-wwtp", "industrial-package-wwtp"]
+
+[archetypes.municipal_aeration_basin]
+description = "Municipal activated sludge aeration basin"
+aeration_volume_m3 = {min = 2000.0, max = 100000.0}
+mlss_concentration_mg_l = {min = 2000.0, max = 4500.0}
+mlvss_fraction = {min = 0.6, max = 0.8}
+site_contexts = ["regional-wwtp", "urban-nutrient-removal-plant"]
+
+[difficulty.easy]
+description = "All parameters given for a package activated sludge plant"
+visibility = "all_given"
+archetypes = ["package_activated_sludge"]
+
+[difficulty.medium]
+description = "All parameters given across package and municipal basins"
+visibility = "all_given"
+archetypes = ["package_activated_sludge", "municipal_aeration_basin"]
+
+[difficulty.hard]
+description = "All parameters given for municipal aeration basin inventory checks"
+visibility = "all_given"
+archetypes = ["municipal_aeration_basin"]

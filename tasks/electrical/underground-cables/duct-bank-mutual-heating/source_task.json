@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "underground-cables",
+    "category_name": "Underground Cable Engineering",
+    "task_id": "duct-bank-mutual-heating",
+    "task_name": "Duct Bank Mutual Heating Analysis",
+    "description": "Calculate ampacity derating for multiple cables in duct bank considering mutual heating",
+    "complexity": "high",
+    "standards": [
+      "IEC 60287",
+      "IEC 60853"
+    ],
+    "inputs": [
+      "Cable data for each circuit",
+      "Duct bank geometry (spacing, depth)",
+      "Soil properties",
+      "Load factor per circuit",
+      "Duct properties"
+    ],
+    "outputs": [
+      "Derating factor per cable position",
+      "Derated ampacity (A)",
+      "Hottest cable identification",
+      "Temperature distribution"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "heat",
+      "heating",
+      "load",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/underground-cables/duct-bank-mutual-heating"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "track_rail",
+    "category_id": "formation-design",
+    "category_name": "Formation & Ballast Design",
+    "task_id": "cess-drain-design",
+    "task_name": "Cess Drain Design",
+    "description": "Size cess drains to manage track formation water",
+    "complexity": "medium",
+    "standards": [
+      "AREMA MRE Chapter 1",
+      "Rational Method"
+    ],
+    "inputs": [
+      "Catchment area (m\u00b2)",
+      "Rainfall intensity (mm/hr)",
+      "Runoff coefficient",
+      "Drain gradient (%)"
+    ],
+    "outputs": [
+      "Peak flow rate (L/s)",
+      "Required drain dimensions",
+      "Flow velocity (m/s)",
+      "Adequacy check"
+    ],
+    "keyword_hits": [
+      "flow",
+      "rate",
+      "size"
+    ],
+    "source_file": "data/tasks/civil/track_rail.json",
+    "suggested_relative_path": "civil/formation-design/cess-drain-design"
+  }
+}

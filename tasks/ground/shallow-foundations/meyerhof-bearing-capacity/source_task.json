@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "ground",
+    "community": "geotechnical",
+    "category_id": "shallow-foundations",
+    "category_name": "Shallow Foundation Design",
+    "task_id": "meyerhof-bearing-capacity",
+    "task_name": "Meyerhof Bearing Capacity",
+    "description": "Calculate bearing capacity with shape, depth, and inclination factors",
+    "complexity": "low",
+    "standards": [
+      "Meyerhof (1963)"
+    ],
+    "inputs": [
+      "Cohesion c' (kPa)",
+      "Friction angle \u03c6' (degrees)",
+      "Unit weight \u03b3 (kN/m\u00b3)",
+      "Footing dimensions B \u00d7 L (m)",
+      "Embedment depth Df (m)",
+      "Load inclination (degrees)"
+    ],
+    "outputs": [
+      "Shape factors sc, sq, s\u03b3",
+      "Depth factors dc, dq, d\u03b3",
+      "Inclination factors ic, iq, i\u03b3",
+      "Ultimate bearing capacity qu (kPa)"
+    ],
+    "keyword_hits": [
+      "bearing",
+      "calculate",
+      "capacity",
+      "load"
+    ],
+    "source_file": "data/tasks/ground/geotechnical.json",
+    "suggested_relative_path": "ground/shallow-foundations/meyerhof-bearing-capacity"
+  }
+}

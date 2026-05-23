@@ -1,0 +1,113 @@
+[meta]
+name = "line-capacitance"
+description = "Overhead line capacitance and charging reactive power"
+long_description = "Calculates per-phase overhead line capacitance from conductor radius and geometric mean phase spacing. The reduced transposed-line method also estimates three-phase charging Mvar per 100 km and surge impedance from an explicit inductance input."
+discipline = "electrical"
+category = "electrical-parameters"
+standards = ["IEC 60909"]
+tags = ["electrical", "line-capacitance", "charging", "surge-impedance", "transmission-lines", "deterministic"]
+tool_mode = "with-tool"
+
+[params.conductor_radius_m]
+type = "float"
+unit = "m"
+description = "Physical conductor radius"
+min = 0.001
+max = 0.05
+
+[params.phase_spacing_ab_m]
+type = "float"
+unit = "m"
+description = "Spacing between phase A and phase B"
+min = 0.2
+max = 30
+
+[params.phase_spacing_bc_m]
+type = "float"
+unit = "m"
+description = "Spacing between phase B and phase C"
+min = 0.2
+max = 30
+
+[params.phase_spacing_ca_m]
+type = "float"
+unit = "m"
+description = "Spacing between phase C and phase A"
+min = 0.2
+max = 50
+
+[params.nominal_voltage_kv]
+type = "float"
+unit = "kV"
+description = "Line-to-line nominal voltage"
+min = 1
+max = 765
+
+[params.frequency_hz]
+type = "float"
+unit = "Hz"
+description = "System frequency"
+min = 16.7
+max = 60
+
+[params.inductance_mh_per_km]
+type = "float"
+unit = "mH/km"
+description = "Per-phase line inductance"
+min = 0.1
+max = 3.0
+
+[outputs.geometric_mean_distance_m]
+description = "Geometric mean distance between phases"
+tolerance = 0.03
+
+[outputs.capacitance_nf_per_km]
+description = "Per-phase capacitance per kilometre"
+tolerance = 0.03
+
+[outputs.charging_mvar_per_100km]
+description = "Three-phase charging reactive power per 100 km"
+tolerance = 0.03
+
+[outputs.surge_impedance_ohm]
+description = "Surge impedance from L and C"
+tolerance = 0.03
+
+[archetypes.distribution_line]
+description = "Medium-voltage distribution overhead line"
+conductor_radius_m = {min = 0.004, max = 0.015}
+phase_spacing_ab_m = {min = 0.5, max = 3}
+phase_spacing_bc_m = {min = 0.5, max = 3}
+phase_spacing_ca_m = {min = 1, max = 6}
+nominal_voltage_kv = {min = 11, max = 66}
+inductance_mh_per_km = {min = 0.6, max = 1.6}
+site_contexts = ["rural-feeder", "urban-distribution"]
+
+[archetypes.transmission_line]
+description = "High-voltage transmission overhead line"
+conductor_radius_m = {min = 0.01, max = 0.04}
+phase_spacing_ab_m = {min = 3, max = 15}
+phase_spacing_bc_m = {min = 3, max = 15}
+phase_spacing_ca_m = {min = 5, max = 30}
+nominal_voltage_kv = {min = 110, max = 500}
+inductance_mh_per_km = {min = 0.6, max = 1.5}
+site_contexts = ["132kv-overhead", "330kv-overhead"]
+
+[difficulty.easy]
+description = "Distribution line with all geometry visible"
+visibility = "all_given"
+archetypes = ["distribution_line"]
+frequency_hz = [50]
+
+[difficulty.medium]
+description = "Distribution or transmission capacitance calculation"
+visibility = "all_given"
+archetypes = ["distribution_line", "transmission_line"]
+
+[difficulty.hard]
+description = "Frequency hidden in system context"
+visibility = "partial"
+hidden_params = ["frequency_hz"]
+replacement_text = "Use the system frequency implied by {{ archetype.description }}."
+archetypes = ["transmission_line"]
+frequency_hz = [50]

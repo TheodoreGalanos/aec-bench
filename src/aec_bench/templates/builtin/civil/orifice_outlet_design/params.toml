@@ -1,0 +1,87 @@
+[meta]
+name = "orifice-outlet-design"
+description = "Size orifice outlet to achieve target release rate from detention basin"
+long_description = "Sizes a circular orifice outlet for a stormwater detention basin by rearranging the orifice equation Q = Cd*A*sqrt(2gH) to solve for the required orifice area and diameter given a target discharge flow rate and available head. Commonly applied in urban stormwater management to control post-development peak flows."
+discipline = "civil"
+category = "detention-design"
+standards = ["Hydraulics textbooks"]
+tags = ["civil", "hydraulics", "stormwater", "detention", "orifice"]
+tool_mode = "with-tool"
+
+[params.design_flow_m3_s]
+type = "float"
+unit = "m³/s"
+description = "Target discharge flow rate Q"
+min = 0.005
+max = 2.0
+
+[params.head_above_centreline_m]
+type = "float"
+unit = "m"
+description = "Head of water above orifice centreline H"
+min = 0.1
+max = 5.0
+derivable_from = "archetype"
+
+[params.discharge_coefficient]
+type = "float"
+description = "Orifice discharge coefficient Cd"
+min = 0.4
+max = 0.8
+default = 0.61
+optional = true
+derivable_from = "archetype"
+
+[outputs.required_orifice_area_m2]
+description = "Required orifice area A (m²)"
+tolerance = 0.03
+
+[outputs.orifice_diameter_mm]
+description = "Orifice diameter D (mm)"
+tolerance = 0.03
+
+[outputs.discharge_velocity_m_s]
+description = "Discharge velocity through orifice v (m/s)"
+tolerance = 0.03
+
+[archetypes.small_urban_basin]
+description = "Small urban detention basin with low head"
+head_above_centreline_m = {min = 0.3, max = 1.0}
+discharge_coefficient = {min = 0.59, max = 0.63}
+site_contexts = ["sydney-infill-residential", "melbourne-suburban-subdivision"]
+
+[archetypes.medium_commercial_basin]
+description = "Medium commercial development detention basin"
+head_above_centreline_m = {min = 0.8, max = 2.0}
+discharge_coefficient = {min = 0.58, max = 0.62}
+site_contexts = ["brisbane-commercial-park", "adelaide-retail-precinct"]
+
+[archetypes.large_regional_basin]
+description = "Large regional stormwater detention facility"
+head_above_centreline_m = {min = 1.5, max = 4.0}
+discharge_coefficient = {min = 0.60, max = 0.65}
+site_contexts = ["perth-regional-wetland", "gold-coast-flood-control"]
+
+[archetypes.shallow_linear_basin]
+description = "Shallow linear detention basin along road corridor"
+head_above_centreline_m = {min = 0.1, max = 0.5}
+discharge_coefficient = {min = 0.55, max = 0.60}
+site_contexts = ["canberra-road-corridor", "townsville-drainage-channel"]
+
+[difficulty.easy]
+description = "All parameters given, standard discharge coefficient"
+visibility = "all_given"
+archetypes = ["small_urban_basin", "medium_commercial_basin"]
+discharge_coefficient = [0.61]
+
+[difficulty.medium]
+description = "All parameters given, variable discharge coefficient"
+visibility = "all_given"
+archetypes = ["small_urban_basin", "medium_commercial_basin", "large_regional_basin", "shallow_linear_basin"]
+
+[difficulty.hard]
+description = "Discharge coefficient and head hidden, agent must infer from site context"
+visibility = "partial"
+hidden_params = ["discharge_coefficient", "head_above_centreline_m"]
+replacement_text = "The detention basin is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["small_urban_basin", "medium_commercial_basin", "large_regional_basin", "shallow_linear_basin"]

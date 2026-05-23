@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "acoustics",
+    "category_id": "environmental-noise",
+    "category_name": "Environmental Noise Assessment",
+    "task_id": "iso9613-propagation",
+    "task_name": "ISO 9613-2 Sound Propagation Calculation",
+    "description": "Calculate outdoor sound level using full ISO 9613-2 methodology",
+    "complexity": "high",
+    "standards": [
+      "ISO 9613-2"
+    ],
+    "inputs": [
+      "Source sound power Lw (dB)",
+      "Distance (m)",
+      "Ground factor G",
+      "Atmospheric conditions",
+      "Barrier geometry (if present)"
+    ],
+    "outputs": [
+      "Attenuation components (Adiv, Aatm, Agr, Abar)",
+      "Receiver LAeq (dBA)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "power"
+    ],
+    "source_file": "data/tasks/mechanical/acoustics.json",
+    "suggested_relative_path": "mechanical/environmental-noise/iso9613-propagation"
+  }
+}

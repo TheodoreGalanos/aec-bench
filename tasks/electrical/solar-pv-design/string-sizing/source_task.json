@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_generation_storage",
+    "category_id": "solar-pv-design",
+    "category_name": "Solar PV Design",
+    "task_id": "string-sizing",
+    "task_name": "Solar Array String Sizing",
+    "description": "Determine maximum and minimum modules per string based on temperature-corrected voltage limits",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 5033",
+      "IEC 62548"
+    ],
+    "inputs": [
+      "PV module Voc at STC (V)",
+      "Temperature coefficient of Voc (%/degC)",
+      "Vmpp at STC (V)",
+      "Site minimum temperature (degC)",
+      "Site maximum temperature (degC)",
+      "Inverter max DC voltage (V)",
+      "Inverter MPPT range (V)"
+    ],
+    "outputs": [
+      "Maximum modules per string",
+      "Minimum modules per string",
+      "Optimum modules per string",
+      "Temperature-corrected Voc at coldest (V)"
+    ],
+    "keyword_hits": [
+      "sizing",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/energy_generation_storage.json",
+    "suggested_relative_path": "electrical/solar-pv-design/string-sizing"
+  }
+}

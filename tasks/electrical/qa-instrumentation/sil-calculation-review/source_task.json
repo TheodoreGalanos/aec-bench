@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "instrumentation_controls",
+    "category_id": "qa-instrumentation",
+    "category_name": "Quality Assurance",
+    "task_id": "sil-calculation-review",
+    "task_name": "SIL Verification Calculation Review",
+    "description": "Review SIL verification calculations for accuracy and completeness",
+    "complexity": "high",
+    "standards": [
+      "IEC 61511",
+      "IEC 61508"
+    ],
+    "inputs": [
+      "SIL verification calculation",
+      "Failure rate data sources",
+      "Proof test procedures",
+      "SRS requirements"
+    ],
+    "outputs": [
+      "Calculation accuracy check",
+      "Parameter source verification",
+      "Proof test coverage validation",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "calculation",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/instrumentation_controls.json",
+    "suggested_relative_path": "electrical/qa-instrumentation/sil-calculation-review"
+  }
+}

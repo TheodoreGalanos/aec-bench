@@ -1,0 +1,102 @@
+[meta]
+name = "pump-affinity-laws"
+description = "Pump affinity law calculation for estimating performance at a new speed"
+long_description = "Calculates the new flow rate, head, and power draw for the same pump operating at a different rotational speed. The template applies the standard pump affinity laws Q2 = Q1(N2/N1), H2 = H1(N2/N1)^2, and P2 = P1(N2/N1)^3 for deterministic variable-speed pump checks."
+discipline = "mechanical"
+category = "pump-sizing"
+standards = ["ANSI/HI Standards"]
+tags = ["mechanical", "pump-sizing", "affinity-laws", "variable-speed", "deterministic"]
+tool_mode = "with-tool"
+
+[params.original_speed_rpm]
+type = "float"
+unit = "rpm"
+description = "Original pump rotational speed N1"
+min = 500.0
+max = 3600.0
+
+[params.new_speed_rpm]
+type = "float"
+unit = "rpm"
+description = "New pump rotational speed N2"
+min = 500.0
+max = 3600.0
+
+[params.original_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "Original pump flow rate Q1"
+min = 1.0
+max = 500.0
+
+[params.original_head_m]
+type = "float"
+unit = "m"
+description = "Original pump total head H1"
+min = 2.0
+max = 150.0
+
+[params.original_power_kw]
+type = "float"
+unit = "kW"
+description = "Original pump power P1"
+min = 0.5
+max = 1000.0
+
+[outputs.speed_ratio]
+description = "Speed ratio N2/N1"
+tolerance = 0.03
+
+[outputs.new_flow_l_s]
+description = "New flow rate Q2"
+tolerance = 0.03
+
+[outputs.new_head_m]
+description = "New total head H2"
+tolerance = 0.03
+
+[outputs.new_power_kw]
+description = "New pump power P2"
+tolerance = 0.03
+
+[archetypes.small_booster_speed_reduction]
+description = "Small booster pump slowed for low-demand operation"
+original_speed_rpm = {min = 1450.0, max = 1800.0}
+new_speed_rpm = {min = 900.0, max = 1400.0}
+original_flow_l_s = {min = 5.0, max = 35.0}
+original_head_m = {min = 15.0, max = 45.0}
+original_power_kw = {min = 2.0, max = 25.0}
+site_contexts = ["suburban-water-booster", "building-services-transfer"]
+
+[archetypes.transfer_pump_speed_increase]
+description = "Transfer pump checked for a moderate speed increase"
+original_speed_rpm = {min = 1200.0, max = 1800.0}
+new_speed_rpm = {min = 1600.0, max = 2200.0}
+original_flow_l_s = {min = 40.0, max = 180.0}
+original_head_m = {min = 20.0, max = 80.0}
+original_power_kw = {min = 20.0, max = 250.0}
+site_contexts = ["regional-water-transfer", "industrial-process-transfer"]
+
+[archetypes.large_station_trim]
+description = "Large pump station trimmed to match a lower duty point"
+original_speed_rpm = {min = 980.0, max = 1500.0}
+new_speed_rpm = {min = 750.0, max = 1200.0}
+original_flow_l_s = {min = 150.0, max = 500.0}
+original_head_m = {min = 40.0, max = 150.0}
+original_power_kw = {min = 150.0, max = 1000.0}
+site_contexts = ["trunk-main-transfer", "raw-water-intake"]
+
+[difficulty.easy]
+description = "All parameters given for a small speed reduction"
+visibility = "all_given"
+archetypes = ["small_booster_speed_reduction"]
+
+[difficulty.medium]
+description = "All parameters given across common pump operating scenarios"
+visibility = "all_given"
+archetypes = ["small_booster_speed_reduction", "transfer_pump_speed_increase", "large_station_trim"]
+
+[difficulty.hard]
+description = "All parameters given for larger pumps and wider speed changes"
+visibility = "all_given"
+archetypes = ["transfer_pump_speed_increase", "large_station_trim"]

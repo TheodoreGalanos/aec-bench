@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "intelligent_transport_systems",
+    "category_id": "simulation",
+    "category_name": "Traffic Simulation",
+    "task_id": "signal-timing-sheet-validation",
+    "task_name": "Signal Timing Sheet Schema Validation",
+    "description": "Validate signal timing sheet against required schema and cross-check calculations",
+    "complexity": "medium",
+    "standards": [
+      "NTCIP 1202",
+      "Agency templates"
+    ],
+    "inputs": [
+      "Signal timing sheet (CSV/XLSX)",
+      "Schema requirements",
+      "Cycle length"
+    ],
+    "outputs": [
+      "Schema compliance status",
+      "Calculation cross-check results",
+      "Missing fields list"
+    ],
+    "keyword_hits": [
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/intelligent_transport_systems.json",
+    "suggested_relative_path": "electrical/simulation/signal-timing-sheet-validation"
+  }
+}

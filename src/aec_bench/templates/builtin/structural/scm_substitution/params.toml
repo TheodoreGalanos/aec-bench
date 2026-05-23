@@ -1,0 +1,76 @@
+[meta]
+name = "scm-substitution"
+description = "Supplementary cementitious material replacement calculation"
+long_description = "Calculates cement content, SCM content, cement reduction, and water-binder ratio from total binder content, SCM replacement percentage, and water content. The template is a deterministic binder mass-balance calculation."
+discipline = "structural"
+category = "concrete-mix-design"
+standards = ["ACI 211.1", "AS 1379"]
+tags = ["structural", "concrete", "scm", "binder", "deterministic"]
+tool_mode = "with-tool"
+
+[params.total_binder_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "Total binder content"
+min = 100.0
+max = 800.0
+
+[params.scm_replacement_pct]
+type = "float"
+unit = "%"
+description = "Percentage of total binder replaced by SCM"
+min = 0.0
+max = 80.0
+
+[params.water_content_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "Mix water content"
+min = 0.0
+max = 400.0
+
+[outputs.cement_content_kg_m3]
+description = "Cement content after SCM replacement"
+tolerance = 0.03
+
+[outputs.scm_content_kg_m3]
+description = "SCM content"
+tolerance = 0.03
+
+[outputs.cement_reduction_kg_m3]
+description = "Reduction in cement content relative to all-cement binder"
+tolerance = 0.03
+
+[outputs.water_binder_ratio]
+description = "Water-binder ratio"
+tolerance = 0.03
+
+[archetypes.fly_ash_mix]
+description = "Concrete mix with fly ash binder replacement"
+total_binder_kg_m3 = {min = 280.0, max = 500.0}
+scm_replacement_pct = {min = 10.0, max = 40.0}
+water_content_kg_m3 = {min = 120.0, max = 220.0}
+site_contexts = ["building-concrete", "fly-ash-mix"]
+
+[archetypes.slag_mix]
+description = "Concrete mix with slag binder replacement"
+total_binder_kg_m3 = {min = 300.0, max = 650.0}
+scm_replacement_pct = {min = 30.0, max = 70.0}
+water_content_kg_m3 = {min = 120.0, max = 240.0}
+site_contexts = ["marine-concrete", "slag-mix"]
+
+[difficulty.easy]
+description = "All parameters given for a fly ash mix"
+visibility = "all_given"
+archetypes = ["fly_ash_mix"]
+
+[difficulty.medium]
+description = "All parameters given across SCM mixes"
+visibility = "all_given"
+archetypes = ["fly_ash_mix", "slag_mix"]
+
+[difficulty.hard]
+description = "All parameters given for higher replacement slag mixes"
+visibility = "all_given"
+archetypes = ["slag_mix"]
+

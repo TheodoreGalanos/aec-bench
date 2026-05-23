@@ -1,0 +1,92 @@
+[meta]
+name = "friction-loss-hazen-williams"
+description = "Imperial Hazen-Williams sprinkler pipe friction loss"
+long_description = "Calculates sprinkler pipe friction loss using the imperial Hazen-Williams equation with flow in gpm, length in feet, and diameter in inches. The template includes fitting equivalent length and reports pipe-only and total pressure loss in psi."
+discipline = "mechanical"
+category = "sprinkler-hydraulics"
+standards = ["NFPA 13", "AS 2118"]
+tags = ["mechanical", "fire-services", "sprinkler", "hazen-williams", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_rate_gpm]
+type = "float"
+unit = "gpm"
+description = "Sprinkler pipe flow rate"
+min = 1.0
+max = 5000.0
+
+[params.pipe_length_ft]
+type = "float"
+unit = "ft"
+description = "Straight pipe length"
+min = 0.1
+max = 2000.0
+
+[params.pipe_internal_diameter_in]
+type = "float"
+unit = "in"
+description = "Internal pipe diameter"
+min = 0.25
+max = 24.0
+
+[params.hazen_williams_c]
+type = "float"
+description = "Hazen-Williams C factor"
+min = 40.0
+max = 160.0
+
+[params.fitting_equivalent_length_ft]
+type = "float"
+unit = "ft"
+description = "Equivalent length for fittings"
+min = 0.0
+max = 1000.0
+
+[outputs.friction_loss_per_ft_psi]
+description = "Friction loss per foot"
+tolerance = 0.03
+
+[outputs.equivalent_length_ft]
+description = "Total equivalent pipe length"
+tolerance = 0.03
+
+[outputs.pipe_friction_loss_psi]
+description = "Straight-pipe friction loss"
+tolerance = 0.03
+
+[outputs.total_pressure_loss_psi]
+description = "Total pressure loss including fittings"
+tolerance = 0.03
+
+[archetypes.branch_line]
+description = "Sprinkler branch line friction-loss calculation"
+flow_rate_gpm = {min = 20.0, max = 300.0}
+pipe_length_ft = {min = 10.0, max = 200.0}
+pipe_internal_diameter_in = {min = 1.0, max = 4.0}
+hazen_williams_c = {min = 100.0, max = 140.0}
+fitting_equivalent_length_ft = {min = 5.0, max = 80.0}
+site_contexts = ["sprinkler-branch-line", "fire-protection-zone"]
+
+[archetypes.feed_main]
+description = "Sprinkler feed main friction-loss calculation"
+flow_rate_gpm = {min = 200.0, max = 2000.0}
+pipe_length_ft = {min = 50.0, max = 800.0}
+pipe_internal_diameter_in = {min = 4.0, max = 12.0}
+hazen_williams_c = {min = 100.0, max = 140.0}
+fitting_equivalent_length_ft = {min = 20.0, max = 300.0}
+site_contexts = ["sprinkler-feed-main", "fire-main"]
+
+[difficulty.easy]
+description = "All parameters given for a sprinkler branch line"
+visibility = "all_given"
+archetypes = ["branch_line"]
+
+[difficulty.medium]
+description = "All parameters given across sprinkler pipe contexts"
+visibility = "all_given"
+archetypes = ["branch_line", "feed_main"]
+
+[difficulty.hard]
+description = "All parameters given for a sprinkler feed main"
+visibility = "all_given"
+archetypes = ["feed_main"]

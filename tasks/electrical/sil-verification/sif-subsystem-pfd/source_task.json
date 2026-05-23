@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "instrumentation_controls",
+    "category_id": "sil-verification",
+    "category_name": "SIL Verification",
+    "task_id": "sif-subsystem-pfd",
+    "task_name": "Complete SIF PFDavg Calculation",
+    "description": "Calculate total SIF PFDavg from sensor, logic solver, and final element subsystems",
+    "complexity": "high",
+    "standards": [
+      "IEC 61511",
+      "IEC 61508"
+    ],
+    "inputs": [
+      "Sensor subsystem PFDavg",
+      "Logic solver PFDavg",
+      "Final element PFDavg",
+      "SIL target"
+    ],
+    "outputs": [
+      "Total SIF PFDavg",
+      "Subsystem contribution breakdown",
+      "Achieved SIL",
+      "Target compliance"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/instrumentation_controls.json",
+    "suggested_relative_path": "electrical/sil-verification/sif-subsystem-pfd"
+  }
+}

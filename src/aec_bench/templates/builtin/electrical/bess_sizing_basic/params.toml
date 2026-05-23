@@ -1,0 +1,96 @@
+[meta]
+name = "bess-sizing-basic"
+description = "Calculate basic BESS power and energy capacity"
+long_description = "Calculates a reduced battery energy storage sizing case from a required discharge duty. The template sizes usable energy, nominal energy capacity, and beginning-of-life capacity using explicit SOC window, efficiency, and end-of-life retention factors."
+discipline = "electrical"
+category = "bess-design"
+standards = ["IEC 62933", "IEEE 2030.2.1"]
+tags = ["electrical", "bess", "storage", "energy", "capacity", "deterministic"]
+tool_mode = "with-tool"
+
+[params.required_discharge_power_mw]
+type = "float"
+unit = "MW"
+description = "Required AC discharge power"
+min = 0.1
+max = 500
+
+[params.required_discharge_duration_h]
+type = "float"
+unit = "h"
+description = "Required discharge duration"
+min = 0.25
+max = 12
+
+[params.usable_soc_range_pct]
+type = "float"
+unit = "%"
+description = "Usable state-of-charge range"
+min = 40
+max = 95
+
+[params.round_trip_efficiency_pct]
+type = "float"
+unit = "%"
+description = "Round-trip efficiency used in reduced sizing"
+min = 70
+max = 98
+
+[params.end_of_life_capacity_retention_pct]
+type = "float"
+unit = "%"
+description = "End-of-life capacity retention allowance"
+min = 60
+max = 95
+
+[outputs.nominal_power_rating_mw]
+description = "Nominal power rating"
+tolerance = 0.03
+
+[outputs.usable_energy_mwh]
+description = "Required delivered usable energy"
+tolerance = 0.03
+
+[outputs.nominal_energy_capacity_mwh]
+description = "Nominal energy capacity before EOL retention allowance"
+tolerance = 0.03
+
+[outputs.beginning_of_life_capacity_mwh]
+description = "Beginning-of-life installed energy capacity"
+tolerance = 0.03
+
+[archetypes.distribution_peak_shaving]
+description = "Distribution peak shaving BESS"
+required_discharge_power_mw = {min = 1, max = 30}
+required_discharge_duration_h = {min = 1, max = 4}
+usable_soc_range_pct = {min = 70, max = 90}
+round_trip_efficiency_pct = {min = 84, max = 94}
+end_of_life_capacity_retention_pct = {min = 75, max = 90}
+site_contexts = ["distribution-network", "peak-shaving"]
+
+[archetypes.grid_firming]
+description = "Grid firming BESS"
+required_discharge_power_mw = {min = 20, max = 250}
+required_discharge_duration_h = {min = 2, max = 8}
+usable_soc_range_pct = {min = 65, max = 90}
+round_trip_efficiency_pct = {min = 82, max = 94}
+end_of_life_capacity_retention_pct = {min = 70, max = 88}
+site_contexts = ["renewable-firming", "grid-storage"]
+
+[difficulty.easy]
+description = "Distribution BESS with all values visible"
+visibility = "all_given"
+archetypes = ["distribution_peak_shaving"]
+
+[difficulty.medium]
+description = "Storage duty selected from distribution or grid firming cases"
+visibility = "all_given"
+archetypes = ["distribution_peak_shaving", "grid_firming"]
+
+[difficulty.hard]
+description = "Grid firming BESS with EOL retention embedded in context"
+visibility = "partial"
+hidden_params = ["end_of_life_capacity_retention_pct"]
+replacement_text = "Use the end-of-life capacity retention implied by {{ archetype.description }}."
+archetypes = ["grid_firming"]
+end_of_life_capacity_retention_pct = [80]

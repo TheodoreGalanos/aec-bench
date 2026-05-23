@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "lighting",
+    "category_id": "energy-performance",
+    "category_name": "Energy Performance",
+    "task_id": "road-aeci-calculation",
+    "task_name": "Road Lighting AECI Calculation",
+    "description": "Calculate Annual Energy Consumption Index for road lighting",
+    "complexity": "medium",
+    "standards": [
+      "EN 13201-5",
+      "AS/NZS 1158.3.1"
+    ],
+    "inputs": [
+      "System power (W)",
+      "Annual operating hours per dimming state",
+      "Dimming levels",
+      "Illuminated area (m2)"
+    ],
+    "outputs": [
+      "AECI value (kWh/m2/year)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "energy",
+      "power"
+    ],
+    "source_file": "data/tasks/electrical/lighting.json",
+    "suggested_relative_path": "electrical/energy-performance/road-aeci-calculation"
+  }
+}

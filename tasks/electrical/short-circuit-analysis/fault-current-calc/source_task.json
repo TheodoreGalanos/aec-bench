@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "substations",
+    "category_id": "short-circuit-analysis",
+    "category_name": "Short-Circuit Analysis",
+    "task_id": "fault-current-calc",
+    "task_name": "Short-Circuit Current Calculation",
+    "description": "Calculate symmetrical and asymmetrical fault currents at substation buses per IEC 60909",
+    "complexity": "medium",
+    "standards": [
+      "IEC 60909",
+      "IEEE C37.010"
+    ],
+    "inputs": [
+      "System voltage (kV)",
+      "Source MVA and X/R ratio",
+      "Transformer impedances (%)",
+      "Cable/line impedances",
+      "Network topology"
+    ],
+    "outputs": [
+      "Initial symmetrical current Ik'' (kA)",
+      "Peak current ip (kA)",
+      "Breaking current Ib (kA)",
+      "Thermal equivalent current Ith (kA)"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "calculation",
+      "current",
+      "fault",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/substations.json",
+    "suggested_relative_path": "electrical/short-circuit-analysis/fault-current-calc"
+  }
+}

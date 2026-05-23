@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "hydraulics_buildings",
+    "category_id": "pressure-boosting",
+    "category_name": "Pressure Boosting Systems",
+    "task_id": "pressure-vessel-sizing",
+    "task_name": "Pressure Vessel Sizing",
+    "description": "Size pressure vessel for booster system",
+    "complexity": "low",
+    "standards": [
+      "Engineering Practice"
+    ],
+    "inputs": [
+      "Pump flow (L/s)",
+      "Pump starts per hour limit",
+      "System pressure range (on/off)",
+      "Pre-charge pressure"
+    ],
+    "outputs": [
+      "Required tank volume (L)",
+      "Drawdown volume (L)",
+      "Pre-charge pressure (kPa)",
+      "Tank selection"
+    ],
+    "keyword_hits": [
+      "flow",
+      "pressure",
+      "pump",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/mechanical/hydraulics_buildings.json",
+    "suggested_relative_path": "mechanical/pressure-boosting/pressure-vessel-sizing"
+  }
+}

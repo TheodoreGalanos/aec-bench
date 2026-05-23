@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "vertical_transportation",
+    "category_id": "motor-sizing",
+    "category_name": "Motor and Drive Sizing",
+    "task_id": "motor-power-calculation",
+    "task_name": "Lift Motor Power Calculation",
+    "description": "Calculate required motor power for lift system",
+    "complexity": "low",
+    "standards": [
+      "CIBSE Guide D",
+      "ISO 25745"
+    ],
+    "inputs": [
+      "Rated load (kg)",
+      "Car weight (kg)",
+      "Counterweight balance ratio",
+      "Rated speed (m/s)",
+      "Drive efficiency",
+      "Roping ratio"
+    ],
+    "outputs": [
+      "Motor power (kW)",
+      "Torque (Nm)",
+      "Regenerative power potential"
+    ],
+    "keyword_hits": [
+      "balance",
+      "calculate",
+      "calculation",
+      "load",
+      "power",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/vertical_transportation.json",
+    "suggested_relative_path": "electrical/motor-sizing/motor-power-calculation"
+  }
+}

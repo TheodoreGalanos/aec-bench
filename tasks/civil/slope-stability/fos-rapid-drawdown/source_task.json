@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "dams",
+    "category_id": "slope-stability",
+    "category_name": "Embankment Slope Stability",
+    "task_id": "fos-rapid-drawdown",
+    "task_name": "Rapid Drawdown Slope Stability",
+    "description": "Calculate Factor of Safety for upstream slope during rapid reservoir drawdown",
+    "complexity": "medium",
+    "standards": [
+      "USACE EM 1110-2-1902"
+    ],
+    "inputs": [
+      "Embankment geometry",
+      "Material properties",
+      "Initial reservoir level (m)",
+      "Final reservoir level (m)",
+      "Drawdown rate (m/day)"
+    ],
+    "outputs": [
+      "Minimum Factor of Safety",
+      "Critical slip surface",
+      "Pore pressure conditions"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "pressure",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/dams.json",
+    "suggested_relative_path": "civil/slope-stability/fos-rapid-drawdown"
+  }
+}

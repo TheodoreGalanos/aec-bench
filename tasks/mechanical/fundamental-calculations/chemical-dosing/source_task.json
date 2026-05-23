@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_wastewater_treatment",
+    "category_id": "fundamental-calculations",
+    "category_name": "Fundamental Treatment Calculations",
+    "task_id": "chemical-dosing",
+    "task_name": "Chemical Dosage and Feed Rate Calculation",
+    "description": "Calculate chemical feed rate for a given dosage",
+    "complexity": "low",
+    "standards": [
+      "WEF MOP 8"
+    ],
+    "inputs": [
+      "Flow rate (m3/d)",
+      "Target dose (mg/L)",
+      "Chemical concentration or purity (%)"
+    ],
+    "outputs": [
+      "Mass feed rate (kg/d)",
+      "Volume feed rate (L/d)",
+      "Annual chemical consumption (tonnes/yr)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/water_wastewater_treatment.json",
+    "suggested_relative_path": "mechanical/fundamental-calculations/chemical-dosing"
+  }
+}

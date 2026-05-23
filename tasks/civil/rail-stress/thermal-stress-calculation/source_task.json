@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "track_rail",
+    "category_id": "rail-stress",
+    "category_name": "Rail Stress & CWR",
+    "task_id": "thermal-stress-calculation",
+    "task_name": "Rail Thermal Stress Calculation",
+    "description": "Calculate longitudinal force and stress in CWR from temperature change",
+    "complexity": "low",
+    "standards": [
+      "AREMA MRE Chapter 5",
+      "UIC 720 R",
+      "ARTC ETS-05-00"
+    ],
+    "inputs": [
+      "Rail cross-sectional area (mm\u00b2)",
+      "Coefficient of thermal expansion (per \u00b0C)",
+      "Modulus of elasticity (MPa)",
+      "Temperature change from neutral (\u00b0C)"
+    ],
+    "outputs": [
+      "Thermal force (kN)",
+      "Thermal stress (MPa)",
+      "Compression/tension state"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "stress"
+    ],
+    "source_file": "data/tasks/civil/track_rail.json",
+    "suggested_relative_path": "civil/rail-stress/thermal-stress-calculation"
+  }
+}

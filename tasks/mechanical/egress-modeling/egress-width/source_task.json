@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_safety",
+    "category_id": "egress-modeling",
+    "category_name": "Egress and Evacuation Modeling",
+    "task_id": "egress-width",
+    "task_name": "Egress Width Calculation",
+    "description": "Calculate required aggregate exit width from occupant load and code requirements",
+    "complexity": "low",
+    "standards": [
+      "NCC/BCA D1.6",
+      "NFPA 101",
+      "BS 9999"
+    ],
+    "inputs": [
+      "Occupant load",
+      "Code-specified flow rate (persons/m/s)",
+      "Exit type (door/corridor/stair)"
+    ],
+    "outputs": [
+      "Required exit width (m)",
+      "Number of exits required",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "load",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/fire_safety.json",
+    "suggested_relative_path": "mechanical/egress-modeling/egress-width"
+  }
+}

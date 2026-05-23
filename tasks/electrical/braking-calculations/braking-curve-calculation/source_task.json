@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "rail_signalling",
+    "category_id": "braking-calculations",
+    "category_name": "Braking and Speed Control",
+    "task_id": "braking-curve-calculation",
+    "task_name": "Service Braking Curve Calculation",
+    "description": "Calculate braking distance and speed profile for service braking",
+    "complexity": "low",
+    "standards": [
+      "EN 15220",
+      "UIC 544-1"
+    ],
+    "inputs": [
+      "Initial speed (km/h)",
+      "Service deceleration rate (m/s2)",
+      "Gradient profile (%)",
+      "Reaction time (s)",
+      "Target speed (km/h)"
+    ],
+    "outputs": [
+      "Braking distance (m)",
+      "Time to target speed (s)",
+      "Speed profile curve",
+      "Gradient-adjusted distance"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/rail_signalling.json",
+    "suggested_relative_path": "electrical/braking-calculations/braking-curve-calculation"
+  }
+}

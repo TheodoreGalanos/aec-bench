@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "facades",
+    "category_id": "glass-design",
+    "category_name": "Glass Design",
+    "task_id": "glass-thickness-selection",
+    "task_name": "Glass Thickness Selection",
+    "description": "Select minimum glass thickness from design charts for given load and span",
+    "complexity": "low",
+    "standards": [
+      "AS 1288",
+      "ASTM E1300",
+      "EN 16612"
+    ],
+    "inputs": [
+      "Panel dimensions (mm)",
+      "Design wind pressure (kPa)",
+      "Glass type (annealed/HS/tempered)",
+      "Support conditions (4-edge/2-edge)",
+      "Aspect ratio"
+    ],
+    "outputs": [
+      "Minimum nominal thickness (mm)",
+      "Glass makeup (mono/laminated/IGU)",
+      "Chart reference used"
+    ],
+    "keyword_hits": [
+      "load",
+      "pressure"
+    ],
+    "source_file": "data/tasks/structural/facades.json",
+    "suggested_relative_path": "structural/glass-design/glass-thickness-selection"
+  }
+}

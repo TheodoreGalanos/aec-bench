@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "cfd_modelling",
+    "category_id": "convergence-assessment",
+    "category_name": "Convergence Assessment",
+    "task_id": "mass-balance",
+    "task_name": "Global Mass Balance Verification",
+    "description": "Verify mass conservation across domain boundaries",
+    "complexity": "low",
+    "standards": [
+      "CFD Best Practices"
+    ],
+    "inputs": [
+      "Inlet mass flow rate",
+      "Outlet mass flow rate",
+      "Source terms"
+    ],
+    "outputs": [
+      "Mass imbalance (%)",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "balance",
+      "flow",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/cfd_modelling.json",
+    "suggested_relative_path": "mechanical/convergence-assessment/mass-balance"
+  }
+}

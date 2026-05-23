@@ -1,0 +1,44 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "industrial_electrical",
+    "category_id": "cable-sizing-industrial",
+    "category_name": "Industrial Cable Sizing",
+    "task_id": "motor-cable-sizing",
+    "task_name": "Motor Feeder Cable Sizing",
+    "description": "Size motor feeder cable considering starting current, derating, voltage drop, and fault withstand",
+    "complexity": "medium",
+    "standards": [
+      "AS/NZS 3008.1",
+      "AS/NZS 3000",
+      "IEC 60287"
+    ],
+    "inputs": [
+      "Motor rating (kW)",
+      "Motor FLC (A)",
+      "Starting method (DOL, star-delta, VFD)",
+      "Cable length (m)",
+      "Installation conditions",
+      "Ambient temperature"
+    ],
+    "outputs": [
+      "Cable size (mm2)",
+      "Voltage drop during start (%)",
+      "Voltage drop during run (%)",
+      "Short-circuit withstand time (s)"
+    ],
+    "keyword_hits": [
+      "cable",
+      "current",
+      "drop",
+      "fault",
+      "size",
+      "sizing",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/industrial_electrical.json",
+    "suggested_relative_path": "electrical/cable-sizing-industrial/motor-cable-sizing"
+  }
+}

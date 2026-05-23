@@ -1,0 +1,28 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "building_structures",
+    "category_id": "qa-error-detection",
+    "category_name": "QA & Error Detection",
+    "task_id": "unit-consistency-check",
+    "task_name": "Unit Consistency Check",
+    "description": "Detect unit conversion and dimensional errors",
+    "complexity": "low",
+    "standards": [],
+    "inputs": [
+      "Calculation sheets",
+      "Input/output values"
+    ],
+    "outputs": [
+      "Unit mismatches flagged",
+      "Order of magnitude errors detected"
+    ],
+    "keyword_hits": [
+      "calculation"
+    ],
+    "source_file": "data/tasks/structural/building_structures.json",
+    "suggested_relative_path": "structural/qa-error-detection/unit-consistency-check"
+  }
+}

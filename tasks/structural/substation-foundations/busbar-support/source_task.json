@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "energy_structures",
+    "category_id": "substation-foundations",
+    "category_name": "Substation Equipment Foundations",
+    "task_id": "busbar-support",
+    "task_name": "Busbar Support Structure Foundation",
+    "description": "Design foundation for busbar support structures under short-circuit and seismic loads",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 605",
+      "AS 3600",
+      "IEC 60865"
+    ],
+    "inputs": [
+      "Short-circuit current (kA)",
+      "Busbar span",
+      "Conductor weight",
+      "Seismic zone",
+      "Support height"
+    ],
+    "outputs": [
+      "Foundation dimensions",
+      "Short-circuit force (kN)",
+      "Anchor bolt design",
+      "Dynamic response check"
+    ],
+    "keyword_hits": [
+      "current",
+      "load"
+    ],
+    "source_file": "data/tasks/structural/energy_structures.json",
+    "suggested_relative_path": "structural/substation-foundations/busbar-support"
+  }
+}

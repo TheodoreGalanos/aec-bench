@@ -1,0 +1,154 @@
+/* ABOUTME: Global CSS custom properties for the aec-bench interface palette. */
+/* ABOUTME: Imported once in App.svelte, used by all components. */
+
+:root {
+  /* Background */
+  --bg: #f7f8f6;
+  --bg-alt: #ecefed;
+  --bg-active: #e2e8e4;
+  --bg-warm: rgba(56, 95, 70, 0.05);
+  --card: #ffffff;
+  --card-hover: #f8faf8;
+  --card-border: #d9ddd8;
+
+  /* Text */
+  --text: #181b19;
+  --text-2: #4f5752;
+  --text-3: #7c8580;
+
+  /* Brand */
+  --forest: #385f46;
+  --forest-light: rgba(56, 95, 70, 0.1);
+  --forest-hover: #294936;
+  --accent: #225b73;
+
+  /* Semantic role colours (matching old viewer avatar palette) */
+  --green: #385f46;
+  --copper: #b87333;
+  --teal: #3cb2b1;
+  --violet: #7c5cbf;
+
+  /* Reward scale */
+  --reward-perfect: #61AAF2;
+  --reward-perfect-bg: rgba(97, 170, 242, 0.12);
+  --reward-good: #7BC47F;
+  --reward-good-bg: rgba(123, 196, 127, 0.12);
+  --reward-mid: #D4A27F;
+  --reward-mid-bg: rgba(212, 162, 127, 0.12);
+  --reward-poor: #E4725C;
+  --reward-poor-bg: rgba(228, 114, 92, 0.12);
+  --reward-zero: #BF4D43;
+  --reward-zero-bg: rgba(191, 77, 67, 0.12);
+
+  /* Model colours */
+  --model-sonnet: #89c925;
+  --model-haiku: #2d4a5e;
+  --model-sonnet4: #3cb2b1;
+  --model-gpt-mini: #e4572e;
+
+  /* Delta */
+  --delta-positive: #4a6741;
+  --delta-negative: #BF4D43;
+  --delta-neutral: #999;
+
+  /* Typography */
+  --font-heading: "Outfit", sans-serif;
+  --font-body: "Plus Jakarta Sans", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Layout */
+  /* Height of the sticky NavBar (48px height + 1px border-bottom). */
+  --navbar-height: 49px;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.1);
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 350ms ease;
+
+  /* Code blocks — dark theme for terminal/code output */
+  --code-bg: #1e1e1e;
+  --code-text: #d4d4d4;
+  --code-border: #333;
+  --code-line-num: #666;
+
+  /* Result tints for tool outputs */
+  --result-ok-bg: rgba(74, 103, 65, 0.06);
+  --result-ok-border: rgba(74, 103, 65, 0.2);
+  --result-err-bg: rgba(191, 77, 67, 0.06);
+  --result-err-border: rgba(191, 77, 67, 0.2);
+}
+
+/* Shared form control baseline */
+select {
+  padding: 4px 8px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+a {
+  color: var(--forest);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--forest-hover);
+}
+
+code, pre {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+pre {
+  background: var(--bg-alt);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}

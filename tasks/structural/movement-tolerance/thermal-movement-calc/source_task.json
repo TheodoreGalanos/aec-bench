@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "facades",
+    "category_id": "movement-tolerance",
+    "category_name": "Movement and Tolerance",
+    "task_id": "thermal-movement-calc",
+    "task_name": "Thermal Movement Calculation",
+    "description": "Calculate thermal expansion/contraction for facade components",
+    "complexity": "low",
+    "standards": [
+      "First principles",
+      "Material data"
+    ],
+    "inputs": [
+      "Material (aluminum/steel/glass)",
+      "Member length L (mm)",
+      "Temperature range delta_T (C)",
+      "Coefficient of thermal expansion alpha"
+    ],
+    "outputs": [
+      "Thermal movement delta_L (mm)",
+      "Movement direction",
+      "Accommodation required"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/structural/facades.json",
+    "suggested_relative_path": "structural/movement-tolerance/thermal-movement-calc"
+  }
+}

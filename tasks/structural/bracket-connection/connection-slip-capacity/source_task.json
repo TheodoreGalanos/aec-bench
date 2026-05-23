@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "facades",
+    "category_id": "bracket-connection",
+    "category_name": "Bracket and Connection Design",
+    "task_id": "connection-slip-capacity",
+    "task_name": "Slotted Connection Slip Capacity",
+    "description": "Check that slotted connections do not slip under serviceability loads",
+    "complexity": "medium",
+    "standards": [
+      "EN 1993-1-8",
+      "AS 4100"
+    ],
+    "inputs": [
+      "Service load (kN)",
+      "Bolt size and number",
+      "Friction coefficient",
+      "Bolt preload",
+      "Slot dimensions"
+    ],
+    "outputs": [
+      "Slip resistance (kN)",
+      "Slip factor achieved",
+      "Pass/Fail for serviceability"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "load",
+      "size"
+    ],
+    "source_file": "data/tasks/structural/facades.json",
+    "suggested_relative_path": "structural/bracket-connection/connection-slip-capacity"
+  }
+}

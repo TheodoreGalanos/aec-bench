@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_generation_storage",
+    "category_id": "bess-design",
+    "category_name": "Battery Energy Storage Design",
+    "task_id": "bess-sizing-basic",
+    "task_name": "Basic BESS Sizing",
+    "description": "Calculate required BESS power and energy capacity for specified application",
+    "complexity": "low",
+    "standards": [
+      "IEC 62933",
+      "IEEE 2030.2.1"
+    ],
+    "inputs": [
+      "Required discharge power (MW)",
+      "Required discharge duration (hours)",
+      "Usable SOC range (%)",
+      "Round-trip efficiency (%)",
+      "End-of-life capacity retention (%)"
+    ],
+    "outputs": [
+      "Nominal power rating (MW)",
+      "Nominal energy capacity (MWh)",
+      "Beginning-of-life capacity (MWh)",
+      "Usable energy (MWh)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "capacity",
+      "energy",
+      "power",
+      "sizing"
+    ],
+    "source_file": "data/tasks/electrical/energy_generation_storage.json",
+    "suggested_relative_path": "electrical/bess-design/bess-sizing-basic"
+  }
+}

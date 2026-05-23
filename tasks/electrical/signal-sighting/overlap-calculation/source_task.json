@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "rail_signalling",
+    "category_id": "signal-sighting",
+    "category_name": "Signal Sighting and Spacing",
+    "task_id": "overlap-calculation",
+    "task_name": "Signal Overlap Length Calculation",
+    "description": "Calculate safety overlap distance beyond stop signal for overrun protection",
+    "complexity": "medium",
+    "standards": [
+      "Network Rail NR/L2/SIG/10158",
+      "AS 7711"
+    ],
+    "inputs": [
+      "Maximum approach speed (km/h)",
+      "Emergency braking rate (m/s2)",
+      "Track gradient (%)",
+      "Reaction time (s)",
+      "Danger point location",
+      "Low adhesion factor"
+    ],
+    "outputs": [
+      "Full-speed overlap (m)",
+      "Timed overlap option (m)",
+      "Gradient-adjusted distance (m)",
+      "Danger point clearance verification"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/rail_signalling.json",
+    "suggested_relative_path": "electrical/signal-sighting/overlap-calculation"
+  }
+}

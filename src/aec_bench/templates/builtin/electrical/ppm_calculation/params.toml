@@ -1,0 +1,100 @@
+[meta]
+name = "ppm-calculation"
+description = "CCTV pixels-per-metre calculation from camera geometry"
+long_description = "Calculates CCTV pixel density at a target distance using horizontal camera resolution, sensor width, and lens focal length. The reduced pinhole-camera method estimates horizontal field of view, pixels per metre, and margin against a specified surveillance target density."
+discipline = "electrical"
+category = "cctv-design"
+standards = ["IEC 62676-4", "EN 62676-4"]
+tags = ["electrical", "cctv", "ppm", "camera", "security", "deterministic"]
+tool_mode = "with-tool"
+
+[params.horizontal_pixels]
+type = "float"
+unit = "px"
+description = "Horizontal camera resolution"
+min = 640
+max = 12000
+
+[params.sensor_width_mm]
+type = "float"
+unit = "mm"
+description = "Camera sensor width"
+min = 2.0
+max = 25.0
+
+[params.lens_focal_length_mm]
+type = "float"
+unit = "mm"
+description = "Lens focal length"
+min = 2.0
+max = 80.0
+
+[params.target_distance_m]
+type = "float"
+unit = "m"
+description = "Distance from camera to target plane"
+min = 1.0
+max = 200.0
+
+[params.target_ppm]
+type = "float"
+unit = "px/m"
+description = "Required pixel density target"
+min = 20
+max = 1000
+
+[outputs.horizontal_field_of_view_m]
+description = "Horizontal field of view at the target plane"
+tolerance = 0.03
+
+[outputs.pixels_per_meter]
+description = "Pixel density at target distance"
+tolerance = 0.03
+
+[outputs.target_ppm_margin_pct]
+description = "Margin relative to target pixel density"
+tolerance = 0.03
+
+[archetypes.detection_camera]
+description = "Wide-angle detection camera"
+horizontal_pixels = {min = 1280, max = 3840}
+sensor_width_mm = {min = 4.0, max = 8.0}
+lens_focal_length_mm = {min = 2.8, max = 6.0}
+target_distance_m = {min = 10, max = 80}
+target_ppm = {min = 25, max = 80}
+site_contexts = ["car-park", "site-perimeter"]
+
+[archetypes.recognition_camera]
+description = "Recognition camera at an access point"
+horizontal_pixels = {min = 1920, max = 8000}
+sensor_width_mm = {min = 4.0, max = 12.0}
+lens_focal_length_mm = {min = 6.0, max = 25.0}
+target_distance_m = {min = 5, max = 50}
+target_ppm = {min = 100, max = 250}
+site_contexts = ["building-entry", "station-gate"]
+
+[archetypes.identification_camera]
+description = "High-density identification camera"
+horizontal_pixels = {min = 3840, max = 12000}
+sensor_width_mm = {min = 6.0, max = 25.0}
+lens_focal_length_mm = {min = 12.0, max = 80.0}
+target_distance_m = {min = 3, max = 30}
+target_ppm = {min = 250, max = 1000}
+site_contexts = ["cash-office", "secure-room"]
+
+[difficulty.easy]
+description = "Detection or recognition camera with all geometry given"
+visibility = "all_given"
+archetypes = ["detection_camera", "recognition_camera"]
+
+[difficulty.medium]
+description = "Mixed camera objectives and target densities"
+visibility = "all_given"
+archetypes = ["detection_camera", "recognition_camera", "identification_camera"]
+
+[difficulty.hard]
+description = "Target PPM hidden in the surveillance objective"
+visibility = "partial"
+hidden_params = ["target_ppm"]
+replacement_text = "Use the target pixel density implied by {{ archetype.description }}."
+archetypes = ["recognition_camera", "identification_camera"]

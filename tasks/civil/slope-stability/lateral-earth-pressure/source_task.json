@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "land_infrastructure",
+    "category_id": "slope-stability",
+    "category_name": "Slope & Retaining Stability",
+    "task_id": "lateral-earth-pressure",
+    "task_name": "Lateral Earth Pressure Calculation",
+    "description": "Calculate active/passive earth pressures using Rankine or Coulomb theory",
+    "complexity": "low",
+    "standards": [
+      "AS 4678"
+    ],
+    "inputs": [
+      "Soil properties (\u03c6, c, unit weight)",
+      "Wall height and geometry",
+      "Surcharge loads",
+      "Groundwater level"
+    ],
+    "outputs": [
+      "Active pressure coefficient (Ka)",
+      "Passive pressure coefficient (Kp)",
+      "Pressure distribution diagram",
+      "Resultant force and point of application"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "load",
+      "pressure"
+    ],
+    "source_file": "data/tasks/civil/land_infrastructure.json",
+    "suggested_relative_path": "civil/slope-stability/lateral-earth-pressure"
+  }
+}

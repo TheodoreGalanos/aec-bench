@@ -1,0 +1,120 @@
+[meta]
+name = "npsh-available"
+description = "Net Positive Suction Head Available calculation for pump inlet checks"
+long_description = "Calculates NPSH available from suction vessel absolute pressure, liquid level relative to the pump, suction pipe losses, fluid vapor pressure, and density. The template converts pressure terms to metres of fluid head and compares NPSHa with explicit NPSH required to report cavitation margin."
+discipline = "mechanical"
+category = "pump-hydraulics"
+standards = ["Hydraulic Institute Standards"]
+tags = ["mechanical", "pump-hydraulics", "npsh", "cavitation", "deterministic"]
+tool_mode = "with-tool"
+
+[params.suction_vessel_pressure_kpa_abs]
+type = "float"
+unit = "kPa abs"
+description = "Absolute pressure at the suction vessel free surface"
+min = 30.0
+max = 800.0
+
+[params.liquid_level_above_pump_m]
+type = "float"
+unit = "m"
+description = "Static liquid level above the pump centreline"
+min = -6.0
+max = 20.0
+
+[params.suction_pipe_losses_kpa]
+type = "float"
+unit = "kPa"
+description = "Suction-side friction and minor losses"
+min = 0.0
+max = 150.0
+
+[params.vapor_pressure_kpa_abs]
+type = "float"
+unit = "kPa abs"
+description = "Fluid vapor pressure at operating temperature"
+min = 0.5
+max = 100.0
+
+[params.fluid_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "Fluid density"
+min = 600.0
+max = 1300.0
+
+[params.npsh_required_m]
+type = "float"
+unit = "m"
+description = "Pump manufacturer's NPSH required"
+min = 0.5
+max = 20.0
+
+[outputs.pressure_head_m]
+description = "Suction pressure head"
+tolerance = 0.03
+
+[outputs.vapor_pressure_head_m]
+description = "Vapor pressure head"
+tolerance = 0.03
+
+[outputs.loss_head_m]
+description = "Suction loss head"
+tolerance = 0.03
+
+[outputs.npsh_available_m]
+description = "Net Positive Suction Head Available"
+tolerance = 0.03
+
+[outputs.cavitation_margin_m]
+description = "NPSHa minus NPSH required"
+tolerance = 0.03
+
+[outputs.margin_ratio]
+description = "NPSHa divided by NPSH required"
+tolerance = 0.03
+
+[archetypes.flooded_water_suction]
+description = "Flooded suction water pump with atmospheric vented tank"
+suction_vessel_pressure_kpa_abs = {min = 98.0, max = 103.0}
+liquid_level_above_pump_m = {min = 1.0, max = 8.0}
+suction_pipe_losses_kpa = {min = 2.0, max = 20.0}
+vapor_pressure_kpa_abs = {min = 2.0, max = 8.0}
+fluid_density_kg_m3 = {min = 990.0, max = 1000.0}
+npsh_required_m = {min = 1.0, max = 5.0}
+site_contexts = ["water-treatment-transfer", "building-services-break-tank"]
+
+[archetypes.hot_process_liquid]
+description = "Hot process liquid suction with elevated vapor pressure"
+suction_vessel_pressure_kpa_abs = {min = 100.0, max = 250.0}
+liquid_level_above_pump_m = {min = -2.0, max = 6.0}
+suction_pipe_losses_kpa = {min = 10.0, max = 60.0}
+vapor_pressure_kpa_abs = {min = 25.0, max = 90.0}
+fluid_density_kg_m3 = {min = 850.0, max = 1000.0}
+npsh_required_m = {min = 3.0, max = 12.0}
+site_contexts = ["industrial-process-skid", "thermal-utility-loop"]
+
+[archetypes.pressurised_suction_vessel]
+description = "Pump drawing from a pressurised suction vessel"
+suction_vessel_pressure_kpa_abs = {min = 200.0, max = 700.0}
+liquid_level_above_pump_m = {min = -4.0, max = 10.0}
+suction_pipe_losses_kpa = {min = 15.0, max = 120.0}
+vapor_pressure_kpa_abs = {min = 2.0, max = 60.0}
+fluid_density_kg_m3 = {min = 700.0, max = 1100.0}
+npsh_required_m = {min = 4.0, max = 18.0}
+site_contexts = ["chemical-transfer-vessel", "pressure-booster-skid"]
+
+[difficulty.easy]
+description = "All parameters given for flooded water suction"
+visibility = "all_given"
+archetypes = ["flooded_water_suction"]
+
+[difficulty.medium]
+description = "All parameters given across water and process suction cases"
+visibility = "all_given"
+archetypes = ["flooded_water_suction", "hot_process_liquid"]
+
+[difficulty.hard]
+description = "All parameters given for hot liquid or pressurised suction cases"
+visibility = "all_given"
+archetypes = ["hot_process_liquid", "pressurised_suction_vessel"]

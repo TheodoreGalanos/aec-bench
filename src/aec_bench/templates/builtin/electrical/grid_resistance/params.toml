@@ -1,0 +1,134 @@
+[meta]
+name = "grid-resistance"
+description = "Substation grounding grid resistance calculation per IEEE 80-2013"
+long_description = "Computes the resistance of a substation grounding grid and the resulting ground potential rise (GPR = Ig * Rg) using the simplified Schwarz equation from IEEE 80-2013. Accounts for soil resistivity, grid area, total buried conductor length, and burial depth to assess whether step and touch voltage safety limits are met during ground faults."
+discipline = "electrical"
+category = "grounding-design"
+standards = ["IEEE 80-2013"]
+tags = ["electrical", "grounding", "earthing", "substation", "grid-resistance", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.soil_resistivity_ohm_m]
+type = "float"
+unit = "ohm-m"
+description = "Apparent soil resistivity"
+min = 10
+max = 3000
+derivable_from = "archetype"
+
+[params.grid_length_m]
+type = "float"
+unit = "m"
+description = "Grid length (longer dimension)"
+min = 10
+max = 300
+
+[params.grid_width_m]
+type = "float"
+unit = "m"
+description = "Grid width (shorter dimension)"
+min = 10
+max = 300
+
+[params.total_conductor_length_m]
+type = "float"
+unit = "m"
+description = "Total buried conductor length including ground rods"
+min = 50
+max = 10000
+
+[params.burial_depth_m]
+type = "float"
+unit = "m"
+description = "Grid burial depth below grade"
+min = 0.3
+max = 2.0
+
+[params.grid_current_ka]
+type = "float"
+unit = "kA"
+description = "Maximum grid current (symmetrical fault current fraction)"
+min = 0.5
+max = 40
+
+# --- Outputs ---
+
+[outputs.grid_area_m2]
+description = "Grid area (m²)"
+tolerance = 0.01
+
+[outputs.equivalent_radius_m]
+description = "Equivalent circular radius of the grid (m)"
+tolerance = 0.03
+
+[outputs.grid_resistance_ohm]
+description = "Grid resistance Rg (ohm)"
+tolerance = 0.03
+
+[outputs.ground_potential_rise_v]
+description = "Ground potential rise GPR (V)"
+tolerance = 0.03
+
+# --- Archetypes ---
+# Substation installation scenarios with representative soil conditions.
+
+[archetypes.distribution_sandy]
+description = "Distribution substation on sandy soil"
+soil_resistivity_ohm_m = {min = 200, max = 800}
+grid_length_m = {min = 15, max = 40}
+grid_width_m = {min = 10, max = 30}
+total_conductor_length_m = {min = 100, max = 600}
+burial_depth_m = {min = 0.5, max = 0.8}
+grid_current_ka = {min = 1, max = 8}
+site_contexts = ["brisbane-suburban", "perth-coastal"]
+
+[archetypes.distribution_clay]
+description = "Distribution substation on clay soil"
+soil_resistivity_ohm_m = {min = 20, max = 100}
+grid_length_m = {min = 15, max = 40}
+grid_width_m = {min = 10, max = 30}
+total_conductor_length_m = {min = 100, max = 600}
+burial_depth_m = {min = 0.5, max = 0.8}
+grid_current_ka = {min = 1, max = 8}
+site_contexts = ["sydney-alluvial", "melbourne-basalt"]
+
+[archetypes.zone_substation]
+description = "Zone substation on sandy loam soil (moderately resistive)"
+soil_resistivity_ohm_m = {min = 100, max = 300}
+grid_length_m = {min = 40, max = 120}
+grid_width_m = {min = 30, max = 80}
+total_conductor_length_m = {min = 500, max = 3000}
+burial_depth_m = {min = 0.5, max = 1.0}
+grid_current_ka = {min = 5, max = 20}
+site_contexts = ["hunter-valley-substation", "latrobe-valley-substation"]
+
+[archetypes.transmission_substation]
+description = "Transmission substation on rocky ground with high resistivity"
+soil_resistivity_ohm_m = {min = 500, max = 1500}
+grid_length_m = {min = 80, max = 300}
+grid_width_m = {min = 60, max = 200}
+total_conductor_length_m = {min = 2000, max = 10000}
+burial_depth_m = {min = 0.5, max = 1.5}
+grid_current_ka = {min = 10, max = 40}
+site_contexts = ["pilbara-remote", "north-qld-transmission"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "Small distribution grid, low resistivity, all parameters given"
+visibility = "all_given"
+archetypes = ["distribution_sandy", "distribution_clay"]
+
+[difficulty.medium]
+description = "Any substation type and soil condition, all parameters given"
+visibility = "all_given"
+archetypes = ["distribution_sandy", "distribution_clay", "zone_substation", "transmission_substation"]
+
+[difficulty.hard]
+description = "Soil resistivity hidden, agent must infer from site description"
+visibility = "partial"
+hidden_params = ["soil_resistivity_ohm_m"]
+replacement_text = "The substation is located on {{ archetype.description | lower }} conditions ({{ archetype.site_context }})"
+archetypes = ["zone_substation", "transmission_substation"]

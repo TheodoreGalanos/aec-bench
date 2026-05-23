@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "industrial_structures",
+    "category_id": "portal-frame-design",
+    "category_name": "Portal Frame Design",
+    "task_id": "portal-deflection-check",
+    "task_name": "Portal Frame Deflection Check",
+    "description": "Check serviceability deflections for portal frame with crane rails",
+    "complexity": "medium",
+    "standards": [
+      "AS 4100",
+      "AS 1418"
+    ],
+    "inputs": [
+      "Frame geometry",
+      "Crane rail height (m)",
+      "Service loads",
+      "Foundation stiffness"
+    ],
+    "outputs": [
+      "Eaves horizontal deflection (mm)",
+      "Apex vertical deflection (mm)",
+      "Crane rail horizontal deflection (mm)",
+      "Pass/Fail"
+    ],
+    "keyword_hits": [
+      "deflection",
+      "load"
+    ],
+    "source_file": "data/tasks/structural/industrial_structures.json",
+    "suggested_relative_path": "structural/portal-frame-design/portal-deflection-check"
+  }
+}

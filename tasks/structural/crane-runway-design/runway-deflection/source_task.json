@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "industrial_structures",
+    "category_id": "crane-runway-design",
+    "category_name": "Crane Runway Beam Design",
+    "task_id": "runway-deflection",
+    "task_name": "Crane Runway Deflection Check",
+    "description": "Check vertical and horizontal deflection limits for crane runway serviceability",
+    "complexity": "medium",
+    "standards": [
+      "AS 1418.18",
+      "AIST TR-13"
+    ],
+    "inputs": [
+      "Girder section properties",
+      "Span (m)",
+      "Service wheel loads (kN)",
+      "Side thrust (kN)"
+    ],
+    "outputs": [
+      "Vertical deflection (mm)",
+      "Horizontal deflection (mm)",
+      "L/deflection ratio",
+      "Pass/Fail"
+    ],
+    "keyword_hits": [
+      "deflection",
+      "load"
+    ],
+    "source_file": "data/tasks/structural/industrial_structures.json",
+    "suggested_relative_path": "structural/crane-runway-design/runway-deflection"
+  }
+}

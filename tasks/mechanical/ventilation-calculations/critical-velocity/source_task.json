@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "tunnel_systems",
+    "category_id": "ventilation-calculations",
+    "category_name": "Ventilation System Calculations",
+    "task_id": "critical-velocity",
+    "task_name": "Critical Velocity Calculation",
+    "description": "Calculate minimum longitudinal air velocity to prevent smoke backlayering",
+    "complexity": "low",
+    "standards": [
+      "NFPA 502 Annex D",
+      "PIARC 1999 05.05.B"
+    ],
+    "inputs": [
+      "Design fire HRR (MW)",
+      "Tunnel height (m)",
+      "Tunnel width (m)",
+      "Cross-sectional area (m2)",
+      "Tunnel grade (%)",
+      "Air density (kg/m3)"
+    ],
+    "outputs": [
+      "Critical velocity (m/s)",
+      "Grade correction factor"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/mechanical/tunnel_systems.json",
+    "suggested_relative_path": "mechanical/ventilation-calculations/critical-velocity"
+  }
+}

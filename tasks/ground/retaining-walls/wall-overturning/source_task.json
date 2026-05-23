@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "ground",
+    "community": "geotechnical",
+    "category_id": "retaining-walls",
+    "category_name": "Retaining Wall Design",
+    "task_id": "wall-overturning",
+    "task_name": "Overturning Stability Check",
+    "description": "Check gravity or cantilever wall against overturning about toe",
+    "complexity": "medium",
+    "standards": [
+      "AS 4678",
+      "Eurocode 7"
+    ],
+    "inputs": [
+      "Wall geometry and weight",
+      "Active earth pressure",
+      "Surcharge loads",
+      "Water pressure (if applicable)"
+    ],
+    "outputs": [
+      "Overturning moment Mo (kNm/m)",
+      "Resisting moment Mr (kNm/m)",
+      "Factor of Safety FoS"
+    ],
+    "keyword_hits": [
+      "cable",
+      "load",
+      "moment",
+      "pressure"
+    ],
+    "source_file": "data/tasks/ground/geotechnical.json",
+    "suggested_relative_path": "ground/retaining-walls/wall-overturning"
+  }
+}

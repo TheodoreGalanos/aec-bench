@@ -1,0 +1,98 @@
+[meta]
+name = "superelevation-rate"
+description = "Superelevation rate and development length for horizontal curves using e + f = V^2 / (127 * R)"
+long_description = "Determines the required superelevation rate and transition development length for horizontal road curves using the point-mass equilibrium equation e + f = V^2/(127*R) per AASHTO Green Book and Austroads AGRD Part 3 Section 7.5. Balances centripetal force demand between pavement banking and tyre side friction to ensure vehicle stability through curves."
+discipline = "civil"
+category = "horizontal-geometry"
+standards = ["AGRD Part 3 §7.5", "AASHTO Green Book Ch. 3"]
+tags = ["civil", "roads", "horizontal-geometry", "superelevation", "curves", "deterministic"]
+tool_mode = "with-tool"
+
+[params.design_speed_km_h]
+type = "float"
+unit = "km/h"
+description = "Design speed V"
+min = 60
+max = 130
+
+[params.curve_radius_m]
+type = "float"
+unit = "m"
+description = "Horizontal curve radius R"
+min = 50
+max = 500
+
+[params.side_friction_factor]
+type = "float"
+unit = "-"
+description = "Side friction factor f"
+min = 0.08
+max = 0.19
+derivable_from = "archetype"
+
+[params.lane_width_m]
+type = "float"
+unit = "m"
+description = "Lane width w"
+min = 3.0
+max = 4.5
+
+[params.rotation_rate]
+type = "float"
+unit = "m/m"
+description = "Maximum rate of pavement rotation (e.g. 1/200 = 0.005)"
+min = 0.005
+max = 0.01
+default = 0.005
+optional = true
+
+# --- Outputs ---
+
+[outputs.superelevation_rate_pct]
+description = "Required superelevation rate e (%)"
+tolerance = 0.03
+
+[outputs.development_length_m]
+description = "Superelevation development (runoff) length Ls (m)"
+tolerance = 0.03
+
+# --- Archetypes: road type / speed environment scenarios ---
+
+[archetypes.rural_highway]
+description = "Rural two-lane highway with moderate traffic and open terrain"
+side_friction_factor = {min = 0.10, max = 0.14}
+site_contexts = ["bruce-highway-qld", "princes-highway-vic", "great-western-highway-nsw"]
+
+[archetypes.urban_arterial]
+description = "Urban multi-lane arterial road with signalised intersections"
+side_friction_factor = {min = 0.13, max = 0.17}
+site_contexts = ["sydney-parramatta-road", "melbourne-hoddle-street", "brisbane-coronation-drive"]
+
+[archetypes.freeway]
+description = "High-speed divided freeway or motorway"
+side_friction_factor = {min = 0.08, max = 0.12}
+site_contexts = ["m1-pacific-motorway", "m2-hills-motorway", "western-ring-road-melbourne"]
+
+[archetypes.mountain_road]
+description = "Winding mountain road with tight curves and steep grades"
+side_friction_factor = {min = 0.14, max = 0.19}
+site_contexts = ["great-ocean-road-vic", "bells-line-of-road-nsw", "gillies-highway-qld"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "All parameters given, gentle curve on a rural highway"
+visibility = "all_given"
+archetypes = ["rural_highway", "freeway"]
+
+[difficulty.medium]
+description = "All parameters given, any road type and curve geometry"
+visibility = "all_given"
+archetypes = ["rural_highway", "urban_arterial", "freeway", "mountain_road"]
+
+[difficulty.hard]
+description = "Side friction factor hidden — agent must infer f from road type and design speed"
+visibility = "partial"
+hidden_params = ["side_friction_factor"]
+replacement_text = "The road is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["rural_highway", "urban_arterial", "freeway", "mountain_road"]

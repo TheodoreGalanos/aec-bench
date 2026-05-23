@@ -1,0 +1,112 @@
+[meta]
+name = "air-demand"
+description = "Compressed air connected and simultaneous demand calculation"
+long_description = "Calculates connected and simultaneous compressed air demand from explicit tool flows, quantities, and simultaneity factor. The template reports demand in L/s and m3/min."
+discipline = "mechanical"
+category = "compressed-air"
+standards = ["ISO 8573"]
+tags = ["mechanical", "compressed-air", "demand", "deterministic"]
+tool_mode = "with-tool"
+
+[params.tool_1_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "Air flow for first tool group"
+min = 0.0
+max = 1000.0
+
+[params.tool_1_quantity]
+type = "float"
+unit = "-"
+description = "Quantity of first tool group"
+min = 0.0
+max = 1000.0
+
+[params.tool_2_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "Air flow for second tool group"
+min = 0.0
+max = 1000.0
+
+[params.tool_2_quantity]
+type = "float"
+unit = "-"
+description = "Quantity of second tool group"
+min = 0.0
+max = 1000.0
+
+[params.tool_3_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "Air flow for third tool group"
+min = 0.0
+max = 1000.0
+
+[params.tool_3_quantity]
+type = "float"
+unit = "-"
+description = "Quantity of third tool group"
+min = 0.0
+max = 1000.0
+
+[params.simultaneity_factor]
+type = "float"
+unit = "-"
+description = "Fraction of connected demand operating simultaneously"
+min = 0.01
+max = 1.0
+
+[outputs.connected_demand_l_s]
+description = "Connected compressed air demand"
+tolerance = 0.03
+
+[outputs.simultaneous_demand_l_s]
+description = "Simultaneous compressed air demand"
+tolerance = 0.03
+
+[outputs.connected_demand_m3_min]
+description = "Connected compressed air demand in cubic metres per minute"
+tolerance = 0.03
+
+[outputs.simultaneous_demand_m3_min]
+description = "Simultaneous compressed air demand in cubic metres per minute"
+tolerance = 0.03
+
+[archetypes.workshop]
+description = "Maintenance workshop compressed air demand"
+tool_1_flow_l_s = {min = 2.0, max = 50.0}
+tool_1_quantity = {min = 1.0, max = 30.0}
+tool_2_flow_l_s = {min = 1.0, max = 30.0}
+tool_2_quantity = {min = 0.0, max = 30.0}
+tool_3_flow_l_s = {min = 0.0, max = 20.0}
+tool_3_quantity = {min = 0.0, max = 20.0}
+simultaneity_factor = {min = 0.2, max = 0.8}
+site_contexts = ["maintenance-workshop", "compressed-air-ring-main"]
+
+[archetypes.process_air]
+description = "Process plant compressed air demand"
+tool_1_flow_l_s = {min = 20.0, max = 300.0}
+tool_1_quantity = {min = 1.0, max = 20.0}
+tool_2_flow_l_s = {min = 10.0, max = 200.0}
+tool_2_quantity = {min = 0.0, max = 20.0}
+tool_3_flow_l_s = {min = 5.0, max = 100.0}
+tool_3_quantity = {min = 0.0, max = 20.0}
+simultaneity_factor = {min = 0.4, max = 1.0}
+site_contexts = ["process-plant", "instrument-air"]
+
+[difficulty.easy]
+description = "All parameters given for workshop air demand"
+visibility = "all_given"
+archetypes = ["workshop"]
+
+[difficulty.medium]
+description = "All parameters given across compressed air systems"
+visibility = "all_given"
+archetypes = ["workshop", "process_air"]
+
+[difficulty.hard]
+description = "All parameters given for process air demand"
+visibility = "all_given"
+archetypes = ["process_air"]
+

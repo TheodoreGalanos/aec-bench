@@ -1,0 +1,85 @@
+[meta]
+name = "pump-power-calculation"
+description = "Pump hydraulic and shaft power calculation"
+long_description = "Calculates pump hydraulic power and shaft power from flow rate, total dynamic head, fluid density, and pump efficiency. The template reports converted flow, hydraulic power, shaft power, and efficiency fraction."
+discipline = "mechanical"
+category = "pump-sizing"
+standards = ["HI 14.6", "ISO 9906"]
+tags = ["mechanical", "pump", "power", "hydraulics", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_rate_l_s]
+type = "float"
+unit = "L/s"
+description = "Pump flow rate"
+min = 0.1
+max = 5000.0
+
+[params.total_dynamic_head_m]
+type = "float"
+unit = "m"
+description = "Total dynamic head"
+min = 0.1
+max = 500.0
+
+[params.fluid_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "Fluid density"
+min = 500.0
+max = 1400.0
+
+[params.pump_efficiency_pct]
+type = "float"
+unit = "%"
+description = "Pump efficiency"
+min = 1.0
+max = 100.0
+
+[outputs.flow_rate_m3_s]
+description = "Flow rate in cubic metres per second"
+tolerance = 0.03
+
+[outputs.hydraulic_power_kw]
+description = "Hydraulic power"
+tolerance = 0.03
+
+[outputs.shaft_power_kw]
+description = "Required shaft power"
+tolerance = 0.03
+
+[outputs.efficiency_fraction]
+description = "Pump efficiency as a fraction"
+tolerance = 0.03
+
+[archetypes.water_pump]
+description = "Water pump power calculation"
+flow_rate_l_s = {min = 5.0, max = 1000.0}
+total_dynamic_head_m = {min = 5.0, max = 150.0}
+fluid_density_kg_m3 = {min = 990.0, max = 1030.0}
+pump_efficiency_pct = {min = 45.0, max = 85.0}
+site_contexts = ["water-pump-station", "transfer-pump"]
+
+[archetypes.process_pump]
+description = "Industrial process pump power calculation"
+flow_rate_l_s = {min = 1.0, max = 500.0}
+total_dynamic_head_m = {min = 10.0, max = 250.0}
+fluid_density_kg_m3 = {min = 700.0, max = 1300.0}
+pump_efficiency_pct = {min = 35.0, max = 80.0}
+site_contexts = ["process-plant", "dosing-pump"]
+
+[difficulty.easy]
+description = "All parameters given for a water pump"
+visibility = "all_given"
+archetypes = ["water_pump"]
+
+[difficulty.medium]
+description = "All parameters given across pump types"
+visibility = "all_given"
+archetypes = ["water_pump", "process_pump"]
+
+[difficulty.hard]
+description = "All parameters given for process pumps"
+visibility = "all_given"
+archetypes = ["process_pump"]
+

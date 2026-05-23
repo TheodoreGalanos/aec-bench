@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "ict_comms_security",
+    "category_id": "structured-cabling",
+    "category_name": "Structured Cabling",
+    "task_id": "fiber-link-loss-budget",
+    "task_name": "Fiber Optic Link Loss Budget Calculation",
+    "description": "Calculate total link loss for fiber optic connection and verify against system budget",
+    "complexity": "medium",
+    "standards": [
+      "ISO/IEC 11801",
+      "TIA-568"
+    ],
+    "inputs": [
+      "Fiber length (m)",
+      "Fiber attenuation (dB/km)",
+      "Number of connectors",
+      "Connector loss (dB)",
+      "Number of splices",
+      "Splice loss (dB)",
+      "System loss budget (dB)"
+    ],
+    "outputs": [
+      "Total link loss (dB)",
+      "Component breakdown",
+      "Power margin (dB)",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "power"
+    ],
+    "source_file": "data/tasks/electrical/ict_comms_security.json",
+    "suggested_relative_path": "electrical/structured-cabling/fiber-link-loss-budget"
+  }
+}

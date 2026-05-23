@@ -1,0 +1,26 @@
+version = "1.0"
+
+[metadata]
+difficulty = "medium"
+category = "power-systems"
+tags = ["electrical", "grid-control", "multimodal", "droop-curve"]
+
+[agent]
+timeout_sec = 600.0
+
+[verifier]
+timeout_sec = 120.0
+
+[environment]
+extensions = ["multimodal"]
+build_timeout_sec = 600.0
+cpus = 1
+memory_mb = 2048
+storage_mb = 5120
+allow_internet = true
+
+[[environment.tools]]
+name = "create_chart"
+source = "tools/create_chart.py"
+description = "Generate a P(f) droop curve chart from computed data. Pass a JSON string with keys: rated_power_mw, system_freq_hz, deadband_hz, droop_pct, pmin_mw, pmax_mw, pref_mw, operating_freq_hz, slope_mw_per_hz, active_power_mw, delta_p_mw. Returns the chart image for visual review."
+returns_image = true

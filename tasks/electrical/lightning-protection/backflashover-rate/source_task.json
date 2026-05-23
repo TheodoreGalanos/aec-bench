@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "lightning-protection",
+    "category_name": "Lightning Protection",
+    "task_id": "backflashover-rate",
+    "task_name": "Backflashover Rate Estimation",
+    "description": "Estimate lightning backflashover rate based on tower footing resistance",
+    "complexity": "high",
+    "standards": [
+      "IEEE 1243",
+      "CIGRE TB 63"
+    ],
+    "inputs": [
+      "Tower footing resistance (ohms)",
+      "Tower surge impedance (ohms)",
+      "Insulator CFO (kV)",
+      "Ground flash density",
+      "Line length (km)",
+      "Span length (m)"
+    ],
+    "outputs": [
+      "Backflashover rate (outages/100km/yr)",
+      "Critical current (kA)",
+      "Tower voltage during stroke (kV)",
+      "Improvement recommendations"
+    ],
+    "keyword_hits": [
+      "current",
+      "rate",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/lightning-protection/backflashover-rate"
+  }
+}

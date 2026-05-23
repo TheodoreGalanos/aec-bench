@@ -1,0 +1,42 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_systems_studies",
+    "category_id": "load-flow",
+    "category_name": "Load Flow Analysis",
+    "task_id": "pfc-sizing",
+    "task_name": "Power Factor Correction Sizing",
+    "description": "Calculate required capacitor kVAr to improve power factor to target",
+    "complexity": "low",
+    "standards": [
+      "IEEE 3002.2",
+      "AS/NZS 2067"
+    ],
+    "inputs": [
+      "Load real power (kW)",
+      "Initial power factor",
+      "Target power factor",
+      "System voltage (V)",
+      "Harmonic considerations"
+    ],
+    "outputs": [
+      "Required reactive power (kVAr)",
+      "Capacitor bank size",
+      "New apparent power (kVA)",
+      "Current reduction (%)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "current",
+      "load",
+      "power",
+      "size",
+      "sizing",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/energy_systems_studies.json",
+    "suggested_relative_path": "electrical/load-flow/pfc-sizing"
+  }
+}

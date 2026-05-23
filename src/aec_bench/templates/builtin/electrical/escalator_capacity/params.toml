@@ -1,0 +1,87 @@
+[meta]
+name = "escalator-capacity"
+description = "Escalator theoretical and practical passenger capacity"
+long_description = "Calculates escalator passenger capacity from escalator speed, step pitch, step width, and practical loading factor. The reduced method converts speed to steps per second, assigns one or two persons per step from width, then reports theoretical and practical hourly capacity."
+discipline = "electrical"
+category = "escalator-design"
+standards = ["EN 115-1", "AS 1735.10"]
+tags = ["electrical", "escalator", "capacity", "vertical-transportation", "deterministic"]
+tool_mode = "with-tool"
+
+[params.escalator_speed_m_s]
+type = "float"
+unit = "m/s"
+description = "Escalator running speed"
+min = 0.3
+max = 0.9
+
+[params.step_width_mm]
+type = "float"
+unit = "mm"
+description = "Nominal step width"
+min = 500
+max = 1200
+
+[params.step_pitch_mm]
+type = "float"
+unit = "mm"
+description = "Step pitch along travel direction"
+min = 300
+max = 500
+
+[params.practical_loading_factor_pct]
+type = "float"
+unit = "%"
+description = "Practical passenger loading factor"
+min = 20
+max = 100
+
+[outputs.steps_per_second]
+description = "Steps passing the comb per second"
+tolerance = 0.03
+
+[outputs.persons_per_step]
+description = "Assumed persons per step from step width"
+tolerance = 0.01
+
+[outputs.theoretical_capacity_persons_per_h]
+description = "Theoretical passenger capacity"
+tolerance = 0.03
+
+[outputs.practical_capacity_persons_per_h]
+description = "Practical passenger capacity"
+tolerance = 0.03
+
+[archetypes.narrow_escalator]
+description = "Narrow escalator with one person per step"
+escalator_speed_m_s = {min = 0.4, max = 0.65}
+step_width_mm = {min = 600, max = 799}
+step_pitch_mm = {min = 380, max = 420}
+practical_loading_factor_pct = {min = 40, max = 75}
+site_contexts = ["retail-escalator", "station-secondary-access"]
+
+[archetypes.wide_escalator]
+description = "Wide escalator with two persons per step"
+escalator_speed_m_s = {min = 0.4, max = 0.75}
+step_width_mm = {min = 800, max = 1100}
+step_pitch_mm = {min = 380, max = 420}
+practical_loading_factor_pct = {min = 50, max = 85}
+site_contexts = ["rail-station", "airport-terminal"]
+
+[difficulty.easy]
+description = "Narrow escalator capacity"
+visibility = "all_given"
+archetypes = ["narrow_escalator"]
+
+[difficulty.medium]
+description = "Narrow or wide escalator"
+visibility = "all_given"
+archetypes = ["narrow_escalator", "wide_escalator"]
+
+[difficulty.hard]
+description = "Practical loading factor hidden in site context"
+visibility = "partial"
+hidden_params = ["practical_loading_factor_pct"]
+replacement_text = "Use the practical loading factor implied by {{ archetype.description }}."
+archetypes = ["wide_escalator"]
+practical_loading_factor_pct = [65]

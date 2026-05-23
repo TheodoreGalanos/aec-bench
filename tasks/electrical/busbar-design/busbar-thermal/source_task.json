@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "substations",
+    "category_id": "busbar-design",
+    "category_name": "Busbar Design & Analysis",
+    "task_id": "busbar-thermal",
+    "task_name": "Busbar Thermal Sizing",
+    "description": "Size busbar for continuous current carrying capacity",
+    "complexity": "low",
+    "standards": [
+      "IEEE 605"
+    ],
+    "inputs": [
+      "Continuous current (A)",
+      "Material (copper/aluminum)",
+      "Configuration (flat, tube)",
+      "Ambient temperature (\u00b0C)",
+      "Allowable temperature rise"
+    ],
+    "outputs": [
+      "Required cross-section (mm\u00b2)",
+      "Busbar dimensions",
+      "Temperature rise (\u00b0C)"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "current",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/electrical/substations.json",
+    "suggested_relative_path": "electrical/busbar-design/busbar-thermal"
+  }
+}

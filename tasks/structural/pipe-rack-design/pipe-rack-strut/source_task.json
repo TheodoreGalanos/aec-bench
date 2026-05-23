@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "industrial_structures",
+    "category_id": "pipe-rack-design",
+    "category_name": "Pipe Rack Design",
+    "task_id": "pipe-rack-strut",
+    "task_name": "Pipe Rack Strut Design",
+    "description": "Design longitudinal struts and bracing for pipe rack stability",
+    "complexity": "medium",
+    "standards": [
+      "AS 4100",
+      "PIP STC01015"
+    ],
+    "inputs": [
+      "Bay spacing (m)",
+      "Longitudinal loads (kN)",
+      "Member length (m)",
+      "Support conditions",
+      "Thermal movement (mm)"
+    ],
+    "outputs": [
+      "Strut section",
+      "Tension capacity (kN)",
+      "Compression capacity (kN)",
+      "Slenderness ratio",
+      "Utilisation"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "load",
+      "pipe"
+    ],
+    "source_file": "data/tasks/structural/industrial_structures.json",
+    "suggested_relative_path": "structural/pipe-rack-design/pipe-rack-strut"
+  }
+}

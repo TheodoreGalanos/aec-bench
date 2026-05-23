@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "industrial_structures",
+    "category_id": "platform-grating-design",
+    "category_name": "Platform and Grating Design",
+    "task_id": "grating-selection",
+    "task_name": "Grating Selection",
+    "description": "Select appropriate grating type and bearing bar spacing for given span and load",
+    "complexity": "low",
+    "standards": [
+      "AS 1657",
+      "Manufacturer load tables"
+    ],
+    "inputs": [
+      "Clear span (mm)",
+      "Live load (kPa)",
+      "Point load (kN)",
+      "Material (steel/aluminium)",
+      "Environment (corrosive/non-corrosive)"
+    ],
+    "outputs": [
+      "Grating type (bar size x spacing)",
+      "Safe load capacity (kPa)",
+      "Point load capacity (kN)",
+      "Deflection check"
+    ],
+    "keyword_hits": [
+      "bearing",
+      "capacity",
+      "deflection",
+      "load",
+      "size"
+    ],
+    "source_file": "data/tasks/structural/industrial_structures.json",
+    "suggested_relative_path": "structural/platform-grating-design/grating-selection"
+  }
+}

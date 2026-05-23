@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "bridges",
+    "category_id": "superstructure-design",
+    "category_name": "Superstructure Design",
+    "task_id": "composite-section",
+    "task_name": "Composite Section Properties",
+    "description": "Calculate section properties for steel-concrete composite girder",
+    "complexity": "low",
+    "standards": [
+      "AASHTO LRFD 6.10",
+      "AS/NZS 5100.6"
+    ],
+    "inputs": [
+      "Steel section dimensions",
+      "Slab dimensions",
+      "Haunch dimensions",
+      "Modular ratio n"
+    ],
+    "outputs": [
+      "Transformed section area (mm\u00b2)",
+      "Neutral axis location (mm)",
+      "Moment of inertia I (mm\u2074)",
+      "Section moduli (mm\u00b3)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "moment"
+    ],
+    "source_file": "data/tasks/structural/bridges.json",
+    "suggested_relative_path": "structural/superstructure-design/composite-section"
+  }
+}

@@ -1,0 +1,83 @@
+[meta]
+name = "interior-uniformity"
+description = "Calculate interior illuminance uniformity ratios"
+long_description = "Calculates task-area illuminance uniformity and adjacent-area illuminance ratios for interior workplace lighting checks."
+discipline = "electrical"
+category = "interior-lighting"
+standards = ["EN 12464-1", "AS/NZS 1680"]
+tags = ["electrical", "lighting", "interior-lighting", "uniformity", "deterministic"]
+tool_mode = "with-tool"
+
+[params.task_min_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "Minimum illuminance within the task area"
+min = 0
+max = 2000
+
+[params.task_average_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "Average illuminance within the task area"
+min = 50
+max = 3000
+
+[params.surround_average_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "Average illuminance in the immediate surround area"
+min = 0
+max = 2000
+
+[params.background_average_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "Average illuminance in the background area"
+min = 0
+max = 1000
+
+[outputs.task_uniformity_uo]
+description = "Task-area illuminance uniformity ratio"
+tolerance = 0.03
+
+[outputs.surround_to_task_ratio]
+description = "Immediate surround illuminance divided by task average illuminance"
+tolerance = 0.03
+
+[outputs.background_to_task_ratio]
+description = "Background illuminance divided by task average illuminance"
+tolerance = 0.03
+
+[archetypes.office_work_area]
+description = "Office task area with surrounding circulation"
+task_min_illuminance_lux = {min = 250, max = 450}
+task_average_illuminance_lux = {min = 400, max = 700}
+surround_average_illuminance_lux = {min = 250, max = 500}
+background_average_illuminance_lux = {min = 100, max = 250}
+site_contexts = ["office-workplace", "task-lighting"]
+
+[archetypes.industrial_work_area]
+description = "Industrial task area with adjacent general lighting"
+task_min_illuminance_lux = {min = 150, max = 500}
+task_average_illuminance_lux = {min = 300, max = 1000}
+surround_average_illuminance_lux = {min = 150, max = 700}
+background_average_illuminance_lux = {min = 75, max = 350}
+site_contexts = ["industrial-workplace", "task-lighting"]
+
+[difficulty.easy]
+description = "Office task area with all values visible"
+visibility = "all_given"
+archetypes = ["office_work_area"]
+
+[difficulty.medium]
+description = "Interior task area selected from office or industrial cases"
+visibility = "all_given"
+archetypes = ["office_work_area", "industrial_work_area"]
+
+[difficulty.hard]
+description = "Industrial task area with background illuminance embedded in context"
+visibility = "partial"
+hidden_params = ["background_average_illuminance_lux"]
+replacement_text = "Use the background-area illuminance implied by {{ archetype.description }}."
+archetypes = ["industrial_work_area"]
+background_average_illuminance_lux = [180]

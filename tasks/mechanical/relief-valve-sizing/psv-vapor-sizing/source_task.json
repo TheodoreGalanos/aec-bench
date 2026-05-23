@@ -1,0 +1,45 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "relief-valve-sizing",
+    "category_name": "Relief Valve Sizing",
+    "task_id": "psv-vapor-sizing",
+    "task_name": "PSV Sizing for Vapor Service",
+    "description": "Size pressure safety valve for vapor or gas relief",
+    "complexity": "medium",
+    "standards": [
+      "API 520 Part I",
+      "API 526"
+    ],
+    "inputs": [
+      "Relief flow rate (kg/h)",
+      "Set pressure (kPag)",
+      "Allowable overpressure (%)",
+      "Relieving temperature (degC)",
+      "Gas molecular weight",
+      "Compressibility factor Z",
+      "Specific heat ratio k",
+      "Discharge coefficient Kd"
+    ],
+    "outputs": [
+      "Relieving pressure P1 (kPa abs)",
+      "Backpressure ratio",
+      "Required orifice area (mm2)",
+      "Selected API 526 orifice letter",
+      "Actual orifice area (mm2)"
+    ],
+    "keyword_hits": [
+      "flow",
+      "heat",
+      "pressure",
+      "rate",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/relief-valve-sizing/psv-vapor-sizing"
+  }
+}

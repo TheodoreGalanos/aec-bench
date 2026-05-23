@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "drainage_hydrology",
+    "category_id": "hydrologic-calculations",
+    "category_name": "Hydrologic Calculations",
+    "task_id": "scs-curve-number",
+    "task_name": "SCS/NRCS Curve Number Runoff",
+    "description": "Calculate runoff volume using SCS Curve Number method",
+    "complexity": "low",
+    "standards": [
+      "NRCS TR-55"
+    ],
+    "inputs": [
+      "Rainfall depth P (mm or in)",
+      "Curve Number CN",
+      "Hydrologic soil group",
+      "Land cover type"
+    ],
+    "outputs": [
+      "Runoff depth Q (mm or in)",
+      "Initial abstraction Ia (mm)",
+      "Potential maximum retention S (mm)"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/civil/drainage_hydrology.json",
+    "suggested_relative_path": "civil/hydrologic-calculations/scs-curve-number"
+  }
+}

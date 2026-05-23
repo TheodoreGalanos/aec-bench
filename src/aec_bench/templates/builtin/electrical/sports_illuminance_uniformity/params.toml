@@ -1,0 +1,145 @@
+[meta]
+name = "sports-illuminance-uniformity"
+description = "Calculate sports field illuminance and uniformity"
+long_description = "Calculates reduced sports lighting performance using aggregate luminaire flux, utilisation factor, maintenance factor, and grid extrema. The template reports average horizontal illuminance, U1 and U2 uniformity ratios, and margins against target lighting class values."
+discipline = "electrical"
+category = "sports-lighting"
+standards = ["EN 12193", "AS 2560"]
+tags = ["electrical", "lighting", "sports-lighting", "illuminance", "uniformity", "deterministic"]
+tool_mode = "with-tool"
+
+[params.field_length_m]
+type = "float"
+unit = "m"
+description = "Sports field length"
+min = 10
+max = 200
+
+[params.field_width_m]
+type = "float"
+unit = "m"
+description = "Sports field width"
+min = 10
+max = 120
+
+[params.luminaire_count]
+type = "float"
+unit = "count"
+description = "Number of luminaires"
+min = 4
+max = 300
+
+[params.luminaire_luminous_flux_lm]
+type = "float"
+unit = "lm"
+description = "Luminous flux per luminaire"
+min = 10000
+max = 250000
+
+[params.utilisation_factor]
+type = "float"
+unit = "-"
+description = "Field utilisation factor"
+min = 0.2
+max = 0.8
+
+[params.maintenance_factor]
+type = "float"
+unit = "-"
+description = "Lighting maintenance factor"
+min = 0.5
+max = 0.95
+
+[params.minimum_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "Minimum grid illuminance"
+min = 0
+max = 2000
+
+[params.maximum_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "Maximum grid illuminance"
+min = 1
+max = 5000
+
+[params.target_average_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "Target average horizontal illuminance"
+min = 50
+max = 2000
+
+[params.target_uniformity_u2]
+type = "float"
+unit = "-"
+description = "Target U2 uniformity ratio"
+min = 0.1
+max = 0.9
+
+[outputs.average_horizontal_illuminance_lux]
+description = "Average horizontal illuminance"
+tolerance = 0.03
+
+[outputs.uniformity_u1_min_max]
+description = "U1 uniformity ratio, minimum divided by maximum"
+tolerance = 0.03
+
+[outputs.uniformity_u2_min_avg]
+description = "U2 uniformity ratio, minimum divided by average"
+tolerance = 0.03
+
+[outputs.average_illuminance_margin_pct]
+description = "Average illuminance margin against target"
+tolerance = 0.03
+
+[outputs.uniformity_u2_margin_pct]
+description = "U2 uniformity margin against target"
+tolerance = 0.03
+
+[archetypes.community_field]
+description = "Community sports field lighting"
+field_length_m = {min = 40, max = 110}
+field_width_m = {min = 25, max = 70}
+luminaire_count = {min = 8, max = 48}
+luminaire_luminous_flux_lm = {min = 40000, max = 160000}
+utilisation_factor = {min = 0.35, max = 0.65}
+maintenance_factor = {min = 0.65, max = 0.85}
+minimum_illuminance_lux = {min = 50, max = 300}
+maximum_illuminance_lux = {min = 100, max = 700}
+target_average_illuminance_lux = {min = 100, max = 300}
+target_uniformity_u2 = {min = 0.4, max = 0.7}
+site_contexts = ["community-sport", "field-lighting"]
+
+[archetypes.stadium_field]
+description = "Stadium field lighting"
+field_length_m = {min = 90, max = 120}
+field_width_m = {min = 50, max = 80}
+luminaire_count = {min = 40, max = 240}
+luminaire_luminous_flux_lm = {min = 80000, max = 220000}
+utilisation_factor = {min = 0.45, max = 0.75}
+maintenance_factor = {min = 0.7, max = 0.9}
+minimum_illuminance_lux = {min = 300, max = 1200}
+maximum_illuminance_lux = {min = 600, max = 2500}
+target_average_illuminance_lux = {min = 500, max = 1500}
+target_uniformity_u2 = {min = 0.5, max = 0.8}
+site_contexts = ["stadium", "field-lighting"]
+
+[difficulty.easy]
+description = "Community sports field with all values visible"
+visibility = "all_given"
+archetypes = ["community_field"]
+
+[difficulty.medium]
+description = "Sports lighting case selected from community or stadium fields"
+visibility = "all_given"
+archetypes = ["community_field", "stadium_field"]
+
+[difficulty.hard]
+description = "Stadium field with target U2 embedded in context"
+visibility = "partial"
+hidden_params = ["target_uniformity_u2"]
+replacement_text = "Use the target U2 uniformity implied by {{ archetype.description }}."
+archetypes = ["stadium_field"]
+target_uniformity_u2 = [0.7]

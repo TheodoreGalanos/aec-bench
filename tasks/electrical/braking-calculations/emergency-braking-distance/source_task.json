@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "rail_signalling",
+    "category_id": "braking-calculations",
+    "category_name": "Braking and Speed Control",
+    "task_id": "emergency-braking-distance",
+    "task_name": "Emergency Braking Distance Calculation",
+    "description": "Calculate worst-case emergency braking distance for safety applications",
+    "complexity": "medium",
+    "standards": [
+      "EN 14531",
+      "UIC 544-1",
+      "EN 50129"
+    ],
+    "inputs": [
+      "Initial speed (km/h)",
+      "Emergency deceleration rate (m/s2)",
+      "Adhesion factor",
+      "Gradient (%)",
+      "Brake build-up time (s)",
+      "Safety margin factor"
+    ],
+    "outputs": [
+      "Emergency braking distance (m)",
+      "Worst-case with degraded adhesion (m)",
+      "Safe stopping distance",
+      "Required overlap length"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/rail_signalling.json",
+    "suggested_relative_path": "electrical/braking-calculations/emergency-braking-distance"
+  }
+}

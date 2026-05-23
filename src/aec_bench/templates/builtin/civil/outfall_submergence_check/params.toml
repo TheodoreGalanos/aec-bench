@@ -1,0 +1,112 @@
+[meta]
+name = "outfall-submergence-check"
+description = "Outfall submergence analysis: fraction of tidal cycle an outfall invert is submerged under present and future sea levels"
+long_description = "Determines the percentage of time a stormwater or wastewater outfall is submerged by tidal waters under present-day conditions and a future sea level rise scenario. Uses a sinusoidal tide model h(t) = MSL + A sin(2 pi t / T) with a closed-form solution for the submerged fraction, then converts to hours per day. Applicable to coastal outfall feasibility assessments per MfE Coastal Hazards Guidance 2024 and Australian coastal design practice."
+discipline = "civil"
+category = "outfall-hydraulics"
+standards = ["MfE Coastal Hazards Guidance 2024", "IPCC AR6 Sea Level Projections"]
+tags = ["coastal", "outfall", "submergence", "tidal", "sea-level-rise", "drainage"]
+tool_mode = "both"
+
+[params.outfall_invert_level_m]
+type = "float"
+unit = "m AHD"
+description = "Outfall pipe invert level relative to datum (m AHD or m CD)"
+min = -1.0
+max = 1.5
+
+[params.mean_sea_level_m]
+type = "float"
+unit = "m AHD"
+description = "Present-day mean sea level relative to datum"
+min = -0.2
+max = 0.5
+
+[params.tidal_amplitude_m]
+type = "float"
+unit = "m"
+description = "Tidal amplitude (half the spring tidal range), A = (HAT - LAT) / 2"
+min = 0.2
+max = 4.0
+
+[params.sea_level_rise_m]
+type = "float"
+unit = "m"
+description = "Projected sea level rise for the design planning horizon"
+min = 0.1
+max = 1.2
+
+[params.tidal_period_hours]
+type = "float"
+unit = "hours"
+description = "Tidal period (typically 12.42 hours for semi-diurnal M2 constituent)"
+min = 6.0
+max = 25.0
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.present_submergence_percent]
+description = "Percentage of time outfall is submerged under present-day conditions"
+tolerance = 1.0
+
+[outputs.future_submergence_percent]
+description = "Percentage of time outfall is submerged under future sea level conditions"
+tolerance = 1.0
+
+[outputs.present_hours_submerged_per_day]
+description = "Hours per day the outfall is submerged (present-day)"
+tolerance = 0.25
+
+[outputs.future_hours_submerged_per_day]
+description = "Hours per day the outfall is submerged (future)"
+tolerance = 0.25
+
+[outputs.submergence_increase_percent]
+description = "Absolute increase in submergence percentage from SLR"
+tolerance = 1.0
+
+# --- Archetypes: Australian/NZ tidal environments ---
+
+[archetypes.micro_tidal_estuary]
+description = "Micro-tidal sheltered estuary with small tidal range (< 1 m amplitude)"
+tidal_amplitude_m = {min = 0.2, max = 0.5}
+tidal_period_hours = {min = 12.0, max = 12.5}
+site_contexts = ["sydney-harbour-estuary", "auckland-waitemata-harbour", "hobart-derwent-estuary"]
+
+[archetypes.meso_tidal_coast]
+description = "Meso-tidal open coast with moderate tidal range (1-2 m amplitude)"
+tidal_amplitude_m = {min = 0.5, max = 1.0}
+tidal_period_hours = {min = 12.2, max = 12.5}
+site_contexts = ["gold-coast-broadwater", "wellington-harbour-outfall", "newcastle-hunter-river"]
+
+[archetypes.macro_tidal_port]
+description = "Macro-tidal port or river mouth with large tidal range (> 2 m amplitude)"
+tidal_amplitude_m = {min = 1.5, max = 4.0}
+tidal_period_hours = {min = 12.3, max = 12.5}
+site_contexts = ["darwin-harbour-outfall", "broome-roebuck-bay", "gladstone-harbour-discharge"]
+
+[archetypes.diurnal_gulf]
+description = "Diurnal tidal regime with ~24 hour period (Gulf of Carpentaria type)"
+tidal_amplitude_m = {min = 0.5, max = 1.5}
+tidal_period_hours = {min = 23.0, max = 25.0}
+site_contexts = ["karumba-gulf-outfall", "weipa-port-discharge", "gove-peninsula-outfall"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "Small tidal range, all parameters given — straightforward substitution into closed-form formula"
+visibility = "all_given"
+archetypes = ["micro_tidal_estuary", "meso_tidal_coast"]
+
+[difficulty.medium]
+description = "Larger tidal range with all parameters given — same formula, wider parameter spread"
+visibility = "all_given"
+archetypes = ["micro_tidal_estuary", "meso_tidal_coast", "macro_tidal_port", "diurnal_gulf"]
+
+[difficulty.hard]
+description = "Tidal period hidden — agent must recognise semi-diurnal or diurnal regime from site description"
+visibility = "partial"
+hidden_params = ["tidal_period_hours"]
+replacement_text = "The outfall discharges into {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["micro_tidal_estuary", "meso_tidal_coast", "macro_tidal_port", "diurnal_gulf"]

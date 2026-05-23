@@ -1,0 +1,84 @@
+[meta]
+name = "water-supply-curve"
+description = "Hydrant water supply curve from flow test data"
+long_description = "Develops a hydrant water supply curve from static pressure, residual pressure, and measured test flow using the standard 0.54 flow-test exponent. The template reports the curve coefficient, target residual flow, and available flow at 20 psi."
+discipline = "mechanical"
+category = "hydrant-flow-test"
+standards = ["NFPA 291", "NFPA 13"]
+tags = ["mechanical", "fire-services", "hydrant", "water-supply", "deterministic"]
+tool_mode = "with-tool"
+
+[params.static_pressure_psi]
+type = "float"
+unit = "psi"
+description = "Static pressure before flow test"
+min = 1.0
+max = 300.0
+
+[params.residual_pressure_psi]
+type = "float"
+unit = "psi"
+description = "Residual pressure during flow test"
+min = 0.0
+max = 250.0
+
+[params.test_flow_gpm]
+type = "float"
+unit = "gpm"
+description = "Measured test flow"
+min = 1.0
+max = 20000.0
+
+[params.target_residual_pressure_psi]
+type = "float"
+unit = "psi"
+description = "Target residual pressure"
+min = 0.0
+max = 250.0
+
+[outputs.pressure_drop_test_psi]
+description = "Pressure drop during the flow test"
+tolerance = 0.03
+
+[outputs.curve_coefficient]
+description = "Water supply curve coefficient"
+tolerance = 0.03
+
+[outputs.flow_at_target_residual_gpm]
+description = "Flow at the target residual pressure"
+tolerance = 0.03
+
+[outputs.available_flow_20psi_gpm]
+description = "Available flow at 20 psi residual pressure"
+tolerance = 0.03
+
+[archetypes.municipal_hydrant]
+description = "Municipal hydrant water supply curve"
+static_pressure_psi = {min = 80.0, max = 140.0}
+residual_pressure_psi = {min = 20.0, max = 70.0}
+test_flow_gpm = {min = 500.0, max = 3000.0}
+target_residual_pressure_psi = {min = 20.0, max = 60.0}
+site_contexts = ["municipal-hydrant", "street-main-flow-test"]
+
+[archetypes.industrial_fire_main]
+description = "Industrial fire-main water supply curve"
+static_pressure_psi = {min = 120.0, max = 220.0}
+residual_pressure_psi = {min = 30.0, max = 100.0}
+test_flow_gpm = {min = 1000.0, max = 8000.0}
+target_residual_pressure_psi = {min = 20.0, max = 80.0}
+site_contexts = ["industrial-fire-main", "site-hydrant-flow-test"]
+
+[difficulty.easy]
+description = "All parameters given for a municipal hydrant"
+visibility = "all_given"
+archetypes = ["municipal_hydrant"]
+
+[difficulty.medium]
+description = "All parameters given across hydrant supply curves"
+visibility = "all_given"
+archetypes = ["municipal_hydrant", "industrial_fire_main"]
+
+[difficulty.hard]
+description = "All parameters given for an industrial fire main"
+visibility = "all_given"
+archetypes = ["industrial_fire_main"]

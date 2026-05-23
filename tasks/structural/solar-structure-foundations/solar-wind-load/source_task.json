@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "energy_structures",
+    "category_id": "solar-structure-foundations",
+    "category_name": "Solar Structure Foundations",
+    "task_id": "solar-wind-load",
+    "task_name": "Solar Panel Wind Load Calculation",
+    "description": "Calculate wind loads on solar panels including array effects and tilt angle",
+    "complexity": "medium",
+    "standards": [
+      "ASCE 7",
+      "AS/NZS 1170.2",
+      "DIN EN 1991-1-4"
+    ],
+    "inputs": [
+      "Panel dimensions",
+      "Tilt angle",
+      "Ground clearance",
+      "Array configuration (rows, spacing)",
+      "Terrain category",
+      "Basic wind speed"
+    ],
+    "outputs": [
+      "Net pressure coefficient Cn",
+      "Design wind pressure (kPa)",
+      "Uplift force per panel (kN)",
+      "Governing direction"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "load",
+      "pressure"
+    ],
+    "source_file": "data/tasks/structural/energy_structures.json",
+    "suggested_relative_path": "structural/solar-structure-foundations/solar-wind-load"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "building_structures",
+    "category_id": "concrete-slab-design",
+    "category_name": "Concrete Slab Design",
+    "task_id": "punching-shear-check",
+    "task_name": "Punching Shear Check",
+    "description": "Check flat slab punching shear capacity at column",
+    "complexity": "low",
+    "standards": [
+      "AS 3600 Sec 9.3",
+      "ACI 318 Ch 22.6"
+    ],
+    "inputs": [
+      "Factored column load Vu (kN)",
+      "Unbalanced moment (kNm)",
+      "Slab depth d (mm)",
+      "Column dimensions",
+      "Concrete strength f'c (MPa)"
+    ],
+    "outputs": [
+      "Critical perimeter (mm)",
+      "Design shear stress vu (MPa)",
+      "Shear capacity PhiVc (MPa)",
+      "Pass/fail or shear reinforcement required"
+    ],
+    "keyword_hits": [
+      "balance",
+      "capacity",
+      "load",
+      "moment",
+      "shear",
+      "stress"
+    ],
+    "source_file": "data/tasks/structural/building_structures.json",
+    "suggested_relative_path": "structural/concrete-slab-design/punching-shear-check"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "facades",
+    "category_id": "bracket-connection",
+    "category_name": "Bracket and Connection Design",
+    "task_id": "anchor-design",
+    "task_name": "Anchor Design to Concrete",
+    "description": "Design post-installed anchors for facade bracket attachment to concrete",
+    "complexity": "medium",
+    "standards": [
+      "AS 5216",
+      "ACI 318 Appendix D",
+      "EN 1992-4"
+    ],
+    "inputs": [
+      "Design loads (tension, shear)",
+      "Edge distances (mm)",
+      "Anchor spacing (mm)",
+      "Concrete strength (MPa)",
+      "Anchor type and size"
+    ],
+    "outputs": [
+      "Steel capacity (kN)",
+      "Concrete breakout capacity (kN)",
+      "Pullout capacity (kN)",
+      "Governing capacity",
+      "Utilisation"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "load",
+      "shear",
+      "size"
+    ],
+    "source_file": "data/tasks/structural/facades.json",
+    "suggested_relative_path": "structural/bracket-connection/anchor-design"
+  }
+}

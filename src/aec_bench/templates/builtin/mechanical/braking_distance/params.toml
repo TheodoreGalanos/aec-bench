@@ -1,0 +1,92 @@
+[meta]
+name = "braking-distance"
+description = "Train braking distance calculation from brake effort and gradient"
+long_description = "Calculates train stopping distance under constant deceleration from train mass, initial speed, brake effort, adhesion limit, and track gradient. The template caps braking effort by wheel-rail adhesion and reports net deceleration, stopping distance, and stopping time."
+discipline = "mechanical"
+category = "braking-systems"
+standards = ["EN 14531-1", "AS 7520.3"]
+tags = ["mechanical", "rolling-stock", "braking-distance", "deceleration", "deterministic"]
+tool_mode = "with-tool"
+
+[params.train_mass_t]
+type = "float"
+unit = "t"
+description = "Train mass"
+min = 5.0
+max = 2000.0
+
+[params.initial_speed_km_h]
+type = "float"
+unit = "km/h"
+description = "Initial speed before braking"
+min = 5.0
+max = 200.0
+
+[params.brake_effort_kn]
+type = "float"
+unit = "kN"
+description = "Available braking effort"
+min = 1.0
+max = 5000.0
+
+[params.adhesion_coefficient]
+type = "float"
+description = "Wheel-rail adhesion coefficient"
+min = 0.03
+max = 0.35
+
+[params.track_gradient_pct]
+type = "float"
+unit = "%"
+description = "Track gradient, positive for downhill in braking direction"
+min = -5.0
+max = 5.0
+
+[outputs.adhesion_limited_brake_effort_kn]
+description = "Effective brake effort after adhesion limit"
+tolerance = 0.03
+
+[outputs.net_deceleration_m_s2]
+description = "Net braking deceleration"
+tolerance = 0.03
+
+[outputs.stopping_distance_m]
+description = "Stopping distance"
+tolerance = 0.03
+
+[outputs.stopping_time_s]
+description = "Stopping time"
+tolerance = 0.03
+
+[archetypes.light_rail_vehicle]
+description = "Light rail vehicle braking on urban alignment"
+train_mass_t = {min = 30.0, max = 120.0}
+initial_speed_km_h = {min = 20.0, max = 80.0}
+brake_effort_kn = {min = 80.0, max = 600.0}
+adhesion_coefficient = {min = 0.08, max = 0.2}
+track_gradient_pct = {min = -2.0, max = 4.0}
+site_contexts = ["urban-light-rail", "depot-approach-track"]
+
+[archetypes.heavy_freight_train]
+description = "Heavy freight train braking on mainline track"
+train_mass_t = {min = 500.0, max = 1800.0}
+initial_speed_km_h = {min = 40.0, max = 120.0}
+brake_effort_kn = {min = 800.0, max = 4500.0}
+adhesion_coefficient = {min = 0.06, max = 0.18}
+track_gradient_pct = {min = -1.0, max = 3.0}
+site_contexts = ["regional-mainline", "freight-terminal-approach"]
+
+[difficulty.easy]
+description = "All parameters given for light rail braking"
+visibility = "all_given"
+archetypes = ["light_rail_vehicle"]
+
+[difficulty.medium]
+description = "All parameters given across passenger and freight braking cases"
+visibility = "all_given"
+archetypes = ["light_rail_vehicle", "heavy_freight_train"]
+
+[difficulty.hard]
+description = "All parameters given for heavy freight braking cases"
+visibility = "all_given"
+archetypes = ["heavy_freight_train"]

@@ -1,0 +1,42 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "buildings_electrical",
+    "category_id": "cable-sizing",
+    "category_name": "Cable Sizing and Selection",
+    "task_id": "voltage-drop-calculation",
+    "task_name": "Voltage Drop Calculation",
+    "description": "Calculate voltage drop for a cable circuit using impedance method",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3008.1",
+      "AS/NZS 3000"
+    ],
+    "inputs": [
+      "Load current (A)",
+      "Cable length (m)",
+      "Cable impedance (ohm/km)",
+      "Power factor",
+      "System voltage (V)"
+    ],
+    "outputs": [
+      "Voltage drop (V)",
+      "Voltage drop (%)",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "calculation",
+      "current",
+      "drop",
+      "load",
+      "power",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/buildings_electrical.json",
+    "suggested_relative_path": "electrical/cable-sizing/voltage-drop-calculation"
+  }
+}

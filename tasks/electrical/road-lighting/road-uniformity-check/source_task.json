@@ -1,0 +1,31 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "lighting",
+    "category_id": "road-lighting",
+    "category_name": "Road Lighting Design",
+    "task_id": "road-uniformity-check",
+    "task_name": "Road Lighting Uniformity Verification",
+    "description": "Calculate overall and longitudinal uniformity ratios for road lighting",
+    "complexity": "low",
+    "standards": [
+      "EN 13201-2",
+      "AS/NZS 1158.2"
+    ],
+    "inputs": [
+      "Calculated luminance/illuminance values across grid"
+    ],
+    "outputs": [
+      "Overall uniformity Uo (L_min/L_avg)",
+      "Longitudinal uniformity Ul",
+      "Pass/fail vs class target"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/electrical/lighting.json",
+    "suggested_relative_path": "electrical/road-lighting/road-uniformity-check"
+  }
+}

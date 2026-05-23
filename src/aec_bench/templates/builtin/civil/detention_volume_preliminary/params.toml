@@ -1,0 +1,101 @@
+[meta]
+name = "detention-volume-preliminary"
+description = "Preliminary detention volume estimate using simplified triangular hydrograph method"
+long_description = "Estimates the required stormwater detention storage volume using a simplified triangular inflow hydrograph with constant outflow, as commonly applied in preliminary site drainage design per TR-55 and local council requirements. Computes the volume difference between post-development peak inflow and the allowable release rate over the storm duration, and derives an approximate basin surface area from a nominated design depth."
+discipline = "civil"
+category = "detention-design"
+standards = ["TR-55", "Local requirements"]
+tags = ["civil", "detention", "stormwater", "hydrology", "storage", "drainage", "deterministic"]
+tool_mode = "with-tool"
+
+[params.post_dev_peak_flow_m3_s]
+type = "float"
+unit = "m³/s"
+description = "Post-development peak flow rate Q_post"
+min = 0.05
+max = 15.0
+
+[params.allowable_release_rate_m3_s]
+type = "float"
+unit = "m³/s"
+description = "Allowable (pre-development or regulated) release rate Q_allow"
+min = 0.01
+max = 10.0
+derivable_from = "archetype"
+
+[params.storm_duration_hr]
+type = "float"
+unit = "hr"
+description = "Design storm duration t_storm"
+min = 0.5
+max = 24.0
+
+[params.design_depth_m]
+type = "float"
+unit = "m"
+description = "Design water depth of the detention basin"
+min = 0.5
+max = 2.0
+
+# --- Outputs ---
+
+[outputs.required_storage_volume_m3]
+description = "Required detention storage volume (m³)"
+tolerance = 0.03
+
+[outputs.approximate_surface_area_m2]
+description = "Approximate basin surface area at design depth (m²)"
+tolerance = 0.03
+
+# --- Archetypes: development site types ---
+
+[archetypes.small_residential_subdivision]
+description = "Small residential subdivision on gentle terrain with local council detention requirements"
+post_dev_peak_flow_m3_s = {min = 0.1, max = 1.0}
+allowable_release_rate_m3_s = {min = 0.05, max = 0.5}
+storm_duration_hr = {min = 1.0, max = 6.0}
+design_depth_m = {min = 0.5, max = 1.2}
+site_contexts = ["sydney-northwest-growth-area", "melbourne-casey-corridor", "brisbane-north-lakes"]
+
+[archetypes.commercial_development]
+description = "Commercial or mixed-use development with high impervious coverage and moderate catchment"
+post_dev_peak_flow_m3_s = {min = 0.5, max = 5.0}
+allowable_release_rate_m3_s = {min = 0.2, max = 2.0}
+storm_duration_hr = {min = 1.0, max = 6.0}
+design_depth_m = {min = 0.8, max = 1.5}
+site_contexts = ["parramatta-cbd-redevelopment", "gold-coast-robina-town-centre", "adelaide-tonsley-innovation"]
+
+[archetypes.industrial_estate]
+description = "Industrial estate with large hardstand areas and concentrated runoff"
+post_dev_peak_flow_m3_s = {min = 1.0, max = 8.0}
+allowable_release_rate_m3_s = {min = 0.3, max = 3.0}
+storm_duration_hr = {min = 1.0, max = 12.0}
+design_depth_m = {min = 1.0, max = 2.0}
+site_contexts = ["western-sydney-aerotropolis", "geelong-northern-industrial", "townsville-port-expansion"]
+
+[archetypes.large_greenfield]
+description = "Large greenfield development converting rural land to mixed residential with significant flow increase"
+post_dev_peak_flow_m3_s = {min = 3.0, max = 15.0}
+allowable_release_rate_m3_s = {min = 1.0, max = 6.0}
+storm_duration_hr = {min = 2.0, max = 24.0}
+design_depth_m = {min = 1.0, max = 2.0}
+site_contexts = ["wollondilly-growth-area", "greater-springfield-qld", "armstrong-creek-vic"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "All parameters given — straightforward volume calculation with clear Q_post > Q_allow"
+visibility = "all_given"
+archetypes = ["small_residential_subdivision", "commercial_development"]
+
+[difficulty.medium]
+description = "All parameters given but larger flows and longer storms — agent must apply correct case logic"
+visibility = "all_given"
+archetypes = ["industrial_estate", "large_greenfield", "commercial_development", "small_residential_subdivision"]
+
+[difficulty.hard]
+description = "Allowable release rate hidden — agent must infer from site description and local requirements"
+visibility = "partial"
+hidden_params = ["allowable_release_rate_m3_s"]
+replacement_text = "The site is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["small_residential_subdivision", "commercial_development", "industrial_estate", "large_greenfield"]

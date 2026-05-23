@@ -1,0 +1,115 @@
+[meta]
+name = "pipe-support-dead-load"
+description = "Pipe support operating and hydrotest dead line load calculation"
+long_description = "Calculates pipe support dead load from steel pipe annulus, fluid contents area, and insulation annulus using explicit densities and pipe geometry. The template reports operating line load and hydrotest line load when hydrotest density is provided."
+discipline = "structural"
+category = "pipe-support"
+standards = ["ASME B31.3", "AS 4041", "EN 13480"]
+tags = ["structural", "pipe-support", "dead-load", "hydrotest", "deterministic"]
+tool_mode = "with-tool"
+
+[params.pipe_outer_diameter_mm]
+type = "float"
+unit = "mm"
+description = "Pipe outside diameter"
+min = 25.0
+max = 2000.0
+
+[params.pipe_wall_thickness_mm]
+type = "float"
+unit = "mm"
+description = "Pipe wall thickness"
+min = 1.0
+max = 80.0
+
+[params.steel_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "Steel pipe density"
+min = 7600.0
+max = 8000.0
+
+[params.contents_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "Operating contents density"
+min = 0.0
+max = 1600.0
+
+[params.insulation_thickness_mm]
+type = "float"
+unit = "mm"
+description = "Radial insulation thickness"
+min = 0.0
+max = 200.0
+
+[params.insulation_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "Insulation density"
+min = 0.0
+max = 300.0
+
+[params.hydrotest_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "Hydrotest fluid density"
+min = 950.0
+max = 1200.0
+
+[outputs.steel_pipe_load_kn_m]
+description = "Steel pipe self-weight line load"
+tolerance = 0.03
+
+[outputs.contents_load_kn_m]
+description = "Operating contents line load"
+tolerance = 0.03
+
+[outputs.insulation_load_kn_m]
+description = "Insulation line load"
+tolerance = 0.03
+
+[outputs.operating_line_load_kn_m]
+description = "Operating dead line load for pipe support"
+tolerance = 0.03
+
+[outputs.hydrotest_line_load_kn_m]
+description = "Hydrotest dead line load for pipe support"
+tolerance = 0.03
+
+[archetypes.small_process_line]
+description = "Small insulated process pipe support dead-load check"
+pipe_outer_diameter_mm = {min = 50.0, max = 250.0}
+pipe_wall_thickness_mm = {min = 2.0, max = 15.0}
+steel_density_kg_m3 = {min = 7800.0, max = 7900.0}
+contents_density_kg_m3 = {min = 600.0, max = 1100.0}
+insulation_thickness_mm = {min = 0.0, max = 75.0}
+insulation_density_kg_m3 = {min = 40.0, max = 180.0}
+hydrotest_density_kg_m3 = {min = 990.0, max = 1050.0}
+site_contexts = ["process-pipe-rack", "plant-room"]
+
+[archetypes.large_utility_line]
+description = "Large utility pipe support dead-load check"
+pipe_outer_diameter_mm = {min = 300.0, max = 1200.0}
+pipe_wall_thickness_mm = {min = 6.0, max = 40.0}
+steel_density_kg_m3 = {min = 7800.0, max = 7900.0}
+contents_density_kg_m3 = {min = 900.0, max = 1200.0}
+insulation_thickness_mm = {min = 25.0, max = 150.0}
+insulation_density_kg_m3 = {min = 60.0, max = 220.0}
+hydrotest_density_kg_m3 = {min = 990.0, max = 1100.0}
+site_contexts = ["utility-corridor", "industrial-pipe-rack"]
+
+[difficulty.easy]
+description = "All parameters given for a small process pipe"
+visibility = "all_given"
+archetypes = ["small_process_line"]
+
+[difficulty.medium]
+description = "All parameters given across small and large pipe supports"
+visibility = "all_given"
+archetypes = ["small_process_line", "large_utility_line"]
+
+[difficulty.hard]
+description = "All parameters given for a large utility pipe"
+visibility = "all_given"
+archetypes = ["large_utility_line"]

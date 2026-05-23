@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_protection",
+    "category_id": "sprinkler-hydraulics",
+    "category_name": "Sprinkler Hydraulic Calculations",
+    "task_id": "friction-loss-hazen-williams",
+    "task_name": "Pipe Friction Loss Calculation",
+    "description": "Calculate friction loss in pipe using Hazen-Williams formula",
+    "complexity": "low",
+    "standards": [
+      "NFPA 13",
+      "AS 2118"
+    ],
+    "inputs": [
+      "Flow rate (gpm)",
+      "Pipe length (ft)",
+      "Pipe internal diameter (in)",
+      "C-factor for pipe material"
+    ],
+    "outputs": [
+      "Friction loss (psi)",
+      "Equivalent length for fittings",
+      "Total pressure loss (psi)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "pipe",
+      "pressure",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/fire_protection.json",
+    "suggested_relative_path": "mechanical/sprinkler-hydraulics/friction-loss-hazen-williams"
+  }
+}

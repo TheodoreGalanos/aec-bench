@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "industrial_electrical",
+    "category_id": "short-circuit-industrial",
+    "category_name": "Short-Circuit Analysis",
+    "task_id": "equipment-fault-rating",
+    "task_name": "Equipment Fault Rating Verification",
+    "description": "Verify switchgear and protective device fault ratings exceed prospective fault levels",
+    "complexity": "low",
+    "standards": [
+      "IEC 60909",
+      "AS/NZS 61439"
+    ],
+    "inputs": [
+      "Prospective fault current (kA)",
+      "Peak fault current (kA)",
+      "Equipment fault rating (kA)",
+      "Equipment peak withstand"
+    ],
+    "outputs": [
+      "Fault rating adequacy check",
+      "Peak withstand verification",
+      "Safety margin (%)"
+    ],
+    "keyword_hits": [
+      "current",
+      "fault"
+    ],
+    "source_file": "data/tasks/electrical/industrial_electrical.json",
+    "suggested_relative_path": "electrical/short-circuit-industrial/equipment-fault-rating"
+  }
+}

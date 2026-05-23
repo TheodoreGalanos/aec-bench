@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_coastal",
+    "category_id": "coastal-drainage",
+    "category_name": "Coastal Drainage Design",
+    "task_id": "freeboard-calculation",
+    "task_name": "Freeboard Calculation",
+    "description": "Calculate required freeboard for coastal structures",
+    "complexity": "low",
+    "standards": [
+      "NZS 4404:2010",
+      "MfE Guidance 2024"
+    ],
+    "inputs": [
+      "Design water level (m)",
+      "Structure type",
+      "Construction tolerance"
+    ],
+    "outputs": [
+      "Freeboard allowance (m)",
+      "Minimum floor/crest level (m)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/civil/civil_coastal.json",
+    "suggested_relative_path": "civil/coastal-drainage/freeboard-calculation"
+  }
+}

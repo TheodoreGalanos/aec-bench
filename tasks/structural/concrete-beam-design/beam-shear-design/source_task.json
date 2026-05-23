@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "building_structures",
+    "category_id": "concrete-beam-design",
+    "category_name": "Concrete Beam Design",
+    "task_id": "beam-shear-design",
+    "task_name": "Beam Shear Reinforcement Design",
+    "description": "Calculate required shear reinforcement (stirrups) for a concrete beam",
+    "complexity": "low",
+    "standards": [
+      "AS 3600 Sec 8.2",
+      "ACI 318 Ch 22"
+    ],
+    "inputs": [
+      "Factored shear Vu (kN)",
+      "Concrete strength f'c (MPa)",
+      "Steel yield strength fsy.f (MPa)",
+      "Beam width bw (mm)",
+      "Effective depth d (mm)"
+    ],
+    "outputs": [
+      "Concrete shear capacity Vuc (kN)",
+      "Required stirrup spacing s (mm)",
+      "Shear capacity PhiVn (kN)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "capacity",
+      "shear"
+    ],
+    "source_file": "data/tasks/structural/building_structures.json",
+    "suggested_relative_path": "structural/concrete-beam-design/beam-shear-design"
+  }
+}

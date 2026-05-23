@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "electrical-parameters",
+    "category_name": "Electrical Parameters",
+    "task_id": "ac-resistance-temperature",
+    "task_name": "AC Resistance at Temperature",
+    "description": "Calculate AC resistance of conductor at operating temperature including skin effect",
+    "complexity": "low",
+    "standards": [
+      "IEEE 738",
+      "IEC 60287"
+    ],
+    "inputs": [
+      "DC resistance at 20C (ohm/km)",
+      "Temperature coefficient (/degC)",
+      "Operating temperature (degC)",
+      "Conductor construction (stranded, segmental)"
+    ],
+    "outputs": [
+      "DC resistance at temperature (ohm/km)",
+      "Skin effect factor",
+      "AC resistance at temperature (ohm/km)"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/electrical-parameters/ac-resistance-temperature"
+  }
+}

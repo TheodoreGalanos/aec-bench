@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "ground",
+    "community": "geotechnical",
+    "category_id": "design-review-qa",
+    "category_name": "Design Review & QA Checks",
+    "task_id": "fos-compliance",
+    "task_name": "Factor of Safety Compliance Check",
+    "description": "Verify all FoS values meet code-specified minimums",
+    "complexity": "low",
+    "standards": [
+      "AS 4678",
+      "Eurocode 7",
+      "AASHTO"
+    ],
+    "inputs": [
+      "Calculated FoS values",
+      "Failure mode types",
+      "Applicable standard"
+    ],
+    "outputs": [
+      "Compliance summary",
+      "Non-compliant items list"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate"
+    ],
+    "source_file": "data/tasks/ground/geotechnical.json",
+    "suggested_relative_path": "ground/design-review-qa/fos-compliance"
+  }
+}

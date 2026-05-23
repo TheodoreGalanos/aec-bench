@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "tunnel_systems",
+    "category_id": "ventilation-calculations",
+    "category_name": "Ventilation System Calculations",
+    "task_id": "jet-fan-thrust",
+    "task_name": "Jet Fan Thrust Calculation",
+    "description": "Calculate required thrust and number of jet fans for tunnel ventilation",
+    "complexity": "medium",
+    "standards": [
+      "PIARC 1996 05.02",
+      "ANSI/AMCA 250-22"
+    ],
+    "inputs": [
+      "Required air velocity (m/s)",
+      "Tunnel cross-section (m2)",
+      "Air density (kg/m3)",
+      "Fan efficiency",
+      "External factors (piston effect, wind)"
+    ],
+    "outputs": [
+      "Total required thrust (kN)",
+      "Number of fans",
+      "Fan specifications",
+      "Air velocity profile"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "ventilation"
+    ],
+    "source_file": "data/tasks/mechanical/tunnel_systems.json",
+    "suggested_relative_path": "mechanical/ventilation-calculations/jet-fan-thrust"
+  }
+}

@@ -1,0 +1,71 @@
+[meta]
+name = "spl-log-sum"
+description = "Three-source sound pressure level logarithmic summation"
+long_description = "Calculates combined sound pressure level from three independent source levels using logarithmic addition. The template converts each dB value to linear acoustic energy, sums the terms, and converts back to dB for deterministic acoustic fundamentals checks."
+discipline = "mechanical"
+category = "fundamental-calculations"
+standards = ["Acoustic Fundamentals"]
+tags = ["mechanical", "acoustics", "spl", "logarithmic-sum", "deterministic"]
+tool_mode = "with-tool"
+
+[params.source_1_spl_db]
+type = "float"
+unit = "dB"
+description = "Sound pressure level from source 1"
+min = 20.0
+max = 130.0
+
+[params.source_2_spl_db]
+type = "float"
+unit = "dB"
+description = "Sound pressure level from source 2"
+min = 20.0
+max = 130.0
+
+[params.source_3_spl_db]
+type = "float"
+unit = "dB"
+description = "Sound pressure level from source 3"
+min = 20.0
+max = 130.0
+
+[outputs.total_linear_energy]
+description = "Sum of linear acoustic energy terms"
+tolerance = 0.03
+
+[outputs.combined_spl_db]
+description = "Combined sound pressure level"
+tolerance = 0.03
+
+[outputs.dominant_source_spl_db]
+description = "Highest individual source level"
+tolerance = 0.01
+
+[archetypes.plant_room_sources]
+description = "Three mechanical plant sources in a plant room"
+source_1_spl_db = {min = 65.0, max = 95.0}
+source_2_spl_db = {min = 60.0, max = 90.0}
+source_3_spl_db = {min = 55.0, max = 85.0}
+site_contexts = ["hospital-plant-room", "commercial-rooftop-plant"]
+
+[archetypes.industrial_noise_sources]
+description = "Three industrial process noise sources"
+source_1_spl_db = {min = 75.0, max = 110.0}
+source_2_spl_db = {min = 70.0, max = 105.0}
+source_3_spl_db = {min = 65.0, max = 100.0}
+site_contexts = ["water-treatment-plant", "industrial-process-building"]
+
+[difficulty.easy]
+description = "All parameters given for plant room sources"
+visibility = "all_given"
+archetypes = ["plant_room_sources"]
+
+[difficulty.medium]
+description = "All parameters given across plant and industrial noise sources"
+visibility = "all_given"
+archetypes = ["plant_room_sources", "industrial_noise_sources"]
+
+[difficulty.hard]
+description = "All parameters given for higher-level industrial noise sources"
+visibility = "all_given"
+archetypes = ["industrial_noise_sources"]

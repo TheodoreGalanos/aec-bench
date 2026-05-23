@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "industrial_electrical",
+    "category_id": "cable-sizing-industrial",
+    "category_name": "Industrial Cable Sizing",
+    "task_id": "tray-cable-derating",
+    "task_name": "Cable Tray Derating Calculation",
+    "description": "Calculate derating factors for cables installed in trays with multiple circuits",
+    "complexity": "medium",
+    "standards": [
+      "AS/NZS 3008.1",
+      "IEC 60287"
+    ],
+    "inputs": [
+      "Number of cables in tray",
+      "Cable sizes and types",
+      "Tray type (ladder, perforated)",
+      "Ambient temperature",
+      "Tray fill percentage"
+    ],
+    "outputs": [
+      "Grouping derating factor",
+      "Temperature derating factor",
+      "Combined derating factor",
+      "Derated cable capacities"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "calculation",
+      "rate",
+      "size"
+    ],
+    "source_file": "data/tasks/electrical/industrial_electrical.json",
+    "suggested_relative_path": "electrical/cable-sizing-industrial/tray-cable-derating"
+  }
+}

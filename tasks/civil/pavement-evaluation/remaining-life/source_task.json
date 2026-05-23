@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_aviation",
+    "category_id": "pavement-evaluation",
+    "category_name": "Pavement Evaluation",
+    "task_id": "remaining-life",
+    "task_name": "Remaining Pavement Life Calculation",
+    "description": "Calculate remaining structural life of existing pavement",
+    "complexity": "medium",
+    "standards": [
+      "FAA AC 150/5320-6G"
+    ],
+    "inputs": [
+      "Current pavement structure",
+      "Backcalculated moduli",
+      "Future traffic forecast",
+      "Current CDF consumed"
+    ],
+    "outputs": [
+      "Remaining life (years)",
+      "Allowable traffic (coverages)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "current",
+      "forecast"
+    ],
+    "source_file": "data/tasks/civil/civil_aviation.json",
+    "suggested_relative_path": "civil/pavement-evaluation/remaining-life"
+  }
+}

@@ -1,0 +1,82 @@
+[meta]
+name = "scs-curve-number"
+description = "Runoff depth using the SCS/NRCS curve number method Q = (P - Ia)^2 / (P - Ia + S)"
+long_description = "Calculates storm runoff depth from rainfall using the SCS/NRCS curve number method per TR-55. Derives potential maximum retention S = (25400/CN) - 254 and initial abstraction Ia = 0.2*S, then computes excess rainfall as Q = (P - Ia)^2 / (P - Ia + S). Widely used for hydrologic modelling of ungauged catchments based on soil type and land cover."
+discipline = "civil"
+category = "hydrologic-calculations"
+standards = ["NRCS TR-55"]
+tags = ["hydrology", "drainage", "runoff", "stormwater", "curve-number", "SCS"]
+tool_mode = "with-tool"
+
+[params.rainfall_depth_mm]
+type = "float"
+unit = "mm"
+description = "Total storm rainfall depth P"
+min = 5
+max = 300
+
+[params.curve_number]
+type = "float"
+unit = "-"
+description = "SCS/NRCS curve number CN (dimensionless)"
+min = 30
+max = 98
+derivable_from = "archetype"
+
+[outputs.potential_max_retention_mm]
+description = "Potential maximum retention S (mm)"
+tolerance = 0.03
+
+[outputs.initial_abstraction_mm]
+description = "Initial abstraction Ia (mm)"
+tolerance = 0.03
+
+[outputs.runoff_depth_mm]
+description = "Runoff depth Q (mm)"
+tolerance = 0.03
+
+# --- Archetypes: land cover / soil type combinations ---
+
+[archetypes.parkland_sandy_soil]
+description = "Parkland and open green space on well-drained sandy soil (HSG A)"
+curve_number = {min = 30, max = 49}
+site_contexts = ["adelaide-parklands-sand", "perth-coastal-reserve", "gold-coast-hinterland-park"]
+
+[archetypes.suburban_residential]
+description = "Suburban residential area with lawns and driveways on loamy soil (HSG B)"
+curve_number = {min = 55, max = 75}
+site_contexts = ["sydney-western-suburbs", "melbourne-outer-east", "brisbane-northern-suburbs"]
+
+[archetypes.agricultural_pasture]
+description = "Agricultural pasture on moderately drained silt-loam soil (HSG C)"
+curve_number = {min = 71, max = 83}
+site_contexts = ["hunter-valley-pastoral", "darling-downs-farmland", "barossa-valley-grazing"]
+
+[archetypes.commercial_industrial]
+description = "Commercial or industrial precinct with mostly impervious surfaces on clay soil (HSG D)"
+curve_number = {min = 89, max = 98}
+site_contexts = ["sydney-cbd-redevelopment", "melbourne-docklands", "brisbane-port-industrial"]
+
+[archetypes.forest_sandy_loam]
+description = "Forested catchment on sandy-loam soil with good ground cover (HSG B)"
+curve_number = {min = 55, max = 66}
+site_contexts = ["blue-mountains-bushland", "dandenong-ranges-forest", "tamborine-mountain-reserve"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "Direct application of SCS equations with all parameters given"
+visibility = "all_given"
+archetypes = ["parkland_sandy_soil", "suburban_residential", "agricultural_pasture", "commercial_industrial", "forest_sandy_loam"]
+
+[difficulty.medium]
+description = "Wider parameter ranges; agent must handle low-CN cases where Q may be zero"
+visibility = "all_given"
+archetypes = ["parkland_sandy_soil", "suburban_residential", "agricultural_pasture", "commercial_industrial", "forest_sandy_loam"]
+
+[difficulty.hard]
+description = "Curve number hidden — agent must infer CN from land cover and soil group description"
+visibility = "partial"
+hidden_params = ["curve_number"]
+replacement_text = "The catchment is {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["parkland_sandy_soil", "suburban_residential", "agricultural_pasture", "commercial_industrial", "forest_sandy_loam"]

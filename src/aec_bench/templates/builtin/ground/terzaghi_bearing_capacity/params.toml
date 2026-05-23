@@ -1,0 +1,138 @@
+[meta]
+name = "terzaghi-bearing-capacity"
+description = "Ultimate bearing capacity using Terzaghi's 1943 equation"
+long_description = "Calculates ultimate and allowable bearing capacity of shallow foundations using Terzaghi's (1943) classical equation: qu = c*Nc*sc + q*Nq + 0.5*gamma*B*sg*Ngamma, with shape factors for strip, square, and circular footings. Includes water table correction for overburden and effective unit weight, and bearing capacity factors Nc, Nq from analytical expressions with Ngamma interpolated from standard tables."
+discipline = "ground"
+category = "shallow-foundations"
+standards = ["Terzaghi (1943)"]
+tags = ["geotechnical", "bearing-capacity", "deterministic"]
+tool_mode = "with-tool"
+
+[params.cohesion_kpa]
+type = "float"
+unit = "kPa"
+description = "Effective cohesion c'"
+min = 0
+max = 150
+derivable_from = "archetype"
+
+[params.friction_angle_deg]
+type = "float"
+unit = "degrees"
+description = "Effective friction angle phi'"
+min = 0
+max = 50
+derivable_from = "archetype"
+
+[params.unit_weight_kn_m3]
+type = "float"
+unit = "kN/m³"
+description = "Soil unit weight gamma"
+min = 14
+max = 23
+derivable_from = "archetype"
+
+[params.footing_width_m]
+type = "float"
+unit = "m"
+description = "Footing width B"
+min = 0.5
+max = 10.0
+
+[params.embedment_depth_m]
+type = "float"
+unit = "m"
+description = "Foundation embedment depth Df"
+min = 0.3
+max = 5.0
+
+[params.footing_shape]
+type = "enum"
+description = "Footing shape"
+values = ["strip", "square", "circular"]
+
+[params.water_table_depth_m]
+type = "float"
+unit = "m"
+description = "Depth to water table from ground surface"
+min = 0
+max = 100.0
+optional = true
+
+[params.factor_of_safety]
+type = "float"
+description = "Factor of safety for allowable capacity"
+min = 2.0
+max = 4.0
+default = 3.0
+
+[outputs.nc]
+description = "Bearing capacity factor Nc"
+tolerance = 0.03
+
+[outputs.nq]
+description = "Bearing capacity factor Nq"
+tolerance = 0.03
+
+[outputs.ngamma]
+description = "Bearing capacity factor Ngamma"
+tolerance = 0.05
+
+[outputs.ultimate_bearing_capacity_kpa]
+description = "Ultimate bearing capacity qu (kPa)"
+tolerance = 0.03
+
+[outputs.allowable_bearing_capacity_kpa]
+description = "Allowable bearing capacity qa (kPa)"
+tolerance = 0.03
+
+[archetypes.soft_nc_clay]
+description = "Soft normally consolidated clay"
+cohesion_kpa = {min = 5, max = 15}
+friction_angle_deg = {min = 0, max = 5}
+unit_weight_kn_m3 = {min = 15, max = 17}
+site_contexts = ["brisbane-alluvial", "darwin-estuarine"]
+
+[archetypes.medium_dense_sand]
+description = "Medium dense sand"
+cohesion_kpa = {min = 0, max = 0}
+friction_angle_deg = {min = 32, max = 36}
+unit_weight_kn_m3 = {min = 17, max = 19}
+site_contexts = ["perth-coastal", "hunter-valley-alluvial"]
+
+[archetypes.stiff_oc_clay]
+description = "Stiff overconsolidated clay"
+cohesion_kpa = {min = 50, max = 150}
+friction_angle_deg = {min = 5, max = 15}
+unit_weight_kn_m3 = {min = 18, max = 21}
+site_contexts = ["sydney-hawkesbury", "adelaide-stiff", "melbourne-basalt"]
+
+[archetypes.dense_sand]
+description = "Dense sand"
+cohesion_kpa = {min = 0, max = 0}
+friction_angle_deg = {min = 36, max = 42}
+unit_weight_kn_m3 = {min = 19, max = 21}
+site_contexts = ["perth-coastal", "cairns-coral"]
+
+[difficulty.easy]
+description = "All parameters given, strip footing, no water table"
+visibility = "all_given"
+archetypes = ["medium_dense_sand", "stiff_oc_clay"]
+footing_shape = ["strip"]
+water_table = false
+
+[difficulty.medium]
+description = "All parameters given, any footing shape, water table present"
+visibility = "all_given"
+archetypes = ["soft_nc_clay", "medium_dense_sand", "stiff_oc_clay", "dense_sand"]
+footing_shape = ["strip", "square", "circular"]
+water_table = true
+
+[difficulty.hard]
+description = "Some soil parameters hidden, water table present"
+visibility = "partial"
+hidden_params = ["cohesion_kpa", "friction_angle_deg", "unit_weight_kn_m3"]
+replacement_text = "The foundation soil is {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["soft_nc_clay", "medium_dense_sand", "stiff_oc_clay", "dense_sand"]
+footing_shape = ["square", "circular"]
+water_table = true

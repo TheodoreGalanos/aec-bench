@@ -1,0 +1,146 @@
+[meta]
+name = "carbon-equivalent-calc"
+description = "IIW carbon equivalent calculation for structural steel weldability"
+long_description = "Calculates the International Institute of Welding carbon equivalent from steel chemistry using CE = C + Mn/6 + (Cr + Mo + V)/5 + (Ni + Cu)/15. The template reports numeric margins to weldability thresholds and a deterministic preheat indicator for first-pass steel specification checks."
+discipline = "structural"
+category = "steel-specification"
+standards = ["IIW formula", "AS/NZS 1554", "AWS D1.1"]
+tags = ["structural", "steel", "weldability", "carbon-equivalent", "deterministic"]
+tool_mode = "with-tool"
+
+[params.carbon_pct]
+type = "float"
+unit = "%"
+description = "Carbon content C"
+min = 0.02
+max = 0.35
+
+[params.manganese_pct]
+type = "float"
+unit = "%"
+description = "Manganese content Mn"
+min = 0.2
+max = 1.8
+
+[params.chromium_pct]
+type = "float"
+unit = "%"
+description = "Chromium content Cr"
+min = 0.0
+max = 1.5
+
+[params.molybdenum_pct]
+type = "float"
+unit = "%"
+description = "Molybdenum content Mo"
+min = 0.0
+max = 0.6
+
+[params.vanadium_pct]
+type = "float"
+unit = "%"
+description = "Vanadium content V"
+min = 0.0
+max = 0.25
+
+[params.nickel_pct]
+type = "float"
+unit = "%"
+description = "Nickel content Ni"
+min = 0.0
+max = 2.0
+
+[params.copper_pct]
+type = "float"
+unit = "%"
+description = "Copper content Cu"
+min = 0.0
+max = 0.8
+
+[params.caution_threshold_pct]
+type = "float"
+unit = "%"
+description = "Carbon equivalent threshold where preheat review is indicated"
+min = 0.3
+max = 0.5
+
+[params.high_risk_threshold_pct]
+type = "float"
+unit = "%"
+description = "Carbon equivalent threshold for high weldability risk"
+min = 0.45
+max = 0.7
+
+[outputs.carbon_equivalent_pct]
+description = "IIW carbon equivalent CE"
+tolerance = 0.03
+
+[outputs.caution_margin_pct]
+description = "Margin above the caution threshold"
+tolerance = 0.03
+
+[outputs.high_risk_margin_pct]
+description = "Margin above the high-risk threshold"
+tolerance = 0.03
+
+[outputs.weldability_risk_index]
+description = "Numeric weldability risk class: 0 low, 1 caution, 2 high"
+tolerance = 0.01
+
+[outputs.preheat_indicated]
+description = "Numeric preheat indication: 0 no, 1 yes"
+tolerance = 0.01
+
+[archetypes.low_carbon_plate]
+description = "Low-carbon structural plate with low alloy content"
+carbon_pct = {min = 0.08, max = 0.16}
+manganese_pct = {min = 0.6, max = 1.2}
+chromium_pct = {min = 0.0, max = 0.2}
+molybdenum_pct = {min = 0.0, max = 0.08}
+vanadium_pct = {min = 0.0, max = 0.05}
+nickel_pct = {min = 0.0, max = 0.25}
+copper_pct = {min = 0.0, max = 0.25}
+caution_threshold_pct = {min = 0.38, max = 0.42}
+high_risk_threshold_pct = {min = 0.55, max = 0.6}
+site_contexts = ["building-frame-steel", "bridge-secondary-steel"]
+
+[archetypes.hsla_plate]
+description = "High-strength low-alloy plate with moderate alloy content"
+carbon_pct = {min = 0.12, max = 0.22}
+manganese_pct = {min = 1.0, max = 1.7}
+chromium_pct = {min = 0.1, max = 0.6}
+molybdenum_pct = {min = 0.02, max = 0.25}
+vanadium_pct = {min = 0.02, max = 0.12}
+nickel_pct = {min = 0.1, max = 0.8}
+copper_pct = {min = 0.05, max = 0.35}
+caution_threshold_pct = {min = 0.38, max = 0.45}
+high_risk_threshold_pct = {min = 0.55, max = 0.65}
+site_contexts = ["crane-runway-girder", "heavy-industrial-platform"]
+
+[archetypes.repair_welding_unknown_origin]
+description = "Repair welding material with elevated alloy content"
+carbon_pct = {min = 0.18, max = 0.3}
+manganese_pct = {min = 1.2, max = 1.8}
+chromium_pct = {min = 0.3, max = 1.2}
+molybdenum_pct = {min = 0.05, max = 0.4}
+vanadium_pct = {min = 0.02, max = 0.18}
+nickel_pct = {min = 0.2, max = 1.5}
+copper_pct = {min = 0.1, max = 0.6}
+caution_threshold_pct = {min = 0.38, max = 0.45}
+high_risk_threshold_pct = {min = 0.55, max = 0.7}
+site_contexts = ["brownfield-plant-repair", "marine-structure-repair"]
+
+[difficulty.easy]
+description = "All chemistry and thresholds given for low-carbon steel"
+visibility = "all_given"
+archetypes = ["low_carbon_plate"]
+
+[difficulty.medium]
+description = "All chemistry and thresholds given across common structural steels"
+visibility = "all_given"
+archetypes = ["low_carbon_plate", "hsla_plate"]
+
+[difficulty.hard]
+description = "All chemistry and thresholds given for higher-risk repair welding cases"
+visibility = "all_given"
+archetypes = ["hsla_plate", "repair_welding_unknown_origin"]

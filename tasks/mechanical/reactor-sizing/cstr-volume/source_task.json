@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "reactor-sizing",
+    "category_name": "Reactor Design and Sizing",
+    "task_id": "cstr-volume",
+    "task_name": "CSTR Volume Calculation",
+    "description": "Calculate required volume for a continuous stirred tank reactor",
+    "complexity": "medium",
+    "standards": [
+      "Chemical Reaction Engineering Fundamentals"
+    ],
+    "inputs": [
+      "Volumetric flow rate (m3/h)",
+      "Inlet concentration (kmol/m3)",
+      "Required conversion (%)",
+      "Reaction rate expression",
+      "Rate constant at temperature"
+    ],
+    "outputs": [
+      "Outlet concentration (kmol/m3)",
+      "Reaction rate at outlet (kmol/m3.h)",
+      "Required volume (m3)",
+      "Space time (h)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/reactor-sizing/cstr-volume"
+  }
+}

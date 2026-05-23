@@ -1,0 +1,106 @@
+[meta]
+name = "berthing-energy-calc"
+description = "Characteristic and design vessel berthing energy calculation"
+long_description = "Calculates characteristic and design berthing energy for a vessel from displacement, approach velocity, hydrodynamic and berth coefficients, and an explicit safety factor. The template applies the kinetic energy relationship E = 0.5 M V^2 and multiplies by the provided marine design coefficients."
+discipline = "structural"
+category = "berthing-energy"
+standards = ["BS 6349-4", "PIANC WG211", "AS 4997"]
+tags = ["structural", "marine", "berthing-energy", "ports", "deterministic"]
+tool_mode = "with-tool"
+
+[params.vessel_displacement_t]
+type = "float"
+unit = "t"
+description = "Vessel displacement mass"
+min = 100.0
+max = 250000.0
+
+[params.approach_velocity_m_s]
+type = "float"
+unit = "m/s"
+description = "Vessel approach velocity normal to berth"
+min = 0.02
+max = 0.5
+
+[params.added_mass_coefficient]
+type = "float"
+description = "Added mass coefficient CM"
+min = 1.0
+max = 2.2
+
+[params.eccentricity_coefficient]
+type = "float"
+description = "Eccentricity coefficient CE"
+min = 0.3
+max = 1.0
+
+[params.berth_configuration_coefficient]
+type = "float"
+description = "Berth configuration coefficient CC"
+min = 0.8
+max = 1.2
+
+[params.softness_coefficient]
+type = "float"
+description = "Berth and fender softness coefficient CS"
+min = 0.8
+max = 1.1
+
+[params.safety_factor]
+type = "float"
+description = "Design safety factor applied to characteristic energy"
+min = 1.0
+max = 2.0
+
+[outputs.kinetic_energy_knm]
+description = "Unmodified vessel kinetic energy"
+tolerance = 0.03
+
+[outputs.characteristic_energy_knm]
+description = "Characteristic berthing energy after coefficient product"
+tolerance = 0.03
+
+[outputs.design_energy_knm]
+description = "Design berthing energy"
+tolerance = 0.03
+
+[outputs.coefficient_product]
+description = "Product of berthing energy coefficients"
+tolerance = 0.03
+
+[archetypes.small_service_vessel]
+description = "Small service vessel berthing at a sheltered wharf"
+vessel_displacement_t = {min = 200.0, max = 3000.0}
+approach_velocity_m_s = {min = 0.08, max = 0.25}
+added_mass_coefficient = {min = 1.2, max = 1.8}
+eccentricity_coefficient = {min = 0.6, max = 1.0}
+berth_configuration_coefficient = {min = 0.9, max = 1.1}
+softness_coefficient = {min = 0.9, max = 1.05}
+safety_factor = {min = 1.1, max = 1.5}
+site_contexts = ["service-wharf", "ferry-terminal"]
+
+[archetypes.bulk_carrier_berth]
+description = "Bulk carrier berthing at an open industrial wharf"
+vessel_displacement_t = {min = 30000.0, max = 180000.0}
+approach_velocity_m_s = {min = 0.06, max = 0.2}
+added_mass_coefficient = {min = 1.4, max = 2.0}
+eccentricity_coefficient = {min = 0.4, max = 0.8}
+berth_configuration_coefficient = {min = 0.9, max = 1.2}
+softness_coefficient = {min = 0.85, max = 1.0}
+safety_factor = {min = 1.2, max = 1.8}
+site_contexts = ["bulk-export-berth", "industrial-port-wharf"]
+
+[difficulty.easy]
+description = "All parameters given for a small sheltered vessel"
+visibility = "all_given"
+archetypes = ["small_service_vessel"]
+
+[difficulty.medium]
+description = "All parameters given across small and bulk vessels"
+visibility = "all_given"
+archetypes = ["small_service_vessel", "bulk_carrier_berth"]
+
+[difficulty.hard]
+description = "All parameters given for larger industrial berth cases"
+visibility = "all_given"
+archetypes = ["bulk_carrier_berth"]

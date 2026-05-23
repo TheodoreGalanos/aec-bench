@@ -1,0 +1,91 @@
+[meta]
+name = "target-strength-calc"
+description = "Concrete target mean compressive strength calculation"
+long_description = "Calculates the required average compressive strength for concrete mix design from the specified strength, historical standard deviation, and an explicit reliability factor. The template uses fcr = fc + max(k s, minimum margin), keeping code selection assumptions visible through numeric inputs rather than hidden standard lookup."
+discipline = "structural"
+category = "concrete-mix-design"
+standards = ["ACI 318", "ACI 301", "AS 1379"]
+tags = ["structural", "concrete", "mix-design", "target-strength", "deterministic"]
+tool_mode = "with-tool"
+
+[params.specified_strength_mpa]
+type = "float"
+unit = "MPa"
+description = "Specified compressive strength f'c"
+min = 20.0
+max = 100.0
+
+[params.standard_deviation_mpa]
+type = "float"
+unit = "MPa"
+description = "Historical standard deviation s"
+min = 0.0
+max = 15.0
+
+[params.k_factor]
+type = "float"
+description = "Reliability multiplier applied to the standard deviation"
+min = 1.0
+max = 2.5
+
+[params.minimum_margin_mpa]
+type = "float"
+unit = "MPa"
+description = "Minimum margin above specified strength"
+min = 0.0
+max = 12.0
+
+[outputs.statistical_margin_mpa]
+description = "Statistical margin k times standard deviation"
+tolerance = 0.03
+
+[outputs.governing_margin_mpa]
+description = "Governing margin after minimum margin check"
+tolerance = 0.03
+
+[outputs.target_mean_strength_mpa]
+description = "Required average compressive strength f'cr"
+tolerance = 0.03
+
+[outputs.margin_above_specified_mpa]
+description = "Margin above specified compressive strength"
+tolerance = 0.03
+
+[archetypes.normal_strength_good_records]
+description = "Normal-strength concrete with good historical production records"
+specified_strength_mpa = {min = 25.0, max = 40.0}
+standard_deviation_mpa = {min = 2.5, max = 5.0}
+k_factor = {min = 1.34, max = 1.65}
+minimum_margin_mpa = {min = 3.0, max = 5.0}
+site_contexts = ["commercial-building-slab", "water-retaining-structure"]
+
+[archetypes.normal_strength_limited_records]
+description = "Normal-strength concrete with limited or variable production records"
+specified_strength_mpa = {min = 25.0, max = 50.0}
+standard_deviation_mpa = {min = 5.0, max = 9.0}
+k_factor = {min = 1.65, max = 2.0}
+minimum_margin_mpa = {min = 5.0, max = 8.0}
+site_contexts = ["regional-precast-yard", "remote-project-batch-plant"]
+
+[archetypes.high_strength_concrete]
+description = "High-strength concrete mix requiring a higher control margin"
+specified_strength_mpa = {min = 50.0, max = 90.0}
+standard_deviation_mpa = {min = 4.0, max = 10.0}
+k_factor = {min = 1.65, max = 2.33}
+minimum_margin_mpa = {min = 6.0, max = 12.0}
+site_contexts = ["high-rise-core", "bridge-precast-girder"]
+
+[difficulty.easy]
+description = "All parameters given for normal-strength concrete with good records"
+visibility = "all_given"
+archetypes = ["normal_strength_good_records"]
+
+[difficulty.medium]
+description = "All parameters given for normal-strength mixes with varied production records"
+visibility = "all_given"
+archetypes = ["normal_strength_good_records", "normal_strength_limited_records"]
+
+[difficulty.hard]
+description = "All parameters given for high-strength or less certain production scenarios"
+visibility = "all_given"
+archetypes = ["normal_strength_limited_records", "high_strength_concrete"]

@@ -1,0 +1,42 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "pump-hydraulics",
+    "category_name": "Pump Hydraulics and Selection",
+    "task_id": "pump-power-efficiency",
+    "task_name": "Pump Power and Efficiency Calculation",
+    "description": "Calculate pump hydraulic power, shaft power, and motor sizing",
+    "complexity": "low",
+    "standards": [
+      "Hydraulic Institute Standards"
+    ],
+    "inputs": [
+      "Flow rate (m3/h)",
+      "Total dynamic head (m)",
+      "Fluid density (kg/m3)",
+      "Pump efficiency (%)",
+      "Motor efficiency (%)"
+    ],
+    "outputs": [
+      "Hydraulic power (kW)",
+      "Shaft power (kW)",
+      "Motor power required (kW)",
+      "Recommended motor size (kW)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "power",
+      "pump",
+      "rate",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/pump-hydraulics/pump-power-efficiency"
+  }
+}

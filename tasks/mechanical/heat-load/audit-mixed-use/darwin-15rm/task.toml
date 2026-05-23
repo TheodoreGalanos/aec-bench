@@ -1,0 +1,20 @@
+version = "1.0"
+
+[metadata]
+difficulty = "hard"
+category = "reasoning"
+tags = ["mechanical", "hvac", "heat-load", "audit", "AS-1668-2", "with-tool"]
+
+[agent]
+timeout_sec = 1200.0
+
+[verifier]
+timeout_sec = 120.0
+
+[environment]
+extensions = ["claude-cli"]
+build_timeout_sec = 600.0
+cpus = 1
+memory_mb = 2048
+storage_mb = 5120
+allow_internet = true

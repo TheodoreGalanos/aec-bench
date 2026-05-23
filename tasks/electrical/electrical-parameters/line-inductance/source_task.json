@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "electrical-parameters",
+    "category_name": "Electrical Parameters",
+    "task_id": "line-inductance",
+    "task_name": "Line Inductance Calculation",
+    "description": "Calculate per-unit-length inductance from conductor geometry",
+    "complexity": "low",
+    "standards": [
+      "IEC 60909",
+      "IEEE 738"
+    ],
+    "inputs": [
+      "GMR of conductor (m)",
+      "Phase spacing (m)",
+      "Phase configuration (horizontal/vertical/delta)",
+      "Bundling configuration"
+    ],
+    "outputs": [
+      "Inductance per phase (mH/km)",
+      "GMD (m)",
+      "Equivalent GMR for bundle"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/electrical-parameters/line-inductance"
+  }
+}

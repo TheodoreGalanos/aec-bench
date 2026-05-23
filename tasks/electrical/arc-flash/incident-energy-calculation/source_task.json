@@ -1,0 +1,43 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "buildings_electrical",
+    "category_id": "arc-flash",
+    "category_name": "Arc Flash Assessment",
+    "task_id": "incident-energy-calculation",
+    "task_name": "Arc Flash Incident Energy Calculation",
+    "description": "Calculate incident energy and arc flash boundary using IEEE 1584 method",
+    "complexity": "high",
+    "standards": [
+      "IEEE 1584",
+      "NFPA 70E"
+    ],
+    "inputs": [
+      "System voltage (V)",
+      "Bolted fault current (kA)",
+      "Protective device clearing time (ms)",
+      "Working distance (mm)",
+      "Electrode gap (mm)",
+      "Enclosure dimensions"
+    ],
+    "outputs": [
+      "Arcing current (kA)",
+      "Incident energy (cal/cm2)",
+      "Arc flash boundary (mm)",
+      "Required PPE category"
+    ],
+    "keyword_hits": [
+      "arc flash",
+      "calculate",
+      "calculation",
+      "current",
+      "energy",
+      "fault",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/buildings_electrical.json",
+    "suggested_relative_path": "electrical/arc-flash/incident-energy-calculation"
+  }
+}

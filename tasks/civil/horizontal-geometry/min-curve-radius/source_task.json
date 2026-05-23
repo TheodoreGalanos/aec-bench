@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "roads",
+    "category_id": "horizontal-geometry",
+    "category_name": "Horizontal Curve Geometry",
+    "task_id": "min-curve-radius",
+    "task_name": "Minimum Horizontal Curve Radius",
+    "description": "Calculate minimum horizontal curve radius for a given design speed and superelevation rate",
+    "complexity": "low",
+    "standards": [
+      "AGRD Part 3 \u00a77"
+    ],
+    "inputs": [
+      "Design speed (km/h)",
+      "Maximum superelevation rate (%)",
+      "Side friction factor"
+    ],
+    "outputs": [
+      "Minimum radius (m)",
+      "Desirable minimum radius (m)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "radius",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/roads.json",
+    "suggested_relative_path": "civil/horizontal-geometry/min-curve-radius"
+  }
+}

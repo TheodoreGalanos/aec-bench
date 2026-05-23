@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "process-deliverables",
+    "category_name": "Process Deliverables Generation",
+    "task_id": "datasheet-review",
+    "task_name": "Equipment Datasheet QA Review",
+    "description": "Review equipment datasheet for accuracy and completeness",
+    "complexity": "medium",
+    "standards": [
+      "API Standards",
+      "Project Specifications"
+    ],
+    "inputs": [
+      "Equipment datasheet",
+      "H&MB data",
+      "P&ID tag information",
+      "Design basis document"
+    ],
+    "outputs": [
+      "Completeness checklist",
+      "Cross-reference verification",
+      "Calculation spot-checks",
+      "Issue/discrepancy list"
+    ],
+    "keyword_hits": [
+      "calculation"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/process-deliverables/datasheet-review"
+  }
+}

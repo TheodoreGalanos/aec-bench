@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "bridges",
+    "category_id": "seismic-analysis",
+    "category_name": "Seismic Analysis & Design",
+    "task_id": "capacity-design",
+    "task_name": "Capacity Design Verification",
+    "description": "Verify capacity protection of non-ductile elements",
+    "complexity": "high",
+    "standards": [
+      "AASHTO Seismic Guide Spec",
+      "EN 1998-2"
+    ],
+    "inputs": [
+      "Plastic hinge overstrength moment",
+      "Column shear capacity",
+      "Foundation and cap beam capacity"
+    ],
+    "outputs": [
+      "Overstrength shear demand",
+      "Capacity-protected element adequacy",
+      "Pass/fail for capacity design"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "demand",
+      "moment",
+      "shear"
+    ],
+    "source_file": "data/tasks/structural/bridges.json",
+    "suggested_relative_path": "structural/seismic-analysis/capacity-design"
+  }
+}

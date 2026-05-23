@@ -1,0 +1,32 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "coastal_engineering",
+    "category_id": "tidal-water-levels",
+    "category_name": "Tidal & Extreme Water Levels",
+    "task_id": "tidal-prism",
+    "task_name": "Tidal Prism Calculation",
+    "description": "Calculate tidal prism for an estuary or lagoon inlet",
+    "complexity": "low",
+    "standards": [
+      "USACE CEM"
+    ],
+    "inputs": [
+      "Basin surface area (m\u00b2)",
+      "Tidal range (m)",
+      "Inlet geometry"
+    ],
+    "outputs": [
+      "Tidal prism (m\u00b3)",
+      "Mean tidal velocity (m/s)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/civil/coastal_engineering.json",
+    "suggested_relative_path": "civil/tidal-water-levels/tidal-prism"
+  }
+}

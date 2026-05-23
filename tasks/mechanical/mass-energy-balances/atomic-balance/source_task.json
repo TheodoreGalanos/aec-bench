@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "mass-energy-balances",
+    "category_name": "Mass and Energy Balances",
+    "task_id": "atomic-balance",
+    "task_name": "Atomic Species Balance",
+    "description": "Calculate unknown compositions and reaction extents using atomic balances for reacting systems",
+    "complexity": "low",
+    "standards": [
+      "Chemical Engineering Fundamentals"
+    ],
+    "inputs": [
+      "Inlet compositions",
+      "Reaction equations",
+      "Conversion or selectivity data",
+      "Outlet flow rate constraints"
+    ],
+    "outputs": [
+      "Product stream compositions",
+      "Reaction extents (kmol/h)",
+      "By-product yields",
+      "Atomic balance closure per element"
+    ],
+    "keyword_hits": [
+      "balance",
+      "calculate",
+      "flow",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/mass-energy-balances/atomic-balance"
+  }
+}

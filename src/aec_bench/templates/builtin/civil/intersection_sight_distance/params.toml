@@ -1,0 +1,126 @@
+[meta]
+name = "intersection-sight-distance"
+description = "Intersection sight distance for give-way and stop-controlled intersections per AGRD Part 4A"
+long_description = "Calculates the required intersection sight distance (ISD) along the major road at unsignalised intersections using ISD = V × t_gap / 3.6 per AGRD Part 4A. Adjusts the base gap acceptance time for control type, vehicle class, approach grade, and number of crossing lanes, then derives sight-triangle dimensions for clearance verification."
+discipline = "civil"
+category = "sight-distance"
+standards = ["AGRD Part 4A §3"]
+tags = ["civil", "roads", "sight-distance", "intersection", "gap-acceptance", "deterministic"]
+tool_mode = "with-tool"
+
+[params.design_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "Design speed of the major road V"
+min = 40
+max = 130
+
+[params.control_type]
+type = "enum"
+description = "Traffic control on the minor approach"
+values = ["give_way", "stop"]
+
+[params.approach_grade_pct]
+type = "float"
+unit = "%"
+description = "Grade of the minor-road approach (positive = upgrade from intersection)"
+min = -6.0
+max = 10.0
+
+[params.num_lanes_to_cross]
+type = "int"
+unit = "lanes"
+description = "Number of lanes on the major road the minor-road vehicle must cross"
+min = 2
+max = 6
+
+[params.vehicle_type]
+type = "enum"
+description = "Design vehicle entering from the minor road"
+values = ["passenger", "single_unit_truck", "semi_trailer"]
+
+[params.setback_distance_m]
+type = "float"
+unit = "m"
+description = "Distance from major-road edge to driver eye on the minor approach"
+min = 3.0
+max = 15.0
+
+# --- Outputs ---
+
+[outputs.gap_time_s]
+description = "Total gap acceptance time including all corrections (s)"
+tolerance = 0.03
+
+[outputs.required_isd_m]
+description = "Required intersection sight distance along the major road (m)"
+tolerance = 0.03
+
+[outputs.sight_triangle_major_m]
+description = "Sight triangle leg along the major road (m)"
+tolerance = 0.03
+
+[outputs.sight_triangle_minor_m]
+description = "Sight triangle leg along the minor road (m)"
+tolerance = 0.03
+
+# --- Archetypes: intersection geometry scenarios ---
+
+[archetypes.suburban_t_intersection]
+description = "T-intersection on a suburban arterial with give-way control and flat approach"
+design_speed_kmh = {min = 50, max = 70}
+control_type = {values = ["give_way"]}
+approach_grade_pct = {min = -3.0, max = 3.0}
+num_lanes_to_cross = {min = 2, max = 4}
+vehicle_type = {values = ["passenger"]}
+setback_distance_m = {min = 5.0, max = 8.0}
+site_contexts = ["sydney-suburban-arterial", "melbourne-local-collector", "brisbane-suburban-road"]
+
+[archetypes.rural_crossroad]
+description = "Rural crossroads intersection with stop control on the minor road serving passenger vehicles"
+design_speed_kmh = {min = 80, max = 110}
+control_type = {values = ["stop"]}
+approach_grade_pct = {min = -4.0, max = 6.0}
+num_lanes_to_cross = {min = 2, max = 2}
+vehicle_type = {values = ["passenger"]}
+setback_distance_m = {min = 5.0, max = 7.0}
+site_contexts = ["bruce-highway-side-road-qld", "princes-highway-crossroad-vic", "new-england-highway-nsw"]
+
+[archetypes.urban_multilane]
+description = "Urban multilane road with stop-controlled side street serving passenger and single-unit truck traffic"
+design_speed_kmh = {min = 60, max = 80}
+control_type = {values = ["stop"]}
+approach_grade_pct = {min = 3.0, max = 8.0}
+num_lanes_to_cross = {min = 4, max = 6}
+vehicle_type = {values = ["single_unit_truck"]}
+setback_distance_m = {min = 5.0, max = 8.0}
+site_contexts = ["sydney-pacific-highway-side-road", "melbourne-punt-road-lane", "gold-coast-highway-access"]
+
+[archetypes.industrial_access]
+description = "Industrial estate access onto a collector road designed for semi-trailer turning movements"
+design_speed_kmh = {min = 50, max = 80}
+control_type = {values = ["give_way", "stop"]}
+approach_grade_pct = {min = -2.0, max = 5.0}
+num_lanes_to_cross = {min = 2, max = 4}
+vehicle_type = {values = ["semi_trailer"]}
+setback_distance_m = {min = 10.0, max = 15.0}
+site_contexts = ["wetherill-park-industrial-nsw", "laverton-north-industrial-vic", "acacia-ridge-industrial-qld"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "All parameters given, flat grade, passenger vehicle on a two-lane road"
+visibility = "all_given"
+archetypes = ["suburban_t_intersection"]
+
+[difficulty.medium]
+description = "All parameters given, any intersection type including steep grades and extra lanes"
+visibility = "all_given"
+archetypes = ["suburban_t_intersection", "rural_crossroad", "urban_multilane", "industrial_access"]
+
+[difficulty.hard]
+description = "Vehicle type and setback distance hidden — agent must infer from intersection context"
+visibility = "partial"
+hidden_params = ["vehicle_type", "setback_distance_m"]
+replacement_text = "The intersection serves {{ archetype.description }} ({{ archetype.site_context }}). Select an appropriate design vehicle and setback distance for this context."
+archetypes = ["rural_crossroad", "urban_multilane", "industrial_access"]

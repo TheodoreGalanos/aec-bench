@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "land_infrastructure",
+    "category_id": "slope-stability",
+    "category_name": "Slope & Retaining Stability",
+    "task_id": "retaining-wall-stability",
+    "task_name": "Retaining Wall Stability Check",
+    "description": "Check sliding, overturning, and bearing stability of gravity retaining walls",
+    "complexity": "medium",
+    "standards": [
+      "AS 4678",
+      "Eurocode 7"
+    ],
+    "inputs": [
+      "Wall geometry and weight",
+      "Earth pressures",
+      "Foundation soil properties",
+      "Groundwater conditions"
+    ],
+    "outputs": [
+      "FoS against sliding",
+      "FoS against overturning",
+      "FoS against bearing failure",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "bearing",
+      "pressure"
+    ],
+    "source_file": "data/tasks/civil/land_infrastructure.json",
+    "suggested_relative_path": "civil/slope-stability/retaining-wall-stability"
+  }
+}

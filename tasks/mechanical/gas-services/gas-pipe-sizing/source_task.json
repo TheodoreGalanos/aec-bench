@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "hydraulics_buildings",
+    "category_id": "gas-services",
+    "category_name": "Gas Services Design",
+    "task_id": "gas-pipe-sizing",
+    "task_name": "Gas Pipe Sizing",
+    "description": "Size gas pipes using AS 5601 tables",
+    "complexity": "low",
+    "standards": [
+      "AS 5601"
+    ],
+    "inputs": [
+      "Gas load (MJ/h)",
+      "Pipe length (m)",
+      "Allowable pressure drop",
+      "Pipe material",
+      "Gas type"
+    ],
+    "outputs": [
+      "Pipe diameter (mm)",
+      "Pressure drop (kPa)",
+      "Velocity (m/s)"
+    ],
+    "keyword_hits": [
+      "drop",
+      "load",
+      "pipe",
+      "pressure",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/mechanical/hydraulics_buildings.json",
+    "suggested_relative_path": "mechanical/gas-services/gas-pipe-sizing"
+  }
+}

@@ -1,0 +1,101 @@
+[meta]
+name = "curve-elements"
+description = "Horizontal curve element calculation: tangent, arc, external distance, mid-ordinate, and PC/PT chainages"
+long_description = "Computes the geometric elements of a simple horizontal circular curve given the radius, deflection angle, and intersection-point chainage, per AGRD Part 3. Derives tangent length (T = R tan(delta/2)), arc length, external distance, mid-ordinate, and PC/PT chainages. Used in road and rail alignment design to set out curve geometry in the field."
+discipline = "civil"
+category = "horizontal-geometry"
+standards = ["AGRD Part 3"]
+tags = ["civil", "roads", "horizontal-geometry", "curves", "chainage", "deterministic"]
+tool_mode = "with-tool"
+
+[params.curve_radius_m]
+type = "float"
+unit = "m"
+description = "Horizontal curve radius R"
+min = 25
+max = 2000
+
+[params.deflection_angle_deg]
+type = "float"
+unit = "degrees"
+description = "Deflection (intersection) angle Δ between tangents"
+min = 5
+max = 120
+
+[params.ip_chainage_m]
+type = "float"
+unit = "m"
+description = "Chainage of the intersection point (IP)"
+min = 100
+max = 50000
+
+# --- Outputs ---
+
+[outputs.tangent_length_m]
+description = "Tangent length T (m)"
+tolerance = 0.03
+
+[outputs.arc_length_m]
+description = "Arc length L (m)"
+tolerance = 0.03
+
+[outputs.external_distance_m]
+description = "External distance E (m)"
+tolerance = 0.03
+
+[outputs.mid_ordinate_m]
+description = "Mid-ordinate M (m)"
+tolerance = 0.03
+
+[outputs.pc_chainage_m]
+description = "Chainage of the point of curvature PC (m)"
+tolerance = 0.03
+
+[outputs.pt_chainage_m]
+description = "Chainage of the point of tangency PT (m)"
+tolerance = 0.03
+
+# --- Archetypes: road geometry scenarios ---
+
+[archetypes.urban_intersection]
+description = "Urban intersection approach with tight curve radius and large deflection angle"
+curve_radius_m = {min = 25, max = 100}
+deflection_angle_deg = {min = 60, max = 120}
+site_contexts = ["sydney-cbd-intersection", "melbourne-city-roundabout", "brisbane-inner-junction"]
+
+[archetypes.rural_highway]
+description = "Rural two-lane highway with large-radius sweeping curves"
+curve_radius_m = {min = 300, max = 1200}
+deflection_angle_deg = {min = 15, max = 60}
+site_contexts = ["bruce-highway-qld", "pacific-highway-nsw", "hume-highway-vic"]
+
+[archetypes.motorway_ramp]
+description = "Motorway on/off ramp with moderate radius and variable deflection"
+curve_radius_m = {min = 80, max = 250}
+deflection_angle_deg = {min = 30, max = 90}
+site_contexts = ["m1-pacific-motorway-ramp", "m2-hills-motorway-ramp", "citylink-melbourne-ramp"]
+
+[archetypes.residential_street]
+description = "Low-speed residential street with tight geometry"
+curve_radius_m = {min = 25, max = 80}
+deflection_angle_deg = {min = 20, max = 90}
+site_contexts = ["suburban-cul-de-sac", "estate-road-curve", "local-collector-bend"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "All parameters given, gentle curve on a rural highway"
+visibility = "all_given"
+archetypes = ["rural_highway"]
+
+[difficulty.medium]
+description = "All parameters given, any road type and curve geometry"
+visibility = "all_given"
+archetypes = ["urban_intersection", "rural_highway", "motorway_ramp", "residential_street"]
+
+[difficulty.hard]
+description = "IP chainage hidden — agent must back-calculate from PC chainage and tangent length"
+visibility = "partial"
+hidden_params = ["ip_chainage_m"]
+replacement_text = "The PC (point of curvature) is at chainage {{ pc_chainage_m }} m"
+archetypes = ["urban_intersection", "rural_highway", "motorway_ramp", "residential_street"]

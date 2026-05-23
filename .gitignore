@@ -1,0 +1,111 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Environment secrets
+.env
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.DS_Store
+
+# Harbor job output
+jobs/
+
+# Generated task instances (produced by aec-bench generate dataset)
+tasks/generated/
+
+# Build artefacts
+artefacts/
+
+# Claude journal
+journal/
+
+# Claude Code user-local settings and memory (session-specific)
+.claude/
+.claude/settings.local.json
+.claude/settings.json
+.claude/projects/
+.claude/scheduled_tasks.lock
+
+# Codex
+.agents/
+
+# Prime
+.prime/
+configs/
+environments/
+
+# Superpowers plans, specs, and brainstorm artifacts (local working docs)
+superpowers/
+.superpowers/
+docs/superpowers/
+
+# Stray experiment configs and downloaded images
+*.jpeg
+*.jpg
+!src/aec_bench/tui/assets/mascot.jpg
+.aec-bench-*.yaml
+.aec-bench-test-*
+experiment-*.yaml
+experiment-test.yaml
+swarm-*.yaml
+
+# Research working files (seed inventories, assessments)
+research/
+
+# Local run outputs from aec-bench run-local
+_local_runs/
+
+# Archive of pre-flatten artifacts (docs, experiment reports, old configs)
+_archive/
+.worktrees/
+node_modules/
+
+# Local working directories (examples, test workspaces, swarm runs)
+examples/
+packages/
+task_decompositions/
+task_genomes/
+.tmp/
+workspaces/
+workspaces/test/
+workspaces/task-ecology-exp1-*/
+workspaces/*/_swarm_runs/
+
+# Blog/experiment scratch — not part of the distributed library
+docs/blog-drafts/
+docs/best-of-k-generation.md
+docs/lambda-rlm/
+docs/lambda-rlm-development-ideas.md
+docs/task-world-flywheel.*
+memento-test/
+workspaces/voltage-drop-blog*
+scripts/ablation_run.sh
+scripts/analyse_experiment2.py
+scripts/bootstrap_tourno/
+scripts/debug_task.py
+scripts/diagnostics/audit_context_gap.py
+scripts/run_experiment2.py
+scripts/run_experiment2_variance.py
+scripts/trace_review.html
+scripts/verify_constitution_inference.py
+tests/scripts/
+# Lab generated artifacts
+/outputs/
+/prime-rl/
+/environments/*/outputs/
+/environments/*/dist/
+/environments/*/*.egg-info/
+/environments/*/**/__pycache__/
+*.py[cod]

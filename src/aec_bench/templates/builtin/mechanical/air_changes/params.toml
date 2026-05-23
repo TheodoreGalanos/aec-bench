@@ -1,0 +1,54 @@
+[meta]
+name = "air-changes"
+description = "Air changes per hour calculation for room ventilation"
+long_description = "Calculates room air changes per hour from supplied ventilation airflow and room volume. The template provides a deterministic closed-form ventilation rate check using ACH = supply airflow / room volume."
+discipline = "mechanical"
+category = "ventilation"
+standards = ["ASHRAE 62.1"]
+tags = ["mechanical", "ventilation", "air-changes", "ach", "deterministic"]
+tool_mode = "with-tool"
+
+[params.supply_airflow_m3_h]
+type = "float"
+unit = "m3/h"
+description = "Supply ventilation airflow rate"
+min = 10.0
+max = 200000.0
+
+[params.room_volume_m3]
+type = "float"
+unit = "m3"
+description = "Room air volume"
+min = 5.0
+max = 100000.0
+
+[outputs.air_changes_per_h]
+description = "Air changes per hour"
+tolerance = 0.03
+
+[archetypes.small_plant_room]
+description = "Small mechanical or electrical plant room ventilation check"
+supply_airflow_m3_h = {min = 200.0, max = 2500.0}
+room_volume_m3 = {min = 30.0, max = 500.0}
+site_contexts = ["mechanical-plant-room", "electrical-switchroom"]
+
+[archetypes.large_process_space]
+description = "Large process or utility space with dilution ventilation"
+supply_airflow_m3_h = {min = 3000.0, max = 80000.0}
+room_volume_m3 = {min = 1000.0, max = 30000.0}
+site_contexts = ["water-treatment-process-hall", "industrial-utility-building"]
+
+[difficulty.easy]
+description = "All parameters given for a small ventilated room"
+visibility = "all_given"
+archetypes = ["small_plant_room"]
+
+[difficulty.medium]
+description = "All parameters given across small and large ventilated spaces"
+visibility = "all_given"
+archetypes = ["small_plant_room", "large_process_space"]
+
+[difficulty.hard]
+description = "All parameters given for larger process ventilation checks"
+visibility = "all_given"
+archetypes = ["large_process_space"]

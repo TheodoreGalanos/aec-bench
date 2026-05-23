@@ -1,0 +1,106 @@
+[meta]
+name = "wave-shoaling"
+description = "Wave shoaling and refraction using Fenton & McKee (1990) explicit wavelength approximation and Snell's law (USACE CEM)"
+long_description = "Transforms deep-water wave height to nearshore conditions by computing shoaling coefficient K_s and refraction coefficient K_r, yielding H = H_0 * K_s * K_r. Uses the Fenton and McKee (1990) explicit dispersion relation approximation to avoid iterative wavelength solutions, and applies Snell's law for wave angle refraction per the USACE Coastal Engineering Manual."
+discipline = "civil"
+category = "wave-climate"
+standards = ["USACE Coastal Engineering Manual (CEM)", "Fenton & McKee 1990"]
+tags = ["coastal", "wave", "shoaling", "refraction", "nearshore"]
+tool_mode = "both"
+
+[params.deep_water_wave_height_m]
+type = "float"
+unit = "m"
+description = "Deep-water significant wave height H_0"
+min = 0.3
+max = 8.0
+
+[params.wave_period_s]
+type = "float"
+unit = "s"
+description = "Wave period T"
+min = 3.0
+max = 18.0
+derivable_from = "archetype"
+
+[params.nearshore_depth_m]
+type = "float"
+unit = "m"
+description = "Water depth at the nearshore location d"
+min = 0.5
+max = 30.0
+
+[params.deep_water_wave_angle_deg]
+type = "float"
+unit = "degrees"
+description = "Deep-water wave crest angle to bottom contour theta_0"
+min = 0
+max = 80
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.shoaling_coefficient]
+description = "Shoaling coefficient K_s (dimensionless)"
+tolerance = 0.03
+
+[outputs.refraction_coefficient]
+description = "Refraction coefficient K_r (dimensionless)"
+tolerance = 0.03
+
+[outputs.nearshore_wave_height_m]
+description = "Nearshore wave height H (m)"
+tolerance = 0.05
+
+# --- Archetypes: coastal site scenarios ---
+
+[archetypes.open_coast_normal]
+description = "Open coast with waves arriving nearly perpendicular to shoreline"
+deep_water_wave_height_m = {min = 1.0, max = 4.0}
+wave_period_s = {min = 8.0, max = 14.0}
+nearshore_depth_m = {min = 2.0, max = 10.0}
+deep_water_wave_angle_deg = {min = 0, max = 10}
+site_contexts = ["gold-coast-open-beach", "bondi-beach-nsw", "cottesloe-beach-wa"]
+
+[archetypes.oblique_approach]
+description = "Coast with waves arriving at a significant oblique angle"
+deep_water_wave_height_m = {min = 1.0, max = 5.0}
+wave_period_s = {min = 6.0, max = 14.0}
+nearshore_depth_m = {min = 2.0, max = 15.0}
+deep_water_wave_angle_deg = {min = 20, max = 45}
+site_contexts = ["byron-bay-headland", "noosa-heads-refraction", "port-stephens-oblique"]
+
+[archetypes.sheltered_bay]
+description = "Semi-enclosed bay with reduced wave energy and moderate refraction"
+deep_water_wave_height_m = {min = 0.3, max = 2.0}
+wave_period_s = {min = 4.0, max = 10.0}
+nearshore_depth_m = {min = 1.0, max = 8.0}
+deep_water_wave_angle_deg = {min = 10, max = 35}
+site_contexts = ["jervis-bay-nsw", "moreton-bay-qld", "princess-royal-harbour-wa"]
+
+[archetypes.reef_shelf]
+description = "Shallow reef platform with rapid depth transition and strong refraction"
+deep_water_wave_height_m = {min = 1.0, max = 6.0}
+wave_period_s = {min = 8.0, max = 16.0}
+nearshore_depth_m = {min = 0.5, max = 5.0}
+deep_water_wave_angle_deg = {min = 5, max = 40}
+site_contexts = ["ningaloo-reef-wa", "great-barrier-reef-outer", "heron-island-reef"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "Normal incidence with moderate depth — all parameters given, straightforward calculation"
+visibility = "all_given"
+archetypes = ["open_coast_normal", "sheltered_bay"]
+
+[difficulty.medium]
+description = "Oblique approach or reef shelf — all parameters given, refraction effects significant"
+visibility = "all_given"
+archetypes = ["oblique_approach", "reef_shelf"]
+
+[difficulty.hard]
+description = "Wave period and approach angle hidden — agent must infer from site description"
+visibility = "partial"
+hidden_params = ["wave_period_s", "deep_water_wave_angle_deg"]
+replacement_text = "The site is {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["open_coast_normal", "oblique_approach", "sheltered_bay", "reef_shelf"]

@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "ground",
+    "community": "geotechnical",
+    "category_id": "soil-interpretation",
+    "category_name": "Soil Data Interpretation",
+    "task_id": "spt-corrections",
+    "task_name": "SPT N-Value Corrections",
+    "description": "Apply overburden (CN) and energy (CER) corrections to raw SPT N-values",
+    "complexity": "low",
+    "standards": [
+      "Liao and Whitman (1986)",
+      "ASTM D1586"
+    ],
+    "inputs": [
+      "Raw SPT N-value",
+      "Effective overburden stress \u03c3'v (kPa)",
+      "Hammer energy ratio (%)",
+      "Borehole diameter correction"
+    ],
+    "outputs": [
+      "Corrected N60 value",
+      "Normalized (N1)60 value",
+      "Overburden correction factor CN"
+    ],
+    "keyword_hits": [
+      "energy",
+      "stress"
+    ],
+    "source_file": "data/tasks/ground/geotechnical.json",
+    "suggested_relative_path": "ground/soil-interpretation/spt-corrections"
+  }
+}

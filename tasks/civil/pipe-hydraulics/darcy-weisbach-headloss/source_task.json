@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "water_infrastructure",
+    "category_id": "pipe-hydraulics",
+    "category_name": "Pipe Hydraulics Calculations",
+    "task_id": "darcy-weisbach-headloss",
+    "task_name": "Darcy-Weisbach Headloss Calculation",
+    "description": "Calculate friction head loss using Darcy-Weisbach equation with Colebrook-White",
+    "complexity": "low",
+    "standards": [
+      "AWWA"
+    ],
+    "inputs": [
+      "Pipe diameter (mm)",
+      "Pipe length (m)",
+      "Flow rate (L/s)",
+      "Pipe roughness (mm)",
+      "Fluid viscosity"
+    ],
+    "outputs": [
+      "Friction factor",
+      "Head loss (m)",
+      "Reynolds number"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "head loss",
+      "pipe",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/water_infrastructure.json",
+    "suggested_relative_path": "civil/pipe-hydraulics/darcy-weisbach-headloss"
+  }
+}

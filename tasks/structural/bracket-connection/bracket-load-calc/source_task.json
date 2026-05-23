@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "facades",
+    "category_id": "bracket-connection",
+    "category_name": "Bracket and Connection Design",
+    "task_id": "bracket-load-calc",
+    "task_name": "Bracket Load Calculation",
+    "description": "Calculate factored loads on facade brackets from dead and wind loads",
+    "complexity": "low",
+    "standards": [
+      "EN 1990",
+      "ASCE 7",
+      "AS/NZS 1170.0"
+    ],
+    "inputs": [
+      "Tributary area (m2)",
+      "Facade dead load (kPa)",
+      "Design wind pressure (kPa)",
+      "Load factors",
+      "Number of brackets"
+    ],
+    "outputs": [
+      "Dead load per bracket (kN)",
+      "Wind load per bracket (kN)",
+      "Factored design load (kN)",
+      "Load angle"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "load",
+      "pressure"
+    ],
+    "source_file": "data/tasks/structural/facades.json",
+    "suggested_relative_path": "structural/bracket-connection/bracket-load-calc"
+  }
+}

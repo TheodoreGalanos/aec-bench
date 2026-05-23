@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "tunnel_systems",
+    "category_id": "egress-analysis",
+    "category_name": "Egress and Evacuation Analysis",
+    "task_id": "egress-time",
+    "task_name": "Egress Time Calculation",
+    "description": "Calculate total evacuation time for tunnel emergency",
+    "complexity": "medium",
+    "standards": [
+      "NFPA 502",
+      "SFPE Handbook"
+    ],
+    "inputs": [
+      "Tunnel length",
+      "Exit spacing",
+      "Occupant load",
+      "Walking speeds",
+      "Detection and alarm time"
+    ],
+    "outputs": [
+      "Total egress time (minutes)",
+      "Critical path identification",
+      "Queue delays"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "load"
+    ],
+    "source_file": "data/tasks/mechanical/tunnel_systems.json",
+    "suggested_relative_path": "mechanical/egress-analysis/egress-time"
+  }
+}

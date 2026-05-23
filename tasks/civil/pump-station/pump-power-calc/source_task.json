@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "water_infrastructure",
+    "category_id": "pump-station",
+    "category_name": "Pump Station Design",
+    "task_id": "pump-power-calc",
+    "task_name": "Pump Power Calculation",
+    "description": "Calculate required brake horsepower for a pump at a given duty point",
+    "complexity": "low",
+    "standards": [
+      "AWWA",
+      "Hydraulics Institute"
+    ],
+    "inputs": [
+      "Flow rate (L/s)",
+      "Total dynamic head (m)",
+      "Pump efficiency (%)",
+      "Motor efficiency (%)"
+    ],
+    "outputs": [
+      "Hydraulic power (kW)",
+      "Brake power (kW)",
+      "Motor input power (kW)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "power",
+      "pump",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/water_infrastructure.json",
+    "suggested_relative_path": "civil/pump-station/pump-power-calc"
+  }
+}

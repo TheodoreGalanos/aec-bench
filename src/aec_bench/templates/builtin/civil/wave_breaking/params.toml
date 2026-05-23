@@ -1,0 +1,109 @@
+[meta]
+name = "wave-breaking"
+description = "Wave breaking criteria using depth-limited breaking height, Iribarren number, and breaker type classification (USACE CEM)"
+long_description = "Evaluates wave breaking conditions using the Weggel (1972) breaker depth index gamma_b to compute depth-limited breaking wave height H_b = gamma_b * d, then classifies breaker type (spilling, plunging, or surging) via the Iribarren surf similarity parameter. Used in coastal structure design and nearshore hazard assessment per the USACE Coastal Engineering Manual."
+discipline = "civil"
+category = "wave-climate"
+standards = ["USACE Coastal Engineering Manual (CEM)", "Weggel 1972"]
+tags = ["coastal", "wave", "breaking", "iribarren", "surf"]
+tool_mode = "both"
+
+[params.wave_height_m]
+type = "float"
+unit = "m"
+description = "Incident (deep-water) wave height H_0"
+min = 0.3
+max = 8.0
+
+[params.wave_period_s]
+type = "float"
+unit = "s"
+description = "Wave period T"
+min = 3.0
+max = 18.0
+derivable_from = "archetype"
+
+[params.water_depth_m]
+type = "float"
+unit = "m"
+description = "Water depth at location of interest d"
+min = 0.3
+max = 15.0
+
+[params.bottom_slope]
+type = "float"
+unit = "-"
+description = "Bottom slope m (rise/run ratio, dimensionless)"
+min = 0.005
+max = 0.20
+
+# --- Outputs ---
+
+[outputs.breaking_wave_height_m]
+description = "Depth-limited breaking wave height H_b (m)"
+tolerance = 0.03
+
+[outputs.breaking_depth_m]
+description = "Breaking depth d_b (m)"
+tolerance = 0.03
+
+[outputs.breaker_type]
+description = "Breaker type: 1.0 = spilling, 2.0 = plunging, 3.0 = surging"
+tolerance = 0.01
+
+[outputs.iribarren_number]
+description = "Iribarren number (surf similarity parameter) xi"
+tolerance = 0.05
+
+# --- Archetypes: coastal site scenarios ---
+
+[archetypes.gentle_sandy_beach]
+description = "Gentle sandy beach with long flat approach"
+wave_height_m = {min = 0.5, max = 2.5}
+wave_period_s = {min = 8.0, max = 14.0}
+water_depth_m = {min = 0.5, max = 4.0}
+bottom_slope = {min = 0.01, max = 0.02}
+site_contexts = ["gold-coast-open-beach", "byron-bay-sandy-shore", "glenelg-beach-sa"]
+
+[archetypes.moderate_beach]
+description = "Moderate-slope beach with mixed sand and gravel"
+wave_height_m = {min = 0.5, max = 3.5}
+wave_period_s = {min = 6.0, max = 12.0}
+water_depth_m = {min = 0.5, max = 5.0}
+bottom_slope = {min = 0.03, max = 0.05}
+site_contexts = ["manly-beach-nsw", "cottesloe-beach-wa", "torquay-surf-coast"]
+
+[archetypes.steep_reef]
+description = "Steep reef or rocky platform with abrupt depth transition"
+wave_height_m = {min = 1.0, max = 5.0}
+wave_period_s = {min = 6.0, max = 14.0}
+water_depth_m = {min = 1.0, max = 8.0}
+bottom_slope = {min = 0.08, max = 0.15}
+site_contexts = ["ningaloo-reef-wa", "great-barrier-reef-outer", "norfolk-island-reef"]
+
+[archetypes.harbour_breakwater]
+description = "Harbour breakwater toe with constructed slope"
+wave_height_m = {min = 1.0, max = 6.0}
+wave_period_s = {min = 5.0, max = 12.0}
+water_depth_m = {min = 2.0, max = 10.0}
+bottom_slope = {min = 0.05, max = 0.10}
+site_contexts = ["fremantle-port-breakwater", "townsville-harbour-arm", "darwin-east-arm-wharf"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "Moderate wave and slope — all parameters given, straightforward calculation"
+visibility = "all_given"
+archetypes = ["gentle_sandy_beach", "moderate_beach", "harbour_breakwater"]
+
+[difficulty.medium]
+description = "Larger waves or steeper slopes — all parameters given, more extreme conditions"
+visibility = "all_given"
+archetypes = ["moderate_beach", "steep_reef", "harbour_breakwater"]
+
+[difficulty.hard]
+description = "Wave period and bottom slope hidden — agent must infer from site description"
+visibility = "partial"
+hidden_params = ["wave_period_s", "bottom_slope"]
+replacement_text = "The site is {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["gentle_sandy_beach", "moderate_beach", "steep_reef", "harbour_breakwater"]

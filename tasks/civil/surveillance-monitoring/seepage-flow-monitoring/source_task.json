@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "dams",
+    "category_id": "surveillance-monitoring",
+    "category_name": "Surveillance & Monitoring",
+    "task_id": "seepage-flow-monitoring",
+    "task_name": "Seepage Flow Monitoring Assessment",
+    "description": "Evaluate seepage flow measurements against historical trends and action thresholds",
+    "complexity": "low",
+    "standards": [
+      "USACE ER 1110-2-110",
+      "FEMA Dam Instrumentation Manual"
+    ],
+    "inputs": [
+      "Seepage flow time-series",
+      "Reservoir level time-series",
+      "Baseline seepage-reservoir relationship",
+      "Threshold and action levels"
+    ],
+    "outputs": [
+      "Current seepage vs expected",
+      "Trend assessment",
+      "Sediment/turbidity observations",
+      "Recommended actions"
+    ],
+    "keyword_hits": [
+      "current",
+      "flow"
+    ],
+    "source_file": "data/tasks/civil/dams.json",
+    "suggested_relative_path": "civil/surveillance-monitoring/seepage-flow-monitoring"
+  }
+}

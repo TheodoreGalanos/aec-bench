@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "thermal-rating",
+    "category_name": "Conductor Thermal Rating",
+    "task_id": "dynamic-line-rating",
+    "task_name": "Dynamic Line Rating Calculation",
+    "description": "Calculate time-varying ampacity from real-time weather data series",
+    "complexity": "high",
+    "standards": [
+      "IEEE 738",
+      "CIGRE TB 299"
+    ],
+    "inputs": [
+      "Conductor properties",
+      "Weather time series (temp, wind, solar)",
+      "Time step (minutes)",
+      "Maximum conductor temperature (degC)"
+    ],
+    "outputs": [
+      "Hourly ampacity values (A)",
+      "Minimum rating in period",
+      "Average rating in period",
+      "Time above static rating (%)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/thermal-rating/dynamic-line-rating"
+  }
+}

@@ -1,0 +1,133 @@
+[meta]
+name = "pollutant-load-estimate"
+description = "Estimate annual pollutant loads from a catchment using the EMC method"
+long_description = "Estimates annual Total Suspended Solids (TSS), Total Phosphorus (TP), and Total Nitrogen (TN) pollutant loads from urban catchments using the Event Mean Concentration (EMC) method. Computes annual runoff volume as V = C*P*A*10 and multiplies by EMC values per MUSIC guidelines and Australian Runoff Quality to support water-sensitive urban design."
+discipline = "civil"
+category = "water-quality"
+standards = ["MUSIC guidelines", "Australian Runoff Quality (ARQ)"]
+tags = ["civil", "water-quality", "stormwater", "pollutant", "EMC", "TSS", "phosphorus", "nitrogen"]
+tool_mode = "both"
+
+[params.catchment_area_ha]
+type = "float"
+unit = "ha"
+description = "Contributing catchment area A"
+min = 0.5
+max = 500.0
+
+[params.annual_rainfall_mm]
+type = "float"
+unit = "mm"
+description = "Mean annual rainfall P"
+min = 200
+max = 3000
+derivable_from = "archetype"
+
+[params.runoff_coefficient]
+type = "float"
+unit = "-"
+description = "Volumetric runoff coefficient C (fraction of rainfall that becomes runoff)"
+min = 0.05
+max = 0.95
+derivable_from = "archetype"
+
+[params.emc_tss_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Event mean concentration of Total Suspended Solids"
+min = 10
+max = 400
+derivable_from = "archetype"
+
+[params.emc_tp_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Event mean concentration of Total Phosphorus"
+min = 0.05
+max = 1.0
+derivable_from = "archetype"
+
+[params.emc_tn_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Event mean concentration of Total Nitrogen"
+min = 0.3
+max = 5.0
+derivable_from = "archetype"
+
+[outputs.annual_runoff_volume_m3]
+description = "Annual runoff volume V (m³/yr)"
+tolerance = 0.03
+
+[outputs.tss_load_kg_yr]
+description = "Annual Total Suspended Solids load (kg/yr)"
+tolerance = 0.03
+
+[outputs.tp_load_kg_yr]
+description = "Annual Total Phosphorus load (kg/yr)"
+tolerance = 0.03
+
+[outputs.tn_load_kg_yr]
+description = "Annual Total Nitrogen load (kg/yr)"
+tolerance = 0.03
+
+# --- Archetypes: Australian land use types with typical EMC values ---
+
+[archetypes.residential_suburb]
+description = "Residential suburban catchment with moderate impervious fraction and typical domestic pollutant sources"
+catchment_area_ha = {min = 5, max = 100}
+annual_rainfall_mm = {min = 600, max = 1200}
+runoff_coefficient = {min = 0.4, max = 0.7}
+emc_tss_mg_l = {min = 100, max = 200}
+emc_tp_mg_l = {min = 0.25, max = 0.45}
+emc_tn_mg_l = {min = 1.5, max = 2.5}
+site_contexts = ["sydney-western-suburbs", "melbourne-southeast-growth", "brisbane-northern-suburbs", "perth-southern-corridor"]
+
+[archetypes.commercial_centre]
+description = "Commercial or mixed-use town centre with high impervious fraction and heavy traffic"
+catchment_area_ha = {min = 1, max = 50}
+annual_rainfall_mm = {min = 600, max = 1400}
+runoff_coefficient = {min = 0.7, max = 0.95}
+emc_tss_mg_l = {min = 120, max = 250}
+emc_tp_mg_l = {min = 0.30, max = 0.55}
+emc_tn_mg_l = {min = 2.0, max = 3.0}
+site_contexts = ["sydney-cbd-fringe", "melbourne-docklands", "brisbane-fortitude-valley", "adelaide-north-terrace"]
+
+[archetypes.industrial_estate]
+description = "Industrial estate with high impervious cover and elevated pollutant concentrations from warehousing and logistics"
+catchment_area_ha = {min = 2, max = 200}
+annual_rainfall_mm = {min = 400, max = 1200}
+runoff_coefficient = {min = 0.6, max = 0.9}
+emc_tss_mg_l = {min = 150, max = 400}
+emc_tp_mg_l = {min = 0.35, max = 0.65}
+emc_tn_mg_l = {min = 2.0, max = 4.0}
+site_contexts = ["sydney-smithfield-industrial", "melbourne-western-ring", "brisbane-eagle-farm", "perth-kwinana-strip"]
+
+[archetypes.parkland_open_space]
+description = "Parkland or open space catchment with low impervious fraction and minimal pollutant sources"
+catchment_area_ha = {min = 5, max = 500}
+annual_rainfall_mm = {min = 400, max = 2000}
+runoff_coefficient = {min = 0.05, max = 0.30}
+emc_tss_mg_l = {min = 10, max = 80}
+emc_tp_mg_l = {min = 0.05, max = 0.15}
+emc_tn_mg_l = {min = 0.3, max = 1.2}
+site_contexts = ["sydney-centennial-park", "melbourne-yarra-bend", "brisbane-south-bank", "canberra-lake-burley-griffin"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "All parameters given directly — straightforward EMC load calculation"
+visibility = "all_given"
+archetypes = ["residential_suburb", "parkland_open_space"]
+
+[difficulty.medium]
+description = "All parameters given but industrial or commercial land use with higher EMC values — agent must handle larger numbers carefully"
+visibility = "all_given"
+archetypes = ["residential_suburb", "commercial_centre", "industrial_estate", "parkland_open_space"]
+
+[difficulty.hard]
+description = "EMC values hidden — agent must infer typical concentrations from land use type and site description"
+visibility = "partial"
+hidden_params = ["emc_tss_mg_l", "emc_tp_mg_l", "emc_tn_mg_l"]
+replacement_text = "The catchment is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["residential_suburb", "commercial_centre", "industrial_estate", "parkland_open_space"]

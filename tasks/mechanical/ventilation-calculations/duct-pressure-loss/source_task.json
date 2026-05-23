@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "tunnel_systems",
+    "category_id": "ventilation-calculations",
+    "category_name": "Ventilation System Calculations",
+    "task_id": "duct-pressure-loss",
+    "task_name": "Duct Pressure Loss Calculation",
+    "description": "Calculate pressure loss in ventilation ducts using Darcy-Weisbach equation",
+    "complexity": "low",
+    "standards": [
+      "PIARC 1996 05.02",
+      "ASHRAE Handbook"
+    ],
+    "inputs": [
+      "Duct dimensions",
+      "Airflow rate (m3/s)",
+      "Duct roughness",
+      "Fitting types and quantities"
+    ],
+    "outputs": [
+      "Total pressure loss (Pa)",
+      "Friction loss",
+      "Fitting losses"
+    ],
+    "keyword_hits": [
+      "airflow",
+      "calculate",
+      "calculation",
+      "flow",
+      "pressure",
+      "rate",
+      "ventilation"
+    ],
+    "source_file": "data/tasks/mechanical/tunnel_systems.json",
+    "suggested_relative_path": "mechanical/ventilation-calculations/duct-pressure-loss"
+  }
+}

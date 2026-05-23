@@ -1,0 +1,94 @@
+[meta]
+name = "yellow-interval-calculation"
+description = "Traffic-signal yellow interval using the metric ITE equation"
+long_description = "Calculates the yellow change interval for a traffic signal approach using the metric ITE kinematic equation. The template converts approach speed to m/s, applies perception-reaction time, deceleration rate, and road grade, then reports both raw and one-decimal rounded yellow interval."
+discipline = "electrical"
+category = "signal-timing"
+standards = ["ITE Yellow Interval Equation", "MUTCD", "AS 1742.14"]
+tags = ["electrical", "traffic-signals", "yellow-interval", "signal-timing", "kinematics", "deterministic"]
+tool_mode = "with-tool"
+
+[params.approach_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "Approach speed"
+min = 10
+max = 120
+
+[params.perception_reaction_time_s]
+type = "float"
+unit = "s"
+description = "Driver perception-reaction time"
+min = 0.5
+max = 2.5
+
+[params.deceleration_rate_m_s2]
+type = "float"
+unit = "m/s2"
+description = "Comfortable deceleration rate"
+min = 1.5
+max = 5.0
+
+[params.road_grade_pct]
+type = "float"
+unit = "%"
+description = "Approach grade, positive for upgrade and negative for downgrade"
+min = -10
+max = 10
+
+[outputs.approach_speed_m_s]
+description = "Approach speed converted to metres per second"
+tolerance = 0.01
+
+[outputs.grade_adjusted_denominator]
+description = "Denominator in the metric ITE stopping term"
+tolerance = 0.03
+
+[outputs.yellow_interval_s]
+description = "Calculated yellow interval"
+tolerance = 0.03
+
+[outputs.yellow_interval_rounded_s]
+description = "Yellow interval rounded to one decimal place"
+tolerance = 0.01
+
+[archetypes.urban_arterial]
+description = "Urban arterial signal approach"
+approach_speed_kmh = {min = 40, max = 70}
+perception_reaction_time_s = {min = 0.8, max = 1.2}
+deceleration_rate_m_s2 = {min = 2.5, max = 3.5}
+road_grade_pct = {min = -4, max = 4}
+site_contexts = ["urban-intersection", "arterial-road"]
+
+[archetypes.high_speed_approach]
+description = "High-speed signalised approach"
+approach_speed_kmh = {min = 70, max = 110}
+perception_reaction_time_s = {min = 1.0, max = 1.5}
+deceleration_rate_m_s2 = {min = 2.0, max = 3.2}
+road_grade_pct = {min = -6, max = 6}
+site_contexts = ["rural-highway", "outer-urban-arterial"]
+
+[archetypes.steep_grade_approach]
+description = "Signal approach with material grade effect"
+approach_speed_kmh = {min = 40, max = 90}
+perception_reaction_time_s = {min = 1.0, max = 1.5}
+deceleration_rate_m_s2 = {min = 2.0, max = 3.0}
+road_grade_pct = {min = -10, max = 10}
+site_contexts = ["hilly-arterial", "bridge-approach"]
+
+[difficulty.easy]
+description = "Urban approach with all kinematic inputs given"
+visibility = "all_given"
+archetypes = ["urban_arterial"]
+
+[difficulty.medium]
+description = "Mixed speed approaches and grade effects"
+visibility = "all_given"
+archetypes = ["urban_arterial", "high_speed_approach"]
+
+[difficulty.hard]
+description = "Grade value hidden in the site context"
+visibility = "partial"
+hidden_params = ["road_grade_pct"]
+replacement_text = "Use the approach grade implied by {{ archetype.description }}."
+archetypes = ["steep_grade_approach"]

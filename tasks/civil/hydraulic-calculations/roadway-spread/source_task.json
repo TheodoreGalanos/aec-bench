@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "drainage_hydrology",
+    "category_id": "hydraulic-calculations",
+    "category_name": "Hydraulic Pipe & Channel Design",
+    "task_id": "roadway-spread",
+    "task_name": "Roadway Gutter Spread Calculation",
+    "description": "Calculate width of water spread on roadway for inlet spacing design",
+    "complexity": "low",
+    "standards": [
+      "HEC-22"
+    ],
+    "inputs": [
+      "Gutter flow Q (m\u00b3/s)",
+      "Roadway cross-slope Sx (%)",
+      "Longitudinal slope S (%)",
+      "Manning's roughness n"
+    ],
+    "outputs": [
+      "Spread width T (m)",
+      "Flow depth at curb (m)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow"
+    ],
+    "source_file": "data/tasks/civil/drainage_hydrology.json",
+    "suggested_relative_path": "civil/hydraulic-calculations/roadway-spread"
+  }
+}

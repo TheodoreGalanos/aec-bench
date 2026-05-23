@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "track_rail",
+    "category_id": "deliverable-validation",
+    "category_name": "Deliverable Validation & QA",
+    "task_id": "cant-table-verification",
+    "task_name": "Cant Table Verification",
+    "description": "Verify cant values in design reports match calculated requirements",
+    "complexity": "low",
+    "standards": [
+      "AREMA MRE Chapter 5",
+      "ARTC ETS-05-00"
+    ],
+    "inputs": [
+      "Cant table from report",
+      "Curve data (radius, speed)",
+      "Jurisdiction standards"
+    ],
+    "outputs": [
+      "Recalculated cant values",
+      "Comparison to reported values",
+      "Discrepancy list",
+      "Compliance assessment"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "radius"
+    ],
+    "source_file": "data/tasks/civil/track_rail.json",
+    "suggested_relative_path": "civil/deliverable-validation/cant-table-verification"
+  }
+}

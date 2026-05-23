@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_generation_storage",
+    "category_id": "grid-connection",
+    "category_name": "Grid Connection Studies",
+    "task_id": "voltage-ride-through",
+    "task_name": "Voltage Ride-Through Verification",
+    "description": "Verify generating system meets voltage ride-through requirements",
+    "complexity": "high",
+    "standards": [
+      "IEEE 2800",
+      "IEEE 1547",
+      "AEMO NER S5.2"
+    ],
+    "inputs": [
+      "VRT capability curve",
+      "Protection relay settings",
+      "Inverter control parameters",
+      "Grid code VRT requirements"
+    ],
+    "outputs": [
+      "VRT compliance verification",
+      "Trip point comparison",
+      "Reactive current injection verification",
+      "Margin analysis"
+    ],
+    "keyword_hits": [
+      "current",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/energy_generation_storage.json",
+    "suggested_relative_path": "electrical/grid-connection/voltage-ride-through"
+  }
+}

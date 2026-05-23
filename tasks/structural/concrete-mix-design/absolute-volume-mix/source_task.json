@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "materials",
+    "category_id": "concrete-mix-design",
+    "category_name": "Concrete Mix Design",
+    "task_id": "absolute-volume-mix",
+    "task_name": "Absolute Volume Mix Proportioning",
+    "description": "Calculate concrete mix proportions using ACI 211.1 absolute volume method",
+    "complexity": "medium",
+    "standards": [
+      "ACI 211.1"
+    ],
+    "inputs": [
+      "Target strength (MPa)",
+      "Slump requirement (mm)",
+      "Maximum aggregate size (mm)",
+      "Aggregate properties (SG, absorption, FM)",
+      "Air content requirement (%)"
+    ],
+    "outputs": [
+      "Cement content (kg/m3)",
+      "Water content (kg/m3)",
+      "Fine aggregate (kg/m3)",
+      "Coarse aggregate (kg/m3)",
+      "w/cm ratio"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "size"
+    ],
+    "source_file": "data/tasks/structural/materials.json",
+    "suggested_relative_path": "structural/concrete-mix-design/absolute-volume-mix"
+  }
+}

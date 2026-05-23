@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "overhead_wiring_rail",
+    "category_id": "catenary-design",
+    "category_name": "Catenary Sag-Tension Design",
+    "task_id": "single-span-sag-tension",
+    "task_name": "Single Span Sag-Tension Calculation",
+    "description": "Calculate contact wire sag and tension for a single level span at given temperature",
+    "complexity": "low",
+    "standards": [
+      "EN 50119",
+      "EN 50367"
+    ],
+    "inputs": [
+      "Span length (m)",
+      "Wire properties (weight, area, E-modulus)",
+      "Temperature (degC)",
+      "Initial tension at reference temperature",
+      "Messenger wire properties"
+    ],
+    "outputs": [
+      "Contact wire sag (mm)",
+      "Messenger wire sag (mm)",
+      "Wire tension (kN)",
+      "Catenary constant"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/overhead_wiring_rail.json",
+    "suggested_relative_path": "electrical/catenary-design/single-span-sag-tension"
+  }
+}

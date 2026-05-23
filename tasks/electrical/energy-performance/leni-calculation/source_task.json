@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "lighting",
+    "category_id": "energy-performance",
+    "category_name": "Energy Performance",
+    "task_id": "leni-calculation",
+    "task_name": "LENI (Lighting Energy Numeric Indicator) Calculation",
+    "description": "Calculate LENI for interior lighting energy performance",
+    "complexity": "medium",
+    "standards": [
+      "EN 15193-1"
+    ],
+    "inputs": [
+      "Installed lighting power (W)",
+      "Control factors",
+      "Daylight availability",
+      "Operating hours",
+      "Zone areas (m2)"
+    ],
+    "outputs": [
+      "LENI value (kWh/m2/year)",
+      "Comparison to reference LENI"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "energy",
+      "power"
+    ],
+    "source_file": "data/tasks/electrical/lighting.json",
+    "suggested_relative_path": "electrical/energy-performance/leni-calculation"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "vertical_transportation",
+    "category_id": "escalator-design",
+    "category_name": "Escalator Design",
+    "task_id": "escalator-dimensions",
+    "task_name": "Escalator Envelope Dimensions",
+    "description": "Calculate escalator structural envelope dimensions",
+    "complexity": "low",
+    "standards": [
+      "EN 115-1",
+      "AS 1735.10"
+    ],
+    "inputs": [
+      "Rise height (m)",
+      "Step width (mm)",
+      "Inclination angle (degrees)",
+      "Speed (m/s)"
+    ],
+    "outputs": [
+      "Overall length (mm)",
+      "Pit depth (mm)",
+      "Structural opening dimensions"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/electrical/vertical_transportation.json",
+    "suggested_relative_path": "electrical/escalator-design/escalator-dimensions"
+  }
+}

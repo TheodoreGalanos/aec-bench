@@ -1,0 +1,110 @@
+[meta]
+name = "wave-speed-calculation"
+description = "Pressure wave speed calculation for transient hydraulic screening"
+long_description = "Calculates pressure wave propagation speed in an elastic pipe from fluid bulk modulus, fluid density, pipe elastic modulus, diameter, wall thickness, and restraint condition. The template separates the fluid-only wave speed from the pipe flexibility reduction used in first-pass water hammer screening."
+discipline = "mechanical"
+category = "transient-analysis"
+standards = ["AWWA M11"]
+tags = ["mechanical", "water-hammer", "wave-speed", "transient-analysis", "deterministic"]
+tool_mode = "with-tool"
+
+[params.fluid_bulk_modulus_gpa]
+type = "float"
+unit = "GPa"
+description = "Fluid bulk modulus K"
+min = 0.8
+max = 2.4
+
+[params.fluid_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "Fluid density rho"
+min = 700.0
+max = 1300.0
+
+[params.pipe_elastic_modulus_gpa]
+type = "float"
+unit = "GPa"
+description = "Pipe material elastic modulus E"
+min = 0.5
+max = 220.0
+
+[params.pipe_diameter_mm]
+type = "float"
+unit = "mm"
+description = "Pipe internal diameter D"
+min = 50.0
+max = 2500.0
+
+[params.pipe_wall_thickness_mm]
+type = "float"
+unit = "mm"
+description = "Pipe wall thickness e"
+min = 2.0
+max = 80.0
+
+[params.restraint_condition]
+type = "enum"
+description = "Pipe restraint condition factor"
+values = ["fully_restrained", "anchored_with_expansion", "unrestrained"]
+
+[outputs.fluid_only_wave_speed_m_s]
+description = "Wave speed considering fluid compressibility only"
+tolerance = 0.03
+
+[outputs.flexibility_factor]
+description = "Pipe flexibility reduction factor"
+tolerance = 0.03
+
+[outputs.wave_speed_m_s]
+description = "Pressure wave speed in the pipe"
+tolerance = 0.03
+
+[outputs.pipe_flexibility_ratio]
+description = "Dimensionless pipe flexibility contribution"
+tolerance = 0.03
+
+[archetypes.steel_water_main]
+description = "Steel water main with high wall stiffness"
+fluid_bulk_modulus_gpa = {min = 2.0, max = 2.25}
+fluid_density_kg_m3 = {min = 990.0, max = 1000.0}
+pipe_elastic_modulus_gpa = {min = 190.0, max = 210.0}
+pipe_diameter_mm = {min = 300.0, max = 1800.0}
+pipe_wall_thickness_mm = {min = 6.0, max = 30.0}
+site_contexts = ["trunk-water-main", "raw-water-pipeline"]
+
+[archetypes.ductile_iron_main]
+description = "Ductile iron water main with cement lining"
+fluid_bulk_modulus_gpa = {min = 2.0, max = 2.25}
+fluid_density_kg_m3 = {min = 990.0, max = 1000.0}
+pipe_elastic_modulus_gpa = {min = 150.0, max = 180.0}
+pipe_diameter_mm = {min = 150.0, max = 1000.0}
+pipe_wall_thickness_mm = {min = 5.0, max = 25.0}
+site_contexts = ["urban-distribution-main", "regional-transfer-main"]
+
+[archetypes.hdpe_rising_main]
+description = "Flexible HDPE rising main"
+fluid_bulk_modulus_gpa = {min = 1.8, max = 2.2}
+fluid_density_kg_m3 = {min = 990.0, max = 1000.0}
+pipe_elastic_modulus_gpa = {min = 0.8, max = 1.5}
+pipe_diameter_mm = {min = 90.0, max = 800.0}
+pipe_wall_thickness_mm = {min = 6.0, max = 60.0}
+site_contexts = ["sewer-rising-main", "irrigation-transfer-line"]
+
+[difficulty.easy]
+description = "All parameters given for a stiff steel water main"
+visibility = "all_given"
+archetypes = ["steel_water_main"]
+restraint_condition = ["fully_restrained"]
+
+[difficulty.medium]
+description = "All parameters given across steel and ductile iron water mains"
+visibility = "all_given"
+archetypes = ["steel_water_main", "ductile_iron_main"]
+restraint_condition = ["fully_restrained", "anchored_with_expansion"]
+
+[difficulty.hard]
+description = "All parameters given across stiff and flexible pipe systems"
+visibility = "all_given"
+archetypes = ["ductile_iron_main", "hdpe_rising_main"]
+restraint_condition = ["fully_restrained", "anchored_with_expansion", "unrestrained"]

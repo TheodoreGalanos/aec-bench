@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_wastewater_treatment",
+    "category_id": "clarifier-design",
+    "category_name": "Clarifier Design",
+    "task_id": "sor-calculation",
+    "task_name": "Surface Overflow Rate Calculation",
+    "description": "Calculate surface overflow rate for a clarifier",
+    "complexity": "low",
+    "standards": [
+      "Ten States Standards",
+      "WEF MOP 8"
+    ],
+    "inputs": [
+      "Flow rate (m3/d)",
+      "Clarifier surface area (m2)"
+    ],
+    "outputs": [
+      "SOR (m3/m2.d)",
+      "Compliance with design criteria"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/water_wastewater_treatment.json",
+    "suggested_relative_path": "mechanical/clarifier-design/sor-calculation"
+  }
+}

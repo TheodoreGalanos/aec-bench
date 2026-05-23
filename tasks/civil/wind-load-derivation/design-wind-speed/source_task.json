@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_energy",
+    "category_id": "wind-load-derivation",
+    "category_name": "Wind Load Derivation",
+    "task_id": "design-wind-speed",
+    "task_name": "Design Wind Speed Calculation",
+    "description": "Calculate design wind speed (V_sit,beta) from regional wind speed and multipliers",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 1170.2"
+    ],
+    "inputs": [
+      "Regional wind speed V_R (m/s)",
+      "Terrain category",
+      "Building height (m)",
+      "Topographic multiplier M_t",
+      "Shielding multiplier M_s"
+    ],
+    "outputs": [
+      "Terrain/height multiplier M_z,cat",
+      "Site wind speed V_sit,beta (m/s)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/civil/civil_energy.json",
+    "suggested_relative_path": "civil/wind-load-derivation/design-wind-speed"
+  }
+}

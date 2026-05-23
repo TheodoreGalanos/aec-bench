@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "reactor-sizing",
+    "category_name": "Reactor Design and Sizing",
+    "task_id": "pfr-volume",
+    "task_name": "PFR Volume Calculation",
+    "description": "Calculate required volume for a plug flow reactor",
+    "complexity": "medium",
+    "standards": [
+      "Chemical Reaction Engineering Fundamentals"
+    ],
+    "inputs": [
+      "Molar flow rate of limiting reactant (kmol/h)",
+      "Inlet concentration (kmol/m3)",
+      "Required conversion (%)",
+      "Reaction rate expression",
+      "Rate constant"
+    ],
+    "outputs": [
+      "Required volume (m3)",
+      "Space time (h)",
+      "Levenspiel plot data"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/reactor-sizing/pfr-volume"
+  }
+}

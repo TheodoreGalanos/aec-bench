@@ -1,0 +1,121 @@
+[meta]
+name = "cable-ampacity"
+description = "Cable ampacity derating calculation per AS/NZS 3008.1.1"
+long_description = "Computes the derated current-carrying capacity of power cables by applying temperature and grouping correction factors to tabulated base ampacity values: I_derated = I_base * Ct * Cg, where Ct = sqrt((T_max - T_amb) / (T_max - T_ref)). Covers XLPE and PVC insulation across buried, tray, conduit, and air installations per AS/NZS 3008.1.1 and IEC 60287."
+discipline = "electrical"
+category = "cable-sizing"
+standards = ["AS/NZS 3008.1.1", "IEC 60287", "IEC 60364-5-52"]
+tags = ["electrical", "cable-ampacity", "derating", "cable-sizing", "deterministic"]
+tool_mode = "with-tool"
+
+[params.conductor_size_mm2]
+type = "enum"
+unit = "mm²"
+description = "Cable conductor cross-sectional area"
+values = ["1.5", "2.5", "4", "6", "10", "16", "25", "35", "50", "70", "95", "120", "150", "185", "240"]
+
+[params.insulation_type]
+type = "enum"
+description = "Cable insulation material"
+values = ["XLPE", "PVC"]
+derivable_from = "archetype"
+
+[params.installation_method]
+type = "enum"
+description = "Cable installation method"
+values = ["buried", "in-tray", "in-conduit", "in-air"]
+derivable_from = "archetype"
+
+[params.ambient_temp_c]
+type = "float"
+unit = "°C"
+description = "Ambient temperature at the cable location"
+min = 10
+max = 60
+
+[params.max_conductor_temp_c]
+type = "float"
+unit = "°C"
+description = "Maximum allowable conductor temperature for the insulation type"
+min = 60
+max = 90
+default = 90.0
+
+[params.grouping_circuits]
+type = "int"
+unit = "circuits"
+description = "Number of circuits grouped together"
+min = 1
+max = 12
+
+# --- Outputs ---
+
+[outputs.base_ampacity_a]
+description = "Base current-carrying capacity from tables (A)"
+tolerance = 0.03
+
+[outputs.temp_derating_factor]
+description = "Temperature derating factor Ct"
+tolerance = 0.03
+
+[outputs.grouping_derating_factor]
+description = "Grouping derating factor Cg"
+tolerance = 0.03
+
+[outputs.derated_ampacity_a]
+description = "Final derated cable ampacity (A)"
+tolerance = 0.03
+
+# --- Archetypes ---
+# Electrical installation scenarios with typical conditions.
+
+[archetypes.residential_circuit]
+description = "Residential wiring circuit in temperate climate"
+ambient_temp_c = {min = 25, max = 35}
+grouping_circuits = {min = 1, max = 3}
+site_contexts = ["sydney-suburban", "melbourne-suburban", "adelaide-suburban"]
+
+[archetypes.commercial_building]
+description = "Commercial building distribution circuit using XLPE cables on cable tray"
+ambient_temp_c = {min = 30, max = 40}
+grouping_circuits = {min = 2, max = 6}
+insulation_type = ["XLPE"]
+installation_method = ["in-tray"]
+site_contexts = ["sydney-cbd", "melbourne-cbd", "brisbane-cbd"]
+
+[archetypes.industrial_plant]
+description = "Industrial plant feeder cable in warm environment using PVC cables in underground conduit"
+ambient_temp_c = {min = 35, max = 50}
+grouping_circuits = {min = 3, max = 9}
+insulation_type = ["PVC"]
+installation_method = ["in-conduit"]
+site_contexts = ["hunter-valley-industrial", "perth-industrial", "gladstone-industrial"]
+
+[archetypes.underground_distribution]
+description = "Underground cable installation in direct-buried duct"
+ambient_temp_c = {min = 20, max = 30}
+grouping_circuits = {min = 1, max = 4}
+site_contexts = ["darwin-tropical", "cairns-tropical", "townsville-coastal"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "Single circuit with standard ambient temperature, all params given"
+visibility = "all_given"
+archetypes = ["residential_circuit", "underground_distribution"]
+grouping_circuits = [1]
+insulation_type = ["XLPE"]
+installation_method = ["in-air", "buried"]
+conductor_size_mm2 = ["2.5", "4", "6", "10", "16", "25"]
+
+[difficulty.medium]
+description = "Multiple circuits with various installation methods, all params given"
+visibility = "all_given"
+archetypes = ["residential_circuit", "commercial_building", "industrial_plant", "underground_distribution"]
+
+[difficulty.hard]
+description = "Installation method and insulation type hidden; agent must infer from context"
+visibility = "partial"
+hidden_params = ["insulation_type", "installation_method"]
+replacement_text = "The installation uses {{ archetype.description }} practices ({{ archetype.site_context }})"
+archetypes = ["commercial_building", "industrial_plant"]

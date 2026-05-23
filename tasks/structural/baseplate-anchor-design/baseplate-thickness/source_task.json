@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "industrial_structures",
+    "category_id": "baseplate-anchor-design",
+    "category_name": "Baseplate and Anchor Design",
+    "task_id": "baseplate-thickness",
+    "task_name": "Baseplate Thickness Calculation",
+    "description": "Calculate required baseplate thickness for column with combined axial load and moment",
+    "complexity": "low",
+    "standards": [
+      "AS 4100",
+      "AISC Design Guide 1"
+    ],
+    "inputs": [
+      "Column axial load N* (kN)",
+      "Column moment M* (kNm)",
+      "Column section size",
+      "Concrete strength f'c (MPa)",
+      "Baseplate dimensions B x D (mm)"
+    ],
+    "outputs": [
+      "Required plate thickness tp (mm)",
+      "Bearing pressure qb (MPa)",
+      "Utilisation ratio"
+    ],
+    "keyword_hits": [
+      "bearing",
+      "calculate",
+      "calculation",
+      "load",
+      "moment",
+      "pressure",
+      "size"
+    ],
+    "source_file": "data/tasks/structural/industrial_structures.json",
+    "suggested_relative_path": "structural/baseplate-anchor-design/baseplate-thickness"
+  }
+}

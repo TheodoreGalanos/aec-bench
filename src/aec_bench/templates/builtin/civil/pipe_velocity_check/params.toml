@@ -1,0 +1,91 @@
+[meta]
+name = "pipe-velocity-check"
+description = "Pipe flow velocity compliance check against AS/NZS 3500.1 service-type limits"
+long_description = "Calculates full-bore pipe flow velocity from V = Q/A and checks compliance against minimum and maximum velocity limits specified in AS/NZS 3500.1 for water supply, gravity sewer, stormwater, and fire service pipes. Ensures velocities remain within self-cleansing and scour-prevention bounds for the given service type."
+discipline = "civil"
+category = "pipe-hydraulics"
+standards = ["AS/NZS 3500.1 Clause 3.4"]
+tags = ["civil", "pipe-hydraulics", "velocity", "compliance", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.pipe_diameter_mm]
+type = "float"
+unit = "mm"
+description = "Internal pipe diameter D"
+min = 15
+max = 1200
+
+[params.flow_rate_l_s]
+type = "float"
+unit = "L/s"
+description = "Volumetric flow rate Q"
+min = 0.1
+max = 2000
+
+[params.service_type]
+type = "enum"
+description = "Pipe service type per AS/NZS 3500.1"
+values = ["water_supply", "sewer_gravity", "stormwater", "fire_services"]
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.velocity_m_s]
+description = "Flow velocity V (m/s)"
+tolerance = 0.03
+
+[outputs.compliance]
+description = "Velocity compliance (1.0 = within limits, 0.0 = outside limits)"
+tolerance = 0.01
+
+# --- Archetypes ---
+
+[archetypes.residential_water_supply]
+description = "Residential water supply reticulation in PVC or copper"
+pipe_diameter_mm = {min = 15, max = 100}
+flow_rate_l_s = {min = 0.1, max = 10}
+service_type = ["water_supply"]
+site_contexts = ["sydney-suburban-estate", "brisbane-residential-infill"]
+
+[archetypes.trunk_sewer]
+description = "Trunk gravity sewer main in reinforced concrete or vitrified clay"
+pipe_diameter_mm = {min = 225, max = 900}
+flow_rate_l_s = {min = 10, max = 800}
+service_type = ["sewer_gravity"]
+site_contexts = ["melbourne-trunk-sewer", "adelaide-catchment-sewer"]
+
+[archetypes.stormwater_main]
+description = "Stormwater drainage main in reinforced concrete pipe"
+pipe_diameter_mm = {min = 300, max = 1200}
+flow_rate_l_s = {min = 50, max = 2000}
+service_type = ["stormwater"]
+site_contexts = ["perth-urban-drainage", "darwin-monsoon-drainage"]
+
+[archetypes.fire_hydrant_main]
+description = "Fire hydrant main in ductile iron or HDPE"
+pipe_diameter_mm = {min = 100, max = 300}
+flow_rate_l_s = {min = 5, max = 150}
+service_type = ["fire_services"]
+site_contexts = ["canberra-commercial-precinct", "hobart-industrial-park"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "All parameters given, water supply only, small residential pipes"
+visibility = "all_given"
+archetypes = ["residential_water_supply"]
+service_type = ["water_supply"]
+
+[difficulty.medium]
+description = "All parameters given, any service type and pipe size"
+visibility = "all_given"
+archetypes = ["residential_water_supply", "trunk_sewer", "stormwater_main", "fire_hydrant_main"]
+
+[difficulty.hard]
+description = "Service type hidden, agent must infer from site description"
+visibility = "partial"
+hidden_params = ["service_type"]
+replacement_text = "The pipe is {{ archetype.description }} serving {{ archetype.site_context }}"
+archetypes = ["residential_water_supply", "trunk_sewer", "stormwater_main", "fire_hydrant_main"]

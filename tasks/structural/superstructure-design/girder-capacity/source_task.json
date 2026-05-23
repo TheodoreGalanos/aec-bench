@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "bridges",
+    "category_id": "superstructure-design",
+    "category_name": "Superstructure Design",
+    "task_id": "girder-capacity",
+    "task_name": "Steel/Concrete Girder Capacity Check",
+    "description": "Verify girder capacity for bending, shear, and combined effects",
+    "complexity": "medium",
+    "standards": [
+      "AASHTO LRFD Section 5/6",
+      "AS/NZS 5100.5/6"
+    ],
+    "inputs": [
+      "Section properties",
+      "Material properties (fy, f'c)",
+      "Factored design forces",
+      "Effective flange width"
+    ],
+    "outputs": [
+      "Nominal moment capacity Mn (kNm)",
+      "Nominal shear capacity Vn (kN)",
+      "Demand/Capacity ratios",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "demand",
+      "moment",
+      "shear"
+    ],
+    "source_file": "data/tasks/structural/bridges.json",
+    "suggested_relative_path": "structural/superstructure-design/girder-capacity"
+  }
+}

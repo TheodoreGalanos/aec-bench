@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "hydraulics_buildings",
+    "category_id": "special-installations",
+    "category_name": "Special Installations",
+    "task_id": "grease-trap-sizing",
+    "task_name": "Grease Trap/Interceptor Sizing",
+    "description": "Size grease trap using prescriptive methods",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3500.2",
+      "Local Water Authority Guidelines"
+    ],
+    "inputs": [
+      "Fixture types and quantities",
+      "Meal volumes (if food service)",
+      "Flow rates",
+      "Retention time requirements"
+    ],
+    "outputs": [
+      "Grease trap capacity (L)",
+      "Model selection",
+      "Location requirements",
+      "Pump-out frequency"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "flow",
+      "pump",
+      "rate",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/mechanical/hydraulics_buildings.json",
+    "suggested_relative_path": "mechanical/special-installations/grease-trap-sizing"
+  }
+}

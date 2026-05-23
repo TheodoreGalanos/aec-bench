@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "bridges",
+    "category_id": "load-rating",
+    "category_name": "Bridge Load Rating",
+    "task_id": "load-rating-calc",
+    "task_name": "Load Rating Factor Calculation",
+    "description": "Calculate inventory and operating rating factors for bridge components",
+    "complexity": "medium",
+    "standards": [
+      "AASHTO Manual for Bridge Evaluation",
+      "AS 5100.7"
+    ],
+    "inputs": [
+      "As-built section properties",
+      "Material strengths (tested or assumed)",
+      "Section loss due to deterioration",
+      "Dead and live load effects",
+      "Rating vehicle"
+    ],
+    "outputs": [
+      "Inventory rating factor RF_inv",
+      "Operating rating factor RF_opr",
+      "Controlling component",
+      "Posted load (if required)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "load"
+    ],
+    "source_file": "data/tasks/structural/bridges.json",
+    "suggested_relative_path": "structural/load-rating/load-rating-calc"
+  }
+}

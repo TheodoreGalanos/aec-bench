@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_generation_storage",
+    "category_id": "grid-connection",
+    "category_name": "Grid Connection Studies",
+    "task_id": "fault-level-contribution",
+    "task_name": "Fault Level Contribution Study",
+    "description": "Calculate fault current contribution from inverter-based resources",
+    "complexity": "medium",
+    "standards": [
+      "IEC 60909",
+      "IEEE 2800",
+      "AEMO NER S5.2"
+    ],
+    "inputs": [
+      "IBR rating (MVA)",
+      "Inverter fault current capability",
+      "Grid fault level (MVA)",
+      "Connection impedance",
+      "Control mode settings"
+    ],
+    "outputs": [
+      "Maximum fault contribution (kA)",
+      "Impact on network fault level",
+      "Protection coordination implications",
+      "SCR at connection point"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "current",
+      "fault"
+    ],
+    "source_file": "data/tasks/electrical/energy_generation_storage.json",
+    "suggested_relative_path": "electrical/grid-connection/fault-level-contribution"
+  }
+}

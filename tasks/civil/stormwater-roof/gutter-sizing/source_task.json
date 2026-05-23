@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "buildings_civil",
+    "category_id": "stormwater-roof",
+    "category_name": "Roof & Gutter Drainage",
+    "task_id": "gutter-sizing",
+    "task_name": "Eaves Gutter Sizing",
+    "description": "Size eaves gutters based on roof catchment area and rainfall intensity",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3500.3:2025 Table 4.2"
+    ],
+    "inputs": [
+      "Roof catchment area (m2)",
+      "Rainfall intensity (mm/hr)",
+      "Gutter profile",
+      "Gutter grade (%)"
+    ],
+    "outputs": [
+      "Required gutter size (mm)",
+      "Gutter capacity (L/s)",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/civil/buildings_civil.json",
+    "suggested_relative_path": "civil/stormwater-roof/gutter-sizing"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_wastewater_treatment",
+    "category_id": "nutrient-removal",
+    "category_name": "Nutrient Removal Design",
+    "task_id": "nitrification-srt",
+    "task_name": "Nitrification SRT Calculation",
+    "description": "Calculate minimum SRT for nitrification with safety factor",
+    "complexity": "medium",
+    "standards": [
+      "WEF MOP 8"
+    ],
+    "inputs": [
+      "Minimum design temperature (degC)",
+      "Maximum specific growth rate at 20C",
+      "Temperature coefficient theta",
+      "DO concentration (mg/L)",
+      "Ammonia concentration (mg/L)",
+      "Safety factor"
+    ],
+    "outputs": [
+      "Temperature-adjusted growth rate",
+      "Minimum SRT for nitrification (days)",
+      "Design SRT with safety factor (days)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/water_wastewater_treatment.json",
+    "suggested_relative_path": "mechanical/nutrient-removal/nitrification-srt"
+  }
+}

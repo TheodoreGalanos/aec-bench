@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_aviation",
+    "category_id": "pavement-design",
+    "category_name": "Pavement Thickness Design",
+    "task_id": "fleet-mix-cdf",
+    "task_name": "Fleet Mix CDF Analysis",
+    "description": "Calculate cumulative damage factor from aircraft fleet mix using Miner's Rule",
+    "complexity": "medium",
+    "standards": [
+      "FAA AC 150/5320-6G"
+    ],
+    "inputs": [
+      "Aircraft fleet list",
+      "Annual departures per aircraft type",
+      "Pavement structure",
+      "Design life"
+    ],
+    "outputs": [
+      "CDF contribution per aircraft",
+      "Total CDF",
+      "Most damaging aircraft"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/civil/civil_aviation.json",
+    "suggested_relative_path": "civil/pavement-design/fleet-mix-cdf"
+  }
+}

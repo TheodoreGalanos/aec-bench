@@ -1,0 +1,131 @@
+[meta]
+name = "sludge-production"
+description = "Activated sludge production estimation"
+long_description = "Estimates activated sludge production from BOD removal, observed biological yield, solids decay, primary TSS capture, and VSS-to-TSS conversion. The template reports BOD removed, observed yield, biomass VSS production, primary solids, and total sludge production."
+discipline = "mechanical"
+category = "activated-sludge"
+standards = ["WEF MOP 8"]
+tags = ["mechanical", "wastewater", "activated-sludge", "sludge-production", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_rate_m3_d]
+type = "float"
+unit = "m3/d"
+description = "Process flow rate"
+min = 10.0
+max = 1000000.0
+
+[params.influent_bod_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Influent BOD concentration"
+min = 10.0
+max = 1000.0
+
+[params.effluent_bod_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Effluent BOD concentration"
+min = 0.0
+max = 100.0
+
+[params.influent_tss_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Influent TSS concentration"
+min = 0.0
+max = 1000.0
+
+[params.primary_tss_removal_pct]
+type = "float"
+unit = "%"
+description = "Primary treatment TSS removal"
+min = 0.0
+max = 80.0
+
+[params.yield_coefficient]
+type = "float"
+description = "Biomass yield coefficient"
+min = 0.1
+max = 0.9
+
+[params.decay_coefficient_d_inv]
+type = "float"
+unit = "1/d"
+description = "Endogenous decay coefficient"
+min = 0.0
+max = 0.2
+
+[params.srt_days]
+type = "float"
+unit = "d"
+description = "Solids retention time"
+min = 1.0
+max = 60.0
+
+[params.vss_to_tss_ratio]
+type = "float"
+description = "Biomass VSS to TSS ratio"
+min = 0.5
+max = 0.9
+
+[outputs.bod_removed_kg_d]
+description = "BOD removed"
+tolerance = 0.03
+
+[outputs.observed_yield_vss_per_bod]
+description = "Observed biomass yield"
+tolerance = 0.03
+
+[outputs.biomass_production_kg_vss_d]
+description = "Biomass production as VSS"
+tolerance = 0.03
+
+[outputs.primary_solids_kg_tss_d]
+description = "Primary solids captured"
+tolerance = 0.03
+
+[outputs.total_sludge_kg_tss_d]
+description = "Total sludge production as TSS"
+tolerance = 0.03
+
+[archetypes.package_plant]
+description = "Package activated sludge plant"
+flow_rate_m3_d = {min = 100.0, max = 5000.0}
+influent_bod_mg_l = {min = 150.0, max = 400.0}
+effluent_bod_mg_l = {min = 5.0, max = 30.0}
+influent_tss_mg_l = {min = 100.0, max = 400.0}
+primary_tss_removal_pct = {min = 0.0, max = 50.0}
+yield_coefficient = {min = 0.35, max = 0.65}
+decay_coefficient_d_inv = {min = 0.03, max = 0.1}
+srt_days = {min = 4.0, max = 25.0}
+vss_to_tss_ratio = {min = 0.65, max = 0.85}
+site_contexts = ["remote-community-wwtp", "industrial-package-wwtp"]
+
+[archetypes.municipal_plant]
+description = "Municipal activated sludge plant"
+flow_rate_m3_d = {min = 5000.0, max = 500000.0}
+influent_bod_mg_l = {min = 150.0, max = 350.0}
+effluent_bod_mg_l = {min = 2.0, max = 20.0}
+influent_tss_mg_l = {min = 150.0, max = 450.0}
+primary_tss_removal_pct = {min = 30.0, max = 70.0}
+yield_coefficient = {min = 0.35, max = 0.65}
+decay_coefficient_d_inv = {min = 0.03, max = 0.1}
+srt_days = {min = 6.0, max = 35.0}
+vss_to_tss_ratio = {min = 0.65, max = 0.85}
+site_contexts = ["regional-wwtp", "urban-nutrient-removal-plant"]
+
+[difficulty.easy]
+description = "All parameters given for package plant sludge production"
+visibility = "all_given"
+archetypes = ["package_plant"]
+
+[difficulty.medium]
+description = "All parameters given across package and municipal plants"
+visibility = "all_given"
+archetypes = ["package_plant", "municipal_plant"]
+
+[difficulty.hard]
+description = "All parameters given for municipal sludge production"
+visibility = "all_given"
+archetypes = ["municipal_plant"]

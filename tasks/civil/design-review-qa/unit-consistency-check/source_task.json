@@ -1,0 +1,32 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "drainage_hydrology",
+    "category_id": "design-review-qa",
+    "category_name": "Design Review & Compliance",
+    "task_id": "unit-consistency-check",
+    "task_name": "Unit and Datum Consistency Check",
+    "description": "Verify consistent use of units throughout calculations",
+    "complexity": "low",
+    "standards": [
+      "QA best practice"
+    ],
+    "inputs": [
+      "Calculation sheets",
+      "Model files",
+      "Reports"
+    ],
+    "outputs": [
+      "Unit consistency report",
+      "Mixed unit warnings",
+      "Conversion verification"
+    ],
+    "keyword_hits": [
+      "calculation"
+    ],
+    "source_file": "data/tasks/civil/drainage_hydrology.json",
+    "suggested_relative_path": "civil/design-review-qa/unit-consistency-check"
+  }
+}

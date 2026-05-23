@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "ground",
+    "community": "geotechnical",
+    "category_id": "shallow-foundations",
+    "category_name": "Shallow Foundation Design",
+    "task_id": "consolidation-settlement",
+    "task_name": "1D Consolidation Settlement",
+    "description": "Calculate primary consolidation settlement for clay layers using Terzaghi's 1D theory",
+    "complexity": "low",
+    "standards": [
+      "Terzaghi 1D consolidation theory"
+    ],
+    "inputs": [
+      "Clay layer thickness H (m)",
+      "Compression index Cc",
+      "Recompression index Cr",
+      "Initial void ratio e0",
+      "Preconsolidation pressure \u03c3'p (kPa)",
+      "Initial effective stress \u03c3'v0 (kPa)",
+      "Final effective stress \u03c3'vf (kPa)"
+    ],
+    "outputs": [
+      "Primary consolidation settlement Sc (mm)",
+      "OCR classification (NC/OC)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "pressure",
+      "settlement",
+      "stress"
+    ],
+    "source_file": "data/tasks/ground/geotechnical.json",
+    "suggested_relative_path": "ground/shallow-foundations/consolidation-settlement"
+  }
+}

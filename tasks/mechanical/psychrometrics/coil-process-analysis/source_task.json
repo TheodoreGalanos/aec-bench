@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "buildings_mechanical",
+    "category_id": "psychrometrics",
+    "category_name": "Psychrometric Analysis",
+    "task_id": "coil-process-analysis",
+    "task_name": "Cooling Coil Process Analysis",
+    "description": "Analyze air state changes through a cooling coil including sensible and latent loads",
+    "complexity": "medium",
+    "standards": [
+      "ASHRAE Fundamentals Handbook"
+    ],
+    "inputs": [
+      "Entering air: dry-bulb (degC), humidity ratio (kg/kg), flow rate (m3/s)",
+      "Coil apparatus dew point (degC)",
+      "Coil bypass factor"
+    ],
+    "outputs": [
+      "Leaving air dry-bulb (degC)",
+      "Leaving air humidity ratio (kg/kg)",
+      "Total cooling load (kW)",
+      "Sensible cooling load (kW)",
+      "Latent cooling load (kW)",
+      "Sensible heat ratio (SHR)"
+    ],
+    "keyword_hits": [
+      "cooling",
+      "flow",
+      "heat",
+      "load",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/buildings_mechanical.json",
+    "suggested_relative_path": "mechanical/psychrometrics/coil-process-analysis"
+  }
+}

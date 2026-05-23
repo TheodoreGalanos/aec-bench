@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "drainage_hydrology",
+    "category_id": "hydraulic-calculations",
+    "category_name": "Hydraulic Pipe & Channel Design",
+    "task_id": "pipe-sizing",
+    "task_name": "Storm Drain Pipe Sizing",
+    "description": "Select minimum pipe diameter to convey design flow",
+    "complexity": "low",
+    "standards": [
+      "HEC-22",
+      "QUDM",
+      "PUB Code of Practice"
+    ],
+    "inputs": [
+      "Design flow Q (m\u00b3/s)",
+      "Available slope S (%)",
+      "Manning's roughness n"
+    ],
+    "outputs": [
+      "Required pipe diameter D (mm)",
+      "Actual velocity V (m/s)",
+      "Capacity check (pass/fail)"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "flow",
+      "pipe",
+      "sizing"
+    ],
+    "source_file": "data/tasks/civil/drainage_hydrology.json",
+    "suggested_relative_path": "civil/hydraulic-calculations/pipe-sizing"
+  }
+}

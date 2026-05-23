@@ -1,0 +1,135 @@
+[meta]
+name = "npsh-calculation"
+description = "Net Positive Suction Head Available calculation for pump station suction systems"
+long_description = "Calculates the Net Positive Suction Head Available (NPSHa) at a pump inlet from atmospheric pressure, vapour pressure, static suction head, and friction losses using the Hydraulics Institute formula NPSHa = (P_atm - P_vap)/(rho*g) + h_s - h_f. Determines the NPSH margin and margin ratio against the pump's required NPSHr to verify cavitation-free operation per ANSI/HI 9.6.1."
+discipline = "civil"
+category = "pump-station"
+standards = ["Hydraulics Institute", "ANSI/HI 9.6.1"]
+tags = ["civil", "pump-station", "npsh", "cavitation", "suction-head", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.atmospheric_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "Atmospheric pressure at the site elevation"
+min = 70.0
+max = 101.325
+
+[params.vapour_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "Vapour pressure of the fluid at pumping temperature"
+min = 0.6
+max = 50.0
+derivable_from = "archetype"
+
+[params.specific_gravity]
+type = "float"
+unit = "-"
+description = "Specific gravity of the fluid relative to water"
+min = 0.8
+max = 1.3
+derivable_from = "archetype"
+
+[params.static_suction_head_m]
+type = "float"
+unit = "m"
+description = "Static suction head (positive = pump below liquid surface, negative = pump above)"
+min = -8.0
+max = 15.0
+
+[params.friction_loss_m]
+type = "float"
+unit = "m"
+description = "Total friction losses in the suction piping"
+min = 0.1
+max = 5.0
+
+[params.npsh_required_m]
+type = "float"
+unit = "m"
+description = "NPSH required by the pump (from manufacturer data)"
+min = 1.0
+max = 12.0
+
+# --- Outputs ---
+
+[outputs.pressure_head_m]
+description = "Net pressure head contribution (P_atm - P_vap) / (rho * g) (m)"
+tolerance = 0.03
+
+[outputs.npsh_available_m]
+description = "Net Positive Suction Head Available NPSHa (m)"
+tolerance = 0.03
+
+[outputs.npsh_margin_m]
+description = "NPSH margin: NPSHa - NPSHr (m)"
+tolerance = 0.03
+
+[outputs.npsh_margin_ratio]
+description = "NPSH margin ratio: NPSHa / NPSHr (dimensionless)"
+tolerance = 0.03
+
+# --- Archetypes ---
+# Pump suction configurations representing typical water infrastructure scenarios.
+
+[archetypes.wet_well_flooded]
+description = "Wet well pump station with flooded suction (submersible or dry-pit pump below water level)"
+atmospheric_pressure_kpa = {min = 99.0, max = 101.325}
+vapour_pressure_kpa = {min = 1.2, max = 4.2}
+specific_gravity = {min = 1.0, max = 1.02}
+static_suction_head_m = {min = 1.0, max = 8.0}
+friction_loss_m = {min = 0.1, max = 1.5}
+npsh_required_m = {min = 1.5, max = 5.0}
+site_contexts = ["brisbane-sewage-wet-well", "sydney-stormwater-wet-well"]
+
+[archetypes.dry_well_suction_lift]
+description = "Dry well pump station with suction lift (pump above liquid level, negative suction head)"
+atmospheric_pressure_kpa = {min = 99.0, max = 101.325}
+vapour_pressure_kpa = {min = 1.2, max = 4.2}
+specific_gravity = {min = 1.0, max = 1.02}
+static_suction_head_m = {min = -8.0, max = -1.0}
+friction_loss_m = {min = 0.5, max = 3.0}
+npsh_required_m = {min = 1.5, max = 4.0}
+site_contexts = ["melbourne-dry-well-sps", "adelaide-dry-well-transfer"]
+
+[archetypes.elevated_tank_feed]
+description = "Pump fed from elevated storage tank with generous static head and long suction pipe"
+atmospheric_pressure_kpa = {min = 95.0, max = 101.325}
+vapour_pressure_kpa = {min = 1.2, max = 2.5}
+specific_gravity = {min = 0.99, max = 1.01}
+static_suction_head_m = {min = 3.0, max = 15.0}
+friction_loss_m = {min = 0.5, max = 3.5}
+npsh_required_m = {min = 2.0, max = 6.0}
+site_contexts = ["perth-hilltop-reservoir", "darwin-elevated-tank"]
+
+[archetypes.high_temp_process]
+description = "High-temperature industrial process pump handling warm fluid with elevated vapour pressure"
+atmospheric_pressure_kpa = {min = 99.0, max = 101.325}
+vapour_pressure_kpa = {min = 12.0, max = 50.0}
+specific_gravity = {min = 0.95, max = 1.1}
+static_suction_head_m = {min = 2.0, max = 10.0}
+friction_loss_m = {min = 0.5, max = 3.0}
+npsh_required_m = {min = 3.0, max = 12.0}
+site_contexts = ["gladstone-process-plant", "kwinana-industrial-pump"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "All parameters given, flooded suction or elevated tank with comfortable NPSH margin"
+visibility = "all_given"
+archetypes = ["wet_well_flooded", "elevated_tank_feed"]
+
+[difficulty.medium]
+description = "All parameters given, any suction arrangement including suction lift and high-temperature"
+visibility = "all_given"
+archetypes = ["wet_well_flooded", "dry_well_suction_lift", "elevated_tank_feed", "high_temp_process"]
+
+[difficulty.hard]
+description = "Vapour pressure and specific gravity hidden, agent must infer from fluid type and temperature"
+visibility = "partial"
+hidden_params = ["vapour_pressure_kpa", "specific_gravity"]
+replacement_text = "The pump station is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["wet_well_flooded", "dry_well_suction_lift", "elevated_tank_feed", "high_temp_process"]

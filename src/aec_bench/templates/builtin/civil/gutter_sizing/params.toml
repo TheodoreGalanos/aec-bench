@@ -1,0 +1,97 @@
+[meta]
+name = "gutter-sizing"
+description = "Size eaves gutters per AS/NZS 3500.3 using catchment area, rainfall intensity, and gutter grade"
+long_description = "Sizes eaves gutters by computing the design stormwater flow from the roof catchment area and rainfall intensity, then selecting the smallest standard gutter profile whose capacity (scaled from the AS/NZS 3500.3 Table 4.2 reference grade by the square root of the installed grade ratio) meets or exceeds the demand. Used in building roof drainage design to prevent overflow and water damage."
+discipline = "civil"
+category = "stormwater-roof"
+standards = ["AS/NZS 3500.3:2025"]
+tags = ["civil", "drainage", "stormwater", "plumbing", "roof-drainage", "gutter"]
+tool_mode = "with-tool"
+
+[params.roof_catchment_area_m2]
+type = "float"
+unit = "m²"
+description = "Effective roof catchment area draining to the gutter run"
+min = 10
+max = 5000
+
+[params.rainfall_intensity_mm_hr]
+type = "float"
+unit = "mm/hr"
+description = "Design rainfall intensity for the ARI and duration"
+min = 50
+max = 300
+derivable_from = "archetype"
+
+[params.gutter_profile]
+type = "enum"
+description = "Nominated eaves gutter profile"
+values = ["100mm_quad", "115mm_quad", "125mm_half_round", "150mm_quad", "150mm_half_round", "175mm_OG"]
+
+[params.gutter_grade_pct]
+type = "float"
+unit = "%"
+description = "Longitudinal grade of the gutter (percentage)"
+min = 0.1
+max = 2.0
+
+[outputs.design_flow_l_s]
+description = "Design stormwater flow from the catchment (L/s)"
+tolerance = 0.03
+
+[outputs.gutter_capacity_l_s]
+description = "Capacity of the selected gutter at the installed grade (L/s)"
+tolerance = 0.05
+
+[outputs.required_gutter_size_mm]
+description = "Nominal size of the smallest adequate standard gutter (mm)"
+tolerance = 0.01
+
+[outputs.compliance]
+description = "Compliance flag: 1.0 if capacity >= design flow, else 0.0"
+tolerance = 0.01
+
+# --- Archetypes ---
+
+[archetypes.residential_house]
+description = "Single or two-storey residential dwelling with pitched roof and standard eaves gutters"
+roof_catchment_area_m2 = {min = 30, max = 200}
+gutter_grade_pct = {min = 0.15, max = 0.5}
+site_contexts = ["sydney-inner-west-house", "melbourne-bayside-cottage", "brisbane-queenslander"]
+
+[archetypes.terrace_row]
+description = "Terrace or row-house with narrow roof draining to a single gutter run"
+roof_catchment_area_m2 = {min = 20, max = 80}
+gutter_grade_pct = {min = 0.1, max = 0.3}
+site_contexts = ["sydney-paddington-terrace", "melbourne-fitzroy-row-house", "adelaide-north-terrace"]
+
+[archetypes.commercial_awning]
+description = "Street-front commercial awning or verandah with a short gutter span"
+roof_catchment_area_m2 = {min = 15, max = 120}
+gutter_grade_pct = {min = 0.2, max = 0.5}
+site_contexts = ["brisbane-fortitude-valley-awning", "perth-cbd-shopfront", "hobart-waterfront-verandah"]
+
+[archetypes.industrial_shed]
+description = "Large industrial or warehouse building with long-span metal roof gutters"
+roof_catchment_area_m2 = {min = 300, max = 5000}
+gutter_grade_pct = {min = 0.2, max = 1.0}
+site_contexts = ["darwin-industrial-estate", "townsville-port-shed", "cairns-processing-facility"]
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Small residential roof, all parameters given — straightforward capacity check"
+visibility = "all_given"
+archetypes = ["residential_house", "terrace_row"]
+
+[difficulty.medium]
+description = "Larger commercial or industrial roof, all parameters given, higher flows may require upsizing"
+visibility = "all_given"
+archetypes = ["commercial_awning", "industrial_shed"]
+
+[difficulty.hard]
+description = "Rainfall intensity hidden — agent must infer I from site context and ARI"
+visibility = "partial"
+hidden_params = ["rainfall_intensity_mm_hr"]
+replacement_text = "The building is {{ archetype.description }} located at {{ archetype.site_context }}"
+archetypes = ["residential_house", "terrace_row", "commercial_awning", "industrial_shed"]

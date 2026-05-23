@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "bridges",
+    "category_id": "design-review-qa",
+    "category_name": "Design Review & QA Checks",
+    "task_id": "capacity-safety-check",
+    "task_name": "Structural Capacity Safety Check",
+    "description": "Verify no component is under-designed (demand \u2264 capacity)",
+    "complexity": "medium",
+    "standards": [
+      "All LRFD codes"
+    ],
+    "inputs": [
+      "Factored demands",
+      "Factored capacities",
+      "Resistance factors"
+    ],
+    "outputs": [
+      "Under-capacity flags",
+      "D/C ratio summary",
+      "Safety assessment"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "demand"
+    ],
+    "source_file": "data/tasks/structural/bridges.json",
+    "suggested_relative_path": "structural/design-review-qa/capacity-safety-check"
+  }
+}

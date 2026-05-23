@@ -1,0 +1,185 @@
+[meta]
+name = "meyerhof-bearing-capacity"
+description = "Ultimate bearing capacity using Meyerhof's 1963 general equation with shape, depth, and inclination factors"
+long_description = "Computes ultimate and allowable bearing capacity of shallow foundations using Meyerhof's (1963) general bearing capacity equation: qu = c*Nc*sc*dc*ic + q*Nq*sq*dq*iq + 0.5*gamma*B*Ngamma*sgamma*dgamma*igamma. Applies shape, depth, and inclination correction factors for strip, rectangular, square, and circular footings under vertical or inclined loading conditions."
+discipline = "ground"
+category = "shallow-foundations"
+standards = ["Meyerhof (1963)"]
+tags = ["geotechnical", "bearing-capacity", "shallow-foundations", "deterministic"]
+tool_mode = "with-tool"
+
+[params.cohesion_kpa]
+type = "float"
+unit = "kPa"
+description = "Effective cohesion c'"
+min = 0
+max = 150
+derivable_from = "archetype"
+
+[params.friction_angle_deg]
+type = "float"
+unit = "degrees"
+description = "Effective friction angle phi'"
+min = 0
+max = 50
+derivable_from = "archetype"
+
+[params.unit_weight_kn_m3]
+type = "float"
+unit = "kN/m³"
+description = "Soil unit weight gamma"
+min = 14
+max = 23
+derivable_from = "archetype"
+
+[params.footing_width_m]
+type = "float"
+unit = "m"
+description = "Footing width B (shorter dimension)"
+min = 0.5
+max = 10.0
+
+[params.footing_length_m]
+type = "float"
+unit = "m"
+description = "Footing length L (longer dimension, L >= B)"
+min = 0.5
+max = 30.0
+
+[params.embedment_depth_m]
+type = "float"
+unit = "m"
+description = "Foundation embedment depth Df"
+min = 0.3
+max = 5.0
+
+[params.footing_shape]
+type = "enum"
+description = "Footing shape"
+values = ["strip", "rectangular", "square", "circular"]
+
+[params.load_inclination_deg]
+type = "float"
+unit = "degrees"
+description = "Load inclination angle from vertical"
+min = 0
+max = 20
+optional = true
+default = 0.0
+
+[params.factor_of_safety]
+type = "float"
+description = "Factor of safety for allowable capacity"
+min = 2.0
+max = 4.0
+default = 3.0
+
+# --- Outputs ---
+
+[outputs.nc]
+description = "Bearing capacity factor Nc"
+tolerance = 0.03
+
+[outputs.nq]
+description = "Bearing capacity factor Nq"
+tolerance = 0.03
+
+[outputs.ngamma]
+description = "Bearing capacity factor Ngamma"
+tolerance = 0.03
+
+[outputs.sc]
+description = "Shape factor sc"
+tolerance = 0.03
+
+[outputs.sq]
+description = "Shape factor sq"
+tolerance = 0.03
+
+[outputs.sgamma]
+description = "Shape factor sgamma"
+tolerance = 0.03
+
+[outputs.dc]
+description = "Depth factor dc"
+tolerance = 0.03
+
+[outputs.dq]
+description = "Depth factor dq"
+tolerance = 0.03
+
+[outputs.dgamma]
+description = "Depth factor dgamma"
+tolerance = 0.03
+
+[outputs.ic]
+description = "Inclination factor ic"
+tolerance = 0.03
+
+[outputs.iq]
+description = "Inclination factor iq"
+tolerance = 0.03
+
+[outputs.igamma]
+description = "Inclination factor igamma"
+tolerance = 0.05
+
+[outputs.ultimate_bearing_capacity_kpa]
+description = "Ultimate bearing capacity qu (kPa)"
+tolerance = 0.03
+
+[outputs.allowable_bearing_capacity_kpa]
+description = "Allowable bearing capacity qa (kPa)"
+tolerance = 0.03
+
+# --- Archetypes ---
+
+[archetypes.soft_nc_clay]
+description = "Soft normally consolidated clay"
+cohesion_kpa = {min = 5, max = 15}
+friction_angle_deg = {min = 0, max = 5}
+unit_weight_kn_m3 = {min = 15, max = 17}
+site_contexts = ["brisbane-alluvial", "darwin-estuarine"]
+
+[archetypes.medium_dense_sand]
+description = "Medium dense sand"
+cohesion_kpa = {min = 0, max = 0}
+friction_angle_deg = {min = 28, max = 36}
+unit_weight_kn_m3 = {min = 17, max = 19}
+site_contexts = ["perth-coastal", "hunter-valley-alluvial"]
+
+[archetypes.stiff_oc_clay]
+description = "Stiff overconsolidated clay"
+cohesion_kpa = {min = 50, max = 150}
+friction_angle_deg = {min = 5, max = 15}
+unit_weight_kn_m3 = {min = 18, max = 21}
+site_contexts = ["sydney-hawkesbury", "adelaide-stiff", "melbourne-basalt"]
+
+[archetypes.dense_sand_gravel]
+description = "Dense sand and gravel"
+cohesion_kpa = {min = 0, max = 0}
+friction_angle_deg = {min = 36, max = 45}
+unit_weight_kn_m3 = {min = 19, max = 22}
+site_contexts = ["cairns-coral", "newcastle-fill"]
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Vertical load, square footing, all parameters given"
+visibility = "all_given"
+archetypes = ["medium_dense_sand", "stiff_oc_clay"]
+footing_shape = ["square"]
+
+[difficulty.medium]
+description = "Vertical or inclined load, any shape, all parameters given"
+visibility = "all_given"
+archetypes = ["soft_nc_clay", "medium_dense_sand", "stiff_oc_clay", "dense_sand_gravel"]
+footing_shape = ["strip", "rectangular", "square", "circular"]
+
+[difficulty.hard]
+description = "Some soil parameters hidden, inclined loading"
+visibility = "partial"
+hidden_params = ["cohesion_kpa", "friction_angle_deg", "unit_weight_kn_m3"]
+replacement_text = "The foundation soil is {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["soft_nc_clay", "medium_dense_sand", "stiff_oc_clay", "dense_sand_gravel"]
+footing_shape = ["rectangular", "square", "circular"]

@@ -1,0 +1,71 @@
+[meta]
+name = "4-20ma-scaling"
+description = "Linear process variable scaling to a 4-20 mA signal"
+long_description = "Calculates the current signal for a process variable over a configured lower and upper range. The deterministic linear scaling reports percentage of span, 4-20 mA current, and reconstructed process value from the current signal for instrumentation checks."
+discipline = "electrical"
+category = "signal-processing"
+standards = ["ISA-5.1", "IEC 60381"]
+tags = ["electrical", "instrumentation", "4-20ma", "signal-scaling", "deterministic"]
+tool_mode = "with-tool"
+
+[params.process_value]
+type = "float"
+description = "Process variable value"
+min = 0
+max = 1000
+
+[params.lower_range_value]
+type = "float"
+description = "Lower range value"
+min = -1000
+max = 500
+
+[params.upper_range_value]
+type = "float"
+description = "Upper range value"
+min = 1
+max = 2000
+
+[outputs.span_pct]
+description = "Percentage of configured span"
+tolerance = 0.03
+
+[outputs.current_signal_ma]
+description = "Current signal"
+tolerance = 0.03
+
+[outputs.reconstructed_process_value]
+description = "Process variable reconstructed from current"
+tolerance = 0.03
+
+[archetypes.level_transmitter]
+description = "Tank level transmitter scaled in percent"
+process_value = {min = 10, max = 90}
+lower_range_value = {min = 0, max = 0}
+upper_range_value = {min = 100, max = 100}
+site_contexts = ["pump-station", "water-treatment"]
+
+[archetypes.pressure_transmitter]
+description = "Pressure transmitter scaled over a positive engineering range"
+process_value = {min = 100, max = 900}
+lower_range_value = {min = 0, max = 0}
+upper_range_value = {min = 1000, max = 1000}
+site_contexts = ["process-skid", "gas-metering"]
+
+[difficulty.easy]
+description = "Percent range scaling"
+visibility = "all_given"
+archetypes = ["level_transmitter"]
+
+[difficulty.medium]
+description = "Engineering range scaling"
+visibility = "all_given"
+archetypes = ["level_transmitter", "pressure_transmitter"]
+
+[difficulty.hard]
+description = "Upper range value hidden in context"
+visibility = "partial"
+hidden_params = ["upper_range_value"]
+replacement_text = "Use the configured upper range implied by {{ archetype.description }}."
+archetypes = ["pressure_transmitter"]
+upper_range_value = [1000]

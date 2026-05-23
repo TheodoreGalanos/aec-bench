@@ -1,0 +1,31 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_coastal",
+    "category_id": "qa-deliverables",
+    "category_name": "QA & Deliverable Validation",
+    "task_id": "cross-document-consistency",
+    "task_name": "Cross-Document Consistency Check",
+    "description": "Verify consistency of levels and datums across project documents",
+    "complexity": "medium",
+    "standards": [],
+    "inputs": [
+      "Design report",
+      "Drawings",
+      "Calculations",
+      "Survey data"
+    ],
+    "outputs": [
+      "Consistency report",
+      "Discrepancies identified",
+      "Datum confusion flagged"
+    ],
+    "keyword_hits": [
+      "calculation"
+    ],
+    "source_file": "data/tasks/civil/civil_coastal.json",
+    "suggested_relative_path": "civil/qa-deliverables/cross-document-consistency"
+  }
+}

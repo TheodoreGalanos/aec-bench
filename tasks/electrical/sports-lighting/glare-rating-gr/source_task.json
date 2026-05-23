@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "lighting",
+    "category_id": "sports-lighting",
+    "category_name": "Sports Lighting Design",
+    "task_id": "glare-rating-gr",
+    "task_name": "Sports Glare Rating (GR) Calculation",
+    "description": "Calculate glare rating for sports lighting to protect players",
+    "complexity": "medium",
+    "standards": [
+      "EN 12193",
+      "CIE 112"
+    ],
+    "inputs": [
+      "Luminaire positions",
+      "Luminaire photometric data",
+      "Field positions",
+      "Viewing directions",
+      "Background luminance"
+    ],
+    "outputs": [
+      "GR at critical positions",
+      "Pass/fail vs sport requirements"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/lighting.json",
+    "suggested_relative_path": "electrical/sports-lighting/glare-rating-gr"
+  }
+}

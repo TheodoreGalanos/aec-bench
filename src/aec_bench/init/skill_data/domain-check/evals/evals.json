@@ -1,0 +1,71 @@
+{
+  "skill_name": "domain-check",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I just added a new adapter module at src/aec_bench/adapters/gemini/adapter.py that calls the Gemini API directly using httpx.post(). It also has a special case for voltage-drop tasks where it adjusts the system prompt based on the task_id. Run a domain check on this change.",
+      "expected_output": "Report should flag two violations: (1) Invariant #4 - adapter contains task-specific logic (voltage-drop branch), (2) Invariant #8 - direct vendor API call (httpx.post to Gemini) instead of going through the provider interface in src/aec_bench/providers/. Both should be high severity.",
+      "files": [],
+      "expectations": [
+        "The report identifies that the adapter contains task-specific logic (voltage-drop branch) as a violation of invariant #4",
+        "The report identifies direct vendor API coupling (httpx.post to Gemini) as a violation of invariant #8 - should use providers/ interface",
+        "Both findings are rated high severity",
+        "The report maps the change to the Adapters domain",
+        "The report suggests specific fixes: remove task-specific branch, route API calls through src/aec_bench/providers/",
+        "The dependency direction check passes (adapters don't import upward)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I modified src/aec_bench/web/routes/dashboard.py to show a new chart of 'agent creativity score' that I computed by averaging some heuristics I came up with. The data doesn't come from EvaluationResult - I calculate it directly in the route handler from conversation transcripts by reading trajectory JSONL files. Check this against the architecture.",
+      "expected_output": "Report should flag invariant #5 violation - communication layer (web routes) inventing a metric not present in evaluation outputs. Should also flag dependency direction issue if the route reads trajectory files directly instead of going through the Evaluation domain.",
+      "files": [],
+      "expectations": [
+        "The report identifies invariant #5 violation - metric invented in web/communication layer",
+        "The report flags the dependency direction issue - Web routes accessing Harness outputs (trajectory files) directly instead of through Evaluation",
+        "The report recommends computing the metric in the Evaluation domain and exposing it through EvaluationResult",
+        "The finding about invented metrics is rated high severity",
+        "The report correctly maps the change to the Communication/Web domain"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I've been working on the feedback annotation system. I added a new Pydantic model in src/aec_bench/feedback/annotation.py that stores reviewer comments as free text strings with a timestamp, but no reviewer_id or discipline field. Also the adjudication results are stored as a plain dict without going through a contract model. Please domain-check this.",
+      "expected_output": "Report should flag invariant #9 - feedback without reviewer identity and structured tags. Should also flag invariant #2 - adjudication results crossing boundary without contract validation (plain dict instead of Pydantic StrictModel).",
+      "files": [],
+      "expectations": [
+        "The report identifies invariant #9 violation - missing reviewer_id and discipline on annotations",
+        "The report identifies invariant #2 violation - untyped adjudication results (plain dict) at domain boundary",
+        "The report recommends adding reviewer_id and discipline fields to the annotation model",
+        "The report recommends routing adjudication results through a Pydantic StrictModel with proper validation",
+        "The report correctly identifies the Feedback domain"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Clean change: I added a new pure function to src/aec_bench/evaluation/metrics.py that computes Cohen's kappa from two lists of ratings. It only depends on Python stdlib (no external imports). The function has type hints and a corresponding test at tests/evaluation/test_metrics.py. Domain check please.",
+      "expected_output": "Report should be clean - no violations. The change is within a single domain (Evaluation), uses no cross-domain imports, adds no hidden state, and has a corresponding test.",
+      "files": [],
+      "expectations": [
+        "The report shows zero findings / all checks pass",
+        "The report correctly maps the change to the Evaluation domain only",
+        "The dependency check passes",
+        "The report notes the change has a corresponding test file",
+        "The report does not produce false positive findings"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "I changed the TrialRecord contract in src/aec_bench/contracts/trial_record.py to add an optional 'notes' field, and updated the harness trial runner to populate it. But I forgot to update the evaluation pipeline to carry it through, and the web viewer route at src/aec_bench/web/routes/viewer.py accesses record.notes directly even though Evaluation hasn't processed it. Domain check this cross-cutting change.",
+      "expected_output": "Report should flag: (1) dependency violation - Web/Communication layer accessing Contracts data that hasn't flowed through Evaluation, (2) incomplete contract change - downstream consumers not updated, (3) potential invariant #2 issue at the Harness-Evaluation boundary.",
+      "files": [],
+      "expectations": [
+        "The report identifies the cross-domain nature of the change (Contracts, Harness, Web/Communication)",
+        "The report flags Web routes accessing record.notes directly without it flowing through Evaluation",
+        "The report identifies the dependency direction violation",
+        "The report notes the incomplete propagation - Evaluation pipeline not updated",
+        "The report recommends a fix path: update Evaluation to process/carry the notes field before Communication can use it"
+      ]
+    }
+  ]
+}

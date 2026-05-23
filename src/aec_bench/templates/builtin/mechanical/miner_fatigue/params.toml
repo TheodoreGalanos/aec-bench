@@ -1,0 +1,111 @@
+[meta]
+name = "miner-fatigue"
+description = "Cumulative fatigue damage calculation using Miner's rule"
+long_description = "Calculates cumulative fatigue damage from three explicit applied-cycle and allowable-cycle bins using Miner's rule. The template reports each damage fraction, cumulative damage, remaining damage margin, and a numeric pass flag."
+discipline = "mechanical"
+category = "fatigue-analysis"
+standards = ["ASME VIII-2", "EN 13445"]
+tags = ["mechanical", "fatigue", "miner", "damage", "deterministic"]
+tool_mode = "with-tool"
+
+[params.applied_cycles_1]
+type = "float"
+unit = "cycles"
+description = "Applied cycles for first bin"
+min = 0.0
+max = 1000000000.0
+
+[params.allowable_cycles_1]
+type = "float"
+unit = "cycles"
+description = "Allowable cycles for first bin"
+min = 1.0
+max = 1000000000000.0
+
+[params.applied_cycles_2]
+type = "float"
+unit = "cycles"
+description = "Applied cycles for second bin"
+min = 0.0
+max = 1000000000.0
+
+[params.allowable_cycles_2]
+type = "float"
+unit = "cycles"
+description = "Allowable cycles for second bin"
+min = 1.0
+max = 1000000000000.0
+
+[params.applied_cycles_3]
+type = "float"
+unit = "cycles"
+description = "Applied cycles for third bin"
+min = 0.0
+max = 1000000000.0
+
+[params.allowable_cycles_3]
+type = "float"
+unit = "cycles"
+description = "Allowable cycles for third bin"
+min = 1.0
+max = 1000000000000.0
+
+[outputs.damage_bin_1]
+description = "Damage fraction for first cycle bin"
+tolerance = 0.03
+
+[outputs.damage_bin_2]
+description = "Damage fraction for second cycle bin"
+tolerance = 0.03
+
+[outputs.damage_bin_3]
+description = "Damage fraction for third cycle bin"
+tolerance = 0.03
+
+[outputs.cumulative_damage]
+description = "Total cumulative fatigue damage"
+tolerance = 0.03
+
+[outputs.remaining_damage_margin]
+description = "Remaining damage margin to cumulative damage of 1"
+tolerance = 0.03
+
+[outputs.fatigue_satisfies]
+description = "Numeric flag where 1 means cumulative damage is not greater than 1"
+tolerance = 0.01
+
+[archetypes.rotating_equipment]
+description = "Rotating equipment duty cycle fatigue check"
+applied_cycles_1 = {min = 1000.0, max = 10000000.0}
+allowable_cycles_1 = {min = 1000000.0, max = 1000000000.0}
+applied_cycles_2 = {min = 1000.0, max = 10000000.0}
+allowable_cycles_2 = {min = 1000000.0, max = 1000000000.0}
+applied_cycles_3 = {min = 1000.0, max = 10000000.0}
+allowable_cycles_3 = {min = 1000000.0, max = 1000000000.0}
+site_contexts = ["rotating-equipment", "pump-shaft"]
+
+[archetypes.pressure_equipment]
+description = "Pressure equipment fatigue damage check"
+applied_cycles_1 = {min = 100.0, max = 1000000.0}
+allowable_cycles_1 = {min = 10000.0, max = 100000000.0}
+applied_cycles_2 = {min = 100.0, max = 1000000.0}
+allowable_cycles_2 = {min = 10000.0, max = 100000000.0}
+applied_cycles_3 = {min = 100.0, max = 1000000.0}
+allowable_cycles_3 = {min = 10000.0, max = 100000000.0}
+site_contexts = ["pressure-vessel", "thermal-cycling"]
+
+[difficulty.easy]
+description = "All parameters given for rotating equipment"
+visibility = "all_given"
+archetypes = ["rotating_equipment"]
+
+[difficulty.medium]
+description = "All parameters given across fatigue checks"
+visibility = "all_given"
+archetypes = ["rotating_equipment", "pressure_equipment"]
+
+[difficulty.hard]
+description = "All parameters given for pressure equipment fatigue"
+visibility = "all_given"
+archetypes = ["pressure_equipment"]
+

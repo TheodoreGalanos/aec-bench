@@ -1,0 +1,30 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "bridges",
+    "category_id": "design-review-qa",
+    "category_name": "Design Review & QA Checks",
+    "task_id": "unit-consistency",
+    "task_name": "Unit Consistency Check",
+    "description": "Detect unit conversion errors in bridge calculations",
+    "complexity": "low",
+    "standards": [
+      "QA best practice"
+    ],
+    "inputs": [
+      "Calculation sheets",
+      "Analysis output"
+    ],
+    "outputs": [
+      "Unit error flags",
+      "Consistency report"
+    ],
+    "keyword_hits": [
+      "calculation"
+    ],
+    "source_file": "data/tasks/structural/bridges.json",
+    "suggested_relative_path": "structural/design-review-qa/unit-consistency"
+  }
+}

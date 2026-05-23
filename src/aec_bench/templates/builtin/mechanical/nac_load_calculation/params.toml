@@ -1,0 +1,108 @@
+[meta]
+name = "nac-load-calculation"
+description = "Notification appliance circuit load and capacity check"
+long_description = "Calculates fire alarm notification appliance circuit load from strobe, horn, and speaker quantities and device currents. The template reports total load, circuit utilisation, spare capacity, and whether the load is within the circuit capacity."
+discipline = "mechanical"
+category = "fire-services"
+standards = ["NFPA 72"]
+tags = ["mechanical", "fire-services", "nac", "notification-appliance-circuit", "deterministic"]
+tool_mode = "with-tool"
+
+[params.strobe_quantity]
+type = "int"
+description = "Number of strobes on the circuit"
+min = 0
+max = 200
+
+[params.strobe_current_a]
+type = "float"
+unit = "A"
+description = "Current draw per strobe"
+min = 0.0
+max = 0.5
+
+[params.horn_quantity]
+type = "int"
+description = "Number of horns on the circuit"
+min = 0
+max = 200
+
+[params.horn_current_a]
+type = "float"
+unit = "A"
+description = "Current draw per horn"
+min = 0.0
+max = 0.3
+
+[params.speaker_quantity]
+type = "int"
+description = "Number of speakers on the circuit"
+min = 0
+max = 200
+
+[params.speaker_current_a]
+type = "float"
+unit = "A"
+description = "Current draw per speaker"
+min = 0.0
+max = 0.2
+
+[params.circuit_capacity_a]
+type = "float"
+unit = "A"
+description = "Available circuit current capacity"
+min = 0.5
+max = 10.0
+
+[outputs.total_load_a]
+description = "Total notification appliance current load"
+tolerance = 0.03
+
+[outputs.utilisation_pct]
+description = "Circuit load as a percentage of capacity"
+tolerance = 0.03
+
+[outputs.spare_capacity_a]
+description = "Remaining circuit current capacity"
+tolerance = 0.03
+
+[outputs.passes_capacity_check]
+description = "Whether total load is within circuit capacity"
+tolerance = 0.0
+
+[archetypes.small_notification_circuit]
+description = "Small notification circuit with modest appliance count"
+strobe_quantity = {min = 2, max = 20}
+strobe_current_a = {min = 0.04, max = 0.12}
+horn_quantity = {min = 2, max = 20}
+horn_current_a = {min = 0.02, max = 0.08}
+speaker_quantity = {min = 0, max = 8}
+speaker_current_a = {min = 0.0, max = 0.05}
+circuit_capacity_a = {min = 2.0, max = 6.0}
+site_contexts = ["office-fire-alarm-zone", "small-public-building"]
+
+[archetypes.voice_evacuation_circuit]
+description = "Voice evacuation notification circuit with speakers and strobes"
+strobe_quantity = {min = 10, max = 60}
+strobe_current_a = {min = 0.05, max = 0.18}
+horn_quantity = {min = 0, max = 20}
+horn_current_a = {min = 0.0, max = 0.08}
+speaker_quantity = {min = 10, max = 80}
+speaker_current_a = {min = 0.02, max = 0.08}
+circuit_capacity_a = {min = 4.0, max = 10.0}
+site_contexts = ["station-public-address-fire-mode", "large-assembly-building"]
+
+[difficulty.easy]
+description = "All parameters given for a small notification circuit"
+visibility = "all_given"
+archetypes = ["small_notification_circuit"]
+
+[difficulty.medium]
+description = "All parameters given across conventional and voice evacuation circuits"
+visibility = "all_given"
+archetypes = ["small_notification_circuit", "voice_evacuation_circuit"]
+
+[difficulty.hard]
+description = "All parameters given for higher-load voice evacuation circuits"
+visibility = "all_given"
+archetypes = ["voice_evacuation_circuit"]

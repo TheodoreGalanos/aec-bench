@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_protection",
+    "category_id": "sprinkler-hydraulics",
+    "category_name": "Sprinkler Hydraulic Calculations",
+    "task_id": "sprinkler-discharge",
+    "task_name": "Sprinkler Discharge Calculation",
+    "description": "Calculate sprinkler discharge flow using K-factor formula",
+    "complexity": "low",
+    "standards": [
+      "NFPA 13",
+      "AS 2118"
+    ],
+    "inputs": [
+      "Sprinkler K-factor",
+      "Pressure at sprinkler head (psi or bar)"
+    ],
+    "outputs": [
+      "Discharge flow rate (gpm or L/min)",
+      "Verification of minimum pressure (7 psi)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "pressure",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/fire_protection.json",
+    "suggested_relative_path": "mechanical/sprinkler-hydraulics/sprinkler-discharge"
+  }
+}

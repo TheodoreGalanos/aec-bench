@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "energy_structures",
+    "category_id": "transmission-tower-foundations",
+    "category_name": "Transmission Tower Foundations",
+    "task_id": "tower-load-cases",
+    "task_name": "Transmission Tower Load Case Development",
+    "description": "Develop foundation design load cases from tower loading including wind, ice, and broken wire",
+    "complexity": "medium",
+    "standards": [
+      "AS/NZS 7000",
+      "IEC 60826",
+      "ASCE Manual 74"
+    ],
+    "inputs": [
+      "Tower geometry",
+      "Conductor configuration",
+      "Span lengths",
+      "Wind speed",
+      "Ice loading zone",
+      "Security requirements"
+    ],
+    "outputs": [
+      "Vertical compression (kN)",
+      "Vertical uplift (kN)",
+      "Transverse shear (kN)",
+      "Longitudinal shear (kN)",
+      "Governing load case"
+    ],
+    "keyword_hits": [
+      "load",
+      "shear"
+    ],
+    "source_file": "data/tasks/structural/energy_structures.json",
+    "suggested_relative_path": "structural/transmission-tower-foundations/tower-load-cases"
+  }
+}

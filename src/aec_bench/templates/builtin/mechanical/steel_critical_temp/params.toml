@@ -1,0 +1,67 @@
+[meta]
+name = "steel-critical-temp"
+description = "Critical steel temperature calculation from structural-fire load ratio"
+long_description = "Calculates steel critical temperature from an explicit fire design load ratio using the Eurocode-style relationship theta_cr = 39.19 ln(1/(0.9674 mu^3.833) - 1) + 482. The template reports the critical temperature, margin to a protection trigger, and a numeric protection requirement indicator."
+discipline = "mechanical"
+category = "structural-fire"
+standards = ["Eurocode 3", "AS 4100"]
+tags = ["mechanical", "structural-fire", "steel-temperature", "fire-resistance", "deterministic"]
+tool_mode = "with-tool"
+
+[params.load_ratio]
+type = "float"
+description = "Design load effect divided by ambient-temperature resistance"
+min = 0.05
+max = 0.95
+
+[params.protection_trigger_c]
+type = "float"
+unit = "C"
+description = "Critical temperature threshold below which fire protection is required"
+min = 350.0
+max = 650.0
+
+[outputs.critical_temperature_c]
+description = "Critical steel temperature"
+tolerance = 0.03
+
+[outputs.protection_margin_c]
+description = "Critical temperature minus protection trigger temperature"
+tolerance = 0.03
+
+[outputs.protection_required]
+description = "Numeric fire protection requirement indicator: 0 no, 1 yes"
+tolerance = 0.01
+
+[archetypes.low_utilisation_member]
+description = "Low-utilisation steel member with reserve ambient capacity"
+load_ratio = {min = 0.15, max = 0.35}
+protection_trigger_c = {min = 500.0, max = 620.0}
+site_contexts = ["secondary-floor-beam", "light-industrial-platform"]
+
+[archetypes.moderate_utilisation_member]
+description = "Moderately utilised steel member in a fire-rated zone"
+load_ratio = {min = 0.35, max = 0.65}
+protection_trigger_c = {min = 500.0, max = 620.0}
+site_contexts = ["commercial-frame-beam", "plant-room-support-steel"]
+
+[archetypes.high_utilisation_member]
+description = "Highly utilised steel member with low reserve fire capacity"
+load_ratio = {min = 0.65, max = 0.9}
+protection_trigger_c = {min = 450.0, max = 600.0}
+site_contexts = ["transfer-girder", "heavily-loaded-column"]
+
+[difficulty.easy]
+description = "All parameters given for a low-utilisation member"
+visibility = "all_given"
+archetypes = ["low_utilisation_member"]
+
+[difficulty.medium]
+description = "All parameters given across low and moderate utilisation members"
+visibility = "all_given"
+archetypes = ["low_utilisation_member", "moderate_utilisation_member"]
+
+[difficulty.hard]
+description = "All parameters given for moderate and high utilisation members"
+visibility = "all_given"
+archetypes = ["moderate_utilisation_member", "high_utilisation_member"]

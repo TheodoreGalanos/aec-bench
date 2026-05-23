@@ -1,0 +1,96 @@
+[meta]
+name = "warning-time-calculation"
+description = "Level crossing warning time and strike-in distance"
+long_description = "Calculates total level crossing warning time by summing minimum road-user warning time, clearance time, barrier lowering time, and system delay. The template converts maximum train speed to m/s and computes the required strike-in detection distance."
+discipline = "electrical"
+category = "level-crossings"
+standards = ["AS 7711", "Network Rail standards"]
+tags = ["electrical", "rail", "level-crossing", "warning-time", "signalling", "deterministic"]
+tool_mode = "with-tool"
+
+[params.maximum_train_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "Maximum train speed"
+min = 5
+max = 200
+
+[params.minimum_warning_time_s]
+type = "float"
+unit = "s"
+description = "Minimum road-user warning time"
+min = 5
+max = 120
+
+[params.road_user_clearance_time_s]
+type = "float"
+unit = "s"
+description = "Road user clearance time"
+min = 0
+max = 60
+
+[params.barrier_lowering_time_s]
+type = "float"
+unit = "s"
+description = "Barrier lowering or equipment operating time"
+min = 0
+max = 30
+
+[params.system_delay_s]
+type = "float"
+unit = "s"
+description = "Signal processing and system delay"
+min = 0
+max = 20
+
+[outputs.maximum_train_speed_m_s]
+description = "Maximum train speed converted to m/s"
+tolerance = 0.01
+
+[outputs.total_warning_time_s]
+description = "Total warning time used for strike-in"
+tolerance = 0.03
+
+[outputs.strike_in_distance_m]
+description = "Strike-in detection distance"
+tolerance = 0.03
+
+[outputs.minimum_warning_margin_s]
+description = "Additional time above the minimum warning time"
+tolerance = 0.03
+
+[archetypes.low_speed_crossing]
+description = "Low-speed urban or yard crossing"
+maximum_train_speed_kmh = {min = 20, max = 60}
+minimum_warning_time_s = {min = 20, max = 35}
+road_user_clearance_time_s = {min = 3, max = 10}
+barrier_lowering_time_s = {min = 0, max = 8}
+system_delay_s = {min = 1, max = 5}
+site_contexts = ["urban-crossing", "yard-access"]
+
+[archetypes.mainline_crossing]
+description = "Mainline level crossing with active controls"
+maximum_train_speed_kmh = {min = 60, max = 160}
+minimum_warning_time_s = {min = 20, max = 45}
+road_user_clearance_time_s = {min = 5, max = 15}
+barrier_lowering_time_s = {min = 5, max = 12}
+system_delay_s = {min = 1, max = 8}
+site_contexts = ["regional-mainline", "suburban-mainline"]
+
+[difficulty.easy]
+description = "Low-speed crossing with all timing values visible"
+visibility = "all_given"
+archetypes = ["low_speed_crossing"]
+
+[difficulty.medium]
+description = "Low-speed or mainline crossing"
+visibility = "all_given"
+archetypes = ["low_speed_crossing", "mainline_crossing"]
+
+[difficulty.hard]
+description = "System delay hidden in signalling context"
+visibility = "partial"
+hidden_params = ["system_delay_s"]
+replacement_text = "Use the signalling system delay implied by {{ archetype.description }}."
+archetypes = ["mainline_crossing"]
+system_delay_s = [3]

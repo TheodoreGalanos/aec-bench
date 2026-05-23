@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "electrical-parameters",
+    "category_name": "Electrical Parameters",
+    "task_id": "line-capacitance",
+    "task_name": "Line Capacitance Calculation",
+    "description": "Calculate per-unit-length capacitance from conductor geometry",
+    "complexity": "low",
+    "standards": [
+      "IEC 60909"
+    ],
+    "inputs": [
+      "Conductor radius (m)",
+      "Phase spacing (m)",
+      "Height above ground (m)",
+      "Phase configuration"
+    ],
+    "outputs": [
+      "Capacitance per phase (nF/km)",
+      "Charging MVA per 100 km",
+      "Surge impedance (ohms)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "radius"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/electrical-parameters/line-capacitance"
+  }
+}

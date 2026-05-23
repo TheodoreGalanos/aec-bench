@@ -1,0 +1,31 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "intelligent_transport_systems",
+    "category_id": "signal-timing",
+    "category_name": "Traffic Signal Timing",
+    "task_id": "pedestrian-clearance-time",
+    "task_name": "Pedestrian Clearance Time Calculation",
+    "description": "Calculate pedestrian clearance (Flashing Don't Walk) interval",
+    "complexity": "low",
+    "standards": [
+      "MUTCD",
+      "AS 1742.14"
+    ],
+    "inputs": [
+      "Crosswalk length (m or ft)",
+      "Pedestrian walking speed (m/s or ft/s)"
+    ],
+    "outputs": [
+      "Flashing Don't Walk duration (s)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/intelligent_transport_systems.json",
+    "suggested_relative_path": "electrical/signal-timing/pedestrian-clearance-time"
+  }
+}

@@ -1,0 +1,52 @@
+# Mechanical Template Names
+
+- **a-weighting** — A-weighted octave-band sound level calculation.
+- **air-changes** — Air changes per hour for room ventilation.
+- **air-demand** — Compressed air connected and simultaneous demand.
+- **available-flow-calculation** — Available fire flow from hydrant test data.
+- **biogas-production** — Biogas and methane from volatile solids destruction.
+- **braking-distance** — Train braking distance from effort and gradient.
+- **chemical-dosing** — Treatment chemical dose and feed rate.
+- **cstr-volume** — CSTR volume for first-order reactions.
+- **davis-resistance** — Train running resistance and tractive power.
+- **distance-attenuation** — Sound pressure adjustment over distance.
+- **egress-width** — Egress width from occupant load.
+- **elevation-pressure** — Static pressure change from elevation difference.
+- **friction-loss-hazen-williams** — Sprinkler pipe friction loss calculation.
+- **gas-load-calculation** — Connected and diversified gas load.
+- **gci-calculation** — Grid convergence index for CFD studies.
+- **hazen-williams-friction** — Hazen-Williams pressure pipe friction loss.
+- **hrt-calculation** — Hydraulic retention time for treatment units.
+- **joukowsky-pressure** — Water hammer pressure rise screening.
+- **lmtd-calculation** — Log mean temperature difference heat duty.
+- **mass-balance** — Global process mass balance closure check.
+- **miner-fatigue** — Cumulative fatigue damage using Miner's rule.
+- **minor-losses-calculation** — Pipe fitting minor losses calculation.
+- **mlss-inventory** — Mixed liquor suspended solids inventory.
+- **nac-load-calculation** — Notification appliance circuit capacity check.
+- **nitrification-srt** — Required SRT for activated-sludge nitrification.
+- **npsh-available** — Pump inlet NPSH available calculation.
+- **occupant-load** — Area-based occupant load calculation.
+- **oxygen-requirements** — Activated sludge oxygen demand calculation.
+- **pfr-volume** — Plug flow reactor volume calculation.
+- **por-aor-compliance** — Pump operating range compliance check.
+- **pressure-loss-calculation** — Water pipe pressure loss calculation.
+- **pump-affinity-laws** — Pump performance at changed speed.
+- **pump-head-calculation** — Total dynamic head for pumps.
+- **pump-power-calculation** — Pump hydraulic and shaft power.
+- **pump-power-efficiency** — Pump power, shaft, and motor sizing.
+- **sabine-rt60** — Sabine reverberation time calculation.
+- **slr-calculation** — Clarifier solids loading rate calculation.
+- **sludge-production** — Activated sludge production estimation.
+- **sor-calculation** — Clarifier surface overflow rate calculation.
+- **spl-log-sum** — Logarithmic summation of sound levels.
+- **sprinkler-discharge** — Sprinkler discharge from K factor and pressure.
+- **srt-calculation** — Activated sludge solids retention time.
+- **steel-critical-temp** — Critical steel temperature from fire load ratio.
+- **t-squared-hrr** — T-squared fire heat release rate.
+- **thrust-force-calculation** — Pipe bend thrust force calculation.
+- **velocity-check** — Pipe velocity and range check.
+- **vibration-transmissibility** — Damped vibration transmissibility calculation.
+- **visibility-criterion** — Smoke visibility tenability criterion.
+- **water-supply-curve** — Hydrant supply curve from flow test.
+- **wave-speed-calculation** — Pressure wave speed for transient screening.

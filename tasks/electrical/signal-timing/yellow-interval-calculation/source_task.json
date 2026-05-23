@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "intelligent_transport_systems",
+    "category_id": "signal-timing",
+    "category_name": "Traffic Signal Timing",
+    "task_id": "yellow-interval-calculation",
+    "task_name": "Yellow Change Interval Calculation",
+    "description": "Calculate yellow change interval duration using ITE kinematic formula",
+    "complexity": "low",
+    "standards": [
+      "ITE Yellow Interval Equation",
+      "MUTCD",
+      "AS 1742.14"
+    ],
+    "inputs": [
+      "Approach speed (km/h or ft/s)",
+      "Perception/reaction time (s)",
+      "Deceleration rate (m/s2 or ft/s2)",
+      "Road grade (%)"
+    ],
+    "outputs": [
+      "Yellow interval duration (s)",
+      "Rounded to 0.1s",
+      "Grade adjustment factor"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/intelligent_transport_systems.json",
+    "suggested_relative_path": "electrical/signal-timing/yellow-interval-calculation"
+  }
+}

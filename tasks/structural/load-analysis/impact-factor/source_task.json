@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "bridges",
+    "category_id": "load-analysis",
+    "category_name": "Load Analysis & Combinations",
+    "task_id": "impact-factor",
+    "task_name": "Dynamic Load Allowance (Impact)",
+    "description": "Calculate dynamic amplification factor for live loads",
+    "complexity": "low",
+    "standards": [
+      "AASHTO LRFD 3.6.2",
+      "AS/NZS 5100.2"
+    ],
+    "inputs": [
+      "Component type",
+      "Limit state",
+      "Span length (for some codes)"
+    ],
+    "outputs": [
+      "Dynamic load allowance IM (%)",
+      "Amplified live load"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "load"
+    ],
+    "source_file": "data/tasks/structural/bridges.json",
+    "suggested_relative_path": "structural/load-analysis/impact-factor"
+  }
+}

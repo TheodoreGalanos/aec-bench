@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "lighting",
+    "category_id": "interior-lighting",
+    "category_name": "Interior Workplace Lighting",
+    "task_id": "maintained-illuminance",
+    "task_name": "Maintained Illuminance Calculation",
+    "description": "Calculate maintained average illuminance (E_m) for interior space",
+    "complexity": "low",
+    "standards": [
+      "EN 12464-1",
+      "AS/NZS 1680"
+    ],
+    "inputs": [
+      "Luminaire photometric data (IES/LDT)",
+      "Room geometry",
+      "Surface reflectances",
+      "Maintenance factor (MF)",
+      "Calculation grid"
+    ],
+    "outputs": [
+      "Maintained illuminance E_m (lux)",
+      "Uniformity Uo",
+      "Pass/fail vs task requirement"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/lighting.json",
+    "suggested_relative_path": "electrical/interior-lighting/maintained-illuminance"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "ground",
+    "community": "geotechnical",
+    "category_id": "shallow-foundations",
+    "category_name": "Shallow Foundation Design",
+    "task_id": "immediate-settlement",
+    "task_name": "Immediate Settlement Calculation",
+    "description": "Calculate elastic/immediate settlement of foundations on sand or clay",
+    "complexity": "low",
+    "standards": [
+      "Mayne and Poulos (1999)",
+      "Schmertmann (1978)"
+    ],
+    "inputs": [
+      "Applied pressure q (kPa)",
+      "Footing dimensions B \u00d7 L (m)",
+      "Elastic modulus E (MPa)",
+      "Poisson's ratio \u03bd",
+      "Influence factors"
+    ],
+    "outputs": [
+      "Immediate settlement Si (mm)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "pressure",
+      "settlement"
+    ],
+    "source_file": "data/tasks/ground/geotechnical.json",
+    "suggested_relative_path": "ground/shallow-foundations/immediate-settlement"
+  }
+}

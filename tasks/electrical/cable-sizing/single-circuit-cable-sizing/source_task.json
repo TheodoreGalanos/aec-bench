@@ -1,0 +1,46 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "buildings_electrical",
+    "category_id": "cable-sizing",
+    "category_name": "Cable Sizing and Selection",
+    "task_id": "single-circuit-cable-sizing",
+    "task_name": "Single Circuit Cable Sizing",
+    "description": "Determine minimum compliant cable size for a single circuit considering current capacity, voltage drop, and short-circuit withstand",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3008.1",
+      "AS/NZS 3000"
+    ],
+    "inputs": [
+      "Load (kW, kVA)",
+      "Power factor",
+      "Cable length (m)",
+      "Installation method",
+      "Ambient temperature",
+      "Grouping factor",
+      "Voltage drop limit (%)"
+    ],
+    "outputs": [
+      "Minimum conductor area (mm2)",
+      "Voltage drop (%)",
+      "Current carrying capacity (A)",
+      "Short-circuit withstand verification"
+    ],
+    "keyword_hits": [
+      "cable",
+      "capacity",
+      "current",
+      "drop",
+      "load",
+      "power",
+      "size",
+      "sizing",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/buildings_electrical.json",
+    "suggested_relative_path": "electrical/cable-sizing/single-circuit-cable-sizing"
+  }
+}

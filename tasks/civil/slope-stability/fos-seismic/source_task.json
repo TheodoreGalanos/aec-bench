@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "dams",
+    "category_id": "slope-stability",
+    "category_name": "Embankment Slope Stability",
+    "task_id": "fos-seismic",
+    "task_name": "Pseudo-Static Seismic Stability",
+    "description": "Calculate Factor of Safety under pseudo-static seismic loading",
+    "complexity": "medium",
+    "standards": [
+      "USACE EM 1110-2-1902",
+      "ICOLD Bulletin 148"
+    ],
+    "inputs": [
+      "Embankment geometry",
+      "Material properties",
+      "Horizontal seismic coefficient (kh)",
+      "Vertical seismic coefficient (kv)"
+    ],
+    "outputs": [
+      "Minimum Factor of Safety",
+      "Critical acceleration (ky)",
+      "Yield acceleration ratio"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "load"
+    ],
+    "source_file": "data/tasks/civil/dams.json",
+    "suggested_relative_path": "civil/slope-stability/fos-seismic"
+  }
+}

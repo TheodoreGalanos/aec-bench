@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_mechanical",
+    "category_id": "conveyor-design",
+    "category_name": "Conveyor System Design",
+    "task_id": "hopper-withdrawal",
+    "task_name": "Hopper Withdrawal Check",
+    "description": "Verify belt can withdraw material from hopper without slipping",
+    "complexity": "medium",
+    "standards": [
+      "CEMA Belt Book"
+    ],
+    "inputs": [
+      "Belt-material friction coefficient",
+      "Material weight in hopper",
+      "Surcharge load",
+      "Material shear force",
+      "Skirtboard friction"
+    ],
+    "outputs": [
+      "Available friction force (kN)",
+      "Required withdrawal force (kN)",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "load",
+      "shear"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_mechanical.json",
+    "suggested_relative_path": "mechanical/conveyor-design/hopper-withdrawal"
+  }
+}

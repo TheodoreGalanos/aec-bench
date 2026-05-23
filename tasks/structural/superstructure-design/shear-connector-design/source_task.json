@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "bridges",
+    "category_id": "superstructure-design",
+    "category_name": "Superstructure Design",
+    "task_id": "shear-connector-design",
+    "task_name": "Shear Connector Design",
+    "description": "Design headed stud shear connectors for composite action",
+    "complexity": "medium",
+    "standards": [
+      "AASHTO LRFD 6.10.10",
+      "AS/NZS 5100.6"
+    ],
+    "inputs": [
+      "Horizontal shear demand",
+      "Stud diameter (mm)",
+      "Stud height (mm)",
+      "Concrete strength f'c (MPa)"
+    ],
+    "outputs": [
+      "Stud capacity Qn (kN)",
+      "Number of studs required",
+      "Stud spacing (mm)",
+      "Fatigue check"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "demand",
+      "shear"
+    ],
+    "source_file": "data/tasks/structural/bridges.json",
+    "suggested_relative_path": "structural/superstructure-design/shear-connector-design"
+  }
+}

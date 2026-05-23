@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "building_structures",
+    "category_id": "steel-connections",
+    "category_name": "Steel Connection Design",
+    "task_id": "moment-endplate-connection",
+    "task_name": "Moment End Plate Connection",
+    "description": "Design end plate moment connection for beam-column joint",
+    "complexity": "medium",
+    "standards": [
+      "AS 4100",
+      "AISC Design Guide 4"
+    ],
+    "inputs": [
+      "Design moment M* (kNm)",
+      "Design shear V* (kN)",
+      "Beam and column sections",
+      "Bolt grade and arrangement"
+    ],
+    "outputs": [
+      "End plate thickness (mm)",
+      "Number and size of bolts",
+      "Column stiffener requirements",
+      "Weld sizes"
+    ],
+    "keyword_hits": [
+      "moment",
+      "shear",
+      "size"
+    ],
+    "source_file": "data/tasks/structural/building_structures.json",
+    "suggested_relative_path": "structural/steel-connections/moment-endplate-connection"
+  }
+}

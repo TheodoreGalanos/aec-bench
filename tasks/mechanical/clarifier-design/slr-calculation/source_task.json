@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_wastewater_treatment",
+    "category_id": "clarifier-design",
+    "category_name": "Clarifier Design",
+    "task_id": "slr-calculation",
+    "task_name": "Solids Loading Rate Calculation",
+    "description": "Calculate solids loading rate for a secondary clarifier",
+    "complexity": "low",
+    "standards": [
+      "Ten States Standards",
+      "WEF MOP 8"
+    ],
+    "inputs": [
+      "Total flow to clarifier including RAS (m3/d)",
+      "MLSS concentration (mg/L)",
+      "Clarifier surface area (m2)"
+    ],
+    "outputs": [
+      "SLR (kg/m2.h)",
+      "Compliance with design criteria"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "load",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/water_wastewater_treatment.json",
+    "suggested_relative_path": "mechanical/clarifier-design/slr-calculation"
+  }
+}

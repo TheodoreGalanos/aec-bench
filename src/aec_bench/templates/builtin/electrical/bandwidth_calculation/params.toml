@@ -1,0 +1,114 @@
+[meta]
+name = "bandwidth-calculation"
+description = "ITS network bandwidth capacity from device inventory"
+long_description = "Calculates network bandwidth demand for an ITS device inventory by summing camera, controller, and sensor data rates. The reduced method applies a network overhead allowance and future capacity buffer to produce base, peak, and required bandwidth values."
+discipline = "electrical"
+category = "its-communications"
+standards = ["IEEE 802.3", "NTCIP"]
+tags = ["electrical", "its", "communications", "bandwidth", "network", "deterministic"]
+tool_mode = "with-tool"
+
+[params.camera_count]
+type = "float"
+description = "Number of cameras"
+min = 0
+max = 200
+
+[params.camera_data_rate_mbps]
+type = "float"
+unit = "Mbps"
+description = "Data rate per camera"
+min = 0
+max = 50
+
+[params.controller_count]
+type = "float"
+description = "Number of controllers"
+min = 0
+max = 200
+
+[params.controller_data_rate_mbps]
+type = "float"
+unit = "Mbps"
+description = "Data rate per controller"
+min = 0
+max = 5
+
+[params.sensor_count]
+type = "float"
+description = "Number of sensors"
+min = 0
+max = 1000
+
+[params.sensor_data_rate_mbps]
+type = "float"
+unit = "Mbps"
+description = "Data rate per sensor"
+min = 0
+max = 5
+
+[params.network_overhead_pct]
+type = "float"
+unit = "%"
+description = "Network protocol and peak overhead allowance"
+min = 0
+max = 50
+
+[params.future_capacity_buffer_pct]
+type = "float"
+unit = "%"
+description = "Future capacity buffer"
+min = 0
+max = 100
+
+[outputs.base_bandwidth_mbps]
+description = "Device bandwidth before allowances"
+tolerance = 0.03
+
+[outputs.peak_demand_mbps]
+description = "Bandwidth after network overhead"
+tolerance = 0.03
+
+[outputs.required_bandwidth_mbps]
+description = "Bandwidth after overhead and future buffer"
+tolerance = 0.03
+
+[archetypes.small_intersection]
+description = "Small signalised intersection communications node"
+camera_count = {min = 1, max = 6}
+camera_data_rate_mbps = {min = 2, max = 8}
+controller_count = {min = 1, max = 4}
+controller_data_rate_mbps = {min = 0.05, max = 0.5}
+sensor_count = {min = 2, max = 20}
+sensor_data_rate_mbps = {min = 0.01, max = 0.2}
+site_contexts = ["urban-intersection", "suburban-corridor"]
+
+[archetypes.corridor_network]
+description = "Road corridor ITS aggregation network"
+camera_count = {min = 10, max = 80}
+camera_data_rate_mbps = {min = 2, max = 12}
+controller_count = {min = 5, max = 40}
+controller_data_rate_mbps = {min = 0.05, max = 1}
+sensor_count = {min = 20, max = 300}
+sensor_data_rate_mbps = {min = 0.01, max = 0.5}
+site_contexts = ["motorway-corridor", "tunnel-approach"]
+
+[difficulty.easy]
+description = "Small node with all rates given"
+visibility = "all_given"
+archetypes = ["small_intersection"]
+network_overhead_pct = [15]
+future_capacity_buffer_pct = [25]
+
+[difficulty.medium]
+description = "Mixed ITS device inventory"
+visibility = "all_given"
+archetypes = ["small_intersection", "corridor_network"]
+
+[difficulty.hard]
+description = "Future buffer hidden in corridor planning context"
+visibility = "partial"
+hidden_params = ["future_capacity_buffer_pct"]
+replacement_text = "Use the future capacity buffer implied by {{ archetype.description }}."
+archetypes = ["corridor_network"]
+future_capacity_buffer_pct = [25]

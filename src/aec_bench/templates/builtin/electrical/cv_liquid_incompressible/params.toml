@@ -1,0 +1,143 @@
+[meta]
+name = "cv-liquid-incompressible"
+description = "Control valve Cv sizing for incompressible liquid service per ISA-75.01.01"
+long_description = "Sizes control valves for incompressible liquid service by computing the required flow coefficient Cv from the ISA-75.01.01 equation Kv = Q * sqrt(SG / deltaP_eff), with Cv = 1.156 * Kv. Checks for choked (cavitating) flow using the liquid pressure recovery factor FL and critical pressure ratio factor FF, essential for process control and piping system design."
+discipline = "electrical"
+category = "control-valve-sizing"
+standards = ["ISA-75.01.01", "IEC 60534-2-1"]
+tags = ["electrical", "instrumentation", "control-valve", "cv-sizing", "liquid-flow"]
+tool_mode = "with-tool"
+
+[params.flow_rate_m3_h]
+type = "float"
+unit = "m³/h"
+description = "Volumetric flow rate through the valve"
+min = 0.5
+max = 500
+
+[params.upstream_pressure_bar]
+type = "float"
+unit = "bar"
+description = "Upstream pressure (P1) at valve inlet"
+min = 1
+max = 100
+
+[params.downstream_pressure_bar]
+type = "float"
+unit = "bar"
+description = "Downstream pressure (P2) at valve outlet"
+min = 0.5
+max = 99
+
+[params.fluid_specific_gravity]
+type = "float"
+description = "Fluid specific gravity relative to water at 15°C"
+min = 0.5
+max = 2.0
+derivable_from = "archetype"
+
+[params.fluid_vapor_pressure_bar]
+type = "float"
+unit = "bar"
+description = "Fluid vapor pressure at operating temperature"
+min = 0.01
+max = 50
+derivable_from = "archetype"
+
+[params.fluid_critical_pressure_bar]
+type = "float"
+unit = "bar"
+description = "Fluid thermodynamic critical pressure"
+min = 10
+max = 250
+derivable_from = "archetype"
+
+[params.fl_recovery_factor]
+type = "float"
+description = "Liquid pressure recovery factor FL of the valve"
+min = 0.5
+max = 1.0
+derivable_from = "archetype"
+
+[outputs.pressure_drop_bar]
+description = "Actual pressure drop across the valve (bar)"
+tolerance = 0.03
+
+[outputs.cv_required]
+description = "Required valve flow coefficient Cv"
+tolerance = 0.03
+
+[outputs.choked_pressure_drop_bar]
+description = "Choked (limiting) pressure drop (bar)"
+tolerance = 0.03
+
+[outputs.is_choked]
+description = "Choked flow indicator (1.0 = choked, 0.0 = not choked)"
+tolerance = 0.01
+
+# --- Archetypes ---
+# Process industry scenarios for control valve sizing.
+
+[archetypes.water_utility]
+description = "Water utility service — clean water, low pressure"
+flow_rate_m3_h = {min = 5, max = 100}
+upstream_pressure_bar = {min = 3, max = 10}
+downstream_pressure_bar = {min = 1, max = 6}
+fluid_specific_gravity = {min = 0.99, max = 1.01}
+fluid_vapor_pressure_bar = {min = 0.02, max = 0.05}
+fluid_critical_pressure_bar = {min = 220, max = 221}
+fl_recovery_factor = {min = 0.8, max = 0.95}
+site_contexts = ["municipal-water-treatment", "pumping-station-transfer"]
+
+[archetypes.petrochemical_light]
+description = "Petrochemical light hydrocarbon liquid service"
+flow_rate_m3_h = {min = 10, max = 200}
+upstream_pressure_bar = {min = 5, max = 40}
+downstream_pressure_bar = {min = 2, max = 30}
+fluid_specific_gravity = {min = 0.65, max = 0.85}
+fluid_vapor_pressure_bar = {min = 0.5, max = 10}
+fluid_critical_pressure_bar = {min = 30, max = 50}
+fl_recovery_factor = {min = 0.6, max = 0.9}
+site_contexts = ["refinery-distillation-unit", "petrochemical-transfer-line"]
+
+[archetypes.chemical_process]
+description = "Chemical process — moderate-density process liquid"
+flow_rate_m3_h = {min = 1, max = 80}
+upstream_pressure_bar = {min = 3, max = 25}
+downstream_pressure_bar = {min = 1, max = 15}
+fluid_specific_gravity = {min = 0.9, max = 1.5}
+fluid_vapor_pressure_bar = {min = 0.05, max = 5}
+fluid_critical_pressure_bar = {min = 40, max = 100}
+fl_recovery_factor = {min = 0.7, max = 0.95}
+site_contexts = ["chemical-plant-reactor-feed", "solvent-blending-unit"]
+
+[archetypes.high_pressure_oil]
+description = "High-pressure oil or heavy hydrocarbon service"
+flow_rate_m3_h = {min = 20, max = 500}
+upstream_pressure_bar = {min = 20, max = 100}
+downstream_pressure_bar = {min = 5, max = 60}
+fluid_specific_gravity = {min = 0.82, max = 1.1}
+fluid_vapor_pressure_bar = {min = 0.01, max = 2}
+fluid_critical_pressure_bar = {min = 30, max = 80}
+fl_recovery_factor = {min = 0.5, max = 0.85}
+site_contexts = ["offshore-production-platform", "crude-oil-pipeline-terminal"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "Water service, moderate pressures, all parameters given, non-choked conditions"
+visibility = "all_given"
+archetypes = ["water_utility"]
+fl_recovery_factor = {min = 0.85, max = 0.95}
+
+[difficulty.medium]
+description = "Any fluid type and pressure range, all parameters given"
+visibility = "all_given"
+archetypes = ["water_utility", "petrochemical_light", "chemical_process", "high_pressure_oil"]
+
+[difficulty.hard]
+description = "Fluid properties and valve FL hidden, agent must infer from process context"
+visibility = "partial"
+hidden_params = ["fluid_specific_gravity", "fluid_vapor_pressure_bar", "fluid_critical_pressure_bar", "fl_recovery_factor"]
+replacement_text = "The process involves {{ archetype.description }} at a {{ archetype.site_context }} facility"
+archetypes = ["petrochemical_light", "chemical_process", "high_pressure_oil"]

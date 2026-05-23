@@ -1,0 +1,32 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_safety",
+    "category_id": "tenability-assessment",
+    "category_name": "Tenability Criteria Assessment",
+    "task_id": "visibility-criterion",
+    "task_name": "Visibility Tenability Assessment",
+    "description": "Calculate smoke visibility and assess against tenability thresholds",
+    "complexity": "low",
+    "standards": [
+      "ISO 13571",
+      "NFPA 92"
+    ],
+    "inputs": [
+      "Optical density or extinction coefficient",
+      "Light-reflecting vs light-emitting signs",
+      "Occupant familiarity"
+    ],
+    "outputs": [
+      "Visibility distance (m)",
+      "Pass/fail against threshold (typically 10m)"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/mechanical/fire_safety.json",
+    "suggested_relative_path": "mechanical/tenability-assessment/visibility-criterion"
+  }
+}

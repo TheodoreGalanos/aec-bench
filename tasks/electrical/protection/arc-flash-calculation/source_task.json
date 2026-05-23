@@ -1,0 +1,42 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "energy_systems_studies",
+    "category_id": "protection",
+    "category_name": "Protection Coordination",
+    "task_id": "arc-flash-calculation",
+    "task_name": "Arc Flash Hazard Analysis",
+    "description": "Calculate arc flash incident energy and determine PPE requirements",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 1584-2018",
+      "NFPA 70E",
+      "AS/NZS 4836"
+    ],
+    "inputs": [
+      "Bolted fault current (kA)",
+      "Protective device clearing time (s)",
+      "Working distance (mm)",
+      "Gap between conductors (mm)",
+      "Enclosure type and size"
+    ],
+    "outputs": [
+      "Incident energy (cal/cm2)",
+      "Arc flash boundary (mm)",
+      "PPE category",
+      "Warning label information"
+    ],
+    "keyword_hits": [
+      "arc flash",
+      "calculate",
+      "current",
+      "energy",
+      "fault",
+      "size"
+    ],
+    "source_file": "data/tasks/electrical/energy_systems_studies.json",
+    "suggested_relative_path": "electrical/protection/arc-flash-calculation"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "ports_marine",
+    "category_id": "berthing-energy",
+    "category_name": "Berthing Energy Analysis",
+    "task_id": "berthing-energy-calc",
+    "task_name": "Berthing Energy Calculation",
+    "description": "Calculate characteristic and design berthing energy for a vessel using kinetic energy formula with coefficients",
+    "complexity": "low",
+    "standards": [
+      "BS 6349-4",
+      "PIANC WG211",
+      "AS 4997"
+    ],
+    "inputs": [
+      "Vessel displacement MD (tonnes)",
+      "Approach velocity VB (m/s)",
+      "Added mass coefficient CM",
+      "Eccentricity coefficient CE",
+      "Berth configuration coefficient CC",
+      "Softness coefficient CS"
+    ],
+    "outputs": [
+      "Characteristic berthing energy EN (kNm)",
+      "Design berthing energy ED (kNm)",
+      "Factor of safety applied"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "energy"
+    ],
+    "source_file": "data/tasks/structural/ports_marine.json",
+    "suggested_relative_path": "structural/berthing-energy/berthing-energy-calc"
+  }
+}

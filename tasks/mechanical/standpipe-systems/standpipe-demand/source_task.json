@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_protection",
+    "category_id": "standpipe-systems",
+    "category_name": "Standpipe System Design",
+    "task_id": "standpipe-demand",
+    "task_name": "Standpipe System Demand Calculation",
+    "description": "Calculate water demand for standpipe system based on class",
+    "complexity": "medium",
+    "standards": [
+      "NFPA 14",
+      "AS 2419.1"
+    ],
+    "inputs": [
+      "Standpipe class (I, II, III)",
+      "Number of standpipes",
+      "Building height",
+      "Most remote outlet location"
+    ],
+    "outputs": [
+      "Total flow demand (gpm)",
+      "Minimum pressure at most remote outlet (psi)",
+      "Flow per standpipe"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "demand",
+      "flow",
+      "pipe",
+      "pressure"
+    ],
+    "source_file": "data/tasks/mechanical/fire_protection.json",
+    "suggested_relative_path": "mechanical/standpipe-systems/standpipe-demand"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "cfd_modelling",
+    "category_id": "post-processing",
+    "category_name": "Post-Processing and Visualization",
+    "task_id": "qoi-extraction",
+    "task_name": "Quantity of Interest Extraction",
+    "description": "Extract engineering quantities from CFD solution",
+    "complexity": "low",
+    "standards": [
+      "CFD Best Practices"
+    ],
+    "inputs": [
+      "Converged solution files",
+      "QoI definitions (Cd, Cl, pressure drop, etc.)"
+    ],
+    "outputs": [
+      "QoI values",
+      "Integration details",
+      "Units verification"
+    ],
+    "keyword_hits": [
+      "drop",
+      "pressure",
+      "quantity"
+    ],
+    "source_file": "data/tasks/mechanical/cfd_modelling.json",
+    "suggested_relative_path": "mechanical/post-processing/qoi-extraction"
+  }
+}

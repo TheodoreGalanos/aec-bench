@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "energy_structures",
+    "category_id": "substation-foundations",
+    "category_name": "Substation Equipment Foundations",
+    "task_id": "circuit-breaker-foundation",
+    "task_name": "Circuit Breaker Foundation Design",
+    "description": "Design foundation for high-voltage circuit breaker including dynamic loads",
+    "complexity": "low",
+    "standards": [
+      "IEEE 693",
+      "AS 3600",
+      "IEC 62271"
+    ],
+    "inputs": [
+      "Equipment weight",
+      "Operating forces",
+      "Seismic loads",
+      "Soil bearing capacity",
+      "Anchor bolt requirements"
+    ],
+    "outputs": [
+      "Pad dimensions (m)",
+      "Pad thickness (mm)",
+      "Anchor bolt layout",
+      "Bearing pressure (kPa)"
+    ],
+    "keyword_hits": [
+      "bearing",
+      "capacity",
+      "load",
+      "pressure",
+      "voltage"
+    ],
+    "source_file": "data/tasks/structural/energy_structures.json",
+    "suggested_relative_path": "structural/substation-foundations/circuit-breaker-foundation"
+  }
+}

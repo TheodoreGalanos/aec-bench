@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "substations",
+    "category_id": "grounding-design",
+    "category_name": "Grounding Grid Design",
+    "task_id": "grid-resistance",
+    "task_name": "Grid Resistance Calculation",
+    "description": "Calculate substation ground grid resistance",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 80"
+    ],
+    "inputs": [
+      "Grid area (m\u00b2)",
+      "Total conductor length (m)",
+      "Soil resistivity (\u03a9\u00b7m)",
+      "Grid burial depth (m)"
+    ],
+    "outputs": [
+      "Grid resistance Rg (\u03a9)",
+      "Ground potential rise GPR (V)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/substations.json",
+    "suggested_relative_path": "electrical/grounding-design/grid-resistance"
+  }
+}

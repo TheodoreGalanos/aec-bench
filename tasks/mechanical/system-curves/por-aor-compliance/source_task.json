@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_pumps_pipes",
+    "category_id": "system-curves",
+    "category_name": "System Curve Development",
+    "task_id": "por-aor-compliance",
+    "task_name": "Preferred Operating Region Compliance",
+    "description": "Verify pump operating point falls within Preferred Operating Region",
+    "complexity": "low",
+    "standards": [
+      "ANSI/HI 9.6.3"
+    ],
+    "inputs": [
+      "Operating point flow (L/s)",
+      "Best Efficiency Point flow (L/s)",
+      "POR limits (% of BEP)"
+    ],
+    "outputs": [
+      "Flow as percentage of BEP (%)",
+      "POR compliance status",
+      "AOR compliance status"
+    ],
+    "keyword_hits": [
+      "flow",
+      "pump"
+    ],
+    "source_file": "data/tasks/mechanical/water_pumps_pipes.json",
+    "suggested_relative_path": "mechanical/system-curves/por-aor-compliance"
+  }
+}

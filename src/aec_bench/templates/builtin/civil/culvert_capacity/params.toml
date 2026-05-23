@@ -1,0 +1,144 @@
+[meta]
+name = "culvert-capacity"
+description = "Culvert headwater analysis under inlet and outlet control using HDS-5 methodology"
+long_description = "Determines the headwater depth for circular culverts under both inlet control and outlet control conditions per the FHWA HDS-5 methodology, then identifies the controlling condition. Inlet control uses regression-based unsubmerged/submerged equations while outlet control applies an energy balance with entrance, friction, and exit losses. Used in road drainage design to verify that headwater elevations remain within acceptable limits."
+discipline = "civil"
+category = "culvert-design"
+standards = ["HDS-5", "ARR"]
+tags = ["civil", "hydraulics", "culvert", "drainage", "inlet-control", "outlet-control"]
+tool_mode = "both"
+
+[params.culvert_diameter_m]
+type = "float"
+unit = "m"
+description = "Internal culvert diameter D"
+min = 0.3
+max = 3.0
+
+[params.culvert_length_m]
+type = "float"
+unit = "m"
+description = "Culvert barrel length L"
+min = 5.0
+max = 100.0
+
+[params.culvert_slope_m_per_m]
+type = "float"
+unit = "m/m"
+description = "Culvert barrel slope S"
+min = 0.001
+max = 0.10
+
+[params.design_flow_m3_s]
+type = "float"
+unit = "m³/s"
+description = "Design discharge Q through the culvert"
+min = 0.1
+max = 30.0
+
+[params.culvert_configuration]
+type = "enum"
+description = "Culvert material and inlet type combination"
+values = ["concrete_square_edge_headwall", "concrete_groove_end_headwall", "concrete_groove_end_projecting", "cmp_headwall", "cmp_mitered", "cmp_projecting"]
+derivable_from = "archetype"
+
+[params.tailwater_depth_m]
+type = "float"
+unit = "m"
+description = "Tailwater depth above outlet invert TW"
+min = 0.0
+max = 5.0
+
+[params.invert_elevation_m]
+type = "float"
+unit = "m AHD"
+description = "Inlet invert elevation"
+min = 10.0
+max = 200.0
+default = 100.0
+optional = true
+derivable_from = "archetype"
+
+[outputs.inlet_control_hw_m]
+description = "Headwater depth above inlet invert under inlet control (m)"
+tolerance = 0.05
+
+[outputs.outlet_control_hw_m]
+description = "Headwater depth above inlet invert under outlet control (m)"
+tolerance = 0.05
+
+[outputs.controlling_condition]
+description = "Controlling condition: 1.0 = inlet control, 2.0 = outlet control"
+tolerance = 0.01
+
+[outputs.headwater_elevation_m]
+description = "Headwater elevation at controlling condition (m AHD)"
+tolerance = 0.05
+
+# --- Archetypes ---
+
+[archetypes.urban_culvert]
+description = "Urban road culvert crossing in a developed catchment"
+culvert_diameter_m = {min = 0.6, max = 1.8}
+culvert_length_m = {min = 10.0, max = 50.0}
+design_flow_m3_s = {min = 0.5, max = 8.0}
+tailwater_depth_m = {min = 0.0, max = 2.0}
+invert_elevation_m = {min = 20.0, max = 80.0}
+site_contexts = ["sydney-road-crossing", "brisbane-suburban-culvert", "melbourne-trunk-drainage"]
+
+[archetypes.highway_culvert]
+description = "Highway culvert crossing with moderate to high design flow"
+culvert_diameter_m = {min = 0.9, max = 2.4}
+culvert_length_m = {min = 15.0, max = 60.0}
+design_flow_m3_s = {min = 2.0, max = 15.0}
+tailwater_depth_m = {min = 0.0, max = 3.0}
+invert_elevation_m = {min = 30.0, max = 150.0}
+site_contexts = ["perth-highway-crossing", "pacific-highway-upgrade"]
+
+[archetypes.rural_crossing]
+description = "Rural creek or farm track culvert crossing"
+culvert_diameter_m = {min = 0.3, max = 1.5}
+culvert_length_m = {min = 5.0, max = 30.0}
+design_flow_m3_s = {min = 0.1, max = 4.0}
+tailwater_depth_m = {min = 0.0, max = 1.5}
+invert_elevation_m = {min = 30.0, max = 120.0}
+site_contexts = ["adelaide-rural-access", "hobart-farm-crossing", "gippsland-farm-track"]
+
+[archetypes.hillside_crossing]
+description = "Steep terrain culvert crossing with significant grade"
+culvert_diameter_m = {min = 0.6, max = 1.8}
+culvert_length_m = {min = 10.0, max = 40.0}
+culvert_slope_m_per_m = {min = 0.02, max = 0.10}
+design_flow_m3_s = {min = 0.3, max = 6.0}
+tailwater_depth_m = {min = 0.0, max = 2.0}
+invert_elevation_m = {min = 40.0, max = 180.0}
+site_contexts = ["toowoomba-hillside-road", "blue-mountains-crossing"]
+
+[archetypes.tropical_crossing]
+description = "Tropical region culvert crossing with high rainfall intensity"
+culvert_diameter_m = {min = 0.9, max = 2.4}
+culvert_length_m = {min = 10.0, max = 60.0}
+design_flow_m3_s = {min = 2.0, max = 12.0}
+tailwater_depth_m = {min = 0.5, max = 2.5}
+invert_elevation_m = {min = 10.0, max = 60.0}
+site_contexts = ["darwin-rural-road", "cairns-forestry-access"]
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Concrete culvert with headwall, all parameters given, moderate flow"
+visibility = "all_given"
+archetypes = ["urban_culvert"]
+culvert_configuration = ["concrete_square_edge_headwall", "concrete_groove_end_headwall"]
+
+[difficulty.medium]
+description = "Any material and inlet type, all parameters given, wider flow range"
+visibility = "all_given"
+archetypes = ["urban_culvert", "highway_culvert", "rural_crossing", "hillside_crossing", "tropical_crossing"]
+
+[difficulty.hard]
+description = "Invert elevation hidden, agent must infer from site context"
+visibility = "partial"
+hidden_params = ["invert_elevation_m"]
+replacement_text = "The culvert is located at {{ archetype.site_context }}"
+archetypes = ["urban_culvert", "highway_culvert", "rural_crossing", "hillside_crossing", "tropical_crossing"]

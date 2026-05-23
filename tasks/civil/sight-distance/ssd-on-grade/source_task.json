@@ -1,0 +1,32 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "roads",
+    "category_id": "sight-distance",
+    "category_name": "Sight Distance Verification",
+    "task_id": "ssd-on-grade",
+    "task_name": "Stopping Sight Distance on Grade",
+    "description": "Calculate required stopping sight distance on a given longitudinal grade",
+    "complexity": "low",
+    "standards": [
+      "AGRD Part 3 \u00a75"
+    ],
+    "inputs": [
+      "Design speed (km/h)",
+      "Longitudinal grade (%)",
+      "Reaction time (s)"
+    ],
+    "outputs": [
+      "Stopping sight distance (m)",
+      "Reaction distance component (m)",
+      "Braking distance component (m)"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/civil/roads.json",
+    "suggested_relative_path": "civil/sight-distance/ssd-on-grade"
+  }
+}

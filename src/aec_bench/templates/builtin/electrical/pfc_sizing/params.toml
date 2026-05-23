@@ -1,0 +1,82 @@
+[meta]
+name = "pfc-sizing"
+description = "Capacitor kVAr sizing for power factor correction"
+long_description = "Calculates the reactive power compensation needed to improve a load from an initial lagging power factor to a target power factor. The reduced method uses Qc = P x (tan phi_initial - tan phi_target), then reports the corrected apparent power and current reduction."
+discipline = "electrical"
+category = "load-flow"
+standards = ["IEEE 3002.2", "AS/NZS 2067"]
+tags = ["electrical", "power-factor", "capacitor", "reactive-power", "load-flow", "deterministic"]
+tool_mode = "with-tool"
+
+[params.real_power_kw]
+type = "float"
+unit = "kW"
+description = "Real load power"
+min = 1
+max = 20000
+
+[params.initial_power_factor]
+type = "float"
+description = "Initial lagging power factor"
+min = 0.5
+max = 0.94
+
+[params.target_power_factor]
+type = "float"
+description = "Target corrected power factor"
+min = 0.9
+max = 0.99
+
+[outputs.initial_apparent_power_kva]
+description = "Initial apparent power"
+tolerance = 0.03
+
+[outputs.corrected_apparent_power_kva]
+description = "Apparent power after correction"
+tolerance = 0.03
+
+[outputs.required_reactive_power_kvar]
+description = "Required capacitor reactive power"
+tolerance = 0.03
+
+[outputs.current_reduction_pct]
+description = "Reduction in line current at unchanged voltage"
+tolerance = 0.03
+
+[archetypes.small_commercial_load]
+description = "Small commercial motor and HVAC load"
+real_power_kw = {min = 20, max = 250}
+initial_power_factor = {min = 0.7, max = 0.88}
+target_power_factor = {min = 0.92, max = 0.97}
+site_contexts = ["commercial-switchboard", "retail-centre"]
+
+[archetypes.industrial_motor_load]
+description = "Industrial motor control centre load"
+real_power_kw = {min = 250, max = 3000}
+initial_power_factor = {min = 0.65, max = 0.88}
+target_power_factor = {min = 0.93, max = 0.99}
+site_contexts = ["water-treatment-plant", "manufacturing-site"]
+
+[archetypes.utility_customer_load]
+description = "Large utility customer connection"
+real_power_kw = {min = 3000, max = 20000}
+initial_power_factor = {min = 0.75, max = 0.94}
+target_power_factor = {min = 0.95, max = 0.99}
+site_contexts = ["mining-load", "large-campus"]
+
+[difficulty.easy]
+description = "Small load with all power factors given"
+visibility = "all_given"
+archetypes = ["small_commercial_load"]
+
+[difficulty.medium]
+description = "Commercial or industrial correction calculation"
+visibility = "all_given"
+archetypes = ["small_commercial_load", "industrial_motor_load"]
+
+[difficulty.hard]
+description = "Larger load with initial power factor hidden in context"
+visibility = "partial"
+hidden_params = ["initial_power_factor"]
+replacement_text = "The existing load has the lagging power factor typical of {{ archetype.description }}."
+archetypes = ["industrial_motor_load", "utility_customer_load"]

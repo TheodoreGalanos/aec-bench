@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "facades",
+    "category_id": "wind-load-analysis",
+    "category_name": "Wind Load Analysis",
+    "task_id": "wind-pressure-calc",
+    "task_name": "Wind Pressure Calculation (C&C)",
+    "description": "Calculate components and cladding wind pressures for facade zones using code formulas",
+    "complexity": "low",
+    "standards": [
+      "ASCE 7",
+      "AS/NZS 1170.2",
+      "EN 1991-1-4"
+    ],
+    "inputs": [
+      "Building geometry (H, L, W)",
+      "Site location and terrain",
+      "Enclosure classification",
+      "Facade zone (wall, corner, edge)",
+      "Effective wind area"
+    ],
+    "outputs": [
+      "Design wind pressure positive (kPa)",
+      "Design wind pressure negative (kPa)",
+      "Zone classification",
+      "Governing load case"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "load",
+      "pressure"
+    ],
+    "source_file": "data/tasks/structural/facades.json",
+    "suggested_relative_path": "structural/wind-load-analysis/wind-pressure-calc"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "clearance-verification",
+    "category_name": "Clearance Verification",
+    "task_id": "ground-clearance-check",
+    "task_name": "Ground Clearance Verification",
+    "description": "Verify minimum ground clearance at maximum sag condition against code requirements",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 7000",
+      "NESC",
+      "IEC 60826"
+    ],
+    "inputs": [
+      "Maximum sag (m)",
+      "Conductor attachment height (m)",
+      "Terrain type",
+      "Voltage level (kV)",
+      "Crossing type (road, rail, water)"
+    ],
+    "outputs": [
+      "Calculated clearance (m)",
+      "Required minimum clearance (m)",
+      "Clearance margin (m)",
+      "Pass/Fail status"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/clearance-verification/ground-clearance-check"
+  }
+}

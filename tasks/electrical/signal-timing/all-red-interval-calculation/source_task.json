@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "intelligent_transport_systems",
+    "category_id": "signal-timing",
+    "category_name": "Traffic Signal Timing",
+    "task_id": "all-red-interval-calculation",
+    "task_name": "Red Clearance (All-Red) Interval Calculation",
+    "description": "Calculate all-red clearance interval for vehicles to clear intersection",
+    "complexity": "low",
+    "standards": [
+      "MUTCD",
+      "AS 1742.14"
+    ],
+    "inputs": [
+      "Intersection width (m)",
+      "Vehicle length (m)",
+      "Vehicle speed (m/s)"
+    ],
+    "outputs": [
+      "All-red interval duration (s)",
+      "Rounded to 0.1s (max 6.0s)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/intelligent_transport_systems.json",
+    "suggested_relative_path": "electrical/signal-timing/all-red-interval-calculation"
+  }
+}

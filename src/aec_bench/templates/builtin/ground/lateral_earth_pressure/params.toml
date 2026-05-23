@@ -1,0 +1,164 @@
+[meta]
+name = "lateral-earth-pressure"
+description = "Active and passive earth pressures using Rankine or Coulomb theory"
+long_description = "Calculates active and passive earth pressure coefficients, base pressures, and total lateral forces on retaining walls using either Rankine or Coulomb theory. Supports inclined backfill, wall friction, cohesive soils, and uniform surcharge loading, computing the pressure distribution, total force per unit wall length, and the point of application for structural design of retaining structures."
+discipline = "ground"
+category = "retaining-walls"
+standards = ["Rankine (1857)", "Coulomb (1776)"]
+tags = ["geotechnical", "earth-pressure", "retaining-wall", "deterministic"]
+tool_mode = "both"
+
+[params.friction_angle_deg]
+type = "float"
+unit = "degrees"
+description = "Effective friction angle φ'"
+min = 0
+max = 45
+derivable_from = "archetype"
+
+[params.cohesion_kpa]
+type = "float"
+unit = "kPa"
+description = "Effective cohesion c'"
+min = 0
+max = 100
+derivable_from = "archetype"
+
+[params.unit_weight_kn_m3]
+type = "float"
+unit = "kN/m³"
+description = "Soil unit weight γ"
+min = 14
+max = 22
+derivable_from = "archetype"
+
+[params.wall_height_m]
+type = "float"
+unit = "m"
+description = "Retaining wall height H"
+min = 1.5
+max = 12.0
+
+[params.backfill_slope_deg]
+type = "float"
+unit = "degrees"
+description = "Backfill slope angle β above horizontal"
+min = 0
+max = 30
+optional = true
+default = 0.0
+
+[params.wall_friction_angle_deg]
+type = "float"
+unit = "degrees"
+description = "Wall friction angle δ (Coulomb theory)"
+min = 0
+max = 30
+optional = true
+default = 0.0
+
+[params.surcharge_kpa]
+type = "float"
+unit = "kPa"
+description = "Uniform surcharge on backfill surface q"
+min = 0
+max = 50
+optional = true
+default = 0.0
+
+[params.theory]
+type = "enum"
+description = "Earth pressure theory to apply"
+values = ["rankine", "coulomb"]
+default = "rankine"
+
+[outputs.ka]
+description = "Active earth pressure coefficient Ka"
+tolerance = 0.03
+
+[outputs.kp]
+description = "Passive earth pressure coefficient Kp"
+tolerance = 0.03
+
+[outputs.active_pressure_at_base_kpa]
+description = "Active pressure at base of wall σ_a (kPa)"
+tolerance = 0.03
+
+[outputs.passive_pressure_at_base_kpa]
+description = "Passive pressure at base of wall σ_p (kPa)"
+tolerance = 0.03
+
+[outputs.total_active_force_kn_m]
+description = "Total active force per unit wall length Pa (kN/m)"
+tolerance = 0.03
+
+[outputs.total_passive_force_kn_m]
+description = "Total passive force per unit wall length Pp (kN/m)"
+tolerance = 0.03
+
+[outputs.active_force_application_point_m]
+description = "Active force point of application above base (m)"
+tolerance = 0.05
+
+# --- Archetypes ---
+
+[archetypes.loose_sand]
+description = "Loose sand backfill"
+friction_angle_deg = {min = 28, max = 32}
+cohesion_kpa = {min = 0, max = 0}
+unit_weight_kn_m3 = {min = 15, max = 17}
+site_contexts = ["perth-coastal", "hunter-valley-alluvial"]
+
+[archetypes.medium_dense_sand]
+description = "Medium dense sand backfill"
+friction_angle_deg = {min = 32, max = 36}
+cohesion_kpa = {min = 0, max = 0}
+unit_weight_kn_m3 = {min = 17, max = 19}
+site_contexts = ["sydney-harbour", "brisbane-river"]
+
+[archetypes.dense_sand_gravel]
+description = "Dense sand and gravel backfill"
+friction_angle_deg = {min = 36, max = 42}
+cohesion_kpa = {min = 0, max = 0}
+unit_weight_kn_m3 = {min = 19, max = 21}
+site_contexts = ["cairns-coral", "adelaide-quarry"]
+
+[archetypes.stiff_clay]
+description = "Stiff clay backfill"
+friction_angle_deg = {min = 18, max = 25}
+cohesion_kpa = {min = 20, max = 60}
+unit_weight_kn_m3 = {min = 18, max = 21}
+site_contexts = ["melbourne-basalt", "sydney-hawkesbury"]
+
+[archetypes.soft_clay]
+description = "Soft normally consolidated clay"
+friction_angle_deg = {min = 10, max = 18}
+cohesion_kpa = {min = 5, max = 20}
+unit_weight_kn_m3 = {min = 15, max = 17}
+site_contexts = ["darwin-estuarine", "brisbane-alluvial"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "Rankine theory, horizontal backfill, cohesionless soil, no surcharge"
+visibility = "all_given"
+archetypes = ["loose_sand", "medium_dense_sand"]
+theory = ["rankine"]
+backfill_slope_deg = [0.0]
+wall_friction_angle_deg = [0.0]
+surcharge_kpa = [0.0]
+
+[difficulty.medium]
+description = "Rankine with inclined backfill or cohesive soil, surcharge may be present"
+visibility = "all_given"
+archetypes = ["loose_sand", "medium_dense_sand", "dense_sand_gravel", "stiff_clay"]
+theory = ["rankine"]
+wall_friction_angle_deg = [0.0]
+
+[difficulty.hard]
+description = "Coulomb theory with wall friction, some soil parameters hidden"
+visibility = "partial"
+hidden_params = ["cohesion_kpa", "friction_angle_deg", "unit_weight_kn_m3"]
+replacement_text = "The retained soil is {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["medium_dense_sand", "dense_sand_gravel", "stiff_clay", "soft_clay"]
+theory = ["coulomb"]

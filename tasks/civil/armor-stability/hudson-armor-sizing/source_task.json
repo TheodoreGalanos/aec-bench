@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "coastal_engineering",
+    "category_id": "armor-stability",
+    "category_name": "Armor Stability Design",
+    "task_id": "hudson-armor-sizing",
+    "task_name": "Hudson Formula Armor Sizing",
+    "description": "Calculate required median weight of armor units using Hudson's equation",
+    "complexity": "low",
+    "standards": [
+      "USACE CEM",
+      "CIRIA C683 Rock Manual"
+    ],
+    "inputs": [
+      "Design wave height H (m)",
+      "Armor unit density (kg/m\u00b3)",
+      "Water density (kg/m\u00b3)",
+      "Stability coefficient (Kd)",
+      "Structure slope (cot \u03b1)"
+    ],
+    "outputs": [
+      "Median armor weight W50 (tonnes)",
+      "Nominal diameter Dn50 (m)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "sizing"
+    ],
+    "source_file": "data/tasks/civil/coastal_engineering.json",
+    "suggested_relative_path": "civil/armor-stability/hudson-armor-sizing"
+  }
+}

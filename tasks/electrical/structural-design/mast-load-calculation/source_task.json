@@ -1,0 +1,43 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "overhead_wiring_rail",
+    "category_id": "structural-design",
+    "category_name": "Structural Design",
+    "task_id": "mast-load-calculation",
+    "task_name": "OLE Mast Load Calculation",
+    "description": "Calculate loads on cantilever mast from wire tension and environmental loads",
+    "complexity": "medium",
+    "standards": [
+      "EN 50119",
+      "AS/NZS 1170",
+      "Eurocodes"
+    ],
+    "inputs": [
+      "Wire tensions (kN)",
+      "Wind pressure (kPa)",
+      "Ice loading (N/m)",
+      "Mast geometry",
+      "Registration arm configuration",
+      "Load combinations"
+    ],
+    "outputs": [
+      "Moment at ground level M_GL (kNm)",
+      "Axial and shear forces",
+      "Torsional moment",
+      "Load case summary"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "load",
+      "moment",
+      "pressure",
+      "shear"
+    ],
+    "source_file": "data/tasks/electrical/overhead_wiring_rail.json",
+    "suggested_relative_path": "electrical/structural-design/mast-load-calculation"
+  }
+}

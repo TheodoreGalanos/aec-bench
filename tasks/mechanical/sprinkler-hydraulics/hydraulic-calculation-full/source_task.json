@@ -1,0 +1,42 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_protection",
+    "category_id": "sprinkler-hydraulics",
+    "category_name": "Sprinkler Hydraulic Calculations",
+    "task_id": "hydraulic-calculation-full",
+    "task_name": "Complete Sprinkler Hydraulic Calculation",
+    "description": "Perform full hydraulic calculation from most remote area to water source",
+    "complexity": "medium",
+    "standards": [
+      "NFPA 13",
+      "AS 2118"
+    ],
+    "inputs": [
+      "Hazard classification",
+      "Design density (gpm/sf)",
+      "Design area (sf)",
+      "Pipe network (lengths, diameters, fittings)",
+      "Sprinkler K-factors",
+      "Elevations",
+      "Water supply data"
+    ],
+    "outputs": [
+      "Total system demand (gpm @ psi)",
+      "Node-by-node pressure/flow",
+      "Demand vs supply curve",
+      "Safety margin (%)"
+    ],
+    "keyword_hits": [
+      "calculation",
+      "demand",
+      "flow",
+      "pipe",
+      "pressure"
+    ],
+    "source_file": "data/tasks/mechanical/fire_protection.json",
+    "suggested_relative_path": "mechanical/sprinkler-hydraulics/hydraulic-calculation-full"
+  }
+}

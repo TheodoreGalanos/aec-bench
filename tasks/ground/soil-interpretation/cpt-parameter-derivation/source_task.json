@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "ground",
+    "community": "geotechnical",
+    "category_id": "soil-interpretation",
+    "category_name": "Soil Data Interpretation",
+    "task_id": "cpt-parameter-derivation",
+    "task_name": "CPT Parameter Derivation",
+    "description": "Derive soil parameters from CPT data using standard correlations",
+    "complexity": "low",
+    "standards": [
+      "Robertson (1990)",
+      "Lunne et al. (1997)"
+    ],
+    "inputs": [
+      "Cone resistance qc (MPa)",
+      "Sleeve friction fs (kPa)",
+      "Pore pressure u2 (kPa)",
+      "Effective overburden \u03c3'v (kPa)"
+    ],
+    "outputs": [
+      "Corrected cone resistance qt (MPa)",
+      "Friction ratio Fr (%)",
+      "Soil behavior type index Ic",
+      "Undrained shear strength su (kPa)",
+      "Friction angle \u03c6' (degrees)"
+    ],
+    "keyword_hits": [
+      "pressure",
+      "shear"
+    ],
+    "source_file": "data/tasks/ground/geotechnical.json",
+    "suggested_relative_path": "ground/soil-interpretation/cpt-parameter-derivation"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "building_structures",
+    "category_id": "steel-member-design",
+    "category_name": "Steel Member Design",
+    "task_id": "steel-column-compression",
+    "task_name": "Steel Column Compression Design",
+    "description": "Check steel column for axial compression capacity",
+    "complexity": "low",
+    "standards": [
+      "AS 4100 Sec 6",
+      "AISC 360 Ch E"
+    ],
+    "inputs": [
+      "Factored axial load N* (kN)",
+      "Section properties (Ag, r)",
+      "Steel grade fy (MPa)",
+      "Effective length Le (m)",
+      "Section form factor kf"
+    ],
+    "outputs": [
+      "Section capacity PhiNs (kN)",
+      "Member capacity PhiNc (kN)",
+      "Slenderness ratio",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "load"
+    ],
+    "source_file": "data/tasks/structural/building_structures.json",
+    "suggested_relative_path": "structural/steel-member-design/steel-column-compression"
+  }
+}

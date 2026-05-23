@@ -1,0 +1,84 @@
+[meta]
+name = "cstr-volume"
+description = "Continuous stirred tank reactor volume calculation for first-order reactions"
+long_description = "Calculates required CSTR volume for an isothermal constant-density first-order reaction. The template uses the CSTR design relationship tau = X/(k(1-X)) and V = Q tau, while reporting outlet concentration and outlet reaction rate."
+discipline = "mechanical"
+category = "reactor-sizing"
+standards = ["Chemical Reaction Engineering Fundamentals"]
+tags = ["mechanical", "reactor-sizing", "cstr", "first-order", "deterministic"]
+tool_mode = "with-tool"
+
+[params.volumetric_flow_m3_h]
+type = "float"
+unit = "m3/h"
+description = "Volumetric feed flow rate"
+min = 0.1
+max = 5000.0
+
+[params.inlet_concentration_kmol_m3]
+type = "float"
+unit = "kmol/m3"
+description = "Inlet concentration of limiting reactant"
+min = 0.01
+max = 20.0
+
+[params.required_conversion_pct]
+type = "float"
+unit = "%"
+description = "Required reactant conversion"
+min = 5.0
+max = 95.0
+
+[params.rate_constant_h_inv]
+type = "float"
+unit = "1/h"
+description = "First-order reaction rate constant"
+min = 0.01
+max = 10.0
+
+[outputs.outlet_concentration_kmol_m3]
+description = "Outlet concentration at required conversion"
+tolerance = 0.03
+
+[outputs.outlet_reaction_rate_kmol_m3_h]
+description = "First-order reaction rate at CSTR outlet"
+tolerance = 0.03
+
+[outputs.space_time_h]
+description = "Required reactor space time"
+tolerance = 0.03
+
+[outputs.required_volume_m3]
+description = "Required CSTR volume"
+tolerance = 0.03
+
+[archetypes.small_process_reactor]
+description = "Small liquid-phase process CSTR"
+volumetric_flow_m3_h = {min = 1.0, max = 50.0}
+inlet_concentration_kmol_m3 = {min = 0.1, max = 3.0}
+required_conversion_pct = {min = 30.0, max = 80.0}
+rate_constant_h_inv = {min = 0.2, max = 3.0}
+site_contexts = ["pilot-process-skid", "batch-to-continuous-conversion"]
+
+[archetypes.large_treatment_reactor]
+description = "Large first-order stirred treatment reactor"
+volumetric_flow_m3_h = {min = 50.0, max = 2000.0}
+inlet_concentration_kmol_m3 = {min = 0.02, max = 1.0}
+required_conversion_pct = {min = 40.0, max = 90.0}
+rate_constant_h_inv = {min = 0.05, max = 1.0}
+site_contexts = ["industrial-wastewater-reactor", "process-neutralisation-train"]
+
+[difficulty.easy]
+description = "All parameters given for a small process CSTR"
+visibility = "all_given"
+archetypes = ["small_process_reactor"]
+
+[difficulty.medium]
+description = "All parameters given across small and large first-order CSTRs"
+visibility = "all_given"
+archetypes = ["small_process_reactor", "large_treatment_reactor"]
+
+[difficulty.hard]
+description = "All parameters given for larger stirred treatment reactor sizing"
+visibility = "all_given"
+archetypes = ["large_treatment_reactor"]

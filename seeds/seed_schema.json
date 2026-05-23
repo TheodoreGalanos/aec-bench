@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:aec-bench:seeds:seed-schema",
+  "title": "AEC-Bench Seed Task",
+  "description": "Schema for benchmark seed files produced by /add-task or imported from ngnbench.",
+  "type": "object",
+  "required": ["status", "seed_origin", "source"],
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "type": "string",
+      "description": "Lifecycle status of the seed."
+    },
+    "seed_origin": {
+      "type": "string",
+      "description": "How the seed was created (e.g. 'expert', 'ngnbench')."
+    },
+    "created_by": {
+      "type": "string",
+      "description": "Author who created this seed."
+    },
+    "source": { "$ref": "#/$defs/source" },
+    "feasibility": { "$ref": "#/$defs/feasibility" }
+  },
+  "$defs": {
+    "structured_field": {
+      "type": "object",
+      "required": ["name", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["float", "int", "categorical"]
+        },
+        "unit": { "type": "string" },
+        "values": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Allowed values for categorical fields."
+        }
+      }
+    },
+    "field_array_strings": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "field_array_objects": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/structured_field" }
+    },
+    "field_array": {
+      "oneOf": [
+        { "$ref": "#/$defs/field_array_strings" },
+        { "$ref": "#/$defs/field_array_objects" }
+      ]
+    },
+    "worked_example": {
+      "type": "object",
+      "required": ["description", "inputs", "outputs"],
+      "properties": {
+        "description": { "type": "string" },
+        "inputs": { "type": "object" },
+        "outputs": { "type": "object" }
+      }
+    },
+    "feasibility_criteria": {
+      "type": "object",
+      "required": [
+        "closed_form",
+        "deterministic",
+        "parameterisable_inputs",
+        "numeric_outputs",
+        "single_compute"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "closed_form": { "type": "boolean" },
+        "deterministic": { "type": "boolean" },
+        "parameterisable_inputs": { "type": "boolean" },
+        "numeric_outputs": { "type": "boolean" },
+        "single_compute": { "type": "boolean" }
+      }
+    },
+    "feasibility": {
+      "type": "object",
+      "required": ["parameterisable", "criteria", "notes"],
+      "properties": {
+        "parameterisable": { "type": "boolean" },
+        "criteria": { "$ref": "#/$defs/feasibility_criteria" },
+        "notes": { "type": "string" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "discipline",
+        "task_id",
+        "task_name",
+        "description",
+        "inputs",
+        "outputs",
+        "standards",
+        "complexity"
+      ],
+      "properties": {
+        "discipline": {
+          "type": "string",
+          "enum": ["civil", "electrical", "ground", "mechanical", "structural"]
+        },
+        "task_id": { "type": "string" },
+        "task_name": { "type": "string" },
+        "description": { "type": "string" },
+        "inputs": { "$ref": "#/$defs/field_array" },
+        "outputs": { "$ref": "#/$defs/field_array" },
+        "standards": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "complexity": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        },
+        "community": { "type": "string" },
+        "category_id": { "type": "string" },
+        "category_name": { "type": "string" },
+        "reference_details": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "worked_examples": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/worked_example" }
+        },
+        "edge_cases": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "keyword_hits": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "source_file": { "type": "string" },
+        "suggested_relative_path": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

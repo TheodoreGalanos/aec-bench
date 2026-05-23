@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "industrial_electrical",
+    "category_id": "short-circuit-industrial",
+    "category_name": "Short-Circuit Analysis",
+    "task_id": "industrial-fault-current",
+    "task_name": "Industrial System Short-Circuit Calculation",
+    "description": "Calculate short-circuit currents at key buses including motor contribution using IEC 60909 method",
+    "complexity": "medium",
+    "standards": [
+      "IEC 60909",
+      "ANSI/IEEE 551"
+    ],
+    "inputs": [
+      "Single line diagram",
+      "Utility fault level (MVA, X/R)",
+      "Transformer impedances (%Z, X/R)",
+      "Motor ratings and reactances",
+      "Cable impedances"
+    ],
+    "outputs": [
+      "Initial symmetrical current Ik'' (kA)",
+      "Peak current ip (kA)",
+      "Breaking current Ib (kA)",
+      "X/R ratio at each bus"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "calculation",
+      "current",
+      "fault"
+    ],
+    "source_file": "data/tasks/electrical/industrial_electrical.json",
+    "suggested_relative_path": "electrical/short-circuit-industrial/industrial-fault-current"
+  }
+}

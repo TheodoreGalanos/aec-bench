@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "pump-hydraulics",
+    "category_name": "Pump Hydraulics and Selection",
+    "task_id": "npsh-available",
+    "task_name": "NPSH Available Calculation",
+    "description": "Calculate Net Positive Suction Head Available at pump inlet",
+    "complexity": "low",
+    "standards": [
+      "Hydraulic Institute Standards"
+    ],
+    "inputs": [
+      "Suction vessel pressure (kPa abs)",
+      "Liquid level above pump (m)",
+      "Suction pipe losses (kPa)",
+      "Fluid vapor pressure at temperature (kPa)",
+      "Fluid density (kg/m3)"
+    ],
+    "outputs": [
+      "NPSH Available (m)",
+      "Comparison to NPSH Required",
+      "Cavitation margin (m)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "pipe",
+      "pressure",
+      "pump"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/pump-hydraulics/npsh-available"
+  }
+}

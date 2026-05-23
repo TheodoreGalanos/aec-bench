@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "dams",
+    "category_id": "seepage-analysis",
+    "category_name": "Seepage Analysis",
+    "task_id": "uplift-pressure",
+    "task_name": "Uplift Pressure Distribution",
+    "description": "Calculate uplift pressure distribution on concrete dam foundation for stability analysis",
+    "complexity": "medium",
+    "standards": [
+      "USACE EM 1110-2-2200",
+      "USBR Design Standard No. 13"
+    ],
+    "inputs": [
+      "Foundation geometry",
+      "Grout curtain efficiency (%)",
+      "Drain efficiency (%)",
+      "Headwater and tailwater levels (m)"
+    ],
+    "outputs": [
+      "Uplift pressure diagram",
+      "Total uplift force (kN/m)",
+      "Effective base width (m)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "pressure"
+    ],
+    "source_file": "data/tasks/civil/dams.json",
+    "suggested_relative_path": "civil/seepage-analysis/uplift-pressure"
+  }
+}

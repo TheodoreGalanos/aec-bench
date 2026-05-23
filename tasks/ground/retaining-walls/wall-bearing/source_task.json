@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "ground",
+    "community": "geotechnical",
+    "category_id": "retaining-walls",
+    "category_name": "Retaining Wall Design",
+    "task_id": "wall-bearing",
+    "task_name": "Wall Base Bearing Check",
+    "description": "Check bearing pressure under wall base including eccentricity effects",
+    "complexity": "medium",
+    "standards": [
+      "AS 4678",
+      "Meyerhof"
+    ],
+    "inputs": [
+      "Total vertical load V (kN/m)",
+      "Net moment about base center",
+      "Base width B (m)",
+      "Foundation soil properties"
+    ],
+    "outputs": [
+      "Eccentricity e (m)",
+      "Effective base width B' (m)",
+      "Maximum bearing pressure qmax (kPa)",
+      "Bearing capacity check (pass/fail)"
+    ],
+    "keyword_hits": [
+      "bearing",
+      "capacity",
+      "load",
+      "moment",
+      "pressure"
+    ],
+    "source_file": "data/tasks/ground/geotechnical.json",
+    "suggested_relative_path": "ground/retaining-walls/wall-bearing"
+  }
+}

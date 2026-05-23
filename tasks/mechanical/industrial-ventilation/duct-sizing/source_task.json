@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_mechanical",
+    "category_id": "industrial-ventilation",
+    "category_name": "Industrial Ventilation Design",
+    "task_id": "duct-sizing",
+    "task_name": "Duct Sizing Calculation",
+    "description": "Size ductwork for required airflow and transport velocity",
+    "complexity": "low",
+    "standards": [
+      "ACGIH Manual",
+      "AS 4254"
+    ],
+    "inputs": [
+      "Required airflow Q (m3/s)",
+      "Required transport velocity V (m/s)",
+      "Duct material"
+    ],
+    "outputs": [
+      "Duct diameter or dimensions (mm)",
+      "Actual velocity",
+      "Standard size selection"
+    ],
+    "keyword_hits": [
+      "airflow",
+      "calculation",
+      "flow",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_mechanical.json",
+    "suggested_relative_path": "mechanical/industrial-ventilation/duct-sizing"
+  }
+}

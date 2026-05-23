@@ -1,0 +1,30 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "acoustics",
+    "category_id": "sound-insulation",
+    "category_name": "Sound Insulation Calculations",
+    "task_id": "lnw-calculation",
+    "task_name": "Weighted Impact Sound Level (Ln,w) Calculation",
+    "description": "Calculate Ln,w rating from impact sound spectrum using ISO 717-2",
+    "complexity": "medium",
+    "standards": [
+      "ISO 717-2"
+    ],
+    "inputs": [
+      "Normalized impact sound levels Ln per frequency (dB)"
+    ],
+    "outputs": [
+      "Ln,w rating (dB)",
+      "Spectrum adaptation term CI"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/mechanical/acoustics.json",
+    "suggested_relative_path": "mechanical/sound-insulation/lnw-calculation"
+  }
+}

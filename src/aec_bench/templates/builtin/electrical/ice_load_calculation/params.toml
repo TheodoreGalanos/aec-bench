@@ -1,0 +1,104 @@
+[meta]
+name = "ice-load-calculation"
+description = "Calculate ice and wind loading on an overhead conductor"
+long_description = "Calculates a reduced iced-conductor loading case using annular ice area, ice density, wind-on-ice pressure, and span length. The template reports vertical ice weight and combined vector loading for overhead line structural checks."
+discipline = "electrical"
+category = "structural-loading"
+standards = ["IEC 60826", "AS/NZS 7000"]
+tags = ["electrical", "transmission-line", "ice-load", "wind-load", "conductor", "deterministic"]
+tool_mode = "with-tool"
+
+[params.conductor_diameter_mm]
+type = "float"
+unit = "mm"
+description = "Bare conductor outside diameter"
+min = 5
+max = 80
+
+[params.ice_thickness_mm]
+type = "float"
+unit = "mm"
+description = "Radial ice accretion thickness"
+min = 0
+max = 50
+
+[params.ice_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "Ice density"
+min = 400
+max = 950
+
+[params.wind_on_ice_pressure_pa]
+type = "float"
+unit = "Pa"
+description = "Wind pressure applied to the iced conductor diameter"
+min = 0
+max = 2500
+
+[params.span_length_m]
+type = "float"
+unit = "m"
+description = "Conductor span length"
+min = 20
+max = 800
+
+[outputs.iced_conductor_diameter_mm]
+description = "Diameter of conductor plus radial ice"
+tolerance = 0.03
+
+[outputs.ice_weight_n_per_m]
+description = "Vertical ice weight per metre"
+tolerance = 0.03
+
+[outputs.total_vertical_load_n_per_m]
+description = "Total vertical load per metre in the reduced case"
+tolerance = 0.03
+
+[outputs.wind_on_ice_load_n_per_m]
+description = "Transverse wind-on-ice load per metre"
+tolerance = 0.03
+
+[outputs.combined_ice_wind_load_n_per_m]
+description = "Vector combined ice and wind load per metre"
+tolerance = 0.03
+
+[outputs.span_combined_load_n]
+description = "Combined load integrated over the span"
+tolerance = 0.03
+
+[archetypes.light_ice_distribution]
+description = "Distribution line with light ice accretion"
+conductor_diameter_mm = {min = 8, max = 25}
+ice_thickness_mm = {min = 2, max = 12}
+ice_density_kg_m3 = {min = 500, max = 900}
+wind_on_ice_pressure_pa = {min = 100, max = 800}
+span_length_m = {min = 40, max = 150}
+site_contexts = ["distribution-line", "icing-condition"]
+
+[archetypes.heavy_ice_transmission]
+description = "Transmission line with heavier ice accretion"
+conductor_diameter_mm = {min = 20, max = 50}
+ice_thickness_mm = {min = 8, max = 35}
+ice_density_kg_m3 = {min = 600, max = 920}
+wind_on_ice_pressure_pa = {min = 200, max = 1500}
+span_length_m = {min = 150, max = 600}
+site_contexts = ["transmission-line", "icing-condition"]
+
+[difficulty.easy]
+description = "Distribution line with all values visible"
+visibility = "all_given"
+archetypes = ["light_ice_distribution"]
+
+[difficulty.medium]
+description = "Iced line selected from distribution or transmission cases"
+visibility = "all_given"
+archetypes = ["light_ice_distribution", "heavy_ice_transmission"]
+
+[difficulty.hard]
+description = "Transmission line with ice density embedded in context"
+visibility = "partial"
+hidden_params = ["ice_density_kg_m3"]
+replacement_text = "Use the ice density implied by {{ archetype.description }}."
+archetypes = ["heavy_ice_transmission"]
+ice_density_kg_m3 = [900]

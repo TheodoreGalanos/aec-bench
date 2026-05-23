@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "tunnel_systems",
+    "category_id": "fire-smoke-management",
+    "category_name": "Fire and Smoke Management",
+    "task_id": "smoke-extraction-rate",
+    "task_name": "Smoke Extraction Rate Calculation",
+    "description": "Calculate volumetric flow rate for transverse/semi-transverse smoke extraction",
+    "complexity": "medium",
+    "standards": [
+      "PIARC 1999 05.05",
+      "PIARC 2007 05.16"
+    ],
+    "inputs": [
+      "Design fire HRR (MW)",
+      "Tunnel cross-section",
+      "Desired smoke layer height",
+      "Fresh air supply rate"
+    ],
+    "outputs": [
+      "Required extraction rate (m3/s)",
+      "Number and sizing of extraction points"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "rate",
+      "sizing"
+    ],
+    "source_file": "data/tasks/mechanical/tunnel_systems.json",
+    "suggested_relative_path": "mechanical/fire-smoke-management/smoke-extraction-rate"
+  }
+}

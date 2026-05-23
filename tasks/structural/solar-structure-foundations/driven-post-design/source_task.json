@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "energy_structures",
+    "category_id": "solar-structure-foundations",
+    "category_name": "Solar Structure Foundations",
+    "task_id": "driven-post-design",
+    "task_name": "Driven Post Foundation Design",
+    "description": "Design driven steel post foundations for solar tracker or fixed-tilt systems",
+    "complexity": "medium",
+    "standards": [
+      "AS 2159",
+      "ASCE 7",
+      "IBC"
+    ],
+    "inputs": [
+      "Post section (W, pipe)",
+      "Embedment depth",
+      "Soil parameters (qu, phi)",
+      "Lateral load at top",
+      "Moment at groundline",
+      "Corrosion allowance"
+    ],
+    "outputs": [
+      "Required embedment depth (m)",
+      "Lateral capacity (kN)",
+      "Moment capacity (kNm)",
+      "Section utilization ratio"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "load",
+      "moment",
+      "pipe"
+    ],
+    "source_file": "data/tasks/structural/energy_structures.json",
+    "suggested_relative_path": "structural/solar-structure-foundations/driven-post-design"
+  }
+}

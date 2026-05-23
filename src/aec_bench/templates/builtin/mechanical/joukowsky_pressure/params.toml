@@ -1,0 +1,71 @@
+[meta]
+name = "joukowsky-pressure"
+description = "Joukowsky pressure rise calculation for water hammer screening"
+long_description = "Calculates transient pressure rise using the Joukowsky equation from fluid density, pressure wave speed, and velocity change. The template reports the pressure rise in pascals and kilopascals and the equivalent pressure head in metres."
+discipline = "mechanical"
+category = "transient-analysis"
+standards = ["AWWA M11"]
+tags = ["mechanical", "water-hammer", "joukowsky", "pressure-rise", "deterministic"]
+tool_mode = "with-tool"
+
+[params.fluid_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "Fluid density rho"
+min = 700.0
+max = 1300.0
+
+[params.wave_speed_m_s]
+type = "float"
+unit = "m/s"
+description = "Pressure wave speed a"
+min = 100.0
+max = 1500.0
+
+[params.velocity_change_m_s]
+type = "float"
+unit = "m/s"
+description = "Magnitude of velocity change"
+min = 0.01
+max = 5.0
+
+[outputs.pressure_rise_pa]
+description = "Joukowsky pressure rise"
+tolerance = 0.03
+
+[outputs.pressure_rise_kpa]
+description = "Joukowsky pressure rise"
+tolerance = 0.03
+
+[outputs.pressure_head_m]
+description = "Equivalent pressure rise head"
+tolerance = 0.03
+
+[archetypes.steel_water_main]
+description = "Stiff water main with high pressure wave speed"
+fluid_density_kg_m3 = {min = 990.0, max = 1000.0}
+wave_speed_m_s = {min = 900.0, max = 1300.0}
+velocity_change_m_s = {min = 0.2, max = 2.5}
+site_contexts = ["trunk-water-main", "raw-water-pipeline"]
+
+[archetypes.flexible_rising_main]
+description = "Flexible rising main with lower pressure wave speed"
+fluid_density_kg_m3 = {min = 990.0, max = 1000.0}
+wave_speed_m_s = {min = 200.0, max = 600.0}
+velocity_change_m_s = {min = 0.2, max = 3.5}
+site_contexts = ["sewer-rising-main", "irrigation-transfer-line"]
+
+[difficulty.easy]
+description = "All parameters given for a stiff water main"
+visibility = "all_given"
+archetypes = ["steel_water_main"]
+
+[difficulty.medium]
+description = "All parameters given across stiff and flexible water mains"
+visibility = "all_given"
+archetypes = ["steel_water_main", "flexible_rising_main"]
+
+[difficulty.hard]
+description = "All parameters given for larger transient velocity changes"
+visibility = "all_given"
+archetypes = ["flexible_rising_main"]

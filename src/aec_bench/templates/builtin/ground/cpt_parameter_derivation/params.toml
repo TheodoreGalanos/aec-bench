@@ -1,0 +1,152 @@
+[meta]
+name = "cpt-parameter-derivation"
+description = "CPT parameter derivation using Robertson (1990) correlations"
+long_description = "Derives geotechnical design parameters from cone penetration test (CPTu) data using the Robertson (1990) classification framework. Computes corrected cone resistance qt, normalized parameters Qt and Fr, soil behavior type index Ic, and estimates undrained shear strength (via Nkt) for clay-like soils or friction angle for sand-like soils based on the Ic = 2.6 boundary."
+discipline = "ground"
+category = "soil-interpretation"
+standards = ["Robertson (1990)", "Lunne et al. (1997)", "Robertson and Campanella (1983)"]
+tags = ["geotechnical", "cpt", "soil-classification", "deterministic"]
+tool_mode = "with-tool"
+
+[params.qc_mpa]
+type = "float"
+unit = "MPa"
+description = "Measured cone resistance"
+min = 0.2
+max = 40.0
+
+[params.fs_kpa]
+type = "float"
+unit = "kPa"
+description = "Measured sleeve friction"
+min = 1.0
+max = 500.0
+
+[params.u2_kpa]
+type = "float"
+unit = "kPa"
+description = "Measured pore water pressure at cone shoulder"
+min = -50.0
+max = 1500.0
+
+[params.depth_m]
+type = "float"
+unit = "m"
+description = "Test depth below ground surface"
+min = 1.0
+max = 40.0
+
+[params.total_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m³"
+description = "Total unit weight of soil"
+min = 14.0
+max = 22.0
+derivable_from = "archetype"
+
+[params.water_table_depth_m]
+type = "float"
+unit = "m"
+description = "Depth to water table below ground surface"
+min = 0.0
+max = 50.0
+optional = true
+default = 50.0
+
+[params.net_area_ratio]
+type = "float"
+unit = "-"
+description = "Net area ratio of the cone (a)"
+min = 0.55
+max = 0.85
+optional = true
+default = 0.80
+
+[outputs.qt_mpa]
+description = "Corrected cone resistance qt (MPa)"
+tolerance = 0.03
+
+[outputs.friction_ratio_pct]
+description = "Friction ratio Rf (%)"
+tolerance = 0.05
+
+[outputs.qt_norm]
+description = "Normalized cone resistance Qt"
+tolerance = 0.05
+
+[outputs.fr_norm]
+description = "Normalized friction ratio Fr (%)"
+tolerance = 0.05
+
+[outputs.ic]
+description = "Soil behavior type index Ic (Robertson 1990)"
+tolerance = 0.05
+
+[outputs.su_kpa]
+description = "Estimated undrained shear strength Su (kPa), 0 if sand-like"
+tolerance = 0.05
+
+[outputs.phi_deg]
+description = "Estimated friction angle phi' (degrees), 0 if clay-like"
+tolerance = 0.05
+
+[archetypes.soft_clay]
+description = "Soft normally consolidated clay with high pore pressure"
+qc_mpa = {min = 0.2, max = 1.5}
+fs_kpa = {min = 5.0, max = 30.0}
+u2_kpa = {min = 100.0, max = 800.0}
+depth_m = {min = 3.0, max = 15.0}
+total_unit_weight_kn_m3 = {min = 15.0, max = 17.5}
+water_table_depth_m = {min = 0.0, max = 2.0}
+net_area_ratio = {min = 0.70, max = 0.85}
+site_contexts = ["brisbane-alluvial", "darwin-estuarine", "cairns-coastal"]
+
+[archetypes.stiff_clay]
+description = "Stiff overconsolidated clay"
+qc_mpa = {min = 1.5, max = 5.0}
+fs_kpa = {min = 30.0, max = 150.0}
+u2_kpa = {min = 50.0, max = 500.0}
+depth_m = {min = 3.0, max = 20.0}
+total_unit_weight_kn_m3 = {min = 17.0, max = 20.0}
+water_table_depth_m = {min = 1.0, max = 5.0}
+net_area_ratio = {min = 0.70, max = 0.85}
+site_contexts = ["sydney-shale", "melbourne-basalt", "adelaide-stiff"]
+
+[archetypes.medium_sand]
+description = "Medium dense clean sand"
+qc_mpa = {min = 5.0, max = 20.0}
+fs_kpa = {min = 20.0, max = 100.0}
+u2_kpa = {min = -20.0, max = 50.0}
+depth_m = {min = 2.0, max = 20.0}
+total_unit_weight_kn_m3 = {min = 17.0, max = 20.0}
+water_table_depth_m = {min = 1.0, max = 10.0}
+net_area_ratio = {min = 0.75, max = 0.85}
+site_contexts = ["perth-coastal", "gold-coast-dune", "newcastle-sand"]
+
+[archetypes.dense_sand]
+description = "Dense to very dense sand or gravel"
+qc_mpa = {min = 15.0, max = 40.0}
+fs_kpa = {min = 50.0, max = 300.0}
+u2_kpa = {min = -50.0, max = 20.0}
+depth_m = {min = 5.0, max = 30.0}
+total_unit_weight_kn_m3 = {min = 18.0, max = 22.0}
+water_table_depth_m = {min = 2.0, max = 15.0}
+net_area_ratio = {min = 0.75, max = 0.85}
+site_contexts = ["hunter-valley-alluvial", "perth-limestone", "sydney-hawkesbury"]
+
+[difficulty.easy]
+description = "All parameters given, soft clay or medium sand archetypes"
+visibility = "all_given"
+archetypes = ["soft_clay", "medium_sand"]
+
+[difficulty.medium]
+description = "All parameters given, any soil archetype"
+visibility = "all_given"
+archetypes = ["soft_clay", "stiff_clay", "medium_sand", "dense_sand"]
+
+[difficulty.hard]
+description = "Unit weight and net area ratio hidden, agent infers from context"
+visibility = "partial"
+hidden_params = ["total_unit_weight_kn_m3", "net_area_ratio"]
+replacement_text = "The CPTu test was performed at a {{ archetype.site_context }} site in {{ archetype.description | lower }} conditions."
+archetypes = ["soft_clay", "stiff_clay", "medium_sand", "dense_sand"]

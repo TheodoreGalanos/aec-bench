@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "drainage_hydrology",
+    "category_id": "detention-design",
+    "category_name": "Detention & Storage Design",
+    "task_id": "weir-outlet-design",
+    "task_name": "Weir Spillway Sizing",
+    "description": "Size emergency spillway weir for detention basin",
+    "complexity": "low",
+    "standards": [
+      "Hydraulics textbooks"
+    ],
+    "inputs": [
+      "Design overflow Q (m\u00b3/s)",
+      "Available head H (m)",
+      "Weir coefficient Cw",
+      "Weir type (sharp-crested, broad-crested)"
+    ],
+    "outputs": [
+      "Required weir length L (m)"
+    ],
+    "keyword_hits": [
+      "flow",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/civil/drainage_hydrology.json",
+    "suggested_relative_path": "civil/detention-design/weir-outlet-design"
+  }
+}

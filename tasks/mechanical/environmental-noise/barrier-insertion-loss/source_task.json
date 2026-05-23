@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "acoustics",
+    "category_id": "environmental-noise",
+    "category_name": "Environmental Noise Assessment",
+    "task_id": "barrier-insertion-loss",
+    "task_name": "Noise Barrier Insertion Loss",
+    "description": "Calculate barrier insertion loss using diffraction theory",
+    "complexity": "medium",
+    "standards": [
+      "ISO 9613-2",
+      "Maekawa"
+    ],
+    "inputs": [
+      "Source-barrier-receiver geometry",
+      "Barrier height",
+      "Frequency or spectrum"
+    ],
+    "outputs": [
+      "Path length difference",
+      "Fresnel number",
+      "Insertion loss (dB)"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/mechanical/acoustics.json",
+    "suggested_relative_path": "mechanical/environmental-noise/barrier-insertion-loss"
+  }
+}

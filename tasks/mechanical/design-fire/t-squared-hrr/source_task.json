@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_safety",
+    "category_id": "design-fire",
+    "category_name": "Design Fire Characterization",
+    "task_id": "t-squared-hrr",
+    "task_name": "T-Squared Fire Growth Calculation",
+    "description": "Calculate heat release rate using t-squared growth model HRR = alpha*t^2",
+    "complexity": "low",
+    "standards": [
+      "ISO/TS 16733",
+      "SFPE Handbook"
+    ],
+    "inputs": [
+      "Fire growth coefficient (alpha)",
+      "Time from ignition (seconds)",
+      "Peak HRR limit (kW)"
+    ],
+    "outputs": [
+      "HRR at time t (kW)",
+      "Time to peak HRR",
+      "HRR curve data"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "heat",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/fire_safety.json",
+    "suggested_relative_path": "mechanical/design-fire/t-squared-hrr"
+  }
+}

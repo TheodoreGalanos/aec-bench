@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_aviation",
+    "category_id": "pavement-strength",
+    "category_name": "Pavement Strength Reporting (ACR-PCR)",
+    "task_id": "acn-calculation",
+    "task_name": "Aircraft ACN Calculation",
+    "description": "Calculate Aircraft Classification Number using COMFAA methodology",
+    "complexity": "medium",
+    "standards": [
+      "FAA AC 150/5335-5D",
+      "ICAO Annex 14"
+    ],
+    "inputs": [
+      "Aircraft type",
+      "Maximum gross weight",
+      "Gear configuration",
+      "Tire pressure",
+      "Subgrade category"
+    ],
+    "outputs": [
+      "ACN value",
+      "ACN for each subgrade category"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "pressure"
+    ],
+    "source_file": "data/tasks/civil/civil_aviation.json",
+    "suggested_relative_path": "civil/pavement-strength/acn-calculation"
+  }
+}

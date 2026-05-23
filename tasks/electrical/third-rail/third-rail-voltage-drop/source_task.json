@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "overhead_wiring_rail",
+    "category_id": "third-rail",
+    "category_name": "Third Rail Systems",
+    "task_id": "third-rail-voltage-drop",
+    "task_name": "Third Rail Voltage Drop with Return Path",
+    "description": "Calculate voltage drop on DC third rail including running rail return path",
+    "complexity": "medium",
+    "standards": [
+      "EN 50163",
+      "EN 50122-1"
+    ],
+    "inputs": [
+      "Third rail resistance (ohm/km)",
+      "Running rail resistance",
+      "Train current (A)",
+      "Substation spacing",
+      "Ground return impedance"
+    ],
+    "outputs": [
+      "Voltage at collector shoe (V)",
+      "Running rail voltage rise",
+      "Compliance with EN 50163",
+      "Touch potential check"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "current",
+      "drop",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/overhead_wiring_rail.json",
+    "suggested_relative_path": "electrical/third-rail/third-rail-voltage-drop"
+  }
+}

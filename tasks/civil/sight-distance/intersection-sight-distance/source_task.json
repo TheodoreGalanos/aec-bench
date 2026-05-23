@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "roads",
+    "category_id": "sight-distance",
+    "category_name": "Sight Distance Verification",
+    "task_id": "intersection-sight-distance",
+    "task_name": "Intersection Sight Distance Assessment",
+    "description": "Calculate and verify intersection sight distance for safe intersection operation",
+    "complexity": "medium",
+    "standards": [
+      "AGRD Part 4A"
+    ],
+    "inputs": [
+      "Major road design speed (km/h)",
+      "Intersection type",
+      "Control type (give way/stop)",
+      "Approach grade (%)"
+    ],
+    "outputs": [
+      "Required ISD (m)",
+      "Sight triangle dimensions",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/civil/roads.json",
+    "suggested_relative_path": "civil/sight-distance/intersection-sight-distance"
+  }
+}

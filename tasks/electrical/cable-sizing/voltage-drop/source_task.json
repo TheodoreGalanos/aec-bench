@@ -1,0 +1,43 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "substations",
+    "category_id": "cable-sizing",
+    "category_name": "Cable Sizing & Voltage Drop",
+    "task_id": "voltage-drop",
+    "task_name": "Voltage Drop Calculation",
+    "description": "Calculate voltage drop and verify within allowable limits",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3008.1.1",
+      "IEC 60364-5-52"
+    ],
+    "inputs": [
+      "Cable size (mm\u00b2)",
+      "Length (m)",
+      "Load current (A)",
+      "Power factor",
+      "Conductor material"
+    ],
+    "outputs": [
+      "Voltage drop (V)",
+      "Voltage drop (%)",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "calculation",
+      "current",
+      "drop",
+      "load",
+      "power",
+      "size",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/substations.json",
+    "suggested_relative_path": "electrical/cable-sizing/voltage-drop"
+  }
+}

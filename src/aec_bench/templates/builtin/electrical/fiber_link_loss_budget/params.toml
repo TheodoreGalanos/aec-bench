@@ -1,0 +1,115 @@
+[meta]
+name = "fiber-link-loss-budget"
+description = "Optical fibre link loss budget and power margin"
+long_description = "Calculates total optical link loss by summing fibre attenuation, connector losses, and splice losses, then compares the result with the system loss budget. This deterministic structured-cabling check reports component losses, total link loss, and remaining power margin."
+discipline = "electrical"
+category = "structured-cabling"
+standards = ["ISO/IEC 11801", "TIA-568"]
+tags = ["electrical", "fibre", "fiber", "link-loss", "structured-cabling", "deterministic"]
+tool_mode = "with-tool"
+
+[params.fiber_length_km]
+type = "float"
+unit = "km"
+description = "Fibre route length"
+min = 0.01
+max = 80
+
+[params.fiber_attenuation_db_per_km]
+type = "float"
+unit = "dB/km"
+description = "Fibre attenuation"
+min = 0.1
+max = 3.5
+
+[params.connector_count]
+type = "float"
+description = "Number of connector interfaces"
+min = 0
+max = 20
+
+[params.connector_loss_db]
+type = "float"
+unit = "dB"
+description = "Loss per connector"
+min = 0
+max = 1.5
+
+[params.splice_count]
+type = "float"
+description = "Number of splices"
+min = 0
+max = 40
+
+[params.splice_loss_db]
+type = "float"
+unit = "dB"
+description = "Loss per splice"
+min = 0
+max = 0.5
+
+[params.system_loss_budget_db]
+type = "float"
+unit = "dB"
+description = "Available system optical loss budget"
+min = 1
+max = 40
+
+[outputs.fiber_loss_db]
+description = "Loss due to fibre attenuation"
+tolerance = 0.03
+
+[outputs.connector_loss_total_db]
+description = "Total connector loss"
+tolerance = 0.03
+
+[outputs.splice_loss_total_db]
+description = "Total splice loss"
+tolerance = 0.03
+
+[outputs.total_link_loss_db]
+description = "Total optical link loss"
+tolerance = 0.03
+
+[outputs.power_margin_db]
+description = "Remaining optical power margin"
+tolerance = 0.03
+
+[archetypes.campus_backbone]
+description = "Multimode or short single-mode campus backbone"
+fiber_length_km = {min = 0.1, max = 5}
+fiber_attenuation_db_per_km = {min = 0.3, max = 3.0}
+connector_count = {min = 2, max = 8}
+connector_loss_db = {min = 0.2, max = 0.75}
+splice_count = {min = 0, max = 8}
+splice_loss_db = {min = 0.05, max = 0.2}
+system_loss_budget_db = {min = 4, max = 12}
+site_contexts = ["campus-backbone", "station-comms-room"]
+
+[archetypes.long_haul_link]
+description = "Longer single-mode field fibre link"
+fiber_length_km = {min = 5, max = 80}
+fiber_attenuation_db_per_km = {min = 0.15, max = 0.5}
+connector_count = {min = 2, max = 12}
+connector_loss_db = {min = 0.2, max = 0.75}
+splice_count = {min = 4, max = 40}
+splice_loss_db = {min = 0.05, max = 0.2}
+system_loss_budget_db = {min = 10, max = 40}
+site_contexts = ["roadside-fibre", "rail-corridor"]
+
+[difficulty.easy]
+description = "Short link with all component losses given"
+visibility = "all_given"
+archetypes = ["campus_backbone"]
+
+[difficulty.medium]
+description = "Short or long fibre link"
+visibility = "all_given"
+archetypes = ["campus_backbone", "long_haul_link"]
+
+[difficulty.hard]
+description = "System budget hidden in the link context"
+visibility = "partial"
+hidden_params = ["system_loss_budget_db"]
+replacement_text = "Use the system loss budget implied by {{ archetype.description }}."
+archetypes = ["long_haul_link"]

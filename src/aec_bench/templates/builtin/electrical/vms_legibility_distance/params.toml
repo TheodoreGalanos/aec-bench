@@ -1,0 +1,78 @@
+[meta]
+name = "vms-legibility-distance"
+description = "Variable message sign legibility distance and reading time"
+long_description = "Calculates variable message sign legibility distance from character height using a reduced 40 ft per inch rule of thumb. It converts design speed to ft/s, estimates reading time available, and reports message character capacity from an explicit reading rate."
+discipline = "electrical"
+category = "vms-design"
+standards = ["MUTCD", "NYSDOT VMS Guidelines"]
+tags = ["electrical", "vms", "signage", "legibility", "its", "deterministic"]
+tool_mode = "with-tool"
+
+[params.character_height_in]
+type = "float"
+unit = "in"
+description = "VMS character height"
+min = 4
+max = 30
+
+[params.design_speed_mph]
+type = "float"
+unit = "mph"
+description = "Approach design speed"
+min = 10
+max = 85
+
+[params.reading_rate_chars_s]
+type = "float"
+unit = "chars/s"
+description = "Assumed driver reading rate"
+min = 1
+max = 6
+
+[outputs.minimum_legibility_distance_ft]
+description = "Minimum legibility distance"
+tolerance = 0.03
+
+[outputs.design_speed_ft_s]
+description = "Design speed converted to feet per second"
+tolerance = 0.01
+
+[outputs.reading_time_available_s]
+description = "Reading time available over the legibility distance"
+tolerance = 0.03
+
+[outputs.message_length_limit_chars]
+description = "Message length supported by available reading time"
+tolerance = 0.03
+
+[archetypes.urban_vms]
+description = "Urban variable message sign on a lower-speed road"
+character_height_in = {min = 6, max = 14}
+design_speed_mph = {min = 25, max = 45}
+reading_rate_chars_s = {min = 2, max = 4}
+site_contexts = ["urban-arterial", "tunnel-approach"]
+
+[archetypes.freeway_vms]
+description = "Freeway variable message sign on a high-speed road"
+character_height_in = {min = 12, max = 24}
+design_speed_mph = {min = 50, max = 75}
+reading_rate_chars_s = {min = 2, max = 4}
+site_contexts = ["motorway-mainline", "managed-freeway"]
+
+[difficulty.easy]
+description = "Urban VMS with all readability inputs visible"
+visibility = "all_given"
+archetypes = ["urban_vms"]
+
+[difficulty.medium]
+description = "Urban or freeway VMS"
+visibility = "all_given"
+archetypes = ["urban_vms", "freeway_vms"]
+
+[difficulty.hard]
+description = "Reading rate hidden in driver-readability context"
+visibility = "partial"
+hidden_params = ["reading_rate_chars_s"]
+replacement_text = "Use the driver reading rate implied by {{ archetype.description }}."
+archetypes = ["freeway_vms"]
+reading_rate_chars_s = [3]

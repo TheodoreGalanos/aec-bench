@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "buildings_electrical",
+    "category_id": "short-circuit-analysis",
+    "category_name": "Short-Circuit Analysis",
+    "task_id": "prospective-fault-current",
+    "task_name": "Prospective Short-Circuit Current Calculation",
+    "description": "Calculate prospective short-circuit current at switchboard using impedance method",
+    "complexity": "medium",
+    "standards": [
+      "IEC 60909",
+      "AS/NZS 3000"
+    ],
+    "inputs": [
+      "Utility fault level (kA or MVA)",
+      "Transformer rating (kVA)",
+      "Transformer impedance (%)",
+      "Cable impedances to switchboard"
+    ],
+    "outputs": [
+      "Prospective fault current (kA)",
+      "X/R ratio",
+      "Peak asymmetrical current (kA)",
+      "Equipment fault rating requirement"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "calculation",
+      "current",
+      "fault"
+    ],
+    "source_file": "data/tasks/electrical/buildings_electrical.json",
+    "suggested_relative_path": "electrical/short-circuit-analysis/prospective-fault-current"
+  }
+}

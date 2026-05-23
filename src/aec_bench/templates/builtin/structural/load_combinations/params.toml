@@ -1,0 +1,183 @@
+[meta]
+name = "load-combinations"
+description = "Reduced structural load combination calculation"
+long_description = "Applies explicit dead, live, wind, and seismic load factors to three reduced load combinations. The template reports each factored moment, the governing moment, the associated governing shear, and a numeric governing-combination index."
+discipline = "structural"
+category = "load-analysis"
+standards = ["AASHTO LRFD 3.4", "EN 1990"]
+tags = ["structural", "load-combinations", "factored-actions", "deterministic"]
+tool_mode = "with-tool"
+
+[params.dead_moment_knm]
+type = "float"
+unit = "kNm"
+description = "Unfactored dead-load moment"
+min = 0.0
+max = 100000.0
+
+[params.live_moment_knm]
+type = "float"
+unit = "kNm"
+description = "Unfactored live-load moment"
+min = 0.0
+max = 100000.0
+
+[params.wind_moment_knm]
+type = "float"
+unit = "kNm"
+description = "Unfactored wind-load moment"
+min = 0.0
+max = 100000.0
+
+[params.seismic_moment_knm]
+type = "float"
+unit = "kNm"
+description = "Unfactored seismic-load moment"
+min = 0.0
+max = 100000.0
+
+[params.dead_shear_kn]
+type = "float"
+unit = "kN"
+description = "Unfactored dead-load shear"
+min = 0.0
+max = 50000.0
+
+[params.live_shear_kn]
+type = "float"
+unit = "kN"
+description = "Unfactored live-load shear"
+min = 0.0
+max = 50000.0
+
+[params.wind_shear_kn]
+type = "float"
+unit = "kN"
+description = "Unfactored wind-load shear"
+min = 0.0
+max = 50000.0
+
+[params.seismic_shear_kn]
+type = "float"
+unit = "kN"
+description = "Unfactored seismic-load shear"
+min = 0.0
+max = 50000.0
+
+[params.combo_1_dead_factor]
+type = "float"
+unit = "-"
+description = "Dead-load factor for combination 1"
+min = 0.0
+max = 2.0
+
+[params.combo_1_live_factor]
+type = "float"
+unit = "-"
+description = "Live-load factor for combination 1"
+min = 0.0
+max = 2.0
+
+[params.combo_2_dead_factor]
+type = "float"
+unit = "-"
+description = "Dead-load factor for combination 2"
+min = 0.0
+max = 2.0
+
+[params.combo_2_wind_factor]
+type = "float"
+unit = "-"
+description = "Wind-load factor for combination 2"
+min = 0.0
+max = 2.0
+
+[params.combo_3_dead_factor]
+type = "float"
+unit = "-"
+description = "Dead-load factor for combination 3"
+min = 0.0
+max = 2.0
+
+[params.combo_3_seismic_factor]
+type = "float"
+unit = "-"
+description = "Seismic-load factor for combination 3"
+min = 0.0
+max = 2.0
+
+[outputs.combo_1_moment_knm]
+description = "Factored moment for combination 1"
+tolerance = 0.03
+
+[outputs.combo_2_moment_knm]
+description = "Factored moment for combination 2"
+tolerance = 0.03
+
+[outputs.combo_3_moment_knm]
+description = "Factored moment for combination 3"
+tolerance = 0.03
+
+[outputs.governing_moment_knm]
+description = "Maximum factored moment"
+tolerance = 0.03
+
+[outputs.governing_shear_kn]
+description = "Factored shear associated with the governing moment combination"
+tolerance = 0.03
+
+[outputs.governing_combination_index]
+description = "Numeric index of the governing moment combination"
+tolerance = 0.01
+
+[archetypes.bridge_member]
+description = "Bridge member factored action check"
+dead_moment_knm = {min = 500.0, max = 20000.0}
+live_moment_knm = {min = 200.0, max = 15000.0}
+wind_moment_knm = {min = 50.0, max = 8000.0}
+seismic_moment_knm = {min = 100.0, max = 12000.0}
+dead_shear_kn = {min = 50.0, max = 6000.0}
+live_shear_kn = {min = 20.0, max = 5000.0}
+wind_shear_kn = {min = 10.0, max = 3000.0}
+seismic_shear_kn = {min = 20.0, max = 4000.0}
+combo_1_dead_factor = {min = 1.1, max = 1.4}
+combo_1_live_factor = {min = 1.4, max = 1.8}
+combo_2_dead_factor = {min = 0.9, max = 1.3}
+combo_2_wind_factor = {min = 1.0, max = 1.6}
+combo_3_dead_factor = {min = 0.9, max = 1.3}
+combo_3_seismic_factor = {min = 0.8, max = 1.4}
+site_contexts = ["bridge-superstructure", "bridge-substructure"]
+
+[archetypes.building_member]
+description = "Building member factored action check"
+dead_moment_knm = {min = 20.0, max = 5000.0}
+live_moment_knm = {min = 10.0, max = 3000.0}
+wind_moment_knm = {min = 10.0, max = 2500.0}
+seismic_moment_knm = {min = 10.0, max = 3000.0}
+dead_shear_kn = {min = 5.0, max = 1500.0}
+live_shear_kn = {min = 5.0, max = 1200.0}
+wind_shear_kn = {min = 5.0, max = 1000.0}
+seismic_shear_kn = {min = 5.0, max = 1200.0}
+combo_1_dead_factor = {min = 1.1, max = 1.4}
+combo_1_live_factor = {min = 1.4, max = 1.8}
+combo_2_dead_factor = {min = 0.9, max = 1.3}
+combo_2_wind_factor = {min = 1.0, max = 1.6}
+combo_3_dead_factor = {min = 0.9, max = 1.3}
+combo_3_seismic_factor = {min = 0.8, max = 1.4}
+site_contexts = ["building-frame", "industrial-structure"]
+
+[difficulty.easy]
+description = "All parameters given for a building member"
+visibility = "all_given"
+archetypes = ["building_member"]
+
+[difficulty.medium]
+description = "All parameters given across building and bridge members"
+visibility = "all_given"
+archetypes = ["building_member", "bridge_member"]
+
+[difficulty.hard]
+description = "All parameters given for a bridge member"
+visibility = "all_given"
+archetypes = ["bridge_member"]
+

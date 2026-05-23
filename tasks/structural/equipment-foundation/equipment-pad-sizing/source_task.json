@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "industrial_structures",
+    "category_id": "equipment-foundation",
+    "category_name": "Equipment Foundation Design",
+    "task_id": "equipment-pad-sizing",
+    "task_name": "Equipment Pad Sizing",
+    "description": "Size reinforced concrete equipment pad for static loads with bearing capacity check",
+    "complexity": "low",
+    "standards": [
+      "AS 3600",
+      "AS 2159"
+    ],
+    "inputs": [
+      "Equipment weight (kN)",
+      "Operating loads (kN)",
+      "Pad dimensions L x W (m)",
+      "Allowable bearing pressure (kPa)",
+      "Concrete strength f'c (MPa)"
+    ],
+    "outputs": [
+      "Pad thickness (mm)",
+      "Applied bearing pressure (kPa)",
+      "Reinforcement layout",
+      "Pedestal details"
+    ],
+    "keyword_hits": [
+      "bearing",
+      "capacity",
+      "load",
+      "pressure",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/structural/industrial_structures.json",
+    "suggested_relative_path": "structural/equipment-foundation/equipment-pad-sizing"
+  }
+}

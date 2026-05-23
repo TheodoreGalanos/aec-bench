@@ -1,0 +1,6 @@
+[template]
+tier = "flat"
+
+[guardrails]
+token_budget = 100_000
+max_iterations = 20

@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "building_structures",
+    "category_id": "rebar-detailing",
+    "category_name": "Reinforcement Detailing",
+    "task_id": "lap-splice-length",
+    "task_name": "Lap Splice Length Calculation",
+    "description": "Calculate required lap splice length for tension bars",
+    "complexity": "low",
+    "standards": [
+      "AS 3600 Sec 13.2",
+      "ACI 318 Ch 25.5"
+    ],
+    "inputs": [
+      "Bar diameter (mm)",
+      "Development length Ld (mm)",
+      "Splice class (A or B)",
+      "Percentage of bars spliced"
+    ],
+    "outputs": [
+      "Required lap length (mm)",
+      "Lap class determination"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/structural/building_structures.json",
+    "suggested_relative_path": "structural/rebar-detailing/lap-splice-length"
+  }
+}

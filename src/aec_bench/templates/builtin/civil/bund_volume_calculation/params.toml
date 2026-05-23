@@ -1,0 +1,159 @@
+[meta]
+name = "bund-volume-calculation"
+description = "Oil containment bund volume calculation per AS/NZS 1940"
+long_description = "Calculates the required bund containment capacity for oil and hazardous liquid storage as the greater of 110% of the largest container or 25% of total stored volume, per AS/NZS 1940. Accounts for equipment displacement within the bund and checks whether the net available volume meets the regulatory minimum."
+discipline = "civil"
+category = "oil-containment"
+standards = ["AS/NZS 1940"]
+tags = ["civil", "oil-containment", "bund", "spill", "hazardous-materials", "deterministic"]
+tool_mode = "with-tool"
+
+[params.num_containers]
+type = "int"
+unit = "-"
+description = "Number of oil-filled containers within the bund"
+min = 1
+max = 12
+
+[params.largest_container_volume_l]
+type = "float"
+unit = "L"
+description = "Volume of the largest single container"
+min = 100
+max = 50000
+
+[params.total_stored_volume_l]
+type = "float"
+unit = "L"
+description = "Total stored volume across all containers"
+min = 100
+max = 200000
+
+[params.bund_length_m]
+type = "float"
+unit = "m"
+description = "Internal length of the bund enclosure"
+min = 1.0
+max = 25.0
+
+[params.bund_width_m]
+type = "float"
+unit = "m"
+description = "Internal width of the bund enclosure"
+min = 1.0
+max = 15.0
+
+[params.bund_wall_height_m]
+type = "float"
+unit = "m"
+description = "Height of the bund containment walls"
+min = 0.15
+max = 1.5
+derivable_from = "archetype"
+
+[params.num_equipment_items]
+type = "int"
+unit = "-"
+description = "Number of equipment items inside the bund (pumps, pipework supports, etc.)"
+min = 0
+max = 6
+optional = true
+default = 0
+
+[params.equipment_footprint_area_m2]
+type = "float"
+unit = "m²"
+description = "Average footprint area of each equipment item inside the bund"
+min = 0.0
+max = 4.0
+optional = true
+default = 0.0
+
+# --- Outputs ---
+
+[outputs.required_bund_volume_m3]
+description = "Required bund capacity per AS/NZS 1940 (m³)"
+tolerance = 0.03
+
+[outputs.net_bund_volume_m3]
+description = "Net available bund volume after equipment displacement (m³)"
+tolerance = 0.03
+
+[outputs.bund_wall_height_m]
+description = "Bund wall height (m)"
+tolerance = 0.03
+
+[outputs.compliance]
+description = "Compliance flag: 1.0 if net >= required, 0.0 otherwise"
+tolerance = 0.01
+
+# --- Archetypes: Australian industrial bund scenarios ---
+
+[archetypes.single_transformer]
+description = "Single oil-filled power transformer in a dedicated bund enclosure"
+num_containers = {min = 1, max = 1}
+largest_container_volume_l = {min = 500, max = 5000}
+total_stored_volume_l = {min = 500, max = 5000}
+bund_length_m = {min = 3.0, max = 8.0}
+bund_width_m = {min = 2.0, max = 6.0}
+bund_wall_height_m = {min = 0.3, max = 0.8}
+num_equipment_items = {min = 0, max = 1}
+equipment_footprint_area_m2 = {min = 0.0, max = 0.5}
+site_contexts = ["sydney-substation", "brisbane-zone-substation", "melbourne-industrial-park"]
+
+[archetypes.fuel_storage_depot]
+description = "Multiple above-ground fuel storage tanks at a bulk fuel depot"
+num_containers = {min = 3, max = 8}
+largest_container_volume_l = {min = 10000, max = 50000}
+total_stored_volume_l = {min = 40000, max = 200000}
+bund_length_m = {min = 10.0, max = 25.0}
+bund_width_m = {min = 6.0, max = 15.0}
+bund_wall_height_m = {min = 0.5, max = 1.5}
+num_equipment_items = {min = 2, max = 6}
+equipment_footprint_area_m2 = {min = 0.5, max = 2.0}
+site_contexts = ["perth-kwinana-fuel-depot", "darwin-east-arm-terminal", "gladstone-industrial"]
+
+[archetypes.workshop_oil_store]
+description = "Small workshop oil and lubricant storage area with drum pallets"
+num_containers = {min = 4, max = 12}
+largest_container_volume_l = {min = 200, max = 1000}
+total_stored_volume_l = {min = 1000, max = 10000}
+bund_length_m = {min = 2.0, max = 6.0}
+bund_width_m = {min = 1.5, max = 4.0}
+bund_wall_height_m = {min = 0.15, max = 0.5}
+num_equipment_items = {min = 0, max = 2}
+equipment_footprint_area_m2 = {min = 0.0, max = 0.3}
+site_contexts = ["cairns-maintenance-depot", "adelaide-fleet-workshop", "hobart-council-yard"]
+
+[archetypes.generator_compound]
+description = "Diesel generator compound with day tank and bulk storage"
+num_containers = {min = 2, max = 4}
+largest_container_volume_l = {min = 2000, max = 15000}
+total_stored_volume_l = {min = 3000, max = 30000}
+bund_length_m = {min = 4.0, max = 12.0}
+bund_width_m = {min = 3.0, max = 8.0}
+bund_wall_height_m = {min = 0.3, max = 1.0}
+num_equipment_items = {min = 1, max = 3}
+equipment_footprint_area_m2 = {min = 0.5, max = 2.5}
+site_contexts = ["townsville-data-centre", "alice-springs-remote-power", "geelong-hospital-backup"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "Single container with no equipment displacement — straightforward volume check"
+visibility = "all_given"
+archetypes = ["single_transformer", "workshop_oil_store"]
+num_equipment_items = [0]
+equipment_footprint_area_m2 = [0.0]
+
+[difficulty.medium]
+description = "Multiple containers with equipment displacement — agent must apply both AS/NZS 1940 rules"
+visibility = "all_given"
+archetypes = ["fuel_storage_depot", "generator_compound", "workshop_oil_store", "single_transformer"]
+
+[difficulty.hard]
+description = "Equipment displacement parameters hidden — agent must infer count and footprint from site description"
+visibility = "partial"
+hidden_params = ["num_equipment_items", "equipment_footprint_area_m2"]
+replacement_text = "The site is a {{ archetype.description }} ({{ archetype.site_context }}). Determine appropriate equipment displacement from the installation context."
+archetypes = ["fuel_storage_depot", "generator_compound", "single_transformer", "workshop_oil_store"]

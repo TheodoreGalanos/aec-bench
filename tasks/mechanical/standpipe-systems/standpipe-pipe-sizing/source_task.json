@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_protection",
+    "category_id": "standpipe-systems",
+    "category_name": "Standpipe System Design",
+    "task_id": "standpipe-pipe-sizing",
+    "task_name": "Standpipe Pipe Sizing",
+    "description": "Size standpipe piping to meet flow and pressure requirements",
+    "complexity": "low",
+    "standards": [
+      "NFPA 14"
+    ],
+    "inputs": [
+      "System flow demand",
+      "Building height",
+      "Pipe material",
+      "Standpipe class"
+    ],
+    "outputs": [
+      "Riser size (in)",
+      "Horizontal feed main size (in)",
+      "Velocity at design flow (ft/s)"
+    ],
+    "keyword_hits": [
+      "demand",
+      "flow",
+      "pipe",
+      "pressure",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/mechanical/fire_protection.json",
+    "suggested_relative_path": "mechanical/standpipe-systems/standpipe-pipe-sizing"
+  }
+}

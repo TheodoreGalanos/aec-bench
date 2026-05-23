@@ -1,0 +1,116 @@
+[meta]
+name = "voltage-drop"
+description = "Cable voltage drop calculation per AS/NZS 3008.1.1"
+long_description = "Calculates voltage drop along a cable run using tabulated mV/A/m values from AS/NZS 3008.1.1 for copper and aluminium multicore cables, adjusted for power factor and circuit type. Checks compliance against the AS/NZS 3000 five-percent limit to verify that voltage at the load stays within acceptable limits for equipment operation."
+discipline = "electrical"
+category = "cable-sizing"
+standards = ["AS/NZS 3008.1.1", "AS/NZS 3000:2018", "IEC 60364-5-52"]
+tags = ["electrical", "voltage-drop", "cable-sizing", "deterministic"]
+tool_mode = "with-tool"
+
+[params.cable_size_mm2]
+type = "enum"
+unit = "mm²"
+description = "Cable conductor cross-sectional area"
+values = ["1.5", "2.5", "4", "6", "10", "16", "25", "35", "50", "70", "95", "120", "150", "185", "240"]
+
+[params.length_m]
+type = "float"
+unit = "m"
+description = "Cable route length (one way)"
+min = 1
+max = 500
+
+[params.load_current_a]
+type = "float"
+unit = "A"
+description = "Design load current"
+min = 0.5
+max = 500
+
+[params.power_factor]
+type = "float"
+description = "Load power factor"
+min = 0.5
+max = 1.0
+default = 0.8
+
+[params.conductor_material]
+type = "enum"
+description = "Conductor material"
+values = ["copper", "aluminium"]
+derivable_from = "archetype"
+
+[params.circuit_type]
+type = "enum"
+description = "Circuit type"
+values = ["single_phase", "three_phase"]
+
+[outputs.vc_mv_per_a_m]
+description = "Effective voltage drop rate Vc (mV/A/m)"
+tolerance = 0.03
+
+[outputs.voltage_drop_v]
+description = "Total voltage drop (V)"
+tolerance = 0.03
+
+[outputs.voltage_drop_percent]
+description = "Voltage drop as percentage of supply voltage (%)"
+tolerance = 0.03
+
+[outputs.compliant]
+description = "Compliance with 5% limit (1.0 = pass, 0.0 = fail)"
+tolerance = 0.01
+
+# --- Archetypes ---
+# Electrical installation scenarios rather than soil types.
+
+[archetypes.residential_lighting]
+description = "Residential lighting circuit"
+length_m = {min = 5, max = 30}
+load_current_a = {min = 1, max = 10}
+site_contexts = ["sydney-suburban", "melbourne-suburban"]
+
+[archetypes.residential_power]
+description = "Residential power outlet circuit"
+length_m = {min = 10, max = 40}
+load_current_a = {min = 10, max = 32}
+site_contexts = ["sydney-suburban", "brisbane-suburban"]
+
+[archetypes.commercial_submain]
+description = "Commercial building submain with copper conductors"
+length_m = {min = 20, max = 200}
+load_current_a = {min = 50, max = 300}
+conductor_material = ["copper"]
+site_contexts = ["sydney-cbd", "melbourne-cbd"]
+
+[archetypes.industrial_feeder]
+description = "Industrial feeder cable with aluminium conductors"
+length_m = {min = 50, max = 500}
+load_current_a = {min = 100, max = 500}
+conductor_material = ["aluminium"]
+site_contexts = ["hunter-valley-industrial", "perth-industrial"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "Single phase copper, standard residential sizes, all params given"
+visibility = "all_given"
+archetypes = ["residential_lighting", "residential_power"]
+conductor_material = ["copper"]
+circuit_type = ["single_phase"]
+cable_size_mm2 = ["1.5", "2.5", "4", "6"]
+
+[difficulty.medium]
+description = "Any circuit type and material, commercial/industrial sizes"
+visibility = "all_given"
+archetypes = ["residential_lighting", "residential_power", "commercial_submain", "industrial_feeder"]
+cable_size_mm2 = ["16", "25", "35", "50", "70", "95", "120", "150", "185", "240"]
+
+[difficulty.hard]
+description = "Conductor material hidden, agent must infer from installation context"
+visibility = "partial"
+hidden_params = ["conductor_material"]
+replacement_text = "The installation uses {{ archetype.description }} practices ({{ archetype.site_context }})"
+archetypes = ["commercial_submain", "industrial_feeder"]
+cable_size_mm2 = ["16", "25", "35", "50", "70", "95", "120", "150", "185", "240"]

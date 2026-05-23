@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "roads",
+    "category_id": "horizontal-geometry",
+    "category_name": "Horizontal Curve Geometry",
+    "task_id": "superelevation-rate",
+    "task_name": "Superelevation Rate Calculation",
+    "description": "Determine required superelevation rate for a given curve radius and design speed",
+    "complexity": "low",
+    "standards": [
+      "AGRD Part 3 \u00a77.5"
+    ],
+    "inputs": [
+      "Design speed (km/h)",
+      "Curve radius (m)",
+      "Road type (urban/rural)"
+    ],
+    "outputs": [
+      "Superelevation rate (%)",
+      "Superelevation development length (m)"
+    ],
+    "keyword_hits": [
+      "calculation",
+      "radius",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/roads.json",
+    "suggested_relative_path": "civil/horizontal-geometry/superelevation-rate"
+  }
+}

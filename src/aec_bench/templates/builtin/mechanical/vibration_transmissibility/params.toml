@@ -1,0 +1,72 @@
+[meta]
+name = "vibration-transmissibility"
+description = "Damped vibration transmissibility calculation"
+long_description = "Calculates force transmissibility for a damped single-degree vibration isolation system from forcing frequency, natural frequency, and damping ratio. The template reports frequency ratio, transmissibility, and isolation efficiency."
+discipline = "mechanical"
+category = "vibration"
+standards = ["ISO 20816"]
+tags = ["mechanical", "vibration", "isolation", "transmissibility", "deterministic"]
+tool_mode = "with-tool"
+
+[params.forcing_frequency_hz]
+type = "float"
+unit = "Hz"
+description = "Excitation or forcing frequency"
+min = 0.1
+max = 200.0
+
+[params.natural_frequency_hz]
+type = "float"
+unit = "Hz"
+description = "Isolator natural frequency"
+min = 0.1
+max = 100.0
+
+[params.damping_ratio]
+type = "float"
+unit = "-"
+description = "Viscous damping ratio"
+min = 0.0
+max = 1.0
+
+[outputs.frequency_ratio]
+description = "Ratio of forcing frequency to natural frequency"
+tolerance = 0.03
+
+[outputs.transmissibility]
+description = "Damped force transmissibility"
+tolerance = 0.03
+
+[outputs.isolation_efficiency_pct]
+description = "Isolation efficiency"
+tolerance = 0.03
+
+[archetypes.pump_isolator]
+description = "Pump or fan vibration isolator"
+forcing_frequency_hz = {min = 20.0, max = 80.0}
+natural_frequency_hz = {min = 2.0, max = 15.0}
+damping_ratio = {min = 0.02, max = 0.25}
+site_contexts = ["plant-room-pump", "fan-isolator"]
+
+[archetypes.precision_equipment]
+description = "Precision equipment vibration isolation"
+forcing_frequency_hz = {min = 5.0, max = 60.0}
+natural_frequency_hz = {min = 1.0, max = 10.0}
+damping_ratio = {min = 0.02, max = 0.35}
+site_contexts = ["laboratory-equipment", "precision-machine-base"]
+
+[difficulty.easy]
+description = "All parameters given for a pump isolator"
+visibility = "all_given"
+archetypes = ["pump_isolator"]
+
+[difficulty.medium]
+description = "All parameters given across isolation systems"
+visibility = "all_given"
+archetypes = ["pump_isolator", "precision_equipment"]
+
+[difficulty.hard]
+description = "All parameters given for precision equipment isolation"
+visibility = "all_given"
+archetypes = ["precision_equipment"]
+

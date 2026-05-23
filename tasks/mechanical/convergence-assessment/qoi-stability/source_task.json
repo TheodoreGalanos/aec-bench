@@ -1,0 +1,32 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "cfd_modelling",
+    "category_id": "convergence-assessment",
+    "category_name": "Convergence Assessment",
+    "task_id": "qoi-stability",
+    "task_name": "Quantity of Interest Stability Check",
+    "description": "Verify key engineering quantities have stabilized",
+    "complexity": "medium",
+    "standards": [
+      "ASME V&V 20-2009"
+    ],
+    "inputs": [
+      "QoI time/iteration history",
+      "Target QoIs (Cd, Cl, pressure, etc.)"
+    ],
+    "outputs": [
+      "QoI stability status",
+      "Relative change over last N iterations",
+      "Converged values"
+    ],
+    "keyword_hits": [
+      "pressure",
+      "quantity"
+    ],
+    "source_file": "data/tasks/mechanical/cfd_modelling.json",
+    "suggested_relative_path": "mechanical/convergence-assessment/qoi-stability"
+  }
+}

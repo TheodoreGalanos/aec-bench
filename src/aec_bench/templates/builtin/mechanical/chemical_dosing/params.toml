@@ -1,0 +1,84 @@
+[meta]
+name = "chemical-dosing"
+description = "Treatment chemical dose and feed rate calculation"
+long_description = "Calculates treatment chemical feed requirements from process flow, target active dose, product strength, and product density. The template reports active chemical mass, commercial product mass, volumetric feed rate, and annual product consumption for water and wastewater dosing checks."
+discipline = "mechanical"
+category = "fundamental-calculations"
+standards = ["WEF MOP 8"]
+tags = ["mechanical", "water-treatment", "chemical-dosing", "feed-rate", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_rate_m3_d]
+type = "float"
+unit = "m3/d"
+description = "Process flow rate"
+min = 10.0
+max = 1000000.0
+
+[params.target_dose_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Target active chemical dose"
+min = 0.1
+max = 500.0
+
+[params.product_strength_pct]
+type = "float"
+unit = "%"
+description = "Active chemical strength or purity of commercial product"
+min = 1.0
+max = 100.0
+
+[params.product_density_kg_l]
+type = "float"
+unit = "kg/L"
+description = "Commercial chemical product density"
+min = 0.7
+max = 2.0
+
+[outputs.active_mass_feed_kg_d]
+description = "Active chemical mass feed rate"
+tolerance = 0.03
+
+[outputs.product_mass_feed_kg_d]
+description = "Commercial product mass feed rate"
+tolerance = 0.03
+
+[outputs.volume_feed_l_d]
+description = "Commercial product volume feed rate"
+tolerance = 0.03
+
+[outputs.annual_product_consumption_t]
+description = "Annual commercial product consumption"
+tolerance = 0.03
+
+[archetypes.disinfection_dose]
+description = "Low-dose liquid chemical disinfection application"
+flow_rate_m3_d = {min = 500.0, max = 100000.0}
+target_dose_mg_l = {min = 1.0, max = 15.0}
+product_strength_pct = {min = 8.0, max = 15.0}
+product_density_kg_l = {min = 1.05, max = 1.25}
+site_contexts = ["water-treatment-disinfection", "recycled-water-plant"]
+
+[archetypes.coagulant_dose]
+description = "Coagulant or alkalinity chemical dosing application"
+flow_rate_m3_d = {min = 1000.0, max = 500000.0}
+target_dose_mg_l = {min = 10.0, max = 120.0}
+product_strength_pct = {min = 20.0, max = 60.0}
+product_density_kg_l = {min = 1.1, max = 1.6}
+site_contexts = ["surface-water-treatment-plant", "industrial-pretreatment"]
+
+[difficulty.easy]
+description = "All parameters given for low-dose disinfection"
+visibility = "all_given"
+archetypes = ["disinfection_dose"]
+
+[difficulty.medium]
+description = "All parameters given across disinfection and coagulant dosing"
+visibility = "all_given"
+archetypes = ["disinfection_dose", "coagulant_dose"]
+
+[difficulty.hard]
+description = "All parameters given for higher mass chemical feed rates"
+visibility = "all_given"
+archetypes = ["coagulant_dose"]

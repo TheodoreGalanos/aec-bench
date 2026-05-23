@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "ict_comms_security",
+    "category_id": "structured-cabling",
+    "category_name": "Structured Cabling",
+    "task_id": "bend-radius-check",
+    "task_name": "Cable Bend Radius Verification",
+    "description": "Verify cable route bend radii meet minimum requirements",
+    "complexity": "low",
+    "standards": [
+      "ANSI/TIA-568.3-D",
+      "AS/NZS 3080"
+    ],
+    "inputs": [
+      "Cable route geometry",
+      "Cable type",
+      "Minimum bend radius requirement (x cable diameter)"
+    ],
+    "outputs": [
+      "Bend radius at each turn",
+      "Violations identified",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "cable",
+      "radius"
+    ],
+    "source_file": "data/tasks/electrical/ict_comms_security.json",
+    "suggested_relative_path": "electrical/structured-cabling/bend-radius-check"
+  }
+}

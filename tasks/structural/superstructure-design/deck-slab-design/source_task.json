@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "bridges",
+    "category_id": "superstructure-design",
+    "category_name": "Superstructure Design",
+    "task_id": "deck-slab-design",
+    "task_name": "Bridge Deck Slab Design",
+    "description": "Design reinforced concrete deck slab for wheel loads",
+    "complexity": "medium",
+    "standards": [
+      "AASHTO LRFD 9.7",
+      "AS/NZS 5100.5"
+    ],
+    "inputs": [
+      "Slab thickness (mm)",
+      "Girder spacing (m)",
+      "Concrete strength f'c (MPa)",
+      "Live load model",
+      "Cover requirements"
+    ],
+    "outputs": [
+      "Required reinforcement As (mm\u00b2/m)",
+      "Bar size and spacing",
+      "Crack control check",
+      "Punching shear check"
+    ],
+    "keyword_hits": [
+      "load",
+      "shear",
+      "size"
+    ],
+    "source_file": "data/tasks/structural/bridges.json",
+    "suggested_relative_path": "structural/superstructure-design/deck-slab-design"
+  }
+}

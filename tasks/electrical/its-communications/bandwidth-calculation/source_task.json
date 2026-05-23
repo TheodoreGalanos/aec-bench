@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "intelligent_transport_systems",
+    "category_id": "its-communications",
+    "category_name": "ITS Communications",
+    "task_id": "bandwidth-calculation",
+    "task_name": "ITS Bandwidth Requirement Calculation",
+    "description": "Calculate total bandwidth for ITS network supporting field devices",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 802.3",
+      "NTCIP"
+    ],
+    "inputs": [
+      "Device inventory (cameras, controllers, sensors)",
+      "Data rate per device type (Mbps)",
+      "Network overhead factor (10-20%)",
+      "Future capacity buffer (%)"
+    ],
+    "outputs": [
+      "Total required bandwidth (Mbps)",
+      "Peak demand estimate",
+      "Backbone sizing recommendation"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "capacity",
+      "demand",
+      "rate",
+      "sizing"
+    ],
+    "source_file": "data/tasks/electrical/intelligent_transport_systems.json",
+    "suggested_relative_path": "electrical/its-communications/bandwidth-calculation"
+  }
+}

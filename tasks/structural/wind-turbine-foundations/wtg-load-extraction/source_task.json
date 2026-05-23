@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "energy_structures",
+    "category_id": "wind-turbine-foundations",
+    "category_name": "Wind Turbine Foundations",
+    "task_id": "wtg-load-extraction",
+    "task_name": "Wind Turbine Load Extraction",
+    "description": "Extract and process design loads from turbine manufacturer load documents for foundation design",
+    "complexity": "medium",
+    "standards": [
+      "IEC 61400-6",
+      "IEC 61400-1"
+    ],
+    "inputs": [
+      "Turbine load document (DLC table)",
+      "Design load case selection",
+      "Partial safety factors",
+      "Hub height",
+      "Tower base diameter"
+    ],
+    "outputs": [
+      "Ultimate moment Mxy (kNm)",
+      "Ultimate shear Fxy (kN)",
+      "Ultimate vertical Fz (kN)",
+      "Fatigue DEL (kNm)",
+      "Number of cycles"
+    ],
+    "keyword_hits": [
+      "load",
+      "moment",
+      "shear"
+    ],
+    "source_file": "data/tasks/structural/energy_structures.json",
+    "suggested_relative_path": "structural/wind-turbine-foundations/wtg-load-extraction"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_energy",
+    "category_id": "cable-trench",
+    "category_name": "Cable Trench & Duct Bank Design",
+    "task_id": "cable-trench-cross-section",
+    "task_name": "Cable Trench Cross-Section Design",
+    "description": "Design standard cable trench cross-section with correct cover, bedding, and separation",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3000",
+      "AS 3996",
+      "Utility Standards"
+    ],
+    "inputs": [
+      "Cable/conduit count",
+      "Voltage levels (LV/HV)",
+      "Traffic loading class",
+      "Utility standard requirements"
+    ],
+    "outputs": [
+      "Trench width (mm)",
+      "Trench depth (mm)",
+      "Bedding thickness (mm)",
+      "Cover depth (mm)",
+      "Marker tape location"
+    ],
+    "keyword_hits": [
+      "cable",
+      "load",
+      "voltage"
+    ],
+    "source_file": "data/tasks/civil/civil_energy.json",
+    "suggested_relative_path": "civil/cable-trench/cable-trench-cross-section"
+  }
+}

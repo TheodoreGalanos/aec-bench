@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "buildings_mechanical",
+    "category_id": "ventilation-calculations",
+    "category_name": "Ventilation Rate Calculations",
+    "task_id": "as1668-ventilation",
+    "task_name": "AS 1668.2 Mechanical Ventilation Rate",
+    "description": "Calculate ventilation requirements per Australian Standard AS 1668.2",
+    "complexity": "low",
+    "standards": [
+      "AS 1668.2"
+    ],
+    "inputs": [
+      "Space type",
+      "Floor area (m2)",
+      "Occupancy (persons)",
+      "Contaminant sources if any"
+    ],
+    "outputs": [
+      "Required outdoor air rate (L/s)",
+      "Required exhaust rate (L/s)",
+      "Air change rate (ACH)",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "rate",
+      "ventilation"
+    ],
+    "source_file": "data/tasks/mechanical/buildings_mechanical.json",
+    "suggested_relative_path": "mechanical/ventilation-calculations/as1668-ventilation"
+  }
+}

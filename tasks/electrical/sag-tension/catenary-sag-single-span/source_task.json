@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "sag-tension",
+    "category_name": "Sag-Tension Calculations",
+    "task_id": "catenary-sag-single-span",
+    "task_name": "Single Span Catenary Sag Calculation",
+    "description": "Calculate conductor sag for a single level span using catenary equations at given temperature",
+    "complexity": "low",
+    "standards": [
+      "IEC 60826",
+      "AS/NZS 7000"
+    ],
+    "inputs": [
+      "Span length (m)",
+      "Conductor weight (N/m)",
+      "Horizontal tension (N)",
+      "Temperature (degC)"
+    ],
+    "outputs": [
+      "Maximum sag (m)",
+      "Sag at any point x",
+      "Total conductor length (m)",
+      "Catenary constant"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/sag-tension/catenary-sag-single-span"
+  }
+}

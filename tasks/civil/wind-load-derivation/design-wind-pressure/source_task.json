@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_energy",
+    "category_id": "wind-load-derivation",
+    "category_name": "Wind Load Derivation",
+    "task_id": "design-wind-pressure",
+    "task_name": "Design Wind Pressure Calculation",
+    "description": "Calculate design wind pressure from wind speed and aerodynamic factors",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 1170.2"
+    ],
+    "inputs": [
+      "Design wind speed V_des,theta (m/s)",
+      "Aerodynamic shape factor C_fig",
+      "Dynamic response factor C_dyn",
+      "Air density rho (kg/m3)"
+    ],
+    "outputs": [
+      "Design wind pressure p (kPa)",
+      "Uplift force (kN)",
+      "Lateral force (kN)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "pressure"
+    ],
+    "source_file": "data/tasks/civil/civil_energy.json",
+    "suggested_relative_path": "civil/wind-load-derivation/design-wind-pressure"
+  }
+}

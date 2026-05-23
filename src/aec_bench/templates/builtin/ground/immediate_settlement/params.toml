@@ -1,0 +1,116 @@
+[meta]
+name = "immediate-settlement"
+description = "Elastic immediate settlement of shallow foundations using Boussinesq theory"
+long_description = "Calculates the elastic (immediate) settlement of shallow foundations using the Boussinesq equation Si = q*B*(1-nu^2)/E * If, where the influence factor If depends on footing shape and L/B ratio per Bowles (1996) Table 5-6. Supports square, rectangular, and circular footings with flexible or rigid foundation corrections for settlement prediction in granular and stiff cohesive soils."
+discipline = "ground"
+category = "shallow-foundations"
+standards = ["Bowles (1996)", "Boussinesq elastic theory"]
+tags = ["geotechnical", "settlement", "elastic", "immediate", "deterministic"]
+tool_mode = "with-tool"
+
+[params.applied_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "Net applied foundation pressure q"
+min = 25
+max = 500
+
+[params.footing_width_m]
+type = "float"
+unit = "m"
+description = "Footing width B (shorter dimension)"
+min = 0.5
+max = 10.0
+
+[params.footing_length_m]
+type = "float"
+unit = "m"
+description = "Footing length L (longer dimension, L >= B)"
+min = 0.5
+max = 30.0
+
+[params.elastic_modulus_mpa]
+type = "float"
+unit = "MPa"
+description = "Soil elastic modulus E"
+min = 2
+max = 200
+derivable_from = "archetype"
+
+[params.poisson_ratio]
+type = "float"
+description = "Soil Poisson's ratio nu"
+min = 0.15
+max = 0.49
+derivable_from = "archetype"
+
+[params.footing_shape]
+type = "enum"
+description = "Footing shape"
+values = ["square", "rectangular", "circular"]
+
+[params.foundation_rigidity]
+type = "enum"
+description = "Foundation rigidity"
+values = ["flexible", "rigid"]
+
+# --- Outputs ---
+
+[outputs.influence_factor]
+description = "Settlement influence factor I_f"
+tolerance = 0.05
+
+[outputs.settlement_mm]
+description = "Immediate elastic settlement Si (mm)"
+tolerance = 0.03
+
+# --- Archetypes ---
+
+[archetypes.loose_sand]
+description = "Loose to medium sand"
+elastic_modulus_mpa = {min = 10, max = 30}
+poisson_ratio = {min = 0.25, max = 0.35}
+site_contexts = ["perth-coastal", "gold-coast-sand"]
+
+[archetypes.dense_sand]
+description = "Dense sand and gravel"
+elastic_modulus_mpa = {min = 40, max = 80}
+poisson_ratio = {min = 0.30, max = 0.40}
+site_contexts = ["hunter-valley-alluvial", "newcastle-fill"]
+
+[archetypes.stiff_clay]
+description = "Stiff overconsolidated clay"
+elastic_modulus_mpa = {min = 15, max = 50}
+poisson_ratio = {min = 0.35, max = 0.45}
+site_contexts = ["sydney-hawkesbury", "melbourne-basalt", "adelaide-stiff"]
+
+[archetypes.soft_clay]
+description = "Soft normally consolidated clay"
+elastic_modulus_mpa = {min = 2, max = 10}
+poisson_ratio = {min = 0.40, max = 0.48}
+site_contexts = ["brisbane-alluvial", "darwin-estuarine"]
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Square flexible footing, all parameters given"
+visibility = "all_given"
+archetypes = ["dense_sand", "stiff_clay"]
+footing_shape = ["square"]
+foundation_rigidity = ["flexible"]
+
+[difficulty.medium]
+description = "Any shape and rigidity, all parameters given"
+visibility = "all_given"
+archetypes = ["loose_sand", "dense_sand", "stiff_clay", "soft_clay"]
+footing_shape = ["square", "rectangular", "circular"]
+foundation_rigidity = ["flexible", "rigid"]
+
+[difficulty.hard]
+description = "Soil properties hidden, agent must estimate E and nu from site description"
+visibility = "partial"
+hidden_params = ["elastic_modulus_mpa", "poisson_ratio"]
+replacement_text = "The foundation soil is {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["loose_sand", "dense_sand", "stiff_clay", "soft_clay"]
+footing_shape = ["square", "rectangular", "circular"]
+foundation_rigidity = ["flexible", "rigid"]

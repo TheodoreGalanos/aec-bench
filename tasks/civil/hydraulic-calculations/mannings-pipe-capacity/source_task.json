@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "drainage_hydrology",
+    "category_id": "hydraulic-calculations",
+    "category_name": "Hydraulic Pipe & Channel Design",
+    "task_id": "mannings-pipe-capacity",
+    "task_name": "Manning's Equation Pipe Capacity",
+    "description": "Calculate flow capacity and velocity in circular pipes using Manning's equation",
+    "complexity": "low",
+    "standards": [
+      "HEC-22",
+      "QUDM",
+      "PUB Code of Practice"
+    ],
+    "inputs": [
+      "Pipe diameter D (mm)",
+      "Pipe slope S (%)",
+      "Manning's roughness n",
+      "Flow depth ratio d/D"
+    ],
+    "outputs": [
+      "Flow capacity Q (m\u00b3/s)",
+      "Flow velocity V (m/s)",
+      "Hydraulic radius R (m)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "capacity",
+      "flow",
+      "pipe",
+      "radius"
+    ],
+    "source_file": "data/tasks/civil/drainage_hydrology.json",
+    "suggested_relative_path": "civil/hydraulic-calculations/mannings-pipe-capacity"
+  }
+}

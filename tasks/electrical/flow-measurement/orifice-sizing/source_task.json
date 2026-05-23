@@ -1,0 +1,42 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "instrumentation_controls",
+    "category_id": "flow-measurement",
+    "category_name": "Flow Measurement Sizing",
+    "task_id": "orifice-sizing",
+    "task_name": "Orifice Plate Sizing",
+    "description": "Size orifice plate for flow measurement using ISO 5167 method",
+    "complexity": "medium",
+    "standards": [
+      "ISO 5167-1",
+      "ISO 5167-2"
+    ],
+    "inputs": [
+      "Flow rate (m3/h)",
+      "Pipe diameter D (mm)",
+      "Fluid density (kg/m3)",
+      "Fluid viscosity (cP)",
+      "Design differential pressure (kPa)"
+    ],
+    "outputs": [
+      "Orifice bore diameter d (mm)",
+      "Beta ratio (d/D)",
+      "Discharge coefficient C",
+      "Reynolds number",
+      "Permanent pressure loss"
+    ],
+    "keyword_hits": [
+      "flow",
+      "pipe",
+      "pressure",
+      "rate",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/electrical/instrumentation_controls.json",
+    "suggested_relative_path": "electrical/flow-measurement/orifice-sizing"
+  }
+}

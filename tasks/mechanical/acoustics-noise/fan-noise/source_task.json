@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "tunnel_systems",
+    "category_id": "acoustics-noise",
+    "category_name": "Acoustic Performance",
+    "task_id": "fan-noise",
+    "task_name": "Fan Acoustic Performance Calculation",
+    "description": "Predict sound levels from ventilation fans for noise compliance",
+    "complexity": "medium",
+    "standards": [
+      "PIARC 2007 05.16"
+    ],
+    "inputs": [
+      "Fan type and speed",
+      "Sound power level data",
+      "Tunnel geometry",
+      "Surface absorption coefficients"
+    ],
+    "outputs": [
+      "Sound pressure level at receiver (dB(A))",
+      "Noise compliance status"
+    ],
+    "keyword_hits": [
+      "calculation",
+      "power",
+      "pressure",
+      "ventilation"
+    ],
+    "source_file": "data/tasks/mechanical/tunnel_systems.json",
+    "suggested_relative_path": "mechanical/acoustics-noise/fan-noise"
+  }
+}

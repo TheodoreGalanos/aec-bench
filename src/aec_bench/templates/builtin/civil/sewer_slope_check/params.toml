@@ -1,0 +1,95 @@
+[meta]
+name = "sewer-slope-check"
+description = "Gravity sewer slope adequacy check for self-cleansing velocity using Manning's equation"
+long_description = "Verifies that a gravity sewer pipe's installed slope produces a full-pipe velocity within the self-cleansing range (0.6-4.0 m/s) required by WSAA WSA 02. Uses Manning's equation V = (1/n)*R_h^(2/3)*S^(1/2) for a circular pipe at full flow to compute velocity and capacity, then reports compliance status."
+discipline = "civil"
+category = "gravity-sewer"
+standards = ["WSAA WSA 02", "BS EN 752"]
+tags = ["civil", "sewer", "gravity-flow", "self-cleansing", "compliance", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.pipe_diameter_mm]
+type = "float"
+unit = "mm"
+description = "Internal pipe diameter D"
+min = 100
+max = 900
+
+[params.pipe_slope_pct]
+type = "float"
+unit = "%"
+description = "Pipe longitudinal slope as a percentage"
+min = 0.1
+max = 10.0
+
+[params.mannings_n]
+type = "float"
+description = "Manning's roughness coefficient n"
+min = 0.009
+max = 0.025
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.full_pipe_velocity_m_s]
+description = "Full-pipe flow velocity V (m/s)"
+tolerance = 0.03
+
+[outputs.full_pipe_capacity_l_s]
+description = "Full-pipe flow capacity Q (L/s)"
+tolerance = 0.03
+
+[outputs.compliance]
+description = "Self-cleansing compliance (1.0 = adequate, 0.0 = non-compliant)"
+tolerance = 0.01
+
+# --- Archetypes ---
+
+[archetypes.residential_reticulation]
+description = "PVC residential sewer reticulation main"
+pipe_diameter_mm = {min = 150, max = 225}
+pipe_slope_pct = {min = 0.5, max = 3.0}
+mannings_n = {min = 0.011, max = 0.013}
+site_contexts = ["brisbane-suburban-subdivision", "perth-residential-infill"]
+
+[archetypes.trunk_sewer]
+description = "Reinforced concrete or vitrified clay trunk sewer"
+pipe_diameter_mm = {min = 300, max = 600}
+pipe_slope_pct = {min = 0.2, max = 1.5}
+mannings_n = {min = 0.011, max = 0.015}
+site_contexts = ["melbourne-trunk-sewer", "sydney-catchment-sewer"]
+
+[archetypes.rising_main_connection]
+description = "Gravity sewer downstream of a rising main discharge point"
+pipe_diameter_mm = {min = 150, max = 300}
+pipe_slope_pct = {min = 1.0, max = 5.0}
+mannings_n = {min = 0.011, max = 0.013}
+site_contexts = ["adelaide-pump-station-outlet", "gold-coast-rising-main-junction"]
+
+[archetypes.industrial_sewer]
+description = "Industrial gravity sewer on steep grade with heavy solids"
+pipe_diameter_mm = {min = 225, max = 450}
+pipe_slope_pct = {min = 2.0, max = 10.0}
+mannings_n = {min = 0.013, max = 0.025}
+site_contexts = ["darwin-industrial-estate", "cairns-food-processing-plant"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "Small residential pipe, all parameters given, gentle slope"
+visibility = "all_given"
+archetypes = ["residential_reticulation"]
+
+[difficulty.medium]
+description = "Any pipe size and archetype, all parameters given"
+visibility = "all_given"
+archetypes = ["residential_reticulation", "trunk_sewer", "rising_main_connection", "industrial_sewer"]
+
+[difficulty.hard]
+description = "Manning's n hidden, agent must infer from pipe material description"
+visibility = "partial"
+hidden_params = ["mannings_n"]
+replacement_text = "The pipe is {{ archetype.description }} installed at {{ archetype.site_context }}"
+archetypes = ["residential_reticulation", "trunk_sewer", "rising_main_connection", "industrial_sewer"]

@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "thermal-rating",
+    "category_name": "Conductor Thermal Rating",
+    "task_id": "static-thermal-rating",
+    "task_name": "Static Thermal Rating (IEEE 738)",
+    "description": "Calculate steady-state thermal rating of overhead conductor using IEEE 738 heat balance",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 738",
+      "CIGRE TB 601"
+    ],
+    "inputs": [
+      "Conductor type and diameter (mm)",
+      "Maximum temperature (degC)",
+      "Ambient temperature (degC)",
+      "Wind speed (m/s)",
+      "Wind angle (degrees)",
+      "Solar radiation (W/m2)",
+      "Elevation (m)"
+    ],
+    "outputs": [
+      "Ampacity (A)",
+      "Heat gain components (W/m)",
+      "Heat loss components (W/m)",
+      "AC resistance at temperature (ohm/km)"
+    ],
+    "keyword_hits": [
+      "balance",
+      "calculate",
+      "heat"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/thermal-rating/static-thermal-rating"
+  }
+}

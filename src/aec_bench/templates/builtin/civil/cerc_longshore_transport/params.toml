@@ -1,0 +1,138 @@
+[meta]
+name = "cerc-longshore-transport"
+description = "Longshore sediment transport rate using the CERC formula Q_l = K * (E*Cg)_b * sin(2*alpha_b) / (2 * (rho_s - rho_w) * g * (1 - p))"
+long_description = "Estimates annual volumetric longshore sediment transport using the CERC formula from the USACE Coastal Engineering Manual and Shore Protection Manual. Calculates wave energy flux at the breaker line and converts it to a sediment transport rate, accounting for wave angle, sediment and water densities, and porosity. Used in coastal engineering to predict littoral drift and inform beach nourishment or breakwater design."
+discipline = "civil"
+category = "sediment-transport"
+standards = ["USACE CEM", "Shore Protection Manual (SPM)"]
+tags = ["coastal", "sediment", "longshore", "transport", "wave", "littoral"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.breaking_wave_height_m]
+type = "float"
+unit = "m"
+description = "Significant breaking wave height H_b"
+min = 0.3
+max = 5.0
+
+[params.wave_angle_at_breaking_deg]
+type = "float"
+unit = "degrees"
+description = "Wave angle at breaking relative to shore-normal alpha_b (positive = left-to-right looking shoreward)"
+min = -45.0
+max = 45.0
+
+[params.k_coefficient]
+type = "float"
+unit = "-"
+description = "CERC empirical transport coefficient K"
+min = 0.1
+max = 1.0
+derivable_from = "archetype"
+
+[params.sediment_density_kg_m3]
+type = "float"
+unit = "kg/m³"
+description = "Sediment grain density rho_s"
+min = 2500.0
+max = 2800.0
+default = 2650.0
+optional = true
+derivable_from = "archetype"
+
+[params.water_density_kg_m3]
+type = "float"
+unit = "kg/m³"
+description = "Water density rho_w"
+min = 1000.0
+max = 1035.0
+default = 1025.0
+optional = true
+derivable_from = "archetype"
+
+[params.porosity]
+type = "float"
+unit = "-"
+description = "In-situ sediment porosity p"
+min = 0.3
+max = 0.5
+default = 0.4
+optional = true
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.energy_flux_w_m]
+description = "Wave energy flux at breaking (E*Cg)_b in W/m"
+tolerance = 0.03
+
+[outputs.transport_rate_m3_yr]
+description = "Volumetric longshore transport rate Q_l (m³/year, absolute value)"
+tolerance = 0.05
+
+[outputs.transport_direction]
+description = "Transport direction: 1.0 = left-to-right, -1.0 = right-to-left (looking shoreward)"
+tolerance = 0.01
+
+# --- Archetypes: coastal settings ---
+
+[archetypes.exposed_sandy_coast]
+description = "High-energy exposed sandy coastline with quartz sand and large oblique swell"
+breaking_wave_height_m = {min = 2.0, max = 4.0}
+wave_angle_at_breaking_deg = {min = 10.0, max = 30.0}
+k_coefficient = {min = 0.30, max = 0.45}
+sediment_density_kg_m3 = {min = 2600, max = 2700}
+water_density_kg_m3 = {min = 1020, max = 1030}
+porosity = {min = 0.35, max = 0.42}
+site_contexts = ["nsw-south-coast-swell", "wa-southwest-capes", "sa-great-ocean-road"]
+
+[archetypes.moderate_energy_beach]
+description = "Moderate-energy beach with medium swell and modest wave angles"
+breaking_wave_height_m = {min = 0.8, max = 2.0}
+wave_angle_at_breaking_deg = {min = 5.0, max = 15.0}
+k_coefficient = {min = 0.32, max = 0.42}
+sediment_density_kg_m3 = {min = 2600, max = 2700}
+water_density_kg_m3 = {min = 1020, max = 1030}
+porosity = {min = 0.35, max = 0.42}
+site_contexts = ["sunshine-coast-qld", "newcastle-nsw-beach", "mandurah-wa-coast"]
+
+[archetypes.sheltered_embayment]
+description = "Low-energy sheltered embayment with short-period wind waves and fine sand"
+breaking_wave_height_m = {min = 0.3, max = 0.8}
+wave_angle_at_breaking_deg = {min = 5.0, max = 20.0}
+k_coefficient = {min = 0.35, max = 0.50}
+sediment_density_kg_m3 = {min = 2550, max = 2650}
+water_density_kg_m3 = {min = 1020, max = 1030}
+porosity = {min = 0.38, max = 0.45}
+site_contexts = ["moreton-bay-qld", "port-phillip-bay-vic", "cockburn-sound-wa"]
+
+[archetypes.high_energy_headland]
+description = "High-energy headland-controlled pocket beach with coarse sand and strong oblique waves"
+breaking_wave_height_m = {min = 3.0, max = 5.0}
+wave_angle_at_breaking_deg = {min = 15.0, max = 45.0}
+k_coefficient = {min = 0.20, max = 0.35}
+sediment_density_kg_m3 = {min = 2650, max = 2800}
+water_density_kg_m3 = {min = 1020, max = 1030}
+porosity = {min = 0.30, max = 0.38}
+site_contexts = ["byron-bay-nsw-headland", "noosa-heads-qld", "cape-naturaliste-wa"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "Moderate wave height, all parameters given — straightforward CERC formula application"
+visibility = "all_given"
+archetypes = ["moderate_energy_beach", "sheltered_embayment"]
+
+[difficulty.medium]
+description = "Larger waves, steeper angles, all parameters given — larger numbers but same formula"
+visibility = "all_given"
+archetypes = ["exposed_sandy_coast", "moderate_energy_beach", "high_energy_headland"]
+
+[difficulty.hard]
+description = "K coefficient, sediment density, water density, and porosity hidden — agent must infer from site description"
+visibility = "partial"
+hidden_params = ["k_coefficient", "sediment_density_kg_m3", "water_density_kg_m3", "porosity"]
+replacement_text = "The site is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["exposed_sandy_coast", "moderate_energy_beach", "sheltered_embayment", "high_energy_headland"]

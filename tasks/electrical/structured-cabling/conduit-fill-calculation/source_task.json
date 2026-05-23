@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "ict_comms_security",
+    "category_id": "structured-cabling",
+    "category_name": "Structured Cabling",
+    "task_id": "conduit-fill-calculation",
+    "task_name": "Conduit Fill Calculation",
+    "description": "Calculate conduit fill percentage and verify compliance with maximum fill ratio",
+    "complexity": "low",
+    "standards": [
+      "ANSI/TIA-569",
+      "AS/NZS 3080"
+    ],
+    "inputs": [
+      "Conduit internal diameter (mm)",
+      "Number and type of cables",
+      "Cable outer diameter (mm)",
+      "Maximum fill percentage"
+    ],
+    "outputs": [
+      "Total cable cross-section area (mm2)",
+      "Conduit cross-section area (mm2)",
+      "Fill percentage (%)",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/ict_comms_security.json",
+    "suggested_relative_path": "electrical/structured-cabling/conduit-fill-calculation"
+  }
+}

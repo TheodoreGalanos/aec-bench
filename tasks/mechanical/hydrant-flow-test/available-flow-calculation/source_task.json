@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_protection",
+    "category_id": "hydrant-flow-test",
+    "category_name": "Hydrant Flow Testing",
+    "task_id": "available-flow-calculation",
+    "task_name": "Available Fire Flow Calculation",
+    "description": "Calculate available fire flow from hydrant test data",
+    "complexity": "low",
+    "standards": [
+      "NFPA 291"
+    ],
+    "inputs": [
+      "Static pressure (psi)",
+      "Residual pressure (psi)",
+      "Flow hydrant pitot reading (psi)",
+      "Hydrant outlet diameter (in)",
+      "Discharge coefficient"
+    ],
+    "outputs": [
+      "Flow from test hydrant (gpm)",
+      "Available flow at 20 psi residual (gpm)",
+      "Water supply curve coefficient"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "pressure"
+    ],
+    "source_file": "data/tasks/mechanical/fire_protection.json",
+    "suggested_relative_path": "mechanical/hydrant-flow-test/available-flow-calculation"
+  }
+}

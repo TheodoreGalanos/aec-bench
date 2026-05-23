@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "instrumentation_controls",
+    "category_id": "flow-measurement",
+    "category_name": "Flow Measurement Sizing",
+    "task_id": "straight-run-requirements",
+    "task_name": "Flow Meter Straight Run Requirements",
+    "description": "Determine required straight pipe lengths upstream and downstream of flow element",
+    "complexity": "low",
+    "standards": [
+      "ISO 5167-1",
+      "ASME MFC-3M"
+    ],
+    "inputs": [
+      "Beta ratio",
+      "Upstream fitting type",
+      "Downstream fitting",
+      "Flow element type"
+    ],
+    "outputs": [
+      "Required upstream straight run (D)",
+      "Required downstream straight run (D)",
+      "Actual installation compliance"
+    ],
+    "keyword_hits": [
+      "flow",
+      "pipe"
+    ],
+    "source_file": "data/tasks/electrical/instrumentation_controls.json",
+    "suggested_relative_path": "electrical/flow-measurement/straight-run-requirements"
+  }
+}

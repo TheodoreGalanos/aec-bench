@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "transmission_lines",
+    "category_id": "sag-tension",
+    "category_name": "Sag-Tension Calculations",
+    "task_id": "ruling-span-calculation",
+    "task_name": "Ruling Span Determination",
+    "description": "Calculate ruling span (equivalent span) for a line section with varying span lengths",
+    "complexity": "medium",
+    "standards": [
+      "IEC 60826",
+      "AS/NZS 7000"
+    ],
+    "inputs": [
+      "Individual span lengths (m)",
+      "Span count",
+      "Suspension vs dead-end structures"
+    ],
+    "outputs": [
+      "Ruling span (m)",
+      "Span length distribution analysis",
+      "Suitability assessment for section"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/electrical/transmission_lines.json",
+    "suggested_relative_path": "electrical/sag-tension/ruling-span-calculation"
+  }
+}

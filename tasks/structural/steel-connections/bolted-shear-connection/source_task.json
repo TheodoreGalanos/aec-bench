@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "building_structures",
+    "category_id": "steel-connections",
+    "category_name": "Steel Connection Design",
+    "task_id": "bolted-shear-connection",
+    "task_name": "Bolted Shear Connection Design",
+    "description": "Design bolted connection for shear force transfer",
+    "complexity": "medium",
+    "standards": [
+      "AS 4100 Sec 9",
+      "AISC 360 Ch J"
+    ],
+    "inputs": [
+      "Design shear force V* (kN)",
+      "Bolt grade and diameter",
+      "Plate thickness and grade",
+      "Connection geometry"
+    ],
+    "outputs": [
+      "Number of bolts required",
+      "Bolt shear capacity (kN)",
+      "Bearing capacity (kN)",
+      "Block shear capacity (kN)",
+      "Pass/fail on all failure modes"
+    ],
+    "keyword_hits": [
+      "bearing",
+      "capacity",
+      "shear"
+    ],
+    "source_file": "data/tasks/structural/building_structures.json",
+    "suggested_relative_path": "structural/steel-connections/bolted-shear-connection"
+  }
+}

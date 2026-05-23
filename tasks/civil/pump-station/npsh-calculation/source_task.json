@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "water_infrastructure",
+    "category_id": "pump-station",
+    "category_name": "Pump Station Design",
+    "task_id": "npsh-calculation",
+    "task_name": "NPSH Available Calculation",
+    "description": "Calculate Net Positive Suction Head Available at pump inlet",
+    "complexity": "low",
+    "standards": [
+      "Hydraulics Institute"
+    ],
+    "inputs": [
+      "Atmospheric pressure (kPa)",
+      "Suction static head (m)",
+      "Suction friction losses (m)",
+      "Vapor pressure (kPa)",
+      "Fluid specific gravity"
+    ],
+    "outputs": [
+      "NPSHa (m)",
+      "NPSH margin assessment"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "pressure",
+      "pump"
+    ],
+    "source_file": "data/tasks/civil/water_infrastructure.json",
+    "suggested_relative_path": "civil/pump-station/npsh-calculation"
+  }
+}

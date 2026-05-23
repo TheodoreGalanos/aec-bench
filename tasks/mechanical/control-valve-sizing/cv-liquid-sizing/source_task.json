@@ -1,0 +1,42 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "control-valve-sizing",
+    "category_name": "Control Valve Sizing",
+    "task_id": "cv-liquid-sizing",
+    "task_name": "Liquid Control Valve Cv Calculation",
+    "description": "Calculate required Cv for a liquid control valve",
+    "complexity": "medium",
+    "standards": [
+      "IEC 60534",
+      "ISA 75.01"
+    ],
+    "inputs": [
+      "Flow rate (m3/h)",
+      "Inlet pressure P1 (kPa)",
+      "Outlet pressure P2 (kPa)",
+      "Fluid density (kg/m3)",
+      "Vapor pressure (kPa)",
+      "Critical pressure (kPa)",
+      "Valve recovery factor FL"
+    ],
+    "outputs": [
+      "Calculated Cv",
+      "Choked flow check",
+      "Cavitation index",
+      "Recommended valve Cv"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "pressure",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/control-valve-sizing/cv-liquid-sizing"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "coastal_engineering",
+    "category_id": "wave-climate",
+    "category_name": "Wave Climate & Transformations",
+    "task_id": "linear-wave-theory",
+    "task_name": "Linear Wave Theory Calculations",
+    "description": "Calculate wave properties (wavelength, celerity, group velocity) using linear wave theory",
+    "complexity": "low",
+    "standards": [
+      "USACE CEM"
+    ],
+    "inputs": [
+      "Wave period (s)",
+      "Water depth (m)",
+      "Wave height (m)"
+    ],
+    "outputs": [
+      "Wavelength (m)",
+      "Wave celerity (m/s)",
+      "Group velocity (m/s)",
+      "Deep/shallow/intermediate classification"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/civil/coastal_engineering.json",
+    "suggested_relative_path": "civil/wave-climate/linear-wave-theory"
+  }
+}

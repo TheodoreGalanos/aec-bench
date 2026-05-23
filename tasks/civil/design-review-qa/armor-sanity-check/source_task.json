@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "coastal_engineering",
+    "category_id": "design-review-qa",
+    "category_name": "Design Review & QA Checks",
+    "task_id": "armor-sanity-check",
+    "task_name": "Armor Sizing Sanity Check",
+    "description": "Verify specified armor size against calculated requirement from standard formulas",
+    "complexity": "low",
+    "standards": [
+      "CIRIA C683",
+      "USACE CEM"
+    ],
+    "inputs": [
+      "Specified armor Dn50 (m)",
+      "Design wave height (m)",
+      "Structure geometry"
+    ],
+    "outputs": [
+      "Required Dn50 (m)",
+      "Size ratio (specified/required)",
+      "Pass/fail/warning"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/civil/coastal_engineering.json",
+    "suggested_relative_path": "civil/design-review-qa/armor-sanity-check"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "lighting",
+    "category_id": "energy-performance",
+    "category_name": "Energy Performance",
+    "task_id": "road-pdi-calculation",
+    "task_name": "Road Lighting Power Density Index (PDI)",
+    "description": "Calculate Power Density Index for road lighting energy efficiency",
+    "complexity": "low",
+    "standards": [
+      "EN 13201-5",
+      "AS/NZS 1158.3.1"
+    ],
+    "inputs": [
+      "Total system power (W)",
+      "Maintained illuminance (lux)",
+      "Illuminated area (m2)"
+    ],
+    "outputs": [
+      "PDI value (W/(lux.m2))"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "energy",
+      "power"
+    ],
+    "source_file": "data/tasks/electrical/lighting.json",
+    "suggested_relative_path": "electrical/energy-performance/road-pdi-calculation"
+  }
+}

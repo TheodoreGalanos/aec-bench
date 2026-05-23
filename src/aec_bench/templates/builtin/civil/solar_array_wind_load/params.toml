@@ -1,0 +1,141 @@
+[meta]
+name = "solar-array-wind-load"
+description = "Wind loads on ground-mounted solar PV arrays including uplift, downforce, and drag"
+long_description = "Calculates wind loads on ground-mounted photovoltaic arrays by combining AS/NZS 1170.2 dynamic pressure with SEAOC PV2-2017 net pressure coefficients. Interpolates GCrn values for tilt angle and row position to determine uplift suction, downward pressure, per-module uplift force, and horizontal drag force per metre of array width. Applicable to fixed-tilt utility and commercial solar installations in Australian wind regions."
+discipline = "civil"
+category = "wind-load-derivation"
+standards = ["AS/NZS 1170.2", "SEAOC PV2-2017", "ASCE 7-22"]
+tags = ["wind", "solar", "photovoltaic", "uplift", "drag", "renewable-energy"]
+tool_mode = "with-tool"
+
+[params.design_wind_speed_m_per_s]
+type = "float"
+unit = "m/s"
+description = "Site design wind speed V_des,theta (after terrain, topographic, shielding, and direction multipliers)"
+min = 20
+max = 70
+
+[params.tilt_angle_deg]
+type = "float"
+unit = "degrees"
+description = "Array tilt angle from horizontal"
+min = 5
+max = 45
+derivable_from = "archetype"
+
+[params.array_height_m]
+type = "float"
+unit = "m"
+description = "Hub height of array above ground level"
+min = 0.3
+max = 3.0
+
+[params.module_width_m]
+type = "float"
+unit = "m"
+description = "Width of a single PV module (along the slope)"
+min = 0.8
+max = 1.4
+
+[params.module_length_m]
+type = "float"
+unit = "m"
+description = "Length of a single PV module (along the row)"
+min = 1.5
+max = 2.4
+
+[params.num_modules_wide]
+type = "int"
+unit = "-"
+description = "Number of modules arranged in the slope direction per row"
+min = 1
+max = 4
+
+[params.row_position]
+type = "enum"
+description = "Row position in the array field affecting wind exposure"
+values = ["exposed", "interior"]
+derivable_from = "archetype"
+
+[params.air_density_kg_per_m3]
+type = "float"
+unit = "kg/m3"
+description = "Air density rho (standard atmosphere default 1.2)"
+min = 1.0
+max = 1.4
+optional = true
+default = 1.2
+
+[outputs.dynamic_pressure_kpa]
+description = "Base velocity pressure q (kPa)"
+tolerance = 0.03
+
+[outputs.uplift_pressure_kpa]
+description = "Net uplift (suction) pressure on the array surface (kPa)"
+tolerance = 0.03
+
+[outputs.downforce_pressure_kpa]
+description = "Net downward pressure on the array surface (kPa)"
+tolerance = 0.03
+
+[outputs.uplift_force_per_module_kn]
+description = "Uplift force acting on a single PV module (kN)"
+tolerance = 0.03
+
+[outputs.drag_force_per_m_kn]
+description = "Horizontal drag force per metre of array row length (kN/m)"
+tolerance = 0.03
+
+# --- Archetypes: typical Australian solar farm configurations ---
+
+[archetypes.utility_scale_flat]
+description = "Utility-scale solar farm on flat open terrain with low tilt fixed-tilt racking"
+tilt_angle_deg = {min = 10, max = 20}
+row_position = ["exposed"]
+site_contexts = ["western-nsw-solar-farm", "north-queensland-solar-park", "mildura-solar-precinct"]
+
+[archetypes.utility_scale_steep]
+description = "Utility-scale solar farm with steeper tilt for higher-latitude sites"
+tilt_angle_deg = {min = 25, max = 35}
+row_position = ["exposed"]
+site_contexts = ["gippsland-solar-farm", "tasmanian-highlands-solar", "southern-sa-solar-plant"]
+
+[archetypes.commercial_rooftop_ground]
+description = "Commercial ground-mounted array behind a warehouse or industrial building"
+tilt_angle_deg = {min = 10, max = 25}
+row_position = ["interior"]
+site_contexts = ["sydney-industrial-park", "melbourne-logistics-precinct", "brisbane-trade-coast"]
+
+[archetypes.remote_community]
+description = "Remote community or mine-site solar installation on exposed terrain"
+tilt_angle_deg = {min = 15, max = 30}
+row_position = ["exposed"]
+site_contexts = ["alice-springs-solar", "mount-isa-mining-camp", "pilbara-remote-solar"]
+
+[archetypes.coastal_exposed]
+description = "Coastal solar farm subject to high cyclonic wind speeds"
+tilt_angle_deg = {min = 10, max = 20}
+row_position = ["exposed"]
+site_contexts = ["townsville-coastal-solar", "darwin-industrial-solar", "geraldton-wind-farm-solar"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "Low wind speed, exposed row, all parameters given — straightforward pressure and force calculation"
+visibility = "all_given"
+archetypes = ["utility_scale_flat", "commercial_rooftop_ground"]
+design_wind_speed_m_per_s = {min = 25, max = 40}
+
+[difficulty.medium]
+description = "Higher wind speeds and steeper tilts with all parameters given"
+visibility = "all_given"
+archetypes = ["utility_scale_steep", "remote_community", "coastal_exposed"]
+design_wind_speed_m_per_s = {min = 35, max = 55}
+
+[difficulty.hard]
+description = "Tilt angle and row position hidden — agent must infer from site description and array configuration"
+visibility = "partial"
+hidden_params = ["tilt_angle_deg", "row_position"]
+replacement_text = "The array is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["utility_scale_steep", "coastal_exposed", "remote_community"]
+design_wind_speed_m_per_s = {min = 40, max = 60}

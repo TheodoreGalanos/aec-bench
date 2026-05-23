@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_safety",
+    "category_id": "egress-modeling",
+    "category_name": "Egress and Evacuation Modeling",
+    "task_id": "movement-time",
+    "task_name": "Evacuation Movement Time Calculation",
+    "description": "Calculate movement time from travel distance and walking speed",
+    "complexity": "medium",
+    "standards": [
+      "SFPE Handbook",
+      "IFEG 2005"
+    ],
+    "inputs": [
+      "Travel distance (m)",
+      "Walking speed distribution",
+      "Occupant density",
+      "Door flow capacity"
+    ],
+    "outputs": [
+      "Movement time (seconds)",
+      "Flow-limited delays",
+      "Total evacuation time"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "capacity",
+      "flow"
+    ],
+    "source_file": "data/tasks/mechanical/fire_safety.json",
+    "suggested_relative_path": "mechanical/egress-modeling/movement-time"
+  }
+}

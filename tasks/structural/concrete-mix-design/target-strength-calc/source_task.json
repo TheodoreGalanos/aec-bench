@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "materials",
+    "category_id": "concrete-mix-design",
+    "category_name": "Concrete Mix Design",
+    "task_id": "target-strength-calc",
+    "task_name": "Target Mean Strength Calculation",
+    "description": "Calculate required average compressive strength (f'cr) from specified strength (f'c) and historical standard deviation",
+    "complexity": "low",
+    "standards": [
+      "ACI 318",
+      "ACI 301",
+      "AS 1379"
+    ],
+    "inputs": [
+      "Specified strength f'c (MPa)",
+      "Historical standard deviation (MPa)",
+      "Number of test records",
+      "Code formula selection"
+    ],
+    "outputs": [
+      "Required average strength f'cr (MPa)",
+      "Formula used",
+      "Margin above f'c"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/structural/materials.json",
+    "suggested_relative_path": "structural/concrete-mix-design/target-strength-calc"
+  }
+}

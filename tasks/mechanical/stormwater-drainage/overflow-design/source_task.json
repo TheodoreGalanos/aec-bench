@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "hydraulics_buildings",
+    "category_id": "stormwater-drainage",
+    "category_name": "Stormwater Drainage Design",
+    "task_id": "overflow-design",
+    "task_name": "Eaves Gutter Overflow Design",
+    "description": "Design overflow provisions for eaves gutters per mandatory Appendix F",
+    "complexity": "medium",
+    "standards": [
+      "AS/NZS 3500.3 Appendix F"
+    ],
+    "inputs": [
+      "Gutter profile",
+      "Roof catchment area",
+      "Design rainfall intensity",
+      "Primary outlet capacity"
+    ],
+    "outputs": [
+      "Required overflow capacity",
+      "Overflow outlet size/type",
+      "Compliance with Appendix F"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "flow",
+      "size"
+    ],
+    "source_file": "data/tasks/mechanical/hydraulics_buildings.json",
+    "suggested_relative_path": "mechanical/stormwater-drainage/overflow-design"
+  }
+}

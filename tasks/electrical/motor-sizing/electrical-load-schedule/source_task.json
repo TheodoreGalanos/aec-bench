@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "vertical_transportation",
+    "category_id": "motor-sizing",
+    "category_name": "Motor and Drive Sizing",
+    "task_id": "electrical-load-schedule",
+    "task_name": "Lift Electrical Load Schedule",
+    "description": "Compile electrical load data for all lift equipment",
+    "complexity": "low",
+    "standards": [
+      "AS 3000",
+      "IEC 60364"
+    ],
+    "inputs": [
+      "Motor power (kW)",
+      "Door operator power",
+      "Car lighting and ventilation",
+      "Controller power",
+      "Number of lifts"
+    ],
+    "outputs": [
+      "Connected load per lift (kVA)",
+      "Maximum demand per lift (kVA)",
+      "Total connected load",
+      "Diversity factor applied"
+    ],
+    "keyword_hits": [
+      "demand",
+      "load",
+      "power",
+      "ventilation"
+    ],
+    "source_file": "data/tasks/electrical/vertical_transportation.json",
+    "suggested_relative_path": "electrical/motor-sizing/electrical-load-schedule"
+  }
+}

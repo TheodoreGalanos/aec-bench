@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "industrial_electrical",
+    "category_id": "grounding-bonding",
+    "category_name": "Grounding and Bonding",
+    "task_id": "bonding-verification",
+    "task_name": "Equipment Bonding Verification",
+    "description": "Verify equipment bonding conductor sizing and routing",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3000",
+      "IEEE 142"
+    ],
+    "inputs": [
+      "Equipment fault current",
+      "Clearing time",
+      "Bonding conductor size",
+      "Conductor length",
+      "Material (Cu/Al)"
+    ],
+    "outputs": [
+      "Conductor adequacy check",
+      "I2t withstand verification",
+      "Voltage drop during fault",
+      "Compliance status"
+    ],
+    "keyword_hits": [
+      "current",
+      "drop",
+      "fault",
+      "size",
+      "sizing",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/industrial_electrical.json",
+    "suggested_relative_path": "electrical/grounding-bonding/bonding-verification"
+  }
+}

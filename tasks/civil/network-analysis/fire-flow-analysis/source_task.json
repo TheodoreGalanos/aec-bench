@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "water_infrastructure",
+    "category_id": "network-analysis",
+    "category_name": "Network Hydraulic Analysis",
+    "task_id": "fire-flow-analysis",
+    "task_name": "Fire Flow Capacity Assessment",
+    "description": "Assess network ability to provide required fire flows while maintaining residual pressure",
+    "complexity": "medium",
+    "standards": [
+      "AWWA M31",
+      "Local fire authority requirements"
+    ],
+    "inputs": [
+      "Network model (INP file)",
+      "Fire flow locations",
+      "Required fire flow (L/s)",
+      "Minimum residual pressure (kPa)"
+    ],
+    "outputs": [
+      "Available fire flow at each location",
+      "Residual pressures during fire flow",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "flow",
+      "pressure"
+    ],
+    "source_file": "data/tasks/civil/water_infrastructure.json",
+    "suggested_relative_path": "civil/network-analysis/fire-flow-analysis"
+  }
+}

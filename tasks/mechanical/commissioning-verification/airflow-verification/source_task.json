@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "buildings_mechanical",
+    "category_id": "commissioning-verification",
+    "category_name": "Commissioning Verification",
+    "task_id": "airflow-verification",
+    "task_name": "TAB Airflow Verification",
+    "description": "Verify measured airflow values against design requirements",
+    "complexity": "low",
+    "standards": [
+      "ACCA Commissioning Checklist",
+      "AABC National Standards"
+    ],
+    "inputs": [
+      "Design airflow schedule",
+      "TAB report with measured values",
+      "Tolerance requirements"
+    ],
+    "outputs": [
+      "Airflow compliance status per diffuser",
+      "Total system airflow compliance",
+      "Out-of-tolerance list",
+      "Rebalancing recommendations"
+    ],
+    "keyword_hits": [
+      "airflow",
+      "flow"
+    ],
+    "source_file": "data/tasks/mechanical/buildings_mechanical.json",
+    "suggested_relative_path": "mechanical/commissioning-verification/airflow-verification"
+  }
+}

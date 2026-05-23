@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "hydraulics_buildings",
+    "category_id": "sanitary-drainage",
+    "category_name": "Sanitary Drainage Design",
+    "task_id": "self-cleansing-velocity",
+    "task_name": "Self-Cleansing Velocity Check",
+    "description": "Verify drainage pipes achieve self-cleansing velocity",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3500.2"
+    ],
+    "inputs": [
+      "Pipe diameter (mm)",
+      "Pipe grade (%)",
+      "Design flow (L/s)"
+    ],
+    "outputs": [
+      "Flow velocity (m/s)",
+      "Self-cleansing status (pass/fail)",
+      "Depth of flow (mm)"
+    ],
+    "keyword_hits": [
+      "flow",
+      "pipe"
+    ],
+    "source_file": "data/tasks/mechanical/hydraulics_buildings.json",
+    "suggested_relative_path": "mechanical/sanitary-drainage/self-cleansing-velocity"
+  }
+}

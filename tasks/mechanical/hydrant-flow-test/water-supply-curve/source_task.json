@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_protection",
+    "category_id": "hydrant-flow-test",
+    "category_name": "Hydrant Flow Testing",
+    "task_id": "water-supply-curve",
+    "task_name": "Water Supply Curve Development",
+    "description": "Develop water supply curve from flow test data",
+    "complexity": "low",
+    "standards": [
+      "NFPA 291",
+      "NFPA 13"
+    ],
+    "inputs": [
+      "Static pressure (psi)",
+      "Residual pressure (psi)",
+      "Test flow (gpm)"
+    ],
+    "outputs": [
+      "Water supply curve equation",
+      "Flow at any residual pressure",
+      "Available flow at 20 psi"
+    ],
+    "keyword_hits": [
+      "flow",
+      "pressure"
+    ],
+    "source_file": "data/tasks/mechanical/fire_protection.json",
+    "suggested_relative_path": "mechanical/hydrant-flow-test/water-supply-curve"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_energy",
+    "category_id": "qa-error-detection",
+    "category_name": "QA & Error Detection",
+    "task_id": "geotech-parameter-consistency",
+    "task_name": "Geotechnical Parameter Consistency Check",
+    "description": "Check consistency between geotechnical report and design calculations",
+    "complexity": "medium",
+    "standards": [
+      "EN 1997",
+      "AS 2159"
+    ],
+    "inputs": [
+      "Geotechnical report parameters",
+      "Design calculation inputs",
+      "Recommended vs used values"
+    ],
+    "outputs": [
+      "Parameter comparison table",
+      "Non-conservative selections flagged",
+      "Justification requirements"
+    ],
+    "keyword_hits": [
+      "calculation"
+    ],
+    "source_file": "data/tasks/civil/civil_energy.json",
+    "suggested_relative_path": "civil/qa-error-detection/geotech-parameter-consistency"
+  }
+}

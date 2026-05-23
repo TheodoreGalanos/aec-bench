@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "vertical_transportation",
+    "category_id": "shaft-sizing",
+    "category_name": "Lift Shaft and Car Sizing",
+    "task_id": "car-dimensions-check",
+    "task_name": "Lift Car Dimension Compliance Check",
+    "description": "Verify lift car dimensions meet accessibility and capacity requirements",
+    "complexity": "low",
+    "standards": [
+      "ISO 4190-1",
+      "AS 1735.12",
+      "EN 81-70"
+    ],
+    "inputs": [
+      "Car internal dimensions (width, depth) (mm)",
+      "Door clear opening (mm)",
+      "Rated load (kg)",
+      "Accessibility requirements"
+    ],
+    "outputs": [
+      "Compliance status per dimension",
+      "Minimum dimension verification",
+      "Pass/fail overall"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "load",
+      "rate"
+    ],
+    "source_file": "data/tasks/electrical/vertical_transportation.json",
+    "suggested_relative_path": "electrical/shaft-sizing/car-dimensions-check"
+  }
+}

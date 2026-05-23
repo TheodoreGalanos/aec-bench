@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "drainage_hydrology",
+    "category_id": "hydraulic-calculations",
+    "category_name": "Hydraulic Pipe & Channel Design",
+    "task_id": "open-channel-capacity",
+    "task_name": "Open Channel Flow Capacity",
+    "description": "Calculate flow capacity in trapezoidal or rectangular open channels",
+    "complexity": "low",
+    "standards": [
+      "HEC-22",
+      "ARR"
+    ],
+    "inputs": [
+      "Channel geometry (bottom width, side slopes)",
+      "Channel slope S (%)",
+      "Manning's roughness n",
+      "Flow depth d (m)"
+    ],
+    "outputs": [
+      "Flow capacity Q (m\u00b3/s)",
+      "Flow velocity V (m/s)",
+      "Froude number Fr"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "capacity",
+      "flow"
+    ],
+    "source_file": "data/tasks/civil/drainage_hydrology.json",
+    "suggested_relative_path": "civil/hydraulic-calculations/open-channel-capacity"
+  }
+}

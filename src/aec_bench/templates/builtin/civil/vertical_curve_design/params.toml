@@ -1,0 +1,107 @@
+[meta]
+name = "vertical-curve-design"
+description = "Minimum vertical curve radius and length for railway grade transitions using R_v = V^2 / (3.6^2 * a_v)"
+long_description = "Computes the minimum vertical curve radius and length required at railway grade transition points using R_v = V^2 / (12.96 * a_v) and L_v = (A/100) * R_v. Ensures vertical acceleration remains within passenger comfort and rolling stock safety limits per ARTC ETS-05-00 and AREMA Chapter 5."
+discipline = "civil"
+category = "track-geometry"
+standards = ["ARTC ETS-05-00", "AREMA MRE Chapter 5"]
+tags = ["civil", "rail", "track-geometry", "vertical-curve", "grade-transition", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.initial_grade_pct]
+type = "float"
+unit = "%"
+description = "Initial longitudinal grade g1 (positive = uphill)"
+min = -5.0
+max = 5.0
+
+[params.final_grade_pct]
+type = "float"
+unit = "%"
+description = "Final longitudinal grade g2 (positive = uphill)"
+min = -5.0
+max = 5.0
+
+[params.design_speed_km_h]
+type = "float"
+unit = "km/h"
+description = "Design operating speed V"
+min = 20
+max = 300
+
+[params.max_vertical_acceleration_m_s2]
+type = "float"
+unit = "m/s²"
+description = "Maximum acceptable vertical acceleration a_v for passenger comfort"
+min = 0.01
+max = 0.10
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.algebraic_grade_difference_pct]
+description = "Algebraic grade difference A = |g1 - g2| (%)"
+tolerance = 0.01
+
+[outputs.min_vertical_curve_radius_m]
+description = "Minimum vertical curve radius R_v (m)"
+tolerance = 0.03
+
+[outputs.min_vertical_curve_length_m]
+description = "Minimum vertical curve length L_v (m)"
+tolerance = 0.03
+
+# --- Archetypes: rail corridor types ---
+
+[archetypes.mainline_passenger]
+description = "Mainline passenger rail corridor with moderate speeds and comfort requirements"
+initial_grade_pct = {min = -2.0, max = 2.0}
+final_grade_pct = {min = -2.0, max = 2.0}
+design_speed_km_h = {min = 100, max = 160}
+max_vertical_acceleration_m_s2 = {min = 0.03, max = 0.05}
+site_contexts = ["artc-north-south-corridor", "sydney-central-west", "melbourne-geelong-mainline"]
+
+[archetypes.heavy_haul_freight]
+description = "Heavy haul freight corridor with low speeds and relaxed comfort limits"
+initial_grade_pct = {min = -1.5, max = 1.5}
+final_grade_pct = {min = -1.5, max = 1.5}
+design_speed_km_h = {min = 60, max = 100}
+max_vertical_acceleration_m_s2 = {min = 0.05, max = 0.07}
+site_contexts = ["artc-hunter-valley-coal", "pilbara-iron-ore-wa", "qld-north-coast-freight"]
+
+[archetypes.urban_metro]
+description = "Urban metro or commuter rail with tight gradients and frequent grade transitions"
+initial_grade_pct = {min = -3.5, max = 3.5}
+final_grade_pct = {min = -3.5, max = 3.5}
+design_speed_km_h = {min = 40, max = 80}
+max_vertical_acceleration_m_s2 = {min = 0.03, max = 0.05}
+site_contexts = ["sydney-metro-northwest", "melbourne-metro-tunnel", "brisbane-cross-river-rail"]
+
+[archetypes.branch_line]
+description = "Regional branch line with moderate gradients and mixed traffic"
+initial_grade_pct = {min = -2.5, max = 2.5}
+final_grade_pct = {min = -2.5, max = 2.5}
+design_speed_km_h = {min = 20, max = 80}
+max_vertical_acceleration_m_s2 = {min = 0.04, max = 0.07}
+site_contexts = ["nsw-north-coast-line", "vic-geelong-warrnambool", "qld-western-line"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "All parameters given, moderate gradients on mainline or freight corridors"
+visibility = "all_given"
+archetypes = ["mainline_passenger", "heavy_haul_freight"]
+
+[difficulty.medium]
+description = "All parameters given, any corridor type including steep metro grades"
+visibility = "all_given"
+archetypes = ["mainline_passenger", "heavy_haul_freight", "urban_metro", "branch_line"]
+
+[difficulty.hard]
+description = "Vertical acceleration hidden — agent must infer from corridor type and passenger comfort requirements"
+visibility = "partial"
+hidden_params = ["max_vertical_acceleration_m_s2"]
+replacement_text = "The track is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["mainline_passenger", "heavy_haul_freight", "urban_metro", "branch_line"]

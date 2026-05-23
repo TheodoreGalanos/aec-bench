@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "dams",
+    "category_id": "spillway-hydraulics",
+    "category_name": "Spillway Hydraulics",
+    "task_id": "stilling-basin-sizing",
+    "task_name": "Stilling Basin Length Estimation",
+    "description": "Estimate stilling basin length required for energy dissipation based on Froude number",
+    "complexity": "medium",
+    "standards": [
+      "USBR Hydraulic Design of Stilling Basins",
+      "USACE EM 1110-2-1603"
+    ],
+    "inputs": [
+      "Unit discharge (m\u00b3/s/m)",
+      "Drop height (m)",
+      "Tailwater depth (m)"
+    ],
+    "outputs": [
+      "Froude number at basin entry",
+      "Sequent depth (m)",
+      "Basin length (m)",
+      "Basin type recommendation"
+    ],
+    "keyword_hits": [
+      "drop",
+      "energy"
+    ],
+    "source_file": "data/tasks/civil/dams.json",
+    "suggested_relative_path": "civil/spillway-hydraulics/stilling-basin-sizing"
+  }
+}

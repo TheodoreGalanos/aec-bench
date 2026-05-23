@@ -1,0 +1,42 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_pumps_pipes",
+    "category_id": "valve-sizing",
+    "category_name": "Valve Sizing and Selection",
+    "task_id": "control-valve-cv",
+    "task_name": "Control Valve Cv Calculation",
+    "description": "Calculate required Cv for water control valve",
+    "complexity": "medium",
+    "standards": [
+      "ISA 75.01",
+      "IEC 60534"
+    ],
+    "inputs": [
+      "Flow rate (L/s)",
+      "Upstream pressure (kPa)",
+      "Downstream pressure (kPa)",
+      "Fluid specific gravity",
+      "Temperature (degC)"
+    ],
+    "outputs": [
+      "Required Cv",
+      "Valve pressure drop (kPa)",
+      "Cavitation index",
+      "Recommended valve size"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "drop",
+      "flow",
+      "pressure",
+      "rate",
+      "size"
+    ],
+    "source_file": "data/tasks/mechanical/water_pumps_pipes.json",
+    "suggested_relative_path": "mechanical/valve-sizing/control-valve-cv"
+  }
+}

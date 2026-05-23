@@ -1,0 +1,151 @@
+[meta]
+name = "uls-load-combinations"
+description = "Generate and check ultimate limit state load combinations per AS/NZS 1170.0 Table 4.1"
+long_description = "Computes all five ULS load combinations from AS/NZS 1170.0 Table 4.1 for a structural element subject to permanent, imposed, wind, and earthquake actions. Applies the appropriate combination factors (psi_c and psi_E) based on the imposed action category, then identifies the governing design action for strength design."
+discipline = "civil"
+category = "load-combinations"
+standards = ["AS/NZS 1170.0"]
+tags = ["civil", "loading", "load-combinations", "ULS", "structural-actions", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.dead_load_kn]
+type = "float"
+unit = "kN"
+description = "Permanent (dead) load G"
+min = 5.0
+max = 2000.0
+
+[params.live_load_kn]
+type = "float"
+unit = "kN"
+description = "Imposed (live) load Q"
+min = 2.0
+max = 1500.0
+
+[params.wind_ultimate_kn]
+type = "float"
+unit = "kN"
+description = "Ultimate wind action W_u"
+min = 0.0
+max = 500.0
+default = 0.0
+optional = true
+
+[params.earthquake_load_kn]
+type = "float"
+unit = "kN"
+description = "Earthquake action E"
+min = 0.0
+max = 500.0
+default = 0.0
+optional = true
+
+[params.load_category]
+type = "enum"
+description = "Imposed action category per AS/NZS 1170.0 (A-D general, E storage)"
+values = ["A", "B", "C", "D", "E"]
+default = "A"
+optional = true
+
+# --- Outputs ---
+
+[outputs.uls_permanent_kn]
+description = "ULS combination 1: 1.35 * G (kN)"
+tolerance = 0.03
+
+[outputs.uls_imposed_kn]
+description = "ULS combination 2: 1.2 * G + 1.5 * Q (kN)"
+tolerance = 0.03
+
+[outputs.uls_wind_kn]
+description = "ULS combination 3: 1.2 * G + psi_c * Q + W_u (kN)"
+tolerance = 0.03
+
+[outputs.uls_wind_uplift_kn]
+description = "ULS combination 4: 0.9 * G + W_u (kN)"
+tolerance = 0.03
+
+[outputs.uls_earthquake_kn]
+description = "ULS combination 5: G + psi_E * Q + E (kN)"
+tolerance = 0.03
+
+[outputs.governing_uls_kn]
+description = "Governing ULS design action Ed = max of all combinations (kN)"
+tolerance = 0.03
+
+# --- Archetypes ---
+
+[archetypes.residential_floor]
+description = "Residential floor beam subject to gravity and moderate wind loads"
+dead_load_kn = {min = 20.0, max = 80.0}
+live_load_kn = {min = 10.0, max = 40.0}
+wind_ultimate_kn = {min = 5.0, max = 30.0}
+earthquake_load_kn = {min = 0.0, max = 15.0}
+site_contexts = ["suburban-house-floor-beam", "townhouse-first-floor-joist"]
+
+[archetypes.office_beam]
+description = "Office building floor beam (occupancy category B per AS/NZS 1170.0) with moderate imposed and wind actions"
+dead_load_kn = {min = 50.0, max = 200.0}
+live_load_kn = {min = 30.0, max = 120.0}
+wind_ultimate_kn = {min = 10.0, max = 80.0}
+earthquake_load_kn = {min = 5.0, max = 50.0}
+load_category = ["B"]
+site_contexts = ["city-office-floor-beam", "campus-administration-building"]
+
+[archetypes.retail_floor]
+description = "Retail or assembly area floor (occupancy category C per AS/NZS 1170.0) with higher imposed loads"
+dead_load_kn = {min = 60.0, max = 250.0}
+live_load_kn = {min = 50.0, max = 200.0}
+wind_ultimate_kn = {min = 10.0, max = 60.0}
+earthquake_load_kn = {min = 5.0, max = 60.0}
+load_category = ["C"]
+site_contexts = ["shopping-centre-floor-slab", "community-hall-floor"]
+
+[archetypes.storage_facility]
+description = "Warehouse or storage facility (occupancy category E per AS/NZS 1170.0) with high imposed loads"
+dead_load_kn = {min = 80.0, max = 400.0}
+live_load_kn = {min = 100.0, max = 600.0}
+wind_ultimate_kn = {min = 20.0, max = 120.0}
+earthquake_load_kn = {min = 10.0, max = 80.0}
+load_category = ["E"]
+site_contexts = ["industrial-warehouse-floor", "distribution-centre-rack-area"]
+
+[archetypes.high_wind_coastal]
+description = "Coastal commercial structure column (occupancy category B per AS/NZS 1170.0) subject to high ultimate wind actions"
+dead_load_kn = {min = 100.0, max = 500.0}
+live_load_kn = {min = 30.0, max = 150.0}
+wind_ultimate_kn = {min = 80.0, max = 300.0}
+earthquake_load_kn = {min = 0.0, max = 30.0}
+load_category = ["B"]
+site_contexts = ["north-qld-cyclonic-portal-frame", "darwin-commercial-building-column"]
+
+[archetypes.seismic_zone_column]
+description = "Column in a moderate-to-high seismic zone office building (occupancy category B per AS/NZS 1170.0) with significant earthquake action"
+dead_load_kn = {min = 200.0, max = 800.0}
+live_load_kn = {min = 80.0, max = 300.0}
+wind_ultimate_kn = {min = 20.0, max = 100.0}
+earthquake_load_kn = {min = 50.0, max = 250.0}
+load_category = ["B"]
+site_contexts = ["newcastle-commercial-column", "christchurch-office-frame"]
+
+# --- Difficulty levels ---
+
+[difficulty.easy]
+description = "All parameters given, residential or office with category A, low wind and earthquake"
+visibility = "all_given"
+archetypes = ["residential_floor", "office_beam"]
+load_category = ["A"]
+
+[difficulty.medium]
+description = "All parameters given, wider building types including storage (category E) and high wind"
+visibility = "all_given"
+archetypes = ["residential_floor", "office_beam", "retail_floor", "storage_facility", "high_wind_coastal"]
+
+[difficulty.hard]
+description = "Load category hidden — agent must determine from building occupancy type described in archetype"
+visibility = "partial"
+hidden_params = ["load_category"]
+replacement_text = "The structural element is in a {{ archetype.description }} ({{ archetype.site_context }}). Determine the appropriate imposed action category from the occupancy description per AS/NZS 1170.0 Table 3.1."
+archetypes = ["office_beam", "retail_floor", "storage_facility", "high_wind_coastal", "seismic_zone_column"]

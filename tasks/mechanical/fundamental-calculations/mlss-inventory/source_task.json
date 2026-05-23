@@ -1,0 +1,31 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_wastewater_treatment",
+    "category_id": "fundamental-calculations",
+    "category_name": "Fundamental Treatment Calculations",
+    "task_id": "mlss-inventory",
+    "task_name": "MLSS Inventory Calculation",
+    "description": "Calculate total mass of mixed liquor suspended solids in aeration basin",
+    "complexity": "low",
+    "standards": [
+      "WEF MOP 8"
+    ],
+    "inputs": [
+      "Aeration tank volume (m3)",
+      "MLSS concentration (mg/L)"
+    ],
+    "outputs": [
+      "Total MLSS mass (kg)",
+      "MLVSS mass (kg) if VSS ratio given"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/mechanical/water_wastewater_treatment.json",
+    "suggested_relative_path": "mechanical/fundamental-calculations/mlss-inventory"
+  }
+}

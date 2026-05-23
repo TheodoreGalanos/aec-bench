@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "overhead_wiring_rail",
+    "category_id": "catenary-design",
+    "category_name": "Catenary Sag-Tension Design",
+    "task_id": "multi-span-ruling-span",
+    "task_name": "Ruling Span Tension Calculation",
+    "description": "Calculate effective ruling span and tension for multi-span tension length",
+    "complexity": "medium",
+    "standards": [
+      "EN 50119"
+    ],
+    "inputs": [
+      "Individual span lengths (m)",
+      "Mast heights",
+      "Grade profile",
+      "Wire properties",
+      "Tension length limits"
+    ],
+    "outputs": [
+      "Ruling span (m)",
+      "Tension at each span",
+      "Sag at each span",
+      "Tension balance verification"
+    ],
+    "keyword_hits": [
+      "balance",
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/electrical/overhead_wiring_rail.json",
+    "suggested_relative_path": "electrical/catenary-design/multi-span-ruling-span"
+  }
+}

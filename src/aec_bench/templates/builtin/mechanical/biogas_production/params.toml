@@ -1,0 +1,85 @@
+[meta]
+name = "biogas-production"
+description = "Biogas and methane production from volatile solids destruction"
+long_description = "Estimates daily biogas and methane production from volatile solids feed, destruction percentage, biogas yield, and methane fraction. The template reports solids destroyed, biogas volume, methane volume, and methane energy."
+discipline = "mechanical"
+category = "sludge-handling"
+standards = ["WEF MOP 8"]
+tags = ["mechanical", "wastewater", "sludge", "biogas", "deterministic"]
+tool_mode = "with-tool"
+
+[params.volatile_solids_feed_kg_d]
+type = "float"
+unit = "kg/d"
+description = "Daily volatile solids feed to digestion"
+min = 0.0
+max = 1000000.0
+
+[params.volatile_solids_destruction_pct]
+type = "float"
+unit = "%"
+description = "Volatile solids destruction percentage"
+min = 0.0
+max = 100.0
+
+[params.biogas_yield_m3_kg_vs]
+type = "float"
+unit = "m3/kg VS"
+description = "Biogas yield per kilogram of volatile solids destroyed"
+min = 0.0
+max = 5.0
+
+[params.methane_fraction]
+type = "float"
+unit = "-"
+description = "Methane fraction of biogas"
+min = 0.0
+max = 1.0
+
+[outputs.volatile_solids_destroyed_kg_d]
+description = "Volatile solids destroyed"
+tolerance = 0.03
+
+[outputs.biogas_m3_d]
+description = "Daily biogas production"
+tolerance = 0.03
+
+[outputs.methane_m3_d]
+description = "Daily methane production"
+tolerance = 0.03
+
+[outputs.methane_energy_kwh_d]
+description = "Daily methane energy content"
+tolerance = 0.03
+
+[archetypes.municipal_digester]
+description = "Municipal anaerobic digester biogas estimate"
+volatile_solids_feed_kg_d = {min = 1000.0, max = 100000.0}
+volatile_solids_destruction_pct = {min = 35.0, max = 65.0}
+biogas_yield_m3_kg_vs = {min = 0.5, max = 1.5}
+methane_fraction = {min = 0.55, max = 0.7}
+site_contexts = ["municipal-wwtp", "anaerobic-digester"]
+
+[archetypes.industrial_digester]
+description = "Industrial sludge digestion biogas estimate"
+volatile_solids_feed_kg_d = {min = 500.0, max = 200000.0}
+volatile_solids_destruction_pct = {min = 25.0, max = 70.0}
+biogas_yield_m3_kg_vs = {min = 0.4, max = 2.0}
+methane_fraction = {min = 0.5, max = 0.75}
+site_contexts = ["industrial-wwtp", "high-strength-waste"]
+
+[difficulty.easy]
+description = "All parameters given for a municipal digester"
+visibility = "all_given"
+archetypes = ["municipal_digester"]
+
+[difficulty.medium]
+description = "All parameters given across digestion settings"
+visibility = "all_given"
+archetypes = ["municipal_digester", "industrial_digester"]
+
+[difficulty.hard]
+description = "All parameters given for industrial digestion"
+visibility = "all_given"
+archetypes = ["industrial_digester"]
+

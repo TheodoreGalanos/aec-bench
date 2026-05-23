@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "hydraulics_buildings",
+    "category_id": "pipe-sizing-water",
+    "category_name": "Water Pipe Sizing",
+    "task_id": "pressure-loss-calculation",
+    "task_name": "Pipe Pressure Loss Calculation",
+    "description": "Calculate pressure loss through water piping using Hazen-Williams",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3500.1"
+    ],
+    "inputs": [
+      "Flow rate (L/s)",
+      "Pipe diameter (mm)",
+      "Pipe length (m)",
+      "Pipe material (C-value)",
+      "Fittings and valves"
+    ],
+    "outputs": [
+      "Friction head loss (kPa)",
+      "Fitting losses (kPa)",
+      "Total pressure loss (kPa)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "head loss",
+      "pipe",
+      "pressure",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/hydraulics_buildings.json",
+    "suggested_relative_path": "mechanical/pipe-sizing-water/pressure-loss-calculation"
+  }
+}

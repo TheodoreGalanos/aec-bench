@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "overhead_wiring_rail",
+    "category_id": "wire-geometry",
+    "category_name": "Contact Wire Geometry",
+    "task_id": "gradient-check",
+    "task_name": "Contact Wire Gradient Verification",
+    "description": "Verify contact wire gradient limits between supports",
+    "complexity": "low",
+    "standards": [
+      "EN 50119",
+      "EN 50367"
+    ],
+    "inputs": [
+      "Wire height at consecutive supports (mm)",
+      "Span length (m)",
+      "Line speed (km/h)",
+      "Maximum gradient limit"
+    ],
+    "outputs": [
+      "Calculated gradient (mm/m or %)",
+      "Compliance status",
+      "Locations exceeding limit"
+    ],
+    "keyword_hits": [
+      "calculate"
+    ],
+    "source_file": "data/tasks/electrical/overhead_wiring_rail.json",
+    "suggested_relative_path": "electrical/wire-geometry/gradient-check"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "facades",
+    "category_id": "movement-tolerance",
+    "category_name": "Movement and Tolerance",
+    "task_id": "drift-joint-sizing",
+    "task_name": "Inter-Story Drift Joint Sizing",
+    "description": "Size movement joints to accommodate building inter-story drift",
+    "complexity": "medium",
+    "standards": [
+      "AAMA 501.4",
+      "ASCE 7",
+      "EN 13830"
+    ],
+    "inputs": [
+      "Story height (mm)",
+      "Design drift ratio",
+      "Facade system type (unitized/stick)",
+      "Gasket capacity"
+    ],
+    "outputs": [
+      "Required joint width (mm)",
+      "Movement accommodation strategy",
+      "Gasket specification"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "rate",
+      "size",
+      "sizing"
+    ],
+    "source_file": "data/tasks/structural/facades.json",
+    "suggested_relative_path": "structural/movement-tolerance/drift-joint-sizing"
+  }
+}

@@ -1,0 +1,84 @@
+[meta]
+name = "available-flow-calculation"
+description = "Available fire flow from hydrant flow test"
+long_description = "Calculates available flow at a target residual pressure from static pressure, residual pressure, and measured test flow using the standard hydrant flow extrapolation exponent. The template reports pressure drops and available flow in L/s and m3/h."
+discipline = "mechanical"
+category = "hydrant-flow-test"
+standards = ["NFPA 291"]
+tags = ["mechanical", "fire-services", "hydrant", "available-flow", "deterministic"]
+tool_mode = "with-tool"
+
+[params.static_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "Static pressure before flow test"
+min = 1.0
+max = 5000.0
+
+[params.residual_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "Residual pressure during flow test"
+min = 0.0
+max = 5000.0
+
+[params.test_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "Measured test flow"
+min = 0.0
+max = 10000.0
+
+[params.target_residual_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "Target residual pressure for available flow"
+min = 0.0
+max = 5000.0
+
+[outputs.pressure_drop_test_kpa]
+description = "Pressure drop during the flow test"
+tolerance = 0.03
+
+[outputs.pressure_drop_target_kpa]
+description = "Pressure drop from static to target residual"
+tolerance = 0.03
+
+[outputs.available_flow_l_s]
+description = "Available flow at target residual pressure"
+tolerance = 0.03
+
+[outputs.available_flow_m3_h]
+description = "Available flow in cubic metres per hour"
+tolerance = 0.03
+
+[archetypes.urban_hydrant]
+description = "Urban hydrant available flow estimate"
+static_pressure_kpa = {min = 600.0, max = 1000.0}
+residual_pressure_kpa = {min = 100.0, max = 500.0}
+test_flow_l_s = {min = 5.0, max = 300.0}
+target_residual_pressure_kpa = {min = 100.0, max = 500.0}
+site_contexts = ["urban-hydrant", "fire-flow-test"]
+
+[archetypes.industrial_site]
+description = "Industrial fire water available flow estimate"
+static_pressure_kpa = {min = 900.0, max = 1500.0}
+residual_pressure_kpa = {min = 100.0, max = 700.0}
+test_flow_l_s = {min = 20.0, max = 1000.0}
+target_residual_pressure_kpa = {min = 100.0, max = 700.0}
+site_contexts = ["industrial-fire-water", "hydrant-flow-test"]
+
+[difficulty.easy]
+description = "All parameters given for an urban hydrant"
+visibility = "all_given"
+archetypes = ["urban_hydrant"]
+
+[difficulty.medium]
+description = "All parameters given across hydrant flow tests"
+visibility = "all_given"
+archetypes = ["urban_hydrant", "industrial_site"]
+
+[difficulty.hard]
+description = "All parameters given for industrial fire water systems"
+visibility = "all_given"
+archetypes = ["industrial_site"]

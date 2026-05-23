@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "industrial_structures",
+    "category_id": "baseplate-anchor-design",
+    "category_name": "Baseplate and Anchor Design",
+    "task_id": "anchor-bolt-tension",
+    "task_name": "Anchor Bolt Tension Capacity",
+    "description": "Calculate anchor bolt capacity including concrete cone breakout for uplift-critical base",
+    "complexity": "low",
+    "standards": [
+      "AS 3600",
+      "ACI 318 App D"
+    ],
+    "inputs": [
+      "Design tension N*t (kN)",
+      "Anchor diameter db (mm)",
+      "Embedment depth hef (mm)",
+      "Edge distances ca (mm)",
+      "Concrete strength f'c (MPa)"
+    ],
+    "outputs": [
+      "Steel capacity Ns (kN)",
+      "Breakout capacity Ncb (kN)",
+      "Governing capacity phi*Nn (kN)",
+      "Utilisation ratio"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "capacity"
+    ],
+    "source_file": "data/tasks/structural/industrial_structures.json",
+    "suggested_relative_path": "structural/baseplate-anchor-design/anchor-bolt-tension"
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "grounding_systems",
+    "category_id": "grid-design",
+    "category_name": "Grounding Grid Design",
+    "task_id": "grounding-grid-layout",
+    "task_name": "Substation Grounding Grid Layout",
+    "description": "Design a grounding grid layout for a substation that meets IEEE 80 step and touch voltage safety criteria",
+    "complexity": "medium",
+    "standards": [
+      "IEEE 80-2013",
+      "IEEE 81"
+    ],
+    "inputs": [
+      "substation_area",
+      "number",
+      "m2",
+      "Total substation footprint area",
+      "fault_current",
+      "number",
+      "kA",
+      "Maximum ground fault current magnitude",
+      "fault_duration",
+      "number",
+      "s",
+      "Fault clearing time",
+      "soil_resistivity",
+      "number",
+      "ohm-m",
+      "Measured soil resistivity (uniform or two-layer model)",
+      "crushed_rock_resistivity",
+      "number",
+      "ohm-m",
+      "Surface layer resistivity (crushed rock/gravel)",
+      "crushed_rock_depth",
+      "number",
+      "m",
+      "Depth of crushed rock surface layer"
+    ],
+    "outputs": [
+      "Grid resistance (ohm)",
+      "Ground potential rise (V)",
+      "Maximum step voltage (V)",
+      "Maximum touch voltage (V)",
+      "Grid conductor layout specification",
+      "Pass/Fail safety assessment"
+    ],
+    "keyword_hits": [
+      "current",
+      "fault",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/grounding_systems.json",
+    "suggested_relative_path": "electrical/grid-design/grounding-grid-layout"
+  }
+}

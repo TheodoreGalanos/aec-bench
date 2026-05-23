@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "buildings_civil",
+    "category_id": "stormwater-roof",
+    "category_name": "Roof & Gutter Drainage",
+    "task_id": "gutter-overflow-check",
+    "task_name": "Gutter Overflow Adequacy",
+    "description": "Verify gutter overflow provisions for major storm events",
+    "complexity": "low",
+    "standards": [
+      "AS/NZS 3500.3:2025 Appendix A (normative)"
+    ],
+    "inputs": [
+      "Gutter size",
+      "Overflow provisions",
+      "Major storm intensity",
+      "Building type"
+    ],
+    "outputs": [
+      "Overflow capacity (L/s)",
+      "Pass/fail assessment"
+    ],
+    "keyword_hits": [
+      "capacity",
+      "flow",
+      "size"
+    ],
+    "source_file": "data/tasks/civil/buildings_civil.json",
+    "suggested_relative_path": "civil/stormwater-roof/gutter-overflow-check"
+  }
+}

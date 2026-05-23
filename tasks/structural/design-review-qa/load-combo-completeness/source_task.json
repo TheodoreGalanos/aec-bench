@@ -1,0 +1,32 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "bridges",
+    "category_id": "design-review-qa",
+    "category_name": "Design Review & QA Checks",
+    "task_id": "load-combo-completeness",
+    "task_name": "Load Combination Completeness Check",
+    "description": "Verify all required load combinations are included in analysis",
+    "complexity": "low",
+    "standards": [
+      "AASHTO LRFD 3.4",
+      "EN 1990"
+    ],
+    "inputs": [
+      "Analysis model output",
+      "Applicable limit states"
+    ],
+    "outputs": [
+      "Missing combinations list",
+      "Completeness score"
+    ],
+    "keyword_hits": [
+      "cable",
+      "load"
+    ],
+    "source_file": "data/tasks/structural/bridges.json",
+    "suggested_relative_path": "structural/design-review-qa/load-combo-completeness"
+  }
+}

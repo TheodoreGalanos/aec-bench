@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "water_infrastructure",
+    "category_id": "pipe-hydraulics",
+    "category_name": "Pipe Hydraulics Calculations",
+    "task_id": "hazen-williams-headloss",
+    "task_name": "Hazen-Williams Headloss Calculation",
+    "description": "Calculate friction head loss in a single pipe segment using Hazen-Williams equation",
+    "complexity": "low",
+    "standards": [
+      "AWWA",
+      "AS/NZS 3500"
+    ],
+    "inputs": [
+      "Pipe diameter (mm)",
+      "Pipe length (m)",
+      "Flow rate (L/s)",
+      "Hazen-Williams C-factor"
+    ],
+    "outputs": [
+      "Head loss (m)",
+      "Hydraulic gradient"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "head loss",
+      "pipe",
+      "rate"
+    ],
+    "source_file": "data/tasks/civil/water_infrastructure.json",
+    "suggested_relative_path": "civil/pipe-hydraulics/hazen-williams-headloss"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_coastal",
+    "category_id": "outfall-hydraulics",
+    "category_name": "Stormwater Outfall Hydraulics",
+    "task_id": "flap-gate-headloss",
+    "task_name": "Flap Gate Headloss Calculation",
+    "description": "Calculate energy loss through flap gates on outfalls",
+    "complexity": "low",
+    "standards": [
+      "Manufacturer data",
+      "Hydraulic references"
+    ],
+    "inputs": [
+      "Flap gate type and size",
+      "Flow velocity (m/s)",
+      "Head difference (m)"
+    ],
+    "outputs": [
+      "Headloss (m)",
+      "Unseating head required (m)",
+      "Effective capacity reduction (%)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "capacity",
+      "energy",
+      "flow",
+      "size"
+    ],
+    "source_file": "data/tasks/civil/civil_coastal.json",
+    "suggested_relative_path": "civil/outfall-hydraulics/flap-gate-headloss"
+  }
+}

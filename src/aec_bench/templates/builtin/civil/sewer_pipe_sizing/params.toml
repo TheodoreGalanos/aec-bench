@@ -1,0 +1,121 @@
+[meta]
+name = "sewer-pipe-sizing"
+description = "Gravity sewer pipe sizing using Manning's equation to select standard diameter for design flow"
+long_description = "Selects the smallest standard gravity sewer pipe diameter (per WSAA WSA 02 / AS 4130) that conveys a given design flow using Manning's equation for full-pipe capacity. Computes pipe slope from invert levels, iterates standard diameters from 150 mm to 1200 mm, and reports the full-pipe velocity and flow depth ratio for the selected pipe."
+discipline = "civil"
+category = "gravity-sewer"
+standards = ["WSAA WSA 02", "PUB Code of Practice", "AS 4130"]
+tags = ["civil", "sewer", "gravity-flow", "pipe-sizing", "mannings", "deterministic"]
+tool_mode = "with-tool"
+
+# --- Parameters ---
+
+[params.design_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "Peak design flow entering the pipe"
+min = 0.5
+max = 500.0
+
+[params.upstream_invert_m]
+type = "float"
+unit = "m AHD"
+description = "Upstream pipe invert elevation"
+min = 0.5
+max = 200.0
+
+[params.downstream_invert_m]
+type = "float"
+unit = "m AHD"
+description = "Downstream pipe invert elevation"
+min = 0.1
+max = 199.5
+
+[params.pipe_length_m]
+type = "float"
+unit = "m"
+description = "Pipe length between manholes"
+min = 10.0
+max = 200.0
+
+[params.mannings_n]
+type = "float"
+description = "Manning's roughness coefficient n"
+min = 0.009
+max = 0.025
+derivable_from = "archetype"
+
+# --- Outputs ---
+
+[outputs.selected_diameter_mm]
+description = "Selected standard pipe internal diameter (mm)"
+tolerance = 0.01
+
+[outputs.pipe_slope_pct]
+description = "Pipe longitudinal slope (%)"
+tolerance = 0.03
+
+[outputs.full_pipe_velocity_m_s]
+description = "Full-pipe flow velocity V (m/s)"
+tolerance = 0.03
+
+[outputs.flow_depth_ratio]
+description = "Approximate flow depth ratio d/D (design flow / full capacity)"
+tolerance = 0.05
+
+# --- Archetypes ---
+
+[archetypes.residential_reticulation]
+description = "PVC residential sewer reticulation main with small domestic flows"
+design_flow_l_s = {min = 0.5, max = 8.0}
+upstream_invert_m = {min = 1.0, max = 10.0}
+downstream_invert_m = {min = 0.5, max = 9.5}
+pipe_length_m = {min = 30.0, max = 80.0}
+mannings_n = {min = 0.011, max = 0.013}
+site_contexts = ["brisbane-suburban-subdivision", "perth-residential-infill", "adelaide-greenfield-estate"]
+
+[archetypes.subdivision_collector]
+description = "Reinforced concrete collector sewer in a subdivision trunk network"
+design_flow_l_s = {min = 8.0, max = 50.0}
+upstream_invert_m = {min = 2.0, max = 20.0}
+downstream_invert_m = {min = 1.5, max = 19.0}
+pipe_length_m = {min = 40.0, max = 120.0}
+mannings_n = {min = 0.011, max = 0.015}
+site_contexts = ["sydney-new-subdivision", "melbourne-growth-corridor", "gold-coast-mixed-density"]
+
+[archetypes.trunk_sewer]
+description = "Large-diameter reinforced concrete trunk sewer conveying combined catchment flows"
+design_flow_l_s = {min = 50.0, max = 500.0}
+upstream_invert_m = {min = 5.0, max = 50.0}
+downstream_invert_m = {min = 4.0, max = 49.0}
+pipe_length_m = {min = 50.0, max = 200.0}
+mannings_n = {min = 0.012, max = 0.015}
+site_contexts = ["melbourne-trunk-sewer", "sydney-catchment-interceptor", "brisbane-major-trunk"]
+
+[archetypes.industrial_sewer]
+description = "Industrial gravity sewer with trade waste discharges on steep terrain"
+design_flow_l_s = {min = 10.0, max = 80.0}
+upstream_invert_m = {min = 5.0, max = 30.0}
+downstream_invert_m = {min = 3.0, max = 28.0}
+pipe_length_m = {min = 20.0, max = 100.0}
+mannings_n = {min = 0.013, max = 0.025}
+site_contexts = ["darwin-industrial-estate", "cairns-food-processing-zone", "townsville-port-precinct"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "Small residential pipe, all parameters given, gentle slopes"
+visibility = "all_given"
+archetypes = ["residential_reticulation"]
+
+[difficulty.medium]
+description = "All pipe sizes and archetypes, all parameters given"
+visibility = "all_given"
+archetypes = ["residential_reticulation", "subdivision_collector", "trunk_sewer", "industrial_sewer"]
+
+[difficulty.hard]
+description = "Manning's n hidden, agent must infer from pipe material and site description"
+visibility = "partial"
+hidden_params = ["mannings_n"]
+replacement_text = "The pipe is {{ archetype.description }} installed at {{ archetype.site_context }}"
+archetypes = ["residential_reticulation", "subdivision_collector", "trunk_sewer", "industrial_sewer"]

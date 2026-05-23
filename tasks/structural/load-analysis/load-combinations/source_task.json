@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "bridges",
+    "category_id": "load-analysis",
+    "category_name": "Load Analysis & Combinations",
+    "task_id": "load-combinations",
+    "task_name": "LRFD Load Combination Calculation",
+    "description": "Calculate factored design forces for all required load combinations per AASHTO LRFD or Eurocode",
+    "complexity": "low",
+    "standards": [
+      "AASHTO LRFD 3.4",
+      "EN 1990"
+    ],
+    "inputs": [
+      "Unfactored dead loads (DC, DW)",
+      "Live load effects (LL+IM)",
+      "Wind loads (WS, WL)",
+      "Seismic loads (EQ)",
+      "Code-specified load factors"
+    ],
+    "outputs": [
+      "Factored axial forces (kN)",
+      "Factored shear forces (kN)",
+      "Factored moments (kNm)",
+      "Governing load combination"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "load",
+      "moment",
+      "shear"
+    ],
+    "source_file": "data/tasks/structural/bridges.json",
+    "suggested_relative_path": "structural/load-analysis/load-combinations"
+  }
+}

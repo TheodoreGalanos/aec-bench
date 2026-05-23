@@ -1,0 +1,30 @@
+# Default constitution for aec-bench adapters.
+# Principles are active; all parameters are inferred at runtime from task metadata.
+# Override individual parameter tables to pin specific values.
+
+version = "0.1.0"
+
+[[principles]]
+name = "information_minimality"
+description = "The agent should only see information needed for its next decision. Large tool outputs stay in durable state; conversation receives only summaries and metadata."
+evaluation_criteria = "Context growth rate per turn; ratio of metadata-only vs verbatim tool results; conversation token count over time."
+
+[[principles]]
+name = "state_persistence"
+description = "Anything worth keeping goes to durable state (variables, scratchpad), not conversation. Conversation is ephemeral; state is the agent's true memory."
+evaluation_criteria = "Percentage of data routed through scratchpad/variables vs conversation; state survival across compaction."
+
+[[principles]]
+name = "progress_obligation"
+description = "Accumulation without output is speculation. The harness must intervene when the agent gathers data without producing concrete progress."
+evaluation_criteria = "Turns before first output; stall incidents (turns without progress); time to first filled section."
+
+[[principles]]
+name = "source_fidelity"
+description = "Every fact in agent output must trace to extracted source data. A placeholder is always better than a fabrication."
+evaluation_criteria = "Factual accuracy score; ratio of traceable claims; presence of [TBD] placeholders vs fabricated content."
+
+[[principles]]
+name = "earned_autonomy"
+description = "Start constrained. Relax constraints as the agent demonstrates reliable progress. Freedom is earned by demonstrated competence."
+evaluation_criteria = "Autonomy mode transitions during run; correlation between mode and output quality."

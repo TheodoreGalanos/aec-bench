@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "industrial_structures",
+    "category_id": "quality-assurance",
+    "category_name": "Quality Assurance",
+    "task_id": "p-delta-trigger",
+    "task_name": "P-Delta Analysis Trigger",
+    "description": "Identify when second-order analysis is required for industrial frames",
+    "complexity": "medium",
+    "standards": [
+      "AS 4100 Clause 4.4",
+      "AISC 360 App 7"
+    ],
+    "inputs": [
+      "Frame geometry",
+      "Axial loads",
+      "Lateral stiffness",
+      "Member properties"
+    ],
+    "outputs": [
+      "Elastic critical load factor lambda_c",
+      "Analysis type required",
+      "Amplification factor if applicable"
+    ],
+    "keyword_hits": [
+      "cable",
+      "load"
+    ],
+    "source_file": "data/tasks/structural/industrial_structures.json",
+    "suggested_relative_path": "structural/quality-assurance/p-delta-trigger"
+  }
+}

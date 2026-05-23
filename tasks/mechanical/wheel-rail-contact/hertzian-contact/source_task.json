@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "rolling_stock_rail",
+    "category_id": "wheel-rail-contact",
+    "category_name": "Wheel-Rail Contact Mechanics",
+    "task_id": "hertzian-contact",
+    "task_name": "Wheel-Rail Contact Stress (Hertzian)",
+    "description": "Calculate contact patch dimensions and maximum stress using Hertzian theory",
+    "complexity": "medium",
+    "standards": [
+      "EN 13674-1",
+      "EN 13262"
+    ],
+    "inputs": [
+      "Wheel profile geometry",
+      "Rail profile geometry",
+      "Normal load (kN)",
+      "Material properties (E, nu)"
+    ],
+    "outputs": [
+      "Contact patch dimensions (mm)",
+      "Maximum contact stress (MPa)",
+      "Ellipse semi-axes a, b"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "load",
+      "stress"
+    ],
+    "source_file": "data/tasks/mechanical/rolling_stock_rail.json",
+    "suggested_relative_path": "mechanical/wheel-rail-contact/hertzian-contact"
+  }
+}

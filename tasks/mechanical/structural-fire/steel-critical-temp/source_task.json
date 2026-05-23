@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_safety",
+    "category_id": "structural-fire",
+    "category_name": "Structural Fire Resistance",
+    "task_id": "steel-critical-temp",
+    "task_name": "Steel Critical Temperature Calculation",
+    "description": "Calculate critical failure temperature of steel member under load",
+    "complexity": "medium",
+    "standards": [
+      "Eurocode 3",
+      "AS 4100"
+    ],
+    "inputs": [
+      "Steel section properties",
+      "Applied load",
+      "Load ratio",
+      "Material grade"
+    ],
+    "outputs": [
+      "Critical temperature (C)",
+      "Load ratio at temperature",
+      "Protection requirements"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "load"
+    ],
+    "source_file": "data/tasks/mechanical/fire_safety.json",
+    "suggested_relative_path": "mechanical/structural-fire/steel-critical-temp"
+  }
+}

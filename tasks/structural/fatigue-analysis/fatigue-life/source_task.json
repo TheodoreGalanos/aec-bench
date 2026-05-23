@@ -1,0 +1,35 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "bridges",
+    "category_id": "fatigue-analysis",
+    "category_name": "Fatigue Analysis",
+    "task_id": "fatigue-life",
+    "task_name": "Fatigue Life Estimation",
+    "description": "Estimate remaining fatigue life of existing bridge component",
+    "complexity": "medium",
+    "standards": [
+      "AASHTO LRFD 6.6",
+      "Manual for Bridge Rating"
+    ],
+    "inputs": [
+      "Current stress range (MPa)",
+      "Detail category",
+      "Traffic volume (ADTT)",
+      "Years in service"
+    ],
+    "outputs": [
+      "Cycles consumed",
+      "Cycles remaining",
+      "Estimated remaining life (years)"
+    ],
+    "keyword_hits": [
+      "current",
+      "stress"
+    ],
+    "source_file": "data/tasks/structural/bridges.json",
+    "suggested_relative_path": "structural/fatigue-analysis/fatigue-life"
+  }
+}

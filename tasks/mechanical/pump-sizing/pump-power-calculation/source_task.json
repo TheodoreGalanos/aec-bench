@@ -1,0 +1,41 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_pumps_pipes",
+    "category_id": "pump-sizing",
+    "category_name": "Pump Sizing and Selection",
+    "task_id": "pump-power-calculation",
+    "task_name": "Pump Power Calculation",
+    "description": "Calculate hydraulic power, brake power, and motor size for a pump",
+    "complexity": "low",
+    "standards": [
+      "ANSI/HI Standards"
+    ],
+    "inputs": [
+      "Flow rate (L/s)",
+      "Total dynamic head (m)",
+      "Pump efficiency (%)",
+      "Motor efficiency (%)",
+      "Fluid specific gravity"
+    ],
+    "outputs": [
+      "Hydraulic power (kW)",
+      "Brake horsepower (kW)",
+      "Motor input power (kW)",
+      "Recommended motor size (kW)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "power",
+      "pump",
+      "rate",
+      "size"
+    ],
+    "source_file": "data/tasks/mechanical/water_pumps_pipes.json",
+    "suggested_relative_path": "mechanical/pump-sizing/pump-power-calculation"
+  }
+}

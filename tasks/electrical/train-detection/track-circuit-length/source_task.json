@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "electrical",
+    "community": "rail_signalling",
+    "category_id": "train-detection",
+    "category_name": "Train Detection Systems",
+    "task_id": "track-circuit-length",
+    "task_name": "Track Circuit Maximum Length Calculation",
+    "description": "Calculate maximum track circuit length for reliable train detection under worst-case conditions",
+    "complexity": "low",
+    "standards": [
+      "Network Rail RT/E/PS/11765",
+      "AS 7717"
+    ],
+    "inputs": [
+      "Rail impedance (ohm/km)",
+      "Ballast resistance range (ohm-km)",
+      "Transmitter voltage (V)",
+      "Receiver sensitivity (V)",
+      "Train shunt impedance (ohm)"
+    ],
+    "outputs": [
+      "Maximum track circuit length (m)",
+      "Transmitter power required (W)",
+      "Receiver threshold settings",
+      "Worst-case margin (%)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "power",
+      "voltage"
+    ],
+    "source_file": "data/tasks/electrical/rail_signalling.json",
+    "suggested_relative_path": "electrical/train-detection/track-circuit-length"
+  }
+}

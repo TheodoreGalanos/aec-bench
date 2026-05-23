@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "materials",
+    "category_id": "steel-specification",
+    "category_name": "Steel Specification",
+    "task_id": "carbon-equivalent-calc",
+    "task_name": "Carbon Equivalent Calculation",
+    "description": "Calculate carbon equivalent (CE) for weldability assessment",
+    "complexity": "low",
+    "standards": [
+      "IIW formula",
+      "AS/NZS 1554",
+      "AWS D1.1"
+    ],
+    "inputs": [
+      "Steel chemical composition (C, Mn, Cr, Mo, V, Ni, Cu)"
+    ],
+    "outputs": [
+      "Carbon equivalent CE (%)",
+      "Weldability classification",
+      "Preheat indication"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "heat"
+    ],
+    "source_file": "data/tasks/structural/materials.json",
+    "suggested_relative_path": "structural/steel-specification/carbon-equivalent-calc"
+  }
+}

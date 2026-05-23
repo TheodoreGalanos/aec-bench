@@ -1,0 +1,30 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "ground",
+    "community": "geotechnical",
+    "category_id": "design-review-qa",
+    "category_name": "Design Review & QA Checks",
+    "task_id": "unit-consistency-check",
+    "task_name": "Unit Consistency Check",
+    "description": "Detect unit conversion errors and inconsistencies in calculations",
+    "complexity": "low",
+    "standards": [
+      "QA best practice"
+    ],
+    "inputs": [
+      "Calculation sheets",
+      "Input/output data"
+    ],
+    "outputs": [
+      "Unit consistency report",
+      "Conversion error flags"
+    ],
+    "keyword_hits": [
+      "calculation"
+    ],
+    "source_file": "data/tasks/ground/geotechnical.json",
+    "suggested_relative_path": "ground/design-review-qa/unit-consistency-check"
+  }
+}

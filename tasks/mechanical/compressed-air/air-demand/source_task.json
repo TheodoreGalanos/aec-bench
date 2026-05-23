@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_mechanical",
+    "category_id": "compressed-air",
+    "category_name": "Compressed Air Systems",
+    "task_id": "air-demand",
+    "task_name": "Compressed Air Demand Calculation",
+    "description": "Calculate total air demand from equipment list",
+    "complexity": "low",
+    "standards": [
+      "Compressed Air Handbook"
+    ],
+    "inputs": [
+      "Equipment list with consumption rates (L/s or CFM)",
+      "Duty cycles (%)",
+      "Diversity factor",
+      "Leak allowance (%)"
+    ],
+    "outputs": [
+      "Total demand (L/s)",
+      "Peak demand",
+      "Average demand"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "demand",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_mechanical.json",
+    "suggested_relative_path": "mechanical/compressed-air/air-demand"
+  }
+}

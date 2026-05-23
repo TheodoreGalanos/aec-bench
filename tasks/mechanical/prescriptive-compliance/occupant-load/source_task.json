@@ -1,0 +1,36 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "fire_safety",
+    "category_id": "prescriptive-compliance",
+    "category_name": "Prescriptive Code Compliance",
+    "task_id": "occupant-load",
+    "task_name": "Occupant Load Calculation",
+    "description": "Calculate design occupant load from floor area and load factors",
+    "complexity": "low",
+    "standards": [
+      "NCC/BCA D1.13",
+      "NFPA 101",
+      "BS 9999"
+    ],
+    "inputs": [
+      "Floor area (m2)",
+      "Occupancy type",
+      "Code load factors (m2/person)"
+    ],
+    "outputs": [
+      "Occupant load (persons)",
+      "Per-space breakdown",
+      "Design vs actual comparison"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "load"
+    ],
+    "source_file": "data/tasks/mechanical/fire_safety.json",
+    "suggested_relative_path": "mechanical/prescriptive-compliance/occupant-load"
+  }
+}

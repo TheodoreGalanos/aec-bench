@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "water_infrastructure",
+    "category_id": "gravity-sewer",
+    "category_name": "Gravity Sewer Design",
+    "task_id": "sewer-pipe-sizing",
+    "task_name": "Gravity Sewer Pipe Sizing",
+    "description": "Determine pipe diameter and slope to achieve design flow at self-cleansing velocity",
+    "complexity": "low",
+    "standards": [
+      "WSAA WSA 02",
+      "PUB Code of Practice"
+    ],
+    "inputs": [
+      "Design flow (L/s)",
+      "Upstream invert level (m)",
+      "Downstream invert level (m)",
+      "Pipe length (m)",
+      "Manning's n"
+    ],
+    "outputs": [
+      "Pipe diameter (mm)",
+      "Pipe slope (%)",
+      "Flow velocity (m/s)",
+      "Flow depth ratio (d/D)"
+    ],
+    "keyword_hits": [
+      "flow",
+      "pipe",
+      "sizing"
+    ],
+    "source_file": "data/tasks/civil/water_infrastructure.json",
+    "suggested_relative_path": "civil/gravity-sewer/sewer-pipe-sizing"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "materials",
+    "category_id": "concrete-mix-design",
+    "category_name": "Concrete Mix Design",
+    "task_id": "scm-substitution",
+    "task_name": "SCM Substitution Calculation",
+    "description": "Calculate supplementary cementitious material substitution rates and adjust mix proportions",
+    "complexity": "medium",
+    "standards": [
+      "ACI 211.1",
+      "ASTM C618",
+      "AS 3582"
+    ],
+    "inputs": [
+      "Base cement content (kg/m3)",
+      "SCM type (fly ash, slag, silica fume)",
+      "Substitution rate (%)",
+      "SCM specific gravity"
+    ],
+    "outputs": [
+      "Adjusted cement content (kg/m3)",
+      "SCM content (kg/m3)",
+      "Total cementitious (kg/m3)",
+      "Adjusted paste volume"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "rate"
+    ],
+    "source_file": "data/tasks/structural/materials.json",
+    "suggested_relative_path": "structural/concrete-mix-design/scm-substitution"
+  }
+}

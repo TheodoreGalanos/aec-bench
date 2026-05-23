@@ -1,0 +1,109 @@
+[meta]
+name = "dc-ac-ratio"
+description = "Solar PV DC/AC ratio (inverter loading ratio) and energy yield calculation"
+long_description = "Calculates the DC/AC ratio (inverter loading ratio) for solar PV systems and estimates annual energy yield accounting for system losses, inverter efficiency, and clipping losses from inverter overloading. Uses a quadratic clipping model to balance higher array utilisation against peak-hour energy curtailment, per IEC 62548 and AS/NZS 5033."
+discipline = "electrical"
+category = "solar-pv-design"
+standards = ["IEC 62548", "AS/NZS 5033"]
+tags = ["electrical", "solar", "pv", "inverter", "dc-ac-ratio", "clipping", "energy-yield"]
+tool_mode = "with-tool"
+
+[params.dc_array_capacity_kwp]
+type = "float"
+unit = "kWp"
+description = "Total PV array DC power capacity at STC"
+min = 5
+max = 10000
+
+[params.inverter_ac_capacity_kw]
+type = "float"
+unit = "kW"
+description = "Total inverter AC power capacity (nameplate rating)"
+min = 3
+max = 8000
+
+[params.annual_psh]
+type = "float"
+unit = "h"
+description = "Annual peak sun hours for the site location"
+min = 800
+max = 2600
+derivable_from = "archetype"
+
+[params.system_losses_pct]
+type = "float"
+unit = "%"
+description = "Total system losses excluding clipping (soiling, wiring, mismatch, temperature)"
+min = 5
+max = 25
+default = 14.0
+
+[outputs.dc_ac_ratio]
+description = "DC/AC ratio (Inverter Loading Ratio)"
+tolerance = 0.01
+
+[outputs.estimated_clipping_loss_pct]
+description = "Estimated annual clipping loss (%)"
+tolerance = 0.05
+
+[outputs.annual_energy_yield_kwh]
+description = "Estimated annual energy yield (kWh)"
+tolerance = 0.03
+
+[outputs.specific_yield_kwh_per_kwp]
+description = "Specific yield (kWh per kWp installed)"
+tolerance = 0.03
+
+# --- Archetypes ---
+# Solar installation scenarios across different climates and scales.
+
+[archetypes.residential_rooftop]
+description = "Residential rooftop solar installation"
+dc_array_capacity_kwp = {min = 5, max = 15}
+inverter_ac_capacity_kw = {min = 3, max = 12}
+annual_psh = {min = 1300, max = 1800}
+system_losses_pct = {min = 10, max = 18}
+site_contexts = ["sydney-suburban", "brisbane-suburban", "adelaide-suburban"]
+
+[archetypes.commercial_rooftop]
+description = "Commercial rooftop solar installation in Melbourne/Sydney (BOM avg 1400-1600 PSH)"
+dc_array_capacity_kwp = {min = 30, max = 200}
+inverter_ac_capacity_kw = {min = 25, max = 160}
+annual_psh = {min = 1400, max = 1600}
+system_losses_pct = {min = 10, max = 18}
+site_contexts = ["melbourne-commercial", "perth-commercial", "sydney-commercial"]
+
+[archetypes.utility_scale]
+description = "Utility-scale ground-mounted solar farm in North Queensland (BOM avg 1800-2100 PSH)"
+dc_array_capacity_kwp = {min = 500, max = 10000}
+inverter_ac_capacity_kw = {min = 400, max = 8000}
+annual_psh = {min = 1800, max = 2100}
+system_losses_pct = {min = 8, max = 16}
+site_contexts = ["north-queensland-solar-farm", "western-nsw-solar-farm", "pilbara-solar-farm"]
+
+[archetypes.arid_high_irradiance]
+description = "Solar installation in arid high-irradiance region near Alice Springs/Broken Hill (BOM avg 2200-2500 PSH)"
+dc_array_capacity_kwp = {min = 100, max = 5000}
+inverter_ac_capacity_kw = {min = 80, max = 4000}
+annual_psh = {min = 2200, max = 2500}
+system_losses_pct = {min = 8, max = 14}
+site_contexts = ["alice-springs-solar", "broken-hill-solar", "longreach-solar"]
+
+# --- Difficulty ---
+
+[difficulty.easy]
+description = "Residential scale, all parameters given, moderate ILR"
+visibility = "all_given"
+archetypes = ["residential_rooftop"]
+
+[difficulty.medium]
+description = "Commercial or utility scale, all parameters given, wider ILR range"
+visibility = "all_given"
+archetypes = ["residential_rooftop", "commercial_rooftop", "utility_scale", "arid_high_irradiance"]
+
+[difficulty.hard]
+description = "Peak sun hours hidden, agent must infer from site location context"
+visibility = "partial"
+hidden_params = ["annual_psh"]
+replacement_text = "The project site is located in {{ archetype.site_context }}, a {{ archetype.description | lower }} environment."
+archetypes = ["commercial_rooftop", "utility_scale", "arid_high_irradiance"]

@@ -1,0 +1,34 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "civil",
+    "community": "civil_energy",
+    "category_id": "earthworks",
+    "category_name": "Earthworks & Site Grading",
+    "task_id": "cut-fill-calculation",
+    "task_name": "Cut/Fill Volume Calculation",
+    "description": "Calculate earthworks volumes from existing and proposed surfaces",
+    "complexity": "low",
+    "standards": [
+      "AS 3798"
+    ],
+    "inputs": [
+      "Existing surface (TIN)",
+      "Proposed surface (TIN)",
+      "Site boundary"
+    ],
+    "outputs": [
+      "Cut volume (m3)",
+      "Fill volume (m3)",
+      "Net balance (m3)"
+    ],
+    "keyword_hits": [
+      "balance",
+      "calculate",
+      "calculation"
+    ],
+    "source_file": "data/tasks/civil/civil_energy.json",
+    "suggested_relative_path": "civil/earthworks/cut-fill-calculation--civil-energy"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "industrial_process",
+    "category_id": "heat-exchanger-design",
+    "category_name": "Heat Exchanger Design",
+    "task_id": "lmtd-calculation",
+    "task_name": "LMTD and Heat Duty Calculation",
+    "description": "Calculate log mean temperature difference and heat duty for a heat exchanger",
+    "complexity": "low",
+    "standards": [
+      "TEMA Standards"
+    ],
+    "inputs": [
+      "Hot side inlet/outlet temperatures (degC)",
+      "Cold side inlet/outlet temperatures (degC)",
+      "Flow arrangement (counter, parallel, cross)",
+      "Correction factor F (for multi-pass)"
+    ],
+    "outputs": [
+      "LMTD (degC)",
+      "Corrected MTD (degC)",
+      "Heat duty (kW)",
+      "Temperature approach (degC)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "calculation",
+      "flow",
+      "heat"
+    ],
+    "source_file": "data/tasks/mechanical/industrial_process.json",
+    "suggested_relative_path": "mechanical/heat-exchanger-design/lmtd-calculation"
+  }
+}

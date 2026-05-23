@@ -1,0 +1,91 @@
+[meta]
+name = "signal-sighting-distance"
+description = "Rail signal sighting distance from reaction and braking distance"
+long_description = "Calculates the minimum signal sighting distance required for a train driver to perceive, react, and brake to a stop. The reduced kinematic method combines reaction distance with braking distance adjusted for track gradient."
+discipline = "electrical"
+category = "signal-sighting"
+standards = ["Network Rail NR/L2/SIG/10158", "AS 7711"]
+tags = ["electrical", "rail", "signal-sighting", "braking-distance", "deterministic"]
+tool_mode = "with-tool"
+
+[params.maximum_line_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "Maximum line speed"
+min = 5
+max = 250
+
+[params.service_braking_rate_m_s2]
+type = "float"
+unit = "m/s2"
+description = "Service braking rate"
+min = 0.2
+max = 2.0
+
+[params.driver_reaction_time_s]
+type = "float"
+unit = "s"
+description = "Driver perception-reaction time"
+min = 0
+max = 10
+
+[params.track_gradient_pct]
+type = "float"
+unit = "%"
+description = "Track gradient, positive for upgrade and negative for downgrade"
+min = -5
+max = 5
+
+[outputs.line_speed_m_s]
+description = "Line speed converted to m/s"
+tolerance = 0.01
+
+[outputs.reaction_distance_m]
+description = "Distance travelled during driver reaction"
+tolerance = 0.03
+
+[outputs.grade_adjusted_braking_rate_m_s2]
+description = "Braking rate adjusted for track gradient"
+tolerance = 0.03
+
+[outputs.braking_distance_m]
+description = "Kinematic braking distance"
+tolerance = 0.03
+
+[outputs.required_sighting_distance_m]
+description = "Total required signal sighting distance"
+tolerance = 0.03
+
+[archetypes.metro_signal]
+description = "Metro or suburban signal sighting check"
+maximum_line_speed_kmh = {min = 30, max = 90}
+service_braking_rate_m_s2 = {min = 0.7, max = 1.2}
+driver_reaction_time_s = {min = 1.5, max = 3.0}
+track_gradient_pct = {min = -2, max = 2}
+site_contexts = ["metro-line", "suburban-corridor"]
+
+[archetypes.mainline_signal]
+description = "Mainline signal sighting check"
+maximum_line_speed_kmh = {min = 80, max = 160}
+service_braking_rate_m_s2 = {min = 0.4, max = 1.0}
+driver_reaction_time_s = {min = 2.0, max = 5.0}
+track_gradient_pct = {min = -3, max = 3}
+site_contexts = ["regional-mainline", "freight-corridor"]
+
+[difficulty.easy]
+description = "Metro signal with all inputs visible"
+visibility = "all_given"
+archetypes = ["metro_signal"]
+
+[difficulty.medium]
+description = "Metro or mainline signal"
+visibility = "all_given"
+archetypes = ["metro_signal", "mainline_signal"]
+
+[difficulty.hard]
+description = "Track gradient hidden in alignment context"
+visibility = "partial"
+hidden_params = ["track_gradient_pct"]
+replacement_text = "Use the track gradient implied by {{ archetype.description }}."
+archetypes = ["mainline_signal"]
+track_gradient_pct = [-1.0]

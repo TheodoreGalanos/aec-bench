@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "structural",
+    "community": "industrial_structures",
+    "category_id": "pipe-rack-design",
+    "category_name": "Pipe Rack Design",
+    "task_id": "pipe-support-dead-load",
+    "task_name": "Pipe Support Dead Load Estimation",
+    "description": "Calculate design dead loads for pipe supports including pipe, contents, and insulation",
+    "complexity": "low",
+    "standards": [
+      "PIP STC01015",
+      "ASME B31.3"
+    ],
+    "inputs": [
+      "Pipe diameter (mm)",
+      "Wall thickness (mm)",
+      "Material",
+      "Contents density (kg/m3)",
+      "Insulation thickness (mm)",
+      "Insulation density (kg/m3)"
+    ],
+    "outputs": [
+      "Pipe weight (kg/m)",
+      "Contents weight (kg/m)",
+      "Insulation weight (kg/m)",
+      "Total operating load (kN/m)",
+      "Hydrotest load (kN/m)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "load",
+      "pipe"
+    ],
+    "source_file": "data/tasks/structural/industrial_structures.json",
+    "suggested_relative_path": "structural/pipe-rack-design/pipe-support-dead-load"
+  }
+}

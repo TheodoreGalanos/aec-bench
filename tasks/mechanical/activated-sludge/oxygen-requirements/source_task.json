@@ -1,0 +1,40 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "water_wastewater_treatment",
+    "category_id": "activated-sludge",
+    "category_name": "Activated Sludge Design",
+    "task_id": "oxygen-requirements",
+    "task_name": "Oxygen Requirements Calculation",
+    "description": "Calculate oxygen demand for carbonaceous and nitrogenous oxidation",
+    "complexity": "medium",
+    "standards": [
+      "WEF MOP 8"
+    ],
+    "inputs": [
+      "Influent and effluent BOD (mg/L)",
+      "Influent and effluent TKN (mg/L)",
+      "Flow rate (m3/d)",
+      "Sludge production (kg/d)",
+      "Denitrification credit (if applicable)"
+    ],
+    "outputs": [
+      "Carbonaceous oxygen demand (kg O2/d)",
+      "Nitrogenous oxygen demand (kg O2/d)",
+      "Total oxygen demand (kg O2/d)",
+      "Denitrification credit (kg O2/d)"
+    ],
+    "keyword_hits": [
+      "cable",
+      "calculate",
+      "calculation",
+      "demand",
+      "flow",
+      "rate"
+    ],
+    "source_file": "data/tasks/mechanical/water_wastewater_treatment.json",
+    "suggested_relative_path": "mechanical/activated-sludge/oxygen-requirements"
+  }
+}

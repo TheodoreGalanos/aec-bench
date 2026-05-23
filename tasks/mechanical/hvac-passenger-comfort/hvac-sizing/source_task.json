@@ -1,0 +1,42 @@
+{
+  "status": "proposed",
+  "seed_origin": "ngnbench",
+  "source": {
+    "discipline": "mechanical",
+    "community": "rolling_stock_rail",
+    "category_id": "hvac-passenger-comfort",
+    "category_name": "HVAC and Passenger Comfort",
+    "task_id": "hvac-sizing",
+    "task_name": "HVAC Capacity Sizing",
+    "description": "Calculate required heating/cooling capacity for passenger car per AS 7482",
+    "complexity": "medium",
+    "standards": [
+      "AS 7482",
+      "EN 14750"
+    ],
+    "inputs": [
+      "Design climate conditions",
+      "Passenger occupancy",
+      "Vehicle insulation (U-value)",
+      "Internal heat gains",
+      "Fresh air requirements"
+    ],
+    "outputs": [
+      "Cooling capacity (kW)",
+      "Heating capacity (kW)",
+      "Air flow rate (L/s)"
+    ],
+    "keyword_hits": [
+      "calculate",
+      "capacity",
+      "cooling",
+      "flow",
+      "heat",
+      "heating",
+      "rate",
+      "sizing"
+    ],
+    "source_file": "data/tasks/mechanical/rolling_stock_rail.json",
+    "suggested_relative_path": "mechanical/hvac-passenger-comfort/hvac-sizing"
+  }
+}

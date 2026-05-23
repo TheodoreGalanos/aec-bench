@@ -1,0 +1,90 @@
+[meta]
+name = "poe-power-budget"
+description = "PoE switch power budget and headroom margin"
+long_description = "Calculates total Power over Ethernet demand from device count and per-device power draw, then compares it with the switch PoE budget. The deterministic check reports utilization, available headroom, required headroom allowance, and remaining headroom margin."
+discipline = "electrical"
+category = "poe-network"
+standards = ["IEEE 802.3bt", "IEEE 802.3at"]
+tags = ["electrical", "poe", "network", "power-budget", "deterministic"]
+tool_mode = "with-tool"
+
+[params.device_count]
+type = "float"
+description = "Number of PoE powered devices"
+min = 1
+max = 96
+
+[params.power_draw_per_device_w]
+type = "float"
+unit = "W"
+description = "Power draw per device"
+min = 1
+max = 90
+
+[params.switch_poe_budget_w]
+type = "float"
+unit = "W"
+description = "Available switch PoE budget"
+min = 30
+max = 3000
+
+[params.required_headroom_pct]
+type = "float"
+unit = "%"
+description = "Required headroom as a percentage of connected PoE load"
+min = 0
+max = 50
+
+[outputs.total_power_requirement_w]
+description = "Total PoE power requirement"
+tolerance = 0.03
+
+[outputs.utilization_pct]
+description = "PoE budget utilization"
+tolerance = 0.03
+
+[outputs.available_headroom_w]
+description = "Unused PoE budget"
+tolerance = 0.03
+
+[outputs.required_headroom_w]
+description = "Required headroom allowance"
+tolerance = 0.03
+
+[outputs.headroom_margin_w]
+description = "Margin after required headroom"
+tolerance = 0.03
+
+[archetypes.access_switch]
+description = "Access switch serving cameras and wireless access points"
+device_count = {min = 4, max = 48}
+power_draw_per_device_w = {min = 7, max = 30}
+switch_poe_budget_w = {min = 180, max = 1200}
+required_headroom_pct = {min = 10, max = 25}
+site_contexts = ["station-comms-room", "campus-access-switch"]
+
+[archetypes.high_power_switch]
+description = "High-power PoE switch serving PTZ cameras or field devices"
+device_count = {min = 8, max = 96}
+power_draw_per_device_w = {min = 20, max = 75}
+switch_poe_budget_w = {min = 740, max = 3000}
+required_headroom_pct = {min = 15, max = 35}
+site_contexts = ["roadside-cabinet", "security-headend"]
+
+[difficulty.easy]
+description = "Small access switch budget"
+visibility = "all_given"
+archetypes = ["access_switch"]
+
+[difficulty.medium]
+description = "Access or high-power PoE switch"
+visibility = "all_given"
+archetypes = ["access_switch", "high_power_switch"]
+
+[difficulty.hard]
+description = "Headroom allowance hidden in design context"
+visibility = "partial"
+hidden_params = ["required_headroom_pct"]
+replacement_text = "Use the required power reserve implied by {{ archetype.description }}."
+archetypes = ["high_power_switch"]
+required_headroom_pct = [20]
