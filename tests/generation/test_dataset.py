@@ -342,6 +342,19 @@ def test_compose_dataset_basic() -> None:
     assert len(plan.planned_instances) == config.instances.per_task
 
 
+def test_compose_dataset_preserves_duplicate_template_names() -> None:
+    """Templates with the same name in different disciplines should not collapse."""
+    templates = [
+        _make_template_with_difficulty("shared", "civil", {"easy": VisibilityLevel.ALL_GIVEN}),
+        _make_template_with_difficulty("shared", "ground", {"easy": VisibilityLevel.ALL_GIVEN}),
+    ]
+    config = _parse_suite_toml(MINIMAL_SUITE_TOML)
+    plan = compose_dataset(config, templates)
+
+    assert len(plan.planned_instances) == config.instances.per_task * len(templates)
+    assert plan.summary.by_discipline == {"civil": 3, "ground": 3}
+
+
 def test_compose_dataset_difficulty_distribution() -> None:
     """Instances should be distributed across difficulties per coverage ratios."""
     templates = [

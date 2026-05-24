@@ -7,7 +7,7 @@ import json
 import logging
 import math
 import tomllib
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from fnmatch import fnmatch
 from pathlib import Path
@@ -177,18 +177,18 @@ def allocate_budget(
     3. If guarantees alone exceed total_max, distribute total_max evenly across disciplines.
     """
     warnings: list[CoverageWarning] = []
-    names = [cfg.meta.name for cfg, _ in templates]
+    keys = _template_allocation_keys(templates)
     total_demand = len(templates) * per_task
 
     # No trimming needed
     if total_demand <= total_max:
-        allocation = {name: per_task for name in names}
+        allocation = {key: per_task for key in keys}
         return allocation, warnings
 
     # Group templates by discipline
     by_discipline: dict[str, list[str]] = defaultdict(list)
-    for cfg, _ in templates:
-        by_discipline[cfg.meta.discipline].append(cfg.meta.name)
+    for (cfg, _), key in zip(templates, keys, strict=True):
+        by_discipline[cfg.meta.discipline].append(key)
 
     # Calculate discipline guarantees
     discipline_guarantees: dict[str, int] = {}
@@ -219,7 +219,7 @@ def allocate_budget(
         return allocation, warnings
 
     # Distribute guarantees across templates within each discipline (round-robin)
-    allocation = {name: 0 for name in names}
+    allocation = {key: 0 for key in keys}
     for disc, disc_templates in by_discipline.items():
         guarantee = discipline_guarantees[disc]
         per_template = largest_remainder_round({t: 1.0 for t in disc_templates}, total=guarantee)
@@ -230,7 +230,7 @@ def allocate_budget(
     remaining = total_max - total_guaranteed
     if remaining > 0:
         # Each template's "want" is per_task minus what it already has
-        wants = {name: max(0, per_task - allocation[name]) for name in names}
+        wants = {key: max(0, per_task - allocation[key]) for key in keys}
         total_want = sum(wants.values())
         if total_want > 0:
             extra = largest_remainder_round(
@@ -241,6 +241,23 @@ def allocate_budget(
                 allocation[name] += bonus
 
     return allocation, warnings
+
+
+def _template_allocation_keys(templates: list[tuple[TemplateConfig, Path]]) -> list[str]:
+    """Return stable unique keys for allocation while preserving old keys when possible."""
+    name_counts = Counter(cfg.meta.name for cfg, _ in templates)
+    used: set[str] = set()
+    keys: list[str] = []
+    for cfg, path in templates:
+        if name_counts[cfg.meta.name] == 1:
+            key = cfg.meta.name
+        else:
+            key = f"{cfg.meta.discipline}/{cfg.meta.category}/{cfg.meta.name}"
+        if key in used:
+            key = str(path)
+        used.add(key)
+        keys.append(key)
+    return keys
 
 
 class PlannedInstance(StrictModel):
@@ -327,6 +344,7 @@ def _build_summary(
 ) -> DatasetSummary:
     """Compute aggregate summary counts from planned instances."""
     name_to_discipline = {cfg.meta.name: cfg.meta.discipline for cfg, _ in templates}
+    path_to_discipline = {path: cfg.meta.discipline for cfg, path in templates}
 
     by_discipline: dict[str, int] = defaultdict(int)
     by_difficulty: dict[str, int] = defaultdict(int)
@@ -334,7 +352,7 @@ def _build_summary(
     by_tool_mode: dict[str, int] = defaultdict(int)
 
     for p in planned:
-        disc = name_to_discipline.get(p.template_name, "unknown")
+        disc = path_to_discipline.get(p.template_dir, name_to_discipline.get(p.template_name, "unknown"))
         by_discipline[disc] += 1
         by_difficulty[p.difficulty] += 1
         by_visibility[p.visibility] += 1
@@ -448,7 +466,9 @@ def compose_dataset(
 
     planned: list[PlannedInstance] = []
     cumulative_index = 0
-    template_lookup = {cfg.meta.name: (cfg, path) for cfg, path in filtered}
+    template_lookup = {
+        key: (cfg, path) for key, (cfg, path) in zip(_template_allocation_keys(filtered), filtered, strict=True)
+    }
 
     for template_name, instance_count in allocation.items():
         cfg, path = template_lookup[template_name]
