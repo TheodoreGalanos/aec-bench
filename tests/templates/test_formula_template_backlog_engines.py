@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from aec_bench.generation.sampler import sample_instance
 from aec_bench.templates.builtin.mechanical.a_weighting.engine import (
     compute as compute_a_weighting,
 )
@@ -653,6 +654,23 @@ def test_lmtd_engine_calculates_counterflow_heat_duty() -> None:
         "heat_duty_kw": 3128.45,
         "minimum_approach_c": 60.0,
     }
+
+
+def test_lmtd_template_samples_valid_parallel_temperature_differences() -> None:
+    config, _ = load_template(TEMPLATE_ROOT / "mechanical/lmtd_calculation")
+
+    instance = sample_instance(
+        config,
+        compute_lmtd,
+        "medium",
+        seed=20260936,
+        instance_index=412,
+    )
+
+    assert instance.all_params["flow_arrangement"] == "parallel"
+    assert instance.ground_truth["delta_t1_c"] > 0.0
+    assert instance.ground_truth["delta_t2_c"] > 0.0
+    assert instance.ground_truth["lmtd_c"] > 0.0
 
 
 def test_braking_distance_engine_applies_adhesion_limit_and_gradient() -> None:

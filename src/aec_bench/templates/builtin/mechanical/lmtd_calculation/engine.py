@@ -82,6 +82,10 @@ def compute(
         delta_t1 = hot_inlet_c - cold_inlet_c
         delta_t2 = hot_outlet_c - cold_outlet_c
 
+    if delta_t1 <= 0 or delta_t2 <= 0:
+        msg = "terminal temperature differences must be > 0 for LMTD"
+        raise ValueError(msg)
+
     lmtd = _lmtd(delta_t1, delta_t2)
     corrected_mtd = lmtd * correction_factor
     heat_duty = overall_u_kw_m2_c * heat_transfer_area_m2 * corrected_mtd

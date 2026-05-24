@@ -87,10 +87,10 @@ tolerance = 0.03
 
 [archetypes.process_cooler]
 description = "Process liquid cooler with counterflow exchanger"
-hot_inlet_c = {min = 80.0, max = 180.0}
-hot_outlet_c = {min = 40.0, max = 100.0}
+hot_inlet_c = {min = 120.0, max = 180.0}
+hot_outlet_c = {min = 75.0, max = 100.0}
 cold_inlet_c = {min = 10.0, max = 35.0}
-cold_outlet_c = {min = 25.0, max = 70.0}
+cold_outlet_c = {min = 40.0, max = 70.0}
 overall_u_kw_m2_c = {min = 0.2, max = 1.5}
 heat_transfer_area_m2 = {min = 20.0, max = 800.0}
 correction_factor = {min = 0.75, max = 1.0}
@@ -98,10 +98,10 @@ site_contexts = ["industrial-process-cooler", "plant-utility-exchanger"]
 
 [archetypes.hot_water_heat_exchanger]
 description = "Hot water heat exchanger for building or process service"
-hot_inlet_c = {min = 60.0, max = 120.0}
-hot_outlet_c = {min = 40.0, max = 90.0}
+hot_inlet_c = {min = 95.0, max = 120.0}
+hot_outlet_c = {min = 75.0, max = 85.0}
 cold_inlet_c = {min = 5.0, max = 30.0}
-cold_outlet_c = {min = 30.0, max = 70.0}
+cold_outlet_c = {min = 35.0, max = 65.0}
 overall_u_kw_m2_c = {min = 0.3, max = 2.0}
 heat_transfer_area_m2 = {min = 5.0, max = 300.0}
 correction_factor = {min = 0.8, max = 1.0}
