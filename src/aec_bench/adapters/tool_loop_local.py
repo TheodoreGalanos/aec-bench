@@ -1,5 +1,5 @@
 # ABOUTME: Local tool-loop client and executor for running tool-using agents without containers.
-# ABOUTME: PydanticAI-based ToolLoopClient (Bedrock/Azure/Anthropic) + bash ToolExecutor.
+# ABOUTME: PydanticAI-based ToolLoopClient (Bedrock/Azure/Anthropic/Together) + bash ToolExecutor.
 
 from __future__ import annotations
 
@@ -12,6 +12,10 @@ from typing import Any
 from pydantic_ai import RunContext
 
 from aec_bench.adapters.advisor import default_advise
+from aec_bench.adapters.pydantic_ai_runtime import (
+    agent_run_output,
+    run_agent_sync_with_streaming_fallback,
+)
 from aec_bench.adapters.rlm.client import RlmClient
 from aec_bench.adapters.tool_loop import (
     ToolExecutionResult,
@@ -321,20 +325,22 @@ class PydanticAiToolLoopClient:
         advisor_client: RlmClient | None = None,
         advisor_config: AdvisorConfig | None = None,
         trajectory_writer: Any | None = None,
+        stream_mode: str = "auto",
     ) -> None:
         from pydantic_ai import Agent
 
         from aec_bench.adapters.rlm.providers import (
             _build_model_settings,
             _build_pydantic_model,
-            detect_provider,
+            resolve_pydantic_provider,
         )
 
         self._model_name = model_name
         self._workspace = workspace
         self._trajectory_writer = trajectory_writer
+        self._stream_mode = stream_mode
 
-        provider = detect_provider(model_name)
+        provider = resolve_pydantic_provider(model_name)
         pydantic_model = _build_pydantic_model(model_name, provider)
         model_settings = _build_model_settings(provider, cache=True)
 
@@ -420,13 +426,16 @@ class PydanticAiToolLoopClient:
 
         # Run the full agent loop with a request limit to prevent runaway
         max_turns = int(request.configuration.get("max_turns", 30)) if request.configuration else 30
-        result = self._agent.run_sync(
+        result = run_agent_sync_with_streaming_fallback(
+            self._agent,
             request.instruction,
             usage_limits=UsageLimits(request_limit=max_turns),
+            stream_mode=self._stream_mode,
         )
 
+        output = agent_run_output(result)
         usage = result.usage()
-        output_text = result.output if isinstance(result.output, str) else str(result.output)
+        output_text = output if isinstance(output, str) else str(output)
 
         if self._trajectory_writer is not None:
             try:

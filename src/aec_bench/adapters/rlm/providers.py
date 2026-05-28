@@ -5,8 +5,14 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Mapping
 from typing import Any
 
+from aec_bench.adapters.pydantic_ai_runtime import (
+    agent_run_output,
+    request_model_response,
+    run_agent_sync_with_streaming_fallback,
+)
 from aec_bench.adapters.rlm.client import (
     RlmCompletionResponse,
     RlmMessage,
@@ -40,13 +46,20 @@ _AZURE_PREFIXES = ("gpt-", "gpt4", "o1-", "o3-", "o4-")
 # Direct Anthropic model name prefixes
 _ANTHROPIC_PREFIXES = ("claude-",)
 
+# Together OpenAI-compatible model prefix
+_TOGETHER_PREFIX = "together:"
+_TOGETHER_BASE_URL = "https://api.together.ai/v1"
+
 
 def detect_provider(model_name: str) -> str:
     """Detect the provider from the model name string.
 
-    Returns one of: ``"bedrock"``, ``"azure"``, ``"anthropic"``, ``"auto"``.
+    Returns one of: ``"bedrock"``, ``"azure"``, ``"anthropic"``,
+    ``"together"``, ``"auto"``.
     """
     lower = model_name.lower()
+    if lower.startswith(_TOGETHER_PREFIX):
+        return "together"
     if any(lower.startswith(p) for p in _BEDROCK_PREFIXES):
         return "bedrock"
     if any(lower.startswith(p) for p in _AZURE_PREFIXES):
@@ -54,6 +67,37 @@ def detect_provider(model_name: str) -> str:
     if any(lower.startswith(p) for p in _ANTHROPIC_PREFIXES):
         return "anthropic"
     return "auto"
+
+
+def resolve_pydantic_provider(model_name: str, env: Mapping[str, str] | None = None) -> str:
+    """Resolve the PydanticAI provider, using Azure credentials for deployment names."""
+    source = env if env is not None else os.environ
+    provider = detect_provider(model_name)
+    if provider == "auto" and _has_azure_credentials(source):
+        return "azure"
+    return provider
+
+
+def _has_azure_credentials(env: Mapping[str, str]) -> bool:
+    return bool(env.get("AZURE_OPENAI_ENDPOINT", "") and env.get("AZURE_OPENAI_API_KEY", ""))
+
+
+def _is_azure_v1_endpoint(endpoint: str) -> bool:
+    return endpoint.rstrip("/").lower().endswith("/openai/v1")
+
+
+def _strip_together_prefix(model_name: str) -> str:
+    if model_name.lower().startswith(_TOGETHER_PREFIX):
+        return model_name[len(_TOGETHER_PREFIX) :]
+    return model_name
+
+
+def _azure_provider_kwargs(endpoint: str, api_key: str, api_version: str) -> dict[str, str]:
+    return {
+        "azure_endpoint": endpoint,
+        "api_key": api_key,
+        "api_version": api_version,
+    }
 
 
 class PydanticAiRlmClient:
@@ -68,11 +112,13 @@ class PydanticAiRlmClient:
         *,
         model: Any,
         model_settings: Any | None = None,
+        stream_mode: str = "auto",
     ) -> None:
         from pydantic_ai import Agent
 
         self._model_obj = model
         self._model_settings = model_settings
+        self._stream_mode = stream_mode
         self._agent = Agent(
             model,
             system_prompt="",
@@ -122,15 +168,18 @@ class PydanticAiRlmClient:
                 base_settings = dict(self._model_settings or {})
                 model_settings = base_settings | {"temperature": temperature}
 
-            result = self._agent.run_sync(
+            result = run_agent_sync_with_streaming_fallback(
+                self._agent,
                 user_prompt,
                 message_history=history if history else None,
                 model_settings=model_settings,
+                stream_mode=self._stream_mode,
             )
 
+            output = agent_run_output(result)
             usage = result.usage()
             return RlmCompletionResponse(
-                output_text=result.output,
+                output_text=str(output),
                 input_tokens=usage.input_tokens or 0,
                 output_tokens=usage.output_tokens or 0,
                 cache_read_tokens=getattr(usage, "cache_read_tokens", 0) or 0,
@@ -159,8 +208,6 @@ class PydanticAiRlmClient:
         pass an explicit ``ToolDefinition`` and inspect the raw response parts
         for both text and tool-call content.
         """
-        import asyncio
-
         from pydantic_ai.messages import (
             ModelRequest,
             SystemPromptPart,
@@ -252,17 +299,13 @@ class PydanticAiRlmClient:
         )
 
         try:
-            loop = asyncio.new_event_loop()
-            try:
-                response = loop.run_until_complete(
-                    resolved_model.request(
-                        pydantic_messages,
-                        self._model_settings,
-                        request_params,
-                    )
-                )
-            finally:
-                loop.close()
+            response = request_model_response(
+                resolved_model,
+                messages=pydantic_messages,
+                model_settings=self._model_settings,
+                model_request_parameters=request_params,
+                stream_mode=self._stream_mode,
+            )
 
             # Extract text and tool call from the response parts
             output_text = ""
@@ -317,7 +360,6 @@ def _build_pydantic_model(
 
     if provider == "azure":
         from pydantic_ai.models.openai import OpenAIChatModel
-        from pydantic_ai.providers.azure import AzureProvider
 
         endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
         api_key = os.environ.get("AZURE_OPENAI_API_KEY", "")
@@ -325,13 +367,32 @@ def _build_pydantic_model(
             "AZURE_OPENAI_API_VERSION",
             os.environ.get("AGENT_API_VERSION", "2024-10-21"),
         )
+        if _is_azure_v1_endpoint(endpoint):
+            from pydantic_ai.providers.openai import OpenAIProvider
+
+            return OpenAIChatModel(
+                model_name,
+                provider=OpenAIProvider(base_url=endpoint, api_key=api_key),
+            )
+
+        from pydantic_ai.providers.azure import AzureProvider
+
         return OpenAIChatModel(
             model_name,
-            provider=AzureProvider(
-                azure_endpoint=endpoint,
-                api_version=api_version,
-                api_key=api_key,
-            ),
+            provider=AzureProvider(**_azure_provider_kwargs(endpoint, api_key, api_version)),
+        )
+
+    if provider == "together":
+        from pydantic_ai.models.openai import OpenAIChatModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+
+        api_key = os.environ.get("TOGETHER_API_KEY", "")
+        if not api_key:
+            msg = "required environment variable is not set: TOGETHER_API_KEY"
+            raise RuntimeError(msg)
+        return OpenAIChatModel(
+            _strip_together_prefix(model_name),
+            provider=OpenAIProvider(base_url=_TOGETHER_BASE_URL, api_key=api_key),
         )
 
     # "anthropic" or "auto" — let PydanticAI infer from model string
@@ -377,6 +438,7 @@ def make_rlm_client(
     model_name: str,
     *,
     cache: bool = True,
+    stream_mode: str = "auto",
 ) -> PydanticAiRlmClient:
     """Create an RlmClient for the given model name.
 
@@ -385,7 +447,7 @@ def make_rlm_client(
 
     Requires ``pydantic-ai`` to be installed.
     """
-    provider = detect_provider(model_name)
+    provider = resolve_pydantic_provider(model_name)
     pydantic_model = _build_pydantic_model(model_name, provider)
     settings = _build_model_settings(provider, cache)
 
@@ -399,4 +461,5 @@ def make_rlm_client(
     return PydanticAiRlmClient(
         model=pydantic_model,
         model_settings=settings,
+        stream_mode=stream_mode,
     )
