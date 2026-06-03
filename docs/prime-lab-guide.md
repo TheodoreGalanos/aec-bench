@@ -231,6 +231,44 @@ Closed hosted inference models are useful for baseline evaluation and teacher
 rollouts, but they are not hosted fine-tuning targets. Training configs should
 use trainable models exposed by the Prime account.
 
+### Training Configs with Difficulty Filtering
+
+Use `aec-bench prime train-config` to generate Hosted Training TOML rather than
+hand-editing Prime configs. For broad suites, keep the train environment fixed
+and create difficulty-filtered environment views with repeated
+`--difficulty-ratio` flags:
+
+```bash
+uv run aec-bench prime train-config \
+  --environment <prime-namespace>/<environment-name> \
+  --output configs/rl/aec-filtered-ratios.toml \
+  --model "Qwen/Qwen3.5-9B" \
+  --split all \
+  --harness stateful \
+  --difficulty-ratio easy=0.45 \
+  --difficulty-ratio medium=0.40 \
+  --difficulty-ratio hard=0.15 \
+  --max-steps 50 \
+  --batch-size 64 \
+  --rollouts-per-example 8 \
+  --max-tokens 4096 \
+  --online-difficulty-filtering \
+  --easy-threshold 0.8 \
+  --hard-threshold 0.2 \
+  --easy-fraction 0.25 \
+  --hard-fraction 0.25
+```
+
+This emits one `[[env]]` block per difficulty and a Prime `[buffer]` section
+with matching `env_ratios`. The ratio flags are mutually exclusive with
+repeated `--difficulty`, which still represents a single environment view with a
+list of allowed difficulties.
+
+For noisy AEC reward surfaces, start with some easy and hard examples retained
+instead of dropping them completely. That keeps the run from collapsing into
+only already-solved examples or only zero-signal failures while still letting
+Prime focus training on examples near the model's current capability.
+
 ## Design Direction
 
 The integration should remain explicit rather than magical:
