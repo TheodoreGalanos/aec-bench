@@ -1363,6 +1363,93 @@ def test_prime_train_config_writes_hosted_baby_qwen_config(tmp_path: Path) -> No
     assert payload["adapters"]["keep_last"] == 3
 
 
+def test_prime_train_config_writes_online_difficulty_buffer_config(tmp_path: Path) -> None:
+    config_path = tmp_path / "configs" / "rl" / "aec-filtered-ratios.toml"
+
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "prime",
+            "train-config",
+            "--environment",
+            "example-org/aec_release_prime_rl_train",
+            "--output",
+            str(config_path),
+            "--model",
+            "Qwen/Qwen3.5-9B",
+            "--split",
+            "all",
+            "--difficulty-ratio",
+            "easy=0.45",
+            "--difficulty-ratio",
+            "medium=0.40",
+            "--difficulty-ratio",
+            "hard=0.15",
+            "--harness",
+            "stateful",
+            "--max-steps",
+            "50",
+            "--batch-size",
+            "64",
+            "--rollouts-per-example",
+            "8",
+            "--max-tokens",
+            "4096",
+            "--online-difficulty-filtering",
+            "--easy-threshold",
+            "0.8",
+            "--hard-threshold",
+            "0.2",
+            "--easy-fraction",
+            "0.25",
+            "--hard-fraction",
+            "0.25",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    assert [env["args"]["difficulty"] for env in payload["env"]] == ["easy", "medium", "hard"]
+    assert payload["env"][0]["args"] == {
+        "split": "all",
+        "harness": "stateful",
+        "difficulty": "easy",
+    }
+    assert payload["buffer"] == {
+        "env_ratios": [0.45, 0.40, 0.15],
+        "online_difficulty_filtering": True,
+        "easy_threshold": 0.8,
+        "hard_threshold": 0.2,
+        "easy_fraction": 0.25,
+        "hard_fraction": 0.25,
+    }
+
+
+def test_prime_train_config_rejects_duplicate_difficulty_ratios(tmp_path: Path) -> None:
+    config_path = tmp_path / "configs" / "rl" / "aec-filtered-ratios.toml"
+
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "prime",
+            "train-config",
+            "--environment",
+            "example-org/aec_release_prime_rl_train",
+            "--output",
+            str(config_path),
+            "--difficulty-ratio",
+            "easy=0.45",
+            "--difficulty-ratio",
+            "easy=0.55",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "duplicate --difficulty-ratio difficulty" in result.output
+
+
 def test_prime_train_runs_hosted_training_config(monkeypatch, tmp_path: Path) -> None:
     config_path = tmp_path / "aec-train.toml"
     config_path.write_text('model = "Qwen/Qwen3.5-0.8B"\n', encoding="utf-8")
