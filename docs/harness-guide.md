@@ -62,7 +62,19 @@ Every compute boundary must provide the equivalent of:
 - resource enforcement,
 - teardown.
 
-For the immediate Python path, those capabilities should be satisfied by Harbor wherever possible rather than reimplemented directly. Domain logic should not know whether execution ultimately lands on local Docker, remote Docker, Modal, or a future backend.
+For the immediate Python path, those capabilities should be satisfied by Harbor wherever possible rather than reimplemented directly. Domain logic should not know whether execution ultimately lands on local Docker, remote Docker, Modal, Morph Cloud, or a future backend.
+
+Direct Python compute backends may exist for parity checks and focused smoke runs, but vendor-specific transport code belongs outside `harness/`. For example, the direct Morph Cloud runner keeps trial orchestration in `harness/` while SDK calls, file transfer, Docker host setup, and snapshot cleanup live under `providers/`.
+
+### Morph Cloud Through Harbor
+
+Morph Cloud support is additive to the earlier direct provider spike. It does not immediately supersede that work.
+
+The normal `aec-bench run --backend morph` path should go through Harbor. Python emits a Harbor environment config with an import path of `aec_bench.providers.morph_harbor:MorphHarborEnvironment`; Harbor still owns task staging, agent invocation, artifact collection, and verifier invocation. The Morph adapter only translates Harbor's `BaseEnvironment` calls into Morph Cloud operations.
+
+The direct `MorphSandboxRunner` remains useful for provider-level smoke tests, direct evolution execution, and backend parity checks. It should not become the main experiment CLI route unless Harbor cannot express the workflow.
+
+Morph-specific SDK calls and remote Docker host handling belong under `providers/`. The harness may select `morph`, validate the contract, and ingest results, but it should not import the Morph SDK directly.
 
 ---
 

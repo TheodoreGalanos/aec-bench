@@ -66,6 +66,53 @@ def test_import_harbor_trial_maps_real_successful_trial() -> None:
     assert record.completeness is Completeness.PARTIAL
 
 
+def test_import_harbor_trial_derives_morph_backend_from_import_path_environment(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    task_dir = repo_root / "tasks" / "mechanical" / "heat-load" / "alpha"
+    trial_dir = repo_root / "jobs" / "job-001" / "trial-morph"
+    (task_dir / "tests").mkdir(parents=True)
+    (trial_dir / "artifacts" / "agent").mkdir(parents=True)
+    (trial_dir / "verifier").mkdir(parents=True)
+    (task_dir / "instruction.md").write_text(
+        "Write your answer to /workspace/output.md.\n",
+        encoding="utf-8",
+    )
+    (task_dir / "task.toml").write_text(
+        '[metadata]\nvisibility = "public"\n\n[agent]\ntimeout_sec = 60\n',
+        encoding="utf-8",
+    )
+    (task_dir / "tests" / "test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    (trial_dir / "artifacts" / "agent" / "output.md").write_text("answer\n", encoding="utf-8")
+    (trial_dir / "verifier" / "reward.json").write_text('{"reward": 1.0}\n', encoding="utf-8")
+    (trial_dir / "result.json").write_text(
+        """
+{
+  "trial_name": "trial-morph",
+  "task_checksum": "sha256-task",
+  "config": {
+    "task": {"path": "tasks/mechanical/heat-load/alpha"},
+    "agent": {"name": "entrypoint", "model_name": "test-model", "kwargs": {"adapter": "tool_loop"}},
+    "environment": {
+      "type": null,
+      "import_path": "aec_bench.providers.morph_harbor:MorphHarborEnvironment",
+      "kwargs": {"compute_backend": "morph"}
+    },
+    "job_id": "experiment-001"
+  },
+  "agent_info": {"name": "entrypoint", "version": "1.0.0"},
+  "agent_result": {},
+  "started_at": "2026-06-05T00:00:00Z",
+  "finished_at": "2026-06-05T00:00:01Z"
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    record = import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
+
+    assert record.environment.compute_backend == "morph"
+
+
 @_skip_no_job_data
 def test_import_harbor_trial_rejects_missing_result_json(tmp_path: Path) -> None:
     with pytest.raises(HarborImportError, match="missing Harbor result artifact"):

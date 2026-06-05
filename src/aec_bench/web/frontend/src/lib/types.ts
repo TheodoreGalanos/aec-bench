@@ -32,6 +32,7 @@ export interface TrialRow {
   task_id: string;
   model: string;
   adapter: string;
+  compute_backend?: string;
   discipline: string;
   reward: number;
   reward_class: string;
@@ -77,6 +78,7 @@ export interface ViewerMeta {
   task_id: string;
   model: string;
   adapter: string;
+  compute_backend?: string;
   reward: number;
   reward_class: string;
   steps: StepSummary[];

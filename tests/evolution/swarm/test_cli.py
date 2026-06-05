@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
@@ -13,7 +14,7 @@ from aec_bench.cli.main import app
 runner = CliRunner()
 
 # Minimal valid config matching SwarmConfig required fields
-_MINIMAL_CONFIG = {
+_MINIMAL_CONFIG: dict[str, Any] = {
     "task": {
         "workspace": "./workspaces/test",
         "task_path": "tasks/electrical/voltage-drop",
@@ -46,6 +47,16 @@ def test_swarm_run_validates_config(tmp_path: Path) -> None:
     config_path.write_text(yaml.dump({"agents": {"count": 4}}))
     result = runner.invoke(app, ["swarm", "run", str(config_path)])
     assert result.exit_code != 0
+
+
+def test_swarm_run_rejects_non_local_backend_before_workspace_resolution(tmp_path: Path) -> None:
+    config_path = tmp_path / "swarm.yaml"
+    config_path.write_text(yaml.dump({**_MINIMAL_CONFIG, "evaluation": {"backend": "morph"}}))
+
+    result = runner.invoke(app, ["swarm", "run", str(config_path)])
+
+    assert result.exit_code != 0
+    assert "currently supports only local evaluation" in result.output
 
 
 def test_swarm_run_missing_workspace(tmp_path: Path) -> None:

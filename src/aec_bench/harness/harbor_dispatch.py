@@ -8,11 +8,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from aec_bench.contracts.experiment_manifest import AgentConfig, ExperimentManifest
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.harness.scheduler import build_trial_plan
+
+MORPH_BACKEND = "morph"
+MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH = "aec_bench.providers.morph_harbor:MorphHarborEnvironment"
+HARBOR_NATIVE_BACKENDS = ("modal", "e2b", "daytona", "docker")
+HARBOR_RUN_BACKENDS = (*HARBOR_NATIVE_BACKENDS, MORPH_BACKEND)
 
 
 class HarborDispatchError(Exception):
@@ -88,12 +93,7 @@ def build_harbor_job_config(
             "n_concurrent_trials": int(manifest.compute.resource_limits.get("n_concurrent_trials", 1)),
             "quiet": False,
         },
-        "environment": {
-            "type": manifest.compute.backend,
-            "force_build": False,
-            "delete": True,
-            "kwargs": {},
-        },
+        "environment": _harbor_environment_config(manifest.compute.backend),
         "agents": [_harbor_agent_config(agent) for agent in manifest.agents],
         "datasets": [],
         "tasks": [{"path": f"tasks/{task.task_id}"} for task in tasks],
@@ -110,6 +110,22 @@ def build_harbor_job_config(
     if manifest.disable_verification:
         config["verifier"] = {"disable": True}
     return config
+
+
+def _harbor_environment_config(backend: str) -> dict[str, Any]:
+    if backend == MORPH_BACKEND:
+        return {
+            "import_path": MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH,
+            "force_build": False,
+            "delete": True,
+            "kwargs": {"compute_backend": MORPH_BACKEND},
+        }
+    return {
+        "type": backend,
+        "force_build": False,
+        "delete": True,
+        "kwargs": {},
+    }
 
 
 ENTRYPOINT_AGENT_IMPORT_PATH = "agents.entrypoint_agent:EntrypointAgent"

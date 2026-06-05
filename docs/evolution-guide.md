@@ -213,7 +213,7 @@ Both modes use the same engine (classify → analyse → evolve → gate), the s
 | `generate.difficulties` | list | `["easy","medium"]` | Difficulty levels to include |
 | `tasks.domains` | list | required | Engineering disciplines to filter tasks |
 | `strategy` | string | `"hill_climb"` | Selection mode: `"hill_climb"` or `"qd"` |
-| `backend` | string | `"local"` | Execution backend |
+| `backend` | string | `"local"` | Execution backend. Use `local` for default evolution; `morph` is available for direct Morph-backed solve runs when solver config and Morph credentials are present. |
 | `batch_size` | int | 10 | Tasks per cycle |
 | `max_cycles` | int | 20 | Maximum evolution iterations |
 | `improvement_threshold` | float | 0.02 | Minimum improvement to accept a mutation |

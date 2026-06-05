@@ -88,9 +88,21 @@ aec-bench run tasks/electrical/pf-droop \
 aec-bench run tasks/ground/shallow-foundations/terzaghi-bearing-capacity \
   --model "<model-id>" --dry-run
 
+# Run through Morph Cloud via Harbor
+aec-bench run tasks/electrical/pf-droop \
+  --model "<model-id>" \
+  --adapter pydantic_ai \
+  --backend morph
+
 # Evaluate results
 aec-bench evaluate
 ```
+
+### Backend Selection
+
+`aec-bench run` executes through Harbor. The default backend is `modal`; supported run backends are `modal`, `morph`, `e2b`, `daytona`, and `docker`.
+
+Use `--backend morph` when you want Harbor's normal task/agent/verifier flow to run on Morph Cloud. Morph runs require the `morphcloud` package and `MORPH_API_KEY` in `.env`.
 
 ### Adapter types
 

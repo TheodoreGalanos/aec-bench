@@ -31,7 +31,7 @@ def _make_client_with_trial(tmp_path: Path) -> TestClient:
     return TestClient(create_app(ledger_root=ledger, tasks_root=tasks))
 
 
-def _write_trajectory_jsonl(path: Path, entries: list[dict]) -> None:
+def _write_trajectory_jsonl(path: Path, entries: list[dict[str, object]]) -> None:
     """Write a trajectory JSONL file with version header and entry dicts."""
     lines = [json.dumps({"format": "aec-bench-trajectory", "version": 1})]
     for entry in entries:
@@ -303,11 +303,16 @@ def test_viewer_api_meta_returns_json(tmp_path: Path) -> None:
         ],
     )
 
-    from aec_bench.contracts.trial_record import OutputRecord
+    from aec_bench.contracts.trial_record import EnvironmentSnapshot, OutputRecord
 
     record = make_trial_record(
         experiment_id="experiment-001",
         trial_id="trial-001",
+        environment=EnvironmentSnapshot(
+            runtime_image="ghcr.io/example/task-image:latest",
+            compute_backend="morph",
+            tool_versions={"codes_search": "abc123"},
+        ),
         outputs=OutputRecord(
             raw_output_path=str(traj_dir / "output.jsonl"),
             trajectory_path=str(traj_path),
@@ -327,6 +332,7 @@ def test_viewer_api_meta_returns_json(tmp_path: Path) -> None:
     assert "reward_class" in data
     assert "artefacts" in data
     assert "has_trajectory" in data
+    assert data["compute_backend"] == "morph"
 
 
 def test_viewer_api_meta_404_for_missing_trial(tmp_path: Path) -> None:

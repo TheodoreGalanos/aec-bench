@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pydantic import PositiveInt
 
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
@@ -67,7 +67,7 @@ class SwarmEvalConfig(StrictModel):
 
     parallel: bool = True
     timeout: PositiveInt = 300
-    backend: Literal["local", "modal", "e2b"] = "local"
+    backend: Literal["local", "modal", "e2b", "morph"] = "local"
 
 
 class SwarmEvolutionConfig(StrictModel):

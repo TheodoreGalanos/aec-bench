@@ -42,6 +42,7 @@ def build_evolution_runner(
 
     # 4. Build solve function — local execution when task_dirs provided, stub otherwise
     experiment_id = f"evo-{workspace.manifest.name}"
+    solve_fn: SolveFn
     if task_dirs:
         solve_fn = make_local_solve_fn(
             task_dirs=task_dirs,
@@ -118,8 +119,8 @@ def build_evolution_runner_from_config(
 
     # 6. Build solve function based on config.backend
     experiment_id = f"evo-{workspace.manifest.name}"
-    if config.backend in ("harbor", "modal") and config.solver is not None:
-        solve_fn = _build_harbor_solve_fn(
+    if config.backend in ("harbor", "modal", "morph") and config.solver is not None:
+        solve_fn = _build_remote_solve_fn(
             config=config,
             task_dirs=task_dirs,
             experiment_id=experiment_id,
@@ -134,7 +135,7 @@ def build_evolution_runner_from_config(
             workspace_root=Path(config.workspace_path),
         )
     else:
-        if config.backend in ("harbor", "modal"):
+        if config.backend in ("harbor", "modal", "morph"):
             _log.warning(
                 "backend=%r requires solver config (via harness_config or explicit solver). "
                 "Falling back to stub solve function.",
@@ -238,27 +239,26 @@ def generate_task_instances(gen_config: TaskGenerateConfig) -> list[Path]:
     return generated_dirs
 
 
-def _build_harbor_solve_fn(
+def _build_remote_solve_fn(
     *,
     config: EvolutionConfig,
     task_dirs: list[Path],
     experiment_id: str,
 ) -> SolveFn:
-    """Build a harbor solve function from config.
+    """Build a remote solve function from config.
 
-    Constructs ModalBackend, adapter, and resolved tasks from the solver config.
+    Constructs a remote ComputeBackend, adapter, and resolved tasks from the solver config.
     All harness imports are deferred to avoid requiring Modal SDK at module load.
-    Falls back to the stub solve function when the Modal SDK is not installed.
+    Falls back to the stub solve function when backend dependencies are not installed.
     """
     try:
         from aec_bench.adapters.factory import build_remote_adapter
         from aec_bench.evolution.backends.harbor import make_harbor_solve_fn
-        from aec_bench.harness.modal_runner import ModalSandboxRunner, ModalSdkOperations
         from aec_bench.harness.trial_runner import TrialRunner
         from aec_bench.tasks.instance import ResolvedTaskInstance, resolve_instance_paths
         from aec_bench.tasks.loader import load_task_definition
     except ImportError as exc:
-        _log.error("Harbor backend requires Modal SDK. Install with: uv add modal. Error: %s", exc)
+        _log.error("Remote backend wiring failed to import common dependencies. Error: %s", exc)
         return make_stub_solve_fn([])
 
     assert config.solver is not None  # caller guarantees this
@@ -269,13 +269,31 @@ def _build_harbor_solve_fn(
     # Build artifacts dir alongside the workspace
     artifacts_dir = Path(config.workspace_path) / "artifacts"
 
-    # Build Modal backend — operations requires the real Modal SDK at runtime
-    modal_operations = ModalSdkOperations()
-    modal_runner = ModalSandboxRunner(
-        operations=modal_operations,
-        artifacts_dir=artifacts_dir,
-    )
-    backend = modal_runner
+    backend: object
+    if config.backend == "morph":
+        try:
+            from aec_bench.harness.morph_runner import MorphSandboxRunner
+            from aec_bench.providers.morph_cloud import MorphCloudOperations
+        except ImportError as exc:
+            _log.error(
+                "Morph backend requires Morph Cloud dependencies. Install with: uv add morphcloud. Error: %s",
+                exc,
+            )
+            return make_stub_solve_fn([])
+        backend = MorphSandboxRunner(
+            operations=MorphCloudOperations(),
+            artifacts_dir=artifacts_dir,
+        )
+    else:
+        try:
+            from aec_bench.harness.modal_runner import ModalSandboxRunner, ModalSdkOperations
+        except ImportError as exc:
+            _log.error("Harbor/modal backend requires Modal SDK. Install with: uv add modal. Error: %s", exc)
+            return make_stub_solve_fn([])
+        backend = ModalSandboxRunner(
+            operations=ModalSdkOperations(),
+            artifacts_dir=artifacts_dir,
+        )
 
     # Resolve task instances — tasks_root is the parent of the first task dir's
     # discipline segment, inferred as the common ancestor two levels up from each
@@ -295,10 +313,12 @@ def _build_harbor_solve_fn(
     # Build trial runner
     trial_runner = TrialRunner(artifacts_dir=artifacts_dir)
 
+    backend_tasks: list[object] = list(resolved_tasks)
+
     return make_harbor_solve_fn(
         trial_runner=trial_runner,
         backend=backend,
-        tasks=resolved_tasks,
+        tasks=backend_tasks,
         adapter=adapter,
         experiment_id=experiment_id,
         runtime_image=f"evolution-{config.solver.adapter}",

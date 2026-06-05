@@ -3,7 +3,7 @@
 
 from pathlib import Path
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from aec_bench.contracts.experiment_manifest import (
     AgentConfig,
@@ -12,6 +12,7 @@ from aec_bench.contracts.experiment_manifest import (
     TaskSelector,
 )
 from aec_bench.harness.harbor_dispatch import (
+    MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH,
     HarborExperimentDispatcher,
     build_harbor_job_config,
 )
@@ -62,6 +63,42 @@ def test_build_harbor_job_config_uses_precise_task_paths() -> None:
         {"path": "tasks/mechanical/heat-load/alpha"},
         {"path": "tasks/mechanical/heat-load/beta"},
     ]
+
+
+def test_build_harbor_job_config_maps_morph_to_import_path_environment() -> None:
+    manifest = ExperimentManifest(
+        experiment_id="experiment-001",
+        name="Morph dispatch config",
+        tasks=TaskSelector(domains=["mechanical"]),
+        agents=[AgentConfig(name="tool-loop", adapter="tool_loop", model="claude-sonnet-4-6")],
+        compute=ComputeConfig(backend="morph"),
+    )
+    tasks = [make_task_definition(task_id="mechanical/heat-load/alpha")]
+
+    config = build_harbor_job_config(manifest=manifest, tasks=tasks)
+
+    assert "type" not in config["environment"]
+    assert config["environment"]["import_path"] == MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH
+    assert config["environment"]["kwargs"]["compute_backend"] == "morph"
+
+
+def test_build_harbor_job_config_for_morph_validates_as_harbor_config() -> None:
+    from harbor.models.job.config import JobConfig  # type: ignore[import-untyped]
+
+    manifest = ExperimentManifest(
+        experiment_id="experiment-001",
+        name="Morph dispatch config",
+        tasks=TaskSelector(domains=["mechanical"]),
+        agents=[AgentConfig(name="tool-loop", adapter="tool_loop", model="claude-sonnet-4-6")],
+        compute=ComputeConfig(backend="morph"),
+    )
+    tasks = [make_task_definition(task_id="mechanical/heat-load/alpha")]
+
+    config = build_harbor_job_config(manifest=manifest, tasks=tasks)
+
+    parsed = JobConfig.model_validate(config)
+    assert parsed.environment.import_path == MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH
+    assert parsed.environment.type is None
 
 
 def test_dispatcher_writes_yaml_and_executes_harbor_command(tmp_path: Path) -> None:

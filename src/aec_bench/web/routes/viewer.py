@@ -147,9 +147,12 @@ def _load_symbolic_state(traj_path_str: str | None) -> dict[str, Any]:
     if not ss_path.exists():
         return {}
     try:
-        return json.loads(ss_path.read_text(encoding="utf-8"))
+        data: object = json.loads(ss_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(key): value for key, value in data.items()}
 
 
 def _load_scratchpad(traj_path_str: str | None) -> dict[str, Any]:
@@ -160,9 +163,12 @@ def _load_scratchpad(traj_path_str: str | None) -> dict[str, Any]:
     if not sp_path.exists():
         return {}
     try:
-        return json.loads(sp_path.read_text(encoding="utf-8"))
+        data: object = json.loads(sp_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(key): value for key, value in data.items()}
 
 
 def _load_plan_state(traj_path_str: str | None) -> dict[str, Any] | None:
@@ -277,6 +283,7 @@ def viewer_api_meta(
         task_id=record.task.task_id,
         model=record.agent.model,
         adapter=record.agent.adapter,
+        compute_backend=record.environment.compute_backend,
         reward=record.evaluation.reward,
         reward_class=reward_css_class(record.evaluation.reward),
         steps=steps,

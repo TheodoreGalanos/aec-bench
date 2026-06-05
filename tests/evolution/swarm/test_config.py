@@ -4,14 +4,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pydantic import ValidationError
 
 from aec_bench.evolution.swarm.config import SwarmConfig, load_swarm_config
 
-MINIMAL_YAML = {
+MINIMAL_YAML: dict[str, Any] = {
     "task": {
         "workspace": "./workspaces/test",
         "task_path": "tasks/electrical/voltage-drop",
@@ -44,6 +45,17 @@ def test_config_defaults() -> None:
     assert config.evaluation.backend == "local"
     assert config.evolution.batch_size == 1
     assert config.heartbeat.pivot_after == 5
+
+
+def test_config_accepts_morph_backend_name() -> None:
+    data = {
+        **MINIMAL_YAML,
+        "evaluation": {
+            "backend": "morph",
+        },
+    }
+    config = SwarmConfig.model_validate(data)
+    assert config.evaluation.backend == "morph"
 
 
 def test_config_rejects_missing_budget() -> None:

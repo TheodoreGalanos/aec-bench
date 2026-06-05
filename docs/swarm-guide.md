@@ -180,7 +180,7 @@ _swarm_runs/
 |-------|------|---------|-------------|
 | `parallel` | bool | true | Run agent evals concurrently |
 | `timeout` | int | 300 | Seconds per task execution |
-| `backend` | string | "local" | `"local"`, `"modal"`, or `"e2b"` |
+| `backend` | string | "local" | Reserved backend selector. Config accepts `"local"`, `"modal"`, `"e2b"`, or `"morph"`, but the current swarm CLI only executes `"local"`. |
 
 ### `evolution`
 
