@@ -13,6 +13,7 @@ def test_sdist_manifest_is_release_scoped() -> None:
 
     assert set(sdist["include"]) == {
         "/.env.example",
+        "/LICENSE",
         "/README.md",
         "/pyproject.toml",
         "/uv.lock",
