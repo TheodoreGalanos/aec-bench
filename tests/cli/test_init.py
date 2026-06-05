@@ -22,6 +22,7 @@ def test_create_scaffold_creates_directories(tmp_path: Path) -> None:
     assert (tmp_path / "tasks").is_dir()
     assert (tmp_path / "seeds").is_dir()
     assert (tmp_path / "artefacts" / "ledger").is_dir()
+    assert (tmp_path / "artefacts" / "datasets").is_dir()
     assert result.created
 
 
@@ -32,6 +33,7 @@ def test_create_scaffold_skips_existing_dirs(tmp_path: Path) -> None:
     result = create_scaffold(tmp_path)
     assert result.created
     assert (tmp_path / "artefacts" / "ledger").is_dir()
+    assert (tmp_path / "artefacts" / "datasets").is_dir()
 
 
 def test_write_project_config_creates_toml(tmp_path: Path) -> None:
@@ -42,6 +44,7 @@ def test_write_project_config_creates_toml(tmp_path: Path) -> None:
     content = config_path.read_text(encoding="utf-8")
     assert "my-bench" in content
     assert "[paths]" in content
+    assert 'datasets = "artefacts/datasets"' in content
     assert "[compute]" in content
 
 

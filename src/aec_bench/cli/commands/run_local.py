@@ -439,7 +439,7 @@ def run_local(
         "--adapter",
         "--harness",
         "-a",
-        help="Agent harness: rlm, direct (default: rlm)",
+        help="Agent harness: rlm, direct, tool_loop, pydantic_ai, lambda-rlm (default: rlm)",
     ),
     output_dir: str | None = typer.Option(
         None,

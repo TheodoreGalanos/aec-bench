@@ -55,7 +55,7 @@ def generate_task(
 
     Examples:
       aec-bench generate task voltage-drop --instances 5 --difficulty easy,medium
-      aec-bench generate task voltage-drop --dry-run --json | jq '.data.instances'
+      aec-bench --json generate task voltage-drop --dry-run | jq '.data.instances'
     """
     import time
 
@@ -242,7 +242,7 @@ def list_templates(
 
     Examples:
       aec-bench generate list-templates --discipline electrical
-      aec-bench generate list-templates --json | jq '.data[].name'
+      aec-bench --json generate list-templates | jq '.data[].name'
     """
     import time
 
@@ -309,7 +309,7 @@ def validate_template_cmd(
 
     Examples:
       aec-bench generate validate-template src/aec_bench/templates/builtin/voltage-drop
-      aec-bench generate validate-template ./my-template --json | jq '.data.valid'
+      aec-bench --json generate validate-template ./my-template | jq '.data.valid'
     """
     import time
 
@@ -370,7 +370,7 @@ def generate_suite(
 
     Examples:
       aec-bench generate suite --config suite.toml --dry-run
-      aec-bench generate suite --config suite.toml --json | jq '.data.total_instances'
+      aec-bench --json generate suite --config suite.toml | jq '.data.total_instances'
     """
     import time
 
@@ -516,7 +516,7 @@ def generate_suite(
 
 
 def _render_plan_table(data: dict) -> None:
-    """Render the plan summary table for generate dataset output."""
+    """Render the plan summary table for generate suite output."""
     table = Table(title=f"Dataset: {data['suite_name']} ({data['total_instances']} instances)")
     table.add_column("Category", style="bold")
     table.add_column("Breakdown")

@@ -25,6 +25,9 @@ class TestDetectDirectProvider:
         assert detect_direct_provider("gpt-4.1-mini") == "azure"
         assert detect_direct_provider("o3-mini") == "azure"
 
+    def test_together_models(self) -> None:
+        assert detect_direct_provider("together:Qwen/Qwen3.7-Max") == "together"
+
     def test_bedrock_models(self) -> None:
         assert detect_direct_provider("us.anthropic.claude-sonnet-4-6") == "anthropic"
         # Bedrock models use the Anthropic API pattern through the prefix
@@ -37,11 +40,15 @@ class TestLocalAdapterRegistry:
     """Tests for the registry itself."""
 
     def test_registered_adapter_kinds(self) -> None:
-        """Registry should know about rlm and direct at minimum."""
+        """Registry should know about the local execution adapters."""
         registry = LocalAdapterRegistry()
         kinds = registry.available_adapters()
         assert "rlm" in kinds
         assert "direct" in kinds
+        assert "lambda-rlm" in kinds
+        assert "lambda_rlm" in kinds
+        assert "tool_loop" in kinds
+        assert "pydantic_ai" in kinds
 
     def test_unknown_adapter_raises(self) -> None:
         registry = LocalAdapterRegistry()
@@ -112,6 +119,61 @@ class TestBuildDirect:
         )
         assert hasattr(adapter, "execute")
         assert adapter.adapter_name() == "direct"
+        assert adapter.resolved_model() == "test-model"
+
+
+class TestBuildAdapterAliases:
+    """Tests for compatibility aliases advertised by skills and CLI help."""
+
+    def test_build_lambda_rlm_accepts_underscore_alias(self, tmp_path: Path) -> None:
+        """lambda_rlm should build the same canonical lambda-rlm adapter."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        (workspace / "report_template.toml").write_text(
+            """
+[[sections]]
+id = "intro"
+title = "Intro"
+writing_guidance = ["one line"]
+generation_mode = "prose"
+input_mapping = []
+"""
+        )
+        (workspace / "lambda-rlm.toml").write_text(
+            """
+[template]
+tier = "dependency_tree"
+definition = "report_template.toml"
+"""
+        )
+
+        registry = LocalAdapterRegistry()
+        adapter = registry.build(
+            adapter_kind="lambda_rlm",
+            model_name="test-model",
+            workspace=str(workspace),
+            client=MagicMock(),
+        )
+
+        assert hasattr(adapter, "execute")
+        assert adapter.adapter_name() == "lambda-rlm"
+        assert adapter.resolved_model() == "test-model"
+
+    def test_build_pydantic_ai_alias_uses_tool_loop_runtime(self, tmp_path: Path) -> None:
+        """pydantic_ai should be a working local alias for the Pydantic-backed tool loop."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        registry = LocalAdapterRegistry()
+        adapter = registry.build(
+            adapter_kind="pydantic_ai",
+            model_name="test-model",
+            workspace=str(workspace),
+            client=MagicMock(),
+        )
+
+        assert hasattr(adapter, "execute")
+        assert adapter.adapter_name() == "pydantic_ai"
         assert adapter.resolved_model() == "test-model"
 
 

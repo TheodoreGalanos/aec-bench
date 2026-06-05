@@ -10,6 +10,7 @@ from aec_bench.adapters.tool_loop import (
     ToolLoopCompletionResponse,
 )
 from aec_bench.contracts.task_definition import ToolSpec
+from aec_bench.harness import execution_entrypoint as execution_entrypoint_module
 from aec_bench.harness.execution_entrypoint import (
     default_execution_driver_registry,
     run_execution_bundle,
@@ -112,6 +113,150 @@ def test_execution_entrypoint_runs_tool_loop_bundle_and_writes_result(
     result = read_execution_result(result_path)
 
     assert result.adapter_name == "tool-loop"
+    assert result.raw_output_text == '{"findings": []}'
+
+
+def test_execution_entrypoint_runs_pydantic_ai_alias_bundle_and_writes_result(
+    tmp_path: Path,
+) -> None:
+    """pydantic_ai should dispatch through the same tool-loop execution driver."""
+    bundle_path = write_execution_bundle(
+        path=tmp_path / "bundle.json",
+        bundle=ExecutionBundle(
+            execution=SerializedAdapterExecution(
+                adapter_kind="pydantic_ai",
+                adapter_name="pydantic_ai",
+                resolved_model="gpt-5.4-mini",
+                payload={
+                    "client": ReplayToolLoopClient(
+                        responses=[
+                            ToolLoopCompletionResponse(
+                                output_text='{"findings": []}',
+                                done=True,
+                            )
+                        ]
+                    )
+                    .serialize_client()
+                    .__dict__
+                },
+            ),
+            request=AdapterRequestPayload(
+                instruction="Review the task.",
+                system_prompt=None,
+                tools=[],
+                configuration={"max_turns": 4},
+                output_path="/workspace/output.jsonl",
+                output_format="jsonl",
+            ),
+        ),
+    )
+
+    result_path = run_execution_bundle(
+        bundle_path=bundle_path,
+        result_path=tmp_path / "result.json",
+        registry=default_execution_driver_registry(workspace_dir=tmp_path),
+    )
+    result = read_execution_result(result_path)
+
+    assert result.adapter_name == "pydantic_ai"
+    assert result.raw_output_text == '{"findings": []}'
+
+
+def test_execution_entrypoint_runs_direct_bundle_without_serialized_client(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Direct Harbor bundles may omit payload; the driver should derive the client from model."""
+
+    class _StubDirectClient:
+        def complete(self, request):  # noqa: ANN001
+            return DirectCompletionResponse(output_text=f"model={request.model}")
+
+    monkeypatch.setattr(
+        execution_entrypoint_module,
+        "_default_direct_client_for_model",
+        lambda model_name: _StubDirectClient(),
+    )
+
+    bundle_path = write_execution_bundle(
+        path=tmp_path / "bundle.json",
+        bundle=ExecutionBundle(
+            execution=SerializedAdapterExecution(
+                adapter_kind="direct",
+                adapter_name="direct",
+                resolved_model="gpt-5.4",
+                payload={},
+            ),
+            request=AdapterRequestPayload(
+                instruction="Review the task.",
+                system_prompt=None,
+                tools=[],
+                configuration={},
+                output_path="/workspace/output.jsonl",
+                output_format="jsonl",
+            ),
+        ),
+    )
+
+    result_path = run_execution_bundle(
+        bundle_path=bundle_path,
+        result_path=tmp_path / "result.json",
+        registry=default_execution_driver_registry(workspace_dir=tmp_path),
+    )
+    result = read_execution_result(result_path)
+
+    assert result.adapter_name == "direct"
+    assert result.raw_output_text == "model=gpt-5.4"
+
+
+def test_execution_entrypoint_runs_pydantic_ai_bundle_without_serialized_client(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Pydantic-backed Harbor bundles may omit payload; the driver should build a client."""
+    replay_client = ReplayToolLoopClient(
+        responses=[
+            ToolLoopCompletionResponse(
+                output_text='{"findings": []}',
+                done=True,
+            )
+        ]
+    )
+
+    monkeypatch.setattr(
+        execution_entrypoint_module,
+        "_default_tool_loop_client_for_model",
+        lambda model_name, workspace_dir: replay_client,
+    )
+
+    bundle_path = write_execution_bundle(
+        path=tmp_path / "bundle.json",
+        bundle=ExecutionBundle(
+            execution=SerializedAdapterExecution(
+                adapter_kind="pydantic_ai",
+                adapter_name="pydantic_ai",
+                resolved_model="gpt-5.4-mini",
+                payload={},
+            ),
+            request=AdapterRequestPayload(
+                instruction="Review the task.",
+                system_prompt=None,
+                tools=[],
+                configuration={"max_turns": 4},
+                output_path="/workspace/output.jsonl",
+                output_format="jsonl",
+            ),
+        ),
+    )
+
+    result_path = run_execution_bundle(
+        bundle_path=bundle_path,
+        result_path=tmp_path / "result.json",
+        registry=default_execution_driver_registry(workspace_dir=tmp_path),
+    )
+    result = read_execution_result(result_path)
+
+    assert result.adapter_name == "pydantic_ai"
     assert result.raw_output_text == '{"findings": []}'
 
 
@@ -257,3 +402,13 @@ def test_execution_entrypoint_runs_lambda_rlm_bundle_and_writes_result(
         assert result.adapter_name == "lambda-rlm"
         assert result.raw_output_text is not None
         assert len(result.raw_output_text) > 0
+
+
+def test_default_execution_registry_exposes_documented_adapter_aliases(
+    tmp_path: Path,
+) -> None:
+    """Execution registry should accept the adapter names exposed to users."""
+    registry = default_execution_driver_registry(workspace_dir=tmp_path)
+
+    assert registry.resolve("lambda-rlm") is registry.resolve("lambda_rlm")
+    assert registry.resolve("pydantic_ai") is registry.resolve("tool_loop")

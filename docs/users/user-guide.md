@@ -42,10 +42,10 @@ aec-bench search "bearing capacity"
 # (created by `aec-bench init`)
 
 # Generate instances
-aec-bench generate dataset --config suite.toml
+aec-bench generate suite --config suite.toml
 
 # Preview what would be generated (without writing files)
-aec-bench generate dataset --config suite.toml --dry-run
+aec-bench generate suite --config suite.toml --dry-run
 ```
 
 ### suite.toml format
@@ -79,7 +79,7 @@ aec-bench generate task terzaghi-bearing-capacity --instances 3 --seed 42
 aec-bench run tasks/ground/shallow-foundations/terzaghi-bearing-capacity \
   --model "<model-id>"
 
-# Run with the PydanticAI agent (required for multimodal tasks)
+# Run with the PydanticAI-backed tool-loop alias
 aec-bench run tasks/electrical/pf-droop \
   --model "<model-id>" \
   --adapter pydantic_ai
@@ -97,8 +97,44 @@ aec-bench evaluate
 | Adapter | When to use |
 |---------|------------|
 | `tool_loop` | Default. Text-only tasks with bash + custom tools. |
-| `pydantic_ai` | Multimodal tasks (charts, images). Requires `pydantic-ai` in container. |
-| `script` | Single-turn tasks (no tool use). |
+| `pydantic_ai` | Compatibility alias for the PydanticAI-backed tool loop. |
+| `rlm` | RLM reasoning adapter for scaffolded/report-style tasks. |
+| `lambda-rlm` | Template-driven RLM report adapter. |
+| `direct` | Single-turn tasks with no tool use. |
+
+### Azure AI Foundry Models
+
+Foundry deployments that expose the v1 OpenAI-compatible API can run through
+the PydanticAI-backed adapters. Put the endpoint and key in `.env`, then pass
+the deployment name exactly as Foundry shows it:
+
+```bash
+AZURE_OPENAI_ENDPOINT=https://example.services.ai.azure.com/openai/v1/
+AZURE_OPENAI_API_KEY=
+
+aec-bench run tasks/electrical/pf-droop \
+  --model "DeepSeek-V4-Flash" \
+  --adapter pydantic_ai
+```
+
+For classic Azure OpenAI deployments, use the same environment variables with
+the normal Azure OpenAI endpoint and `AZURE_OPENAI_API_VERSION`.
+
+### Together AI Models
+
+Together models use the OpenAI-compatible chat-completions endpoint. Put the
+key in `.env`, then prefix the model with `together:` so provider routing stays
+explicit:
+
+```bash
+TOGETHER_API_KEY=
+
+aec-bench run tasks/electrical/pf-droop \
+  --model "together:Qwen/Qwen3.7-Max" \
+  --adapter pydantic_ai
+```
+
+The prefix is stripped before the request is sent to Together.
 
 ---
 
@@ -129,9 +165,9 @@ aec-bench run tasks/<discipline>/<category>/<template-name> \
 
 ---
 
-## Journey 4: Create a Multimodal Task
+## Journey 4: Create a Chart-Generating Task
 
-Build a task where the agent generates charts or diagrams as part of its workflow.
+Build a task where the agent generates charts or diagrams as part of its workflow. The current unified entrypoint treats generated image paths as text output; binary image self-review is only available on legacy script routes.
 
 ```bash
 # Step 1: Create the task directory
@@ -147,7 +183,7 @@ version = "1.0"
 [metadata]
 difficulty = "medium"
 category = "power-systems"
-tags = ["electrical", "multimodal"]
+tags = ["electrical", "chart-generation"]
 
 [agent]
 timeout_sec = 600.0
@@ -181,7 +217,7 @@ aec-bench generate dockerfiles tasks/
 | `task.toml` | Metadata, extensions, tool declarations |
 | `instruction.md` | What the agent must do |
 | `ground_truth.json` | Expected numeric outputs |
-| `environment/tools/create_chart.py` | Chart generator (prints `IMAGE:/path` for multimodal) |
+| `environment/tools/create_chart.py` | Optional chart generator script used by the task |
 | `tests/verify.py` | Scores agent output against ground truth |
 
 ### Run it
@@ -192,7 +228,7 @@ aec-bench run tasks/electrical/my-task \
   --adapter pydantic_ai
 ```
 
-See `tasks/electrical/pf-droop/` and `tasks/electrical/qv-droop/` for complete examples.
+See `tasks/electrical/pf-droop/` and `tasks/electrical/qv-droop/` for manually authored chart-generation examples.
 
 ---
 
@@ -233,7 +269,7 @@ extensions = ["claude-cli", "multimodal"]
 | Extension | What it adds | When to use |
 |-----------|-------------|-------------|
 | `claude-cli` | curl, procps, Claude Code CLI | Tasks using Claude Code as the agent |
-| `multimodal` | pydantic-ai, matplotlib | Tasks with chart/image generation |
+| `multimodal` | pydantic-ai, matplotlib | Tasks with chart/image generation dependencies |
 | `ocr` | tesseract, poppler-utils | Tasks requiring OCR or PDF processing |
 
 ### Generating Dockerfiles
@@ -254,7 +290,7 @@ Tasks that declare `extensions` get auto-generated Dockerfiles. Tasks without `e
 
 ## Image-Returning Tools
 
-Tools can return images to the agent for multimodal self-review. Declare `returns_image = true` in task.toml:
+Tasks can declare image-producing tools with `returns_image = true` in task.toml:
 
 ```toml
 [[environment.tools]]
@@ -264,17 +300,17 @@ description = "Generate a chart from computed data."
 returns_image = true
 ```
 
-The tool script prints `IMAGE:/path/to/file.png` to stdout. The PydanticAI agent detects this, reads the image, and injects it into the conversation so the model can visually review its own output.
+The legacy script agent path can consume `IMAGE:/path/to/file.png` markers. The current unified entrypoint records tool output as text and does not expose binary image returns to the model, so do not rely on multimodal self-review unless you are intentionally using that legacy route.
 
 ### How it works
 
 ```
 Agent computes values → calls create_chart tool → tool generates PNG
-→ tool prints IMAGE:/workspace/chart.png → agent sees the chart
-→ agent reviews visually → submits final answer
+→ tool prints IMAGE:/workspace/chart.png → output is available as text
+→ verifier scores the submitted answer
 ```
 
-This requires the `pydantic_ai` adapter (`--adapter pydantic_ai`).
+Treat `returns_image = true` as partial support in the unified entrypoint.
 
 ---
 
@@ -286,7 +322,7 @@ This requires the `pydantic_ai` adapter (`--adapter pydantic_ai`).
 | `aec-bench search <query>` | Find templates and seeds |
 | `aec-bench generate list-templates` | List available templates |
 | `aec-bench generate task <name>` | Generate instances from a template |
-| `aec-bench generate dataset --config suite.toml` | Generate a full dataset |
+| `aec-bench generate suite --config suite.toml` | Generate a full suite |
 | `aec-bench generate dockerfiles tasks/` | Regenerate Dockerfiles from extensions |
 | `aec-bench generate validate-template <dir>` | Validate a template |
 | `aec-bench run <path> --model <model>` | Run an experiment |

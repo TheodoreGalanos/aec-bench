@@ -305,7 +305,7 @@ Every param declared in `[params.*]` is available as a top-level template variab
 
 ### Conditional Blocks for Hidden Params
 
-Use Jinja2 `{% if ... is defined %}` guards around params that may be hidden at harder difficulties. When a param is in `hidden_params`, it is removed from `visible_params` but the direct-access variable is still set (from `all_params`). Use `is defined` to test whether a param should be shown:
+Use Jinja2 `{% if ... is defined %}` guards around params that may be hidden at harder difficulties. When a param is in `hidden_params`, it is removed from `visible_params` and is not injected as a direct-access variable. Use `is defined` to test whether a param should be shown:
 
 ```jinja2
 {% if cohesion_kpa is defined %}
@@ -313,7 +313,7 @@ Use Jinja2 `{% if ... is defined %}` guards around params that may be hidden at 
 {% endif %}
 ```
 
-**Important:** The renderer populates ALL param values (from `all_params`) into the template context, so direct-access variables are always defined. The `is defined` pattern works because the existing templates use it as a convention for params that _may_ be hidden. If you need true conditional rendering based on visibility, check against `visible_params` list or use a custom filter. The existing convention of `{% if param is defined %}` serves as documentation of which params are hideable.
+**Important:** The renderer only exposes visible param values as direct template variables. Hidden params remain available to the engine and verifier, but not to the instruction template through names like `{{ cohesion_kpa }}`. The `is defined` pattern is the intended way to exclude hidden params from generated instructions.
 
 ### Archetype Description Block
 

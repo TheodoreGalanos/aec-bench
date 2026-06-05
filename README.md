@@ -42,6 +42,16 @@ AEC-Bench loads `.env` from the project root when the CLI starts. Start from
 `.env.example` and fill only the providers you use; the example file contains
 placeholder names only and no real credentials.
 
+For Azure AI Foundry deployments that expose the v1 OpenAI-compatible API, set
+`AZURE_OPENAI_ENDPOINT` to the `/openai/v1/` endpoint, set
+`AZURE_OPENAI_API_KEY`, and run with the deployment name as `--model`. The
+`pydantic_ai`, `rlm`, and local Pydantic tool-loop paths use those settings.
+
+For Together AI, set `TOGETHER_API_KEY` and use an explicit `together:` model
+prefix, for example `--model "together:Qwen/Qwen3.7-Max"`. The prefix keeps
+Together model IDs from being routed to Azure when Azure credentials are also
+present.
+
 ## What This Does
 
 AEC-Bench lets you:
@@ -66,8 +76,8 @@ uv run aec-bench generate task --template path/to/template/ --instances 3
 # Preview without writing files
 uv run aec-bench generate task terzaghi-bearing-capacity --dry-run
 
-# Generate a full dataset from a suite configuration
-uv run aec-bench generate dataset --config suite.toml
+# Generate a full suite from a suite configuration
+uv run aec-bench generate suite --config suite.toml
 
 # List built-in templates
 uv run aec-bench generate list-templates
@@ -355,7 +365,7 @@ class MyToolAgent(BaseAgent):
 Ready-to-use agents in `agents/`:
 - `script_anthropic.py`, `script_azure_openai.py` — single-turn
 - `tool_loop_anthropic.py`, `tool_loop_azure_openai.py` — multi-turn with tools
-- `pydantic_ai_agent.py` — multimodal with chart generation support (provider-agnostic)
+- `pydantic_ai_agent.py` — legacy PydanticAI script agent with chart generation support
 
 ## Task Disciplines
 

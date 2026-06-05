@@ -4,9 +4,12 @@
 
 | Agent Type | Providers | Model Patterns | Tool Support | Multimodal |
 |------------|-----------|---------------|--------------|------------|
-| `tool_loop` | anthropic, azure_openai | `claude-*`, `gpt-*`, `o1-*`, `o3-*`, `o4-*` | Yes (bash + declared tools) | No |
-| `pydantic_ai` | anthropic, openai, azure_openai, bedrock, gemini | All above + `gemini-*` | Yes (bash + declared tools + image return) | Yes |
-| `direct` | anthropic, azure_openai | Same as tool_loop | No | No |
+| `tool_loop` | anthropic, azure_openai, bedrock, together, PydanticAI auto | `claude-*`, `gpt-*`, `o1-*`, `o3-*`, `o4-*`, Bedrock-prefixed IDs, `together:*`, provider-native names | Yes (bash tool loop) | No |
+| `pydantic_ai` | Same as `tool_loop` | Same as `tool_loop` | Yes (compatibility alias for Pydantic-backed tool loop) | No |
+| `rlm` | anthropic, azure_openai, bedrock, together, PydanticAI auto | Same as `tool_loop` | RLM REPL/scaffolded reasoning path | No |
+| `lambda-rlm` | Same as `rlm` | Same as `rlm` | Template-driven RLM report path | No |
+| `lambda_rlm` | Same as `lambda-rlm` | Same as `lambda-rlm` | Compatibility alias for `lambda-rlm` | No |
+| `direct` | anthropic, azure_openai, together | `claude-*`, `gpt-*`, `o1-*`, `o3-*`, `o4-*`, `together:*` | No | No |
 
 ## Provider Inference from Model Name
 
@@ -14,7 +17,9 @@ The provider is automatically inferred from the model name:
 
 - `claude-*` → anthropic (uses `ANTHROPIC_API_KEY`)
 - `gpt-*`, `o1-*`, `o3-*`, `o4-*` → azure_openai (uses `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_ENDPOINT`)
-- `gemini-*` → gemini (pydantic_ai only)
+- `together:*` → together (uses `TOGETHER_API_KEY`; prefix is stripped before the API request)
+- Unknown deployment names route through Azure when `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_API_KEY` are set for PydanticAI-backed agents
+- Bedrock-prefixed names such as `us.anthropic.*`, `amazon.*`, `meta.llama*`, `mistral.*`, `cohere.*`, and `ai21.*` route through Bedrock for PydanticAI-backed agents
 
 Override with `client.kind` if the default inference is wrong (e.g., using OpenAI directly instead of Azure).
 
@@ -28,20 +33,30 @@ Multi-turn agent with tool use. The agent gets a bash tool (always) plus any too
 
 ### pydantic_ai
 
-Uses the PydanticAI framework for the agent loop. Supports all providers (not just Anthropic and Azure OpenAI). Native multimodal support via `ToolReturn` + `BinaryContent` for image-returning tools.
+Compatibility alias for the PydanticAI-backed tool loop. It uses the same runtime as `tool_loop`, but keeps older manifests that name `pydantic_ai` working.
 
-**Use when:** tasks have image-returning tools (`returns_image = true`), or you need providers beyond Anthropic/Azure OpenAI (e.g., Gemini, Bedrock).
+**Use when:** older configs use `adapter: pydantic_ai`, or you want the public adapter name to signal the PydanticAI provider-routing path.
 
-**Important:** `pydantic_ai` is not in the default Harbor dispatch table. You must provide a `harbor_import_path` in the agent parameters pointing to your PydanticAI agent class:
+Use `adapter: pydantic_ai` directly in manifests:
 
 ```yaml
 agents:
   - name: pydantic-sonnet
     adapter: pydantic_ai
     model: claude-sonnet-4-20250514
-    parameters:
-      harbor_import_path: "agents.pydantic_ai_anthropic:PydanticAIAnthropicAgent"
 ```
+
+### rlm
+
+RLM reasoning adapter for tasks that benefit from scaffolded reasoning, scratchpad state, and optional `rlm.toml` configuration.
+
+**Use when:** a task or experiment is explicitly designed for the RLM adapter.
+
+### lambda-rlm
+
+Template-driven RLM report adapter. Looks for `lambda-rlm.toml`, falling back to `rlm.toml`, plus the configured report template.
+
+**Use when:** the workspace contains a report template and λ-RLM configuration.
 
 ### direct
 
@@ -66,5 +81,5 @@ Older single-turn agent variant. Prefer `direct` for new experiments.
 - `o3` — reasoning-focused
 - `o4-mini` — compact reasoning
 
-### Google (pydantic_ai only)
-- `gemini-2.5-pro` — multimodal, strong reasoning
+### Together AI
+- `together:Qwen/Qwen3.7-Max` — OpenAI-compatible Together model route

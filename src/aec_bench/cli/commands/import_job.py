@@ -21,7 +21,7 @@ def import_job(
 
     Examples:
       aec-bench import jobs/exp-001-run-1
-      aec-bench import jobs/exp-001-run-1 --json | jq '.data.imported'
+      aec-bench --json import jobs/exp-001-run-1 | jq '.data.imported'
     """
     start = time.monotonic()
     resolved_ledger = resolve_path("ledger_root", cli_override=ledger_root)
