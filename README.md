@@ -433,3 +433,7 @@ uv run ruff format src/ tests/
 - `docs/INVARIANTS.md` — 10 non-negotiable architectural rules
 - `docs/CONTRACTS.md` — Data shapes at every boundary
 - `docs/AGENTS.md` — Agent guide with conventions and shared utilities
+
+## License
+
+AEC-Bench is distributed under the MIT License. See [LICENSE](LICENSE).
