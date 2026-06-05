@@ -255,7 +255,7 @@ def list_datasets_cmd(
 
     Examples:
       aec-bench dataset list
-      aec-bench dataset list --json | jq '.data[].name'
+      aec-bench --json dataset list | jq '.data[].name'
     """
     import time
 
@@ -325,7 +325,7 @@ def dataset_info(
 
     Examples:
       aec-bench dataset info electrical-only@1.0.0
-      aec-bench dataset info electrical-only --json | jq '.data.integrity'
+      aec-bench --json dataset info electrical-only | jq '.data.integrity'
     """
     import time
 
@@ -469,7 +469,7 @@ def validate_dataset(
 
     Examples:
       aec-bench dataset validate electrical-only@1.0.0
-      aec-bench dataset validate electrical-only --json | jq '.data.is_clean'
+      aec-bench --json dataset validate electrical-only | jq '.data.is_clean'
     """
     import time
 
@@ -546,7 +546,7 @@ def dataset_results_cmd(
 
     Examples:
       aec-bench dataset results electrical-only@1.0.0
-      aec-bench dataset results electrical-only --json | jq '.data.summary'
+      aec-bench --json dataset results electrical-only | jq '.data.summary'
     """
     import time
 

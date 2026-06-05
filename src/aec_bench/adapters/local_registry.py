@@ -19,15 +19,19 @@ AdapterBuilder = Callable[..., Any]
 # Provider detection prefixes — shared across adapter types
 _AZURE_PREFIXES = ("gpt-", "gpt4", "o1-", "o3-", "o4-")
 _ANTHROPIC_PREFIXES = ("claude-",)
+_TOGETHER_PREFIX = "together:"
 
 
 def detect_direct_provider(model_name: str) -> str:
     """Detect the direct client provider from the model name.
 
-    Returns ``"anthropic"`` or ``"azure"``.  Defaults to ``"anthropic"``
-    for unknown models (Anthropic API is the most common local use case).
+    Returns ``"anthropic"``, ``"azure"``, or ``"together"``.  Defaults to
+    ``"anthropic"`` for unknown models (Anthropic API is the most common
+    local use case).
     """
     lower = model_name.lower()
+    if lower.startswith(_TOGETHER_PREFIX):
+        return "together"
     if any(lower.startswith(p) for p in _AZURE_PREFIXES):
         return "azure"
     return "anthropic"
@@ -164,6 +168,10 @@ def _build_direct(
             from aec_bench.adapters.direct_providers import AzureOpenAIChatDirectClient
 
             client = AzureOpenAIChatDirectClient()
+        elif provider == "together":
+            from aec_bench.adapters.direct_providers import TogetherChatDirectClient
+
+            client = TogetherChatDirectClient()
         else:
             from aec_bench.adapters.direct_providers import AnthropicDirectClient
 
@@ -271,6 +279,7 @@ def _build_tool_loop(
     workspace: str,
     client: Any | None = None,
     trajectory_writer: Any | None = None,
+    adapter_name: str = "tool_loop",
     **_kwargs: Any,
 ) -> Any:
     """Build a tool-loop adapter for local execution with bash tool.
@@ -330,7 +339,7 @@ def _build_tool_loop(
     executor = BashToolExecutor(workspace=workspace)
 
     return ToolLoopAdapter(
-        adapter_name="tool_loop",
+        adapter_name=adapter_name,
         model_name=model_name,
         client=client,
         tool_executor=executor,
@@ -339,12 +348,29 @@ def _build_tool_loop(
     )
 
 
+def _build_pydantic_ai(
+    *,
+    model_name: str,
+    workspace: str,
+    **kwargs: Any,
+) -> Any:
+    """Build the PydanticAI-backed tool-loop adapter through its public alias."""
+    return _build_tool_loop(
+        model_name=model_name,
+        workspace=workspace,
+        adapter_name="pydantic_ai",
+        **kwargs,
+    )
+
+
 # Default builder registry
 _DEFAULT_BUILDERS: dict[str, AdapterBuilder] = {
     "rlm": _build_rlm,
     "direct": _build_direct,
     "lambda-rlm": _build_lambda_rlm,
+    "lambda_rlm": _build_lambda_rlm,
     "tool_loop": _build_tool_loop,
+    "pydantic_ai": _build_pydantic_ai,
 }
 
 
@@ -354,8 +380,9 @@ class LocalAdapterRegistry:
     Each builder creates a fully-wired adapter for in-process local
     execution.  Provider credentials are read from environment variables.
 
-    The registry ships with builders for ``"rlm"`` and ``"direct"``.
-    Additional builders can be registered via :meth:`register`.
+    The registry ships with builders for the built-in local adapters and
+    compatibility aliases. Additional builders can be registered via
+    :meth:`register`.
     """
 
     def __init__(self) -> None:

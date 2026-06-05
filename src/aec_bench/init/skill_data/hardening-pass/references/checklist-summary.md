@@ -30,10 +30,10 @@
 
 | # | Category | Check | Severity if Failed |
 |---|----------|-------|--------------------|
-| I1 | Metadata | task.toml has [meta] and [difficulty] | High |
-| I2 | Metadata | Difficulty level is valid (easy/medium/hard) | Medium |
-| I3 | Metadata | Tags present and include discipline | Low |
-| I4 | Metadata | Declared tool files exist | High |
+| I1 | Metadata | task.toml has [metadata], [agent], [verifier], and [environment] | High |
+| I2 | Metadata | [metadata].difficulty is valid (easy/medium/hard) | Medium |
+| I3 | Metadata | [metadata].tags present and include discipline | Low |
+| I4 | Metadata | [[environment.tools]] entries point to existing files | High |
 | I5 | Instruction | No template placeholders remaining | Critical |
 | I6 | Instruction | Output format specified | High |
 | I7 | Instruction | All values are concrete (no ranges/descriptions) | High |

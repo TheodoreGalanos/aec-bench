@@ -19,9 +19,14 @@ from aec_bench.adapters.direct import (
     replay_direct_client_from_payload,
 )
 from aec_bench.adapters.direct_providers import (
+    AnthropicDirectClient,
+    AzureOpenAIChatDirectClient,
+    TogetherChatDirectClient,
     anthropic_direct_client_from_payload,
     azure_openai_chat_client_from_payload,
+    together_chat_client_from_payload,
 )
+from aec_bench.adapters.local_registry import detect_direct_provider
 from aec_bench.adapters.rlm.providers import make_rlm_client
 from aec_bench.adapters.tool_loop import (
     ToolExecutionResult,
@@ -53,6 +58,7 @@ class ExecutionClientRegistry:
             "replay": replay_direct_client_from_payload,
             "anthropic_api": anthropic_direct_client_from_payload,
             "azure_openai_chat": azure_openai_chat_client_from_payload,
+            "together_chat": together_chat_client_from_payload,
         }
     )
     tool_loop_client_factories: dict[str, ToolLoopClientFactory] = field(
@@ -93,10 +99,14 @@ class DirectExecutionDriver:
     client_registry: ExecutionClientRegistry
 
     def execute(self, bundle: ExecutionBundle) -> AdapterResult:
+        if _payload_has_client(bundle.execution.payload):
+            client = self.client_registry.build_direct_client(_client_spec(bundle.execution.payload))
+        else:
+            client = _default_direct_client_for_model(bundle.execution.resolved_model)
         adapter = DirectAdapter(
             adapter_name=bundle.execution.adapter_name,
             model_name=bundle.execution.resolved_model,
-            client=self.client_registry.build_direct_client(_client_spec(bundle.execution.payload)),
+            client=client,
         )
         return adapter.execute(_adapter_request(bundle))
 
@@ -108,10 +118,17 @@ class ToolLoopExecutionDriver:
 
     def execute(self, bundle: ExecutionBundle) -> AdapterResult:
         tools = [ToolSpec.model_validate(tool_payload) for tool_payload in bundle.request.tools]
+        if _payload_has_client(bundle.execution.payload):
+            client = self.client_registry.build_tool_loop_client(_client_spec(bundle.execution.payload))
+        else:
+            client = _default_tool_loop_client_for_model(
+                bundle.execution.resolved_model,
+                self.workspace_dir,
+            )
         adapter = ToolLoopAdapter(
             adapter_name=bundle.execution.adapter_name,
             model_name=bundle.execution.resolved_model,
-            client=self.client_registry.build_tool_loop_client(_client_spec(bundle.execution.payload)),
+            client=client,
             tool_executor=TaskToolExecutor(
                 registry=ToolExecutorRegistry(workspace_dir=self.workspace_dir),
                 tools=tools,
@@ -250,15 +267,20 @@ def run_execution_bundle(
 
 def default_execution_driver_registry(*, workspace_dir: Path) -> ExecutionDriverRegistry:
     client_registry = ExecutionClientRegistry()
+    direct_driver = DirectExecutionDriver(client_registry=client_registry)
+    tool_loop_driver = ToolLoopExecutionDriver(
+        workspace_dir=workspace_dir,
+        client_registry=client_registry,
+    )
+    lambda_rlm_driver = LambdaRlmExecutionDriver(workspace_dir=workspace_dir)
     return ExecutionDriverRegistry(
         drivers={
-            "direct": DirectExecutionDriver(client_registry=client_registry),
-            "tool_loop": ToolLoopExecutionDriver(
-                workspace_dir=workspace_dir,
-                client_registry=client_registry,
-            ),
+            "direct": direct_driver,
+            "tool_loop": tool_loop_driver,
+            "pydantic_ai": tool_loop_driver,
             "rlm": RlmExecutionDriver(workspace_dir=workspace_dir),
-            "lambda_rlm": LambdaRlmExecutionDriver(workspace_dir=workspace_dir),
+            "lambda-rlm": lambda_rlm_driver,
+            "lambda_rlm": lambda_rlm_driver,
         }
     )
 
@@ -297,6 +319,31 @@ def _client_spec(payload: dict[str, Any]) -> SerializedClientSpec:
     return SerializedClientSpec(
         client_kind=cast(str, client_payload["client_kind"]),
         payload=cast(dict[str, Any], client_payload.get("payload", {})),
+    )
+
+
+def _payload_has_client(payload: dict[str, Any]) -> bool:
+    return isinstance(payload.get("client"), dict)
+
+
+def _default_direct_client_for_model(model_name: str) -> DirectClient:
+    provider = detect_direct_provider(model_name)
+    if provider == "azure":
+        return AzureOpenAIChatDirectClient()
+    if provider == "together":
+        return TogetherChatDirectClient()
+    return AnthropicDirectClient()
+
+
+def _default_tool_loop_client_for_model(
+    model_name: str,
+    workspace_dir: Path,
+) -> ToolLoopClient:
+    from aec_bench.adapters.tool_loop_local import PydanticAiToolLoopClient
+
+    return PydanticAiToolLoopClient(
+        model_name,
+        workspace=str(workspace_dir),
     )
 
 

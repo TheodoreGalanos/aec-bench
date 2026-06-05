@@ -32,7 +32,7 @@ def list_trials(
 
     Examples:
       aec-bench ledger list --experiment-id exp-001
-      aec-bench ledger list --adapter tool_loop --json | jq '.data[].reward'
+      aec-bench --json ledger list --adapter tool_loop | jq '.data[].reward'
     """
     start = time.monotonic()
     resolved_ledger = resolve_path("ledger_root", cli_override=ledger_root)

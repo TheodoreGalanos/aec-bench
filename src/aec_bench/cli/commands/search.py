@@ -34,7 +34,7 @@ def search_command(
 
     Examples:
       aec-bench search "voltage drop" --discipline electrical
-      aec-bench search "cable sizing" --json | jq '.data[].name'
+      aec-bench --json search "cable sizing" | jq '.data[].name'
     """
     start = time.monotonic()
     config = load_config()

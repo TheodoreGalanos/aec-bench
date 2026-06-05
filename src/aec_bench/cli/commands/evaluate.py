@@ -51,7 +51,7 @@ def evaluate_experiment(
 
     Examples:
       aec-bench evaluate --experiment exp-001 --ledger-root jobs/
-      aec-bench evaluate --experiment exp-001 --json | jq '.data.summary'
+      aec-bench --json evaluate --experiment exp-001 | jq '.data.summary'
     """
     from aec_bench.communication.html_report import build_evaluation_report
     from aec_bench.evaluation.artifact import (

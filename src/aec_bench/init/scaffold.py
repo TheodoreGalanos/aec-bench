@@ -29,6 +29,7 @@ _SCAFFOLD_DIRS: tuple[str, ...] = (
     "tasks",
     "seeds",
     "artefacts/ledger",
+    "artefacts/datasets",
 )
 
 _PROJECT_CONFIG_TEMPLATE = """\
@@ -39,6 +40,7 @@ name = "{project_name}"
 tasks = "tasks"
 seeds = "seeds"
 ledger = "artefacts/ledger"
+datasets = "artefacts/datasets"
 feedback = "artefacts/feedback"
 jobs = "jobs"
 templates = "templates"
@@ -49,7 +51,7 @@ backend = "modal"
 
 _SUITE_TOML_CONTENT = """\
 # Suite configuration — defines which templates to generate instances from.
-# Run with: aec-bench generate dataset --config suite.toml
+# Run with: aec-bench generate suite --config suite.toml
 #
 # Each [[dataset]] entry specifies a template, instance count, and optional
 # filters. Templates are listed with: aec-bench generate list-templates
@@ -202,7 +204,7 @@ def _locate_bundled_source(package_name: str, fallback_dir: str) -> Path | None:
 def copy_skills(target: Path) -> None:
     """Copy packaged skills into ``<target>/.claude/skills/``.
 
-    Only the four packaged skill directories are written. User-added skill
+    Only the packaged skill directories are written. User-added skill
     directories are left untouched.
     """
     source = _locate_bundled_source("aec_bench.init.skill_data", ".claude/skills")

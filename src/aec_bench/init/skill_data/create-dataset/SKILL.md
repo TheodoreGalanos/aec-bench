@@ -112,13 +112,14 @@ Execute the pipeline:
 
 1. **Generate instances** (if using templates):
    ```bash
-   aec-bench generate dataset --config suite.toml --seed 42
+   aec-bench generate suite --config suite.toml --seed 42
    ```
 
 2. **Create the dataset manifest**:
    ```bash
-   aec-bench dataset create --config suite.toml --name "<name>" --version "<version>" --summary "<summary>"
+   aec-bench dataset create --from-suite-output <manifest_path> --name "<name>" --version "<version>" --summary "<summary>"
    ```
+   Use the `manifest_path` returned by `generate suite` for `<manifest_path>`.
 
 3. **Verify integrity**:
    ```bash

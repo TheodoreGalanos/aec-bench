@@ -44,7 +44,7 @@ def view() -> None:
 
     Examples:
       aec-bench config view
-      aec-bench config view --json | jq '.data.settings.tasks_root'
+      aec-bench --json config view | jq '.data.settings.tasks_root'
     """
     start = time.monotonic()
     config = _load_config()

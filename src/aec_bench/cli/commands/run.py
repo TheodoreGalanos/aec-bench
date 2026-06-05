@@ -26,7 +26,7 @@ def run_experiment(
         "tool_loop",
         "--adapter",
         "--harness",
-        help="Agent harness: tool_loop, pydantic_ai, script, rlm",
+        help="Agent harness: tool_loop, pydantic_ai, direct, rlm, lambda-rlm",
     ),
     backend: str = typer.Option(
         "modal",
@@ -53,7 +53,7 @@ def run_experiment(
 
     Examples:
       aec-bench run tasks/electrical/voltage-drop --model gpt-4.1-mini --dry-run
-      aec-bench run --config experiment.yaml --json | jq '.data.experiment_id'
+      aec-bench --json run --config experiment.yaml | jq '.data.experiment_id'
     """
     start = time.monotonic()
 

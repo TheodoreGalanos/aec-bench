@@ -112,7 +112,7 @@ def test_resolve_import_path_returns_entrypoint_agent_for_all_adapters() -> None
     from aec_bench.contracts.experiment_manifest import AgentConfig
     from aec_bench.harness.harbor_dispatch import _resolve_import_path
 
-    for adapter in ("rlm", "direct", "tool_loop", "lambda_rlm", "pydantic_ai"):
+    for adapter in ("rlm", "direct", "tool_loop", "lambda-rlm", "lambda_rlm", "pydantic_ai"):
         agent = AgentConfig(name="test", adapter=adapter, model="claude-sonnet-4-20250514")
         path = _resolve_import_path(agent)
         assert path == "agents.entrypoint_agent:EntrypointAgent", f"Failed for adapter={adapter}"

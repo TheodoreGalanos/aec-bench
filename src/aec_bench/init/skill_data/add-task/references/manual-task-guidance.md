@@ -73,6 +73,8 @@ description = "Generate a chart from computed data."
 returns_image = true
 ```
 
+`returns_image = true` documents that the tool may produce image files. The unified entrypoint currently passes tool output as text, so binary image self-review requires an intentionally selected legacy script route.
+
 ---
 
 ## 2. instruction.md
@@ -244,8 +246,8 @@ See existing task instances for reference implementations:
 
 - **Generated tasks:** `tasks/ground/` and `tasks/electrical/` contain instances
   produced by generation templates. These follow all conventions correctly.
-- **Multimodal tasks:** `tasks/electrical/pf-droop/` and `tasks/electrical/qv-droop/`
-  are manually-authored multimodal tasks with tool declarations and chart generation.
+- **Chart-generation tasks:** `tasks/electrical/pf-droop/` and `tasks/electrical/qv-droop/`
+  are manually-authored tasks with tool declarations and chart generation.
 - **Seed tasks:** `tasks/civil/`, `tasks/mechanical/`, and `tasks/structural/`
   contain seed inventories that describe tasks but may not yet have full instance
   directories.

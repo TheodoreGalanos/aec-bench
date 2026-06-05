@@ -101,27 +101,34 @@ Show available agent types:
 
 ```
 Available agents:
-  1. tool_loop   — Multi-turn tool use (Anthropic, Azure OpenAI)
-  2. pydantic_ai — PydanticAI framework (all providers, multimodal support)
-                   Note: requires harbor_import_path override
-  3. direct      — Single-turn, no tools (Anthropic, Azure OpenAI)
+  1. tool_loop    — Multi-turn bash tool use with PydanticAI provider routing
+  2. pydantic_ai  — Compatibility alias for the Pydantic-backed tool loop
+  3. rlm          — RLM reasoning adapter for scaffolded/report-style tasks
+  4. lambda-rlm   — Template-driven RLM report adapter
+  5. direct       — Single-turn, no tools (Anthropic, Azure OpenAI, Together)
 ```
 
 Add contextual notes based on the selected tasks:
 - If tasks have tools: "X of your Y tasks declare tools — tool_loop or pydantic_ai will use them, direct won't."
-- If tasks have `returns_image: true`: "Z tasks have image-returning tools — pydantic_ai handles those natively."
+- If tasks have `returns_image: true`: "Z tasks have image-returning tools — binary image returns are not exposed by the unified entrypoint yet, so treat this as a gap unless you are intentionally using a legacy script agent."
+- If tasks include `lambda-rlm.toml` or `report_template.toml`, mention `lambda-rlm` as the adapter that consumes those files.
 
 Ask: **Which agent type?**
 
 If they choose `pydantic_ai`, explain:
-> "PydanticAI isn't in the default Harbor dispatch table yet. You'll need to provide the import path to your PydanticAI agent class. For example: `agents.pydantic_ai_anthropic:PydanticAIAnthropicAgent`"
+> "`pydantic_ai` is a public compatibility name for the Pydantic-backed tool loop. Use it when older configs expect that adapter name, or when you want the PydanticAI provider-routing path."
+
+If they choose `lambda-rlm`, explain:
+> "`lambda-rlm` expects a `lambda-rlm.toml` or compatible `rlm.toml` plus a report template in the task workspace."
 
 Ask: **Which model?**
 
 Suggest models based on the agent-provider matrix:
 - tool_loop + Anthropic: `claude-sonnet-4-20250514`, `claude-haiku-4-5-20251001`
 - tool_loop + Azure OpenAI: `gpt-4o`, `o3`, `o4-mini`
-- pydantic_ai: any of the above plus `gemini-2.5-pro`
+- Together: `together:Qwen/Qwen3.7-Max` (requires `TOGETHER_API_KEY`)
+- rlm / lambda-rlm: same PydanticAI provider routing as tool_loop, including Bedrock-style model IDs and `together:*`
+- pydantic_ai: same PydanticAI provider routing as tool_loop
 - direct: same as tool_loop
 
 Ask: **Custom system prompt file?** (default: none)

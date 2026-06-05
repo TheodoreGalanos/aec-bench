@@ -29,7 +29,7 @@ def summary(
 
     Examples:
       aec-bench report summary --experiment-id exp-001
-      aec-bench report summary -e exp-001 --json | jq '.data.mean_reward'
+      aec-bench --json report summary -e exp-001 | jq '.data.mean_reward'
     """
     start = time.monotonic()
     resolved_ledger = resolve_path("ledger_root", cli_override=ledger_root)
@@ -89,7 +89,7 @@ def leaderboard(
 
     Examples:
       aec-bench report leaderboard --experiment-id exp-001
-      aec-bench report leaderboard --json | jq '.data.leaderboard.entries[]'
+      aec-bench --json report leaderboard | jq '.data.leaderboard.entries[]'
     """
     start = time.monotonic()
     resolved_ledger = resolve_path("ledger_root", cli_override=ledger_root)
@@ -154,7 +154,7 @@ def traces(
 
     Examples:
       aec-bench report traces --experiment-id exp-001 --output traces.json
-      aec-bench report traces -e exp-001 --json | jq '.data[].n_turns'
+      aec-bench --json report traces -e exp-001 | jq '.data[].n_turns'
     """
     start = time.monotonic()
     resolved_ledger = resolve_path("ledger_root", cli_override=ledger_root)
@@ -216,8 +216,8 @@ def behavioral(
 
     Examples:
       aec-bench report behavioral -e exp-001 --classifier claude-sonnet-4-20250514
-      aec-bench report behavioral -e exp-001 --classifier claude-sonnet-4-20250514 \\
-        --json | jq '.data.trials'
+      aec-bench --json report behavioral -e exp-001 \\
+        --classifier claude-sonnet-4-20250514 | jq '.data.trials'
     """
     start = time.monotonic()
     resolved_ledger = resolve_path("ledger_root", cli_override=ledger_root)

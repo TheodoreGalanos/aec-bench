@@ -104,10 +104,10 @@ Read all instance files: `task.toml`, `instruction.md`, and check for `environme
 
 Read `task.toml` and check:
 
-- [ ] **Required sections** — does it have `[meta]`, `[difficulty]`?
-- [ ] **Difficulty level** — is it set to one of easy/medium/hard?
-- [ ] **Tags** — are tags present and include the discipline?
-- [ ] **Tools** — if `[tools]` is declared, do the referenced tool files exist?
+- [ ] **Required sections** — does it have `[metadata]`, `[agent]`, `[verifier]`, and `[environment]`?
+- [ ] **Difficulty level** — is `[metadata].difficulty` set to one of easy/medium/hard?
+- [ ] **Tags** — are `[metadata].tags` present and include the discipline?
+- [ ] **Tools** — if `[[environment.tools]]` is declared, do the referenced tool files exist?
 
 #### 3b. Instruction
 

@@ -87,8 +87,6 @@ agents:
   - name: sonnet-pydantic
     adapter: pydantic_ai
     model: claude-sonnet-4-20250514
-    parameters:
-      harbor_import_path: "agents.pydantic_ai_anthropic:PydanticAIAnthropicAgent"
   - name: gpt4o-tool-loop
     adapter: tool_loop
     model: gpt-4o
