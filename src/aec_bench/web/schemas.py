@@ -44,6 +44,7 @@ class TrialRowSchema(BaseModel):
     task_id: str
     model: str
     adapter: str
+    compute_backend: str = ""
     discipline: str
     reward: float
     reward_class: str
@@ -98,6 +99,7 @@ class ViewerMetaResponse(BaseModel):
     task_id: str
     model: str
     adapter: str
+    compute_backend: str = ""
     reward: float
     reward_class: str
     steps: list[StepSummarySchema]
@@ -536,7 +538,7 @@ class GraveyardEntrySchema(BaseModel):
     failure_reason: str
     field_failures: dict[str, str] | None = None
     detected_patterns: list[str] | None = None
-    mutation_actions: list[dict] | None = None
+    mutation_actions: list[dict[str, Any]] | None = None
     investigation_summary: str | None = None
 
 

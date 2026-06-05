@@ -6,9 +6,11 @@ from aec_bench.providers.behavioral_llm import (
     BedrockBehavioralLLMClient,
     build_behavioral_llm_client,
 )
+from aec_bench.providers.morph_cloud import MorphCloudOperations
 
 __all__ = [
     "AnthropicBehavioralLLMClient",
     "BedrockBehavioralLLMClient",
+    "MorphCloudOperations",
     "build_behavioral_llm_client",
 ]

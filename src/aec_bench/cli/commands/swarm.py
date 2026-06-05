@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -31,6 +32,10 @@ def swarm_run(
     except Exception as exc:
         print_error(f"Invalid config: {exc}")
         raise typer.Exit(1) from exc
+
+    if config.evaluation.backend != "local":
+        print_error(f"Swarm currently supports only local evaluation; configured backend: {config.evaluation.backend}")
+        raise typer.Exit(1)
 
     console.print(f"[bold green]Swarm starting:[/bold green] {config.agents.count} agents")
     console.print(f"  Budget: ${config.budget.max_cost_usd:.2f}")
@@ -60,10 +65,12 @@ def swarm_run(
     console.print(f"  Tasks: {len(task_dirs)} task instances")
 
     # Read adapter from workspace manifest
-    import yaml as _yaml
+    import yaml as _yaml  # type: ignore[import-untyped]
 
-    manifest_data = _yaml.safe_load((workspace_path / "manifest.yaml").read_text())
-    adapter = manifest_data.get("agent_adapter", "rlm")
+    raw_manifest: object = _yaml.safe_load((workspace_path / "manifest.yaml").read_text())
+    manifest_data = {str(k): v for k, v in raw_manifest.items()} if isinstance(raw_manifest, dict) else {}
+    adapter_value = manifest_data.get("agent_adapter", "rlm")
+    adapter = adapter_value if isinstance(adapter_value, str) else "rlm"
     console.print(f"  Adapter: {adapter}")
 
     # Build LLM clients
@@ -164,7 +171,7 @@ def swarm_history(
 ) -> None:
     """List past swarm runs."""
     state_path = Path(state_dir)
-    runs: list[dict] = []
+    runs: list[dict[str, Any]] = []
     for event_file in sorted(state_path.glob("**/events.jsonl")):
         from aec_bench.evolution.swarm.resume import rebuild_state
 

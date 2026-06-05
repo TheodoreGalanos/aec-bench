@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, ValidationError, field_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 
 from aec_bench.contracts.validators import LenientModel, ensure_non_empty_string
 
@@ -37,12 +37,30 @@ class HarborAgentConfig(LenientModel):
 
 
 class HarborEnvironmentConfig(LenientModel):
-    type: str
+    type: str | None = None
+    import_path: str | None = None
+    kwargs: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("type")
     @classmethod
-    def validate_type(cls, value: str) -> str:
+    def validate_type(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         return ensure_non_empty_string(value)
+
+    @field_validator("import_path")
+    @classmethod
+    def validate_import_path(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return ensure_non_empty_string(value)
+
+    @model_validator(mode="after")
+    def validate_environment_reference(self) -> "HarborEnvironmentConfig":
+        if self.type is None and self.import_path is None:
+            msg = "environment must include type or import_path"
+            raise ValueError(msg)
+        return self
 
 
 class HarborTrialConfig(LenientModel):

@@ -102,7 +102,12 @@ uv run aec-bench run --config experiment.yaml --tasks-root tasks/
 
 # Dry run to see the plan
 uv run aec-bench run tasks/mechanical/heat-load --model "<model-id>" --dry-run
+
+# Run through Morph Cloud via Harbor
+uv run aec-bench run tasks/electrical/pf-droop --model "<model-id>" --backend morph
 ```
+
+`aec-bench run` defaults to Harbor's `modal` backend. Morph Cloud runs use Harbor's normal task, agent, artifact, and verifier lifecycle through `--backend morph`; set `MORPH_API_KEY` in `.env` before using it.
 
 ### Prime Lab Export
 

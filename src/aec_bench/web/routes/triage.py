@@ -109,6 +109,7 @@ class TrialRow:
     task_id: str
     model: str
     adapter: str
+    compute_backend: str
     discipline: str
     reward: float
     reward_class: str
@@ -290,6 +291,7 @@ def get_triage_api(
                 task_id=record.task.task_id,
                 model=record.agent.model,
                 adapter=record.agent.adapter,
+                compute_backend=record.environment.compute_backend,
                 discipline=extract_discipline(record.task.task_id),
                 reward=record.evaluation.reward,
                 reward_class=reward_css_class(record.evaluation.reward),

@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
-from aec_bench.contracts.trial_record import AgentReference, TaskReference
+from aec_bench.contracts.trial_record import AgentReference, EnvironmentSnapshot, TaskReference
 from aec_bench.ledger.writer import write_trial_record
 from aec_bench.web.app import create_app
 from tests.support.trial_record_factories import make_trial_record
@@ -37,6 +37,33 @@ def test_triage_api_returns_json(tmp_path: Path) -> None:
     assert "filters" in data
     assert "experiments" in data
     assert "models" in data
+
+
+def test_triage_api_includes_compute_backend(tmp_path: Path) -> None:
+    """Trial rows expose the execution backend recorded in the ledger."""
+    ledger = tmp_path / "ledger"
+    ledger.mkdir()
+    tasks = tmp_path / "tasks"
+    tasks.mkdir()
+    write_trial_record(
+        ledger_root=ledger,
+        record=make_trial_record(
+            experiment_id="exp-01",
+            trial_id="trial-morph",
+            environment=EnvironmentSnapshot(
+                runtime_image="ghcr.io/example/task-image:latest",
+                compute_backend="morph",
+                tool_versions={"codes_search": "abc123"},
+            ),
+        ),
+    )
+    client = TestClient(create_app(ledger_root=ledger, tasks_root=tasks))
+
+    resp = client.get("/api/triage?experiment=exp-01")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["trials"][0]["compute_backend"] == "morph"
 
 
 def test_triage_api_filters_by_experiment(tmp_path: Path) -> None:

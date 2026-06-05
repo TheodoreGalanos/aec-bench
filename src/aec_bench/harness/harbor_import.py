@@ -25,9 +25,11 @@ from aec_bench.contracts.trial_record import (
 from aec_bench.contracts.validators import infer_output_format, normalize_workspace_path
 from aec_bench.harness.harbor_contract import (
     HarborArtifactContractError,
+    HarborEnvironmentConfig,
     HarborTrialResult,
     read_harbor_trial_result,
 )
+from aec_bench.harness.harbor_dispatch import MORPH_BACKEND, MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH
 from aec_bench.harness.verifier_artifacts import read_verifier_artifacts
 from aec_bench.tasks.loader import load_task_definition
 
@@ -153,7 +155,7 @@ def import_harbor_trial(
         ),
         environment=EnvironmentSnapshot(
             runtime_image=_runtime_image(task_relative_path=task_relative_path),
-            compute_backend=harbor_result.config.environment.type,
+            compute_backend=_compute_backend(harbor_result.config.environment),
             tool_versions=None,
         ),
         inputs=InputRecord(
@@ -322,6 +324,17 @@ def _resolved_model(*, harbor_result: HarborTrialResult) -> str:
 
 def _runtime_image(*, task_relative_path: str) -> str:
     return f"harbor-dockerfile:{task_relative_path}/environment/Dockerfile"
+
+
+def _compute_backend(environment: HarborEnvironmentConfig) -> str:
+    if environment.type is not None:
+        return environment.type
+    raw_backend = environment.kwargs.get("compute_backend")
+    if isinstance(raw_backend, str) and raw_backend:
+        return raw_backend
+    if environment.import_path == MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH:
+        return MORPH_BACKEND
+    raise HarborImportError("unable to resolve compute backend from Harbor result")
 
 
 def _setup_duration_seconds(*, harbor_result: HarborTrialResult) -> float | None:

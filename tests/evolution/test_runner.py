@@ -4,7 +4,7 @@
 from pathlib import Path
 
 import pytest
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from aec_bench.contracts.evolution import EvolutionConfig, EvolverModelConfig, TaskGenerateConfig
 from aec_bench.contracts.experiment_manifest import AgentConfig, ClientConfig, TaskSelector
@@ -149,6 +149,34 @@ class TestBuildEvolutionRunnerHarborFallback:
         runner = build_evolution_runner_from_config(config=config)
         assert hasattr(runner, "run")
 
+    def test_morph_without_solver_warns_and_stubs(self, tmp_path: Path) -> None:
+        ws_root = _scaffold_workspace(tmp_path / "ws")
+        config = EvolutionConfig(
+            workspace_path=str(ws_root),
+            models=EvolverModelConfig(classifier="haiku", evolver="sonnet"),
+            task_selector=TaskSelector(),
+            backend="morph",
+        )
+        runner = build_evolution_runner_from_config(config=config)
+        assert hasattr(runner, "run")
+
+    def test_morph_with_solver_builds_remote_solve_fn_without_connecting(self, tmp_path: Path) -> None:
+        ws_root = _scaffold_workspace(tmp_path / "ws")
+        config = EvolutionConfig(
+            workspace_path=str(ws_root),
+            models=EvolverModelConfig(classifier="haiku", evolver="sonnet"),
+            task_selector=TaskSelector(),
+            solver=AgentConfig(
+                name="evo-solver",
+                adapter="direct",
+                model="replay-direct",
+                client=ClientConfig(kind="replay", settings={"output_text": '{"findings": []}'}),
+            ),
+            backend="morph",
+        )
+        runner = build_evolution_runner_from_config(config=config)
+        assert callable(runner._solve_fn)
+
 
 class TestResolveTemplate:
     def test_resolves_builtin_by_name(self) -> None:
@@ -184,8 +212,8 @@ class TestRunnerStrategyWiring:
 
         config = EvolutionConfig(
             workspace_path=str(ws_path),
-            models={"classifier": "claude-haiku-4", "evolver": "claude-sonnet-4-6"},
-            task_selector={},
+            models=EvolverModelConfig(classifier="claude-haiku-4", evolver="claude-sonnet-4-6"),
+            task_selector=TaskSelector(),
             strategy="qd",
         )
 
@@ -206,8 +234,8 @@ class TestRunnerStrategyWiring:
 
         config = EvolutionConfig(
             workspace_path=str(ws_path),
-            models={"classifier": "claude-haiku-4", "evolver": "claude-sonnet-4-6"},
-            task_selector={},
+            models=EvolverModelConfig(classifier="claude-haiku-4", evolver="claude-sonnet-4-6"),
+            task_selector=TaskSelector(),
         )
 
         runner = build_evolution_runner_from_config(config=config)

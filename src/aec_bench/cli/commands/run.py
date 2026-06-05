@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import typer
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 if TYPE_CHECKING:
     from aec_bench.contracts.experiment_manifest import ExperimentManifest
@@ -32,7 +32,7 @@ def run_experiment(
         "modal",
         "--backend",
         "-b",
-        help="Execution backend: modal, e2b, daytona, docker",
+        help="Harbor execution backend: modal, morph, e2b, daytona, docker.",
     ),
     repetitions: int = typer.Option(1, "--repetitions", "-n", help="Repetitions"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show plan without executing"),
@@ -174,8 +174,22 @@ def _execute_manifest(
     dry_run: bool,
     start: float,
 ) -> None:
+    from aec_bench.harness.harbor_dispatch import HARBOR_RUN_BACKENDS
     from aec_bench.harness.scheduler import build_trial_plan, select_manifest_tasks
     from aec_bench.tasks.registry import TaskRegistry
+
+    if manifest.compute.backend not in HARBOR_RUN_BACKENDS:
+        supported = ", ".join(HARBOR_RUN_BACKENDS)
+        emit(
+            "run",
+            data=None,
+            errors=[
+                f"backend '{manifest.compute.backend}' is not supported by 'aec-bench run'; "
+                f"or choose one of: {supported}"
+            ],
+            start_time=start,
+        )
+        return
 
     registry = TaskRegistry(tasks_root=tasks_root)
     registry.reload()
@@ -195,6 +209,7 @@ def _execute_manifest(
     if dry_run:
         plan_data = {
             "experiment_id": manifest.experiment_id,
+            "backend": manifest.compute.backend,
             "selected_tasks": len(selected_tasks),
             "planned_trials": len(plan),
             "agents": [a.name for a in manifest.agents],
@@ -202,8 +217,9 @@ def _execute_manifest(
             "trials": [{"trial_id": t.trial_id, "task_id": t.task_id, "agent": t.agent.name} for t in plan],
         }
 
-        def _render_dry_run(d: dict) -> None:
+        def _render_dry_run(d: dict[str, Any]) -> None:
             console.print(f"[bold]Dry Run: {d['experiment_id']}[/bold]")
+            console.print(f"  Backend:    {d['backend']}")
             console.print(f"  Tasks:      {d['selected_tasks']}")
             console.print(f"  Agents:     {', '.join(d['agents'])}")
             console.print(f"  Repetitions: {d['repetitions']}")
@@ -260,7 +276,7 @@ def _execute_manifest(
         "duplicates": result.import_result.duplicate_trials if result.import_result else 0,
     }
 
-    def _render_result(d: dict) -> None:
+    def _render_result(d: dict[str, Any]) -> None:
         print_success(f"Completed: {d['imported']} trials imported into ledger")
 
     emit("run", result_data, start_time=start, human_renderer=_render_result)
