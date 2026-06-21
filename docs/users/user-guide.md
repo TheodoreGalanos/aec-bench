@@ -88,6 +88,12 @@ aec-bench run tasks/electrical/pf-droop \
 aec-bench run tasks/ground/shallow-foundations/terzaghi-bearing-capacity \
   --model "<model-id>" --dry-run
 
+# Preview a post-verifier LLM reviewer stage
+aec-bench run tasks/ground/shallow-foundations/terzaghi-bearing-capacity \
+  --model "<model-id>" \
+  --reviewer-models-config reviewer-models.json \
+  --dry-run
+
 # Run through Morph Cloud via Harbor
 aec-bench run tasks/electrical/pf-droop \
   --model "<model-id>" \
@@ -103,6 +109,31 @@ aec-bench evaluate
 `aec-bench run` executes through Harbor. The default backend is `modal`; supported run backends are `modal`, `morph`, `e2b`, `daytona`, and `docker`.
 
 Use `--backend morph` when you want Harbor's normal task/agent/verifier flow to run on Morph Cloud. Morph runs require the `morphcloud` package and `MORPH_API_KEY` in `.env`.
+
+### Post-Verifier LLM Reviewer
+
+Add `--reviewer-models-config reviewer-models.json` to run an LLM reviewer after
+the verifier. The reviewer can use multiple PydanticAI model endpoints:
+
+```json
+{
+  "enabled": true,
+  "models": [
+    {"name": "openai-main", "model": "openai:gpt-5.2"},
+    {"name": "claude-reviewer", "model": "anthropic:claude-opus-4-8"}
+  ]
+}
+```
+
+For local runs, reviewer artifacts are copied under `logs/reviewer/`. For
+Harbor-backed runs, reviewer summaries are written into each trial directory
+before ledger import and appear under `evaluation.breakdown.llm_reviewer`.
+
+Tasks can optionally include a `world.yaml` sidecar to define the reviewer-facing
+task-world profile: `logic_profile` gates, operation handles, and review modes.
+When no sidecar exists, a conservative default profile is derived from the task
+and final verifier evidence. The resolved profile is saved as
+`world_profile.json` beside the reviewer request.
 
 ### Adapter types
 
@@ -173,6 +204,19 @@ aec-bench run tasks/<discipline>/<category>/<template-name> \
 
 # Step 5: Harden (via agent skill)
 /hardening-pass
+```
+
+For task-world harness design or candidate-vs-baseline harness comparison, use the
+meta-harness skill:
+
+```bash
+/meta-harness
+```
+
+For scripts, start with:
+
+```bash
+aec-bench meta-harness recipe --task-file task.md --output artefacts/meta-harness/demo
 ```
 
 ---

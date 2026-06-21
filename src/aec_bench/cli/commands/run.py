@@ -15,6 +15,12 @@ if TYPE_CHECKING:
 
 from aec_bench.cli.commands.config import resolve_path
 from aec_bench.cli.output import console, emit, print_success
+from aec_bench.evaluation.llm_reviewer import (
+    ReviewerEndpointConfig,
+    ReviewerRunConfig,
+    load_reviewer_config,
+    reviewer_config_from_manifest,
+)
 
 
 def run_experiment(
@@ -37,6 +43,18 @@ def run_experiment(
     repetitions: int = typer.Option(1, "--repetitions", "-n", help="Repetitions"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show plan without executing"),
     no_verify: bool = typer.Option(False, "--no-verify", help="Skip verification (agent-only run)"),
+    reviewer: bool = typer.Option(False, "--reviewer", help="Run the post-verifier LLM reviewer stage"),
+    reviewer_model: str | None = typer.Option(None, "--reviewer-model", help="Single reviewer model name"),
+    reviewer_models_config: Path | None = typer.Option(
+        None,
+        "--reviewer-models-config",
+        help="JSON/YAML reviewer model endpoint config",
+    ),
+    fail_on_reviewer_error: bool = typer.Option(
+        False,
+        "--fail-on-reviewer-error",
+        help="Fail the run when the reviewer stage cannot complete",
+    ),
 ) -> None:
     """Run an experiment.
 
@@ -56,9 +74,22 @@ def run_experiment(
       aec-bench --json run --config experiment.yaml | jq '.data.experiment_id'
     """
     start = time.monotonic()
+    reviewer_config = _reviewer_config_from_cli(
+        enabled=reviewer,
+        model=reviewer_model,
+        models_config=reviewer_models_config,
+        fail_on_error=fail_on_reviewer_error,
+    )
 
     if config is not None:
-        _run_from_config(config, tasks_root=tasks_root, dry_run=dry_run, start=start, no_verify=no_verify)
+        _run_from_config(
+            config,
+            tasks_root=tasks_root,
+            dry_run=dry_run,
+            start=start,
+            no_verify=no_verify,
+            reviewer_config=reviewer_config,
+        )
     elif tasks_path is not None and model is not None:
         _run_inline(
             tasks_path=tasks_path,
@@ -70,6 +101,7 @@ def run_experiment(
             dry_run=dry_run,
             start=start,
             no_verify=no_verify,
+            reviewer_config=reviewer_config,
         )
     else:
         emit(
@@ -88,6 +120,7 @@ def _run_from_config(
     dry_run: bool,
     start: float,
     no_verify: bool = False,
+    reviewer_config: ReviewerRunConfig | None = None,
 ) -> None:
     if not config_path.exists():
         emit("run", data=None, errors=[f"config file not found: {config_path}"], start_time=start)
@@ -116,7 +149,13 @@ def _run_from_config(
                 )
                 return
 
-    _execute_manifest(manifest, tasks_root=resolved_tasks, dry_run=dry_run, start=start)
+    _execute_manifest(
+        manifest,
+        tasks_root=resolved_tasks,
+        dry_run=dry_run,
+        start=start,
+        reviewer_config=reviewer_config,
+    )
 
 
 def _run_inline(
@@ -130,6 +169,7 @@ def _run_inline(
     dry_run: bool,
     start: float,
     no_verify: bool = False,
+    reviewer_config: ReviewerRunConfig | None = None,
 ) -> None:
     from aec_bench.contracts.experiment_manifest import (
         AgentConfig,
@@ -164,7 +204,13 @@ def _run_inline(
     )
 
     resolved_tasks = resolve_path("tasks_root", cli_override=tasks_root)
-    _execute_manifest(manifest, tasks_root=resolved_tasks, dry_run=dry_run, start=start)
+    _execute_manifest(
+        manifest,
+        tasks_root=resolved_tasks,
+        dry_run=dry_run,
+        start=start,
+        reviewer_config=reviewer_config,
+    )
 
 
 def _execute_manifest(
@@ -173,6 +219,7 @@ def _execute_manifest(
     tasks_root: Path,
     dry_run: bool,
     start: float,
+    reviewer_config: ReviewerRunConfig | None = None,
 ) -> None:
     from aec_bench.harness.harbor_dispatch import HARBOR_RUN_BACKENDS
     from aec_bench.harness.scheduler import build_trial_plan, select_manifest_tasks
@@ -207,6 +254,7 @@ def _execute_manifest(
     plan = build_trial_plan(manifest, selected_tasks)
 
     if dry_run:
+        effective_reviewer_config = reviewer_config or reviewer_config_from_manifest(manifest.reviewer)
         plan_data = {
             "experiment_id": manifest.experiment_id,
             "backend": manifest.compute.backend,
@@ -215,6 +263,7 @@ def _execute_manifest(
             "agents": [a.name for a in manifest.agents],
             "repetitions": manifest.repetitions,
             "trials": [{"trial_id": t.trial_id, "task_id": t.task_id, "agent": t.agent.name} for t in plan],
+            "reviewer": _reviewer_plan(effective_reviewer_config),
         }
 
         def _render_dry_run(d: dict[str, Any]) -> None:
@@ -267,6 +316,7 @@ def _execute_manifest(
         manifest=manifest,
         config_path=project_root / f".aec-bench-{manifest.experiment_id}.yaml",
         progress_callback=_progress,
+        reviewer_config=reviewer_config,
     )
 
     result_data = {
@@ -274,9 +324,58 @@ def _execute_manifest(
         "job_dir": str(result.job_dir) if result.job_dir else None,
         "imported": result.import_result.imported_trials if result.import_result else 0,
         "duplicates": result.import_result.duplicate_trials if result.import_result else 0,
+        "reviewer": _reviewer_result_data(result.reviewer_result),
     }
 
     def _render_result(d: dict[str, Any]) -> None:
         print_success(f"Completed: {d['imported']} trials imported into ledger")
 
     emit("run", result_data, start_time=start, human_renderer=_render_result)
+
+
+def _reviewer_config_from_cli(
+    *,
+    enabled: bool,
+    model: str | None,
+    models_config: Path | None,
+    fail_on_error: bool,
+) -> ReviewerRunConfig | None:
+    if models_config is not None:
+        config = load_reviewer_config(models_config)
+        return config.model_copy(update={"enabled": True, "fail_on_error": fail_on_error or config.fail_on_error})
+    if model is not None:
+        return ReviewerRunConfig(
+            enabled=True,
+            fail_on_error=fail_on_error,
+            models=[
+                ReviewerEndpointConfig(
+                    name=model,
+                    model=model,
+                )
+            ],
+        )
+    if enabled:
+        return ReviewerRunConfig(enabled=True, fail_on_error=fail_on_error)
+    return None
+
+
+def _reviewer_plan(config: ReviewerRunConfig | None) -> dict[str, Any]:
+    if config is None:
+        return {"enabled": False, "required": False, "models": []}
+    return {
+        "enabled": config.enabled,
+        "required": config.required,
+        "models": [model.name for model in config.models],
+        "fail_on_error": config.fail_on_error,
+    }
+
+
+def _reviewer_result_data(result: Any | None) -> dict[str, Any] | None:
+    if result is None:
+        return None
+    return {
+        "trial_count": result.trial_count,
+        "complete_count": result.complete_count,
+        "error_count": result.error_count,
+        "skipped_count": result.skipped_count,
+    }

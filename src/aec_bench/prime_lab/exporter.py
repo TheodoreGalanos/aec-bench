@@ -278,9 +278,6 @@ def _render_pyproject(name: str, version: str, description: str | None) -> str:
 
         [tool.hatch.build.targets.wheel]
         packages = ["{name}"]
-
-        [tool.hatch.build.targets.wheel.force-include]
-        "{name}/tasks" = "{name}/tasks"
         """
     )
 

@@ -76,3 +76,44 @@ def test_run_dry_run_accepts_morph_backend(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     envelope = json.loads(result.output)
     assert envelope["data"]["backend"] == "morph"
+
+
+def test_run_dry_run_reports_reviewer_plan_from_config(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    task_dir = _write_minimal_task(tasks_root)
+    reviewer_config = tmp_path / "reviewer.json"
+    reviewer_config.write_text(
+        json.dumps(
+            {
+                "enabled": True,
+                "models": [
+                    {"name": "primary", "model": "openai:gpt-5.2"},
+                    {"name": "secondary", "model": "anthropic:claude-opus-4-8"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "run",
+            str(task_dir),
+            "--model",
+            "test-model",
+            "--tasks-root",
+            str(tasks_root),
+            "--backend",
+            "modal",
+            "--reviewer-models-config",
+            str(reviewer_config),
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    envelope = json.loads(result.output)
+    assert envelope["data"]["reviewer"]["enabled"] is True
+    assert envelope["data"]["reviewer"]["models"] == ["primary", "secondary"]

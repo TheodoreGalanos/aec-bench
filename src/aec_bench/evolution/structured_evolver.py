@@ -313,13 +313,13 @@ def call_structured_evolver_with_tools(
 def _build_pydantic_model(model_name: str) -> object:
     """Build a PydanticAI model object from the model name.
 
-    Detects provider from the model name (Bedrock, Azure, Anthropic) and
+    Detects provider from the model name (Bedrock, Azure, Anthropic, Together) and
     constructs the appropriate PydanticAI model. Mirrors the logic in
     ``adapters.rlm.providers`` but without RLM-specific concerns.
     """
-    from aec_bench.adapters.rlm.providers import detect_provider
+    from aec_bench.adapters.rlm.providers import resolve_pydantic_provider
 
-    provider = detect_provider(model_name)
+    provider = resolve_pydantic_provider(model_name)
 
     if provider == "bedrock":
         from pydantic_ai.models.bedrock import BedrockConverseModel
@@ -346,12 +346,38 @@ def _build_pydantic_model(model_name: str) -> object:
         )
         return OpenAIChatModel(
             model_name,
-            provider=AzureProvider(
-                azure_endpoint=endpoint,
-                api_version=api_version,
-                api_key=api_key,
-            ),
+            provider=AzureProvider(**_azure_provider_kwargs(endpoint, api_key, api_version)),
+        )
+
+    if provider == "together":
+        from pydantic_ai.models.openai import OpenAIChatModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+
+        api_key = os.environ.get("TOGETHER_API_KEY", "")
+        if not api_key:
+            msg = "required environment variable is not set: TOGETHER_API_KEY"
+            raise RuntimeError(msg)
+        return OpenAIChatModel(
+            _strip_together_prefix(model_name),
+            provider=OpenAIProvider(base_url="https://api.together.ai/v1", api_key=api_key),
         )
 
     # "anthropic" or "auto" — let PydanticAI infer from model string
     return model_name
+
+
+def _strip_together_prefix(model_name: str) -> str:
+    prefix = "together:"
+    if model_name.lower().startswith(prefix):
+        return model_name[len(prefix) :]
+    return model_name
+
+
+def _azure_provider_kwargs(endpoint: str, api_key: str, api_version: str) -> dict[str, str]:
+    kwargs = {
+        "azure_endpoint": endpoint,
+        "api_key": api_key,
+    }
+    if api_version and not endpoint.rstrip("/").lower().endswith("/openai/v1"):
+        kwargs["api_version"] = api_version
+    return kwargs

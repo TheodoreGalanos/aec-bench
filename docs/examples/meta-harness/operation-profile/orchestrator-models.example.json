@@ -1,0 +1,22 @@
+{
+  "aboutme": [
+    "Example multi-endpoint config for the PydanticAI operation orchestrator runner.",
+    "Uses environment variables for secrets so configs can be checked into source safely."
+  ],
+  "models": [
+    {
+      "name": "primary-planner",
+      "model": "operation-planner-primary",
+      "provider": "auto",
+      "temperature": 0.0
+    },
+    {
+      "name": "local-compatible-planner",
+      "model": "operation-planner-local",
+      "provider": "openai_compatible",
+      "base_url": "http://localhost:11434/v1",
+      "api_key_env": "LOCAL_OPERATION_PLANNER_API_KEY",
+      "temperature": 0.0
+    }
+  ]
+}

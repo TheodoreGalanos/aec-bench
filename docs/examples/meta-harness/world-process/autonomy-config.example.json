@@ -1,0 +1,17 @@
+{
+  "auto_accept_scopes": [
+    "run_only"
+  ],
+  "batch_size": 1,
+  "improvement_threshold": 0.02,
+  "max_cost_usd": null,
+  "max_governance_actions": 8,
+  "max_iterations": 10,
+  "max_world_regenerations": 4,
+  "require_human_for": [
+    "world_schema",
+    "world_generator"
+  ],
+  "selection_strategy": "hill_climb",
+  "stagnation_window": 3
+}

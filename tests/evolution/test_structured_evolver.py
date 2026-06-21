@@ -7,6 +7,7 @@ import pytest
 
 from aec_bench.evolution.structured_evolver import (
     _SCOPE_ACTION_LIMITS,
+    _build_pydantic_model,
     call_structured_evolver_with_tools,
 )
 
@@ -25,6 +26,19 @@ class TestScopeActionLimits:
             "TARGETED",
             "COMPREHENSIVE",
         }
+
+
+class TestBuildPydanticModel:
+    def test_build_pydantic_model_supports_together_prefix(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("TOGETHER_API_KEY", "tog-key")
+
+        model = _build_pydantic_model("together:Qwen/Qwen3.7-Max")
+
+        assert str(model.base_url).rstrip("/") == "https://api.together.ai/v1"
+        assert model.model_name == "Qwen/Qwen3.7-Max"
 
 
 class TestCallStructuredEvolverWithTools:

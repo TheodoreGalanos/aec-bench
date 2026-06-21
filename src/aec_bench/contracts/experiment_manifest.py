@@ -77,6 +77,30 @@ class ComputeConfig(StrictModel):
     timeout_override: PositiveInt | None = None
 
 
+class ReviewerEndpointConfig(StrictModel):
+    name: NonEmptyStr
+    model: NonEmptyStr
+    provider: NonEmptyStr = "auto"
+    base_url: str | None = None
+    base_url_env: str | None = None
+    api_key_env: str | None = None
+    temperature: float | None = 0.0
+    max_tokens: PositiveInt | None = None
+    stream_mode: NonEmptyStr = "auto"
+
+    @field_validator("model")
+    @classmethod
+    def validate_model_non_empty(cls, value: str) -> str:
+        return ensure_non_empty_string(value)
+
+
+class ReviewerConfig(StrictModel):
+    enabled: bool = False
+    required: bool = True
+    models: list[ReviewerEndpointConfig] = Field(default_factory=list)
+    fail_on_error: bool = False
+
+
 class ExperimentManifest(StrictModel):
     experiment_id: NonEmptyStr
     name: NonEmptyStr
@@ -86,6 +110,7 @@ class ExperimentManifest(StrictModel):
     compute: ComputeConfig
     repetitions: PositiveInt = 1
     disable_verification: bool = False
+    reviewer: ReviewerConfig | None = None
 
     @field_validator("agents")
     @classmethod

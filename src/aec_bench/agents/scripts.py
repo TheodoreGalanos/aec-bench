@@ -525,18 +525,41 @@ tool_sources = {t["name"]: t["source"] for t in discovered_tools}
 # Build provider-aware model for PydanticAI
 _azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
 _azure_key = os.environ.get("AZURE_OPENAI_API_KEY", "")
-_azure_api_version = os.environ.get("AGENT_API_VERSION", "2024-10-21")
+_azure_api_version = os.environ.get("AZURE_OPENAI_API_VERSION", os.environ.get("AGENT_API_VERSION", "2024-10-21"))
+_together_key = os.environ.get("TOGETHER_API_KEY", "")
+_TOGETHER_BASE_URL = "https://api.together.ai/v1"
 
-if _azure_endpoint and _azure_key:
+def _is_azure_v1_endpoint(endpoint):
+    return endpoint.rstrip("/").lower().endswith("/openai/v1")
+
+def _strip_together_prefix(model):
+    prefix = "together:"
+    if model.lower().startswith(prefix):
+        return model[len(prefix):]
+    return model
+
+if model_name.lower().startswith("together:"):
+    if not _together_key:
+        print("FATAL: TOGETHER_API_KEY not set", file=sys.stderr)
+        sys.exit(1)
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.openai import OpenAIProvider
+    _model = OpenAIChatModel(
+        _strip_together_prefix(model_name),
+        provider=OpenAIProvider(base_url=_TOGETHER_BASE_URL, api_key=_together_key),
+    )
+elif _azure_endpoint and _azure_key:
     from pydantic_ai.models.openai import OpenAIChatModel
     from pydantic_ai.providers.azure import AzureProvider
+    _provider_kwargs = {
+        "azure_endpoint": _azure_endpoint,
+        "api_key": _azure_key,
+    }
+    if not _is_azure_v1_endpoint(_azure_endpoint):
+        _provider_kwargs["api_version"] = _azure_api_version
     _model = OpenAIChatModel(
         model_name,
-        provider=AzureProvider(
-            azure_endpoint=_azure_endpoint,
-            api_version=_azure_api_version,
-            api_key=_azure_key,
-        ),
+        provider=AzureProvider(**_provider_kwargs),
     )
 else:
     _model = model_name

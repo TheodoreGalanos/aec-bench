@@ -1,6 +1,7 @@
 # ABOUTME: Tests for importing Harbor trial artifacts into Python TrialRecord contracts.
 # ABOUTME: Covers a real successful Harbor trial and missing-result failure handling.
 
+import json
 from pathlib import Path
 
 import pytest
@@ -111,6 +112,55 @@ def test_import_harbor_trial_derives_morph_backend_from_import_path_environment(
     record = import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
 
     assert record.environment.compute_backend == "morph"
+
+
+def test_import_harbor_trial_includes_reviewer_summary_in_breakdown(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    task_dir = repo_root / "tasks" / "mechanical" / "heat-load" / "alpha"
+    trial_dir = repo_root / "jobs" / "job-001" / "trial-reviewed"
+    (task_dir / "tests").mkdir(parents=True)
+    (trial_dir / "artifacts" / "agent").mkdir(parents=True)
+    (trial_dir / "verifier").mkdir(parents=True)
+    (trial_dir / "reviewer").mkdir(parents=True)
+    (task_dir / "instruction.md").write_text(
+        "Write your answer to /workspace/output.md.\n",
+        encoding="utf-8",
+    )
+    (task_dir / "task.toml").write_text(
+        '[metadata]\nvisibility = "public"\n\n[agent]\ntimeout_sec = 60\n',
+        encoding="utf-8",
+    )
+    (task_dir / "tests" / "test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    (trial_dir / "artifacts" / "agent" / "output.md").write_text("answer\n", encoding="utf-8")
+    (trial_dir / "verifier" / "reward.json").write_text('{"reward": 1.0}\n', encoding="utf-8")
+    (trial_dir / "reviewer" / "summary.json").write_text(
+        json.dumps({"status": "complete", "event_candidates": ["verifier_language_gap"]}),
+        encoding="utf-8",
+    )
+    (trial_dir / "result.json").write_text(
+        """
+{
+  "trial_name": "trial-reviewed",
+  "task_checksum": "sha256-task",
+  "config": {
+    "task": {"path": "tasks/mechanical/heat-load/alpha"},
+    "agent": {"name": "entrypoint", "model_name": "test-model", "kwargs": {"adapter": "tool_loop"}},
+    "environment": {"type": "modal", "kwargs": {}},
+    "job_id": "experiment-001"
+  },
+  "agent_info": {"name": "entrypoint", "version": "1.0.0"},
+  "agent_result": {},
+  "started_at": "2026-06-05T00:00:00Z",
+  "finished_at": "2026-06-05T00:00:01Z"
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    record = import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
+
+    assert record.evaluation.breakdown is not None
+    assert record.evaluation.breakdown["llm_reviewer"]["status"] == "complete"
 
 
 @_skip_no_job_data

@@ -10,6 +10,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from pydantic import ConfigDict
+
 from aec_bench.contracts.validators import StrictModel
 
 
@@ -21,8 +23,10 @@ class DatasetVariant(str, Enum):
     RL_MEMENTO = "rl_memento"
 
 
-class TraceDatasetVariant(StrictModel, frozen=True):
+class TraceDatasetVariant(StrictModel):
     """One view of a trace — full, compressed, or otherwise transformed."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     name: str
     path: Path
@@ -31,8 +35,10 @@ class TraceDatasetVariant(StrictModel, frozen=True):
     metadata: dict[str, Any] = {}
 
 
-class TraceDatasetEntry(StrictModel, frozen=True):
+class TraceDatasetEntry(StrictModel):
     """A single trace with all its variants."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     task_id: str
     model: str
@@ -40,8 +46,10 @@ class TraceDatasetEntry(StrictModel, frozen=True):
     variants: list[TraceDatasetVariant]
 
 
-class TraceDatasetManifest(StrictModel, frozen=True):
+class TraceDatasetManifest(StrictModel):
     """A collection of traces packaged for training."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     name: str
     version: str

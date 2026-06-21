@@ -7,6 +7,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from aec_bench.contracts.experiment_manifest import ExperimentManifest
+from aec_bench.evaluation.llm_reviewer import (
+    ReviewerJobResult,
+    ReviewerRunConfig,
+    reviewer_config_from_manifest,
+    run_harbor_job_reviewer,
+)
 from aec_bench.harness.experiment_runner import (
     ExperimentImportResult,
     HarborImportExperimentRunner,
@@ -30,6 +36,7 @@ class HarborWorkflowResult:
     dispatch: HarborDispatchResult
     job_dir: Path
     import_result: ExperimentImportResult
+    reviewer_result: ReviewerJobResult | None = None
 
 
 @dataclass(frozen=True)
@@ -47,6 +54,7 @@ class SynchronousHarborWorkflow:
         config_path: Path,
         executor: HarborCommandExecutor | None = None,
         progress_callback: Callable[[WorkflowProgressSnapshot], None] | None = None,
+        reviewer_config: ReviewerRunConfig | None = None,
     ) -> HarborWorkflowResult:
         registry = TaskRegistry(tasks_root=self.tasks_root)
         registry.reload()
@@ -83,6 +91,15 @@ class SynchronousHarborWorkflow:
         )
         self._emit(progress_callback, progress_tracker.job_dir_identified(job_dir=job_dir))
 
+        effective_reviewer_config = reviewer_config or reviewer_config_from_manifest(manifest.reviewer)
+        reviewer_result: ReviewerJobResult | None = None
+        if effective_reviewer_config is not None and effective_reviewer_config.enabled:
+            reviewer_result = run_harbor_job_reviewer(
+                job_dir=job_dir,
+                repo_root=self.repo_root,
+                config=effective_reviewer_config,
+            )
+
         import_runner = HarborImportExperimentRunner(
             repo_root=self.repo_root,
             tasks_root=self.tasks_root,
@@ -104,6 +121,7 @@ class SynchronousHarborWorkflow:
             dispatch=dispatch_result,
             job_dir=job_dir,
             import_result=import_result,
+            reviewer_result=reviewer_result,
         )
 
     def _job_dirs(self) -> set[Path]:

@@ -38,6 +38,18 @@ def test_build_provider_env_azure_with_api_version() -> None:
     assert env["AGENT_API_VERSION"] == "2024-10-21"
 
 
+def test_build_provider_env_together() -> None:
+    host = {"TOGETHER_API_KEY": "tog-key"}
+    env = build_provider_env(
+        "together",
+        "solve this",
+        "together:Qwen/Qwen3.7-Max",
+        host_env=host,
+    )
+    assert env["TOGETHER_API_KEY"] == "tog-key"
+    assert env["AGENT_MODEL"] == "together:Qwen/Qwen3.7-Max"
+
+
 def test_build_provider_env_skips_missing_host_keys() -> None:
     env = build_provider_env("anthropic", "solve", "model", host_env={})
     assert "ANTHROPIC_API_KEY" not in env
@@ -92,6 +104,7 @@ def test_build_all_provider_env_injects_all_keys() -> None:
         "AZURE_OPENAI_API_KEY": "az-key",
         "AZURE_OPENAI_ENDPOINT": "https://az.com",
         "OPENAI_API_KEY": "sk-oai",
+        "TOGETHER_API_KEY": "tog-key",
     }
     env = build_all_provider_env(
         "solve",
@@ -102,6 +115,7 @@ def test_build_all_provider_env_injects_all_keys() -> None:
     assert env["ANTHROPIC_API_KEY"] == "sk-ant"
     assert env["AZURE_OPENAI_API_KEY"] == "az-key"
     assert env["OPENAI_API_KEY"] == "sk-oai"
+    assert env["TOGETHER_API_KEY"] == "tog-key"
     assert env["AGENT_INSTRUCTION"] == "solve"
 
 

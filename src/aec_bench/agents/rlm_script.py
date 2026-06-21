@@ -95,12 +95,35 @@ _azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
 _azure_key = os.environ.get("AZURE_OPENAI_API_KEY", "")
 _azure_api_version = os.environ.get("AZURE_OPENAI_API_VERSION",
                                      os.environ.get("AGENT_API_VERSION", "2024-10-21"))
+_together_key = os.environ.get("TOGETHER_API_KEY", "")
+_TOGETHER_BASE_URL = "https://api.together.ai/v1"
 _bedrock_token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK", "")
 _aws_region = os.environ.get("AWS_REGION", "") or os.environ.get("AWS_DEFAULT_REGION", "")
+
+def _is_azure_v1_endpoint(endpoint):
+    return endpoint.rstrip("/").lower().endswith("/openai/v1")
+
+
+def _azure_provider_kwargs(endpoint, api_key, api_version):
+    kwargs = {
+        "azure_endpoint": endpoint,
+        "api_key": api_key,
+    }
+    if not _is_azure_v1_endpoint(endpoint):
+        kwargs["api_version"] = api_version
+    return kwargs
+
+
+def _strip_together_prefix(model):
+    prefix = "together:"
+    if model.lower().startswith(prefix):
+        return model[len(prefix):]
+    return model
 
 # Detect provider from MODEL NAME first (disambiguates when multiple
 # provider credentials are present in the environment).
 _model_lower = model_name.lower()
+_is_together_model = _model_lower.startswith("together:")
 _is_bedrock_model = any(
     _model_lower.startswith(p) for p in (
         "anthropic.claude", "au.anthropic.", "us.anthropic.",
@@ -113,7 +136,18 @@ _is_azure_model = any(
     _model_lower.startswith(p) for p in ("gpt-", "gpt4", "o1-", "o3-", "o4-")
 )
 
-if _is_bedrock_model and (_bedrock_token or _aws_region):
+if _is_together_model:
+    if not _together_key:
+        print("FATAL: TOGETHER_API_KEY not set", file=sys.stderr)
+        sys.exit(1)
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.openai import OpenAIProvider
+    _model = OpenAIChatModel(
+        _strip_together_prefix(model_name),
+        provider=OpenAIProvider(base_url=_TOGETHER_BASE_URL, api_key=_together_key),
+    )
+    print(f"Provider: Together AI ({_TOGETHER_BASE_URL})", file=sys.stderr)
+elif _is_bedrock_model and (_bedrock_token or _aws_region):
     from pydantic_ai.models.bedrock import BedrockConverseModel
     from pydantic_ai.providers.bedrock import BedrockProvider
     provider_kwargs = {}
@@ -126,11 +160,7 @@ elif _is_azure_model and _azure_endpoint and _azure_key:
     from pydantic_ai.providers.azure import AzureProvider
     _model = OpenAIChatModel(
         model_name,
-        provider=AzureProvider(
-            azure_endpoint=_azure_endpoint,
-            api_version=_azure_api_version,
-            api_key=_azure_key,
-        ),
+        provider=AzureProvider(**_azure_provider_kwargs(_azure_endpoint, _azure_key, _azure_api_version)),
     )
     print(f"Provider: Azure OpenAI ({_azure_endpoint})", file=sys.stderr)
 elif _azure_endpoint and _azure_key:
@@ -138,11 +168,7 @@ elif _azure_endpoint and _azure_key:
     from pydantic_ai.providers.azure import AzureProvider
     _model = OpenAIChatModel(
         model_name,
-        provider=AzureProvider(
-            azure_endpoint=_azure_endpoint,
-            api_version=_azure_api_version,
-            api_key=_azure_key,
-        ),
+        provider=AzureProvider(**_azure_provider_kwargs(_azure_endpoint, _azure_key, _azure_api_version)),
     )
     print(f"Provider: Azure OpenAI ({_azure_endpoint})", file=sys.stderr)
 elif _bedrock_token or _aws_region:
@@ -738,13 +764,23 @@ async def _compact(repl_state):
     # Build compaction model — reuse the same provider setup as the main agent
     if _compaction_model_name:
         _cm_lower = _compaction_model_name.lower()
+        _cm_is_together = _cm_lower.startswith("together:")
         _cm_is_bedrock = any(
             _cm_lower.startswith(p) for p in (
                 "anthropic.", "au.anthropic.", "us.anthropic.",
                 "eu.anthropic.", "ap.anthropic.", "amazon.",
             )
         )
-        if _cm_is_bedrock and (_bedrock_token or _aws_region):
+        if _cm_is_together:
+            if not _together_key:
+                raise RuntimeError("TOGETHER_API_KEY not set for compaction model")
+            from pydantic_ai.models.openai import OpenAIChatModel as _OCM
+            from pydantic_ai.providers.openai import OpenAIProvider as _OP
+            compact_model = _OCM(
+                _strip_together_prefix(_compaction_model_name),
+                provider=_OP(base_url=_TOGETHER_BASE_URL, api_key=_together_key),
+            )
+        elif _cm_is_bedrock and (_bedrock_token or _aws_region):
             from pydantic_ai.models.bedrock import BedrockConverseModel as _BCM
             from pydantic_ai.providers.bedrock import BedrockProvider as _BP
             _bp_kwargs = {}

@@ -1,0 +1,129 @@
+{
+  "aboutme": [
+    "AEC-Bench-shaped task world for exercising logic-profile evaluation.",
+    "Models a verifier-language event where preserved artifacts contradict a failing score."
+  ],
+  "world_id": "aecbench.verifier_event.rewrite_integrity",
+  "name": "AEC-Bench verifier event: score contradicts durable artifact",
+  "task_unit": "Produce a rewrite integrity report that proves the required side effect occurred.",
+  "logic_profile": {
+    "closure_gates": [
+      {
+        "id": "artifact_file_preserved",
+        "proposition": "The verifier-visible rewrite integrity report exists on disk",
+        "evidence_key": "artifacts.rewrite_integrity_report.exists",
+        "expected": true,
+        "authority": "filesystem",
+        "failure_effect": "run_invalid"
+      },
+      {
+        "id": "artifact_schema_valid",
+        "proposition": "The rewrite integrity report validates against the expected schema",
+        "evidence_key": "validator.rewrite_integrity_report.valid",
+        "expected": true,
+        "authority": "validator",
+        "failure_effect": "run_invalid"
+      }
+    ],
+    "construction_gates": [
+      {
+        "id": "success_claim_has_witness",
+        "proposition": "The claim that the model completed the task is backed by preserved evidence",
+        "construction_required": [
+          "artifacts.rewrite_integrity_report.path",
+          "artifacts.rewrite_integrity_report.summary",
+          "validator.rewrite_integrity_report.valid"
+        ],
+        "failure_effect": "claim_unproven"
+      }
+    ],
+    "containment_gates": [
+      {
+        "id": "score_artifact_contradiction",
+        "contradiction": "The benchmark score says failure while durable artifact evidence says success",
+        "when": {
+          "all": [
+            {
+              "key": "score.passed",
+              "equals": false
+            },
+            {
+              "key": "artifacts.rewrite_integrity_report.exists",
+              "equals": true
+            },
+            {
+              "key": "validator.rewrite_integrity_report.valid",
+              "equals": true
+            }
+          ]
+        },
+        "record_key": "contradictions.score_artifact_contradiction",
+        "required_record": [
+          "sources",
+          "affected_claims",
+          "allowed_next_actions"
+        ],
+        "failure_effect": "event_candidate"
+      }
+    ],
+    "event_triggers": [
+      {
+        "id": "score_artifact_contradiction",
+        "classification": "verifier_language_gap",
+        "when": {
+          "all": [
+            {
+              "key": "score.passed",
+              "equals": false
+            },
+            {
+              "key": "artifacts.rewrite_integrity_report.exists",
+              "equals": true
+            },
+            {
+              "key": "contradictions.score_artifact_contradiction.classification",
+              "equals": "verifier_language_gap"
+            }
+          ]
+        },
+        "repair_targets": [
+          "verifier",
+          "world_schema",
+          "evidence_profile"
+        ]
+      }
+    ],
+    "agentic_review": {
+      "required": true,
+      "review_modes": [
+        "verifier_result",
+        "output_artifacts",
+        "trace",
+        "source_authority",
+        "contradiction_ledger"
+      ],
+      "guidance": "Respect deterministic verifier outputs, then inspect artifacts, traces, source authority, and contradictions for unmodeled task-world failures."
+    }
+  },
+  "operation_profile": {
+    "subset_axes": [
+      "artifact_visibility",
+      "verifier_authority"
+    ],
+    "difference_axes": [
+      "preserved_artifact_channel",
+      "schema_validator"
+    ],
+    "projection_axes": [
+      "score_only",
+      "artifact_only",
+      "contradiction_ledger"
+    ],
+    "product_axes": [
+      "task_family",
+      "verifier_family",
+      "evidence_profile"
+    ],
+    "extension_policy": "Promote verifier/artifact contradictions into schema or verifier repair candidates when containment records are complete."
+  }
+}

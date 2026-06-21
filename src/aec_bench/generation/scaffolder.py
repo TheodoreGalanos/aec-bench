@@ -14,6 +14,8 @@ from aec_bench.images.extensions import generate_dockerfile
 from aec_bench.templates.contracts import TemplateConfig, ToolMode
 from aec_bench.templates.registry import has_custom_verifier
 
+RUNNABLE_DIFFICULTIES = {"easy", "medium", "hard"}
+
 
 def _resolve_tool_mode(
     config: TemplateConfig,
@@ -29,6 +31,20 @@ def _resolve_tool_mode(
     if config.meta.tool_mode is ToolMode.BOTH:
         return ToolMode.WITH_TOOL
     return config.meta.tool_mode
+
+
+def _runnable_metadata_difficulty(generation_difficulty: str) -> str:
+    """Return the public task difficulty enum for generated task metadata."""
+    if generation_difficulty in RUNNABLE_DIFFICULTIES:
+        return generation_difficulty
+    return "medium"
+
+
+def _generation_difficulty_metadata_line(generation_difficulty: str) -> str:
+    """Preserve custom generation presets when metadata difficulty is normalized."""
+    if generation_difficulty in RUNNABLE_DIFFICULTIES:
+        return ""
+    return f'\tgeneration_difficulty = "{generation_difficulty}"\n'
 
 
 def _build_task_toml(
@@ -47,6 +63,8 @@ def _build_task_toml(
 
     meta = instance.metadata
     timestamp_iso = meta.timestamp.isoformat()
+    metadata_difficulty = _runnable_metadata_difficulty(instance.difficulty)
+    generation_difficulty_line = _generation_difficulty_metadata_line(instance.difficulty)
 
     toml_str = f"""\
 version = "1.0"
@@ -54,8 +72,8 @@ version = "1.0"
 	[metadata]
 	domain = "{config.meta.discipline}"
 	category = "{config.meta.category}"
-	difficulty = "{instance.difficulty}"
-	tags = [{tags_toml}]
+	difficulty = "{metadata_difficulty}"
+{generation_difficulty_line}	tags = [{tags_toml}]
 
 [agent]
 timeout_sec = 600.0

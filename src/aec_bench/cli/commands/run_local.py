@@ -18,6 +18,13 @@ import typer
 
 from aec_bench.cli.output import StructuredError, console, emit
 from aec_bench.contracts.canonical_refs import CanonicalRefSet, parse_canonical_refs
+from aec_bench.evaluation.llm_reviewer import (
+    ReviewerEndpointConfig,
+    ReviewerRunConfig,
+    ReviewerRunResult,
+    load_reviewer_config,
+    run_workspace_reviewer,
+)
 from aec_bench.evaluation.normalisation import NormalisationResult, normalise_output
 from aec_bench.harness.local_runtime import (
     patch_workspace_paths,
@@ -97,7 +104,165 @@ def apply_normalisation(
 _VERIFIER_FILES = [
     "logs/verifier/reward.json",
     "logs/verifier/details.json",
+    "logs/verifier/feedback.md",
+    "logs/verifier/retry.json",
 ]
+
+_VERIFIER_SIDE_EFFECT_ARTIFACT_DIR = Path("logs/verifier/artifacts")
+_REVIEWER_ARTIFACT_DIR = Path("logs/reviewer")
+_VERIFIER_RETRY_PROMPT = "verifier_retry_prompt.md"
+_VERIFIER_RETRY_TARGET_REWARD = 1.0
+_VERIFIER_SIDE_EFFECT_SUFFIXES = (
+    "_record.json",
+    "_decision.json",
+    "_readback_check.json",
+    "_notice.json",
+    "_report.json",
+    "_marker.json",
+)
+_VERIFIER_SIDE_EFFECT_EXCLUDED_PREFIXES = (
+    "expected_",
+    "input_",
+    "prior_",
+    "source_",
+)
+
+
+def _is_verifier_side_effect_artifact(path: Path) -> bool:
+    """Return true for root-level JSON artifacts created by the agent or verifier."""
+    if not path.is_file() or path.suffix != ".json":
+        return False
+    if path.name in _OUTPUT_FILES:
+        return False
+    if path.name.startswith(_VERIFIER_SIDE_EFFECT_EXCLUDED_PREFIXES):
+        return False
+    return path.name.endswith(_VERIFIER_SIDE_EFFECT_SUFFIXES)
+
+
+def _read_optional_text(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _read_verifier_reward(workspace: Path) -> float | None:
+    reward_path = workspace / "logs" / "verifier" / "reward.json"
+    if not reward_path.exists():
+        return None
+    try:
+        data = json.loads(reward_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    reward = data.get("reward")
+    return float(reward) if isinstance(reward, int | float) else None
+
+
+def _should_run_verifier_feedback_retry(
+    workspace: str | Path,
+    *,
+    reward: float | None,
+    target_reward: float = _VERIFIER_RETRY_TARGET_REWARD,
+) -> bool:
+    """Return true when a task opts into one verifier-feedback retry."""
+    if reward is None or reward >= target_reward:
+        return False
+    return (Path(workspace) / _VERIFIER_RETRY_PROMPT).exists()
+
+
+def _build_verifier_retry_instruction(
+    *,
+    workspace: Path,
+    base_instruction: str,
+    reward: float,
+) -> str:
+    """Build the second-pass instruction from verifier feedback and prior output."""
+    verifier_dir = workspace / "logs" / "verifier"
+    retry_instruction = _read_optional_text(workspace / "verifier_retry_instruction.md").strip()
+    governing_instruction = retry_instruction or base_instruction.strip()
+    retry_prompt = _read_optional_text(workspace / _VERIFIER_RETRY_PROMPT).strip()
+    prior_output = _read_optional_text(workspace / "output.md").strip()
+    feedback = _read_optional_text(verifier_dir / "feedback.md").strip()
+    details = _read_optional_text(verifier_dir / "details.json").strip()
+
+    parts = [
+        governing_instruction,
+        "---",
+        "# Verifier Feedback Retry",
+        retry_prompt,
+        f"Previous verifier reward: `{reward:.4f}`.",
+        "The previous `output.md` was:",
+        "```markdown",
+        prior_output,
+        "```",
+    ]
+    if feedback:
+        parts.extend(
+            [
+                "The verifier feedback was:",
+                "```markdown",
+                feedback,
+                "```",
+            ]
+        )
+    if details:
+        parts.extend(
+            [
+                "The verifier detail scores were:",
+                "```json",
+                details,
+                "```",
+            ]
+        )
+    parts.append(
+        "Repair the workspace now. You may overwrite `output.md` and any required side-effect files. "
+        "Do not merely describe files that should be written."
+    )
+    return "\n\n".join(part for part in parts if part)
+
+
+def _archive_verifier_retry_attempt(workspace: Path, attempt_name: str) -> Path:
+    """Preserve first-attempt output and verifier files before retrying."""
+    verifier_dir = workspace / "logs" / "verifier"
+    archive_dir = verifier_dir / "attempts" / attempt_name
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    for relative in [
+        Path("output.md"),
+        Path("agent_result.json"),
+        Path("trajectory.jsonl"),
+        Path("conversation.jsonl"),
+        Path("logs/verifier/reward.json"),
+        Path("logs/verifier/details.json"),
+        Path("logs/verifier/feedback.md"),
+    ]:
+        src = workspace / relative
+        if not src.exists():
+            continue
+        shutil.copy2(src, archive_dir / src.name)
+
+    artifact_dir = archive_dir / "artifacts"
+    for src in sorted(workspace.iterdir()):
+        if not _is_verifier_side_effect_artifact(src):
+            continue
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, artifact_dir / src.name)
+
+    return archive_dir
+
+
+def _prepare_verifier_retry_workspace(workspace: Path, attempt_name: str) -> Path:
+    """Archive a failed attempt and clear output.md for retry output."""
+    archive_dir = _archive_verifier_retry_attempt(workspace, attempt_name)
+    output_path = workspace / "output.md"
+    if output_path.exists():
+        output_path.unlink()
+    return archive_dir
+
+
+def _write_verifier_retry_summary(workspace: Path, payload: dict[str, object]) -> None:
+    retry_path = workspace / "logs" / "verifier" / "retry.json"
+    retry_path.parent.mkdir(parents=True, exist_ok=True)
+    retry_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _run_adapter(
@@ -106,6 +271,7 @@ def _run_adapter(
     workspace: str,
     model: str,
     constitutional_model: str | None = None,
+    instruction_override: str | None = None,
 ) -> dict[str, object]:
     """Execute a task using the adapter registry.
 
@@ -121,7 +287,7 @@ def _run_adapter(
     from aec_bench.adapters.transcript import TranscriptRole
     from aec_bench.trajectory.writer import TrajectoryWriter
 
-    instruction = read_instruction(workspace)
+    instruction = instruction_override if instruction_override is not None else read_instruction(workspace)
     if not instruction:
         StructuredError(
             message="No instruction file found in task directory",
@@ -304,6 +470,28 @@ def _copy_output_files(
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dest)
             copied.append(fname)
+    attempts_src = Path(workspace) / "logs" / "verifier" / "attempts"
+    if attempts_src.exists():
+        attempts_dest = out_path / "logs" / "verifier" / "attempts"
+        shutil.copytree(attempts_src, attempts_dest, dirs_exist_ok=True)
+        for src in sorted(attempts_src.rglob("*")):
+            if src.is_file():
+                copied.append(str(src.relative_to(Path(workspace))))
+    artifact_dir = out_path / _VERIFIER_SIDE_EFFECT_ARTIFACT_DIR
+    for src in sorted(Path(workspace).iterdir()):
+        if not _is_verifier_side_effect_artifact(src):
+            continue
+        dest = artifact_dir / src.name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        copied.append(str(_VERIFIER_SIDE_EFFECT_ARTIFACT_DIR / src.name))
+    reviewer_src = Path(workspace) / _REVIEWER_ARTIFACT_DIR
+    if reviewer_src.exists():
+        reviewer_dest = out_path / _REVIEWER_ARTIFACT_DIR
+        shutil.copytree(reviewer_src, reviewer_dest, dirs_exist_ok=True)
+        for src in sorted(reviewer_src.rglob("*")):
+            if src.is_file():
+                copied.append(str(src.relative_to(Path(workspace))))
     return copied
 
 
@@ -471,6 +659,18 @@ def run_local(
             "Only used when rlm.toml has a [constitution] section."
         ),
     ),
+    reviewer: bool = typer.Option(False, "--reviewer", help="Run the post-verifier LLM reviewer stage"),
+    reviewer_model: str | None = typer.Option(None, "--reviewer-model", help="Single reviewer model name"),
+    reviewer_models_config: Path | None = typer.Option(
+        None,
+        "--reviewer-models-config",
+        help="JSON/YAML reviewer model endpoint config",
+    ),
+    fail_on_reviewer_error: bool = typer.Option(
+        False,
+        "--fail-on-reviewer-error",
+        help="Fail the run when the reviewer stage cannot complete",
+    ),
 ) -> None:
     """Run a task locally without Docker or Harbor.
 
@@ -520,6 +720,13 @@ def run_local(
     if legacy_script:
         console.print("  Mode: [dim]legacy-script[/dim]")
     console.print()
+    reviewer_result: ReviewerRunResult | None = None
+    reviewer_config = _reviewer_config_from_cli(
+        enabled=reviewer,
+        model=reviewer_model,
+        models_config=reviewer_models_config,
+        fail_on_error=fail_on_reviewer_error,
+    )
 
     try:
         console.print("[bold]Running agent...[/bold]")
@@ -580,12 +787,86 @@ def run_local(
             if verifier_seconds is None:
                 console.print("[dim]No verifier found, skipping[/dim]")
             else:
-                # Read reward from the verifier output
-                reward_path = Path(workspace) / "logs" / "verifier" / "reward.json"
-                if reward_path.exists():
-                    reward_data = json.loads(reward_path.read_text(encoding="utf-8"))
-                    reward = float(reward_data.get("reward", 0.0))
+                reward = _read_verifier_reward(Path(workspace))
                 console.print(f"[green]Verifier completed in {verifier_seconds:.1f}s[/green]")
+
+        if (
+            not legacy_script
+            and not no_verify
+            and verifier_seconds is not None
+            and _should_run_verifier_feedback_retry(Path(workspace), reward=reward)
+        ):
+            assert reward is not None
+            console.print("[bold]Running verifier-feedback retry...[/bold]")
+            _prepare_verifier_retry_workspace(Path(workspace), "attempt-01")
+            base_instruction = read_instruction(workspace)
+            retry_instruction = _build_verifier_retry_instruction(
+                workspace=Path(workspace),
+                base_instruction=base_instruction,
+                reward=reward,
+            )
+            initial_reward = reward
+
+            retry_agent_start = time.monotonic()
+            agent_result = _run_adapter(
+                adapter_kind=adapter,
+                workspace=workspace,
+                model=model,
+                constitutional_model=constitutional_model,
+                instruction_override=retry_instruction,
+            )
+            retry_agent_seconds = time.monotonic() - retry_agent_start
+            agent_seconds += retry_agent_seconds
+
+            if not no_normalise:
+                refs = load_canonical_refs(task_dir / "task.toml")
+                if refs.refs:
+                    report_path = Path(workspace) / "normalisation_report.json"
+                    norm_result = apply_normalisation(Path(workspace) / "output.md", refs, report_path)
+                    if norm_result.substitutions_count > 0:
+                        print(
+                            f"Normalised {norm_result.substitutions_count} reference(s); audit log: {report_path}",
+                            file=sys.stderr,
+                        )
+
+            retry_verifier_seconds = _run_verifier(
+                workspace=workspace,
+                output_file=str(Path(workspace) / "output.md"),
+            )
+            if retry_verifier_seconds is not None:
+                verifier_seconds += retry_verifier_seconds
+            reward = _read_verifier_reward(Path(workspace))
+            retry_summary = {
+                "performed": True,
+                "initial_reward": initial_reward,
+                "final_reward": reward,
+                "retry_agent_seconds": retry_agent_seconds,
+                "retry_verifier_seconds": retry_verifier_seconds,
+            }
+            _write_verifier_retry_summary(Path(workspace), retry_summary)
+            agent_result.update(
+                {
+                    "verifier_retry_performed": True,
+                    "initial_reward": initial_reward,
+                    "final_reward": reward,
+                }
+            )
+            Path(workspace, "agent_result.json").write_text(
+                json.dumps(agent_result, indent=2),
+                encoding="utf-8",
+            )
+
+        if reviewer_config is not None and reviewer_config.enabled:
+            console.print("[bold]Running LLM reviewer...[/bold]")
+            reviewer_result = run_workspace_reviewer(
+                task_dir=task_dir,
+                workspace_dir=Path(workspace),
+                config=reviewer_config,
+            )
+            if reviewer_result.status == "complete":
+                console.print("[green]LLM reviewer completed[/green]")
+            else:
+                console.print(f"[yellow]LLM reviewer status: {reviewer_result.status}[/yellow]")
 
         _report_results(
             agent_result,
@@ -633,6 +914,7 @@ def run_local(
                 "agent_seconds": agent_seconds,
                 "verifier_seconds": verifier_seconds,
                 "reward": reward,
+                "reviewer_status": reviewer_result.status if reviewer_result is not None else None,
             },
         )
 
@@ -669,3 +951,29 @@ def run_local(
             console.print(f"\n[dim]Workspace kept at: {workspace}[/dim]")
         else:
             shutil.rmtree(workspace, ignore_errors=True)
+
+
+def _reviewer_config_from_cli(
+    *,
+    enabled: bool,
+    model: str | None,
+    models_config: Path | None,
+    fail_on_error: bool,
+) -> ReviewerRunConfig | None:
+    if models_config is not None:
+        config = load_reviewer_config(models_config)
+        return config.model_copy(update={"enabled": True, "fail_on_error": fail_on_error or config.fail_on_error})
+    if model is not None:
+        return ReviewerRunConfig(
+            enabled=True,
+            fail_on_error=fail_on_error,
+            models=[
+                ReviewerEndpointConfig(
+                    name=model,
+                    model=model,
+                )
+            ],
+        )
+    if enabled:
+        return ReviewerRunConfig(enabled=True, fail_on_error=fail_on_error)
+    return None

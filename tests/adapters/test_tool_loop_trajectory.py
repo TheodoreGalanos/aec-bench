@@ -126,3 +126,45 @@ class TestEmitPydanticAiMessagesToTrajectory:
         roles = [t.role for t in turns]
         assert roles[0] == "system"
         assert roles[1] == "user"
+
+
+class TestWorkspaceOutputFallback:
+    def test_recovers_non_empty_output_file_as_completed_response(self, tmp_path: Path) -> None:
+        from aec_bench.adapters.tool_loop_local import (
+            completion_from_workspace_output,
+        )
+
+        (tmp_path / "output.md").write_text('{"answer": 42}\n', encoding="utf-8")
+
+        response = completion_from_workspace_output(str(tmp_path))
+
+        assert response is not None
+        assert response.done is True
+        assert response.output_text == '{"answer": 42}\n'
+        assert response.error_message is None
+
+    def test_ignores_missing_output_file(self, tmp_path: Path) -> None:
+        from aec_bench.adapters.tool_loop_local import (
+            completion_from_workspace_output,
+        )
+
+        assert completion_from_workspace_output(str(tmp_path)) is None
+
+    def test_next_turn_recovers_workspace_output_after_agent_exception(self, tmp_path: Path) -> None:
+        from aec_bench.adapters.tool_loop import ToolLoopRequest
+        from aec_bench.adapters.tool_loop_local import PydanticAiToolLoopClient
+
+        (tmp_path / "output.md").write_text('{"ok": true}\n', encoding="utf-8")
+        client = PydanticAiToolLoopClient.__new__(PydanticAiToolLoopClient)
+        client._workspace = str(tmp_path)
+
+        def raise_after_writing(_request: ToolLoopRequest) -> None:
+            raise RuntimeError("schema failure")
+
+        client._run_agent = raise_after_writing
+
+        response = client.next_turn(ToolLoopRequest(model="test-model", instruction="solve it"))
+
+        assert response.done is True
+        assert response.output_text == '{"ok": true}\n'
+        assert response.error_message is None

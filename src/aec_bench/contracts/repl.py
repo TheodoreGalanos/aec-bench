@@ -107,6 +107,10 @@ class JsonReplMixin:
         """Return Python code that reconstructs this object as var_name via JSON."""
         return f"{var_name} = json.loads('''{self.to_repl()}''')"
 
+    def to_repl(self) -> str:
+        """Serialise this object into the JSON representation used in the REPL."""
+        raise NotImplementedError
+
 
 @dataclass(frozen=True)
 class ParameterTable(JsonReplMixin):

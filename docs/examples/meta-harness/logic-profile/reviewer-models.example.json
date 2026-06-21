@@ -1,0 +1,28 @@
+{
+  "aboutme": [
+    "Example multi-endpoint config for the PydanticAI logic-profile reviewer runner.",
+    "Uses environment variables for secrets so configs can be checked into source safely."
+  ],
+  "models": [
+    {
+      "name": "primary-reviewer",
+      "model": "reviewer-primary",
+      "provider": "auto",
+      "temperature": 0.0
+    },
+    {
+      "name": "cross-check-reviewer",
+      "model": "reviewer-cross-check",
+      "provider": "auto",
+      "temperature": 0.0
+    },
+    {
+      "name": "local-compatible",
+      "model": "reviewer-local",
+      "provider": "openai_compatible",
+      "base_url": "http://localhost:11434/v1",
+      "api_key_env": "LOCAL_REVIEWER_API_KEY",
+      "temperature": 0.0
+    }
+  ]
+}

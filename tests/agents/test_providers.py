@@ -48,6 +48,15 @@ def test_openai_provider_config() -> None:
     assert "api.openai.com" in p.url_template
 
 
+def test_together_provider_config() -> None:
+    p = get_provider("together")
+    assert p.name == "together"
+    assert p.family == "openai"
+    assert p.auth_style == "bearer"
+    assert "TOGETHER_API_KEY" in p.env_keys
+    assert "api.together.ai" in p.url_template
+
+
 def test_get_provider_unknown_raises_value_error() -> None:
     with pytest.raises(ValueError, match="unknown provider"):
         get_provider("gcp-vertex")

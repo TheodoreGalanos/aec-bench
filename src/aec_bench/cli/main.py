@@ -15,6 +15,7 @@ from aec_bench.cli.commands.import_prime_eval import import_prime_eval
 from aec_bench.cli.commands.init import init_command
 from aec_bench.cli.commands.ledger import app as ledger_app
 from aec_bench.cli.commands.library import app as library_app
+from aec_bench.cli.commands.meta_harness import app as meta_harness_app
 from aec_bench.cli.commands.prime import app as prime_app
 from aec_bench.cli.commands.remediate import remediate
 from aec_bench.cli.commands.report import app as report_app
@@ -57,6 +58,7 @@ app.add_typer(swarm_app, name="swarm", rich_help_panel="Evolution")
 app.add_typer(task_app, name="task", rich_help_panel="Tasks")
 app.add_typer(library_app, name="library", rich_help_panel="Library")
 app.add_typer(prime_app, name="prime", rich_help_panel="Integrations")
+app.add_typer(meta_harness_app, name="meta-harness", rich_help_panel="Meta-Harness")
 
 
 @app.callback(invoke_without_command=True)

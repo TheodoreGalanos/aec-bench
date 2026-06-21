@@ -92,6 +92,10 @@ def build_trial_record_from_workspace(
         reward = float(reward_data["reward"])
         if details_path.exists():
             breakdown = json.loads(details_path.read_text(encoding="utf-8"))
+    reviewer_summary = _read_reviewer_summary(workspace_dir / "logs" / "reviewer" / "summary.json")
+    if reviewer_summary is not None:
+        breakdown = dict(breakdown or {})
+        breakdown["llm_reviewer"] = reviewer_summary
 
     validity = ValidityCheck(
         output_parseable=agent_status == AgentOutputStatus.COMPLETED,
@@ -191,6 +195,13 @@ def copy_artifacts(
             shutil.copy2(src, artifact_dir / fname)
             copied.append(fname)
     return copied
+
+
+def _read_reviewer_summary(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return payload if isinstance(payload, dict) else None
 
 
 def build_trial_record(

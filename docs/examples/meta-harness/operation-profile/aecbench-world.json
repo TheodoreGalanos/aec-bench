@@ -1,0 +1,105 @@
+{
+  "aboutme": [
+    "AEC-Bench-shaped world for operation-profile examples.",
+    "Exposes operation handles for projection, difference, subset, and product."
+  ],
+  "world_id": "aecbench.operation.example",
+  "name": "AEC-Bench operation profile example",
+  "task_unit": "Complete a calculation with verifier-visible artifacts.",
+  "families": [
+    "calculation",
+    "review"
+  ],
+  "family_components": {
+    "calculation": {
+      "difficulty": "easy"
+    },
+    "review": {
+      "difficulty": "hard"
+    }
+  },
+  "logic_profile": {
+    "closure_gates": [
+      {
+        "id": "verifier_passed",
+        "evidence_key": "score.passed",
+        "expected": true
+      }
+    ],
+    "construction_gates": [
+      {
+        "id": "artifact_witnessed",
+        "construction_required": [
+          "artifacts.report.path"
+        ]
+      }
+    ],
+    "containment_gates": [],
+    "event_triggers": [],
+    "agentic_review": {
+      "required": true
+    }
+  },
+  "evidence_profile": {
+    "preserved_artifacts": [
+      "logs/verifier/details.json",
+      "logs/verifier/artifacts/report.json"
+    ],
+    "process_metrics": [
+      "tool_count",
+      "duration"
+    ]
+  },
+  "operation_profile": {
+    "subset_axes": [
+      "task_family"
+    ],
+    "difference_axes": [
+      "artifact_evidence"
+    ],
+    "projection_axes": [
+      "artifact_evidence",
+      "verifier_authority"
+    ],
+    "product_axes": [
+      "verifier_family"
+    ],
+    "extension_policy": "Escalate missing handles to agentic orchestration.",
+    "agentic_orchestration": {
+      "allowed_actions": [
+        "propose_operation_handle",
+        "propose_component_transform",
+        "request_schema_extension"
+      ],
+      "guidance": "Prefer deterministic operations; propose repairs when handles are incomplete."
+    }
+  },
+  "operation_handles": {
+    "artifact_evidence": {
+      "description": "Artifacts that constructively witness task completion.",
+      "paths": [
+        "logic_profile.construction_gates",
+        "evidence_profile.preserved_artifacts"
+      ]
+    },
+    "task_family": {
+      "description": "Task family membership and family-level components.",
+      "paths": [
+        "families",
+        "family_components"
+      ]
+    },
+    "verifier_authority": {
+      "description": "Verifier closure authority.",
+      "paths": [
+        "logic_profile.closure_gates"
+      ]
+    },
+    "verifier_family": {
+      "description": "Verifier family used for product composition.",
+      "paths": [
+        "logic_profile.closure_gates"
+      ]
+    }
+  }
+}

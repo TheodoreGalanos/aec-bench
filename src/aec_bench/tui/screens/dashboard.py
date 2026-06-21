@@ -364,6 +364,7 @@ class DashboardScreen(Screen):
             ("aec-bench init", "scaffold a new project"),
             ("aec-bench generate task", "create instances from template"),
             ("aec-bench generate dataset", "build dataset from suite.toml"),
+            ("aec-bench meta-harness recipe", "harness comparison workflow"),
             ("aec-bench evaluate", "score trial results"),
             ("aec-bench search", "search tasks and templates"),
             ("aec-bench tui", "launch this interface"),
@@ -387,6 +388,7 @@ class DashboardScreen(Screen):
             ("/configure-experiment", "set up an experiment config"),
             ("/hardening-pass", "quality-gate template or instance"),
             ("/domain-check", "verify architectural invariants"),
+            ("/meta-harness", "design or compare a harness candidate"),
         ]
         max_skill = max(len(s) for s, _ in skills)
         for skill, description in skills:

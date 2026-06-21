@@ -9,6 +9,8 @@ from aec_bench.contracts.experiment_manifest import (
     AgentConfig,
     ComputeConfig,
     ExperimentManifest,
+    ReviewerConfig,
+    ReviewerEndpointConfig,
     TaskSelector,
 )
 from aec_bench.harness.harbor_dispatch import (
@@ -63,6 +65,29 @@ def test_build_harbor_job_config_uses_precise_task_paths() -> None:
         {"path": "tasks/mechanical/heat-load/alpha"},
         {"path": "tasks/mechanical/heat-load/beta"},
     ]
+
+
+def test_experiment_manifest_accepts_reviewer_config() -> None:
+    manifest = ExperimentManifest(
+        experiment_id="experiment-001",
+        name="Reviewer config",
+        tasks=TaskSelector(domains=["mechanical"]),
+        agents=[AgentConfig(name="tool-loop", adapter="tool_loop", model="claude-sonnet-4-6")],
+        compute=ComputeConfig(backend="modal"),
+        reviewer=ReviewerConfig(
+            enabled=True,
+            models=[
+                ReviewerEndpointConfig(
+                    name="reviewer-main",
+                    model="openai:gpt-5.2",
+                )
+            ],
+        ),
+    )
+
+    assert manifest.reviewer is not None
+    assert manifest.reviewer.enabled is True
+    assert manifest.reviewer.models[0].name == "reviewer-main"
 
 
 def test_build_harbor_job_config_maps_morph_to_import_path_environment() -> None:
