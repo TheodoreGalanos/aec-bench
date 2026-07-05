@@ -279,7 +279,11 @@ def score_identity_claims(payload: dict) -> tuple[float, dict]:
     ledger_score = ledger_hits / len(REQUIRED_LEDGER_TOKENS) if REQUIRED_LEDGER_TOKENS else 0.0
 
     statement = str(payload.get("claim_boundary_statement", "")).strip().lower()
-    claims_ok = bool(statement) and "task-owned synthetic" in statement and "does not claim" in statement
+    claims_ok = (
+        bool(statement)
+        and "task-owned synthetic" in statement
+        and any(phrase in statement for phrase in ("does not claim", "does not constitute"))
+    )
 
     checks = {"identity_ledger": ledger_score, "claim_boundary": 1.0 if claims_ok else 0.0}
     score = sum(checks.values()) / len(checks)
