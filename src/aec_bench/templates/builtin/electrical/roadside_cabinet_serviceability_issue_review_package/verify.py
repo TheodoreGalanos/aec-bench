@@ -304,12 +304,13 @@ def has_supported_claim_boundary(statement: str) -> bool:
 def score_identity_claims(payload: dict) -> tuple[float, dict]:
     ledger = payload.get("identity_ledger", {})
     ledger_text = json.dumps(ledger).lower() if isinstance(ledger, dict) else ""
-    ledger_ok = all(token in ledger_text for token in REQUIRED_LEDGER_TOKENS)
+    ledger_hits = sum(1.0 for token in REQUIRED_LEDGER_TOKENS if token in ledger_text)
+    ledger_score = ledger_hits / len(REQUIRED_LEDGER_TOKENS) if REQUIRED_LEDGER_TOKENS else 0.0
 
     statement = str(payload.get("claim_boundary_statement", "")).strip().lower()
     claims_ok = has_supported_claim_boundary(statement)
 
-    checks = {"identity_ledger": 1.0 if ledger_ok else 0.0, "claim_boundary": 1.0 if claims_ok else 0.0}
+    checks = {"identity_ledger": ledger_score, "claim_boundary": 1.0 if claims_ok else 0.0}
     score = sum(checks.values()) / len(checks)
     return score, {"score": round(score * GATE_WEIGHTS["identity_claims"], 4), "checks": checks}
 

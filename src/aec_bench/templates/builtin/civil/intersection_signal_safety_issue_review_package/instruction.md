@@ -11,7 +11,7 @@ Your job is not to redesign the intersection. Your job is to decide whether the 
 3. Check for source conflicts, stale revisions, contradictory datums, copied scenarios, missing evidence, and open critical comments before accepting any package claim.
 4. Recompute the package's own calculations only where they answer review items, using the assessment bases stated in the criteria memo. Do not import methods or values from outside the packet.
 5. Assign exactly one status to every review item: `pass`, `fail`, `not_applicable`, or `insufficient_data`.
-6. Do not invent missing values. Mark missing evidence as `insufficient_data` and request the exact missing field and source.
+6. Do not invent missing values. Mark missing evidence as `insufficient_data` and request the exact missing field and source. A value that a source explicitly marks as pending or awaiting confirmation is missing evidence of this kind: it does not make otherwise-reconciling identifiers inconsistent and does not make evidence that is present untraceable; the check that cannot be completed without it takes `insufficient_data`.
 7. Convert every failure into a finding with a source pointer, affected object, consequence, and corrective action.
 8. Issue a readiness decision that reconciles with your matrix, findings, and action register.
 
