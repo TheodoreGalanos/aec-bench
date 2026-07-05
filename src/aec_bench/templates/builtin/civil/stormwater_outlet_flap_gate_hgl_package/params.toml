@@ -1,0 +1,172 @@
+# ABOUTME: Defines the SSC-11 stormwater outlet flap-gate HGL template.
+# ABOUTME: Pins one synthetic drainage, tailwater, flap-gate, and support source package.
+
+[meta]
+name = "stormwater-outlet-flap-gate-hgl-package"
+description = "SSC-11 stormwater outlet HGL, flap gate, and support metrics"
+long_description = "Calculates source-bound stormwater outlet metrics from a deterministic SSC-11 task-owned source pack. The template combines full-pipe Manning friction, flap-gate headloss, minor loss, upstream HGL clearance, pipe crown clearance, outfall support reaction, and an overall synthetic pass score."
+discipline = "civil"
+category = "stormwater-outlet"
+standards = ["Manning hydraulic calculations", "Stormwater HGL review workflows", "Flap-gate product coordination", "Outfall support checks"]
+tags = ["civil", "stormwater", "outfall", "flap-gate", "hgl", "deterministic"]
+tool_mode = "with-tool"
+
+[params.pipe_diameter_m]
+type = "float"
+unit = "m"
+description = "PIPE-SSC11-004 outlet pipe diameter"
+min = 0.75
+max = 0.75
+
+[params.design_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "DRAIN-SSC11-004 design stormwater flow"
+min = 0.5694627558483623
+max = 0.5694627558483623
+
+[params.pipe_length_m]
+type = "float"
+unit = "m"
+description = "PIPE-SSC11-004 full-pipe outlet length"
+min = 48.53773926377916
+max = 48.53773926377916
+
+[params.manning_n]
+type = "float"
+description = "PIPE-SSC11-004 Manning roughness"
+min = 0.013
+max = 0.013
+
+[params.tailwater_level_m]
+type = "float"
+unit = "m"
+description = "TAIL-SSC11-004 tailwater level"
+min = 4.851
+max = 4.851
+
+[params.flap_gate_loss_coefficient]
+type = "float"
+description = "FLAP-SSC11-004 flap-gate loss coefficient"
+min = 1.794885529584038
+max = 1.794885529584038
+
+[params.minor_loss_coefficient]
+type = "float"
+description = "DRAIN-SSC11-004 outlet minor-loss coefficient"
+min = 0.6966989884569621
+max = 0.6966989884569621
+
+[params.upstream_invert_m]
+type = "float"
+unit = "m"
+description = "DRAIN-SSC11-004 upstream invert level"
+min = 4.35
+max = 4.35
+
+[params.road_surface_level_m]
+type = "float"
+unit = "m"
+description = "DRAIN-SSC11-004 road surface level over the outlet"
+min = 6.2
+max = 6.2
+
+[params.pipe_support_line_load_kn_m]
+type = "float"
+unit = "kN/m"
+description = "PIPE-SSC11-004 outfall pipe support line load"
+min = 4.0
+max = 4.0
+
+[params.support_span_m]
+type = "float"
+unit = "m"
+description = "PIPE-SSC11-004 support span"
+min = 4.0
+max = 4.0
+
+[params.flap_gate_weight_kn]
+type = "float"
+unit = "kN"
+description = "FLAP-SSC11-004 flap-gate weight"
+min = 5.7
+max = 5.7
+
+[params.support_allowable_kn]
+type = "float"
+unit = "kN"
+description = "PIPE-SSC11-004 outfall support allowable reaction"
+min = 32.0
+max = 32.0
+
+[outputs.pipe_velocity_m_s]
+description = "Outlet pipe velocity"
+tolerance = 0.03
+
+[outputs.friction_loss_m]
+description = "Full-pipe Manning friction loss"
+tolerance = 0.03
+
+[outputs.flap_gate_headloss_m]
+description = "Flap-gate headloss"
+tolerance = 0.03
+
+[outputs.minor_loss_m]
+description = "Outlet minor loss"
+tolerance = 0.03
+
+[outputs.upstream_hgl_m]
+description = "Upstream hydraulic grade line"
+tolerance = 0.03
+
+[outputs.hgl_clearance_to_surface_m]
+description = "Road-surface clearance above upstream HGL"
+tolerance = 0.03
+
+[outputs.pipe_crown_margin_to_surface_m]
+description = "Road-surface clearance above pipe crown"
+tolerance = 0.03
+
+[outputs.outfall_support_reaction_kn]
+description = "Outfall support reaction including flap-gate weight"
+tolerance = 0.03
+
+[outputs.support_utilization]
+description = "Outfall support reaction divided by allowable reaction"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for the task-owned HGL and support checks"
+tolerance = 0.03
+
+[archetypes.ssc11_stormwater_outlet_case]
+description = "Stormwater outfall flap-gate and HGL case"
+pipe_diameter_m = {min = 0.75, max = 0.75}
+design_flow_m3_s = {min = 0.5694627558483623, max = 0.5694627558483623}
+pipe_length_m = {min = 48.53773926377916, max = 48.53773926377916}
+manning_n = {min = 0.013, max = 0.013}
+tailwater_level_m = {min = 4.851, max = 4.851}
+flap_gate_loss_coefficient = {min = 1.794885529584038, max = 1.794885529584038}
+minor_loss_coefficient = {min = 0.6966989884569621, max = 0.6966989884569621}
+upstream_invert_m = {min = 4.35, max = 4.35}
+road_surface_level_m = {min = 6.2, max = 6.2}
+pipe_support_line_load_kn_m = {min = 4.0, max = 4.0}
+support_span_m = {min = 4.0, max = 4.0}
+flap_gate_weight_kn = {min = 5.7, max = 5.7}
+support_allowable_kn = {min = 32.0, max = 32.0}
+site_contexts = ["stormwater-outlet", "flap-gate-hgl-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-11 stormwater outlet package"
+visibility = "all_given"
+archetypes = ["ssc11_stormwater_outlet_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-11 stormwater outlet package"
+visibility = "all_given"
+archetypes = ["ssc11_stormwater_outlet_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-11 stormwater outlet package"
+visibility = "all_given"
+archetypes = ["ssc11_stormwater_outlet_case"]

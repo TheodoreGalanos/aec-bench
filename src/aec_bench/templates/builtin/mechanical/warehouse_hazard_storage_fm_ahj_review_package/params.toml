@@ -1,0 +1,216 @@
+[meta]
+name = "warehouse-hazard-storage-fm-ahj-review-package"
+description = "SSC-19 warehouse hazard, storage, and FM/AHJ review metrics"
+long_description = "Calculates source-bound warehouse hazard and review metrics from a deterministic SSC-19 task-owned source pack. The template combines commodity hazard density, remote-area sprinkler demand, water-supply and pressure margins, aisle clearance, review comment closeout, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "warehouse-hazard-review"
+standards = ["warehouse fire protection workflows", "FM/AHJ review workflows", "sprinkler demand workflows"]
+tags = ["mechanical", "fire-protection", "warehouse", "sprinkler", "review", "authority", "deterministic"]
+tool_mode = "with-tool"
+
+[params.storage_area_ft2]
+type = "float"
+unit = "ft2"
+description = "STORE-19-LAYOUT-05 storage area"
+min = 24000.0
+max = 24000.0
+
+[params.storage_height_ft]
+type = "float"
+unit = "ft"
+description = "STORE-19-LAYOUT-05 storage height"
+min = 28.0
+max = 28.0
+
+[params.aisle_width_ft]
+type = "float"
+unit = "ft"
+description = "STORE-19-LAYOUT-05 aisle width"
+min = 8.0
+max = 8.0
+
+[params.required_aisle_width_ft]
+type = "float"
+unit = "ft"
+description = "HAZ-19-COMMODITY-05 required aisle width"
+min = 6.0
+max = 6.0
+
+[params.commodity_hazard_factor]
+type = "float"
+description = "HAZ-19-COMMODITY-05 commodity hazard factor"
+min = 1.35
+max = 1.35
+
+[params.base_density_gpm_ft2]
+type = "float"
+unit = "gpm/ft2"
+description = "SPR-19-BASIS-05 base sprinkler density"
+min = 0.25
+max = 0.25
+
+[params.remote_area_ft2]
+type = "float"
+unit = "ft2"
+description = "SPR-19-BASIS-05 remote area"
+min = 2500.0
+max = 2500.0
+
+[params.hose_allowance_gpm]
+type = "float"
+unit = "gpm"
+description = "SPR-19-BASIS-05 hose allowance"
+min = 500.0
+max = 500.0
+
+[params.sprinkler_k_factor]
+type = "float"
+description = "SPR-19-BASIS-05 sprinkler K factor"
+min = 8.0
+max = 8.0
+
+[params.minimum_head_pressure_psi]
+type = "float"
+unit = "psi"
+description = "SPR-19-BASIS-05 minimum head pressure"
+min = 20.0
+max = 20.0
+
+[params.available_supply_gpm]
+type = "float"
+unit = "gpm"
+description = "CALC-19-APPENDIX-05 available supply"
+min = 1850.0
+max = 1850.0
+
+[params.available_pressure_psi]
+type = "float"
+unit = "psi"
+description = "CALC-19-APPENDIX-05 available pressure"
+min = 58.0
+max = 58.0
+
+[params.required_pressure_psi]
+type = "float"
+unit = "psi"
+description = "SPR-19-BASIS-05 required pressure"
+min = 45.0
+max = 45.0
+
+[params.review_comments]
+type = "float"
+description = "REVIEW-19-FM-AHJ-05 review comment count"
+min = 6.0
+max = 6.0
+
+[params.resolved_comments]
+type = "float"
+description = "REVIEW-19-FM-AHJ-05 resolved comment count"
+min = 5.0
+max = 5.0
+
+[params.response_sections]
+type = "float"
+description = "MEMO-19-HAZARD-05 response sections"
+min = 8.0
+max = 8.0
+
+[params.required_response_sections]
+type = "float"
+description = "REVIEW-19-FM-AHJ-05 required response sections"
+min = 9.0
+max = 9.0
+
+[params.critical_open_comments]
+type = "float"
+description = "REVIEW-19-FM-AHJ-05 critical open comments"
+min = 0.0
+max = 0.0
+
+[outputs.storage_area_ft2]
+description = "Warehouse storage area"
+tolerance = 0.03
+
+[outputs.storage_height_ft]
+description = "Warehouse storage height"
+tolerance = 0.03
+
+[outputs.sprinkler_density_gpm_ft2]
+description = "Hazard-adjusted sprinkler density"
+tolerance = 0.03
+
+[outputs.sprinkler_demand_gpm]
+description = "Remote-area sprinkler demand"
+tolerance = 0.03
+
+[outputs.total_fire_demand_gpm]
+description = "Sprinkler demand plus hose allowance"
+tolerance = 0.03
+
+[outputs.required_remote_head_count]
+description = "Required remote-area sprinkler head count"
+tolerance = 0.03
+
+[outputs.water_supply_margin_gpm]
+description = "Available supply minus total fire demand"
+tolerance = 0.03
+
+[outputs.pressure_margin_psi]
+description = "Available pressure minus required pressure"
+tolerance = 0.03
+
+[outputs.aisle_width_margin_ft]
+description = "Available aisle width minus required aisle width"
+tolerance = 0.03
+
+[outputs.comment_resolution_fraction]
+description = "Resolved review comments divided by total review comments"
+tolerance = 0.03
+
+[outputs.authority_response_score]
+description = "Response sections divided by required response sections"
+tolerance = 0.03
+
+[outputs.critical_open_comments]
+description = "Critical open review comments"
+tolerance = 0.001
+
+[outputs.overall_pass_score]
+description = "1.0 when water supply, pressure, aisle, and critical-comment checks pass"
+tolerance = 0.001
+
+[archetypes.ssc19_warehouse_hazard_review_case]
+description = "Warehouse hazard review case with sprinkler demand, water supply, pressure, and review closeout"
+storage_area_ft2 = {min = 24000.0, max = 24000.0}
+storage_height_ft = {min = 28.0, max = 28.0}
+aisle_width_ft = {min = 8.0, max = 8.0}
+required_aisle_width_ft = {min = 6.0, max = 6.0}
+commodity_hazard_factor = {min = 1.35, max = 1.35}
+base_density_gpm_ft2 = {min = 0.25, max = 0.25}
+remote_area_ft2 = {min = 2500.0, max = 2500.0}
+hose_allowance_gpm = {min = 500.0, max = 500.0}
+sprinkler_k_factor = {min = 8.0, max = 8.0}
+minimum_head_pressure_psi = {min = 20.0, max = 20.0}
+available_supply_gpm = {min = 1850.0, max = 1850.0}
+available_pressure_psi = {min = 58.0, max = 58.0}
+required_pressure_psi = {min = 45.0, max = 45.0}
+review_comments = {min = 6.0, max = 6.0}
+resolved_comments = {min = 5.0, max = 5.0}
+response_sections = {min = 8.0, max = 8.0}
+required_response_sections = {min = 9.0, max = 9.0}
+critical_open_comments = {min = 0.0, max = 0.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-19 warehouse hazard and review package"
+visibility = "all_given"
+archetypes = ["ssc19_warehouse_hazard_review_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-19 warehouse hazard and review package"
+visibility = "all_given"
+archetypes = ["ssc19_warehouse_hazard_review_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-19 warehouse hazard and review package"
+visibility = "all_given"
+archetypes = ["ssc19_warehouse_hazard_review_case"]

@@ -1,0 +1,172 @@
+[meta]
+name = "vibration-isolation-support-package"
+description = "SSC-12 vibration isolation and support metrics"
+long_description = "Calculates source-bound vibration isolation, support reaction, and fatigue metrics from a deterministic SSC-12 task-owned source pack."
+discipline = "structural"
+category = "vibration-isolation"
+standards = ["FTA vibration assessment workflow", "manufacturer isolator workflow", "support layout workflow"]
+tags = ["structural", "acoustics", "vibration", "isolation", "support", "deterministic"]
+tool_mode = "with-tool"
+
+[params.equipment_mass_kg]
+type = "float"
+unit = "kg"
+description = "EQ-12-VIB-02 equipment mass"
+min = 1800.0
+max = 1800.0
+
+[params.dynamic_allowance_factor]
+type = "float"
+description = "SUPPORT-12-LAYOUT-02 dynamic allowance factor"
+min = 1.25
+max = 1.25
+
+[params.support_count]
+type = "float"
+unit = "count"
+description = "SUPPORT-12-LAYOUT-02 support count"
+min = 4.0
+max = 4.0
+
+[params.support_capacity_kn]
+type = "float"
+unit = "kN"
+description = "FOUND-12-SCHED-02 support service capacity"
+min = 12.0
+max = 12.0
+
+[params.forcing_frequency_hz]
+type = "float"
+unit = "Hz"
+description = "EQ-12-VIB-02 forcing frequency"
+min = 30.0
+max = 30.0
+
+[params.isolator_natural_frequency_hz]
+type = "float"
+unit = "Hz"
+description = "ISO-12-DATA-02 isolator natural frequency"
+min = 9.0
+max = 9.0
+
+[params.damping_ratio]
+type = "float"
+description = "ISO-12-DATA-02 damping ratio"
+min = 0.07
+max = 0.07
+
+[params.source_vibration_velocity_mm_s]
+type = "float"
+unit = "mm/s"
+description = "EQ-12-VIB-02 source vibration velocity"
+min = 2.6
+max = 2.6
+
+[params.structural_path_factor]
+type = "float"
+description = "SUPPORT-12-LAYOUT-02 structural path factor"
+min = 0.35
+max = 0.35
+
+[params.vibration_velocity_criterion_mm_s]
+type = "float"
+unit = "mm/s"
+description = "CRIT-12-VIB-02 receiver vibration velocity criterion"
+min = 0.35
+max = 0.35
+
+[params.cycles_per_hour]
+type = "float"
+unit = "cycles/h"
+description = "EQ-12-VIB-02 operating cycles per hour"
+min = 120.0
+max = 120.0
+
+[params.operating_hours_per_day]
+type = "float"
+unit = "h/d"
+description = "EQ-12-VIB-02 operating hours per day"
+min = 10.0
+max = 10.0
+
+[params.design_life_days]
+type = "float"
+unit = "d"
+description = "FOUND-12-SCHED-02 design life"
+min = 250.0
+max = 250.0
+
+[params.allowable_fatigue_cycles]
+type = "float"
+unit = "cycles"
+description = "CRIT-12-VIB-02 allowable fatigue cycles"
+min = 500000.0
+max = 500000.0
+
+[outputs.frequency_ratio]
+description = "Forcing frequency divided by isolator natural frequency"
+tolerance = 0.003
+
+[outputs.vibration_transmissibility]
+description = "Damped vibration transmissibility"
+tolerance = 0.003
+
+[outputs.receiver_vibration_velocity_mm_s]
+description = "Receiver vibration velocity after isolation and path factor"
+tolerance = 0.003
+
+[outputs.vibration_margin_mm_s]
+description = "Vibration criterion minus receiver vibration velocity"
+tolerance = 0.003
+
+[outputs.support_service_reaction_kn]
+description = "Dynamic service reaction per support"
+tolerance = 0.003
+
+[outputs.support_reaction_margin_kn]
+description = "Support capacity minus service reaction"
+tolerance = 0.003
+
+[outputs.fatigue_damage_ratio]
+description = "Operating cycles divided by allowable fatigue cycles"
+tolerance = 0.003
+
+[outputs.fatigue_margin]
+description = "One minus fatigue damage ratio"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when vibration, support, and fatigue checks pass"
+tolerance = 0.001
+
+[archetypes.ssc12_vibration_isolation_case]
+description = "Vibration isolation support case"
+equipment_mass_kg = {min = 1800.0, max = 1800.0}
+dynamic_allowance_factor = {min = 1.25, max = 1.25}
+support_count = {min = 4.0, max = 4.0}
+support_capacity_kn = {min = 12.0, max = 12.0}
+forcing_frequency_hz = {min = 30.0, max = 30.0}
+isolator_natural_frequency_hz = {min = 9.0, max = 9.0}
+damping_ratio = {min = 0.07, max = 0.07}
+source_vibration_velocity_mm_s = {min = 2.6, max = 2.6}
+structural_path_factor = {min = 0.35, max = 0.35}
+vibration_velocity_criterion_mm_s = {min = 0.35, max = 0.35}
+cycles_per_hour = {min = 120.0, max = 120.0}
+operating_hours_per_day = {min = 10.0, max = 10.0}
+design_life_days = {min = 250.0, max = 250.0}
+allowable_fatigue_cycles = {min = 500000.0, max = 500000.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-12 vibration isolation support package"
+visibility = "all_given"
+archetypes = ["ssc12_vibration_isolation_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-12 vibration isolation support package"
+visibility = "all_given"
+archetypes = ["ssc12_vibration_isolation_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-12 vibration isolation support package"
+visibility = "all_given"
+archetypes = ["ssc12_vibration_isolation_case"]

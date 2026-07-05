@@ -1,0 +1,167 @@
+[meta]
+name = "room-acoustic-hvac-operations-package"
+description = "SSC-12 room acoustic and HVAC operations metrics"
+long_description = "Calculates source-bound RT60, air-change, HVAC/equipment receiver level, combined room noise, and occupancy metrics from a deterministic SSC-12 task-owned source pack."
+discipline = "mechanical"
+category = "room-acoustics"
+standards = ["room acoustic workflow", "HVAC noise workflow", "SoundPLAN", "CadnaA"]
+tags = ["mechanical", "acoustics", "hvac", "room", "rt60", "deterministic"]
+tool_mode = "with-tool"
+
+[params.room_volume_m3]
+type = "float"
+unit = "m3"
+description = "ROOM-12-PLAN-03 room volume"
+min = 720.0
+max = 720.0
+
+[params.absorption_area_m2]
+type = "float"
+unit = "m2 sabins"
+description = "FINISH-12-SCHED-03 equivalent absorption area"
+min = 165.0
+max = 165.0
+
+[params.max_rt60_s]
+type = "float"
+unit = "s"
+description = "CRIT-12-ROOM-03 maximum RT60"
+min = 1.2
+max = 1.2
+
+[params.supply_airflow_m3_h]
+type = "float"
+unit = "m3/h"
+description = "HVAC-12-SCHED-03 supply airflow"
+min = 4000.0
+max = 4000.0
+
+[params.hvac_sound_power_dba]
+type = "float"
+unit = "dBA"
+description = "HVAC-12-SCHED-03 HVAC source level"
+min = 63.0
+max = 63.0
+
+[params.hvac_receiver_distance_m]
+type = "float"
+unit = "m"
+description = "ROOM-12-PLAN-03 HVAC receiver distance"
+min = 18.0
+max = 18.0
+
+[params.hvac_insertion_loss_db]
+type = "float"
+unit = "dB"
+description = "FINISH-12-SCHED-03 HVAC insertion loss"
+min = 5.0
+max = 5.0
+
+[params.equipment_sound_power_dba]
+type = "float"
+unit = "dBA"
+description = "HVAC-12-SCHED-03 equipment source level"
+min = 58.0
+max = 58.0
+
+[params.equipment_receiver_distance_m]
+type = "float"
+unit = "m"
+description = "ROOM-12-PLAN-03 equipment receiver distance"
+min = 10.0
+max = 10.0
+
+[params.equipment_insertion_loss_db]
+type = "float"
+unit = "dB"
+description = "FINISH-12-SCHED-03 equipment insertion loss"
+min = 3.0
+max = 3.0
+
+[params.room_noise_criterion_dba]
+type = "float"
+unit = "dBA"
+description = "CRIT-12-ROOM-03 room noise criterion"
+min = 45.0
+max = 45.0
+
+[params.room_area_m2]
+type = "float"
+unit = "m2"
+description = "ROOM-12-PLAN-03 room area"
+min = 186.0
+max = 186.0
+
+[params.area_per_occupant_m2]
+type = "float"
+unit = "m2/person"
+description = "OCC-12-SCENARIO-03 area per occupant"
+min = 10.0
+max = 10.0
+
+[outputs.room_rt60_s]
+description = "Sabine reverberation time"
+tolerance = 0.003
+
+[outputs.rt60_margin_s]
+description = "Maximum RT60 minus calculated RT60"
+tolerance = 0.003
+
+[outputs.air_changes_per_h]
+description = "Supply airflow divided by room volume"
+tolerance = 0.003
+
+[outputs.hvac_source_a_level_dba]
+description = "HVAC source level at receiver"
+tolerance = 0.003
+
+[outputs.equipment_source_a_level_dba]
+description = "Equipment source level at receiver"
+tolerance = 0.003
+
+[outputs.combined_room_level_dba]
+description = "Logarithmic sum of room source levels"
+tolerance = 0.003
+
+[outputs.room_noise_margin_db]
+description = "Room criterion minus combined source level"
+tolerance = 0.003
+
+[outputs.design_occupants]
+description = "Ceiling of area divided by area per occupant"
+tolerance = 0.001
+
+[outputs.overall_pass_score]
+description = "1.0 when RT60, noise, and ventilation checks pass"
+tolerance = 0.001
+
+[archetypes.ssc12_room_acoustic_case]
+description = "Room acoustic and HVAC operations case"
+room_volume_m3 = {min = 720.0, max = 720.0}
+absorption_area_m2 = {min = 165.0, max = 165.0}
+max_rt60_s = {min = 1.2, max = 1.2}
+supply_airflow_m3_h = {min = 4000.0, max = 4000.0}
+hvac_sound_power_dba = {min = 63.0, max = 63.0}
+hvac_receiver_distance_m = {min = 18.0, max = 18.0}
+hvac_insertion_loss_db = {min = 5.0, max = 5.0}
+equipment_sound_power_dba = {min = 58.0, max = 58.0}
+equipment_receiver_distance_m = {min = 10.0, max = 10.0}
+equipment_insertion_loss_db = {min = 3.0, max = 3.0}
+room_noise_criterion_dba = {min = 45.0, max = 45.0}
+room_area_m2 = {min = 186.0, max = 186.0}
+area_per_occupant_m2 = {min = 10.0, max = 10.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-12 room acoustic HVAC package"
+visibility = "all_given"
+archetypes = ["ssc12_room_acoustic_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-12 room acoustic HVAC package"
+visibility = "all_given"
+archetypes = ["ssc12_room_acoustic_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-12 room acoustic HVAC package"
+visibility = "all_given"
+archetypes = ["ssc12_room_acoustic_case"]

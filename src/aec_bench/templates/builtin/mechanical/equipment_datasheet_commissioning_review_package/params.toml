@@ -1,0 +1,194 @@
+# ABOUTME: Defines the SSC-06 equipment datasheet and commissioning review template.
+# ABOUTME: Pins one schedule, datasheet, curve export, commissioning checklist, and review-comment source pack.
+
+[meta]
+name = "equipment-datasheet-commissioning-review-package"
+description = "SSC-06 equipment datasheet and commissioning review metrics"
+long_description = "Calculates source-bound equipment datasheet and commissioning review metrics from a deterministic SSC-06 task-owned source pack. The template combines flow/head capacity margins, POR/AOR position, NPSH and motor margins, evidence completeness, open commissioning items, critical review comments, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "equipment-review-commissioning"
+standards = ["pump datasheet review workflow", "POR/AOR screening", "commissioning checklist workflow"]
+tags = ["mechanical", "equipment", "datasheet", "commissioning", "por", "aor", "review", "deterministic"]
+tool_mode = "with-tool"
+
+[params.scheduled_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "EQUIP-06-SCHED-08 scheduled duty flow"
+min = 78.0
+max = 78.0
+
+[params.datasheet_max_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "DATASHEET-06-MFR-08 datasheet maximum flow"
+min = 85.0
+max = 85.0
+
+[params.scheduled_head_m]
+type = "float"
+unit = "m"
+description = "EQUIP-06-SCHED-08 scheduled duty head"
+min = 24.5
+max = 24.5
+
+[params.datasheet_max_head_m]
+type = "float"
+unit = "m"
+description = "DATASHEET-06-MFR-08 datasheet maximum head"
+min = 27.5
+max = 27.5
+
+[params.bep_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "CURVE-06-EXPORT-08 best-efficiency-point flow"
+min = 82.0
+max = 82.0
+
+[params.por_lower_pct]
+type = "float"
+unit = "%"
+description = "CURVE-06-EXPORT-08 POR lower bound as percent of BEP flow"
+min = 70.0
+max = 70.0
+
+[params.por_upper_pct]
+type = "float"
+unit = "%"
+description = "CURVE-06-EXPORT-08 POR upper bound as percent of BEP flow"
+min = 110.0
+max = 110.0
+
+[params.npsh_available_m]
+type = "float"
+unit = "m"
+description = "COMM-06-CHECK-08 NPSH available"
+min = 10.6
+max = 10.6
+
+[params.npsh_required_m]
+type = "float"
+unit = "m"
+description = "CURVE-06-EXPORT-08 NPSH required"
+min = 7.8
+max = 7.8
+
+[params.shaft_power_kw]
+type = "float"
+unit = "kW"
+description = "CURVE-06-EXPORT-08 shaft power"
+min = 26.0
+max = 26.0
+
+[params.selected_motor_kw]
+type = "float"
+unit = "kW"
+description = "EQUIP-06-SCHED-08 selected motor size"
+min = 30.0
+max = 30.0
+
+[params.motor_service_factor]
+type = "float"
+description = "DATASHEET-06-MFR-08 motor service factor"
+min = 1.15
+max = 1.15
+
+[params.provided_evidence_count]
+type = "float"
+description = "REVIEW-06-COMMENTS-08 evidence items provided"
+min = 7.0
+max = 7.0
+
+[params.required_evidence_count]
+type = "float"
+description = "REVIEW-06-COMMENTS-08 evidence items required"
+min = 8.0
+max = 8.0
+
+[params.open_commissioning_items]
+type = "float"
+description = "COMM-06-CHECK-08 open commissioning items"
+min = 2.0
+max = 2.0
+
+[params.critical_review_comments_open]
+type = "float"
+description = "REVIEW-06-COMMENTS-08 critical review comments still open"
+min = 0.0
+max = 0.0
+
+[outputs.flow_capacity_margin_pct]
+description = "Datasheet flow capacity margin"
+tolerance = 0.03
+
+[outputs.head_capacity_margin_pct]
+description = "Datasheet head capacity margin"
+tolerance = 0.03
+
+[outputs.por_position_pct]
+description = "Scheduled duty flow as a percent of BEP flow"
+tolerance = 0.03
+
+[outputs.por_margin_pct]
+description = "Nearest POR bound margin"
+tolerance = 0.03
+
+[outputs.npsh_margin_m]
+description = "NPSH available minus NPSH required"
+tolerance = 0.03
+
+[outputs.motor_service_margin_kw]
+description = "Selected motor size minus service-factor-adjusted shaft power"
+tolerance = 0.03
+
+[outputs.evidence_completeness_score]
+description = "Provided evidence count divided by required evidence count"
+tolerance = 0.03
+
+[outputs.open_commissioning_items]
+description = "Open commissioning item count"
+tolerance = 0.03
+
+[outputs.critical_review_comments_open]
+description = "Critical review comments still open"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when capacity, POR, NPSH, motor, evidence, and critical comment checks pass"
+tolerance = 0.001
+
+[archetypes.ssc06_equipment_review_case]
+description = "Equipment schedule, datasheet, curve export, commissioning checklist, and review response source pack"
+scheduled_flow_l_s = {min = 78.0, max = 78.0}
+datasheet_max_flow_l_s = {min = 85.0, max = 85.0}
+scheduled_head_m = {min = 24.5, max = 24.5}
+datasheet_max_head_m = {min = 27.5, max = 27.5}
+bep_flow_l_s = {min = 82.0, max = 82.0}
+por_lower_pct = {min = 70.0, max = 70.0}
+por_upper_pct = {min = 110.0, max = 110.0}
+npsh_available_m = {min = 10.6, max = 10.6}
+npsh_required_m = {min = 7.8, max = 7.8}
+shaft_power_kw = {min = 26.0, max = 26.0}
+selected_motor_kw = {min = 30.0, max = 30.0}
+motor_service_factor = {min = 1.15, max = 1.15}
+provided_evidence_count = {min = 7.0, max = 7.0}
+required_evidence_count = {min = 8.0, max = 8.0}
+open_commissioning_items = {min = 2.0, max = 2.0}
+critical_review_comments_open = {min = 0.0, max = 0.0}
+site_contexts = ["equipment-review-commissioning", "datasheet-por-commissioning-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-06 datasheet commissioning review package"
+visibility = "all_given"
+archetypes = ["ssc06_equipment_review_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-06 datasheet commissioning review package"
+visibility = "all_given"
+archetypes = ["ssc06_equipment_review_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-06 datasheet commissioning review package"
+visibility = "all_given"
+archetypes = ["ssc06_equipment_review_case"]

@@ -1,0 +1,187 @@
+# ABOUTME: Defines the SSC-15 cable component compliance template.
+# ABOUTME: Pins one task-owned cable datasheet, schedule, SLD, and memo source pack.
+
+[meta]
+name = "cable-component-datasheet-ampacity-voltage-package"
+description = "SSC-15 cable datasheet ampacity, AC resistance, voltage-drop, and identity checks"
+long_description = "Calculates source-bound cable/component compliance metrics from a deterministic SSC-15 task-owned source pack. The template combines one cable datasheet, schedule, installation table, SLD feeder, manufacturer limit sheet, and component memo."
+discipline = "electrical"
+category = "component-compliance"
+standards = ["AS/NZS 3008 style voltage drop", "IEC 60287 style resistance temperature", "product datasheet review"]
+tags = ["electrical", "cable", "datasheet", "ampacity", "voltage-drop", "product-compliance", "deterministic"]
+tool_mode = "with-tool"
+
+[params.design_current_a]
+type = "float"
+unit = "A"
+description = "SCHED-15-CABLE-02 design feeder current"
+min = 118.0
+max = 118.0
+
+[params.datasheet_ampacity_a]
+type = "float"
+unit = "A"
+description = "DAT-15-CABLE-02 datasheet ampacity before derating"
+min = 170.0
+max = 170.0
+
+[params.ambient_derating_factor]
+type = "float"
+description = "TEMP-15-INSTALL-02 ambient derating factor"
+min = 0.94
+max = 0.94
+
+[params.grouping_derating_factor]
+type = "float"
+description = "TEMP-15-INSTALL-02 grouping derating factor"
+min = 0.85
+max = 0.85
+
+[params.installation_derating_factor]
+type = "float"
+description = "TEMP-15-INSTALL-02 installation derating factor"
+min = 0.95
+max = 0.95
+
+[params.base_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "DAT-15-CABLE-02 conductor resistance at reference temperature"
+min = 0.153
+max = 0.153
+
+[params.temperature_coefficient]
+type = "float"
+description = "LIMIT-15-MFR-02 conductor resistance temperature coefficient"
+min = 0.00393
+max = 0.00393
+
+[params.operating_temperature_c]
+type = "float"
+unit = "degC"
+description = "TEMP-15-INSTALL-02 operating conductor temperature"
+min = 75.0
+max = 75.0
+
+[params.reference_temperature_c]
+type = "float"
+unit = "degC"
+description = "DAT-15-CABLE-02 reference resistance temperature"
+min = 20.0
+max = 20.0
+
+[params.skin_effect_factor]
+type = "float"
+description = "DAT-15-CABLE-02 skin-effect multiplier"
+min = 1.02
+max = 1.02
+
+[params.reactance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "DAT-15-CABLE-02 cable reactance"
+min = 0.08
+max = 0.08
+
+[params.power_factor]
+type = "float"
+description = "SLD-15-FEEDER-02 feeder power factor"
+min = 0.88
+max = 0.88
+
+[params.circuit_length_m]
+type = "float"
+unit = "m"
+description = "SCHED-15-CABLE-02 circuit length"
+min = 82.0
+max = 82.0
+
+[params.voltage_v]
+type = "float"
+unit = "V"
+description = "SLD-15-FEEDER-02 line voltage"
+min = 400.0
+max = 400.0
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "LIMIT-15-MFR-02 maximum voltage-drop criterion"
+min = 4.0
+max = 4.0
+
+[params.temperature_rating_c]
+type = "float"
+unit = "degC"
+description = "DAT-15-CABLE-02 product temperature rating"
+min = 90.0
+max = 90.0
+
+[params.matching_identity_fields]
+type = "float"
+unit = "count"
+description = "MEMO-15-CABLE-02 product identity fields matched to the SLD"
+min = 5.0
+max = 5.0
+
+[params.required_identity_fields]
+type = "float"
+unit = "count"
+description = "MEMO-15-CABLE-02 required identity fields"
+min = 5.0
+max = 5.0
+
+[outputs.derated_ampacity_a]
+description = "Datasheet ampacity after all derating factors"
+tolerance = 0.03
+
+[outputs.ampacity_margin_a]
+description = "Derated ampacity minus design current"
+tolerance = 0.03
+
+[outputs.ampacity_utilization]
+description = "Design current divided by derated ampacity"
+tolerance = 0.003
+
+[outputs.ac_resistance_ohm_km]
+description = "AC resistance at operating temperature"
+tolerance = 0.003
+
+[outputs.voltage_drop_percent]
+description = "Three-phase voltage drop percentage"
+tolerance = 0.003
+
+[outputs.voltage_drop_margin_percent]
+description = "Maximum voltage drop minus calculated voltage drop"
+tolerance = 0.003
+
+[outputs.temperature_rating_margin_c]
+description = "Product temperature rating minus operating temperature"
+tolerance = 0.03
+
+[outputs.product_identity_match_fraction]
+description = "Matched product identity fields divided by required identity fields"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when ampacity, voltage, temperature, and identity checks pass"
+tolerance = 0.001
+
+[archetypes.ssc15_cable_component_case]
+description = "Cable component datasheet ampacity and voltage compliance case"
+site_contexts = ["ssc15-cable-component"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-15 cable component compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_cable_component_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-15 cable component compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_cable_component_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-15 cable component compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_cable_component_case"]

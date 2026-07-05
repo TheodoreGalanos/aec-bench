@@ -1,0 +1,352 @@
+[meta]
+name = "roadside-cabinet-serviceability-issue-review-package"
+description = "SSC-01 review-first issue-readiness review of a roadside cabinet serviceability package"
+long_description = "Review-native long-horizon task over a generated SSC-01 roadside cabinet serviceability issue packet. The agent receives a multi-file source packet in /workspace/sources/ covering cabinet setout/elevation, flood HGL and inundation, enclosure heat derating, critical load and backup energy, feeder/access, owner criteria, and comments. The task is to inventory the packet, preserve object identity, recompute only source-owned evidence, assign one status per review item, raise findings/information requests/actions, and make a readiness decision. Packet variants inject missing heat-derating evidence, stale enclosure revisions, cabinet/event mismatch, scenario copy-forward, open comments, carried comments, or a genuine thermal-capacity deficiency."
+discipline = "electrical"
+category = "road-review"
+standards = ["roadside cabinet serviceability", "electrical feeder voltage drop", "backup energy workflow", "thermal enclosure derating"]
+tags = ["electrical", "road", "review", "issue-readiness", "cabinet", "thermal", "backup", "feeder"]
+tool_mode = "no-tool"
+
+# --- Flood and cabinet setout ---
+
+[params.hgl_level_m]
+type = "float"
+unit = "m"
+description = "HGL-SSC01-007 source HGL level"
+min = 41.20
+max = 42.70
+
+[params.inundation_level_m]
+type = "float"
+unit = "m"
+description = "HGL-SSC01-007 source inundation level"
+min = 41.10
+max = 42.80
+
+[params.minimum_freeboard_m]
+type = "float"
+unit = "m"
+description = "OPS-SSC01-007 minimum cabinet freeboard"
+min = 0.30
+max = 0.60
+
+[params.flood_freeboard_margin_target_m]
+type = "float"
+unit = "m"
+description = "Derivation margin between cabinet freeboard and minimum freeboard for passing packets"
+min = 0.08
+max = 0.35
+
+# --- Thermal capacity and critical load ---
+
+[params.enclosure_capacity_w_at_reference_temp]
+type = "float"
+unit = "W"
+description = "HEAT-SSC01-007 reference enclosure thermal capacity"
+min = 900.0
+max = 1650.0
+
+[params.reference_temperature_c]
+type = "float"
+unit = "C"
+description = "HEAT-SSC01-007 reference temperature"
+min = 24.0
+max = 28.0
+
+[params.event_temperature_c]
+type = "float"
+unit = "C"
+description = "HEAT-SSC01-007 event temperature"
+min = 39.0
+max = 50.0
+
+[params.derate_pct_per_c]
+type = "float"
+unit = "% per C"
+description = "HEAT-SSC01-007 enclosure derating rate"
+min = 0.70
+max = 1.60
+
+[params.thermal_margin_target_w]
+type = "float"
+unit = "W"
+description = "Derivation margin between derated enclosure capacity and critical load for passing packets"
+min = 70.0
+max = 260.0
+
+[params.thermal_deficit_w]
+type = "float"
+unit = "W"
+description = "Derivation deficit between critical load and derated enclosure capacity for failing packets"
+min = 35.0
+max = 180.0
+
+# --- Backup energy and feeder/access ---
+
+[params.battery_efficiency]
+type = "float"
+description = "BATT-SSC01-007 usable battery efficiency"
+min = 0.82
+max = 0.92
+
+[params.required_backup_h]
+type = "float"
+unit = "h"
+description = "OPS-SSC01-007 required backup duration"
+min = 4.0
+max = 12.0
+
+[params.battery_runtime_margin_h]
+type = "float"
+unit = "h"
+description = "Derivation margin between battery runtime and required backup duration"
+min = 1.0
+max = 5.0
+
+[params.bess_power_margin_kw]
+type = "float"
+unit = "kW"
+description = "Derivation margin between BESS inverter capacity and critical load"
+min = 0.2
+max = 1.2
+
+[params.voltage_drop_margin_percent]
+type = "float"
+unit = "%"
+description = "Derivation margin between allowable and computed feeder voltage drop"
+min = 1.0
+max = 3.0
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "FEED-SSC01-007 feeder route length"
+min = 0.08
+max = 0.55
+
+[params.conductor_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "FEED-SSC01-007 conductor resistance"
+min = 0.25
+max = 0.90
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "FEED-SSC01-007 feeder voltage"
+min = 230.0
+max = 240.0
+
+[params.power_factor]
+type = "float"
+description = "FEED-SSC01-007 critical load power factor"
+min = 0.82
+max = 0.96
+
+[params.road_lighting_power_w]
+type = "float"
+unit = "W"
+description = "FEED-SSC01-007 road lighting power"
+min = 700.0
+max = 2400.0
+
+[params.annual_operating_hours]
+type = "float"
+unit = "h/y"
+description = "FEED-SSC01-007 annual lighting operating hours"
+min = 3800.0
+max = 4300.0
+
+[params.lit_area_m2]
+type = "float"
+unit = "m2"
+description = "FEED-SSC01-007 lit road area"
+min = 900.0
+max = 2600.0
+
+# --- Documentary variant helper ---
+
+[params.packet_variant]
+type = "enum"
+description = "Hidden packet-defect variant controlling gold review statuses"
+values = [
+  "clean",
+  "missing_derating_rate",
+  "stale_enclosure_derating_revision",
+  "cabinet_event_mismatch",
+  "scenario_copy_forward",
+  "open_critical_comment",
+  "minor_open_comment_carried",
+  "thermal_capacity_deficient",
+]
+
+# --- Outputs (review gold state and evidence) ---
+
+[outputs.rlr_01_status]
+description = "Packet completeness status code (0 pass, 1 fail, 2 not applicable, 3 insufficient data)"
+tolerance = 0.0
+
+[outputs.rlr_02_status]
+description = "Object identity status code"
+tolerance = 0.0
+
+[outputs.rlr_03_status]
+description = "Cabinet serviceability basis status code"
+tolerance = 0.0
+
+[outputs.rlr_04_status]
+description = "Cabinet serviceability adequacy status code"
+tolerance = 0.0
+
+[outputs.rlr_05_status]
+description = "Scenario consequence status code"
+tolerance = 0.0
+
+[outputs.rlr_06_status]
+description = "Secondary power/access resilience status code"
+tolerance = 0.0
+
+[outputs.rlr_07_status]
+description = "Comment and action closure status code"
+tolerance = 0.0
+
+[outputs.rlr_08_status]
+description = "Readiness decision consistency status code"
+tolerance = 0.0
+
+[outputs.rlr_09_status]
+description = "Claim boundary status code"
+tolerance = 0.0
+
+[outputs.readiness_code]
+description = "Gold readiness decision (0 ready, 1 ready with carried actions, 2 not ready)"
+tolerance = 0.0
+
+[outputs.required_findings_count]
+description = "Findings the review must raise"
+tolerance = 0.0
+
+[outputs.required_information_requests_count]
+description = "Information requests the review must raise"
+tolerance = 0.0
+
+[outputs.required_carried_actions_count]
+description = "Carried actions the review must record"
+tolerance = 0.0
+
+[outputs.cabinet_freeboard_m]
+description = "Cabinet pad level minus controlling water level"
+tolerance = 0.02
+
+[outputs.flood_freeboard_margin_m]
+description = "Cabinet freeboard minus minimum freeboard"
+tolerance = 0.02
+
+[outputs.thermal_derated_capacity_w]
+description = "Derated enclosure thermal capacity"
+tolerance = 2.0
+
+[outputs.thermal_margin_w]
+description = "Derated enclosure capacity minus critical load"
+tolerance = 2.0
+
+[outputs.thermal_utilization]
+description = "Critical load divided by derated enclosure capacity"
+tolerance = 0.01
+
+[outputs.battery_runtime_h]
+description = "Backup battery runtime"
+tolerance = 0.05
+
+[outputs.battery_margin_h]
+description = "Battery runtime minus required backup duration"
+tolerance = 0.05
+
+[outputs.bess_power_margin_kw]
+description = "BESS inverter capacity minus load kW"
+tolerance = 0.05
+
+[outputs.bess_energy_margin_kwh]
+description = "Usable battery energy minus required load energy"
+tolerance = 0.05
+
+[outputs.feeder_voltage_drop_percent]
+description = "Computed feeder voltage drop"
+tolerance = 0.02
+
+[outputs.voltage_drop_margin_percent]
+description = "Allowable voltage drop minus computed voltage drop"
+tolerance = 0.02
+
+[outputs.road_lighting_aeci_kwh_m2_y]
+description = "Annual road-lighting energy divided by lit area"
+tolerance = 0.02
+
+# --- Archetypes ---
+
+[archetypes.urban_roadside_cabinet]
+description = "Urban roadside cabinet with tighter feeder route and higher lighting load"
+site_contexts = ["urban-roadside-cabinet", "arterial-its-cabinet"]
+feeder_length_km = {min = 0.08, max = 0.32}
+road_lighting_power_w = {min = 1200.0, max = 2400.0}
+lit_area_m2 = {min = 900.0, max = 1800.0}
+
+[archetypes.suburban_field_cabinet]
+description = "Suburban field cabinet with longer feeder route and moderate lighting load"
+site_contexts = ["suburban-field-cabinet", "peri-urban-lighting-cabinet"]
+feeder_length_km = {min = 0.20, max = 0.55}
+road_lighting_power_w = {min = 700.0, max = 1600.0}
+lit_area_m2 = {min = 1400.0, max = 2600.0}
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Obvious packet defects: clean, missing derating rate, or genuine thermal-capacity deficiency"
+visibility = "partial"
+archetypes = ["urban_roadside_cabinet", "suburban_field_cabinet"]
+hidden_params = [
+  "packet_variant",
+  "flood_freeboard_margin_target_m",
+  "thermal_margin_target_w",
+  "thermal_deficit_w",
+  "battery_runtime_margin_h",
+  "bess_power_margin_kw",
+  "voltage_drop_margin_percent",
+]
+packet_variant = ["clean", "missing_derating_rate", "thermal_capacity_deficient"]
+
+[difficulty.medium]
+description = "Full packet-variant distribution"
+visibility = "partial"
+archetypes = ["urban_roadside_cabinet", "suburban_field_cabinet"]
+hidden_params = [
+  "packet_variant",
+  "flood_freeboard_margin_target_m",
+  "thermal_margin_target_w",
+  "thermal_deficit_w",
+  "battery_runtime_margin_h",
+  "bess_power_margin_kw",
+  "voltage_drop_margin_percent",
+]
+
+[difficulty.hard]
+description = "Subtle documentary defects: stale revisions, cabinet/event mismatch, copied cases, carried comments"
+visibility = "partial"
+archetypes = ["urban_roadside_cabinet", "suburban_field_cabinet"]
+hidden_params = [
+  "packet_variant",
+  "flood_freeboard_margin_target_m",
+  "thermal_margin_target_w",
+  "thermal_deficit_w",
+  "battery_runtime_margin_h",
+  "bess_power_margin_kw",
+  "voltage_drop_margin_percent",
+]
+packet_variant = [
+  "stale_enclosure_derating_revision",
+  "cabinet_event_mismatch",
+  "scenario_copy_forward",
+  "minor_open_comment_carried",
+]

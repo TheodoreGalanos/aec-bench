@@ -1,0 +1,147 @@
+[meta]
+name = "equipment-enclosure-ventilation-noise-package"
+description = "SSC-12 equipment enclosure ventilation and noise metrics"
+long_description = "Calculates source-bound enclosure ventilation, attenuation, receiver noise, and thermal margin metrics from a deterministic SSC-12 task-owned source pack."
+discipline = "mechanical"
+category = "enclosure-noise"
+standards = ["equipment enclosure workflow", "ventilation workflow", "receiver noise workflow"]
+tags = ["mechanical", "acoustics", "enclosure", "ventilation", "noise", "deterministic"]
+tool_mode = "with-tool"
+
+[params.enclosure_volume_m3]
+type = "float"
+unit = "m3"
+description = "ENC-12-PLAN-07 enclosure volume"
+min = 84.0
+max = 84.0
+
+[params.ventilation_flow_m3_h]
+type = "float"
+unit = "m3/h"
+description = "VENT-12-SCHED-07 ventilation airflow"
+min = 1260.0
+max = 1260.0
+
+[params.minimum_air_changes_per_h]
+type = "float"
+unit = "ACH"
+description = "VENT-12-SCHED-07 minimum air changes"
+min = 12.0
+max = 12.0
+
+[params.internal_equipment_level_dba]
+type = "float"
+unit = "dBA"
+description = "SPEC-12-EQUIP-07 internal equipment level"
+min = 98.0
+max = 98.0
+
+[params.wall_transmission_loss_db]
+type = "float"
+unit = "dB"
+description = "TREAT-12-ATTEN-07 wall transmission loss"
+min = 22.0
+max = 22.0
+
+[params.louvre_insertion_loss_db]
+type = "float"
+unit = "dB"
+description = "TREAT-12-ATTEN-07 louvre insertion loss"
+min = 8.0
+max = 8.0
+
+[params.receiver_distance_m]
+type = "float"
+unit = "m"
+description = "RCV-12-ENC-07 receiver distance"
+min = 32.0
+max = 32.0
+
+[params.background_level_dba]
+type = "float"
+unit = "dBA"
+description = "RCV-12-ENC-07 background level"
+min = 41.0
+max = 41.0
+
+[params.receiver_noise_criterion_dba]
+type = "float"
+unit = "dBA"
+description = "RCV-12-ENC-07 receiver noise criterion"
+min = 45.0
+max = 45.0
+
+[params.ventilation_heat_capacity_kw]
+type = "float"
+unit = "kW"
+description = "VENT-12-SCHED-07 ventilation heat capacity"
+min = 10.2
+max = 10.2
+
+[params.equipment_heat_load_kw]
+type = "float"
+unit = "kW"
+description = "SPEC-12-EQUIP-07 equipment heat load"
+min = 8.5
+max = 8.5
+
+[outputs.air_changes_per_h]
+description = "Ventilation airflow divided by enclosure volume"
+tolerance = 0.003
+
+[outputs.ventilation_margin_ach]
+description = "Calculated air changes minus required air changes"
+tolerance = 0.003
+
+[outputs.receiver_enclosure_noise_dba]
+description = "Enclosure noise level at receiver"
+tolerance = 0.003
+
+[outputs.combined_receiver_level_dba]
+description = "Logarithmic sum of enclosure noise and background"
+tolerance = 0.003
+
+[outputs.noise_criterion_margin_db]
+description = "Receiver criterion minus combined receiver level"
+tolerance = 0.003
+
+[outputs.thermal_capacity_margin_kw]
+description = "Ventilation heat capacity minus equipment heat load"
+tolerance = 0.003
+
+[outputs.treatment_insertion_loss_db]
+description = "Wall plus louvre treatment insertion loss"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when ventilation, noise, and thermal checks pass"
+tolerance = 0.001
+
+[archetypes.ssc12_enclosure_noise_case]
+description = "Equipment enclosure ventilation and noise case"
+enclosure_volume_m3 = {min = 84.0, max = 84.0}
+ventilation_flow_m3_h = {min = 1260.0, max = 1260.0}
+minimum_air_changes_per_h = {min = 12.0, max = 12.0}
+internal_equipment_level_dba = {min = 98.0, max = 98.0}
+wall_transmission_loss_db = {min = 22.0, max = 22.0}
+louvre_insertion_loss_db = {min = 8.0, max = 8.0}
+receiver_distance_m = {min = 32.0, max = 32.0}
+background_level_dba = {min = 41.0, max = 41.0}
+receiver_noise_criterion_dba = {min = 45.0, max = 45.0}
+ventilation_heat_capacity_kw = {min = 10.2, max = 10.2}
+equipment_heat_load_kw = {min = 8.5, max = 8.5}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-12 enclosure ventilation noise package"
+visibility = "all_given"
+archetypes = ["ssc12_enclosure_noise_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-12 enclosure ventilation noise package"
+visibility = "all_given"
+archetypes = ["ssc12_enclosure_noise_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-12 enclosure ventilation noise package"
+visibility = "all_given"
+archetypes = ["ssc12_enclosure_noise_case"]

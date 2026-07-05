@@ -1,0 +1,91 @@
+source_pack_id: facade_redrawn_calculation_source_pack_seed_001
+status: docs_only_seed_skeleton
+tolerances:
+  numeric_absolute: 0.005
+  numeric_relative: 0.005
+required_files:
+  - project.json
+  - elevation-redrawn.svg
+  - geometry-oracle.csv
+  - pressure-schedule.csv
+  - support-schedule.csv
+  - capacity-excerpts.yaml
+  - anchor-check-oracle.csv
+  - calculation-oracle.csv
+  - expected-output.md
+  - verifier-implementation-brief.md
+  - variant-matrix.yaml
+  - variant-source-overlays.yaml
+  - variants/variant-source-files.yaml
+  - verification-cases.yaml
+  - verification-rules.yaml
+checks:
+  - id: manifest_completeness
+    description: Every required file exists and every data file is listed in project.json.
+  - id: drawing_label_consistency
+    description: Every support_id in support-schedule.csv appears as a visible label in elevation-redrawn.svg.
+  - id: drawing_bounds
+    description: The geometry oracle drawing row matches the SVG viewBox and project.json scale.
+  - id: zone_extent_consistency
+    description: Every pressure zone in pressure-schedule.csv has at least one geometry-oracle.csv zone extent, and each support point lies inside an extent with the same zone_id.
+  - id: opening_extent_consistency
+    description: The geometry oracle opening row matches the redrawn SVG opening rectangle and scale.
+  - id: support_coordinate_consistency
+    description: Every support row has a geometry-oracle.csv support point with matching support_id, zone_id, and visible SVG label.
+  - id: zone_assignment
+    description: Every support row joins to one pressure-schedule.csv zone_id.
+  - id: tributary_area
+    formula: tributary_area_m2 = tributary_width_m * tributary_height_m
+  - id: wind_load
+    formula: wind_load_kN = abs(pressure_kpa) * tributary_area_m2
+  - id: dead_load
+    formula: dead_load_kN = dead_load_kpa * tributary_area_m2
+  - id: bracket_horizontal_utilization
+    formula: bracket_horizontal_utilization = wind_load_kN / bracket_horizontal_resistance_kN
+  - id: bracket_vertical_utilization
+    formula: bracket_vertical_utilization = dead_load_kN / bracket_vertical_resistance_kN
+  - id: anchor_tension_utilization
+    formula: anchor_tension_utilization = wind_load_kN / anchor_tension_resistance_kN
+  - id: anchor_shear_utilization
+    formula: anchor_shear_utilization = dead_load_kN / anchor_shear_resistance_kN
+  - id: anchor_combined_utilization
+    formula: anchor_combined_utilization = sqrt(anchor_tension_utilization^2 + anchor_shear_utilization^2)
+  - id: anchor_schedule_consistency
+    description: Every support row has one anchor-check-oracle.csv row with the same support_id and anchor_row.
+  - id: anchor_geometry_limits
+    description: Anchor embedment, edge distance, and nearest-anchor spacing in anchor-check-oracle.csv satisfy the embedded capacity excerpt limits.
+  - id: anchor_demand_trace
+    description: Anchor tension and shear demands in anchor-check-oracle.csv match wind and dead-load demand rows in calculation-oracle.csv.
+  - id: governing_utilization
+    formula: governing_utilization = max(bracket_horizontal_utilization, bracket_vertical_utilization, anchor_combined_utilization)
+  - id: pass_fail
+    rule: status is pass when governing_utilization <= 1.0 and fail otherwise.
+  - id: memo_traceability
+    description: Expected output must identify the governing row, governing component, and embedded capacity-excerpt source-family tags.
+  - id: source_policy
+    description: Expected output must not claim the seed pack is an issued report and must not rely on live vendor data for grading.
+  - id: verification_case_matrix
+    description: Each case in verification-cases.yaml must name an expected result and a localized failure stage when the result is fail.
+  - id: variant_matrix_coverage
+    description: Each future variant in variant-matrix.yaml must name expected_result, fixture changes or source files, and a localized failure stage when the expected result is fail.
+  - id: variant_source_overlay_coverage
+    description: Each variant in variant-matrix.yaml must have a baseline reference or row-level overlay in variant-source-overlays.yaml with expected results aligned to the matrix.
+  - id: expanded_variant_source_file_coverage
+    description: Each non-baseline variant must have expanded docs-only source files listed in variants/variant-source-files.yaml, with expected results aligned to the matrix and no runtime-readiness claim.
+  - id: verifier_implementation_brief_coverage
+    description: The docs-only verifier implementation brief must map source files, staged checks, variant handling, diagnostics, acceptance evidence, and non-runtime boundary before executable work begins.
+failure_localization:
+  - manifest
+  - drawing_geometry
+  - geometry_bounds
+  - opening_geometry
+  - support_coordinates
+  - pressure_zone
+  - load_derivation
+  - support_lookup
+  - anchor_lookup
+  - anchor_geometry
+  - anchor_demand
+  - utilization
+  - source_policy
+  - memo_traceability

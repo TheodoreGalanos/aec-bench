@@ -1,0 +1,5 @@
+support_id,zone_id,svg_label,support_family,bracket_product_row,rail_profile_row,fixed_sliding_role,centre_spacing_x_m,centre_spacing_y_m,tributary_width_m,tributary_height_m,fastener_count,anchor_row,demand_source
+BR-B01,ZB,BR-B01,NVELOPE-style vertical rail,NV-VB-S-150 task row,VR-60x40 task row,sliding wind restraint,0.60,1.50,0.60,1.50,1,ANCH-CONC-M8,calculation-oracle.csv
+BR-E01,ZE,BR-E01,NVELOPE-style vertical rail,NV-VB-S-150 task row,VR-60x40 task row,sliding wind restraint,0.60,1.50,0.60,1.50,1,ANCH-CONC-M8,calculation-oracle.csv
+BR-C01,ZC,BR-C01,NVELOPE-style vertical rail,NV-VB-S-150 task row,VR-60x40 task row,fixed wind restraint,0.60,1.50,0.60,1.50,1,ANCH-CONC-M8,calculation-oracle.csv
+BR-RC01,ZC-RE,BR-RC01,NVELOPE-style vertical rail,NV-VB-S-150 task row,VR-60x40 task row,fixed wind restraint,0.60,1.50,0.60,1.50,1,ANCH-CONC-M8,calculation-oracle.csv

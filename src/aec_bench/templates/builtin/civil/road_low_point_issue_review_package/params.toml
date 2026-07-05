@@ -1,0 +1,426 @@
+[meta]
+name = "road-low-point-issue-review-package"
+description = "SSC-01 review-first issue-readiness review of a road low-point resilience package"
+long_description = "Review-native long-horizon task over a generated SSC-01 road low-point issue packet. The agent receives a multi-file source packet in /workspace/sources/ (document register, road geometry, drainage package, field equipment, power/comms, traffic operations, criteria and comments), inventories it, preserves corridor identity, checks the package's own calculations as review evidence, assigns one status per review item, raises findings/information requests/actions, and issues a readiness decision. Packet variants inject missing evidence, stale revisions, datum mismatches, scenario copy-forward, open comments, or genuine criterion failures. Scored by a stage-gated custom verifier, not per-key answer matching."
+discipline = "civil"
+category = "road-review"
+standards = ["FHWA HEC-22", "FHWA MUTCD"]
+tags = ["civil", "road", "review", "issue-readiness", "drainage", "its", "long-horizon"]
+tool_mode = "no-tool"
+
+# --- Drainage and road geometry ---
+
+[params.runoff_coefficient]
+type = "float"
+description = "DRN-CAT-01 runoff coefficient for the contributing low-point catchment"
+min = 0.75
+max = 0.88
+
+[params.rainfall_intensity_mm_h]
+type = "float"
+unit = "mm/h"
+description = "STORM-01 rainfall intensity for the low-point design burst"
+min = 80.0
+max = 120.0
+
+[params.catchment_area_ha]
+type = "float"
+unit = "ha"
+description = "DRN-CAT-01 contributing catchment area draining to LP-01"
+min = 1.0
+max = 1.8
+
+[params.upstream_bypass_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "DRN-BYP-01 upstream inlet bypass flow reaching LP-01"
+min = 0.03
+max = 0.09
+
+[params.cross_slope_pct]
+type = "float"
+unit = "%"
+description = "RD-SSC01-001 pavement crossfall at LP-01"
+min = 2.0
+max = 3.0
+
+[params.longitudinal_slope_pct]
+type = "float"
+unit = "%"
+description = "RD-SSC01-001 approach longitudinal slope into LP-01"
+min = 0.5
+max = 1.2
+
+[params.gutter_mannings_n]
+type = "float"
+description = "DRN-GUT-01 Manning roughness for the pavement gutter"
+min = 0.013
+max = 0.017
+
+[params.road_low_point_level_m]
+type = "float"
+unit = "m"
+description = "LP-01 pavement level at the sag point (AHD)"
+min = 40.0
+max = 46.0
+
+[params.allowable_spread_margin_m]
+type = "float"
+unit = "m"
+description = "Derivation margin between computed spread and the CRIT-SSC01-001 allowable spread"
+min = 0.3
+max = 0.9
+
+# --- Inlet, pipe, and HGL ---
+
+[params.inlet_efficiency]
+type = "float"
+description = "DRN-PIT-01 low-point inlet interception efficiency"
+min = 0.75
+max = 0.9
+
+[params.inlet_capture_capacity_m3_s]
+type = "float"
+unit = "m3/s"
+description = "DRN-PIT-01 maximum inlet capture capacity"
+min = 0.25
+max = 0.4
+
+[params.pipe_diameter_mm]
+type = "enum"
+description = "DRN-PIPE-01 storm-drain diameter leaving DRN-PIT-01"
+values = ["450", "525", "600"]
+
+[params.pipe_length_m]
+type = "float"
+unit = "m"
+description = "DRN-PIPE-01 reach length to the downstream tailwater node"
+min = 30.0
+max = 60.0
+
+[params.pipe_mannings_n]
+type = "float"
+description = "DRN-PIPE-01 full-pipe Manning roughness"
+min = 0.011
+max = 0.014
+
+[params.pit_loss_coefficient]
+type = "float"
+description = "HGL-01 pit and junction loss coefficient at DRN-PIT-01"
+min = 0.5
+max = 1.5
+
+[params.hgl_clearance_target_m]
+type = "float"
+unit = "m"
+description = "Derivation clearance between the upstream HGL and the LP-01 pavement level"
+min = 0.3
+max = 0.8
+
+# --- Cabinet exposure ---
+
+[params.minimum_cabinet_freeboard_m]
+type = "float"
+unit = "m"
+description = "CRIT-SSC01-001 minimum freeboard from the controlling water level to the CAB-01 pad"
+min = 0.2
+max = 0.4
+
+[params.cabinet_freeboard_margin_m]
+type = "float"
+unit = "m"
+description = "Derivation margin above minimum freeboard used to set the CAB-01 pad level"
+min = 0.1
+max = 0.35
+
+[params.cabinet_freeboard_deficit_m]
+type = "float"
+unit = "m"
+description = "Derivation deficit below minimum freeboard for the freeboard-deficient variant"
+min = 0.05
+max = 0.2
+
+# --- Traffic operations and VMS ---
+
+[params.road_design_speed_kmh]
+type = "enum"
+unit = "km/h"
+description = "RD-SSC01-001 design speed at the low point"
+values = ["50", "60", "70", "80"]
+
+[params.vms_character_height_in]
+type = "enum"
+unit = "in"
+description = "VMS-01 character height"
+values = ["12", "18"]
+
+[params.vms_message_margin_chars_target]
+type = "float"
+unit = "chars"
+description = "Derivation margin between readable characters and the selected message length"
+min = 2.0
+max = 6.0
+
+[params.reading_rate_chars_s]
+type = "float"
+unit = "chars/s"
+description = "TOPS-SSC01-CASE-01 driver reading rate for VMS legibility"
+min = 3.5
+max = 5.0
+
+# --- Network and battery ---
+
+[params.camera_count]
+type = "int"
+description = "ITS-NET-01 CCTV cameras served from CAB-01"
+min = 2
+max = 4
+
+[params.camera_data_rate_mbps]
+type = "float"
+unit = "Mbps"
+description = "ITS-NET-01 data rate per CCTV camera"
+min = 4.0
+max = 8.0
+
+[params.vms_data_rate_mbps]
+type = "float"
+unit = "Mbps"
+description = "ITS-NET-01 VMS-01 data rate"
+min = 0.5
+max = 1.5
+
+[params.controller_data_rate_mbps]
+type = "float"
+unit = "Mbps"
+description = "ITS-NET-01 controller data rate"
+min = 0.2
+max = 0.6
+
+[params.sensor_data_rate_mbps]
+type = "float"
+unit = "Mbps"
+description = "ITS-NET-01 water-level sensor data rate"
+min = 0.1
+max = 0.3
+
+[params.network_overhead_pct]
+type = "float"
+unit = "%"
+description = "ITS-NET-01 protocol overhead allowance"
+min = 15.0
+max = 25.0
+
+[params.future_capacity_buffer_pct]
+type = "float"
+unit = "%"
+description = "ITS-NET-01 future capacity buffer"
+min = 20.0
+max = 30.0
+
+[params.network_headroom_margin_mbps]
+type = "float"
+unit = "Mbps"
+description = "Derivation margin between required network load and the provisioned uplink"
+min = 5.0
+max = 15.0
+
+[params.required_autonomy_h]
+type = "enum"
+unit = "h"
+description = "CRIT-SSC01-001 required battery autonomy for CAB-01 critical load"
+values = ["4", "6", "8"]
+
+[params.battery_efficiency]
+type = "float"
+description = "BATT-01 usable-energy efficiency"
+min = 0.85
+max = 0.95
+
+[params.critical_load_w]
+type = "float"
+unit = "W"
+description = "CAB-01 critical load during the event"
+min = 150.0
+max = 400.0
+
+[params.battery_runtime_margin_h]
+type = "float"
+unit = "h"
+description = "Derivation margin between required autonomy and provisioned battery runtime"
+min = 0.5
+max = 2.0
+
+# --- Packet variant ---
+
+[params.packet_variant]
+type = "enum"
+description = "Hidden packet-defect variant controlling gold review statuses"
+values = [
+  "clean",
+  "missing_cabinet_level",
+  "stale_hgl_revision",
+  "chainage_datum_mismatch",
+  "scenario_copy_forward",
+  "open_critical_comment",
+  "minor_open_comment_carried",
+  "freeboard_deficient",
+]
+
+# --- Outputs (review gold state and evidence) ---
+
+[outputs.rlr_01_status]
+description = "Packet completeness status code (0 pass, 1 fail, 2 not applicable, 3 insufficient data)"
+tolerance = 0.0
+
+[outputs.rlr_02_status]
+description = "Object identity status code"
+tolerance = 0.0
+
+[outputs.rlr_03_status]
+description = "Drainage basis status code"
+tolerance = 0.0
+
+[outputs.rlr_04_status]
+description = "Equipment exposure status code"
+tolerance = 0.0
+
+[outputs.rlr_05_status]
+description = "Traffic operation consequence status code"
+tolerance = 0.0
+
+[outputs.rlr_06_status]
+description = "Power/comms resilience status code"
+tolerance = 0.0
+
+[outputs.rlr_07_status]
+description = "Comment and action closure status code"
+tolerance = 0.0
+
+[outputs.rlr_08_status]
+description = "Readiness decision consistency status code"
+tolerance = 0.0
+
+[outputs.rlr_09_status]
+description = "Claim boundary status code"
+tolerance = 0.0
+
+[outputs.readiness_code]
+description = "Gold readiness decision (0 ready, 1 ready with carried actions, 2 not ready)"
+tolerance = 0.0
+
+[outputs.required_findings_count]
+description = "Findings the review must raise"
+tolerance = 0.0
+
+[outputs.required_information_requests_count]
+description = "Information requests the review must raise"
+tolerance = 0.0
+
+[outputs.required_carried_actions_count]
+description = "Carried actions the review must record"
+tolerance = 0.0
+
+[outputs.peak_runoff_m3_s]
+description = "Rational-method peak runoff evidence"
+tolerance = 0.02
+
+[outputs.gutter_approach_flow_m3_s]
+description = "Gutter approach flow evidence"
+tolerance = 0.02
+
+[outputs.spread_width_m]
+description = "Triangular gutter spread evidence"
+tolerance = 0.02
+
+[outputs.allowable_spread_m]
+description = "Criteria allowable spread (source-owned)"
+tolerance = 0.0
+
+[outputs.controlling_water_level_m]
+description = "Controlling water level evidence"
+tolerance = 0.02
+
+[outputs.cabinet_freeboard_m]
+description = "Cabinet freeboard evidence (absent when the pad level is missing)"
+tolerance = 0.02
+
+[outputs.vms_message_margin_chars]
+description = "VMS message margin evidence"
+tolerance = 0.02
+
+[outputs.battery_runtime_h]
+description = "Battery runtime evidence"
+tolerance = 0.02
+
+[outputs.network_headroom_mbps]
+description = "Network headroom evidence"
+tolerance = 0.02
+
+# --- Archetypes ---
+
+[archetypes.urban_arterial]
+description = "Urban arterial sag with kerbed gutter and dense ITS assets"
+site_contexts = ["urban-arterial-sag", "cbd-underpass-approach"]
+rainfall_intensity_mm_h = {min = 95.0, max = 120.0}
+catchment_area_ha = {min = 1.2, max = 1.8}
+
+[archetypes.suburban_collector]
+description = "Suburban collector sag with roadside field cabinet"
+site_contexts = ["suburban-collector-sag", "industrial-access-low-point"]
+rainfall_intensity_mm_h = {min = 80.0, max = 105.0}
+catchment_area_ha = {min = 1.0, max = 1.5}
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Obvious packet defects: clean, missing evidence, or a genuine criterion failure"
+visibility = "partial"
+archetypes = ["urban_arterial", "suburban_collector"]
+hidden_params = [
+  "packet_variant",
+  "allowable_spread_margin_m",
+  "cabinet_freeboard_margin_m",
+  "cabinet_freeboard_deficit_m",
+  "hgl_clearance_target_m",
+  "vms_message_margin_chars_target",
+  "network_headroom_margin_mbps",
+  "battery_runtime_margin_h",
+]
+packet_variant = ["clean", "missing_cabinet_level", "freeboard_deficient"]
+
+[difficulty.medium]
+description = "Full packet-variant distribution"
+visibility = "partial"
+archetypes = ["urban_arterial", "suburban_collector"]
+hidden_params = [
+  "packet_variant",
+  "allowable_spread_margin_m",
+  "cabinet_freeboard_margin_m",
+  "cabinet_freeboard_deficit_m",
+  "hgl_clearance_target_m",
+  "vms_message_margin_chars_target",
+  "network_headroom_margin_mbps",
+  "battery_runtime_margin_h",
+]
+
+[difficulty.hard]
+description = "Subtle documentary defects: stale revisions, datum drift, scenario copy-forward, carried comments"
+visibility = "partial"
+archetypes = ["urban_arterial", "suburban_collector"]
+hidden_params = [
+  "packet_variant",
+  "allowable_spread_margin_m",
+  "cabinet_freeboard_margin_m",
+  "cabinet_freeboard_deficit_m",
+  "hgl_clearance_target_m",
+  "vms_message_margin_chars_target",
+  "network_headroom_margin_mbps",
+  "battery_runtime_margin_h",
+]
+packet_variant = [
+  "stale_hgl_revision",
+  "chainage_datum_mismatch",
+  "scenario_copy_forward",
+  "minor_open_comment_carried",
+]

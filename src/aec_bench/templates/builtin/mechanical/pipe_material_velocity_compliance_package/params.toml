@@ -1,0 +1,277 @@
+# ABOUTME: Defines the SSC-11 pipe material and velocity compliance template.
+# ABOUTME: Pins one synthetic line, material certificate, criteria, and support source package.
+
+[meta]
+name = "pipe-material-velocity-compliance-package"
+description = "SSC-11 pipe product velocity, pressure, certificate, and support metrics"
+long_description = "Calculates source-bound pipe product compliance metrics from a deterministic SSC-11 task-owned source pack. The template combines line velocity, pressure loss, pressure class, lining velocity, carbon equivalent, certificate match, support reaction, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "pipe-product-compliance"
+standards = ["Pipe material certificate review", "Velocity and pressure-loss checks", "Darcy-Weisbach calculations", "Pipe support coordination"]
+tags = ["mechanical", "pipe-product", "velocity", "material-certificate", "support", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_l_s]
+type = "float"
+unit = "L/s"
+description = "LINE-SSC11-007 line design flow"
+min = 42.00309377849555
+max = 42.00309377849555
+
+[params.pipe_internal_diameter_mm]
+type = "float"
+unit = "mm"
+description = "LINE-SSC11-007 hydraulic internal diameter"
+min = 200.0
+max = 200.0
+
+[params.maximum_velocity_m_s]
+type = "float"
+unit = "m/s"
+description = "CRIT-SSC11-007 maximum line velocity"
+min = 2.5
+max = 2.5
+
+[params.pipe_length_m]
+type = "float"
+unit = "m"
+description = "LINE-SSC11-007 checked pipe length"
+min = 120.89552398206219
+max = 120.89552398206219
+
+[params.darcy_friction_factor]
+type = "float"
+description = "CRIT-SSC11-007 Darcy friction factor"
+min = 0.022
+max = 0.022
+
+[params.maximum_pressure_loss_kpa]
+type = "float"
+unit = "kPa"
+description = "CRIT-SSC11-007 maximum pressure loss"
+min = 90.0
+max = 90.0
+
+[params.design_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "LINE-SSC11-007 design pressure"
+min = 880.0
+max = 880.0
+
+[params.pipe_pressure_class_kpa]
+type = "float"
+unit = "kPa"
+description = "MAT-SSC11-007 pipe pressure class"
+min = 1600.0
+max = 1600.0
+
+[params.lining_max_velocity_m_s]
+type = "float"
+unit = "m/s"
+description = "MAT-SSC11-007 lining maximum velocity"
+min = 3.0
+max = 3.0
+
+[params.carbon_percent]
+type = "float"
+unit = "%"
+description = "MAT-SSC11-007 carbon percentage"
+min = 0.2
+max = 0.2
+
+[params.manganese_percent]
+type = "float"
+unit = "%"
+description = "MAT-SSC11-007 manganese percentage"
+min = 1.2
+max = 1.2
+
+[params.chromium_percent]
+type = "float"
+unit = "%"
+description = "MAT-SSC11-007 chromium percentage"
+min = 0.1
+max = 0.1
+
+[params.molybdenum_percent]
+type = "float"
+unit = "%"
+description = "MAT-SSC11-007 molybdenum percentage"
+min = 0.06
+max = 0.06
+
+[params.vanadium_percent]
+type = "float"
+unit = "%"
+description = "MAT-SSC11-007 vanadium percentage"
+min = 0.04
+max = 0.04
+
+[params.nickel_percent]
+type = "float"
+unit = "%"
+description = "MAT-SSC11-007 nickel percentage"
+min = 0.05
+max = 0.05
+
+[params.copper_percent]
+type = "float"
+unit = "%"
+description = "MAT-SSC11-007 copper percentage"
+min = 0.055
+max = 0.055
+
+[params.carbon_equivalent_limit]
+type = "float"
+description = "CRIT-SSC11-007 carbon equivalent limit"
+min = 0.5
+max = 0.5
+
+[params.required_certificate_items]
+type = "float"
+unit = "count"
+description = "MAT-SSC11-007 required certificate fields"
+min = 5.0
+max = 5.0
+
+[params.matching_certificate_items]
+type = "float"
+unit = "count"
+description = "MAT-SSC11-007 matching certificate fields"
+min = 5.0
+max = 5.0
+
+[params.support_span_m]
+type = "float"
+unit = "m"
+description = "SUP-SSC11-007 support span"
+min = 4.448988932962285
+max = 4.448988932962285
+
+[params.pipe_outer_diameter_mm]
+type = "float"
+unit = "mm"
+description = "SUP-SSC11-007 support pipe outer diameter"
+min = 219.1
+max = 219.1
+
+[params.pipe_wall_thickness_mm]
+type = "float"
+unit = "mm"
+description = "SUP-SSC11-007 support pipe wall thickness"
+min = 8.18
+max = 8.18
+
+[params.steel_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "SUP-SSC11-007 steel density"
+min = 7850.0
+max = 7850.0
+
+[params.contents_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "LINE-SSC11-007 contents density"
+min = 1000.0
+max = 1000.0
+
+[params.support_vertical_allowable_kn]
+type = "float"
+unit = "kN"
+description = "SUP-SSC11-007 vertical support allowable"
+min = 9.5
+max = 9.5
+
+[outputs.pipe_velocity_m_s]
+description = "Line velocity"
+tolerance = 0.03
+
+[outputs.velocity_margin_m_s]
+description = "Velocity limit minus line velocity"
+tolerance = 0.03
+
+[outputs.pressure_loss_kpa]
+description = "Darcy pressure-loss screening value"
+tolerance = 0.03
+
+[outputs.pressure_loss_margin_kpa]
+description = "Pressure-loss allowance minus calculated loss"
+tolerance = 0.03
+
+[outputs.pressure_class_margin_kpa]
+description = "Pipe pressure class minus design pressure"
+tolerance = 0.03
+
+[outputs.lining_velocity_margin_m_s]
+description = "Lining maximum velocity minus line velocity"
+tolerance = 0.03
+
+[outputs.carbon_equivalent]
+description = "Carbon equivalent from certificate chemistry"
+tolerance = 0.03
+
+[outputs.carbon_equivalent_margin]
+description = "Carbon equivalent limit minus calculated value"
+tolerance = 0.03
+
+[outputs.certificate_match_percent]
+description = "Matching certificate fields divided by required fields"
+tolerance = 0.03
+
+[outputs.support_vertical_reaction_kn]
+description = "Pipe support vertical reaction"
+tolerance = 0.03
+
+[outputs.support_margin_kn]
+description = "Support allowable minus vertical reaction"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for the task-owned material, hydraulic, certificate, and support checks"
+tolerance = 0.03
+
+[archetypes.ssc11_pipe_material_case]
+description = "Pipe material and velocity compliance case"
+flow_l_s = {min = 42.00309377849555, max = 42.00309377849555}
+pipe_internal_diameter_mm = {min = 200.0, max = 200.0}
+maximum_velocity_m_s = {min = 2.5, max = 2.5}
+pipe_length_m = {min = 120.89552398206219, max = 120.89552398206219}
+darcy_friction_factor = {min = 0.022, max = 0.022}
+maximum_pressure_loss_kpa = {min = 90.0, max = 90.0}
+design_pressure_kpa = {min = 880.0, max = 880.0}
+pipe_pressure_class_kpa = {min = 1600.0, max = 1600.0}
+lining_max_velocity_m_s = {min = 3.0, max = 3.0}
+carbon_percent = {min = 0.2, max = 0.2}
+manganese_percent = {min = 1.2, max = 1.2}
+chromium_percent = {min = 0.1, max = 0.1}
+molybdenum_percent = {min = 0.06, max = 0.06}
+vanadium_percent = {min = 0.04, max = 0.04}
+nickel_percent = {min = 0.05, max = 0.05}
+copper_percent = {min = 0.055, max = 0.055}
+carbon_equivalent_limit = {min = 0.5, max = 0.5}
+required_certificate_items = {min = 5.0, max = 5.0}
+matching_certificate_items = {min = 5.0, max = 5.0}
+support_span_m = {min = 4.448988932962285, max = 4.448988932962285}
+pipe_outer_diameter_mm = {min = 219.1, max = 219.1}
+pipe_wall_thickness_mm = {min = 8.18, max = 8.18}
+steel_density_kg_m3 = {min = 7850.0, max = 7850.0}
+contents_density_kg_m3 = {min = 1000.0, max = 1000.0}
+support_vertical_allowable_kn = {min = 9.5, max = 9.5}
+site_contexts = ["pipe-product", "material-velocity-compliance-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-11 pipe material package"
+visibility = "all_given"
+archetypes = ["ssc11_pipe_material_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-11 pipe material package"
+visibility = "all_given"
+archetypes = ["ssc11_pipe_material_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-11 pipe material package"
+visibility = "all_given"
+archetypes = ["ssc11_pipe_material_case"]

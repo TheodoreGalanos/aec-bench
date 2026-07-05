@@ -1,0 +1,188 @@
+# ABOUTME: Defines the SSC-11 buried pipeline groundwater and uplift template.
+# ABOUTME: Pins one synthetic pipe profile, groundwater, bedding, and pressure source package.
+
+[meta]
+name = "buried-pipeline-groundwater-uplift-package"
+description = "SSC-11 buried pipeline uplift, seepage, and pressure-class metrics"
+long_description = "Calculates source-bound buried pipeline groundwater metrics from a deterministic SSC-11 task-owned source pack. The template combines buoyant uplift, pipe and contents weight, soil overburden, bedding resistance, exit gradient, pressure-class margin, and an overall synthetic pass score."
+discipline = "ground"
+category = "pipeline-ground"
+standards = ["Buried pipeline flotation checks", "Seepage exit-gradient checks", "Pipeline pressure class coordination", "Trench bedding workflows"]
+tags = ["ground", "pipeline", "uplift", "groundwater", "seepage", "deterministic"]
+tool_mode = "with-tool"
+
+[params.pipe_outer_diameter_m]
+type = "float"
+unit = "m"
+description = "PROFILE-SSC11-005 pipe outer diameter"
+min = 1.2
+max = 1.2
+
+[params.pipe_wall_thickness_m]
+type = "float"
+unit = "m"
+description = "PROFILE-SSC11-005 pipe wall thickness"
+min = 0.08001447899386938
+max = 0.08001447899386938
+
+[params.pipe_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m3"
+description = "PRESS-SSC11-005 pipe material unit weight"
+min = 23.997100938125133
+max = 23.997100938125133
+
+[params.water_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m3"
+description = "GEO-SSC11-005 water unit weight"
+min = 9.81
+max = 9.81
+
+[params.soil_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m3"
+description = "GEO-SSC11-005 soil unit weight"
+min = 18.0
+max = 18.0
+
+[params.soil_cover_m]
+type = "float"
+unit = "m"
+description = "PROFILE-SSC11-005 cover above pipe"
+min = 1.8
+max = 1.8
+
+[params.trench_width_m]
+type = "float"
+unit = "m"
+description = "BED-SSC11-005 trench width tributary to uplift resistance"
+min = 1.1
+max = 1.1
+
+[params.bedding_resistance_kn_m]
+type = "float"
+unit = "kN/m"
+description = "BED-SSC11-005 bedding resistance"
+min = 8.0
+max = 8.0
+
+[params.groundwater_head_difference_m]
+type = "float"
+unit = "m"
+description = "GEO-SSC11-005 groundwater head difference"
+min = 0.81
+max = 0.81
+
+[params.seepage_path_length_m]
+type = "float"
+unit = "m"
+description = "GEO-SSC11-005 seepage path length"
+min = 5.0
+max = 5.0
+
+[params.critical_exit_gradient]
+type = "float"
+description = "GEO-SSC11-005 critical exit gradient"
+min = 0.921294
+max = 0.921294
+
+[params.required_uplift_factor_of_safety]
+type = "float"
+description = "MEMO-SSC11-005 required uplift factor of safety"
+min = 1.2
+max = 1.2
+
+[params.required_exit_gradient_factor_of_safety]
+type = "float"
+description = "MEMO-SSC11-005 required exit-gradient factor of safety"
+min = 3.0
+max = 3.0
+
+[params.operating_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "PRESS-SSC11-005 operating pressure"
+min = 650.0
+max = 650.0
+
+[params.pipe_pressure_class_kpa]
+type = "float"
+unit = "kPa"
+description = "PRESS-SSC11-005 pipe pressure class"
+min = 900.0
+max = 900.0
+
+[outputs.buoyant_uplift_kn_m]
+description = "Buoyant uplift per metre"
+tolerance = 0.03
+
+[outputs.pipe_self_weight_kn_m]
+description = "Pipe self-weight per metre"
+tolerance = 0.03
+
+[outputs.contents_weight_kn_m]
+description = "Pipe contents weight per metre"
+tolerance = 0.03
+
+[outputs.soil_overburden_kn_m]
+description = "Soil overburden resistance per metre"
+tolerance = 0.03
+
+[outputs.downward_resistance_kn_m]
+description = "Total downward resistance per metre"
+tolerance = 0.03
+
+[outputs.uplift_factor_of_safety]
+description = "Downward resistance divided by buoyant uplift"
+tolerance = 0.03
+
+[outputs.exit_gradient]
+description = "Groundwater head difference divided by seepage path length"
+tolerance = 0.03
+
+[outputs.exit_gradient_factor_of_safety]
+description = "Critical exit gradient divided by exit gradient"
+tolerance = 0.03
+
+[outputs.pressure_class_margin_kpa]
+description = "Pipe pressure class minus operating pressure"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for the task-owned uplift, seepage, and pressure checks"
+tolerance = 0.03
+
+[archetypes.ssc11_buried_pipeline_uplift_case]
+description = "Buried pipeline groundwater uplift case"
+pipe_outer_diameter_m = {min = 1.2, max = 1.2}
+pipe_wall_thickness_m = {min = 0.08001447899386938, max = 0.08001447899386938}
+pipe_unit_weight_kn_m3 = {min = 23.997100938125133, max = 23.997100938125133}
+water_unit_weight_kn_m3 = {min = 9.81, max = 9.81}
+soil_unit_weight_kn_m3 = {min = 18.0, max = 18.0}
+soil_cover_m = {min = 1.8, max = 1.8}
+trench_width_m = {min = 1.1, max = 1.1}
+bedding_resistance_kn_m = {min = 8.0, max = 8.0}
+groundwater_head_difference_m = {min = 0.81, max = 0.81}
+seepage_path_length_m = {min = 5.0, max = 5.0}
+critical_exit_gradient = {min = 0.921294, max = 0.921294}
+required_uplift_factor_of_safety = {min = 1.2, max = 1.2}
+required_exit_gradient_factor_of_safety = {min = 3.0, max = 3.0}
+operating_pressure_kpa = {min = 650.0, max = 650.0}
+pipe_pressure_class_kpa = {min = 900.0, max = 900.0}
+site_contexts = ["buried-pipeline", "groundwater-uplift-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-11 buried pipeline package"
+visibility = "all_given"
+archetypes = ["ssc11_buried_pipeline_uplift_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-11 buried pipeline package"
+visibility = "all_given"
+archetypes = ["ssc11_buried_pipeline_uplift_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-11 buried pipeline package"
+visibility = "all_given"
+archetypes = ["ssc11_buried_pipeline_uplift_case"]

@@ -1,0 +1,248 @@
+[meta]
+name = "bus-priority-signal-cabinet-load-package"
+description = "SSC-01 bus priority signal corridor and cabinet load metrics"
+long_description = "Calculates task-owned synthetic SSC-01 bus-priority signal timing, passenger handling capacity, cabinet load, feeder voltage drop, and backup battery metrics."
+discipline = "electrical"
+category = "road-operations"
+standards = ["FHWA MUTCD", "transit signal priority", "roadside cabinet design"]
+tags = ["electrical", "traffic", "bus-priority", "signal", "cabinet", "deterministic"]
+tool_mode = "with-tool"
+
+[params.bus_approach_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "SIG-SSC01-005 bus-priority approach speed"
+min = 50.0
+max = 50.0
+
+[params.bus_approach_grade_pct]
+type = "float"
+unit = "%"
+description = "BUS-SSC01-005 signed bus-priority approach grade"
+min = 1.0
+max = 1.0
+
+[params.yellow_reaction_time_s]
+type = "float"
+unit = "s"
+description = "SIG-SSC01-005 yellow interval reaction term"
+min = 1.0
+max = 1.0
+
+[params.yellow_deceleration_m_s2]
+type = "float"
+unit = "m/s2"
+description = "SIG-SSC01-005 yellow interval deceleration"
+min = 3.0
+max = 3.0
+
+[params.intersection_width_m]
+type = "float"
+unit = "m"
+description = "SIG-SSC01-005 intersection width"
+min = 24.0
+max = 24.0
+
+[params.bus_length_m]
+type = "float"
+unit = "m"
+description = "BUS-SSC01-005 design bus length"
+min = 12.0
+max = 12.0
+
+[params.all_red_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "SIG-SSC01-005 all-red clearance speed"
+min = 45.0
+max = 45.0
+
+[params.buses_per_hour]
+type = "float"
+unit = "buses/h"
+description = "BUS-SSC01-005 scheduled priority buses"
+min = 18.0
+max = 18.0
+
+[params.bus_occupancy_pax]
+type = "float"
+unit = "passengers/bus"
+description = "BUS-SSC01-005 design bus occupancy"
+min = 65.0
+max = 65.0
+
+[params.peak_passenger_demand_pax_h]
+type = "float"
+unit = "passengers/h"
+description = "BUS-SSC01-005 peak passenger demand"
+min = 940.0
+max = 940.0
+
+[params.controller_load_w]
+type = "float"
+unit = "W"
+description = "CAB-SSC01-005 controller load"
+min = 180.0
+max = 180.0
+
+[params.detector_count]
+type = "float"
+description = "DET-SSC01-005 detector count"
+min = 12.0
+max = 12.0
+
+[params.detector_load_w]
+type = "float"
+unit = "W"
+description = "DET-SSC01-005 detector load per unit"
+min = 8.0
+max = 8.0
+
+[params.transit_radio_load_w]
+type = "float"
+unit = "W"
+description = "CAB-SSC01-005 transit radio load"
+min = 75.0
+max = 75.0
+
+[params.vms_load_w]
+type = "float"
+unit = "W"
+description = "CAB-SSC01-005 VMS load"
+min = 120.0
+max = 120.0
+
+[params.signal_heads_load_w]
+type = "float"
+unit = "W"
+description = "CAB-SSC01-005 signal head load"
+min = 420.0
+max = 420.0
+
+[params.cabinet_capacity_w]
+type = "float"
+unit = "W"
+description = "CAB-SSC01-005 available cabinet load capacity"
+min = 1400.0
+max = 1400.0
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "FEED-SSC01-005 feeder voltage"
+min = 230.0
+max = 230.0
+
+[params.power_factor]
+type = "float"
+description = "FEED-SSC01-005 cabinet power factor"
+min = 0.92
+max = 0.92
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "FEED-SSC01-005 feeder length"
+min = 0.18
+max = 0.18
+
+[params.conductor_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "FEED-SSC01-005 conductor resistance"
+min = 0.64
+max = 0.64
+
+[params.allowable_voltage_drop_pct]
+type = "float"
+unit = "%"
+description = "FEED-SSC01-005 allowable voltage drop"
+min = 5.0
+max = 5.0
+
+[params.battery_capacity_kwh]
+type = "float"
+unit = "kWh"
+description = "CAB-SSC01-005 backup battery capacity"
+min = 4.8
+max = 4.8
+
+[params.battery_efficiency]
+type = "float"
+description = "CAB-SSC01-005 backup battery efficiency"
+min = 0.88
+max = 0.88
+
+[params.required_backup_h]
+type = "float"
+unit = "h"
+description = "CAB-SSC01-005 required backup duration"
+min = 3.0
+max = 3.0
+
+[outputs.yellow_interval_s]
+description = "Grade-adjusted yellow interval"
+tolerance = 0.03
+
+[outputs.all_red_interval_s]
+description = "All-red clearance interval"
+tolerance = 0.03
+
+[outputs.bus_handling_capacity_pax_h]
+description = "Bus priority passenger handling capacity"
+tolerance = 0.5
+
+[outputs.bus_capacity_margin_pax_h]
+description = "Passenger capacity minus demand"
+tolerance = 0.5
+
+[outputs.cabinet_load_w]
+description = "Selected cabinet load"
+tolerance = 0.5
+
+[outputs.cabinet_load_margin_w]
+description = "Cabinet capacity minus selected load"
+tolerance = 0.5
+
+[outputs.feeder_current_a]
+description = "Cabinet feeder current"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "Feeder voltage drop at selected cabinet load"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Allowable voltage drop minus computed voltage drop"
+tolerance = 0.03
+
+[outputs.battery_runtime_h]
+description = "Backup battery runtime"
+tolerance = 0.03
+
+[outputs.battery_margin_h]
+description = "Backup runtime minus required duration"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when bus capacity, cabinet load, voltage, and backup checks pass"
+tolerance = 0.01
+
+[archetypes.ssc01_bus_priority_cabinet]
+description = "SSC-01 task-owned synthetic bus priority signal and cabinet load package"
+site_contexts = ["bus-priority-signal-cabinet-load"]
+
+[difficulty.easy]
+description = "All source-pack values visible"
+visibility = "all_given"
+archetypes = ["ssc01_bus_priority_cabinet"]
+
+[difficulty.medium]
+description = "Same deterministic source-pack values with package-level aggregation"
+visibility = "all_given"
+archetypes = ["ssc01_bus_priority_cabinet"]
+
+[difficulty.hard]
+description = "Same deterministic source-pack values with cross-discipline handoff checks"
+visibility = "all_given"
+archetypes = ["ssc01_bus_priority_cabinet"]

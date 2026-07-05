@@ -1,0 +1,235 @@
+[meta]
+name = "road-its-field-equipment-energy-resilience-package"
+description = "SSC-17 road ITS field equipment energy resilience metrics"
+long_description = "Calculates source-bound road ITS field equipment resilience metrics from a deterministic SSC-17 task-owned source pack. The template combines lighting, VMS, CCTV, communications, cabinet battery/PV autonomy, flood freeboard, PoE budget, and an overall synthetic pass score."
+discipline = "electrical"
+category = "road-its-energy-resilience"
+standards = ["ITS field equipment workflows", "PoE power budget workflows", "backup energy dispatch workflows"]
+tags = ["electrical", "road", "its", "cctv", "vms", "cabinet", "bess", "pv", "resilience", "deterministic"]
+tool_mode = "with-tool"
+
+[params.luminaire_count]
+type = "float"
+description = "DEVICE-SSC17-005 luminaire count"
+min = 8.0
+max = 8.0
+
+[params.luminaire_kw_each]
+type = "float"
+unit = "kW"
+description = "DEVICE-SSC17-005 luminaire load"
+min = 0.12
+max = 0.12
+
+[params.vms_kw]
+type = "float"
+unit = "kW"
+description = "DEVICE-SSC17-005 VMS load"
+min = 0.9
+max = 0.9
+
+[params.cctv_count]
+type = "float"
+description = "DEVICE-SSC17-005 CCTV camera count"
+min = 4.0
+max = 4.0
+
+[params.cctv_kw_each]
+type = "float"
+unit = "kW"
+description = "DEVICE-SSC17-005 CCTV load"
+min = 0.045
+max = 0.045
+
+[params.comms_kw]
+type = "float"
+unit = "kW"
+description = "NET-SSC17-005 communications load"
+min = 0.18
+max = 0.18
+
+[params.outage_duration_hr]
+type = "float"
+unit = "h"
+description = "FLOOD-SSC17-005 outage duration"
+min = 10.0
+max = 10.0
+
+[params.cabinet_battery_kwh]
+type = "float"
+unit = "kWh"
+description = "CAB-SSC17-005 cabinet battery energy"
+min = 36.0
+max = 36.0
+
+[params.max_depth_of_discharge]
+type = "float"
+description = "CAB-SSC17-005 maximum depth of discharge"
+min = 0.8
+max = 0.8
+
+[params.inverter_efficiency]
+type = "float"
+description = "CAB-SSC17-005 inverter efficiency"
+min = 0.92
+max = 0.92
+
+[params.pv_kw]
+type = "float"
+unit = "kW"
+description = "CAB-SSC17-005 cabinet PV rating"
+min = 1.5
+max = 1.5
+
+[params.solar_hours]
+type = "float"
+unit = "h"
+description = "FLOOD-SSC17-005 solar hours during event"
+min = 2.0
+max = 2.0
+
+[params.pv_performance_ratio]
+type = "float"
+description = "CAB-SSC17-005 PV performance ratio"
+min = 0.85
+max = 0.85
+
+[params.cabinet_threshold_level_m]
+type = "float"
+unit = "m"
+description = "CAB-SSC17-005 cabinet threshold level"
+min = 24.2
+max = 24.2
+
+[params.flood_hgl_m]
+type = "float"
+unit = "m"
+description = "FLOOD-SSC17-005 flood HGL"
+min = 23.55
+max = 23.55
+
+[params.required_freeboard_m]
+type = "float"
+unit = "m"
+description = "FLOOD-SSC17-005 required cabinet freeboard"
+min = 0.3
+max = 0.3
+
+[params.poe_budget_w]
+type = "float"
+unit = "W"
+description = "NET-SSC17-005 PoE budget"
+min = 80.0
+max = 80.0
+
+[params.poe_camera_w_each]
+type = "float"
+unit = "W"
+description = "NET-SSC17-005 PoE camera load"
+min = 8.0
+max = 8.0
+
+[params.poe_switch_w]
+type = "float"
+unit = "W"
+description = "NET-SSC17-005 PoE switch load"
+min = 44.0
+max = 44.0
+
+[params.required_vms_runtime_hr]
+type = "float"
+unit = "h"
+description = "MEMO-SSC17-005 required VMS runtime"
+min = 8.0
+max = 8.0
+
+[outputs.field_device_load_kw]
+description = "Lighting, VMS, CCTV, and communications load"
+tolerance = 0.03
+
+[outputs.outage_energy_required_kwh]
+description = "Energy required during outage"
+tolerance = 0.03
+
+[outputs.usable_battery_energy_kwh]
+description = "Usable cabinet battery energy"
+tolerance = 0.03
+
+[outputs.pv_energy_available_kwh]
+description = "PV energy available during event"
+tolerance = 0.03
+
+[outputs.backup_energy_available_kwh]
+description = "Battery plus PV energy available"
+tolerance = 0.03
+
+[outputs.backup_energy_margin_kwh]
+description = "Available backup energy minus required outage energy"
+tolerance = 0.03
+
+[outputs.battery_only_runtime_hr]
+description = "Battery-only runtime at field device load"
+tolerance = 0.03
+
+[outputs.vms_runtime_margin_hr]
+description = "Battery-only runtime minus required VMS runtime"
+tolerance = 0.03
+
+[outputs.cabinet_freeboard_m]
+description = "Cabinet threshold minus flood HGL"
+tolerance = 0.03
+
+[outputs.cabinet_freeboard_margin_m]
+description = "Cabinet freeboard minus required freeboard"
+tolerance = 0.03
+
+[outputs.poe_load_w]
+description = "PoE camera plus switch load"
+tolerance = 0.03
+
+[outputs.poe_margin_w]
+description = "PoE budget minus PoE load"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when energy, runtime, freeboard, and PoE margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc17_road_its_energy_case]
+description = "Road ITS field equipment resilience case with cabinet battery, PV, flood level, and PoE budget"
+luminaire_count = {min = 8.0, max = 8.0}
+luminaire_kw_each = {min = 0.12, max = 0.12}
+vms_kw = {min = 0.9, max = 0.9}
+cctv_count = {min = 4.0, max = 4.0}
+cctv_kw_each = {min = 0.045, max = 0.045}
+comms_kw = {min = 0.18, max = 0.18}
+outage_duration_hr = {min = 10.0, max = 10.0}
+cabinet_battery_kwh = {min = 36.0, max = 36.0}
+max_depth_of_discharge = {min = 0.8, max = 0.8}
+inverter_efficiency = {min = 0.92, max = 0.92}
+pv_kw = {min = 1.5, max = 1.5}
+solar_hours = {min = 2.0, max = 2.0}
+pv_performance_ratio = {min = 0.85, max = 0.85}
+cabinet_threshold_level_m = {min = 24.2, max = 24.2}
+flood_hgl_m = {min = 23.55, max = 23.55}
+required_freeboard_m = {min = 0.3, max = 0.3}
+poe_budget_w = {min = 80.0, max = 80.0}
+poe_camera_w_each = {min = 8.0, max = 8.0}
+poe_switch_w = {min = 44.0, max = 44.0}
+required_vms_runtime_hr = {min = 8.0, max = 8.0}
+site_contexts = ["road-its-field-equipment-energy", "cabinet-bess-pv-flood-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-17 road ITS field equipment energy package"
+visibility = "all_given"
+archetypes = ["ssc17_road_its_energy_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-17 road ITS field equipment energy package"
+visibility = "all_given"
+archetypes = ["ssc17_road_its_energy_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-17 road ITS field equipment energy package"
+visibility = "all_given"
+archetypes = ["ssc17_road_its_energy_case"]

@@ -1,0 +1,53 @@
+# ABOUTME: Source manifest for the docs-only SWMM Example 3 stormwater fixture plan.
+# ABOUTME: Records official URLs, hashes, file sizes, and selected external source files.
+
+source_pack:
+  id: swmm_example3_detention_source_pack
+  task: stormwater-drainage-package
+  status: docs_only_fixture_plan
+  selected_example: EPA SWMM Applications Manual Example 3, Detention Pond Design
+  last_checked_date: "2026-06-29"
+  redistribution_boundary: Official EPA source files are not vendored in this research pass; future runtime packaging should download or otherwise authorize source-file inclusion and verify hashes before use.
+
+official_sources:
+  swmm_page:
+    url: https://www.epa.gov/water-research/storm-water-management-model-swmm
+    role: Primary EPA page that lists SWMM software, documentation, manuals, capabilities, and the Applications Manual zip.
+    page_last_updated_seen: "2026-03-17"
+  applications_manual_zip:
+    url: https://www.epa.gov/sites/default/files/2014-05/epaswmm5_apps_manual.zip
+    role: Outer EPA zip inspected for the Applications Manual PDF and nested example-file bundle.
+    size_bytes: 6586620
+    sha256: 889dd60a53ac85f00ee90db947a67ddc6d0737f46acf818bf7c7c08ac272f0ea
+    observed_outer_entries:
+      - path: epaswmm5_apps_manual/files.zip
+        size_bytes: 968839
+        sha256: 99ef5eb1ec7995fa2db3cc797d75080ab26843a7b523e2bc227717e2d047c9a8
+      - path: epaswmm5_apps_manual/Swmm_Apps_Manual.pdf
+        size_bytes: 6816660
+        pages: 180
+        sha256: c40f7afea62b8b8b5d97b337e56db19320cfe478354b5e99c8618568b6da5feb
+
+selected_files:
+  - path: Example3.inp
+    source_container: epaswmm5_apps_manual/files.zip
+    role: SWMM model file for the detention pond final design.
+    size_bytes: 26596
+    sha256: ece140eda259a9e68631a7c9d25d5060f9b3e69f133aec308d19ad339c9b0a1a
+  - path: Example3.ini
+    source_container: epaswmm5_apps_manual/files.zip
+    role: SWMM GUI/view configuration paired with Example3.inp.
+    size_bytes: 3888
+    sha256: 9241ec0d997c0c291a5d192775e654e215093249b9bb28740a9a2ebb83616432
+  - path: Site-Post.jpg
+    source_container: epaswmm5_apps_manual/files.zip
+    role: Post-development site backdrop referenced by Example3.inp.
+    size_bytes: 369649
+    sha256: a1effb2859ed2c693cb8143cb431dd2b0ea5d081156ab9f5e7ef0a0da06a44a3
+    observed_image: JPEG, 1430x1482, 96 dpi metadata
+
+related_bundle_files:
+  retained_for_context:
+    - Example1-Pre.inp
+    - Example2-Post.inp
+  reason: The manual uses these prior examples for pre-development and uncontrolled post-development comparison targets, but the selected fixture plan centers on Example3.inp.

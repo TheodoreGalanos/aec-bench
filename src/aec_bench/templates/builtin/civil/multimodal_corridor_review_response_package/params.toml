@@ -1,0 +1,226 @@
+[meta]
+name = "multimodal-corridor-review-response-package"
+description = "SSC-01 multimodal corridor review response metrics"
+long_description = "Calculates task-owned synthetic SSC-01 review-response metrics for changed chainage, HGL clearance, pedestrian clearance, VMS legibility, feeder voltage drop, and comment closeout."
+discipline = "civil"
+category = "road-resilience"
+standards = ["corridor review workflow", "FHWA MUTCD", "drainage design workflow"]
+tags = ["civil", "road", "review", "multimodal", "drainage", "signal", "deterministic"]
+tool_mode = "with-tool"
+
+[params.original_chainage_m]
+type = "float"
+unit = "m"
+description = "MARKUP-SSC01-008 original comment chainage"
+min = 1280.0
+max = 1280.0
+
+[params.revised_chainage_m]
+type = "float"
+unit = "m"
+description = "MARKUP-SSC01-008 revised comment chainage"
+min = 1292.5
+max = 1292.5
+
+[params.revised_road_level_m]
+type = "float"
+unit = "m"
+description = "DRAIN-SSC01-008 revised road level"
+min = 42.35
+max = 42.35
+
+[params.revised_hgl_m]
+type = "float"
+unit = "m"
+description = "DRAIN-SSC01-008 revised HGL"
+min = 42.02
+max = 42.02
+
+[params.minimum_hgl_clearance_mm]
+type = "float"
+unit = "mm"
+description = "DRAIN-SSC01-008 minimum HGL clearance"
+min = 150.0
+max = 150.0
+
+[params.pedestrian_startup_time_s]
+type = "float"
+unit = "s"
+description = "SIG-SSC01-008 pedestrian startup allowance"
+min = 3.0
+max = 3.0
+
+[params.revised_crossing_width_m]
+type = "float"
+unit = "m"
+description = "SIG-SSC01-008 revised crossing width"
+min = 16.0
+max = 16.0
+
+[params.pedestrian_walk_speed_m_s]
+type = "float"
+unit = "m/s"
+description = "SIG-SSC01-008 pedestrian walk speed"
+min = 1.2
+max = 1.2
+
+[params.available_ped_clearance_s]
+type = "float"
+unit = "s"
+description = "SIG-SSC01-008 available pedestrian clearance"
+min = 20.0
+max = 20.0
+
+[params.vms_character_height_in]
+type = "float"
+unit = "in"
+description = "FEED-SSC01-008 revised VMS character height"
+min = 10.0
+max = 10.0
+
+[params.approach_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "SIG-SSC01-008 revised approach speed"
+min = 50.0
+max = 50.0
+
+[params.reading_rate_chars_s]
+type = "float"
+unit = "chars/s"
+description = "SIG-SSC01-008 reading rate"
+min = 4.0
+max = 4.0
+
+[params.revised_message_length_chars]
+type = "float"
+unit = "chars"
+description = "FEED-SSC01-008 revised VMS message length"
+min = 25.0
+max = 25.0
+
+[params.revised_device_load_w]
+type = "float"
+unit = "W"
+description = "FEED-SSC01-008 revised connected device load"
+min = 760.0
+max = 760.0
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "FEED-SSC01-008 revised feeder length"
+min = 0.22
+max = 0.22
+
+[params.conductor_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "FEED-SSC01-008 conductor resistance"
+min = 0.5
+max = 0.5
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "FEED-SSC01-008 feeder voltage"
+min = 230.0
+max = 230.0
+
+[params.power_factor]
+type = "float"
+description = "FEED-SSC01-008 load power factor"
+min = 0.9
+max = 0.9
+
+[params.allowable_voltage_drop_pct]
+type = "float"
+unit = "%"
+description = "FEED-SSC01-008 allowable voltage drop"
+min = 5.0
+max = 5.0
+
+[params.review_comments_total]
+type = "float"
+description = "REV-SSC01-008 total comments in the response batch"
+min = 6.0
+max = 6.0
+
+[params.review_comments_closed]
+type = "float"
+description = "REV-SSC01-008 closed comments in the response batch"
+min = 6.0
+max = 6.0
+
+[params.impacted_calculation_count]
+type = "float"
+description = "REV-SSC01-008 count of recalculations touched by the change"
+min = 5.0
+max = 5.0
+
+[outputs.changed_chainage_delta_m]
+description = "Revised chainage minus original chainage"
+tolerance = 0.03
+
+[outputs.hgl_clearance_mm]
+description = "Revised road level minus revised HGL"
+tolerance = 0.5
+
+[outputs.hgl_clearance_margin_mm]
+description = "HGL clearance minus minimum required clearance"
+tolerance = 0.5
+
+[outputs.ped_clearance_required_s]
+description = "Required pedestrian clearance time"
+tolerance = 0.03
+
+[outputs.ped_clearance_margin_s]
+description = "Available pedestrian clearance minus required clearance"
+tolerance = 0.03
+
+[outputs.vms_reading_time_s]
+description = "Available VMS reading time"
+tolerance = 0.03
+
+[outputs.vms_message_margin_chars]
+description = "Readable character capacity minus revised message length"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "Voltage drop at revised device load"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Allowable voltage drop minus computed voltage drop"
+tolerance = 0.03
+
+[outputs.comment_closeout_percent]
+description = "Closed comments divided by total comments"
+tolerance = 0.03
+
+[outputs.impacted_calculation_count]
+description = "Number of discipline calculations impacted by the review change"
+tolerance = 0.01
+
+[outputs.overall_pass_score]
+description = "1.0 when review-response drainage, timing, VMS, voltage, and comment checks pass"
+tolerance = 0.01
+
+[archetypes.ssc01_multimodal_review]
+description = "SSC-01 task-owned synthetic multimodal corridor review response package"
+site_contexts = ["multimodal-corridor-review-response"]
+
+[difficulty.easy]
+description = "All source-pack values visible"
+visibility = "all_given"
+archetypes = ["ssc01_multimodal_review"]
+
+[difficulty.medium]
+description = "Same deterministic source-pack values with package-level aggregation"
+visibility = "all_given"
+archetypes = ["ssc01_multimodal_review"]
+
+[difficulty.hard]
+description = "Same deterministic source-pack values with cross-discipline handoff checks"
+visibility = "all_given"
+archetypes = ["ssc01_multimodal_review"]

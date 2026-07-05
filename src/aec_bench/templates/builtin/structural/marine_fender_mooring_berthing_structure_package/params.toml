@@ -1,0 +1,209 @@
+# ABOUTME: Defines the SSC-14 marine fender mooring and berthing structure template.
+# ABOUTME: Pins one berth, vessel, fender, mooring, water-level, and support source pack.
+
+[meta]
+name = "marine-fender-mooring-berthing-structure-package"
+description = "SSC-14 marine fender, mooring, water-level, and berthing support metrics"
+long_description = "Calculates source-bound marine structural metrics from a deterministic SSC-14 task-owned source pack. The template combines berthing energy, fender demand and reaction, mooring line demand, water-level margin, support load combination, and overall pass scoring."
+discipline = "structural"
+category = "marine-structures"
+standards = ["PIANC berthing energy workflow", "fender schedule", "mooring line screening", "freeboard check"]
+tags = ["structural", "marine", "fender", "mooring", "berthing", "water-level", "deterministic"]
+tool_mode = "with-tool"
+
+[params.vessel_displacement_t]
+type = "float"
+unit = "t"
+description = "VESSEL-SSC14-005 vessel displacement"
+min = 18000.0
+max = 18000.0
+
+[params.berthing_velocity_m_s]
+type = "float"
+unit = "m/s"
+description = "VESSEL-SSC14-005 berthing velocity"
+min = 0.16
+max = 0.16
+
+[params.berthing_coefficient]
+type = "float"
+description = "VESSEL-SSC14-005 berthing coefficient"
+min = 1.45
+max = 1.45
+
+[params.fender_demand_factor]
+type = "float"
+description = "FENDER-SSC14-005 fender energy demand factor"
+min = 1.1
+max = 1.1
+
+[params.fender_energy_capacity_kj]
+type = "float"
+unit = "kJ"
+description = "FENDER-SSC14-005 selected fender energy capacity"
+min = 420.0
+max = 420.0
+
+[params.fender_stroke_m]
+type = "float"
+unit = "m"
+description = "FENDER-SSC14-005 fender stroke at design demand"
+min = 0.42
+max = 0.42
+
+[params.wind_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "BERTH-SSC14-005 wind pressure for mooring demand"
+min = 0.85
+max = 0.85
+
+[params.vessel_projected_area_m2]
+type = "float"
+unit = "m2"
+description = "VESSEL-SSC14-005 vessel projected area"
+min = 260.0
+max = 260.0
+
+[params.wind_drag_coefficient]
+type = "float"
+description = "VESSEL-SSC14-005 wind drag coefficient"
+min = 1.15
+max = 1.15
+
+[params.active_mooring_line_count]
+type = "int"
+description = "FENDER-SSC14-005 active mooring line count"
+min = 4
+max = 4
+
+[params.mooring_line_angle_deg]
+type = "float"
+unit = "deg"
+description = "FENDER-SSC14-005 mooring line horizontal angle"
+min = 25.0
+max = 25.0
+
+[params.mooring_line_capacity_kn]
+type = "float"
+unit = "kN"
+description = "FENDER-SSC14-005 mooring line capacity"
+min = 95.0
+max = 95.0
+
+[params.design_water_level_m]
+type = "float"
+unit = "m"
+description = "WATER-SSC14-005 design water level"
+min = 2.7
+max = 2.7
+
+[params.deck_level_m]
+type = "float"
+unit = "m"
+description = "BERTH-SSC14-005 berth deck level"
+min = 4.05
+max = 4.05
+
+[params.required_freeboard_m]
+type = "float"
+unit = "m"
+description = "WATER-SSC14-005 required freeboard"
+min = 0.8
+max = 0.8
+
+[params.vertical_support_load_kn]
+type = "float"
+unit = "kN"
+description = "BERTH-SSC14-005 vertical support load"
+min = 115.0
+max = 115.0
+
+[params.vertical_load_factor]
+type = "float"
+description = "BERTH-SSC14-005 vertical load factor"
+min = 1.25
+max = 1.25
+
+[params.fender_reaction_combination_factor]
+type = "float"
+description = "BERTH-SSC14-005 fender reaction combination factor"
+min = 0.35
+max = 0.35
+
+[outputs.berthing_energy_kj]
+description = "Source-owned vessel berthing energy"
+tolerance = 0.03
+
+[outputs.fender_energy_demand_kj]
+description = "Factored fender energy demand"
+tolerance = 0.03
+
+[outputs.fender_energy_utilization]
+description = "Fender energy demand divided by capacity"
+tolerance = 0.03
+
+[outputs.fender_reaction_kn]
+description = "Fender energy demand divided by stroke"
+tolerance = 0.03
+
+[outputs.mooring_wind_force_kn]
+description = "Wind force for mooring demand"
+tolerance = 0.03
+
+[outputs.mooring_line_demand_kn]
+description = "Demand per active mooring line"
+tolerance = 0.03
+
+[outputs.mooring_utilization]
+description = "Mooring line demand divided by line capacity"
+tolerance = 0.03
+
+[outputs.water_level_margin_m]
+description = "Deck level minus design water level and required freeboard"
+tolerance = 0.03
+
+[outputs.combined_support_load_kn]
+description = "Vertical support load plus combined fender reaction component"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when fender, mooring, and water-level checks pass"
+tolerance = 0.03
+
+[archetypes.ssc14_marine_berthing_case]
+description = "Berth layout, vessel data, fender/mooring schedule, water-level, and structural detail source pack"
+vessel_displacement_t = {min = 18000.0, max = 18000.0}
+berthing_velocity_m_s = {min = 0.16, max = 0.16}
+berthing_coefficient = {min = 1.45, max = 1.45}
+fender_demand_factor = {min = 1.1, max = 1.1}
+fender_energy_capacity_kj = {min = 420.0, max = 420.0}
+fender_stroke_m = {min = 0.42, max = 0.42}
+wind_pressure_kpa = {min = 0.85, max = 0.85}
+vessel_projected_area_m2 = {min = 260.0, max = 260.0}
+wind_drag_coefficient = {min = 1.15, max = 1.15}
+active_mooring_line_count = {min = 4, max = 4}
+mooring_line_angle_deg = {min = 25.0, max = 25.0}
+mooring_line_capacity_kn = {min = 95.0, max = 95.0}
+design_water_level_m = {min = 2.7, max = 2.7}
+deck_level_m = {min = 4.05, max = 4.05}
+required_freeboard_m = {min = 0.8, max = 0.8}
+vertical_support_load_kn = {min = 115.0, max = 115.0}
+vertical_load_factor = {min = 1.25, max = 1.25}
+fender_reaction_combination_factor = {min = 0.35, max = 0.35}
+site_contexts = ["marine-berth", "fender-mooring", "water-level"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-14 marine berthing package"
+visibility = "all_given"
+archetypes = ["ssc14_marine_berthing_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-14 marine berthing package"
+visibility = "all_given"
+archetypes = ["ssc14_marine_berthing_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-14 marine berthing package"
+visibility = "all_given"
+archetypes = ["ssc14_marine_berthing_case"]

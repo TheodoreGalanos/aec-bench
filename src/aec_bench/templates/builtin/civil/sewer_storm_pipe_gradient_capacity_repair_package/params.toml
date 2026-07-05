@@ -1,0 +1,178 @@
+# ABOUTME: Defines the SSC-03 sewer/storm pipe gradient and capacity repair template.
+# ABOUTME: Pins one synthetic pipe schedule, invert, long-section, and repair criteria source package.
+
+[meta]
+name = "sewer-storm-pipe-gradient-capacity-repair-package"
+description = "SSC-03 pipe slope, invert conflict, Manning capacity, velocity, and cover metrics"
+long_description = "Calculates source-bound sewer/storm pipe repair metrics from a deterministic SSC-03 task-owned source pack. The template combines scheduled and long-section slopes, invert conflict, Manning capacity, velocity margins, pipe cover, and an overall synthetic pass score."
+discipline = "civil"
+category = "pipe-gradient-repair"
+standards = ["Manning pipe capacity", "pipe invert schedule review", "storm pipe repair workflows", "gravity pipe velocity checks"]
+tags = ["civil", "stormwater", "sewer", "pipe-gradient", "capacity", "repair", "deterministic"]
+tool_mode = "with-tool"
+
+[params.scheduled_upstream_invert_m]
+type = "float"
+unit = "m"
+description = "INVERT-SSC03-007 scheduled upstream invert"
+min = 18.42
+max = 18.42
+
+[params.scheduled_downstream_invert_m]
+type = "float"
+unit = "m"
+description = "INVERT-SSC03-007 scheduled downstream invert"
+min = 17.94
+max = 17.94
+
+[params.long_section_downstream_invert_m]
+type = "float"
+unit = "m"
+description = "LONG-SSC03-007 long-section downstream invert"
+min = 17.935
+max = 17.935
+
+[params.pipe_length_m]
+type = "float"
+unit = "m"
+description = "PIPE-SSC03-007 pipe reach length"
+min = 96.0
+max = 96.0
+
+[params.pipe_diameter_m]
+type = "float"
+unit = "m"
+description = "PIPE-SSC03-007 hydraulic pipe diameter"
+min = 0.6
+max = 0.6
+
+[params.manning_n]
+type = "float"
+description = "PIPE-SSC03-007 Manning roughness"
+min = 0.013
+max = 0.013
+
+[params.design_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "PIPE-SSC03-007 design flow"
+min = 0.34
+max = 0.34
+
+[params.invert_conflict_tolerance_m]
+type = "float"
+unit = "m"
+description = "MEMO-SSC03-007 invert conflict tolerance"
+min = 0.01
+max = 0.01
+
+[params.surface_level_m]
+type = "float"
+unit = "m"
+description = "LONG-SSC03-007 surface level at upstream end"
+min = 19.65
+max = 19.65
+
+[params.pipe_outer_diameter_m]
+type = "float"
+unit = "m"
+description = "PIPE-SSC03-007 pipe outer diameter for cover"
+min = 0.65
+max = 0.65
+
+[params.minimum_cover_m]
+type = "float"
+unit = "m"
+description = "CRIT-SSC03-007 minimum cover"
+min = 0.45
+max = 0.45
+
+[params.minimum_velocity_m_s]
+type = "float"
+unit = "m/s"
+description = "CRIT-SSC03-007 minimum velocity"
+min = 0.75
+max = 0.75
+
+[params.maximum_velocity_m_s]
+type = "float"
+unit = "m/s"
+description = "CRIT-SSC03-007 maximum velocity"
+min = 3.0
+max = 3.0
+
+[outputs.scheduled_slope_percent]
+description = "Pipe slope from scheduled inverts"
+tolerance = 0.03
+
+[outputs.long_section_slope_percent]
+description = "Pipe slope from long-section invert"
+tolerance = 0.03
+
+[outputs.invert_conflict_m]
+description = "Absolute difference between scheduled and long-section downstream invert"
+tolerance = 0.03
+
+[outputs.manning_capacity_m3_s]
+description = "Full-pipe Manning capacity"
+tolerance = 0.03
+
+[outputs.capacity_margin_m3_s]
+description = "Manning capacity minus design flow"
+tolerance = 0.03
+
+[outputs.flow_velocity_m_s]
+description = "Pipe flow velocity"
+tolerance = 0.03
+
+[outputs.velocity_low_margin_m_s]
+description = "Flow velocity minus minimum velocity"
+tolerance = 0.03
+
+[outputs.velocity_high_margin_m_s]
+description = "Maximum velocity minus flow velocity"
+tolerance = 0.03
+
+[outputs.pipe_crown_cover_m]
+description = "Cover above pipe crown"
+tolerance = 0.03
+
+[outputs.cover_margin_m]
+description = "Pipe crown cover minus minimum cover"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for invert, capacity, velocity, and cover checks"
+tolerance = 0.03
+
+[archetypes.ssc03_pipe_gradient_repair_case]
+description = "Sewer/storm pipe gradient and capacity repair case"
+scheduled_upstream_invert_m = {min = 18.42, max = 18.42}
+scheduled_downstream_invert_m = {min = 17.94, max = 17.94}
+long_section_downstream_invert_m = {min = 17.935, max = 17.935}
+pipe_length_m = {min = 96.0, max = 96.0}
+pipe_diameter_m = {min = 0.6, max = 0.6}
+manning_n = {min = 0.013, max = 0.013}
+design_flow_m3_s = {min = 0.34, max = 0.34}
+invert_conflict_tolerance_m = {min = 0.01, max = 0.01}
+surface_level_m = {min = 19.65, max = 19.65}
+pipe_outer_diameter_m = {min = 0.65, max = 0.65}
+minimum_cover_m = {min = 0.45, max = 0.45}
+minimum_velocity_m_s = {min = 0.75, max = 0.75}
+maximum_velocity_m_s = {min = 3.0, max = 3.0}
+site_contexts = ["pipe-gradient", "capacity-repair-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-03 pipe gradient repair package"
+visibility = "all_given"
+archetypes = ["ssc03_pipe_gradient_repair_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-03 pipe gradient repair package"
+visibility = "all_given"
+archetypes = ["ssc03_pipe_gradient_repair_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-03 pipe gradient repair package"
+visibility = "all_given"
+archetypes = ["ssc03_pipe_gradient_repair_case"]

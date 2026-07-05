@@ -1,0 +1,169 @@
+[meta]
+name = "valve-failure-safe-state-repair-package"
+description = "SSC-18 valve failure, safe-state, bypass, runtime, and repair-source metrics"
+long_description = "Calculates source-bound valve failure repair metrics from a deterministic SSC-18 task-owned source pack. The template combines failed-signal threshold, fail-safe valve capacity, bypass capacity, safe-flow and runtime margins, source resolution, conflict closure, and an overall synthetic pass score."
+discipline = "electrical"
+category = "safe-state-repair"
+standards = ["control narrative workflow", "failure mode table workflow", "ISA-5"]
+tags = ["electrical", "instrumentation", "valve", "failure", "safe-state", "repair", "deterministic"]
+tool_mode = "with-tool"
+
+[params.failed_signal_ma]
+type = "float"
+unit = "mA"
+description = "LOOP-18-FAIL-07 failed signal value"
+min = 3.6
+max = 3.6
+
+[params.fail_threshold_ma]
+type = "float"
+unit = "mA"
+description = "MODE-18-FAIL-07 fail-detect threshold"
+min = 3.8
+max = 3.8
+
+[params.fail_closed_cv]
+type = "float"
+description = "VDS-18-FAIL-07 fail-closed available Cv"
+min = 5.0
+max = 5.0
+
+[params.required_safe_cv]
+type = "float"
+description = "NARR-18-SAFE-07 required safe-state Cv"
+min = 4.0
+max = 4.0
+
+[params.bypass_cv]
+type = "float"
+description = "VDS-18-FAIL-07 bypass Cv"
+min = 12.0
+max = 12.0
+
+[params.required_bypass_cv]
+type = "float"
+description = "NARR-18-SAFE-07 required bypass Cv"
+min = 10.0
+max = 10.0
+
+[params.safe_flow_m3_h]
+type = "float"
+unit = "m3/h"
+description = "NARR-18-SAFE-07 safe-state flow"
+min = 15.0
+max = 15.0
+
+[params.minimum_safe_flow_m3_h]
+type = "float"
+unit = "m3/h"
+description = "MODE-18-FAIL-07 minimum safe flow"
+min = 12.0
+max = 12.0
+
+[params.tank_volume_m3]
+type = "float"
+unit = "m3"
+description = "PID-18-FAIL-07 available tank volume"
+min = 100.0
+max = 100.0
+
+[params.drawdown_flow_m3_h]
+type = "float"
+unit = "m3/h"
+description = "MODE-18-FAIL-07 safe-state drawdown flow"
+min = 15.0
+max = 15.0
+
+[params.required_safe_duration_h]
+type = "float"
+unit = "h"
+description = "NARR-18-SAFE-07 required safe duration"
+min = 6.0
+max = 6.0
+
+[params.source_items_resolved]
+type = "float"
+description = "RESPONSE-18-FAIL-07 resolved source item count"
+min = 6.0
+max = 6.0
+
+[params.source_items_total]
+type = "float"
+description = "RESPONSE-18-FAIL-07 total source item count"
+min = 6.0
+max = 6.0
+
+[params.unresolved_conflict_count]
+type = "float"
+description = "RESPONSE-18-FAIL-07 unresolved conflict count"
+min = 0.0
+max = 0.0
+
+[outputs.failed_signal_margin_ma]
+description = "Fail-detect threshold minus failed signal"
+tolerance = 0.03
+
+[outputs.fail_closed_cv_margin]
+description = "Fail-safe Cv minus required safe Cv"
+tolerance = 0.03
+
+[outputs.bypass_cv_margin]
+description = "Bypass Cv minus required bypass Cv"
+tolerance = 0.03
+
+[outputs.safe_flow_margin_m3_h]
+description = "Safe flow minus minimum safe flow"
+tolerance = 0.03
+
+[outputs.safe_runtime_h]
+description = "Safe-state runtime from available tank volume"
+tolerance = 0.03
+
+[outputs.safe_runtime_margin_h]
+description = "Safe runtime minus required duration"
+tolerance = 0.03
+
+[outputs.source_resolution_fraction]
+description = "Resolved source items divided by total source items"
+tolerance = 0.03
+
+[outputs.unresolved_conflict_count]
+description = "Unresolved source conflict count"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for valve failure safe-state repair checks"
+tolerance = 0.03
+
+[archetypes.ssc18_valve_failure_safe_state_case]
+description = "Valve failure safe-state repair source pack"
+failed_signal_ma = {min = 3.6, max = 3.6}
+fail_threshold_ma = {min = 3.8, max = 3.8}
+fail_closed_cv = {min = 5.0, max = 5.0}
+required_safe_cv = {min = 4.0, max = 4.0}
+bypass_cv = {min = 12.0, max = 12.0}
+required_bypass_cv = {min = 10.0, max = 10.0}
+safe_flow_m3_h = {min = 15.0, max = 15.0}
+minimum_safe_flow_m3_h = {min = 12.0, max = 12.0}
+tank_volume_m3 = {min = 100.0, max = 100.0}
+drawdown_flow_m3_h = {min = 15.0, max = 15.0}
+required_safe_duration_h = {min = 6.0, max = 6.0}
+source_items_resolved = {min = 6.0, max = 6.0}
+source_items_total = {min = 6.0, max = 6.0}
+unresolved_conflict_count = {min = 0.0, max = 0.0}
+site_contexts = ["valve-failure-safe-state", "control-repair-response"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-18 valve failure repair package"
+visibility = "all_given"
+archetypes = ["ssc18_valve_failure_safe_state_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-18 valve failure repair package"
+visibility = "all_given"
+archetypes = ["ssc18_valve_failure_safe_state_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-18 valve failure repair package"
+visibility = "all_given"
+archetypes = ["ssc18_valve_failure_safe_state_case"]

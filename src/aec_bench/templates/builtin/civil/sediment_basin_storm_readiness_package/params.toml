@@ -1,0 +1,197 @@
+[meta]
+name = "sediment-basin-storm-readiness-package"
+description = "SSC-16 sediment basin and storm event readiness metrics"
+long_description = "Calculates source-bound construction basin storage, weir capacity, freeboard, drawdown, pollutant load, and inspection window metrics from a deterministic SSC-16 task-owned source pack."
+discipline = "civil"
+category = "storm-event-readiness"
+standards = ["CGP/SWPPP workflow", "sediment basin readiness", "construction inspection records"]
+tags = ["civil", "construction", "stormwater", "sediment-basin", "inspection", "deterministic"]
+tool_mode = "with-tool"
+
+[params.catchment_area_ha]
+type = "float"
+unit = "ha"
+description = "CATCH-16-STAGE-05 disturbed catchment area"
+min = 1.8
+max = 1.8
+
+[params.storm_depth_mm]
+type = "float"
+unit = "mm"
+description = "STORM-16-EVENT-05 storm depth"
+min = 75.0
+max = 75.0
+
+[params.runoff_coefficient]
+type = "float"
+description = "STORM-16-EVENT-05 runoff coefficient"
+min = 0.82
+max = 0.82
+
+[params.sediment_allowance_m3]
+type = "float"
+unit = "m3"
+description = "BASIN-16-DETAIL-05 sediment storage allowance"
+min = 180.0
+max = 180.0
+
+[params.provided_basin_volume_m3]
+type = "float"
+unit = "m3"
+description = "BASIN-16-DETAIL-05 provided basin volume"
+min = 1450.0
+max = 1450.0
+
+[params.weir_coefficient]
+type = "float"
+description = "BASIN-16-DETAIL-05 weir coefficient"
+min = 1.7
+max = 1.7
+
+[params.weir_length_m]
+type = "float"
+unit = "m"
+description = "BASIN-16-DETAIL-05 weir length"
+min = 2.4
+max = 2.4
+
+[params.weir_head_m]
+type = "float"
+unit = "m"
+description = "BASIN-16-DETAIL-05 weir head"
+min = 0.45
+max = 0.45
+
+[params.peak_inflow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "STORM-16-EVENT-05 peak inflow"
+min = 0.95
+max = 0.95
+
+[params.provided_freeboard_m]
+type = "float"
+unit = "m"
+description = "BASIN-16-DETAIL-05 provided freeboard"
+min = 0.65
+max = 0.65
+
+[params.required_freeboard_m]
+type = "float"
+unit = "m"
+description = "DISCH-16-CRIT-05 required freeboard"
+min = 0.45
+max = 0.45
+
+[params.outlet_drawdown_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "BASIN-16-DETAIL-05 outlet drawdown flow"
+min = 0.018
+max = 0.018
+
+[params.maximum_drawdown_time_h]
+type = "float"
+unit = "h"
+description = "DISCH-16-CRIT-05 maximum drawdown time"
+min = 24.0
+max = 24.0
+
+[params.tss_event_mean_concentration_mg_l]
+type = "float"
+unit = "mg/L"
+description = "DISCH-16-CRIT-05 TSS event mean concentration"
+min = 220.0
+max = 220.0
+
+[params.inspection_due_window_h]
+type = "float"
+unit = "h"
+description = "INSP-16-CHECK-05 inspection due window after storm"
+min = 24.0
+max = 24.0
+
+[params.hours_since_storm_end]
+type = "float"
+unit = "h"
+description = "INSP-16-CHECK-05 hours since storm end"
+min = 18.0
+max = 18.0
+
+[outputs.runoff_volume_m3]
+description = "Runoff volume to the sediment basin"
+tolerance = 0.03
+
+[outputs.required_basin_volume_m3]
+description = "Required basin volume including sediment allowance"
+tolerance = 0.03
+
+[outputs.basin_headroom_m3]
+description = "Provided basin volume minus required basin volume"
+tolerance = 0.03
+
+[outputs.weir_capacity_m3_s]
+description = "Outlet weir capacity"
+tolerance = 0.003
+
+[outputs.weir_capacity_margin_m3_s]
+description = "Weir capacity minus peak inflow"
+tolerance = 0.003
+
+[outputs.freeboard_margin_m]
+description = "Provided freeboard minus required freeboard"
+tolerance = 0.003
+
+[outputs.drawdown_time_h]
+description = "Basin drawdown time"
+tolerance = 0.03
+
+[outputs.drawdown_margin_h]
+description = "Maximum drawdown time minus calculated drawdown time"
+tolerance = 0.03
+
+[outputs.tss_load_kg]
+description = "Estimated event TSS load"
+tolerance = 0.03
+
+[outputs.inspection_window_margin_h]
+description = "Inspection due window minus elapsed time since storm"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when basin, weir, freeboard, drawdown, and inspection checks pass"
+tolerance = 0.001
+
+[archetypes.ssc16_sediment_basin_storm_case]
+description = "Sediment basin and storm event readiness case"
+catchment_area_ha = {min = 1.8, max = 1.8}
+storm_depth_mm = {min = 75.0, max = 75.0}
+runoff_coefficient = {min = 0.82, max = 0.82}
+sediment_allowance_m3 = {min = 180.0, max = 180.0}
+provided_basin_volume_m3 = {min = 1450.0, max = 1450.0}
+weir_coefficient = {min = 1.7, max = 1.7}
+weir_length_m = {min = 2.4, max = 2.4}
+weir_head_m = {min = 0.45, max = 0.45}
+peak_inflow_m3_s = {min = 0.95, max = 0.95}
+provided_freeboard_m = {min = 0.65, max = 0.65}
+required_freeboard_m = {min = 0.45, max = 0.45}
+outlet_drawdown_flow_m3_s = {min = 0.018, max = 0.018}
+maximum_drawdown_time_h = {min = 24.0, max = 24.0}
+tss_event_mean_concentration_mg_l = {min = 220.0, max = 220.0}
+inspection_due_window_h = {min = 24.0, max = 24.0}
+hours_since_storm_end = {min = 18.0, max = 18.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-16 sediment basin storm readiness package"
+visibility = "all_given"
+archetypes = ["ssc16_sediment_basin_storm_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-16 sediment basin storm readiness package"
+visibility = "all_given"
+archetypes = ["ssc16_sediment_basin_storm_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-16 sediment basin storm readiness package"
+visibility = "all_given"
+archetypes = ["ssc16_sediment_basin_storm_case"]

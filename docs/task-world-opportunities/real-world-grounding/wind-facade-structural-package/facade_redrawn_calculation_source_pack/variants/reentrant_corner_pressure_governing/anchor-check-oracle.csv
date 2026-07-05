@@ -1,0 +1,5 @@
+support_id,anchor_row,source_family_tag,substrate,embedment_mm,min_embedment_mm,edge_distance_x_mm,edge_distance_y_mm,min_edge_distance_mm,nearest_anchor_spacing_mm,min_spacing_mm,tension_demand_kN,shear_demand_kN,tension_resistance_kN,shear_resistance_kN,tension_utilization,shear_utilization,combined_utilization,edge_distance_ok,embedment_ok,spacing_ok,governing_anchor_check,status
+BR-B01,ANCH-CONC-M8,hilti_profis_hrd_and_kws_ankit_style,concrete,60,60,150,140,75,180,100,1.080,0.315,2.50,3.00,0.432,0.105,0.445,true,true,true,combined_utilization,pass
+BR-E01,ANCH-CONC-M8,hilti_profis_hrd_and_kws_ankit_style,concrete,60,60,100,140,75,180,100,1.620,0.315,2.50,3.00,0.648,0.105,0.656,true,true,true,combined_utilization,pass
+BR-C01,ANCH-CONC-M8,hilti_profis_hrd_and_kws_ankit_style,concrete,60,60,85,140,75,160,100,2.160,0.315,2.50,3.00,0.864,0.105,0.870,true,true,true,combined_utilization,pass
+BR-RC01,ANCH-CONC-M8,hilti_profis_hrd_and_kws_ankit_style,concrete,60,60,90,140,75,160,100,2.385,0.315,2.50,3.00,0.954,0.105,0.960,true,true,true,combined_utilization,pass

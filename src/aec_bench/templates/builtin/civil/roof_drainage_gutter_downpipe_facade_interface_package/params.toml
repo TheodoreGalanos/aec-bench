@@ -1,0 +1,169 @@
+# ABOUTME: Defines the SSC-03/SSC-09 roof drainage gutter/downpipe facade-interface template.
+# ABOUTME: Pins one synthetic roof catchment, gutter, downpipe, overflow, and facade source package.
+
+[meta]
+name = "roof-drainage-gutter-downpipe-facade-interface-package"
+description = "SSC-03/SSC-09 roof runoff, gutter/downpipe capacity, overflow, and facade interface metrics"
+long_description = "Calculates source-bound roof drainage metrics from deterministic SSC-03 and SSC-09 task-owned source packs. The template combines roof runoff, gutter capacity margin, downpipe capacity margin, overflow route capacity, parapet freeboard, facade fixing pressure margin, and an overall synthetic pass score."
+discipline = "civil"
+category = "roof-drainage"
+standards = ["AS/NZS 3500.3-style roof drainage workflows", "gutter and downpipe sizing", "roof overflow review", "facade interface coordination"]
+tags = ["civil", "roof-drainage", "gutter", "downpipe", "facade", "overflow", "deterministic"]
+tool_mode = "with-tool"
+
+[params.roof_catchment_area_m2]
+type = "float"
+unit = "m2"
+description = "ROOF-SSC03-004 roof catchment area"
+min = 1280.0
+max = 1280.0
+
+[params.rainfall_intensity_mm_h]
+type = "float"
+unit = "mm/h"
+description = "RAIN-SSC03-004 design rainfall intensity"
+min = 165.0
+max = 165.0
+
+[params.runoff_coefficient]
+type = "float"
+description = "ROOF-SSC03-004 roof runoff coefficient"
+min = 0.95
+max = 0.95
+
+[params.gutter_capacity_l_s]
+type = "float"
+unit = "L/s"
+description = "GUTTER-SSC03-004 total gutter capacity"
+min = 68.0
+max = 68.0
+
+[params.downpipe_count]
+type = "float"
+unit = "count"
+description = "GUTTER-SSC03-004 downpipe count"
+min = 6.0
+max = 6.0
+
+[params.downpipe_capacity_l_s]
+type = "float"
+unit = "L/s"
+description = "GUTTER-SSC03-004 capacity per downpipe"
+min = 13.5
+max = 13.5
+
+[params.overflow_weir_coefficient]
+type = "float"
+description = "ROOF-SSC03-004 overflow weir coefficient"
+min = 1.7
+max = 1.7
+
+[params.overflow_weir_length_m]
+type = "float"
+unit = "m"
+description = "ROOF-SSC03-004 overflow weir length"
+min = 3.2
+max = 3.2
+
+[params.overflow_head_m]
+type = "float"
+unit = "m"
+description = "ROOF-SSC03-004 overflow head"
+min = 0.08
+max = 0.08
+
+[params.parapet_freeboard_m]
+type = "float"
+unit = "m"
+description = "FACADE-SSC03-004 parapet freeboard"
+min = 0.22
+max = 0.22
+
+[params.minimum_freeboard_m]
+type = "float"
+unit = "m"
+description = "MEMO-SSC03-004 minimum freeboard"
+min = 0.12
+max = 0.12
+
+[params.facade_zone_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "FACADE-SSC03-004 local facade pressure at drainage interface"
+min = 1.4
+max = 1.4
+
+[params.fixing_allowable_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "FACADE-SSC03-004 fixing allowable pressure"
+min = 2.1
+max = 2.1
+
+[outputs.roof_runoff_l_s]
+description = "Roof runoff at design rainfall"
+tolerance = 0.03
+
+[outputs.gutter_capacity_margin_l_s]
+description = "Gutter capacity minus roof runoff"
+tolerance = 0.03
+
+[outputs.downpipe_total_capacity_l_s]
+description = "Total downpipe capacity"
+tolerance = 0.03
+
+[outputs.downpipe_capacity_margin_l_s]
+description = "Downpipe capacity minus roof runoff"
+tolerance = 0.03
+
+[outputs.overflow_capacity_l_s]
+description = "Overflow weir capacity"
+tolerance = 0.03
+
+[outputs.overflow_capacity_margin_l_s]
+description = "Overflow capacity minus overflow demand"
+tolerance = 0.03
+
+[outputs.freeboard_margin_m]
+description = "Parapet freeboard minus minimum freeboard"
+tolerance = 0.03
+
+[outputs.facade_fixing_pressure_margin_kpa]
+description = "Facade fixing allowable pressure minus zone pressure"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for roof drainage and facade interface checks"
+tolerance = 0.03
+
+[archetypes.ssc03_roof_drainage_case]
+description = "Roof gutter/downpipe and facade interface case"
+roof_catchment_area_m2 = {min = 1280.0, max = 1280.0}
+rainfall_intensity_mm_h = {min = 165.0, max = 165.0}
+runoff_coefficient = {min = 0.95, max = 0.95}
+gutter_capacity_l_s = {min = 68.0, max = 68.0}
+downpipe_count = {min = 6.0, max = 6.0}
+downpipe_capacity_l_s = {min = 13.5, max = 13.5}
+overflow_weir_coefficient = {min = 1.7, max = 1.7}
+overflow_weir_length_m = {min = 3.2, max = 3.2}
+overflow_head_m = {min = 0.08, max = 0.08}
+parapet_freeboard_m = {min = 0.22, max = 0.22}
+minimum_freeboard_m = {min = 0.12, max = 0.12}
+facade_zone_pressure_kpa = {min = 1.4, max = 1.4}
+fixing_allowable_pressure_kpa = {min = 2.1, max = 2.1}
+site_contexts = ["roof-drainage", "facade-interface-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-03 roof drainage package"
+visibility = "all_given"
+archetypes = ["ssc03_roof_drainage_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-03 roof drainage package"
+visibility = "all_given"
+archetypes = ["ssc03_roof_drainage_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-03 roof drainage package"
+visibility = "all_given"
+archetypes = ["ssc03_roof_drainage_case"]

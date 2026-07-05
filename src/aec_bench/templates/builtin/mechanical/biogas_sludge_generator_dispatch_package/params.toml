@@ -1,0 +1,188 @@
+# ABOUTME: Defines the SSC-10 biogas, sludge, and generator dispatch template.
+# ABOUTME: Pins one sludge, digester, generator, load, dispatch policy, and memo source pack.
+
+[meta]
+name = "biogas-sludge-generator-dispatch-package"
+description = "SSC-10 biogas, sludge, and generator dispatch metrics"
+long_description = "Calculates source-bound biogas generator dispatch metrics from a deterministic SSC-10 task-owned source pack. The template combines volatile solids destruction, biogas and methane energy, generator electric energy, dispatch runtime, heat recovery, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "biogas-generator-dispatch"
+standards = ["sludge production workflow", "biogas production workflow", "generator dispatch workflow"]
+tags = ["mechanical", "wastewater", "sludge", "biogas", "methane", "generator", "dispatch", "deterministic"]
+tool_mode = "with-tool"
+
+[params.sludge_production_kg_d]
+type = "float"
+unit = "kg/d"
+description = "SLUDGE-10-PROD-07 sludge production"
+min = 1180.0
+max = 1180.0
+
+[params.volatile_solids_fraction]
+type = "float"
+description = "SLUDGE-10-PROD-07 volatile solids fraction"
+min = 0.74
+max = 0.74
+
+[params.volatile_solids_destruction_fraction]
+type = "float"
+description = "DIGESTER-10-GAS-07 volatile solids destruction fraction"
+min = 0.52
+max = 0.52
+
+[params.biogas_yield_m3_kg_vs]
+type = "float"
+unit = "m3/kg VS"
+description = "DIGESTER-10-GAS-07 biogas yield"
+min = 0.92
+max = 0.92
+
+[params.methane_fraction]
+type = "float"
+description = "DIGESTER-10-GAS-07 methane fraction"
+min = 0.63
+max = 0.63
+
+[params.methane_energy_kwh_m3]
+type = "float"
+unit = "kWh/m3"
+description = "DIGESTER-10-GAS-07 methane energy content"
+min = 9.97
+max = 9.97
+
+[params.generator_electrical_efficiency]
+type = "float"
+description = "GEN-10-DATA-07 generator electrical efficiency"
+min = 0.36
+max = 0.36
+
+[params.generator_rated_kw]
+type = "float"
+unit = "kW"
+description = "GEN-10-DATA-07 generator rating"
+min = 180.0
+max = 180.0
+
+[params.critical_process_load_kw]
+type = "float"
+unit = "kW"
+description = "LOAD-10-PROFILE-07 critical process load"
+min = 86.0
+max = 86.0
+
+[params.dispatch_runtime_h]
+type = "float"
+unit = "h"
+description = "POLICY-10-DISPATCH-07 required dispatch runtime"
+min = 8.0
+max = 8.0
+
+[params.parasitic_load_kw]
+type = "float"
+unit = "kW"
+description = "LOAD-10-PROFILE-07 parasitic generator plant load"
+min = 12.0
+max = 12.0
+
+[params.heat_recovery_efficiency]
+type = "float"
+description = "GEN-10-DATA-07 heat recovery efficiency"
+min = 0.44
+max = 0.44
+
+[params.heat_load_kwh_d]
+type = "float"
+unit = "kWh/d"
+description = "LOAD-10-PROFILE-07 heat load to offset"
+min = 1050.0
+max = 1050.0
+
+[outputs.volatile_solids_feed_kg_d]
+description = "Volatile solids feed"
+tolerance = 0.03
+
+[outputs.volatile_solids_destroyed_kg_d]
+description = "Volatile solids destroyed"
+tolerance = 0.03
+
+[outputs.biogas_m3_d]
+description = "Daily biogas production"
+tolerance = 0.03
+
+[outputs.methane_m3_d]
+description = "Daily methane production"
+tolerance = 0.03
+
+[outputs.methane_energy_kwh_d]
+description = "Daily methane energy"
+tolerance = 0.03
+
+[outputs.generator_electric_energy_kwh_d]
+description = "Daily generator electric energy"
+tolerance = 0.03
+
+[outputs.average_generator_kw]
+description = "Average generator power over day"
+tolerance = 0.03
+
+[outputs.generator_capacity_margin_kw]
+description = "Generator rating minus critical and parasitic load"
+tolerance = 0.03
+
+[outputs.critical_dispatch_energy_kwh]
+description = "Critical dispatch energy"
+tolerance = 0.03
+
+[outputs.dispatch_energy_margin_kwh]
+description = "Generator electric energy minus critical dispatch energy"
+tolerance = 0.03
+
+[outputs.available_runtime_hr]
+description = "Available runtime at critical plus parasitic load"
+tolerance = 0.03
+
+[outputs.heat_recovery_kwh_d]
+description = "Daily heat recovery"
+tolerance = 0.03
+
+[outputs.heat_recovery_margin_kwh_d]
+description = "Recovered heat minus heat load"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when generator capacity, dispatch energy, and heat recovery margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc10_biogas_generator_dispatch_case]
+description = "Biogas, sludge, and generator dispatch source pack"
+site_contexts = ["biogas-generator-dispatch", "sludge-gas-dispatch-check"]
+
+[archetypes.ssc10_biogas_generator_dispatch_case.params]
+sludge_production_kg_d = {min = 1180.0, max = 1180.0}
+volatile_solids_fraction = {min = 0.74, max = 0.74}
+volatile_solids_destruction_fraction = {min = 0.52, max = 0.52}
+biogas_yield_m3_kg_vs = {min = 0.92, max = 0.92}
+methane_fraction = {min = 0.63, max = 0.63}
+methane_energy_kwh_m3 = {min = 9.97, max = 9.97}
+generator_electrical_efficiency = {min = 0.36, max = 0.36}
+generator_rated_kw = {min = 180.0, max = 180.0}
+critical_process_load_kw = {min = 86.0, max = 86.0}
+dispatch_runtime_h = {min = 8.0, max = 8.0}
+parasitic_load_kw = {min = 12.0, max = 12.0}
+heat_recovery_efficiency = {min = 0.44, max = 0.44}
+heat_load_kwh_d = {min = 1050.0, max = 1050.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-10 biogas dispatch package"
+visibility = "all_given"
+archetypes = ["ssc10_biogas_generator_dispatch_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-10 biogas dispatch package"
+visibility = "all_given"
+archetypes = ["ssc10_biogas_generator_dispatch_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-10 biogas dispatch package"
+visibility = "all_given"
+archetypes = ["ssc10_biogas_generator_dispatch_case"]

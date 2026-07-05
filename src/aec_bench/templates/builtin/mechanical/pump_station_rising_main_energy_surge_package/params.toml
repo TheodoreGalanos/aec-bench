@@ -1,0 +1,222 @@
+# ABOUTME: Defines the SSC-11 pump station rising-main energy and surge template.
+# ABOUTME: Pins one synthetic pump, rising-main, transient, and feeder source package.
+
+[meta]
+name = "pump-station-rising-main-energy-surge-package"
+description = "SSC-11 rising-main energy, surge pressure, and feeder voltage metrics"
+long_description = "Calculates source-bound pump station rising-main metrics from a deterministic SSC-11 task-owned source pack. The template combines Hazen-Williams loss, total dynamic head, hydraulic and motor power, surge pressure, pressure trip margin, pipe pressure margin, feeder current, voltage drop, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "pump-energy"
+standards = ["Hazen-Williams hydraulic calculations", "Joukowsky surge screening", "Pump duty energy checks", "Feeder voltage-drop coordination"]
+tags = ["mechanical", "pump-station", "rising-main", "surge", "energy", "feeder", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_l_s]
+type = "float"
+unit = "L/s"
+description = "PUMP-SSC11-006 pump duty flow"
+min = 68.13617500413491
+max = 68.13617500413491
+
+[params.static_head_m]
+type = "float"
+unit = "m"
+description = "PROFILE-SSC11-006 static head"
+min = 31.0
+max = 31.0
+
+[params.rising_main_length_m]
+type = "float"
+unit = "m"
+description = "PROFILE-SSC11-006 rising-main length"
+min = 915.5489290180652
+max = 915.5489290180652
+
+[params.pipe_internal_diameter_mm]
+type = "float"
+unit = "mm"
+description = "PIPE-SSC11-006 pipe internal diameter"
+min = 250.27590903686897
+max = 250.27590903686897
+
+[params.hazen_williams_c]
+type = "float"
+description = "PIPE-SSC11-006 Hazen-Williams coefficient"
+min = 130.0
+max = 130.0
+
+[params.pump_efficiency]
+type = "float"
+description = "PUMP-SSC11-006 pump efficiency"
+min = 0.82
+max = 0.82
+
+[params.motor_efficiency]
+type = "float"
+description = "PUMP-SSC11-006 motor efficiency"
+min = 0.894144295124421
+max = 0.894144295124421
+
+[params.velocity_change_fraction]
+type = "float"
+description = "PUMP-SSC11-006 surge velocity-change fraction"
+min = 0.85
+max = 0.85
+
+[params.wave_speed_m_s]
+type = "float"
+unit = "m/s"
+description = "PIPE-SSC11-006 screening wave speed"
+min = 928.5183235445193
+max = 928.5183235445193
+
+[params.fluid_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "PIPE-SSC11-006 fluid density"
+min = 998.0
+max = 998.0
+
+[params.base_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "PUMP-SSC11-006 steady base pressure"
+min = 520.0
+max = 520.0
+
+[params.pipe_pressure_class_kpa]
+type = "float"
+unit = "kPa"
+description = "PIPE-SSC11-006 pipe pressure class"
+min = 1850.0
+max = 1850.0
+
+[params.high_high_trip_setpoint_kpa]
+type = "float"
+unit = "kPa"
+description = "PUMP-SSC11-006 high-high pressure trip setpoint"
+min = 1750.0
+max = 1750.0
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "FEED-SSC11-006 feeder voltage"
+min = 415.0
+max = 415.0
+
+[params.motor_power_factor]
+type = "float"
+description = "FEED-SSC11-006 motor power factor"
+min = 0.8481852929567529
+max = 0.8481852929567529
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "FEED-SSC11-006 feeder route length"
+min = 0.18
+max = 0.18
+
+[params.conductor_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "FEED-SSC11-006 conductor resistance"
+min = 0.3319917367928062
+max = 0.3319917367928062
+
+[params.allowable_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "MEMO-SSC11-006 allowable voltage drop"
+min = 5.0
+max = 5.0
+
+[outputs.hazen_williams_loss_m]
+description = "Rising-main Hazen-Williams loss"
+tolerance = 0.03
+
+[outputs.total_dynamic_head_m]
+description = "Static head plus rising-main friction loss"
+tolerance = 0.03
+
+[outputs.hydraulic_power_kw]
+description = "Hydraulic power at pump duty"
+tolerance = 0.03
+
+[outputs.motor_input_power_kw]
+description = "Motor input power including pump and motor efficiency"
+tolerance = 0.03
+
+[outputs.steady_velocity_m_s]
+description = "Steady velocity in the rising main"
+tolerance = 0.03
+
+[outputs.surge_pressure_rise_kpa]
+description = "Screening surge pressure rise"
+tolerance = 0.03
+
+[outputs.peak_transient_pressure_kpa]
+description = "Base pressure plus surge pressure rise"
+tolerance = 0.03
+
+[outputs.pressure_trip_margin_kpa]
+description = "High-high trip setpoint margin"
+tolerance = 0.03
+
+[outputs.pipe_pressure_margin_kpa]
+description = "Pipe pressure class margin"
+tolerance = 0.03
+
+[outputs.feeder_current_a]
+description = "Three-phase feeder current"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "Feeder voltage drop percent"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Allowable voltage-drop margin"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for the task-owned surge, pressure, and feeder checks"
+tolerance = 0.03
+
+[archetypes.ssc11_rising_main_surge_case]
+description = "Pump station rising-main energy and surge case"
+flow_l_s = {min = 68.13617500413491, max = 68.13617500413491}
+static_head_m = {min = 31.0, max = 31.0}
+rising_main_length_m = {min = 915.5489290180652, max = 915.5489290180652}
+pipe_internal_diameter_mm = {min = 250.27590903686897, max = 250.27590903686897}
+hazen_williams_c = {min = 130.0, max = 130.0}
+pump_efficiency = {min = 0.82, max = 0.82}
+motor_efficiency = {min = 0.894144295124421, max = 0.894144295124421}
+velocity_change_fraction = {min = 0.85, max = 0.85}
+wave_speed_m_s = {min = 928.5183235445193, max = 928.5183235445193}
+fluid_density_kg_m3 = {min = 998.0, max = 998.0}
+base_pressure_kpa = {min = 520.0, max = 520.0}
+pipe_pressure_class_kpa = {min = 1850.0, max = 1850.0}
+high_high_trip_setpoint_kpa = {min = 1750.0, max = 1750.0}
+feeder_voltage_v = {min = 415.0, max = 415.0}
+motor_power_factor = {min = 0.8481852929567529, max = 0.8481852929567529}
+feeder_length_km = {min = 0.18, max = 0.18}
+conductor_resistance_ohm_km = {min = 0.3319917367928062, max = 0.3319917367928062}
+allowable_voltage_drop_percent = {min = 5.0, max = 5.0}
+site_contexts = ["pump-station", "rising-main-energy-surge-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-11 rising-main package"
+visibility = "all_given"
+archetypes = ["ssc11_rising_main_surge_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-11 rising-main package"
+visibility = "all_given"
+archetypes = ["ssc11_rising_main_surge_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-11 rising-main package"
+visibility = "all_given"
+archetypes = ["ssc11_rising_main_surge_case"]

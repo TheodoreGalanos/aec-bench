@@ -1,0 +1,196 @@
+[meta]
+name = "fire-life-safety-communications-load-package"
+description = "SSC-05 fire/life-safety, access, CCTV, communications, UPS, and feeder metrics"
+long_description = "Calculates deterministic SSC-05 life-safety and communications load metrics from a task-owned synthetic source pack. The template combines NAC current, fire panel load, emergency lighting, access/CCTV/network loads, UPS autonomy, feeder current, and an overall synthetic pass score."
+discipline = "electrical"
+category = "life-safety-comms-load"
+standards = ["life-safety load schedule workflow", "CCTV/access device schedule workflow", "UPS autonomy review workflow"]
+tags = ["electrical", "life-safety", "communications", "cctv", "access-control", "ups", "feeder", "deterministic"]
+tool_mode = "with-tool"
+
+[params.nac_device_count]
+type = "float"
+description = "FIRE-05-LOAD-04 notification-appliance count"
+min = 65.0
+max = 65.0
+
+[params.nac_device_current_a]
+type = "float"
+unit = "A"
+description = "FIRE-05-LOAD-04 current per notification appliance"
+min = 0.14
+max = 0.14
+
+[params.nac_voltage_v]
+type = "float"
+unit = "V"
+description = "FIRE-05-LOAD-04 NAC circuit voltage"
+min = 24.0
+max = 24.0
+
+[params.fire_panel_load_kw]
+type = "float"
+unit = "kW"
+description = "FIRE-05-LOAD-04 fire panel load"
+min = 0.26
+max = 0.26
+
+[params.emergency_lighting_load_kw]
+type = "float"
+unit = "kW"
+description = "CRIT-05-EMERG-04 emergency-mode lighting load"
+min = 1.0816
+max = 1.0816
+
+[params.access_controller_count]
+type = "float"
+description = "CCTV-05-DEVICE-04 access-controller count"
+min = 4.0
+max = 4.0
+
+[params.access_controller_w]
+type = "float"
+unit = "W"
+description = "CCTV-05-DEVICE-04 access-controller load"
+min = 85.0
+max = 85.0
+
+[params.cctv_camera_count]
+type = "float"
+description = "CCTV-05-DEVICE-04 camera count"
+min = 18.0
+max = 18.0
+
+[params.cctv_camera_w]
+type = "float"
+unit = "W"
+description = "CCTV-05-DEVICE-04 camera load"
+min = 55.0
+max = 55.0
+
+[params.network_core_w]
+type = "float"
+unit = "W"
+description = "COMMS-05-TOPO-04 network-core load"
+min = 650.0
+max = 650.0
+
+[params.emergency_runtime_h]
+type = "float"
+unit = "h"
+description = "CRIT-05-EMERG-04 emergency runtime"
+min = 5.6
+max = 5.6
+
+[params.ups_nominal_kwh]
+type = "float"
+unit = "kWh"
+description = "UPS-05-DATA-04 nominal battery capacity"
+min = 27.0
+max = 27.0
+
+[params.ups_usable_fraction]
+type = "float"
+description = "UPS-05-DATA-04 usable battery fraction"
+min = 0.78
+max = 0.78
+
+[params.nac_circuit_limit_a]
+type = "float"
+unit = "A"
+description = "FIRE-05-LOAD-04 NAC circuit limit"
+min = 12.0
+max = 12.0
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "MEMO-05-LIFE-04 feeder voltage for the life-safety panel"
+min = 250.0
+max = 250.0
+
+[params.feeder_allowable_current_a]
+type = "float"
+unit = "A"
+description = "MEMO-05-LIFE-04 feeder allowable current"
+min = 20.0
+max = 20.0
+
+[outputs.life_safety_load_kw]
+description = "NAC, fire panel, and emergency-lighting load"
+tolerance = 0.03
+
+[outputs.communications_load_kw]
+description = "Access, CCTV, and network-core load"
+tolerance = 0.03
+
+[outputs.total_essential_load_kw]
+description = "Total life-safety and communications load"
+tolerance = 0.03
+
+[outputs.battery_required_kwh]
+description = "Required emergency battery energy"
+tolerance = 0.03
+
+[outputs.usable_battery_kwh]
+description = "Usable UPS battery energy"
+tolerance = 0.03
+
+[outputs.battery_margin_kwh]
+description = "Usable UPS energy minus required emergency energy"
+tolerance = 0.03
+
+[outputs.nac_current_a]
+description = "Notification-appliance circuit current"
+tolerance = 0.03
+
+[outputs.nac_margin_a]
+description = "NAC circuit current limit minus calculated current"
+tolerance = 0.03
+
+[outputs.feeder_current_a]
+description = "Life-safety feeder current"
+tolerance = 0.03
+
+[outputs.feeder_margin_a]
+description = "Life-safety feeder allowable current minus calculated current"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when battery, NAC, and feeder margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc05_life_safety_case]
+description = "Fire/life-safety and communications load package tied to one device schedule, topology, UPS, emergency criterion, and memo"
+nac_device_count = {min = 65.0, max = 65.0}
+nac_device_current_a = {min = 0.14, max = 0.14}
+nac_voltage_v = {min = 24.0, max = 24.0}
+fire_panel_load_kw = {min = 0.26, max = 0.26}
+emergency_lighting_load_kw = {min = 1.0816, max = 1.0816}
+access_controller_count = {min = 4.0, max = 4.0}
+access_controller_w = {min = 85.0, max = 85.0}
+cctv_camera_count = {min = 18.0, max = 18.0}
+cctv_camera_w = {min = 55.0, max = 55.0}
+network_core_w = {min = 650.0, max = 650.0}
+emergency_runtime_h = {min = 5.6, max = 5.6}
+ups_nominal_kwh = {min = 27.0, max = 27.0}
+ups_usable_fraction = {min = 0.78, max = 0.78}
+nac_circuit_limit_a = {min = 12.0, max = 12.0}
+feeder_voltage_v = {min = 250.0, max = 250.0}
+feeder_allowable_current_a = {min = 20.0, max = 20.0}
+site_contexts = ["life-safety-comms-load"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-05 life-safety communications package"
+visibility = "all_given"
+archetypes = ["ssc05_life_safety_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-05 life-safety communications package"
+visibility = "all_given"
+archetypes = ["ssc05_life_safety_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-05 life-safety communications package"
+visibility = "all_given"
+archetypes = ["ssc05_life_safety_case"]

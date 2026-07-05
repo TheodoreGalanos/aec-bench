@@ -1,0 +1,172 @@
+# ABOUTME: Defines the SSC-10 chemical dosing, storage, and containment template.
+# ABOUTME: Pins one flow, dose, storage, bund, pump, and memo source pack.
+
+[meta]
+name = "chemical-dosing-storage-containment-package"
+description = "SSC-10 chemical dosing, storage, and containment metrics"
+long_description = "Calculates source-bound chemical dosing metrics from a deterministic SSC-10 task-owned source pack. The template combines dose mass, solution volume, storage refill margin, bund volume, dosing pump flow, control signal, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "chemical-dosing-containment"
+standards = ["chemical dosing workflow", "bund containment workflow", "4-20 mA loop scaling"]
+tags = ["mechanical", "wastewater", "chemical", "dosing", "storage", "bund", "pump", "control", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_rate_m3_d]
+type = "float"
+unit = "m3/d"
+description = "FLOW-10-CHEM-03 process flow"
+min = 4800.0
+max = 4800.0
+
+[params.chemical_dose_mg_l]
+type = "float"
+unit = "mg/L"
+description = "DOSE-10-BASIS-03 chemical dose"
+min = 38.0
+max = 38.0
+
+[params.solution_strength_kg_l]
+type = "float"
+unit = "kg/L"
+description = "DOSE-10-BASIS-03 solution strength"
+min = 0.48
+max = 0.48
+
+[params.required_storage_days]
+type = "float"
+unit = "d"
+description = "TANK-10-STORAGE-03 required storage duration"
+min = 18.0
+max = 18.0
+
+[params.installed_storage_m3]
+type = "float"
+unit = "m3"
+description = "TANK-10-STORAGE-03 installed storage"
+min = 7.8
+max = 7.8
+
+[params.largest_tank_m3]
+type = "float"
+unit = "m3"
+description = "BUND-10-DETAIL-03 largest tank"
+min = 6.0
+max = 6.0
+
+[params.bund_factor]
+type = "float"
+description = "BUND-10-DETAIL-03 containment factor"
+min = 1.1
+max = 1.1
+
+[params.rain_allowance_m3]
+type = "float"
+unit = "m3"
+description = "BUND-10-DETAIL-03 rain allowance"
+min = 0.25
+max = 0.25
+
+[params.bund_available_m3]
+type = "float"
+unit = "m3"
+description = "BUND-10-DETAIL-03 available bund volume"
+min = 8.2
+max = 8.2
+
+[params.pump_operating_hours_d]
+type = "float"
+unit = "h/d"
+description = "PUMP-10-CONTROL-03 daily dosing pump operating hours"
+min = 20.0
+max = 20.0
+
+[params.selected_pump_capacity_l_h]
+type = "float"
+unit = "L/h"
+description = "PUMP-10-CONTROL-03 selected pump capacity"
+min = 22.0
+max = 22.0
+
+[params.signal_range_l_h]
+type = "float"
+unit = "L/h"
+description = "PUMP-10-CONTROL-03 20 mA pump signal range"
+min = 30.0
+max = 30.0
+
+[outputs.chemical_mass_kg_d]
+description = "Daily chemical mass"
+tolerance = 0.03
+
+[outputs.solution_volume_l_d]
+description = "Daily dosing solution volume"
+tolerance = 0.03
+
+[outputs.required_storage_m3]
+description = "Required chemical storage"
+tolerance = 0.03
+
+[outputs.refill_margin_d]
+description = "Installed refill margin"
+tolerance = 0.03
+
+[outputs.bund_required_m3]
+description = "Required bund volume"
+tolerance = 0.03
+
+[outputs.bund_margin_m3]
+description = "Available bund volume minus required bund volume"
+tolerance = 0.03
+
+[outputs.dosing_pump_flow_l_h]
+description = "Required dosing pump flow"
+tolerance = 0.03
+
+[outputs.pump_capacity_margin_l_h]
+description = "Selected pump capacity minus required pump flow"
+tolerance = 0.03
+
+[outputs.design_signal_ma]
+description = "Design 4-20 mA signal"
+tolerance = 0.03
+
+[outputs.signal_headroom_ma]
+description = "20 mA minus design signal"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when storage, bund, pump, and signal margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc10_chemical_dosing_containment_case]
+description = "Chemical dosing, storage, containment, and control source pack"
+site_contexts = ["chemical-dosing-containment", "chemical-storage-pump-check"]
+
+[archetypes.ssc10_chemical_dosing_containment_case.params]
+flow_rate_m3_d = {min = 4800.0, max = 4800.0}
+chemical_dose_mg_l = {min = 38.0, max = 38.0}
+solution_strength_kg_l = {min = 0.48, max = 0.48}
+required_storage_days = {min = 18.0, max = 18.0}
+installed_storage_m3 = {min = 7.8, max = 7.8}
+largest_tank_m3 = {min = 6.0, max = 6.0}
+bund_factor = {min = 1.1, max = 1.1}
+rain_allowance_m3 = {min = 0.25, max = 0.25}
+bund_available_m3 = {min = 8.2, max = 8.2}
+pump_operating_hours_d = {min = 20.0, max = 20.0}
+selected_pump_capacity_l_h = {min = 22.0, max = 22.0}
+signal_range_l_h = {min = 30.0, max = 30.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-10 chemical dosing package"
+visibility = "all_given"
+archetypes = ["ssc10_chemical_dosing_containment_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-10 chemical dosing package"
+visibility = "all_given"
+archetypes = ["ssc10_chemical_dosing_containment_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-10 chemical dosing package"
+visibility = "all_given"
+archetypes = ["ssc10_chemical_dosing_containment_case"]

@@ -1,0 +1,200 @@
+# ABOUTME: Defines the SSC-07 excavation dewatering and temporary power package template.
+# ABOUTME: Pins one excavation, groundwater, pump, backup power, and uplift case.
+
+[meta]
+name = "excavation-dewatering-temporary-power-package"
+description = "SSC-07 excavation seepage, dewatering pump power, backup, and uplift metrics"
+long_description = "Calculates source-bound excavation and dewatering metrics from a deterministic SSC-07 task-owned source pack. The template combines exit-gradient safety, rapid-drawdown screening, pump power, temporary generator capacity, battery runtime, and uplift pressure checks."
+discipline = "ground"
+category = "ground-investigation"
+standards = ["exit gradient screening", "rapid drawdown slope screening", "pump power calculation"]
+tags = ["ground", "excavation", "dewatering", "temporary-power", "uplift", "deterministic"]
+tool_mode = "with-tool"
+
+[params.water_head_above_base_m]
+type = "float"
+unit = "m"
+description = "GW-07-DEWATER-01 water head above excavation base"
+min = 3.2
+max = 3.2
+
+[params.seepage_path_m]
+type = "float"
+unit = "m"
+description = "EXC-07-SECTION-01 seepage path length"
+min = 14.0
+max = 14.0
+
+[params.critical_gradient]
+type = "float"
+description = "GW-07-DEWATER-01 critical exit gradient"
+min = 0.9
+max = 0.9
+
+[params.slope_angle_deg]
+type = "float"
+unit = "degrees"
+description = "EXC-07-SECTION-01 temporary slope angle"
+min = 26.0
+max = 26.0
+
+[params.friction_angle_deg]
+type = "float"
+unit = "degrees"
+description = "EXC-07-SECTION-01 drained friction angle"
+min = 34.0
+max = 34.0
+
+[params.pore_pressure_ratio]
+type = "float"
+description = "GW-07-DEWATER-01 rapid-drawdown pore pressure ratio"
+min = 0.18
+max = 0.18
+
+[params.pump_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "PUMP-07-TEMP-01 pump flow per pump"
+min = 0.024
+max = 0.024
+
+[params.pump_head_m]
+type = "float"
+unit = "m"
+description = "PUMP-07-TEMP-01 dewatering pump head"
+min = 12.0
+max = 12.0
+
+[params.pump_efficiency]
+type = "float"
+description = "PUMP-07-TEMP-01 pump efficiency"
+min = 0.62
+max = 0.62
+
+[params.pump_count]
+type = "float"
+unit = "count"
+description = "PUMP-07-TEMP-01 operating pump count"
+min = 2.0
+max = 2.0
+
+[params.controls_load_kw]
+type = "float"
+unit = "kW"
+description = "PWR-07-TEMP-01 controls and monitoring load"
+min = 1.5
+max = 1.5
+
+[params.generator_capacity_kw]
+type = "float"
+unit = "kW"
+description = "PWR-07-TEMP-01 temporary generator capacity"
+min = 18.0
+max = 18.0
+
+[params.battery_capacity_kwh]
+type = "float"
+unit = "kWh"
+description = "PWR-07-TEMP-01 backup battery capacity"
+min = 25.0
+max = 25.0
+
+[params.autonomy_load_kw]
+type = "float"
+unit = "kW"
+description = "PWR-07-TEMP-01 critical autonomy load"
+min = 3.0
+max = 3.0
+
+[params.required_runtime_h]
+type = "float"
+unit = "h"
+description = "MEMO-07-TEMP-01 required monitoring runtime"
+min = 6.0
+max = 6.0
+
+[params.slab_resisting_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "EXC-07-SECTION-01 slab resisting pressure"
+min = 42.0
+max = 42.0
+
+[outputs.exit_gradient]
+description = "Water head above base divided by seepage path"
+tolerance = 0.03
+
+[outputs.exit_gradient_fs]
+description = "Critical gradient divided by exit gradient"
+tolerance = 0.03
+
+[outputs.rapid_drawdown_fs]
+description = "Rapid-drawdown slope factor of safety"
+tolerance = 0.03
+
+[outputs.pump_power_kw]
+description = "Per-pump hydraulic input power"
+tolerance = 0.03
+
+[outputs.temporary_power_kw]
+description = "Pump power for all pumps plus controls load"
+tolerance = 0.03
+
+[outputs.generator_margin_kw]
+description = "Generator capacity minus temporary power"
+tolerance = 0.03
+
+[outputs.battery_runtime_h]
+description = "Battery runtime at autonomy load"
+tolerance = 0.03
+
+[outputs.battery_runtime_margin_h]
+description = "Battery runtime minus required runtime"
+tolerance = 0.03
+
+[outputs.uplift_pressure_kpa]
+description = "Water unit weight times water head above base"
+tolerance = 0.03
+
+[outputs.uplift_margin_kpa]
+description = "Slab resisting pressure minus uplift pressure"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when seepage, slope, power, runtime, and uplift checks pass"
+tolerance = 0.03
+
+[archetypes.ssc07_excavation_dewatering_case]
+description = "Ground investigation package for one excavation, dewatering, and temporary power check"
+water_head_above_base_m = {min = 3.2, max = 3.2}
+seepage_path_m = {min = 14.0, max = 14.0}
+critical_gradient = {min = 0.9, max = 0.9}
+slope_angle_deg = {min = 26.0, max = 26.0}
+friction_angle_deg = {min = 34.0, max = 34.0}
+pore_pressure_ratio = {min = 0.18, max = 0.18}
+pump_flow_m3_s = {min = 0.024, max = 0.024}
+pump_head_m = {min = 12.0, max = 12.0}
+pump_efficiency = {min = 0.62, max = 0.62}
+pump_count = {min = 2.0, max = 2.0}
+controls_load_kw = {min = 1.5, max = 1.5}
+generator_capacity_kw = {min = 18.0, max = 18.0}
+battery_capacity_kwh = {min = 25.0, max = 25.0}
+autonomy_load_kw = {min = 3.0, max = 3.0}
+required_runtime_h = {min = 6.0, max = 6.0}
+slab_resisting_pressure_kpa = {min = 42.0, max = 42.0}
+site_contexts = ["excavation-dewatering", "temporary-power-handoff"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-07 excavation dewatering package"
+visibility = "all_given"
+archetypes = ["ssc07_excavation_dewatering_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-07 excavation dewatering package"
+visibility = "all_given"
+archetypes = ["ssc07_excavation_dewatering_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-07 excavation dewatering package"
+visibility = "all_given"
+archetypes = ["ssc07_excavation_dewatering_case"]

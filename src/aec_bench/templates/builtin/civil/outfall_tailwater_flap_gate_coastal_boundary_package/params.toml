@@ -1,0 +1,164 @@
+# ABOUTME: Defines the SSC-03 outfall tailwater flap-gate coastal-boundary template.
+# ABOUTME: Pins one synthetic outfall, tide, flap-gate, and upstream HGL source package.
+
+[meta]
+name = "outfall-tailwater-flap-gate-coastal-boundary-package"
+description = "SSC-03 outfall tailwater, flap-gate loss, HGL, and coastal freeboard metrics"
+long_description = "Calculates source-bound outfall tailwater metrics from a deterministic SSC-03 task-owned source pack. The template combines pipe velocity, Manning friction, flap-gate headloss, upstream HGL, outfall submergence, HGL clearance, coastal freeboard margin, and an overall synthetic pass score."
+discipline = "civil"
+category = "outfall-tailwater"
+standards = ["Manning pipe hydraulics", "flap-gate headloss checks", "outfall tailwater workflows", "coastal boundary coordination"]
+tags = ["civil", "stormwater", "outfall", "tailwater", "flap-gate", "coastal", "deterministic"]
+tool_mode = "with-tool"
+
+[params.pipe_diameter_m]
+type = "float"
+unit = "m"
+description = "OUTFALL-SSC03-005 outfall pipe diameter"
+min = 0.9
+max = 0.9
+
+[params.design_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "HGL-SSC03-005 design flow"
+min = 0.72
+max = 0.72
+
+[params.pipe_length_m]
+type = "float"
+unit = "m"
+description = "OUTFALL-SSC03-005 outfall pipe length"
+min = 95.0
+max = 95.0
+
+[params.manning_n]
+type = "float"
+description = "OUTFALL-SSC03-005 Manning roughness"
+min = 0.013
+max = 0.013
+
+[params.tailwater_level_m]
+type = "float"
+unit = "m"
+description = "TIDE-SSC03-005 tailwater level"
+min = 2.85
+max = 2.85
+
+[params.outfall_invert_m]
+type = "float"
+unit = "m"
+description = "OUTFALL-SSC03-005 outfall invert"
+min = 1.72
+max = 1.72
+
+[params.flap_gate_loss_coefficient]
+type = "float"
+description = "FLAP-SSC03-005 flap-gate loss coefficient"
+min = 1.25
+max = 1.25
+
+[params.minor_loss_coefficient]
+type = "float"
+description = "HGL-SSC03-005 minor-loss coefficient"
+min = 0.4
+max = 0.4
+
+[params.upstream_rim_level_m]
+type = "float"
+unit = "m"
+description = "HGL-SSC03-005 upstream rim level"
+min = 3.75
+max = 3.75
+
+[params.minimum_hgl_clearance_m]
+type = "float"
+unit = "m"
+description = "MEMO-SSC03-005 minimum HGL clearance"
+min = 0.35
+max = 0.35
+
+[params.coastal_crest_level_m]
+type = "float"
+unit = "m"
+description = "TIDE-SSC03-005 coastal crest level"
+min = 3.55
+max = 3.55
+
+[params.required_coastal_freeboard_m]
+type = "float"
+unit = "m"
+description = "MEMO-SSC03-005 required coastal freeboard"
+min = 0.45
+max = 0.45
+
+[outputs.pipe_velocity_m_s]
+description = "Outfall pipe velocity"
+tolerance = 0.03
+
+[outputs.friction_loss_m]
+description = "Outfall pipe friction loss"
+tolerance = 0.03
+
+[outputs.flap_gate_headloss_m]
+description = "Flap-gate headloss"
+tolerance = 0.03
+
+[outputs.minor_loss_m]
+description = "Minor loss"
+tolerance = 0.03
+
+[outputs.upstream_hgl_m]
+description = "Upstream HGL under tailwater boundary"
+tolerance = 0.03
+
+[outputs.outfall_submergence_m]
+description = "Tailwater above outfall pipe crown"
+tolerance = 0.03
+
+[outputs.hgl_clearance_m]
+description = "Upstream rim level minus upstream HGL"
+tolerance = 0.03
+
+[outputs.hgl_clearance_margin_m]
+description = "HGL clearance minus minimum clearance"
+tolerance = 0.03
+
+[outputs.coastal_freeboard_margin_m]
+description = "Coastal crest margin above tailwater and required freeboard"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for HGL and coastal freeboard checks"
+tolerance = 0.03
+
+[archetypes.ssc03_outfall_tailwater_case]
+description = "Outfall tailwater and flap-gate case"
+pipe_diameter_m = {min = 0.9, max = 0.9}
+design_flow_m3_s = {min = 0.72, max = 0.72}
+pipe_length_m = {min = 95.0, max = 95.0}
+manning_n = {min = 0.013, max = 0.013}
+tailwater_level_m = {min = 2.85, max = 2.85}
+outfall_invert_m = {min = 1.72, max = 1.72}
+flap_gate_loss_coefficient = {min = 1.25, max = 1.25}
+minor_loss_coefficient = {min = 0.4, max = 0.4}
+upstream_rim_level_m = {min = 3.75, max = 3.75}
+minimum_hgl_clearance_m = {min = 0.35, max = 0.35}
+coastal_crest_level_m = {min = 3.55, max = 3.55}
+required_coastal_freeboard_m = {min = 0.45, max = 0.45}
+site_contexts = ["outfall-tailwater", "flap-gate-hgl-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-03 outfall tailwater package"
+visibility = "all_given"
+archetypes = ["ssc03_outfall_tailwater_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-03 outfall tailwater package"
+visibility = "all_given"
+archetypes = ["ssc03_outfall_tailwater_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-03 outfall tailwater package"
+visibility = "all_given"
+archetypes = ["ssc03_outfall_tailwater_case"]

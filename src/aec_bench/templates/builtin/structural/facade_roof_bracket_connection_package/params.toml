@@ -1,0 +1,219 @@
+# ABOUTME: Defines the SSC-14 facade or roof bracket connection template.
+# ABOUTME: Pins one bracket, anchor, wind, and material-certificate source pack.
+
+[meta]
+name = "facade-roof-bracket-connection-package"
+description = "SSC-14 facade or roof bracket, anchor, and material certificate metrics"
+long_description = "Calculates source-bound facade or roof bracket connection metrics from a deterministic SSC-14 task-owned source pack. The template combines wind tributary load, bracket reaction, anchor combined utilization, carbon-equivalent material screening, and overall pass scoring."
+discipline = "structural"
+category = "structural-connections"
+standards = ["AS/NZS 1170.2", "AS 4100", "EN 1993-1-8", "anchor design report"]
+tags = ["structural", "facade", "roof", "bracket", "anchor", "connection", "material-certificate", "deterministic"]
+tool_mode = "with-tool"
+
+[params.wind_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "WIND-SSC14-002 controlling facade or roof pressure"
+min = 1.45
+max = 1.45
+
+[params.tributary_width_m]
+type = "float"
+unit = "m"
+description = "ELEV-SSC14-002 bracket tributary width"
+min = 0.75
+max = 0.75
+
+[params.tributary_height_m]
+type = "float"
+unit = "m"
+description = "ELEV-SSC14-002 bracket tributary height"
+min = 1.6
+max = 1.6
+
+[params.facade_dead_load_kpa]
+type = "float"
+unit = "kPa"
+description = "BRKT-SSC14-002 cladding and rail dead load"
+min = 0.42
+max = 0.42
+
+[params.wind_load_factor]
+type = "float"
+description = "LC-SSC14-002 wind load factor"
+min = 1.5
+max = 1.5
+
+[params.dead_load_factor]
+type = "float"
+description = "LC-SSC14-002 dead load factor"
+min = 1.2
+max = 1.2
+
+[params.bracket_horizontal_capacity_kn]
+type = "float"
+unit = "kN"
+description = "BRKT-SSC14-002 selected bracket horizontal capacity"
+min = 2.8
+max = 2.8
+
+[params.anchor_tension_capacity_kn]
+type = "float"
+unit = "kN"
+description = "BRKT-SSC14-002 anchor design tension capacity"
+min = 3.4
+max = 3.4
+
+[params.anchor_shear_capacity_kn]
+type = "float"
+unit = "kN"
+description = "BRKT-SSC14-002 anchor design shear capacity"
+min = 4.0
+max = 4.0
+
+[params.active_anchor_count]
+type = "int"
+description = "BRKT-SSC14-002 active anchors in the bracket group"
+min = 2
+max = 2
+
+[params.carbon_percent]
+type = "float"
+unit = "%"
+description = "MAT-SSC14-002 material certificate carbon percentage"
+min = 0.17
+max = 0.17
+
+[params.manganese_percent]
+type = "float"
+unit = "%"
+description = "MAT-SSC14-002 material certificate manganese percentage"
+min = 1.25
+max = 1.25
+
+[params.chromium_percent]
+type = "float"
+unit = "%"
+description = "MAT-SSC14-002 material certificate chromium percentage"
+min = 0.3
+max = 0.3
+
+[params.molybdenum_percent]
+type = "float"
+unit = "%"
+description = "MAT-SSC14-002 material certificate molybdenum percentage"
+min = 0.08
+max = 0.08
+
+[params.vanadium_percent]
+type = "float"
+unit = "%"
+description = "MAT-SSC14-002 material certificate vanadium percentage"
+min = 0.02
+max = 0.02
+
+[params.nickel_percent]
+type = "float"
+unit = "%"
+description = "MAT-SSC14-002 material certificate nickel percentage"
+min = 0.25
+max = 0.25
+
+[params.copper_percent]
+type = "float"
+unit = "%"
+description = "MAT-SSC14-002 material certificate copper percentage"
+min = 0.18
+max = 0.18
+
+[params.carbon_equivalent_limit]
+type = "float"
+description = "MAT-SSC14-002 carbon equivalent acceptance limit"
+min = 0.5
+max = 0.5
+
+[outputs.tributary_area_m2]
+description = "Bracket tributary area"
+tolerance = 0.03
+
+[outputs.service_wind_load_kn]
+description = "Service wind load on the bracket tributary area"
+tolerance = 0.03
+
+[outputs.service_dead_load_kn]
+description = "Service dead load on the bracket tributary area"
+tolerance = 0.03
+
+[outputs.factored_out_of_plane_reaction_kn]
+description = "Factored out-of-plane bracket reaction"
+tolerance = 0.03
+
+[outputs.factored_vertical_reaction_kn]
+description = "Factored vertical bracket reaction"
+tolerance = 0.03
+
+[outputs.bracket_utilization]
+description = "Factored out-of-plane reaction divided by bracket capacity"
+tolerance = 0.03
+
+[outputs.anchor_tension_per_anchor_kn]
+description = "Factored tension demand per active anchor"
+tolerance = 0.03
+
+[outputs.anchor_shear_per_anchor_kn]
+description = "Factored shear demand per active anchor"
+tolerance = 0.03
+
+[outputs.anchor_combined_utilization]
+description = "Square-root combined tension and shear anchor utilization"
+tolerance = 0.03
+
+[outputs.carbon_equivalent]
+description = "IIW carbon equivalent from the material certificate"
+tolerance = 0.03
+
+[outputs.carbon_equivalent_margin]
+description = "Carbon equivalent limit minus calculated carbon equivalent"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when bracket, anchor, and certificate checks pass"
+tolerance = 0.03
+
+[archetypes.ssc14_facade_roof_connection_case]
+description = "Facade or roof bracket, anchor, and material certificate source pack"
+wind_pressure_kpa = {min = 1.45, max = 1.45}
+tributary_width_m = {min = 0.75, max = 0.75}
+tributary_height_m = {min = 1.6, max = 1.6}
+facade_dead_load_kpa = {min = 0.42, max = 0.42}
+wind_load_factor = {min = 1.5, max = 1.5}
+dead_load_factor = {min = 1.2, max = 1.2}
+bracket_horizontal_capacity_kn = {min = 2.8, max = 2.8}
+anchor_tension_capacity_kn = {min = 3.4, max = 3.4}
+anchor_shear_capacity_kn = {min = 4.0, max = 4.0}
+active_anchor_count = {min = 2, max = 2}
+carbon_percent = {min = 0.17, max = 0.17}
+manganese_percent = {min = 1.25, max = 1.25}
+chromium_percent = {min = 0.3, max = 0.3}
+molybdenum_percent = {min = 0.08, max = 0.08}
+vanadium_percent = {min = 0.02, max = 0.02}
+nickel_percent = {min = 0.25, max = 0.25}
+copper_percent = {min = 0.18, max = 0.18}
+carbon_equivalent_limit = {min = 0.5, max = 0.5}
+site_contexts = ["facade-bracket", "roof-anchor", "material-certificate"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-14 bracket connection package"
+visibility = "all_given"
+archetypes = ["ssc14_facade_roof_connection_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-14 bracket connection package"
+visibility = "all_given"
+archetypes = ["ssc14_facade_roof_connection_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-14 bracket connection package"
+visibility = "all_given"
+archetypes = ["ssc14_facade_roof_connection_case"]

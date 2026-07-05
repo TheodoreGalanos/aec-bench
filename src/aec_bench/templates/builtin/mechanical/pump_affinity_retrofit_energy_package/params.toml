@@ -1,0 +1,157 @@
+# ABOUTME: Defines the SSC-06 pump affinity, retrofit, and energy-performance template.
+# ABOUTME: Pins one existing pump curve, operating profile, VFD, NPSH, motor, and tariff source pack.
+
+[meta]
+name = "pump-affinity-retrofit-energy-package"
+description = "SSC-06 pump affinity, retrofit, and energy-performance metrics"
+long_description = "Calculates source-bound pump retrofit metrics from a deterministic SSC-06 task-owned source pack. The template combines pump affinity-law flow/head/power changes, annual energy and cost savings, NPSH margin, motor margin, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "pump-affinity-retrofit"
+standards = ["pump affinity-law workflow", "VFD retrofit screening", "pump energy-performance workflow"]
+tags = ["mechanical", "pump", "affinity", "retrofit", "vfd", "energy", "npsh", "deterministic"]
+tool_mode = "with-tool"
+
+[params.existing_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "CURVE-06-RETRO-05 existing pump duty flow"
+min = 82.0
+max = 82.0
+
+[params.existing_head_m]
+type = "float"
+unit = "m"
+description = "CURVE-06-RETRO-05 existing pump duty head"
+min = 31.0
+max = 31.0
+
+[params.existing_shaft_power_kw]
+type = "float"
+unit = "kW"
+description = "CURVE-06-RETRO-05 existing shaft power"
+min = 44.0
+max = 44.0
+
+[params.retrofit_speed_ratio]
+type = "float"
+description = "AFFINITY-06-WS-05 proposed speed ratio"
+min = 0.86
+max = 0.86
+
+[params.existing_motor_input_kw]
+type = "float"
+unit = "kW"
+description = "DRIVE-06-VFD-05 existing motor input power"
+min = 47.0
+max = 47.0
+
+[params.annual_operating_hours]
+type = "float"
+unit = "h/year"
+description = "TARIFF-06-ENERGY-05 annual operating hours"
+min = 4200.0
+max = 4200.0
+
+[params.energy_tariff_per_kwh]
+type = "float"
+unit = "currency/kWh"
+description = "TARIFF-06-ENERGY-05 energy tariff"
+min = 0.18
+max = 0.18
+
+[params.existing_npsh_required_m]
+type = "float"
+unit = "m"
+description = "CURVE-06-RETRO-05 existing NPSHr"
+min = 6.2
+max = 6.2
+
+[params.npsh_available_m]
+type = "float"
+unit = "m"
+description = "SCENARIO-06-LOAD-05 NPSHa after retrofit"
+min = 8.1
+max = 8.1
+
+[params.selected_motor_kw]
+type = "float"
+unit = "kW"
+description = "DRIVE-06-VFD-05 selected motor size"
+min = 37.0
+max = 37.0
+
+[params.motor_service_factor]
+type = "float"
+description = "DRIVE-06-VFD-05 motor service factor"
+min = 1.15
+max = 1.15
+
+[outputs.retrofit_flow_l_s]
+description = "Affinity-law flow after speed change"
+tolerance = 0.03
+
+[outputs.retrofit_head_m]
+description = "Affinity-law head after speed change"
+tolerance = 0.03
+
+[outputs.retrofit_shaft_power_kw]
+description = "Affinity-law shaft power after speed change"
+tolerance = 0.03
+
+[outputs.retrofit_motor_input_kw]
+description = "Motor input power after retrofit"
+tolerance = 0.03
+
+[outputs.annual_energy_savings_kwh]
+description = "Annual energy savings relative to existing motor input power"
+tolerance = 0.03
+
+[outputs.annual_cost_savings]
+description = "Annual cost savings from the declared energy tariff"
+tolerance = 0.03
+
+[outputs.new_npsh_required_m]
+description = "Affinity-law NPSHr after speed change"
+tolerance = 0.03
+
+[outputs.npsh_margin_m]
+description = "NPSHa minus retrofit NPSHr"
+tolerance = 0.03
+
+[outputs.motor_margin_kw]
+description = "Selected motor size minus service-factor-adjusted retrofit shaft power"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when energy savings, NPSH margin, and motor margin are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc06_pump_affinity_retrofit_case]
+description = "Pump affinity retrofit, VFD, NPSH, motor, and tariff source pack"
+existing_flow_l_s = {min = 82.0, max = 82.0}
+existing_head_m = {min = 31.0, max = 31.0}
+existing_shaft_power_kw = {min = 44.0, max = 44.0}
+retrofit_speed_ratio = {min = 0.86, max = 0.86}
+existing_motor_input_kw = {min = 47.0, max = 47.0}
+annual_operating_hours = {min = 4200.0, max = 4200.0}
+energy_tariff_per_kwh = {min = 0.18, max = 0.18}
+existing_npsh_required_m = {min = 6.2, max = 6.2}
+npsh_available_m = {min = 8.1, max = 8.1}
+selected_motor_kw = {min = 37.0, max = 37.0}
+motor_service_factor = {min = 1.15, max = 1.15}
+site_contexts = ["pump-affinity-retrofit", "vfd-energy-npsh-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-06 pump affinity retrofit package"
+visibility = "all_given"
+archetypes = ["ssc06_pump_affinity_retrofit_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-06 pump affinity retrofit package"
+visibility = "all_given"
+archetypes = ["ssc06_pump_affinity_retrofit_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-06 pump affinity retrofit package"
+visibility = "all_given"
+archetypes = ["ssc06_pump_affinity_retrofit_case"]

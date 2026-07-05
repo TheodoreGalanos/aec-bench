@@ -1,0 +1,67 @@
+{
+  "pack_id": "facade_redrawn_calculation_source_pack_seed_001",
+  "status": "docs_only_seed_skeleton",
+  "purpose": "Materialize the captured public facade source shapes into a redistributable task-owned scenario for future benchmark fixture construction.",
+  "not_an_issued_report": true,
+  "region_or_authority_basis": "task_supplied_global_fixture",
+  "units": {
+    "length": "m",
+    "force": "kN",
+    "pressure": "kPa",
+    "utilization": "ratio"
+  },
+  "load_combinations": [
+    "WIND_SERVICE"
+  ],
+  "geometry_scale": {
+    "svg_px_per_m": 100,
+    "drawing_width_m": 12.0,
+    "drawing_height_m": 9.0
+  },
+  "drawing_references": [
+    "elevation-redrawn.svg"
+  ],
+  "data_files": [
+    "geometry-oracle.csv",
+    "pressure-schedule.csv",
+    "support-schedule.csv",
+    "capacity-excerpts.yaml",
+    "anchor-check-oracle.csv",
+    "calculation-oracle.csv",
+    "expected-output.md",
+    "verifier-implementation-brief.md",
+    "variant-matrix.yaml",
+    "variant-source-overlays.yaml",
+    "variants/variant-source-files.yaml",
+    "verification-cases.yaml",
+    "verification-rules.yaml"
+  ],
+  "source_family_roles": {
+    "intake_and_setout_shape": [
+      "SFS/NVELOPE",
+      "Downer/Fixfast",
+      "BICEP",
+      "Clad-Sec",
+      "Ancon/Leviat"
+    ],
+    "calculation_output_shape": [
+      "WPS",
+      "Eurofox"
+    ],
+    "capacity_excerpt_shape": [
+      "SFS BBA",
+      "Hilti/PROFIS/HRD",
+      "Knight/KWS ANKIT",
+      "Hohmann & Barnard FLEXbracket",
+      "Cascadia",
+      "EJOT"
+    ],
+    "redrawn_visual_shape": [
+      "SFS NV1/NV3/NH3 details",
+      "Cascadia detail drawings",
+      "Fixfast/Downer visual guides"
+    ]
+  },
+  "embedded_excerpt_policy": "Values in this seed pack are normalized task-owned values for grading and fixture design. They are not verbatim vendor capacities and must not be treated as an issued calculation.",
+  "next_required_step": "Implement fixture generation and executable verifier checks against these files before using the pack for benchmark grading."
+}

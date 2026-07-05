@@ -1,0 +1,205 @@
+# ABOUTME: Defines the SSC-06 marine and coastal pumping equipment template.
+# ABOUTME: Pins one tide, pump section, pipe, motor, generator, elevation, and corrosion source pack.
+
+[meta]
+name = "marine-coastal-pumping-equipment-package"
+description = "SSC-06 marine and coastal pumping equipment metrics"
+long_description = "Calculates source-bound coastal pumping equipment metrics from a deterministic SSC-06 task-owned source pack. The template combines tidal pumping head, hydraulic and input power, generator margin, backup runtime, equipment freeboard, corrosion allowance margin, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "marine-coastal-pumping"
+standards = ["coastal pumping workflow", "backup generator sizing workflow", "marine corrosion allowance workflow"]
+tags = ["mechanical", "coastal", "marine", "pump", "generator", "freeboard", "corrosion", "deterministic"]
+tool_mode = "with-tool"
+
+[params.pump_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "SECTION-06-PUMP-07 pump flow"
+min = 48.0
+max = 48.0
+
+[params.static_lift_m]
+type = "float"
+unit = "m"
+description = "SECTION-06-PUMP-07 static lift"
+min = 8.5
+max = 8.5
+
+[params.tailwater_surcharge_m]
+type = "float"
+unit = "m"
+description = "TIDE-06-TAILWATER-07 tailwater surcharge"
+min = 1.4
+max = 1.4
+
+[params.pipe_loss_m]
+type = "float"
+unit = "m"
+description = "PIPE-06-SCHED-07 pipe loss"
+min = 2.2
+max = 2.2
+
+[params.flap_gate_loss_m]
+type = "float"
+unit = "m"
+description = "PIPE-06-SCHED-07 flap-gate loss"
+min = 0.45
+max = 0.45
+
+[params.seawater_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "TIDE-06-TAILWATER-07 seawater density"
+min = 1025.0
+max = 1025.0
+
+[params.pump_efficiency]
+type = "float"
+description = "MOTOR-06-SCHED-07 pump efficiency"
+min = 0.72
+max = 0.72
+
+[params.motor_efficiency]
+type = "float"
+description = "MOTOR-06-SCHED-07 motor efficiency"
+min = 0.93
+max = 0.93
+
+[params.controls_load_kw]
+type = "float"
+unit = "kW"
+description = "MOTOR-06-SCHED-07 controls load"
+min = 2.8
+max = 2.8
+
+[params.generator_capacity_kw]
+type = "float"
+unit = "kW"
+description = "MOTOR-06-SCHED-07 generator capacity"
+min = 35.0
+max = 35.0
+
+[params.fuel_available_l]
+type = "float"
+unit = "L"
+description = "MOTOR-06-SCHED-07 available fuel"
+min = 70.0
+max = 70.0
+
+[params.generator_energy_kwh_per_l]
+type = "float"
+unit = "kWh/L"
+description = "MOTOR-06-SCHED-07 generator fuel energy"
+min = 2.8
+max = 2.8
+
+[params.equipment_elevation_m]
+type = "float"
+unit = "m"
+description = "SECTION-06-PUMP-07 equipment elevation"
+min = 4.25
+max = 4.25
+
+[params.design_flood_level_m]
+type = "float"
+unit = "m"
+description = "TIDE-06-TAILWATER-07 design flood level"
+min = 3.75
+max = 3.75
+
+[params.minimum_freeboard_m]
+type = "float"
+unit = "m"
+description = "SECTION-06-PUMP-07 minimum freeboard"
+min = 0.3
+max = 0.3
+
+[params.corrosion_allowance_mm]
+type = "float"
+unit = "mm"
+description = "MATERIAL-06-CORROSION-07 corrosion allowance"
+min = 4.5
+max = 4.5
+
+[params.required_corrosion_allowance_mm]
+type = "float"
+unit = "mm"
+description = "MATERIAL-06-CORROSION-07 required corrosion allowance"
+min = 3.0
+max = 3.0
+
+[outputs.total_pumping_head_m]
+description = "Static lift plus tailwater, pipe, and flap-gate losses"
+tolerance = 0.03
+
+[outputs.pump_hydraulic_power_kw]
+description = "Pump hydraulic power at coastal design head"
+tolerance = 0.03
+
+[outputs.pump_input_power_kw]
+description = "Pump input power after pump and motor efficiency"
+tolerance = 0.03
+
+[outputs.backup_generator_load_kw]
+description = "Pump input power plus controls load"
+tolerance = 0.03
+
+[outputs.generator_capacity_margin_kw]
+description = "Generator capacity minus backup generator load"
+tolerance = 0.03
+
+[outputs.backup_runtime_hr]
+description = "Backup runtime from fuel energy and generator load"
+tolerance = 0.03
+
+[outputs.equipment_freeboard_m]
+description = "Equipment elevation minus design flood level"
+tolerance = 0.03
+
+[outputs.equipment_freeboard_margin_m]
+description = "Equipment freeboard minus minimum required freeboard"
+tolerance = 0.03
+
+[outputs.corrosion_allowance_margin_mm]
+description = "Provided corrosion allowance minus required corrosion allowance"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when generator, freeboard, and corrosion margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc06_marine_coastal_pumping_case]
+description = "Marine pumping, generator, freeboard, and corrosion source pack"
+pump_flow_l_s = {min = 48.0, max = 48.0}
+static_lift_m = {min = 8.5, max = 8.5}
+tailwater_surcharge_m = {min = 1.4, max = 1.4}
+pipe_loss_m = {min = 2.2, max = 2.2}
+flap_gate_loss_m = {min = 0.45, max = 0.45}
+seawater_density_kg_m3 = {min = 1025.0, max = 1025.0}
+pump_efficiency = {min = 0.72, max = 0.72}
+motor_efficiency = {min = 0.93, max = 0.93}
+controls_load_kw = {min = 2.8, max = 2.8}
+generator_capacity_kw = {min = 35.0, max = 35.0}
+fuel_available_l = {min = 70.0, max = 70.0}
+generator_energy_kwh_per_l = {min = 2.8, max = 2.8}
+equipment_elevation_m = {min = 4.25, max = 4.25}
+design_flood_level_m = {min = 3.75, max = 3.75}
+minimum_freeboard_m = {min = 0.3, max = 0.3}
+corrosion_allowance_mm = {min = 4.5, max = 4.5}
+required_corrosion_allowance_mm = {min = 3.0, max = 3.0}
+site_contexts = ["marine-coastal-pumping", "tidal-pump-generator-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-06 marine coastal pumping package"
+visibility = "all_given"
+archetypes = ["ssc06_marine_coastal_pumping_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-06 marine coastal pumping package"
+visibility = "all_given"
+archetypes = ["ssc06_marine_coastal_pumping_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-06 marine coastal pumping package"
+visibility = "all_given"
+archetypes = ["ssc06_marine_coastal_pumping_case"]

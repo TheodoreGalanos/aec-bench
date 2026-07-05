@@ -1,0 +1,216 @@
+# ABOUTME: Defines the SSC-03 stormwater pump control and backup-energy template.
+# ABOUTME: Pins one synthetic wet-well, pump, rising-main, controls, and energy source package.
+
+[meta]
+name = "stormwater-pump-station-control-backup-energy-package"
+description = "SSC-03 stormwater pump capacity, rising-main, controls, and backup-energy metrics"
+long_description = "Calculates source-bound stormwater pump station metrics from a deterministic SSC-03 task-owned source pack. The template combines pump capacity, Hazen-Williams rising-main loss, hydraulic and motor power, control load, backup energy, wet-well freeboard, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "stormwater-pump-control"
+standards = ["Hazen-Williams hydraulic calculations", "stormwater pump station controls", "pump duty power workflows", "backup energy sizing"]
+tags = ["mechanical", "stormwater", "pump-station", "rising-main", "backup-energy", "deterministic"]
+tool_mode = "with-tool"
+
+[params.pump_capacity_l_s]
+type = "float"
+unit = "L/s"
+description = "WETWELL-SSC03-003 duty capacity per pump"
+min = 72.0
+max = 72.0
+
+[params.pump_count]
+type = "float"
+unit = "count"
+description = "WETWELL-SSC03-003 duty pump count"
+min = 2.0
+max = 2.0
+
+[params.inflow_peak_l_s]
+type = "float"
+unit = "L/s"
+description = "INFLOW-SSC03-003 peak inflow"
+min = 118.0
+max = 118.0
+
+[params.static_head_m]
+type = "float"
+unit = "m"
+description = "RMAIN-SSC03-003 static head"
+min = 8.5
+max = 8.5
+
+[params.rising_main_length_m]
+type = "float"
+unit = "m"
+description = "RMAIN-SSC03-003 rising-main length"
+min = 420.0
+max = 420.0
+
+[params.pipe_internal_diameter_mm]
+type = "float"
+unit = "mm"
+description = "RMAIN-SSC03-003 rising-main internal diameter"
+min = 250.0
+max = 250.0
+
+[params.hazen_williams_c]
+type = "float"
+description = "RMAIN-SSC03-003 Hazen-Williams coefficient"
+min = 130.0
+max = 130.0
+
+[params.pump_efficiency]
+type = "float"
+description = "WETWELL-SSC03-003 pump efficiency"
+min = 0.78
+max = 0.78
+
+[params.motor_efficiency]
+type = "float"
+description = "CTRL-SSC03-003 motor efficiency"
+min = 0.92
+max = 0.92
+
+[params.fluid_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "INFLOW-SSC03-003 water density"
+min = 998.0
+max = 998.0
+
+[params.control_panel_load_kw]
+type = "float"
+unit = "kW"
+description = "CTRL-SSC03-003 control panel load"
+min = 1.8
+max = 1.8
+
+[params.telemetry_load_kw]
+type = "float"
+unit = "kW"
+description = "CTRL-SSC03-003 telemetry load"
+min = 0.4
+max = 0.4
+
+[params.outage_duration_hr]
+type = "float"
+unit = "h"
+description = "ENERGY-SSC03-003 outage duration"
+min = 6.0
+max = 6.0
+
+[params.usable_battery_energy_kwh]
+type = "float"
+unit = "kWh"
+description = "ENERGY-SSC03-003 usable battery energy"
+min = 24.0
+max = 24.0
+
+[params.wetwell_high_water_level_m]
+type = "float"
+unit = "m"
+description = "WETWELL-SSC03-003 wet-well high water level"
+min = 14.2
+max = 14.2
+
+[params.access_level_m]
+type = "float"
+unit = "m"
+description = "WETWELL-SSC03-003 access level"
+min = 15.05
+max = 15.05
+
+[params.minimum_wetwell_freeboard_m]
+type = "float"
+unit = "m"
+description = "MEMO-SSC03-003 minimum wet-well freeboard"
+min = 0.45
+max = 0.45
+
+[outputs.total_pump_capacity_l_s]
+description = "Duty pump capacity"
+tolerance = 0.03
+
+[outputs.pump_capacity_margin_l_s]
+description = "Duty pump capacity minus peak inflow"
+tolerance = 0.03
+
+[outputs.hazen_williams_loss_m]
+description = "Rising-main Hazen-Williams loss"
+tolerance = 0.03
+
+[outputs.total_dynamic_head_m]
+description = "Static head plus rising-main loss"
+tolerance = 0.03
+
+[outputs.rising_main_velocity_m_s]
+description = "Velocity in the rising main"
+tolerance = 0.03
+
+[outputs.hydraulic_power_kw]
+description = "Hydraulic pump power"
+tolerance = 0.03
+
+[outputs.motor_input_power_kw]
+description = "Motor input power"
+tolerance = 0.03
+
+[outputs.control_load_kw]
+description = "Control and telemetry load"
+tolerance = 0.03
+
+[outputs.backup_energy_required_kwh]
+description = "Backup energy required for the outage"
+tolerance = 0.03
+
+[outputs.backup_energy_margin_kwh]
+description = "Usable battery energy minus required backup energy"
+tolerance = 0.03
+
+[outputs.wetwell_freeboard_m]
+description = "Access level minus high water level"
+tolerance = 0.03
+
+[outputs.wetwell_freeboard_margin_m]
+description = "Wet-well freeboard minus minimum freeboard"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for pump capacity, backup energy, and wet-well freeboard checks"
+tolerance = 0.03
+
+[archetypes.ssc03_pump_control_energy_case]
+description = "Stormwater pump station control and backup-energy case"
+pump_capacity_l_s = {min = 72.0, max = 72.0}
+pump_count = {min = 2.0, max = 2.0}
+inflow_peak_l_s = {min = 118.0, max = 118.0}
+static_head_m = {min = 8.5, max = 8.5}
+rising_main_length_m = {min = 420.0, max = 420.0}
+pipe_internal_diameter_mm = {min = 250.0, max = 250.0}
+hazen_williams_c = {min = 130.0, max = 130.0}
+pump_efficiency = {min = 0.78, max = 0.78}
+motor_efficiency = {min = 0.92, max = 0.92}
+fluid_density_kg_m3 = {min = 998.0, max = 998.0}
+control_panel_load_kw = {min = 1.8, max = 1.8}
+telemetry_load_kw = {min = 0.4, max = 0.4}
+outage_duration_hr = {min = 6.0, max = 6.0}
+usable_battery_energy_kwh = {min = 24.0, max = 24.0}
+wetwell_high_water_level_m = {min = 14.2, max = 14.2}
+access_level_m = {min = 15.05, max = 15.05}
+minimum_wetwell_freeboard_m = {min = 0.45, max = 0.45}
+site_contexts = ["stormwater-pump-station", "backup-energy-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-03 pump control backup-energy package"
+visibility = "all_given"
+archetypes = ["ssc03_pump_control_energy_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-03 pump control backup-energy package"
+visibility = "all_given"
+archetypes = ["ssc03_pump_control_energy_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-03 pump control backup-energy package"
+visibility = "all_given"
+archetypes = ["ssc03_pump_control_energy_case"]

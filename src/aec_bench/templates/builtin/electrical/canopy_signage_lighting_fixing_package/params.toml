@@ -1,0 +1,186 @@
+[meta]
+name = "canopy-signage-lighting-fixing-package"
+description = "SSC-09 canopy, signage, lighting, and envelope fixing metrics"
+long_description = "Calculates source-bound canopy/signage fixing and lighting metrics from a deterministic SSC-09 task-owned source pack. The template combines wind load, dead load, combined fixing demand, anchor group margin, lighting connected load, DC feeder voltage drop, and an overall synthetic pass score."
+discipline = "electrical"
+category = "canopy-signage-lighting-fixing"
+standards = ["canopy/signage wind workflows", "lighting load workflows", "DC feeder voltage-drop workflows"]
+tags = ["electrical", "structural", "canopy", "signage", "lighting", "fixing", "voltage-drop", "deterministic"]
+tool_mode = "with-tool"
+
+[params.sign_area_m2]
+type = "float"
+unit = "m2"
+description = "SIGN-09-GEOM-04 sign area"
+min = 10.0
+max = 10.0
+
+[params.canopy_area_m2]
+type = "float"
+unit = "m2"
+description = "CANOPY-09-ELEV-04 canopy area"
+min = 18.0
+max = 18.0
+
+[params.wind_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "CANOPY-09-ELEV-04 wind pressure"
+min = 1.3
+max = 1.3
+
+[params.sign_dead_load_kpa]
+type = "float"
+unit = "kPa"
+description = "SIGN-09-GEOM-04 sign dead load"
+min = 0.25
+max = 0.25
+
+[params.canopy_dead_load_kpa]
+type = "float"
+unit = "kPa"
+description = "CANOPY-09-ELEV-04 canopy dead load"
+min = 0.4
+max = 0.4
+
+[params.fixing_capacity_kn]
+type = "float"
+unit = "kN"
+description = "ANCH-09-CANOPY-04 fixing capacity"
+min = 55.0
+max = 55.0
+
+[params.anchor_count]
+type = "float"
+description = "ANCH-09-CANOPY-04 anchor count"
+min = 8.0
+max = 8.0
+
+[params.anchor_capacity_kn]
+type = "float"
+unit = "kN"
+description = "ANCH-09-CANOPY-04 anchor capacity"
+min = 7.0
+max = 7.0
+
+[params.lighting_load_w]
+type = "float"
+unit = "W"
+description = "LIGHT-09-LOAD-04 lighting load"
+min = 420.0
+max = 420.0
+
+[params.driver_load_w]
+type = "float"
+unit = "W"
+description = "LIGHT-09-LOAD-04 driver load"
+min = 60.0
+max = 60.0
+
+[params.sign_control_load_w]
+type = "float"
+unit = "W"
+description = "LIGHT-09-LOAD-04 sign control load"
+min = 40.0
+max = 40.0
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "FEEDER-09-LIGHT-04 feeder voltage"
+min = 24.0
+max = 24.0
+
+[params.cable_length_m]
+type = "float"
+unit = "m"
+description = "FEEDER-09-LIGHT-04 cable length"
+min = 42.0
+max = 42.0
+
+[params.conductor_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "FEEDER-09-LIGHT-04 conductor resistance"
+min = 0.75
+max = 0.75
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "FEEDER-09-LIGHT-04 maximum voltage drop"
+min = 8.0
+max = 8.0
+
+[outputs.wind_load_kn]
+description = "Canopy and sign wind load"
+tolerance = 0.03
+
+[outputs.dead_load_kn]
+description = "Canopy and sign dead load"
+tolerance = 0.03
+
+[outputs.combined_fixing_demand_kn]
+description = "Vector combined wind and dead-load fixing demand"
+tolerance = 0.03
+
+[outputs.fixing_capacity_margin_kn]
+description = "Fixing capacity minus combined demand"
+tolerance = 0.03
+
+[outputs.anchor_group_margin_kn]
+description = "Anchor group capacity minus combined demand"
+tolerance = 0.03
+
+[outputs.lighting_connected_load_w]
+description = "Lighting, driver, and sign-control connected load"
+tolerance = 0.03
+
+[outputs.lighting_current_a]
+description = "Lighting feeder current"
+tolerance = 0.03
+
+[outputs.voltage_drop_percent]
+description = "Two-wire DC voltage drop percent"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Maximum voltage drop minus calculated voltage drop"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when fixing, anchor, and voltage-drop checks pass"
+tolerance = 0.001
+
+[archetypes.ssc09_canopy_signage_lighting_case]
+description = "Canopy signage lighting and fixing case"
+sign_area_m2 = {min = 10.0, max = 10.0}
+canopy_area_m2 = {min = 18.0, max = 18.0}
+wind_pressure_kpa = {min = 1.3, max = 1.3}
+sign_dead_load_kpa = {min = 0.25, max = 0.25}
+canopy_dead_load_kpa = {min = 0.4, max = 0.4}
+fixing_capacity_kn = {min = 55.0, max = 55.0}
+anchor_count = {min = 8.0, max = 8.0}
+anchor_capacity_kn = {min = 7.0, max = 7.0}
+lighting_load_w = {min = 420.0, max = 420.0}
+driver_load_w = {min = 60.0, max = 60.0}
+sign_control_load_w = {min = 40.0, max = 40.0}
+feeder_voltage_v = {min = 24.0, max = 24.0}
+cable_length_m = {min = 42.0, max = 42.0}
+conductor_resistance_ohm_km = {min = 0.75, max = 0.75}
+max_voltage_drop_percent = {min = 8.0, max = 8.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-09 canopy signage lighting package"
+visibility = "all_given"
+archetypes = ["ssc09_canopy_signage_lighting_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-09 canopy signage lighting package"
+visibility = "all_given"
+archetypes = ["ssc09_canopy_signage_lighting_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-09 canopy signage lighting package"
+visibility = "all_given"
+archetypes = ["ssc09_canopy_signage_lighting_case"]

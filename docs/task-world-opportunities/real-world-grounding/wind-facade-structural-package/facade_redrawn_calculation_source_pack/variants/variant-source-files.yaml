@@ -1,0 +1,70 @@
+# ABOUTME: Indexes expanded docs-only source files for facade source-pack variants.
+# ABOUTME: Separates concrete research fixtures from future executable verifier work.
+source_pack_id: facade_redrawn_calculation_source_pack_seed_001
+status: docs_only_expanded_variant_sources
+policy: These files are expanded research sources derived from variant-source-overlays.yaml. They are not executable runtime fixtures, generated benchmark instances, or issued project calculations.
+base_pack: ../
+source_overlay_file: ../variant-source-overlays.yaml
+variants:
+  - variant_id: added_opening_edge_support
+    expected_result: pass
+    expanded_files:
+      - added_opening_edge_support/elevation-redrawn.svg
+      - added_opening_edge_support/geometry-oracle.csv
+      - added_opening_edge_support/support-schedule.csv
+      - added_opening_edge_support/calculation-oracle.csv
+      - added_opening_edge_support/anchor-check-oracle.csv
+    base_files_reused:
+      - pressure-schedule.csv
+      - capacity-excerpts.yaml
+      - verification-rules.yaml
+      - verification-cases.yaml
+  - variant_id: reentrant_corner_pressure_governing
+    expected_result: pass
+    expanded_files:
+      - reentrant_corner_pressure_governing/elevation-redrawn.svg
+      - reentrant_corner_pressure_governing/geometry-oracle.csv
+      - reentrant_corner_pressure_governing/pressure-schedule.csv
+      - reentrant_corner_pressure_governing/support-schedule.csv
+      - reentrant_corner_pressure_governing/calculation-oracle.csv
+      - reentrant_corner_pressure_governing/anchor-check-oracle.csv
+    base_files_reused:
+      - capacity-excerpts.yaml
+      - verification-rules.yaml
+      - verification-cases.yaml
+  - variant_id: anchor_edge_distance_failure
+    expected_result: fail
+    failure_stage: anchor_geometry
+    expanded_files:
+      - anchor_edge_distance_failure/anchor-check-oracle.csv
+    base_files_reused:
+      - elevation-redrawn.svg
+      - geometry-oracle.csv
+      - pressure-schedule.csv
+      - support-schedule.csv
+      - capacity-excerpts.yaml
+      - calculation-oracle.csv
+  - variant_id: anchor_spacing_failure
+    expected_result: fail
+    failure_stage: anchor_geometry
+    expanded_files:
+      - anchor_spacing_failure/anchor-check-oracle.csv
+    base_files_reused:
+      - elevation-redrawn.svg
+      - geometry-oracle.csv
+      - pressure-schedule.csv
+      - support-schedule.csv
+      - capacity-excerpts.yaml
+      - calculation-oracle.csv
+  - variant_id: corner_pressure_over_limit
+    expected_result: fail
+    failure_stage: utilization
+    expanded_files:
+      - corner_pressure_over_limit/pressure-schedule.csv
+      - corner_pressure_over_limit/calculation-oracle.csv
+      - corner_pressure_over_limit/anchor-check-oracle.csv
+    base_files_reused:
+      - elevation-redrawn.svg
+      - geometry-oracle.csv
+      - support-schedule.csv
+      - capacity-excerpts.yaml

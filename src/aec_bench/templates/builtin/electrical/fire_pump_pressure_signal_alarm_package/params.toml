@@ -1,0 +1,178 @@
+[meta]
+name = "fire-pump-pressure-signal-alarm-package"
+description = "SSC-18 fire pump pressure signal, alarm threshold, NAC load, and battery metrics"
+long_description = "Calculates source-bound fire pump control metrics from a deterministic SSC-18 task-owned source pack. The template combines pressure transmitter signal scaling, alarm threshold margins, NAC panel load, battery required energy, and an overall synthetic pass score."
+discipline = "electrical"
+category = "fire-pump-alarm"
+standards = ["fire pump control workflow", "ISA-5", "alarm battery workflow"]
+tags = ["electrical", "instrumentation", "fire-pump", "pressure", "alarm", "nac", "battery", "deterministic"]
+tool_mode = "with-tool"
+
+[params.residual_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "FIRE-18-PUMP-06 residual pressure"
+min = 520.0
+max = 520.0
+
+[params.pressure_lower_kpa]
+type = "float"
+unit = "kPa"
+description = "PRESS-18-SENSOR-06 pressure transmitter lower range"
+min = 0.0
+max = 0.0
+
+[params.pressure_upper_kpa]
+type = "float"
+unit = "kPa"
+description = "PRESS-18-SENSOR-06 pressure transmitter upper range"
+min = 1000.0
+max = 1000.0
+
+[params.low_alarm_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "ALM-18-THRESH-06 low alarm pressure"
+min = 420.0
+max = 420.0
+
+[params.pump_start_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "ALM-18-THRESH-06 pump start pressure"
+min = 450.0
+max = 450.0
+
+[params.nac_device_count]
+type = "float"
+description = "NAC-18-LOAD-06 NAC device count"
+min = 12.0
+max = 12.0
+
+[params.nac_device_current_a]
+type = "float"
+unit = "A"
+description = "NAC-18-LOAD-06 current per NAC device"
+min = 0.15
+max = 0.15
+
+[params.nac_panel_capacity_a]
+type = "float"
+unit = "A"
+description = "NAC-18-LOAD-06 NAC panel capacity"
+min = 3.0
+max = 3.0
+
+[params.control_load_w]
+type = "float"
+unit = "W"
+description = "NAC-18-LOAD-06 fire control load"
+min = 95.0
+max = 95.0
+
+[params.standby_duration_h]
+type = "float"
+unit = "h"
+description = "CRIT-18-FIRE-06 standby duration"
+min = 24.0
+max = 24.0
+
+[params.alarm_duration_h]
+type = "float"
+unit = "h"
+description = "CRIT-18-FIRE-06 alarm duration"
+min = 0.5
+max = 0.5
+
+[params.battery_capacity_kwh]
+type = "float"
+unit = "kWh"
+description = "NAC-18-LOAD-06 battery capacity"
+min = 3.0
+max = 3.0
+
+[params.dc_voltage_v]
+type = "float"
+unit = "V"
+description = "NAC-18-LOAD-06 DC voltage"
+min = 24.0
+max = 24.0
+
+[params.charger_efficiency]
+type = "float"
+description = "NAC-18-LOAD-06 charger efficiency"
+min = 0.85
+max = 0.85
+
+[outputs.pressure_signal_ma]
+description = "4-20 mA signal at residual pressure"
+tolerance = 0.03
+
+[outputs.low_alarm_current_ma]
+description = "4-20 mA signal at low alarm pressure"
+tolerance = 0.03
+
+[outputs.pump_start_current_ma]
+description = "4-20 mA signal at pump-start pressure"
+tolerance = 0.03
+
+[outputs.low_alarm_margin_kpa]
+description = "Residual pressure minus low alarm pressure"
+tolerance = 0.03
+
+[outputs.pump_start_margin_kpa]
+description = "Residual pressure minus pump-start pressure"
+tolerance = 0.03
+
+[outputs.nac_load_a]
+description = "Total NAC current"
+tolerance = 0.03
+
+[outputs.nac_panel_margin_a]
+description = "NAC panel capacity minus NAC load"
+tolerance = 0.03
+
+[outputs.battery_required_kwh]
+description = "Battery energy required for standby and alarm"
+tolerance = 0.03
+
+[outputs.battery_margin_kwh]
+description = "Battery capacity minus required energy"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for fire pump pressure signal and alarm checks"
+tolerance = 0.03
+
+[archetypes.ssc18_fire_pump_signal_alarm_case]
+description = "Fire pump pressure signal and alarm source pack"
+residual_pressure_kpa = {min = 520.0, max = 520.0}
+pressure_lower_kpa = {min = 0.0, max = 0.0}
+pressure_upper_kpa = {min = 1000.0, max = 1000.0}
+low_alarm_pressure_kpa = {min = 420.0, max = 420.0}
+pump_start_pressure_kpa = {min = 450.0, max = 450.0}
+nac_device_count = {min = 12.0, max = 12.0}
+nac_device_current_a = {min = 0.15, max = 0.15}
+nac_panel_capacity_a = {min = 3.0, max = 3.0}
+control_load_w = {min = 95.0, max = 95.0}
+standby_duration_h = {min = 24.0, max = 24.0}
+alarm_duration_h = {min = 0.5, max = 0.5}
+battery_capacity_kwh = {min = 3.0, max = 3.0}
+dc_voltage_v = {min = 24.0, max = 24.0}
+charger_efficiency = {min = 0.85, max = 0.85}
+site_contexts = ["fire-pump-pressure-signal", "fire-alarm-control"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-18 fire pump signal alarm package"
+visibility = "all_given"
+archetypes = ["ssc18_fire_pump_signal_alarm_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-18 fire pump signal alarm package"
+visibility = "all_given"
+archetypes = ["ssc18_fire_pump_signal_alarm_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-18 fire pump signal alarm package"
+visibility = "all_given"
+archetypes = ["ssc18_fire_pump_signal_alarm_case"]

@@ -1,0 +1,323 @@
+# ABOUTME: Defines the SSC-08 station population egress vertical movement template.
+# ABOUTME: Pins one task-owned source pack with occupancy, egress, movement, ventilation, and alarm values.
+
+[meta]
+name = "station-population-egress-vertical-package"
+description = "SSC-08 station population, vertical movement, egress, alarm, and ventilation metrics"
+long_description = "Calculates source-bound building-operations metrics from a deterministic SSC-08 task-owned source pack. The template combines one station concourse zone, population basis, egress route, escalator group, lift group, emergency ventilation case, fire-alarm NAC circuit, and operations memo for one compact generated task instance."
+discipline = "mechanical"
+category = "building-operations"
+standards = ["NFPA 101 Life Safety Code", "International Building Code means of egress", "NFPA 72 fire alarm notification", "NIST FDS and Smokeview", "Pathfinder", "Oasys MassMotion"]
+tags = ["mechanical", "building", "station", "occupancy", "egress", "vertical-transport", "ventilation", "alarm", "deterministic"]
+tool_mode = "with-tool"
+
+[params.floor_area_m2]
+type = "float"
+unit = "m2"
+description = "ZONE-08-CONCOURSE-L1 net concourse floor area"
+min = 1500.0
+max = 1500.0
+
+[params.area_per_occupant_m2]
+type = "float"
+unit = "m2/person"
+description = "POP-08-PEAK-001 source occupant-load factor for the peak station scenario"
+min = 2.5
+max = 2.5
+
+[params.egress_width_per_occupant_mm]
+type = "float"
+unit = "mm/person"
+description = "EGRESS-08-ROUTE-A source egress-width criterion"
+min = 5.0
+max = 5.0
+
+[params.provided_egress_width_mm]
+type = "float"
+unit = "mm"
+description = "EGRESS-08-ROUTE-A aggregate clear egress width"
+min = 3600.0
+max = 3600.0
+
+[params.max_egress_time_s]
+type = "float"
+unit = "s"
+description = "EGRESS-08-ROUTE-A source maximum egress flow-time criterion"
+min = 180.0
+max = 180.0
+
+[params.egress_flow_rate_persons_per_m_s]
+type = "float"
+unit = "persons/(m*s)"
+description = "EGRESS-08-ROUTE-A source flow-rate assumption for the egress route"
+min = 1.33
+max = 1.33
+
+[params.peak_vertical_demand_persons_per_5min]
+type = "float"
+unit = "persons/5min"
+description = "POP-08-PEAK-001 vertical movement demand during the peak five-minute station case"
+min = 260.0
+max = 260.0
+
+[params.escalator_speed_m_s]
+type = "float"
+unit = "m/s"
+description = "ESC-08-UP-01 escalator rated speed"
+min = 0.50
+max = 0.50
+
+[params.escalator_step_width_mm]
+type = "float"
+unit = "mm"
+description = "ESC-08-UP-01 escalator step width"
+min = 1000.0
+max = 1000.0
+
+[params.escalator_step_pitch_mm]
+type = "float"
+unit = "mm"
+description = "ESC-08-UP-01 escalator step pitch"
+min = 400.0
+max = 400.0
+
+[params.escalator_loading_factor_percent]
+type = "float"
+unit = "%"
+description = "ESC-08-UP-01 practical escalator loading factor for station operation"
+min = 40.0
+max = 40.0
+
+[params.lift_round_trip_time_s]
+type = "float"
+unit = "s"
+description = "LIFT-08-GROUP-01 source round-trip time"
+min = 120.0
+max = 120.0
+
+[params.lift_car_capacity_persons]
+type = "float"
+unit = "persons"
+description = "LIFT-08-GROUP-01 car capacity"
+min = 16.0
+max = 16.0
+
+[params.lift_count]
+type = "float"
+unit = "lifts"
+description = "LIFT-08-GROUP-01 number of lifts in the group"
+min = 2.0
+max = 2.0
+
+[params.lift_loading_factor_percent]
+type = "float"
+unit = "%"
+description = "LIFT-08-GROUP-01 practical car loading factor"
+min = 80.0
+max = 80.0
+
+[params.required_lift_handling_percent]
+type = "float"
+unit = "%"
+description = "LIFT-08-GROUP-01 minimum five-minute handling capacity criterion"
+min = 10.0
+max = 10.0
+
+[params.ventilation_airflow_m3_h]
+type = "float"
+unit = "m3/h"
+description = "VENT-08-SMOKE-01 emergency ventilation airflow"
+min = 48000.0
+max = 48000.0
+
+[params.concourse_volume_m3]
+type = "float"
+unit = "m3"
+description = "ZONE-08-CONCOURSE-L1 source concourse volume"
+min = 7500.0
+max = 7500.0
+
+[params.required_air_changes_per_h]
+type = "float"
+unit = "1/h"
+description = "VENT-08-SMOKE-01 emergency ventilation air-change criterion"
+min = 6.0
+max = 6.0
+
+[params.nac_strobe_quantity]
+type = "float"
+unit = "count"
+description = "NAC-08-ALARM-01 strobe appliance count"
+min = 18.0
+max = 18.0
+
+[params.nac_strobe_current_a]
+type = "float"
+unit = "A"
+description = "NAC-08-ALARM-01 strobe current per appliance"
+min = 0.09
+max = 0.09
+
+[params.nac_horn_quantity]
+type = "float"
+unit = "count"
+description = "NAC-08-ALARM-01 horn appliance count"
+min = 12.0
+max = 12.0
+
+[params.nac_horn_current_a]
+type = "float"
+unit = "A"
+description = "NAC-08-ALARM-01 horn current per appliance"
+min = 0.04
+max = 0.04
+
+[params.nac_speaker_quantity]
+type = "float"
+unit = "count"
+description = "NAC-08-ALARM-01 speaker appliance count"
+min = 10.0
+max = 10.0
+
+[params.nac_speaker_current_a]
+type = "float"
+unit = "A"
+description = "NAC-08-ALARM-01 speaker current per appliance"
+min = 0.03
+max = 0.03
+
+[params.nac_circuit_capacity_a]
+type = "float"
+unit = "A"
+description = "NAC-08-ALARM-01 notification appliance circuit capacity"
+min = 3.0
+max = 3.0
+
+[outputs.calculated_occupants]
+description = "Unrounded occupant count from area and occupant-load factor"
+tolerance = 0.03
+
+[outputs.design_occupants]
+description = "Ceiling-rounded design occupants for the source station zone"
+tolerance = 0.03
+
+[outputs.occupant_density_person_m2]
+description = "Design occupant density over the source floor area"
+tolerance = 0.03
+
+[outputs.required_egress_width_mm]
+description = "Required egress width from occupant load and source width factor"
+tolerance = 0.03
+
+[outputs.egress_width_margin_mm]
+description = "Provided egress width minus required egress width"
+tolerance = 0.03
+
+[outputs.egress_width_utilization]
+description = "Required egress width divided by provided egress width"
+tolerance = 0.03
+
+[outputs.egress_flow_time_s]
+description = "Flow time for design occupants through the provided egress width"
+tolerance = 0.03
+
+[outputs.egress_time_margin_s]
+description = "Maximum source egress time minus computed flow time"
+tolerance = 0.03
+
+[outputs.escalator_practical_capacity_persons_per_h]
+description = "Practical escalator capacity at source speed, pitch, width, and loading factor"
+tolerance = 0.03
+
+[outputs.escalator_capacity_persons_per_5min]
+description = "Practical escalator capacity converted to a five-minute period"
+tolerance = 0.03
+
+[outputs.lift_passengers_per_5min]
+description = "Lift group passengers carried in five minutes"
+tolerance = 0.03
+
+[outputs.lift_handling_capacity_percent]
+description = "Five-minute lift handling capacity as a percentage of design occupants"
+tolerance = 0.03
+
+[outputs.lift_handling_margin_percent]
+description = "Lift handling capacity minus the source handling criterion"
+tolerance = 0.03
+
+[outputs.vertical_capacity_persons_per_5min]
+description = "Escalator plus lift vertical capacity in five minutes"
+tolerance = 0.03
+
+[outputs.vertical_capacity_margin_persons_per_5min]
+description = "Vertical movement capacity minus peak five-minute vertical demand"
+tolerance = 0.03
+
+[outputs.ventilation_air_changes_per_h]
+description = "Emergency ventilation air changes per hour"
+tolerance = 0.03
+
+[outputs.ventilation_ach_margin]
+description = "Emergency ventilation air-change rate minus source criterion"
+tolerance = 0.03
+
+[outputs.nac_total_load_a]
+description = "Notification appliance circuit current load"
+tolerance = 0.03
+
+[outputs.nac_spare_capacity_a]
+description = "Notification appliance circuit capacity minus computed load"
+tolerance = 0.03
+
+[outputs.nac_utilization_percent]
+description = "Notification appliance circuit load as a percentage of circuit capacity"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "One when egress, movement, ventilation, and alarm checks pass"
+tolerance = 0.03
+
+[archetypes.ssc08_station_operations_case]
+description = "Station concourse occupancy, egress, vertical movement, ventilation, and alarm case"
+floor_area_m2 = {min = 1500.0, max = 1500.0}
+area_per_occupant_m2 = {min = 2.5, max = 2.5}
+egress_width_per_occupant_mm = {min = 5.0, max = 5.0}
+provided_egress_width_mm = {min = 3600.0, max = 3600.0}
+max_egress_time_s = {min = 180.0, max = 180.0}
+egress_flow_rate_persons_per_m_s = {min = 1.33, max = 1.33}
+peak_vertical_demand_persons_per_5min = {min = 260.0, max = 260.0}
+escalator_speed_m_s = {min = 0.50, max = 0.50}
+escalator_step_width_mm = {min = 1000.0, max = 1000.0}
+escalator_step_pitch_mm = {min = 400.0, max = 400.0}
+escalator_loading_factor_percent = {min = 40.0, max = 40.0}
+lift_round_trip_time_s = {min = 120.0, max = 120.0}
+lift_car_capacity_persons = {min = 16.0, max = 16.0}
+lift_count = {min = 2.0, max = 2.0}
+lift_loading_factor_percent = {min = 80.0, max = 80.0}
+required_lift_handling_percent = {min = 10.0, max = 10.0}
+ventilation_airflow_m3_h = {min = 48000.0, max = 48000.0}
+concourse_volume_m3 = {min = 7500.0, max = 7500.0}
+required_air_changes_per_h = {min = 6.0, max = 6.0}
+nac_strobe_quantity = {min = 18.0, max = 18.0}
+nac_strobe_current_a = {min = 0.09, max = 0.09}
+nac_horn_quantity = {min = 12.0, max = 12.0}
+nac_horn_current_a = {min = 0.04, max = 0.04}
+nac_speaker_quantity = {min = 10.0, max = 10.0}
+nac_speaker_current_a = {min = 0.03, max = 0.03}
+nac_circuit_capacity_a = {min = 3.0, max = 3.0}
+site_contexts = ["station-concourse-life-safety", "public-venue-vertical-movement"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-08 station population egress vertical package"
+visibility = "all_given"
+archetypes = ["ssc08_station_operations_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-08 station population egress vertical package"
+visibility = "all_given"
+archetypes = ["ssc08_station_operations_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-08 station population egress vertical package"
+visibility = "all_given"
+archetypes = ["ssc08_station_operations_case"]

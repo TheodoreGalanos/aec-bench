@@ -1,0 +1,192 @@
+# ABOUTME: Defines the SSC-03 drainage long-section HGL road low-point template.
+# ABOUTME: Pins one synthetic road profile, pit/pipe, HGL, and equipment source package.
+
+[meta]
+name = "drainage-long-section-hgl-road-low-point-package"
+description = "SSC-03 drainage long-section, HGL, spread, and road low-point metrics"
+long_description = "Calculates source-bound road low-point drainage metrics from a deterministic SSC-03 task-owned source pack. The template combines pipe slope, Manning capacity, HGL, low-point freeboard, roadway spread, equipment freeboard, and an overall synthetic pass score."
+discipline = "civil"
+category = "drainage-hgl-road-low-point"
+standards = ["FHWA HEC-22", "Manning drainage calculations", "road low-point drainage review", "stormwater HGL workflows"]
+tags = ["civil", "stormwater", "hgl", "road-low-point", "spread", "deterministic"]
+tool_mode = "with-tool"
+
+[params.upstream_invert_m]
+type = "float"
+unit = "m"
+description = "PITPIPE-SSC03-002 upstream pipe invert"
+min = 22.15
+max = 22.15
+
+[params.downstream_invert_m]
+type = "float"
+unit = "m"
+description = "PITPIPE-SSC03-002 downstream pipe invert"
+min = 21.65
+max = 21.65
+
+[params.pipe_length_m]
+type = "float"
+unit = "m"
+description = "DRAIN-SSC03-002 pipe reach length"
+min = 80.0
+max = 80.0
+
+[params.pipe_diameter_m]
+type = "float"
+unit = "m"
+description = "PITPIPE-SSC03-002 pipe diameter"
+min = 0.6
+max = 0.6
+
+[params.design_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "HGL-SSC03-002 design pipe flow"
+min = 0.42
+max = 0.42
+
+[params.manning_n]
+type = "float"
+description = "DRAIN-SSC03-002 Manning roughness"
+min = 0.013
+max = 0.013
+
+[params.downstream_tailwater_m]
+type = "float"
+unit = "m"
+description = "HGL-SSC03-002 downstream tailwater"
+min = 21.95
+max = 21.95
+
+[params.minor_loss_coefficient]
+type = "float"
+description = "HGL-SSC03-002 pit/minor loss coefficient"
+min = 0.65
+max = 0.65
+
+[params.road_low_point_level_m]
+type = "float"
+unit = "m"
+description = "ROAD-SSC03-002 road low-point level"
+min = 22.8
+max = 22.8
+
+[params.minimum_freeboard_m]
+type = "float"
+unit = "m"
+description = "MEMO-SSC03-002 minimum low-point freeboard"
+min = 0.3
+max = 0.3
+
+[params.gutter_approach_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "ROAD-SSC03-002 gutter approach flow"
+min = 0.18
+max = 0.18
+
+[params.roadway_spread_factor]
+type = "float"
+description = "ROAD-SSC03-002 source-owned roadway spread factor"
+min = 4.2
+max = 4.2
+
+[params.allowable_spread_m]
+type = "float"
+unit = "m"
+description = "MEMO-SSC03-002 allowable roadway spread"
+min = 2.4
+max = 2.4
+
+[params.equipment_threshold_level_m]
+type = "float"
+unit = "m"
+description = "MEMO-SSC03-002 roadside equipment threshold level"
+min = 23.05
+max = 23.05
+
+[outputs.pipe_slope_percent]
+description = "Pipe slope from invert schedule"
+tolerance = 0.03
+
+[outputs.pipe_velocity_m_s]
+description = "Pipe velocity at design flow"
+tolerance = 0.03
+
+[outputs.manning_capacity_m3_s]
+description = "Full-pipe Manning capacity"
+tolerance = 0.03
+
+[outputs.capacity_margin_m3_s]
+description = "Manning capacity minus design flow"
+tolerance = 0.03
+
+[outputs.friction_loss_m]
+description = "Pipe friction loss at design flow"
+tolerance = 0.03
+
+[outputs.minor_loss_m]
+description = "Pit/minor loss at design flow"
+tolerance = 0.03
+
+[outputs.upstream_hgl_m]
+description = "Upstream hydraulic grade line"
+tolerance = 0.03
+
+[outputs.low_point_freeboard_m]
+description = "Road low-point level minus upstream HGL"
+tolerance = 0.03
+
+[outputs.freeboard_margin_m]
+description = "Low-point freeboard minus minimum freeboard"
+tolerance = 0.03
+
+[outputs.roadway_spread_m]
+description = "Source-owned roadway spread estimate"
+tolerance = 0.03
+
+[outputs.spread_margin_m]
+description = "Allowable spread minus roadway spread"
+tolerance = 0.03
+
+[outputs.equipment_freeboard_m]
+description = "Equipment threshold level minus upstream HGL"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for capacity, HGL, spread, and equipment freeboard checks"
+tolerance = 0.03
+
+[archetypes.ssc03_low_point_hgl_case]
+description = "Road low-point HGL and spread case"
+upstream_invert_m = {min = 22.15, max = 22.15}
+downstream_invert_m = {min = 21.65, max = 21.65}
+pipe_length_m = {min = 80.0, max = 80.0}
+pipe_diameter_m = {min = 0.6, max = 0.6}
+design_flow_m3_s = {min = 0.42, max = 0.42}
+manning_n = {min = 0.013, max = 0.013}
+downstream_tailwater_m = {min = 21.95, max = 21.95}
+minor_loss_coefficient = {min = 0.65, max = 0.65}
+road_low_point_level_m = {min = 22.8, max = 22.8}
+minimum_freeboard_m = {min = 0.3, max = 0.3}
+gutter_approach_flow_m3_s = {min = 0.18, max = 0.18}
+roadway_spread_factor = {min = 4.2, max = 4.2}
+allowable_spread_m = {min = 2.4, max = 2.4}
+equipment_threshold_level_m = {min = 23.05, max = 23.05}
+site_contexts = ["road-low-point", "drainage-hgl-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-03 road low-point HGL package"
+visibility = "all_given"
+archetypes = ["ssc03_low_point_hgl_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-03 road low-point HGL package"
+visibility = "all_given"
+archetypes = ["ssc03_low_point_hgl_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-03 road low-point HGL package"
+visibility = "all_given"
+archetypes = ["ssc03_low_point_hgl_case"]

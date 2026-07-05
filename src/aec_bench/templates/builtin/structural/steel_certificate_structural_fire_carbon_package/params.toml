@@ -1,0 +1,177 @@
+# ABOUTME: Defines the SSC-15 steel certificate compliance template.
+# ABOUTME: Pins one task-owned steel certificate source pack and expected outputs.
+
+[meta]
+name = "steel-certificate-structural-fire-carbon-package"
+description = "SSC-15 steel certificate weldability, structural capacity, and fire consequence checks"
+long_description = "Calculates source-bound steel certificate compliance metrics from a deterministic SSC-15 task-owned source pack. The template combines one mill certificate, material schedule, welding criterion, fire note, structural excerpt, and material compliance memo."
+discipline = "structural"
+category = "material-compliance"
+standards = ["IIW carbon equivalent", "structural material certificate review", "fire design note review"]
+tags = ["structural", "steel", "certificate", "carbon-equivalent", "fire", "product-compliance", "deterministic"]
+tool_mode = "with-tool"
+
+[params.carbon_percent]
+type = "float"
+unit = "%"
+description = "CERT-15-STEEL-01 carbon content from the mill certificate"
+min = 0.18
+max = 0.18
+
+[params.manganese_percent]
+type = "float"
+unit = "%"
+description = "CERT-15-STEEL-01 manganese content from the mill certificate"
+min = 1.25
+max = 1.25
+
+[params.chromium_percent]
+type = "float"
+unit = "%"
+description = "CERT-15-STEEL-01 chromium content from the mill certificate"
+min = 0.25
+max = 0.25
+
+[params.molybdenum_percent]
+type = "float"
+unit = "%"
+description = "CERT-15-STEEL-01 molybdenum content from the mill certificate"
+min = 0.04
+max = 0.04
+
+[params.vanadium_percent]
+type = "float"
+unit = "%"
+description = "CERT-15-STEEL-01 vanadium content from the mill certificate"
+min = 0.03
+max = 0.03
+
+[params.nickel_percent]
+type = "float"
+unit = "%"
+description = "CERT-15-STEEL-01 nickel content from the mill certificate"
+min = 0.2
+max = 0.2
+
+[params.copper_percent]
+type = "float"
+unit = "%"
+description = "CERT-15-STEEL-01 copper content from the mill certificate"
+min = 0.25
+max = 0.25
+
+[params.carbon_equivalent_limit]
+type = "float"
+description = "WELD-15-CRIT-01 project carbon-equivalent acceptance limit"
+min = 0.52
+max = 0.52
+
+[params.certificate_capacity_kn]
+type = "float"
+unit = "kN"
+description = "MAT-15-SCHED-01 certificate-derived member capacity"
+min = 128.0
+max = 128.0
+
+[params.design_load_kn]
+type = "float"
+unit = "kN"
+description = "CALC-15-STRUCT-01 governing design load consumed by the certificate check"
+min = 95.0
+max = 95.0
+
+[params.fire_load_ratio]
+type = "float"
+description = "FIRE-15-NOTE-01 structural fire load ratio used by the task-owned critical-temperature formula"
+min = 0.62
+max = 0.62
+
+[params.required_fire_temperature_c]
+type = "float"
+unit = "degC"
+description = "FIRE-15-NOTE-01 required steel temperature threshold"
+min = 430.0
+max = 430.0
+
+[params.matching_certificate_fields]
+type = "float"
+unit = "count"
+description = "CERT-15-STEEL-01 certificate fields matching the material schedule"
+min = 6.0
+max = 6.0
+
+[params.required_certificate_fields]
+type = "float"
+unit = "count"
+description = "MAT-15-SCHED-01 required certificate field count"
+min = 6.0
+max = 6.0
+
+[params.completed_memo_sections]
+type = "float"
+unit = "count"
+description = "MEMO-15-STEEL-01 completed material memo sections"
+min = 5.0
+max = 5.0
+
+[params.required_memo_sections]
+type = "float"
+unit = "count"
+description = "MEMO-15-STEEL-01 required material memo sections"
+min = 5.0
+max = 5.0
+
+[outputs.carbon_equivalent]
+description = "IIW-style carbon equivalent from certificate chemistry"
+tolerance = 0.003
+
+[outputs.carbon_equivalent_margin]
+description = "Carbon equivalent limit minus calculated carbon equivalent"
+tolerance = 0.003
+
+[outputs.structural_capacity_margin_kn]
+description = "Certificate capacity minus design load"
+tolerance = 0.03
+
+[outputs.structural_utilization]
+description = "Design load divided by certificate capacity"
+tolerance = 0.003
+
+[outputs.critical_steel_temperature_c]
+description = "Task-owned critical steel temperature from fire load ratio"
+tolerance = 0.03
+
+[outputs.fire_temperature_margin_c]
+description = "Critical steel temperature minus required fire temperature"
+tolerance = 0.03
+
+[outputs.certificate_field_match_fraction]
+description = "Matching certificate fields divided by required certificate fields"
+tolerance = 0.003
+
+[outputs.material_memo_completeness_fraction]
+description = "Completed memo sections divided by required memo sections"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when certificate, weldability, structural, fire, and memo checks pass"
+tolerance = 0.001
+
+[archetypes.ssc15_steel_certificate_case]
+description = "Steel certificate structural, fire, and carbon compliance case"
+site_contexts = ["ssc15-steel-certificate"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-15 steel certificate compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_steel_certificate_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-15 steel certificate compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_steel_certificate_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-15 steel certificate compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_steel_certificate_case"]

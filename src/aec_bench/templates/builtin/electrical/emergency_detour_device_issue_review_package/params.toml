@@ -1,0 +1,394 @@
+[meta]
+name = "emergency-detour-device-issue-review-package"
+description = "SSC-01 review-first issue-readiness review of an emergency detour device package"
+long_description = "Review-native long-horizon task over a generated SSC-01 emergency detour device issue packet. The agent receives a multi-file source packet in /workspace/sources/ covering detour plan, message library, device inventory, communications topology, power continuity, criteria, and comments. The task is to inventory the packet, preserve object identity, recompute only source-owned evidence, assign one status per review item, raise findings/information requests/actions, and make a readiness decision. Packet variants inject missing closure duration evidence, stale detour revisions, device inventory mismatch, scenario copy-forward, open comments, carried comments, or a genuine battery runtime failure."
+discipline = "electrical"
+category = "road-review"
+standards = ["FHWA MUTCD", "NTCIP", "ITS architecture", "roadside power"]
+tags = ["electrical", "road", "review", "issue-readiness", "detour", "its", "vms", "rf", "battery"]
+tool_mode = "no-tool"
+
+# --- VMS and detour message ---
+
+[params.vms_character_height_in]
+type = "float"
+unit = "in"
+description = "MSG-SSC01-004 VMS character height"
+min = 8.0
+max = 14.0
+
+[params.detour_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "DETOUR-SSC01-004 detour approach speed"
+min = 50.0
+max = 90.0
+
+[params.reading_rate_chars_s]
+type = "float"
+unit = "chars/s"
+description = "MSG-SSC01-004 reading rate"
+min = 3.5
+max = 5.0
+
+[params.message_margin_chars]
+type = "float"
+unit = "chars"
+description = "Derivation margin between readable characters and selected message length"
+min = 2.0
+max = 8.0
+
+# --- Network load ---
+
+[params.cctv_count]
+type = "int"
+description = "CCTV-SSC01-004 active CCTV count"
+min = 2.0
+max = 5.0
+
+[params.cctv_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-SSC01-004 load per CCTV stream"
+min = 3.0
+max = 8.0
+
+[params.vms_count]
+type = "int"
+description = "VMS-SSC01-004 active VMS count"
+min = 1.0
+max = 3.0
+
+[params.vms_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-SSC01-004 load per VMS board"
+min = 1.5
+max = 4.0
+
+[params.radio_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "RF-SSC01-004 radio telemetry load"
+min = 0.5
+max = 2.0
+
+[params.controller_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-SSC01-004 controller network load"
+min = 0.5
+max = 1.5
+
+[params.network_overhead_pct]
+type = "float"
+unit = "%"
+description = "NET-SSC01-004 network overhead"
+min = 15.0
+max = 30.0
+
+[params.network_headroom_margin_mbps]
+type = "float"
+unit = "Mbps"
+description = "Derivation margin between required network load and uplink capacity"
+min = 5.0
+max = 20.0
+
+# --- RF link ---
+
+[params.rf_tx_power_dbm]
+type = "float"
+unit = "dBm"
+description = "RF-SSC01-004 transmit power"
+min = 18.0
+max = 24.0
+
+[params.rf_tx_gain_db]
+type = "float"
+unit = "dB"
+description = "RF-SSC01-004 transmit antenna gain"
+min = 8.0
+max = 14.0
+
+[params.rf_rx_gain_db]
+type = "float"
+unit = "dB"
+description = "RF-SSC01-004 receive antenna gain"
+min = 8.0
+max = 14.0
+
+[params.rf_path_loss_db]
+type = "float"
+unit = "dB"
+description = "RF-SSC01-004 path loss"
+min = 95.0
+max = 115.0
+
+[params.rf_misc_loss_db]
+type = "float"
+unit = "dB"
+description = "RF-SSC01-004 cable and connector loss"
+min = 2.0
+max = 5.0
+
+[params.rf_fade_margin_db]
+type = "float"
+unit = "dB"
+description = "RF-SSC01-004 reserved fade margin"
+min = 8.0
+max = 12.0
+
+[params.rf_link_margin_db]
+type = "float"
+unit = "dB"
+description = "Derivation margin between received power and receiver sensitivity"
+min = 6.0
+max = 18.0
+
+# --- Battery and feeder ---
+
+[params.critical_load_w]
+type = "float"
+unit = "W"
+description = "PWR-SSC01-004 critical detour device load"
+min = 450.0
+max = 850.0
+
+[params.battery_efficiency]
+type = "float"
+description = "PWR-SSC01-004 battery efficiency"
+min = 0.85
+max = 0.95
+
+[params.required_detour_duration_h]
+type = "float"
+unit = "h"
+description = "OPS-SSC01-004 required emergency closure duration"
+min = 4.0
+max = 12.0
+
+[params.battery_runtime_margin_h]
+type = "float"
+unit = "h"
+description = "Derivation margin between battery runtime and required closure duration for passing packets"
+min = 1.0
+max = 5.0
+
+[params.battery_runtime_deficit_h]
+type = "float"
+unit = "h"
+description = "Derivation deficit between battery runtime and required closure duration for failing packets"
+min = 0.5
+max = 2.0
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "PWR-SSC01-004 feeder length"
+min = 0.08
+max = 0.4
+
+[params.conductor_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "PWR-SSC01-004 conductor resistance"
+min = 0.5
+max = 1.2
+
+[params.feeder_voltage_v]
+type = "enum"
+unit = "V"
+description = "PWR-SSC01-004 nominal feeder voltage"
+values = ["230", "240"]
+
+[params.power_factor]
+type = "float"
+description = "PWR-SSC01-004 load power factor"
+min = 0.9
+max = 0.98
+
+[params.voltage_drop_margin_percent]
+type = "float"
+unit = "%"
+description = "Derivation margin between voltage drop and allowable voltage drop"
+min = 2.0
+max = 5.0
+
+# --- Documentary variant helper ---
+
+[params.packet_variant]
+type = "enum"
+description = "Hidden packet-defect variant controlling gold review statuses"
+values = [
+  "clean",
+  "missing_closure_duration",
+  "stale_detour_plan_revision",
+  "device_inventory_mismatch",
+  "scenario_copy_forward",
+  "open_critical_comment",
+  "minor_open_comment_carried",
+  "battery_runtime_deficient",
+]
+
+# --- Outputs (review gold state and evidence) ---
+
+[outputs.rlr_01_status]
+description = "Packet completeness status code (0 pass, 1 fail, 2 not applicable, 3 insufficient data)"
+tolerance = 0.0
+
+[outputs.rlr_02_status]
+description = "Object identity status code"
+tolerance = 0.0
+
+[outputs.rlr_03_status]
+description = "Detour and message basis status code"
+tolerance = 0.0
+
+[outputs.rlr_04_status]
+description = "Continuity adequacy status code"
+tolerance = 0.0
+
+[outputs.rlr_05_status]
+description = "Scenario consequence status code"
+tolerance = 0.0
+
+[outputs.rlr_06_status]
+description = "Secondary-discipline resilience status code"
+tolerance = 0.0
+
+[outputs.rlr_07_status]
+description = "Comment and action closure status code"
+tolerance = 0.0
+
+[outputs.rlr_08_status]
+description = "Readiness decision consistency status code"
+tolerance = 0.0
+
+[outputs.rlr_09_status]
+description = "Claim boundary status code"
+tolerance = 0.0
+
+[outputs.readiness_code]
+description = "Gold readiness decision (0 ready, 1 ready with carried actions, 2 not ready)"
+tolerance = 0.0
+
+[outputs.required_findings_count]
+description = "Findings the review must raise"
+tolerance = 0.0
+
+[outputs.required_information_requests_count]
+description = "Information requests the review must raise"
+tolerance = 0.0
+
+[outputs.required_carried_actions_count]
+description = "Carried actions the review must record"
+tolerance = 0.0
+
+[outputs.vms_reading_time_s]
+description = "Available reading time for the selected VMS message"
+tolerance = 0.02
+
+[outputs.vms_message_margin_chars]
+description = "Readable character capacity minus selected detour message length"
+tolerance = 0.02
+
+[outputs.required_network_mbps]
+description = "Required detour network load after overhead"
+tolerance = 0.02
+
+[outputs.network_headroom_mbps]
+description = "Uplink capacity minus required detour network load"
+tolerance = 0.02
+
+[outputs.rf_received_power_dbm]
+description = "RF received power after gains and losses"
+tolerance = 0.02
+
+[outputs.rf_link_margin_db]
+description = "RF received power minus receiver sensitivity"
+tolerance = 0.02
+
+[outputs.battery_runtime_h]
+description = "Battery runtime for the critical detour load"
+tolerance = 0.02
+
+[outputs.battery_margin_h]
+description = "Battery runtime minus required closure duration"
+tolerance = 0.02
+
+[outputs.feeder_voltage_drop_percent]
+description = "Feeder voltage drop at the detour critical load"
+tolerance = 0.02
+
+[outputs.voltage_drop_margin_percent]
+description = "Allowable voltage drop minus computed voltage drop"
+tolerance = 0.02
+
+# --- Archetypes ---
+
+[archetypes.urban_arterial_detour]
+description = "Urban arterial closure with higher device and network density"
+site_contexts = ["urban-arterial-emergency-detour", "cbd-fringe-closure-response"]
+cctv_count = {min = 3.0, max = 5.0}
+vms_count = {min = 2.0, max = 3.0}
+critical_load_w = {min = 600.0, max = 850.0}
+required_detour_duration_h = {min = 6.0, max = 12.0}
+
+[archetypes.suburban_collector_detour]
+description = "Suburban collector closure with moderate device density"
+site_contexts = ["suburban-collector-emergency-detour", "school-access-closure-response"]
+cctv_count = {min = 2.0, max = 3.0}
+vms_count = {min = 1.0, max = 2.0}
+critical_load_w = {min = 450.0, max = 700.0}
+required_detour_duration_h = {min = 4.0, max = 10.0}
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Obvious packet defects: clean, missing closure duration, or genuine battery runtime failure"
+visibility = "partial"
+archetypes = ["urban_arterial_detour", "suburban_collector_detour"]
+hidden_params = [
+  "packet_variant",
+  "message_margin_chars",
+  "network_headroom_margin_mbps",
+  "rf_link_margin_db",
+  "battery_runtime_margin_h",
+  "battery_runtime_deficit_h",
+  "voltage_drop_margin_percent",
+]
+packet_variant = ["clean", "missing_closure_duration", "battery_runtime_deficient"]
+
+[difficulty.medium]
+description = "Full packet-variant distribution"
+visibility = "partial"
+archetypes = ["urban_arterial_detour", "suburban_collector_detour"]
+hidden_params = [
+  "packet_variant",
+  "message_margin_chars",
+  "network_headroom_margin_mbps",
+  "rf_link_margin_db",
+  "battery_runtime_margin_h",
+  "battery_runtime_deficit_h",
+  "voltage_drop_margin_percent",
+]
+
+[difficulty.hard]
+description = "Subtle documentary defects: stale revisions, device mismatch, scenario copy-forward, carried comments"
+visibility = "partial"
+archetypes = ["urban_arterial_detour", "suburban_collector_detour"]
+hidden_params = [
+  "packet_variant",
+  "message_margin_chars",
+  "network_headroom_margin_mbps",
+  "rf_link_margin_db",
+  "battery_runtime_margin_h",
+  "battery_runtime_deficit_h",
+  "voltage_drop_margin_percent",
+]
+packet_variant = [
+  "stale_detour_plan_revision",
+  "device_inventory_mismatch",
+  "scenario_copy_forward",
+  "minor_open_comment_carried",
+]

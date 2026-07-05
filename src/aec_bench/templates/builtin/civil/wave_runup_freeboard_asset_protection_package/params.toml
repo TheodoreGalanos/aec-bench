@@ -1,0 +1,159 @@
+[meta]
+name = "wave-runup-freeboard-asset-protection-package"
+description = "SSC-04 wave runup, freeboard, and asset protection metrics"
+long_description = "Calculates source-bound coastal wave protection metrics from a deterministic SSC-04 task-owned source pack. The template combines wave transform, breaking height, runup, total water level, freeboard, armor stability margin, and an overall synthetic pass score."
+discipline = "civil"
+category = "coastal-wave-protection"
+standards = ["linear wave workflow", "wave runup workflow", "freeboard review", "armor protection review"]
+tags = ["civil", "coastal", "wave", "runup", "freeboard", "armor", "deterministic"]
+tool_mode = "with-tool"
+
+[params.offshore_wave_height_m]
+type = "float"
+unit = "m"
+description = "WAVE-04-CLIMATE-02 offshore wave height"
+min = 1.8
+max = 1.8
+
+[params.wave_period_s]
+type = "float"
+unit = "s"
+description = "WAVE-04-CLIMATE-02 wave period"
+min = 8.0
+max = 8.0
+
+[params.shoaling_coefficient]
+type = "float"
+description = "PROFILE-04-SHORE-02 source-owned shoaling coefficient"
+min = 1.12
+max = 1.12
+
+[params.nearshore_depth_m]
+type = "float"
+unit = "m"
+description = "PROFILE-04-SHORE-02 nearshore depth"
+min = 3.2
+max = 3.2
+
+[params.breaker_index]
+type = "float"
+description = "CRIT-04-HORIZON-02 breaker index"
+min = 0.78
+max = 0.78
+
+[params.runup_coefficient]
+type = "float"
+description = "CRIT-04-HORIZON-02 runup coefficient"
+min = 1.6
+max = 1.6
+
+[params.slope_factor]
+type = "float"
+description = "PROFILE-04-SHORE-02 slope factor"
+min = 0.75
+max = 0.75
+
+[params.stillwater_level_m]
+type = "float"
+unit = "m"
+description = "CRIT-04-HORIZON-02 stillwater level"
+min = 2.05
+max = 2.05
+
+[params.asset_platform_level_m]
+type = "float"
+unit = "m"
+description = "ASSET-04-LEVEL-02 asset platform level"
+min = 5.1
+max = 5.1
+
+[params.required_freeboard_m]
+type = "float"
+unit = "m"
+description = "CRIT-04-HORIZON-02 required freeboard"
+min = 0.3
+max = 0.3
+
+[params.selected_armor_mass_t]
+type = "float"
+unit = "t"
+description = "ARMOR-04-SCHED-02 selected armor mass"
+min = 3.5
+max = 3.5
+
+[params.required_armor_mass_t]
+type = "float"
+unit = "t"
+description = "ARMOR-04-SCHED-02 required armor mass"
+min = 2.8
+max = 2.8
+
+[outputs.deepwater_wavelength_m]
+description = "Deepwater wavelength from wave period"
+tolerance = 0.03
+
+[outputs.shoaling_coefficient]
+description = "Source-owned shoaling coefficient"
+tolerance = 0.003
+
+[outputs.nearshore_wave_height_m]
+description = "Offshore wave height times shoaling coefficient"
+tolerance = 0.03
+
+[outputs.breaking_height_limit_m]
+description = "Breaker index times nearshore depth"
+tolerance = 0.03
+
+[outputs.breaking_margin_m]
+description = "Breaking height limit minus nearshore wave height"
+tolerance = 0.03
+
+[outputs.runup_2_percent_m]
+description = "Two-percent runup estimate"
+tolerance = 0.03
+
+[outputs.total_water_level_m]
+description = "Stillwater level plus runup"
+tolerance = 0.03
+
+[outputs.freeboard_margin_m]
+description = "Asset level minus total water level and required freeboard"
+tolerance = 0.03
+
+[outputs.armor_stability_margin_t]
+description = "Selected armor mass minus required armor mass"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when breaking, freeboard, and armor checks pass"
+tolerance = 0.001
+
+[archetypes.ssc04_wave_protection_case]
+description = "Wave runup, freeboard, and asset protection case"
+offshore_wave_height_m = {min = 1.8, max = 1.8}
+wave_period_s = {min = 8.0, max = 8.0}
+shoaling_coefficient = {min = 1.12, max = 1.12}
+nearshore_depth_m = {min = 3.2, max = 3.2}
+breaker_index = {min = 0.78, max = 0.78}
+runup_coefficient = {min = 1.6, max = 1.6}
+slope_factor = {min = 0.75, max = 0.75}
+stillwater_level_m = {min = 2.05, max = 2.05}
+asset_platform_level_m = {min = 5.1, max = 5.1}
+required_freeboard_m = {min = 0.3, max = 0.3}
+selected_armor_mass_t = {min = 3.5, max = 3.5}
+required_armor_mass_t = {min = 2.8, max = 2.8}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-04 wave protection package"
+visibility = "all_given"
+archetypes = ["ssc04_wave_protection_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-04 wave protection package"
+visibility = "all_given"
+archetypes = ["ssc04_wave_protection_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-04 wave protection package"
+visibility = "all_given"
+archetypes = ["ssc04_wave_protection_case"]

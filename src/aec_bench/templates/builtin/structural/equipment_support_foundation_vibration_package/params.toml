@@ -1,0 +1,201 @@
+# ABOUTME: Defines the SSC-06 equipment support, foundation, and vibration template.
+# ABOUTME: Pins one equipment layout, mass schedule, foundation, isolator, and load-combination source pack.
+
+[meta]
+name = "equipment-support-foundation-vibration-package"
+description = "SSC-06 equipment support, foundation, and vibration metrics"
+long_description = "Calculates source-bound equipment support metrics from a deterministic SSC-06 task-owned source pack. The template combines support reaction, foundation bearing pressure, vibration transmissibility, fatigue damage screening, support capacity margin, and an overall synthetic pass score."
+discipline = "structural"
+category = "equipment-support-vibration"
+standards = ["equipment support workflow", "vibration isolation workflow", "load-combination screening"]
+tags = ["structural", "equipment", "support", "foundation", "vibration", "fatigue", "deterministic"]
+tool_mode = "with-tool"
+
+[params.equipment_mass_kg]
+type = "float"
+unit = "kg"
+description = "MASS-06-SCHED-04 equipment operating mass"
+min = 5800.0
+max = 5800.0
+
+[params.dynamic_allowance_factor]
+type = "float"
+description = "LOAD-06-COMB-04 dynamic allowance factor"
+min = 1.2
+max = 1.2
+
+[params.support_count]
+type = "int"
+description = "FOUNDATION-06-BASE-04 active support count"
+min = 4
+max = 4
+
+[params.reaction_load_factor]
+type = "float"
+description = "LOAD-06-COMB-04 reaction load factor"
+min = 1.35
+max = 1.35
+
+[params.foundation_self_weight_kn]
+type = "float"
+unit = "kN"
+description = "FOUNDATION-06-BASE-04 foundation self-weight"
+min = 35.0
+max = 35.0
+
+[params.foundation_length_m]
+type = "float"
+unit = "m"
+description = "FOUNDATION-06-BASE-04 foundation length"
+min = 3.0
+max = 3.0
+
+[params.foundation_width_m]
+type = "float"
+unit = "m"
+description = "FOUNDATION-06-BASE-04 foundation width"
+min = 2.0
+max = 2.0
+
+[params.allowable_bearing_kpa]
+type = "float"
+unit = "kPa"
+description = "FOUNDATION-06-BASE-04 allowable bearing pressure"
+min = 160.0
+max = 160.0
+
+[params.operating_frequency_hz]
+type = "float"
+unit = "Hz"
+description = "ISO-06-VIB-04 operating frequency"
+min = 29.0
+max = 29.0
+
+[params.support_natural_frequency_hz]
+type = "float"
+unit = "Hz"
+description = "ISO-06-VIB-04 support natural frequency"
+min = 42.0
+max = 42.0
+
+[params.damping_ratio]
+type = "float"
+description = "ISO-06-VIB-04 damping ratio"
+min = 0.1
+max = 0.1
+
+[params.cycles_per_day]
+type = "float"
+unit = "cycles/day"
+description = "ISO-06-VIB-04 duty cycles per day"
+min = 24.0
+max = 24.0
+
+[params.design_life_days]
+type = "float"
+unit = "days"
+description = "ISO-06-VIB-04 design life"
+min = 5475.0
+max = 5475.0
+
+[params.stress_range_mpa]
+type = "float"
+unit = "MPa"
+description = "LOAD-06-COMB-04 fatigue stress range"
+min = 38.0
+max = 38.0
+
+[params.fatigue_constant]
+type = "float"
+description = "LOAD-06-COMB-04 fatigue constant"
+min = 1200000000000.0
+max = 1200000000000.0
+
+[params.fatigue_exponent]
+type = "float"
+description = "LOAD-06-COMB-04 fatigue exponent"
+min = 3.0
+max = 3.0
+
+[params.support_factored_capacity_kn]
+type = "float"
+unit = "kN"
+description = "FOUNDATION-06-BASE-04 support factored capacity"
+min = 60.0
+max = 60.0
+
+[outputs.support_service_reaction_kn]
+description = "Dynamic service support reaction per support"
+tolerance = 0.03
+
+[outputs.factored_support_reaction_kn]
+description = "Factored support reaction per support"
+tolerance = 0.03
+
+[outputs.bearing_pressure_kpa]
+description = "Foundation bearing pressure"
+tolerance = 0.03
+
+[outputs.bearing_utilization]
+description = "Bearing pressure divided by allowable bearing"
+tolerance = 0.03
+
+[outputs.frequency_ratio]
+description = "Operating frequency divided by support natural frequency"
+tolerance = 0.03
+
+[outputs.vibration_transmissibility]
+description = "Damped vibration transmissibility"
+tolerance = 0.03
+
+[outputs.transmitted_dynamic_force_kn]
+description = "Support service reaction times vibration transmissibility"
+tolerance = 0.03
+
+[outputs.fatigue_damage_ratio]
+description = "Miner-style fatigue damage ratio"
+tolerance = 0.03
+
+[outputs.load_combination_margin_kn]
+description = "Support capacity minus factored reaction"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when bearing, fatigue, and support capacity checks pass"
+tolerance = 0.001
+
+[archetypes.ssc06_equipment_support_vibration_case]
+description = "Equipment support, foundation, vibration, and load-combination source pack"
+equipment_mass_kg = {min = 5800.0, max = 5800.0}
+dynamic_allowance_factor = {min = 1.2, max = 1.2}
+support_count = {min = 4, max = 4}
+reaction_load_factor = {min = 1.35, max = 1.35}
+foundation_self_weight_kn = {min = 35.0, max = 35.0}
+foundation_length_m = {min = 3.0, max = 3.0}
+foundation_width_m = {min = 2.0, max = 2.0}
+allowable_bearing_kpa = {min = 160.0, max = 160.0}
+operating_frequency_hz = {min = 29.0, max = 29.0}
+support_natural_frequency_hz = {min = 42.0, max = 42.0}
+damping_ratio = {min = 0.1, max = 0.1}
+cycles_per_day = {min = 24.0, max = 24.0}
+design_life_days = {min = 5475.0, max = 5475.0}
+stress_range_mpa = {min = 38.0, max = 38.0}
+fatigue_constant = {min = 1200000000000.0, max = 1200000000000.0}
+fatigue_exponent = {min = 3.0, max = 3.0}
+support_factored_capacity_kn = {min = 60.0, max = 60.0}
+site_contexts = ["equipment-support-vibration", "foundation-fatigue-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-06 equipment support package"
+visibility = "all_given"
+archetypes = ["ssc06_equipment_support_vibration_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-06 equipment support package"
+visibility = "all_given"
+archetypes = ["ssc06_equipment_support_vibration_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-06 equipment support package"
+visibility = "all_given"
+archetypes = ["ssc06_equipment_support_vibration_case"]

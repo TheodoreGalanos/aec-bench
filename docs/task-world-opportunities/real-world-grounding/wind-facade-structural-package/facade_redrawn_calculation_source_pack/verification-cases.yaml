@@ -1,0 +1,117 @@
+# ABOUTME: Defines positive and negative verifier cases for the facade source-pack seed.
+# ABOUTME: Keeps verifier expectations concrete without adding task runtime code.
+source_pack_id: facade_redrawn_calculation_source_pack_seed_001
+status: docs_only_verifier_case_skeleton
+policy: These cases are research fixtures for future verifier implementation. They are not executable runtime tests yet.
+baseline_case:
+  id: baseline_pass
+  expected_result: pass
+  description: The unmodified seed pack should pass manifest, drawing-label, geometry, zone, load, lookup, utilization, source-policy, and memo-traceability checks.
+  required_gates:
+    - manifest_completeness
+    - drawing_label_consistency
+    - drawing_bounds
+    - zone_extent_consistency
+    - opening_extent_consistency
+    - support_coordinate_consistency
+    - zone_assignment
+    - tributary_area
+    - wind_load
+    - dead_load
+    - bracket_horizontal_utilization
+    - bracket_vertical_utilization
+    - anchor_tension_utilization
+    - anchor_shear_utilization
+    - anchor_combined_utilization
+    - anchor_schedule_consistency
+    - anchor_geometry_limits
+    - anchor_demand_trace
+    - governing_utilization
+    - pass_fail
+    - source_policy
+    - memo_traceability
+    - variant_matrix_coverage
+    - variant_source_overlay_coverage
+    - expanded_variant_source_file_coverage
+    - verifier_implementation_brief_coverage
+negative_cases:
+  - id: missing_capacity_file
+    expected_result: fail
+    failure_stage: manifest
+    mutation: Remove `capacity-excerpts.yaml` from the pack.
+    expected_diagnostic: Required capacity excerpt file is missing.
+  - id: missing_drawing_label
+    expected_result: fail
+    failure_stage: drawing_geometry
+    mutation: Change `BR-C01` in support-schedule.csv to `BR-C99` without updating elevation-redrawn.svg.
+    expected_diagnostic: Support label in schedule is not visible in the redrawn elevation.
+  - id: drawing_bounds_mismatch
+    expected_result: fail
+    failure_stage: geometry_bounds
+    mutation: Change the `DRAWING` row in geometry-oracle.csv from 1200 by 900 px to 1100 by 900 px.
+    expected_diagnostic: Geometry oracle drawing bounds do not match the SVG viewBox or project scale.
+  - id: opening_extent_mismatch
+    expected_result: fail
+    failure_stage: opening_geometry
+    mutation: Change `OP-01` width_m in geometry-oracle.csv from `2.30` to `2.00`.
+    expected_diagnostic: Opening extent does not match the SVG opening rectangle and project scale.
+  - id: support_coordinate_mismatch
+    expected_result: fail
+    failure_stage: support_coordinates
+    mutation: Move `BR-E01` x_min_px and x_max_px in geometry-oracle.csv from `300` to `650`.
+    expected_diagnostic: Support coordinate is not inside the pressure-zone extent named by its support schedule row.
+  - id: invalid_pressure_zone
+    expected_result: fail
+    failure_stage: pressure_zone
+    mutation: Change support row `BR-E01` zone_id from `ZE` to `ZX`.
+    expected_diagnostic: Support row cannot be joined to a pressure schedule zone.
+  - id: tributary_area_mismatch
+    expected_result: fail
+    failure_stage: load_derivation
+    mutation: Change `BR-B01` tributary_area_m2 in calculation-oracle.csv from `0.900` to `0.800`.
+    expected_diagnostic: Tributary area does not equal tributary_width_m multiplied by tributary_height_m.
+  - id: anchor_lookup_missing
+    expected_result: fail
+    failure_stage: anchor_lookup
+    mutation: Change `BR-C01` anchor_row in support-schedule.csv from `ANCH-CONC-M8` to `ANCH-MISSING`.
+    expected_diagnostic: Support row references an anchor row absent from capacity-excerpts.yaml.
+  - id: anchor_edge_distance_under_minimum
+    expected_result: fail
+    failure_stage: anchor_geometry
+    mutation: Change `BR-C01` edge_distance_x_mm in anchor-check-oracle.csv from `85` to `60`.
+    expected_diagnostic: Anchor edge distance is below the embedded capacity excerpt minimum.
+  - id: anchor_embedment_under_minimum
+    expected_result: fail
+    failure_stage: anchor_geometry
+    mutation: Change `BR-E01` embedment_mm in anchor-check-oracle.csv from `60` to `45`.
+    expected_diagnostic: Anchor embedment is below the embedded capacity excerpt minimum.
+  - id: anchor_demand_mismatch
+    expected_result: fail
+    failure_stage: anchor_demand
+    mutation: Change `BR-B01` tension_demand_kN in anchor-check-oracle.csv from `1.080` to `0.900`.
+    expected_diagnostic: Anchor tension demand does not match the wind-load demand in calculation-oracle.csv.
+  - id: governing_utilization_underreported
+    expected_result: fail
+    failure_stage: utilization
+    mutation: Report `BR-C01` governing_utilization below its computed anchor_combined_utilization.
+    expected_diagnostic: Governing utilization does not equal the maximum controlling utilization.
+  - id: over_limit_case_not_failed
+    expected_result: fail
+    failure_stage: utilization
+    mutation: Increase `BR-C01` pressure_kpa to `-3.20` and keep status as `pass`.
+    expected_diagnostic: Row with governing_utilization greater than 1.0 is not marked fail.
+  - id: live_vendor_lookup_used
+    expected_result: fail
+    failure_stage: source_policy
+    mutation: Solver output ignores capacity-excerpts.yaml and cites live vendor capacity retrieval as the grading basis.
+    expected_diagnostic: Output relies on live vendor data instead of embedded task-owned excerpts.
+  - id: issued_report_claim
+    expected_result: fail
+    failure_stage: source_policy
+    mutation: Solver output describes the seed pack as an issued public project engineering report.
+    expected_diagnostic: Output misrepresents the docs-only seed skeleton as an issued report.
+  - id: missing_governing_memo
+    expected_result: fail
+    failure_stage: memo_traceability
+    mutation: Solver output gives pass/fail rows but omits the governing row and governing component explanation.
+    expected_diagnostic: Memo does not identify the governing support row and component.

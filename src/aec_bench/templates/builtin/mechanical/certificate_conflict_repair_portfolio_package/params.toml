@@ -1,0 +1,163 @@
+# ABOUTME: Defines the SSC-15 certificate conflict repair template.
+# ABOUTME: Pins one task-owned conflicting-datasheet and repair memo source pack.
+
+[meta]
+name = "certificate-conflict-repair-portfolio-package"
+description = "SSC-15 certificate conflict source authority, affected calculations, substitution, and repair memo checks"
+long_description = "Calculates source-bound certificate conflict repair metrics from a deterministic SSC-15 task-owned source pack. The template combines two conflicting product datasheets, a certificate record, source index, calculation trace, and repair response."
+discipline = "mechanical"
+category = "certificate-repair"
+standards = ["source authority review", "substitution review", "product certificate conflict review"]
+tags = ["mechanical", "certificate", "datasheet", "source-conflict", "repair", "product-compliance", "deterministic"]
+tool_mode = "with-tool"
+
+[params.selected_source_is_current]
+type = "float"
+description = "INDEX-15-SRC-08 selected source is current"
+min = 1.0
+max = 1.0
+
+[params.selected_source_has_authority]
+type = "float"
+description = "INDEX-15-SRC-08 selected source has governing authority"
+min = 1.0
+max = 1.0
+
+[params.affected_calculation_count]
+type = "float"
+unit = "count"
+description = "TRACE-15-CALC-08 affected calculation count"
+min = 5.0
+max = 5.0
+
+[params.updated_calculation_count]
+type = "float"
+unit = "count"
+description = "TRACE-15-CALC-08 updated affected calculation count"
+min = 5.0
+max = 5.0
+
+[params.governing_certificate_capacity_kn]
+type = "float"
+unit = "kN"
+description = "CERT-15-REC-08 governing certificate capacity"
+min = 125.0
+max = 125.0
+
+[params.conflicting_datasheet_capacity_kn]
+type = "float"
+unit = "kN"
+description = "DAT-15-A-08 superseded datasheet capacity"
+min = 110.0
+max = 110.0
+
+[params.replacement_capacity_kn]
+type = "float"
+unit = "kN"
+description = "DAT-15-B-08 replacement product capacity"
+min = 142.0
+max = 142.0
+
+[params.required_capacity_kn]
+type = "float"
+unit = "kN"
+description = "TRACE-15-CALC-08 required capacity after repair"
+min = 130.0
+max = 130.0
+
+[params.total_conflict_items]
+type = "float"
+unit = "count"
+description = "RESPONSE-15-REPAIR-08 total conflict items"
+min = 4.0
+max = 4.0
+
+[params.closed_conflict_items]
+type = "float"
+unit = "count"
+description = "RESPONSE-15-REPAIR-08 closed conflict items"
+min = 4.0
+max = 4.0
+
+[params.unresolved_conflict_count]
+type = "float"
+unit = "count"
+description = "RESPONSE-15-REPAIR-08 unresolved conflict count"
+min = 0.0
+max = 0.0
+
+[params.expired_source_count]
+type = "float"
+unit = "count"
+description = "INDEX-15-SRC-08 expired source count still used by the repair"
+min = 0.0
+max = 0.0
+
+[params.completed_repair_memo_sections]
+type = "float"
+unit = "count"
+description = "RESPONSE-15-REPAIR-08 completed repair memo sections"
+min = 9.0
+max = 9.0
+
+[params.required_repair_memo_sections]
+type = "float"
+unit = "count"
+description = "RESPONSE-15-REPAIR-08 required repair memo sections"
+min = 10.0
+max = 10.0
+
+[outputs.source_authority_score]
+description = "Minimum of current-source and authority-source indicators"
+tolerance = 0.001
+
+[outputs.affected_calculation_update_fraction]
+description = "Updated calculations divided by affected calculations"
+tolerance = 0.003
+
+[outputs.certificate_capacity_delta_kn]
+description = "Governing certificate capacity minus conflicting datasheet capacity"
+tolerance = 0.03
+
+[outputs.replacement_capacity_margin_kn]
+description = "Replacement product capacity minus required capacity"
+tolerance = 0.03
+
+[outputs.source_conflict_closure_fraction]
+description = "Closed conflict items divided by total conflict items"
+tolerance = 0.003
+
+[outputs.unresolved_conflict_count]
+description = "Unresolved conflict count left in the repair response"
+tolerance = 0.001
+
+[outputs.expired_source_count]
+description = "Expired source count still used by the repair"
+tolerance = 0.001
+
+[outputs.repair_memo_completeness_fraction]
+description = "Completed repair memo sections divided by required repair memo sections"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when source authority, affected calculations, substitution, conflict, and memo checks pass"
+tolerance = 0.001
+
+[archetypes.ssc15_certificate_conflict_case]
+description = "Certificate conflict and repair portfolio compliance case"
+site_contexts = ["ssc15-certificate-conflict"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-15 certificate conflict repair package"
+visibility = "all_given"
+archetypes = ["ssc15_certificate_conflict_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-15 certificate conflict repair package"
+visibility = "all_given"
+archetypes = ["ssc15_certificate_conflict_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-15 certificate conflict repair package"
+visibility = "all_given"
+archetypes = ["ssc15_certificate_conflict_case"]

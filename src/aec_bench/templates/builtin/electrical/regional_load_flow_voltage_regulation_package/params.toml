@@ -1,0 +1,161 @@
+[meta]
+name = "regional-load-flow-voltage-regulation-package"
+description = "SSC-05 regional load-flow, voltage-regulation, transformer loading, PFC, and feeder-loss metrics"
+long_description = "Calculates deterministic SSC-05 regional load-flow metrics from a task-owned synthetic source pack. The template combines load growth, transformer loading, feeder current, voltage drop, regulator boost, minimum-voltage margin, PFC requirement, feeder loss, and an overall synthetic pass score."
+discipline = "electrical"
+category = "regional-load-flow-voltage"
+standards = ["ETAP-style load-flow workflow", "EasyPower PowerFlow workflow", "regional voltage-regulation review workflow"]
+tags = ["electrical", "load-flow", "voltage-regulation", "transformer", "feeder", "pfc", "deterministic"]
+tool_mode = "with-tool"
+
+[params.base_load_kw]
+type = "float"
+unit = "kW"
+description = "LOAD-05-SCENARIO-07 base regional feeder load"
+min = 980.0
+max = 980.0
+
+[params.growth_fraction]
+type = "float"
+description = "LOAD-05-SCENARIO-07 load-growth fraction"
+min = 0.25
+max = 0.25
+
+[params.transformer_kva]
+type = "float"
+unit = "kVA"
+description = "SLD-05-FEEDER-07 transformer rating"
+min = 1400.0
+max = 1400.0
+
+[params.source_power_factor]
+type = "float"
+description = "LOAD-05-SCENARIO-07 source power factor before PFC"
+min = 0.94
+max = 0.94
+
+[params.target_power_factor]
+type = "float"
+description = "CRIT-05-VOLT-07 target power factor"
+min = 0.98
+max = 0.98
+
+[params.feeder_voltage_kv]
+type = "float"
+unit = "kV"
+description = "SLD-05-FEEDER-07 feeder voltage"
+min = 4.16
+max = 4.16
+
+[params.feeder_r_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "CABLE-05-FEEDER-07 feeder resistance"
+min = 0.32
+max = 0.32
+
+[params.feeder_x_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "CABLE-05-FEEDER-07 feeder reactance"
+min = 0.14
+max = 0.14
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "CABLE-05-FEEDER-07 feeder length"
+min = 3.8
+max = 3.8
+
+[params.regulator_boost_pu]
+type = "float"
+unit = "pu"
+description = "CRIT-05-VOLT-07 regulator boost applied to the review case"
+min = 0.065
+max = 0.065
+
+[params.minimum_voltage_pu]
+type = "float"
+unit = "pu"
+description = "CRIT-05-VOLT-07 minimum allowed voltage"
+min = 0.94
+max = 0.94
+
+[params.feeder_loss_percent]
+type = "float"
+unit = "%"
+description = "COMMENT-05-REVIEW-07 source-owned feeder loss percentage"
+min = 2.372326530612245
+max = 2.372326530612245
+
+[outputs.peak_load_kw]
+description = "Base load plus growth allowance"
+tolerance = 0.03
+
+[outputs.transformer_loading_percent]
+description = "Transformer loading at peak load"
+tolerance = 0.03
+
+[outputs.transformer_margin_percent]
+description = "Transformer loading margin to 100 percent"
+tolerance = 0.03
+
+[outputs.feeder_current_a]
+description = "Regional feeder current"
+tolerance = 0.03
+
+[outputs.voltage_drop_percent]
+description = "Feeder voltage drop before regulator boost"
+tolerance = 0.03
+
+[outputs.regulated_voltage_pu]
+description = "Receiving-end voltage after regulator boost"
+tolerance = 0.03
+
+[outputs.minimum_voltage_margin_pu]
+description = "Regulated voltage minus minimum-voltage criterion"
+tolerance = 0.003
+
+[outputs.required_pfc_kvar]
+description = "PFC kVAr needed to move from source to target power factor"
+tolerance = 0.03
+
+[outputs.feeder_loss_kw]
+description = "Source-owned feeder loss estimate"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when transformer and voltage margins are non-negative and PFC is positive"
+tolerance = 0.001
+
+[archetypes.ssc05_regional_load_flow_case]
+description = "Regional load-flow package tied to one SLD, load scenario, feeder schedule, voltage criterion, review comment, and response memo"
+base_load_kw = {min = 980.0, max = 980.0}
+growth_fraction = {min = 0.25, max = 0.25}
+transformer_kva = {min = 1400.0, max = 1400.0}
+source_power_factor = {min = 0.94, max = 0.94}
+target_power_factor = {min = 0.98, max = 0.98}
+feeder_voltage_kv = {min = 4.16, max = 4.16}
+feeder_r_ohm_per_km = {min = 0.32, max = 0.32}
+feeder_x_ohm_per_km = {min = 0.14, max = 0.14}
+feeder_length_km = {min = 3.8, max = 3.8}
+regulator_boost_pu = {min = 0.065, max = 0.065}
+minimum_voltage_pu = {min = 0.94, max = 0.94}
+feeder_loss_percent = {min = 2.372326530612245, max = 2.372326530612245}
+site_contexts = ["regional-load-flow-voltage"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-05 regional load-flow package"
+visibility = "all_given"
+archetypes = ["ssc05_regional_load_flow_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-05 regional load-flow package"
+visibility = "all_given"
+archetypes = ["ssc05_regional_load_flow_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-05 regional load-flow package"
+visibility = "all_given"
+archetypes = ["ssc05_regional_load_flow_case"]

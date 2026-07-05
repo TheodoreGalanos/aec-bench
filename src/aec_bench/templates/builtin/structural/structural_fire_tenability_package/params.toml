@@ -1,0 +1,176 @@
+[meta]
+name = "structural-fire-tenability-package"
+description = "SSC-19 structural fire and tenability metrics"
+long_description = "Calculates source-bound structural fire and tenability metrics from a deterministic SSC-19 task-owned source pack. The template combines fire growth HRR, fire energy, steel critical temperature, smoke visibility, egress width, alarm NAC current margin, and an overall synthetic pass score."
+discipline = "structural"
+category = "structural-fire-tenability"
+standards = ["structural fire engineering workflows", "tenability review workflows", "fire alarm load workflows"]
+tags = ["structural", "fire", "tenability", "egress", "steel", "alarm", "deterministic"]
+tool_mode = "with-tool"
+
+[params.fire_growth_alpha_kw_s2]
+type = "float"
+unit = "kW/s2"
+description = "HRR-19-DESIGN-03 fire growth alpha"
+min = 0.0469
+max = 0.0469
+
+[params.time_to_check_s]
+type = "float"
+unit = "s"
+description = "HRR-19-DESIGN-03 time for design HRR check"
+min = 240.0
+max = 240.0
+
+[params.max_hrr_kw]
+type = "float"
+unit = "kW"
+description = "HRR-19-DESIGN-03 maximum capped HRR"
+min = 2800.0
+max = 2800.0
+
+[params.fire_duration_min]
+type = "float"
+unit = "min"
+description = "FIRE-19-STRAT-03 fire duration for energy check"
+min = 20.0
+max = 20.0
+
+[params.structural_load_ratio]
+type = "float"
+description = "STEEL-19-MEMBER-03 structural load ratio"
+min = 0.55
+max = 0.55
+
+[params.steel_temperature_c]
+type = "float"
+unit = "degC"
+description = "STEEL-19-MEMBER-03 calculated steel temperature"
+min = 420.0
+max = 420.0
+
+[params.visibility_constant]
+type = "float"
+description = "TEN-19-CRIT-03 visibility constant"
+min = 8.0
+max = 8.0
+
+[params.smoke_extinction_coefficient_m1]
+type = "float"
+unit = "1/m"
+description = "TEN-19-CRIT-03 smoke extinction coefficient"
+min = 0.25
+max = 0.25
+
+[params.required_visibility_m]
+type = "float"
+unit = "m"
+description = "TEN-19-CRIT-03 required visibility"
+min = 10.0
+max = 10.0
+
+[params.available_egress_width_m]
+type = "float"
+unit = "m"
+description = "EGRESS-19-ALARM-03 available egress width"
+min = 8.4
+max = 8.4
+
+[params.occupant_load]
+type = "float"
+description = "EGRESS-19-ALARM-03 occupant load"
+min = 320.0
+max = 320.0
+
+[params.egress_width_factor_m_per_10_persons]
+type = "float"
+unit = "m/10 persons"
+description = "EGRESS-19-ALARM-03 egress width factor"
+min = 0.2
+max = 0.2
+
+[params.nac_current_a]
+type = "float"
+unit = "A"
+description = "EGRESS-19-ALARM-03 NAC current"
+min = 6.5
+max = 6.5
+
+[params.nac_capacity_a]
+type = "float"
+unit = "A"
+description = "EGRESS-19-ALARM-03 NAC capacity"
+min = 10.0
+max = 10.0
+
+[outputs.design_hrr_kw]
+description = "Design heat release rate"
+tolerance = 0.03
+
+[outputs.fire_energy_mj]
+description = "Fire energy over the design duration"
+tolerance = 0.03
+
+[outputs.steel_critical_temp_c]
+description = "Steel critical temperature from load ratio"
+tolerance = 0.03
+
+[outputs.steel_temperature_margin_c]
+description = "Critical temperature minus calculated steel temperature"
+tolerance = 0.03
+
+[outputs.visibility_distance_m]
+description = "Visibility distance from extinction coefficient"
+tolerance = 0.03
+
+[outputs.visibility_margin_m]
+description = "Visibility distance minus required visibility"
+tolerance = 0.03
+
+[outputs.required_egress_width_m]
+description = "Required aggregate egress width"
+tolerance = 0.03
+
+[outputs.egress_width_margin_m]
+description = "Available egress width minus required width"
+tolerance = 0.03
+
+[outputs.nac_current_margin_a]
+description = "NAC capacity minus NAC current"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when structural, tenability, egress, and NAC margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc19_structural_fire_tenability_case]
+description = "Structural fire and tenability case with HRR, steel, visibility, egress, and NAC checks"
+fire_growth_alpha_kw_s2 = {min = 0.0469, max = 0.0469}
+time_to_check_s = {min = 240.0, max = 240.0}
+max_hrr_kw = {min = 2800.0, max = 2800.0}
+fire_duration_min = {min = 20.0, max = 20.0}
+structural_load_ratio = {min = 0.55, max = 0.55}
+steel_temperature_c = {min = 420.0, max = 420.0}
+visibility_constant = {min = 8.0, max = 8.0}
+smoke_extinction_coefficient_m1 = {min = 0.25, max = 0.25}
+required_visibility_m = {min = 10.0, max = 10.0}
+available_egress_width_m = {min = 8.4, max = 8.4}
+occupant_load = {min = 320.0, max = 320.0}
+egress_width_factor_m_per_10_persons = {min = 0.2, max = 0.2}
+nac_current_a = {min = 6.5, max = 6.5}
+nac_capacity_a = {min = 10.0, max = 10.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-19 structural fire and tenability package"
+visibility = "all_given"
+archetypes = ["ssc19_structural_fire_tenability_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-19 structural fire and tenability package"
+visibility = "all_given"
+archetypes = ["ssc19_structural_fire_tenability_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-19 structural fire and tenability package"
+visibility = "all_given"
+archetypes = ["ssc19_structural_fire_tenability_case"]

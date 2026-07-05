@@ -1,0 +1,218 @@
+[meta]
+name = "acoustic-receiver-impact-package"
+description = "SSC-12 acoustic and vibration receiver-impact metrics"
+long_description = "Calculates source-bound acoustic and vibration receiver-impact metrics from a deterministic SSC-12 task-owned source pack. The template aggregates octave-band source sound power, receiver distance attenuation, mitigation insertion loss, A-weighted logarithmic summation, background addition, night criterion margin, and vibration isolation transmissibility for a compact generated task instance."
+discipline = "mechanical"
+category = "acoustic-impact"
+standards = ["FHWA TNM", "FTA Noise and Vibration Manual", "SoundPLAN", "CadnaA"]
+tags = ["mechanical", "acoustics", "vibration", "receiver-impact", "octave-band", "deterministic"]
+tool_mode = "with-tool"
+
+[params.source_lw_63_hz_db]
+type = "float"
+unit = "dB Lw"
+description = "SRC-SSC12-001 63 Hz source sound power level"
+min = 91.0
+max = 91.0
+
+[params.source_lw_125_hz_db]
+type = "float"
+unit = "dB Lw"
+description = "SRC-SSC12-001 125 Hz source sound power level"
+min = 96.0
+max = 96.0
+
+[params.source_lw_250_hz_db]
+type = "float"
+unit = "dB Lw"
+description = "SRC-SSC12-001 250 Hz source sound power level"
+min = 99.0
+max = 99.0
+
+[params.source_lw_500_hz_db]
+type = "float"
+unit = "dB Lw"
+description = "SRC-SSC12-001 500 Hz source sound power level"
+min = 101.0
+max = 101.0
+
+[params.source_lw_1000_hz_db]
+type = "float"
+unit = "dB Lw"
+description = "SRC-SSC12-001 1000 Hz source sound power level"
+min = 100.0
+max = 100.0
+
+[params.source_lw_2000_hz_db]
+type = "float"
+unit = "dB Lw"
+description = "SRC-SSC12-001 2000 Hz source sound power level"
+min = 97.0
+max = 97.0
+
+[params.source_lw_4000_hz_db]
+type = "float"
+unit = "dB Lw"
+description = "SRC-SSC12-001 4000 Hz source sound power level"
+min = 91.0
+max = 91.0
+
+[params.source_lw_8000_hz_db]
+type = "float"
+unit = "dB Lw"
+description = "SRC-SSC12-001 8000 Hz source sound power level"
+min = 84.0
+max = 84.0
+
+[params.receiver_distance_m]
+type = "float"
+unit = "m"
+description = "Distance from SRC-SSC12-001 to RCV-12-NIGHT-01"
+min = 75.0
+max = 75.0
+
+[params.mitigation_insertion_loss_db]
+type = "float"
+unit = "dB"
+description = "MIT-12-BARRIER-01 insertion loss applied to each receiver octave band"
+min = 15.0
+max = 15.0
+
+[params.background_sound_level_dba]
+type = "float"
+unit = "dBA"
+description = "Existing night background level at RCV-12-NIGHT-01"
+min = 42.0
+max = 42.0
+
+[params.night_noise_criterion_dba]
+type = "float"
+unit = "dBA"
+description = "CRIT-12-NIGHT night receiver criterion"
+min = 45.0
+max = 45.0
+
+[params.forcing_frequency_hz]
+type = "float"
+unit = "Hz"
+description = "Equipment forcing frequency for ISO-12-MOUNT-01 isolation check"
+min = 29.5
+max = 29.5
+
+[params.isolator_natural_frequency_hz]
+type = "float"
+unit = "Hz"
+description = "ISO-12-MOUNT-01 natural frequency"
+min = 8.0
+max = 8.0
+
+[params.damping_ratio]
+type = "float"
+description = "ISO-12-MOUNT-01 damping ratio"
+min = 0.08
+max = 0.08
+
+[params.source_vibration_velocity_mm_s]
+type = "float"
+unit = "mm/s"
+description = "Equipment source vibration velocity before isolation and path loss"
+min = 3.2
+max = 3.2
+
+[params.structural_path_factor]
+type = "float"
+description = "Task-owned structural path factor from ISO-12-MOUNT-01 to RCV-12-NIGHT-01"
+min = 0.82
+max = 0.82
+
+[params.vibration_velocity_criterion_mm_s]
+type = "float"
+unit = "mm/s"
+description = "Receiver vibration velocity criterion for this source pack"
+min = 0.3
+max = 0.3
+
+[outputs.distance_attenuation_db]
+description = "Receiver path distance attenuation using the task-owned point-source approximation"
+tolerance = 0.03
+
+[outputs.receiver_linear_level_db]
+description = "Logarithmic sum of receiver octave-band levels before A-weighting"
+tolerance = 0.03
+
+[outputs.receiver_a_weighted_level_dba]
+description = "Logarithmic sum of receiver octave-band levels after A-weighting"
+tolerance = 0.03
+
+[outputs.combined_ambient_level_dba]
+description = "Logarithmic sum of receiver A-weighted level and existing background"
+tolerance = 0.03
+
+[outputs.increase_over_background_db]
+description = "Combined ambient level minus existing background level"
+tolerance = 0.03
+
+[outputs.criterion_margin_db]
+description = "Night receiver criterion minus combined ambient level"
+tolerance = 0.03
+
+[outputs.dominant_octave_hz]
+description = "Octave band with the highest A-weighted receiver band level"
+tolerance = 0.03
+
+[outputs.frequency_ratio]
+description = "Forcing frequency divided by isolator natural frequency"
+tolerance = 0.03
+
+[outputs.vibration_transmissibility]
+description = "Damped isolation transmissibility for ISO-12-MOUNT-01"
+tolerance = 0.03
+
+[outputs.receiver_vibration_velocity_mm_s]
+description = "Receiver vibration velocity after isolation and structural path factor"
+tolerance = 0.03
+
+[outputs.vibration_margin_mm_s]
+description = "Receiver vibration criterion minus receiver vibration velocity"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for the task-owned acoustic and vibration checks"
+tolerance = 0.03
+
+[archetypes.ssc12_night_receiver_case]
+description = "Night equipment receiver impact package with octave-band source, mitigation, and isolation data"
+source_lw_63_hz_db = {min = 91.0, max = 91.0}
+source_lw_125_hz_db = {min = 96.0, max = 96.0}
+source_lw_250_hz_db = {min = 99.0, max = 99.0}
+source_lw_500_hz_db = {min = 101.0, max = 101.0}
+source_lw_1000_hz_db = {min = 100.0, max = 100.0}
+source_lw_2000_hz_db = {min = 97.0, max = 97.0}
+source_lw_4000_hz_db = {min = 91.0, max = 91.0}
+source_lw_8000_hz_db = {min = 84.0, max = 84.0}
+receiver_distance_m = {min = 75.0, max = 75.0}
+mitigation_insertion_loss_db = {min = 15.0, max = 15.0}
+background_sound_level_dba = {min = 42.0, max = 42.0}
+night_noise_criterion_dba = {min = 45.0, max = 45.0}
+forcing_frequency_hz = {min = 29.5, max = 29.5}
+isolator_natural_frequency_hz = {min = 8.0, max = 8.0}
+damping_ratio = {min = 0.08, max = 0.08}
+source_vibration_velocity_mm_s = {min = 3.2, max = 3.2}
+structural_path_factor = {min = 0.82, max = 0.82}
+vibration_velocity_criterion_mm_s = {min = 0.3, max = 0.3}
+site_contexts = ["night-equipment-impact", "receiver-mitigation-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-12 acoustic receiver impact package"
+visibility = "all_given"
+archetypes = ["ssc12_night_receiver_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-12 acoustic receiver impact package"
+visibility = "all_given"
+archetypes = ["ssc12_night_receiver_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-12 acoustic receiver impact package"
+visibility = "all_given"
+archetypes = ["ssc12_night_receiver_case"]

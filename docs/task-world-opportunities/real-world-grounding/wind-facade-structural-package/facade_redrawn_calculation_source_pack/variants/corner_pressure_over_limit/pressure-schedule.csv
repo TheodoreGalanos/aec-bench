@@ -1,0 +1,4 @@
+zone_id,zone_name,height_band_m,pressure_kpa,load_combination,tributary_rule,governing_pressure
+ZB,body,0-9,-1.20,WIND_SERVICE,representative interior panel tributary,0
+ZE,edge,0-9,-1.80,WIND_SERVICE,edge strip representative tributary,0
+ZC,corner,0-9,-3.00,WIND_SERVICE,corner strip representative tributary,1

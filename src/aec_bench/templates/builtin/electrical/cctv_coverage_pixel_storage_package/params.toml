@@ -1,0 +1,262 @@
+# ABOUTME: Defines the SSC-13 CCTV coverage, pixel-density, and storage template.
+# ABOUTME: Pins one task-owned CCTV source pack and expected outputs.
+
+[meta]
+name = "cctv-coverage-pixel-storage-package"
+description = "SSC-13 CCTV coverage, PPM, storage, network, PoE, and fibre checks"
+long_description = "Calculates source-bound CCTV coverage metrics from a deterministic SSC-13 task-owned source pack. The template combines camera coverage, target PPM, recording retention, bandwidth, PoE, and fibre link margin."
+discipline = "electrical"
+category = "cctv-coverage-storage"
+standards = ["CCTV PPM workflow", "video retention workflow", "network bandwidth review", "fibre loss budget"]
+tags = ["electrical", "cctv", "coverage", "ppm", "storage", "network", "poe", "fibre", "deterministic"]
+tool_mode = "with-tool"
+
+[params.camera_01_horizontal_pixels]
+type = "float"
+unit = "px"
+description = "CAM-13-DATA-06 camera 01 horizontal pixels"
+min = 2688.0
+max = 2688.0
+
+[params.camera_01_target_width_m]
+type = "float"
+unit = "m"
+description = "TARGET-13-LIST-06 camera 01 target width"
+min = 18.0
+max = 18.0
+
+[params.camera_02_horizontal_pixels]
+type = "float"
+unit = "px"
+description = "CAM-13-DATA-06 camera 02 horizontal pixels"
+min = 2688.0
+max = 2688.0
+
+[params.camera_02_target_width_m]
+type = "float"
+unit = "m"
+description = "TARGET-13-LIST-06 camera 02 target width"
+min = 22.0
+max = 22.0
+
+[params.camera_03_horizontal_pixels]
+type = "float"
+unit = "px"
+description = "CAM-13-DATA-06 camera 03 horizontal pixels"
+min = 2688.0
+max = 2688.0
+
+[params.camera_03_target_width_m]
+type = "float"
+unit = "m"
+description = "TARGET-13-LIST-06 camera 03 target width"
+min = 16.0
+max = 16.0
+
+[params.required_ppm]
+type = "float"
+description = "MEMO-13-CCTV-06 required minimum pixels per metre"
+min = 100.0
+max = 100.0
+
+[params.covered_targets]
+type = "float"
+unit = "count"
+description = "TARGET-13-LIST-06 covered target count"
+min = 7.0
+max = 7.0
+
+[params.required_targets]
+type = "float"
+unit = "count"
+description = "TARGET-13-LIST-06 required target count"
+min = 7.0
+max = 7.0
+
+[params.camera_01_bitrate_mbps]
+type = "float"
+unit = "Mbps"
+description = "REC-13-POL-06 camera 01 bitrate"
+min = 5.0
+max = 5.0
+
+[params.camera_02_bitrate_mbps]
+type = "float"
+unit = "Mbps"
+description = "REC-13-POL-06 camera 02 bitrate"
+min = 5.0
+max = 5.0
+
+[params.camera_03_bitrate_mbps]
+type = "float"
+unit = "Mbps"
+description = "REC-13-POL-06 camera 03 bitrate"
+min = 8.0
+max = 8.0
+
+[params.retention_days]
+type = "float"
+unit = "days"
+description = "REC-13-POL-06 retention days"
+min = 30.0
+max = 30.0
+
+[params.storage_overhead_factor]
+type = "float"
+description = "REC-13-POL-06 storage overhead factor"
+min = 1.15
+max = 1.15
+
+[params.network_overhead_factor]
+type = "float"
+description = "NET-13-PWR-06 network overhead factor"
+min = 1.20
+max = 1.20
+
+[params.uplink_capacity_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-13-PWR-06 uplink capacity"
+min = 50.0
+max = 50.0
+
+[params.camera_count]
+type = "float"
+unit = "count"
+description = "CCTV-13-PLAN-06 camera count"
+min = 3.0
+max = 3.0
+
+[params.camera_poe_w]
+type = "float"
+unit = "W"
+description = "NET-13-PWR-06 PoE per camera"
+min = 14.0
+max = 14.0
+
+[params.recorder_aux_poe_w]
+type = "float"
+unit = "W"
+description = "NET-13-PWR-06 recorder auxiliary PoE allowance"
+min = 10.0
+max = 10.0
+
+[params.poe_budget_w]
+type = "float"
+unit = "W"
+description = "NET-13-PWR-06 PoE budget"
+min = 90.0
+max = 90.0
+
+[params.fibre_length_km]
+type = "float"
+unit = "km"
+description = "NET-13-PWR-06 fibre length"
+min = 0.8
+max = 0.8
+
+[params.fibre_loss_db_per_km]
+type = "float"
+unit = "dB/km"
+description = "NET-13-PWR-06 fibre attenuation"
+min = 0.35
+max = 0.35
+
+[params.connector_loss_db]
+type = "float"
+unit = "dB"
+description = "NET-13-PWR-06 connector loss"
+min = 1.0
+max = 1.0
+
+[params.splice_loss_db]
+type = "float"
+unit = "dB"
+description = "NET-13-PWR-06 splice loss"
+min = 0.3
+max = 0.3
+
+[params.reserve_loss_db]
+type = "float"
+unit = "dB"
+description = "NET-13-PWR-06 reserve loss"
+min = 1.5
+max = 1.5
+
+[params.fibre_budget_db]
+type = "float"
+unit = "dB"
+description = "NET-13-PWR-06 fibre budget"
+min = 16.0
+max = 16.0
+
+[outputs.camera_01_pixels_per_m]
+description = "Camera 01 pixels per metre"
+tolerance = 0.003
+
+[outputs.camera_02_pixels_per_m]
+description = "Camera 02 pixels per metre"
+tolerance = 0.003
+
+[outputs.camera_03_pixels_per_m]
+description = "Camera 03 pixels per metre"
+tolerance = 0.003
+
+[outputs.minimum_pixels_per_m]
+description = "Minimum camera pixels per metre"
+tolerance = 0.003
+
+[outputs.ppm_margin]
+description = "Minimum PPM minus required PPM"
+tolerance = 0.003
+
+[outputs.coverage_match_fraction]
+description = "Covered targets divided by required targets"
+tolerance = 0.003
+
+[outputs.storage_required_tb]
+description = "CCTV storage requirement"
+tolerance = 0.003
+
+[outputs.network_load_mbps]
+description = "Network load including overhead"
+tolerance = 0.003
+
+[outputs.network_headroom_mbps]
+description = "Uplink capacity minus network load"
+tolerance = 0.003
+
+[outputs.poe_load_w]
+description = "PoE load"
+tolerance = 0.003
+
+[outputs.poe_headroom_w]
+description = "PoE budget minus load"
+tolerance = 0.003
+
+[outputs.fibre_margin_db]
+description = "Fibre budget minus calculated loss"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when CCTV, storage, network, PoE, and fibre checks pass"
+tolerance = 0.001
+
+[archetypes.ssc13_cctv_storage_case]
+description = "CCTV coverage, pixel-density, and storage case"
+site_contexts = ["ssc13-cctv-storage"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-13 CCTV package"
+visibility = "all_given"
+archetypes = ["ssc13_cctv_storage_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-13 CCTV package"
+visibility = "all_given"
+archetypes = ["ssc13_cctv_storage_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-13 CCTV package"
+visibility = "all_given"
+archetypes = ["ssc13_cctv_storage_case"]

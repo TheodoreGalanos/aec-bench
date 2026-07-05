@@ -1,0 +1,182 @@
+# ABOUTME: Defines the SSC-13 visual systems review and repair template.
+# ABOUTME: Pins one task-owned review-response source pack and expected outputs.
+
+[meta]
+name = "visual-systems-review-repair-package"
+description = "SSC-13 visual systems review response, affected-check repair, and source-conflict checks"
+long_description = "Calculates source-bound visual systems review metrics from a deterministic SSC-13 task-owned source pack. The template combines review comments, revised layout, device schedule, calculation trace, criteria matrix, and repair response."
+discipline = "electrical"
+category = "visual-systems-review"
+standards = ["review response workflow", "source conflict workflow", "lighting/CCTV/network repair workflow"]
+tags = ["electrical", "lighting", "cctv", "its", "review", "repair", "source-conflict", "deterministic"]
+tool_mode = "with-tool"
+
+[params.closed_review_comments]
+type = "float"
+unit = "count"
+description = "REVIEW-13-COMMENTS-08 closed review comments"
+min = 5.0
+max = 5.0
+
+[params.total_review_comments]
+type = "float"
+unit = "count"
+description = "REVIEW-13-COMMENTS-08 total review comments"
+min = 5.0
+max = 5.0
+
+[params.updated_affected_checks]
+type = "float"
+unit = "count"
+description = "CALC-13-TRACE-08 updated affected checks"
+min = 4.0
+max = 4.0
+
+[params.required_affected_checks]
+type = "float"
+unit = "count"
+description = "CRIT-13-MATRIX-08 required affected checks"
+min = 4.0
+max = 4.0
+
+[params.revised_minimum_lux]
+type = "float"
+unit = "lux"
+description = "LAYOUT-13-REV-08 revised minimum lighting"
+min = 16.1
+max = 16.1
+
+[params.required_minimum_lux]
+type = "float"
+unit = "lux"
+description = "CRIT-13-MATRIX-08 required minimum lighting"
+min = 15.0
+max = 15.0
+
+[params.cctv_horizontal_pixels]
+type = "float"
+unit = "px"
+description = "DEVICE-13-SCHED-08 revised CCTV horizontal pixels"
+min = 1920.0
+max = 1920.0
+
+[params.revised_target_width_m]
+type = "float"
+unit = "m"
+description = "LAYOUT-13-REV-08 revised CCTV target width"
+min = 24.0
+max = 24.0
+
+[params.required_ppm]
+type = "float"
+description = "CRIT-13-MATRIX-08 required CCTV PPM"
+min = 70.0
+max = 70.0
+
+[params.revised_network_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "DEVICE-13-SCHED-08 revised network load"
+min = 38.0
+max = 38.0
+
+[params.network_capacity_mbps]
+type = "float"
+unit = "Mbps"
+description = "DEVICE-13-SCHED-08 network capacity"
+min = 50.0
+max = 50.0
+
+[params.revised_poe_load_w]
+type = "float"
+unit = "W"
+description = "DEVICE-13-SCHED-08 revised PoE load"
+min = 92.0
+max = 92.0
+
+[params.poe_budget_w]
+type = "float"
+unit = "W"
+description = "DEVICE-13-SCHED-08 PoE budget"
+min = 120.0
+max = 120.0
+
+[params.unresolved_conflict_count]
+type = "float"
+unit = "count"
+description = "RESPONSE-13-REPAIR-08 unresolved conflicts"
+min = 0.0
+max = 0.0
+
+[params.completed_repair_memo_sections]
+type = "float"
+unit = "count"
+description = "RESPONSE-13-REPAIR-08 completed memo sections"
+min = 9.0
+max = 9.0
+
+[params.required_repair_memo_sections]
+type = "float"
+unit = "count"
+description = "RESPONSE-13-REPAIR-08 required memo sections"
+min = 10.0
+max = 10.0
+
+[outputs.review_comment_closure_fraction]
+description = "Closed review comments divided by total comments"
+tolerance = 0.003
+
+[outputs.affected_check_update_fraction]
+description = "Updated affected checks divided by required affected checks"
+tolerance = 0.003
+
+[outputs.lighting_minimum_margin_lux]
+description = "Revised minimum lighting minus required minimum lighting"
+tolerance = 0.003
+
+[outputs.revised_cctv_pixels_per_m]
+description = "Revised CCTV pixels per metre"
+tolerance = 0.003
+
+[outputs.cctv_ppm_margin]
+description = "Revised CCTV PPM minus required PPM"
+tolerance = 0.003
+
+[outputs.network_headroom_mbps]
+description = "Network capacity minus revised network load"
+tolerance = 0.003
+
+[outputs.poe_headroom_w]
+description = "PoE budget minus revised PoE load"
+tolerance = 0.003
+
+[outputs.unresolved_conflict_count]
+description = "Unresolved source conflict count"
+tolerance = 0.001
+
+[outputs.repair_memo_completeness_fraction]
+description = "Completed repair memo sections divided by required sections"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when review repair checks pass"
+tolerance = 0.001
+
+[archetypes.ssc13_visual_repair_case]
+description = "Visual systems review and repair case"
+site_contexts = ["ssc13-visual-repair"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-13 visual systems repair package"
+visibility = "all_given"
+archetypes = ["ssc13_visual_repair_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-13 visual systems repair package"
+visibility = "all_given"
+archetypes = ["ssc13_visual_repair_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-13 visual systems repair package"
+visibility = "all_given"
+archetypes = ["ssc13_visual_repair_case"]

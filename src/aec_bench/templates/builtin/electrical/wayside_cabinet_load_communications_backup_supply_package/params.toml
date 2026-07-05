@@ -1,0 +1,288 @@
+[meta]
+name = "wayside-cabinet-load-communications-backup-supply-package"
+description = "SSC-02 wayside cabinet load, backup battery, feeder, UPS, and fiber metrics"
+long_description = "Calculates deterministic SSC-02 wayside cabinet resilience metrics from a task-owned synthetic source pack. The template combines connected load, design load, backup energy, battery capacity margin, 48 V feeder voltage drop, optical link budget, UPS sizing, and an overall synthetic pass score."
+discipline = "electrical"
+category = "wayside-cabinet-backup"
+standards = ["rail wayside cabinet power workflow", "fiber link budget workflow", "backup-power autonomy review workflow"]
+tags = ["electrical", "rail", "wayside", "cabinet", "backup", "battery", "fiber", "ups", "deterministic"]
+tool_mode = "with-tool"
+
+[params.signal_processor_w]
+type = "float"
+unit = "W"
+description = "LOAD-02-DEVICE-07 signal processor load"
+min = 120.0
+max = 120.0
+
+[params.axle_counter_w]
+type = "float"
+unit = "W"
+description = "LOAD-02-DEVICE-07 axle counter load"
+min = 80.0
+max = 80.0
+
+[params.comms_switch_w]
+type = "float"
+unit = "W"
+description = "LOAD-02-DEVICE-07 communications switch load"
+min = 65.0
+max = 65.0
+
+[params.radio_w]
+type = "float"
+unit = "W"
+description = "LOAD-02-DEVICE-07 radio load"
+min = 45.0
+max = 45.0
+
+[params.point_machine_heater_w]
+type = "float"
+unit = "W"
+description = "LOAD-02-DEVICE-07 point machine heater load"
+min = 150.0
+max = 150.0
+
+[params.spare_allowance_pct]
+type = "float"
+unit = "%"
+description = "UPS-02-DATA-07 spare allowance"
+min = 15.0
+max = 15.0
+
+[params.autonomy_h]
+type = "float"
+unit = "h"
+description = "MAINT-02-RESPONSE-07 required backup autonomy"
+min = 10.0
+max = 10.0
+
+[params.dc_voltage_v]
+type = "float"
+unit = "V"
+description = "UPS-02-DATA-07 DC system voltage"
+min = 48.0
+max = 48.0
+
+[params.usable_battery_fraction]
+type = "float"
+description = "UPS-02-DATA-07 usable battery fraction"
+min = 0.72
+max = 0.72
+
+[params.installed_battery_ah]
+type = "float"
+unit = "Ah"
+description = "UPS-02-DATA-07 installed battery capacity"
+min = 240.0
+max = 240.0
+
+[params.feeder_length_m]
+type = "float"
+unit = "m"
+description = "CAB-02-LAYOUT-07 one-way DC feeder length"
+min = 42.0
+max = 42.0
+
+[params.conductor_resistance_milliohm_per_m]
+type = "float"
+unit = "milliohm/m"
+description = "CAB-02-LAYOUT-07 conductor resistance"
+min = 1.5
+max = 1.5
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "UPS-02-DATA-07 maximum feeder voltage drop"
+min = 5.0
+max = 5.0
+
+[params.fiber_length_km]
+type = "float"
+unit = "km"
+description = "COMMS-02-TOPO-07 fiber link length"
+min = 2.6
+max = 2.6
+
+[params.fiber_attenuation_db_per_km]
+type = "float"
+unit = "dB/km"
+description = "COMMS-02-TOPO-07 fiber attenuation"
+min = 0.35
+max = 0.35
+
+[params.fiber_connector_count]
+type = "float"
+description = "COMMS-02-TOPO-07 connector count"
+min = 4.0
+max = 4.0
+
+[params.connector_loss_db]
+type = "float"
+unit = "dB"
+description = "COMMS-02-TOPO-07 connector loss"
+min = 0.3
+max = 0.3
+
+[params.fiber_splice_count]
+type = "float"
+description = "COMMS-02-TOPO-07 splice count"
+min = 5.0
+max = 5.0
+
+[params.splice_loss_db]
+type = "float"
+unit = "dB"
+description = "COMMS-02-TOPO-07 splice loss"
+min = 0.05
+max = 0.05
+
+[params.patch_panel_allowance_db]
+type = "float"
+unit = "dB"
+description = "COMMS-02-TOPO-07 patch-panel allowance"
+min = 0.8
+max = 0.8
+
+[params.optical_tx_power_dbm]
+type = "float"
+unit = "dBm"
+description = "COMMS-02-TOPO-07 optical transmitter power"
+min = -2.0
+max = -2.0
+
+[params.receiver_sensitivity_dbm]
+type = "float"
+unit = "dBm"
+description = "COMMS-02-TOPO-07 receiver sensitivity"
+min = -24.0
+max = -24.0
+
+[params.required_fiber_margin_db]
+type = "float"
+unit = "dB"
+description = "COMMS-02-TOPO-07 required optical margin"
+min = 3.0
+max = 3.0
+
+[params.selected_ups_rating_va]
+type = "float"
+unit = "VA"
+description = "UPS-02-DATA-07 selected UPS rating"
+min = 1200.0
+max = 1200.0
+
+[params.load_power_factor]
+type = "float"
+description = "UPS-02-DATA-07 UPS load power factor"
+min = 0.9
+max = 0.9
+
+[outputs.connected_load_w]
+description = "Sum of source-owned wayside device loads"
+tolerance = 0.03
+
+[outputs.design_load_w]
+description = "Connected load plus spare allowance"
+tolerance = 0.03
+
+[outputs.required_energy_kwh]
+description = "Design load times autonomy"
+tolerance = 0.03
+
+[outputs.required_battery_capacity_ah]
+description = "Battery amp-hours required after usable fraction"
+tolerance = 0.03
+
+[outputs.battery_capacity_margin_ah]
+description = "Installed battery capacity minus required capacity"
+tolerance = 0.03
+
+[outputs.feeder_current_a]
+description = "DC feeder current at design load"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_v]
+description = "Two-wire DC feeder voltage drop"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "DC feeder voltage drop percentage"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Maximum allowed voltage drop minus computed voltage drop"
+tolerance = 0.03
+
+[outputs.fiber_total_loss_db]
+description = "Total optical link loss"
+tolerance = 0.03
+
+[outputs.fiber_receive_power_dbm]
+description = "Optical receive power"
+tolerance = 0.03
+
+[outputs.fiber_link_margin_db]
+description = "Receive power minus receiver sensitivity"
+tolerance = 0.03
+
+[outputs.fiber_excess_margin_db]
+description = "Optical link margin above required margin"
+tolerance = 0.03
+
+[outputs.required_ups_rating_va]
+description = "UPS VA required at design load"
+tolerance = 0.03
+
+[outputs.ups_rating_margin_va]
+description = "Selected UPS rating minus required UPS rating"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when battery, feeder, fiber, and UPS margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc02_wayside_cabinet_backup_case]
+description = "Wayside cabinet package tied to one cabinet layout, load schedule, communications topology, UPS data sheet, maintenance response plan, and memo"
+signal_processor_w = {min = 120.0, max = 120.0}
+axle_counter_w = {min = 80.0, max = 80.0}
+comms_switch_w = {min = 65.0, max = 65.0}
+radio_w = {min = 45.0, max = 45.0}
+point_machine_heater_w = {min = 150.0, max = 150.0}
+spare_allowance_pct = {min = 15.0, max = 15.0}
+autonomy_h = {min = 10.0, max = 10.0}
+dc_voltage_v = {min = 48.0, max = 48.0}
+usable_battery_fraction = {min = 0.72, max = 0.72}
+installed_battery_ah = {min = 240.0, max = 240.0}
+feeder_length_m = {min = 42.0, max = 42.0}
+conductor_resistance_milliohm_per_m = {min = 1.5, max = 1.5}
+max_voltage_drop_percent = {min = 5.0, max = 5.0}
+fiber_length_km = {min = 2.6, max = 2.6}
+fiber_attenuation_db_per_km = {min = 0.35, max = 0.35}
+fiber_connector_count = {min = 4.0, max = 4.0}
+connector_loss_db = {min = 0.3, max = 0.3}
+fiber_splice_count = {min = 5.0, max = 5.0}
+splice_loss_db = {min = 0.05, max = 0.05}
+patch_panel_allowance_db = {min = 0.8, max = 0.8}
+optical_tx_power_dbm = {min = -2.0, max = -2.0}
+receiver_sensitivity_dbm = {min = -24.0, max = -24.0}
+required_fiber_margin_db = {min = 3.0, max = 3.0}
+selected_ups_rating_va = {min = 1200.0, max = 1200.0}
+load_power_factor = {min = 0.9, max = 0.9}
+site_contexts = ["wayside-cabinet-backup"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-02 wayside cabinet backup package"
+visibility = "all_given"
+archetypes = ["ssc02_wayside_cabinet_backup_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-02 wayside cabinet backup package"
+visibility = "all_given"
+archetypes = ["ssc02_wayside_cabinet_backup_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-02 wayside cabinet backup package"
+visibility = "all_given"
+archetypes = ["ssc02_wayside_cabinet_backup_case"]

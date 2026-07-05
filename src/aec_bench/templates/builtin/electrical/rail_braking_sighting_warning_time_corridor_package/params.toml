@@ -1,0 +1,176 @@
+[meta]
+name = "rail-braking-sighting-warning-time-corridor-package"
+description = "SSC-02 rail braking, sighting, warning-time, and overlap metrics"
+long_description = "Calculates deterministic SSC-02 rail corridor metrics from a task-owned synthetic source pack. The template combines Davis resistance, gradient-adjusted braking distance, signal sighting time, warning strike-in distance, overlap margin, and an overall synthetic pass score."
+discipline = "electrical"
+category = "rail-braking-sighting-warning"
+standards = ["AREMA/ARTC-style braking and sighting workflow", "operator warning-time review workflow"]
+tags = ["electrical", "rail", "signalling", "braking", "sighting", "warning-time", "overlap", "deterministic"]
+tool_mode = "with-tool"
+
+[params.train_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "ROUTE-02-PROFILE-01 controlling train speed"
+min = 90.0
+max = 90.0
+
+[params.grade_percent]
+type = "float"
+unit = "%"
+description = "ROUTE-02-PROFILE-01 adverse grade on approach"
+min = 1.0
+max = 1.0
+
+[params.reaction_time_s]
+type = "float"
+unit = "s"
+description = "RULE-02-OPS-01 driver/system reaction allowance"
+min = 4.0
+max = 4.0
+
+[params.braking_rate_m_s2]
+type = "float"
+unit = "m/s^2"
+description = "ROLL-02-DATA-01 service braking rate"
+min = 0.72
+max = 0.72
+
+[params.davis_a_n_per_t]
+type = "float"
+unit = "N/t"
+description = "ROLL-02-DATA-01 Davis A coefficient"
+min = 5.0
+max = 5.0
+
+[params.davis_b_n_per_t_kmh]
+type = "float"
+unit = "N/t/km/h"
+description = "ROLL-02-DATA-01 Davis B coefficient"
+min = 0.12
+max = 0.12
+
+[params.davis_c_n_per_t_kmh2]
+type = "float"
+unit = "N/t/(km/h)^2"
+description = "ROLL-02-DATA-01 Davis C coefficient"
+min = 0.004
+max = 0.004
+
+[params.train_mass_t]
+type = "float"
+unit = "t"
+description = "ROLL-02-DATA-01 controlling train mass"
+min = 420.0
+max = 420.0
+
+[params.sighting_distance_m]
+type = "float"
+unit = "m"
+description = "SIGHT-02-NOTE-01 available signal sighting distance"
+min = 640.0
+max = 640.0
+
+[params.required_sighting_time_s]
+type = "float"
+unit = "s"
+description = "RULE-02-OPS-01 required signal sighting time"
+min = 7.0
+max = 7.0
+
+[params.overlap_distance_m]
+type = "float"
+unit = "m"
+description = "SIG-02-LAYOUT-01 required overlap allowance"
+min = 180.0
+max = 180.0
+
+[params.warning_time_s]
+type = "float"
+unit = "s"
+description = "RULE-02-OPS-01 warning-time review case"
+min = 38.0
+max = 38.0
+
+[params.minimum_warning_time_s]
+type = "float"
+unit = "s"
+description = "RULE-02-OPS-01 minimum warning-time criterion"
+min = 30.0
+max = 30.0
+
+[outputs.speed_m_s]
+description = "Controlling train speed in metres per second"
+tolerance = 0.03
+
+[outputs.davis_resistance_n_per_t]
+description = "Davis rolling resistance per tonne"
+tolerance = 0.03
+
+[outputs.resistance_force_kn]
+description = "Total rolling resistance force"
+tolerance = 0.03
+
+[outputs.effective_braking_deceleration_m_s2]
+description = "Braking rate after adverse grade allowance"
+tolerance = 0.003
+
+[outputs.braking_distance_m]
+description = "Reaction plus braking distance"
+tolerance = 0.03
+
+[outputs.sighting_time_s]
+description = "Available sighting time"
+tolerance = 0.03
+
+[outputs.sighting_margin_s]
+description = "Available sighting time minus required sighting time"
+tolerance = 0.03
+
+[outputs.warning_strike_in_distance_m]
+description = "Warning strike-in distance at the controlling speed"
+tolerance = 0.03
+
+[outputs.warning_margin_s]
+description = "Warning time minus minimum warning time"
+tolerance = 0.03
+
+[outputs.overlap_margin_m]
+description = "Strike-in distance minus braking distance and overlap allowance"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when sighting, warning, and overlap margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc02_rail_braking_sighting_case]
+description = "Rail braking and sighting package tied to one route profile, rolling-stock data sheet, signal layout, sighting note, operating rule, and memo"
+train_speed_kmh = {min = 90.0, max = 90.0}
+grade_percent = {min = 1.0, max = 1.0}
+reaction_time_s = {min = 4.0, max = 4.0}
+braking_rate_m_s2 = {min = 0.72, max = 0.72}
+davis_a_n_per_t = {min = 5.0, max = 5.0}
+davis_b_n_per_t_kmh = {min = 0.12, max = 0.12}
+davis_c_n_per_t_kmh2 = {min = 0.004, max = 0.004}
+train_mass_t = {min = 420.0, max = 420.0}
+sighting_distance_m = {min = 640.0, max = 640.0}
+required_sighting_time_s = {min = 7.0, max = 7.0}
+overlap_distance_m = {min = 180.0, max = 180.0}
+warning_time_s = {min = 38.0, max = 38.0}
+minimum_warning_time_s = {min = 30.0, max = 30.0}
+site_contexts = ["rail-braking-sighting-warning"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-02 braking and sighting package"
+visibility = "all_given"
+archetypes = ["ssc02_rail_braking_sighting_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-02 braking and sighting package"
+visibility = "all_given"
+archetypes = ["ssc02_rail_braking_sighting_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-02 braking and sighting package"
+visibility = "all_given"
+archetypes = ["ssc02_rail_braking_sighting_case"]

@@ -1,0 +1,174 @@
+# ABOUTME: Defines the SSC-07 seismic slope and service continuity package template.
+# ABOUTME: Pins one seismic case, slope section, service load, and feeder source pack.
+
+[meta]
+name = "seismic-slope-service-continuity-package"
+description = "SSC-07 seismic slope, service continuity, and feeder voltage metrics"
+long_description = "Calculates source-bound seismic slope and utility continuity metrics from a deterministic SSC-07 task-owned source pack. The template combines pseudo-static slope stability, service backup capacity, and feeder voltage-drop checks."
+discipline = "ground"
+category = "ground-investigation"
+standards = ["pseudo-static slope screening", "service continuity screening", "three-phase voltage-drop screening"]
+tags = ["ground", "seismic", "slope", "service-continuity", "voltage-drop", "deterministic"]
+tool_mode = "with-tool"
+
+[params.slope_angle_deg]
+type = "float"
+unit = "degrees"
+description = "SLOPE-07-SECTION-01 slope angle"
+min = 21.0
+max = 21.0
+
+[params.friction_angle_deg]
+type = "float"
+unit = "degrees"
+description = "SOIL-07-SEIS-01 drained friction angle"
+min = 34.0
+max = 34.0
+
+[params.cohesion_kpa]
+type = "float"
+unit = "kPa"
+description = "SOIL-07-SEIS-01 effective cohesion"
+min = 4.0
+max = 4.0
+
+[params.soil_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m3"
+description = "SOIL-07-SEIS-01 soil unit weight"
+min = 18.0
+max = 18.0
+
+[params.failure_depth_m]
+type = "float"
+unit = "m"
+description = "SLOPE-07-SECTION-01 assumed failure depth"
+min = 4.0
+max = 4.0
+
+[params.seismic_coefficient]
+type = "float"
+description = "SEIS-07-CASE-01 pseudo-static seismic coefficient"
+min = 0.12
+max = 0.12
+
+[params.service_load_kw]
+type = "float"
+unit = "kW"
+description = "UTIL-07-SERVICE-01 affected utility service load"
+min = 28.0
+max = 28.0
+
+[params.backup_capacity_kw]
+type = "float"
+unit = "kW"
+description = "UTIL-07-SERVICE-01 backup service capacity"
+min = 36.0
+max = 36.0
+
+[params.feeder_current_a]
+type = "float"
+unit = "A"
+description = "UTIL-07-SERVICE-01 feeder current"
+min = 65.0
+max = 65.0
+
+[params.feeder_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "UTIL-07-SERVICE-01 feeder resistance"
+min = 0.32
+max = 0.32
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "UTIL-07-SERVICE-01 feeder length"
+min = 0.18
+max = 0.18
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "UTIL-07-SERVICE-01 feeder voltage"
+min = 400.0
+max = 400.0
+
+[params.allowable_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "MEMO-07-SEIS-01 allowable feeder voltage drop"
+min = 5.0
+max = 5.0
+
+[outputs.slope_resisting_kpa]
+description = "Cohesion plus frictional resisting stress along the slope"
+tolerance = 0.03
+
+[outputs.static_driving_kpa]
+description = "Static driving stress along the slope"
+tolerance = 0.03
+
+[outputs.seismic_increment_kpa]
+description = "Pseudo-static seismic driving increment"
+tolerance = 0.03
+
+[outputs.static_slope_fs]
+description = "Static slope factor of safety"
+tolerance = 0.03
+
+[outputs.seismic_slope_fs]
+description = "Pseudo-static seismic slope factor of safety"
+tolerance = 0.03
+
+[outputs.seismic_fs_margin]
+description = "Seismic factor of safety minus minimum 1.1 target"
+tolerance = 0.03
+
+[outputs.service_capacity_margin_kw]
+description = "Backup capacity minus affected utility service load"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "Three-phase feeder voltage drop percent"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Allowable voltage drop minus calculated voltage drop"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when seismic slope, service capacity, and voltage-drop checks pass"
+tolerance = 0.03
+
+[archetypes.ssc07_seismic_slope_case]
+description = "Ground investigation package for one seismic slope and service continuity check"
+slope_angle_deg = {min = 21.0, max = 21.0}
+friction_angle_deg = {min = 34.0, max = 34.0}
+cohesion_kpa = {min = 4.0, max = 4.0}
+soil_unit_weight_kn_m3 = {min = 18.0, max = 18.0}
+failure_depth_m = {min = 4.0, max = 4.0}
+seismic_coefficient = {min = 0.12, max = 0.12}
+service_load_kw = {min = 28.0, max = 28.0}
+backup_capacity_kw = {min = 36.0, max = 36.0}
+feeder_current_a = {min = 65.0, max = 65.0}
+feeder_resistance_ohm_km = {min = 0.32, max = 0.32}
+feeder_length_km = {min = 0.18, max = 0.18}
+feeder_voltage_v = {min = 400.0, max = 400.0}
+allowable_voltage_drop_percent = {min = 5.0, max = 5.0}
+site_contexts = ["seismic-slope", "service-continuity-handoff"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-07 seismic slope package"
+visibility = "all_given"
+archetypes = ["ssc07_seismic_slope_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-07 seismic slope package"
+visibility = "all_given"
+archetypes = ["ssc07_seismic_slope_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-07 seismic slope package"
+visibility = "all_given"
+archetypes = ["ssc07_seismic_slope_case"]

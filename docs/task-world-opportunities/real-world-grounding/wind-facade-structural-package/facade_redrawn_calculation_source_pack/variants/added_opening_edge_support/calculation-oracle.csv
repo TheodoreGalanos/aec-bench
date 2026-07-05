@@ -1,0 +1,5 @@
+support_id,zone_id,pressure_kpa,tributary_width_m,tributary_height_m,tributary_area_m2,dead_load_kpa,dead_load_kN,wind_load_kN,bracket_horizontal_resistance_kN,bracket_vertical_resistance_kN,bracket_horizontal_utilization,bracket_vertical_utilization,anchor_tension_resistance_kN,anchor_shear_resistance_kN,anchor_tension_utilization,anchor_shear_utilization,anchor_combined_utilization,governing_utilization,governing_component,status
+BR-B01,ZB,-1.20,0.60,1.50,0.900,0.35,0.315,1.080,2.80,1.20,0.386,0.263,2.50,3.00,0.432,0.105,0.445,0.445,anchor,pass
+BR-E01,ZE,-1.80,0.60,1.50,0.900,0.35,0.315,1.620,2.80,1.20,0.579,0.263,2.50,3.00,0.648,0.105,0.656,0.656,anchor,pass
+BR-C01,ZC,-2.40,0.60,1.50,0.900,0.35,0.315,2.160,2.80,1.20,0.771,0.263,2.50,3.00,0.864,0.105,0.870,0.870,anchor,pass
+BR-E02,ZE,-1.80,0.60,1.50,0.900,0.35,0.315,1.620,2.80,1.20,0.579,0.263,2.50,3.00,0.648,0.105,0.656,0.656,anchor,pass

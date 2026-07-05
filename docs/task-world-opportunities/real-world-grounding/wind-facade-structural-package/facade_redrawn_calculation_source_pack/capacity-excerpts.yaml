@@ -1,0 +1,34 @@
+source_pack_id: facade_redrawn_calculation_source_pack_seed_001
+status: docs_only_seed_skeleton
+policy: Normalized task-owned values for fixture research. Not verbatim vendor capacities and not an issued calculation.
+bracket_rows:
+  - id: NV-VB-S-150 task row
+    source_family_tag: sfs_nvelope_bba_style
+    family_role: bracket resistance and fixed/sliding point source-pack shape
+    design_horizontal_resistance_kN: 2.80
+    design_vertical_resistance_kN: 1.20
+    combined_rule: max(horizontal_utilization, vertical_utilization)
+rail_rows:
+  - id: VR-60x40 task row
+    source_family_tag: sfs_nvelope_and_cascadia_detail_style
+    family_role: rail/profile geometry source-pack shape
+    profile_depth_mm: 60
+    profile_width_mm: 40
+    max_vertical_span_m: 1.50
+anchor_rows:
+  - id: ANCH-CONC-M8
+    source_family_tag: hilti_profis_hrd_and_kws_ankit_style
+    family_role: anchor resistance, embedment, spacing, and edge-distance source-pack shape
+    substrate: concrete
+    embedment_mm: 60
+    min_edge_distance_mm: 75
+    min_spacing_mm: 100
+    design_tension_resistance_kN: 2.50
+    design_shear_resistance_kN: 3.00
+    combined_rule: sqrt((tension_demand / design_tension_resistance)^2 + (shear_demand / design_shear_resistance)^2)
+fastener_rows:
+  - id: FAST-BR-RAIL-A4
+    source_family_tag: sfs_sda5_and_ejot_style
+    family_role: bracket-to-rail fixing source-pack shape
+    material: A4 stainless steel
+    minimum_count_per_bracket: 2

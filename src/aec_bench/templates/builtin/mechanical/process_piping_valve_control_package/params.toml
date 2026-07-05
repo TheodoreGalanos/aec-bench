@@ -1,0 +1,182 @@
+# ABOUTME: Defines the SSC-11 process piping valve and control template.
+# ABOUTME: Pins one synthetic valve, line, loop, and thrust source package.
+
+[meta]
+name = "process-piping-valve-control-package"
+description = "SSC-11 process piping valve sizing, control signal, and thrust metrics"
+long_description = "Calculates source-bound process piping valve and control metrics from a deterministic SSC-11 task-owned source pack. The template combines valve Cv, pipe velocity, pressure-loss margin, control signal scaling, bend thrust, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "process-piping"
+standards = ["ISA-style control loop checks", "Valve Cv sizing workflows", "P&ID line-list coordination", "Pipe thrust support checks"]
+tags = ["mechanical", "process-piping", "valve", "control-loop", "thrust", "deterministic"]
+tool_mode = "with-tool"
+
+[params.process_flow_m3_h]
+type = "float"
+unit = "m3/h"
+description = "LINE-SSC11-003 process design flow"
+min = 80.96296754462662
+max = 80.96296754462662
+
+[params.liquid_specific_gravity]
+type = "float"
+description = "LINE-SSC11-003 liquid specific gravity"
+min = 1.0
+max = 1.0
+
+[params.valve_pressure_drop_kpa]
+type = "float"
+unit = "kPa"
+description = "VALVE-SSC11-003 design valve pressure drop"
+min = 50.0
+max = 50.0
+
+[params.installed_valve_cv]
+type = "float"
+description = "VALVE-SSC11-003 installed valve Cv"
+min = 150.0
+max = 150.0
+
+[params.pipe_internal_diameter_mm]
+type = "float"
+unit = "mm"
+description = "LINE-SSC11-003 pipe internal diameter"
+min = 195.1363142095143
+max = 195.1363142095143
+
+[params.maximum_velocity_m_s]
+type = "float"
+unit = "m/s"
+description = "MEMO-SSC11-003 maximum process line velocity"
+min = 3.0
+max = 3.0
+
+[params.maximum_pressure_loss_kpa]
+type = "float"
+unit = "kPa"
+description = "MEMO-SSC11-003 maximum pressure loss allowance"
+min = 65.0
+max = 65.0
+
+[params.line_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "PID-SSC11-003 line pressure at bend"
+min = 369.53035281978987
+max = 369.53035281978987
+
+[params.signal_low_value]
+type = "float"
+description = "LOOP-SSC11-003 transmitter low range value"
+min = 0.0
+max = 0.0
+
+[params.signal_high_value]
+type = "float"
+description = "LOOP-SSC11-003 transmitter high range value"
+min = 100.0
+max = 100.0
+
+[params.process_value]
+type = "float"
+description = "LOOP-SSC11-003 process value for signal scaling"
+min = 64.0
+max = 64.0
+
+[params.signal_low_ma]
+type = "float"
+unit = "mA"
+description = "LOOP-SSC11-003 low signal"
+min = 4.0
+max = 4.0
+
+[params.signal_high_ma]
+type = "float"
+unit = "mA"
+description = "LOOP-SSC11-003 high signal"
+min = 20.0
+max = 20.0
+
+[params.bend_angle_deg]
+type = "float"
+unit = "degrees"
+description = "PID-SSC11-003 bend angle"
+min = 90.0
+max = 90.0
+
+[params.thrust_allowable_kn]
+type = "float"
+unit = "kN"
+description = "MEMO-SSC11-003 bend thrust allowable"
+min = 50.0
+max = 50.0
+
+[outputs.required_valve_cv]
+description = "Required valve Cv for the source-pack flow and pressure drop"
+tolerance = 0.03
+
+[outputs.valve_cv_margin]
+description = "Installed valve Cv minus required Cv"
+tolerance = 0.03
+
+[outputs.pipe_velocity_m_s]
+description = "Process line velocity"
+tolerance = 0.03
+
+[outputs.velocity_margin_m_s]
+description = "Velocity allowance minus line velocity"
+tolerance = 0.03
+
+[outputs.pressure_loss_margin_kpa]
+description = "Pressure-loss allowance minus valve pressure drop"
+tolerance = 0.03
+
+[outputs.control_signal_ma]
+description = "Scaled 4-20 mA control signal"
+tolerance = 0.03
+
+[outputs.bend_thrust_kn]
+description = "Pressure thrust at the bend"
+tolerance = 0.03
+
+[outputs.thrust_utilization]
+description = "Bend thrust divided by allowable thrust"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for the task-owned valve, velocity, loss, and thrust checks"
+tolerance = 0.03
+
+[archetypes.ssc11_process_valve_case]
+description = "Process piping valve and control case"
+process_flow_m3_h = {min = 80.96296754462662, max = 80.96296754462662}
+liquid_specific_gravity = {min = 1.0, max = 1.0}
+valve_pressure_drop_kpa = {min = 50.0, max = 50.0}
+installed_valve_cv = {min = 150.0, max = 150.0}
+pipe_internal_diameter_mm = {min = 195.1363142095143, max = 195.1363142095143}
+maximum_velocity_m_s = {min = 3.0, max = 3.0}
+maximum_pressure_loss_kpa = {min = 65.0, max = 65.0}
+line_pressure_kpa = {min = 369.53035281978987, max = 369.53035281978987}
+signal_low_value = {min = 0.0, max = 0.0}
+signal_high_value = {min = 100.0, max = 100.0}
+process_value = {min = 64.0, max = 64.0}
+signal_low_ma = {min = 4.0, max = 4.0}
+signal_high_ma = {min = 20.0, max = 20.0}
+bend_angle_deg = {min = 90.0, max = 90.0}
+thrust_allowable_kn = {min = 50.0, max = 50.0}
+site_contexts = ["process-piping", "valve-control-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-11 process valve package"
+visibility = "all_given"
+archetypes = ["ssc11_process_valve_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-11 process valve package"
+visibility = "all_given"
+archetypes = ["ssc11_process_valve_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-11 process valve package"
+visibility = "all_given"
+archetypes = ["ssc11_process_valve_case"]

@@ -1,0 +1,293 @@
+[meta]
+name = "ground-structural-electrical-safety-package"
+description = "SSC-07 SPT/CPT, bearing capacity, and earthing safety metrics"
+long_description = "Calculates source-bound ground structural-electrical safety metrics from a deterministic SSC-07 task-owned source pack. The template combines SPT correction, CPT-derived behavior and friction angle, Terzaghi shallow foundation bearing capacity, and IEEE 80-style grid resistance/GPR checks while keeping the mechanical ground model separate from the electrical resistivity model."
+discipline = "ground"
+category = "ground-safety"
+standards = ["Liao and Whitman 1986", "Robertson 1990", "Terzaghi 1943", "IEEE 80-2013"]
+tags = ["ground", "geotechnical", "spt", "cpt", "bearing-capacity", "earthing", "resistivity", "deterministic"]
+tool_mode = "with-tool"
+
+[params.raw_n_value]
+type = "int"
+description = "SPT-07-03-06M raw blow count from BH-07-03"
+min = 18
+max = 18
+
+[params.effective_overburden_kpa]
+type = "float"
+unit = "kPa"
+description = "SOIL-07-PARAM-01 effective overburden pressure at the SPT depth"
+min = 125.0
+max = 125.0
+
+[params.hammer_type]
+type = "enum"
+description = "SPT hammer type"
+values = ["auto"]
+
+[params.borehole_diameter_mm]
+type = "enum"
+unit = "mm"
+description = "BH-07-03 borehole diameter class"
+values = ["115"]
+
+[params.sampler_type]
+type = "enum"
+description = "SPT sampler liner state"
+values = ["with_liner"]
+
+[params.rod_length_m]
+type = "float"
+unit = "m"
+description = "SPT-07-03-06M rod length"
+min = 8.0
+max = 8.0
+
+[params.minimum_design_n1_60]
+type = "float"
+description = "GM-SSC07-001 minimum corrected N1,60 for the shallow foundation design case"
+min = 15.0
+max = 15.0
+
+[params.qc_mpa]
+type = "float"
+unit = "MPa"
+description = "CPT-07-02 cone resistance at the design depth"
+min = 12.0
+max = 12.0
+
+[params.fs_kpa]
+type = "float"
+unit = "kPa"
+description = "CPT-07-02 sleeve friction at the design depth"
+min = 60.0
+max = 60.0
+
+[params.u2_kpa]
+type = "float"
+unit = "kPa"
+description = "CPT-07-02 pore pressure behind the cone"
+min = 25.0
+max = 25.0
+
+[params.cpt_depth_m]
+type = "float"
+unit = "m"
+description = "CPT-07-02 design interpretation depth"
+min = 6.0
+max = 6.0
+
+[params.total_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m3"
+description = "SOIL-07-PARAM-01 total soil unit weight"
+min = 18.5
+max = 18.5
+
+[params.water_table_depth_m]
+type = "float"
+unit = "m"
+description = "GW-07-WET-001 wet-season water table depth below ground"
+min = 2.1
+max = 2.1
+
+[params.net_area_ratio]
+type = "float"
+description = "CPT-07-02 cone net area ratio"
+min = 0.8
+max = 0.8
+
+[params.interpreted_design_phi_deg]
+type = "float"
+unit = "degrees"
+description = "GIM-07-001 interpreted design friction angle from the ground interpretation memo"
+min = 32.0
+max = 32.0
+
+[params.cohesion_kpa]
+type = "float"
+unit = "kPa"
+description = "SOIL-07-PARAM-01 effective cohesion for the bearing check"
+min = 5.0
+max = 5.0
+
+[params.footing_width_m]
+type = "float"
+unit = "m"
+description = "FDN-07-MAT-01 footing width"
+min = 2.4
+max = 2.4
+
+[params.embedment_depth_m]
+type = "float"
+unit = "m"
+description = "FDN-07-MAT-01 footing embedment depth"
+min = 1.2
+max = 1.2
+
+[params.footing_shape]
+type = "enum"
+description = "FDN-07-MAT-01 footing shape"
+values = ["square"]
+
+[params.factor_of_safety]
+type = "float"
+description = "GIM-07-001 bearing-capacity factor of safety"
+min = 3.0
+max = 3.0
+
+[params.applied_bearing_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "FDN-07-MAT-01 applied service bearing pressure"
+min = 220.0
+max = 220.0
+
+[params.soil_resistivity_ohm_m]
+type = "float"
+unit = "ohm-m"
+description = "RES-07-ERT-01 apparent soil resistivity for the earthing model"
+min = 85.0
+max = 85.0
+
+[params.grid_length_m]
+type = "float"
+unit = "m"
+description = "GRID-07-EARTH-01 grounding-grid length"
+min = 32.0
+max = 32.0
+
+[params.grid_width_m]
+type = "float"
+unit = "m"
+description = "GRID-07-EARTH-01 grounding-grid width"
+min = 24.0
+max = 24.0
+
+[params.total_conductor_length_m]
+type = "float"
+unit = "m"
+description = "GRID-07-EARTH-01 total buried conductor length"
+min = 360.0
+max = 360.0
+
+[params.burial_depth_m]
+type = "float"
+unit = "m"
+description = "GRID-07-EARTH-01 conductor burial depth"
+min = 0.6
+max = 0.6
+
+[params.grid_current_ka]
+type = "float"
+unit = "kA"
+description = "FAULT-07-001 maximum grid current"
+min = 3.2
+max = 3.2
+
+[params.gpr_limit_v]
+type = "float"
+unit = "V"
+description = "GIM-07-001 source-pack ground-potential-rise screening limit"
+min = 5000.0
+max = 5000.0
+
+[outputs.spt_n60]
+description = "Energy, borehole, sampler, and rod-length corrected SPT N60"
+tolerance = 0.03
+
+[outputs.spt_n1_60]
+description = "Overburden-corrected SPT N1,60"
+tolerance = 0.03
+
+[outputs.spt_n1_60_margin]
+description = "SPT N1,60 minus the source-pack minimum design N1,60"
+tolerance = 0.03
+
+[outputs.cpt_qt_mpa]
+description = "Corrected CPT cone resistance"
+tolerance = 0.03
+
+[outputs.cpt_ic]
+description = "CPT soil behavior type index"
+tolerance = 0.03
+
+[outputs.cpt_phi_deg]
+description = "CPT-derived drained friction angle"
+tolerance = 0.03
+
+[outputs.governing_phi_deg]
+description = "Smaller of the interpreted design phi and CPT-derived phi"
+tolerance = 0.03
+
+[outputs.allowable_bearing_capacity_kpa]
+description = "Allowable Terzaghi shallow foundation bearing capacity"
+tolerance = 0.03
+
+[outputs.bearing_utilization]
+description = "Applied bearing pressure divided by allowable bearing capacity"
+tolerance = 0.03
+
+[outputs.bearing_margin_kpa]
+description = "Allowable bearing capacity minus applied bearing pressure"
+tolerance = 0.03
+
+[outputs.grid_resistance_ohm]
+description = "Grounding-grid resistance from the separate resistivity model"
+tolerance = 0.03
+
+[outputs.ground_potential_rise_v]
+description = "Ground potential rise from grid current and grid resistance"
+tolerance = 0.03
+
+[outputs.gpr_margin_v]
+description = "Source-pack GPR screening limit minus ground potential rise"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for SPT, bearing, and GPR source-pack checks"
+tolerance = 0.03
+
+[archetypes.ssc07_ground_safety_case]
+description = "Ground investigation package for one shallow foundation and earthing-grid check"
+raw_n_value = {min = 18, max = 18}
+effective_overburden_kpa = {min = 125.0, max = 125.0}
+rod_length_m = {min = 8.0, max = 8.0}
+minimum_design_n1_60 = {min = 15.0, max = 15.0}
+qc_mpa = {min = 12.0, max = 12.0}
+fs_kpa = {min = 60.0, max = 60.0}
+u2_kpa = {min = 25.0, max = 25.0}
+cpt_depth_m = {min = 6.0, max = 6.0}
+total_unit_weight_kn_m3 = {min = 18.5, max = 18.5}
+water_table_depth_m = {min = 2.1, max = 2.1}
+net_area_ratio = {min = 0.8, max = 0.8}
+interpreted_design_phi_deg = {min = 32.0, max = 32.0}
+cohesion_kpa = {min = 5.0, max = 5.0}
+footing_width_m = {min = 2.4, max = 2.4}
+embedment_depth_m = {min = 1.2, max = 1.2}
+factor_of_safety = {min = 3.0, max = 3.0}
+applied_bearing_pressure_kpa = {min = 220.0, max = 220.0}
+soil_resistivity_ohm_m = {min = 85.0, max = 85.0}
+grid_length_m = {min = 32.0, max = 32.0}
+grid_width_m = {min = 24.0, max = 24.0}
+total_conductor_length_m = {min = 360.0, max = 360.0}
+burial_depth_m = {min = 0.6, max = 0.6}
+grid_current_ka = {min = 3.2, max = 3.2}
+gpr_limit_v = {min = 5000.0, max = 5000.0}
+site_contexts = ["shallow-foundation-earthing", "ground-investigation-handoff"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-07 ground structural-electrical safety package"
+visibility = "all_given"
+archetypes = ["ssc07_ground_safety_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-07 ground structural-electrical safety package"
+visibility = "all_given"
+archetypes = ["ssc07_ground_safety_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-07 ground structural-electrical safety package"
+visibility = "all_given"
+archetypes = ["ssc07_ground_safety_case"]

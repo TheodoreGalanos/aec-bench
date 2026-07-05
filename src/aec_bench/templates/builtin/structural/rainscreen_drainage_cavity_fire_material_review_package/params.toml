@@ -1,0 +1,176 @@
+[meta]
+name = "rainscreen-drainage-cavity-fire-material-review-package"
+description = "SSC-09 rainscreen drainage, cavity, fire/material review metrics"
+long_description = "Calculates source-bound rainscreen cavity and review metrics from a deterministic SSC-09 task-owned source pack. The template combines cavity depth, ventilation/drainage slot margins, material evidence completeness, fire-stop spacing, thermal-break coverage, review comment closure, and an overall synthetic pass score."
+discipline = "structural"
+category = "rainscreen-cavity-fire-review"
+standards = ["rainscreen drainage workflows", "fire-stop coordination workflows", "material submittal review"]
+tags = ["structural", "facade", "rainscreen", "cavity", "fire-stop", "materials", "review", "deterministic"]
+tool_mode = "with-tool"
+
+[params.cavity_depth_mm]
+type = "float"
+unit = "mm"
+description = "RAINSCREEN-09-DETAIL-05 cavity depth"
+min = 38.0
+max = 38.0
+
+[params.minimum_cavity_depth_mm]
+type = "float"
+unit = "mm"
+description = "RAINSCREEN-09-DETAIL-05 minimum cavity depth"
+min = 25.0
+max = 25.0
+
+[params.open_joint_area_cm2_m]
+type = "float"
+unit = "cm2/m"
+description = "CAVITY-09-DRAIN-05 open joint area"
+min = 85.0
+max = 85.0
+
+[params.required_vent_area_cm2_m]
+type = "float"
+unit = "cm2/m"
+description = "CAVITY-09-DRAIN-05 required vent area"
+min = 60.0
+max = 60.0
+
+[params.drainage_slot_area_cm2]
+type = "float"
+unit = "cm2"
+description = "CAVITY-09-DRAIN-05 drainage slot area"
+min = 140.0
+max = 140.0
+
+[params.required_drainage_slot_area_cm2]
+type = "float"
+unit = "cm2"
+description = "CAVITY-09-DRAIN-05 required drainage slot area"
+min = 120.0
+max = 120.0
+
+[params.product_documents_submitted]
+type = "float"
+description = "MAT-09-DATA-05 submitted product documents"
+min = 9.0
+max = 9.0
+
+[params.product_documents_required]
+type = "float"
+description = "MAT-09-DATA-05 required product documents"
+min = 10.0
+max = 10.0
+
+[params.fire_stop_spacing_m]
+type = "float"
+unit = "m"
+description = "FIRESTOP-09-SCHED-05 proposed fire-stop spacing"
+min = 2.8
+max = 2.8
+
+[params.max_fire_stop_spacing_m]
+type = "float"
+unit = "m"
+description = "FIRESTOP-09-SCHED-05 maximum fire-stop spacing"
+min = 3.0
+max = 3.0
+
+[params.thermal_break_count]
+type = "float"
+description = "RAINSCREEN-09-DETAIL-05 thermal break count"
+min = 48.0
+max = 48.0
+
+[params.bracket_count]
+type = "float"
+description = "RAINSCREEN-09-DETAIL-05 bracket count"
+min = 50.0
+max = 50.0
+
+[params.review_comments]
+type = "float"
+description = "REVIEW-09-MAT-05 review comment count"
+min = 5.0
+max = 5.0
+
+[params.resolved_review_comments]
+type = "float"
+description = "REVIEW-09-MAT-05 resolved review comment count"
+min = 5.0
+max = 5.0
+
+[params.critical_open_comments]
+type = "float"
+description = "REVIEW-09-MAT-05 critical open comment count"
+min = 0.0
+max = 0.0
+
+[outputs.cavity_depth_margin_mm]
+description = "Cavity depth minus minimum cavity depth"
+tolerance = 0.03
+
+[outputs.vent_area_margin_cm2_m]
+description = "Open joint area minus required vent area"
+tolerance = 0.03
+
+[outputs.drainage_slot_margin_cm2]
+description = "Drainage slot area minus required drainage slot area"
+tolerance = 0.03
+
+[outputs.material_evidence_score]
+description = "Submitted product documents divided by required product documents"
+tolerance = 0.003
+
+[outputs.fire_stop_spacing_margin_m]
+description = "Maximum fire-stop spacing minus proposed fire-stop spacing"
+tolerance = 0.003
+
+[outputs.thermal_break_coverage_fraction]
+description = "Thermal break count divided by bracket count"
+tolerance = 0.003
+
+[outputs.review_resolution_fraction]
+description = "Resolved review comments divided by review comments"
+tolerance = 0.003
+
+[outputs.critical_open_comments]
+description = "Critical open review comment count"
+tolerance = 0.001
+
+[outputs.overall_pass_score]
+description = "1.0 when rainscreen drainage, fire/material, and review checks pass"
+tolerance = 0.001
+
+[archetypes.ssc09_rainscreen_cavity_review_case]
+description = "Rainscreen drainage, cavity, fire/material review case"
+cavity_depth_mm = {min = 38.0, max = 38.0}
+minimum_cavity_depth_mm = {min = 25.0, max = 25.0}
+open_joint_area_cm2_m = {min = 85.0, max = 85.0}
+required_vent_area_cm2_m = {min = 60.0, max = 60.0}
+drainage_slot_area_cm2 = {min = 140.0, max = 140.0}
+required_drainage_slot_area_cm2 = {min = 120.0, max = 120.0}
+product_documents_submitted = {min = 9.0, max = 9.0}
+product_documents_required = {min = 10.0, max = 10.0}
+fire_stop_spacing_m = {min = 2.8, max = 2.8}
+max_fire_stop_spacing_m = {min = 3.0, max = 3.0}
+thermal_break_count = {min = 48.0, max = 48.0}
+bracket_count = {min = 50.0, max = 50.0}
+review_comments = {min = 5.0, max = 5.0}
+resolved_review_comments = {min = 5.0, max = 5.0}
+critical_open_comments = {min = 0.0, max = 0.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-09 rainscreen cavity review package"
+visibility = "all_given"
+archetypes = ["ssc09_rainscreen_cavity_review_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-09 rainscreen cavity review package"
+visibility = "all_given"
+archetypes = ["ssc09_rainscreen_cavity_review_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-09 rainscreen cavity review package"
+visibility = "all_given"
+archetypes = ["ssc09_rainscreen_cavity_review_case"]

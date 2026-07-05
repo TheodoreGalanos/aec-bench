@@ -1,0 +1,168 @@
+[meta]
+name = "signal-overlap-approach-speed-sighting-photo-package"
+description = "SSC-02 signal approach speed, sighting photo, stopping-distance, and overlap metrics"
+long_description = "Calculates deterministic SSC-02 signal sighting metrics from a task-owned synthetic source pack. The template combines approach speed, grade-adjusted stopping distance, sighting time, stopping-distance margin, overlap margin, photo chainage offset, warning distance, and an overall synthetic pass score."
+discipline = "electrical"
+category = "signal-overlap-sighting"
+standards = ["rail signal sighting workflow", "operator overlap review workflow"]
+tags = ["electrical", "rail", "signal", "sighting", "overlap", "approach-speed", "photo", "deterministic"]
+tool_mode = "with-tool"
+
+[params.approach_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "SPEED-02-APPROACH-06 approach speed"
+min = 100.0
+max = 100.0
+
+[params.reaction_time_s]
+type = "float"
+unit = "s"
+description = "CRIT-02-SIGHT-06 reaction allowance"
+min = 3.0
+max = 3.0
+
+[params.braking_rate_m_s2]
+type = "float"
+unit = "m/s^2"
+description = "SPEED-02-APPROACH-06 braking rate"
+min = 0.78
+max = 0.78
+
+[params.grade_percent]
+type = "float"
+unit = "%"
+description = "GRADE-02-ROUTE-06 adverse route grade"
+min = 0.5
+max = 0.5
+
+[params.available_sighting_distance_m]
+type = "float"
+unit = "m"
+description = "PHOTO-02-SIGHT-06 available sighting distance"
+min = 720.0
+max = 720.0
+
+[params.required_sighting_time_s]
+type = "float"
+unit = "s"
+description = "CRIT-02-SIGHT-06 required sighting time"
+min = 8.0
+max = 8.0
+
+[params.provided_overlap_m]
+type = "float"
+unit = "m"
+description = "SIG-02-ARRANGE-06 provided overlap"
+min = 300.0
+max = 300.0
+
+[params.danger_point_distance_m]
+type = "float"
+unit = "m"
+description = "SIG-02-ARRANGE-06 distance to danger point"
+min = 220.0
+max = 220.0
+
+[params.photo_chainage_m]
+type = "float"
+unit = "m"
+description = "PHOTO-02-SIGHT-06 sighting photo chainage"
+min = 12540.0
+max = 12540.0
+
+[params.signal_chainage_m]
+type = "float"
+unit = "m"
+description = "SIG-02-ARRANGE-06 signal chainage"
+min = 12480.0
+max = 12480.0
+
+[params.max_photo_offset_m]
+type = "float"
+unit = "m"
+description = "CRIT-02-SIGHT-06 maximum allowed photo offset"
+min = 80.0
+max = 80.0
+
+[params.warning_time_s]
+type = "float"
+unit = "s"
+description = "CRIT-02-SIGHT-06 warning-time equivalent for distance ledger"
+min = 35.0
+max = 35.0
+
+[outputs.approach_speed_m_s]
+description = "Approach speed in metres per second"
+tolerance = 0.03
+
+[outputs.effective_braking_deceleration_m_s2]
+description = "Braking rate after adverse grade allowance"
+tolerance = 0.003
+
+[outputs.stopping_distance_m]
+description = "Reaction plus stopping distance"
+tolerance = 0.03
+
+[outputs.sighting_time_s]
+description = "Available sighting time"
+tolerance = 0.03
+
+[outputs.sighting_time_margin_s]
+description = "Available sighting time minus required sighting time"
+tolerance = 0.03
+
+[outputs.stopping_distance_margin_m]
+description = "Available sighting distance minus stopping distance"
+tolerance = 0.03
+
+[outputs.overlap_margin_m]
+description = "Provided overlap minus distance to danger point"
+tolerance = 0.03
+
+[outputs.photo_offset_m]
+description = "Absolute offset between photo chainage and signal chainage"
+tolerance = 0.03
+
+[outputs.photo_offset_margin_m]
+description = "Maximum allowed photo offset minus actual photo offset"
+tolerance = 0.03
+
+[outputs.warning_distance_m]
+description = "Approach speed times warning time"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when sighting, stopping, overlap, and photo-offset margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc02_signal_overlap_sighting_case]
+description = "Signal sighting package tied to one signal arrangement, approach speed table, photo log, route grade data, sighting criterion, and response memo"
+approach_speed_kmh = {min = 100.0, max = 100.0}
+reaction_time_s = {min = 3.0, max = 3.0}
+braking_rate_m_s2 = {min = 0.78, max = 0.78}
+grade_percent = {min = 0.5, max = 0.5}
+available_sighting_distance_m = {min = 720.0, max = 720.0}
+required_sighting_time_s = {min = 8.0, max = 8.0}
+provided_overlap_m = {min = 300.0, max = 300.0}
+danger_point_distance_m = {min = 220.0, max = 220.0}
+photo_chainage_m = {min = 12540.0, max = 12540.0}
+signal_chainage_m = {min = 12480.0, max = 12480.0}
+max_photo_offset_m = {min = 80.0, max = 80.0}
+warning_time_s = {min = 35.0, max = 35.0}
+site_contexts = ["signal-overlap-sighting"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-02 signal overlap and sighting package"
+visibility = "all_given"
+archetypes = ["ssc02_signal_overlap_sighting_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-02 signal overlap and sighting package"
+visibility = "all_given"
+archetypes = ["ssc02_signal_overlap_sighting_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-02 signal overlap and sighting package"
+visibility = "all_given"
+archetypes = ["ssc02_signal_overlap_sighting_case"]

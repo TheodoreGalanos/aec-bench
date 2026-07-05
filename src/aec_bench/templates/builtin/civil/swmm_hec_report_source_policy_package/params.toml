@@ -1,0 +1,219 @@
+# ABOUTME: Defines the SSC-03 SWMM/HEC report source-policy template.
+# ABOUTME: Pins one synthetic model, report, result, hash, and negative-case source package.
+
+[meta]
+name = "swmm-hec-report-source-policy-package"
+description = "SSC-03 model/report object matching, hash, continuity, and source-policy metrics"
+long_description = "Calculates source-bound model/report source-policy metrics from a deterministic SSC-03 task-owned source pack. The template combines model/report object matching, hash completeness, manual/model peak delta, continuity error margin, outlet row counts, negative-case capture, unresolved source conflicts, and an overall synthetic pass score."
+discipline = "civil"
+category = "model-source-policy"
+standards = ["EPA SWMM report workflows", "HEC-style model report review", "source manifest hashing", "negative-case verification"]
+tags = ["civil", "stormwater", "swmm", "hec", "source-policy", "report-output", "deterministic"]
+tool_mode = "with-tool"
+
+[params.model_subcatchment_count]
+type = "float"
+unit = "count"
+description = "MODEL-SSC03-008 model subcatchment count"
+min = 14.0
+max = 14.0
+
+[params.report_subcatchment_count]
+type = "float"
+unit = "count"
+description = "REPORT-SSC03-008 report subcatchment count"
+min = 14.0
+max = 14.0
+
+[params.model_node_count]
+type = "float"
+unit = "count"
+description = "MODEL-SSC03-008 model node count"
+min = 28.0
+max = 28.0
+
+[params.report_node_count]
+type = "float"
+unit = "count"
+description = "REPORT-SSC03-008 report node count"
+min = 28.0
+max = 28.0
+
+[params.model_link_count]
+type = "float"
+unit = "count"
+description = "MODEL-SSC03-008 model link count"
+min = 31.0
+max = 31.0
+
+[params.report_link_count]
+type = "float"
+unit = "count"
+description = "REPORT-SSC03-008 report link count"
+min = 31.0
+max = 31.0
+
+[params.storage_unit_count]
+type = "float"
+unit = "count"
+description = "MODEL-SSC03-008 storage unit count"
+min = 2.0
+max = 2.0
+
+[params.outlet_row_count]
+type = "float"
+unit = "count"
+description = "RESULT-SSC03-008 outlet result row count"
+min = 5.0
+max = 5.0
+
+[params.required_hash_count]
+type = "float"
+unit = "count"
+description = "HASH-SSC03-008 required hash count"
+min = 6.0
+max = 6.0
+
+[params.present_hash_count]
+type = "float"
+unit = "count"
+description = "HASH-SSC03-008 present hash count"
+min = 6.0
+max = 6.0
+
+[params.manual_peak_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "REPORT-SSC03-008 manual peak flow"
+min = 1.84
+max = 1.84
+
+[params.model_peak_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "RESULT-SSC03-008 model peak flow"
+min = 1.812
+max = 1.812
+
+[params.allowed_peak_delta_m3_s]
+type = "float"
+unit = "m3/s"
+description = "MEMO-SSC03-008 allowed manual/model peak delta"
+min = 0.05
+max = 0.05
+
+[params.continuity_error_percent]
+type = "float"
+unit = "%"
+description = "REPORT-SSC03-008 continuity error"
+min = 0.37
+max = 0.37
+
+[params.maximum_continuity_error_percent]
+type = "float"
+unit = "%"
+description = "MEMO-SSC03-008 maximum continuity error"
+min = 1.0
+max = 1.0
+
+[params.expected_negative_cases]
+type = "float"
+unit = "count"
+description = "VERIFY-SSC03-008 expected negative cases"
+min = 7.0
+max = 7.0
+
+[params.captured_negative_cases]
+type = "float"
+unit = "count"
+description = "VERIFY-SSC03-008 captured negative cases"
+min = 7.0
+max = 7.0
+
+[params.unresolved_source_conflicts]
+type = "float"
+unit = "count"
+description = "MEMO-SSC03-008 unresolved source conflicts"
+min = 0.0
+max = 0.0
+
+[outputs.object_match_percent]
+description = "Model/report object match percentage"
+tolerance = 0.03
+
+[outputs.hash_completeness_percent]
+description = "Present hashes divided by required hashes"
+tolerance = 0.03
+
+[outputs.peak_delta_m3_s]
+description = "Absolute manual/model peak flow delta"
+tolerance = 0.03
+
+[outputs.peak_delta_margin_m3_s]
+description = "Allowed peak delta minus observed peak delta"
+tolerance = 0.03
+
+[outputs.continuity_error_percent]
+description = "Reported continuity error"
+tolerance = 0.03
+
+[outputs.continuity_margin_percent]
+description = "Maximum continuity error minus reported continuity error"
+tolerance = 0.03
+
+[outputs.storage_unit_count]
+description = "Model storage unit count"
+tolerance = 0.03
+
+[outputs.outlet_row_count]
+description = "Outlet result row count"
+tolerance = 0.03
+
+[outputs.negative_case_capture_percent]
+description = "Captured negative cases divided by expected negative cases"
+tolerance = 0.03
+
+[outputs.unresolved_source_conflicts]
+description = "Unresolved source conflict count"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for model/report source-policy checks"
+tolerance = 0.03
+
+[archetypes.ssc03_model_source_policy_case]
+description = "SWMM/HEC-style report output and source-policy case"
+model_subcatchment_count = {min = 14.0, max = 14.0}
+report_subcatchment_count = {min = 14.0, max = 14.0}
+model_node_count = {min = 28.0, max = 28.0}
+report_node_count = {min = 28.0, max = 28.0}
+model_link_count = {min = 31.0, max = 31.0}
+report_link_count = {min = 31.0, max = 31.0}
+storage_unit_count = {min = 2.0, max = 2.0}
+outlet_row_count = {min = 5.0, max = 5.0}
+required_hash_count = {min = 6.0, max = 6.0}
+present_hash_count = {min = 6.0, max = 6.0}
+manual_peak_flow_m3_s = {min = 1.84, max = 1.84}
+model_peak_flow_m3_s = {min = 1.812, max = 1.812}
+allowed_peak_delta_m3_s = {min = 0.05, max = 0.05}
+continuity_error_percent = {min = 0.37, max = 0.37}
+maximum_continuity_error_percent = {min = 1.0, max = 1.0}
+expected_negative_cases = {min = 7.0, max = 7.0}
+captured_negative_cases = {min = 7.0, max = 7.0}
+unresolved_source_conflicts = {min = 0.0, max = 0.0}
+site_contexts = ["swmm-hec-report", "source-policy-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-03 source-policy package"
+visibility = "all_given"
+archetypes = ["ssc03_model_source_policy_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-03 source-policy package"
+visibility = "all_given"
+archetypes = ["ssc03_model_source_policy_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-03 source-policy package"
+visibility = "all_given"
+archetypes = ["ssc03_model_source_policy_case"]

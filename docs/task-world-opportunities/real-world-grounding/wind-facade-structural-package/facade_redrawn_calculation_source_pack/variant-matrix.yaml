@@ -1,0 +1,104 @@
+# ABOUTME: Defines docs-only fixture variants for the facade source-pack seed.
+# ABOUTME: Keeps richer geometry and anchor cases explicit before runtime verifier work.
+source_pack_id: facade_redrawn_calculation_source_pack_seed_001
+status: docs_only_variant_matrix
+policy: These variants are research targets for future fixture generation. They are not executable runtime tests yet.
+source_overlay_file: variant-source-overlays.yaml
+expanded_source_index: variants/variant-source-files.yaml
+variant_dimensions:
+  - id: geometry_complexity
+    values:
+      - baseline_flat_elevation
+      - added_opening
+      - reentrant_corner
+      - mixed_zone_strip
+  - id: anchor_condition
+    values:
+      - baseline_single_anchor_family
+      - reduced_edge_distance
+      - reduced_embedment
+      - reduced_spacing
+      - higher_tension_demand
+  - id: source_policy
+    values:
+      - embedded_excerpts_only
+      - live_vendor_lookup_forbidden
+variants:
+  - id: baseline_seed_001
+    expected_result: pass
+    purpose: Preserve the current seed as the baseline body/edge/corner geometry and anchor-check case.
+    source_files:
+      - geometry-oracle.csv
+      - pressure-schedule.csv
+      - support-schedule.csv
+      - capacity-excerpts.yaml
+      - anchor-check-oracle.csv
+      - calculation-oracle.csv
+    required_checks:
+      - manifest_completeness
+      - drawing_bounds
+      - zone_extent_consistency
+      - opening_extent_consistency
+      - support_coordinate_consistency
+      - zone_assignment
+      - anchor_schedule_consistency
+      - anchor_geometry_limits
+      - anchor_demand_trace
+      - governing_utilization
+      - source_policy
+      - memo_traceability
+    notes: Current task-owned 12 m by 9 m elevation with one opening, three representative supports, one anchor family, and governing anchor utilization at BR-C01.
+  - id: added_opening_edge_support
+    expected_result: pass
+    purpose: Future geometry variant that adds a second opening near an edge-zone support and requires the solver to preserve support-to-zone and opening extents.
+    fixture_changes:
+      - Add OP-02 to geometry-oracle.csv with new SVG rectangle bounds.
+      - Add one ZE support row adjacent to OP-02 in support-schedule.csv and anchor-check-oracle.csv.
+      - Add matching calculation-oracle.csv and expected-output.md rows.
+    required_checks:
+      - opening_extent_consistency
+      - support_coordinate_consistency
+      - zone_assignment
+      - anchor_demand_trace
+    unresolved_until_runtime: Needs redrawn SVG update and executable drawing-to-table verifier.
+    source_overlay: added_opening_edge_support
+  - id: reentrant_corner_pressure_governing
+    expected_result: pass
+    purpose: Future geometry variant that introduces a re-entrant corner and checks whether the corner pressure zone becomes governing.
+    fixture_changes:
+      - Add re-entrant corner zone extents to geometry-oracle.csv.
+      - Add a ZC support row with higher suction demand in pressure-schedule.csv and calculation-oracle.csv.
+      - Add corresponding anchor-check-oracle.csv row.
+    required_checks:
+      - drawing_bounds
+      - zone_extent_consistency
+      - wind_load
+      - anchor_combined_utilization
+      - governing_utilization
+    unresolved_until_runtime: Needs a richer redrawn elevation and pressure-zone derivation rule.
+    source_overlay: reentrant_corner_pressure_governing
+  - id: anchor_edge_distance_failure
+    expected_result: fail
+    failure_stage: anchor_geometry
+    purpose: Future negative variant that keeps the anchor row valid but makes the selected support fail edge-distance limits.
+    fixture_changes:
+      - Reduce BR-C01 edge_distance_x_mm below min_edge_distance_mm in anchor-check-oracle.csv.
+    expected_diagnostic: Anchor edge distance is below the embedded capacity excerpt minimum.
+    source_overlay: anchor_edge_distance_failure
+  - id: anchor_spacing_failure
+    expected_result: fail
+    failure_stage: anchor_geometry
+    purpose: Future negative variant that preserves demand values but violates nearest-anchor spacing.
+    fixture_changes:
+      - Reduce BR-E01 nearest_anchor_spacing_mm below min_spacing_mm in anchor-check-oracle.csv.
+    expected_diagnostic: Anchor spacing is below the embedded capacity excerpt minimum.
+    source_overlay: anchor_spacing_failure
+  - id: corner_pressure_over_limit
+    expected_result: fail
+    failure_stage: utilization
+    purpose: Future negative variant that increases the corner suction enough that the governing anchor utilization exceeds 1.0.
+    fixture_changes:
+      - Increase ZC pressure_kpa in pressure-schedule.csv and calculation-oracle.csv.
+      - Update anchor-check-oracle.csv tension demand and combined utilization to exceed 1.0.
+    expected_diagnostic: Row with governing_utilization greater than 1.0 is not marked fail.
+    source_overlay: corner_pressure_over_limit

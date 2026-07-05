@@ -1,0 +1,164 @@
+# ABOUTME: Defines the SSC-15 concrete mix compliance template.
+# ABOUTME: Pins one task-owned mix design and drainage/retaining use source pack.
+
+[meta]
+name = "concrete-mix-drainage-retaining-compliance-package"
+description = "SSC-15 concrete mix strength, SCM, bearing, exposure, and drainage checks"
+long_description = "Calculates source-bound concrete or mix compliance metrics from a deterministic SSC-15 task-owned source pack. The template combines one mix design, SCM product record, strength criterion, foundation/retaining detail, exposure note, and mix compliance memo."
+discipline = "civil"
+category = "mix-compliance"
+standards = ["mix design review", "SCM substitution review", "foundation and exposure criteria"]
+tags = ["civil", "concrete", "mix-design", "certificate", "bearing", "drainage", "product-compliance", "deterministic"]
+tool_mode = "with-tool"
+
+[params.specified_strength_mpa]
+type = "float"
+unit = "MPa"
+description = "STRENGTH-15-CRIT-03 specified concrete strength"
+min = 40.0
+max = 40.0
+
+[params.submitted_mean_strength_mpa]
+type = "float"
+unit = "MPa"
+description = "MIX-15-DESIGN-03 submitted mean mix strength"
+min = 48.0
+max = 48.0
+
+[params.standard_deviation_mpa]
+type = "float"
+unit = "MPa"
+description = "MIX-15-DESIGN-03 strength standard deviation"
+min = 4.0
+max = 4.0
+
+[params.target_strength_factor]
+type = "float"
+description = "STRENGTH-15-CRIT-03 target mean strength factor"
+min = 1.65
+max = 1.65
+
+[params.scm_replacement_percent]
+type = "float"
+unit = "%"
+description = "SCM-15-PRODUCT-03 proposed SCM replacement"
+min = 25.0
+max = 25.0
+
+[params.max_scm_replacement_percent]
+type = "float"
+unit = "%"
+description = "SCM-15-PRODUCT-03 maximum accepted SCM replacement"
+min = 35.0
+max = 35.0
+
+[params.bearing_capacity_kpa]
+type = "float"
+unit = "kPa"
+description = "FOUND-15-DETAIL-03 bearing capacity for the use case"
+min = 340.0
+max = 340.0
+
+[params.bearing_demand_kpa]
+type = "float"
+unit = "kPa"
+description = "FOUND-15-DETAIL-03 bearing demand consumed by the mix memo"
+min = 260.0
+max = 260.0
+
+[params.exposure_cover_provided_mm]
+type = "float"
+unit = "mm"
+description = "EXP-15-NOTE-03 provided cover for exposure condition"
+min = 55.0
+max = 55.0
+
+[params.exposure_cover_required_mm]
+type = "float"
+unit = "mm"
+description = "EXP-15-NOTE-03 required cover for exposure condition"
+min = 45.0
+max = 45.0
+
+[params.drainage_freeboard_provided_m]
+type = "float"
+unit = "m"
+description = "FOUND-15-DETAIL-03 provided drainage freeboard"
+min = 0.35
+max = 0.35
+
+[params.drainage_freeboard_required_m]
+type = "float"
+unit = "m"
+description = "EXP-15-NOTE-03 required drainage freeboard"
+min = 0.25
+max = 0.25
+
+[params.matching_evidence_items]
+type = "float"
+unit = "count"
+description = "MEMO-15-MIX-03 evidence items matched across source files"
+min = 6.0
+max = 6.0
+
+[params.required_evidence_items]
+type = "float"
+unit = "count"
+description = "MEMO-15-MIX-03 required evidence item count"
+min = 6.0
+max = 6.0
+
+[outputs.target_mean_strength_mpa]
+description = "Specified strength plus target factor times standard deviation"
+tolerance = 0.03
+
+[outputs.strength_margin_mpa]
+description = "Submitted mean strength minus target mean strength"
+tolerance = 0.03
+
+[outputs.scm_replacement_margin_percent]
+description = "Maximum SCM replacement minus proposed SCM replacement"
+tolerance = 0.03
+
+[outputs.bearing_capacity_margin_kpa]
+description = "Bearing capacity minus bearing demand"
+tolerance = 0.03
+
+[outputs.bearing_utilization]
+description = "Bearing demand divided by bearing capacity"
+tolerance = 0.003
+
+[outputs.exposure_cover_margin_mm]
+description = "Provided cover minus required cover"
+tolerance = 0.03
+
+[outputs.drainage_freeboard_margin_m]
+description = "Provided drainage freeboard minus required drainage freeboard"
+tolerance = 0.003
+
+[outputs.mix_evidence_match_fraction]
+description = "Matching evidence items divided by required evidence items"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when strength, SCM, bearing, exposure, drainage, and evidence checks pass"
+tolerance = 0.001
+
+[archetypes.ssc15_concrete_mix_case]
+description = "Concrete mix drainage and retaining compliance case"
+site_contexts = ["ssc15-concrete-mix"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-15 concrete mix compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_concrete_mix_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-15 concrete mix compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_concrete_mix_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-15 concrete mix compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_concrete_mix_case"]

@@ -1,0 +1,305 @@
+[meta]
+name = "construction-monitoring-network-continuity-package"
+description = "SSC-16 construction monitoring network continuity metrics"
+long_description = "Calculates source-bound sensor data load, RF fade margin, PoE headroom, battery backup, solar headroom, and DC voltage-drop metrics from a deterministic SSC-16 task-owned source pack."
+discipline = "electrical"
+category = "monitoring-network"
+standards = ["construction monitoring workflow", "RF link budget workflow", "temporary power workflow"]
+tags = ["electrical", "construction", "monitoring", "network", "rf", "poe", "battery", "deterministic"]
+tool_mode = "with-tool"
+
+[params.turbidity_sensor_count]
+type = "float"
+unit = "count"
+description = "SENSOR-16-SCHED-07 turbidity sensor count"
+min = 2.0
+max = 2.0
+
+[params.turbidity_sensor_data_mbps]
+type = "float"
+unit = "Mbps"
+description = "SENSOR-16-SCHED-07 turbidity sensor data load"
+min = 0.15
+max = 0.15
+
+[params.vibration_sensor_count]
+type = "float"
+unit = "count"
+description = "SENSOR-16-SCHED-07 vibration sensor count"
+min = 3.0
+max = 3.0
+
+[params.vibration_sensor_data_mbps]
+type = "float"
+unit = "Mbps"
+description = "SENSOR-16-SCHED-07 vibration sensor data load"
+min = 0.35
+max = 0.35
+
+[params.camera_count]
+type = "float"
+unit = "count"
+description = "MON-16-LAYOUT-07 camera count"
+min = 2.0
+max = 2.0
+
+[params.camera_data_mbps]
+type = "float"
+unit = "Mbps"
+description = "SENSOR-16-SCHED-07 camera data load"
+min = 4.0
+max = 4.0
+
+[params.weather_station_data_mbps]
+type = "float"
+unit = "Mbps"
+description = "SENSOR-16-SCHED-07 weather station data load"
+min = 0.1
+max = 0.1
+
+[params.gateway_overhead_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-16-TOPO-07 gateway overhead"
+min = 0.55
+max = 0.55
+
+[params.network_capacity_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-16-TOPO-07 network capacity"
+min = 25.0
+max = 25.0
+
+[params.rf_tx_power_dbm]
+type = "float"
+unit = "dBm"
+description = "NET-16-TOPO-07 RF TX power"
+min = 23.0
+max = 23.0
+
+[params.rf_tx_gain_db]
+type = "float"
+unit = "dB"
+description = "NET-16-TOPO-07 RF TX antenna gain"
+min = 12.0
+max = 12.0
+
+[params.rf_rx_gain_db]
+type = "float"
+unit = "dB"
+description = "NET-16-TOPO-07 RF RX antenna gain"
+min = 12.0
+max = 12.0
+
+[params.rf_path_loss_db]
+type = "float"
+unit = "dB"
+description = "NET-16-TOPO-07 RF path loss"
+min = 106.0
+max = 106.0
+
+[params.rf_misc_loss_db]
+type = "float"
+unit = "dB"
+description = "NET-16-TOPO-07 RF miscellaneous loss"
+min = 4.0
+max = 4.0
+
+[params.rf_receiver_sensitivity_dbm]
+type = "float"
+unit = "dBm"
+description = "NET-16-TOPO-07 RF receiver sensitivity"
+min = -82.0
+max = -82.0
+
+[params.camera_poe_w]
+type = "float"
+unit = "W"
+description = "BAT-16-SOLAR-07 camera PoE load"
+min = 18.0
+max = 18.0
+
+[params.gateway_poe_w]
+type = "float"
+unit = "W"
+description = "BAT-16-SOLAR-07 gateway PoE load"
+min = 12.0
+max = 12.0
+
+[params.sensor_poe_w]
+type = "float"
+unit = "W"
+description = "BAT-16-SOLAR-07 each sensor PoE load"
+min = 4.0
+max = 4.0
+
+[params.poe_budget_w]
+type = "float"
+unit = "W"
+description = "BAT-16-SOLAR-07 PoE budget"
+min = 120.0
+max = 120.0
+
+[params.battery_capacity_kwh]
+type = "float"
+unit = "kWh"
+description = "BAT-16-SOLAR-07 battery capacity"
+min = 3.2
+max = 3.2
+
+[params.usable_battery_fraction]
+type = "float"
+description = "BAT-16-SOLAR-07 usable battery fraction"
+min = 0.85
+max = 0.85
+
+[params.backup_runtime_h]
+type = "float"
+unit = "h"
+description = "REPORT-16-RULE-07 backup runtime"
+min = 36.0
+max = 36.0
+
+[params.solar_panel_power_w]
+type = "float"
+unit = "W"
+description = "BAT-16-SOLAR-07 solar panel power"
+min = 800.0
+max = 800.0
+
+[params.peak_sun_hours]
+type = "float"
+unit = "h"
+description = "BAT-16-SOLAR-07 peak sun hours"
+min = 4.0
+max = 4.0
+
+[params.solar_derate_factor]
+type = "float"
+description = "BAT-16-SOLAR-07 solar derate factor"
+min = 0.72
+max = 0.72
+
+[params.dc_voltage_v]
+type = "float"
+unit = "V"
+description = "BAT-16-SOLAR-07 DC voltage"
+min = 48.0
+max = 48.0
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "NET-16-TOPO-07 temporary DC feeder length"
+min = 0.12
+max = 0.12
+
+[params.feeder_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "NET-16-TOPO-07 feeder resistance"
+min = 1.4
+max = 1.4
+
+[params.allowed_voltage_drop_percent]
+type = "float"
+unit = "percent"
+description = "BAT-16-SOLAR-07 allowed voltage drop"
+min = 5.0
+max = 5.0
+
+[outputs.sensor_data_load_mbps]
+description = "Total monitoring sensor data load"
+tolerance = 0.03
+
+[outputs.network_headroom_mbps]
+description = "Network capacity minus sensor data load"
+tolerance = 0.03
+
+[outputs.rf_received_power_dbm]
+description = "RF received power"
+tolerance = 0.03
+
+[outputs.rf_fade_margin_db]
+description = "RF received power minus receiver sensitivity"
+tolerance = 0.03
+
+[outputs.poe_load_w]
+description = "Total monitoring PoE load"
+tolerance = 0.03
+
+[outputs.poe_headroom_w]
+description = "PoE budget minus load"
+tolerance = 0.03
+
+[outputs.battery_required_kwh]
+description = "Battery energy required for backup runtime"
+tolerance = 0.03
+
+[outputs.battery_margin_kwh]
+description = "Usable battery energy minus required battery energy"
+tolerance = 0.03
+
+[outputs.solar_daily_headroom_wh]
+description = "Solar daily energy minus monitoring daily load"
+tolerance = 0.03
+
+[outputs.voltage_drop_percent]
+description = "Temporary DC feeder voltage drop"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Allowed voltage drop minus calculated drop"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when network, RF, PoE, battery, solar, and voltage checks pass"
+tolerance = 0.001
+
+[archetypes.ssc16_monitoring_network_case]
+description = "Construction monitoring network and data continuity case"
+turbidity_sensor_count = {min = 2.0, max = 2.0}
+turbidity_sensor_data_mbps = {min = 0.15, max = 0.15}
+vibration_sensor_count = {min = 3.0, max = 3.0}
+vibration_sensor_data_mbps = {min = 0.35, max = 0.35}
+camera_count = {min = 2.0, max = 2.0}
+camera_data_mbps = {min = 4.0, max = 4.0}
+weather_station_data_mbps = {min = 0.1, max = 0.1}
+gateway_overhead_mbps = {min = 0.55, max = 0.55}
+network_capacity_mbps = {min = 25.0, max = 25.0}
+rf_tx_power_dbm = {min = 23.0, max = 23.0}
+rf_tx_gain_db = {min = 12.0, max = 12.0}
+rf_rx_gain_db = {min = 12.0, max = 12.0}
+rf_path_loss_db = {min = 106.0, max = 106.0}
+rf_misc_loss_db = {min = 4.0, max = 4.0}
+rf_receiver_sensitivity_dbm = {min = -82.0, max = -82.0}
+camera_poe_w = {min = 18.0, max = 18.0}
+gateway_poe_w = {min = 12.0, max = 12.0}
+sensor_poe_w = {min = 4.0, max = 4.0}
+poe_budget_w = {min = 120.0, max = 120.0}
+battery_capacity_kwh = {min = 3.2, max = 3.2}
+usable_battery_fraction = {min = 0.85, max = 0.85}
+backup_runtime_h = {min = 36.0, max = 36.0}
+solar_panel_power_w = {min = 800.0, max = 800.0}
+peak_sun_hours = {min = 4.0, max = 4.0}
+solar_derate_factor = {min = 0.72, max = 0.72}
+dc_voltage_v = {min = 48.0, max = 48.0}
+feeder_length_km = {min = 0.12, max = 0.12}
+feeder_resistance_ohm_km = {min = 1.4, max = 1.4}
+allowed_voltage_drop_percent = {min = 5.0, max = 5.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-16 monitoring continuity package"
+visibility = "all_given"
+archetypes = ["ssc16_monitoring_network_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-16 monitoring continuity package"
+visibility = "all_given"
+archetypes = ["ssc16_monitoring_network_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-16 monitoring continuity package"
+visibility = "all_given"
+archetypes = ["ssc16_monitoring_network_case"]

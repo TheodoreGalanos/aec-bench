@@ -1,0 +1,194 @@
+[meta]
+name = "wastewater-energy-island-resilience-package"
+description = "SSC-17 wastewater process energy island resilience metrics"
+long_description = "Calculates source-bound wastewater energy island metrics from a deterministic SSC-17 task-owned source pack. The template combines oxygen demand, blower energy, biogas CHP, BESS autonomy, critical-process energy, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "wastewater-energy-resilience"
+standards = ["wastewater process energy workflows", "biogas CHP workflows", "BESS dispatch workflows"]
+tags = ["mechanical", "wastewater", "biogas", "blower", "bess", "resilience", "energy", "deterministic"]
+tool_mode = "with-tool"
+
+[params.influent_flow_mld]
+type = "float"
+unit = "ML/d"
+description = "WWTP-SSC17-002 influent flow"
+min = 2.4
+max = 2.4
+
+[params.bod_mg_l]
+type = "float"
+unit = "mg/L"
+description = "WWTP-SSC17-002 influent BOD"
+min = 220.0
+max = 220.0
+
+[params.ammonia_mg_l]
+type = "float"
+unit = "mg/L"
+description = "WWTP-SSC17-002 influent ammonia"
+min = 32.0
+max = 32.0
+
+[params.bod_oxygen_factor]
+type = "float"
+description = "PFD-SSC17-002 BOD oxygen factor"
+min = 1.1
+max = 1.1
+
+[params.nitrification_oxygen_factor]
+type = "float"
+description = "PFD-SSC17-002 nitrification oxygen factor"
+min = 4.57
+max = 4.57
+
+[params.blower_specific_energy_kwh_kg_o2]
+type = "float"
+unit = "kWh/kg O2"
+description = "BLOWER-SSC17-002 blower specific energy"
+min = 0.75
+max = 0.75
+
+[params.auxiliary_critical_load_kw]
+type = "float"
+unit = "kW"
+description = "BLOWER-SSC17-002 auxiliary critical load"
+min = 18.0
+max = 18.0
+
+[params.outage_duration_hr]
+type = "float"
+unit = "h"
+description = "MEMO-SSC17-002 critical process outage duration"
+min = 12.0
+max = 12.0
+
+[params.volatile_solids_kg_d]
+type = "float"
+unit = "kg/d"
+description = "BIOGAS-SSC17-002 volatile solids"
+min = 520.0
+max = 520.0
+
+[params.biogas_yield_m3_kg_vs]
+type = "float"
+unit = "m3/kg VS"
+description = "BIOGAS-SSC17-002 biogas yield"
+min = 0.68
+max = 0.68
+
+[params.methane_fraction]
+type = "float"
+description = "BIOGAS-SSC17-002 methane fraction"
+min = 0.62
+max = 0.62
+
+[params.methane_energy_kwh_m3]
+type = "float"
+unit = "kWh/m3"
+description = "BIOGAS-SSC17-002 methane energy content"
+min = 9.97
+max = 9.97
+
+[params.chp_efficiency]
+type = "float"
+description = "BIOGAS-SSC17-002 CHP electrical efficiency"
+min = 0.34
+max = 0.34
+
+[params.bess_nominal_kwh]
+type = "float"
+unit = "kWh"
+description = "BESS-SSC17-002 nominal energy"
+min = 300.0
+max = 300.0
+
+[params.max_depth_of_discharge]
+type = "float"
+description = "BESS-SSC17-002 maximum depth of discharge"
+min = 0.8
+max = 0.8
+
+[params.inverter_efficiency]
+type = "float"
+description = "BESS-SSC17-002 inverter efficiency"
+min = 0.92
+max = 0.92
+
+[outputs.oxygen_demand_kg_d]
+description = "Total process oxygen demand"
+tolerance = 0.03
+
+[outputs.blower_energy_kwh_d]
+description = "Daily blower energy"
+tolerance = 0.03
+
+[outputs.blower_average_kw]
+description = "Average blower power"
+tolerance = 0.03
+
+[outputs.biogas_production_m3_d]
+description = "Daily biogas production"
+tolerance = 0.03
+
+[outputs.chp_energy_available_kwh]
+description = "CHP energy available during the outage window"
+tolerance = 0.03
+
+[outputs.bess_usable_energy_kwh]
+description = "Usable BESS energy"
+tolerance = 0.03
+
+[outputs.critical_process_energy_kwh]
+description = "Blower plus auxiliary energy required during outage"
+tolerance = 0.03
+
+[outputs.resilience_energy_available_kwh]
+description = "CHP plus BESS energy available"
+tolerance = 0.03
+
+[outputs.energy_margin_kwh]
+description = "Available resilience energy minus required process energy"
+tolerance = 0.03
+
+[outputs.battery_only_runtime_hr]
+description = "Battery-only runtime at blower plus auxiliary load"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when energy margin is non-negative"
+tolerance = 0.001
+
+[archetypes.ssc17_wastewater_energy_island_case]
+description = "Wastewater process energy island case with oxygen demand, biogas CHP, and BESS autonomy"
+influent_flow_mld = {min = 2.4, max = 2.4}
+bod_mg_l = {min = 220.0, max = 220.0}
+ammonia_mg_l = {min = 32.0, max = 32.0}
+bod_oxygen_factor = {min = 1.1, max = 1.1}
+nitrification_oxygen_factor = {min = 4.57, max = 4.57}
+blower_specific_energy_kwh_kg_o2 = {min = 0.75, max = 0.75}
+auxiliary_critical_load_kw = {min = 18.0, max = 18.0}
+outage_duration_hr = {min = 12.0, max = 12.0}
+volatile_solids_kg_d = {min = 520.0, max = 520.0}
+biogas_yield_m3_kg_vs = {min = 0.68, max = 0.68}
+methane_fraction = {min = 0.62, max = 0.62}
+methane_energy_kwh_m3 = {min = 9.97, max = 9.97}
+chp_efficiency = {min = 0.34, max = 0.34}
+bess_nominal_kwh = {min = 300.0, max = 300.0}
+max_depth_of_discharge = {min = 0.8, max = 0.8}
+inverter_efficiency = {min = 0.92, max = 0.92}
+site_contexts = ["wastewater-energy-island-resilience", "process-biogas-bess-autonomy-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-17 wastewater energy island package"
+visibility = "all_given"
+archetypes = ["ssc17_wastewater_energy_island_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-17 wastewater energy island package"
+visibility = "all_given"
+archetypes = ["ssc17_wastewater_energy_island_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-17 wastewater energy island package"
+visibility = "all_given"
+archetypes = ["ssc17_wastewater_energy_island_case"]

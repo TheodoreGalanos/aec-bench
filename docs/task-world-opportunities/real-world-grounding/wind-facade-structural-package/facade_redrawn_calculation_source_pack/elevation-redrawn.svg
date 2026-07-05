@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-label="Task-owned redrawn facade elevation with pressure zones and representative bracket labels">
+  <title>Facade Redrawn Calculation Source Pack Seed Elevation</title>
+  <desc>Task-owned elevation for research fixture design. It is not copied from an issued project drawing.</desc>
+  <rect x="0" y="0" width="1200" height="900" fill="#f8fafc" stroke="#111827" stroke-width="6"/>
+  <rect x="0" y="0" width="200" height="900" fill="#fee2e2" opacity="0.75"/>
+  <rect x="1000" y="0" width="200" height="900" fill="#fee2e2" opacity="0.75"/>
+  <rect x="200" y="0" width="200" height="900" fill="#fef3c7" opacity="0.7"/>
+  <rect x="800" y="0" width="200" height="900" fill="#fef3c7" opacity="0.7"/>
+  <rect x="400" y="0" width="400" height="900" fill="#dcfce7" opacity="0.65"/>
+  <g stroke="#334155" stroke-width="2">
+    <line x1="200" y1="0" x2="200" y2="900"/>
+    <line x1="400" y1="0" x2="400" y2="900"/>
+    <line x1="600" y1="0" x2="600" y2="900"/>
+    <line x1="800" y1="0" x2="800" y2="900"/>
+    <line x1="1000" y1="0" x2="1000" y2="900"/>
+    <line x1="0" y1="225" x2="1200" y2="225"/>
+    <line x1="0" y1="450" x2="1200" y2="450"/>
+    <line x1="0" y1="675" x2="1200" y2="675"/>
+  </g>
+  <rect x="485" y="280" width="230" height="250" fill="#eff6ff" stroke="#1d4ed8" stroke-width="4"/>
+  <text x="600" y="415" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" fill="#1d4ed8">OPENING</text>
+  <g font-family="Arial, sans-serif" font-size="30" fill="#111827">
+    <text x="100" y="60" text-anchor="middle">ZC corner</text>
+    <text x="300" y="60" text-anchor="middle">ZE edge</text>
+    <text x="600" y="60" text-anchor="middle">ZB body</text>
+    <text x="900" y="60" text-anchor="middle">ZE edge</text>
+    <text x="1100" y="60" text-anchor="middle">ZC corner</text>
+  </g>
+  <g stroke="#7c2d12" stroke-width="5">
+    <line x1="120" y1="130" x2="120" y2="820"/>
+    <line x1="300" y1="130" x2="300" y2="820"/>
+    <line x1="600" y1="130" x2="600" y2="820"/>
+    <line x1="900" y1="130" x2="900" y2="820"/>
+    <line x1="1080" y1="130" x2="1080" y2="820"/>
+  </g>
+  <g font-family="Arial, sans-serif" font-size="28" font-weight="700">
+    <circle cx="600" cy="675" r="22" fill="#16a34a"/>
+    <text x="635" y="685" fill="#166534">BR-B01</text>
+    <circle cx="300" cy="675" r="22" fill="#d97706"/>
+    <text x="335" y="685" fill="#92400e">BR-E01</text>
+    <circle cx="120" cy="675" r="22" fill="#dc2626"/>
+    <text x="155" y="685" fill="#991b1b">BR-C01</text>
+  </g>
+  <g font-family="Arial, sans-serif" font-size="24" fill="#111827">
+    <text x="600" y="860" text-anchor="middle">Width 12.0 m; height 9.0 m; representative bracket tributary 0.60 m x 1.50 m</text>
+    <text x="600" y="895" text-anchor="middle">Task-owned redrawn elevation for fixture research; not an issued project drawing</text>
+  </g>
+</svg>

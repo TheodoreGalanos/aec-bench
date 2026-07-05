@@ -1,0 +1,252 @@
+[meta]
+name = "fire-water-sprinkler-storage-package"
+description = "SSC-19 fire-water, sprinkler demand, riser pressure, pump boost, and storage metrics"
+long_description = "Calculates source-bound fire-water metrics from a deterministic SSC-19 task-owned source pack. The template combines sprinkler density-area demand, hose allowance, sprinkler head discharge, hydrant water-supply curve, riser Hazen-Williams loss, elevation pressure loss, pump boost, tank storage duration, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "fire-protection"
+standards = ["NFPA 13", "NFPA 291", "EPA EPANET", "FM Property Loss Prevention Data Sheets", "AHJ fire-protection workflow"]
+tags = ["mechanical", "fire-protection", "sprinkler", "hydrant", "water-supply", "storage", "pump-boost", "hazen-williams", "deterministic"]
+tool_mode = "with-tool"
+
+[params.sprinkler_design_area_ft2]
+type = "float"
+unit = "ft2"
+description = "SPR-19-AREA-01 remote sprinkler design area"
+min = 1500.0
+max = 1500.0
+
+[params.sprinkler_density_gpm_ft2]
+type = "float"
+unit = "gpm/ft2"
+description = "HAZ-19-STORAGE-01 selected sprinkler density"
+min = 0.20
+max = 0.20
+
+[params.hose_allowance_gpm]
+type = "float"
+unit = "gpm"
+description = "CRIT-19-AHJ-01 hose allowance added to sprinkler demand"
+min = 250.0
+max = 250.0
+
+[params.sprinkler_head_k_factor_gpm_sqrt_psi]
+type = "float"
+unit = "gpm/sqrt(psi)"
+description = "SPR-19-HEAD-01 sprinkler K factor"
+min = 5.6
+max = 5.6
+
+[params.minimum_head_pressure_psi]
+type = "float"
+unit = "psi"
+description = "SPR-19-HEAD-01 minimum remote-head pressure"
+min = 15.0
+max = 15.0
+
+[params.installed_remote_head_count]
+type = "float"
+description = "SPR-19-AREA-01 installed remote-area head count"
+min = 16.0
+max = 16.0
+
+[params.hydrant_static_pressure_psi]
+type = "float"
+unit = "psi"
+description = "HYD-19-TEST-01 hydrant static pressure"
+min = 70.0
+max = 70.0
+
+[params.hydrant_residual_pressure_psi]
+type = "float"
+unit = "psi"
+description = "HYD-19-TEST-01 hydrant residual pressure at test flow"
+min = 48.0
+max = 48.0
+
+[params.hydrant_test_flow_gpm]
+type = "float"
+unit = "gpm"
+description = "HYD-19-TEST-01 measured hydrant test flow"
+min = 900.0
+max = 900.0
+
+[params.target_residual_pressure_psi]
+type = "float"
+unit = "psi"
+description = "CURVE-19-SUPPLY-01 target residual pressure for available flow"
+min = 20.0
+max = 20.0
+
+[params.riser_pipe_length_ft]
+type = "float"
+unit = "ft"
+description = "PIPE-19-RISER-01 riser pipe length"
+min = 240.0
+max = 240.0
+
+[params.riser_fitting_equivalent_length_ft]
+type = "float"
+unit = "ft"
+description = "PIPE-19-RISER-01 aggregate fitting equivalent length"
+min = 60.0
+max = 60.0
+
+[params.riser_pipe_internal_diameter_in]
+type = "float"
+unit = "in"
+description = "PIPE-19-RISER-01 pipe internal diameter"
+min = 4.0
+max = 4.0
+
+[params.hazen_williams_c]
+type = "float"
+description = "PIPE-19-RISER-01 Hazen-Williams C factor"
+min = 120.0
+max = 120.0
+
+[params.elevation_gain_ft]
+type = "float"
+unit = "ft"
+description = "ELEV-19-ZONE-01 elevation gain from supply boundary to remote area"
+min = 38.0
+max = 38.0
+
+[params.pump_boost_pressure_psi]
+type = "float"
+unit = "psi"
+description = "PUMP-19-BOOST-01 selected fire-water pump boost pressure"
+min = 25.0
+max = 25.0
+
+[params.remote_area_allowance_psi]
+type = "float"
+unit = "psi"
+description = "CRIT-19-AHJ-01 allowance above minimum head pressure for remote-area checks"
+min = 20.0
+max = 20.0
+
+[params.required_duration_min]
+type = "float"
+unit = "min"
+description = "TANK-19-STORAGE-01 fire-water storage duration"
+min = 60.0
+max = 60.0
+
+[params.available_storage_gal]
+type = "float"
+unit = "gal"
+description = "TANK-19-STORAGE-01 available fire-water storage"
+min = 36000.0
+max = 36000.0
+
+[outputs.sprinkler_demand_gpm]
+description = "SPR-19-AREA-01 density-area sprinkler demand"
+tolerance = 0.03
+
+[outputs.total_fire_demand_gpm]
+description = "Sprinkler demand plus CRIT-19-AHJ-01 hose allowance"
+tolerance = 0.03
+
+[outputs.sprinkler_head_discharge_gpm]
+description = "SPR-19-HEAD-01 discharge per sprinkler head at minimum pressure"
+tolerance = 0.03
+
+[outputs.required_remote_head_count]
+description = "Required remote-area head count from sprinkler demand and per-head discharge"
+tolerance = 0.03
+
+[outputs.remote_head_count_margin]
+description = "Installed remote-area heads minus required remote-area heads"
+tolerance = 0.03
+
+[outputs.pressure_drop_test_psi]
+description = "HYD-19-TEST-01 static minus residual pressure at test flow"
+tolerance = 0.03
+
+[outputs.supply_curve_coefficient]
+description = "CURVE-19-SUPPLY-01 hydrant flow coefficient using exponent 0.54"
+tolerance = 0.03
+
+[outputs.available_flow_20psi_gpm]
+description = "CURVE-19-SUPPLY-01 available flow at the target residual pressure"
+tolerance = 0.03
+
+[outputs.water_supply_flow_margin_gpm]
+description = "Available flow at target residual pressure minus total fire demand"
+tolerance = 0.03
+
+[outputs.residual_pressure_at_demand_psi]
+description = "Residual supply pressure on the hydrant curve at total fire demand"
+tolerance = 0.03
+
+[outputs.friction_loss_per_ft_psi]
+description = "PIPE-19-RISER-01 Hazen-Williams friction loss per foot at total fire demand"
+tolerance = 0.001
+
+[outputs.equivalent_length_ft]
+description = "Riser pipe length plus equivalent fitting length"
+tolerance = 0.03
+
+[outputs.total_friction_loss_psi]
+description = "PIPE-19-RISER-01 total friction pressure loss"
+tolerance = 0.03
+
+[outputs.elevation_pressure_loss_psi]
+description = "ELEV-19-ZONE-01 elevation pressure loss"
+tolerance = 0.03
+
+[outputs.available_riser_pressure_psi]
+description = "Residual demand pressure minus riser friction and elevation losses"
+tolerance = 0.03
+
+[outputs.boosted_riser_pressure_psi]
+description = "Available riser pressure after PUMP-19-BOOST-01 boost"
+tolerance = 0.03
+
+[outputs.required_riser_pressure_psi]
+description = "Minimum remote-head pressure plus CRIT-19-AHJ-01 allowance"
+tolerance = 0.03
+
+[outputs.pressure_margin_psi]
+description = "Boosted riser pressure minus required riser pressure"
+tolerance = 0.03
+
+[outputs.required_storage_gal]
+description = "Total fire demand times required storage duration"
+tolerance = 0.03
+
+[outputs.storage_margin_gal]
+description = "Available storage minus required storage"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when head count, flow, pressure, and storage margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc19_fire_water_case]
+description = "Fire-water sprinkler storage case with hydrant test, hazard basis, riser, pump boost, and storage tank"
+site_contexts = ["sprinkler-storage-hazard-check"]
+sprinkler_design_area_ft2 = {min = 1500.0, max = 1500.0}
+sprinkler_density_gpm_ft2 = {min = 0.20, max = 0.20}
+hose_allowance_gpm = {min = 250.0, max = 250.0}
+sprinkler_head_k_factor_gpm_sqrt_psi = {min = 5.6, max = 5.6}
+minimum_head_pressure_psi = {min = 15.0, max = 15.0}
+installed_remote_head_count = {min = 16.0, max = 16.0}
+hydrant_static_pressure_psi = {min = 70.0, max = 70.0}
+hydrant_residual_pressure_psi = {min = 48.0, max = 48.0}
+hydrant_test_flow_gpm = {min = 900.0, max = 900.0}
+target_residual_pressure_psi = {min = 20.0, max = 20.0}
+riser_pipe_length_ft = {min = 240.0, max = 240.0}
+riser_fitting_equivalent_length_ft = {min = 60.0, max = 60.0}
+riser_pipe_internal_diameter_in = {min = 4.0, max = 4.0}
+hazen_williams_c = {min = 120.0, max = 120.0}
+elevation_gain_ft = {min = 38.0, max = 38.0}
+pump_boost_pressure_psi = {min = 25.0, max = 25.0}
+remote_area_allowance_psi = {min = 20.0, max = 20.0}
+required_duration_min = {min = 60.0, max = 60.0}
+available_storage_gal = {min = 36000.0, max = 36000.0}
+
+[difficulty.easy]
+description = "All source-pack values are visible for the baseline SSC-19 fire-water check."
+visibility = "all_given"
+archetypes = ["ssc19_fire_water_case"]

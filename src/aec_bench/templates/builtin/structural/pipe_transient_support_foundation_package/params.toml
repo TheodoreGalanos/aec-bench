@@ -1,0 +1,325 @@
+[meta]
+name = "pipe-transient-support-foundation-package"
+description = "SSC-14 pipe transient support, foundation bearing, anchor, and sliding metrics"
+long_description = "Calculates source-bound support and foundation metrics from a deterministic SSC-14 task-owned source pack. The template combines pipe bend transient thrust, operating pipe support dead load, a Terzaghi bearing-capacity check, gravity-base eccentric bearing pressure, anchor shear, and sliding margin for one compact generated task instance."
+discipline = "structural"
+category = "pipe-support-foundation"
+standards = ["ASME B31.3", "ACI 318", "AutoPIPE", "Terzaghi bearing capacity"]
+tags = ["structural", "pipe-support", "foundation", "anchor", "bearing", "transient", "deterministic"]
+tool_mode = "with-tool"
+
+[params.transient_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "TRANS-14-001 controlling transient pressure at the anchored bend"
+min = 950.0
+max = 950.0
+
+[params.pipe_internal_diameter_mm]
+type = "float"
+unit = "mm"
+description = "PIPE-SSC14-001 internal diameter used for transient thrust"
+min = 500.0
+max = 500.0
+
+[params.bend_angle_deg]
+type = "float"
+unit = "deg"
+description = "PIPE-SSC14-001 anchored bend deflection angle"
+min = 45.0
+max = 45.0
+
+[params.pipe_outer_diameter_mm]
+type = "float"
+unit = "mm"
+description = "PIPE-SSC14-001 pipe outside diameter for support dead load"
+min = 610.0
+max = 610.0
+
+[params.pipe_wall_thickness_mm]
+type = "float"
+unit = "mm"
+description = "PIPE-SSC14-001 pipe wall thickness for support dead load"
+min = 12.7
+max = 12.7
+
+[params.steel_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "SUP-14-ANCH-01 steel density used for pipe dead load"
+min = 7850.0
+max = 7850.0
+
+[params.contents_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "PIPE-SSC14-001 operating contents density"
+min = 1000.0
+max = 1000.0
+
+[params.insulation_thickness_mm]
+type = "float"
+unit = "mm"
+description = "SUP-14-ANCH-01 insulation thickness"
+min = 50.0
+max = 50.0
+
+[params.insulation_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "SUP-14-ANCH-01 insulation density"
+min = 120.0
+max = 120.0
+
+[params.support_span_m]
+type = "float"
+unit = "m"
+description = "SUP-14-ANCH-01 tributary pipe span to the anchored support"
+min = 5.5
+max = 5.5
+
+[params.valve_weight_kn]
+type = "float"
+unit = "kN"
+description = "PIPE-SSC14-001 valve concentrated weight at the support"
+min = 18.0
+max = 18.0
+
+[params.saddle_weight_kn]
+type = "float"
+unit = "kN"
+description = "SUP-14-ANCH-01 saddle and clamp concentrated weight"
+min = 7.0
+max = 7.0
+
+[params.foundation_length_along_thrust_m]
+type = "float"
+unit = "m"
+description = "FDN-14-BASE-01 foundation dimension along the transient thrust"
+min = 5.2
+max = 5.2
+
+[params.foundation_width_transverse_m]
+type = "float"
+unit = "m"
+description = "FDN-14-BASE-01 foundation transverse width"
+min = 2.4
+max = 2.4
+
+[params.foundation_depth_m]
+type = "float"
+unit = "m"
+description = "FDN-14-BASE-01 concrete foundation depth"
+min = 1.0
+max = 1.0
+
+[params.concrete_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m3"
+description = "FDN-14-BASE-01 reinforced concrete unit weight"
+min = 24.0
+max = 24.0
+
+[params.pipe_centerline_height_m]
+type = "float"
+unit = "m"
+description = "SUP-14-ANCH-01 thrust line height above the foundation bearing plane"
+min = 0.85
+max = 0.85
+
+[params.vertical_load_factor]
+type = "float"
+description = "LC-14-ULS-01 vertical load factor"
+min = 1.2
+max = 1.2
+
+[params.horizontal_load_factor]
+type = "float"
+description = "LC-14-ULS-01 horizontal transient load factor"
+min = 1.4
+max = 1.4
+
+[params.cohesion_kpa]
+type = "float"
+unit = "kPa"
+description = "SOIL-14-BEAR-01 cohesion used for Terzaghi bearing check"
+min = 0.0
+max = 0.0
+
+[params.soil_friction_angle_deg]
+type = "float"
+unit = "deg"
+description = "SOIL-14-BEAR-01 friction angle used for Terzaghi bearing check"
+min = 30.0
+max = 30.0
+
+[params.soil_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m3"
+description = "SOIL-14-BEAR-01 soil unit weight"
+min = 18.5
+max = 18.5
+
+[params.embedment_depth_m]
+type = "float"
+unit = "m"
+description = "SOIL-14-BEAR-01 foundation embedment depth"
+min = 0.6
+max = 0.6
+
+[params.footing_shape]
+type = "enum"
+values = ["strip"]
+description = "SOIL-14-BEAR-01 Terzaghi shape convention"
+
+[params.water_table_depth_m]
+type = "float"
+unit = "m"
+description = "SOIL-14-BEAR-01 water table depth below grade"
+min = 4.0
+max = 4.0
+
+[params.bearing_factor_of_safety]
+type = "float"
+description = "SOIL-14-BEAR-01 bearing factor of safety"
+min = 3.0
+max = 3.0
+
+[params.sliding_friction_coefficient]
+type = "float"
+description = "FDN-14-BASE-01 concrete-on-soil sliding friction coefficient"
+min = 0.55
+max = 0.55
+
+[params.anchor_bolt_count]
+type = "int"
+description = "ANCH-14-001 number of active shear anchors"
+min = 8
+max = 8
+
+[params.anchor_allowable_shear_per_bolt_kn]
+type = "float"
+unit = "kN"
+description = "ANCH-14-001 allowable shear per anchor bolt"
+min = 38.0
+max = 38.0
+
+[outputs.pipe_internal_area_m2]
+description = "Internal pipe area used for transient pressure thrust"
+tolerance = 0.03
+
+[outputs.pressure_force_kn]
+description = "Pressure force before bend-angle resolution"
+tolerance = 0.03
+
+[outputs.transient_thrust_kn]
+description = "Resolved transient bend thrust at the anchored support"
+tolerance = 0.03
+
+[outputs.operating_line_load_kn_m]
+description = "Operating pipe, contents, and insulation line load"
+tolerance = 0.03
+
+[outputs.support_vertical_service_kn]
+description = "Service vertical reaction at SUP-14-ANCH-01"
+tolerance = 0.03
+
+[outputs.foundation_self_weight_kn]
+description = "Self-weight of FDN-14-BASE-01"
+tolerance = 0.03
+
+[outputs.terzaghi_allowable_bearing_kpa]
+description = "Allowable bearing capacity from the source-owned Terzaghi check"
+tolerance = 0.03
+
+[outputs.factored_vertical_load_kn]
+description = "Factored vertical load for the foundation check"
+tolerance = 0.03
+
+[outputs.factored_horizontal_load_kn]
+description = "Factored horizontal transient load for anchor and foundation checks"
+tolerance = 0.03
+
+[outputs.overturning_moment_knm]
+description = "Overturning moment at the foundation bearing plane"
+tolerance = 0.03
+
+[outputs.bearing_eccentricity_m]
+description = "Foundation bearing eccentricity along thrust"
+tolerance = 0.03
+
+[outputs.middle_third_limit_m]
+description = "Middle-third eccentricity limit"
+tolerance = 0.03
+
+[outputs.maximum_bearing_kpa]
+description = "Maximum linear bearing pressure under factored loads"
+tolerance = 0.03
+
+[outputs.bearing_utilization]
+description = "Maximum bearing pressure divided by Terzaghi allowable bearing"
+tolerance = 0.03
+
+[outputs.anchor_shear_per_bolt_kn]
+description = "Factored horizontal shear per active anchor bolt"
+tolerance = 0.03
+
+[outputs.anchor_shear_utilization]
+description = "Per-bolt shear demand divided by allowable shear"
+tolerance = 0.03
+
+[outputs.sliding_margin_kn]
+description = "Frictional sliding resistance minus factored horizontal load"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for source-owned bearing, eccentricity, anchor, and sliding checks"
+tolerance = 0.03
+
+[archetypes.ssc14_pipe_support_case]
+description = "Pipe transient support, concrete base, anchor, and bearing package"
+transient_pressure_kpa = {min = 950.0, max = 950.0}
+pipe_internal_diameter_mm = {min = 500.0, max = 500.0}
+bend_angle_deg = {min = 45.0, max = 45.0}
+pipe_outer_diameter_mm = {min = 610.0, max = 610.0}
+pipe_wall_thickness_mm = {min = 12.7, max = 12.7}
+steel_density_kg_m3 = {min = 7850.0, max = 7850.0}
+contents_density_kg_m3 = {min = 1000.0, max = 1000.0}
+insulation_thickness_mm = {min = 50.0, max = 50.0}
+insulation_density_kg_m3 = {min = 120.0, max = 120.0}
+support_span_m = {min = 5.5, max = 5.5}
+valve_weight_kn = {min = 18.0, max = 18.0}
+saddle_weight_kn = {min = 7.0, max = 7.0}
+foundation_length_along_thrust_m = {min = 5.2, max = 5.2}
+foundation_width_transverse_m = {min = 2.4, max = 2.4}
+foundation_depth_m = {min = 1.0, max = 1.0}
+concrete_unit_weight_kn_m3 = {min = 24.0, max = 24.0}
+pipe_centerline_height_m = {min = 0.85, max = 0.85}
+vertical_load_factor = {min = 1.2, max = 1.2}
+horizontal_load_factor = {min = 1.4, max = 1.4}
+cohesion_kpa = {min = 0.0, max = 0.0}
+soil_friction_angle_deg = {min = 30.0, max = 30.0}
+soil_unit_weight_kn_m3 = {min = 18.5, max = 18.5}
+embedment_depth_m = {min = 0.6, max = 0.6}
+footing_shape = {values = ["strip"]}
+water_table_depth_m = {min = 4.0, max = 4.0}
+bearing_factor_of_safety = {min = 3.0, max = 3.0}
+sliding_friction_coefficient = {min = 0.55, max = 0.55}
+anchor_bolt_count = {min = 8, max = 8}
+anchor_allowable_shear_per_bolt_kn = {min = 38.0, max = 38.0}
+site_contexts = ["pipe-anchor-bend", "support-foundation-handoff"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-14 pipe support and foundation package"
+visibility = "all_given"
+archetypes = ["ssc14_pipe_support_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-14 pipe support and foundation package"
+visibility = "all_given"
+archetypes = ["ssc14_pipe_support_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-14 pipe support and foundation package"
+visibility = "all_given"
+archetypes = ["ssc14_pipe_support_case"]

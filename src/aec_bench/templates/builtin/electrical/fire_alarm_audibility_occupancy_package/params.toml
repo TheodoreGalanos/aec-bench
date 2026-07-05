@@ -1,0 +1,211 @@
+[meta]
+name = "fire-alarm-audibility-occupancy-package"
+description = "SSC-12 fire alarm audibility and occupancy metrics"
+long_description = "Calculates source-bound room RT60, NAC audibility, notification current, and alarm battery metrics from a deterministic SSC-12 task-owned source pack."
+discipline = "electrical"
+category = "alarm-audibility"
+standards = ["fire alarm audibility workflow", "NAC load workflow", "room finish workflow"]
+tags = ["electrical", "acoustics", "fire-alarm", "audibility", "battery", "deterministic"]
+tool_mode = "with-tool"
+
+[params.room_area_m2]
+type = "float"
+unit = "m2"
+description = "FLOOR-12-PLAN-06 room area"
+min = 220.0
+max = 220.0
+
+[params.ceiling_height_m]
+type = "float"
+unit = "m"
+description = "FLOOR-12-PLAN-06 ceiling height"
+min = 3.2
+max = 3.2
+
+[params.absorption_area_m2]
+type = "float"
+unit = "m2 sabins"
+description = "FINISH-12-ROOM-06 equivalent absorption area"
+min = 142.0
+max = 142.0
+
+[params.max_rt60_s]
+type = "float"
+unit = "s"
+description = "CRIT-12-LIFE-06 maximum RT60"
+min = 1.5
+max = 1.5
+
+[params.nac_sound_level_dba]
+type = "float"
+unit = "dBA"
+description = "NAC-12-SCHED-06 NAC sound level"
+min = 85.0
+max = 85.0
+
+[params.farthest_receiver_distance_m]
+type = "float"
+unit = "m"
+description = "FLOOR-12-PLAN-06 farthest receiver distance"
+min = 19.0
+max = 19.0
+
+[params.room_loss_db]
+type = "float"
+unit = "dB"
+description = "FINISH-12-ROOM-06 room loss allowance"
+min = 1.0
+max = 1.0
+
+[params.audible_nac_count]
+type = "float"
+unit = "count"
+description = "NAC-12-SCHED-06 audible NAC count"
+min = 3.0
+max = 3.0
+
+[params.audibility_criterion_dba]
+type = "float"
+unit = "dBA"
+description = "CRIT-12-LIFE-06 audibility criterion"
+min = 75.0
+max = 75.0
+
+[params.horn_count]
+type = "float"
+unit = "count"
+description = "NAC-12-SCHED-06 horn count"
+min = 8.0
+max = 8.0
+
+[params.horn_current_a]
+type = "float"
+unit = "A"
+description = "NAC-12-SCHED-06 horn current"
+min = 0.075
+max = 0.075
+
+[params.strobe_count]
+type = "float"
+unit = "count"
+description = "NAC-12-SCHED-06 strobe count"
+min = 6.0
+max = 6.0
+
+[params.strobe_current_a]
+type = "float"
+unit = "A"
+description = "NAC-12-SCHED-06 strobe current"
+min = 0.11
+max = 0.11
+
+[params.panel_current_a]
+type = "float"
+unit = "A"
+description = "LOAD-12-ALARM-06 panel current"
+min = 0.25
+max = 0.25
+
+[params.nac_supply_capacity_a]
+type = "float"
+unit = "A"
+description = "LOAD-12-ALARM-06 NAC supply capacity"
+min = 2.5
+max = 2.5
+
+[params.alarm_load_w]
+type = "float"
+unit = "W"
+description = "LOAD-12-ALARM-06 alarm standby load"
+min = 115.0
+max = 115.0
+
+[params.backup_runtime_h]
+type = "float"
+unit = "h"
+description = "LOAD-12-ALARM-06 backup runtime"
+min = 24.0
+max = 24.0
+
+[params.alarm_battery_capacity_kwh]
+type = "float"
+unit = "kWh"
+description = "LOAD-12-ALARM-06 alarm battery capacity"
+min = 3.4
+max = 3.4
+
+[outputs.room_rt60_s]
+description = "Sabine RT60 for audibility room"
+tolerance = 0.003
+
+[outputs.rt60_margin_s]
+description = "Maximum RT60 minus calculated RT60"
+tolerance = 0.003
+
+[outputs.farthest_nac_level_dba]
+description = "Farthest NAC level after distance and room loss"
+tolerance = 0.003
+
+[outputs.combined_alarm_level_dba]
+description = "Logarithmic sum of audible NAC levels"
+tolerance = 0.003
+
+[outputs.audibility_margin_db]
+description = "Audibility criterion minus combined alarm level"
+tolerance = 0.003
+
+[outputs.nac_current_a]
+description = "Total NAC current"
+tolerance = 0.003
+
+[outputs.nac_headroom_a]
+description = "NAC supply capacity minus total current"
+tolerance = 0.003
+
+[outputs.alarm_battery_required_kwh]
+description = "Alarm battery energy required"
+tolerance = 0.003
+
+[outputs.alarm_battery_margin_kwh]
+description = "Alarm battery capacity minus required energy"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when RT60, audibility, current, and battery checks pass"
+tolerance = 0.001
+
+[archetypes.ssc12_fire_alarm_audibility_case]
+description = "Fire alarm audibility and occupancy case"
+room_area_m2 = {min = 220.0, max = 220.0}
+ceiling_height_m = {min = 3.2, max = 3.2}
+absorption_area_m2 = {min = 142.0, max = 142.0}
+max_rt60_s = {min = 1.5, max = 1.5}
+nac_sound_level_dba = {min = 85.0, max = 85.0}
+farthest_receiver_distance_m = {min = 19.0, max = 19.0}
+room_loss_db = {min = 1.0, max = 1.0}
+audible_nac_count = {min = 3.0, max = 3.0}
+audibility_criterion_dba = {min = 75.0, max = 75.0}
+horn_count = {min = 8.0, max = 8.0}
+horn_current_a = {min = 0.075, max = 0.075}
+strobe_count = {min = 6.0, max = 6.0}
+strobe_current_a = {min = 0.11, max = 0.11}
+panel_current_a = {min = 0.25, max = 0.25}
+nac_supply_capacity_a = {min = 2.5, max = 2.5}
+alarm_load_w = {min = 115.0, max = 115.0}
+backup_runtime_h = {min = 24.0, max = 24.0}
+alarm_battery_capacity_kwh = {min = 3.4, max = 3.4}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-12 fire alarm audibility package"
+visibility = "all_given"
+archetypes = ["ssc12_fire_alarm_audibility_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-12 fire alarm audibility package"
+visibility = "all_given"
+archetypes = ["ssc12_fire_alarm_audibility_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-12 fire alarm audibility package"
+visibility = "all_given"
+archetypes = ["ssc12_fire_alarm_audibility_case"]

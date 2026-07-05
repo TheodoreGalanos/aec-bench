@@ -1,0 +1,40 @@
+# ABOUTME: Case ledger for the SSC-13 road visual operations synthetic pack.
+# ABOUTME: Records selected operating cases and source-status boundaries.
+
+cases:
+  - id: SCENE-BASELINE
+    role: governing_scene
+    source_file: scene-layout.csv
+    selected_value: RD-SSC13-001
+    reason: The baseline task uses one 120 m road segment with fixed device locations.
+  - id: LIGHTING-BASELINE
+    role: lighting_case
+    source_file: lighting_comms_source_manifest.yaml
+    selected_value: LT-NIGHT-INCIDENT
+    reason: Night incident operation keeps all luminaires energized and VMS active.
+  - id: CCTV-BASELINE
+    role: camera_coverage_case
+    source_file: camera-coverage-oracle.csv
+    selected_value: west_approach_and_vms_zone
+    reason: Both camera target zones must satisfy the task-owned 60 PPM threshold.
+  - id: VMS-BASELINE
+    role: message_policy_case
+    source_file: lighting_comms_source_manifest.yaml
+    selected_value: MSG-POL-01
+    reason: The synthetic message policy permits two short phases only.
+  - id: NETWORK-BASELINE
+    role: network_case
+    source_file: network-power-oracle.csv
+    selected_value: NET-BW
+    reason: All CCTV, VMS, sensor, and cabinet telemetry loads share the same 100 Mbps uplink.
+  - id: POWER-BASELINE
+    role: power_case
+    source_file: network-power-oracle.csv
+    selected_value: UPS-ENERGY
+    reason: Backup energy is checked for the selected night incident operating case.
+
+non_claims:
+  - The selected cases are task-owned and synthetic.
+  - The case ledger does not establish full MUTCD compliance.
+  - The case ledger does not establish software-certified lighting output.
+  - The case ledger does not establish authority approval or benchmark readiness.

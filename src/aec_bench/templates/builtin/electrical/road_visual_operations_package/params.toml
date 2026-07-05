@@ -1,0 +1,362 @@
+[meta]
+name = "road-visual-operations-package"
+description = "SSC-13 lighting, CCTV, ITS, communications, and power package metrics"
+long_description = "Calculates source-bound road visual operations metrics from a deterministic SSC-13 task-owned source pack. The template aggregates lighting grid illuminance, CCTV pixels-per-metre and retention storage, ITS network load, PoE headroom, fibre link margin, and UPS energy for a compact generated task instance."
+discipline = "electrical"
+category = "road-visual-operations"
+standards = ["IEC 62676-4", "IEEE 802.3bt", "NTCIP", "MUTCD"]
+tags = ["electrical", "lighting", "cctv", "its", "communications", "road", "deterministic"]
+tool_mode = "with-tool"
+
+[params.lighting_grid_lg01_lux]
+type = "float"
+unit = "lux"
+description = "Lighting grid point LG-01 illuminance"
+min = 18.4
+max = 18.4
+
+[params.lighting_grid_lg02_lux]
+type = "float"
+unit = "lux"
+description = "Lighting grid point LG-02 illuminance"
+min = 20.1
+max = 20.1
+
+[params.lighting_grid_lg03_lux]
+type = "float"
+unit = "lux"
+description = "Lighting grid point LG-03 illuminance"
+min = 19.7
+max = 19.7
+
+[params.lighting_grid_lg04_lux]
+type = "float"
+unit = "lux"
+description = "Lighting grid point LG-04 illuminance"
+min = 17.9
+max = 17.9
+
+[params.lighting_grid_lg05_lux]
+type = "float"
+unit = "lux"
+description = "Lighting grid point LG-05 illuminance"
+min = 16.8
+max = 16.8
+
+[params.lighting_grid_lg06_lux]
+type = "float"
+unit = "lux"
+description = "Lighting grid point LG-06 illuminance"
+min = 18.9
+max = 18.9
+
+[params.lighting_grid_lg07_lux]
+type = "float"
+unit = "lux"
+description = "Lighting grid point LG-07 illuminance"
+min = 21.0
+max = 21.0
+
+[params.lighting_grid_lg08_lux]
+type = "float"
+unit = "lux"
+description = "Lighting grid point LG-08 illuminance"
+min = 18.2
+max = 18.2
+
+[params.cctv_01_target_width_m]
+type = "float"
+unit = "m"
+description = "CCTV-01 target-zone width"
+min = 24.0
+max = 24.0
+
+[params.cctv_01_horizontal_pixels]
+type = "float"
+unit = "px"
+description = "CCTV-01 horizontal pixel count"
+min = 1920.0
+max = 1920.0
+
+[params.cctv_01_bitrate_mbps]
+type = "float"
+unit = "Mbps"
+description = "CCTV-01 recording bitrate"
+min = 6.0
+max = 6.0
+
+[params.cctv_02_target_width_m]
+type = "float"
+unit = "m"
+description = "CCTV-02 target-zone width"
+min = 32.0
+max = 32.0
+
+[params.cctv_02_horizontal_pixels]
+type = "float"
+unit = "px"
+description = "CCTV-02 horizontal pixel count"
+min = 1920.0
+max = 1920.0
+
+[params.cctv_02_bitrate_mbps]
+type = "float"
+unit = "Mbps"
+description = "CCTV-02 recording bitrate"
+min = 6.0
+max = 6.0
+
+[params.retention_days]
+type = "float"
+unit = "days"
+description = "Continuous recording retention period"
+min = 14.0
+max = 14.0
+
+[params.storage_overhead_factor]
+type = "float"
+description = "CCTV storage overhead multiplier"
+min = 1.10
+max = 1.10
+
+[params.cctv_01_network_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "CCTV-01 network load"
+min = 6.0
+max = 6.0
+
+[params.cctv_02_network_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "CCTV-02 network load"
+min = 6.0
+max = 6.0
+
+[params.vms_network_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "VMS-01 network load"
+min = 4.0
+max = 4.0
+
+[params.environment_sensor_network_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "ENV-01 network load"
+min = 0.2
+max = 0.2
+
+[params.cabinet_aux_network_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "CAB-01 auxiliary telemetry network load"
+min = 0.5
+max = 0.5
+
+[params.cctv_01_poe_load_w]
+type = "float"
+unit = "W"
+description = "CCTV-01 PoE load"
+min = 13.0
+max = 13.0
+
+[params.cctv_02_poe_load_w]
+type = "float"
+unit = "W"
+description = "CCTV-02 PoE load"
+min = 13.0
+max = 13.0
+
+[params.vms_poe_load_w]
+type = "float"
+unit = "W"
+description = "VMS-01 PoE communications load"
+min = 12.0
+max = 12.0
+
+[params.environment_sensor_poe_load_w]
+type = "float"
+unit = "W"
+description = "ENV-01 PoE load"
+min = 6.0
+max = 6.0
+
+[params.poe_budget_w]
+type = "float"
+unit = "W"
+description = "SW-01 PoE budget"
+min = 120.0
+max = 120.0
+
+[params.fibre_length_km]
+type = "float"
+unit = "km"
+description = "FIB-01 fibre uplink length"
+min = 0.42
+max = 0.42
+
+[params.fibre_loss_db_per_km]
+type = "float"
+unit = "dB/km"
+description = "Single-mode fibre attenuation allowance"
+min = 0.35
+max = 0.35
+
+[params.connector_loss_db]
+type = "float"
+unit = "dB"
+description = "Connector loss allowance"
+min = 1.0
+max = 1.0
+
+[params.splice_loss_db]
+type = "float"
+unit = "dB"
+description = "Splice loss allowance"
+min = 0.6
+max = 0.6
+
+[params.fibre_reserve_loss_db]
+type = "float"
+unit = "dB"
+description = "Fibre design reserve loss allowance"
+min = 0.6
+max = 0.6
+
+[params.fibre_budget_db]
+type = "float"
+unit = "dB"
+description = "FIB-01 optical loss budget"
+min = 15.0
+max = 15.0
+
+[params.luminaire_01_power_w]
+type = "float"
+unit = "W"
+description = "L-01 normal lighting load"
+min = 80.0
+max = 80.0
+
+[params.luminaire_02_power_w]
+type = "float"
+unit = "W"
+description = "L-02 normal lighting load"
+min = 80.0
+max = 80.0
+
+[params.luminaire_03_power_w]
+type = "float"
+unit = "W"
+description = "L-03 normal lighting load"
+min = 80.0
+max = 80.0
+
+[params.luminaire_04_power_w]
+type = "float"
+unit = "W"
+description = "L-04 normal lighting load"
+min = 80.0
+max = 80.0
+
+[params.vms_power_w]
+type = "float"
+unit = "W"
+description = "VMS-01 selected UPS case load"
+min = 180.0
+max = 180.0
+
+[params.cabinet_aux_power_w]
+type = "float"
+unit = "W"
+description = "CAB-01 selected UPS auxiliary load"
+min = 40.0
+max = 40.0
+
+[params.ups_autonomy_h]
+type = "float"
+unit = "h"
+description = "Required UPS autonomy"
+min = 2.0
+max = 2.0
+
+[params.ups_efficiency]
+type = "float"
+description = "UPS efficiency factor"
+min = 0.85
+max = 0.85
+
+[outputs.average_illuminance_lux]
+description = "Average illuminance across the eight lighting grid rows"
+tolerance = 0.005
+
+[outputs.minimum_illuminance_lux]
+description = "Minimum illuminance across the lighting grid"
+tolerance = 0.005
+
+[outputs.uniformity_ratio]
+description = "Minimum-to-average lighting uniformity ratio"
+tolerance = 0.005
+
+[outputs.cctv_01_pixels_per_meter]
+description = "CCTV-01 target-zone pixel density"
+tolerance = 0.005
+
+[outputs.cctv_02_pixels_per_meter]
+description = "CCTV-02 target-zone pixel density"
+tolerance = 0.005
+
+[outputs.cctv_01_storage_tb]
+description = "CCTV-01 retained video storage"
+tolerance = 0.005
+
+[outputs.cctv_02_storage_tb]
+description = "CCTV-02 retained video storage"
+tolerance = 0.005
+
+[outputs.total_cctv_storage_tb]
+description = "Total retained CCTV storage"
+tolerance = 0.005
+
+[outputs.total_network_load_mbps]
+description = "Total ITS network load"
+tolerance = 0.005
+
+[outputs.poe_load_w]
+description = "Total PoE-powered device load"
+tolerance = 0.005
+
+[outputs.poe_headroom_w]
+description = "Remaining PoE budget headroom"
+tolerance = 0.005
+
+[outputs.fibre_loss_db]
+description = "Total FIB-01 optical link loss"
+tolerance = 0.005
+
+[outputs.fibre_margin_db]
+description = "FIB-01 optical budget margin"
+tolerance = 0.005
+
+[outputs.ups_energy_kwh]
+description = "UPS energy required for the selected operating case"
+tolerance = 0.005
+
+[archetypes.ssc13_seed]
+description = "SSC-13 task-owned synthetic road lighting, visual, ITS, CCTV, and communications package"
+site_contexts = ["night-incident-road-visual-operations"]
+
+[difficulty.easy]
+description = "All source-pack values visible"
+visibility = "all_given"
+archetypes = ["ssc13_seed"]
+
+[difficulty.medium]
+description = "Same deterministic source-pack values with package-level aggregation"
+visibility = "all_given"
+archetypes = ["ssc13_seed"]
+
+[difficulty.hard]
+description = "Same deterministic source-pack values with cross-discipline handoff checks"
+visibility = "all_given"
+archetypes = ["ssc13_seed"]

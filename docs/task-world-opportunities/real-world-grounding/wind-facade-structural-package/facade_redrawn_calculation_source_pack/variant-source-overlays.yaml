@@ -1,0 +1,294 @@
+# ABOUTME: Defines row-level source overlays for facade source-pack variants.
+# ABOUTME: Keeps richer geometry and anchor mutations explicit before verifier implementation.
+source_pack_id: facade_redrawn_calculation_source_pack_seed_001
+status: docs_only_variant_source_overlays
+policy: These overlays are research fixture-generation inputs. They are not expanded runtime fixtures, executable verifier code, or issued project calculations.
+overlay_format:
+  type: row_level_patch
+  base_pack: baseline_seed_001
+  rule: Apply one overlay at a time to the baseline source files before future fixture generation.
+expanded_source_index: variants/variant-source-files.yaml
+overlays:
+  - variant_id: baseline_seed_001
+    expected_result: pass
+    overlay_type: baseline_reference
+    source_files:
+      - geometry-oracle.csv
+      - pressure-schedule.csv
+      - support-schedule.csv
+      - capacity-excerpts.yaml
+      - anchor-check-oracle.csv
+      - calculation-oracle.csv
+    expected_governing:
+      support_id: BR-C01
+      governing_component: anchor
+      governing_utilization: 0.870
+  - variant_id: added_opening_edge_support
+    expected_result: pass
+    overlay_type: row_level_patch
+    row_overlays:
+      geometry-oracle.csv:
+        add:
+          - element_id: OP-02
+            element_type: opening
+            zone_id: null
+            svg_label: OPENING-02
+            x_min_px: 220
+            y_min_px: 160
+            x_max_px: 340
+            y_max_px: 300
+            width_m: 1.20
+            height_m: 1.40
+            source_file: elevation-redrawn.svg
+            verifier_role: opening_extent
+          - element_id: BR-E02
+            element_type: support
+            zone_id: ZE
+            svg_label: BR-E02
+            x_min_px: 360
+            y_min_px: 360
+            x_max_px: 360
+            y_max_px: 360
+            width_m: 0.00
+            height_m: 0.00
+            source_file: elevation-redrawn.svg
+            verifier_role: support_point
+      support-schedule.csv:
+        add:
+          - support_id: BR-E02
+            zone_id: ZE
+            svg_label: BR-E02
+            support_family: NVELOPE-style vertical rail
+            bracket_product_row: NV-VB-S-150 task row
+            rail_profile_row: VR-60x40 task row
+            fixed_sliding_role: sliding wind restraint
+            centre_spacing_x_m: 0.60
+            centre_spacing_y_m: 1.50
+            tributary_width_m: 0.60
+            tributary_height_m: 1.50
+            fastener_count: 1
+            anchor_row: ANCH-CONC-M8
+            demand_source: calculation-oracle.csv
+      calculation-oracle.csv:
+        add:
+          - support_id: BR-E02
+            zone_id: ZE
+            pressure_kpa: -1.80
+            tributary_width_m: 0.60
+            tributary_height_m: 1.50
+            tributary_area_m2: 0.900
+            dead_load_kpa: 0.35
+            dead_load_kN: 0.315
+            wind_load_kN: 1.620
+            bracket_horizontal_resistance_kN: 2.80
+            bracket_vertical_resistance_kN: 1.20
+            bracket_horizontal_utilization: 0.579
+            bracket_vertical_utilization: 0.263
+            anchor_tension_resistance_kN: 2.50
+            anchor_shear_resistance_kN: 3.00
+            anchor_tension_utilization: 0.648
+            anchor_shear_utilization: 0.105
+            anchor_combined_utilization: 0.656
+            governing_utilization: 0.656
+            governing_component: anchor
+            status: pass
+      anchor-check-oracle.csv:
+        add:
+          - support_id: BR-E02
+            anchor_row: ANCH-CONC-M8
+            source_family_tag: hilti_profis_hrd_and_kws_ankit_style
+            substrate: concrete
+            embedment_mm: 60
+            min_embedment_mm: 60
+            edge_distance_x_mm: 95
+            edge_distance_y_mm: 140
+            min_edge_distance_mm: 75
+            nearest_anchor_spacing_mm: 180
+            min_spacing_mm: 100
+            tension_demand_kN: 1.620
+            shear_demand_kN: 0.315
+            tension_resistance_kN: 2.50
+            shear_resistance_kN: 3.00
+            tension_utilization: 0.648
+            shear_utilization: 0.105
+            combined_utilization: 0.656
+            edge_distance_ok: true
+            embedment_ok: true
+            spacing_ok: true
+            governing_anchor_check: combined_utilization
+            status: pass
+    expected_governing:
+      support_id: BR-C01
+      governing_component: anchor
+      governing_utilization: 0.870
+    unresolved_until_runtime: Needs an expanded redrawn SVG and executable drawing-to-table verifier.
+  - variant_id: reentrant_corner_pressure_governing
+    expected_result: pass
+    overlay_type: row_level_patch
+    row_overlays:
+      geometry-oracle.csv:
+        add:
+          - element_id: ZC-RE-01
+            element_type: pressure_zone
+            zone_id: ZC-RE
+            svg_label: ZC re-entrant return
+            x_min_px: 900
+            y_min_px: 250
+            x_max_px: 1200
+            y_max_px: 600
+            width_m: 3.00
+            height_m: 3.50
+            source_file: elevation-redrawn.svg
+            verifier_role: zone_extent
+          - element_id: BR-RC01
+            element_type: support
+            zone_id: ZC-RE
+            svg_label: BR-RC01
+            x_min_px: 1040
+            y_min_px: 420
+            x_max_px: 1040
+            y_max_px: 420
+            width_m: 0.00
+            height_m: 0.00
+            source_file: elevation-redrawn.svg
+            verifier_role: support_point
+      pressure-schedule.csv:
+        add:
+          - zone_id: ZC-RE
+            zone_name: reentrant_corner
+            height_band_m: 0-9
+            pressure_kpa: -2.65
+            load_combination: WIND_SERVICE
+            tributary_rule: re-entrant corner representative tributary
+            governing_pressure: 1
+      support-schedule.csv:
+        add:
+          - support_id: BR-RC01
+            zone_id: ZC-RE
+            svg_label: BR-RC01
+            support_family: NVELOPE-style vertical rail
+            bracket_product_row: NV-VB-S-150 task row
+            rail_profile_row: VR-60x40 task row
+            fixed_sliding_role: fixed wind restraint
+            centre_spacing_x_m: 0.60
+            centre_spacing_y_m: 1.50
+            tributary_width_m: 0.60
+            tributary_height_m: 1.50
+            fastener_count: 1
+            anchor_row: ANCH-CONC-M8
+            demand_source: calculation-oracle.csv
+      calculation-oracle.csv:
+        add:
+          - support_id: BR-RC01
+            zone_id: ZC-RE
+            pressure_kpa: -2.65
+            tributary_width_m: 0.60
+            tributary_height_m: 1.50
+            tributary_area_m2: 0.900
+            dead_load_kpa: 0.35
+            dead_load_kN: 0.315
+            wind_load_kN: 2.385
+            bracket_horizontal_resistance_kN: 2.80
+            bracket_vertical_resistance_kN: 1.20
+            bracket_horizontal_utilization: 0.852
+            bracket_vertical_utilization: 0.263
+            anchor_tension_resistance_kN: 2.50
+            anchor_shear_resistance_kN: 3.00
+            anchor_tension_utilization: 0.954
+            anchor_shear_utilization: 0.105
+            anchor_combined_utilization: 0.960
+            governing_utilization: 0.960
+            governing_component: anchor
+            status: pass
+      anchor-check-oracle.csv:
+        add:
+          - support_id: BR-RC01
+            anchor_row: ANCH-CONC-M8
+            source_family_tag: hilti_profis_hrd_and_kws_ankit_style
+            substrate: concrete
+            embedment_mm: 60
+            min_embedment_mm: 60
+            edge_distance_x_mm: 90
+            edge_distance_y_mm: 140
+            min_edge_distance_mm: 75
+            nearest_anchor_spacing_mm: 160
+            min_spacing_mm: 100
+            tension_demand_kN: 2.385
+            shear_demand_kN: 0.315
+            tension_resistance_kN: 2.50
+            shear_resistance_kN: 3.00
+            tension_utilization: 0.954
+            shear_utilization: 0.105
+            combined_utilization: 0.960
+            edge_distance_ok: true
+            embedment_ok: true
+            spacing_ok: true
+            governing_anchor_check: combined_utilization
+            status: pass
+    expected_governing:
+      support_id: BR-RC01
+      governing_component: anchor
+      governing_utilization: 0.960
+    unresolved_until_runtime: Needs an expanded redrawn SVG and executable pressure-zone derivation rule.
+  - variant_id: anchor_edge_distance_failure
+    expected_result: fail
+    failure_stage: anchor_geometry
+    overlay_type: row_level_patch
+    row_overlays:
+      anchor-check-oracle.csv:
+        update:
+          - match:
+              support_id: BR-C01
+            values:
+              edge_distance_x_mm: 60
+              edge_distance_ok: false
+              status: fail
+    expected_diagnostic: Anchor edge distance is below the embedded capacity excerpt minimum.
+  - variant_id: anchor_spacing_failure
+    expected_result: fail
+    failure_stage: anchor_geometry
+    overlay_type: row_level_patch
+    row_overlays:
+      anchor-check-oracle.csv:
+        update:
+          - match:
+              support_id: BR-E01
+            values:
+              nearest_anchor_spacing_mm: 80
+              spacing_ok: false
+              status: fail
+    expected_diagnostic: Anchor spacing is below the embedded capacity excerpt minimum.
+  - variant_id: corner_pressure_over_limit
+    expected_result: fail
+    failure_stage: utilization
+    overlay_type: row_level_patch
+    row_overlays:
+      pressure-schedule.csv:
+        update:
+          - match:
+              zone_id: ZC
+            values:
+              pressure_kpa: -3.00
+              governing_pressure: 1
+      calculation-oracle.csv:
+        update:
+          - match:
+              support_id: BR-C01
+            values:
+              pressure_kpa: -3.00
+              wind_load_kN: 2.700
+              bracket_horizontal_utilization: 0.964
+              anchor_tension_utilization: 1.080
+              anchor_combined_utilization: 1.085
+              governing_utilization: 1.085
+              status: fail
+      anchor-check-oracle.csv:
+        update:
+          - match:
+              support_id: BR-C01
+            values:
+              tension_demand_kN: 2.700
+              tension_utilization: 1.080
+              combined_utilization: 1.085
+              status: fail
+    expected_diagnostic: Row with governing_utilization greater than 1.0 is marked fail.

@@ -1,0 +1,280 @@
+[meta]
+name = "pump-station-duty-power-npsh-feeder-package"
+description = "SSC-06 pump station duty, power, NPSH, and feeder metrics"
+long_description = "Calculates source-bound pump station duty metrics from a deterministic SSC-06 task-owned source pack. The template combines rising-main Hazen-Williams headloss, minor losses, total dynamic head, pump curve head margin, hydraulic and shaft power, motor schedule margin, NPSH available, feeder current, feeder voltage drop, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "pump-station-duty"
+standards = ["EPA EPANET", "Datacor Fathom", "PIPE-FLO", "PUMP-FLO", "Hydraulic Institute pump and NPSH workflows"]
+tags = ["mechanical", "pump", "pump-station", "npsh", "motor", "feeder", "hazen-williams", "voltage-drop", "deterministic"]
+tool_mode = "with-tool"
+
+[params.design_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "CASE-SSC06-PUMP-DUTY-001 design flow for EQUIP-06-PUMP-01"
+min = 72.0
+max = 72.0
+
+[params.static_lift_m]
+type = "float"
+unit = "m"
+description = "WW-06-WETWELL-01 static lift to the rising-main discharge boundary"
+min = 18.4
+max = 18.4
+
+[params.rising_main_length_m]
+type = "float"
+unit = "m"
+description = "RM-06-RISING-MAIN-01 pipe length"
+min = 540.0
+max = 540.0
+
+[params.rising_main_diameter_mm]
+type = "float"
+unit = "mm"
+description = "RM-06-RISING-MAIN-01 internal diameter"
+min = 250.0
+max = 250.0
+
+[params.hazen_williams_c]
+type = "float"
+description = "RM-06-RISING-MAIN-01 Hazen-Williams C factor"
+min = 130.0
+max = 130.0
+
+[params.minor_loss_coefficient]
+type = "float"
+description = "RM-06-RISING-MAIN-01 aggregate minor-loss coefficient"
+min = 5.2
+max = 5.2
+
+[params.pump_curve_head_at_duty_m]
+type = "float"
+unit = "m"
+description = "CURVE-06-PUMP-01 selected pump curve head at design flow"
+min = 25.6
+max = 25.6
+
+[params.fluid_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "WW-06-WETWELL-01 source-owned fluid density"
+min = 998.0
+max = 998.0
+
+[params.pump_efficiency_pct]
+type = "float"
+unit = "%"
+description = "CURVE-06-PUMP-01 pump efficiency at design duty"
+min = 74.0
+max = 74.0
+
+[params.motor_efficiency_pct]
+type = "float"
+unit = "%"
+description = "MOTOR-06-SCHED-01 motor efficiency"
+min = 94.0
+max = 94.0
+
+[params.motor_service_factor]
+type = "float"
+description = "MOTOR-06-SCHED-01 source-owned motor service factor"
+min = 1.15
+max = 1.15
+
+[params.selected_motor_kw]
+type = "float"
+unit = "kW"
+description = "MOTOR-06-SCHED-01 selected motor size"
+min = 30.0
+max = 30.0
+
+[params.atmospheric_pressure_kpa_abs]
+type = "float"
+unit = "kPa abs"
+description = "NPSH-06-SUCTION-01 atmospheric pressure"
+min = 101.3
+max = 101.3
+
+[params.vapor_pressure_kpa_abs]
+type = "float"
+unit = "kPa abs"
+description = "NPSH-06-SUCTION-01 vapor pressure"
+min = 2.3
+max = 2.3
+
+[params.wetwell_min_level_above_pump_m]
+type = "float"
+unit = "m"
+description = "WW-06-WETWELL-01 minimum water level above pump centerline"
+min = 2.1
+max = 2.1
+
+[params.suction_loss_m]
+type = "float"
+unit = "m"
+description = "NPSH-06-SUCTION-01 suction-side loss at design duty"
+min = 0.42
+max = 0.42
+
+[params.npsh_required_m]
+type = "float"
+unit = "m"
+description = "CURVE-06-PUMP-01 NPSHr at design duty"
+min = 7.4
+max = 7.4
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "FEEDER-06-480V-01 nominal three-phase feeder voltage"
+min = 480.0
+max = 480.0
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "FEEDER-06-480V-01 feeder length"
+min = 0.36
+max = 0.36
+
+[params.feeder_resistance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "FEEDER-06-480V-01 conductor resistance"
+min = 0.386
+max = 0.386
+
+[params.feeder_reactance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "FEEDER-06-480V-01 conductor reactance"
+min = 0.083
+max = 0.083
+
+[params.motor_power_factor]
+type = "float"
+description = "MOTOR-06-SCHED-01 source-owned motor power factor"
+min = 0.86
+max = 0.86
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "FEEDER-06-480V-01 maximum allowed voltage drop"
+min = 4.0
+max = 4.0
+
+[outputs.hazen_williams_headloss_m]
+description = "RM-06-RISING-MAIN-01 Hazen-Williams headloss at design flow"
+tolerance = 0.03
+
+[outputs.flow_velocity_m_s]
+description = "RM-06-RISING-MAIN-01 flow velocity at design flow"
+tolerance = 0.03
+
+[outputs.minor_loss_m]
+description = "RM-06-RISING-MAIN-01 aggregate minor loss"
+tolerance = 0.03
+
+[outputs.total_dynamic_head_m]
+description = "Static lift plus rising-main headloss plus minor losses"
+tolerance = 0.03
+
+[outputs.pump_curve_head_margin_m]
+description = "CURVE-06-PUMP-01 head at duty minus total dynamic head"
+tolerance = 0.03
+
+[outputs.hydraulic_power_kw]
+description = "Hydraulic power at the selected pump duty point"
+tolerance = 0.03
+
+[outputs.shaft_power_kw]
+description = "Pump shaft power after pump efficiency"
+tolerance = 0.03
+
+[outputs.motor_input_power_kw]
+description = "Motor electrical input power after motor efficiency"
+tolerance = 0.03
+
+[outputs.required_motor_power_kw]
+description = "Required motor power after applying source-owned service factor"
+tolerance = 0.03
+
+[outputs.motor_size_margin_kw]
+description = "Selected motor size minus required motor power"
+tolerance = 0.03
+
+[outputs.npsh_available_m]
+description = "NPSH available at minimum wet-well level"
+tolerance = 0.03
+
+[outputs.npsh_margin_m]
+description = "NPSH available minus NPSH required"
+tolerance = 0.03
+
+[outputs.npsh_margin_ratio]
+description = "NPSH available divided by NPSH required"
+tolerance = 0.03
+
+[outputs.load_reactive_power_kvar]
+description = "Reactive load derived from motor input power and power factor"
+tolerance = 0.03
+
+[outputs.feeder_current_a]
+description = "FEEDER-06-480V-01 three-phase feeder current"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "FEEDER-06-480V-01 source-owned voltage-drop percentage"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Maximum allowed voltage drop minus calculated voltage drop"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when curve, NPSH, motor size, and voltage-drop margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc06_pump_station_duty_case]
+description = "Pump station duty case with rising main, pump curve, motor schedule, NPSH basis, and feeder schedule"
+design_flow_l_s = {min = 72.0, max = 72.0}
+static_lift_m = {min = 18.4, max = 18.4}
+rising_main_length_m = {min = 540.0, max = 540.0}
+rising_main_diameter_mm = {min = 250.0, max = 250.0}
+hazen_williams_c = {min = 130.0, max = 130.0}
+minor_loss_coefficient = {min = 5.2, max = 5.2}
+pump_curve_head_at_duty_m = {min = 25.6, max = 25.6}
+fluid_density_kg_m3 = {min = 998.0, max = 998.0}
+pump_efficiency_pct = {min = 74.0, max = 74.0}
+motor_efficiency_pct = {min = 94.0, max = 94.0}
+motor_service_factor = {min = 1.15, max = 1.15}
+selected_motor_kw = {min = 30.0, max = 30.0}
+atmospheric_pressure_kpa_abs = {min = 101.3, max = 101.3}
+vapor_pressure_kpa_abs = {min = 2.3, max = 2.3}
+wetwell_min_level_above_pump_m = {min = 2.1, max = 2.1}
+suction_loss_m = {min = 0.42, max = 0.42}
+npsh_required_m = {min = 7.4, max = 7.4}
+feeder_voltage_v = {min = 480.0, max = 480.0}
+feeder_length_km = {min = 0.36, max = 0.36}
+feeder_resistance_ohm_per_km = {min = 0.386, max = 0.386}
+feeder_reactance_ohm_per_km = {min = 0.083, max = 0.083}
+motor_power_factor = {min = 0.86, max = 0.86}
+max_voltage_drop_percent = {min = 4.0, max = 4.0}
+site_contexts = ["pump-station-duty-selection", "pump-npsh-feeder-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-06 pump station duty package"
+visibility = "all_given"
+archetypes = ["ssc06_pump_station_duty_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-06 pump station duty package"
+visibility = "all_given"
+archetypes = ["ssc06_pump_station_duty_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-06 pump station duty package"
+visibility = "all_given"
+archetypes = ["ssc06_pump_station_duty_case"]

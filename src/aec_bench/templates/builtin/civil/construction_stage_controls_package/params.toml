@@ -1,0 +1,297 @@
+[meta]
+name = "construction-stage-controls-package"
+description = "SSC-16 construction environmental controls, temporary traffic, and monitoring power metrics"
+long_description = "Calculates source-bound construction stage readiness metrics from a deterministic SSC-16 task-owned source pack. The template aggregates EPA CGP-style stormwater runoff and basin readiness, MUTCD-style temporary traffic taper and channelizer checks, monitoring data load, battery/solar autonomy, and inspection timing for a compact generated task instance."
+discipline = "civil"
+category = "construction-staging"
+standards = ["EPA CGP", "FHWA MUTCD Part 6", "SYNCHRO 4D", "construction inspection records"]
+tags = ["civil", "construction", "staging", "stormwater", "temporary-traffic", "monitoring", "deterministic"]
+tool_mode = "with-tool"
+
+[params.disturbed_area_ac]
+type = "float"
+unit = "acre"
+description = "Disturbed catchment area draining to SB-01"
+min = 4.8
+max = 4.8
+
+[params.design_storm_depth_in]
+type = "float"
+unit = "in"
+description = "2-year, 24-hour storm depth for sediment basin readiness"
+min = 2.1
+max = 2.1
+
+[params.runoff_coefficient]
+type = "float"
+description = "Runoff coefficient for disturbed construction catchment"
+min = 0.72
+max = 0.72
+
+[params.provided_basin_volume_ft3]
+type = "float"
+unit = "ft3"
+description = "Provided SB-01 sediment basin storage volume"
+min = 31500.0
+max = 31500.0
+
+[params.provided_freeboard_ft]
+type = "float"
+unit = "ft"
+description = "Provided SB-01 freeboard"
+min = 1.4
+max = 1.4
+
+[params.required_freeboard_ft]
+type = "float"
+unit = "ft"
+description = "Required SB-01 freeboard for this source pack"
+min = 1.0
+max = 1.0
+
+[params.tss_event_mean_concentration_mg_l]
+type = "float"
+unit = "mg/L"
+description = "Construction runoff TSS event mean concentration"
+min = 185.0
+max = 185.0
+
+[params.work_zone_speed_mph]
+type = "float"
+unit = "mph"
+description = "Posted work-zone speed used for TTC-01 taper check"
+min = 35.0
+max = 35.0
+
+[params.lane_shift_width_ft]
+type = "float"
+unit = "ft"
+description = "TTC-01 lane shift width"
+min = 11.0
+max = 11.0
+
+[params.provided_taper_length_ft]
+type = "float"
+unit = "ft"
+description = "Provided TTC-01 taper length"
+min = 250.0
+max = 250.0
+
+[params.channelizer_spacing_ft]
+type = "float"
+unit = "ft"
+description = "TTC-01 channelizer spacing"
+min = 25.0
+max = 25.0
+
+[params.provided_channelizer_count]
+type = "float"
+unit = "count"
+description = "Provided TTC-01 channelizing device count"
+min = 12.0
+max = 12.0
+
+[params.turbidity_logger_load_w]
+type = "float"
+unit = "W"
+description = "TURB-01 logger power load"
+min = 8.0
+max = 8.0
+
+[params.weather_station_load_w]
+type = "float"
+unit = "W"
+description = "WX-01 weather station power load"
+min = 5.0
+max = 5.0
+
+[params.cellular_router_load_w]
+type = "float"
+unit = "W"
+description = "GW-01 cellular gateway power load"
+min = 9.0
+max = 9.0
+
+[params.work_zone_camera_load_w]
+type = "float"
+unit = "W"
+description = "CAM-16-01 work-zone camera power load"
+min = 18.0
+max = 18.0
+
+[params.battery_capacity_wh]
+type = "float"
+unit = "Wh"
+description = "PV-BAT-01 nominal battery capacity"
+min = 2400.0
+max = 2400.0
+
+[params.usable_battery_fraction]
+type = "float"
+description = "PV-BAT-01 usable battery fraction"
+min = 0.80
+max = 0.80
+
+[params.solar_panel_power_w]
+type = "float"
+unit = "W"
+description = "PV-BAT-01 solar panel rated power"
+min = 400.0
+max = 400.0
+
+[params.peak_sun_hours]
+type = "float"
+unit = "h/day"
+description = "Peak sun hours for the selected stage"
+min = 3.6
+max = 3.6
+
+[params.solar_derate_factor]
+type = "float"
+description = "Solar derate factor"
+min = 0.75
+max = 0.75
+
+[params.camera_data_mbps]
+type = "float"
+unit = "Mbps"
+description = "CAM-16-01 data load"
+min = 3.5
+max = 3.5
+
+[params.turbidity_logger_data_mbps]
+type = "float"
+unit = "Mbps"
+description = "TURB-01 data load"
+min = 0.2
+max = 0.2
+
+[params.weather_station_data_mbps]
+type = "float"
+unit = "Mbps"
+description = "WX-01 data load"
+min = 0.1
+max = 0.1
+
+[params.gateway_data_mbps]
+type = "float"
+unit = "Mbps"
+description = "GW-01 telemetry overhead data load"
+min = 0.4
+max = 0.4
+
+[params.inspection_interval_days]
+type = "float"
+unit = "days"
+description = "INSP-01 routine inspection interval"
+min = 7.0
+max = 7.0
+
+[params.days_since_last_inspection]
+type = "float"
+unit = "days"
+description = "Elapsed days since INSP-01 was last completed"
+min = 6.0
+max = 6.0
+
+[outputs.runoff_volume_ft3]
+description = "Runoff volume to SB-01 from the selected design storm"
+tolerance = 0.03
+
+[outputs.required_basin_volume_ft3]
+description = "Required SB-01 basin volume for the selected source-pack rule"
+tolerance = 0.03
+
+[outputs.basin_storage_headroom_ft3]
+description = "Provided SB-01 storage minus required basin volume"
+tolerance = 0.03
+
+[outputs.freeboard_margin_ft]
+description = "Provided SB-01 freeboard minus required freeboard"
+tolerance = 0.03
+
+[outputs.tss_load_lb]
+description = "Estimated event TSS load from construction runoff"
+tolerance = 0.03
+
+[outputs.taper_length_ft]
+description = "Required TTC-01 taper length"
+tolerance = 0.03
+
+[outputs.taper_headroom_ft]
+description = "Provided TTC-01 taper length minus required taper length"
+tolerance = 0.03
+
+[outputs.minimum_channelizer_count]
+description = "Minimum TTC-01 channelizer count along the required taper"
+tolerance = 0.03
+
+[outputs.channelizer_headroom_count]
+description = "Provided TTC-01 channelizer count minus minimum count"
+tolerance = 0.03
+
+[outputs.total_monitoring_data_mbps]
+description = "Total monitoring data load through GW-01"
+tolerance = 0.03
+
+[outputs.monitoring_load_w]
+description = "Total monitoring power load on PV-BAT-01"
+tolerance = 0.03
+
+[outputs.battery_autonomy_h]
+description = "PV-BAT-01 battery autonomy for the monitoring load"
+tolerance = 0.03
+
+[outputs.solar_daily_headroom_wh]
+description = "PV-BAT-01 solar daily energy minus monitoring daily load"
+tolerance = 0.03
+
+[outputs.inspection_days_remaining]
+description = "Days remaining before the next routine inspection is due"
+tolerance = 0.03
+
+[archetypes.ssc16_stage_a_controls]
+description = "Night-shift construction environmental controls, temporary traffic, and monitoring power package"
+disturbed_area_ac = {min = 4.8, max = 4.8}
+design_storm_depth_in = {min = 2.1, max = 2.1}
+runoff_coefficient = {min = 0.72, max = 0.72}
+provided_basin_volume_ft3 = {min = 31500.0, max = 31500.0}
+provided_freeboard_ft = {min = 1.4, max = 1.4}
+required_freeboard_ft = {min = 1.0, max = 1.0}
+tss_event_mean_concentration_mg_l = {min = 185.0, max = 185.0}
+work_zone_speed_mph = {min = 35.0, max = 35.0}
+lane_shift_width_ft = {min = 11.0, max = 11.0}
+provided_taper_length_ft = {min = 250.0, max = 250.0}
+channelizer_spacing_ft = {min = 25.0, max = 25.0}
+provided_channelizer_count = {min = 12.0, max = 12.0}
+turbidity_logger_load_w = {min = 8.0, max = 8.0}
+weather_station_load_w = {min = 5.0, max = 5.0}
+cellular_router_load_w = {min = 9.0, max = 9.0}
+work_zone_camera_load_w = {min = 18.0, max = 18.0}
+battery_capacity_wh = {min = 2400.0, max = 2400.0}
+usable_battery_fraction = {min = 0.80, max = 0.80}
+solar_panel_power_w = {min = 400.0, max = 400.0}
+peak_sun_hours = {min = 3.6, max = 3.6}
+solar_derate_factor = {min = 0.75, max = 0.75}
+camera_data_mbps = {min = 3.5, max = 3.5}
+turbidity_logger_data_mbps = {min = 0.2, max = 0.2}
+weather_station_data_mbps = {min = 0.1, max = 0.1}
+gateway_data_mbps = {min = 0.4, max = 0.4}
+inspection_interval_days = {min = 7.0, max = 7.0}
+days_since_last_inspection = {min = 6.0, max = 6.0}
+site_contexts = ["night-shift-civil-works", "storm-event-stage-a"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-16 stage A controls package"
+visibility = "all_given"
+archetypes = ["ssc16_stage_a_controls"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-16 stage A controls package"
+visibility = "all_given"
+archetypes = ["ssc16_stage_a_controls"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-16 stage A controls package"
+visibility = "all_given"
+archetypes = ["ssc16_stage_a_controls"]

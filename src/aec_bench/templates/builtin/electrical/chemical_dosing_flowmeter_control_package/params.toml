@@ -1,0 +1,158 @@
+[meta]
+name = "chemical-dosing-flowmeter-control-package"
+description = "SSC-18 chemical dosing flowmeter, pump duty, alarm, and control-current metrics"
+long_description = "Calculates source-bound chemical dosing control metrics from a deterministic SSC-18 task-owned source pack. The template combines dose mass, product solution volume, required dosing pump flow, 4-20 mA flowmeter scaling, high-alarm current, pump current, and an overall synthetic pass score."
+discipline = "electrical"
+category = "dosing-control"
+standards = ["chemical dosing workflow", "ISA-5", "4-20 mA loop scaling"]
+tags = ["electrical", "instrumentation", "chemical-dosing", "flowmeter", "pump", "alarm", "deterministic"]
+tool_mode = "with-tool"
+
+[params.plant_flow_m3_d]
+type = "float"
+unit = "m3/d"
+description = "DOSE-18-BASIS-05 plant flow"
+min = 4200.0
+max = 4200.0
+
+[params.dose_mg_l]
+type = "float"
+unit = "mg/L"
+description = "DOSE-18-BASIS-05 chemical dose"
+min = 8.5
+max = 8.5
+
+[params.active_fraction]
+type = "float"
+description = "DOSE-18-BASIS-05 active chemical fraction"
+min = 0.125
+max = 0.125
+
+[params.solution_density_kg_l]
+type = "float"
+unit = "kg/L"
+description = "DOSE-18-BASIS-05 solution density"
+min = 1.1
+max = 1.1
+
+[params.pump_operating_hours_d]
+type = "float"
+unit = "h/d"
+description = "PUMP-18-SCHED-05 pump operating hours"
+min = 20.0
+max = 20.0
+
+[params.selected_pump_capacity_l_h]
+type = "float"
+unit = "L/h"
+description = "PUMP-18-SCHED-05 selected dosing pump capacity"
+min = 16.0
+max = 16.0
+
+[params.flowmeter_lower_l_h]
+type = "float"
+unit = "L/h"
+description = "RANGE-18-LOOP-05 flowmeter lower range"
+min = 0.0
+max = 0.0
+
+[params.flowmeter_upper_l_h]
+type = "float"
+unit = "L/h"
+description = "RANGE-18-LOOP-05 flowmeter upper range"
+min = 20.0
+max = 20.0
+
+[params.high_alarm_flow_l_h]
+type = "float"
+unit = "L/h"
+description = "ALM-18-DOSE-05 high alarm flow"
+min = 16.0
+max = 16.0
+
+[params.pump_power_kw]
+type = "float"
+unit = "kW"
+description = "PUMP-18-SCHED-05 dosing pump power"
+min = 0.55
+max = 0.55
+
+[params.supply_voltage_v]
+type = "float"
+unit = "V"
+description = "PUMP-18-SCHED-05 pump control supply voltage"
+min = 400.0
+max = 400.0
+
+[params.motor_power_factor]
+type = "float"
+description = "PUMP-18-SCHED-05 pump motor power factor"
+min = 0.8
+max = 0.8
+
+[outputs.active_dose_kg_d]
+description = "Daily active chemical dose mass"
+tolerance = 0.03
+
+[outputs.solution_volume_l_d]
+description = "Daily dosing solution volume"
+tolerance = 0.03
+
+[outputs.dosing_pump_flow_l_h]
+description = "Required dosing pump flow"
+tolerance = 0.03
+
+[outputs.pump_capacity_margin_l_h]
+description = "Selected pump capacity minus required flow"
+tolerance = 0.03
+
+[outputs.flowmeter_signal_ma]
+description = "4-20 mA signal at required dosing flow"
+tolerance = 0.03
+
+[outputs.high_alarm_current_ma]
+description = "4-20 mA signal at high alarm flow"
+tolerance = 0.03
+
+[outputs.alarm_headroom_ma]
+description = "High alarm current minus current signal"
+tolerance = 0.03
+
+[outputs.pump_current_a]
+description = "Three-phase pump current"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for chemical dosing flowmeter control checks"
+tolerance = 0.03
+
+[archetypes.ssc18_dosing_flowmeter_control_case]
+description = "Chemical dosing flowmeter and control source pack"
+plant_flow_m3_d = {min = 4200.0, max = 4200.0}
+dose_mg_l = {min = 8.5, max = 8.5}
+active_fraction = {min = 0.125, max = 0.125}
+solution_density_kg_l = {min = 1.1, max = 1.1}
+pump_operating_hours_d = {min = 20.0, max = 20.0}
+selected_pump_capacity_l_h = {min = 16.0, max = 16.0}
+flowmeter_lower_l_h = {min = 0.0, max = 0.0}
+flowmeter_upper_l_h = {min = 20.0, max = 20.0}
+high_alarm_flow_l_h = {min = 16.0, max = 16.0}
+pump_power_kw = {min = 0.55, max = 0.55}
+supply_voltage_v = {min = 400.0, max = 400.0}
+motor_power_factor = {min = 0.8, max = 0.8}
+site_contexts = ["chemical-dosing-flowmeter", "dosing-control"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-18 dosing flowmeter control package"
+visibility = "all_given"
+archetypes = ["ssc18_dosing_flowmeter_control_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-18 dosing flowmeter control package"
+visibility = "all_given"
+archetypes = ["ssc18_dosing_flowmeter_control_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-18 dosing flowmeter control package"
+visibility = "all_given"
+archetypes = ["ssc18_dosing_flowmeter_control_case"]

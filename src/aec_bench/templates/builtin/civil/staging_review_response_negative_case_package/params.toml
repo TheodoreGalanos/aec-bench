@@ -1,0 +1,203 @@
+[meta]
+name = "staging-review-response-negative-case-package"
+description = "SSC-16 staging review response and negative-case metrics"
+long_description = "Calculates source-bound staging review closure, affected-check updates, source matching, revised environmental/traffic/power/tolerance margins, conflict count, and repair-ledger completeness from a deterministic SSC-16 task-owned source pack."
+discipline = "civil"
+category = "staging-review"
+standards = ["construction review workflow", "hold-point workflow", "staging source-control workflow"]
+tags = ["civil", "construction", "staging", "review", "negative-case", "repair", "deterministic"]
+tool_mode = "with-tool"
+
+[params.closed_review_comments]
+type = "float"
+unit = "count"
+description = "REVIEW-16-COMMENTS-08 closed review comments"
+min = 5.0
+max = 5.0
+
+[params.total_review_comments]
+type = "float"
+unit = "count"
+description = "REVIEW-16-COMMENTS-08 total review comments"
+min = 5.0
+max = 5.0
+
+[params.updated_affected_checks]
+type = "float"
+unit = "count"
+description = "CONTROL-16-SCHED-08 affected checks updated"
+min = 4.0
+max = 4.0
+
+[params.total_affected_checks]
+type = "float"
+unit = "count"
+description = "CONTROL-16-SCHED-08 total affected checks"
+min = 4.0
+max = 4.0
+
+[params.matching_stage_sources]
+type = "float"
+unit = "count"
+description = "STAGE-16-REV-08 matching stage sources"
+min = 6.0
+max = 6.0
+
+[params.referenced_stage_sources]
+type = "float"
+unit = "count"
+description = "STAGE-16-REV-08 referenced stage sources"
+min = 6.0
+max = 6.0
+
+[params.revised_basin_capacity_m3]
+type = "float"
+unit = "m3"
+description = "CONTROL-16-SCHED-08 revised basin capacity"
+min = 1335.0
+max = 1335.0
+
+[params.required_basin_capacity_m3]
+type = "float"
+unit = "m3"
+description = "CRIT-16-MATRIX-08 required basin capacity"
+min = 1250.0
+max = 1250.0
+
+[params.scheduled_traffic_device_count]
+type = "float"
+unit = "count"
+description = "CONTROL-16-SCHED-08 scheduled traffic device count"
+min = 18.0
+max = 18.0
+
+[params.inventoried_traffic_device_count]
+type = "float"
+unit = "count"
+description = "DEVICE-16-INV-08 inventoried traffic device count"
+min = 18.0
+max = 18.0
+
+[params.available_temp_power_w]
+type = "float"
+unit = "W"
+description = "CONTROL-16-SCHED-08 available temporary power"
+min = 420.0
+max = 420.0
+
+[params.revised_temp_load_w]
+type = "float"
+unit = "W"
+description = "CONTROL-16-SCHED-08 revised temporary load"
+min = 260.0
+max = 260.0
+
+[params.allowed_tolerance_mm]
+type = "float"
+unit = "mm"
+description = "CRIT-16-MATRIX-08 allowed construction tolerance"
+min = 15.0
+max = 15.0
+
+[params.observed_tolerance_mm]
+type = "float"
+unit = "mm"
+description = "DEVICE-16-INV-08 observed construction tolerance"
+min = 9.0
+max = 9.0
+
+[params.unresolved_conflict_count]
+type = "float"
+unit = "count"
+description = "RESPONSE-16-REPAIR-08 unresolved conflict count"
+min = 0.0
+max = 0.0
+
+[params.completed_repair_fields]
+type = "float"
+unit = "count"
+description = "RESPONSE-16-REPAIR-08 completed repair-ledger fields"
+min = 23.0
+max = 23.0
+
+[params.required_repair_fields]
+type = "float"
+unit = "count"
+description = "RESPONSE-16-REPAIR-08 required repair-ledger fields"
+min = 25.0
+max = 25.0
+
+[outputs.review_comment_closure_fraction]
+description = "Closed review comments divided by total review comments"
+tolerance = 0.001
+
+[outputs.affected_check_update_fraction]
+description = "Updated affected checks divided by total affected checks"
+tolerance = 0.001
+
+[outputs.stage_source_match_fraction]
+description = "Matching stage sources divided by referenced stage sources"
+tolerance = 0.001
+
+[outputs.sediment_basin_margin_m3]
+description = "Revised basin capacity minus required basin capacity"
+tolerance = 0.03
+
+[outputs.traffic_device_delta_count]
+description = "Absolute difference between scheduled and inventoried traffic devices"
+tolerance = 0.001
+
+[outputs.power_headroom_w]
+description = "Available temporary power minus revised load"
+tolerance = 0.03
+
+[outputs.tolerance_margin_mm]
+description = "Allowed tolerance minus observed tolerance"
+tolerance = 0.03
+
+[outputs.unresolved_conflict_count]
+description = "Unresolved source conflict count"
+tolerance = 0.001
+
+[outputs.repair_ledger_completeness_fraction]
+description = "Completed repair-ledger fields divided by required fields"
+tolerance = 0.001
+
+[outputs.overall_pass_score]
+description = "1.0 when review, source, margin, conflict, and repair checks pass"
+tolerance = 0.001
+
+[archetypes.ssc16_staging_review_case]
+description = "Staging review response and negative-case repair case"
+closed_review_comments = {min = 5.0, max = 5.0}
+total_review_comments = {min = 5.0, max = 5.0}
+updated_affected_checks = {min = 4.0, max = 4.0}
+total_affected_checks = {min = 4.0, max = 4.0}
+matching_stage_sources = {min = 6.0, max = 6.0}
+referenced_stage_sources = {min = 6.0, max = 6.0}
+revised_basin_capacity_m3 = {min = 1335.0, max = 1335.0}
+required_basin_capacity_m3 = {min = 1250.0, max = 1250.0}
+scheduled_traffic_device_count = {min = 18.0, max = 18.0}
+inventoried_traffic_device_count = {min = 18.0, max = 18.0}
+available_temp_power_w = {min = 420.0, max = 420.0}
+revised_temp_load_w = {min = 260.0, max = 260.0}
+allowed_tolerance_mm = {min = 15.0, max = 15.0}
+observed_tolerance_mm = {min = 9.0, max = 9.0}
+unresolved_conflict_count = {min = 0.0, max = 0.0}
+completed_repair_fields = {min = 23.0, max = 23.0}
+required_repair_fields = {min = 25.0, max = 25.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-16 staging review response package"
+visibility = "all_given"
+archetypes = ["ssc16_staging_review_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-16 staging review response package"
+visibility = "all_given"
+archetypes = ["ssc16_staging_review_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-16 staging review response package"
+visibility = "all_given"
+archetypes = ["ssc16_staging_review_case"]

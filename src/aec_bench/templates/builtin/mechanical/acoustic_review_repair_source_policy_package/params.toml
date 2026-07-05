@@ -1,0 +1,175 @@
+[meta]
+name = "acoustic-review-repair-source-policy-package"
+description = "SSC-12 acoustic review repair and source-policy metrics"
+long_description = "Calculates source-bound acoustic review closure, source traceability, corrected margins, unresolved conflicts, and repair ledger completeness from a deterministic SSC-12 task-owned source pack."
+discipline = "mechanical"
+category = "acoustic-review"
+standards = ["acoustic review workflow", "source policy workflow", "criteria matrix workflow"]
+tags = ["mechanical", "acoustics", "review", "source-policy", "repair", "deterministic"]
+tool_mode = "with-tool"
+
+[params.closed_review_comments]
+type = "float"
+unit = "count"
+description = "COMMENT-12-REG-08 closed review comments"
+min = 6.0
+max = 6.0
+
+[params.total_review_comments]
+type = "float"
+unit = "count"
+description = "COMMENT-12-REG-08 total review comments"
+min = 6.0
+max = 6.0
+
+[params.updated_calculations]
+type = "float"
+unit = "count"
+description = "RESPONSE-12-REPAIR-08 updated calculations"
+min = 5.0
+max = 5.0
+
+[params.affected_calculations]
+type = "float"
+unit = "count"
+description = "COMMENT-12-REG-08 affected calculations"
+min = 5.0
+max = 5.0
+
+[params.source_referenced_rows]
+type = "float"
+unit = "count"
+description = "INDEX-12-SOURCE-08 referenced source rows"
+min = 7.0
+max = 7.0
+
+[params.required_source_rows]
+type = "float"
+unit = "count"
+description = "INDEX-12-SOURCE-08 required source rows"
+min = 7.0
+max = 7.0
+
+[params.pre_repair_level_dba]
+type = "float"
+unit = "dBA"
+description = "SPEC-12-OCTAVE-08 pre-repair receiver level"
+min = 48.6
+max = 48.6
+
+[params.post_repair_level_dba]
+type = "float"
+unit = "dBA"
+description = "SPEC-12-OCTAVE-08 post-repair receiver level"
+min = 43.9
+max = 43.9
+
+[params.noise_criterion_dba]
+type = "float"
+unit = "dBA"
+description = "CRIT-12-MATRIX-08 noise criterion"
+min = 45.0
+max = 45.0
+
+[params.corrected_vibration_velocity_mm_s]
+type = "float"
+unit = "mm/s"
+description = "RCV-12-PLAN-08 corrected vibration velocity"
+min = 0.28
+max = 0.28
+
+[params.vibration_criterion_mm_s]
+type = "float"
+unit = "mm/s"
+description = "CRIT-12-MATRIX-08 vibration criterion"
+min = 0.4
+max = 0.4
+
+[params.unresolved_conflict_count]
+type = "float"
+unit = "count"
+description = "RESPONSE-12-REPAIR-08 unresolved conflicts"
+min = 0.0
+max = 0.0
+
+[params.complete_repair_ledger_rows]
+type = "float"
+unit = "count"
+description = "RESPONSE-12-REPAIR-08 complete repair ledger rows"
+min = 47.0
+max = 47.0
+
+[params.required_repair_ledger_rows]
+type = "float"
+unit = "count"
+description = "RESPONSE-12-REPAIR-08 required repair ledger rows"
+min = 50.0
+max = 50.0
+
+[outputs.review_comment_closure_fraction]
+description = "Closed review comments divided by total review comments"
+tolerance = 0.001
+
+[outputs.affected_calculation_update_fraction]
+description = "Updated calculations divided by affected calculations"
+tolerance = 0.001
+
+[outputs.source_traceability_fraction]
+description = "Referenced source rows divided by required source rows"
+tolerance = 0.001
+
+[outputs.mitigation_delta_db]
+description = "Pre-repair receiver level minus post-repair receiver level"
+tolerance = 0.003
+
+[outputs.corrected_noise_margin_db]
+description = "Noise criterion minus post-repair receiver level"
+tolerance = 0.003
+
+[outputs.vibration_margin_mm_s]
+description = "Vibration criterion minus corrected vibration velocity"
+tolerance = 0.003
+
+[outputs.unresolved_conflict_count]
+description = "Unresolved source conflict count"
+tolerance = 0.001
+
+[outputs.repair_ledger_completeness_fraction]
+description = "Complete repair ledger rows divided by required rows"
+tolerance = 0.001
+
+[outputs.overall_pass_score]
+description = "1.0 when review, source, margin, conflict, and ledger checks pass"
+tolerance = 0.001
+
+[archetypes.ssc12_acoustic_review_case]
+description = "Acoustic review repair and source-policy case"
+closed_review_comments = {min = 6.0, max = 6.0}
+total_review_comments = {min = 6.0, max = 6.0}
+updated_calculations = {min = 5.0, max = 5.0}
+affected_calculations = {min = 5.0, max = 5.0}
+source_referenced_rows = {min = 7.0, max = 7.0}
+required_source_rows = {min = 7.0, max = 7.0}
+pre_repair_level_dba = {min = 48.6, max = 48.6}
+post_repair_level_dba = {min = 43.9, max = 43.9}
+noise_criterion_dba = {min = 45.0, max = 45.0}
+corrected_vibration_velocity_mm_s = {min = 0.28, max = 0.28}
+vibration_criterion_mm_s = {min = 0.4, max = 0.4}
+unresolved_conflict_count = {min = 0.0, max = 0.0}
+complete_repair_ledger_rows = {min = 47.0, max = 47.0}
+required_repair_ledger_rows = {min = 50.0, max = 50.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-12 acoustic review repair package"
+visibility = "all_given"
+archetypes = ["ssc12_acoustic_review_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-12 acoustic review repair package"
+visibility = "all_given"
+archetypes = ["ssc12_acoustic_review_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-12 acoustic review repair package"
+visibility = "all_given"
+archetypes = ["ssc12_acoustic_review_case"]

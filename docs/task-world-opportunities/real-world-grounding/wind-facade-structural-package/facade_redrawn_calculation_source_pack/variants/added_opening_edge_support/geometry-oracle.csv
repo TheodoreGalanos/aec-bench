@@ -1,0 +1,13 @@
+element_id,element_type,zone_id,svg_label,x_min_px,y_min_px,x_max_px,y_max_px,width_m,height_m,source_file,verifier_role
+DRAWING,drawing,,overall,0,0,1200,900,12.00,9.00,elevation-redrawn.svg,drawing_bounds
+ZC-L,pressure_zone,ZC,ZC corner left,0,0,200,900,2.00,9.00,elevation-redrawn.svg,zone_extent
+ZE-L,pressure_zone,ZE,ZE edge left,200,0,400,900,2.00,9.00,elevation-redrawn.svg,zone_extent
+ZB,pressure_zone,ZB,ZB body,400,0,800,900,4.00,9.00,elevation-redrawn.svg,zone_extent
+ZE-R,pressure_zone,ZE,ZE edge right,800,0,1000,900,2.00,9.00,elevation-redrawn.svg,zone_extent
+ZC-R,pressure_zone,ZC,ZC corner right,1000,0,1200,900,2.00,9.00,elevation-redrawn.svg,zone_extent
+OP-01,opening,,OPENING,485,280,715,530,2.30,2.50,elevation-redrawn.svg,opening_extent
+OP-02,opening,,OPENING-02,220,160,340,300,1.20,1.40,elevation-redrawn.svg,opening_extent
+BR-B01,support,ZB,BR-B01,600,675,600,675,0.00,0.00,elevation-redrawn.svg,support_point
+BR-E01,support,ZE,BR-E01,300,675,300,675,0.00,0.00,elevation-redrawn.svg,support_point
+BR-C01,support,ZC,BR-C01,120,675,120,675,0.00,0.00,elevation-redrawn.svg,support_point
+BR-E02,support,ZE,BR-E02,360,360,360,360,0.00,0.00,elevation-redrawn.svg,support_point

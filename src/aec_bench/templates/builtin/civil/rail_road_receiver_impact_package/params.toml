@@ -1,0 +1,186 @@
+[meta]
+name = "rail-road-receiver-impact-package"
+description = "SSC-12 rail or road receiver impact metrics"
+long_description = "Calculates source-bound corridor receiver noise, vibration, and mitigation margins from a deterministic SSC-12 task-owned source pack."
+discipline = "civil"
+category = "corridor-acoustics"
+standards = ["FHWA TNM workflow", "FTA corridor vibration workflow", "receiver mitigation workflow"]
+tags = ["civil", "acoustics", "vibration", "corridor", "receiver", "deterministic"]
+tool_mode = "with-tool"
+
+[params.base_source_level_dba]
+type = "float"
+unit = "dBA"
+description = "SPEC-12-CORR-05 base source level"
+min = 88.0
+max = 88.0
+
+[params.traffic_volume_vph]
+type = "float"
+unit = "veh/h"
+description = "TRAFFIC-12-SCENARIO-05 traffic volume"
+min = 1250.0
+max = 1250.0
+
+[params.reference_volume_vph]
+type = "float"
+unit = "veh/h"
+description = "SPEC-12-CORR-05 reference traffic volume"
+min = 1000.0
+max = 1000.0
+
+[params.speed_kmh]
+type = "float"
+unit = "km/h"
+description = "TRAFFIC-12-SCENARIO-05 speed"
+min = 80.0
+max = 80.0
+
+[params.reference_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "SPEC-12-CORR-05 reference speed"
+min = 60.0
+max = 60.0
+
+[params.speed_adjustment_db_per_kmh]
+type = "float"
+unit = "dB/km/h"
+description = "SPEC-12-CORR-05 speed adjustment"
+min = 0.02
+max = 0.02
+
+[params.receiver_distance_m]
+type = "float"
+unit = "m"
+description = "RCV-12-CORR-05 receiver distance"
+min = 52.0
+max = 52.0
+
+[params.barrier_insertion_loss_db]
+type = "float"
+unit = "dB"
+description = "MIT-12-BARRIER-05 barrier insertion loss"
+min = 6.0
+max = 6.0
+
+[params.background_level_dba]
+type = "float"
+unit = "dBA"
+description = "RCV-12-CORR-05 background level"
+min = 50.0
+max = 50.0
+
+[params.corridor_noise_criterion_dba]
+type = "float"
+unit = "dBA"
+description = "MIT-12-BARRIER-05 corridor noise criterion"
+min = 57.0
+max = 57.0
+
+[params.base_vibration_velocity_mm_s]
+type = "float"
+unit = "mm/s"
+description = "SPEC-12-CORR-05 base vibration velocity"
+min = 1.4
+max = 1.4
+
+[params.vibration_reference_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "SPEC-12-CORR-05 vibration reference speed"
+min = 60.0
+max = 60.0
+
+[params.vibration_path_factor]
+type = "float"
+description = "RCV-12-CORR-05 vibration path factor"
+min = 0.25
+max = 0.25
+
+[params.vibration_criterion_mm_s]
+type = "float"
+unit = "mm/s"
+description = "MIT-12-BARRIER-05 vibration criterion"
+min = 0.8
+max = 0.8
+
+[params.provided_barrier_height_m]
+type = "float"
+unit = "m"
+description = "MIT-12-BARRIER-05 provided barrier height"
+min = 3.2
+max = 3.2
+
+[params.required_barrier_height_m]
+type = "float"
+unit = "m"
+description = "MIT-12-BARRIER-05 required barrier height"
+min = 2.5
+max = 2.5
+
+[outputs.traffic_source_level_dba]
+description = "Traffic source level adjusted for volume and speed"
+tolerance = 0.003
+
+[outputs.receiver_noise_level_dba]
+description = "Receiver noise level after distance and barrier loss"
+tolerance = 0.003
+
+[outputs.combined_corridor_level_dba]
+description = "Logarithmic sum of receiver corridor level and background"
+tolerance = 0.003
+
+[outputs.corridor_noise_margin_db]
+description = "Corridor criterion minus combined corridor level"
+tolerance = 0.003
+
+[outputs.corridor_vibration_velocity_mm_s]
+description = "Receiver corridor vibration velocity"
+tolerance = 0.003
+
+[outputs.corridor_vibration_margin_mm_s]
+description = "Vibration criterion minus receiver vibration velocity"
+tolerance = 0.003
+
+[outputs.mitigation_height_margin_m]
+description = "Provided barrier height minus required barrier height"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when noise, vibration, and mitigation checks pass"
+tolerance = 0.001
+
+[archetypes.ssc12_corridor_receiver_case]
+description = "Rail or road receiver impact case"
+base_source_level_dba = {min = 88.0, max = 88.0}
+traffic_volume_vph = {min = 1250.0, max = 1250.0}
+reference_volume_vph = {min = 1000.0, max = 1000.0}
+speed_kmh = {min = 80.0, max = 80.0}
+reference_speed_kmh = {min = 60.0, max = 60.0}
+speed_adjustment_db_per_kmh = {min = 0.02, max = 0.02}
+receiver_distance_m = {min = 52.0, max = 52.0}
+barrier_insertion_loss_db = {min = 6.0, max = 6.0}
+background_level_dba = {min = 50.0, max = 50.0}
+corridor_noise_criterion_dba = {min = 57.0, max = 57.0}
+base_vibration_velocity_mm_s = {min = 1.4, max = 1.4}
+vibration_reference_speed_kmh = {min = 60.0, max = 60.0}
+vibration_path_factor = {min = 0.25, max = 0.25}
+vibration_criterion_mm_s = {min = 0.8, max = 0.8}
+provided_barrier_height_m = {min = 3.2, max = 3.2}
+required_barrier_height_m = {min = 2.5, max = 2.5}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-12 corridor receiver package"
+visibility = "all_given"
+archetypes = ["ssc12_corridor_receiver_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-12 corridor receiver package"
+visibility = "all_given"
+archetypes = ["ssc12_corridor_receiver_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-12 corridor receiver package"
+visibility = "all_given"
+archetypes = ["ssc12_corridor_receiver_case"]

@@ -1,0 +1,193 @@
+[meta]
+name = "stormwater-treatment-telemetry-control-package"
+description = "SSC-18 stormwater/treatment telemetry scaling, control, communications, and backup metrics"
+long_description = "Calculates source-bound telemetry control metrics from a deterministic SSC-18 task-owned source pack. The template combines level transmitter 4-20 mA scaling, pump setpoint currents, communications load, battery backup energy, and an overall synthetic pass score."
+discipline = "electrical"
+category = "telemetry-control"
+standards = ["ISA-5", "SCADA telemetry workflow", "control narrative workflow"]
+tags = ["electrical", "instrumentation", "telemetry", "controls", "4-20ma", "backup-power", "deterministic"]
+tool_mode = "with-tool"
+
+[params.current_level_m]
+type = "float"
+unit = "m"
+description = "LEVEL-18-TABLE-02 current stormwater/treatment level"
+min = 3.2
+max = 3.2
+
+[params.lower_range_level_m]
+type = "float"
+unit = "m"
+description = "SENSOR-18-SCHED-02 level transmitter lower range"
+min = 0.0
+max = 0.0
+
+[params.upper_range_level_m]
+type = "float"
+unit = "m"
+description = "SENSOR-18-SCHED-02 level transmitter upper range"
+min = 5.0
+max = 5.0
+
+[params.high_level_alarm_m]
+type = "float"
+unit = "m"
+description = "NARR-18-CTRL-02 high-level alarm setpoint"
+min = 4.2
+max = 4.2
+
+[params.pump_start_level_m]
+type = "float"
+unit = "m"
+description = "NARR-18-CTRL-02 pump start setpoint"
+min = 3.5
+max = 3.5
+
+[params.pump_stop_level_m]
+type = "float"
+unit = "m"
+description = "NARR-18-CTRL-02 pump stop setpoint"
+min = 1.2
+max = 1.2
+
+[params.sensor_accuracy_pct_span]
+type = "float"
+unit = "%"
+description = "SENSOR-18-SCHED-02 transmitter accuracy as percent of span"
+min = 0.25
+max = 0.25
+
+[params.device_count]
+type = "float"
+description = "COMMS-18-TOPO-02 telemetry device count"
+min = 6.0
+max = 6.0
+
+[params.device_power_w]
+type = "float"
+unit = "W"
+description = "PWR-18-SCHED-02 power per telemetry device"
+min = 18.0
+max = 18.0
+
+[params.radio_power_w]
+type = "float"
+unit = "W"
+description = "COMMS-18-TOPO-02 radio power"
+min = 35.0
+max = 35.0
+
+[params.backup_duration_h]
+type = "float"
+unit = "h"
+description = "PWR-18-SCHED-02 required backup duration"
+min = 12.0
+max = 12.0
+
+[params.battery_voltage_v]
+type = "float"
+unit = "V"
+description = "PWR-18-SCHED-02 battery voltage"
+min = 24.0
+max = 24.0
+
+[params.battery_capacity_ah]
+type = "float"
+unit = "Ah"
+description = "PWR-18-SCHED-02 battery capacity"
+min = 120.0
+max = 120.0
+
+[params.battery_usable_fraction]
+type = "float"
+description = "PWR-18-SCHED-02 usable battery fraction"
+min = 0.8
+max = 0.8
+
+[params.inverter_efficiency]
+type = "float"
+description = "PWR-18-SCHED-02 inverter efficiency"
+min = 0.9
+max = 0.9
+
+[outputs.level_span_m]
+description = "Transmitter level span"
+tolerance = 0.03
+
+[outputs.current_signal_ma]
+description = "4-20 mA signal at the current level"
+tolerance = 0.03
+
+[outputs.high_level_current_ma]
+description = "4-20 mA signal at the high-level alarm setpoint"
+tolerance = 0.03
+
+[outputs.pump_start_current_ma]
+description = "4-20 mA signal at the pump-start setpoint"
+tolerance = 0.03
+
+[outputs.pump_stop_current_ma]
+description = "4-20 mA signal at the pump-stop setpoint"
+tolerance = 0.03
+
+[outputs.sensor_accuracy_m]
+description = "Sensor accuracy converted to metres"
+tolerance = 0.03
+
+[outputs.pump_start_margin_m]
+description = "Pump-start level minus current level"
+tolerance = 0.03
+
+[outputs.telemetry_load_w]
+description = "Total telemetry load"
+tolerance = 0.03
+
+[outputs.backup_energy_required_kwh]
+description = "Backup energy required"
+tolerance = 0.03
+
+[outputs.battery_usable_kwh]
+description = "Usable battery energy"
+tolerance = 0.03
+
+[outputs.backup_energy_margin_kwh]
+description = "Usable battery energy minus required energy"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for telemetry control checks"
+tolerance = 0.03
+
+[archetypes.ssc18_telemetry_control_case]
+description = "Stormwater/treatment telemetry control source pack"
+current_level_m = {min = 3.2, max = 3.2}
+lower_range_level_m = {min = 0.0, max = 0.0}
+upper_range_level_m = {min = 5.0, max = 5.0}
+high_level_alarm_m = {min = 4.2, max = 4.2}
+pump_start_level_m = {min = 3.5, max = 3.5}
+pump_stop_level_m = {min = 1.2, max = 1.2}
+sensor_accuracy_pct_span = {min = 0.25, max = 0.25}
+device_count = {min = 6.0, max = 6.0}
+device_power_w = {min = 18.0, max = 18.0}
+radio_power_w = {min = 35.0, max = 35.0}
+backup_duration_h = {min = 12.0, max = 12.0}
+battery_voltage_v = {min = 24.0, max = 24.0}
+battery_capacity_ah = {min = 120.0, max = 120.0}
+battery_usable_fraction = {min = 0.8, max = 0.8}
+inverter_efficiency = {min = 0.9, max = 0.9}
+site_contexts = ["telemetry-control", "stormwater-level-signal"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-18 telemetry control package"
+visibility = "all_given"
+archetypes = ["ssc18_telemetry_control_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-18 telemetry control package"
+visibility = "all_given"
+archetypes = ["ssc18_telemetry_control_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-18 telemetry control package"
+visibility = "all_given"
+archetypes = ["ssc18_telemetry_control_case"]
