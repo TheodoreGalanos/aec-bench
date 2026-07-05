@@ -136,6 +136,33 @@ Fresh current-state instances were generated for `SSC-01-LH-03`, `SSC-01-LH-07`,
 
 Evidence is recorded in `ara/evidence/logs/ssc01_review_first_post_cleanup_model_probes_self_check.txt` and Ara-lite `C155` / `E149` / `EV1379` / `N298`. The result is an initial probe packet only. It does not claim broad two-model evidence across every SSC-01 companion, full hidden-variant coverage, source-pack hardening, accepted project evidence, authority approval, generated benchmark readiness, or benchmark readiness.
 
+## Evidence Packet v2 (2026-07-06, Post-Triage)
+
+Collected after the probe-triage commit (generic pending-value clause; fractional identity-ledger scoring). Raw run artifacts (instances, outputs, reward and details JSON) are archived untracked at `artefacts/local-runs/ssc01-evidence-v2/`; instances regenerate deterministically from the recorded seeds at the triage commit. Adapter `pydantic_ai`; Haiku `claude-haiku-4-5`, Sonnet `claude-sonnet-4-6`.
+
+Triage-validation and breadth results (one run per row):
+
+| Product | Variant | Model | Reward | Classification |
+| --- | --- | --- | --- | --- |
+| LH-08 | `missing_revised_chainage` | Sonnet | `0.95` (was `0.88`) | Pending-value definition resolved the cascade for Sonnet; residual RLR-03 and one evidence key are model evidence. |
+| LH-08 | `missing_revised_chainage` | Haiku | `0.72` | Cascade persists under decidable definitions: standing capability finding, not ambiguity. |
+| LH-08 | `scenario_copy_forward` | Haiku | `0.72` | Same over-cascade signature; model evidence. |
+| LH-07 | `thermal_capacity_deficient` | Sonnet | `0.99` (was `0.95`) | Fractional ledger validated (7/8 tokens); model evidence. |
+| LH-03 | missing PoE budget | Haiku | `0.77` | RLR-06 plus readiness contradiction; model evidence. |
+| LH-01 | `freeboard_deficient` | Haiku / Sonnet | `0.86` / `0.95` | Haiku: RLR-05/08, linkage. Sonnet loss was claim-boundary wording only, reclassified as verifier inconsistency and fixed by porting the accepted negation-equivalence check to LH-01 through LH-06 (retroactively `1.00`). |
+| LH-02 / LH-04 / LH-05 / LH-06 | defect variants | Haiku | `0.78` / `0.88` / `0.97` / `0.76` | All localized losses; model evidence. |
+
+Reliability (LH-01, Haiku, five fresh seeds per variant; pass = reward `1.0`):
+
+| Variant | Mean reward | pass@1 | pass@5 | pass^5 |
+| --- | --- | --- | --- | --- |
+| `clean` | `0.822` | `0.20` | `1.00` | `~0.0003` |
+| `freeboard_deficient` | `0.844` | `0.00` | `0.00` | `0.00` |
+
+Standing model findings from this packet: (1) Haiku over-cascades single defects across adjacent matrix items even under decidable definitions, while Sonnet localizes; (2) recurring RLR-08 self-inconsistency — readiness decisions contradicting the model's own matrix; (3) phantom findings on defect-free packets — clean-variant runs at `0.59`-`0.63` flipped RLR-02/03/04 with no defect present. Reporting convention going forward: `pass^k` means all `k` runs pass (tau-bench); `pass@k` means at least one.
+
+This packet does not claim full hidden-variant coverage, two-model evidence on every companion, source-pack hardening, accepted project evidence, authority approval, generated benchmark readiness, or benchmark readiness.
+
 ## Non-Claims
 
 This plan does not claim accepted project evidence, authority approval, real source-pack parsing, full standards compliance, source-pack hardening, executable verifier readiness beyond implemented template validation, generated benchmark readiness, or benchmark readiness. It is a design and sequencing artifact for converting SSC-01 products to the review-first standard.
