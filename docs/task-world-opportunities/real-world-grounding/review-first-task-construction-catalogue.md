@@ -343,8 +343,8 @@ The 152 construction rows above are a menu, not a queue. Uniform eight-per-SSC c
 
 Gates before implementing anything from this menu:
 
-1. Post-cleanup `SSC-01` model probes exist under the variant-blind prompts, with results triaged per the authoring guide.
-2. The SSC's anchor has passed SME review.
+1. Post-cleanup `SSC-01` model probes exist under the variant-blind prompts, with results triaged per the authoring guide. (Satisfied by evidence packet v2.)
+2. The SSC's anchor has passed SME review — or, for the five first-wave anchors only, is built under the documented provisional rulings in `review-first-anchor-build-plan.md` with SME review moved to a post-build confirmation pass. All other menu rows still require SME review before build.
 3. Every implemented row satisfies the authoring-guide acceptance checklist, including variant-blindness.
 
 Status as of 2026-07-06: gate 1 has an initial evidence packet. Five fresh post-cleanup probes ran on current SSC-01-LH-03/LH-07/LH-08 instances through the Bedrock-backed `pydantic_ai` adapter, with rewards from `0.75` to `0.95` and localized verifier details recorded in Ara-lite `C155` / `E149` / `EV1379` / `N298`. This is evidence that the variant-blind prompts have headroom again; it is not broad SSC-01 variant-distribution evidence or benchmark readiness. Gates 2 and 3 still apply before any row is built.
