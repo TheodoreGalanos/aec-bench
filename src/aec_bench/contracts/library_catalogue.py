@@ -34,7 +34,9 @@ class LibraryEntryBase(StrictModel):
     """Fields shared by both TemplateEntry and SeedEntry."""
 
     task_id: str
-    discipline: Literal["civil", "electrical", "ground", "mechanical", "structural"]
+    # NOTE: this value set is duplicated across seed_task.py, library_catalogue.py, and
+    # seeds/seed_schema.json. Follow-up: unify into one canonical Discipline source.
+    discipline: Literal["civil", "electrical", "ground", "maritime", "mechanical", "structural"]
     category: str
     category_label: str | None = None
     standards: list[str] = Field(default_factory=list)

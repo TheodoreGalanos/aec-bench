@@ -35,7 +35,7 @@ Read `references/seed-schema.md` to understand the full field list.
 Ask follow-up questions for any fields not yet captured. Ask one or two questions at a time — keep it conversational, not like filling out a form.
 
 **Core fields (must collect all):**
-- **Discipline**: one of civil, electrical, ground, mechanical, structural
+- **Discipline**: one of civil, electrical, ground, maritime, mechanical, structural
 - **Task ID**: suggest a hyphenated slug derived from the task name (e.g., "Cable Sizing for Long Runs" → `cable-sizing-long-runs`)
 - **Task name**: human-readable name
 - **Description**: one paragraph explaining what the task tests

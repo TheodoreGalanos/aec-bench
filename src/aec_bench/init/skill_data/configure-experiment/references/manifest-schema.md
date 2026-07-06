@@ -21,7 +21,7 @@ Controls which tasks are included in the experiment.
 | `dataset` | string | No | null | Versioned dataset selector, as `name` or `name@version`. |
 | `include_patterns` | list[string] | No | [] | Glob patterns matching task paths (e.g., `electrical/*`, `ground/terzaghi-*`). |
 | `exclude_patterns` | list[string] | No | [] | Inverse patterns — tasks matching these are removed. |
-| `domains` | list[string] | No | [] | Discipline filter. Values come from the task directory structure (e.g., `civil`, `electrical`, `ground`, `mechanical`, `structural`). Empty means all domains. |
+| `domains` | list[string] | No | [] | Discipline filter. Values come from the task directory structure (e.g., `civil`, `electrical`, `ground`, `maritime`, `mechanical`, `structural`). Empty means all domains. |
 | `difficulties` | list[string] | No | [] | Difficulty filter: `easy`, `medium`, `hard`. Empty means all difficulties. |
 
 **Note:** The contract also has a `lifecycle_filter` field, but it is not currently consumed by the scheduler. Do not include it in generated YAML.
