@@ -32,9 +32,31 @@ optional = true
 description = "Rule length L (m)"
 tolerance = 0.005
 
-[archetypes.conventional_rudder_ship]
-description = "Conventional single-screw ship with a rudder stock"
+[archetypes.conventional_within_bounds]
+description = "Conventional single-screw ship with a rudder stock; measured distance falls inside the 96%/97% band"
+# Narrow extreme-length range (max/min <= 0.97/0.96) so that, combined with the stem
+# range below, stem_to_rudder_stock_distance_m always lands strictly between
+# 0.96*extreme and 0.97*extreme (the within_bounds clamp regime) regardless of which
+# value is independently sampled from each range.
+extreme_length_on_waterline_at_TSC_m = {min = 200.0, max = 200.5}
+stem_to_rudder_stock_distance_m = {min = 192.6, max = 193.8}
+site_contexts = ["bulk-carrier-panamax", "product-tanker-mr", "general-cargo-handysize"]
+
+[archetypes.conventional_lower_bites]
+description = "Conventional single-screw ship with a rudder stock; measured distance is short, so the 96% lower bound bites"
 extreme_length_on_waterline_at_TSC_m = {min = 150.0, max = 300.0}
+# stem_max <= 0.96 * extreme_min (0.96 * 150 = 144) so stem < 0.96*extreme for every
+# sampled combination, regardless of the independently sampled extreme length.
+stem_to_rudder_stock_distance_m = {min = 80.0, max = 140.0}
+site_contexts = ["bulk-carrier-panamax", "product-tanker-mr", "general-cargo-handysize"]
+
+[archetypes.conventional_upper_bites]
+description = "Conventional single-screw ship with a rudder stock; measured distance is long, so the 97% upper bound bites"
+# Narrow extreme-length range (max/min <= 1/0.97) so that, combined with the stem
+# range below, stem_to_rudder_stock_distance_m always lands strictly above
+# 0.97*extreme yet no more than extreme itself (the upper_bound_bites clamp regime).
+extreme_length_on_waterline_at_TSC_m = {min = 220.0, max = 224.0}
+stem_to_rudder_stock_distance_m = {min = 217.5, max = 220.0}
 site_contexts = ["bulk-carrier-panamax", "product-tanker-mr", "general-cargo-handysize"]
 
 [archetypes.azimuth_thruster_ship]
@@ -45,14 +67,14 @@ site_contexts = ["shuttle-tanker-dp", "offshore-support-vessel", "harbour-tug-az
 [difficulty.easy]
 description = "Rudder stock ship with measured distance between the 96%/97% bounds"
 visibility = "all_given"
-archetypes = ["conventional_rudder_ship"]
+archetypes = ["conventional_within_bounds"]
 has_rudder_stock = ["true"]
 clamp_regime = ["within_bounds"]
 
 [difficulty.medium]
 description = "Rudder stock ship where the measured distance falls outside the 96%/97% band, so the clamp bites"
 visibility = "all_given"
-archetypes = ["conventional_rudder_ship"]
+archetypes = ["conventional_lower_bites", "conventional_upper_bites"]
 has_rudder_stock = ["true"]
 clamp_regime = ["lower_bound_bites", "upper_bound_bites"]
 

@@ -1,0 +1,75 @@
+{
+  "status": "proposed",
+  "seed_origin": "expert",
+  "created_by": "const.koutsakis",
+  "source": {
+    "discipline": "maritime",
+    "task_id": "rule-length",
+    "task_name": "Rule length L",
+    "description": "Calculate the IACS Common Structural Rules (CSR-H) Rule length L: the distance, in metres, measured on the waterline at the scantling draught T_SC from the forward side of the stem to the centre (axis) of the rudder stock, clamped so it is not less than 96% and not more than 97% of the extreme length on the waterline at T_SC. For ships without a rudder stock (e.g. those fitted with azimuth thrusters), L is taken equal to 97% of the extreme length on the waterline at T_SC.",
+    "inputs": [
+      {"name": "extreme_length_on_waterline_at_TSC_m", "type": "float", "unit": "m"},
+      {"name": "stem_to_rudder_stock_distance_m", "type": "float", "unit": "m"},
+      {"name": "has_rudder_stock", "type": "categorical", "values": ["true", "false"]}
+    ],
+    "outputs": [
+      {"name": "rule_length_L_m", "type": "float", "unit": "m"}
+    ],
+    "standards": ["IACS Common Structural Rules (CSR-H), 01 JUL 2025, Pt 1 Ch 1 Sec 4, §3.1.1"],
+    "reference_details": [
+      "IACS CSR-H, 01 JUL 2025, Pt 1 Ch 1 Sec 4, §3.1.1, p.47: \"The Rule length L is the distance, in m, measured on the waterline at the scantling draught T_SC from the forward side of the stem to the centre of the rudder stock. L is to be not less than 96% and need not exceed 97% of the extreme length on the waterline at the scantling draught T_SC. In ships without rudder stock (e.g. ships fitted with azimuth thrusters), the Rule length L is to be taken equal to 97% of the extreme length on the waterline at the scantling draught T_SC. In ships with unusual stem or stern arrangements, the Rule length is considered on a case-by-case basis.\""
+    ],
+    "complexity": "low",
+    "worked_examples": [
+      {
+        "description": "Panamax bulk carrier where the measured stem-to-rudder-stock distance falls below the 96% lower bound, so the clamp bites and L is set to 96% of the extreme waterline length.",
+        "inputs": {
+          "extreme_length_on_waterline_at_TSC_m": 229.0,
+          "stem_to_rudder_stock_distance_m": 215.0,
+          "has_rudder_stock": "true"
+        },
+        "outputs": {
+          "rule_length_L_m": 219.84
+        }
+      },
+      {
+        "description": "Offshore support vessel fitted with azimuth thrusters and no rudder stock; L is taken as 97% of the extreme waterline length directly.",
+        "inputs": {
+          "extreme_length_on_waterline_at_TSC_m": 200.0,
+          "has_rudder_stock": "false"
+        },
+        "outputs": {
+          "rule_length_L_m": 194.0
+        }
+      },
+      {
+        "description": "General cargo ship where the measured stem-to-rudder-stock distance already lies within the 96%-97% band, so no clamping is applied and L equals the measured distance.",
+        "inputs": {
+          "extreme_length_on_waterline_at_TSC_m": 180.0,
+          "stem_to_rudder_stock_distance_m": 173.5,
+          "has_rudder_stock": "true"
+        },
+        "outputs": {
+          "rule_length_L_m": 173.5
+        }
+      }
+    ],
+    "edge_cases": [
+      "Measured stem-to-rudder-stock distance below 96% of the extreme waterline length: L is clamped up to the 96% lower bound (see worked example 1).",
+      "Measured stem-to-rudder-stock distance above 97% of the extreme waterline length: L is clamped down to the 97% upper cap.",
+      "No rudder stock (e.g. azimuth-thruster vessels): L is taken directly as 97% of the extreme waterline length; the stem-to-rudder-stock distance input does not apply.",
+      "Unusual stem or stern arrangements: the Rule length is determined on a case-by-case basis by the classification society and is out of scope for this closed-form task."
+    ]
+  },
+  "feasibility": {
+    "parameterisable": true,
+    "criteria": {
+      "closed_form": true,
+      "deterministic": true,
+      "parameterisable_inputs": true,
+      "numeric_outputs": true,
+      "single_compute": true
+    },
+    "notes": "Single clamp formula (min/max of a measured distance against two fractions of a given length), one categorical branch for the no-rudder-stock case. No iteration or table lookups required."
+  }
+}

@@ -14,6 +14,24 @@ UPPER_BOUND_FRACTION = 0.97
 _NO_RUDDER_STOCK_SENTINEL = None
 
 
+def _normalize_has_rudder_stock(has_rudder_stock: bool | str) -> bool:
+    """Normalize has_rudder_stock to a real bool.
+
+    params.toml declares has_rudder_stock as an enum with values ["true", "false"]
+    (bool is not a valid param type), so the generator passes it as a string. Direct
+    or test callers may still pass a real bool. Accept both.
+    """
+    if isinstance(has_rudder_stock, bool):
+        return has_rudder_stock
+    normalized = has_rudder_stock.strip().lower()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    msg = f"has_rudder_stock must be 'true' or 'false', got {has_rudder_stock!r}"
+    raise ValueError(msg)
+
+
 def _validate_inputs(
     extreme_length_on_waterline_at_TSC_m: float,
     has_rudder_stock: bool,
@@ -37,7 +55,7 @@ def _validate_inputs(
 
 def compute(
     extreme_length_on_waterline_at_TSC_m: float,
-    has_rudder_stock: bool,
+    has_rudder_stock: bool | str,
     stem_to_rudder_stock_distance_m: float | None = _NO_RUDDER_STOCK_SENTINEL,
 ) -> dict[str, float]:
     """Compute the IACS CSR-H Rule length L per Pt 1 Ch 1 Sec 4 §3.1.1.
@@ -50,6 +68,8 @@ def compute(
 
     Returns a dict with key: rule_length_L_m.
     """
+    has_rudder_stock = _normalize_has_rudder_stock(has_rudder_stock)
+
     _validate_inputs(
         extreme_length_on_waterline_at_TSC_m,
         has_rudder_stock,
@@ -68,5 +88,5 @@ def compute(
         rule_length_l = upper_bound
 
     return {
-        "rule_length_L_m": round(rule_length_l, 3),
+        "rule_length_L_m": round(rule_length_l, 2),
     }

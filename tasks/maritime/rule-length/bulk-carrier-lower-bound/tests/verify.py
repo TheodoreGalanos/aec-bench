@@ -43,7 +43,7 @@ def compute_ground_truth() -> dict[str, float]:
         rule_length_l = upper_bound
 
     return {
-        "rule_length_L_m": round(rule_length_l, 3),
+        "rule_length_L_m": round(rule_length_l, 2),
     }
 
 

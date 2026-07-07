@@ -68,6 +68,45 @@ def test_compute_no_rudder_stock_returns_97_percent() -> None:
     assert isclose(result["rule_length_L_m"], 145.5, rel_tol=1e-9)
 
 
+def test_compute_accepts_string_false_for_has_rudder_stock() -> None:
+    """The generator passes has_rudder_stock as the string 'false' (params.toml enum values
+    are ["true", "false"] since bool is not a valid param type); this must behave identically
+    to the Python bool False."""
+    from aec_bench.templates.builtin.maritime.rule_length.engine import compute
+
+    result = compute(
+        extreme_length_on_waterline_at_TSC_m=200.0,
+        has_rudder_stock="false",
+    )
+
+    assert isclose(result["rule_length_L_m"], 194.0, rel_tol=1e-9)
+
+
+def test_compute_accepts_string_true_for_has_rudder_stock() -> None:
+    """The generator passes has_rudder_stock as the string 'true'; the measured distance
+    above the upper bound must still clamp down to 0.97 x extreme length."""
+    from aec_bench.templates.builtin.maritime.rule_length.engine import compute
+
+    result = compute(
+        extreme_length_on_waterline_at_TSC_m=200.0,
+        has_rudder_stock="true",
+        stem_to_rudder_stock_distance_m=199.0,
+    )
+
+    assert isclose(result["rule_length_L_m"], 194.0, rel_tol=1e-9)
+
+
+def test_compute_rejects_invalid_has_rudder_stock_string() -> None:
+    """A has_rudder_stock string other than 'true'/'false' raises ValueError."""
+    from aec_bench.templates.builtin.maritime.rule_length.engine import compute
+
+    with pytest.raises(ValueError, match="has_rudder_stock"):
+        compute(
+            extreme_length_on_waterline_at_TSC_m=200.0,
+            has_rudder_stock="maybe",
+        )
+
+
 def test_compute_returns_only_expected_key() -> None:
     """Output dict has exactly the one scored key."""
     from aec_bench.templates.builtin.maritime.rule_length.engine import compute
