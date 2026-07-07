@@ -1,0 +1,79 @@
+{
+  "status": "proposed",
+  "seed_origin": "expert",
+  "created_by": "const.koutsakis",
+  "source": {
+    "discipline": "maritime",
+    "task_id": "block-coefficient",
+    "task_name": "Block coefficient C_B",
+    "description": "Calculate the IACS Common Structural Rules (CSR-H) block coefficient C_B at the scantling draught T_SC: C_B = Delta / (1.025 x L x B x T_SC), where Delta is the moulded displacement of the ship at draught T_SC (in tonnes), L is the Rule length (m), B is the moulded breadth (m), and T_SC is the scantling draught (m).",
+    "inputs": [
+      {"name": "moulded_displacement_t", "type": "float", "unit": "t"},
+      {"name": "rule_length_L_m", "type": "float", "unit": "m"},
+      {"name": "moulded_breadth_B_m", "type": "float", "unit": "m"},
+      {"name": "scantling_draught_TSC_m", "type": "float", "unit": "m"}
+    ],
+    "outputs": [
+      {"name": "block_coefficient_CB", "type": "float", "unit": "dimensionless"}
+    ],
+    "standards": ["IACS Common Structural Rules (CSR-H), 01 JUL 2025, Pt 1 Ch 1 Sec 4, §3.1.8"],
+    "reference_details": [
+      "IACS CSR-H, 01 JUL 2025, Pt 1 Ch 1 Sec 4, §3.1.8, p.48: \"C_B, the block coefficient at the draught, T_SC is defined in the following equation: C_B = Delta / (1.025 . L . B . T_SC)\" where Delta = moulded displacement of the ship at draught T_SC (in tonnes); L = rule length (m); B = moulded breadth (m); T_SC = scantling draught (m)."
+    ],
+    "complexity": "low",
+    "worked_examples": [
+      {
+        "description": "Capesize bulk carrier: moulded displacement 180,000 t at rule length 280 m, breadth 45 m, scantling draught 18 m.",
+        "inputs": {
+          "moulded_displacement_t": 180000.0,
+          "rule_length_L_m": 280.0,
+          "moulded_breadth_B_m": 45.0,
+          "scantling_draught_TSC_m": 18.0
+        },
+        "outputs": {
+          "block_coefficient_CB": 0.77
+        }
+      },
+      {
+        "description": "VLCC (Very Large Crude Carrier): moulded displacement 366,000 t at rule length 330 m, breadth 60 m, scantling draught 22 m.",
+        "inputs": {
+          "moulded_displacement_t": 366000.0,
+          "rule_length_L_m": 330.0,
+          "moulded_breadth_B_m": 60.0,
+          "scantling_draught_TSC_m": 22.0
+        },
+        "outputs": {
+          "block_coefficient_CB": 0.82
+        }
+      },
+      {
+        "description": "Large container ship: moulded displacement 125,000 t at rule length 310 m, breadth 45 m, scantling draught 13.5 m — finer-formed hull, so a noticeably lower C_B than the bulk carrier and tanker examples.",
+        "inputs": {
+          "moulded_displacement_t": 125000.0,
+          "rule_length_L_m": 310.0,
+          "moulded_breadth_B_m": 45.0,
+          "scantling_draught_TSC_m": 13.5
+        },
+        "outputs": {
+          "block_coefficient_CB": 0.65
+        }
+      }
+    ],
+    "edge_cases": [
+      "Full-form ships (bulk carriers, tankers) have C_B in the region of 0.80-0.85; fine-formed ships (container ships) have C_B typically in the region of 0.60-0.70 — the same closed-form equation covers both regimes without any branching.",
+      "C_B must remain a positive value less than 1.0 for physically realistic ships; a computed value at or above 1.0 signals inconsistent input dimensions (e.g. a displacement too large for the given L, B, T_SC) rather than a valid design point.",
+      "All four inputs (Delta, L, B, T_SC) must be strictly positive; a non-positive value for any of them makes the ratio meaningless and should be rejected."
+    ]
+  },
+  "feasibility": {
+    "parameterisable": true,
+    "criteria": {
+      "closed_form": true,
+      "deterministic": true,
+      "parameterisable_inputs": true,
+      "numeric_outputs": true,
+      "single_compute": true
+    },
+    "notes": "Single closed-form ratio of four positive scalars (Delta, L, B, T_SC) with a fixed seawater-density constant. No branching, iteration, or table lookups required."
+  }
+}
