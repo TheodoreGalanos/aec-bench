@@ -118,14 +118,16 @@ def test_compute_is_pure() -> None:
     """Same inputs produce identical outputs — function is deterministic and pure."""
     from aec_bench.templates.builtin.maritime.freeboard_length.engine import compute
 
-    kwargs = {
-        "total_length_on_85pct_depth_waterline_m": 210.0,
-        "has_rudder_stock": True,
-        "stem_to_rudder_stock_axis_distance_m": 205.0,
-    }
-
-    result_a = compute(**kwargs)
-    result_b = compute(**kwargs)
+    result_a = compute(
+        total_length_on_85pct_depth_waterline_m=210.0,
+        has_rudder_stock=True,
+        stem_to_rudder_stock_axis_distance_m=205.0,
+    )
+    result_b = compute(
+        total_length_on_85pct_depth_waterline_m=210.0,
+        has_rudder_stock=True,
+        stem_to_rudder_stock_axis_distance_m=205.0,
+    )
 
     assert result_a == result_b
 
