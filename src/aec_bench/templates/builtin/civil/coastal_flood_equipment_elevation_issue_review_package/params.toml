@@ -1,0 +1,257 @@
+# ABOUTME: Parameter ranges for the SSC-04 coastal equipment elevation review package.
+# ABOUTME: Samples coastal boundary, equipment elevation, pump, and hidden issue variants.
+
+[meta]
+name = "coastal-flood-equipment-elevation-issue-review-package"
+description = "SSC-04 review of coastal flood equipment elevations and datum consistency"
+long_description = "Review-first source-packet task for a coastal pump-station equipment elevation package: inventory source files, preserve datum and planning-horizon identity, recompute design flood level and equipment margins, and issue an auditable readiness decision."
+discipline = "civil"
+category = "coastal-review"
+standards = ["FEMA flood utility elevation", "USACE Coastal Engineering Manual", "task-owned synthetic criteria"]
+tags = ["civil", "coastal", "datum", "flood", "equipment-elevation", "review", "source-pack"]
+tool_mode = "no-tool"
+
+[params.present_mean_sea_level_m_ahd]
+type = "float"
+unit = "m AHD"
+description = "Present mean sea level in AHD"
+min = 0.10
+max = 0.35
+
+[params.tide_amplitude_m]
+type = "float"
+unit = "m"
+description = "Design tide amplitude"
+min = 0.75
+max = 1.05
+
+[params.storm_surge_m]
+type = "float"
+unit = "m"
+description = "Storm surge allowance"
+min = 0.90
+max = 1.30
+
+[params.slr_allowance_m]
+type = "float"
+unit = "m"
+description = "Sea-level-rise allowance for the selected planning horizon"
+min = 0.40
+max = 0.70
+
+[params.wave_runup_m]
+type = "float"
+unit = "m"
+description = "Wave/runup allowance"
+min = 0.30
+max = 0.55
+
+[params.required_freeboard_m]
+type = "float"
+unit = "m"
+description = "Required equipment freeboard above design flood level"
+min = 0.30
+max = 0.45
+
+[params.switchboard_margin_target_m]
+type = "float"
+unit = "m"
+description = "Hidden clean switchboard freeboard margin used to derive elevation"
+min = 0.18
+max = 0.42
+
+[params.generator_margin_target_m]
+type = "float"
+unit = "m"
+description = "Hidden generator freeboard margin used to derive elevation"
+min = 0.25
+max = 0.55
+
+[params.switchboard_deficit_m]
+type = "float"
+unit = "m"
+description = "Hidden deficient-case switchboard freeboard deficit"
+min = 0.08
+max = 0.25
+
+[params.outfall_tailwater_margin_m]
+type = "float"
+unit = "m"
+description = "Hidden outfall allowable tailwater margin"
+min = 0.20
+max = 0.55
+
+[params.required_pump_duty_m3_s]
+type = "float"
+unit = "m3/s"
+description = "Required pump duty during selected coastal event"
+min = 0.30
+max = 0.48
+
+[params.pump_duty_margin_target_m3_s]
+type = "float"
+unit = "m3/s"
+description = "Hidden selected pump duty margin"
+min = 0.04
+max = 0.12
+
+[params.cd_to_ahd_offset_m]
+type = "float"
+unit = "m"
+description = "Chart datum to AHD offset owned by the criteria memo"
+min = -0.92
+max = -0.72
+
+[params.packet_variant]
+type = "enum"
+description = "Hidden source-packet issue variant"
+values = [
+  "clean",
+  "missing_switchboard_survey_level",
+  "stale_water_level_basis_revision",
+  "asset_survey_chart_datum_labelled_ahd",
+  "scenario_copy_forward",
+  "open_critical_comment",
+  "minor_open_comment_carried",
+  "switchboard_below_design_level",
+]
+
+[outputs.rlr_01_status]
+description = "RLR-01 status code"
+tolerance = 0.01
+
+[outputs.rlr_02_status]
+description = "RLR-02 status code"
+tolerance = 0.01
+
+[outputs.rlr_03_status]
+description = "RLR-03 status code"
+tolerance = 0.01
+
+[outputs.rlr_04_status]
+description = "RLR-04 status code"
+tolerance = 0.01
+
+[outputs.rlr_05_status]
+description = "RLR-05 status code"
+tolerance = 0.01
+
+[outputs.rlr_06_status]
+description = "RLR-06 status code"
+tolerance = 0.01
+
+[outputs.rlr_07_status]
+description = "RLR-07 status code"
+tolerance = 0.01
+
+[outputs.rlr_08_status]
+description = "RLR-08 status code"
+tolerance = 0.01
+
+[outputs.rlr_09_status]
+description = "RLR-09 status code"
+tolerance = 0.01
+
+[outputs.design_flood_level_m_ahd]
+description = "Design flood level in AHD"
+tolerance = 0.03
+
+[outputs.wave_runup_m]
+description = "Wave/runup allowance evidence"
+tolerance = 0.03
+
+[outputs.switchboard_freeboard_m]
+description = "Switchboard elevation minus design flood level"
+tolerance = 0.03
+
+[outputs.switchboard_freeboard_margin_m]
+description = "Switchboard freeboard minus required freeboard"
+tolerance = 0.03
+
+[outputs.generator_freeboard_margin_m]
+description = "Generator freeboard minus required freeboard"
+tolerance = 0.03
+
+[outputs.outfall_submergence_margin_m]
+description = "Outfall allowable tailwater minus design tailwater"
+tolerance = 0.03
+
+[outputs.pump_duty_margin]
+description = "Selected pump duty minus required pump duty"
+tolerance = 0.03
+
+[outputs.readiness_code]
+description = "Readiness decision code"
+tolerance = 0.01
+
+[outputs.required_findings_count]
+description = "Required finding count"
+tolerance = 0.01
+
+[outputs.required_information_requests_count]
+description = "Required information request count"
+tolerance = 0.01
+
+[outputs.required_carried_actions_count]
+description = "Required carried action count"
+tolerance = 0.01
+
+[archetypes.estuary_pump_station]
+description = "Estuary pump station with AHD-controlled equipment elevations"
+site_contexts = ["estuary-pump-station", "coastal-utility-yard"]
+present_mean_sea_level_m_ahd = {min = 0.10, max = 0.25}
+tide_amplitude_m = {min = 0.75, max = 0.95}
+storm_surge_m = {min = 0.90, max = 1.15}
+
+[archetypes.harbour_outfall_station]
+description = "Harbour outfall pump station with higher tide and runup allowances"
+site_contexts = ["harbour-outfall-station", "marine-edge-pump-station"]
+present_mean_sea_level_m_ahd = {min = 0.20, max = 0.35}
+tide_amplitude_m = {min = 0.88, max = 1.05}
+storm_surge_m = {min = 1.05, max = 1.30}
+
+[difficulty.easy]
+description = "Obvious coastal equipment-elevation defects"
+visibility = "partial"
+archetypes = ["estuary_pump_station", "harbour_outfall_station"]
+hidden_params = [
+  "packet_variant",
+  "switchboard_margin_target_m",
+  "generator_margin_target_m",
+  "switchboard_deficit_m",
+  "outfall_tailwater_margin_m",
+  "pump_duty_margin_target_m3_s",
+]
+packet_variant = ["clean", "missing_switchboard_survey_level", "switchboard_below_design_level"]
+
+[difficulty.medium]
+description = "Full packet-variant distribution"
+visibility = "partial"
+archetypes = ["estuary_pump_station", "harbour_outfall_station"]
+hidden_params = [
+  "packet_variant",
+  "switchboard_margin_target_m",
+  "generator_margin_target_m",
+  "switchboard_deficit_m",
+  "outfall_tailwater_margin_m",
+  "pump_duty_margin_target_m3_s",
+]
+
+[difficulty.hard]
+description = "Subtle datum, revision, planning-horizon, and comment-closure defects"
+visibility = "partial"
+archetypes = ["estuary_pump_station", "harbour_outfall_station"]
+hidden_params = [
+  "packet_variant",
+  "switchboard_margin_target_m",
+  "generator_margin_target_m",
+  "switchboard_deficit_m",
+  "outfall_tailwater_margin_m",
+  "pump_duty_margin_target_m3_s",
+]
+packet_variant = [
+  "stale_water_level_basis_revision",
+  "asset_survey_chart_datum_labelled_ahd",
+  "scenario_copy_forward",
+  "minor_open_comment_carried",
+]

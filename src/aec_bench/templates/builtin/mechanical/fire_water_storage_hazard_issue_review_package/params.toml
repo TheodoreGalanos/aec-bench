@@ -1,0 +1,204 @@
+[meta]
+name = "fire-water-storage-hazard-issue-review-package"
+description = "SSC-19 review-first issue-readiness review of a fire-water hazard, sprinkler, and storage package"
+long_description = "Review-native long-horizon task over a generated SSC-19 fire-water issue packet. The agent receives a multi-file source packet in /workspace/sources/ (document register, hazard and storage arrangement, sprinkler/hydrant demand sheet, tank and pump schedule, fire strategy case, water-supply basis, criteria and comments), inventories it, preserves hazard and asset identity, checks source-owned classification and storage calculations as review evidence, assigns one status per review item, raises findings/information requests/actions, and issues a readiness decision. Packet variants inject missing hazard evidence, stale revisions, tank identity mismatches, scenario copy-forward, open comments, or genuine storage failures under the true hazard class. Scored by a stage-gated custom verifier, not per-key answer matching."
+discipline = "mechanical"
+category = "fire-review"
+standards = ["NFPA 13", "NFPA 291", "FM Property Loss Prevention Data Sheets", "AHJ fire-protection workflow"]
+tags = ["mechanical", "fire-protection", "sprinkler", "storage", "hazard", "review", "issue-readiness", "long-horizon"]
+tool_mode = "no-tool"
+
+[params.storage_height_m]
+type = "float"
+unit = "m"
+description = "HAZ-19 storage height for the commodity arrangement"
+min = 6.0
+max = 8.5
+
+[params.remote_area_adjustment_m2]
+type = "float"
+unit = "m2"
+description = "Source-owned remote-area adjustment applied to the class baseline"
+min = -12.0
+max = 18.0
+
+[params.storage_margin_m3]
+type = "float"
+unit = "m3"
+description = "Derivation margin between true required volume and available tank storage"
+min = 20.0
+max = 80.0
+
+[params.storage_deficit_m3]
+type = "float"
+unit = "m3"
+description = "Derivation deficit below true required storage for the storage-deficient variant"
+min = 8.0
+max = 35.0
+
+[params.pump_capacity_margin_l_min]
+type = "float"
+unit = "L/min"
+description = "Derivation margin between pump rated capacity and total fire-water demand"
+min = 250.0
+max = 900.0
+
+[params.tank_volume_mismatch_delta_m3]
+type = "float"
+unit = "m3"
+description = "Documentary mismatch between tank schedule and demand-sheet tank volume"
+min = 35.0
+max = 90.0
+
+[params.packet_variant]
+type = "enum"
+description = "Hidden source-packet variant"
+values = [
+  "clean",
+  "missing_commodity_classification",
+  "stale_hazard_basis_revision",
+  "tank_volume_mismatch",
+  "scenario_copy_forward",
+  "open_critical_comment",
+  "minor_open_comment_carried",
+  "storage_deficient_under_true_class",
+]
+
+[outputs.rlr_01_status]
+description = "Review matrix status code for RLR-01"
+tolerance = 0.0
+
+[outputs.rlr_02_status]
+description = "Review matrix status code for RLR-02"
+tolerance = 0.0
+
+[outputs.rlr_03_status]
+description = "Review matrix status code for RLR-03"
+tolerance = 0.0
+
+[outputs.rlr_04_status]
+description = "Review matrix status code for RLR-04"
+tolerance = 0.0
+
+[outputs.rlr_05_status]
+description = "Review matrix status code for RLR-05"
+tolerance = 0.0
+
+[outputs.rlr_06_status]
+description = "Review matrix status code for RLR-06"
+tolerance = 0.0
+
+[outputs.rlr_07_status]
+description = "Review matrix status code for RLR-07"
+tolerance = 0.0
+
+[outputs.rlr_08_status]
+description = "Review matrix status code for RLR-08"
+tolerance = 0.0
+
+[outputs.rlr_09_status]
+description = "Review matrix status code for RLR-09"
+tolerance = 0.0
+
+[outputs.readiness_code]
+description = "Readiness decision code"
+tolerance = 0.0
+
+[outputs.required_findings_count]
+description = "Required finding count"
+tolerance = 0.0
+
+[outputs.required_information_requests_count]
+description = "Required information request count"
+tolerance = 0.0
+
+[outputs.required_carried_actions_count]
+description = "Required carried action count"
+tolerance = 0.0
+
+[outputs.design_density_mm_min]
+description = "True source-owned sprinkler design density"
+tolerance = 0.02
+
+[outputs.design_area_m2]
+description = "True source-owned sprinkler design area"
+tolerance = 0.02
+
+[outputs.sprinkler_demand_l_min]
+description = "Sprinkler density-area demand"
+tolerance = 0.02
+
+[outputs.hose_allowance_l_min]
+description = "Hose allowance"
+tolerance = 0.02
+
+[outputs.required_duration_min]
+description = "Required fire-water duration"
+tolerance = 0.02
+
+[outputs.required_volume_m3]
+description = "Required fire-water storage volume"
+tolerance = 0.02
+
+[outputs.storage_volume_margin_m3]
+description = "Available storage minus required storage"
+tolerance = 0.02
+
+[outputs.pump_capacity_margin_l_min]
+description = "Fire pump rated capacity minus total fire-water demand"
+tolerance = 0.02
+
+[archetypes.high_bay_warehouse]
+description = "High-bay warehouse storage arrangement with rack storage and AHJ/FM criteria"
+site_contexts = ["high-bay-warehouse-fire-water", "rack-storage-hazard-review"]
+storage_height_m = {min = 6.8, max = 8.5}
+remote_area_adjustment_m2 = {min = -8.0, max = 18.0}
+
+[archetypes.medium_height_storage]
+description = "Medium-height storage building with racked commodity and fire-water tank"
+site_contexts = ["medium-height-storage-fire-water", "distribution-building-hazard-review"]
+storage_height_m = {min = 6.0, max = 6.7}
+remote_area_adjustment_m2 = {min = -12.0, max = 10.0}
+
+[difficulty.easy]
+description = "Obvious packet defects: clean, missing classification evidence, or a genuine storage failure"
+visibility = "partial"
+archetypes = ["high_bay_warehouse", "medium_height_storage"]
+hidden_params = [
+  "packet_variant",
+  "storage_margin_m3",
+  "storage_deficit_m3",
+  "pump_capacity_margin_l_min",
+  "tank_volume_mismatch_delta_m3",
+]
+packet_variant = ["clean", "missing_commodity_classification", "storage_deficient_under_true_class"]
+
+[difficulty.medium]
+description = "Full packet-variant distribution"
+visibility = "partial"
+archetypes = ["high_bay_warehouse", "medium_height_storage"]
+hidden_params = [
+  "packet_variant",
+  "storage_margin_m3",
+  "storage_deficit_m3",
+  "pump_capacity_margin_l_min",
+  "tank_volume_mismatch_delta_m3",
+]
+
+[difficulty.hard]
+description = "Subtle documentary defects: stale revisions, tank identity mismatch, scenario copy-forward, carried comments"
+visibility = "partial"
+archetypes = ["high_bay_warehouse", "medium_height_storage"]
+hidden_params = [
+  "packet_variant",
+  "storage_margin_m3",
+  "storage_deficit_m3",
+  "pump_capacity_margin_l_min",
+  "tank_volume_mismatch_delta_m3",
+]
+packet_variant = [
+  "stale_hazard_basis_revision",
+  "tank_volume_mismatch",
+  "scenario_copy_forward",
+  "minor_open_comment_carried",
+]
