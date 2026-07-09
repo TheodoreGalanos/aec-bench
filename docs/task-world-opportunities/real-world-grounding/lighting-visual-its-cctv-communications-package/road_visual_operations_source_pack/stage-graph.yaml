@@ -1,0 +1,85 @@
+# ABOUTME: Stage graph for the SSC-13 road visual operations synthetic pack.
+# ABOUTME: Defines source consumption, handoff production, and verifier gate families.
+
+stages:
+  - id: source_intake
+    purpose: Parse project, manifest, source index, scene layout, and device schedule.
+    consumes:
+      - project.json
+      - source-index.md
+      - lighting_comms_source_manifest.yaml
+      - scene-layout.csv
+      - device-schedule.csv
+    produces:
+      - H_SCENE_ID
+    gates:
+      - manifest_completeness
+      - source_status_boundary
+      - object_identity
+  - id: lighting_summary
+    purpose: Reproduce average, minimum, and min-to-average lighting values from task-owned grid rows.
+    consumes:
+      - lighting-grid-results.csv
+      - network-power-oracle.csv
+      - H_SCENE_ID
+    produces:
+      - H_LIGHT_AVG_LUX
+      - H_LIGHT_MIN_LUX
+      - H_LIGHT_U0
+    gates:
+      - lighting_grid_formula
+      - lighting_thresholds
+      - handoff_units
+  - id: cctv_coverage
+    purpose: Reproduce PPM and storage values for the two camera target zones.
+    consumes:
+      - camera-coverage-oracle.csv
+      - device-schedule.csv
+      - H_SCENE_ID
+    produces:
+      - H_CCTV_MIN_PPM
+      - H_CCTV_STORAGE_TB
+    gates:
+      - camera_ppm_formula
+      - camera_storage_formula
+      - object_identity
+  - id: vms_policy
+    purpose: Confirm the VMS identity and synthetic message-policy boundary remain explicit.
+    consumes:
+      - lighting_comms_source_manifest.yaml
+      - scene-layout.csv
+      - H_SCENE_ID
+    produces:
+      - H_VMS_POLICY_ID
+    gates:
+      - message_policy_trace
+      - traffic_control_non_claim
+  - id: network_power
+    purpose: Reproduce bandwidth, PoE, fibre-loss, and UPS-energy handoff values.
+    consumes:
+      - device-schedule.csv
+      - network-power-oracle.csv
+      - H_CCTV_MIN_PPM
+      - H_CCTV_STORAGE_TB
+    produces:
+      - H_NETWORK_LOAD_MBPS
+      - H_POE_LOAD_W
+      - H_FIBRE_LOSS_DB
+      - H_UPS_ENERGY_KWH
+    gates:
+      - bandwidth_formula
+      - poe_formula
+      - fibre_loss_formula
+      - backup_energy_formula
+  - id: visual_operations_memo
+    purpose: Produce the response memo with source status, handoff values, pass/fail rows, and non-claims.
+    consumes:
+      - expected-output.md
+      - handoff-ledger.yaml
+      - case-ledger.yaml
+    produces:
+      - visual_operations_memo
+    gates:
+      - memo_traceability
+      - readiness_non_claim
+      - no_silent_handoff_mutation

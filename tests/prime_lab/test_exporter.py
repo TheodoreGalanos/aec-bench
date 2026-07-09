@@ -229,6 +229,7 @@ def test_export_creates_prime_lab_package(tmp_path: Path) -> None:
         encoding="utf-8"
     )
     assert 'tags = ["aec-bench", "aec", "benchmark"]' in (package_dir / "pyproject.toml").read_text(encoding="utf-8")
+    assert "force-include" not in (package_dir / "pyproject.toml").read_text(encoding="utf-8")
     assert "def load_environment" in (package_dir / "aec_voltage_drop" / "environment.py").read_text(encoding="utf-8")
     assert '"harness_kind": "single_turn"' in (package_dir / "aec_voltage_drop" / "environment.py").read_text(
         encoding="utf-8"

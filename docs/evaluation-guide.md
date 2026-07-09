@@ -48,11 +48,32 @@ Structured expert annotation:
 
 Calibrated judges may automate selected subjective dimensions once human agreement is strong enough.
 
+### Layer 5: LLM reviewer
+
+The LLM reviewer is a post-verifier meta-evaluation stage. It consumes the
+completed run evidence, verifier output, artifacts, traces, and the materialized
+task-world profile, then writes structured findings under `logs/reviewer/` for
+local runs or `reviewer/` inside Harbor trial directories.
+
+The reviewer does not replace verifier reward. It answers a different question:
+whether the verifier result is interpretable under the current task-world
+schema, or whether the run should be treated as a verifier-language, evidence,
+schema, governance, containment, or model-failure finding.
+
+Task-world profiles may be supplied by a task sidecar such as `world.yaml`; when
+absent, evaluation derives a conservative default profile from the task path,
+instruction, verifier artifacts, output, and trace channels. The materialized
+profile is persisted as `world_profile.json` beside the reviewer request.
+
 ---
 
 ## Mechanical Verification Boundary
 
 The verifier belongs to the task. Evaluation consumes verifier output and adds enrichment later. Evaluation should never overwrite the original verifier result; it adds structured context around it.
+
+The LLM reviewer follows the same boundary. It can flag verifier
+miscalibration, missing evidence, or event candidates, but it never edits
+`reward.json` or `details.json`.
 
 ---
 

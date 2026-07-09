@@ -1,0 +1,9 @@
+{
+  "brief_id": "brief.verifier_artifact_ablation",
+  "objective": "Create diagnostic variants for verifier/artifact disagreement.",
+  "problem": "A verifier score may disagree with preserved artifact evidence, so we need projections and ablations that isolate the artifact channel.",
+  "constraints": [
+    "Do not mutate source worlds directly.",
+    "Record missing-handle repairs as proposals before schema mutation."
+  ]
+}

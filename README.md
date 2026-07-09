@@ -109,6 +109,22 @@ uv run aec-bench run tasks/electrical/pf-droop --model "<model-id>" --backend mo
 
 `aec-bench run` defaults to Harbor's `modal` backend. Morph Cloud runs use Harbor's normal task, agent, artifact, and verifier lifecycle through `--backend morph`; set `MORPH_API_KEY` in `.env` before using it.
 
+### Meta-Harness
+
+Use the meta-harness workflow when a task needs an explicit world model, reviewer
+evidence, governance decisions, or candidate-vs-baseline harness comparison.
+
+```bash
+uv run aec-bench meta-harness recipe \
+  --task-file task.md \
+  --output artefacts/meta-harness/demo
+```
+
+The recipe writes a scriptable workspace for intake, world generation, reviewer
+evidence, governance, and comparison artifacts. See
+[docs/meta-harness-guide.md](docs/meta-harness-guide.md) for the full CLI/API
+workflow.
+
 ### Prime Lab Export
 
 AEC-Bench can export tasks as Prime Lab environments for local and hosted evals.
@@ -345,6 +361,7 @@ or another agent environment.
 | **Create Template** | `/create-template <seed-path>` | Build a generation template from a seed file |
 | **Hardening Pass** | `/hardening-pass <path>` | Quality-gate a template or task instance before benchmarking |
 | **Domain Check** | `/domain-check` | Verify architectural invariants before publishing or committing |
+| **Meta-Harness** | `/meta-harness` | Design or compare a harness candidate from task prose and run evidence |
 
 **Typical flow:** `/add-task` interviews an expert and produces a seed file. If the task is parameterisable, it hands off to `/create-template` which builds the template and generates instances. Then `/hardening-pass` reviews the template for correctness before use in real benchmarks.
 

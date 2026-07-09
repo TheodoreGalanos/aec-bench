@@ -1,0 +1,7 @@
+{
+  "decision_id": "decision.accept-governance-axis",
+  "status": "accepted",
+  "scope": "world_schema",
+  "decided_by": "human",
+  "rationale": "Governance is a recurring evaluation dimension and should become explicit world language."
+}

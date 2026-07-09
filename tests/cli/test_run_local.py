@@ -8,7 +8,14 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from aec_bench.cli.commands.run_local import _copy_output_files, _run_verifier
+from aec_bench.cli.commands.run_local import (
+    _archive_verifier_retry_attempt,
+    _build_verifier_retry_instruction,
+    _copy_output_files,
+    _prepare_verifier_retry_workspace,
+    _run_verifier,
+    _should_run_verifier_feedback_retry,
+)
 from aec_bench.harness.local_runtime import (
     read_instruction,
     setup_workspace,
@@ -291,6 +298,113 @@ class TestRunVerifier:
         assert reward_data["reward"] == 0.75
 
 
+class TestVerifierFeedbackRetry:
+    """Validate opt-in verifier feedback retry helpers."""
+
+    def test_should_run_verifier_feedback_retry_requires_prompt_and_incomplete_reward(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        assert not _should_run_verifier_feedback_retry(workspace, reward=0.0)
+
+        (workspace / "verifier_retry_prompt.md").write_text("Repair the files.")
+
+        assert _should_run_verifier_feedback_retry(workspace, reward=0.5)
+        assert not _should_run_verifier_feedback_retry(workspace, reward=1.0)
+        assert not _should_run_verifier_feedback_retry(workspace, reward=None)
+
+    def test_build_verifier_retry_instruction_includes_prior_output_and_feedback(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        (workspace / "verifier_retry_prompt.md").write_text("Write the missing files.")
+        (workspace / "output.md").write_text("First answer without artifacts.")
+        verifier_dir = workspace / "logs" / "verifier"
+        verifier_dir.mkdir(parents=True)
+        (verifier_dir / "feedback.md").write_text("Missing rewrite_integrity_report.json.")
+        (verifier_dir / "details.json").write_text(json.dumps({"rewrite_integrity_report_written": 0.0}, indent=2))
+
+        instruction = _build_verifier_retry_instruction(
+            workspace=workspace,
+            base_instruction="Original task instruction.",
+            reward=0.25,
+        )
+
+        assert "Original task instruction." in instruction
+        assert "Write the missing files." in instruction
+        assert "First answer without artifacts." in instruction
+        assert "Missing rewrite_integrity_report.json." in instruction
+        assert '"rewrite_integrity_report_written": 0.0' in instruction
+        assert "0.2500" in instruction
+
+    def test_build_verifier_retry_instruction_prefers_retry_instruction_file(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        (workspace / "verifier_retry_prompt.md").write_text("Repair the files.")
+        (workspace / "verifier_retry_instruction.md").write_text("Clean retry-only instruction.")
+        (workspace / "output.md").write_text("First answer.")
+        verifier_dir = workspace / "logs" / "verifier"
+        verifier_dir.mkdir(parents=True)
+        (verifier_dir / "details.json").write_text(json.dumps({"score": 0.0}))
+
+        instruction = _build_verifier_retry_instruction(
+            workspace=workspace,
+            base_instruction="Original turn 1 instruction with stale no-file constraint.",
+            reward=0.0,
+        )
+
+        assert "Clean retry-only instruction." in instruction
+        assert "Original turn 1 instruction" not in instruction
+        assert "Repair the files." in instruction
+        assert "First answer." in instruction
+
+    def test_archive_verifier_retry_attempt_preserves_first_attempt_files(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        (workspace / "output.md").write_text("first output")
+        (workspace / "rewrite_integrity_report.json").write_text(json.dumps({"attempt": 1}))
+        verifier_dir = workspace / "logs" / "verifier"
+        verifier_dir.mkdir(parents=True)
+        (verifier_dir / "reward.json").write_text(json.dumps({"reward": 0.2}))
+        (verifier_dir / "details.json").write_text(json.dumps({"field": 0.0}))
+        (verifier_dir / "feedback.md").write_text("retry needed")
+
+        archive_dir = _archive_verifier_retry_attempt(workspace, "attempt-01")
+
+        assert (archive_dir / "output.md").read_text() == "first output"
+        assert json.loads((archive_dir / "reward.json").read_text()) == {"reward": 0.2}
+        assert json.loads((archive_dir / "details.json").read_text()) == {"field": 0.0}
+        assert (archive_dir / "feedback.md").read_text() == "retry needed"
+        assert (archive_dir / "artifacts" / "rewrite_integrity_report.json").exists()
+
+    def test_prepare_verifier_retry_workspace_archives_and_clears_output(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        (workspace / "output.md").write_text("first output")
+        verifier_dir = workspace / "logs" / "verifier"
+        verifier_dir.mkdir(parents=True)
+        (verifier_dir / "reward.json").write_text(json.dumps({"reward": 0.2}))
+
+        archive_dir = _prepare_verifier_retry_workspace(workspace, "attempt-01")
+
+        assert (archive_dir / "output.md").read_text() == "first output"
+        assert not (workspace / "output.md").exists()
+
+
 class TestCopyOutputFiles:
     """Validate partial output file copying for graceful exit."""
 
@@ -325,3 +439,64 @@ class TestCopyOutputFiles:
         out_path = tmp_path / "nested" / "results"
         _copy_output_files(str(workspace), out_path)
         assert out_path.is_dir()
+
+    def test_preserves_verifier_side_effect_artifacts(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        Path(workspace, "anomaly_review_record.json").write_text(json.dumps({"issue_id": "ANOM-001"}))
+        Path(workspace, "record_readback_check.json").write_text(json.dumps({"matches_record": False}))
+        Path(workspace, "rewrite_integrity_report.json").write_text(json.dumps({"material_risk_preserved": True}))
+        Path(workspace, "helper_execution_marker.json").write_text(
+            json.dumps({"helper_name": "write_integrity_artifacts.py"})
+        )
+        Path(workspace, "source_pack.json").write_text(json.dumps({"source_id": "SRC-001"}))
+        Path(workspace, "prior_record.json").write_text(json.dumps({"issue_id": "OLD-001"}))
+
+        out_path = tmp_path / "results"
+        copied = _copy_output_files(str(workspace), out_path)
+
+        artifact_dir = out_path / "logs" / "verifier" / "artifacts"
+        assert "logs/verifier/artifacts/anomaly_review_record.json" in copied
+        assert "logs/verifier/artifacts/record_readback_check.json" in copied
+        assert "logs/verifier/artifacts/rewrite_integrity_report.json" in copied
+        assert "logs/verifier/artifacts/helper_execution_marker.json" in copied
+        assert (artifact_dir / "anomaly_review_record.json").exists()
+        assert (artifact_dir / "record_readback_check.json").exists()
+        assert (artifact_dir / "rewrite_integrity_report.json").exists()
+        assert (artifact_dir / "helper_execution_marker.json").exists()
+        assert not (artifact_dir / "source_pack.json").exists()
+        assert not (artifact_dir / "prior_record.json").exists()
+
+    def test_copies_verifier_retry_attempt_archive(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        attempt_dir = workspace / "logs" / "verifier" / "attempts" / "attempt-01"
+        attempt_dir.mkdir(parents=True)
+        (attempt_dir / "output.md").write_text("first answer")
+        (attempt_dir / "feedback.md").write_text("missing file")
+        (workspace / "logs" / "verifier" / "retry.json").write_text(json.dumps({"performed": True}))
+
+        out_path = tmp_path / "results"
+        copied = _copy_output_files(str(workspace), out_path)
+
+        assert "logs/verifier/retry.json" in copied
+        assert "logs/verifier/attempts/attempt-01/output.md" in copied
+        assert "logs/verifier/attempts/attempt-01/feedback.md" in copied
+        assert (out_path / "logs" / "verifier" / "attempts" / "attempt-01" / "output.md").read_text() == "first answer"
+
+    def test_copies_reviewer_artifacts(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        reviewer_dir = workspace / "logs" / "reviewer" / "openai-main"
+        reviewer_dir.mkdir(parents=True)
+        (workspace / "logs" / "reviewer" / "request.json").write_text(json.dumps({"payload": "review-request"}))
+        (workspace / "logs" / "reviewer" / "summary.json").write_text(json.dumps({"status": "complete"}))
+        (reviewer_dir / "review.json").write_text(json.dumps({"status": "complete"}))
+
+        out_path = tmp_path / "results"
+        copied = _copy_output_files(str(workspace), out_path)
+
+        assert "logs/reviewer/request.json" in copied
+        assert "logs/reviewer/summary.json" in copied
+        assert "logs/reviewer/openai-main/review.json" in copied
+        assert (out_path / "logs" / "reviewer" / "summary.json").exists()

@@ -93,6 +93,7 @@ def test_copy_skills_creates_skill_dirs(tmp_path: Path) -> None:
     assert (skills_dir / "create-template" / "SKILL.md").exists()
     assert (skills_dir / "hardening-pass" / "SKILL.md").exists()
     assert (skills_dir / "domain-check" / "SKILL.md").exists()
+    assert (skills_dir / "meta-harness" / "SKILL.md").exists()
 
 
 def test_copy_skills_preserves_user_added_skills(tmp_path: Path) -> None:

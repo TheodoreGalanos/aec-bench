@@ -1,0 +1,22 @@
+{
+  "aboutme": [
+    "Example multi-endpoint config for world-process intake and generation runners.",
+    "Uses environment variables for secrets so configs can be checked into source safely."
+  ],
+  "models": [
+    {
+      "name": "intake-agent",
+      "model": "problem-brief-intake",
+      "provider": "auto",
+      "temperature": 0.0
+    },
+    {
+      "name": "world-agent",
+      "model": "world-generator-local",
+      "provider": "openai_compatible",
+      "base_url": "http://localhost:11434/v1",
+      "api_key_env": "LOCAL_WORLD_PROCESS_API_KEY",
+      "temperature": 0.0
+    }
+  ]
+}

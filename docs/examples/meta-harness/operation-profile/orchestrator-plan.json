@@ -1,0 +1,31 @@
+{
+  "plan_id": "plan.verifier_artifact_ablation",
+  "brief_ref": "brief.verifier_artifact_ablation",
+  "objective": "Create diagnostic variants for verifier/artifact disagreement.",
+  "steps": [
+    {
+      "id": "project_artifacts",
+      "kind": "deterministic_operation",
+      "world_ref": "aecbench.operation.example",
+      "output_ref": "artifact_projection",
+      "operation": {
+        "operation": "projection",
+        "axis": "artifact_evidence"
+      }
+    },
+    {
+      "id": "remove_artifacts",
+      "kind": "deterministic_operation",
+      "world_ref": "aecbench.operation.example",
+      "output_ref": "artifact_removed",
+      "operation": {
+        "operation": "difference",
+        "axis": "artifact_evidence"
+      }
+    }
+  ],
+  "acceptance_checks": [
+    "all deterministic steps produce operation_history",
+    "source world is not mutated"
+  ]
+}

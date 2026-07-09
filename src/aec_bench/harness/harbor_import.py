@@ -108,6 +108,11 @@ def import_harbor_trial(
         details_path=details_path,
         agent_status=agent_status,
     )
+    reviewer_summary = _read_reviewer_summary(trial_dir)
+    if reviewer_summary is not None:
+        breakdown = dict(evaluation.breakdown or {})
+        breakdown["llm_reviewer"] = reviewer_summary
+        evaluation = evaluation.model_copy(update={"breakdown": breakdown})
 
     agent_result_payload = _read_json_object(agent_result_path) if agent_result_path else {}
     # When agent artifacts aren't downloaded (Modal teardown), fall back to
@@ -411,6 +416,20 @@ def _read_json_object(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise HarborImportError(f"expected JSON object in {path}")
     return cast(dict[str, Any], payload)
+
+
+def _read_reviewer_summary(trial_dir: Path) -> dict[str, Any] | None:
+    for path in [
+        trial_dir / "reviewer" / "summary.json",
+        trial_dir / "artifacts" / "logs" / "reviewer" / "summary.json",
+        trial_dir / "logs" / "reviewer" / "summary.json",
+    ]:
+        if not path.exists():
+            continue
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            return cast(dict[str, Any], payload)
+    return None
 
 
 def _int_or_none(value: Any) -> int | None:

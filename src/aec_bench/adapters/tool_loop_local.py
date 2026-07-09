@@ -7,6 +7,7 @@ import json
 import logging
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from pydantic_ai import RunContext
@@ -25,6 +26,20 @@ from aec_bench.adapters.tool_loop import (
 from aec_bench.contracts.advisor import AdvisorConfig, AdvisorRequest
 
 logger = logging.getLogger(__name__)
+
+
+def completion_from_workspace_output(workspace: str) -> ToolLoopCompletionResponse | None:
+    """Recover a completed response when the agent wrote the requested output file."""
+    if not workspace:
+        return None
+    output_path = Path(workspace) / "output.md"
+    try:
+        output_text = output_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    if not output_text.strip():
+        return None
+    return ToolLoopCompletionResponse(output_text=output_text, done=True)
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +424,13 @@ class PydanticAiToolLoopClient:
         try:
             return self._run_agent(request)
         except Exception as exc:
+            fallback = completion_from_workspace_output(self._workspace)
+            if fallback is not None:
+                logger.warning(
+                    "PydanticAI tool loop failed after writing output.md; recovering workspace output: %s",
+                    exc,
+                )
+                return fallback
             logger.exception("PydanticAI tool loop client error: %s", exc)
             return ToolLoopCompletionResponse(
                 error_message=str(exc),

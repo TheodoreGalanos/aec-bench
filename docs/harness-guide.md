@@ -116,6 +116,8 @@ The harness collects:
 - token usage where available,
 - verifier reward,
 - verifier details where available.
+- materialized task-world profile when the LLM reviewer is enabled,
+- LLM reviewer request, findings, and summary when enabled.
 
 Collection happens before teardown and still runs on failures.
 
@@ -123,6 +125,18 @@ Verification remains separate from evaluation:
 
 - verifier: task-specific mechanical scoring,
 - evaluation: cross-task enrichment and analysis.
+- LLM reviewer: post-verifier evidence review and schema/verifier event detection.
+
+The reviewer runs after the final verifier state is known. For `run-local`, this
+means after any verifier-feedback retry has completed and before result copying
+or ledger import. For Harbor-backed runs, Python runs the reviewer after the job
+directory is produced and before importing trial records into the ledger.
+
+Before the reviewer prompt is built, Python materializes a task-world run from
+the task profile plus final verifier, artifact, and trace evidence. Explicit
+task sidecars such as `world.yaml` override the default profile. The materialized
+profile is written as `world_profile.json`; it is reviewer evidence, not a
+replacement for verifier reward or task output.
 
 ---
 

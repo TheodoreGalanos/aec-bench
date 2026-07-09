@@ -671,6 +671,7 @@ def _write_harbor_job_config(
         "#   bedrock       — AWS Bedrock (AWS_BEDROCK_ENDPOINT, AWS_BEARER_TOKEN)\n"
         "#   azure_openai  — Azure OpenAI (AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY)\n"
         "#   openai        — OpenAI API (OPENAI_API_KEY)\n"
+        "#   together      — Together AI OpenAI-compatible API (TOGETHER_API_KEY)\n"
         "\n"
         "jobs_dir: jobs\n"
         "n_attempts: 1\n"

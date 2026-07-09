@@ -26,3 +26,5 @@ def test_readme_uses_current_public_commands() -> None:
     assert "terzaghi-bearing --" not in readme
     assert "default_compute_backend" not in readme
     assert "research/" not in readme
+    assert "aec-bench meta-harness recipe" in readme
+    assert "/meta-harness" in readme

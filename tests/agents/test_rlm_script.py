@@ -78,6 +78,14 @@ def test_script_supports_azure() -> None:
     assert "AzureProvider" in script
 
 
+def test_script_supports_together() -> None:
+    script = build_rlm_script()
+    assert "TOGETHER_API_KEY" in script
+    assert "https://api.together.ai/v1" in script
+    assert "_strip_together_prefix(model_name)" in script
+    assert "OpenAIProvider(base_url=_TOGETHER_BASE_URL, api_key=_together_key)" in script
+
+
 def test_script_uses_async_iter() -> None:
     """Script should use Agent.iter() instead of run_sync() for the main loop."""
     script = build_rlm_script()

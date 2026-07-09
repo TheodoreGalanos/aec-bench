@@ -222,6 +222,7 @@ environment's native skill/prompt mechanism.
 | `/create-template` | Build a generation template from a seed file | Converting a `source_task.json` into a parameterisable template |
 | `/hardening-pass` | Quality-gate a template or task instance | Before using a template or task in real benchmarks |
 | `/domain-check` | Verify architectural invariants and dependency directions | Before committing cross-domain changes |
+| `/meta-harness` | Create or compare a harness candidate against a baseline | When a task needs world design, reviewer evidence, governance, or candidate-vs-baseline comparison |
 
 ---
 

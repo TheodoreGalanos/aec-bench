@@ -65,6 +65,45 @@ def test_execution_entrypoint_runs_direct_bundle_and_writes_result(
     assert result.raw_output_text == '{"findings": []}'
 
 
+def test_execution_entrypoint_materializes_raw_output_text(tmp_path: Path) -> None:
+    output_path = tmp_path / "output.md"
+    bundle_path = write_execution_bundle(
+        path=tmp_path / "bundle.json",
+        bundle=ExecutionBundle(
+            execution=SerializedAdapterExecution(
+                adapter_kind="direct",
+                adapter_name="direct",
+                resolved_model="replay-direct",
+                payload={
+                    "client": ReplayDirectClient(
+                        response=DirectCompletionResponse(
+                            output_text='## Answer\n\n```json\n{"reward": 1.0}\n```',
+                        )
+                    )
+                    .serialize_client()
+                    .__dict__
+                },
+            ),
+            request=AdapterRequestPayload(
+                instruction="Solve the task.",
+                system_prompt=None,
+                tools=[],
+                configuration={},
+                output_path=str(output_path),
+                output_format="markdown",
+            ),
+        ),
+    )
+
+    run_execution_bundle(
+        bundle_path=bundle_path,
+        result_path=tmp_path / "result.json",
+        registry=default_execution_driver_registry(workspace_dir=tmp_path),
+    )
+
+    assert output_path.read_text(encoding="utf-8") == '## Answer\n\n```json\n{"reward": 1.0}\n```'
+
+
 def test_execution_entrypoint_runs_tool_loop_bundle_and_writes_result(
     tmp_path: Path,
 ) -> None:

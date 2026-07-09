@@ -74,6 +74,9 @@ node_modules/
 
 # Local working directories (examples, test workspaces, swarm runs)
 examples/
+!docs/examples/
+!docs/examples/meta-harness/
+!docs/examples/meta-harness/**
 packages/
 task_decompositions/
 task_genomes/

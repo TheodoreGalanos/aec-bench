@@ -1,0 +1,25 @@
+{
+  "run_id": "run.verifier_artifact_ablation",
+  "evidence": {
+    "score": {
+      "passed": true
+    },
+    "artifacts": {
+      "report": {
+        "path": "logs/verifier/artifacts/report.json"
+      }
+    },
+    "agentic_review": {
+      "status": "complete",
+      "reviewed_modes": [
+        "verifier_result",
+        "output_artifacts",
+        "trace",
+        "source_authority",
+        "rubric_scores",
+        "contradiction_ledger"
+      ],
+      "findings": []
+    }
+  }
+}

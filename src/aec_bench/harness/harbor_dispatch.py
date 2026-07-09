@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,7 +40,10 @@ class HarborCommandExecutor(Protocol):
 
 class SubprocessHarborExecutor:
     def execute(self, *, command: list[str], cwd: Path) -> int:
-        completed = subprocess.run(command, cwd=cwd, check=False)
+        env = dict(os.environ)
+        existing_pythonpath = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = str(cwd) if not existing_pythonpath else f"{cwd}{os.pathsep}{existing_pythonpath}"
+        completed = subprocess.run(command, cwd=cwd, check=False, env=env)
         return int(completed.returncode)
 
 
@@ -153,6 +157,11 @@ _LEGACY_HARBOR_IMPORT_PATH_TABLE: dict[tuple[str, str], str] = {
 def _harbor_agent_config(agent: AgentConfig) -> dict[str, Any]:
     kwargs = dict(agent.parameters)
     kwargs["adapter"] = agent.adapter
+    if agent.client is not None:
+        kwargs["client"] = {
+            "client_kind": agent.client.kind,
+            "payload": dict(agent.client.settings),
+        }
     return {
         "name": agent.name,
         "import_path": _resolve_import_path(agent),

@@ -66,6 +66,22 @@ def test_pydantic_ai_script_uses_pydantic_ai() -> None:
     assert "UsageLimits" in script
 
 
+def test_pydantic_ai_script_supports_azure_v1_endpoint() -> None:
+    script = build_pydantic_ai_script()
+    assert "/openai/v1" in script
+    assert "AZURE_OPENAI_API_VERSION" in script
+    assert "_provider_kwargs" in script
+    assert "AzureProvider(**_provider_kwargs)" in script
+
+
+def test_pydantic_ai_script_supports_together_prefix() -> None:
+    script = build_pydantic_ai_script()
+    assert "TOGETHER_API_KEY" in script
+    assert "https://api.together.ai/v1" in script
+    assert "_strip_together_prefix(model_name)" in script
+    assert "OpenAIProvider(base_url=_TOGETHER_BASE_URL, api_key=_together_key)" in script
+
+
 def test_pydantic_ai_script_includes_trajectory_writer() -> None:
     script = build_pydantic_ai_script()
     assert "from trajectory_writer import TrajectoryWriter" in script

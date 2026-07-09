@@ -583,6 +583,7 @@ def test_harbor_job_config_has_provider_docs(tmp_path: Path) -> None:
     assert "import_path" in job_content
     assert "anthropic" in job_content
     assert "azure_openai" in job_content
+    assert "together" in job_content
 
 
 def test_manifest_instance_entries_have_archetype(tmp_path: Path) -> None:

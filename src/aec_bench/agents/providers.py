@@ -61,6 +61,13 @@ PROVIDERS: dict[str, ProviderConfig] = {
         env_keys=["OPENAI_API_KEY"],
         auth_style="bearer",
     ),
+    "together": ProviderConfig(
+        name="together",
+        family="openai",
+        url_template="https://api.together.ai/v1/chat/completions",
+        env_keys=["TOGETHER_API_KEY"],
+        auth_style="bearer",
+    ),
 }
 
 

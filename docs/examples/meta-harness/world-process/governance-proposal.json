@@ -1,0 +1,25 @@
+{
+  "status": "complete",
+  "operation": {
+    "operation": "projection",
+    "axis": "governance"
+  },
+  "proposed_action": "request_schema_extension",
+  "rationale": "Governance appears in reviewer findings but has no operation handle.",
+  "evidence_refs": [
+    "agentic_review.findings[0]"
+  ],
+  "confidence": 0.87,
+  "repair_targets": [
+    "world_schema",
+    "world_generator"
+  ],
+  "new_operation_handles": {
+    "governance": {
+      "paths": [
+        "governance_profile"
+      ]
+    }
+  },
+  "requires_human_approval": true
+}

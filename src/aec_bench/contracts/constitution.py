@@ -108,7 +108,7 @@ class ConstitutionManifest:
 try:
     import tomllib
 except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redef]
+    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
 
 def parse_constitution(toml_str: str) -> ConstitutionManifest:

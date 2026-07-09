@@ -82,6 +82,31 @@ def test_scaffold_task_toml_has_generation_metadata(tmp_path: Path) -> None:
     assert "site_context" in gen
 
 
+def test_scaffold_task_toml_preserves_nonstandard_generation_difficulty(tmp_path: Path) -> None:
+    """Custom generation presets must not make runnable task metadata invalid."""
+    config, tdir = load_template(TEMPLATE_DIR)
+    engine = load_engine_module(tdir)
+    inst = sample_instance(config, engine.compute, "easy", seed=42, instance_index=0)
+    inst = inst.model_copy(
+        update={
+            "difficulty": "baseline_audited",
+            "metadata": inst.metadata.model_copy(update={"difficulty": "baseline_audited"}),
+        }
+    )
+    engine_source = (tdir / "engine.py").read_text()
+
+    from aec_bench.generation.scaffolder import scaffold_task_instance
+
+    instance_dir = scaffold_task_instance(config, engine_source, tdir, inst, tmp_path)
+
+    with open(instance_dir / "task.toml", "rb") as fh:
+        data = tomllib.load(fh)
+
+    assert data["metadata"]["difficulty"] == "medium"
+    assert data["metadata"]["generation_difficulty"] == "baseline_audited"
+    assert data["generation"]["difficulty"] == "baseline_audited"
+
+
 def test_scaffold_task_toml_has_required_sections(tmp_path: Path) -> None:
     """task.toml must contain version, [metadata], [agent], [verifier], [environment] sections."""
     instance_dir = _generate_test_instance(tmp_path)

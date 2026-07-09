@@ -110,7 +110,20 @@ async def test_dashboard_advertises_agent_skills_without_vendor_lock_in() -> Non
         skills = app.screen.query_one("#agent-skills", Static)
         text = str(skills.render())
         assert "Agent Skills" in text
+        assert "/meta-harness" in text
+        assert "harness candidate" in text
         assert "Claude" not in text
+
+
+@pytest.mark.anyio
+async def test_dashboard_advertises_meta_harness_recipe_command() -> None:
+    app = _make_app()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        commands = app.screen.query_one("#cli-commands", Static)
+        text = str(commands.render())
+        assert "aec-bench meta-harness recipe" in text
+        assert "harness comparison workflow" in text
 
 
 # ---------------------------------------------------------------------------

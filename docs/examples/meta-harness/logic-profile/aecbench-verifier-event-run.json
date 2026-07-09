@@ -1,0 +1,82 @@
+{
+  "aboutme": [
+    "Run evidence for the AEC-Bench-shaped verifier event fixture.",
+    "Captures a failing benchmark score contradicted by preserved artifact evidence."
+  ],
+  "run_id": "example-run.score-artifact-contradiction",
+  "evidence": {
+    "score": {
+      "passed": false,
+      "status": "failed",
+      "source": "benchmark_verifier"
+    },
+    "artifacts": {
+      "rewrite_integrity_report": {
+        "exists": true,
+        "path": "logs/verifier/artifacts/rewrite_integrity_report.json",
+        "summary": "The report shows the requested rewrite side effect was created and preserved for verifier inspection."
+      }
+    },
+    "validator": {
+      "rewrite_integrity_report": {
+        "valid": true,
+        "schema": "rewrite_integrity_report.v1"
+      }
+    },
+    "contradictions": {
+      "score_artifact_contradiction": {
+        "classification": "verifier_language_gap",
+        "sources": [
+          "score.passed",
+          "artifacts.rewrite_integrity_report",
+          "validator.rewrite_integrity_report"
+        ],
+        "affected_claims": [
+          "task_outcome",
+          "verifier_correctness",
+          "world_success_semantics"
+        ],
+        "allowed_next_actions": [
+          "repair_verifier",
+          "extend_world_schema",
+          "replay_world",
+          "run_nearby_regression_worlds"
+        ]
+      }
+    },
+    "agentic_review": {
+      "status": "complete",
+      "reviewed_modes": [
+        "verifier_result",
+        "output_artifacts",
+        "trace",
+        "source_authority",
+        "contradiction_ledger"
+      ],
+      "findings": [
+        {
+          "id": "agentic_review_verifier_language_gap",
+          "category": "verifier_language_gap",
+          "evidence_refs": [
+            "score.passed",
+            "artifacts.rewrite_integrity_report",
+            "validator.rewrite_integrity_report",
+            "contradictions.score_artifact_contradiction"
+          ],
+          "affected_claims": [
+            "task_outcome",
+            "verifier_correctness",
+            "world_success_semantics"
+          ],
+          "confidence": 0.95,
+          "proposed_next_action": "repair_verifier_and_replay_world",
+          "repair_targets": [
+            "verifier",
+            "world_schema",
+            "evidence_profile"
+          ]
+        }
+      ]
+    }
+  }
+}
