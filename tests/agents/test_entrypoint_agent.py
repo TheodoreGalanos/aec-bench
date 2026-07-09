@@ -322,3 +322,37 @@ def test_bundle_contains_instruction_and_config(tmp_path: Path) -> None:
     assert bundle_data["execution"]["resolved_model"] == "claude-sonnet-4-20250514"
     assert bundle_data["request"]["instruction"] == "Calculate voltage drop"
     assert bundle_data["request"]["configuration"]["custom_param"] == "hello"
+
+
+def test_bundle_includes_serialized_client_payload(tmp_path: Path) -> None:
+    """EntrypointAgent should forward serialized client settings to execution_entrypoint."""
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="replay-direct",
+        adapter="direct",
+        client={"client_kind": "replay", "payload": {"output_text": "done"}},
+    )
+    env = _make_environment()
+    context = MagicMock()
+    context.metadata = {}
+    env.exec.return_value = _make_exec_result(return_code=0)
+
+    captured_bundles: list[dict[str, Any]] = []
+
+    async def capture_upload(local_path: str, remote_path: str) -> None:
+        if remote_path == _BUNDLE_REMOTE_PATH:
+            captured_bundles.append(json.loads(Path(local_path).read_text()))
+
+    env.upload_file = AsyncMock(side_effect=capture_upload)
+
+    async def fake_download(source: str, target: Any) -> None:
+        Path(target).parent.mkdir(parents=True, exist_ok=True)
+        Path(target).write_text(json.dumps({"adapter_name": "entrypoint"}))
+
+    env.download_file = AsyncMock(side_effect=fake_download)
+
+    asyncio.run(agent.run("Use replay output", env, context))
+
+    assert captured_bundles[0]["execution"]["payload"] == {
+        "client": {"client_kind": "replay", "payload": {"output_text": "done"}}
+    }

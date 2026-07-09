@@ -58,10 +58,7 @@ class EntrypointAgent(BaseAgent):
         # 1. Verify Python3 available
         result = await environment.exec("python3 --version")
         if result.return_code != 0:
-            raise RuntimeError(
-                f"Python3 not available in sandbox.\n"
-                f"stdout: {result.stdout}\nstderr: {result.stderr}"
-            )
+            raise RuntimeError(f"Python3 not available in sandbox.\nstdout: {result.stdout}\nstderr: {result.stderr}")
 
         # 2. Upload library source to /opt/aec_bench/aec_bench/
         await environment.upload_dir(str(_LIBRARY_SOURCE), "/opt/aec_bench/aec_bench")
@@ -83,6 +80,10 @@ class EntrypointAgent(BaseAgent):
     ) -> None:
         adapter_kind = self._params.get("adapter", "rlm")
         timeout_sec = int(self._params.get("timeout_sec", 600))
+        execution_payload: dict[str, Any] = {}
+        client_payload = self._params.get("client")
+        if isinstance(client_payload, dict):
+            execution_payload["client"] = client_payload
 
         # Build execution bundle
         bundle: dict[str, Any] = {
@@ -90,7 +91,7 @@ class EntrypointAgent(BaseAgent):
                 "adapter_kind": adapter_kind,
                 "adapter_name": self.name(),
                 "resolved_model": self.model_name or "",
-                "payload": {},
+                "payload": execution_payload,
             },
             "request": {
                 "instruction": instruction,

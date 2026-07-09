@@ -262,6 +262,7 @@ def run_execution_bundle(
     bundle = read_execution_bundle(bundle_path)
     driver = registry.resolve(bundle.execution.adapter_kind)
     result = driver.execute(bundle)
+    _materialize_raw_output(bundle=bundle, result=result)
     return write_execution_result(path=result_path, result=result)
 
 
@@ -283,6 +284,21 @@ def default_execution_driver_registry(*, workspace_dir: Path) -> ExecutionDriver
             "lambda_rlm": lambda_rlm_driver,
         }
     )
+
+
+def _materialize_raw_output(*, bundle: ExecutionBundle, result: AdapterResult) -> None:
+    """Write raw adapter text to the requested output path when the adapter did not."""
+    if not result.raw_output_text:
+        return
+
+    output_path = Path(bundle.request.output_path)
+    if output_path.exists() and output_path.stat().st_size > 0:
+        return
+    if output_path.is_absolute() and output_path.parts[:2] == ("/", "workspace") and not output_path.parent.exists():
+        return
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(result.raw_output_text, encoding="utf-8")
 
 
 def main() -> int:
