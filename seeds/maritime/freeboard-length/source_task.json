@@ -1,0 +1,75 @@
+{
+  "status": "proposed",
+  "seed_origin": "expert",
+  "created_by": "const.koutsakis",
+  "source": {
+    "discipline": "maritime",
+    "task_id": "freeboard-length",
+    "task_name": "Freeboard length L_LL",
+    "description": "Calculate the IACS Common Structural Rules (CSR-H) Freeboard length L_LL: 96% of the total length on a waterline at 85% of the least moulded depth measured from the top of the keel, or the length from the fore side of the stem to the axis of the rudder stock on that waterline, whichever is greater. For ships without a rudder stock (e.g. those fitted with azimuth thrusters), L_LL is taken as 96% of the waterline at 85% of the least moulded depth.",
+    "inputs": [
+      {"name": "total_length_on_85pct_depth_waterline_m", "type": "float", "unit": "m"},
+      {"name": "stem_to_rudder_stock_axis_distance_m", "type": "float", "unit": "m"},
+      {"name": "has_rudder_stock", "type": "categorical", "values": ["true", "false"]}
+    ],
+    "outputs": [
+      {"name": "freeboard_length_LLL_m", "type": "float", "unit": "m"}
+    ],
+    "standards": ["IACS Common Structural Rules (CSR-H), 01 JUL 2025, Pt 1 Ch 1 Sec 4, §3.1.2"],
+    "reference_details": [
+      "IACS CSR-H, 01 JUL 2025, Pt 1 Ch 1 Sec 4, §3.1.2, p.47: \"The freeboard length L_LL, in m, is to be taken as 96% of the total length on a waterline at 85% of the least moulded depth measured from the top of the keel, or as the length from the fore side of the stem to the axis of the rudder stock on that waterline, if that be greater. For ships without a rudder stock, the length L_LL is to be taken as 96% of the waterline at 85% of the least moulded depth.\""
+    ],
+    "complexity": "low",
+    "worked_examples": [
+      {
+        "description": "Panamax bulk carrier where the measured stem-to-rudder-stock-axis distance exceeds 96% of the 85%-depth waterline length, so it governs (the greater-of picks the measured distance).",
+        "inputs": {
+          "total_length_on_85pct_depth_waterline_m": 225.0,
+          "stem_to_rudder_stock_axis_distance_m": 220.0,
+          "has_rudder_stock": "true"
+        },
+        "outputs": {
+          "freeboard_length_LLL_m": 220.0
+        }
+      },
+      {
+        "description": "General cargo ship where the measured stem-to-rudder-stock-axis distance is below 96% of the 85%-depth waterline length, so 96% of the waterline length governs instead (the greater-of flips relative to the previous example).",
+        "inputs": {
+          "total_length_on_85pct_depth_waterline_m": 180.0,
+          "stem_to_rudder_stock_axis_distance_m": 170.0,
+          "has_rudder_stock": "true"
+        },
+        "outputs": {
+          "freeboard_length_LLL_m": 172.8
+        }
+      },
+      {
+        "description": "Offshore support vessel fitted with azimuth thrusters and no rudder stock; L_LL is taken directly as 96% of the 85%-depth waterline length, and the stem-to-rudder-stock-axis distance input does not apply.",
+        "inputs": {
+          "total_length_on_85pct_depth_waterline_m": 200.0,
+          "has_rudder_stock": "false"
+        },
+        "outputs": {
+          "freeboard_length_LLL_m": 192.0
+        }
+      }
+    ],
+    "edge_cases": [
+      "Measured stem-to-rudder-stock-axis distance greater than 96% of the 85%-depth waterline length: that measured distance governs L_LL (see worked example 1).",
+      "Measured stem-to-rudder-stock-axis distance less than 96% of the 85%-depth waterline length: 96% of the waterline length governs L_LL instead (see worked example 2).",
+      "No rudder stock (e.g. azimuth-thruster vessels): L_LL is taken directly as 96% of the 85%-depth waterline length; the stem-to-rudder-stock-axis distance input does not apply (see worked example 3).",
+      "Concave stem contours: the freeboard length calculation has a special-case treatment in the rules for ships with unusual (concave) stem contours; this is out of scope for this closed-form task, which assumes a conventional stem contour."
+    ]
+  },
+  "feasibility": {
+    "parameterisable": true,
+    "criteria": {
+      "closed_form": true,
+      "deterministic": true,
+      "parameterisable_inputs": true,
+      "numeric_outputs": true,
+      "single_compute": true
+    },
+    "notes": "Single greater-of formula (max of 96% of a given waterline length and a measured stem-to-rudder-stock-axis distance), one categorical branch for the no-rudder-stock case. No iteration or table lookups required."
+  }
+}

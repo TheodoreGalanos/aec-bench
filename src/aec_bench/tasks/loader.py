@@ -24,7 +24,17 @@ class LoadError(Exception):
     pass
 
 
-KNOWN_DOMAINS = {"electrical", "mechanical", "structural", "architectural", "plumbing", "civil"}
+# "architectural" and "plumbing" are unverified/tracked-debt — no known task instances use them.
+KNOWN_DOMAINS = {
+    "civil",
+    "electrical",
+    "ground",
+    "maritime",
+    "mechanical",
+    "structural",
+    "architectural",
+    "plumbing",
+}
 WORKSPACE_OUTPUT_PATH_RE: Final[str] = r"/workspace/[A-Za-z0-9._/-]+"
 
 

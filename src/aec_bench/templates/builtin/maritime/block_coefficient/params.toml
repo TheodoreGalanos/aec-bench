@@ -1,0 +1,91 @@
+[meta]
+name = "block-coefficient"
+description = "IACS CSR-H Block coefficient C_B at the scantling draught T_SC"
+long_description = "Calculates the block coefficient C_B used throughout the IACS Harmonised Common Structural Rules for Bulk Carriers and Oil Tankers (CSR-H): C_B = Delta / (1.025 x L x B x T_SC), where Delta is the moulded displacement of the ship at draught T_SC (tonnes), L is the Rule length (m), B is the moulded breadth (m), and T_SC is the scantling draught (m). C_B is a fundamental principal-particulars quantity used throughout CSR-H scantling assessments."
+discipline = "maritime"
+category = "principal-particulars"
+standards = ["IACS CSR-H (Common Structural Rules) 01 JUL 2025, Pt 1 Ch 1 Sec 4, §3.1.8"]
+tags = ["maritime", "csr-h", "iacs", "block-coefficient", "principal-particulars", "deterministic"]
+tool_mode = "with-tool"
+
+[params.moulded_displacement_t]
+type = "float"
+unit = "t"
+description = "Moulded displacement of the ship at the scantling draught T_SC (Delta)"
+min = 15000.0
+max = 400000.0
+derivable_from = "archetype"
+
+[params.rule_length_L_m]
+type = "float"
+unit = "m"
+description = "Rule length L"
+min = 130.0
+max = 340.0
+
+[params.moulded_breadth_B_m]
+type = "float"
+unit = "m"
+description = "Moulded breadth B"
+min = 20.0
+max = 65.0
+
+[params.scantling_draught_TSC_m]
+type = "float"
+unit = "m"
+description = "Scantling draught T_SC"
+min = 8.0
+max = 24.0
+
+[outputs.block_coefficient_CB]
+description = "Block coefficient C_B (dimensionless)"
+tolerance = 0.03
+
+[archetypes.capesize_bulk_carrier]
+description = "Capesize bulk carrier with a moulded displacement of approximately 190,000 tonnes at the scantling draught"
+moulded_displacement_t = {min = 186200.0, max = 193800.0}
+rule_length_L_m = {min = 274.0, max = 286.0}
+moulded_breadth_B_m = {min = 44.0, max = 46.0}
+scantling_draught_TSC_m = {min = 17.6, max = 18.4}
+site_contexts = ["capesize-iron-ore-run", "capesize-coal-run"]
+
+[archetypes.vlcc_tanker]
+description = "VLCC (Very Large Crude Carrier) with a moulded displacement of approximately 366,000 tonnes at the scantling draught"
+moulded_displacement_t = {min = 358000.0, max = 374000.0}
+rule_length_L_m = {min = 323.0, max = 337.0}
+moulded_breadth_B_m = {min = 58.8, max = 61.2}
+scantling_draught_TSC_m = {min = 21.5, max = 22.5}
+site_contexts = ["arabian-gulf-crude-export", "west-africa-crude-export"]
+
+[archetypes.container_ship]
+description = "Large container ship with a moulded displacement of approximately 125,000 tonnes at the scantling draught"
+moulded_displacement_t = {min = 118000.0, max = 132000.0}
+rule_length_L_m = {min = 295.0, max = 325.0}
+moulded_breadth_B_m = {min = 43.0, max = 47.0}
+scantling_draught_TSC_m = {min = 12.8, max = 14.2}
+site_contexts = ["asia-europe-trade-lane", "transpacific-trade-lane"]
+
+[archetypes.general_cargo]
+description = "General cargo ship with a moulded displacement of approximately 23,500 tonnes at the scantling draught"
+moulded_displacement_t = {min = 22800.0, max = 24200.0}
+rule_length_L_m = {min = 145.0, max = 155.0}
+moulded_breadth_B_m = {min = 22.3, max = 23.7}
+scantling_draught_TSC_m = {min = 8.7, max = 9.3}
+site_contexts = ["short-sea-general-cargo", "coastal-breakbulk-trade"]
+
+[difficulty.easy]
+description = "All parameters given for a large, conventional bulker or tanker"
+visibility = "all_given"
+archetypes = ["capesize_bulk_carrier", "vlcc_tanker"]
+
+[difficulty.medium]
+description = "All parameters given across the full range of ship types"
+visibility = "all_given"
+archetypes = ["capesize_bulk_carrier", "vlcc_tanker", "container_ship", "general_cargo"]
+
+[difficulty.hard]
+description = "Moulded displacement hidden; agent must infer it from the vessel description"
+visibility = "partial"
+hidden_params = ["moulded_displacement_t"]
+replacement_text = "The vessel is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["capesize_bulk_carrier", "vlcc_tanker", "container_ship", "general_cargo"]

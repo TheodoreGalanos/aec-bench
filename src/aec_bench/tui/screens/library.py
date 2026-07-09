@@ -459,6 +459,7 @@ _DISCIPLINE_CYCLE: list[str] = [
     "civil",
     "electrical",
     "ground",
+    "maritime",
     "mechanical",
     "structural",
 ]

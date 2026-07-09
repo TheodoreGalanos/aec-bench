@@ -26,7 +26,7 @@ imported from legacy inventories). Both are valid.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `discipline` | `enum` | One of: `civil`, `electrical`, `ground`, `mechanical`, `structural`. |
+| `discipline` | `enum` | One of: `civil`, `electrical`, `ground`, `maritime`, `mechanical`, `structural`. |
 | `task_id` | `string` | Kebab-case unique identifier (e.g. `"cable-sizing-long-runs"`). |
 | `task_name` | `string` | Human-readable title (e.g. `"Cable Sizing for Long Runs"`). |
 | `description` | `string` | One or two sentences explaining what the task calculates or evaluates. |

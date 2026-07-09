@@ -1,0 +1,73 @@
+[meta]
+name = "freeboard-length"
+description = "IACS CSR-H Freeboard length L_LL, the greater of 96% of the waterline length or the stem-to-rudder-stock distance"
+long_description = "Calculates the Freeboard length L_LL used throughout the IACS Harmonised Common Structural Rules for Bulk Carriers and Oil Tankers (CSR-H). L_LL is taken as 96% of the total length on a waterline at 85% of the least moulded depth measured from the top of the keel, or as the length from the fore side of the stem to the axis of the rudder stock on that waterline, whichever is greater. Ships without a rudder stock (e.g. fitted with azimuth thrusters) take L_LL equal to 96% of the waterline length directly. This is a principal-particulars quantity used for freeboard and stability assessment under CSR-H."
+discipline = "maritime"
+category = "principal-particulars"
+standards = ["IACS CSR-H (Common Structural Rules) 01 JUL 2025, Pt 1 Ch 1 Sec 4, §3.1.2"]
+tags = ["maritime", "csr-h", "iacs", "freeboard-length", "principal-particulars", "deterministic"]
+tool_mode = "with-tool"
+
+[params.total_length_on_85pct_depth_waterline_m]
+type = "float"
+unit = "m"
+description = "Total length on a waterline at 85% of the least moulded depth, measured from the top of the keel"
+min = 90.0
+max = 450.0
+
+[params.has_rudder_stock]
+type = "enum"
+description = "Whether the ship has a rudder stock (false for ships fitted with azimuth thrusters and similar)"
+values = ["true", "false"]
+
+[params.stem_to_rudder_stock_axis_distance_m]
+type = "float"
+unit = "m"
+description = "Length from the fore side of the stem to the axis of the rudder stock, on the 85%-depth waterline"
+min = 85.0
+max = 440.0
+optional = true
+
+[outputs.freeboard_length_LLL_m]
+description = "Freeboard length L_LL (m)"
+tolerance = 0.005
+
+[archetypes.conventional_rudder_ship]
+description = "Conventional single-screw ship with a rudder stock and moderate stern overhang"
+total_length_on_85pct_depth_waterline_m = {min = 220.0, max = 300.0}
+stem_to_rudder_stock_axis_distance_m = {min = 140.0, max = 210.0}
+site_contexts = ["bulk-carrier-panamax", "product-tanker-mr", "general-cargo-handysize"]
+
+[archetypes.long_stern_rudder_ship]
+description = "Rudder-stock ship with a long counter/cruiser stern, where the rudder stock axis sits well aft, beyond 96% of the waterline length"
+total_length_on_85pct_depth_waterline_m = {min = 200.0, max = 205.0}
+stem_to_rudder_stock_axis_distance_m = {min = 197.0, max = 199.5}
+site_contexts = ["chemical-tanker-cruiser-stern", "general-cargo-long-counter-stern", "livestock-carrier-cruiser-stern"]
+
+[archetypes.azimuth_thruster_ship]
+description = "Ship fitted with azimuth thrusters and no rudder stock"
+total_length_on_85pct_depth_waterline_m = {min = 100.0, max = 250.0}
+site_contexts = ["shuttle-tanker-dp", "offshore-support-vessel", "harbour-tug-azimuth"]
+
+[difficulty.easy]
+description = "Rudder stock ship where the measured stem-to-rudder-stock-axis distance governs (exceeds 96% of the waterline length)"
+visibility = "all_given"
+archetypes = ["long_stern_rudder_ship"]
+has_rudder_stock = ["true"]
+governing_term = ["stem_to_rudder_stock_distance"]
+
+[difficulty.medium]
+description = "Rudder stock ship where 96% of the waterline length governs (the measured distance is smaller, so the greater-of flips)"
+visibility = "all_given"
+archetypes = ["conventional_rudder_ship"]
+has_rudder_stock = ["true"]
+governing_term = ["waterline_fraction"]
+
+[difficulty.hard]
+description = "has_rudder_stock hidden; agent must infer the azimuth-thruster case from the vessel description"
+visibility = "partial"
+hidden_params = ["has_rudder_stock", "stem_to_rudder_stock_axis_distance_m"]
+replacement_text = "The vessel is a {{ archetype.description }} ({{ archetype.site_context }})"
+archetypes = ["azimuth_thruster_ship"]
+has_rudder_stock = ["false"]
+governing_term = ["no_rudder_stock"]

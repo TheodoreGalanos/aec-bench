@@ -108,7 +108,7 @@
       "properties": {
         "discipline": {
           "type": "string",
-          "enum": ["civil", "electrical", "ground", "mechanical", "structural"]
+          "enum": ["civil", "electrical", "ground", "maritime", "mechanical", "structural"]
         },
         "task_id": { "type": "string" },
         "task_name": { "type": "string" },

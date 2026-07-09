@@ -29,7 +29,9 @@ class SeedSource(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    discipline: Literal["civil", "electrical", "ground", "mechanical", "structural"]
+    # NOTE: this value set is duplicated across seed_task.py, library_catalogue.py, and
+    # seeds/seed_schema.json. Follow-up: unify into one canonical Discipline source.
+    discipline: Literal["civil", "electrical", "ground", "maritime", "mechanical", "structural"]
     task_id: NonEmptyStr
     task_name: NonEmptyStr
     description: NonEmptyStr
