@@ -1,0 +1,185 @@
+[meta]
+name = "coastal-erosion-longshore-temporary-works-package"
+description = "SSC-04 coastal erosion, longshore transport, and temporary works metrics"
+long_description = "Calculates source-bound coastal erosion and temporary works metrics from a deterministic SSC-04 task-owned source pack. The template combines longshore transport, temporary protection volume, sediment basin sizing, permitted discharge, monitoring coverage, alignment tolerance, and an overall synthetic pass score."
+discipline = "civil"
+category = "coastal-erosion-temporary-works"
+standards = ["longshore transport workflow", "temporary coastal works review", "sediment control review", "shoreline monitoring review"]
+tags = ["civil", "coastal", "erosion", "longshore", "temporary-works", "sediment-control", "deterministic"]
+tool_mode = "with-tool"
+
+[params.transport_coefficient]
+type = "float"
+description = "WAVE-04-CLIMATE-05 transport coefficient"
+min = 0.38
+max = 0.38
+
+[params.wave_energy_factor]
+type = "float"
+description = "WAVE-04-CLIMATE-05 wave energy factor"
+min = 850.0
+max = 850.0
+
+[params.breaking_wave_angle_deg]
+type = "float"
+unit = "deg"
+description = "BEACH-04-PROFILE-05 breaking wave angle"
+min = 18.0
+max = 18.0
+
+[params.exposure_days]
+type = "float"
+unit = "days"
+description = "TEMP-04-WORKS-05 exposure duration"
+min = 6.0
+max = 6.0
+
+[params.capture_factor]
+type = "float"
+description = "TEMP-04-WORKS-05 temporary protection capture factor"
+min = 0.55
+max = 0.55
+
+[params.selected_protection_volume_m3]
+type = "float"
+unit = "m3"
+description = "TEMP-04-WORKS-05 selected protection volume"
+min = 720.0
+max = 720.0
+
+[params.disturbed_area_ha]
+type = "float"
+unit = "ha"
+description = "SEDIMENT-04-GRADING-05 disturbed area"
+min = 1.8
+max = 1.8
+
+[params.design_rainfall_mm]
+type = "float"
+unit = "mm"
+description = "MONITOR-04-PERMIT-05 design rainfall"
+min = 55.0
+max = 55.0
+
+[params.runoff_coefficient]
+type = "float"
+description = "SEDIMENT-04-GRADING-05 runoff coefficient"
+min = 0.65
+max = 0.65
+
+[params.selected_sediment_basin_volume_m3]
+type = "float"
+unit = "m3"
+description = "TEMP-04-WORKS-05 selected sediment basin volume"
+min = 700.0
+max = 700.0
+
+[params.permitted_discharge_m3_s]
+type = "float"
+unit = "m3/s"
+description = "MONITOR-04-PERMIT-05 permitted discharge"
+min = 0.18
+max = 0.18
+
+[params.pumped_discharge_m3_s]
+type = "float"
+unit = "m3/s"
+description = "TEMP-04-WORKS-05 pumped discharge"
+min = 0.14
+max = 0.14
+
+[params.monitoring_stations_installed]
+type = "float"
+description = "MONITOR-04-PERMIT-05 installed monitoring stations"
+min = 4.0
+max = 4.0
+
+[params.required_monitoring_stations]
+type = "float"
+description = "MONITOR-04-PERMIT-05 required monitoring stations"
+min = 4.0
+max = 4.0
+
+[params.allowable_alignment_offset_m]
+type = "float"
+unit = "m"
+description = "TEMP-04-WORKS-05 allowable temporary works offset"
+min = 0.25
+max = 0.25
+
+[params.measured_alignment_offset_m]
+type = "float"
+unit = "m"
+description = "BEACH-04-PROFILE-05 measured temporary works offset"
+min = 0.18
+max = 0.18
+
+[outputs.longshore_transport_m3_day]
+description = "Synthetic longshore transport rate"
+tolerance = 0.03
+
+[outputs.temporary_protection_volume_m3]
+description = "Temporary protection volume demand"
+tolerance = 0.03
+
+[outputs.protection_volume_margin_m3]
+description = "Selected protection volume minus temporary protection demand"
+tolerance = 0.03
+
+[outputs.sediment_basin_required_m3]
+description = "Sediment basin required volume"
+tolerance = 0.03
+
+[outputs.sediment_basin_margin_m3]
+description = "Selected sediment basin volume minus required basin volume"
+tolerance = 0.03
+
+[outputs.discharge_capacity_margin_m3_s]
+description = "Permitted discharge minus pumped discharge"
+tolerance = 0.03
+
+[outputs.monitoring_coverage_fraction]
+description = "Installed monitoring stations divided by required monitoring stations"
+tolerance = 0.003
+
+[outputs.construction_tolerance_margin_m]
+description = "Allowable alignment offset minus measured offset"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when temporary works checks pass"
+tolerance = 0.001
+
+[archetypes.ssc04_coastal_erosion_case]
+description = "Coastal erosion, longshore transport, and temporary works case"
+transport_coefficient = {min = 0.38, max = 0.38}
+wave_energy_factor = {min = 850.0, max = 850.0}
+breaking_wave_angle_deg = {min = 18.0, max = 18.0}
+exposure_days = {min = 6.0, max = 6.0}
+capture_factor = {min = 0.55, max = 0.55}
+selected_protection_volume_m3 = {min = 720.0, max = 720.0}
+disturbed_area_ha = {min = 1.8, max = 1.8}
+design_rainfall_mm = {min = 55.0, max = 55.0}
+runoff_coefficient = {min = 0.65, max = 0.65}
+selected_sediment_basin_volume_m3 = {min = 700.0, max = 700.0}
+permitted_discharge_m3_s = {min = 0.18, max = 0.18}
+pumped_discharge_m3_s = {min = 0.14, max = 0.14}
+monitoring_stations_installed = {min = 4.0, max = 4.0}
+required_monitoring_stations = {min = 4.0, max = 4.0}
+allowable_alignment_offset_m = {min = 0.25, max = 0.25}
+measured_alignment_offset_m = {min = 0.18, max = 0.18}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-04 coastal erosion package"
+visibility = "all_given"
+archetypes = ["ssc04_coastal_erosion_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-04 coastal erosion package"
+visibility = "all_given"
+archetypes = ["ssc04_coastal_erosion_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-04 coastal erosion package"
+visibility = "all_given"
+archetypes = ["ssc04_coastal_erosion_case"]

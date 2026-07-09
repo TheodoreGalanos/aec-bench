@@ -1,0 +1,204 @@
+# ABOUTME: Defines the SSC-11 piping repair and negative-case portfolio template.
+# ABOUTME: Pins one synthetic baseline, variant, support, and negative-case source package.
+
+[meta]
+name = "piping-network-repair-negative-case-package"
+description = "SSC-11 piping repair variant, thrust, support-shift, and negative-case metrics"
+long_description = "Calculates source-bound piping network repair metrics from a deterministic SSC-11 task-owned source pack. The template combines baseline and variant hydraulic values, velocity and headloss deltas, bend thrust, support shift margin, negative-case capture, unresolved repair count, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "piping-review"
+standards = ["Piping network hydraulic review", "Repair option comparison workflows", "Pipe thrust support checks", "Negative-case verification portfolios"]
+tags = ["mechanical", "piping", "repair", "negative-case", "hydraulics", "support", "deterministic"]
+tool_mode = "with-tool"
+
+[params.baseline_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "BASE-SSC11-008 baseline flow"
+min = 54.977871437821385
+max = 54.977871437821385
+
+[params.variant_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "VAR-SSC11-008 repair variant flow"
+min = 67.98602851909162
+max = 67.98602851909162
+
+[params.pipe_internal_diameter_mm]
+type = "float"
+unit = "mm"
+description = "BASE-SSC11-008 pipe internal diameter"
+min = 250.0
+max = 250.0
+
+[params.pipe_length_m]
+type = "float"
+unit = "m"
+description = "BASE-SSC11-008 checked pipe length"
+min = 90.0
+max = 90.0
+
+[params.darcy_friction_factor]
+type = "float"
+description = "BASE-SSC11-008 Darcy friction factor"
+min = 0.02
+max = 0.02
+
+[params.baseline_valve_loss_coefficient]
+type = "float"
+description = "BASE-SSC11-008 baseline valve loss coefficient"
+min = 3.607892219387754
+max = 3.607892219387754
+
+[params.variant_valve_loss_coefficient]
+type = "float"
+description = "VAR-SSC11-008 variant valve loss coefficient"
+min = 4.807913565926833
+max = 4.807913565926833
+
+[params.measured_support_shift_m]
+type = "float"
+unit = "m"
+description = "SUP-SSC11-008 measured support shift after repair"
+min = 0.05
+max = 0.05
+
+[params.allowed_support_shift_m]
+type = "float"
+unit = "m"
+description = "SUP-SSC11-008 allowed support shift"
+min = 0.12
+max = 0.12
+
+[params.bend_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "VAR-SSC11-008 bend pressure"
+min = 779.9838540354903
+max = 779.9838540354903
+
+[params.bend_angle_deg]
+type = "float"
+unit = "degrees"
+description = "VAR-SSC11-008 bend angle"
+min = 30.0
+max = 30.0
+
+[params.thrust_allowable_kn]
+type = "float"
+unit = "kN"
+description = "SUP-SSC11-008 thrust allowable"
+min = 120.0
+max = 120.0
+
+[params.expected_negative_cases]
+type = "float"
+unit = "count"
+description = "VERIFY-SSC11-008 expected negative cases"
+min = 4.0
+max = 4.0
+
+[params.localized_negative_cases]
+type = "float"
+unit = "count"
+description = "VERIFY-SSC11-008 localized negative cases"
+min = 4.0
+max = 4.0
+
+[params.unresolved_repair_count]
+type = "float"
+unit = "count"
+description = "MEMO-SSC11-008 unresolved repairs"
+min = 0.0
+max = 0.0
+
+[params.maximum_variant_velocity_m_s]
+type = "float"
+unit = "m/s"
+description = "MEMO-SSC11-008 maximum allowed variant velocity"
+min = 1.5
+max = 1.5
+
+[outputs.baseline_velocity_m_s]
+description = "Baseline pipe velocity"
+tolerance = 0.03
+
+[outputs.variant_velocity_m_s]
+description = "Repair variant pipe velocity"
+tolerance = 0.03
+
+[outputs.velocity_delta_m_s]
+description = "Variant velocity minus baseline velocity"
+tolerance = 0.03
+
+[outputs.baseline_headloss_m]
+description = "Baseline major and valve headloss"
+tolerance = 0.03
+
+[outputs.variant_headloss_m]
+description = "Variant major and valve headloss"
+tolerance = 0.03
+
+[outputs.headloss_delta_m]
+description = "Variant headloss minus baseline headloss"
+tolerance = 0.03
+
+[outputs.bend_thrust_kn]
+description = "Variant bend thrust"
+tolerance = 0.03
+
+[outputs.thrust_utilization]
+description = "Bend thrust divided by allowable thrust"
+tolerance = 0.03
+
+[outputs.support_shift_margin_m]
+description = "Allowed support shift minus measured support shift"
+tolerance = 0.03
+
+[outputs.negative_case_capture_percent]
+description = "Localized negative cases divided by expected cases"
+tolerance = 0.03
+
+[outputs.unresolved_repair_count]
+description = "Unresolved repair count"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for the task-owned repair, support, and negative-case checks"
+tolerance = 0.03
+
+[archetypes.ssc11_piping_repair_case]
+description = "Piping network repair and negative-case portfolio case"
+baseline_flow_l_s = {min = 54.977871437821385, max = 54.977871437821385}
+variant_flow_l_s = {min = 67.98602851909162, max = 67.98602851909162}
+pipe_internal_diameter_mm = {min = 250.0, max = 250.0}
+pipe_length_m = {min = 90.0, max = 90.0}
+darcy_friction_factor = {min = 0.02, max = 0.02}
+baseline_valve_loss_coefficient = {min = 3.607892219387754, max = 3.607892219387754}
+variant_valve_loss_coefficient = {min = 4.807913565926833, max = 4.807913565926833}
+measured_support_shift_m = {min = 0.05, max = 0.05}
+allowed_support_shift_m = {min = 0.12, max = 0.12}
+bend_pressure_kpa = {min = 779.9838540354903, max = 779.9838540354903}
+bend_angle_deg = {min = 30.0, max = 30.0}
+thrust_allowable_kn = {min = 120.0, max = 120.0}
+expected_negative_cases = {min = 4.0, max = 4.0}
+localized_negative_cases = {min = 4.0, max = 4.0}
+unresolved_repair_count = {min = 0.0, max = 0.0}
+maximum_variant_velocity_m_s = {min = 1.5, max = 1.5}
+site_contexts = ["piping-repair", "negative-case-portfolio"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-11 piping repair package"
+visibility = "all_given"
+archetypes = ["ssc11_piping_repair_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-11 piping repair package"
+visibility = "all_given"
+archetypes = ["ssc11_piping_repair_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-11 piping repair package"
+visibility = "all_given"
+archetypes = ["ssc11_piping_repair_case"]

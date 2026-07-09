@@ -1,3 +1,0 @@
-camera_id,target_zone,target_width_m,horizontal_pixels,required_ppm,actual_ppm,bitrate_mbps,retention_days,storage_tb,status
-CCTV-01,west_approach,24.0,1920,60.0,80.0,6.0,14,0.99792,pass
-CCTV-02,vms_zone,32.0,1920,60.0,60.0,6.0,14,0.99792,pass

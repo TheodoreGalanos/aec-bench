@@ -1,0 +1,221 @@
+# ABOUTME: Defines the SSC-11 fire-main hydraulic and seismic support template.
+# ABOUTME: Pins one synthetic fire-main source pack with flow, pressure, and support values.
+
+[meta]
+name = "fire-main-hydraulic-seismic-support-package"
+description = "SSC-11 fire-main flow, residual pressure, and seismic support metrics"
+long_description = "Calculates source-bound fire-main hydraulic and support metrics from a deterministic SSC-11 task-owned source pack. The template combines Hazen-Williams loss, remote fire-head demand, residual pressure, pipe/support dead load, seismic reaction, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "fire-protection"
+standards = ["NFPA-style fire-main checks", "Hazen-Williams hydraulic calculations", "ASME-style piping support workflows", "Seismic bracing coordination workflows"]
+tags = ["mechanical", "fire-main", "hydraulics", "seismic-support", "deterministic"]
+tool_mode = "with-tool"
+
+[params.fire_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "FLOW-SSC11-002 design fire flow"
+min = 32.0
+max = 32.0
+
+[params.main_length_m]
+type = "float"
+unit = "m"
+description = "FIRE-SSC11-002 fire-main length to the remote branch"
+min = 110.18021736015125
+max = 110.18021736015125
+
+[params.pipe_internal_diameter_mm]
+type = "float"
+unit = "mm"
+description = "FIRE-SSC11-002 hydraulic internal diameter"
+min = 150.0
+max = 150.0
+
+[params.hazen_williams_c]
+type = "float"
+description = "FLOW-SSC11-002 Hazen-Williams roughness coefficient"
+min = 130.0
+max = 130.0
+
+[params.riser_elevation_m]
+type = "float"
+unit = "m"
+description = "FIRE-SSC11-002 elevation rise to the remote head branch"
+min = 5.441896024464831
+max = 5.441896024464831
+
+[params.remote_head_flow_l_min]
+type = "float"
+unit = "L/min"
+description = "FIRE-SSC11-002 remote head flow"
+min = 95.0
+max = 95.0
+
+[params.remote_head_count]
+type = "float"
+unit = "count"
+description = "FIRE-SSC11-002 active remote head count"
+min = 8.0
+max = 8.0
+
+[params.source_residual_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "PUMP-SSC11-002 source residual pressure"
+min = 310.0
+max = 310.0
+
+[params.pump_boost_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "PUMP-SSC11-002 pump boost pressure"
+min = 260.0
+max = 260.0
+
+[params.required_remote_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "MEMO-SSC11-002 required remote residual pressure"
+min = 140.0
+max = 140.0
+
+[params.support_span_m]
+type = "float"
+unit = "m"
+description = "SUP-SSC11-002 support tributary span"
+min = 4.196169128523375
+max = 4.196169128523375
+
+[params.pipe_outer_diameter_mm]
+type = "float"
+unit = "mm"
+description = "SUP-SSC11-002 support pipe outer diameter"
+min = 168.3
+max = 168.3
+
+[params.pipe_wall_thickness_mm]
+type = "float"
+unit = "mm"
+description = "SUP-SSC11-002 support pipe wall thickness"
+min = 7.11
+max = 7.11
+
+[params.water_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "FLOW-SSC11-002 water density"
+min = 1000.0
+max = 1000.0
+
+[params.steel_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "SUP-SSC11-002 steel density"
+min = 7850.0
+max = 7850.0
+
+[params.seismic_horizontal_coefficient]
+type = "float"
+description = "SUP-SSC11-002 horizontal seismic coefficient"
+min = 0.3
+max = 0.3
+
+[params.support_vertical_allowable_kn]
+type = "float"
+unit = "kN"
+description = "SUP-SSC11-002 vertical allowable support reaction"
+min = 8.5
+max = 8.5
+
+[params.support_horizontal_allowable_kn]
+type = "float"
+unit = "kN"
+description = "SUP-SSC11-002 horizontal allowable support reaction"
+min = 3.0
+max = 3.0
+
+[outputs.hazen_williams_loss_m]
+description = "Friction head loss through the fire main"
+tolerance = 0.03
+
+[outputs.friction_loss_kpa]
+description = "Fire-main friction loss expressed as pressure"
+tolerance = 0.03
+
+[outputs.remote_flow_demand_l_s]
+description = "Remote fire-head flow demand"
+tolerance = 0.03
+
+[outputs.fire_flow_margin_l_s]
+description = "Design fire-flow margin against remote demand"
+tolerance = 0.03
+
+[outputs.remote_pressure_kpa]
+description = "Remote residual pressure after losses and elevation"
+tolerance = 0.03
+
+[outputs.remote_pressure_margin_kpa]
+description = "Remote residual pressure margin"
+tolerance = 0.03
+
+[outputs.support_line_load_kn_m]
+description = "Pipe and contents line load at the support"
+tolerance = 0.03
+
+[outputs.support_vertical_reaction_kn]
+description = "Vertical support reaction"
+tolerance = 0.03
+
+[outputs.seismic_horizontal_reaction_kn]
+description = "Horizontal seismic support reaction"
+tolerance = 0.03
+
+[outputs.support_vertical_utilization]
+description = "Vertical support utilization"
+tolerance = 0.03
+
+[outputs.support_horizontal_utilization]
+description = "Horizontal support utilization"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for the task-owned hydraulic and support checks"
+tolerance = 0.03
+
+[archetypes.ssc11_fire_main_support_case]
+description = "Fire-main hydraulic and seismic support case"
+fire_flow_l_s = {min = 32.0, max = 32.0}
+main_length_m = {min = 110.18021736015125, max = 110.18021736015125}
+pipe_internal_diameter_mm = {min = 150.0, max = 150.0}
+hazen_williams_c = {min = 130.0, max = 130.0}
+riser_elevation_m = {min = 5.441896024464831, max = 5.441896024464831}
+remote_head_flow_l_min = {min = 95.0, max = 95.0}
+remote_head_count = {min = 8.0, max = 8.0}
+source_residual_pressure_kpa = {min = 310.0, max = 310.0}
+pump_boost_pressure_kpa = {min = 260.0, max = 260.0}
+required_remote_pressure_kpa = {min = 140.0, max = 140.0}
+support_span_m = {min = 4.196169128523375, max = 4.196169128523375}
+pipe_outer_diameter_mm = {min = 168.3, max = 168.3}
+pipe_wall_thickness_mm = {min = 7.11, max = 7.11}
+water_density_kg_m3 = {min = 1000.0, max = 1000.0}
+steel_density_kg_m3 = {min = 7850.0, max = 7850.0}
+seismic_horizontal_coefficient = {min = 0.3, max = 0.3}
+support_vertical_allowable_kn = {min = 8.5, max = 8.5}
+support_horizontal_allowable_kn = {min = 3.0, max = 3.0}
+site_contexts = ["fire-main", "seismic-support-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-11 fire-main support package"
+visibility = "all_given"
+archetypes = ["ssc11_fire_main_support_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-11 fire-main support package"
+visibility = "all_given"
+archetypes = ["ssc11_fire_main_support_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-11 fire-main support package"
+visibility = "all_given"
+archetypes = ["ssc11_fire_main_support_case"]

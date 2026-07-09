@@ -1,0 +1,414 @@
+[meta]
+name = "level-crossing-warning-backup-power-package"
+description = "SSC-02 level crossing warning time, signal load, backup battery, feeder, and fiber metrics"
+long_description = "Calculates source-bound rail level-crossing metrics from a deterministic SSC-02 task-owned source pack. The template combines warning time and strike-in distance, active-control and communications load, UPS and battery autonomy, DC feeder voltage drop, fiber link margin, and an overall synthetic pass score."
+discipline = "electrical"
+category = "rail-signalling"
+standards = ["49 CFR Part 234", "FHWA MUTCD Part 8", "AREMA C&S Manual route", "operator level-crossing workflow"]
+tags = ["electrical", "rail", "signalling", "level-crossing", "warning-time", "battery", "dc-feeder", "fiber", "deterministic"]
+tool_mode = "with-tool"
+
+[params.maximum_train_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "WT-02-WARN-01 controlling approach train speed"
+min = 80.0
+max = 80.0
+
+[params.minimum_warning_time_s]
+type = "float"
+unit = "s"
+description = "WT-02-WARN-01 minimum warning time criterion"
+min = 20.0
+max = 20.0
+
+[params.road_user_clearance_time_s]
+type = "float"
+unit = "s"
+description = "WT-02-WARN-01 road-user clearance allowance"
+min = 7.0
+max = 7.0
+
+[params.gate_lowering_time_s]
+type = "float"
+unit = "s"
+description = "CTRL-02-XING-01 gate lowering time"
+min = 11.0
+max = 11.0
+
+[params.system_delay_s]
+type = "float"
+unit = "s"
+description = "WT-02-WARN-01 controller and detection delay"
+min = 2.0
+max = 2.0
+
+[params.gate_start_delay_s]
+type = "float"
+unit = "s"
+description = "CTRL-02-XING-01 delay from warning start to gate descent"
+min = 3.0
+max = 3.0
+
+[params.required_gate_horizontal_before_arrival_s]
+type = "float"
+unit = "s"
+description = "OPS-02-DEGRADED-01 required time with gates horizontal before train arrival"
+min = 5.0
+max = 5.0
+
+[params.controller_load_w]
+type = "float"
+unit = "W"
+description = "LOAD-02-SIG-01 crossing controller load"
+min = 180.0
+max = 180.0
+
+[params.flashing_light_load_w]
+type = "float"
+unit = "W"
+description = "LOAD-02-SIG-01 load per flashing-light assembly"
+min = 40.0
+max = 40.0
+
+[params.flashing_light_count]
+type = "float"
+description = "LX-02-LAYOUT-01 flashing-light assembly count"
+min = 4.0
+max = 4.0
+
+[params.gate_mechanism_load_w]
+type = "float"
+unit = "W"
+description = "LOAD-02-SIG-01 load per gate mechanism"
+min = 90.0
+max = 90.0
+
+[params.gate_mechanism_count]
+type = "float"
+description = "LX-02-LAYOUT-01 gate mechanism count"
+min = 2.0
+max = 2.0
+
+[params.comms_switch_load_w]
+type = "float"
+unit = "W"
+description = "LOAD-02-SIG-01 communications switch load"
+min = 45.0
+max = 45.0
+
+[params.track_circuit_load_w]
+type = "float"
+unit = "W"
+description = "LOAD-02-SIG-01 track circuit and detector load"
+min = 65.0
+max = 65.0
+
+[params.event_recorder_load_w]
+type = "float"
+unit = "W"
+description = "LOAD-02-SIG-01 event recorder load"
+min = 25.0
+max = 25.0
+
+[params.load_future_allowance_pct]
+type = "float"
+unit = "%"
+description = "LOAD-02-SIG-01 spare and future allowance"
+min = 10.0
+max = 10.0
+
+[params.required_autonomy_h]
+type = "float"
+unit = "h"
+description = "BATT-02-UPS-01 degraded-mode autonomy requirement"
+min = 8.0
+max = 8.0
+
+[params.dc_system_voltage_v]
+type = "float"
+unit = "V"
+description = "BATT-02-UPS-01 DC system voltage"
+min = 48.0
+max = 48.0
+
+[params.depth_of_discharge_pct]
+type = "float"
+unit = "%"
+description = "BATT-02-UPS-01 usable battery depth of discharge"
+min = 80.0
+max = 80.0
+
+[params.temperature_derating_factor]
+type = "float"
+description = "BATT-02-UPS-01 temperature derating factor"
+min = 0.85
+max = 0.85
+
+[params.inverter_efficiency_pct]
+type = "float"
+unit = "%"
+description = "BATT-02-UPS-01 inverter efficiency"
+min = 92.0
+max = 92.0
+
+[params.installed_battery_capacity_ah]
+type = "float"
+unit = "Ah"
+description = "BATT-02-UPS-01 installed battery capacity"
+min = 200.0
+max = 200.0
+
+[params.battery_block_voltage_v]
+type = "float"
+unit = "V"
+description = "BATT-02-UPS-01 battery block voltage"
+min = 12.0
+max = 12.0
+
+[params.load_power_factor]
+type = "float"
+description = "BATT-02-UPS-01 UPS load power factor"
+min = 0.90
+max = 0.90
+
+[params.selected_ups_rating_va]
+type = "float"
+unit = "VA"
+description = "BATT-02-UPS-01 selected UPS rating"
+min = 900.0
+max = 900.0
+
+[params.feeder_length_m]
+type = "float"
+unit = "m"
+description = "FEEDER-02-DC-01 two-wire DC feeder one-way length"
+min = 30.0
+max = 30.0
+
+[params.feeder_resistance_milliohm_per_m]
+type = "float"
+unit = "milliohm/m"
+description = "FEEDER-02-DC-01 conductor resistance"
+min = 1.83
+max = 1.83
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "FEEDER-02-DC-01 maximum DC feeder voltage drop"
+min = 5.0
+max = 5.0
+
+[params.fiber_length_km]
+type = "float"
+unit = "km"
+description = "FIBER-02-COMMS-01 fiber link length"
+min = 1.8
+max = 1.8
+
+[params.fiber_attenuation_db_per_km]
+type = "float"
+unit = "dB/km"
+description = "FIBER-02-COMMS-01 fiber attenuation"
+min = 0.35
+max = 0.35
+
+[params.fiber_connector_count]
+type = "float"
+description = "FIBER-02-COMMS-01 connector count"
+min = 4.0
+max = 4.0
+
+[params.connector_loss_db]
+type = "float"
+unit = "dB"
+description = "FIBER-02-COMMS-01 connector loss"
+min = 0.3
+max = 0.3
+
+[params.fiber_splice_count]
+type = "float"
+description = "FIBER-02-COMMS-01 splice count"
+min = 6.0
+max = 6.0
+
+[params.splice_loss_db]
+type = "float"
+unit = "dB"
+description = "FIBER-02-COMMS-01 splice loss"
+min = 0.05
+max = 0.05
+
+[params.patch_panel_allowance_db]
+type = "float"
+unit = "dB"
+description = "FIBER-02-COMMS-01 patch-panel allowance"
+min = 1.0
+max = 1.0
+
+[params.optical_tx_power_dbm]
+type = "float"
+unit = "dBm"
+description = "FIBER-02-COMMS-01 optical transmitter power"
+min = -3.0
+max = -3.0
+
+[params.receiver_sensitivity_dbm]
+type = "float"
+unit = "dBm"
+description = "FIBER-02-COMMS-01 receiver sensitivity"
+min = -24.0
+max = -24.0
+
+[params.required_fiber_margin_db]
+type = "float"
+unit = "dB"
+description = "FIBER-02-COMMS-01 required optical margin"
+min = 3.0
+max = 3.0
+
+[outputs.maximum_train_speed_m_s]
+description = "WT-02-WARN-01 controlling approach speed converted to m/s"
+tolerance = 0.03
+
+[outputs.total_warning_time_s]
+description = "Total warning time including minimum warning, clearance, gate lowering, and system delay"
+tolerance = 0.03
+
+[outputs.strike_in_distance_m]
+description = "WT-02-WARN-01 strike-in distance for the controlling approach"
+tolerance = 0.03
+
+[outputs.minimum_warning_margin_s]
+description = "Total warning time minus the minimum warning criterion"
+tolerance = 0.03
+
+[outputs.gate_horizontal_margin_s]
+description = "Time margin after gate start delay, lowering, and required horizontal-before-arrival time"
+tolerance = 0.03
+
+[outputs.connected_signal_load_w]
+description = "Connected crossing control, warning-device, communications, and recorder load"
+tolerance = 0.03
+
+[outputs.design_signal_load_w]
+description = "Connected signal load plus future allowance"
+tolerance = 0.03
+
+[outputs.required_energy_kwh]
+description = "Backup energy required for degraded-mode autonomy"
+tolerance = 0.03
+
+[outputs.required_battery_capacity_ah]
+description = "Required battery capacity after DOD, temperature, and inverter derating"
+tolerance = 0.03
+
+[outputs.battery_capacity_margin_ah]
+description = "Installed battery capacity minus required battery capacity"
+tolerance = 0.03
+
+[outputs.required_ups_rating_va]
+description = "Required UPS apparent power rating at the source-owned power factor"
+tolerance = 0.03
+
+[outputs.ups_rating_margin_va]
+description = "Selected UPS rating minus required UPS rating"
+tolerance = 0.03
+
+[outputs.battery_block_count]
+description = "Battery block count needed to reach the DC system voltage"
+tolerance = 0.001
+
+[outputs.dc_feeder_current_a]
+description = "FEEDER-02-DC-01 DC current at design signal load"
+tolerance = 0.03
+
+[outputs.dc_feeder_voltage_drop_v]
+description = "Two-wire DC feeder voltage drop"
+tolerance = 0.03
+
+[outputs.dc_feeder_voltage_drop_percent]
+description = "Two-wire DC feeder voltage drop percentage"
+tolerance = 0.03
+
+[outputs.dc_voltage_drop_margin_percent]
+description = "Maximum voltage drop percent minus calculated voltage drop percent"
+tolerance = 0.03
+
+[outputs.fiber_total_loss_db]
+description = "Total fiber attenuation, connector, splice, and patch-panel loss"
+tolerance = 0.03
+
+[outputs.fiber_receive_power_dbm]
+description = "Estimated optical receive power"
+tolerance = 0.03
+
+[outputs.fiber_link_margin_db]
+description = "Receive power minus receiver sensitivity"
+tolerance = 0.03
+
+[outputs.fiber_excess_margin_db]
+description = "Fiber link margin minus required margin"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when warning, gate, battery, UPS, voltage-drop, and fiber margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc02_level_crossing_backup_case]
+description = "One route-profile level crossing tied to warning-time, signalling load, backup supply, DC feeder, fiber link, and degraded-mode memo"
+maximum_train_speed_kmh = {min = 80.0, max = 80.0}
+minimum_warning_time_s = {min = 20.0, max = 20.0}
+road_user_clearance_time_s = {min = 7.0, max = 7.0}
+gate_lowering_time_s = {min = 11.0, max = 11.0}
+system_delay_s = {min = 2.0, max = 2.0}
+gate_start_delay_s = {min = 3.0, max = 3.0}
+required_gate_horizontal_before_arrival_s = {min = 5.0, max = 5.0}
+controller_load_w = {min = 180.0, max = 180.0}
+flashing_light_load_w = {min = 40.0, max = 40.0}
+flashing_light_count = {min = 4.0, max = 4.0}
+gate_mechanism_load_w = {min = 90.0, max = 90.0}
+gate_mechanism_count = {min = 2.0, max = 2.0}
+comms_switch_load_w = {min = 45.0, max = 45.0}
+track_circuit_load_w = {min = 65.0, max = 65.0}
+event_recorder_load_w = {min = 25.0, max = 25.0}
+load_future_allowance_pct = {min = 10.0, max = 10.0}
+required_autonomy_h = {min = 8.0, max = 8.0}
+dc_system_voltage_v = {min = 48.0, max = 48.0}
+depth_of_discharge_pct = {min = 80.0, max = 80.0}
+temperature_derating_factor = {min = 0.85, max = 0.85}
+inverter_efficiency_pct = {min = 92.0, max = 92.0}
+installed_battery_capacity_ah = {min = 200.0, max = 200.0}
+battery_block_voltage_v = {min = 12.0, max = 12.0}
+load_power_factor = {min = 0.90, max = 0.90}
+selected_ups_rating_va = {min = 900.0, max = 900.0}
+feeder_length_m = {min = 30.0, max = 30.0}
+feeder_resistance_milliohm_per_m = {min = 1.83, max = 1.83}
+max_voltage_drop_percent = {min = 5.0, max = 5.0}
+fiber_length_km = {min = 1.8, max = 1.8}
+fiber_attenuation_db_per_km = {min = 0.35, max = 0.35}
+fiber_connector_count = {min = 4.0, max = 4.0}
+connector_loss_db = {min = 0.3, max = 0.3}
+fiber_splice_count = {min = 6.0, max = 6.0}
+splice_loss_db = {min = 0.05, max = 0.05}
+patch_panel_allowance_db = {min = 1.0, max = 1.0}
+optical_tx_power_dbm = {min = -3.0, max = -3.0}
+receiver_sensitivity_dbm = {min = -24.0, max = -24.0}
+required_fiber_margin_db = {min = 3.0, max = 3.0}
+site_contexts = ["level-crossing-warning-backup"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-02 level-crossing warning and backup-power package"
+visibility = "all_given"
+archetypes = ["ssc02_level_crossing_backup_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-02 level-crossing warning and backup-power package"
+visibility = "all_given"
+archetypes = ["ssc02_level_crossing_backup_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-02 level-crossing warning and backup-power package"
+visibility = "all_given"
+archetypes = ["ssc02_level_crossing_backup_case"]

@@ -1,0 +1,210 @@
+[meta]
+name = "station-emergency-operations-energy-package"
+description = "SSC-17 station emergency operations energy metrics"
+long_description = "Calculates source-bound station emergency operations energy metrics from a deterministic SSC-17 task-owned source pack. The template combines life-safety loads, generator and BESS autonomy, load shedding, feeder voltage drop, and an overall synthetic pass score."
+discipline = "electrical"
+category = "station-emergency-energy"
+standards = ["emergency power workflows", "station operations workflows", "load shedding workflows"]
+tags = ["electrical", "station", "emergency", "life-safety", "generator", "bess", "feeder", "resilience", "deterministic"]
+tool_mode = "with-tool"
+
+[params.emergency_lighting_kw]
+type = "float"
+unit = "kW"
+description = "LIFE-SSC17-006 emergency lighting load"
+min = 18.0
+max = 18.0
+
+[params.alarm_nac_kw]
+type = "float"
+unit = "kW"
+description = "LIFE-SSC17-006 alarm NAC load"
+min = 3.2
+max = 3.2
+
+[params.ventilation_kw]
+type = "float"
+unit = "kW"
+description = "LIFE-SSC17-006 ventilation load"
+min = 28.0
+max = 28.0
+
+[params.lift_kw]
+type = "float"
+unit = "kW"
+description = "LIFE-SSC17-006 lift load"
+min = 22.0
+max = 22.0
+
+[params.communications_kw]
+type = "float"
+unit = "kW"
+description = "LIFE-SSC17-006 communications load"
+min = 2.6
+max = 2.6
+
+[params.outage_duration_hr]
+type = "float"
+unit = "h"
+description = "MEMO-SSC17-006 emergency operation duration"
+min = 3.0
+max = 3.0
+
+[params.generator_kw]
+type = "float"
+unit = "kW"
+description = "SLD-SSC17-006 generator output"
+min = 125.0
+max = 125.0
+
+[params.generator_runtime_hr]
+type = "float"
+unit = "h"
+description = "SLD-SSC17-006 generator runtime"
+min = 1.5
+max = 1.5
+
+[params.bess_nominal_kwh]
+type = "float"
+unit = "kWh"
+description = "SLD-SSC17-006 BESS nominal energy"
+min = 240.0
+max = 240.0
+
+[params.max_depth_of_discharge]
+type = "float"
+description = "SLD-SSC17-006 maximum BESS depth of discharge"
+min = 0.8
+max = 0.8
+
+[params.inverter_efficiency]
+type = "float"
+description = "SLD-SSC17-006 inverter efficiency"
+min = 0.93
+max = 0.93
+
+[params.noncritical_load_shed_kw]
+type = "float"
+unit = "kW"
+description = "SHED-SSC17-006 non-critical load shed"
+min = 55.0
+max = 55.0
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "SLD-SSC17-006 feeder voltage"
+min = 415.0
+max = 415.0
+
+[params.feeder_length_m]
+type = "float"
+unit = "m"
+description = "SLD-SSC17-006 feeder length"
+min = 140.0
+max = 140.0
+
+[params.feeder_current_a]
+type = "float"
+unit = "A"
+description = "SLD-SSC17-006 feeder current"
+min = 118.0
+max = 118.0
+
+[params.conductor_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "SLD-SSC17-006 conductor resistance"
+min = 0.245
+max = 0.245
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "SLD-SSC17-006 maximum voltage drop"
+min = 4.0
+max = 4.0
+
+[outputs.emergency_load_kw]
+description = "Emergency life-safety load"
+tolerance = 0.03
+
+[outputs.required_energy_kwh]
+description = "Emergency energy required"
+tolerance = 0.03
+
+[outputs.generator_energy_kwh]
+description = "Generator energy available"
+tolerance = 0.03
+
+[outputs.usable_bess_energy_kwh]
+description = "Usable BESS energy"
+tolerance = 0.03
+
+[outputs.backup_energy_available_kwh]
+description = "Generator plus BESS energy available"
+tolerance = 0.03
+
+[outputs.backup_energy_margin_kwh]
+description = "Available backup energy minus required emergency energy"
+tolerance = 0.03
+
+[outputs.battery_only_runtime_hr]
+description = "Battery-only runtime at emergency load"
+tolerance = 0.03
+
+[outputs.generator_capacity_margin_kw]
+description = "Generator output minus emergency load"
+tolerance = 0.03
+
+[outputs.load_shed_kw]
+description = "Non-critical load shed"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "Three-phase feeder voltage drop"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Maximum voltage drop minus calculated voltage drop"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when energy, capacity, load-shed, and voltage-drop checks pass"
+tolerance = 0.001
+
+[archetypes.ssc17_station_emergency_energy_case]
+description = "Station emergency operations energy case with life-safety loads, generator, BESS, load shedding, and feeder"
+emergency_lighting_kw = {min = 18.0, max = 18.0}
+alarm_nac_kw = {min = 3.2, max = 3.2}
+ventilation_kw = {min = 28.0, max = 28.0}
+lift_kw = {min = 22.0, max = 22.0}
+communications_kw = {min = 2.6, max = 2.6}
+outage_duration_hr = {min = 3.0, max = 3.0}
+generator_kw = {min = 125.0, max = 125.0}
+generator_runtime_hr = {min = 1.5, max = 1.5}
+bess_nominal_kwh = {min = 240.0, max = 240.0}
+max_depth_of_discharge = {min = 0.8, max = 0.8}
+inverter_efficiency = {min = 0.93, max = 0.93}
+noncritical_load_shed_kw = {min = 55.0, max = 55.0}
+feeder_voltage_v = {min = 415.0, max = 415.0}
+feeder_length_m = {min = 140.0, max = 140.0}
+feeder_current_a = {min = 118.0, max = 118.0}
+conductor_resistance_ohm_km = {min = 0.245, max = 0.245}
+max_voltage_drop_percent = {min = 4.0, max = 4.0}
+site_contexts = ["station-emergency-operations-energy", "life-safety-load-shed-feeder-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-17 station emergency operations energy package"
+visibility = "all_given"
+archetypes = ["ssc17_station_emergency_energy_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-17 station emergency operations energy package"
+visibility = "all_given"
+archetypes = ["ssc17_station_emergency_energy_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-17 station emergency operations energy package"
+visibility = "all_given"
+archetypes = ["ssc17_station_emergency_energy_case"]

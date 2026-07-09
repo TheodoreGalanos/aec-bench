@@ -1,0 +1,220 @@
+# ABOUTME: Defines the SSC-13 lighting energy and emergency-mode template.
+# ABOUTME: Pins one task-owned lighting energy source pack and expected outputs.
+
+[meta]
+name = "lighting-energy-emergency-mode-package"
+description = "SSC-13 lighting energy, LENI, emergency illuminance, and battery checks"
+long_description = "Calculates source-bound lighting energy metrics from a deterministic SSC-13 task-owned source pack. The template combines lighting layout, controls, LENI/energy profile, emergency load schedule, and criteria checks."
+discipline = "electrical"
+category = "lighting-energy"
+standards = ["LENI workflow", "lighting energy review", "emergency lighting workflow", "battery autonomy review"]
+tags = ["electrical", "lighting", "energy", "leni", "emergency", "battery", "deterministic"]
+tool_mode = "with-tool"
+
+[params.grid_lux_01]
+type = "float"
+unit = "lux"
+description = "LIGHT-13-LAYOUT-07 grid point 01"
+min = 175.0
+max = 175.0
+
+[params.grid_lux_02]
+type = "float"
+unit = "lux"
+description = "LIGHT-13-LAYOUT-07 grid point 02"
+min = 168.0
+max = 168.0
+
+[params.grid_lux_03]
+type = "float"
+unit = "lux"
+description = "LIGHT-13-LAYOUT-07 grid point 03"
+min = 182.0
+max = 182.0
+
+[params.grid_lux_04]
+type = "float"
+unit = "lux"
+description = "LIGHT-13-LAYOUT-07 grid point 04"
+min = 171.0
+max = 171.0
+
+[params.grid_lux_05]
+type = "float"
+unit = "lux"
+description = "LIGHT-13-LAYOUT-07 grid point 05"
+min = 176.0
+max = 176.0
+
+[params.grid_lux_06]
+type = "float"
+unit = "lux"
+description = "LIGHT-13-LAYOUT-07 grid point 06"
+min = 169.0
+max = 169.0
+
+[params.required_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "CRIT-13-TABLE-07 required normal illuminance"
+min = 150.0
+max = 150.0
+
+[params.emergency_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "EMERG-13-LOAD-07 emergency illuminance"
+min = 12.0
+max = 12.0
+
+[params.required_emergency_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "CRIT-13-TABLE-07 required emergency illuminance"
+min = 10.0
+max = 10.0
+
+[params.luminaire_count]
+type = "float"
+unit = "count"
+description = "LIGHT-13-LAYOUT-07 luminaire count"
+min = 18.0
+max = 18.0
+
+[params.normal_luminaire_power_w]
+type = "float"
+unit = "W"
+description = "LENI-13-PROFILE-07 normal luminaire power"
+min = 42.0
+max = 42.0
+
+[params.control_factor]
+type = "float"
+description = "CTRL-13-SCHED-07 control factor"
+min = 0.65
+max = 0.65
+
+[params.annual_operating_hours]
+type = "float"
+unit = "h/year"
+description = "LENI-13-PROFILE-07 annual operating hours"
+min = 3200.0
+max = 3200.0
+
+[params.area_m2]
+type = "float"
+unit = "m2"
+description = "LENI-13-PROFILE-07 assessed area"
+min = 450.0
+max = 450.0
+
+[params.target_leni_kwh_m2_year]
+type = "float"
+unit = "kWh/m2-year"
+description = "CRIT-13-TABLE-07 target LENI"
+min = 5.0
+max = 5.0
+
+[params.emergency_luminaire_power_w]
+type = "float"
+unit = "W"
+description = "EMERG-13-LOAD-07 emergency luminaire power"
+min = 8.0
+max = 8.0
+
+[params.exit_sign_count]
+type = "float"
+unit = "count"
+description = "EMERG-13-LOAD-07 exit sign count"
+min = 12.0
+max = 12.0
+
+[params.exit_sign_power_w]
+type = "float"
+unit = "W"
+description = "EMERG-13-LOAD-07 exit sign power"
+min = 4.0
+max = 4.0
+
+[params.emergency_autonomy_h]
+type = "float"
+unit = "h"
+description = "EMERG-13-LOAD-07 emergency autonomy"
+min = 2.0
+max = 2.0
+
+[params.battery_efficiency]
+type = "float"
+description = "EMERG-13-LOAD-07 battery efficiency"
+min = 0.85
+max = 0.85
+
+[params.battery_capacity_kwh]
+type = "float"
+unit = "kWh"
+description = "EMERG-13-LOAD-07 battery capacity"
+min = 0.8
+max = 0.8
+
+[outputs.average_illuminance_lux]
+description = "Average normal-mode illuminance"
+tolerance = 0.003
+
+[outputs.minimum_illuminance_lux]
+description = "Minimum normal-mode illuminance"
+tolerance = 0.003
+
+[outputs.uniformity_ratio]
+description = "Minimum illuminance divided by average illuminance"
+tolerance = 0.003
+
+[outputs.illuminance_margin_lux]
+description = "Average normal illuminance minus required illuminance"
+tolerance = 0.003
+
+[outputs.emergency_illuminance_margin_lux]
+description = "Emergency illuminance minus required emergency illuminance"
+tolerance = 0.003
+
+[outputs.annual_lighting_energy_kwh]
+description = "Annual controlled lighting energy"
+tolerance = 0.003
+
+[outputs.leni_kwh_m2_year]
+description = "Lighting energy numeric indicator"
+tolerance = 0.003
+
+[outputs.leni_margin_kwh_m2_year]
+description = "Target LENI minus calculated LENI"
+tolerance = 0.003
+
+[outputs.emergency_battery_required_kwh]
+description = "Emergency battery capacity required"
+tolerance = 0.003
+
+[outputs.emergency_battery_margin_kwh]
+description = "Installed battery capacity minus required capacity"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when lighting energy and emergency checks pass"
+tolerance = 0.001
+
+[archetypes.ssc13_lighting_energy_case]
+description = "Lighting energy and emergency mode case"
+site_contexts = ["ssc13-lighting-energy"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-13 lighting energy package"
+visibility = "all_given"
+archetypes = ["ssc13_lighting_energy_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-13 lighting energy package"
+visibility = "all_given"
+archetypes = ["ssc13_lighting_energy_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-13 lighting energy package"
+visibility = "all_given"
+archetypes = ["ssc13_lighting_energy_case"]

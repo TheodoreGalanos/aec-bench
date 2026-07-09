@@ -1,0 +1,294 @@
+# ABOUTME: Defines the SSC-15 product submittal compliance template.
+# ABOUTME: Pins one task-owned pump package with evidence, certificate, comment, and duty values.
+
+[meta]
+name = "product-submittal-compliance-package"
+description = "SSC-15 product submittal review packet duty, evidence, certificate, and comment metrics"
+long_description = "Calculates source-bound product-submittal review metrics from a deterministic SSC-15 task-owned source pack. The template combines one pump submittal register, datasheet, certificate, calculation excerpt, review-comment log, deviation register, and disposition memo for one compact generated task instance."
+discipline = "mechanical"
+category = "product-compliance"
+standards = ["Procore Submittals", "Autodesk Construction Cloud Submittals", "ICC-ES evaluation reports", "UL Product iQ", "FM Approvals", "BBA certificates"]
+tags = ["mechanical", "submittal", "product-compliance", "certificate", "datasheet", "review-comments", "deterministic"]
+tool_mode = "with-tool"
+
+[params.required_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "CALC-15-DUTY-001 required design flow consumed by the product submittal review"
+min = 42.0
+max = 42.0
+
+[params.submitted_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "DAT-15-PUMP-001 submitted pump datasheet flow at the selected duty point"
+min = 45.0
+max = 45.0
+
+[params.required_head_m]
+type = "float"
+unit = "m"
+description = "CALC-15-DUTY-001 required design head consumed by the product submittal review"
+min = 38.0
+max = 38.0
+
+[params.submitted_head_m]
+type = "float"
+unit = "m"
+description = "DAT-15-PUMP-001 submitted pump datasheet head at the selected duty point"
+min = 40.0
+max = 40.0
+
+[params.bep_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "DAT-15-PUMP-001 best efficiency point flow used to check the POR band"
+min = 40.0
+max = 40.0
+
+[params.por_low_percent]
+type = "float"
+unit = "%"
+description = "SPEC-15-15100 preferred operating range lower bound as percent of BEP flow"
+min = 70.0
+max = 70.0
+
+[params.por_high_percent]
+type = "float"
+unit = "%"
+description = "SPEC-15-15100 preferred operating range upper bound as percent of BEP flow"
+min = 120.0
+max = 120.0
+
+[params.motor_nameplate_kw]
+type = "float"
+unit = "kW"
+description = "DAT-15-PUMP-001 submitted motor nameplate power"
+min = 30.0
+max = 30.0
+
+[params.motor_service_factor]
+type = "float"
+description = "DAT-15-PUMP-001 submitted motor service factor"
+min = 1.15
+max = 1.15
+
+[params.required_motor_kw]
+type = "float"
+unit = "kW"
+description = "CALC-15-DUTY-001 required motor input power for the design duty"
+min = 23.0
+max = 23.0
+
+[params.max_system_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "CALC-15-DUTY-001 maximum system pressure applied to the submitted product certificate"
+min = 860.0
+max = 860.0
+
+[params.certificate_pressure_rating_kpa]
+type = "float"
+unit = "kPa"
+description = "CERT-15-PRESS-001 pressure rating declared by the submitted certificate"
+min = 1000.0
+max = 1000.0
+
+[params.required_evidence_items]
+type = "float"
+unit = "count"
+description = "REG-15-SUB-001 required evidence item count for this submittal package"
+min = 8.0
+max = 8.0
+
+[params.submitted_evidence_items]
+type = "float"
+unit = "count"
+description = "REG-15-SUB-001 submitted evidence item count"
+min = 8.0
+max = 8.0
+
+[params.required_certificate_items]
+type = "float"
+unit = "count"
+description = "CERT-15-PRESS-001 required certificate field count for the pressure and identity check"
+min = 4.0
+max = 4.0
+
+[params.matching_certificate_items]
+type = "float"
+unit = "count"
+description = "CERT-15-PRESS-001 certificate fields that match the submitted product and use case"
+min = 4.0
+max = 4.0
+
+[params.total_review_comments]
+type = "float"
+unit = "count"
+description = "CMT-15-REVIEW-001 total reviewer comments on the submittal"
+min = 5.0
+max = 5.0
+
+[params.closed_review_comments]
+type = "float"
+unit = "count"
+description = "CMT-15-REVIEW-001 reviewer comments closed with evidence"
+min = 5.0
+max = 5.0
+
+[params.open_critical_comments]
+type = "float"
+unit = "count"
+description = "CMT-15-REVIEW-001 open critical comments at disposition"
+min = 0.0
+max = 0.0
+
+[params.review_period_days]
+type = "float"
+unit = "days"
+description = "REG-15-SUB-001 allowed review period"
+min = 14.0
+max = 14.0
+
+[params.elapsed_review_days]
+type = "float"
+unit = "days"
+description = "REG-15-SUB-001 elapsed review period at disposition"
+min = 10.0
+max = 10.0
+
+[params.approved_deviation_count]
+type = "float"
+unit = "count"
+description = "DEV-15-LOG-001 deviations accepted with reviewer evidence"
+min = 1.0
+max = 1.0
+
+[params.unresolved_deviation_count]
+type = "float"
+unit = "count"
+description = "DEV-15-LOG-001 deviations still unresolved at disposition"
+min = 0.0
+max = 0.0
+
+[outputs.flow_capacity_margin_l_s]
+description = "Submitted pump flow minus required design flow"
+tolerance = 0.03
+
+[outputs.flow_capacity_ratio]
+description = "Submitted pump flow divided by required design flow"
+tolerance = 0.03
+
+[outputs.head_capacity_margin_m]
+description = "Submitted pump head minus required design head"
+tolerance = 0.03
+
+[outputs.head_capacity_ratio]
+description = "Submitted pump head divided by required design head"
+tolerance = 0.03
+
+[outputs.bep_flow_percent]
+description = "Required flow as a percentage of BEP flow"
+tolerance = 0.03
+
+[outputs.por_min_flow_l_s]
+description = "Preferred operating range lower flow bound"
+tolerance = 0.03
+
+[outputs.por_max_flow_l_s]
+description = "Preferred operating range upper flow bound"
+tolerance = 0.03
+
+[outputs.por_low_margin_l_s]
+description = "Required flow minus POR lower flow bound"
+tolerance = 0.03
+
+[outputs.por_high_margin_l_s]
+description = "POR upper flow bound minus required flow"
+tolerance = 0.03
+
+[outputs.motor_available_kw]
+description = "Motor nameplate power multiplied by service factor"
+tolerance = 0.03
+
+[outputs.motor_margin_kw]
+description = "Motor available power minus required motor power"
+tolerance = 0.03
+
+[outputs.pressure_certificate_margin_kpa]
+description = "Certificate pressure rating minus maximum system pressure"
+tolerance = 0.03
+
+[outputs.evidence_completeness_percent]
+description = "Submitted evidence items as a percentage of required evidence items"
+tolerance = 0.03
+
+[outputs.certificate_match_percent]
+description = "Matching certificate fields as a percentage of required certificate fields"
+tolerance = 0.03
+
+[outputs.review_closeout_percent]
+description = "Closed reviewer comments as a percentage of total reviewer comments"
+tolerance = 0.03
+
+[outputs.review_days_remaining]
+description = "Allowed review period minus elapsed review days"
+tolerance = 0.03
+
+[outputs.approved_deviation_count]
+description = "Deviation count accepted with reviewer evidence"
+tolerance = 0.03
+
+[outputs.unresolved_deviation_count]
+description = "Deviation count still unresolved at disposition"
+tolerance = 0.03
+
+[outputs.open_critical_comments]
+description = "Critical reviewer comments still open at disposition"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "One when duty, evidence, certificate, comment, schedule, and deviation checks pass"
+tolerance = 0.03
+
+[archetypes.ssc15_product_submittal_case]
+description = "Pump product submittal review packet with datasheet, certificate, duty, comment, and deviation checks"
+required_flow_l_s = {min = 42.0, max = 42.0}
+submitted_flow_l_s = {min = 45.0, max = 45.0}
+required_head_m = {min = 38.0, max = 38.0}
+submitted_head_m = {min = 40.0, max = 40.0}
+bep_flow_l_s = {min = 40.0, max = 40.0}
+por_low_percent = {min = 70.0, max = 70.0}
+por_high_percent = {min = 120.0, max = 120.0}
+motor_nameplate_kw = {min = 30.0, max = 30.0}
+motor_service_factor = {min = 1.15, max = 1.15}
+required_motor_kw = {min = 23.0, max = 23.0}
+max_system_pressure_kpa = {min = 860.0, max = 860.0}
+certificate_pressure_rating_kpa = {min = 1000.0, max = 1000.0}
+required_evidence_items = {min = 8.0, max = 8.0}
+submitted_evidence_items = {min = 8.0, max = 8.0}
+required_certificate_items = {min = 4.0, max = 4.0}
+matching_certificate_items = {min = 4.0, max = 4.0}
+total_review_comments = {min = 5.0, max = 5.0}
+closed_review_comments = {min = 5.0, max = 5.0}
+open_critical_comments = {min = 0.0, max = 0.0}
+review_period_days = {min = 14.0, max = 14.0}
+elapsed_review_days = {min = 10.0, max = 10.0}
+approved_deviation_count = {min = 1.0, max = 1.0}
+unresolved_deviation_count = {min = 0.0, max = 0.0}
+site_contexts = ["pump-product-submittal-review", "equipment-compliance-overlay"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-15 product submittal compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_product_submittal_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-15 product submittal compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_product_submittal_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-15 product submittal compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_product_submittal_case"]

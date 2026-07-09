@@ -1,0 +1,160 @@
+[meta]
+name = "facade-zone-reentrant-geometry-package"
+description = "SSC-09 facade pressure-zone difference and re-entrant geometry metrics"
+long_description = "Calculates source-bound facade zone difference metrics from a deterministic SSC-09 task-owned source pack. The template compares baseline and variant re-entrant corner pressure-zone areas, corner loads, anchor utilization, utilization margin, support-point reassignment, and an overall synthetic pass score."
+discipline = "structural"
+category = "facade-zone-geometry"
+standards = ["facade pressure-zone workflows", "re-entrant geometry review", "anchor-capacity coordination"]
+tags = ["structural", "facade", "re-entrant", "geometry", "wind", "anchor", "support", "deterministic"]
+tool_mode = "with-tool"
+
+[params.baseline_corner_zone_area_m2]
+type = "float"
+unit = "m2"
+description = "ELEV-09-BASE-06 baseline corner-zone area"
+min = 42.0
+max = 42.0
+
+[params.variant_corner_zone_area_m2]
+type = "float"
+unit = "m2"
+description = "ELEV-09-VARIANT-06 variant corner-zone area"
+min = 58.0
+max = 58.0
+
+[params.baseline_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "ZONE-09-SCHED-06 baseline corner pressure"
+min = 1.8
+max = 1.8
+
+[params.variant_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "ZONE-09-SCHED-06 variant corner pressure"
+min = 2.4
+max = 2.4
+
+[params.tributary_area_m2]
+type = "float"
+unit = "m2"
+description = "SUPPORT-09-POINTS-06 representative support tributary area"
+min = 0.84
+max = 0.84
+
+[params.dead_load_kpa]
+type = "float"
+unit = "kPa"
+description = "SUPPORT-09-POINTS-06 facade dead load"
+min = 0.35
+max = 0.35
+
+[params.anchor_tension_capacity_kn]
+type = "float"
+unit = "kN"
+description = "CAP-09-ANCHOR-06 anchor tension capacity"
+min = 2.8
+max = 2.8
+
+[params.anchor_shear_capacity_kn]
+type = "float"
+unit = "kN"
+description = "CAP-09-ANCHOR-06 anchor shear capacity"
+min = 3.2
+max = 3.2
+
+[params.allowable_utilization]
+type = "float"
+description = "CAP-09-ANCHOR-06 allowable combined utilization"
+min = 0.95
+max = 0.95
+
+[params.support_points_reassigned]
+type = "float"
+description = "SUPPORT-09-POINTS-06 reassigned support points"
+min = 6.0
+max = 6.0
+
+[params.support_points_required]
+type = "float"
+description = "SUPPORT-09-POINTS-06 required support points"
+min = 6.0
+max = 6.0
+
+[outputs.corner_zone_area_delta_m2]
+description = "Variant corner-zone area minus baseline corner-zone area"
+tolerance = 0.03
+
+[outputs.corner_zone_area_delta_percent]
+description = "Corner-zone area delta divided by baseline corner-zone area"
+tolerance = 0.03
+
+[outputs.pressure_delta_kpa]
+description = "Variant pressure minus baseline pressure"
+tolerance = 0.03
+
+[outputs.baseline_corner_load_kn]
+description = "Baseline corner load"
+tolerance = 0.03
+
+[outputs.variant_corner_load_kn]
+description = "Variant corner load"
+tolerance = 0.03
+
+[outputs.corner_load_delta_kn]
+description = "Variant corner load minus baseline corner load"
+tolerance = 0.03
+
+[outputs.baseline_utilization]
+description = "Baseline combined anchor utilization"
+tolerance = 0.003
+
+[outputs.variant_utilization]
+description = "Variant combined anchor utilization"
+tolerance = 0.003
+
+[outputs.utilization_delta]
+description = "Variant utilization minus baseline utilization"
+tolerance = 0.003
+
+[outputs.utilization_margin]
+description = "Allowable utilization minus variant utilization"
+tolerance = 0.003
+
+[outputs.support_reassignment_fraction]
+description = "Reassigned support points divided by required support points"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when variant geometry and support reassignment checks pass"
+tolerance = 0.001
+
+[archetypes.ssc09_facade_zone_reentrant_case]
+description = "Facade pressure-zone difference and re-entrant geometry case"
+baseline_corner_zone_area_m2 = {min = 42.0, max = 42.0}
+variant_corner_zone_area_m2 = {min = 58.0, max = 58.0}
+baseline_pressure_kpa = {min = 1.8, max = 1.8}
+variant_pressure_kpa = {min = 2.4, max = 2.4}
+tributary_area_m2 = {min = 0.84, max = 0.84}
+dead_load_kpa = {min = 0.35, max = 0.35}
+anchor_tension_capacity_kn = {min = 2.8, max = 2.8}
+anchor_shear_capacity_kn = {min = 3.2, max = 3.2}
+allowable_utilization = {min = 0.95, max = 0.95}
+support_points_reassigned = {min = 6.0, max = 6.0}
+support_points_required = {min = 6.0, max = 6.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-09 facade zone geometry package"
+visibility = "all_given"
+archetypes = ["ssc09_facade_zone_reentrant_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-09 facade zone geometry package"
+visibility = "all_given"
+archetypes = ["ssc09_facade_zone_reentrant_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-09 facade zone geometry package"
+visibility = "all_given"
+archetypes = ["ssc09_facade_zone_reentrant_case"]

@@ -1,0 +1,217 @@
+# ABOUTME: Defines the SSC-10 wet-weather process and bypass resilience template.
+# ABOUTME: Pins one wet-weather inflow, unit, pump/storage, control, permit, and memo source pack.
+
+[meta]
+name = "wet-weather-process-bypass-resilience-package"
+description = "SSC-10 wet-weather process and bypass resilience metrics"
+long_description = "Calculates source-bound wet-weather resilience metrics from a deterministic SSC-10 task-owned source pack. The template combines storage need, reactor HRT, clarifier peak SOR, pump energy, backup energy, bypass volume, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "wet-weather-bypass-resilience"
+standards = ["wet-weather process workflow", "bypass resilience workflow", "pump backup energy workflow"]
+tags = ["mechanical", "wastewater", "wet-weather", "bypass", "storage", "pump", "backup-energy", "deterministic"]
+tool_mode = "with-tool"
+
+[params.peak_inflow_m3_h]
+type = "float"
+unit = "m3/h"
+description = "WET-10-INFLOW-06 peak wet-weather inflow"
+min = 1120.0
+max = 1120.0
+
+[params.process_capacity_m3_h]
+type = "float"
+unit = "m3/h"
+description = "UNIT-10-SCHED-06 process capacity"
+min = 820.0
+max = 820.0
+
+[params.peak_duration_h]
+type = "float"
+unit = "h"
+description = "WET-10-INFLOW-06 peak duration"
+min = 3.5
+max = 3.5
+
+[params.reactor_volume_m3]
+type = "float"
+unit = "m3"
+description = "UNIT-10-SCHED-06 reactor volume"
+min = 3600.0
+max = 3600.0
+
+[params.min_hrt_hr]
+type = "float"
+unit = "h"
+description = "PERMIT-10-BYPASS-06 minimum HRT"
+min = 3.2
+max = 3.2
+
+[params.clarifier_area_m2]
+type = "float"
+unit = "m2"
+description = "UNIT-10-SCHED-06 clarifier area"
+min = 520.0
+max = 520.0
+
+[params.max_peak_sor_m3_m2_d]
+type = "float"
+unit = "m3/m2/d"
+description = "PERMIT-10-BYPASS-06 maximum peak SOR"
+min = 58.0
+max = 58.0
+
+[params.available_storage_m3]
+type = "float"
+unit = "m3"
+description = "PUMP-10-STORAGE-06 available storage"
+min = 1100.0
+max = 1100.0
+
+[params.pump_head_m]
+type = "float"
+unit = "m"
+description = "PUMP-10-STORAGE-06 pump head"
+min = 14.0
+max = 14.0
+
+[params.pump_efficiency]
+type = "float"
+description = "PUMP-10-STORAGE-06 pump efficiency"
+min = 0.72
+max = 0.72
+
+[params.pump_motor_efficiency]
+type = "float"
+description = "PUMP-10-STORAGE-06 motor efficiency"
+min = 0.93
+max = 0.93
+
+[params.backup_bess_kwh]
+type = "float"
+unit = "kWh"
+description = "CONTROL-10-RULES-06 backup BESS capacity"
+min = 320.0
+max = 320.0
+
+[params.bess_usable_soc_fraction]
+type = "float"
+description = "CONTROL-10-RULES-06 usable BESS SOC"
+min = 0.86
+max = 0.86
+
+[params.bess_inverter_efficiency]
+type = "float"
+description = "CONTROL-10-RULES-06 BESS inverter efficiency"
+min = 0.93
+max = 0.93
+
+[params.bess_reserve_kwh]
+type = "float"
+unit = "kWh"
+description = "CONTROL-10-RULES-06 BESS reserve"
+min = 35.0
+max = 35.0
+
+[params.outage_duration_h]
+type = "float"
+unit = "h"
+description = "CONTROL-10-RULES-06 backup operation duration"
+min = 2.5
+max = 2.5
+
+[params.allowed_bypass_m3]
+type = "float"
+unit = "m3"
+description = "PERMIT-10-BYPASS-06 allowed bypass volume"
+min = 0.0
+max = 0.0
+
+[outputs.required_storage_m3]
+description = "Storage required for excess wet-weather flow"
+tolerance = 0.03
+
+[outputs.storage_margin_m3]
+description = "Available storage minus required storage"
+tolerance = 0.03
+
+[outputs.reactor_hrt_hr]
+description = "Wet-weather reactor HRT"
+tolerance = 0.03
+
+[outputs.hrt_margin_hr]
+description = "Reactor HRT minus minimum HRT"
+tolerance = 0.03
+
+[outputs.clarifier_peak_sor_m3_m2_d]
+description = "Clarifier peak SOR"
+tolerance = 0.03
+
+[outputs.sor_margin_m3_m2_d]
+description = "Peak SOR limit minus calculated SOR"
+tolerance = 0.03
+
+[outputs.pump_input_power_kw]
+description = "Pump input power"
+tolerance = 0.03
+
+[outputs.outage_energy_kwh]
+description = "Pump outage energy"
+tolerance = 0.03
+
+[outputs.usable_backup_energy_kwh]
+description = "Usable backup energy"
+tolerance = 0.03
+
+[outputs.backup_energy_margin_kwh]
+description = "Usable backup energy minus outage energy"
+tolerance = 0.03
+
+[outputs.bypass_volume_m3]
+description = "Calculated bypass volume"
+tolerance = 0.03
+
+[outputs.bypass_margin_m3]
+description = "Allowed bypass minus calculated bypass"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when storage, HRT, SOR, backup, and bypass margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc10_wet_weather_bypass_case]
+description = "Wet-weather process and bypass resilience source pack"
+site_contexts = ["wet-weather-bypass-resilience", "wet-weather-storage-energy-check"]
+
+[archetypes.ssc10_wet_weather_bypass_case.params]
+peak_inflow_m3_h = {min = 1120.0, max = 1120.0}
+process_capacity_m3_h = {min = 820.0, max = 820.0}
+peak_duration_h = {min = 3.5, max = 3.5}
+reactor_volume_m3 = {min = 3600.0, max = 3600.0}
+min_hrt_hr = {min = 3.2, max = 3.2}
+clarifier_area_m2 = {min = 520.0, max = 520.0}
+max_peak_sor_m3_m2_d = {min = 58.0, max = 58.0}
+available_storage_m3 = {min = 1100.0, max = 1100.0}
+pump_head_m = {min = 14.0, max = 14.0}
+pump_efficiency = {min = 0.72, max = 0.72}
+pump_motor_efficiency = {min = 0.93, max = 0.93}
+backup_bess_kwh = {min = 320.0, max = 320.0}
+bess_usable_soc_fraction = {min = 0.86, max = 0.86}
+bess_inverter_efficiency = {min = 0.93, max = 0.93}
+bess_reserve_kwh = {min = 35.0, max = 35.0}
+outage_duration_h = {min = 2.5, max = 2.5}
+allowed_bypass_m3 = {min = 0.0, max = 0.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-10 wet-weather package"
+visibility = "all_given"
+archetypes = ["ssc10_wet_weather_bypass_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-10 wet-weather package"
+visibility = "all_given"
+archetypes = ["ssc10_wet_weather_bypass_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-10 wet-weather package"
+visibility = "all_given"
+archetypes = ["ssc10_wet_weather_bypass_case"]

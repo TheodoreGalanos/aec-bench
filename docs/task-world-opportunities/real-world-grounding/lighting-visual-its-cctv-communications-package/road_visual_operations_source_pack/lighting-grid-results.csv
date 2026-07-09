@@ -1,9 +1,0 @@
-grid_id,road_segment_id,chainage_m,lane,offset_m,illuminance_lux,source_status
-LG-01,RD-SSC13-001,15,near_lane,-1.75,18.4,task_owned_synthetic
-LG-02,RD-SSC13-001,15,far_lane,1.75,20.1,task_owned_synthetic
-LG-03,RD-SSC13-001,45,near_lane,-1.75,19.7,task_owned_synthetic
-LG-04,RD-SSC13-001,45,far_lane,1.75,17.9,task_owned_synthetic
-LG-05,RD-SSC13-001,75,near_lane,-1.75,16.8,task_owned_synthetic
-LG-06,RD-SSC13-001,75,far_lane,1.75,18.9,task_owned_synthetic
-LG-07,RD-SSC13-001,105,near_lane,-1.75,21.0,task_owned_synthetic
-LG-08,RD-SSC13-001,105,far_lane,1.75,18.2,task_owned_synthetic

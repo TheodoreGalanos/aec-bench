@@ -1,0 +1,179 @@
+# ABOUTME: Defines the SSC-14 retaining foundation groundwater stability template.
+# ABOUTME: Pins one wall section, ground report, groundwater, surcharge, and foundation source pack.
+
+[meta]
+name = "retaining-foundation-groundwater-stability-package"
+description = "SSC-14 retaining wall, foundation groundwater, bearing, and uplift metrics"
+long_description = "Calculates source-bound retaining and foundation stability metrics from a deterministic SSC-14 task-owned source pack. The template combines active earth pressure, surcharge, hydrostatic pressure, overturning, sliding, bearing, uplift margin, and overall pass scoring."
+discipline = "structural"
+category = "retaining-foundation"
+standards = ["Rankine earth pressure", "retaining wall stability", "foundation bearing", "groundwater uplift"]
+tags = ["structural", "retaining-wall", "foundation", "groundwater", "bearing", "uplift", "deterministic"]
+tool_mode = "with-tool"
+
+[params.retained_height_m]
+type = "float"
+unit = "m"
+description = "WALL-SSC14-004 retained wall height"
+min = 4.0
+max = 4.0
+
+[params.soil_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m3"
+description = "GEO-SSC14-004 retained soil unit weight"
+min = 19.0
+max = 19.0
+
+[params.soil_friction_angle_deg]
+type = "float"
+unit = "deg"
+description = "GEO-SSC14-004 soil friction angle for Rankine pressure"
+min = 30.0
+max = 30.0
+
+[params.surcharge_kpa]
+type = "float"
+unit = "kPa"
+description = "SUR-SSC14-004 backfill surcharge"
+min = 12.0
+max = 12.0
+
+[params.water_height_m]
+type = "float"
+unit = "m"
+description = "GW-SSC14-004 water height against the wall"
+min = 2.1
+max = 2.1
+
+[params.wall_vertical_weight_kn_m]
+type = "float"
+unit = "kN/m"
+description = "WALL-SSC14-004 vertical stabilizing wall weight per metre"
+min = 240.0
+max = 240.0
+
+[params.base_width_m]
+type = "float"
+unit = "m"
+description = "WALL-SSC14-004 foundation base width"
+min = 3.2
+max = 3.2
+
+[params.resisting_lever_arm_ratio]
+type = "float"
+description = "WALL-SSC14-004 resisting lever arm as a fraction of base width"
+min = 0.45
+max = 0.45
+
+[params.base_friction_coefficient]
+type = "float"
+description = "WALL-SSC14-004 base sliding friction coefficient"
+min = 0.6
+max = 0.6
+
+[params.allowable_bearing_kpa]
+type = "float"
+unit = "kPa"
+description = "GEO-SSC14-004 allowable bearing pressure"
+min = 220.0
+max = 220.0
+
+[params.uplift_force_kn_m]
+type = "float"
+unit = "kN/m"
+description = "GW-SSC14-004 uplift force under the foundation"
+min = 38.0
+max = 38.0
+
+[params.minimum_overturning_fs]
+type = "float"
+description = "MEMO-SSC14-004 minimum overturning factor of safety"
+min = 2.0
+max = 2.0
+
+[params.minimum_sliding_fs]
+type = "float"
+description = "MEMO-SSC14-004 minimum sliding factor of safety"
+min = 1.1
+max = 1.1
+
+[outputs.active_earth_force_kn_m]
+description = "Rankine active earth force per metre"
+tolerance = 0.03
+
+[outputs.surcharge_force_kn_m]
+description = "Rankine surcharge force per metre"
+tolerance = 0.03
+
+[outputs.hydrostatic_force_kn_m]
+description = "Hydrostatic force per metre"
+tolerance = 0.03
+
+[outputs.total_lateral_force_kn_m]
+description = "Total lateral force per metre"
+tolerance = 0.03
+
+[outputs.overturning_moment_knm_m]
+description = "Total overturning moment per metre"
+tolerance = 0.03
+
+[outputs.resisting_moment_knm_m]
+description = "Resisting moment from wall vertical weight"
+tolerance = 0.03
+
+[outputs.overturning_factor_of_safety]
+description = "Resisting moment divided by overturning moment"
+tolerance = 0.03
+
+[outputs.sliding_factor_of_safety]
+description = "Frictional resistance divided by lateral force"
+tolerance = 0.03
+
+[outputs.bearing_pressure_kpa]
+description = "Average bearing pressure under the wall base"
+tolerance = 0.03
+
+[outputs.bearing_utilization]
+description = "Bearing pressure divided by allowable bearing"
+tolerance = 0.03
+
+[outputs.uplift_margin_kn_m]
+description = "Reduced stabilizing weight minus uplift force"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when overturning, sliding, bearing, and uplift checks pass"
+tolerance = 0.03
+
+[archetypes.ssc14_retaining_groundwater_case]
+description = "Retaining wall, groundwater, surcharge, and foundation source pack"
+retained_height_m = {min = 4.0, max = 4.0}
+soil_unit_weight_kn_m3 = {min = 19.0, max = 19.0}
+soil_friction_angle_deg = {min = 30.0, max = 30.0}
+surcharge_kpa = {min = 12.0, max = 12.0}
+water_height_m = {min = 2.1, max = 2.1}
+wall_vertical_weight_kn_m = {min = 240.0, max = 240.0}
+base_width_m = {min = 3.2, max = 3.2}
+resisting_lever_arm_ratio = {min = 0.45, max = 0.45}
+base_friction_coefficient = {min = 0.6, max = 0.6}
+allowable_bearing_kpa = {min = 220.0, max = 220.0}
+uplift_force_kn_m = {min = 38.0, max = 38.0}
+minimum_overturning_fs = {min = 2.0, max = 2.0}
+minimum_sliding_fs = {min = 1.1, max = 1.1}
+site_contexts = ["retaining-wall", "groundwater-interface", "foundation-bearing"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-14 retaining foundation package"
+visibility = "all_given"
+archetypes = ["ssc14_retaining_groundwater_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-14 retaining foundation package"
+visibility = "all_given"
+archetypes = ["ssc14_retaining_groundwater_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-14 retaining foundation package"
+visibility = "all_given"
+archetypes = ["ssc14_retaining_groundwater_case"]

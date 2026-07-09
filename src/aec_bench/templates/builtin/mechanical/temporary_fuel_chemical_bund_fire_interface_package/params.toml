@@ -1,0 +1,231 @@
+[meta]
+name = "temporary-fuel-chemical-bund-fire-interface-package"
+description = "SSC-16 temporary fuel chemical bund and fire interface metrics"
+long_description = "Calculates source-bound temporary bund volume, fire HRR, visibility margin, NAC load, alarm battery, drain isolation, and spill response metrics from a deterministic SSC-16 task-owned source pack."
+discipline = "mechanical"
+category = "site-safety"
+standards = ["hazardous storage workflow", "fire interface workflow", "alarm load workflow"]
+tags = ["mechanical", "construction", "bund", "fire", "alarm", "site-safety", "deterministic"]
+tool_mode = "with-tool"
+
+[params.largest_container_l]
+type = "float"
+unit = "L"
+description = "INV-16-FUEL-06 largest temporary storage container"
+min = 2500.0
+max = 2500.0
+
+[params.rainfall_allowance_l]
+type = "float"
+unit = "L"
+description = "BUND-16-DETAIL-06 rainfall allowance"
+min = 600.0
+max = 600.0
+
+[params.provided_bund_volume_l]
+type = "float"
+unit = "L"
+description = "BUND-16-DETAIL-06 provided bund volume"
+min = 3600.0
+max = 3600.0
+
+[params.fire_growth_alpha_kw_s2]
+type = "float"
+unit = "kW/s2"
+description = "FIRE-16-NOTE-06 t-squared fire growth alpha"
+min = 0.0469
+max = 0.0469
+
+[params.design_fire_time_s]
+type = "float"
+unit = "s"
+description = "FIRE-16-NOTE-06 design fire time"
+min = 240.0
+max = 240.0
+
+[params.provided_visibility_m]
+type = "float"
+unit = "m"
+description = "FIRE-16-NOTE-06 provided site visibility"
+min = 14.0
+max = 14.0
+
+[params.required_visibility_m]
+type = "float"
+unit = "m"
+description = "FIRE-16-NOTE-06 required visibility"
+min = 10.0
+max = 10.0
+
+[params.horn_count]
+type = "float"
+unit = "count"
+description = "ALARM-16-LOAD-06 horn count"
+min = 6.0
+max = 6.0
+
+[params.horn_current_a]
+type = "float"
+unit = "A"
+description = "ALARM-16-LOAD-06 horn current"
+min = 0.075
+max = 0.075
+
+[params.strobe_count]
+type = "float"
+unit = "count"
+description = "ALARM-16-LOAD-06 strobe count"
+min = 4.0
+max = 4.0
+
+[params.strobe_current_a]
+type = "float"
+unit = "A"
+description = "ALARM-16-LOAD-06 strobe current"
+min = 0.11
+max = 0.11
+
+[params.panel_current_a]
+type = "float"
+unit = "A"
+description = "ALARM-16-LOAD-06 panel current"
+min = 0.2
+max = 0.2
+
+[params.nac_supply_capacity_a]
+type = "float"
+unit = "A"
+description = "ALARM-16-LOAD-06 NAC supply capacity"
+min = 2.0
+max = 2.0
+
+[params.alarm_load_w]
+type = "float"
+unit = "W"
+description = "ALARM-16-LOAD-06 alarm standby load"
+min = 95.0
+max = 95.0
+
+[params.alarm_runtime_h]
+type = "float"
+unit = "h"
+description = "ALARM-16-LOAD-06 alarm runtime"
+min = 24.0
+max = 24.0
+
+[params.alarm_battery_capacity_kwh]
+type = "float"
+unit = "kWh"
+description = "ALARM-16-LOAD-06 alarm battery capacity"
+min = 3.0
+max = 3.0
+
+[params.isolated_drain_count]
+type = "float"
+unit = "count"
+description = "BUND-16-DETAIL-06 isolated drain count"
+min = 3.0
+max = 3.0
+
+[params.total_drain_count]
+type = "float"
+unit = "count"
+description = "BUND-16-DETAIL-06 total drain count"
+min = 3.0
+max = 3.0
+
+[params.allowed_spill_response_min]
+type = "float"
+unit = "min"
+description = "STORE-16-LAYOUT-06 allowed spill response time"
+min = 30.0
+max = 30.0
+
+[params.planned_spill_response_min]
+type = "float"
+unit = "min"
+description = "STORE-16-LAYOUT-06 planned spill response time"
+min = 18.0
+max = 18.0
+
+[outputs.required_bund_volume_l]
+description = "Required temporary bund volume"
+tolerance = 0.03
+
+[outputs.bund_volume_margin_l]
+description = "Provided bund volume minus required bund volume"
+tolerance = 0.03
+
+[outputs.fire_hrr_kw]
+description = "T-squared design fire heat release rate"
+tolerance = 0.03
+
+[outputs.visibility_margin_m]
+description = "Provided visibility minus required visibility"
+tolerance = 0.03
+
+[outputs.nac_current_a]
+description = "Total notification appliance circuit current"
+tolerance = 0.003
+
+[outputs.nac_headroom_a]
+description = "NAC supply capacity minus current"
+tolerance = 0.003
+
+[outputs.alarm_battery_required_kwh]
+description = "Alarm battery energy required"
+tolerance = 0.03
+
+[outputs.alarm_battery_margin_kwh]
+description = "Alarm battery capacity minus required battery energy"
+tolerance = 0.03
+
+[outputs.drain_isolation_fraction]
+description = "Fraction of drains isolated for temporary storage"
+tolerance = 0.001
+
+[outputs.spill_response_margin_min]
+description = "Allowed spill response time minus planned response time"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when bund, visibility, alarm, drain, and response checks pass"
+tolerance = 0.001
+
+[archetypes.ssc16_bund_fire_case]
+description = "Temporary fuel chemical bund and fire interface case"
+largest_container_l = {min = 2500.0, max = 2500.0}
+rainfall_allowance_l = {min = 600.0, max = 600.0}
+provided_bund_volume_l = {min = 3600.0, max = 3600.0}
+fire_growth_alpha_kw_s2 = {min = 0.0469, max = 0.0469}
+design_fire_time_s = {min = 240.0, max = 240.0}
+provided_visibility_m = {min = 14.0, max = 14.0}
+required_visibility_m = {min = 10.0, max = 10.0}
+horn_count = {min = 6.0, max = 6.0}
+horn_current_a = {min = 0.075, max = 0.075}
+strobe_count = {min = 4.0, max = 4.0}
+strobe_current_a = {min = 0.11, max = 0.11}
+panel_current_a = {min = 0.2, max = 0.2}
+nac_supply_capacity_a = {min = 2.0, max = 2.0}
+alarm_load_w = {min = 95.0, max = 95.0}
+alarm_runtime_h = {min = 24.0, max = 24.0}
+alarm_battery_capacity_kwh = {min = 3.0, max = 3.0}
+isolated_drain_count = {min = 3.0, max = 3.0}
+total_drain_count = {min = 3.0, max = 3.0}
+allowed_spill_response_min = {min = 30.0, max = 30.0}
+planned_spill_response_min = {min = 18.0, max = 18.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-16 temporary bund fire interface package"
+visibility = "all_given"
+archetypes = ["ssc16_bund_fire_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-16 temporary bund fire interface package"
+visibility = "all_given"
+archetypes = ["ssc16_bund_fire_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-16 temporary bund fire interface package"
+visibility = "all_given"
+archetypes = ["ssc16_bund_fire_case"]

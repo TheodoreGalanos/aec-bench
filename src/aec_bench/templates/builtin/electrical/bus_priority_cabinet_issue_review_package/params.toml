@@ -1,0 +1,375 @@
+[meta]
+name = "bus-priority-cabinet-issue-review-package"
+description = "SSC-01 review-first issue-readiness review of a bus-priority signal and cabinet package"
+long_description = "Review-native long-horizon task over a generated SSC-01 bus-priority corridor issue packet. The agent receives a multi-file source packet in /workspace/sources/ covering operations, signal timing, detector/controller membership, cabinet load, feeder and backup power, owner criteria, and comments. The task is to inventory the packet, preserve object identity, recompute only source-owned evidence, assign one status per review item, raise findings/information requests/actions, and make a readiness decision. Packet variants inject missing cabinet capacity evidence, stale signal timing revisions, detector/controller mismatch, scenario copy-forward, open comments, carried comments, or a genuine cabinet load exceedance."
+discipline = "electrical"
+category = "road-review"
+standards = ["FHWA MUTCD", "transit signal priority", "roadside cabinet design", "ITS architecture"]
+tags = ["electrical", "road", "review", "issue-readiness", "bus-priority", "signal", "cabinet", "its"]
+tool_mode = "no-tool"
+
+# --- Signal timing and bus-priority operations ---
+
+[params.bus_approach_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "SIG-SSC01-005 bus-priority approach speed"
+min = 35.0
+max = 65.0
+
+[params.bus_approach_grade_pct]
+type = "float"
+unit = "%"
+description = "SIG-SSC01-005 signed bus-priority approach grade"
+min = -1.0
+max = 3.0
+
+[params.yellow_reaction_time_s]
+type = "float"
+unit = "s"
+description = "SIG-SSC01-005 yellow interval reaction term"
+min = 0.8
+max = 1.4
+
+[params.yellow_deceleration_m_s2]
+type = "float"
+unit = "m/s2"
+description = "SIG-SSC01-005 yellow interval deceleration"
+min = 2.8
+max = 3.6
+
+[params.intersection_width_m]
+type = "float"
+unit = "m"
+description = "SIG-SSC01-005 intersection width"
+min = 18.0
+max = 36.0
+
+[params.bus_length_m]
+type = "float"
+unit = "m"
+description = "BUS-SSC01-005 design bus length"
+min = 12.0
+max = 18.0
+
+[params.all_red_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "SIG-SSC01-005 all-red clearance speed"
+min = 35.0
+max = 55.0
+
+[params.buses_per_hour]
+type = "int"
+unit = "buses/h"
+description = "BUS-SSC01-005 scheduled priority buses"
+min = 12.0
+max = 36.0
+
+[params.bus_occupancy_pax]
+type = "int"
+unit = "passengers/bus"
+description = "BUS-SSC01-005 design bus occupancy"
+min = 45.0
+max = 85.0
+
+[params.bus_capacity_margin_target_pax_h]
+type = "float"
+unit = "passengers/h"
+description = "Derivation margin between bus handling capacity and peak passenger demand"
+min = 80.0
+max = 450.0
+
+# --- Cabinet load ---
+
+[params.controller_load_w]
+type = "float"
+unit = "W"
+description = "CAB-SSC01-005 controller load"
+min = 150.0
+max = 260.0
+
+[params.detector_count]
+type = "int"
+description = "DET-SSC01-005 detector count"
+min = 8.0
+max = 18.0
+
+[params.detector_load_w]
+type = "float"
+unit = "W"
+description = "DET-SSC01-005 detector load per unit"
+min = 5.0
+max = 12.0
+
+[params.transit_radio_load_w]
+type = "float"
+unit = "W"
+description = "CAB-SSC01-005 transit radio load"
+min = 50.0
+max = 110.0
+
+[params.vms_load_w]
+type = "float"
+unit = "W"
+description = "CAB-SSC01-005 VMS load"
+min = 80.0
+max = 180.0
+
+[params.signal_heads_load_w]
+type = "float"
+unit = "W"
+description = "CAB-SSC01-005 signal heads load"
+min = 300.0
+max = 650.0
+
+[params.cabinet_capacity_margin_w]
+type = "float"
+unit = "W"
+description = "Derivation margin between cabinet load and cabinet capacity for passing packets"
+min = 120.0
+max = 550.0
+
+[params.cabinet_load_deficit_w]
+type = "float"
+unit = "W"
+description = "Derivation deficit between cabinet capacity and cabinet load for failing packets"
+min = 50.0
+max = 250.0
+
+# --- Feeder and backup power ---
+
+[params.feeder_voltage_v]
+type = "enum"
+unit = "V"
+description = "FEED-SSC01-005 nominal feeder voltage"
+values = ["230", "240"]
+
+[params.power_factor]
+type = "float"
+description = "FEED-SSC01-005 cabinet power factor"
+min = 0.90
+max = 0.98
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "FEED-SSC01-005 feeder length"
+min = 0.08
+max = 0.35
+
+[params.conductor_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "FEED-SSC01-005 conductor resistance"
+min = 0.45
+max = 1.10
+
+[params.voltage_drop_margin_target_percent]
+type = "float"
+unit = "%"
+description = "Derivation margin between voltage drop and allowable voltage drop"
+min = 2.0
+max = 5.0
+
+[params.battery_efficiency]
+type = "float"
+description = "BATT-SSC01-005 battery efficiency"
+min = 0.85
+max = 0.95
+
+[params.required_backup_h]
+type = "float"
+unit = "h"
+description = "BATT-SSC01-005 required backup duration"
+min = 2.0
+max = 6.0
+
+[params.battery_runtime_margin_h]
+type = "float"
+unit = "h"
+description = "Derivation margin between battery runtime and required backup duration"
+min = 0.8
+max = 3.5
+
+# --- Documentary variant helper ---
+
+[params.packet_variant]
+type = "enum"
+description = "Hidden packet-defect variant controlling gold review statuses"
+values = [
+  "clean",
+  "missing_cabinet_capacity",
+  "stale_signal_timing_revision",
+  "detector_controller_mismatch",
+  "scenario_copy_forward",
+  "open_critical_comment",
+  "minor_open_comment_carried",
+  "cabinet_load_exceeded",
+]
+
+# --- Outputs (review gold state and evidence) ---
+
+[outputs.rlr_01_status]
+description = "Packet completeness status code (0 pass, 1 fail, 2 not applicable, 3 insufficient data)"
+tolerance = 0.0
+
+[outputs.rlr_02_status]
+description = "Object identity status code"
+tolerance = 0.0
+
+[outputs.rlr_03_status]
+description = "Signal and priority basis status code"
+tolerance = 0.0
+
+[outputs.rlr_04_status]
+description = "Cabinet and priority adequacy status code"
+tolerance = 0.0
+
+[outputs.rlr_05_status]
+description = "Scenario consequence status code"
+tolerance = 0.0
+
+[outputs.rlr_06_status]
+description = "Secondary-discipline resilience status code"
+tolerance = 0.0
+
+[outputs.rlr_07_status]
+description = "Comment and action closure status code"
+tolerance = 0.0
+
+[outputs.rlr_08_status]
+description = "Readiness decision consistency status code"
+tolerance = 0.0
+
+[outputs.rlr_09_status]
+description = "Claim boundary status code"
+tolerance = 0.0
+
+[outputs.readiness_code]
+description = "Gold readiness decision (0 ready, 1 ready with carried actions, 2 not ready)"
+tolerance = 0.0
+
+[outputs.required_findings_count]
+description = "Findings the review must raise"
+tolerance = 0.0
+
+[outputs.required_information_requests_count]
+description = "Information requests the review must raise"
+tolerance = 0.0
+
+[outputs.required_carried_actions_count]
+description = "Carried actions the review must record"
+tolerance = 0.0
+
+[outputs.yellow_interval_s]
+description = "Grade-adjusted yellow interval"
+tolerance = 0.02
+
+[outputs.all_red_interval_s]
+description = "All-red clearance interval"
+tolerance = 0.02
+
+[outputs.bus_handling_capacity_pax_h]
+description = "Bus priority passenger handling capacity"
+tolerance = 0.02
+
+[outputs.bus_capacity_margin_pax_h]
+description = "Passenger capacity minus demand"
+tolerance = 0.02
+
+[outputs.cabinet_load_w]
+description = "Selected cabinet load"
+tolerance = 0.02
+
+[outputs.cabinet_load_margin_w]
+description = "Cabinet capacity minus selected load"
+tolerance = 0.02
+
+[outputs.feeder_current_a]
+description = "Cabinet feeder current"
+tolerance = 0.02
+
+[outputs.feeder_voltage_drop_percent]
+description = "Feeder voltage drop at selected cabinet load"
+tolerance = 0.02
+
+[outputs.voltage_drop_margin_percent]
+description = "Allowable voltage drop minus computed voltage drop"
+tolerance = 0.02
+
+[outputs.battery_runtime_h]
+description = "Backup battery runtime"
+tolerance = 0.02
+
+[outputs.battery_margin_h]
+description = "Backup runtime minus required duration"
+tolerance = 0.02
+
+# --- Archetypes ---
+
+[archetypes.urban_bus_priority_corridor]
+description = "Urban arterial bus-priority corridor with denser roadside equipment"
+site_contexts = ["urban-arterial-bus-priority-cabinet", "cbd-transit-priority-corridor"]
+buses_per_hour = {min = 20.0, max = 36.0}
+bus_occupancy_pax = {min = 55.0, max = 85.0}
+detector_count = {min = 12.0, max = 18.0}
+signal_heads_load_w = {min = 420.0, max = 650.0}
+required_backup_h = {min = 3.0, max = 6.0}
+
+[archetypes.suburban_bus_priority_corridor]
+description = "Suburban bus-priority corridor with moderate equipment and demand"
+site_contexts = ["suburban-bus-priority-cabinet", "station-access-transit-priority-corridor"]
+buses_per_hour = {min = 12.0, max = 24.0}
+bus_occupancy_pax = {min = 45.0, max = 70.0}
+detector_count = {min = 8.0, max = 14.0}
+signal_heads_load_w = {min = 300.0, max = 520.0}
+required_backup_h = {min = 2.0, max = 5.0}
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Obvious packet defects: clean, missing cabinet capacity, or genuine cabinet load exceedance"
+visibility = "partial"
+archetypes = ["urban_bus_priority_corridor", "suburban_bus_priority_corridor"]
+hidden_params = [
+  "packet_variant",
+  "bus_capacity_margin_target_pax_h",
+  "cabinet_capacity_margin_w",
+  "cabinet_load_deficit_w",
+  "voltage_drop_margin_target_percent",
+  "battery_runtime_margin_h",
+]
+packet_variant = ["clean", "missing_cabinet_capacity", "cabinet_load_exceeded"]
+
+[difficulty.medium]
+description = "Full packet-variant distribution"
+visibility = "partial"
+archetypes = ["urban_bus_priority_corridor", "suburban_bus_priority_corridor"]
+hidden_params = [
+  "packet_variant",
+  "bus_capacity_margin_target_pax_h",
+  "cabinet_capacity_margin_w",
+  "cabinet_load_deficit_w",
+  "voltage_drop_margin_target_percent",
+  "battery_runtime_margin_h",
+]
+
+[difficulty.hard]
+description = "Subtle documentary defects: stale revisions, identity mismatch, scenario copy-forward, carried comments"
+visibility = "partial"
+archetypes = ["urban_bus_priority_corridor", "suburban_bus_priority_corridor"]
+hidden_params = [
+  "packet_variant",
+  "bus_capacity_margin_target_pax_h",
+  "cabinet_capacity_margin_w",
+  "cabinet_load_deficit_w",
+  "voltage_drop_margin_target_percent",
+  "battery_runtime_margin_h",
+]
+packet_variant = [
+  "stale_signal_timing_revision",
+  "detector_controller_mismatch",
+  "scenario_copy_forward",
+  "minor_open_comment_carried",
+]

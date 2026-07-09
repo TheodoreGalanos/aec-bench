@@ -1,0 +1,221 @@
+[meta]
+name = "der-resilience-feeder-interconnection-package"
+description = "SSC-17 DER resilience and feeder interconnection metrics"
+long_description = "Calculates source-bound DER resilience metrics from a deterministic SSC-17 task-owned source pack. The template combines PV output, export limit, BESS/generator autonomy, feeder voltage drop, ampacity, and an overall synthetic pass score."
+discipline = "electrical"
+category = "der-interconnection-resilience"
+standards = ["NREL SAM", "NREL REopt", "DER interconnection workflows", "backup energy dispatch workflows"]
+tags = ["electrical", "pv", "bess", "generator", "interconnection", "feeder", "resilience", "deterministic"]
+tool_mode = "with-tool"
+
+[params.pv_dc_kw]
+type = "float"
+unit = "kW"
+description = "PV-SSC17-001 PV DC rating"
+min = 180.0
+max = 180.0
+
+[params.pv_ac_derate]
+type = "float"
+description = "PV-SSC17-001 source-owned AC derate"
+min = 0.82
+max = 0.82
+
+[params.inverter_ac_rating_kw]
+type = "float"
+unit = "kW"
+description = "BESS-SSC17-001 inverter AC rating"
+min = 150.0
+max = 150.0
+
+[params.site_minimum_load_kw]
+type = "float"
+unit = "kW"
+description = "LOAD-SSC17-001 site minimum load during export check"
+min = 90.0
+max = 90.0
+
+[params.export_limit_kw]
+type = "float"
+unit = "kW"
+description = "UTIL-SSC17-001 export limit"
+min = 120.0
+max = 120.0
+
+[params.critical_load_kw]
+type = "float"
+unit = "kW"
+description = "LOAD-SSC17-001 critical load"
+min = 62.0
+max = 62.0
+
+[params.outage_duration_hr]
+type = "float"
+unit = "h"
+description = "LOAD-SSC17-001 outage duration"
+min = 5.0
+max = 5.0
+
+[params.bess_nominal_kwh]
+type = "float"
+unit = "kWh"
+description = "BESS-SSC17-001 nominal energy"
+min = 420.0
+max = 420.0
+
+[params.max_depth_of_discharge]
+type = "float"
+description = "BESS-SSC17-001 maximum depth of discharge"
+min = 0.8
+max = 0.8
+
+[params.inverter_efficiency]
+type = "float"
+description = "BESS-SSC17-001 inverter efficiency"
+min = 0.94
+max = 0.94
+
+[params.generator_kw]
+type = "float"
+unit = "kW"
+description = "BESS-SSC17-001 paired generator output"
+min = 55.0
+max = 55.0
+
+[params.generator_runtime_hr]
+type = "float"
+unit = "h"
+description = "BESS-SSC17-001 paired generator runtime"
+min = 2.0
+max = 2.0
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "SLD-SSC17-001 feeder voltage"
+min = 480.0
+max = 480.0
+
+[params.feeder_length_m]
+type = "float"
+unit = "m"
+description = "SLD-SSC17-001 feeder length"
+min = 220.0
+max = 220.0
+
+[params.feeder_current_a]
+type = "float"
+unit = "A"
+description = "SLD-SSC17-001 feeder current"
+min = 92.0
+max = 92.0
+
+[params.conductor_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "SLD-SSC17-001 conductor resistance"
+min = 0.253
+max = 0.253
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "UTIL-SSC17-001 maximum voltage drop"
+min = 3.0
+max = 3.0
+
+[params.feeder_ampacity_a]
+type = "float"
+unit = "A"
+description = "SLD-SSC17-001 feeder ampacity"
+min = 160.0
+max = 160.0
+
+[outputs.pv_ac_output_kw]
+description = "PV AC output after derate and inverter cap"
+tolerance = 0.03
+
+[outputs.export_kw]
+description = "Potential export after serving site minimum load"
+tolerance = 0.03
+
+[outputs.export_margin_kw]
+description = "Utility export limit minus calculated export"
+tolerance = 0.03
+
+[outputs.critical_energy_required_kwh]
+description = "Critical load energy required during outage"
+tolerance = 0.03
+
+[outputs.usable_bess_energy_kwh]
+description = "Usable BESS energy after depth of discharge and inverter efficiency"
+tolerance = 0.03
+
+[outputs.generator_energy_kwh]
+description = "Generator energy available"
+tolerance = 0.03
+
+[outputs.resilience_energy_available_kwh]
+description = "Usable BESS energy plus generator energy"
+tolerance = 0.03
+
+[outputs.autonomy_energy_margin_kwh]
+description = "Available resilience energy minus critical energy required"
+tolerance = 0.03
+
+[outputs.battery_only_runtime_hr]
+description = "Battery-only runtime at the critical load"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "Three-phase feeder voltage drop"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Maximum voltage drop minus calculated voltage drop"
+tolerance = 0.03
+
+[outputs.feeder_ampacity_margin_a]
+description = "Feeder ampacity minus operating current"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when export, autonomy, voltage drop, and ampacity margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc17_der_interconnection_case]
+description = "DER resilience case with PV, load, BESS/generator, feeder, and interconnection export limit"
+pv_dc_kw = {min = 180.0, max = 180.0}
+pv_ac_derate = {min = 0.82, max = 0.82}
+inverter_ac_rating_kw = {min = 150.0, max = 150.0}
+site_minimum_load_kw = {min = 90.0, max = 90.0}
+export_limit_kw = {min = 120.0, max = 120.0}
+critical_load_kw = {min = 62.0, max = 62.0}
+outage_duration_hr = {min = 5.0, max = 5.0}
+bess_nominal_kwh = {min = 420.0, max = 420.0}
+max_depth_of_discharge = {min = 0.8, max = 0.8}
+inverter_efficiency = {min = 0.94, max = 0.94}
+generator_kw = {min = 55.0, max = 55.0}
+generator_runtime_hr = {min = 2.0, max = 2.0}
+feeder_voltage_v = {min = 480.0, max = 480.0}
+feeder_length_m = {min = 220.0, max = 220.0}
+feeder_current_a = {min = 92.0, max = 92.0}
+conductor_resistance_ohm_km = {min = 0.253, max = 0.253}
+max_voltage_drop_percent = {min = 3.0, max = 3.0}
+feeder_ampacity_a = {min = 160.0, max = 160.0}
+site_contexts = ["der-interconnection-resilience", "pv-bess-export-autonomy-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-17 DER interconnection resilience package"
+visibility = "all_given"
+archetypes = ["ssc17_der_interconnection_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-17 DER interconnection resilience package"
+visibility = "all_given"
+archetypes = ["ssc17_der_interconnection_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-17 DER interconnection resilience package"
+visibility = "all_given"
+archetypes = ["ssc17_der_interconnection_case"]

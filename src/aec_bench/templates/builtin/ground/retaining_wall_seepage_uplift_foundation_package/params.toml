@@ -1,0 +1,169 @@
+# ABOUTME: Defines the SSC-07 retaining wall seepage and foundation package template.
+# ABOUTME: Pins one source-bound retaining wall, groundwater, surcharge, and memo case.
+
+[meta]
+name = "retaining-wall-seepage-uplift-foundation-package"
+description = "SSC-07 retaining wall seepage, uplift, bearing, and stability metrics"
+long_description = "Calculates source-bound retaining wall metrics from a deterministic SSC-07 task-owned source pack. The template combines lateral pressure, wall sliding and overturning, bearing pressure, exit gradient, and uplift checks for one retaining section."
+discipline = "ground"
+category = "ground-investigation"
+standards = ["Rankine earth pressure", "retaining wall stability", "exit gradient screening"]
+tags = ["ground", "retaining-wall", "seepage", "uplift", "bearing", "deterministic"]
+tool_mode = "with-tool"
+
+[params.retained_height_m]
+type = "float"
+unit = "m"
+description = "RET-07-WALL-01 retained soil height"
+min = 4.2
+max = 4.2
+
+[params.soil_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m3"
+description = "GEO-07-RET-01 soil unit weight"
+min = 18.0
+max = 18.0
+
+[params.friction_angle_deg]
+type = "float"
+unit = "degrees"
+description = "GEO-07-RET-01 drained friction angle"
+min = 32.0
+max = 32.0
+
+[params.surcharge_kpa]
+type = "float"
+unit = "kPa"
+description = "SUR-07-RET-01 retained-side surcharge"
+min = 12.0
+max = 12.0
+
+[params.base_width_m]
+type = "float"
+unit = "m"
+description = "RET-07-WALL-01 wall base width"
+min = 2.6
+max = 2.6
+
+[params.wall_weight_kn_m]
+type = "float"
+unit = "kN/m"
+description = "RET-07-WALL-01 service wall weight per metre"
+min = 160.0
+max = 160.0
+
+[params.base_friction_coefficient]
+type = "float"
+description = "GEO-07-RET-01 base sliding friction coefficient"
+min = 0.55
+max = 0.55
+
+[params.passive_resistance_kn_m]
+type = "float"
+unit = "kN/m"
+description = "GEO-07-RET-01 credited passive resistance"
+min = 25.0
+max = 25.0
+
+[params.allowable_bearing_kpa]
+type = "float"
+unit = "kPa"
+description = "GEO-07-RET-01 allowable service bearing pressure"
+min = 220.0
+max = 220.0
+
+[params.head_difference_m]
+type = "float"
+unit = "m"
+description = "GW-07-RET-01 retained-side head difference"
+min = 2.1
+max = 2.1
+
+[params.seepage_path_m]
+type = "float"
+unit = "m"
+description = "GW-07-RET-01 seepage path length"
+min = 12.0
+max = 12.0
+
+[params.critical_gradient]
+type = "float"
+description = "GEO-07-RET-01 critical hydraulic gradient"
+min = 0.95
+max = 0.95
+
+[outputs.active_pressure_coefficient]
+description = "Rankine active pressure coefficient"
+tolerance = 0.03
+
+[outputs.active_thrust_kn_m]
+description = "Total active thrust per metre of wall"
+tolerance = 0.03
+
+[outputs.sliding_fs]
+description = "Sliding factor of safety"
+tolerance = 0.03
+
+[outputs.overturning_fs]
+description = "Overturning factor of safety"
+tolerance = 0.03
+
+[outputs.max_bearing_pressure_kpa]
+description = "Maximum service bearing pressure under wall base"
+tolerance = 0.03
+
+[outputs.bearing_margin_kpa]
+description = "Allowable bearing pressure minus maximum bearing pressure"
+tolerance = 0.03
+
+[outputs.exit_gradient]
+description = "Head difference divided by seepage path"
+tolerance = 0.03
+
+[outputs.exit_gradient_fs]
+description = "Critical gradient divided by exit gradient"
+tolerance = 0.03
+
+[outputs.uplift_pressure_kpa]
+description = "Water unit weight times head difference"
+tolerance = 0.03
+
+[outputs.uplift_margin_kpa]
+description = "Average wall contact pressure minus uplift pressure"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when sliding, overturning, bearing, exit-gradient, and uplift checks pass"
+tolerance = 0.03
+
+[archetypes.ssc07_retaining_wall_case]
+description = "Ground investigation package for one retaining wall seepage, uplift, and foundation check"
+retained_height_m = {min = 4.2, max = 4.2}
+soil_unit_weight_kn_m3 = {min = 18.0, max = 18.0}
+friction_angle_deg = {min = 32.0, max = 32.0}
+surcharge_kpa = {min = 12.0, max = 12.0}
+base_width_m = {min = 2.6, max = 2.6}
+wall_weight_kn_m = {min = 160.0, max = 160.0}
+base_friction_coefficient = {min = 0.55, max = 0.55}
+passive_resistance_kn_m = {min = 25.0, max = 25.0}
+allowable_bearing_kpa = {min = 220.0, max = 220.0}
+head_difference_m = {min = 2.1, max = 2.1}
+seepage_path_m = {min = 12.0, max = 12.0}
+critical_gradient = {min = 0.95, max = 0.95}
+site_contexts = ["retaining-wall-seepage", "groundwater-handoff"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-07 retaining wall seepage package"
+visibility = "all_given"
+archetypes = ["ssc07_retaining_wall_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-07 retaining wall seepage package"
+visibility = "all_given"
+archetypes = ["ssc07_retaining_wall_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-07 retaining wall seepage package"
+visibility = "all_given"
+archetypes = ["ssc07_retaining_wall_case"]

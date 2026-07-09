@@ -1,0 +1,167 @@
+# ABOUTME: Defines the SSC-07 ground improvement foundation recheck template.
+# ABOUTME: Pins one improvement certificate, SPT, bearing, and settlement source pack.
+
+[meta]
+name = "ground-improvement-foundation-recheck-package"
+description = "SSC-07 ground improvement acceptance, bearing, and settlement metrics"
+long_description = "Calculates source-bound ground improvement recheck metrics from a deterministic SSC-07 task-owned source pack. The template combines pre/post SPT improvement, bearing capacity, immediate settlement, consolidation settlement, certificate match, and overall acceptance checks."
+discipline = "ground"
+category = "ground-investigation"
+standards = ["SPT improvement screening", "elastic settlement screening", "bearing recheck"]
+tags = ["ground", "ground-improvement", "foundation", "settlement", "certificate", "deterministic"]
+tool_mode = "with-tool"
+
+[params.pre_improvement_n1_60]
+type = "float"
+description = "SPT-07-POST-01 baseline corrected N1,60"
+min = 9.0
+max = 9.0
+
+[params.post_improvement_n1_60]
+type = "float"
+description = "SPT-07-POST-01 post-improvement corrected N1,60"
+min = 22.0
+max = 22.0
+
+[params.target_n1_60]
+type = "float"
+description = "GI-07-CERT-01 required post-improvement N1,60"
+min = 18.0
+max = 18.0
+
+[params.applied_bearing_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "FDN-07-RECHECK-01 applied service bearing pressure"
+min = 180.0
+max = 180.0
+
+[params.bearing_factor_per_blow_kpa]
+type = "float"
+unit = "kPa"
+description = "SETTLE-07-RECHECK-01 source-owned bearing factor per corrected SPT blow"
+min = 12.0
+max = 12.0
+
+[params.footing_width_m]
+type = "float"
+unit = "m"
+description = "FDN-07-RECHECK-01 footing width"
+min = 2.0
+max = 2.0
+
+[params.elastic_modulus_kpa]
+type = "float"
+unit = "kPa"
+description = "SETTLE-07-RECHECK-01 post-improvement elastic modulus"
+min = 35000.0
+max = 35000.0
+
+[params.poisson_ratio]
+type = "float"
+description = "SETTLE-07-RECHECK-01 Poisson ratio"
+min = 0.3
+max = 0.3
+
+[params.primary_settlement_mm]
+type = "float"
+unit = "mm"
+description = "SETTLE-07-RECHECK-01 primary settlement component"
+min = 12.5
+max = 12.5
+
+[params.allowable_settlement_mm]
+type = "float"
+unit = "mm"
+description = "MEMO-07-FOUND-01 allowable total settlement"
+min = 25.0
+max = 25.0
+
+[params.required_certificate_items]
+type = "float"
+unit = "count"
+description = "GI-07-CERT-01 required certificate fields"
+min = 5.0
+max = 5.0
+
+[params.matching_certificate_items]
+type = "float"
+unit = "count"
+description = "GI-07-CERT-01 matched certificate fields"
+min = 5.0
+max = 5.0
+
+[outputs.improvement_ratio]
+description = "Post-improvement N1,60 divided by pre-improvement N1,60"
+tolerance = 0.03
+
+[outputs.post_improvement_n_margin]
+description = "Post-improvement N1,60 minus target N1,60"
+tolerance = 0.03
+
+[outputs.allowable_bearing_capacity_kpa]
+description = "Source-owned bearing factor times post-improvement N1,60"
+tolerance = 0.03
+
+[outputs.bearing_utilization]
+description = "Applied bearing pressure divided by allowable bearing capacity"
+tolerance = 0.03
+
+[outputs.bearing_margin_kpa]
+description = "Allowable bearing capacity minus applied bearing pressure"
+tolerance = 0.03
+
+[outputs.immediate_settlement_mm]
+description = "Elastic immediate settlement estimate"
+tolerance = 0.03
+
+[outputs.primary_settlement_mm]
+description = "Primary settlement component from source worksheet"
+tolerance = 0.03
+
+[outputs.total_settlement_mm]
+description = "Immediate plus primary settlement"
+tolerance = 0.03
+
+[outputs.settlement_margin_mm]
+description = "Allowable settlement minus total settlement"
+tolerance = 0.03
+
+[outputs.certificate_match_percent]
+description = "Matched certificate fields divided by required certificate fields"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when improvement, bearing, settlement, and certificate checks pass"
+tolerance = 0.03
+
+[archetypes.ssc07_ground_improvement_case]
+description = "Ground investigation package for one improvement certificate and foundation recheck"
+pre_improvement_n1_60 = {min = 9.0, max = 9.0}
+post_improvement_n1_60 = {min = 22.0, max = 22.0}
+target_n1_60 = {min = 18.0, max = 18.0}
+applied_bearing_pressure_kpa = {min = 180.0, max = 180.0}
+bearing_factor_per_blow_kpa = {min = 12.0, max = 12.0}
+footing_width_m = {min = 2.0, max = 2.0}
+elastic_modulus_kpa = {min = 35000.0, max = 35000.0}
+poisson_ratio = {min = 0.3, max = 0.3}
+primary_settlement_mm = {min = 12.5, max = 12.5}
+allowable_settlement_mm = {min = 25.0, max = 25.0}
+required_certificate_items = {min = 5.0, max = 5.0}
+matching_certificate_items = {min = 5.0, max = 5.0}
+site_contexts = ["ground-improvement", "foundation-recheck"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-07 ground improvement package"
+visibility = "all_given"
+archetypes = ["ssc07_ground_improvement_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-07 ground improvement package"
+visibility = "all_given"
+archetypes = ["ssc07_ground_improvement_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-07 ground improvement package"
+visibility = "all_given"
+archetypes = ["ssc07_ground_improvement_case"]

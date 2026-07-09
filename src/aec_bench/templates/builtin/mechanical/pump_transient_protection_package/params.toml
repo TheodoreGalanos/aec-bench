@@ -1,0 +1,290 @@
+[meta]
+name = "pump-transient-protection-package"
+description = "SSC-11 pump transient, thrust, support, and protection-trip metrics"
+long_description = "Calculates source-bound pump-trip transient and support metrics from a deterministic SSC-11 task-owned source pack. The template combines wave-speed estimation, Joukowsky pressure rise, pump head and hydraulic power, bend transient thrust, pipe/support dead load, high-high trip margin, MAWP margin, support utilization, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "pump-transient"
+standards = ["Bentley OpenFlows HAMMER", "AFT Impulse", "Hydraulic Institute", "ASME-style piping support workflows"]
+tags = ["mechanical", "piping", "pump-trip", "water-hammer", "support", "protection", "deterministic"]
+tool_mode = "with-tool"
+
+[params.fluid_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "TRANS-11-TRIP-01 fluid density for the pump-trip case"
+min = 998.0
+max = 998.0
+
+[params.fluid_bulk_modulus_gpa]
+type = "float"
+unit = "GPa"
+description = "TRANS-11-TRIP-01 water bulk modulus used for source-bound wave speed"
+min = 2.2
+max = 2.2
+
+[params.pipe_elastic_modulus_gpa]
+type = "float"
+unit = "GPa"
+description = "PID-SSC11-401 pipe elastic modulus used for wave-speed flexibility"
+min = 200.0
+max = 200.0
+
+[params.pipe_internal_diameter_mm]
+type = "float"
+unit = "mm"
+description = "PID-SSC11-401 pipe internal diameter"
+min = 482.6
+max = 482.6
+
+[params.pipe_wall_thickness_mm]
+type = "float"
+unit = "mm"
+description = "PID-SSC11-401 pipe wall thickness"
+min = 12.7
+max = 12.7
+
+[params.pipe_outer_diameter_mm]
+type = "float"
+unit = "mm"
+description = "PID-SSC11-401 pipe outer diameter"
+min = 508.0
+max = 508.0
+
+[params.pipe_restraint_factor]
+type = "float"
+description = "SUP-11-ANCH-01 source-bound restraint factor for wave-speed flexibility"
+min = 1.0
+max = 1.0
+
+[params.flow_rate_l_s]
+type = "float"
+unit = "L/s"
+description = "PUMP-11-DUTY-01 steady pump flow"
+min = 100.0
+max = 100.0
+
+[params.velocity_change_fraction]
+type = "float"
+description = "TRANS-11-TRIP-01 fraction of steady velocity lost during the pump-trip event"
+min = 0.85
+max = 0.85
+
+[params.suction_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "PUMP-11-DUTY-01 suction pressure"
+min = 80.0
+max = 80.0
+
+[params.discharge_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "PUMP-11-DUTY-01 discharge pressure before transient rise"
+min = 520.0
+max = 520.0
+
+[params.pipe_friction_loss_kpa]
+type = "float"
+unit = "kPa"
+description = "PUMP-11-DUTY-01 pipe friction loss at steady duty"
+min = 65.0
+max = 65.0
+
+[params.static_elevation_m]
+type = "float"
+unit = "m"
+description = "PUMP-11-DUTY-01 static elevation lift"
+min = 12.0
+max = 12.0
+
+[params.bend_angle_deg]
+type = "float"
+unit = "degrees"
+description = "SUP-11-ANCH-01 bend angle for the transient thrust check"
+min = 45.0
+max = 45.0
+
+[params.steel_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "SUP-11-ANCH-01 steel density for pipe dead load"
+min = 7850.0
+max = 7850.0
+
+[params.insulation_thickness_mm]
+type = "float"
+unit = "mm"
+description = "SUP-11-ANCH-01 insulation thickness"
+min = 25.0
+max = 25.0
+
+[params.insulation_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "SUP-11-ANCH-01 insulation density"
+min = 80.0
+max = 80.0
+
+[params.support_span_m]
+type = "float"
+unit = "m"
+description = "SUP-11-ANCH-01 support span carrying operating pipe load"
+min = 6.0
+max = 6.0
+
+[params.valve_weight_kn]
+type = "float"
+unit = "kN"
+description = "SUP-11-ANCH-01 valve weight at the support"
+min = 12.0
+max = 12.0
+
+[params.actuator_weight_kn]
+type = "float"
+unit = "kN"
+description = "SUP-11-ANCH-01 actuator weight at the support"
+min = 3.5
+max = 3.5
+
+[params.high_high_trip_setpoint_kpa]
+type = "float"
+unit = "kPa"
+description = "PROT-11-HHP-01 high-high trip setpoint"
+min = 1160.0
+max = 1160.0
+
+[params.pipe_mawp_kpa]
+type = "float"
+unit = "kPa"
+description = "PID-SSC11-401 maximum allowable working pressure for the pipe"
+min = 1350.0
+max = 1350.0
+
+[params.thrust_allowable_kn]
+type = "float"
+unit = "kN"
+description = "SUP-11-ANCH-01 allowable bend thrust"
+min = 190.0
+max = 190.0
+
+[params.support_vertical_allowable_kn]
+type = "float"
+unit = "kN"
+description = "SUP-11-ANCH-01 allowable support vertical service load"
+min = 42.0
+max = 42.0
+
+[outputs.fluid_only_wave_speed_m_s]
+description = "Wave speed in the fluid before pipe-flexibility reduction"
+tolerance = 0.03
+
+[outputs.pipe_flexibility_ratio]
+description = "Source-bound pipe-flexibility correction ratio"
+tolerance = 0.03
+
+[outputs.wave_speed_m_s]
+description = "Pipe-adjusted transient wave speed"
+tolerance = 0.03
+
+[outputs.steady_velocity_m_s]
+description = "Steady flow velocity in PID-SSC11-401"
+tolerance = 0.03
+
+[outputs.velocity_change_m_s]
+description = "Pump-trip velocity change from TRANS-11-TRIP-01"
+tolerance = 0.03
+
+[outputs.joukowsky_pressure_rise_kpa]
+description = "Joukowsky transient pressure rise"
+tolerance = 0.03
+
+[outputs.joukowsky_pressure_head_m]
+description = "Joukowsky pressure rise expressed as head"
+tolerance = 0.03
+
+[outputs.total_dynamic_head_m]
+description = "Pump total dynamic head for PUMP-11-DUTY-01"
+tolerance = 0.03
+
+[outputs.hydraulic_power_kw]
+description = "Hydraulic power at the steady pump duty"
+tolerance = 0.03
+
+[outputs.peak_transient_pressure_kpa]
+description = "Discharge pressure plus transient pressure rise"
+tolerance = 0.03
+
+[outputs.bend_transient_thrust_kn]
+description = "Transient thrust at SUP-11-ANCH-01 bend"
+tolerance = 0.03
+
+[outputs.operating_line_load_kn_m]
+description = "Pipe, contents, and insulation operating dead load"
+tolerance = 0.03
+
+[outputs.support_vertical_service_kn]
+description = "Service vertical reaction at SUP-11-ANCH-01"
+tolerance = 0.03
+
+[outputs.pressure_trip_margin_kpa]
+description = "PROT-11-HHP-01 high-high trip margin against peak pressure"
+tolerance = 0.03
+
+[outputs.pipe_pressure_margin_kpa]
+description = "Pipe MAWP margin against peak pressure"
+tolerance = 0.03
+
+[outputs.thrust_utilization]
+description = "Transient bend thrust divided by allowable thrust"
+tolerance = 0.03
+
+[outputs.support_vertical_utilization]
+description = "Support vertical service load divided by allowable support load"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for the task-owned pressure, thrust, and support checks"
+tolerance = 0.03
+
+[archetypes.ssc11_pump_trip_support_case]
+description = "Pump-trip transient package with one pipe bend, support reaction, and protection setting"
+fluid_density_kg_m3 = {min = 998.0, max = 998.0}
+fluid_bulk_modulus_gpa = {min = 2.2, max = 2.2}
+pipe_elastic_modulus_gpa = {min = 200.0, max = 200.0}
+pipe_internal_diameter_mm = {min = 482.6, max = 482.6}
+pipe_wall_thickness_mm = {min = 12.7, max = 12.7}
+pipe_outer_diameter_mm = {min = 508.0, max = 508.0}
+pipe_restraint_factor = {min = 1.0, max = 1.0}
+flow_rate_l_s = {min = 100.0, max = 100.0}
+velocity_change_fraction = {min = 0.85, max = 0.85}
+suction_pressure_kpa = {min = 80.0, max = 80.0}
+discharge_pressure_kpa = {min = 520.0, max = 520.0}
+pipe_friction_loss_kpa = {min = 65.0, max = 65.0}
+static_elevation_m = {min = 12.0, max = 12.0}
+bend_angle_deg = {min = 45.0, max = 45.0}
+steel_density_kg_m3 = {min = 7850.0, max = 7850.0}
+insulation_thickness_mm = {min = 25.0, max = 25.0}
+insulation_density_kg_m3 = {min = 80.0, max = 80.0}
+support_span_m = {min = 6.0, max = 6.0}
+valve_weight_kn = {min = 12.0, max = 12.0}
+actuator_weight_kn = {min = 3.5, max = 3.5}
+high_high_trip_setpoint_kpa = {min = 1160.0, max = 1160.0}
+pipe_mawp_kpa = {min = 1350.0, max = 1350.0}
+thrust_allowable_kn = {min = 190.0, max = 190.0}
+support_vertical_allowable_kn = {min = 42.0, max = 42.0}
+site_contexts = ["pump-trip", "piping-support-protection-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-11 pump transient protection package"
+visibility = "all_given"
+archetypes = ["ssc11_pump_trip_support_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-11 pump transient protection package"
+visibility = "all_given"
+archetypes = ["ssc11_pump_trip_support_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-11 pump transient protection package"
+visibility = "all_given"
+archetypes = ["ssc11_pump_trip_support_case"]

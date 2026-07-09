@@ -1,0 +1,334 @@
+[meta]
+name = "road-low-point-resilience-package"
+description = "SSC-01 road low-point drainage and field-equipment resilience metrics"
+long_description = "Calculates source-bound road low-point resilience metrics from a deterministic SSC-01 task-owned source pack. The template combines rational-method runoff, HEC-22-style gutter spread, one storm-drain HGL reach, field-cabinet flood freeboard, VMS reading time, network headroom, and battery runtime for one corridor low-point case."
+discipline = "civil"
+category = "road-resilience"
+standards = ["FHWA HEC-22", "FHWA MUTCD", "EPA SWMM"]
+tags = ["civil", "road", "drainage", "hgl", "its", "vms", "battery", "deterministic"]
+tool_mode = "with-tool"
+
+[params.runoff_coefficient]
+type = "float"
+description = "DRN-CAT-01 runoff coefficient for the contributing low-point catchment"
+min = 0.82
+max = 0.82
+
+[params.rainfall_intensity_mm_h]
+type = "float"
+unit = "mm/h"
+description = "STORM-01 rainfall intensity for the low-point design burst"
+min = 95.0
+max = 95.0
+
+[params.catchment_area_ha]
+type = "float"
+unit = "ha"
+description = "DRN-CAT-01 contributing catchment area draining to LP-01"
+min = 1.35
+max = 1.35
+
+[params.upstream_bypass_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "DRN-BYP-01 upstream inlet bypass flow reaching LP-01"
+min = 0.06
+max = 0.06
+
+[params.cross_slope_pct]
+type = "float"
+unit = "%"
+description = "RD-SSC01-001 pavement crossfall at LP-01"
+min = 2.5
+max = 2.5
+
+[params.longitudinal_slope_pct]
+type = "float"
+unit = "%"
+description = "RD-SSC01-001 approach longitudinal slope into LP-01"
+min = 0.8
+max = 0.8
+
+[params.gutter_mannings_n_thousandths]
+type = "float"
+description = "DRN-GUT-01 Manning roughness for the pavement gutter, expressed as n x 1000 to avoid prompt display rounding"
+min = 16.0
+max = 16.0
+
+[params.allowable_spread_m]
+type = "float"
+unit = "m"
+description = "CRIT-SSC01-001 allowable spread before blocking the protected travel lane"
+min = 6.0
+max = 6.0
+
+[params.inlet_efficiency]
+type = "float"
+description = "DRN-PIT-01 low-point inlet interception efficiency"
+min = 0.82
+max = 0.82
+
+[params.inlet_capture_capacity_m3_s]
+type = "float"
+unit = "m3/s"
+description = "DRN-PIT-01 maximum inlet capture capacity"
+min = 0.31
+max = 0.31
+
+[params.pipe_diameter_mm]
+type = "float"
+unit = "mm"
+description = "DRN-PIPE-01 storm-drain diameter leaving DRN-PIT-01"
+min = 600.0
+max = 600.0
+
+[params.pipe_length_m]
+type = "float"
+unit = "m"
+description = "DRN-PIPE-01 reach length to the downstream tailwater node"
+min = 48.0
+max = 48.0
+
+[params.pipe_mannings_n_thousandths]
+type = "float"
+description = "DRN-PIPE-01 full-pipe Manning roughness, expressed as n x 1000 to avoid prompt display rounding"
+min = 13.0
+max = 13.0
+
+[params.pit_loss_coefficient]
+type = "float"
+description = "HGL-01 pit and junction loss coefficient at DRN-PIT-01"
+min = 0.7
+max = 0.7
+
+[params.tailwater_level_m]
+type = "float"
+unit = "m"
+description = "HGL-01 downstream tailwater level"
+min = 41.55
+max = 41.55
+
+[params.road_low_point_level_m]
+type = "float"
+unit = "m"
+description = "RD-SSC01-001 pavement level at LP-01"
+min = 42.20
+max = 42.20
+
+[params.cabinet_pad_level_m]
+type = "float"
+unit = "m"
+description = "CAB-01 cabinet pad level adjacent to LP-01"
+min = 42.58
+max = 42.58
+
+[params.minimum_cabinet_freeboard_m]
+type = "float"
+unit = "m"
+description = "CRIT-SSC01-001 minimum cabinet freeboard above controlling water level"
+min = 0.15
+max = 0.15
+
+[params.vms_character_height_in]
+type = "float"
+unit = "in"
+description = "VMS-01 character height for the selected low-point warning message"
+min = 12.0
+max = 12.0
+
+[params.road_design_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "RD-SSC01-001 design operating speed for the VMS reading check"
+min = 60.0
+max = 60.0
+
+[params.reading_rate_chars_s]
+type = "float"
+unit = "chars/s"
+description = "CRIT-SSC01-001 reading-rate assumption for the VMS message"
+min = 4.0
+max = 4.0
+
+[params.vms_message_length_chars]
+type = "float"
+unit = "chars"
+description = "VMS-01 selected message length for WATER OVER ROAD - USE LEFT"
+min = 28.0
+max = 28.0
+
+[params.camera_count]
+type = "float"
+description = "ITS-NET-01 number of low-point CCTV cameras in the operating case"
+min = 2.0
+max = 2.0
+
+[params.camera_data_rate_mbps]
+type = "float"
+unit = "Mbps"
+description = "ITS-NET-01 data rate per CCTV camera"
+min = 6.0
+max = 6.0
+
+[params.vms_data_rate_mbps]
+type = "float"
+unit = "Mbps"
+description = "ITS-NET-01 VMS data rate"
+min = 4.0
+max = 4.0
+
+[params.controller_data_rate_mbps]
+type = "float"
+unit = "Mbps"
+description = "ITS-NET-01 traffic-controller data rate"
+min = 0.6
+max = 0.6
+
+[params.sensor_data_rate_mbps]
+type = "float"
+unit = "Mbps"
+description = "ITS-NET-01 water-level sensor data rate"
+min = 0.2
+max = 0.2
+
+[params.network_overhead_pct]
+type = "float"
+unit = "%"
+description = "ITS-NET-01 protocol and operating overhead"
+min = 20.0
+max = 20.0
+
+[params.future_capacity_buffer_pct]
+type = "float"
+unit = "%"
+description = "ITS-NET-01 future capacity buffer"
+min = 25.0
+max = 25.0
+
+[params.uplink_capacity_mbps]
+type = "float"
+unit = "Mbps"
+description = "ITS-NET-01 available cabinet uplink capacity"
+min = 50.0
+max = 50.0
+
+[params.battery_capacity_kwh]
+type = "float"
+unit = "kWh"
+description = "BATT-01 installed usable nominal battery capacity"
+min = 5.2
+max = 5.2
+
+[params.battery_efficiency]
+type = "float"
+description = "BATT-01 effective battery and inverter efficiency"
+min = 0.88
+max = 0.88
+
+[params.critical_load_w]
+type = "float"
+unit = "W"
+description = "CAB-01 selected critical load for low-point warning, CCTV, controller, and telemetry"
+min = 450.0
+max = 450.0
+
+[params.required_autonomy_h]
+type = "float"
+unit = "h"
+description = "CRIT-SSC01-001 required outage autonomy during the storm case"
+min = 6.0
+max = 6.0
+
+[params.minimum_hgl_clearance_mm]
+type = "float"
+unit = "mm"
+description = "CRIT-SSC01-001 minimum HGL clearance below the LP-01 pavement level"
+min = 150.0
+max = 150.0
+
+[outputs.peak_runoff_m3_s]
+description = "Rational-method peak runoff from DRN-CAT-01"
+tolerance = 0.03
+
+[outputs.gutter_approach_flow_m3_s]
+description = "Peak runoff plus upstream bypass flow reaching LP-01"
+tolerance = 0.03
+
+[outputs.spread_width_m]
+description = "HEC-22-style triangular gutter spread at LP-01"
+tolerance = 0.03
+
+[outputs.spread_margin_m]
+description = "Allowable spread minus computed spread"
+tolerance = 0.03
+
+[outputs.curb_depth_m]
+description = "Pavement gutter depth at the curb"
+tolerance = 0.03
+
+[outputs.inlet_intercepted_flow_m3_s]
+description = "Flow intercepted by DRN-PIT-01 after efficiency and capacity limits"
+tolerance = 0.03
+
+[outputs.residual_ponding_flow_m3_s]
+description = "Approach flow not intercepted by DRN-PIT-01"
+tolerance = 0.03
+
+[outputs.hgl_upstream_m]
+description = "Hydraulic grade line at DRN-PIT-01"
+tolerance = 0.03
+
+[outputs.hgl_clearance_mm]
+description = "LP-01 pavement level minus upstream HGL"
+tolerance = 0.5
+
+[outputs.cabinet_freeboard_m]
+description = "CAB-01 pad level minus controlling water level"
+tolerance = 0.03
+
+[outputs.cabinet_flood_depth_m]
+description = "Depth of controlling water above CAB-01 pad"
+tolerance = 0.03
+
+[outputs.vms_reading_time_s]
+description = "Available reading time for VMS-01 at the road design speed"
+tolerance = 0.03
+
+[outputs.vms_message_margin_chars]
+description = "Readable character capacity minus selected VMS message length"
+tolerance = 0.03
+
+[outputs.network_headroom_mbps]
+description = "Cabinet uplink capacity minus required low-point operating bandwidth"
+tolerance = 0.03
+
+[outputs.battery_runtime_h]
+description = "BATT-01 runtime for the selected critical cabinet load"
+tolerance = 0.03
+
+[outputs.battery_margin_h]
+description = "Battery runtime minus required outage autonomy"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when spread, HGL, cabinet, VMS, network, and battery margins pass"
+tolerance = 0.01
+
+[archetypes.ssc01_seed]
+description = "SSC-01 task-owned synthetic road low-point drainage and field-equipment resilience package"
+site_contexts = ["road-low-point-storm-its-resilience"]
+
+[difficulty.easy]
+description = "All source-pack values visible"
+visibility = "all_given"
+archetypes = ["ssc01_seed"]
+
+[difficulty.medium]
+description = "Same deterministic source-pack values with package-level aggregation"
+visibility = "all_given"
+archetypes = ["ssc01_seed"]
+
+[difficulty.hard]
+description = "Same deterministic source-pack values with cross-discipline handoff checks"
+visibility = "all_given"
+archetypes = ["ssc01_seed"]

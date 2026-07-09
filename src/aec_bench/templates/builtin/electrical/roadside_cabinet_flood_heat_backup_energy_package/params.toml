@@ -1,0 +1,225 @@
+[meta]
+name = "roadside-cabinet-flood-heat-backup-energy-package"
+description = "SSC-01 roadside cabinet flood, heat, and backup energy metrics"
+long_description = "Calculates task-owned synthetic SSC-01 cabinet flood freeboard, thermal derating, backup battery/BESS, feeder voltage-drop, and lighting AECI metrics."
+discipline = "electrical"
+category = "road-resilience"
+standards = ["roadside cabinet design", "battery sizing", "lighting energy workflow"]
+tags = ["electrical", "road", "cabinet", "flood", "heat", "battery", "deterministic"]
+tool_mode = "with-tool"
+
+[params.cabinet_pad_level_m]
+type = "float"
+unit = "m"
+description = "CAB-SSC01-007 cabinet pad level"
+min = 42.70
+max = 42.70
+
+[params.hgl_level_m]
+type = "float"
+unit = "m"
+description = "HGL-SSC01-007 HGL level"
+min = 42.28
+max = 42.28
+
+[params.inundation_level_m]
+type = "float"
+unit = "m"
+description = "HGL-SSC01-007 event inundation level"
+min = 42.34
+max = 42.34
+
+[params.minimum_freeboard_m]
+type = "float"
+unit = "m"
+description = "MEMO-SSC01-007 minimum cabinet freeboard"
+min = 0.25
+max = 0.25
+
+[params.enclosure_capacity_w_at_reference_temp]
+type = "float"
+unit = "W"
+description = "HEAT-SSC01-007 enclosure capacity at reference temperature"
+min = 900.0
+max = 900.0
+
+[params.reference_temperature_c]
+type = "float"
+unit = "C"
+description = "HEAT-SSC01-007 reference temperature"
+min = 25.0
+max = 25.0
+
+[params.event_temperature_c]
+type = "float"
+unit = "C"
+description = "HEAT-SSC01-007 heat event temperature"
+min = 45.0
+max = 45.0
+
+[params.derate_pct_per_c]
+type = "float"
+unit = "%/C"
+description = "HEAT-SSC01-007 capacity derating rate above reference temperature"
+min = 1.5
+max = 1.5
+
+[params.critical_load_w]
+type = "float"
+unit = "W"
+description = "LOAD-SSC01-007 selected critical cabinet load"
+min = 520.0
+max = 520.0
+
+[params.battery_capacity_kwh]
+type = "float"
+unit = "kWh"
+description = "BATT-SSC01-007 battery capacity"
+min = 6.5
+max = 6.5
+
+[params.battery_efficiency]
+type = "float"
+description = "BATT-SSC01-007 battery efficiency"
+min = 0.9
+max = 0.9
+
+[params.required_backup_h]
+type = "float"
+unit = "h"
+description = "MEMO-SSC01-007 required backup duration"
+min = 6.0
+max = 6.0
+
+[params.bess_inverter_capacity_kw]
+type = "float"
+unit = "kW"
+description = "BATT-SSC01-007 BESS inverter capacity"
+min = 1.2
+max = 1.2
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "LOAD-SSC01-007 feeder length"
+min = 0.16
+max = 0.16
+
+[params.conductor_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "LOAD-SSC01-007 conductor resistance"
+min = 0.62
+max = 0.62
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "LOAD-SSC01-007 feeder voltage"
+min = 230.0
+max = 230.0
+
+[params.power_factor]
+type = "float"
+description = "LOAD-SSC01-007 load power factor"
+min = 0.95
+max = 0.95
+
+[params.allowable_voltage_drop_pct]
+type = "float"
+unit = "%"
+description = "LOAD-SSC01-007 allowable voltage drop"
+min = 5.0
+max = 5.0
+
+[params.road_lighting_power_w]
+type = "float"
+unit = "W"
+description = "LOAD-SSC01-007 selected road lighting power"
+min = 420.0
+max = 420.0
+
+[params.annual_operating_hours]
+type = "float"
+unit = "h/y"
+description = "LOAD-SSC01-007 annual lighting operating hours"
+min = 4100.0
+max = 4100.0
+
+[params.lit_area_m2]
+type = "float"
+unit = "m2"
+description = "LOAD-SSC01-007 lit road area"
+min = 1250.0
+max = 1250.0
+
+[outputs.cabinet_freeboard_m]
+description = "Cabinet pad freeboard above controlling water level"
+tolerance = 0.03
+
+[outputs.flood_freeboard_margin_m]
+description = "Cabinet freeboard minus required freeboard"
+tolerance = 0.03
+
+[outputs.thermal_derated_capacity_w]
+description = "Thermally derated enclosure load capacity"
+tolerance = 0.5
+
+[outputs.thermal_margin_w]
+description = "Thermally derated capacity minus critical load"
+tolerance = 0.5
+
+[outputs.thermal_utilization]
+description = "Critical load divided by thermally derated capacity"
+tolerance = 0.03
+
+[outputs.battery_runtime_h]
+description = "Battery runtime for the selected critical load"
+tolerance = 0.03
+
+[outputs.battery_margin_h]
+description = "Battery runtime minus required backup duration"
+tolerance = 0.03
+
+[outputs.bess_power_margin_kw]
+description = "BESS inverter capacity minus critical load"
+tolerance = 0.03
+
+[outputs.bess_energy_margin_kwh]
+description = "Usable battery energy minus required backup energy"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "Feeder voltage drop at the selected cabinet load"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Allowable voltage drop minus computed voltage drop"
+tolerance = 0.03
+
+[outputs.road_lighting_aeci_kwh_m2_y]
+description = "Road-lighting annual energy consumption indicator"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when flood, heat, backup, and feeder checks pass"
+tolerance = 0.01
+
+[archetypes.ssc01_cabinet_flood_heat_energy]
+description = "SSC-01 task-owned synthetic roadside cabinet flood heat backup energy package"
+site_contexts = ["roadside-cabinet-flood-heat-backup-energy"]
+
+[difficulty.easy]
+description = "All source-pack values visible"
+visibility = "all_given"
+archetypes = ["ssc01_cabinet_flood_heat_energy"]
+
+[difficulty.medium]
+description = "Same deterministic source-pack values with package-level aggregation"
+visibility = "all_given"
+archetypes = ["ssc01_cabinet_flood_heat_energy"]
+
+[difficulty.hard]
+description = "Same deterministic source-pack values with cross-discipline handoff checks"
+visibility = "all_given"
+archetypes = ["ssc01_cabinet_flood_heat_energy"]

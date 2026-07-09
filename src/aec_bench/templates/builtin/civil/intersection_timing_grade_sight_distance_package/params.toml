@@ -1,0 +1,157 @@
+[meta]
+name = "intersection-timing-grade-sight-distance-package"
+description = "SSC-01 intersection timing, grade, and sight-distance metrics"
+long_description = "Calculates task-owned synthetic SSC-01 metrics for one intersection approach, including grade-adjusted stopping distance, sight-distance margin, yellow interval, all-red interval, and pedestrian clearance."
+discipline = "civil"
+category = "traffic-safety"
+standards = ["FHWA MUTCD", "AASHTO Green Book"]
+tags = ["civil", "road", "intersection", "signal", "sight-distance", "deterministic"]
+tool_mode = "with-tool"
+
+[params.approach_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "SIG-SSC01-002 approach design speed"
+min = 60.0
+max = 60.0
+
+[params.approach_grade_pct]
+type = "float"
+unit = "%"
+description = "PROF-SSC01-002 signed approach grade; downhill is negative"
+min = -3.0
+max = -3.0
+
+[params.reaction_time_s]
+type = "float"
+unit = "s"
+description = "MEMO-SSC01-002 stopping sight-distance reaction time"
+min = 2.5
+max = 2.5
+
+[params.braking_friction_coefficient]
+type = "float"
+description = "MEMO-SSC01-002 braking friction coefficient"
+min = 0.35
+max = 0.35
+
+[params.available_sight_distance_m]
+type = "float"
+unit = "m"
+description = "INT-SSC01-002 available approach sight distance"
+min = 145.0
+max = 145.0
+
+[params.yellow_reaction_time_s]
+type = "float"
+unit = "s"
+description = "SIG-SSC01-002 yellow interval perception-reaction term"
+min = 1.0
+max = 1.0
+
+[params.yellow_deceleration_m_s2]
+type = "float"
+unit = "m/s2"
+description = "SIG-SSC01-002 comfortable deceleration rate for yellow timing"
+min = 3.0
+max = 3.0
+
+[params.intersection_width_m]
+type = "float"
+unit = "m"
+description = "INT-SSC01-002 conflict area width"
+min = 28.0
+max = 28.0
+
+[params.design_vehicle_length_m]
+type = "float"
+unit = "m"
+description = "MEMO-SSC01-002 design vehicle length"
+min = 6.0
+max = 6.0
+
+[params.all_red_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "SIG-SSC01-002 clearance speed for all-red interval"
+min = 50.0
+max = 50.0
+
+[params.pedestrian_startup_time_s]
+type = "float"
+unit = "s"
+description = "PED-SSC01-002 startup allowance"
+min = 3.0
+max = 3.0
+
+[params.crossing_width_m]
+type = "float"
+unit = "m"
+description = "PED-SSC01-002 crossing width"
+min = 14.0
+max = 14.0
+
+[params.pedestrian_walk_speed_m_s]
+type = "float"
+unit = "m/s"
+description = "PED-SSC01-002 pedestrian walk speed"
+min = 1.2
+max = 1.2
+
+[params.pedestrian_clearance_available_s]
+type = "float"
+unit = "s"
+description = "SIG-SSC01-002 available pedestrian clearance interval"
+min = 16.0
+max = 16.0
+
+[outputs.stopping_distance_m]
+description = "Grade-adjusted stopping distance"
+tolerance = 0.03
+
+[outputs.sight_distance_margin_m]
+description = "Available sight distance minus stopping distance"
+tolerance = 0.03
+
+[outputs.yellow_interval_s]
+description = "Grade-adjusted yellow interval"
+tolerance = 0.03
+
+[outputs.all_red_interval_s]
+description = "Intersection all-red clearance interval"
+tolerance = 0.03
+
+[outputs.ped_clearance_required_s]
+description = "Required pedestrian clearance interval"
+tolerance = 0.03
+
+[outputs.ped_clearance_margin_s]
+description = "Available pedestrian clearance minus required clearance"
+tolerance = 0.03
+
+[outputs.grade_adjusted_braking_distance_m]
+description = "Braking distance component of stopping distance"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when the synthetic sight-distance and clearance checks pass"
+tolerance = 0.01
+
+[archetypes.ssc01_intersection_timing]
+description = "SSC-01 task-owned synthetic intersection timing and sight-distance package"
+site_contexts = ["intersection-approach-grade-signal-clearance"]
+
+[difficulty.easy]
+description = "All source-pack values visible"
+visibility = "all_given"
+archetypes = ["ssc01_intersection_timing"]
+
+[difficulty.medium]
+description = "Same deterministic source-pack values with package-level aggregation"
+visibility = "all_given"
+archetypes = ["ssc01_intersection_timing"]
+
+[difficulty.hard]
+description = "Same deterministic source-pack values with cross-discipline handoff checks"
+visibility = "all_given"
+archetypes = ["ssc01_intersection_timing"]

@@ -1,0 +1,249 @@
+[meta]
+name = "poe-fibre-field-cabinet-power-package"
+description = "SSC-05 PoE, fibre, UPS runtime, cabinet heat, and field cabinet metrics"
+long_description = "Calculates deterministic SSC-05 field cabinet metrics from a task-owned synthetic source pack. The template combines PoE device load, switch budget, UPS runtime, cabinet thermal rise, fibre link loss, optical margin, and an overall synthetic pass score."
+discipline = "electrical"
+category = "poe-fibre-field-cabinet"
+standards = ["PoE budget workflow", "fibre link-loss budget workflow", "field cabinet UPS autonomy workflow"]
+tags = ["electrical", "poe", "fibre", "field-cabinet", "ups", "thermal", "optical", "deterministic"]
+tool_mode = "with-tool"
+
+[params.camera_count]
+type = "float"
+description = "DEVICE-05-SCHED-06 PoE camera count"
+min = 14.0
+max = 14.0
+
+[params.camera_poe_w]
+type = "float"
+unit = "W"
+description = "DEVICE-05-SCHED-06 camera PoE allocation"
+min = 24.0
+max = 24.0
+
+[params.radio_count]
+type = "float"
+description = "DEVICE-05-SCHED-06 radio count"
+min = 3.0
+max = 3.0
+
+[params.radio_poe_w]
+type = "float"
+unit = "W"
+description = "DEVICE-05-SCHED-06 radio PoE allocation"
+min = 42.0
+max = 42.0
+
+[params.controller_count]
+type = "float"
+description = "DEVICE-05-SCHED-06 controller count"
+min = 2.0
+max = 2.0
+
+[params.controller_poe_w]
+type = "float"
+unit = "W"
+description = "DEVICE-05-SCHED-06 controller PoE allocation"
+min = 31.0
+max = 31.0
+
+[params.poe_budget_w]
+type = "float"
+unit = "W"
+description = "POE-05-SWITCH-06 available switch PoE budget"
+min = 670.0
+max = 670.0
+
+[params.ups_nominal_kwh]
+type = "float"
+unit = "kWh"
+description = "UPS-05-CAB-06 nominal UPS energy"
+min = 2.7
+max = 2.7
+
+[params.ups_usable_fraction]
+type = "float"
+description = "UPS-05-CAB-06 usable battery fraction"
+min = 0.82
+max = 0.82
+
+[params.inverter_efficiency]
+type = "float"
+description = "UPS-05-CAB-06 inverter efficiency"
+min = 0.992
+max = 0.992
+
+[params.non_poe_load_w]
+type = "float"
+unit = "W"
+description = "NET-05-TOPO-06 non-PoE cabinet load"
+min = 115.0
+max = 115.0
+
+[params.required_runtime_h]
+type = "float"
+unit = "h"
+description = "UPS-05-CAB-06 required backup runtime"
+min = 2.0
+max = 2.0
+
+[params.switch_heat_w]
+type = "float"
+unit = "W"
+description = "POE-05-SWITCH-06 switch heat contribution"
+min = 65.0
+max = 65.0
+
+[params.cabinet_thermal_w_per_c]
+type = "float"
+unit = "W/C"
+description = "UPS-05-CAB-06 cabinet thermal dissipation"
+min = 80.0
+max = 80.0
+
+[params.max_temperature_rise_c]
+type = "float"
+unit = "C"
+description = "UPS-05-CAB-06 maximum cabinet temperature rise"
+min = 15.0
+max = 15.0
+
+[params.fibre_length_km]
+type = "float"
+unit = "km"
+description = "FIBRE-05-PATH-06 fibre path length"
+min = 7.4
+max = 7.4
+
+[params.fibre_loss_db_per_km]
+type = "float"
+unit = "dB/km"
+description = "FIBRE-05-PATH-06 cable attenuation"
+min = 0.35
+max = 0.35
+
+[params.splice_count]
+type = "float"
+description = "FIBRE-05-PATH-06 splice count"
+min = 7.0
+max = 7.0
+
+[params.splice_loss_db]
+type = "float"
+unit = "dB"
+description = "FIBRE-05-PATH-06 loss per splice"
+min = 0.1
+max = 0.1
+
+[params.connector_count]
+type = "float"
+description = "FIBRE-05-PATH-06 connector count"
+min = 4.0
+max = 4.0
+
+[params.connector_loss_db]
+type = "float"
+unit = "dB"
+description = "FIBRE-05-PATH-06 loss per connector"
+min = 0.5
+max = 0.5
+
+[params.patch_loss_db]
+type = "float"
+unit = "dB"
+description = "FIBRE-05-PATH-06 patch-panel allowance"
+min = 0.06
+max = 0.06
+
+[params.optical_budget_db]
+type = "float"
+unit = "dB"
+description = "FIBRE-05-PATH-06 available optical budget"
+min = 10.0
+max = 10.0
+
+[outputs.poe_load_w]
+description = "Total PoE load from the device schedule"
+tolerance = 0.03
+
+[outputs.poe_budget_margin_w]
+description = "Available PoE budget minus total PoE load"
+tolerance = 0.03
+
+[outputs.usable_ups_energy_kwh]
+description = "Usable UPS energy after battery and inverter factors"
+tolerance = 0.03
+
+[outputs.ups_runtime_hr]
+description = "UPS runtime for PoE plus non-PoE cabinet loads"
+tolerance = 0.03
+
+[outputs.runtime_margin_hr]
+description = "UPS runtime minus required runtime"
+tolerance = 0.03
+
+[outputs.cabinet_heat_w]
+description = "Cabinet heat load"
+tolerance = 0.03
+
+[outputs.cabinet_temp_rise_c]
+description = "Cabinet temperature rise"
+tolerance = 0.03
+
+[outputs.temperature_margin_c]
+description = "Maximum cabinet temperature rise minus calculated rise"
+tolerance = 0.03
+
+[outputs.fibre_loss_db]
+description = "Fibre path loss"
+tolerance = 0.03
+
+[outputs.optical_margin_db]
+description = "Available optical budget minus fibre path loss"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when PoE, runtime, temperature, and optical margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc05_poe_fibre_case]
+description = "PoE/fibre cabinet package tied to one device schedule, topology, PoE switch schedule, fibre path, UPS sheet, and memo"
+camera_count = {min = 14.0, max = 14.0}
+camera_poe_w = {min = 24.0, max = 24.0}
+radio_count = {min = 3.0, max = 3.0}
+radio_poe_w = {min = 42.0, max = 42.0}
+controller_count = {min = 2.0, max = 2.0}
+controller_poe_w = {min = 31.0, max = 31.0}
+poe_budget_w = {min = 670.0, max = 670.0}
+ups_nominal_kwh = {min = 2.7, max = 2.7}
+ups_usable_fraction = {min = 0.82, max = 0.82}
+inverter_efficiency = {min = 0.992, max = 0.992}
+non_poe_load_w = {min = 115.0, max = 115.0}
+required_runtime_h = {min = 2.0, max = 2.0}
+switch_heat_w = {min = 65.0, max = 65.0}
+cabinet_thermal_w_per_c = {min = 80.0, max = 80.0}
+max_temperature_rise_c = {min = 15.0, max = 15.0}
+fibre_length_km = {min = 7.4, max = 7.4}
+fibre_loss_db_per_km = {min = 0.35, max = 0.35}
+splice_count = {min = 7.0, max = 7.0}
+splice_loss_db = {min = 0.1, max = 0.1}
+connector_count = {min = 4.0, max = 4.0}
+connector_loss_db = {min = 0.5, max = 0.5}
+patch_loss_db = {min = 0.06, max = 0.06}
+optical_budget_db = {min = 10.0, max = 10.0}
+site_contexts = ["poe-fibre-field-cabinet"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-05 PoE/fibre field cabinet package"
+visibility = "all_given"
+archetypes = ["ssc05_poe_fibre_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-05 PoE/fibre field cabinet package"
+visibility = "all_given"
+archetypes = ["ssc05_poe_fibre_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-05 PoE/fibre field cabinet package"
+visibility = "all_given"
+archetypes = ["ssc05_poe_fibre_case"]

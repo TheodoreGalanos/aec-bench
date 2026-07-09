@@ -1,0 +1,144 @@
+# ABOUTME: Defines the SSC-15 facade fixing certificate template.
+# ABOUTME: Pins one task-owned fixing certificate, capacity table, elevation, and memo source pack.
+
+[meta]
+name = "facade-fixing-certificate-capacity-package"
+description = "SSC-15 facade fixing certificate, wind demand, bracket capacity, anchor, and tolerance checks"
+long_description = "Calculates source-bound facade/fixing product compliance metrics from a deterministic SSC-15 task-owned source pack. The template combines one fixing certificate, capacity table, facade elevation, wind/bracket calculation, material schedule, and submittal memo."
+discipline = "structural"
+category = "fixing-compliance"
+standards = ["facade fixing certificate review", "wind bracket demand review", "material certificate review"]
+tags = ["structural", "facade", "fixing", "certificate", "bracket", "anchor", "product-compliance", "deterministic"]
+tool_mode = "with-tool"
+
+[params.wind_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "WIND-15-CALC-06 design wind pressure"
+min = 2.4
+max = 2.4
+
+[params.tributary_area_m2]
+type = "float"
+unit = "m2"
+description = "ELEV-15-FACADE-06 bracket tributary area"
+min = 1.2
+max = 1.2
+
+[params.load_factor]
+type = "float"
+description = "WIND-15-CALC-06 product-capacity load factor"
+min = 1.5
+max = 1.5
+
+[params.bracket_capacity_kn]
+type = "float"
+unit = "kN"
+description = "CAP-15-TABLE-06 certified bracket capacity"
+min = 6.2
+max = 6.2
+
+[params.anchor_shear_capacity_kn]
+type = "float"
+unit = "kN"
+description = "CAP-15-TABLE-06 anchor shear capacity"
+min = 3.4
+max = 3.4
+
+[params.anchor_shear_demand_kn]
+type = "float"
+unit = "kN"
+description = "WIND-15-CALC-06 anchor shear demand"
+min = 2.1
+max = 2.1
+
+[params.matching_certificate_fields]
+type = "float"
+unit = "count"
+description = "CERT-15-FIX-06 certificate fields matching the capacity table"
+min = 6.0
+max = 6.0
+
+[params.required_certificate_fields]
+type = "float"
+unit = "count"
+description = "CERT-15-FIX-06 required certificate field count"
+min = 6.0
+max = 6.0
+
+[params.carbon_equivalent]
+type = "float"
+description = "MAT-15-FACADE-06 material carbon-equivalent value"
+min = 0.39
+max = 0.39
+
+[params.carbon_equivalent_limit]
+type = "float"
+description = "MAT-15-FACADE-06 material carbon-equivalent limit"
+min = 0.45
+max = 0.45
+
+[params.adjustment_allowance_mm]
+type = "float"
+unit = "mm"
+description = "ELEV-15-FACADE-06 bracket adjustment allowance"
+min = 35.0
+max = 35.0
+
+[params.measured_deviation_mm]
+type = "float"
+unit = "mm"
+description = "ELEV-15-FACADE-06 measured substrate deviation"
+min = 22.0
+max = 22.0
+
+[outputs.design_bracket_load_kn]
+description = "Wind pressure times tributary area times load factor"
+tolerance = 0.03
+
+[outputs.bracket_capacity_margin_kn]
+description = "Bracket capacity minus design bracket load"
+tolerance = 0.03
+
+[outputs.bracket_utilization]
+description = "Design bracket load divided by bracket capacity"
+tolerance = 0.003
+
+[outputs.anchor_shear_margin_kn]
+description = "Anchor shear capacity minus anchor shear demand"
+tolerance = 0.03
+
+[outputs.certificate_field_match_fraction]
+description = "Matching certificate fields divided by required fields"
+tolerance = 0.003
+
+[outputs.carbon_equivalent_margin]
+description = "Carbon-equivalent limit minus material carbon equivalent"
+tolerance = 0.003
+
+[outputs.tolerance_adjustment_margin_mm]
+description = "Adjustment allowance minus measured substrate deviation"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when fixing capacity, anchor, certificate, material, and tolerance checks pass"
+tolerance = 0.001
+
+[archetypes.ssc15_facade_fixing_case]
+description = "Facade fixing certificate and capacity compliance case"
+site_contexts = ["ssc15-facade-fixing"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-15 facade fixing compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_facade_fixing_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-15 facade fixing compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_facade_fixing_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-15 facade fixing compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_facade_fixing_case"]

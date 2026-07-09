@@ -1,0 +1,172 @@
+[meta]
+name = "marine-asset-source-policy-review-package"
+description = "SSC-04 marine asset source-policy review metrics"
+long_description = "Calculates source-bound marine asset source-policy review metrics from a deterministic SSC-04 task-owned source pack. The template combines datum trace, criteria resolution, asset schedule matching, calculation trace, comment resolution, authority partition, unsupported-source count, response completeness, evidence boundary score, and an overall synthetic pass score."
+discipline = "civil"
+category = "marine-source-policy-review"
+standards = ["marine source-policy workflow", "datum trace review", "criteria matrix review", "review comment response workflow"]
+tags = ["civil", "marine", "source-policy", "datum", "criteria", "review", "traceability", "deterministic"]
+tool_mode = "with-tool"
+
+[params.datum_items_traced]
+type = "float"
+description = "DATUM-04-STATEMENT-08 traced datum items"
+min = 5.0
+max = 5.0
+
+[params.required_datum_items]
+type = "float"
+description = "DATUM-04-STATEMENT-08 required datum items"
+min = 5.0
+max = 5.0
+
+[params.resolved_criteria_items]
+type = "float"
+description = "CRITERIA-04-MATRIX-08 resolved criteria items"
+min = 6.0
+max = 6.0
+
+[params.criteria_items]
+type = "float"
+description = "CRITERIA-04-MATRIX-08 criteria items"
+min = 6.0
+max = 6.0
+
+[params.matching_asset_rows]
+type = "float"
+description = "ASSET-04-MARINE-08 matching asset rows"
+min = 14.0
+max = 14.0
+
+[params.asset_schedule_rows]
+type = "float"
+description = "ASSET-04-MARINE-08 asset schedule rows"
+min = 15.0
+max = 15.0
+
+[params.traced_calculation_rows]
+type = "float"
+description = "CALC-04-APPENDIX-08 traced calculation rows"
+min = 18.0
+max = 18.0
+
+[params.calculation_rows]
+type = "float"
+description = "CALC-04-APPENDIX-08 calculation rows"
+min = 20.0
+max = 20.0
+
+[params.resolved_comments]
+type = "float"
+description = "COMMENT-04-REGISTER-08 resolved comments"
+min = 7.0
+max = 7.0
+
+[params.review_comments]
+type = "float"
+description = "COMMENT-04-REGISTER-08 review comments"
+min = 8.0
+max = 8.0
+
+[params.separated_authority_roles]
+type = "float"
+description = "MEMO-04-SOURCE-08 separated authority roles"
+min = 4.0
+max = 4.0
+
+[params.required_authority_roles]
+type = "float"
+description = "MEMO-04-SOURCE-08 required authority roles"
+min = 4.0
+max = 4.0
+
+[params.unsupported_source_value_count]
+type = "float"
+description = "MEMO-04-SOURCE-08 unsupported source value count"
+min = 0.0
+max = 0.0
+
+[params.response_sections]
+type = "float"
+description = "MEMO-04-SOURCE-08 response sections"
+min = 9.0
+max = 9.0
+
+[params.required_response_sections]
+type = "float"
+description = "MEMO-04-SOURCE-08 required response sections"
+min = 10.0
+max = 10.0
+
+[outputs.datum_trace_score]
+description = "Datum items traced divided by required datum items"
+tolerance = 0.003
+
+[outputs.criteria_resolution_fraction]
+description = "Resolved criteria items divided by criteria items"
+tolerance = 0.003
+
+[outputs.asset_schedule_match_fraction]
+description = "Matching asset rows divided by asset schedule rows"
+tolerance = 0.003
+
+[outputs.calculation_trace_fraction]
+description = "Traced calculation rows divided by calculation rows"
+tolerance = 0.003
+
+[outputs.comment_resolution_fraction]
+description = "Resolved comments divided by review comments"
+tolerance = 0.003
+
+[outputs.authority_partition_score]
+description = "Separated authority roles divided by required authority roles"
+tolerance = 0.003
+
+[outputs.unsupported_source_value_count]
+description = "Unsupported source value count"
+tolerance = 0.001
+
+[outputs.response_completeness_score]
+description = "Response sections divided by required response sections"
+tolerance = 0.003
+
+[outputs.evidence_boundary_score]
+description = "Average evidence-boundary score"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when source-policy review checks pass"
+tolerance = 0.001
+
+[archetypes.ssc04_marine_source_policy_case]
+description = "Marine asset source-policy and review packet case"
+datum_items_traced = {min = 5.0, max = 5.0}
+required_datum_items = {min = 5.0, max = 5.0}
+resolved_criteria_items = {min = 6.0, max = 6.0}
+criteria_items = {min = 6.0, max = 6.0}
+matching_asset_rows = {min = 14.0, max = 14.0}
+asset_schedule_rows = {min = 15.0, max = 15.0}
+traced_calculation_rows = {min = 18.0, max = 18.0}
+calculation_rows = {min = 20.0, max = 20.0}
+resolved_comments = {min = 7.0, max = 7.0}
+review_comments = {min = 8.0, max = 8.0}
+separated_authority_roles = {min = 4.0, max = 4.0}
+required_authority_roles = {min = 4.0, max = 4.0}
+unsupported_source_value_count = {min = 0.0, max = 0.0}
+response_sections = {min = 9.0, max = 9.0}
+required_response_sections = {min = 10.0, max = 10.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-04 marine source-policy review package"
+visibility = "all_given"
+archetypes = ["ssc04_marine_source_policy_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-04 marine source-policy review package"
+visibility = "all_given"
+archetypes = ["ssc04_marine_source_policy_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-04 marine source-policy review package"
+visibility = "all_given"
+archetypes = ["ssc04_marine_source_policy_case"]

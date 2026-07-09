@@ -1,0 +1,215 @@
+# ABOUTME: Defines the SSC-06 compressor and pneumatic system template.
+# ABOUTME: Pins one air demand, compressor, receiver, motor, feeder, and branch-pressure source pack.
+
+[meta]
+name = "compressor-pneumatic-system-package"
+description = "SSC-06 compressor and pneumatic system metrics"
+long_description = "Calculates source-bound compressor and pneumatic system metrics from a deterministic SSC-06 task-owned source pack. The template combines adjusted air demand, compressor capacity margin, receiver storage runtime, motor input and margin, feeder voltage drop, branch pressure margin, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "compressor-pneumatic"
+standards = ["compressed-air demand workflow", "receiver storage workflow", "motor and feeder sizing workflow"]
+tags = ["mechanical", "compressor", "pneumatic", "receiver", "motor", "feeder", "deterministic"]
+tool_mode = "with-tool"
+
+[params.connected_air_demand_m3_min]
+type = "float"
+unit = "m3/min"
+description = "AIR-06-DEMAND-03 connected air demand"
+min = 18.0
+max = 18.0
+
+[params.simultaneity_factor]
+type = "float"
+description = "AIR-06-DEMAND-03 simultaneity factor"
+min = 0.72
+max = 0.72
+
+[params.leakage_allowance_fraction]
+type = "float"
+description = "AIR-06-DEMAND-03 leakage allowance"
+min = 0.12
+max = 0.12
+
+[params.selected_compressor_capacity_m3_min]
+type = "float"
+unit = "m3/min"
+description = "COMP-06-DATA-03 selected compressor capacity"
+min = 18.5
+max = 18.5
+
+[params.receiver_volume_m3]
+type = "float"
+unit = "m3"
+description = "RECEIVER-06-STORAGE-03 receiver volume"
+min = 5.0
+max = 5.0
+
+[params.receiver_pressure_band_kpa]
+type = "float"
+unit = "kPa"
+description = "RECEIVER-06-STORAGE-03 usable pressure band"
+min = 150.0
+max = 150.0
+
+[params.atmospheric_pressure_kpa_abs]
+type = "float"
+unit = "kPa abs"
+description = "RECEIVER-06-STORAGE-03 atmospheric pressure basis"
+min = 101.3
+max = 101.3
+
+[params.compressor_specific_power_kw_per_m3_min]
+type = "float"
+unit = "kW per m3/min"
+description = "COMP-06-DATA-03 specific power at operating pressure"
+min = 6.2
+max = 6.2
+
+[params.motor_efficiency]
+type = "float"
+description = "MOTOR-06-SCHED-03 motor efficiency"
+min = 0.95
+max = 0.95
+
+[params.selected_motor_kw]
+type = "float"
+unit = "kW"
+description = "MOTOR-06-SCHED-03 selected motor size"
+min = 110.0
+max = 110.0
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "FEEDER-06-480V-03 feeder voltage"
+min = 480.0
+max = 480.0
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "FEEDER-06-480V-03 feeder length"
+min = 0.18
+max = 0.18
+
+[params.feeder_resistance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "FEEDER-06-480V-03 conductor resistance"
+min = 0.321
+max = 0.321
+
+[params.feeder_reactance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "FEEDER-06-480V-03 conductor reactance"
+min = 0.081
+max = 0.081
+
+[params.motor_power_factor]
+type = "float"
+description = "MOTOR-06-SCHED-03 motor power factor"
+min = 0.88
+max = 0.88
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "FEEDER-06-480V-03 maximum allowed voltage drop"
+min = 4.0
+max = 4.0
+
+[params.branch_pressure_loss_kpa]
+type = "float"
+unit = "kPa"
+description = "AIR-06-DEMAND-03 branch pressure loss"
+min = 22.0
+max = 22.0
+
+[params.max_branch_pressure_loss_kpa]
+type = "float"
+unit = "kPa"
+description = "COMP-06-DATA-03 maximum branch pressure loss"
+min = 35.0
+max = 35.0
+
+[outputs.adjusted_air_demand_m3_min]
+description = "Connected demand after simultaneity and leakage allowance"
+tolerance = 0.03
+
+[outputs.compressor_capacity_margin_m3_min]
+description = "Selected compressor capacity minus adjusted demand"
+tolerance = 0.03
+
+[outputs.receiver_storage_runtime_min]
+description = "Receiver storage runtime over the declared pressure band"
+tolerance = 0.03
+
+[outputs.compressor_shaft_power_kw]
+description = "Compressor shaft power from adjusted air demand"
+tolerance = 0.03
+
+[outputs.motor_input_power_kw]
+description = "Motor input power after motor efficiency"
+tolerance = 0.03
+
+[outputs.motor_size_margin_kw]
+description = "Selected motor size minus motor input power"
+tolerance = 0.03
+
+[outputs.feeder_current_a]
+description = "FEEDER-06-480V-03 three-phase feeder current"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "FEEDER-06-480V-03 voltage drop percentage"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Maximum voltage drop minus calculated voltage drop"
+tolerance = 0.03
+
+[outputs.pressure_drop_margin_kpa]
+description = "Maximum branch pressure loss minus calculated branch loss"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when capacity, motor, voltage-drop, and pressure-loss margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc06_compressor_pneumatic_case]
+description = "Compressor, receiver, motor, feeder, and branch pressure source pack"
+connected_air_demand_m3_min = {min = 18.0, max = 18.0}
+simultaneity_factor = {min = 0.72, max = 0.72}
+leakage_allowance_fraction = {min = 0.12, max = 0.12}
+selected_compressor_capacity_m3_min = {min = 18.5, max = 18.5}
+receiver_volume_m3 = {min = 5.0, max = 5.0}
+receiver_pressure_band_kpa = {min = 150.0, max = 150.0}
+atmospheric_pressure_kpa_abs = {min = 101.3, max = 101.3}
+compressor_specific_power_kw_per_m3_min = {min = 6.2, max = 6.2}
+motor_efficiency = {min = 0.95, max = 0.95}
+selected_motor_kw = {min = 110.0, max = 110.0}
+feeder_voltage_v = {min = 480.0, max = 480.0}
+feeder_length_km = {min = 0.18, max = 0.18}
+feeder_resistance_ohm_per_km = {min = 0.321, max = 0.321}
+feeder_reactance_ohm_per_km = {min = 0.081, max = 0.081}
+motor_power_factor = {min = 0.88, max = 0.88}
+max_voltage_drop_percent = {min = 4.0, max = 4.0}
+branch_pressure_loss_kpa = {min = 22.0, max = 22.0}
+max_branch_pressure_loss_kpa = {min = 35.0, max = 35.0}
+site_contexts = ["compressor-pneumatic", "air-demand-feeder-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-06 compressor pneumatic package"
+visibility = "all_given"
+archetypes = ["ssc06_compressor_pneumatic_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-06 compressor pneumatic package"
+visibility = "all_given"
+archetypes = ["ssc06_compressor_pneumatic_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-06 compressor pneumatic package"
+visibility = "all_given"
+archetypes = ["ssc06_compressor_pneumatic_case"]

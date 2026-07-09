@@ -1,0 +1,400 @@
+[meta]
+name = "road-visual-operations-issue-review-package"
+description = "SSC-01 review-first issue-readiness review of a road visual operations package"
+long_description = "Review-native long-horizon task over a generated SSC-01 road visual operations issue packet. The agent receives a multi-file source packet in /workspace/sources/ covering lighting, CCTV, VMS, ITS network, PoE, UPS, storm operations, criteria, and comments. The task is to inventory the packet, preserve object identity, recompute only source-owned evidence, assign one status per review item, raise findings/information requests/actions, and make a readiness decision. Packet variants inject missing PoE budget evidence, stale lighting revisions, device-register mismatch, scenario copy-forward, open comments, carried comments, or a genuine PoE capacity failure."
+discipline = "electrical"
+category = "road-review"
+standards = ["IES lighting workflow", "FHWA MUTCD", "NTCIP", "IEEE 802.3bt"]
+tags = ["electrical", "road", "review", "issue-readiness", "lighting", "its", "cctv", "poe"]
+tool_mode = "no-tool"
+
+# --- Lighting grid ---
+
+[params.lighting_lux_01]
+type = "float"
+unit = "lux"
+description = "LGT-SSC01-003 grid point 01"
+min = 14.0
+max = 24.0
+
+[params.lighting_lux_02]
+type = "float"
+unit = "lux"
+description = "LGT-SSC01-003 grid point 02"
+min = 14.0
+max = 24.0
+
+[params.lighting_lux_03]
+type = "float"
+unit = "lux"
+description = "LGT-SSC01-003 grid point 03"
+min = 14.0
+max = 24.0
+
+[params.lighting_lux_04]
+type = "float"
+unit = "lux"
+description = "LGT-SSC01-003 grid point 04"
+min = 14.0
+max = 24.0
+
+[params.lighting_lux_05]
+type = "float"
+unit = "lux"
+description = "LGT-SSC01-003 grid point 05"
+min = 14.0
+max = 24.0
+
+[params.lighting_lux_06]
+type = "float"
+unit = "lux"
+description = "LGT-SSC01-003 grid point 06"
+min = 14.0
+max = 24.0
+
+[params.minimum_uniformity_margin]
+type = "float"
+description = "Derivation margin between source minimum uniformity criterion and computed uniformity"
+min = 0.05
+max = 0.15
+
+# --- Network and storage ---
+
+[params.cctv_count]
+type = "int"
+description = "CCTV-SSC01-003 number of active cameras"
+min = 2.0
+max = 4.0
+
+[params.cctv_network_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-SSC01-003 network load per CCTV stream"
+min = 4.0
+max = 8.0
+
+[params.vms_network_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-SSC01-003 VMS network load"
+min = 2.0
+max = 5.0
+
+[params.sensor_network_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-SSC01-003 storm sensor network load"
+min = 0.2
+max = 0.8
+
+[params.controller_network_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-SSC01-003 controller network load"
+min = 0.5
+max = 1.2
+
+[params.network_overhead_pct]
+type = "float"
+unit = "%"
+description = "NET-SSC01-003 protocol overhead"
+min = 15.0
+max = 30.0
+
+[params.network_headroom_margin_mbps]
+type = "float"
+unit = "Mbps"
+description = "Derivation margin between total network load and uplink capacity"
+min = 5.0
+max = 15.0
+
+[params.cctv_total_bitrate_mbps]
+type = "float"
+unit = "Mbps"
+description = "CCTV-SSC01-003 total recording bitrate"
+min = 8.0
+max = 18.0
+
+[params.retention_days]
+type = "enum"
+unit = "days"
+description = "CCTV-SSC01-003 retention period"
+values = ["7", "14", "21"]
+
+[params.storage_overhead_factor]
+type = "float"
+description = "CCTV-SSC01-003 storage overhead factor"
+min = 1.05
+max = 1.25
+
+# --- PoE and UPS ---
+
+[params.cctv_poe_load_w]
+type = "float"
+unit = "W"
+description = "PWR-SSC01-003 PoE load per CCTV camera"
+min = 10.0
+max = 25.0
+
+[params.vms_poe_load_w]
+type = "float"
+unit = "W"
+description = "PWR-SSC01-003 VMS PoE load"
+min = 8.0
+max = 18.0
+
+[params.sensor_poe_load_w]
+type = "float"
+unit = "W"
+description = "PWR-SSC01-003 storm sensor PoE load"
+min = 4.0
+max = 10.0
+
+[params.poe_headroom_margin_w]
+type = "float"
+unit = "W"
+description = "Derivation margin between PoE load and switch budget for passing packets"
+min = 10.0
+max = 40.0
+
+[params.poe_headroom_deficit_w]
+type = "float"
+unit = "W"
+description = "Derivation deficit between PoE load and switch budget for failing packets"
+min = 5.0
+max = 20.0
+
+[params.luminaire_power_w]
+type = "float"
+unit = "W"
+description = "PWR-SSC01-003 power per luminaire"
+min = 60.0
+max = 120.0
+
+[params.luminaire_count]
+type = "enum"
+description = "PWR-SSC01-003 selected luminaire count"
+values = ["4", "5", "6"]
+
+[params.device_ups_load_w]
+type = "float"
+unit = "W"
+description = "PWR-SSC01-003 non-lighting UPS device load"
+min = 60.0
+max = 140.0
+
+[params.ups_autonomy_h]
+type = "enum"
+unit = "h"
+description = "PWR-SSC01-003 required UPS autonomy"
+values = ["2", "3", "4"]
+
+[params.ups_efficiency]
+type = "float"
+description = "PWR-SSC01-003 UPS efficiency"
+min = 0.85
+max = 0.95
+
+# --- Storm operations ---
+
+[params.storm_sensor_level_m]
+type = "float"
+unit = "m"
+description = "WLS-SSC01-003 storm water-level sensor reading"
+min = 40.0
+max = 45.0
+
+[params.water_level_margin_m]
+type = "float"
+unit = "m"
+description = "Derivation margin between storm sensor level and alarm threshold"
+min = 0.2
+max = 0.8
+
+# --- Documentary variant helpers ---
+
+[params.packet_variant]
+type = "enum"
+description = "Hidden packet-defect variant controlling gold review statuses"
+values = [
+  "clean",
+  "missing_poe_switch_budget",
+  "stale_lighting_grid_revision",
+  "device_register_mismatch",
+  "scenario_copy_forward",
+  "open_critical_comment",
+  "minor_open_comment_carried",
+  "poe_budget_exceeded",
+]
+
+# --- Outputs (review gold state and evidence) ---
+
+[outputs.rlr_01_status]
+description = "Packet completeness status code (0 pass, 1 fail, 2 not applicable, 3 insufficient data)"
+tolerance = 0.0
+
+[outputs.rlr_02_status]
+description = "Object identity status code"
+tolerance = 0.0
+
+[outputs.rlr_03_status]
+description = "Visual operations basis status code"
+tolerance = 0.0
+
+[outputs.rlr_04_status]
+description = "Visual and field-device adequacy status code"
+tolerance = 0.0
+
+[outputs.rlr_05_status]
+description = "Scenario consequence status code"
+tolerance = 0.0
+
+[outputs.rlr_06_status]
+description = "Secondary-discipline resilience status code"
+tolerance = 0.0
+
+[outputs.rlr_07_status]
+description = "Comment and action closure status code"
+tolerance = 0.0
+
+[outputs.rlr_08_status]
+description = "Readiness decision consistency status code"
+tolerance = 0.0
+
+[outputs.rlr_09_status]
+description = "Claim boundary status code"
+tolerance = 0.0
+
+[outputs.readiness_code]
+description = "Gold readiness decision (0 ready, 1 ready with carried actions, 2 not ready)"
+tolerance = 0.0
+
+[outputs.required_findings_count]
+description = "Findings the review must raise"
+tolerance = 0.0
+
+[outputs.required_information_requests_count]
+description = "Information requests the review must raise"
+tolerance = 0.0
+
+[outputs.required_carried_actions_count]
+description = "Carried actions the review must record"
+tolerance = 0.0
+
+[outputs.average_illuminance_lux]
+description = "Average illuminance across the lighting grid"
+tolerance = 0.02
+
+[outputs.minimum_illuminance_lux]
+description = "Minimum illuminance across the lighting grid"
+tolerance = 0.02
+
+[outputs.uniformity_ratio]
+description = "Minimum illuminance divided by average illuminance"
+tolerance = 0.02
+
+[outputs.minimum_uniformity_ratio]
+description = "Source-owned minimum uniformity criterion"
+tolerance = 0.02
+
+[outputs.total_network_load_mbps]
+description = "Total communications load after overhead"
+tolerance = 0.02
+
+[outputs.network_headroom_mbps]
+description = "Uplink capacity minus total communications load"
+tolerance = 0.02
+
+[outputs.total_cctv_storage_tb]
+description = "CCTV storage required for source retention period"
+tolerance = 0.02
+
+[outputs.poe_load_w]
+description = "Total field-device PoE load"
+tolerance = 0.02
+
+[outputs.poe_headroom_w]
+description = "PoE switch budget minus field-device load"
+tolerance = 0.02
+
+[outputs.water_level_margin_m]
+description = "Storm alarm threshold minus sensor level"
+tolerance = 0.02
+
+[outputs.ups_energy_kwh]
+description = "UPS energy required for luminaires and field devices"
+tolerance = 0.02
+
+# --- Archetypes ---
+
+[archetypes.urban_arterial_visual_ops]
+description = "Urban arterial road segment with higher visual systems density"
+site_contexts = ["urban-arterial-night-storm", "cbd-fringe-incident-response"]
+lighting_lux_01 = {min = 16.0, max = 24.0}
+lighting_lux_02 = {min = 16.0, max = 24.0}
+lighting_lux_03 = {min = 16.0, max = 24.0}
+lighting_lux_04 = {min = 15.0, max = 23.0}
+lighting_lux_05 = {min = 16.0, max = 24.0}
+lighting_lux_06 = {min = 15.0, max = 23.0}
+cctv_count = {min = 3.0, max = 4.0}
+cctv_total_bitrate_mbps = {min = 11.0, max = 18.0}
+
+[archetypes.suburban_collector_visual_ops]
+description = "Suburban collector road segment with moderate field-device load"
+site_contexts = ["suburban-collector-night-storm", "school-access-visual-ops"]
+lighting_lux_01 = {min = 14.0, max = 21.0}
+lighting_lux_02 = {min = 14.0, max = 21.0}
+lighting_lux_03 = {min = 14.0, max = 21.0}
+lighting_lux_04 = {min = 14.0, max = 20.0}
+lighting_lux_05 = {min = 14.0, max = 21.0}
+lighting_lux_06 = {min = 14.0, max = 20.0}
+cctv_count = {min = 2.0, max = 3.0}
+cctv_total_bitrate_mbps = {min = 8.0, max = 14.0}
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Obvious packet defects: clean, missing PoE budget, or genuine PoE capacity failure"
+visibility = "partial"
+archetypes = ["urban_arterial_visual_ops", "suburban_collector_visual_ops"]
+hidden_params = [
+  "packet_variant",
+  "network_headroom_margin_mbps",
+  "poe_headroom_margin_w",
+  "poe_headroom_deficit_w",
+  "water_level_margin_m",
+  "minimum_uniformity_margin",
+]
+packet_variant = ["clean", "missing_poe_switch_budget", "poe_budget_exceeded"]
+
+[difficulty.medium]
+description = "Full packet-variant distribution"
+visibility = "partial"
+archetypes = ["urban_arterial_visual_ops", "suburban_collector_visual_ops"]
+hidden_params = [
+  "packet_variant",
+  "network_headroom_margin_mbps",
+  "poe_headroom_margin_w",
+  "poe_headroom_deficit_w",
+  "water_level_margin_m",
+  "minimum_uniformity_margin",
+]
+
+[difficulty.hard]
+description = "Subtle documentary defects: stale revisions, device mismatch, scenario copy-forward, carried comments"
+visibility = "partial"
+archetypes = ["urban_arterial_visual_ops", "suburban_collector_visual_ops"]
+hidden_params = [
+  "packet_variant",
+  "network_headroom_margin_mbps",
+  "poe_headroom_margin_w",
+  "poe_headroom_deficit_w",
+  "water_level_margin_m",
+  "minimum_uniformity_margin",
+]
+packet_variant = [
+  "stale_lighting_grid_revision",
+  "device_register_mismatch",
+  "scenario_copy_forward",
+  "minor_open_comment_carried",
+]

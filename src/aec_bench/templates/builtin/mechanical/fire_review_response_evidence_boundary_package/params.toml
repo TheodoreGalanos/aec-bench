@@ -1,0 +1,176 @@
+[meta]
+name = "fire-review-response-evidence-boundary-package"
+description = "SSC-19 fire review response and evidence-boundary metrics"
+long_description = "Calculates source-bound fire review and evidence-boundary metrics from a deterministic SSC-19 task-owned source pack. The template combines source traceability, comment resolution, affected-check updates, unresolved gaps, authority role separation, conflict resolution, response completeness, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "fire-review-boundary"
+standards = ["fire review workflows", "source evidence workflows", "authority response workflows"]
+tags = ["mechanical", "fire", "review", "evidence", "source-boundary", "authority", "deterministic"]
+tool_mode = "with-tool"
+
+[params.source_items_traced]
+type = "float"
+description = "SOURCE-19-INDEX-08 traced source items"
+min = 18.0
+max = 18.0
+
+[params.required_source_items]
+type = "float"
+description = "SOURCE-19-INDEX-08 required source items"
+min = 20.0
+max = 20.0
+
+[params.review_comments]
+type = "float"
+description = "COMMENT-19-REVIEW-08 total review comments"
+min = 7.0
+max = 7.0
+
+[params.resolved_comments]
+type = "float"
+description = "COMMENT-19-REVIEW-08 resolved comments"
+min = 6.0
+max = 6.0
+
+[params.affected_checks]
+type = "float"
+description = "CALC-19-EXTRACT-08 affected checks"
+min = 5.0
+max = 5.0
+
+[params.updated_checks]
+type = "float"
+description = "CALC-19-EXTRACT-08 updated checks"
+min = 5.0
+max = 5.0
+
+[params.unresolved_gaps]
+type = "float"
+description = "HAZ-19-TABLE-08 unresolved gaps"
+min = 2.0
+max = 2.0
+
+[params.allowed_gaps]
+type = "float"
+description = "AUTH-19-SOURCE-08 allowed gaps"
+min = 3.0
+max = 3.0
+
+[params.authority_roles]
+type = "float"
+description = "AUTH-19-SOURCE-08 authority role count"
+min = 4.0
+max = 4.0
+
+[params.separated_authority_roles]
+type = "float"
+description = "AUTH-19-SOURCE-08 separated authority roles"
+min = 4.0
+max = 4.0
+
+[params.evidence_conflicts]
+type = "float"
+description = "SOURCE-19-INDEX-08 evidence conflicts"
+min = 3.0
+max = 3.0
+
+[params.resolved_conflicts]
+type = "float"
+description = "RESPONSE-19-MEMO-08 resolved conflicts"
+min = 2.0
+max = 2.0
+
+[params.critical_open_comments]
+type = "float"
+description = "COMMENT-19-REVIEW-08 critical open comments"
+min = 0.0
+max = 0.0
+
+[params.response_sections]
+type = "float"
+description = "RESPONSE-19-MEMO-08 completed response sections"
+min = 11.0
+max = 11.0
+
+[params.required_response_sections]
+type = "float"
+description = "RESPONSE-19-MEMO-08 required response sections"
+min = 12.0
+max = 12.0
+
+[outputs.source_trace_score]
+description = "Traced source items divided by required source items"
+tolerance = 0.03
+
+[outputs.comment_resolution_fraction]
+description = "Resolved comments divided by review comments"
+tolerance = 0.03
+
+[outputs.affected_check_update_fraction]
+description = "Updated checks divided by affected checks"
+tolerance = 0.03
+
+[outputs.unresolved_gap_count]
+description = "Unresolved evidence gaps"
+tolerance = 0.001
+
+[outputs.allowed_gap_margin]
+description = "Allowed gaps minus unresolved gaps"
+tolerance = 0.03
+
+[outputs.authority_role_separation_score]
+description = "Separated authority roles divided by authority roles"
+tolerance = 0.03
+
+[outputs.conflict_resolution_fraction]
+description = "Resolved conflicts divided by evidence conflicts"
+tolerance = 0.03
+
+[outputs.response_completeness_score]
+description = "Completed response sections divided by required response sections"
+tolerance = 0.03
+
+[outputs.review_boundary_score]
+description = "Mean of source, comment, check, role, conflict, and response scores"
+tolerance = 0.03
+
+[outputs.critical_open_comments]
+description = "Critical open comments"
+tolerance = 0.001
+
+[outputs.overall_pass_score]
+description = "1.0 when gap, check-update, role-separation, and critical-comment checks pass"
+tolerance = 0.001
+
+[archetypes.ssc19_fire_review_boundary_case]
+description = "Fire review response case with source traceability, gaps, conflicts, and authority boundaries"
+source_items_traced = {min = 18.0, max = 18.0}
+required_source_items = {min = 20.0, max = 20.0}
+review_comments = {min = 7.0, max = 7.0}
+resolved_comments = {min = 6.0, max = 6.0}
+affected_checks = {min = 5.0, max = 5.0}
+updated_checks = {min = 5.0, max = 5.0}
+unresolved_gaps = {min = 2.0, max = 2.0}
+allowed_gaps = {min = 3.0, max = 3.0}
+authority_roles = {min = 4.0, max = 4.0}
+separated_authority_roles = {min = 4.0, max = 4.0}
+evidence_conflicts = {min = 3.0, max = 3.0}
+resolved_conflicts = {min = 2.0, max = 2.0}
+critical_open_comments = {min = 0.0, max = 0.0}
+response_sections = {min = 11.0, max = 11.0}
+required_response_sections = {min = 12.0, max = 12.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-19 fire review response package"
+visibility = "all_given"
+archetypes = ["ssc19_fire_review_boundary_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-19 fire review response package"
+visibility = "all_given"
+archetypes = ["ssc19_fire_review_boundary_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-19 fire review response package"
+visibility = "all_given"
+archetypes = ["ssc19_fire_review_boundary_case"]

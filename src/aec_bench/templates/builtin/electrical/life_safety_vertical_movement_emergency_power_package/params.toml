@@ -1,0 +1,212 @@
+[meta]
+name = "life-safety-vertical-movement-emergency-power-package"
+description = "SSC-08 life-safety and vertical-movement emergency-power metrics"
+long_description = "Calculates source-bound emergency-power metrics from a deterministic SSC-08 task-owned source pack. The template combines critical connected load, diversified emergency load, generator margin, battery bridge, feeder current and voltage drop, load shedding, and an overall synthetic pass score."
+discipline = "electrical"
+category = "life-safety-emergency-power"
+standards = ["emergency power workflow", "life-safety load review", "battery bridge review", "feeder voltage drop"]
+tags = ["electrical", "building", "life-safety", "emergency-power", "vertical-transport", "deterministic"]
+tool_mode = "with-tool"
+
+[params.critical_lift_load_kw]
+type = "float"
+unit = "kW"
+description = "LIFT-08-SCHED-03 critical lift load"
+min = 18.0
+max = 18.0
+
+[params.escalator_recovery_load_kw]
+type = "float"
+unit = "kW"
+description = "ESC-08-SCHED-03 escalator recovery load"
+min = 11.0
+max = 11.0
+
+[params.alarm_load_kw]
+type = "float"
+unit = "kW"
+description = "ALARM-08-LOAD-03 alarm load"
+min = 2.4
+max = 2.4
+
+[params.smoke_control_load_kw]
+type = "float"
+unit = "kW"
+description = "EMERG-08-PLAN-03 smoke control load"
+min = 7.5
+max = 7.5
+
+[params.emergency_lighting_load_kw]
+type = "float"
+unit = "kW"
+description = "ALARM-08-LOAD-03 emergency lighting load"
+min = 3.2
+max = 3.2
+
+[params.diversity_factor]
+type = "float"
+description = "MEMO-08-POWER-03 diversity factor"
+min = 0.85
+max = 0.85
+
+[params.generator_capacity_kw]
+type = "float"
+unit = "kW"
+description = "BACKUP-08-POWER-03 generator capacity"
+min = 55.0
+max = 55.0
+
+[params.generator_derate_factor]
+type = "float"
+description = "BACKUP-08-POWER-03 generator derate factor"
+min = 0.9
+max = 0.9
+
+[params.control_load_kw]
+type = "float"
+unit = "kW"
+description = "ALARM-08-LOAD-03 control load"
+min = 1.5
+max = 1.5
+
+[params.bridge_duration_h]
+type = "float"
+unit = "h"
+description = "BACKUP-08-POWER-03 battery bridge duration"
+min = 2.0
+max = 2.0
+
+[params.battery_usable_fraction]
+type = "float"
+description = "BACKUP-08-POWER-03 battery usable fraction"
+min = 0.8
+max = 0.8
+
+[params.selected_battery_capacity_kwh]
+type = "float"
+unit = "kWh"
+description = "BACKUP-08-POWER-03 selected battery capacity"
+min = 24.0
+max = 24.0
+
+[params.voltage_v]
+type = "float"
+unit = "V"
+description = "BACKUP-08-POWER-03 emergency feeder voltage"
+min = 400.0
+max = 400.0
+
+[params.power_factor]
+type = "float"
+description = "BACKUP-08-POWER-03 emergency load power factor"
+min = 0.9
+max = 0.9
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "BACKUP-08-POWER-03 feeder length"
+min = 0.12
+max = 0.12
+
+[params.feeder_resistance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "BACKUP-08-POWER-03 feeder resistance"
+min = 0.42
+max = 0.42
+
+[params.feeder_reactance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "BACKUP-08-POWER-03 feeder reactance"
+min = 0.08
+max = 0.08
+
+[params.allowable_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "MEMO-08-POWER-03 allowable voltage drop"
+min = 3.0
+max = 3.0
+
+[params.shedable_load_kw]
+type = "float"
+unit = "kW"
+description = "EMERG-08-PLAN-03 shedable load"
+min = 8.0
+max = 8.0
+
+[params.required_shed_kw]
+type = "float"
+unit = "kW"
+description = "EMERG-08-PLAN-03 required shed"
+min = 4.0
+max = 4.0
+
+[outputs.critical_connected_load_kw]
+description = "Connected life-safety load"
+tolerance = 0.03
+
+[outputs.diversified_emergency_load_kw]
+description = "Diversified emergency load"
+tolerance = 0.03
+
+[outputs.available_generator_capacity_kw]
+description = "Derated generator capacity"
+tolerance = 0.03
+
+[outputs.generator_capacity_margin_kw]
+description = "Generator capacity minus diversified load"
+tolerance = 0.03
+
+[outputs.battery_bridge_load_kw]
+description = "Battery bridge load"
+tolerance = 0.03
+
+[outputs.required_battery_capacity_kwh]
+description = "Required battery bridge capacity"
+tolerance = 0.03
+
+[outputs.battery_capacity_margin_kwh]
+description = "Selected battery capacity minus required battery capacity"
+tolerance = 0.03
+
+[outputs.emergency_feeder_current_a]
+description = "Emergency feeder current"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "Emergency feeder voltage drop"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Allowable voltage drop minus computed drop"
+tolerance = 0.03
+
+[outputs.load_shed_margin_kw]
+description = "Shedable load minus required shed"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when emergency-power checks pass"
+tolerance = 0.001
+
+[archetypes.ssc08_emergency_power_case]
+description = "Life-safety and vertical-movement emergency-power case"
+site_contexts = ["ssc08-emergency-power"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-08 emergency-power package"
+visibility = "all_given"
+archetypes = ["ssc08_emergency_power_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-08 emergency-power package"
+visibility = "all_given"
+archetypes = ["ssc08_emergency_power_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-08 emergency-power package"
+visibility = "all_given"
+archetypes = ["ssc08_emergency_power_case"]

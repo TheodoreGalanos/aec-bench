@@ -1,0 +1,343 @@
+[meta]
+name = "pump-station-duty-npsh-issue-review-package"
+description = "SSC-06 review-first issue-readiness review of a pump duty, NPSH, motor, and feeder package"
+long_description = "Review-native long-horizon task over a generated SSC-06 pump station issue packet. The agent receives a multi-file source packet in /workspace/sources/ (document register, wet-well and suction geometry, rising-main schedule, pump curve and datasheet, motor and feeder schedule, duty operating case, criteria and comments), inventories it, preserves pump-station identity, checks the package's own calculations as review evidence, assigns one status per review item, raises findings/information requests/actions, and issues a readiness decision. Packet variants inject missing wet-well evidence, stale revisions, impeller identity mismatches, scenario copy-forward, open comments, or genuine NPSH criterion failures. Scored by a stage-gated custom verifier, not per-key answer matching."
+discipline = "mechanical"
+category = "equipment-review"
+standards = ["Hydraulic Institute pump and NPSH workflows", "Hazen-Williams", "three-phase feeder voltage-drop workflow"]
+tags = ["mechanical", "pump", "pump-station", "review", "issue-readiness", "npsh", "motor", "feeder", "long-horizon"]
+tool_mode = "no-tool"
+
+[params.design_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "DUTY-06-CASE-01 design flow for PMP-06"
+min = 58.0
+max = 92.0
+
+[params.static_lift_m]
+type = "float"
+unit = "m"
+description = "DUTY-06-CASE-01 static lift from WW-06 to discharge boundary"
+min = 11.0
+max = 22.0
+
+[params.rising_main_length_m]
+type = "float"
+unit = "m"
+description = "RM-06 rising-main length"
+min = 320.0
+max = 760.0
+
+[params.rising_main_diameter_mm]
+type = "enum"
+unit = "mm"
+description = "RM-06 internal diameter"
+values = ["225", "250", "300"]
+
+[params.hazen_williams_c]
+type = "float"
+description = "RM-06 Hazen-Williams C factor"
+min = 125.0
+max = 140.0
+
+[params.minor_loss_coefficient]
+type = "float"
+description = "RM-06 aggregate minor-loss coefficient"
+min = 3.0
+max = 7.5
+
+[params.fluid_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "WW-06 source-owned fluid density"
+min = 995.0
+max = 1000.0
+
+[params.pump_efficiency_pct]
+type = "float"
+unit = "%"
+description = "PMP-06 pump efficiency at the selected duty point"
+min = 68.0
+max = 79.0
+
+[params.motor_efficiency_pct]
+type = "float"
+unit = "%"
+description = "MOT-06 motor efficiency"
+min = 91.0
+max = 95.0
+
+[params.motor_service_factor]
+type = "float"
+description = "MOT-06 source-owned motor service factor"
+min = 1.10
+max = 1.20
+
+[params.atmospheric_pressure_kpa_abs]
+type = "float"
+unit = "kPa abs"
+description = "WW-06 atmospheric pressure for NPSHa"
+min = 100.8
+max = 101.5
+
+[params.vapor_pressure_kpa_abs]
+type = "float"
+unit = "kPa abs"
+description = "WW-06 vapor pressure for NPSHa"
+min = 2.2
+max = 3.1
+
+[params.wetwell_min_level_above_pump_m]
+type = "float"
+unit = "m"
+description = "WW-06 minimum operating level above pump centreline"
+min = 0.8
+max = 2.4
+
+[params.average_level_delta_m]
+type = "float"
+unit = "m"
+description = "Difference between average and minimum wet-well operating levels"
+min = 0.8
+max = 1.8
+
+[params.suction_loss_m]
+type = "float"
+unit = "m"
+description = "WW-06 suction-side loss at design duty"
+min = 0.25
+max = 0.75
+
+[params.minimum_npsh_margin_m]
+type = "float"
+unit = "m"
+description = "CRIT-SSC06-001 minimum NPSH margin above NPSHr"
+min = 0.5
+max = 0.8
+
+[params.npsh_margin_target_m]
+type = "float"
+unit = "m"
+description = "Derivation margin above the CRIT-SSC06-001 minimum NPSH margin"
+min = 0.4
+max = 1.2
+
+[params.npsh_margin_deficit_m]
+type = "float"
+unit = "m"
+description = "Derivation deficit below the CRIT-SSC06-001 minimum NPSH margin"
+min = 0.1
+max = 0.4
+
+[params.pump_head_margin_target_m]
+type = "float"
+unit = "m"
+description = "Derivation margin between PMP-06 curve head and total dynamic head"
+min = 0.8
+max = 3.2
+
+[params.motor_margin_target_kw]
+type = "float"
+unit = "kW"
+description = "Derivation margin between selected motor size and required motor power"
+min = 2.0
+max = 8.0
+
+[params.feeder_voltage_v]
+type = "enum"
+unit = "V"
+description = "FDR-06 nominal three-phase feeder voltage"
+values = ["415", "480"]
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "FDR-06 feeder length"
+min = 0.12
+max = 0.55
+
+[params.feeder_resistance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "FDR-06 conductor resistance"
+min = 0.24
+max = 0.55
+
+[params.feeder_reactance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "FDR-06 conductor reactance"
+min = 0.07
+max = 0.11
+
+[params.motor_power_factor]
+type = "float"
+description = "MOT-06 source-owned motor power factor"
+min = 0.84
+max = 0.90
+
+[params.voltage_drop_margin_target_percent]
+type = "float"
+unit = "%"
+description = "Derivation margin between feeder voltage drop and maximum allowed drop"
+min = 0.5
+max = 1.6
+
+[params.packet_variant]
+type = "enum"
+description = "Hidden source-packet variant"
+values = [
+  "clean",
+  "missing_wetwell_min_level",
+  "stale_pump_curve_revision",
+  "impeller_diameter_mismatch",
+  "scenario_copy_forward",
+  "open_critical_comment",
+  "minor_open_comment_carried",
+  "npsh_margin_deficient",
+]
+
+[outputs.rlr_01_status]
+description = "Review matrix status code for RLR-01"
+tolerance = 0.0
+
+[outputs.rlr_02_status]
+description = "Review matrix status code for RLR-02"
+tolerance = 0.0
+
+[outputs.rlr_03_status]
+description = "Review matrix status code for RLR-03"
+tolerance = 0.0
+
+[outputs.rlr_04_status]
+description = "Review matrix status code for RLR-04"
+tolerance = 0.0
+
+[outputs.rlr_05_status]
+description = "Review matrix status code for RLR-05"
+tolerance = 0.0
+
+[outputs.rlr_06_status]
+description = "Review matrix status code for RLR-06"
+tolerance = 0.0
+
+[outputs.rlr_07_status]
+description = "Review matrix status code for RLR-07"
+tolerance = 0.0
+
+[outputs.rlr_08_status]
+description = "Review matrix status code for RLR-08"
+tolerance = 0.0
+
+[outputs.rlr_09_status]
+description = "Review matrix status code for RLR-09"
+tolerance = 0.0
+
+[outputs.readiness_code]
+description = "Readiness decision code"
+tolerance = 0.0
+
+[outputs.required_findings_count]
+description = "Required finding count"
+tolerance = 0.0
+
+[outputs.required_information_requests_count]
+description = "Required information request count"
+tolerance = 0.0
+
+[outputs.required_carried_actions_count]
+description = "Required carried action count"
+tolerance = 0.0
+
+[outputs.total_dynamic_head_m]
+description = "Total dynamic head evidence"
+tolerance = 0.02
+
+[outputs.pump_head_margin_m]
+description = "Pump curve head margin evidence"
+tolerance = 0.02
+
+[outputs.npsh_available_m]
+description = "NPSH available evidence (absent when minimum wet-well level is missing)"
+tolerance = 0.02
+
+[outputs.npsh_margin_m]
+description = "NPSH margin evidence (absent when minimum wet-well level is missing)"
+tolerance = 0.02
+
+[outputs.motor_input_kw]
+description = "Motor input power evidence"
+tolerance = 0.02
+
+[outputs.motor_margin_kw]
+description = "Selected motor margin evidence"
+tolerance = 0.02
+
+[outputs.feeder_voltage_drop_percent]
+description = "Feeder voltage-drop evidence"
+tolerance = 0.02
+
+[outputs.voltage_drop_margin_percent]
+description = "Voltage-drop margin evidence"
+tolerance = 0.02
+
+[archetypes.municipal_wastewater_station]
+description = "Municipal wet-well pump station with a moderate rising main"
+site_contexts = ["municipal-wetwell-duty", "suburban-transfer-station"]
+design_flow_l_s = {min = 58.0, max = 78.0}
+static_lift_m = {min = 11.0, max = 18.0}
+rising_main_length_m = {min = 320.0, max = 560.0}
+
+[archetypes.industrial_lift_station]
+description = "Industrial lift station with longer feeder and higher duty head"
+site_contexts = ["industrial-lift-station", "port-estate-pumpout"]
+design_flow_l_s = {min = 72.0, max = 92.0}
+static_lift_m = {min = 15.0, max = 22.0}
+rising_main_length_m = {min = 480.0, max = 760.0}
+
+[difficulty.easy]
+description = "Obvious packet defects: clean, missing wet-well evidence, or a genuine NPSH failure"
+visibility = "partial"
+archetypes = ["municipal_wastewater_station", "industrial_lift_station"]
+hidden_params = [
+  "packet_variant",
+  "npsh_margin_target_m",
+  "npsh_margin_deficit_m",
+  "pump_head_margin_target_m",
+  "motor_margin_target_kw",
+  "voltage_drop_margin_target_percent",
+]
+packet_variant = ["clean", "missing_wetwell_min_level", "npsh_margin_deficient"]
+
+[difficulty.medium]
+description = "Full packet-variant distribution"
+visibility = "partial"
+archetypes = ["municipal_wastewater_station", "industrial_lift_station"]
+hidden_params = [
+  "packet_variant",
+  "npsh_margin_target_m",
+  "npsh_margin_deficit_m",
+  "pump_head_margin_target_m",
+  "motor_margin_target_kw",
+  "voltage_drop_margin_target_percent",
+]
+
+[difficulty.hard]
+description = "Subtle documentary defects: stale revisions, identity mismatch, scenario copy-forward, carried comments"
+visibility = "partial"
+archetypes = ["municipal_wastewater_station", "industrial_lift_station"]
+hidden_params = [
+  "packet_variant",
+  "npsh_margin_target_m",
+  "npsh_margin_deficit_m",
+  "pump_head_margin_target_m",
+  "motor_margin_target_kw",
+  "voltage_drop_margin_target_percent",
+]
+packet_variant = [
+  "stale_pump_curve_revision",
+  "impeller_diameter_mismatch",
+  "scenario_copy_forward",
+  "minor_open_comment_carried",
+]

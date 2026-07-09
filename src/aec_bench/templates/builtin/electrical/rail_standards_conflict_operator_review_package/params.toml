@@ -1,0 +1,159 @@
+[meta]
+name = "rail-standards-conflict-operator-review-package"
+description = "SSC-02 rail standards conflict, comment resolution, exception, and operator-review metrics"
+long_description = "Calculates deterministic SSC-02 operator-review metrics from a task-owned synthetic source pack. The template combines standard selection, review-comment resolution, affected-calculation updates, exception approval, source-value traceability, response completeness, and an overall synthetic pass score."
+discipline = "electrical"
+category = "rail-standards-review"
+standards = ["rail operator standards matrix workflow", "authority review comment-response workflow"]
+tags = ["electrical", "rail", "standards", "operator-review", "comments", "exceptions", "traceability", "deterministic"]
+tool_mode = "with-tool"
+
+[params.candidate_standards_count]
+type = "float"
+description = "STD-02-MATRIX-08 candidate standard count"
+min = 5.0
+max = 5.0
+
+[params.selected_standards_count]
+type = "float"
+description = "STD-02-MATRIX-08 selected controlling standard count"
+min = 4.0
+max = 4.0
+
+[params.conflicting_comments]
+type = "float"
+description = "COMMENT-02-REGISTER-08 comments requiring resolution"
+min = 3.0
+max = 3.0
+
+[params.resolved_comments]
+type = "float"
+description = "COMMENT-02-REGISTER-08 resolved comments"
+min = 3.0
+max = 3.0
+
+[params.affected_calculations]
+type = "float"
+description = "CALC-02-EXTRACT-08 calculations affected by review comments"
+min = 6.0
+max = 6.0
+
+[params.calculations_updated]
+type = "float"
+description = "CALC-02-EXTRACT-08 affected calculations updated"
+min = 5.0
+max = 5.0
+
+[params.exception_requests]
+type = "float"
+description = "EXCEPT-02-APPROVAL-08 exception requests"
+min = 1.0
+max = 1.0
+
+[params.approved_exceptions]
+type = "float"
+description = "EXCEPT-02-APPROVAL-08 approved exceptions"
+min = 1.0
+max = 1.0
+
+[params.source_values_traced]
+type = "float"
+description = "ALIGN-02-SIGNAL-08 traced source values"
+min = 18.0
+max = 18.0
+
+[params.required_source_values]
+type = "float"
+description = "ALIGN-02-SIGNAL-08 required source values"
+min = 20.0
+max = 20.0
+
+[params.response_sections]
+type = "float"
+description = "RESPONSE-02-AUTH-08 completed response sections"
+min = 9.0
+max = 9.0
+
+[params.required_response_sections]
+type = "float"
+description = "RESPONSE-02-AUTH-08 required response sections"
+min = 10.0
+max = 10.0
+
+[params.critical_open_comments]
+type = "float"
+description = "COMMENT-02-REGISTER-08 unresolved critical comments"
+min = 0.0
+max = 0.0
+
+[outputs.standard_selection_fraction]
+description = "Selected controlling standards divided by candidate standards"
+tolerance = 0.003
+
+[outputs.comment_resolution_fraction]
+description = "Resolved comments divided by conflicting comments"
+tolerance = 0.003
+
+[outputs.calculation_update_fraction]
+description = "Updated affected calculations divided by affected calculations"
+tolerance = 0.003
+
+[outputs.exception_resolution_fraction]
+description = "Approved exceptions divided by exception requests"
+tolerance = 0.003
+
+[outputs.source_trace_score]
+description = "Traced source values divided by required source values"
+tolerance = 0.003
+
+[outputs.response_completeness_score]
+description = "Completed response sections divided by required response sections"
+tolerance = 0.003
+
+[outputs.operator_review_score]
+description = "Average of the six review completeness fractions"
+tolerance = 0.003
+
+[outputs.open_comments]
+description = "Conflicting comments minus resolved comments"
+tolerance = 0.003
+
+[outputs.critical_open_comments]
+description = "Unresolved critical comments"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when review completeness thresholds pass and no critical comments remain"
+tolerance = 0.001
+
+[archetypes.ssc02_rail_standards_review_case]
+description = "Rail standards review package tied to one standards matrix, comment register, alignment/signal source pack, calculation extracts, exception approval route, and response"
+candidate_standards_count = {min = 5.0, max = 5.0}
+selected_standards_count = {min = 4.0, max = 4.0}
+conflicting_comments = {min = 3.0, max = 3.0}
+resolved_comments = {min = 3.0, max = 3.0}
+affected_calculations = {min = 6.0, max = 6.0}
+calculations_updated = {min = 5.0, max = 5.0}
+exception_requests = {min = 1.0, max = 1.0}
+approved_exceptions = {min = 1.0, max = 1.0}
+source_values_traced = {min = 18.0, max = 18.0}
+required_source_values = {min = 20.0, max = 20.0}
+response_sections = {min = 9.0, max = 9.0}
+required_response_sections = {min = 10.0, max = 10.0}
+critical_open_comments = {min = 0.0, max = 0.0}
+site_contexts = ["rail-standards-review"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-02 rail standards conflict and operator-review package"
+visibility = "all_given"
+archetypes = ["ssc02_rail_standards_review_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-02 rail standards conflict and operator-review package"
+visibility = "all_given"
+archetypes = ["ssc02_rail_standards_review_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-02 rail standards conflict and operator-review package"
+visibility = "all_given"
+archetypes = ["ssc02_rail_standards_review_case"]

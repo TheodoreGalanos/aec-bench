@@ -1,0 +1,151 @@
+[meta]
+name = "rail-drainage-flood-clearance-speed-restriction-package"
+description = "SSC-02 rail drainage, flood clearance, equipment exposure, and speed-restriction metrics"
+long_description = "Calculates deterministic SSC-02 rail drainage and flood-clearance metrics from a task-owned synthetic source pack. The template combines rational-method peak flow, culvert capacity margin, track freeboard, wayside equipment clearance, speed reduction, and an overall synthetic pass score."
+discipline = "civil"
+category = "rail-drainage-flood-restriction"
+standards = ["rail drainage design review workflow", "operator flood speed-restriction workflow"]
+tags = ["civil", "rail", "drainage", "flood", "freeboard", "speed-restriction", "wayside", "deterministic"]
+tool_mode = "with-tool"
+
+[params.catchment_area_ha]
+type = "float"
+unit = "ha"
+description = "TRACK-02-DRAIN-04 contributing catchment area"
+min = 12.0
+max = 12.0
+
+[params.rainfall_intensity_mm_h]
+type = "float"
+unit = "mm/h"
+description = "FLOOD-02-LEVEL-04 design rainfall intensity"
+min = 72.0
+max = 72.0
+
+[params.runoff_coefficient]
+type = "float"
+description = "TRACK-02-DRAIN-04 runoff coefficient"
+min = 0.72
+max = 0.72
+
+[params.culvert_capacity_m3_s]
+type = "float"
+unit = "m^3/s"
+description = "CULVERT-02-SCHED-04 culvert capacity"
+min = 2.4
+max = 2.4
+
+[params.track_low_rail_level_m]
+type = "float"
+unit = "m"
+description = "TRACK-02-DRAIN-04 low-rail level"
+min = 102.25
+max = 102.25
+
+[params.flood_level_m]
+type = "float"
+unit = "m"
+description = "FLOOD-02-LEVEL-04 flood level"
+min = 101.58
+max = 101.58
+
+[params.required_freeboard_m]
+type = "float"
+unit = "m"
+description = "OPS-02-FLOOD-04 required track freeboard"
+min = 0.45
+max = 0.45
+
+[params.equipment_plinth_level_m]
+type = "float"
+unit = "m"
+description = "WAYSIDE-02-LAYOUT-04 wayside equipment plinth level"
+min = 101.95
+max = 101.95
+
+[params.minimum_equipment_clearance_m]
+type = "float"
+unit = "m"
+description = "OPS-02-FLOOD-04 minimum equipment clearance above flood level"
+min = 0.1
+max = 0.1
+
+[params.normal_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "OPS-02-FLOOD-04 normal line speed"
+min = 95.0
+max = 95.0
+
+[params.restricted_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "OPS-02-FLOOD-04 flood-restriction speed"
+min = 45.0
+max = 45.0
+
+[outputs.peak_flow_m3_s]
+description = "Rational-method peak flow"
+tolerance = 0.03
+
+[outputs.culvert_capacity_margin_m3_s]
+description = "Culvert capacity minus peak flow"
+tolerance = 0.03
+
+[outputs.track_freeboard_m]
+description = "Low-rail level minus flood level"
+tolerance = 0.003
+
+[outputs.freeboard_margin_m]
+description = "Track freeboard minus required freeboard"
+tolerance = 0.003
+
+[outputs.equipment_freeboard_m]
+description = "Equipment plinth level minus flood level"
+tolerance = 0.003
+
+[outputs.equipment_exposure_margin_m]
+description = "Equipment freeboard minus minimum equipment clearance"
+tolerance = 0.003
+
+[outputs.speed_reduction_kmh]
+description = "Normal speed minus restricted speed"
+tolerance = 0.03
+
+[outputs.restriction_pass_score]
+description = "1.0 when culvert, freeboard, and exposure margins are non-negative"
+tolerance = 0.001
+
+[outputs.overall_pass_score]
+description = "Overall synthetic pass score for the drainage and restriction check"
+tolerance = 0.001
+
+[archetypes.ssc02_rail_drainage_flood_case]
+description = "Rail drainage package tied to one track profile, culvert schedule, flood level table, wayside equipment layout, operating restriction, and memo"
+catchment_area_ha = {min = 12.0, max = 12.0}
+rainfall_intensity_mm_h = {min = 72.0, max = 72.0}
+runoff_coefficient = {min = 0.72, max = 0.72}
+culvert_capacity_m3_s = {min = 2.4, max = 2.4}
+track_low_rail_level_m = {min = 102.25, max = 102.25}
+flood_level_m = {min = 101.58, max = 101.58}
+required_freeboard_m = {min = 0.45, max = 0.45}
+equipment_plinth_level_m = {min = 101.95, max = 101.95}
+minimum_equipment_clearance_m = {min = 0.1, max = 0.1}
+normal_speed_kmh = {min = 95.0, max = 95.0}
+restricted_speed_kmh = {min = 45.0, max = 45.0}
+site_contexts = ["rail-drainage-flood-restriction"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-02 rail drainage and flood-clearance package"
+visibility = "all_given"
+archetypes = ["ssc02_rail_drainage_flood_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-02 rail drainage and flood-clearance package"
+visibility = "all_given"
+archetypes = ["ssc02_rail_drainage_flood_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-02 rail drainage and flood-clearance package"
+visibility = "all_given"
+archetypes = ["ssc02_rail_drainage_flood_case"]

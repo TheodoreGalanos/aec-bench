@@ -1,0 +1,209 @@
+[meta]
+name = "temporary-works-wind-structural-staging-package"
+description = "SSC-16 temporary works wind and structural staging metrics"
+long_description = "Calculates source-bound temporary works wind, anchor, ballast stability, movement slot, and inspection tolerance metrics from a deterministic SSC-16 task-owned source pack."
+discipline = "structural"
+category = "temporary-works"
+standards = ["temporary works workflow", "wind action workflow", "construction inspection records"]
+tags = ["structural", "construction", "temporary-works", "wind", "staging", "deterministic"]
+tool_mode = "with-tool"
+
+[params.regional_wind_speed_m_s]
+type = "float"
+unit = "m/s"
+description = "WIND-16-CRIT-02 regional wind speed"
+min = 34.0
+max = 34.0
+
+[params.terrain_multiplier]
+type = "float"
+description = "WIND-16-CRIT-02 terrain multiplier"
+min = 0.95
+max = 0.95
+
+[params.direction_multiplier]
+type = "float"
+description = "WIND-16-CRIT-02 direction multiplier"
+min = 1.0
+max = 1.0
+
+[params.shielding_multiplier]
+type = "float"
+description = "WIND-16-CRIT-02 shielding multiplier"
+min = 0.9
+max = 0.9
+
+[params.air_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "WIND-16-CRIT-02 air density"
+min = 1.2
+max = 1.2
+
+[params.force_coefficient]
+type = "float"
+description = "TEMP-16-STRUCT-02 force coefficient"
+min = 1.3
+max = 1.3
+
+[params.temporary_panel_area_m2]
+type = "float"
+unit = "m2"
+description = "TEMP-16-STRUCT-02 temporary panel area"
+min = 32.0
+max = 32.0
+
+[params.anchor_count]
+type = "float"
+unit = "count"
+description = "SUPPORT-16-SCHED-02 anchor count"
+min = 4.0
+max = 4.0
+
+[params.anchor_load_factor]
+type = "float"
+description = "SUPPORT-16-SCHED-02 anchor load factor"
+min = 1.25
+max = 1.25
+
+[params.selected_anchor_capacity_kn]
+type = "float"
+unit = "kN"
+description = "SUPPORT-16-SCHED-02 selected anchor capacity"
+min = 12.0
+max = 12.0
+
+[params.wind_centroid_height_m]
+type = "float"
+unit = "m"
+description = "TEMP-16-STRUCT-02 wind centroid height"
+min = 2.4
+max = 2.4
+
+[params.ballast_weight_kn]
+type = "float"
+unit = "kN"
+description = "SUPPORT-16-SCHED-02 ballast weight"
+min = 44.0
+max = 44.0
+
+[params.ballast_arm_m]
+type = "float"
+unit = "m"
+description = "SUPPORT-16-SCHED-02 ballast lever arm"
+min = 1.6
+max = 1.6
+
+[params.required_stability_ratio]
+type = "float"
+description = "WIND-16-CRIT-02 required stability ratio"
+min = 1.2
+max = 1.2
+
+[params.provided_slot_length_mm]
+type = "float"
+unit = "mm"
+description = "TOL-16-CHECK-02 provided movement slot length"
+min = 45.0
+max = 45.0
+
+[params.required_movement_mm]
+type = "float"
+unit = "mm"
+description = "TOL-16-CHECK-02 required movement allowance"
+min = 32.0
+max = 32.0
+
+[params.allowed_vertical_tolerance_mm]
+type = "float"
+unit = "mm"
+description = "TOL-16-CHECK-02 allowed vertical tolerance"
+min = 8.0
+max = 8.0
+
+[params.measured_vertical_tolerance_mm]
+type = "float"
+unit = "mm"
+description = "TOL-16-CHECK-02 measured vertical tolerance"
+min = 5.0
+max = 5.0
+
+[outputs.site_wind_speed_m_s]
+description = "Site wind speed from the source-owned wind multipliers"
+tolerance = 0.03
+
+[outputs.wind_pressure_kpa]
+description = "Dynamic wind pressure on the temporary panel"
+tolerance = 0.003
+
+[outputs.temporary_panel_wind_force_kn]
+description = "Temporary panel wind force"
+tolerance = 0.03
+
+[outputs.anchor_demand_kn]
+description = "Factored demand per anchor"
+tolerance = 0.03
+
+[outputs.anchor_capacity_margin_kn]
+description = "Selected anchor capacity minus demand"
+tolerance = 0.03
+
+[outputs.overturning_moment_knm]
+description = "Overturning moment from wind force"
+tolerance = 0.03
+
+[outputs.stability_ratio]
+description = "Ballast resisting moment divided by overturning moment"
+tolerance = 0.003
+
+[outputs.stability_margin]
+description = "Stability ratio minus required stability ratio"
+tolerance = 0.003
+
+[outputs.slot_length_margin_mm]
+description = "Provided movement slot length minus required movement"
+tolerance = 0.03
+
+[outputs.inspection_tolerance_margin_mm]
+description = "Allowed tolerance minus measured tolerance"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when anchor, stability, slot, and tolerance checks pass"
+tolerance = 0.001
+
+[archetypes.ssc16_temporary_works_wind_case]
+description = "Temporary works wind and structural staging case"
+regional_wind_speed_m_s = {min = 34.0, max = 34.0}
+terrain_multiplier = {min = 0.95, max = 0.95}
+direction_multiplier = {min = 1.0, max = 1.0}
+shielding_multiplier = {min = 0.9, max = 0.9}
+air_density_kg_m3 = {min = 1.2, max = 1.2}
+force_coefficient = {min = 1.3, max = 1.3}
+temporary_panel_area_m2 = {min = 32.0, max = 32.0}
+anchor_count = {min = 4.0, max = 4.0}
+anchor_load_factor = {min = 1.25, max = 1.25}
+selected_anchor_capacity_kn = {min = 12.0, max = 12.0}
+wind_centroid_height_m = {min = 2.4, max = 2.4}
+ballast_weight_kn = {min = 44.0, max = 44.0}
+ballast_arm_m = {min = 1.6, max = 1.6}
+required_stability_ratio = {min = 1.2, max = 1.2}
+provided_slot_length_mm = {min = 45.0, max = 45.0}
+required_movement_mm = {min = 32.0, max = 32.0}
+allowed_vertical_tolerance_mm = {min = 8.0, max = 8.0}
+measured_vertical_tolerance_mm = {min = 5.0, max = 5.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-16 temporary works wind package"
+visibility = "all_given"
+archetypes = ["ssc16_temporary_works_wind_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-16 temporary works wind package"
+visibility = "all_given"
+archetypes = ["ssc16_temporary_works_wind_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-16 temporary works wind package"
+visibility = "all_given"
+archetypes = ["ssc16_temporary_works_wind_case"]

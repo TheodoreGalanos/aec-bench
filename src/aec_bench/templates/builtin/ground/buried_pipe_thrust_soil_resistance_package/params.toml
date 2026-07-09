@@ -1,0 +1,166 @@
+# ABOUTME: Defines the SSC-07 buried pipe thrust and soil resistance template.
+# ABOUTME: Pins one pipe alignment, thrust event, soil profile, and thrust block source pack.
+
+[meta]
+name = "buried-pipe-thrust-soil-resistance-package"
+description = "SSC-07 buried pipe transient thrust, soil resistance, bearing, and uplift metrics"
+long_description = "Calculates source-bound buried-pipe support metrics from a deterministic SSC-07 task-owned source pack. The template combines transient bend thrust, passive soil resistance, thrust-block bearing, uplift screening, and Hazen-Williams headloss."
+discipline = "ground"
+category = "ground-investigation"
+standards = ["bend thrust screening", "bearing screening", "Hazen-Williams headloss"]
+tags = ["ground", "buried-pipe", "thrust-block", "soil-resistance", "uplift", "deterministic"]
+tool_mode = "with-tool"
+
+[params.pipe_diameter_m]
+type = "float"
+unit = "m"
+description = "PIPE-07-ALIGN-01 pipe internal diameter"
+min = 0.6
+max = 0.6
+
+[params.transient_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "TRANS-07-THRUST-01 transient pressure"
+min = 850.0
+max = 850.0
+
+[params.bend_angle_deg]
+type = "float"
+unit = "degrees"
+description = "PIPE-07-ALIGN-01 bend angle"
+min = 45.0
+max = 45.0
+
+[params.passive_resistance_kn]
+type = "float"
+unit = "kN"
+description = "SOIL-07-PIPE-01 passive soil resistance"
+min = 260.0
+max = 260.0
+
+[params.thrust_block_vertical_load_kn]
+type = "float"
+unit = "kN"
+description = "TBLOCK-07-01 thrust block vertical service load"
+min = 120.0
+max = 120.0
+
+[params.thrust_block_base_area_m2]
+type = "float"
+unit = "m2"
+description = "TBLOCK-07-01 thrust block base area"
+min = 4.5
+max = 4.5
+
+[params.allowable_bearing_kpa]
+type = "float"
+unit = "kPa"
+description = "SOIL-07-PIPE-01 allowable bearing pressure"
+min = 160.0
+max = 160.0
+
+[params.groundwater_head_m]
+type = "float"
+unit = "m"
+description = "SOIL-07-PIPE-01 groundwater head over block"
+min = 2.4
+max = 2.4
+
+[params.cover_resisting_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "TBLOCK-07-01 cover resisting pressure"
+min = 36.0
+max = 36.0
+
+[params.pipe_length_m]
+type = "float"
+unit = "m"
+description = "PIPE-07-ALIGN-01 checked pipe length"
+min = 180.0
+max = 180.0
+
+[params.flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "TRANS-07-THRUST-01 operating flow"
+min = 0.095
+max = 0.095
+
+[params.hazen_williams_c]
+type = "float"
+description = "PIPE-07-ALIGN-01 Hazen-Williams roughness coefficient"
+min = 130.0
+max = 130.0
+
+[outputs.pipe_internal_area_m2]
+description = "Pipe internal flow area"
+tolerance = 0.03
+
+[outputs.transient_thrust_kn]
+description = "Transient bend thrust"
+tolerance = 0.03
+
+[outputs.thrust_resistance_margin_kn]
+description = "Passive resistance minus transient thrust"
+tolerance = 0.03
+
+[outputs.thrust_utilization]
+description = "Transient thrust divided by passive resistance"
+tolerance = 0.03
+
+[outputs.bearing_pressure_kpa]
+description = "Thrust block vertical load divided by base area"
+tolerance = 0.03
+
+[outputs.bearing_margin_kpa]
+description = "Allowable bearing minus bearing pressure"
+tolerance = 0.03
+
+[outputs.uplift_pressure_kpa]
+description = "Water unit weight times groundwater head"
+tolerance = 0.03
+
+[outputs.uplift_margin_kpa]
+description = "Cover resisting pressure minus uplift pressure"
+tolerance = 0.03
+
+[outputs.hazen_williams_headloss_m]
+description = "Hazen-Williams pipe headloss"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when thrust, bearing, and uplift checks pass"
+tolerance = 0.03
+
+[archetypes.ssc07_buried_pipe_case]
+description = "Ground investigation package for one buried pipe thrust block and soil resistance check"
+pipe_diameter_m = {min = 0.6, max = 0.6}
+transient_pressure_kpa = {min = 850.0, max = 850.0}
+bend_angle_deg = {min = 45.0, max = 45.0}
+passive_resistance_kn = {min = 260.0, max = 260.0}
+thrust_block_vertical_load_kn = {min = 120.0, max = 120.0}
+thrust_block_base_area_m2 = {min = 4.5, max = 4.5}
+allowable_bearing_kpa = {min = 160.0, max = 160.0}
+groundwater_head_m = {min = 2.4, max = 2.4}
+cover_resisting_pressure_kpa = {min = 36.0, max = 36.0}
+pipe_length_m = {min = 180.0, max = 180.0}
+flow_m3_s = {min = 0.095, max = 0.095}
+hazen_williams_c = {min = 130.0, max = 130.0}
+site_contexts = ["buried-pipe", "thrust-block-handoff"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-07 buried pipe thrust package"
+visibility = "all_given"
+archetypes = ["ssc07_buried_pipe_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-07 buried pipe thrust package"
+visibility = "all_given"
+archetypes = ["ssc07_buried_pipe_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-07 buried pipe thrust package"
+visibility = "all_given"
+archetypes = ["ssc07_buried_pipe_case"]

@@ -1,0 +1,162 @@
+[meta]
+name = "instrumentation-source-policy-extension-package"
+description = "SSC-18 instrumentation source-policy, linked-table, verification-case, and gap-register metrics"
+long_description = "Calculates source-bound instrumentation source-policy metrics from a deterministic SSC-18 task-owned source pack. The template combines source traceability, linked process/electrical table updates, gap documentation, verification-case closure, authority partitioning, memo completeness, and an overall synthetic pass score."
+discipline = "electrical"
+category = "instrumentation-source-policy"
+standards = ["source policy workflow", "instrumentation verification workflow", "authority partition workflow"]
+tags = ["electrical", "instrumentation", "source-policy", "verification", "gap-register", "authority", "deterministic"]
+tool_mode = "with-tool"
+
+[params.source_items_traced]
+type = "float"
+description = "INDEX-18-SOURCE-08 traced source item count"
+min = 7.0
+max = 7.0
+
+[params.source_items_total]
+type = "float"
+description = "INDEX-18-SOURCE-08 total source item count"
+min = 7.0
+max = 7.0
+
+[params.linked_tables_updated]
+type = "float"
+description = "LINK-18-TABLE-08 updated linked table count"
+min = 5.0
+max = 5.0
+
+[params.linked_tables_total]
+type = "float"
+description = "LINK-18-TABLE-08 total linked table count"
+min = 5.0
+max = 5.0
+
+[params.documented_gap_count]
+type = "float"
+description = "GAP-18-REGISTER-08 documented gap count"
+min = 3.0
+max = 3.0
+
+[params.expected_gap_count]
+type = "float"
+description = "GAP-18-REGISTER-08 expected gap count"
+min = 3.0
+max = 3.0
+
+[params.verification_cases_passed]
+type = "float"
+description = "CASE-18-VERIFY-08 passing verification case count"
+min = 8.0
+max = 8.0
+
+[params.verification_cases_total]
+type = "float"
+description = "CASE-18-VERIFY-08 total verification case count"
+min = 8.0
+max = 8.0
+
+[params.process_margin]
+type = "float"
+description = "LINK-18-TABLE-08 process-side margin"
+min = 1.4
+max = 1.4
+
+[params.electrical_margin]
+type = "float"
+description = "LINK-18-TABLE-08 electrical-side margin"
+min = 0.8
+max = 0.8
+
+[params.authority_partitions_signed]
+type = "float"
+description = "MEMO-18-EXT-08 signed authority partition count"
+min = 4.0
+max = 4.0
+
+[params.authority_partitions_total]
+type = "float"
+description = "MEMO-18-EXT-08 total authority partition count"
+min = 4.0
+max = 4.0
+
+[params.unresolved_conflict_count]
+type = "float"
+description = "MEMO-18-EXT-08 unresolved conflict count"
+min = 0.0
+max = 0.0
+
+[params.extension_memo_completeness_fraction]
+type = "float"
+description = "MEMO-18-EXT-08 memo completeness fraction"
+min = 0.95
+max = 0.95
+
+[outputs.source_traceability_fraction]
+description = "Traced source items divided by total source items"
+tolerance = 0.03
+
+[outputs.linked_table_update_fraction]
+description = "Updated linked tables divided by total linked tables"
+tolerance = 0.03
+
+[outputs.gap_documentation_fraction]
+description = "Documented gaps divided by expected gaps"
+tolerance = 0.03
+
+[outputs.verification_case_pass_fraction]
+description = "Passing verification cases divided by total cases"
+tolerance = 0.03
+
+[outputs.min_cross_domain_margin]
+description = "Minimum process/electrical linked-table margin"
+tolerance = 0.03
+
+[outputs.authority_partition_fraction]
+description = "Signed authority partitions divided by total partitions"
+tolerance = 0.03
+
+[outputs.unresolved_conflict_count]
+description = "Unresolved source conflict count"
+tolerance = 0.03
+
+[outputs.extension_memo_completeness_fraction]
+description = "Extension memo completeness fraction"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for instrumentation source-policy extension checks"
+tolerance = 0.03
+
+[archetypes.ssc18_instrumentation_source_policy_case]
+description = "Instrumentation source-policy and thin-substrate extension source pack"
+source_items_traced = {min = 7.0, max = 7.0}
+source_items_total = {min = 7.0, max = 7.0}
+linked_tables_updated = {min = 5.0, max = 5.0}
+linked_tables_total = {min = 5.0, max = 5.0}
+documented_gap_count = {min = 3.0, max = 3.0}
+expected_gap_count = {min = 3.0, max = 3.0}
+verification_cases_passed = {min = 8.0, max = 8.0}
+verification_cases_total = {min = 8.0, max = 8.0}
+process_margin = {min = 1.4, max = 1.4}
+electrical_margin = {min = 0.8, max = 0.8}
+authority_partitions_signed = {min = 4.0, max = 4.0}
+authority_partitions_total = {min = 4.0, max = 4.0}
+unresolved_conflict_count = {min = 0.0, max = 0.0}
+extension_memo_completeness_fraction = {min = 0.95, max = 0.95}
+site_contexts = ["instrumentation-source-policy", "thin-substrate-extension"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-18 source-policy extension package"
+visibility = "all_given"
+archetypes = ["ssc18_instrumentation_source_policy_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-18 source-policy extension package"
+visibility = "all_given"
+archetypes = ["ssc18_instrumentation_source_policy_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-18 source-policy extension package"
+visibility = "all_given"
+archetypes = ["ssc18_instrumentation_source_policy_case"]

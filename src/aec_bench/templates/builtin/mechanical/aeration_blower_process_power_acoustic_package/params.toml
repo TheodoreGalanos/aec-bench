@@ -1,0 +1,233 @@
+# ABOUTME: Defines the SSC-10 aeration blower process, power, and acoustic template.
+# ABOUTME: Pins one sampling, blower, motor, receiver, and memo source pack.
+
+[meta]
+name = "aeration-blower-process-power-acoustic-package"
+description = "SSC-10 aeration blower process, power, and acoustic metrics"
+long_description = "Calculates source-bound aeration blower metrics from a deterministic SSC-10 task-owned source pack. The template combines organic and nitrogen load, oxygen demand, airflow, blower input power, motor margin, receiver sound level, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "aeration-blower-acoustic"
+standards = ["BioWin", "GPS-X", "SUMO", "blower selection workflow", "acoustic receiver screening"]
+tags = ["mechanical", "wastewater", "aeration", "blower", "oxygen", "motor", "acoustic", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_rate_m3_d]
+type = "float"
+unit = "m3/d"
+description = "SAMPLE-10-AER-02 design flow"
+min = 6200.0
+max = 6200.0
+
+[params.influent_bod_mg_l]
+type = "float"
+unit = "mg/L"
+description = "SAMPLE-10-AER-02 influent BOD"
+min = 250.0
+max = 250.0
+
+[params.effluent_bod_mg_l]
+type = "float"
+unit = "mg/L"
+description = "CRITERIA-10-AER-02 effluent BOD"
+min = 20.0
+max = 20.0
+
+[params.influent_tkn_mg_l]
+type = "float"
+unit = "mg/L"
+description = "SAMPLE-10-AER-02 influent TKN"
+min = 45.0
+max = 45.0
+
+[params.effluent_tkn_mg_l]
+type = "float"
+unit = "mg/L"
+description = "CRITERIA-10-AER-02 effluent TKN"
+min = 7.0
+max = 7.0
+
+[params.sludge_production_kg_d]
+type = "float"
+unit = "kg/d"
+description = "CRITERIA-10-AER-02 sludge production credit"
+min = 760.0
+max = 760.0
+
+[params.denitrified_nitrogen_mg_l]
+type = "float"
+unit = "mg/L"
+description = "CRITERIA-10-AER-02 denitrified nitrogen"
+min = 16.0
+max = 16.0
+
+[params.field_transfer_efficiency]
+type = "float"
+description = "BLOWER-10-DATA-02 field oxygen transfer efficiency"
+min = 0.17
+max = 0.17
+
+[params.air_oxygen_mass_fraction]
+type = "float"
+description = "BLOWER-10-DATA-02 oxygen mass fraction in air"
+min = 0.23
+max = 0.23
+
+[params.air_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "BLOWER-10-DATA-02 air density"
+min = 1.2
+max = 1.2
+
+[params.blower_capacity_m3_min]
+type = "float"
+unit = "m3/min"
+description = "BLOWER-10-DATA-02 selected blower capacity"
+min = 58.0
+max = 58.0
+
+[params.blower_discharge_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "BLOWER-10-DATA-02 discharge pressure"
+min = 68.0
+max = 68.0
+
+[params.blower_efficiency]
+type = "float"
+description = "BLOWER-10-DATA-02 blower efficiency"
+min = 0.69
+max = 0.69
+
+[params.motor_efficiency]
+type = "float"
+description = "MOTOR-10-SCHED-02 motor efficiency"
+min = 0.94
+max = 0.94
+
+[params.selected_motor_kw]
+type = "float"
+unit = "kW"
+description = "MOTOR-10-SCHED-02 selected motor rating"
+min = 95.0
+max = 95.0
+
+[params.blower_sound_level_dba]
+type = "float"
+unit = "dBA"
+description = "BLOWER-10-DATA-02 blower sound level"
+min = 82.0
+max = 82.0
+
+[params.header_sound_level_dba]
+type = "float"
+unit = "dBA"
+description = "BLOWER-10-DATA-02 header sound level"
+min = 79.0
+max = 79.0
+
+[params.enclosure_sound_level_dba]
+type = "float"
+unit = "dBA"
+description = "BLOWER-10-DATA-02 enclosure sound level"
+min = 76.0
+max = 76.0
+
+[params.receiver_distance_m]
+type = "float"
+unit = "m"
+description = "RECEIVER-10-PLAN-02 receiver distance"
+min = 85.0
+max = 85.0
+
+[params.receiver_criterion_dba]
+type = "float"
+unit = "dBA"
+description = "RECEIVER-10-PLAN-02 receiver criterion"
+min = 55.0
+max = 55.0
+
+[outputs.bod_removed_kg_d]
+description = "BOD removed by the aeration case"
+tolerance = 0.03
+
+[outputs.nitrogen_removed_kg_d]
+description = "Nitrogen removed by the aeration case"
+tolerance = 0.03
+
+[outputs.oxygen_demand_kg_d]
+description = "Total process oxygen demand"
+tolerance = 0.03
+
+[outputs.required_airflow_m3_min]
+description = "Required aeration airflow"
+tolerance = 0.03
+
+[outputs.blower_oxygen_capacity_margin_kg_d]
+description = "Selected blower oxygen capacity minus oxygen demand"
+tolerance = 0.03
+
+[outputs.blower_input_power_kw]
+description = "Blower input power"
+tolerance = 0.03
+
+[outputs.motor_margin_kw]
+description = "Selected motor rating minus blower input power"
+tolerance = 0.03
+
+[outputs.combined_source_spl_dba]
+description = "Log-summed source sound level"
+tolerance = 0.03
+
+[outputs.receiver_spl_dba]
+description = "Receiver sound level after distance loss"
+tolerance = 0.03
+
+[outputs.acoustic_margin_db]
+description = "Receiver criterion minus receiver sound level"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when oxygen, motor, and acoustic margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc10_aeration_blower_acoustic_case]
+description = "Aeration blower process, power, and acoustic source pack"
+site_contexts = ["aeration-blower-acoustic", "oxygen-power-noise-check"]
+
+[archetypes.ssc10_aeration_blower_acoustic_case.params]
+flow_rate_m3_d = {min = 6200.0, max = 6200.0}
+influent_bod_mg_l = {min = 250.0, max = 250.0}
+effluent_bod_mg_l = {min = 20.0, max = 20.0}
+influent_tkn_mg_l = {min = 45.0, max = 45.0}
+effluent_tkn_mg_l = {min = 7.0, max = 7.0}
+sludge_production_kg_d = {min = 760.0, max = 760.0}
+denitrified_nitrogen_mg_l = {min = 16.0, max = 16.0}
+field_transfer_efficiency = {min = 0.17, max = 0.17}
+air_oxygen_mass_fraction = {min = 0.23, max = 0.23}
+air_density_kg_m3 = {min = 1.2, max = 1.2}
+blower_capacity_m3_min = {min = 58.0, max = 58.0}
+blower_discharge_pressure_kpa = {min = 68.0, max = 68.0}
+blower_efficiency = {min = 0.69, max = 0.69}
+motor_efficiency = {min = 0.94, max = 0.94}
+selected_motor_kw = {min = 95.0, max = 95.0}
+blower_sound_level_dba = {min = 82.0, max = 82.0}
+header_sound_level_dba = {min = 79.0, max = 79.0}
+enclosure_sound_level_dba = {min = 76.0, max = 76.0}
+receiver_distance_m = {min = 85.0, max = 85.0}
+receiver_criterion_dba = {min = 55.0, max = 55.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-10 aeration blower and acoustic package"
+visibility = "all_given"
+archetypes = ["ssc10_aeration_blower_acoustic_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-10 aeration blower and acoustic package"
+visibility = "all_given"
+archetypes = ["ssc10_aeration_blower_acoustic_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-10 aeration blower and acoustic package"
+visibility = "all_given"
+archetypes = ["ssc10_aeration_blower_acoustic_case"]

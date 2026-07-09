@@ -1,0 +1,187 @@
+# ABOUTME: Defines the SSC-13 sports/field lighting power template.
+# ABOUTME: Pins one task-owned field lighting source pack and expected outputs.
+
+[meta]
+name = "sports-field-lighting-power-uniformity-package"
+description = "SSC-13 sports/field lighting illuminance, uniformity, power, and feeder checks"
+long_description = "Calculates source-bound field lighting metrics from a deterministic SSC-13 task-owned source pack. The template combines field geometry, luminaire schedule, calculation grid, operating profile, and feeder checks."
+discipline = "electrical"
+category = "field-lighting"
+standards = ["sports lighting workflow", "lighting uniformity review", "lighting power schedule review"]
+tags = ["electrical", "lighting", "sports-field", "uniformity", "energy", "feeder", "deterministic"]
+tool_mode = "with-tool"
+
+[params.grid_lux_01]
+type = "float"
+unit = "lux"
+description = "GRID-13-CALC-03 grid point 01"
+min = 520.0
+max = 520.0
+
+[params.grid_lux_02]
+type = "float"
+unit = "lux"
+description = "GRID-13-CALC-03 grid point 02"
+min = 548.0
+max = 548.0
+
+[params.grid_lux_03]
+type = "float"
+unit = "lux"
+description = "GRID-13-CALC-03 grid point 03"
+min = 536.0
+max = 536.0
+
+[params.grid_lux_04]
+type = "float"
+unit = "lux"
+description = "GRID-13-CALC-03 grid point 04"
+min = 512.0
+max = 512.0
+
+[params.grid_lux_05]
+type = "float"
+unit = "lux"
+description = "GRID-13-CALC-03 grid point 05"
+min = 525.0
+max = 525.0
+
+[params.grid_lux_06]
+type = "float"
+unit = "lux"
+description = "GRID-13-CALC-03 grid point 06"
+min = 540.0
+max = 540.0
+
+[params.grid_lux_07]
+type = "float"
+unit = "lux"
+description = "GRID-13-CALC-03 grid point 07"
+min = 531.0
+max = 531.0
+
+[params.grid_lux_08]
+type = "float"
+unit = "lux"
+description = "GRID-13-CALC-03 grid point 08"
+min = 518.0
+max = 518.0
+
+[params.required_average_lux]
+type = "float"
+unit = "lux"
+description = "MEMO-13-FIELD-03 required average maintained illuminance"
+min = 500.0
+max = 500.0
+
+[params.required_uniformity_ratio]
+type = "float"
+description = "MEMO-13-FIELD-03 required minimum-to-average uniformity"
+min = 0.70
+max = 0.70
+
+[params.luminaire_count]
+type = "float"
+unit = "count"
+description = "LUM-13-SCHED-03 luminaire count"
+min = 16.0
+max = 16.0
+
+[params.luminaire_power_w]
+type = "float"
+unit = "W"
+description = "LUM-13-SCHED-03 luminaire input power"
+min = 750.0
+max = 750.0
+
+[params.driver_loss_factor]
+type = "float"
+description = "POWER-13-SCHED-03 driver loss allowance"
+min = 1.06
+max = 1.06
+
+[params.event_hours]
+type = "float"
+unit = "h"
+description = "CTRL-13-MODE-03 event operating duration"
+min = 4.5
+max = 4.5
+
+[params.voltage_v]
+type = "float"
+unit = "V"
+description = "POWER-13-SCHED-03 three-phase feeder voltage"
+min = 400.0
+max = 400.0
+
+[params.power_factor]
+type = "float"
+description = "POWER-13-SCHED-03 luminaire circuit power factor"
+min = 0.92
+max = 0.92
+
+[params.feeder_rating_a]
+type = "float"
+unit = "A"
+description = "POWER-13-SCHED-03 feeder rating"
+min = 32.0
+max = 32.0
+
+[outputs.average_illuminance_lux]
+description = "Average illuminance across the field grid"
+tolerance = 0.003
+
+[outputs.minimum_illuminance_lux]
+description = "Minimum illuminance across the field grid"
+tolerance = 0.003
+
+[outputs.uniformity_ratio]
+description = "Minimum illuminance divided by average illuminance"
+tolerance = 0.003
+
+[outputs.average_illuminance_margin_lux]
+description = "Average illuminance minus required average illuminance"
+tolerance = 0.003
+
+[outputs.uniformity_margin]
+description = "Calculated uniformity minus required uniformity"
+tolerance = 0.003
+
+[outputs.connected_load_kw]
+description = "Connected lighting load including driver loss"
+tolerance = 0.003
+
+[outputs.event_energy_kwh]
+description = "Event lighting energy"
+tolerance = 0.003
+
+[outputs.feeder_current_a]
+description = "Three-phase feeder current"
+tolerance = 0.003
+
+[outputs.feeder_current_margin_a]
+description = "Feeder rating minus calculated current"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when illuminance, uniformity, and feeder checks pass"
+tolerance = 0.001
+
+[archetypes.ssc13_field_lighting_case]
+description = "Sports/field lighting power and uniformity case"
+site_contexts = ["ssc13-field-lighting"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-13 field lighting package"
+visibility = "all_given"
+archetypes = ["ssc13_field_lighting_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-13 field lighting package"
+visibility = "all_given"
+archetypes = ["ssc13_field_lighting_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-13 field lighting package"
+visibility = "all_given"
+archetypes = ["ssc13_field_lighting_case"]

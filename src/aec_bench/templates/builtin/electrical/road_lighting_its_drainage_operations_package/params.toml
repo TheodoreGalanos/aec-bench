@@ -1,0 +1,267 @@
+[meta]
+name = "road-lighting-its-drainage-operations-package"
+description = "SSC-01 road lighting, ITS, and drainage operations metrics"
+long_description = "Calculates task-owned synthetic SSC-01 lighting uniformity, CCTV storage, ITS network, PoE, storm-level, and UPS metrics for one road operations scene."
+discipline = "electrical"
+category = "road-operations"
+standards = ["IES lighting workflow", "FHWA MUTCD", "NTCIP"]
+tags = ["electrical", "road", "lighting", "its", "cctv", "network", "deterministic"]
+tool_mode = "with-tool"
+
+[params.lighting_lux_01]
+type = "float"
+unit = "lux"
+description = "LGT-SSC01-003 grid point 01"
+min = 17.2
+max = 17.2
+
+[params.lighting_lux_02]
+type = "float"
+unit = "lux"
+description = "LGT-SSC01-003 grid point 02"
+min = 18.1
+max = 18.1
+
+[params.lighting_lux_03]
+type = "float"
+unit = "lux"
+description = "LGT-SSC01-003 grid point 03"
+min = 19.0
+max = 19.0
+
+[params.lighting_lux_04]
+type = "float"
+unit = "lux"
+description = "LGT-SSC01-003 grid point 04"
+min = 16.5
+max = 16.5
+
+[params.lighting_lux_05]
+type = "float"
+unit = "lux"
+description = "LGT-SSC01-003 grid point 05"
+min = 18.8
+max = 18.8
+
+[params.lighting_lux_06]
+type = "float"
+unit = "lux"
+description = "LGT-SSC01-003 grid point 06"
+min = 17.7
+max = 17.7
+
+[params.cctv_count]
+type = "float"
+description = "CCTV-SSC01-003 number of active cameras"
+min = 2.0
+max = 2.0
+
+[params.cctv_network_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-SSC01-003 load per CCTV stream"
+min = 5.5
+max = 5.5
+
+[params.vms_network_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-SSC01-003 VMS network load"
+min = 3.0
+max = 3.0
+
+[params.sensor_network_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-SSC01-003 drainage sensor network load"
+min = 0.4
+max = 0.4
+
+[params.controller_network_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-SSC01-003 controller network load"
+min = 0.8
+max = 0.8
+
+[params.network_overhead_pct]
+type = "float"
+unit = "%"
+description = "NET-SSC01-003 protocol overhead"
+min = 25.0
+max = 25.0
+
+[params.uplink_capacity_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-SSC01-003 cabinet uplink capacity"
+min = 45.0
+max = 45.0
+
+[params.cctv_total_bitrate_mbps]
+type = "float"
+unit = "Mbps"
+description = "CCTV-SSC01-003 total recording bitrate"
+min = 11.0
+max = 11.0
+
+[params.retention_days]
+type = "float"
+unit = "days"
+description = "CCTV-SSC01-003 retention period"
+min = 14.0
+max = 14.0
+
+[params.storage_overhead_factor]
+type = "float"
+description = "CCTV-SSC01-003 storage overhead factor"
+min = 1.1
+max = 1.1
+
+[params.cctv_poe_load_w]
+type = "float"
+unit = "W"
+description = "PWR-SSC01-003 PoE load per CCTV camera"
+min = 18.0
+max = 18.0
+
+[params.vms_poe_load_w]
+type = "float"
+unit = "W"
+description = "PWR-SSC01-003 VMS PoE load"
+min = 12.0
+max = 12.0
+
+[params.sensor_poe_load_w]
+type = "float"
+unit = "W"
+description = "PWR-SSC01-003 drainage sensor PoE load"
+min = 6.0
+max = 6.0
+
+[params.poe_budget_w]
+type = "float"
+unit = "W"
+description = "PWR-SSC01-003 PoE switch budget"
+min = 90.0
+max = 90.0
+
+[params.storm_sensor_level_m]
+type = "float"
+unit = "m"
+description = "CCTV-SSC01-003 storm water-level sensor reading"
+min = 41.95
+max = 41.95
+
+[params.storm_alarm_threshold_m]
+type = "float"
+unit = "m"
+description = "MEMO-SSC01-003 storm alarm threshold"
+min = 42.25
+max = 42.25
+
+[params.luminaire_power_w]
+type = "float"
+unit = "W"
+description = "PWR-SSC01-003 power per luminaire"
+min = 95.0
+max = 95.0
+
+[params.luminaire_count]
+type = "float"
+description = "PWR-SSC01-003 selected luminaire count"
+min = 4.0
+max = 4.0
+
+[params.device_ups_load_w]
+type = "float"
+unit = "W"
+description = "PWR-SSC01-003 non-lighting UPS device load"
+min = 80.0
+max = 80.0
+
+[params.ups_autonomy_h]
+type = "float"
+unit = "h"
+description = "PWR-SSC01-003 required UPS autonomy"
+min = 2.0
+max = 2.0
+
+[params.ups_efficiency]
+type = "float"
+description = "PWR-SSC01-003 UPS efficiency"
+min = 0.9
+max = 0.9
+
+[params.minimum_uniformity_ratio]
+type = "float"
+description = "MEMO-SSC01-003 minimum synthetic uniformity ratio"
+min = 0.7
+max = 0.7
+
+[outputs.average_illuminance_lux]
+description = "Average illuminance across the road grid"
+tolerance = 0.03
+
+[outputs.minimum_illuminance_lux]
+description = "Minimum illuminance across the road grid"
+tolerance = 0.03
+
+[outputs.uniformity_ratio]
+description = "Minimum illuminance divided by average illuminance"
+tolerance = 0.03
+
+[outputs.glare_variation_ratio]
+description = "Maximum illuminance divided by average illuminance"
+tolerance = 0.03
+
+[outputs.total_network_load_mbps]
+description = "Network load after overhead"
+tolerance = 0.03
+
+[outputs.network_headroom_mbps]
+description = "Uplink capacity minus required network load"
+tolerance = 0.03
+
+[outputs.total_cctv_storage_tb]
+description = "Decimal TB required for CCTV retention"
+tolerance = 0.03
+
+[outputs.poe_load_w]
+description = "Selected PoE device load"
+tolerance = 0.03
+
+[outputs.poe_headroom_w]
+description = "PoE budget minus selected PoE load"
+tolerance = 0.03
+
+[outputs.water_level_margin_m]
+description = "Storm alarm threshold minus current sensor level"
+tolerance = 0.03
+
+[outputs.ups_energy_kwh]
+description = "UPS energy required for the selected lighting and device load"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when lighting, network, PoE, and storm checks pass"
+tolerance = 0.01
+
+[archetypes.ssc01_lighting_ops]
+description = "SSC-01 task-owned synthetic road lighting, ITS, and drainage operations package"
+site_contexts = ["road-lighting-its-drainage-operations"]
+
+[difficulty.easy]
+description = "All source-pack values visible"
+visibility = "all_given"
+archetypes = ["ssc01_lighting_ops"]
+
+[difficulty.medium]
+description = "Same deterministic source-pack values with package-level aggregation"
+visibility = "all_given"
+archetypes = ["ssc01_lighting_ops"]
+
+[difficulty.hard]
+description = "Same deterministic source-pack values with cross-discipline handoff checks"
+visibility = "all_given"
+archetypes = ["ssc01_lighting_ops"]

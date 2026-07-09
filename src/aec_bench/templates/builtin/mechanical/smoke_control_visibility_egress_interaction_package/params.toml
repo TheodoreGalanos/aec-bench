@@ -1,0 +1,186 @@
+[meta]
+name = "smoke-control-visibility-egress-interaction-package"
+description = "SSC-08 smoke control, visibility, and egress interaction metrics"
+long_description = "Calculates source-bound tenability interaction metrics from a deterministic SSC-08 task-owned source pack. The template combines smoke exhaust ACH, smoke layer height, visibility, egress width/time, life-safety battery margin, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "smoke-control-egress"
+standards = ["smoke control workflow", "visibility criterion review", "egress width review", "life-safety battery review"]
+tags = ["mechanical", "building", "smoke-control", "visibility", "egress", "life-safety", "deterministic"]
+tool_mode = "with-tool"
+
+[params.fire_zone_volume_m3]
+type = "float"
+unit = "m3"
+description = "FIRE-08-STRATEGY-05 fire zone volume"
+min = 4200.0
+max = 4200.0
+
+[params.smoke_exhaust_flow_m3_h]
+type = "float"
+unit = "m3/h"
+description = "VENT-08-SCHED-05 smoke exhaust flow"
+min = 31500.0
+max = 31500.0
+
+[params.required_air_changes_per_h]
+type = "float"
+unit = "1/h"
+description = "VIS-08-CRIT-05 required air changes"
+min = 6.0
+max = 6.0
+
+[params.smoke_layer_height_m]
+type = "float"
+unit = "m"
+description = "FIRE-08-STRATEGY-05 smoke layer height"
+min = 2.4
+max = 2.4
+
+[params.minimum_smoke_layer_height_m]
+type = "float"
+unit = "m"
+description = "VIS-08-CRIT-05 minimum smoke layer height"
+min = 2.1
+max = 2.1
+
+[params.visibility_m]
+type = "float"
+unit = "m"
+description = "VIS-08-CRIT-05 visibility"
+min = 14.0
+max = 14.0
+
+[params.required_visibility_m]
+type = "float"
+unit = "m"
+description = "VIS-08-CRIT-05 required visibility"
+min = 10.0
+max = 10.0
+
+[params.population_persons]
+type = "float"
+unit = "persons"
+description = "POP-08-SCHED-05 population"
+min = 520.0
+max = 520.0
+
+[params.egress_width_factor_mm_per_person]
+type = "float"
+unit = "mm/person"
+description = "EGRESS-08-PLAN-05 egress width factor"
+min = 5.0
+max = 5.0
+
+[params.provided_egress_width_mm]
+type = "float"
+unit = "mm"
+description = "EGRESS-08-PLAN-05 provided egress width"
+min = 3200.0
+max = 3200.0
+
+[params.egress_flow_rate_person_m_s]
+type = "float"
+unit = "persons/(m*s)"
+description = "EGRESS-08-PLAN-05 egress flow rate"
+min = 1.25
+max = 1.25
+
+[params.max_egress_time_s]
+type = "float"
+unit = "s"
+description = "EGRESS-08-PLAN-05 maximum egress time"
+min = 180.0
+max = 180.0
+
+[params.ventilation_load_kw]
+type = "float"
+unit = "kW"
+description = "VENT-08-SCHED-05 ventilation load"
+min = 12.5
+max = 12.5
+
+[params.alarm_load_kw]
+type = "float"
+unit = "kW"
+description = "FIRE-08-STRATEGY-05 alarm load"
+min = 2.2
+max = 2.2
+
+[params.battery_capacity_kwh]
+type = "float"
+unit = "kWh"
+description = "VENT-08-SCHED-05 battery capacity"
+min = 36.0
+max = 36.0
+
+[params.battery_usable_fraction]
+type = "float"
+description = "VENT-08-SCHED-05 battery usable fraction"
+min = 0.85
+max = 0.85
+
+[params.required_runtime_h]
+type = "float"
+unit = "h"
+description = "MEMO-08-TENABILITY-05 required runtime"
+min = 2.0
+max = 2.0
+
+[outputs.smoke_exhaust_air_changes_per_h]
+description = "Smoke exhaust air changes per hour"
+tolerance = 0.03
+
+[outputs.ach_margin]
+description = "Smoke exhaust ACH minus required ACH"
+tolerance = 0.03
+
+[outputs.smoke_layer_height_margin_m]
+description = "Smoke layer height margin"
+tolerance = 0.03
+
+[outputs.visibility_margin_m]
+description = "Visibility margin"
+tolerance = 0.03
+
+[outputs.required_egress_width_mm]
+description = "Required egress width"
+tolerance = 0.03
+
+[outputs.egress_width_margin_mm]
+description = "Provided egress width minus required width"
+tolerance = 0.03
+
+[outputs.egress_flow_time_s]
+description = "Egress flow time"
+tolerance = 0.03
+
+[outputs.egress_time_margin_s]
+description = "Maximum egress time minus flow time"
+tolerance = 0.03
+
+[outputs.life_safety_battery_margin_kwh]
+description = "Usable battery capacity minus required life-safety load energy"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when smoke-control and egress checks pass"
+tolerance = 0.001
+
+[archetypes.ssc08_smoke_egress_case]
+description = "Smoke control, visibility, and egress interaction case"
+site_contexts = ["ssc08-smoke-egress"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-08 smoke-control package"
+visibility = "all_given"
+archetypes = ["ssc08_smoke_egress_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-08 smoke-control package"
+visibility = "all_given"
+archetypes = ["ssc08_smoke_egress_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-08 smoke-control package"
+visibility = "all_given"
+archetypes = ["ssc08_smoke_egress_case"]

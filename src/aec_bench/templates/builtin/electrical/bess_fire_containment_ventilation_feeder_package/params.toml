@@ -1,0 +1,216 @@
+[meta]
+name = "bess-fire-containment-ventilation-feeder-package"
+description = "SSC-17/SSC-19 BESS fire containment, ventilation, and feeder metrics"
+long_description = "Calculates source-bound BESS fire and feeder metrics from deterministic SSC-17 and SSC-19 task-owned source packs. The template combines usable storage energy, ventilation airflow, HRR containment, safety energy load, feeder voltage drop, and an overall synthetic pass score."
+discipline = "electrical"
+category = "bess-safety-feeder"
+standards = ["BESS safety workflows", "ventilation and containment workflows", "feeder voltage-drop workflows"]
+tags = ["electrical", "bess", "fire", "containment", "ventilation", "feeder", "resilience", "deterministic"]
+tool_mode = "with-tool"
+
+[params.bess_nominal_kwh]
+type = "float"
+unit = "kWh"
+description = "BESS-SSC17-004 nominal energy"
+min = 600.0
+max = 600.0
+
+[params.max_depth_of_discharge]
+type = "float"
+description = "BESS-SSC17-004 maximum depth of discharge"
+min = 0.85
+max = 0.85
+
+[params.inverter_efficiency]
+type = "float"
+description = "BESS-SSC17-004 inverter efficiency"
+min = 0.95
+max = 0.95
+
+[params.room_volume_m3]
+type = "float"
+unit = "m3"
+description = "ROOM-SSC17-004 battery room volume"
+min = 180.0
+max = 180.0
+
+[params.required_air_changes_h]
+type = "float"
+unit = "ACH"
+description = "VENT-SSC17-004 required air changes"
+min = 6.0
+max = 6.0
+
+[params.fan_power_density_kw_m3_s]
+type = "float"
+unit = "kW/(m3/s)"
+description = "VENT-SSC17-004 fan power density"
+min = 1.2
+max = 1.2
+
+[params.emergency_duration_hr]
+type = "float"
+unit = "h"
+description = "FIRE-SSC17-004 emergency duration"
+min = 4.0
+max = 4.0
+
+[params.battery_module_count]
+type = "float"
+description = "FIRE-SSC17-004 battery module count"
+min = 20.0
+max = 20.0
+
+[params.module_hrr_kw]
+type = "float"
+unit = "kW"
+description = "FIRE-SSC17-004 module heat release rate"
+min = 45.0
+max = 45.0
+
+[params.propagation_factor]
+type = "float"
+description = "FIRE-SSC17-004 propagation factor"
+min = 0.4
+max = 0.4
+
+[params.containment_rating_kw]
+type = "float"
+unit = "kW"
+description = "FIRE-SSC17-004 containment rating"
+min = 500.0
+max = 500.0
+
+[params.alarm_load_kw]
+type = "float"
+unit = "kW"
+description = "VENT-SSC17-004 alarm load"
+min = 1.8
+max = 1.8
+
+[params.suppression_load_kw]
+type = "float"
+unit = "kW"
+description = "VENT-SSC17-004 suppression load"
+min = 0.7
+max = 0.7
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "SLD-SSC17-004 feeder voltage"
+min = 480.0
+max = 480.0
+
+[params.feeder_length_m]
+type = "float"
+unit = "m"
+description = "SLD-SSC17-004 feeder length"
+min = 95.0
+max = 95.0
+
+[params.feeder_current_a]
+type = "float"
+unit = "A"
+description = "SLD-SSC17-004 feeder current"
+min = 110.0
+max = 110.0
+
+[params.conductor_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "SLD-SSC17-004 conductor resistance"
+min = 0.201
+max = 0.201
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "SLD-SSC17-004 maximum voltage drop"
+min = 3.0
+max = 3.0
+
+[outputs.usable_bess_energy_kwh]
+description = "Usable BESS energy"
+tolerance = 0.03
+
+[outputs.ventilation_airflow_m3_s]
+description = "Ventilation airflow"
+tolerance = 0.03
+
+[outputs.ventilation_fan_power_kw]
+description = "Ventilation fan power"
+tolerance = 0.03
+
+[outputs.ventilation_energy_kwh]
+description = "Ventilation energy required"
+tolerance = 0.03
+
+[outputs.design_hrr_kw]
+description = "Design heat release rate"
+tolerance = 0.03
+
+[outputs.containment_hrr_margin_kw]
+description = "Containment rating minus design heat release rate"
+tolerance = 0.03
+
+[outputs.safety_load_kw]
+description = "Ventilation, alarm, and suppression safety load"
+tolerance = 0.03
+
+[outputs.safety_energy_required_kwh]
+description = "Safety energy required"
+tolerance = 0.03
+
+[outputs.safety_energy_margin_kwh]
+description = "Usable BESS energy minus safety energy required"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "Three-phase feeder voltage drop"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Maximum voltage drop minus calculated voltage drop"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when containment, safety energy, and voltage drop margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc17_bess_fire_feeder_case]
+description = "BESS fire containment and feeder case with ventilation and safety loads"
+bess_nominal_kwh = {min = 600.0, max = 600.0}
+max_depth_of_discharge = {min = 0.85, max = 0.85}
+inverter_efficiency = {min = 0.95, max = 0.95}
+room_volume_m3 = {min = 180.0, max = 180.0}
+required_air_changes_h = {min = 6.0, max = 6.0}
+fan_power_density_kw_m3_s = {min = 1.2, max = 1.2}
+emergency_duration_hr = {min = 4.0, max = 4.0}
+battery_module_count = {min = 20.0, max = 20.0}
+module_hrr_kw = {min = 45.0, max = 45.0}
+propagation_factor = {min = 0.4, max = 0.4}
+containment_rating_kw = {min = 500.0, max = 500.0}
+alarm_load_kw = {min = 1.8, max = 1.8}
+suppression_load_kw = {min = 0.7, max = 0.7}
+feeder_voltage_v = {min = 480.0, max = 480.0}
+feeder_length_m = {min = 95.0, max = 95.0}
+feeder_current_a = {min = 110.0, max = 110.0}
+conductor_resistance_ohm_km = {min = 0.201, max = 0.201}
+max_voltage_drop_percent = {min = 3.0, max = 3.0}
+site_contexts = ["bess-fire-containment-ventilation-feeder", "bess-safety-load-feeder-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-17 BESS safety and feeder package"
+visibility = "all_given"
+archetypes = ["ssc17_bess_fire_feeder_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-17 BESS safety and feeder package"
+visibility = "all_given"
+archetypes = ["ssc17_bess_fire_feeder_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-17 BESS safety and feeder package"
+visibility = "all_given"
+archetypes = ["ssc17_bess_fire_feeder_case"]
