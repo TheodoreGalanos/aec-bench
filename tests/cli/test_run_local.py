@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import shutil
 import tempfile
@@ -21,6 +22,8 @@ from aec_bench.harness.local_runtime import (
     setup_workspace,
     setup_workspace_for_script,
 )
+
+run_local_module = importlib.import_module("aec_bench.cli.commands.run_local")
 
 
 class TestSetupWorkspace:
@@ -101,6 +104,125 @@ class TestSetupWorkspace:
                 assert Path(workspace, "instruction.md").read_text() == original
             finally:
                 shutil.rmtree(workspace, ignore_errors=True)
+
+
+class TestRunLocalWorkspacePrivacy:
+    """Validate that verifier assets appear only after the agent turn."""
+
+    def test_stages_tests_after_agent_execution(self, tmp_path: Path, monkeypatch) -> None:
+        task_dir = tmp_path / "task"
+        task_dir.mkdir()
+        (task_dir / "instruction.md").write_text("Read /workspace/sources/input.md and write output.md")
+        sources = task_dir / "environment" / "sources"
+        sources.mkdir(parents=True)
+        (sources / "input.md").write_text("agent-visible source\n")
+        tests_dir = task_dir / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "instance.json").write_text('{"ground_truth": {"answer": 42}}')
+        (tests_dir / "verify.py").write_text("# private verifier\n")
+
+        observed: dict[str, bool] = {}
+
+        def fake_run_adapter(**kwargs):
+            workspace = Path(kwargs["workspace"])
+            observed["agent_source_visible"] = (workspace / "sources" / "input.md").exists()
+            observed["agent_tests_visible"] = (workspace / "tests").exists()
+            (workspace / "output.md").write_text("completed\n")
+            return {"status": "completed"}
+
+        def fake_run_verifier(*, workspace: str, output_file: str) -> float:
+            del output_file
+            workspace_path = Path(workspace)
+            observed["verifier_tests_visible"] = (workspace_path / "tests" / "verify.py").exists()
+            reward = workspace_path / "logs" / "verifier" / "reward.json"
+            reward.parent.mkdir(parents=True)
+            reward.write_text(json.dumps({"reward": 1.0}))
+            return 0.01
+
+        monkeypatch.setattr(run_local_module, "_run_adapter", fake_run_adapter)
+        monkeypatch.setattr(run_local_module, "_run_verifier", fake_run_verifier)
+        monkeypatch.setattr(run_local_module, "_report_results", lambda *args, **kwargs: None)
+        monkeypatch.setattr(run_local_module, "emit", lambda *args, **kwargs: None)
+
+        run_local_module.run_local(
+            task_path=str(task_dir),
+            model="test-model",
+            adapter="direct",
+            output_dir=str(tmp_path / "results"),
+            timeout=30,
+            keep_workspace=False,
+            legacy_script=False,
+            no_verify=False,
+            no_import=True,
+            no_normalise=True,
+            constitutional_model=None,
+            reviewer=False,
+            reviewer_model=None,
+            reviewer_models_config=None,
+            fail_on_reviewer_error=False,
+        )
+
+        assert observed == {
+            "agent_source_visible": True,
+            "agent_tests_visible": False,
+            "verifier_tests_visible": True,
+        }
+
+    def test_hides_tests_again_during_verifier_feedback_retry(self, tmp_path: Path, monkeypatch) -> None:
+        task_dir = tmp_path / "task"
+        task_dir.mkdir()
+        (task_dir / "instruction.md").write_text("Write output.md")
+        environment = task_dir / "environment"
+        environment.mkdir()
+        (environment / "verifier_retry_prompt.md").write_text("Repair the response")
+        tests_dir = task_dir / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "verify.py").write_text("# private verifier\n")
+        (tests_dir / "instance.json").write_text('{"ground_truth": {"answer": 42}}')
+
+        agent_visibility: list[bool] = []
+        verifier_visibility: list[bool] = []
+
+        def fake_run_adapter(**kwargs):
+            workspace = Path(kwargs["workspace"])
+            agent_visibility.append((workspace / "tests").exists())
+            (workspace / "output.md").write_text(f"attempt {len(agent_visibility)}\n")
+            return {"status": "completed"}
+
+        def fake_run_verifier(*, workspace: str, output_file: str) -> float:
+            del output_file
+            workspace_path = Path(workspace)
+            verifier_visibility.append((workspace_path / "tests" / "verify.py").exists())
+            reward = workspace_path / "logs" / "verifier" / "reward.json"
+            reward.parent.mkdir(parents=True, exist_ok=True)
+            reward.write_text(json.dumps({"reward": 0.5 if len(verifier_visibility) == 1 else 1.0}))
+            return 0.01
+
+        monkeypatch.setattr(run_local_module, "_run_adapter", fake_run_adapter)
+        monkeypatch.setattr(run_local_module, "_run_verifier", fake_run_verifier)
+        monkeypatch.setattr(run_local_module, "_report_results", lambda *args, **kwargs: None)
+        monkeypatch.setattr(run_local_module, "emit", lambda *args, **kwargs: None)
+
+        run_local_module.run_local(
+            task_path=str(task_dir),
+            model="test-model",
+            adapter="direct",
+            output_dir=str(tmp_path / "results"),
+            timeout=30,
+            keep_workspace=False,
+            legacy_script=False,
+            no_verify=False,
+            no_import=True,
+            no_normalise=True,
+            constitutional_model=None,
+            reviewer=False,
+            reviewer_model=None,
+            reviewer_models_config=None,
+            fail_on_reviewer_error=False,
+        )
+
+        assert agent_visibility == [False, False]
+        assert verifier_visibility == [True, True]
 
 
 class TestSetupWorkspaceForScript:

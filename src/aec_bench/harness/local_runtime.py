@@ -35,16 +35,37 @@ def setup_workspace(task_dir: str) -> str:
                         dest = Path(workspace) / rel
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(ws_item, dest)
-            # Also copy any files directly under environment/
+            # Mirror environment assets at workspace root, matching Docker COPY destinations.
             for env_item in item.iterdir():
+                if env_item.name == "workspace":
+                    continue
                 if env_item.is_file():
                     shutil.copy2(env_item, workspace)
+                elif env_item.is_dir():
+                    shutil.copytree(
+                        env_item,
+                        Path(workspace) / env_item.name,
+                        dirs_exist_ok=True,
+                    )
             # Keep the full directory for backwards compatibility
             shutil.copytree(item, os.path.join(workspace, item.name))
-        elif item.is_dir() and item.name != "__pycache__":
+        elif item.is_dir() and item.name not in {"__pycache__", "tests"}:
             shutil.copytree(item, os.path.join(workspace, item.name), dirs_exist_ok=True)
 
     return workspace
+
+
+def stage_verifier_assets(task_dir: str | Path, workspace: str | Path) -> None:
+    """Copy private verifier assets into the workspace after agent execution."""
+    source = Path(task_dir) / "tests"
+    if not source.is_dir():
+        return
+    shutil.copytree(source, Path(workspace) / "tests", dirs_exist_ok=True)
+
+
+def unstage_verifier_assets(workspace: str | Path) -> None:
+    """Remove private verifier assets before another agent turn."""
+    shutil.rmtree(Path(workspace) / "tests", ignore_errors=True)
 
 
 def setup_workspace_for_script(task_dir: str) -> str:
