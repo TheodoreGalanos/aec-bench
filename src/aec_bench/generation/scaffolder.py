@@ -12,7 +12,9 @@ from aec_bench.generation.instruction_renderer import render_instruction
 from aec_bench.generation.verifier_gen import generate_verifier
 from aec_bench.images.extensions import generate_dockerfile
 from aec_bench.templates.contracts import TemplateConfig, ToolMode
-from aec_bench.templates.registry import has_custom_verifier
+from aec_bench.templates.registry import has_custom_verifier, load_engine_module
+
+RUNNABLE_DIFFICULTIES = {"easy", "medium", "hard"}
 
 RUNNABLE_DIFFICULTIES = {"easy", "medium", "hard"}
 
@@ -115,17 +117,22 @@ scripts = ["{calc_name}"]
 def _build_dockerfile(
     config: TemplateConfig,
     tool_mode: ToolMode,
+    extra_copy_files: list[str] | None = None,
 ) -> str:
     """Build Dockerfile content using the extension system.
 
     Generated tasks use core extensions (no extras). COPY lines are added
-    for system_prompt.md and the calc script (when tool_mode is WITH_TOOL).
+    for system_prompt.md, the calc script (when tool_mode is WITH_TOOL),
+    and any template-provided source-pack files.
     """
     copy_files = ["system_prompt.md"]
 
     if tool_mode is ToolMode.WITH_TOOL:
         calc_name = f"{config.meta.name}_calc.py"
         copy_files.append(calc_name)
+
+    if extra_copy_files:
+        copy_files.extend(extra_copy_files)
 
     return generate_dockerfile(
         extensions=[],
@@ -197,6 +204,42 @@ def _build_golden_fail(ground_truth: dict[str, float]) -> str:
 """
 
 
+def _write_source_pack(
+    engine_module,
+    instance: SampledInstance,
+    environment_dir: Path,
+) -> list[str]:
+    """Write template-provided source-pack files into the environment directory.
+
+    Templates may define ``build_sources(all_params) -> dict[relpath, content]``
+    on their engine module. Each file is written under ``environment/`` and its
+    relative path is returned so the Dockerfile can COPY it into /workspace.
+    """
+    if not hasattr(engine_module, "build_sources"):
+        return []
+
+    sources: dict[str, str] = engine_module.build_sources(dict(instance.all_params))
+    written: list[str] = []
+    for relpath, content in sources.items():
+        target = environment_dir / relpath
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content)
+        written.append(relpath)
+    return written
+
+
+def _write_instance_record(instance: SampledInstance, tests_dir: Path) -> None:
+    """Write tests/instance.json so a custom verifier can read instance gold state."""
+    record = {
+        "instance_name": instance.instance_name,
+        "seed": instance.metadata.seed,
+        "difficulty": instance.difficulty,
+        "all_params": instance.all_params,
+        "ground_truth": instance.ground_truth,
+    }
+    (tests_dir / "instance.json").write_text(json.dumps(record, indent=2))
+
+
 def scaffold_task_instance(
     config: TemplateConfig,
     engine_source: str,
@@ -214,6 +257,7 @@ def scaffold_task_instance(
     Returns the path to the created instance directory.
     """
     tool_mode = _resolve_tool_mode(config, tool_mode_override)
+    engine_module = load_engine_module(template_dir)
 
     # Build the instance directory path: output_dir/discipline/category/template_name/instance_name
     template_name = config.meta.name
@@ -235,11 +279,16 @@ def scaffold_task_instance(
     rendered_instruction = render_instruction(instruction_template, instance, config)
     (instance_dir / "instruction.md").write_text(rendered_instruction)
 
-    # 3. Write environment/Dockerfile
-    (instance_dir / "environment" / "Dockerfile").write_text(_build_dockerfile(config, tool_mode))
+    # 3. Write template-provided source-pack files, then environment/Dockerfile
+    source_files = _write_source_pack(engine_module, instance, instance_dir / "environment")
+    (instance_dir / "environment" / "Dockerfile").write_text(_build_dockerfile(config, tool_mode, source_files))
 
-    # 4. Write environment/system_prompt.md
-    (instance_dir / "environment" / "system_prompt.md").write_text(_build_system_prompt())
+    # 4. Write environment/system_prompt.md — template-owned prompt wins over the default
+    template_system_prompt = template_dir / "system_prompt.md"
+    if template_system_prompt.exists():
+        (instance_dir / "environment" / "system_prompt.md").write_text(template_system_prompt.read_text())
+    else:
+        (instance_dir / "environment" / "system_prompt.md").write_text(_build_system_prompt())
 
     # 5. If with-tool: generate and write the calc script
     if tool_mode is ToolMode.WITH_TOOL:
@@ -247,9 +296,11 @@ def scaffold_task_instance(
         calc_source = generate_cli_wrapper(config, engine_source)
         (instance_dir / "environment" / calc_filename).write_text(calc_source)
 
-    # 6. Write tests/verify.py — copy custom if present, otherwise generate
+    # 6. Write tests/verify.py — copy custom if present, otherwise generate.
+    #    Custom verifiers also get tests/instance.json with the instance gold state.
     if has_custom_verifier(template_dir):
         shutil.copy(template_dir / "verify.py", instance_dir / "tests" / "verify.py")
+        _write_instance_record(instance, instance_dir / "tests")
     else:
         verifier_source = generate_verifier(instance, config)
         (instance_dir / "tests" / "verify.py").write_text(verifier_source)
@@ -259,8 +310,16 @@ def scaffold_task_instance(
     test_sh_path.write_text(_build_test_sh())
     test_sh_path.chmod(0o755)
 
-    # 8. Write fixture files
-    (instance_dir / "tests" / "fixtures" / "golden_pass.md").write_text(_build_golden_pass(instance.ground_truth))
-    (instance_dir / "tests" / "fixtures" / "golden_fail.md").write_text(_build_golden_fail(instance.ground_truth))
+    # 8. Write fixture files — template golden hooks win over the generated defaults
+    if hasattr(engine_module, "build_golden_pass"):
+        golden_pass = engine_module.build_golden_pass(dict(instance.all_params), dict(instance.ground_truth))
+    else:
+        golden_pass = _build_golden_pass(instance.ground_truth)
+    if hasattr(engine_module, "build_golden_fail"):
+        golden_fail = engine_module.build_golden_fail(dict(instance.all_params), dict(instance.ground_truth))
+    else:
+        golden_fail = _build_golden_fail(instance.ground_truth)
+    (instance_dir / "tests" / "fixtures" / "golden_pass.md").write_text(golden_pass)
+    (instance_dir / "tests" / "fixtures" / "golden_fail.md").write_text(golden_fail)
 
     return instance_dir

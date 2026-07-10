@@ -1,0 +1,183 @@
+# ABOUTME: Defines the SSC-14 wind or solar foundation template.
+# ABOUTME: Pins one renewable array, wind, foundation, geotechnical, and anchor source pack.
+
+[meta]
+name = "wind-solar-foundation-package"
+description = "SSC-14 wind or solar foundation uplift, bearing, sliding, and anchor metrics"
+long_description = "Calculates source-bound renewable foundation metrics from a deterministic SSC-14 task-owned source pack. The template combines velocity pressure, array wind load, dead load, foundation self-weight, uplift, bearing, sliding, anchor tension, and overall pass scoring."
+discipline = "structural"
+category = "renewable-foundation"
+standards = ["AS/NZS 1170.2", "solar racking wind load", "foundation bearing", "anchor tension screening"]
+tags = ["structural", "solar", "wind", "foundation", "uplift", "bearing", "anchor", "deterministic"]
+tool_mode = "with-tool"
+
+[params.wind_speed_m_s]
+type = "float"
+unit = "m/s"
+description = "WIND-SSC14-006 source wind speed"
+min = 45.0
+max = 45.0
+
+[params.wind_pressure_coefficient]
+type = "float"
+description = "WIND-SSC14-006 source pressure coefficient"
+min = 1.25
+max = 1.25
+
+[params.tributary_array_area_m2]
+type = "float"
+unit = "m2"
+description = "PV-SSC14-006 tributary array area"
+min = 12.0
+max = 12.0
+
+[params.array_dead_load_kpa]
+type = "float"
+unit = "kPa"
+description = "PV-SSC14-006 array dead load"
+min = 0.18
+max = 0.18
+
+[params.foundation_length_m]
+type = "float"
+unit = "m"
+description = "FDN-SSC14-006 foundation length"
+min = 2.4
+max = 2.4
+
+[params.foundation_width_m]
+type = "float"
+unit = "m"
+description = "FDN-SSC14-006 foundation width"
+min = 1.8
+max = 1.8
+
+[params.foundation_depth_m]
+type = "float"
+unit = "m"
+description = "FDN-SSC14-006 foundation depth"
+min = 0.6
+max = 0.6
+
+[params.concrete_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m3"
+description = "FDN-SSC14-006 concrete unit weight"
+min = 24.0
+max = 24.0
+
+[params.allowable_bearing_kpa]
+type = "float"
+unit = "kPa"
+description = "GEO-SSC14-006 allowable bearing pressure"
+min = 180.0
+max = 180.0
+
+[params.sliding_friction_coefficient]
+type = "float"
+description = "GEO-SSC14-006 sliding friction coefficient"
+min = 0.55
+max = 0.55
+
+[params.horizontal_shear_factor]
+type = "float"
+description = "FDN-SSC14-006 horizontal shear factor from array wind load"
+min = 0.45
+max = 0.45
+
+[params.anchor_count]
+type = "int"
+description = "FDN-SSC14-006 active anchor count"
+min = 4
+max = 4
+
+[params.anchor_tension_capacity_kn]
+type = "float"
+unit = "kN"
+description = "FDN-SSC14-006 anchor tension capacity"
+min = 30.0
+max = 30.0
+
+[outputs.source_velocity_pressure_kpa]
+description = "Velocity pressure from the source wind speed"
+tolerance = 0.03
+
+[outputs.array_wind_load_kn]
+description = "Array wind load"
+tolerance = 0.03
+
+[outputs.array_dead_load_kn]
+description = "Array dead load"
+tolerance = 0.03
+
+[outputs.foundation_self_weight_kn]
+description = "Foundation concrete self-weight"
+tolerance = 0.03
+
+[outputs.net_uplift_kn]
+description = "Array wind load minus array dead load and foundation self-weight"
+tolerance = 0.03
+
+[outputs.uplift_margin_kn]
+description = "Anchor group tension capacity minus net uplift"
+tolerance = 0.03
+
+[outputs.bearing_pressure_kpa]
+description = "Service bearing pressure under the renewable foundation"
+tolerance = 0.03
+
+[outputs.bearing_utilization]
+description = "Bearing pressure divided by allowable bearing"
+tolerance = 0.03
+
+[outputs.horizontal_shear_kn]
+description = "Horizontal shear from array wind load"
+tolerance = 0.03
+
+[outputs.sliding_margin_kn]
+description = "Frictional sliding resistance minus horizontal shear"
+tolerance = 0.03
+
+[outputs.anchor_tension_per_anchor_kn]
+description = "Net uplift demand per anchor"
+tolerance = 0.03
+
+[outputs.anchor_tension_utilization]
+description = "Per-anchor tension demand divided by anchor capacity"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when uplift, bearing, sliding, and anchor checks pass"
+tolerance = 0.03
+
+[archetypes.ssc14_wind_solar_foundation_case]
+description = "Wind or solar array foundation, geotechnical, and anchor source pack"
+wind_speed_m_s = {min = 45.0, max = 45.0}
+wind_pressure_coefficient = {min = 1.25, max = 1.25}
+tributary_array_area_m2 = {min = 12.0, max = 12.0}
+array_dead_load_kpa = {min = 0.18, max = 0.18}
+foundation_length_m = {min = 2.4, max = 2.4}
+foundation_width_m = {min = 1.8, max = 1.8}
+foundation_depth_m = {min = 0.6, max = 0.6}
+concrete_unit_weight_kn_m3 = {min = 24.0, max = 24.0}
+allowable_bearing_kpa = {min = 180.0, max = 180.0}
+sliding_friction_coefficient = {min = 0.55, max = 0.55}
+horizontal_shear_factor = {min = 0.45, max = 0.45}
+anchor_count = {min = 4, max = 4}
+anchor_tension_capacity_kn = {min = 30.0, max = 30.0}
+site_contexts = ["solar-foundation", "wind-uplift", "renewable-anchor"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-14 renewable foundation package"
+visibility = "all_given"
+archetypes = ["ssc14_wind_solar_foundation_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-14 renewable foundation package"
+visibility = "all_given"
+archetypes = ["ssc14_wind_solar_foundation_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-14 renewable foundation package"
+visibility = "all_given"
+archetypes = ["ssc14_wind_solar_foundation_case"]

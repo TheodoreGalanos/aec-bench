@@ -1,0 +1,144 @@
+[meta]
+name = "protection-control-sld-bridge-package"
+description = "SSC-18 protection-control setting, measurement scaling, CT, and SLD consequence metrics"
+long_description = "Calculates source-bound protection-control metrics from a deterministic SSC-18 task-owned source pack. The template combines CT secondary current, linear signal scaling, pickup headroom, fault pickup ratio, feeder load margin, and an overall synthetic pass score."
+discipline = "electrical"
+category = "protection-control"
+standards = ["ISA-5", "protection setting workflow", "single-line diagram workflow"]
+tags = ["electrical", "instrumentation", "protection", "control", "ct", "sld", "deterministic"]
+tool_mode = "with-tool"
+
+[params.primary_current_a]
+type = "float"
+unit = "A"
+description = "FAULT-18-TABLE-03 measured feeder current"
+min = 400.0
+max = 400.0
+
+[params.ct_primary_a]
+type = "float"
+unit = "A"
+description = "CT-18-DATA-03 CT primary rating"
+min = 600.0
+max = 600.0
+
+[params.ct_secondary_a]
+type = "float"
+unit = "A"
+description = "CT-18-DATA-03 CT secondary rating"
+min = 5.0
+max = 5.0
+
+[params.lower_range_current_a]
+type = "float"
+unit = "A"
+description = "LOOP-18-SCHED-03 lower current range"
+min = 0.0
+max = 0.0
+
+[params.upper_range_current_a]
+type = "float"
+unit = "A"
+description = "LOOP-18-SCHED-03 upper current range"
+min = 600.0
+max = 600.0
+
+[params.pickup_current_a]
+type = "float"
+unit = "A"
+description = "SET-18-PROT-03 pickup current setting"
+min = 500.0
+max = 500.0
+
+[params.fault_current_ka]
+type = "float"
+unit = "kA"
+description = "FAULT-18-TABLE-03 available fault current"
+min = 8.5
+max = 8.5
+
+[params.transformer_ratio_error_pct]
+type = "float"
+unit = "%"
+description = "CT-18-DATA-03 ratio error"
+min = 0.5
+max = 0.5
+
+[params.feeder_full_load_a]
+type = "float"
+unit = "A"
+description = "SLD-18-FEEDER-03 feeder full-load current"
+min = 320.0
+max = 320.0
+
+[params.breaker_trip_a]
+type = "float"
+unit = "A"
+description = "SET-18-PROT-03 breaker trip setting"
+min = 500.0
+max = 500.0
+
+[outputs.ct_secondary_current_a]
+description = "CT secondary current for measured primary current"
+tolerance = 0.03
+
+[outputs.measurement_signal_ma]
+description = "4-20 mA signal for measured primary current"
+tolerance = 0.03
+
+[outputs.pickup_signal_ma]
+description = "4-20 mA signal for pickup current"
+tolerance = 0.03
+
+[outputs.pickup_margin_a]
+description = "Pickup current minus measured current"
+tolerance = 0.03
+
+[outputs.fault_pickup_ratio]
+description = "Fault current divided by pickup current"
+tolerance = 0.03
+
+[outputs.feeder_load_margin_a]
+description = "Breaker trip setting minus feeder full-load current"
+tolerance = 0.03
+
+[outputs.ct_error_current_a]
+description = "Current represented by CT ratio error"
+tolerance = 0.03
+
+[outputs.trip_signal_headroom_ma]
+description = "20 mA minus pickup signal"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for protection-control bridge checks"
+tolerance = 0.03
+
+[archetypes.ssc18_protection_control_case]
+description = "Protection and control setting bridge source pack"
+primary_current_a = {min = 400.0, max = 400.0}
+ct_primary_a = {min = 600.0, max = 600.0}
+ct_secondary_a = {min = 5.0, max = 5.0}
+lower_range_current_a = {min = 0.0, max = 0.0}
+upper_range_current_a = {min = 600.0, max = 600.0}
+pickup_current_a = {min = 500.0, max = 500.0}
+fault_current_ka = {min = 8.5, max = 8.5}
+transformer_ratio_error_pct = {min = 0.5, max = 0.5}
+feeder_full_load_a = {min = 320.0, max = 320.0}
+breaker_trip_a = {min = 500.0, max = 500.0}
+site_contexts = ["protection-control", "sld-setting-bridge"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-18 protection-control bridge package"
+visibility = "all_given"
+archetypes = ["ssc18_protection_control_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-18 protection-control bridge package"
+visibility = "all_given"
+archetypes = ["ssc18_protection_control_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-18 protection-control bridge package"
+visibility = "all_given"
+archetypes = ["ssc18_protection_control_case"]

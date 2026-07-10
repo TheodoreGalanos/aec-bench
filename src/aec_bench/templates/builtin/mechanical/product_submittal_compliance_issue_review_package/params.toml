@@ -1,0 +1,202 @@
+[meta]
+name = "product-submittal-compliance-issue-review-package"
+description = "SSC-15 review-first issue-readiness review of a product submittal, certificates, and traceability package"
+long_description = "Review-native long-horizon task over a generated SSC-15 product submittal issue packet. The agent receives a multi-file source packet in /workspace/sources/ (document register, submittal manifest, mill certificates, heat traceability table, product application schedule, deviation register, and criteria/comments), inventories it, preserves product, heat, certificate, and application identity, checks source-owned carbon-equivalent and property calculations as review evidence, assigns one status per review item, raises findings/information requests/actions, and issues a readiness decision. Packet variants inject missing heat traceability, stale certificate revisions, heat identity mismatches, copied standard applicability, open comments, or genuine carbon-equivalent failures. Scored by a stage-gated custom verifier, not per-key answer matching."
+discipline = "mechanical"
+category = "product-review"
+standards = ["AS/NZS 3678", "EN 10204", "AWS D1.1", "ISO 15614", "Project submittal review workflow"]
+tags = ["mechanical", "product-compliance", "submittal", "certificate", "steel", "traceability", "review", "issue-readiness", "long-horizon"]
+tool_mode = "no-tool"
+
+[params.cev_limit]
+type = "float"
+description = "Source-owned carbon-equivalent limit for the product use case"
+min = 0.42
+max = 0.48
+
+[params.carbon_equivalent_margin]
+type = "float"
+description = "Derivation margin below the CEV limit for the controlling heat"
+min = 0.025
+max = 0.075
+
+[params.carbon_equivalent_deficit]
+type = "float"
+description = "Derivation exceedance above the CEV limit for the carbon-equivalent failure variant"
+min = 0.012
+max = 0.04
+
+[params.required_yield_mpa]
+type = "float"
+unit = "MPa"
+description = "Source-owned minimum yield strength for the application grade"
+min = 345.0
+max = 420.0
+
+[params.yield_strength_margin_mpa]
+type = "float"
+unit = "MPa"
+description = "Derivation margin between certificate yield and required yield"
+min = 30.0
+max = 85.0
+
+[params.required_tensile_mpa]
+type = "float"
+unit = "MPa"
+description = "Source-owned minimum tensile strength for the application grade"
+min = 470.0
+max = 560.0
+
+[params.tensile_strength_margin_mpa]
+type = "float"
+unit = "MPa"
+description = "Derivation margin between certificate tensile strength and required tensile strength"
+min = 35.0
+max = 100.0
+
+[params.packet_variant]
+type = "enum"
+description = "Hidden source-packet variant"
+values = [
+  "clean",
+  "missing_heat_number",
+  "stale_certificate_revision",
+  "heat_number_mismatch",
+  "scenario_copy_forward",
+  "open_critical_comment",
+  "minor_open_comment_carried",
+  "carbon_equivalent_exceeds",
+]
+
+[outputs.rlr_01_status]
+description = "Review matrix status code for RLR-01"
+tolerance = 0.0
+
+[outputs.rlr_02_status]
+description = "Review matrix status code for RLR-02"
+tolerance = 0.0
+
+[outputs.rlr_03_status]
+description = "Review matrix status code for RLR-03"
+tolerance = 0.0
+
+[outputs.rlr_04_status]
+description = "Review matrix status code for RLR-04"
+tolerance = 0.0
+
+[outputs.rlr_05_status]
+description = "Review matrix status code for RLR-05"
+tolerance = 0.0
+
+[outputs.rlr_06_status]
+description = "Review matrix status code for RLR-06"
+tolerance = 0.0
+
+[outputs.rlr_07_status]
+description = "Review matrix status code for RLR-07"
+tolerance = 0.0
+
+[outputs.rlr_08_status]
+description = "Review matrix status code for RLR-08"
+tolerance = 0.0
+
+[outputs.rlr_09_status]
+description = "Review matrix status code for RLR-09"
+tolerance = 0.0
+
+[outputs.readiness_code]
+description = "Readiness decision code"
+tolerance = 0.0
+
+[outputs.required_findings_count]
+description = "Required finding count"
+tolerance = 0.0
+
+[outputs.required_information_requests_count]
+description = "Required information request count"
+tolerance = 0.0
+
+[outputs.required_carried_actions_count]
+description = "Required carried action count"
+tolerance = 0.0
+
+[outputs.carbon_equivalent_max]
+description = "Maximum recomputed carbon equivalent for applied heats"
+tolerance = 0.02
+
+[outputs.carbon_equivalent_margin]
+description = "CEV limit minus maximum recomputed carbon equivalent"
+tolerance = 0.02
+
+[outputs.yield_strength_margin_mpa]
+description = "Minimum certified yield strength minus required yield strength"
+tolerance = 0.02
+
+[outputs.tensile_strength_margin_mpa]
+description = "Minimum certified tensile strength minus required tensile strength"
+tolerance = 0.02
+
+[outputs.certificate_coverage_count]
+description = "Applied heats covered by mill certificates"
+tolerance = 0.0
+
+[outputs.traceability_match_count]
+description = "Application rows with traceable heat numbers"
+tolerance = 0.0
+
+[archetypes.bridge_plate_submittal]
+description = "Bridge-plate steel product submittal with mill certificates and weldability criteria"
+site_contexts = ["bridge-plate-product-review", "welded-plate-submittal"]
+cev_limit = {min = 0.42, max = 0.46}
+required_yield_mpa = {min = 345.0, max = 380.0}
+required_tensile_mpa = {min = 470.0, max = 520.0}
+
+[archetypes.plant_skid_frame_submittal]
+description = "Plant skid-frame steel product submittal with heat traceability and deviation closeout"
+site_contexts = ["skid-frame-product-review", "fabricated-frame-submittal"]
+cev_limit = {min = 0.44, max = 0.48}
+required_yield_mpa = {min = 380.0, max = 420.0}
+required_tensile_mpa = {min = 500.0, max = 560.0}
+
+[difficulty.easy]
+description = "Obvious packet defects: clean, missing heat traceability, or a carbon-equivalent failure"
+visibility = "partial"
+archetypes = ["bridge_plate_submittal", "plant_skid_frame_submittal"]
+hidden_params = [
+  "packet_variant",
+  "carbon_equivalent_margin",
+  "carbon_equivalent_deficit",
+  "yield_strength_margin_mpa",
+  "tensile_strength_margin_mpa",
+]
+packet_variant = ["clean", "missing_heat_number", "carbon_equivalent_exceeds"]
+
+[difficulty.medium]
+description = "Full packet-variant distribution"
+visibility = "partial"
+archetypes = ["bridge_plate_submittal", "plant_skid_frame_submittal"]
+hidden_params = [
+  "packet_variant",
+  "carbon_equivalent_margin",
+  "carbon_equivalent_deficit",
+  "yield_strength_margin_mpa",
+  "tensile_strength_margin_mpa",
+]
+
+[difficulty.hard]
+description = "Subtle documentary defects: stale certificate revisions, heat identity mismatch, copied standard basis, carried comments"
+visibility = "partial"
+archetypes = ["bridge_plate_submittal", "plant_skid_frame_submittal"]
+hidden_params = [
+  "packet_variant",
+  "carbon_equivalent_margin",
+  "carbon_equivalent_deficit",
+  "yield_strength_margin_mpa",
+  "tensile_strength_margin_mpa",
+]
+packet_variant = [
+  "stale_certificate_revision",
+  "heat_number_mismatch",
+  "scenario_copy_forward",
+  "minor_open_comment_carried",
+]

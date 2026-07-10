@@ -1,0 +1,204 @@
+[meta]
+name = "pv-bess-interconnection-export-control-package"
+description = "SSC-05 PV/BESS interconnection, export-control, autonomy, feeder, and breaker metrics"
+long_description = "Calculates deterministic SSC-05 PV/BESS interconnection metrics from a task-owned synthetic source pack. The template combines PV AC output, export-control headroom, BESS backup autonomy, feeder current, voltage drop, breaker margin, and an overall synthetic pass score."
+discipline = "electrical"
+category = "pv-bess-export-control"
+standards = ["ETAP-style DER interconnection workflow", "EasyPower one-line and PowerFlow workflow", "utility export-control review workflow"]
+tags = ["electrical", "pv", "bess", "interconnection", "export-control", "feeder", "voltage-drop", "deterministic"]
+tool_mode = "with-tool"
+
+[params.pv_dc_kw]
+type = "float"
+unit = "kW"
+description = "PV-05-MOD-02 source-owned PV DC array rating"
+min = 165.0
+max = 165.0
+
+[params.dc_ac_derate_factor]
+type = "float"
+description = "INV-05-DATA-02 DC-to-AC derate factor before inverter clipping"
+min = 0.9
+max = 0.9
+
+[params.inverter_ac_kw]
+type = "float"
+unit = "kW"
+description = "INV-05-DATA-02 inverter AC rating"
+min = 150.0
+max = 150.0
+
+[params.site_minimum_load_kw]
+type = "float"
+unit = "kW"
+description = "PCC-05-SLD-02 minimum site load at the export-control point"
+min = 62.0
+max = 62.0
+
+[params.export_limit_kw]
+type = "float"
+unit = "kW"
+description = "RULE-05-EXPORT-02 utility export limit"
+min = 75.0
+max = 75.0
+
+[params.bess_nominal_kwh]
+type = "float"
+unit = "kWh"
+description = "BESS-05-DATA-02 nominal storage energy"
+min = 360.0
+max = 360.0
+
+[params.bess_usable_fraction]
+type = "float"
+description = "BESS-05-DATA-02 usable state-of-charge fraction"
+min = 0.82
+max = 0.82
+
+[params.bess_inverter_efficiency]
+type = "float"
+description = "BESS-05-DATA-02 discharge inverter efficiency"
+min = 0.94
+max = 0.94
+
+[params.reserved_energy_kwh]
+type = "float"
+unit = "kWh"
+description = "BESS-05-DATA-02 reserved energy not available for the outage case"
+min = 3.516
+max = 3.516
+
+[params.critical_load_kw]
+type = "float"
+unit = "kW"
+description = "PCC-05-SLD-02 critical load during outage mode"
+min = 54.0
+max = 54.0
+
+[params.outage_duration_h]
+type = "float"
+unit = "h"
+description = "RULE-05-EXPORT-02 required backup duration"
+min = 5.0
+max = 5.0
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "PCC-05-SLD-02 DER feeder voltage"
+min = 480.0
+max = 480.0
+
+[params.feeder_power_factor]
+type = "float"
+description = "PCC-05-SLD-02 feeder power factor for current calculation"
+min = 0.95
+max = 0.95
+
+[params.feeder_length_m]
+type = "float"
+unit = "m"
+description = "PCC-05-SLD-02 DER feeder route length"
+min = 320.0
+max = 320.0
+
+[params.voltage_drop_mv_per_a_m]
+type = "float"
+unit = "mV/A/m"
+description = "PCC-05-SLD-02 source-owned voltage-drop factor"
+min = 0.275
+max = 0.275
+
+[params.breaker_allowable_current_a]
+type = "float"
+unit = "A"
+description = "PCC-05-SLD-02 DER breaker allowable current"
+min = 200.0
+max = 200.0
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "RULE-05-EXPORT-02 maximum feeder voltage drop"
+min = 3.0
+max = 3.0
+
+[outputs.pv_ac_output_kw]
+description = "PV AC output after derate and inverter clipping"
+tolerance = 0.03
+
+[outputs.export_kw]
+description = "Export at the PCC before curtailment"
+tolerance = 0.03
+
+[outputs.export_excess_kw]
+description = "Export above the utility limit"
+tolerance = 0.03
+
+[outputs.usable_bess_energy_kwh]
+description = "Usable BESS energy after inverter efficiency and reserve"
+tolerance = 0.03
+
+[outputs.backup_energy_required_kwh]
+description = "Critical-load outage energy requirement"
+tolerance = 0.03
+
+[outputs.backup_energy_margin_kwh]
+description = "Usable BESS energy minus required outage energy"
+tolerance = 0.03
+
+[outputs.feeder_current_a]
+description = "Three-phase DER feeder current"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "DER feeder voltage drop"
+tolerance = 0.03
+
+[outputs.voltage_drop_excess_percent]
+description = "Voltage drop above the owner criterion"
+tolerance = 0.03
+
+[outputs.breaker_margin_a]
+description = "DER breaker allowable current minus feeder current"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when export, backup, voltage-drop, and breaker margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc05_pv_bess_case]
+description = "PV/BESS export-control package tied to one PCC, utility rule, feeder, and interconnection memo"
+pv_dc_kw = {min = 165.0, max = 165.0}
+dc_ac_derate_factor = {min = 0.9, max = 0.9}
+inverter_ac_kw = {min = 150.0, max = 150.0}
+site_minimum_load_kw = {min = 62.0, max = 62.0}
+export_limit_kw = {min = 75.0, max = 75.0}
+bess_nominal_kwh = {min = 360.0, max = 360.0}
+bess_usable_fraction = {min = 0.82, max = 0.82}
+bess_inverter_efficiency = {min = 0.94, max = 0.94}
+reserved_energy_kwh = {min = 3.516, max = 3.516}
+critical_load_kw = {min = 54.0, max = 54.0}
+outage_duration_h = {min = 5.0, max = 5.0}
+feeder_voltage_v = {min = 480.0, max = 480.0}
+feeder_power_factor = {min = 0.95, max = 0.95}
+feeder_length_m = {min = 320.0, max = 320.0}
+voltage_drop_mv_per_a_m = {min = 0.275, max = 0.275}
+breaker_allowable_current_a = {min = 200.0, max = 200.0}
+max_voltage_drop_percent = {min = 3.0, max = 3.0}
+site_contexts = ["pv-bess-export-control"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-05 PV/BESS interconnection package"
+visibility = "all_given"
+archetypes = ["ssc05_pv_bess_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-05 PV/BESS interconnection package"
+visibility = "all_given"
+archetypes = ["ssc05_pv_bess_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-05 PV/BESS interconnection package"
+visibility = "all_given"
+archetypes = ["ssc05_pv_bess_case"]

@@ -1,0 +1,215 @@
+[meta]
+name = "crowd-cctv-communications-operations-package"
+description = "SSC-08 crowd, CCTV, and communications operations metrics"
+long_description = "Calculates source-bound security operations metrics from a deterministic SSC-08 task-owned source pack. The template combines queue population, CCTV pixels per metre, storage, communications bandwidth, PoE load, access-state matching, and an overall synthetic pass score."
+discipline = "electrical"
+category = "security-communications-operations"
+standards = ["CCTV coverage workflow", "video retention workflow", "network bandwidth review", "PoE budget review"]
+tags = ["electrical", "building", "crowd", "cctv", "communications", "poe", "access-control", "deterministic"]
+tool_mode = "with-tool"
+
+[params.queue_length_m]
+type = "float"
+unit = "m"
+description = "QUEUE-08-SCHED-04 queue length"
+min = 18.0
+max = 18.0
+
+[params.queue_width_m]
+type = "float"
+unit = "m"
+description = "QUEUE-08-SCHED-04 queue width"
+min = 3.0
+max = 3.0
+
+[params.queue_density_person_m2]
+type = "float"
+unit = "persons/m2"
+description = "QUEUE-08-SCHED-04 queue density"
+min = 2.2
+max = 2.2
+
+[params.horizontal_pixels]
+type = "float"
+unit = "px"
+description = "CCTV-08-LAYOUT-04 horizontal pixels"
+min = 1920.0
+max = 1920.0
+
+[params.camera_horizontal_field_m]
+type = "float"
+unit = "m"
+description = "CCTV-08-LAYOUT-04 camera horizontal field"
+min = 8.0
+max = 8.0
+
+[params.required_ppm]
+type = "float"
+description = "MEMO-08-SECURITY-04 required PPM"
+min = 180.0
+max = 180.0
+
+[params.camera_count]
+type = "float"
+description = "CCTV-08-LAYOUT-04 camera count"
+min = 6.0
+max = 6.0
+
+[params.camera_bitrate_mbps]
+type = "float"
+unit = "Mbps"
+description = "CCTV-08-LAYOUT-04 camera bitrate"
+min = 4.0
+max = 4.0
+
+[params.retention_days]
+type = "float"
+unit = "days"
+description = "MEMO-08-SECURITY-04 retention days"
+min = 21.0
+max = 21.0
+
+[params.storage_overhead_factor]
+type = "float"
+description = "MEMO-08-SECURITY-04 storage overhead factor"
+min = 1.15
+max = 1.15
+
+[params.access_network_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-08-TOPO-04 access network load"
+min = 2.5
+max = 2.5
+
+[params.intercom_network_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-08-TOPO-04 intercom network load"
+min = 1.2
+max = 1.2
+
+[params.network_overhead_percent]
+type = "float"
+unit = "%"
+description = "NET-08-TOPO-04 network overhead"
+min = 20.0
+max = 20.0
+
+[params.uplink_capacity_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-08-TOPO-04 uplink capacity"
+min = 60.0
+max = 60.0
+
+[params.camera_poe_w]
+type = "float"
+unit = "W"
+description = "POE-08-SWITCH-04 camera PoE load"
+min = 13.0
+max = 13.0
+
+[params.access_controller_count]
+type = "float"
+description = "ACCESS-08-STATE-04 access controller count"
+min = 4.0
+max = 4.0
+
+[params.access_controller_poe_w]
+type = "float"
+unit = "W"
+description = "POE-08-SWITCH-04 access controller PoE load"
+min = 8.0
+max = 8.0
+
+[params.intercom_count]
+type = "float"
+description = "ACCESS-08-STATE-04 intercom count"
+min = 3.0
+max = 3.0
+
+[params.intercom_poe_w]
+type = "float"
+unit = "W"
+description = "POE-08-SWITCH-04 intercom PoE load"
+min = 10.0
+max = 10.0
+
+[params.poe_budget_w]
+type = "float"
+unit = "W"
+description = "POE-08-SWITCH-04 PoE budget"
+min = 180.0
+max = 180.0
+
+[params.matching_access_states]
+type = "float"
+description = "ACCESS-08-STATE-04 matching access states"
+min = 5.0
+max = 5.0
+
+[params.required_access_states]
+type = "float"
+description = "ACCESS-08-STATE-04 required access states"
+min = 5.0
+max = 5.0
+
+[outputs.queue_population_persons]
+description = "Queue population from area and density"
+tolerance = 0.03
+
+[outputs.cctv_pixels_per_m]
+description = "CCTV pixels per metre"
+tolerance = 0.03
+
+[outputs.ppm_margin]
+description = "Pixels-per-metre margin"
+tolerance = 0.03
+
+[outputs.cctv_storage_tb]
+description = "CCTV storage requirement"
+tolerance = 0.03
+
+[outputs.network_load_mbps]
+description = "Network load with overhead"
+tolerance = 0.03
+
+[outputs.network_headroom_mbps]
+description = "Uplink capacity minus network load"
+tolerance = 0.03
+
+[outputs.poe_load_w]
+description = "PoE load"
+tolerance = 0.03
+
+[outputs.poe_headroom_w]
+description = "PoE budget minus PoE load"
+tolerance = 0.03
+
+[outputs.access_state_match_fraction]
+description = "Matching access states divided by required access states"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when security operations checks pass"
+tolerance = 0.001
+
+[archetypes.ssc08_security_ops_case]
+description = "Crowd, CCTV, and communications operations case"
+site_contexts = ["ssc08-security-operations"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-08 security operations package"
+visibility = "all_given"
+archetypes = ["ssc08_security_ops_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-08 security operations package"
+visibility = "all_given"
+archetypes = ["ssc08_security_ops_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-08 security operations package"
+visibility = "all_given"
+archetypes = ["ssc08_security_ops_case"]

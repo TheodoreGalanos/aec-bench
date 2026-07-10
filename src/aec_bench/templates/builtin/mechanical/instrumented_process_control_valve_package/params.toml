@@ -1,0 +1,164 @@
+# ABOUTME: Defines the SSC-10 instrumented process control and valve template.
+# ABOUTME: Pins one P&ID, loop, valve, range, control narrative, and memo source pack.
+
+[meta]
+name = "instrumented-process-control-valve-package"
+description = "SSC-10 instrumented process control and valve metrics"
+long_description = "Calculates source-bound process control valve metrics from a deterministic SSC-10 task-owned source pack. The template combines valve Cv, valve authority, 4-20 mA scaling, fail-close timing, basin HRT, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "process-control-valve"
+standards = ["P&ID review workflow", "control valve sizing workflow", "4-20 mA loop scaling"]
+tags = ["mechanical", "wastewater", "instrumentation", "control-valve", "cv", "loop", "hrt", "deterministic"]
+tool_mode = "with-tool"
+
+[params.design_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "PID-10-VALVE-04 design flow"
+min = 38.0
+max = 38.0
+
+[params.specific_gravity]
+type = "float"
+description = "VALVE-10-DATA-04 fluid specific gravity"
+min = 1.02
+max = 1.02
+
+[params.upstream_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "PID-10-VALVE-04 upstream pressure"
+min = 420.0
+max = 420.0
+
+[params.downstream_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "PID-10-VALVE-04 downstream pressure"
+min = 255.0
+max = 255.0
+
+[params.selected_valve_cv]
+type = "float"
+description = "VALVE-10-DATA-04 selected valve Cv"
+min = 145.0
+max = 145.0
+
+[params.total_control_zone_drop_kpa]
+type = "float"
+unit = "kPa"
+description = "CONTROL-10-NARR-04 total control-zone pressure drop"
+min = 240.0
+max = 240.0
+
+[params.process_lrv]
+type = "float"
+description = "RANGE-10-PV-04 lower range value"
+min = 0.0
+max = 0.0
+
+[params.process_urv]
+type = "float"
+description = "RANGE-10-PV-04 upper range value"
+min = 60.0
+max = 60.0
+
+[params.setpoint_value]
+type = "float"
+description = "LOOP-10-SCHED-04 process setpoint"
+min = 42.0
+max = 42.0
+
+[params.measured_signal_ma]
+type = "float"
+unit = "mA"
+description = "LOOP-10-SCHED-04 measured command signal"
+min = 15.2
+max = 15.2
+
+[params.required_fail_close_s]
+type = "float"
+unit = "s"
+description = "CONTROL-10-NARR-04 required fail-close time"
+min = 18.0
+max = 18.0
+
+[params.actual_fail_close_s]
+type = "float"
+unit = "s"
+description = "VALVE-10-DATA-04 actual fail-close time"
+min = 13.0
+max = 13.0
+
+[params.basin_volume_m3]
+type = "float"
+unit = "m3"
+description = "PID-10-VALVE-04 controlled basin volume"
+min = 750.0
+max = 750.0
+
+[outputs.required_cv]
+description = "Required valve Cv"
+tolerance = 0.03
+
+[outputs.cv_margin]
+description = "Selected Cv minus required Cv"
+tolerance = 0.03
+
+[outputs.valve_authority_ratio]
+description = "Valve pressure drop divided by total control-zone drop"
+tolerance = 0.03
+
+[outputs.command_signal_ma]
+description = "Setpoint converted to 4-20 mA command"
+tolerance = 0.03
+
+[outputs.signal_error_ma]
+description = "Difference between measured and calculated command signal"
+tolerance = 0.03
+
+[outputs.fail_close_margin_s]
+description = "Required fail-close time minus actual fail-close time"
+tolerance = 0.03
+
+[outputs.basin_hrt_hr]
+description = "Hydraulic retention time through controlled basin"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when Cv, signal, fail-close, and HRT checks pass"
+tolerance = 0.001
+
+[archetypes.ssc10_process_control_valve_case]
+description = "Instrumented process control and valve source pack"
+site_contexts = ["process-control-valve", "valve-loop-scaling-check"]
+
+[archetypes.ssc10_process_control_valve_case.params]
+design_flow_l_s = {min = 38.0, max = 38.0}
+specific_gravity = {min = 1.02, max = 1.02}
+upstream_pressure_kpa = {min = 420.0, max = 420.0}
+downstream_pressure_kpa = {min = 255.0, max = 255.0}
+selected_valve_cv = {min = 145.0, max = 145.0}
+total_control_zone_drop_kpa = {min = 240.0, max = 240.0}
+process_lrv = {min = 0.0, max = 0.0}
+process_urv = {min = 60.0, max = 60.0}
+setpoint_value = {min = 42.0, max = 42.0}
+measured_signal_ma = {min = 15.2, max = 15.2}
+required_fail_close_s = {min = 18.0, max = 18.0}
+actual_fail_close_s = {min = 13.0, max = 13.0}
+basin_volume_m3 = {min = 750.0, max = 750.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-10 process control valve package"
+visibility = "all_given"
+archetypes = ["ssc10_process_control_valve_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-10 process control valve package"
+visibility = "all_given"
+archetypes = ["ssc10_process_control_valve_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-10 process control valve package"
+visibility = "all_given"
+archetypes = ["ssc10_process_control_valve_case"]

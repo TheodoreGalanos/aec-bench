@@ -1,0 +1,198 @@
+[meta]
+name = "alarm-smoke-control-emergency-power-package"
+description = "SSC-19 alarm, smoke control, and emergency power metrics"
+long_description = "Calculates source-bound alarm, smoke control, and emergency power metrics from a deterministic SSC-19 task-owned source pack. The template combines NAC current, battery autonomy, smoke control load, generator sizing, smoke exhaust ACH, and an overall synthetic pass score."
+discipline = "electrical"
+category = "alarm-smoke-emergency-power"
+standards = ["fire alarm workflows", "smoke control workflows", "emergency power workflows"]
+tags = ["electrical", "alarm", "smoke-control", "emergency-power", "battery", "generator", "deterministic"]
+tool_mode = "with-tool"
+
+[params.strobe_count]
+type = "float"
+description = "ALARM-19-ZONE-04 strobe count"
+min = 68.0
+max = 68.0
+
+[params.strobe_current_a]
+type = "float"
+unit = "A"
+description = "NAC-19-LOAD-04 strobe current"
+min = 0.09
+max = 0.09
+
+[params.speaker_count]
+type = "float"
+description = "ALARM-19-ZONE-04 speaker count"
+min = 42.0
+max = 42.0
+
+[params.speaker_current_a]
+type = "float"
+unit = "A"
+description = "NAC-19-LOAD-04 speaker current"
+min = 0.04
+max = 0.04
+
+[params.nac_capacity_a]
+type = "float"
+unit = "A"
+description = "NAC-19-LOAD-04 NAC capacity"
+min = 10.0
+max = 10.0
+
+[params.smoke_fan_count]
+type = "float"
+description = "SMOKE-19-VENT-04 smoke fan count"
+min = 3.0
+max = 3.0
+
+[params.smoke_fan_power_kw]
+type = "float"
+unit = "kW"
+description = "SMOKE-19-VENT-04 smoke fan power"
+min = 7.5
+max = 7.5
+
+[params.smoke_control_load_kw]
+type = "float"
+unit = "kW"
+description = "OPS-19-EMERG-04 control load"
+min = 2.4
+max = 2.4
+
+[params.battery_autonomy_h]
+type = "float"
+unit = "h"
+description = "BATT-19-LIFE-04 battery autonomy"
+min = 2.0
+max = 2.0
+
+[params.battery_dc_voltage_v]
+type = "float"
+unit = "V"
+description = "BATT-19-LIFE-04 DC voltage"
+min = 24.0
+max = 24.0
+
+[params.usable_battery_fraction]
+type = "float"
+description = "BATT-19-LIFE-04 usable battery fraction"
+min = 0.8
+max = 0.8
+
+[params.installed_battery_ah]
+type = "float"
+unit = "Ah"
+description = "BATT-19-LIFE-04 installed battery capacity"
+min = 260.0
+max = 260.0
+
+[params.generator_rating_kw]
+type = "float"
+unit = "kW"
+description = "OPS-19-EMERG-04 generator rating"
+min = 80.0
+max = 80.0
+
+[params.starting_factor]
+type = "float"
+description = "OPS-19-EMERG-04 smoke fan starting factor"
+min = 1.25
+max = 1.25
+
+[params.smoke_zone_volume_m3]
+type = "float"
+unit = "m3"
+description = "SMOKE-19-VENT-04 smoke zone volume"
+min = 8500.0
+max = 8500.0
+
+[params.exhaust_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "SMOKE-19-VENT-04 exhaust flow"
+min = 9.5
+max = 9.5
+
+[params.required_smoke_exhaust_ach]
+type = "float"
+unit = "ACH"
+description = "SMOKE-19-VENT-04 required smoke exhaust ACH"
+min = 4.0
+max = 4.0
+
+[outputs.nac_current_a]
+description = "Total strobe and speaker NAC current"
+tolerance = 0.03
+
+[outputs.nac_current_margin_a]
+description = "NAC capacity minus total NAC current"
+tolerance = 0.03
+
+[outputs.smoke_control_load_kw]
+description = "Smoke fan plus control load"
+tolerance = 0.03
+
+[outputs.battery_required_ah]
+description = "Battery amp-hours required for NAC autonomy"
+tolerance = 0.03
+
+[outputs.battery_capacity_margin_ah]
+description = "Installed battery capacity minus required amp-hours"
+tolerance = 0.03
+
+[outputs.generator_required_kw]
+description = "Generator load with starting factor and DC alarm load"
+tolerance = 0.03
+
+[outputs.generator_margin_kw]
+description = "Generator rating minus required generator load"
+tolerance = 0.03
+
+[outputs.smoke_exhaust_ach]
+description = "Smoke exhaust air changes per hour"
+tolerance = 0.03
+
+[outputs.smoke_exhaust_ach_margin]
+description = "Smoke exhaust ACH minus required ACH"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when NAC, battery, generator, and smoke exhaust margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc19_alarm_smoke_emergency_power_case]
+description = "Alarm, smoke control, and emergency power case"
+strobe_count = {min = 68.0, max = 68.0}
+strobe_current_a = {min = 0.09, max = 0.09}
+speaker_count = {min = 42.0, max = 42.0}
+speaker_current_a = {min = 0.04, max = 0.04}
+nac_capacity_a = {min = 10.0, max = 10.0}
+smoke_fan_count = {min = 3.0, max = 3.0}
+smoke_fan_power_kw = {min = 7.5, max = 7.5}
+smoke_control_load_kw = {min = 2.4, max = 2.4}
+battery_autonomy_h = {min = 2.0, max = 2.0}
+battery_dc_voltage_v = {min = 24.0, max = 24.0}
+usable_battery_fraction = {min = 0.8, max = 0.8}
+installed_battery_ah = {min = 260.0, max = 260.0}
+generator_rating_kw = {min = 80.0, max = 80.0}
+starting_factor = {min = 1.25, max = 1.25}
+smoke_zone_volume_m3 = {min = 8500.0, max = 8500.0}
+exhaust_flow_m3_s = {min = 9.5, max = 9.5}
+required_smoke_exhaust_ach = {min = 4.0, max = 4.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-19 alarm, smoke control, and emergency power package"
+visibility = "all_given"
+archetypes = ["ssc19_alarm_smoke_emergency_power_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-19 alarm, smoke control, and emergency power package"
+visibility = "all_given"
+archetypes = ["ssc19_alarm_smoke_emergency_power_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-19 alarm, smoke control, and emergency power package"
+visibility = "all_given"
+archetypes = ["ssc19_alarm_smoke_emergency_power_case"]

@@ -1,0 +1,95 @@
+# ABOUTME: CLI commands for composite task-world templates.
+# ABOUTME: Lists template specs and materialises or verifies compiled example packages.
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+
+import typer
+
+from aec_bench.cli.output import emit, print_table
+from aec_bench.task_world_templates.catalogue import get_template, list_templates
+from aec_bench.task_world_templates.materializer import materialize_template_example, verify_template_example
+
+app = typer.Typer(help="Inspect composite task-world templates.")
+
+
+@app.command("list")
+def list_command() -> None:
+    start = time.monotonic()
+    templates = list_templates()
+    data = {
+        "count": len(templates),
+        "templates": [
+            {
+                "template_id": template.template_id,
+                "name": template.name,
+                "pattern": template.pattern,
+                "disciplines": template.discipline_scope,
+                "stage_count": len(template.stages),
+                "handoff_count": len(template.handoffs),
+                "data_gap_count": len(template.data_gaps),
+            }
+            for template in templates
+        ],
+    }
+    emit("task composite-template list", data, start_time=start, human_renderer=_render_templates)
+
+
+@app.command("materialize-example")
+def materialize_example_command(
+    template_id: str = typer.Argument(..., help="Composite task-world template id"),
+    output: Path = typer.Option(..., "--output", "-o", help="Directory where the example package is written"),
+) -> None:
+    start = time.monotonic()
+    try:
+        template = get_template(template_id)
+    except KeyError as exc:
+        emit("task composite-template materialize-example", None, errors=[str(exc)], start_time=start)
+        return
+
+    package_dir = materialize_template_example(template, output)
+    result = verify_template_example(package_dir)
+    emit(
+        "task composite-template materialize-example",
+        {
+            "template_id": template.template_id,
+            "package_dir": str(package_dir),
+            "overall": result["overall"],
+            "score": result["score"],
+            "data_gap_count": len(result["data_gaps"]),
+        },
+        start_time=start,
+    )
+
+
+@app.command("verify-example")
+def verify_example_command(
+    package_dir: Path = typer.Argument(..., help="Materialized composite task-world package directory"),
+) -> None:
+    start = time.monotonic()
+    result = verify_template_example(package_dir)
+    emit("task composite-template verify-example", result, start_time=start)
+
+
+def _render_templates(data: dict[str, object]) -> None:
+    templates = data["templates"]
+    if not isinstance(templates, list):
+        return
+    rows = [
+        [
+            str(template["template_id"]),
+            str(template["name"]),
+            ", ".join(template["disciplines"]),
+            str(template["stage_count"]),
+            str(template["handoff_count"]),
+        ]
+        for template in templates
+        if isinstance(template, dict)
+    ]
+    print_table(
+        "Composite Task-World Templates",
+        ["Template", "Name", "Disciplines", "Stages", "Handoffs"],
+        rows,
+    )

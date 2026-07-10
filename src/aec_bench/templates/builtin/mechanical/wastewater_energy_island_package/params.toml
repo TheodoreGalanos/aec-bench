@@ -1,0 +1,407 @@
+[meta]
+name = "wastewater-energy-island-package"
+description = "SSC-10 wastewater process, blower, biogas, and energy island metrics"
+long_description = "Calculates source-bound wastewater energy island metrics from a deterministic SSC-10 task-owned source pack. The template combines influent load, oxygen demand, blower air flow and motor power, sludge-to-biogas energy, PV/BESS dispatch, feeder voltage drop, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "wastewater-energy"
+standards = ["BioWin", "GPS-X", "SUMO", "EPA wastewater energy efficiency workflows", "NREL REopt"]
+tags = ["mechanical", "wastewater", "process", "oxygen-demand", "blower", "biogas", "bess", "feeder", "energy-island", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_rate_m3_d]
+type = "float"
+unit = "m3/d"
+description = "PROCESS-10-BASIS-01 design average flow for CASE-SSC10-ENERGY-001"
+min = 5800.0
+max = 5800.0
+
+[params.influent_bod_mg_l]
+type = "float"
+unit = "mg/L"
+description = "PROCESS-10-BASIS-01 influent BOD concentration"
+min = 260.0
+max = 260.0
+
+[params.effluent_bod_mg_l]
+type = "float"
+unit = "mg/L"
+description = "PROCESS-10-BASIS-01 effluent BOD concentration"
+min = 20.0
+max = 20.0
+
+[params.influent_tkn_mg_l]
+type = "float"
+unit = "mg/L"
+description = "PROCESS-10-BASIS-01 influent TKN concentration"
+min = 42.0
+max = 42.0
+
+[params.effluent_tkn_mg_l]
+type = "float"
+unit = "mg/L"
+description = "PROCESS-10-BASIS-01 effluent TKN concentration"
+min = 6.0
+max = 6.0
+
+[params.sludge_production_kg_d]
+type = "float"
+unit = "kg/d"
+description = "AER-10-BASIN-01 sludge production used in the oxygen demand credit"
+min = 820.0
+max = 820.0
+
+[params.denitrified_nitrogen_mg_l]
+type = "float"
+unit = "mg/L"
+description = "PFD-10-AERATION-01 denitrified nitrogen concentration"
+min = 18.0
+max = 18.0
+
+[params.field_transfer_efficiency]
+type = "float"
+description = "AER-10-BASIN-01 source-owned field oxygen transfer efficiency"
+min = 0.18
+max = 0.18
+
+[params.air_oxygen_mass_fraction]
+type = "float"
+description = "BLOWER-10-01 oxygen mass fraction in dry air used by the synthetic source pack"
+min = 0.23
+max = 0.23
+
+[params.air_density_kg_nm3]
+type = "float"
+unit = "kg/Nm3"
+description = "BLOWER-10-01 normal air density"
+min = 1.2
+max = 1.2
+
+[params.blower_airflow_capacity_nm3_h]
+type = "float"
+unit = "Nm3/h"
+description = "BLOWER-10-01 selected blower capacity"
+min = 850.0
+max = 850.0
+
+[params.blower_discharge_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "BLOWER-10-01 source-owned discharge pressure for simplified power approximation"
+min = 62.0
+max = 62.0
+
+[params.blower_efficiency]
+type = "float"
+description = "BLOWER-10-01 blower efficiency"
+min = 0.68
+max = 0.68
+
+[params.blower_motor_efficiency]
+type = "float"
+description = "BLOWER-10-01 motor efficiency"
+min = 0.94
+max = 0.94
+
+[params.selected_blower_motor_kw]
+type = "float"
+unit = "kW"
+description = "BLOWER-10-01 selected blower motor rating"
+min = 30.0
+max = 30.0
+
+[params.mixer_load_kw]
+type = "float"
+unit = "kW"
+description = "AER-10-BASIN-01 mixer load included in the process energy ledger"
+min = 14.0
+max = 14.0
+
+[params.recycle_pump_load_kw]
+type = "float"
+unit = "kW"
+description = "PFD-10-AERATION-01 recycle pump load included in the process energy ledger"
+min = 18.5
+max = 18.5
+
+[params.controls_load_kw]
+type = "float"
+unit = "kW"
+description = "PFD-10-AERATION-01 controls and instrumentation load included in the process energy ledger"
+min = 4.2
+max = 4.2
+
+[params.volatile_solids_feed_kg_d]
+type = "float"
+unit = "kg/d"
+description = "DIG-10-BIOGAS-01 volatile solids feed to digestion"
+min = 950.0
+max = 950.0
+
+[params.volatile_solids_destruction_pct]
+type = "float"
+unit = "%"
+description = "DIG-10-BIOGAS-01 volatile solids destruction"
+min = 48.0
+max = 48.0
+
+[params.biogas_yield_m3_kg_vs]
+type = "float"
+unit = "m3/kg VS destroyed"
+description = "DIG-10-BIOGAS-01 biogas yield per kg volatile solids destroyed"
+min = 0.9
+max = 0.9
+
+[params.methane_fraction]
+type = "float"
+description = "DIG-10-BIOGAS-01 methane fraction in produced biogas"
+min = 0.62
+max = 0.62
+
+[params.methane_energy_kwh_m3]
+type = "float"
+unit = "kWh/m3"
+description = "DIG-10-BIOGAS-01 methane energy content"
+min = 9.97
+max = 9.97
+
+[params.chp_electrical_efficiency]
+type = "float"
+description = "DIG-10-BIOGAS-01 generator electrical efficiency applied to methane energy"
+min = 0.34
+max = 0.34
+
+[params.pv_generation_kwh_d]
+type = "float"
+unit = "kWh/d"
+description = "PV-10-ARRAY-01 daily PV generation credited in the island memo"
+min = 390.0
+max = 390.0
+
+[params.bess_nominal_kwh]
+type = "float"
+unit = "kWh"
+description = "BESS-10-ISLAND-01 nominal battery capacity"
+min = 420.0
+max = 420.0
+
+[params.bess_usable_soc_fraction]
+type = "float"
+description = "BESS-10-ISLAND-01 usable state-of-charge window"
+min = 0.8
+max = 0.8
+
+[params.bess_inverter_efficiency]
+type = "float"
+description = "BESS-10-ISLAND-01 inverter efficiency"
+min = 0.92
+max = 0.92
+
+[params.bess_reserve_kwh]
+type = "float"
+unit = "kWh"
+description = "BESS-10-ISLAND-01 minimum reserve held outside island dispatch"
+min = 60.0
+max = 60.0
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "FEEDER-10-480V-01 nominal three-phase feeder voltage"
+min = 480.0
+max = 480.0
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "FEEDER-10-480V-01 feeder length"
+min = 0.42
+max = 0.42
+
+[params.feeder_resistance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "FEEDER-10-480V-01 conductor resistance"
+min = 0.32
+max = 0.32
+
+[params.feeder_reactance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "FEEDER-10-480V-01 conductor reactance"
+min = 0.08
+max = 0.08
+
+[params.feeder_power_factor]
+type = "float"
+description = "FEEDER-10-480V-01 process load power factor"
+min = 0.86
+max = 0.86
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "FEEDER-10-480V-01 maximum allowed voltage drop"
+min = 5.0
+max = 5.0
+
+[outputs.bod_removed_kg_d]
+description = "PROCESS-10-BASIS-01 BOD removed by the selected process case"
+tolerance = 0.03
+
+[outputs.carbonaceous_oxygen_kg_d]
+description = "Carbonaceous oxygen demand after source-owned sludge production credit"
+tolerance = 0.03
+
+[outputs.nitrogenous_oxygen_kg_d]
+description = "Nitrogenous oxygen demand from TKN removal"
+tolerance = 0.03
+
+[outputs.denitrification_credit_kg_d]
+description = "Oxygen credit from denitrified nitrogen"
+tolerance = 0.03
+
+[outputs.total_oxygen_kg_d]
+description = "Total source-bound oxygen demand"
+tolerance = 0.03
+
+[outputs.required_airflow_nm3_h]
+description = "BLOWER-10-01 airflow required to deliver total oxygen demand"
+tolerance = 0.03
+
+[outputs.blower_capacity_oxygen_kg_d]
+description = "Oxygen transfer capacity at selected blower airflow"
+tolerance = 0.03
+
+[outputs.oxygen_capacity_margin_kg_d]
+description = "Selected blower oxygen-transfer capacity minus total oxygen demand"
+tolerance = 0.03
+
+[outputs.blower_shaft_power_kw]
+description = "Simplified blower shaft power at required airflow and discharge pressure"
+tolerance = 0.03
+
+[outputs.blower_input_power_kw]
+description = "Blower electrical input power after motor efficiency"
+tolerance = 0.03
+
+[outputs.blower_motor_margin_kw]
+description = "Selected blower motor rating minus blower input power"
+tolerance = 0.03
+
+[outputs.volatile_solids_destroyed_kg_d]
+description = "DIG-10-BIOGAS-01 volatile solids destroyed"
+tolerance = 0.03
+
+[outputs.biogas_m3_d]
+description = "DIG-10-BIOGAS-01 daily biogas production"
+tolerance = 0.03
+
+[outputs.methane_m3_d]
+description = "DIG-10-BIOGAS-01 daily methane volume"
+tolerance = 0.03
+
+[outputs.methane_energy_kwh_d]
+description = "Methane energy available before generator efficiency"
+tolerance = 0.03
+
+[outputs.biogas_electric_energy_kwh_d]
+description = "Electrical energy from biogas CHP generator"
+tolerance = 0.03
+
+[outputs.critical_process_load_kw]
+description = "Blower, mixer, recycle pump, and controls critical process load"
+tolerance = 0.03
+
+[outputs.daily_process_energy_kwh]
+description = "Twenty-four-hour critical process energy"
+tolerance = 0.03
+
+[outputs.usable_bess_energy_kwh]
+description = "BESS dispatchable energy after SOC, inverter, and reserve adjustments"
+tolerance = 0.03
+
+[outputs.onsite_energy_available_kwh]
+description = "Biogas electric energy plus PV generation plus usable BESS dispatch"
+tolerance = 0.03
+
+[outputs.island_energy_margin_kwh]
+description = "Onsite energy available minus daily critical process energy"
+tolerance = 0.03
+
+[outputs.process_energy_intensity_kwh_m3]
+description = "Daily process energy divided by design flow"
+tolerance = 0.03
+
+[outputs.onsite_energy_fraction]
+description = "Onsite energy available divided by daily process energy, capped at 1.0"
+tolerance = 0.03
+
+[outputs.feeder_current_a]
+description = "FEEDER-10-480V-01 three-phase current for the critical process load"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "FEEDER-10-480V-01 source-owned voltage-drop percentage"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Maximum voltage drop minus computed feeder voltage drop"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when oxygen capacity, blower motor, island energy, and voltage-drop margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc10_wastewater_energy_island_case]
+description = "Wastewater energy island case with process oxygen basis, blower schedule, sludge-to-biogas ledger, PV/BESS dispatch, and feeder voltage drop"
+flow_rate_m3_d = {min = 5800.0, max = 5800.0}
+influent_bod_mg_l = {min = 260.0, max = 260.0}
+effluent_bod_mg_l = {min = 20.0, max = 20.0}
+influent_tkn_mg_l = {min = 42.0, max = 42.0}
+effluent_tkn_mg_l = {min = 6.0, max = 6.0}
+sludge_production_kg_d = {min = 820.0, max = 820.0}
+denitrified_nitrogen_mg_l = {min = 18.0, max = 18.0}
+field_transfer_efficiency = {min = 0.18, max = 0.18}
+air_oxygen_mass_fraction = {min = 0.23, max = 0.23}
+air_density_kg_nm3 = {min = 1.2, max = 1.2}
+blower_airflow_capacity_nm3_h = {min = 850.0, max = 850.0}
+blower_discharge_pressure_kpa = {min = 62.0, max = 62.0}
+blower_efficiency = {min = 0.68, max = 0.68}
+blower_motor_efficiency = {min = 0.94, max = 0.94}
+selected_blower_motor_kw = {min = 30.0, max = 30.0}
+mixer_load_kw = {min = 14.0, max = 14.0}
+recycle_pump_load_kw = {min = 18.5, max = 18.5}
+controls_load_kw = {min = 4.2, max = 4.2}
+volatile_solids_feed_kg_d = {min = 950.0, max = 950.0}
+volatile_solids_destruction_pct = {min = 48.0, max = 48.0}
+biogas_yield_m3_kg_vs = {min = 0.9, max = 0.9}
+methane_fraction = {min = 0.62, max = 0.62}
+methane_energy_kwh_m3 = {min = 9.97, max = 9.97}
+chp_electrical_efficiency = {min = 0.34, max = 0.34}
+pv_generation_kwh_d = {min = 390.0, max = 390.0}
+bess_nominal_kwh = {min = 420.0, max = 420.0}
+bess_usable_soc_fraction = {min = 0.8, max = 0.8}
+bess_inverter_efficiency = {min = 0.92, max = 0.92}
+bess_reserve_kwh = {min = 60.0, max = 60.0}
+feeder_voltage_v = {min = 480.0, max = 480.0}
+feeder_length_km = {min = 0.42, max = 0.42}
+feeder_resistance_ohm_per_km = {min = 0.32, max = 0.32}
+feeder_reactance_ohm_per_km = {min = 0.08, max = 0.08}
+feeder_power_factor = {min = 0.86, max = 0.86}
+max_voltage_drop_percent = {min = 5.0, max = 5.0}
+site_contexts = ["wastewater-energy-island", "process-blower-biogas-bess-feeder-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-10 wastewater energy island package"
+visibility = "all_given"
+archetypes = ["ssc10_wastewater_energy_island_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-10 wastewater energy island package"
+visibility = "all_given"
+archetypes = ["ssc10_wastewater_energy_island_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-10 wastewater energy island package"
+visibility = "all_given"
+archetypes = ["ssc10_wastewater_energy_island_case"]

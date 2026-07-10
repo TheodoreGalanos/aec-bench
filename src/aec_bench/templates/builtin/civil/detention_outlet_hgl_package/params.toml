@@ -1,0 +1,268 @@
+[meta]
+name = "detention-outlet-hgl-package"
+description = "SSC-03 detention, outlet-control, and HGL stormwater metrics"
+long_description = "Calculates source-bound stormwater detention and outlet-control metrics from a deterministic SSC-03 task-owned source pack. The template combines Rational Method peak flow, simplified triangular-hydrograph detention storage, basin storage volume, orifice release, emergency weir release, freeboard, downstream HGL clearance, and an overall synthetic pass score."
+discipline = "civil"
+category = "stormwater-detention"
+standards = ["EPA SWMM", "FHWA HEC-22", "HEC-HMS", "stormwater detention outlet workflows"]
+tags = ["civil", "stormwater", "detention", "outlet-control", "hgl", "orifice", "weir", "deterministic"]
+tool_mode = "with-tool"
+
+[params.catchment_area_ha]
+type = "float"
+unit = "ha"
+description = "CATCH-03-DET-01 total contributing catchment area"
+min = 6.4
+max = 6.4
+
+[params.runoff_coefficient]
+type = "float"
+description = "CATCH-03-DET-01 composite runoff coefficient"
+min = 0.72
+max = 0.72
+
+[params.rainfall_intensity_mm_h]
+type = "float"
+unit = "mm/h"
+description = "RAIN-03-IDF-10YR base rainfall intensity"
+min = 78.0
+max = 78.0
+
+[params.climate_factor]
+type = "float"
+description = "RAIN-03-IDF-10YR source-owned climate factor applied to intensity"
+min = 1.10
+max = 1.10
+
+[params.allowable_release_rate_m3_s]
+type = "float"
+unit = "m3/s"
+description = "Criteria target for controlled detention discharge"
+min = 0.42
+max = 0.42
+
+[params.storm_duration_hr]
+type = "float"
+unit = "h"
+description = "RAIN-03-IDF-10YR storm duration used for the triangular hydrograph"
+min = 2.0
+max = 2.0
+
+[params.storage_bottom_area_m2]
+type = "float"
+unit = "m2"
+description = "DET-03-BASIN-01 bottom area at active storage base"
+min = 640.0
+max = 640.0
+
+[params.storage_top_area_m2]
+type = "float"
+unit = "m2"
+description = "DET-03-BASIN-01 top area at active storage depth"
+min = 1040.0
+max = 1040.0
+
+[params.active_storage_depth_m]
+type = "float"
+unit = "m"
+description = "DET-03-BASIN-01 active storage depth"
+min = 1.2
+max = 1.2
+
+[params.orifice_diameter_mm]
+type = "float"
+unit = "mm"
+description = "OUT-03-ORIFICE-01 selected low-flow orifice diameter"
+min = 420.0
+max = 420.0
+
+[params.orifice_discharge_coefficient]
+type = "float"
+description = "OUT-03-ORIFICE-01 discharge coefficient"
+min = 0.61
+max = 0.61
+
+[params.orifice_head_m]
+type = "float"
+unit = "m"
+description = "Head over OUT-03-ORIFICE-01 centreline at design water surface"
+min = 1.05
+max = 1.05
+
+[params.major_event_peak_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "REPORT-03-SWMMTRACE-01 major event peak flow for emergency weir check"
+min = 1.28
+max = 1.28
+
+[params.emergency_weir_length_m]
+type = "float"
+unit = "m"
+description = "OUT-03-WEIR-01 clear crest length"
+min = 2.4
+max = 2.4
+
+[params.emergency_weir_head_m]
+type = "float"
+unit = "m"
+description = "Head over OUT-03-WEIR-01 during the major event check"
+min = 0.28
+max = 0.28
+
+[params.weir_discharge_coefficient]
+type = "float"
+description = "OUT-03-WEIR-01 source-owned weir discharge coefficient"
+min = 0.62
+max = 0.62
+
+[params.basin_bottom_elevation_m]
+type = "float"
+unit = "m"
+description = "DET-03-BASIN-01 basin bottom elevation"
+min = 41.05
+max = 41.05
+
+[params.embankment_crest_elevation_m]
+type = "float"
+unit = "m"
+description = "DET-03-BASIN-01 embankment crest elevation"
+min = 42.55
+max = 42.55
+
+[params.minimum_freeboard_m]
+type = "float"
+unit = "m"
+description = "Minimum required basin freeboard"
+min = 0.25
+max = 0.25
+
+[params.downstream_tailwater_elevation_m]
+type = "float"
+unit = "m"
+description = "HGL-03-OUTLET-01 downstream tailwater elevation"
+min = 41.20
+max = 41.20
+
+[params.outlet_loss_m]
+type = "float"
+unit = "m"
+description = "HGL-03-OUTLET-01 outlet loss added to tailwater"
+min = 0.18
+max = 0.18
+
+[params.downstream_rim_elevation_m]
+type = "float"
+unit = "m"
+description = "HGL-03-OUTLET-01 downstream access/rim elevation for HGL clearance"
+min = 41.65
+max = 41.65
+
+[outputs.adjusted_rainfall_intensity_mm_h]
+description = "Rainfall intensity after source-owned climate factor"
+tolerance = 0.03
+
+[outputs.post_development_peak_flow_m3_s]
+description = "Rational Method post-development peak flow"
+tolerance = 0.03
+
+[outputs.required_storage_volume_m3]
+description = "Required detention storage from the simplified triangular hydrograph"
+tolerance = 0.03
+
+[outputs.available_storage_volume_m3]
+description = "Available active basin storage volume from the source storage areas"
+tolerance = 0.03
+
+[outputs.storage_volume_margin_m3]
+description = "Available storage minus required storage"
+tolerance = 0.03
+
+[outputs.orifice_area_m2]
+description = "OUT-03-ORIFICE-01 selected orifice area"
+tolerance = 0.03
+
+[outputs.controlled_orifice_release_m3_s]
+description = "Controlled discharge through OUT-03-ORIFICE-01"
+tolerance = 0.03
+
+[outputs.outlet_release_margin_m3_s]
+description = "Allowable release rate minus controlled orifice release"
+tolerance = 0.03
+
+[outputs.emergency_weir_release_m3_s]
+description = "Emergency overflow capacity through OUT-03-WEIR-01"
+tolerance = 0.03
+
+[outputs.major_event_excess_flow_m3_s]
+description = "Major event peak flow remaining after controlled orifice release"
+tolerance = 0.03
+
+[outputs.emergency_weir_margin_m3_s]
+description = "Emergency weir release minus major event excess flow"
+tolerance = 0.03
+
+[outputs.design_water_surface_elevation_m]
+description = "Design water surface elevation at active storage depth"
+tolerance = 0.03
+
+[outputs.basin_freeboard_m]
+description = "Embankment crest elevation minus design water surface elevation"
+tolerance = 0.03
+
+[outputs.freeboard_margin_m]
+description = "Basin freeboard minus minimum required freeboard"
+tolerance = 0.03
+
+[outputs.downstream_hgl_m]
+description = "Downstream HGL elevation after tailwater and outlet loss"
+tolerance = 0.03
+
+[outputs.hgl_clearance_m]
+description = "Downstream rim elevation minus downstream HGL"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for the task-owned storage, outlet, freeboard, and HGL checks"
+tolerance = 0.03
+
+[archetypes.ssc03_detention_outlet_case]
+description = "Stormwater detention basin with controlled orifice, emergency weir, freeboard, and HGL clearance"
+catchment_area_ha = {min = 6.4, max = 6.4}
+runoff_coefficient = {min = 0.72, max = 0.72}
+rainfall_intensity_mm_h = {min = 78.0, max = 78.0}
+climate_factor = {min = 1.10, max = 1.10}
+allowable_release_rate_m3_s = {min = 0.42, max = 0.42}
+storm_duration_hr = {min = 2.0, max = 2.0}
+storage_bottom_area_m2 = {min = 640.0, max = 640.0}
+storage_top_area_m2 = {min = 1040.0, max = 1040.0}
+active_storage_depth_m = {min = 1.2, max = 1.2}
+orifice_diameter_mm = {min = 420.0, max = 420.0}
+orifice_discharge_coefficient = {min = 0.61, max = 0.61}
+orifice_head_m = {min = 1.05, max = 1.05}
+major_event_peak_flow_m3_s = {min = 1.28, max = 1.28}
+emergency_weir_length_m = {min = 2.4, max = 2.4}
+emergency_weir_head_m = {min = 0.28, max = 0.28}
+weir_discharge_coefficient = {min = 0.62, max = 0.62}
+basin_bottom_elevation_m = {min = 41.05, max = 41.05}
+embankment_crest_elevation_m = {min = 42.55, max = 42.55}
+minimum_freeboard_m = {min = 0.25, max = 0.25}
+downstream_tailwater_elevation_m = {min = 41.20, max = 41.20}
+outlet_loss_m = {min = 0.18, max = 0.18}
+downstream_rim_elevation_m = {min = 41.65, max = 41.65}
+site_contexts = ["detention-outlet-hgl", "stormwater-storage-control-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-03 detention outlet HGL package"
+visibility = "all_given"
+archetypes = ["ssc03_detention_outlet_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-03 detention outlet HGL package"
+visibility = "all_given"
+archetypes = ["ssc03_detention_outlet_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-03 detention outlet HGL package"
+visibility = "all_given"
+archetypes = ["ssc03_detention_outlet_case"]

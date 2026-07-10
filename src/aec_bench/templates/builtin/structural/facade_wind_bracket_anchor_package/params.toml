@@ -1,0 +1,323 @@
+[meta]
+name = "facade-wind-bracket-anchor-package"
+description = "SSC-09 facade wind, bracket, anchor, and tolerance metrics"
+long_description = "Calculates source-bound facade fixing metrics from a deterministic SSC-09 task-owned source pack. The template combines a redrawn facade pressure-zone schedule, representative body/edge/corner bracket tributary loads, bracket and anchor utilization checks, anchor geometry margins, and a bracket projection tolerance check for one compact generated task instance."
+discipline = "structural"
+category = "facade-structural"
+standards = ["EN 1991-1-4", "ASCE 7", "NVELOPE", "PROFIS", "rainscreen setout"]
+tags = ["structural", "facade", "rainscreen", "wind", "bracket", "anchor", "tolerance", "deterministic"]
+tool_mode = "with-tool"
+
+[params.basic_wind_speed_m_s]
+type = "float"
+unit = "m/s"
+description = "WIND-09-CRIT-01 basic wind speed used for the task-owned velocity-pressure calculation"
+min = 44.24461147271994
+max = 44.24461147271994
+
+[params.source_velocity_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "WIND-09-CRIT-01 source-owned velocity pressure used for the facade pressure zones"
+min = 1.2
+max = 1.2
+
+[params.body_pressure_coefficient]
+type = "float"
+description = "PRESS-09-ZONES-01 body-zone external pressure coefficient magnitude"
+min = 1.0
+max = 1.0
+
+[params.edge_pressure_coefficient]
+type = "float"
+description = "PRESS-09-ZONES-01 edge-zone external pressure coefficient magnitude"
+min = 1.5
+max = 1.5
+
+[params.corner_pressure_coefficient]
+type = "float"
+description = "PRESS-09-ZONES-01 corner-zone external pressure coefficient magnitude"
+min = 2.0
+max = 2.0
+
+[params.tributary_width_m]
+type = "float"
+unit = "m"
+description = "SUP-09-BRACKET-01 representative bracket tributary width"
+min = 0.6
+max = 0.6
+
+[params.tributary_height_m]
+type = "float"
+unit = "m"
+description = "SUP-09-BRACKET-01 representative bracket tributary height"
+min = 1.5
+max = 1.5
+
+[params.facade_dead_load_kpa]
+type = "float"
+unit = "kPa"
+description = "SUP-09-BRACKET-01 cladding and subframe dead load per facade area"
+min = 0.35
+max = 0.35
+
+[params.bracket_horizontal_resistance_kn]
+type = "float"
+unit = "kN"
+description = "SUP-09-BRACKET-01 selected bracket horizontal design resistance excerpt"
+min = 2.8
+max = 2.8
+
+[params.bracket_vertical_resistance_kn]
+type = "float"
+unit = "kN"
+description = "SUP-09-BRACKET-01 selected fixed-point bracket vertical design resistance excerpt"
+min = 1.2
+max = 1.2
+
+[params.anchor_tension_resistance_kn]
+type = "float"
+unit = "kN"
+description = "ANCH-09-CONC-01 selected concrete anchor tension resistance excerpt"
+min = 2.5
+max = 2.5
+
+[params.anchor_shear_resistance_kn]
+type = "float"
+unit = "kN"
+description = "ANCH-09-CONC-01 selected concrete anchor shear resistance excerpt"
+min = 3.0
+max = 3.0
+
+[params.anchor_embedment_mm]
+type = "float"
+unit = "mm"
+description = "ANCH-09-CONC-01 selected corner anchor embedment"
+min = 60.0
+max = 60.0
+
+[params.minimum_anchor_embedment_mm]
+type = "float"
+unit = "mm"
+description = "ANCH-09-CONC-01 minimum embedment for the selected anchor row"
+min = 60.0
+max = 60.0
+
+[params.corner_anchor_edge_distance_x_mm]
+type = "float"
+unit = "mm"
+description = "ANCH-09-CONC-01 governing corner anchor edge distance in the x direction"
+min = 85.0
+max = 85.0
+
+[params.corner_anchor_edge_distance_y_mm]
+type = "float"
+unit = "mm"
+description = "ANCH-09-CONC-01 governing corner anchor edge distance in the y direction"
+min = 140.0
+max = 140.0
+
+[params.minimum_anchor_edge_distance_mm]
+type = "float"
+unit = "mm"
+description = "ANCH-09-CONC-01 minimum edge distance for the selected anchor row"
+min = 75.0
+max = 75.0
+
+[params.corner_nearest_anchor_spacing_mm]
+type = "float"
+unit = "mm"
+description = "ANCH-09-CONC-01 nearest anchor spacing at the governing corner bracket"
+min = 160.0
+max = 160.0
+
+[params.minimum_anchor_spacing_mm]
+type = "float"
+unit = "mm"
+description = "ANCH-09-CONC-01 minimum anchor spacing for the selected anchor row"
+min = 100.0
+max = 100.0
+
+[params.nominal_cavity_depth_mm]
+type = "float"
+unit = "mm"
+description = "TOL-09-SETOUT-01 nominal cavity depth from the redrawn facade setout"
+min = 190.0
+max = 190.0
+
+[params.measured_wall_offset_mm]
+type = "float"
+unit = "mm"
+description = "TOL-09-SETOUT-01 measured substrate offset requiring bracket adjustment"
+min = 18.0
+max = 18.0
+
+[params.minimum_bracket_projection_mm]
+type = "float"
+unit = "mm"
+description = "TOL-09-SETOUT-01 lower adjustment bound for the selected bracket"
+min = 170.0
+max = 170.0
+
+[params.maximum_bracket_projection_mm]
+type = "float"
+unit = "mm"
+description = "TOL-09-SETOUT-01 upper adjustment bound for the selected bracket"
+min = 230.0
+max = 230.0
+
+[params.installation_tolerance_allowance_mm]
+type = "float"
+unit = "mm"
+description = "TOL-09-SETOUT-01 minimum remaining adjustment allowance after wall offset"
+min = 15.0
+max = 15.0
+
+[params.fixed_point_count]
+type = "int"
+description = "SUP-09-BRACKET-01 number of fixed-point bracket rows in the representative bay"
+min = 1
+max = 1
+
+[params.sliding_point_count]
+type = "int"
+description = "SUP-09-BRACKET-01 number of sliding-point bracket rows in the representative bay"
+min = 2
+max = 2
+
+[outputs.velocity_pressure_kpa]
+description = "Simplified velocity pressure from the source wind speed"
+tolerance = 0.03
+
+[outputs.body_pressure_kpa]
+description = "Body-zone facade pressure magnitude"
+tolerance = 0.03
+
+[outputs.edge_pressure_kpa]
+description = "Edge-zone facade pressure magnitude"
+tolerance = 0.03
+
+[outputs.corner_pressure_kpa]
+description = "Corner-zone facade pressure magnitude"
+tolerance = 0.03
+
+[outputs.tributary_area_m2]
+description = "Representative bracket tributary area"
+tolerance = 0.03
+
+[outputs.body_wind_load_kn]
+description = "Body-zone wind demand on one representative bracket"
+tolerance = 0.03
+
+[outputs.edge_wind_load_kn]
+description = "Edge-zone wind demand on one representative bracket"
+tolerance = 0.03
+
+[outputs.corner_wind_load_kn]
+description = "Corner-zone wind demand on one representative bracket"
+tolerance = 0.03
+
+[outputs.dead_load_per_bracket_kn]
+description = "Dead load on one representative fixed-point bracket"
+tolerance = 0.03
+
+[outputs.corner_bracket_horizontal_utilization]
+description = "Corner bracket horizontal wind utilization"
+tolerance = 0.03
+
+[outputs.corner_bracket_vertical_utilization]
+description = "Corner fixed-point vertical dead-load utilization"
+tolerance = 0.03
+
+[outputs.body_anchor_combined_utilization]
+description = "Body-zone combined anchor utilization"
+tolerance = 0.03
+
+[outputs.edge_anchor_combined_utilization]
+description = "Edge-zone combined anchor utilization"
+tolerance = 0.03
+
+[outputs.corner_anchor_combined_utilization]
+description = "Corner-zone combined anchor utilization"
+tolerance = 0.03
+
+[outputs.governing_utilization]
+description = "Maximum utilization across representative bracket and anchor checks"
+tolerance = 0.03
+
+[outputs.anchor_embedment_margin_mm]
+description = "Selected anchor embedment minus minimum embedment"
+tolerance = 0.03
+
+[outputs.anchor_edge_margin_mm]
+description = "Minimum governing edge distance margin for the selected corner anchor"
+tolerance = 0.03
+
+[outputs.anchor_spacing_margin_mm]
+description = "Selected corner anchor spacing minus minimum spacing"
+tolerance = 0.03
+
+[outputs.required_projection_mm]
+description = "Required bracket projection from nominal cavity plus measured wall offset"
+tolerance = 0.03
+
+[outputs.projection_margin_mm]
+description = "Remaining adjustment margin inside the selected bracket projection range"
+tolerance = 0.03
+
+[outputs.fixed_point_vertical_margin_kn]
+description = "Fixed-point vertical bracket resistance minus dead load"
+tolerance = 0.03
+
+[outputs.governing_row_is_corner_score]
+description = "One when the governing utilization is the corner anchor row"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "One when utilization, anchor geometry, and projection tolerance checks pass"
+tolerance = 0.03
+
+[archetypes.ssc09_facade_fixing_case]
+description = "Facade wind-zone, bracket, anchor, and tolerance package"
+basic_wind_speed_m_s = {min = 44.24461147271994, max = 44.24461147271994}
+source_velocity_pressure_kpa = {min = 1.2, max = 1.2}
+body_pressure_coefficient = {min = 1.0, max = 1.0}
+edge_pressure_coefficient = {min = 1.5, max = 1.5}
+corner_pressure_coefficient = {min = 2.0, max = 2.0}
+tributary_width_m = {min = 0.6, max = 0.6}
+tributary_height_m = {min = 1.5, max = 1.5}
+facade_dead_load_kpa = {min = 0.35, max = 0.35}
+bracket_horizontal_resistance_kn = {min = 2.8, max = 2.8}
+bracket_vertical_resistance_kn = {min = 1.2, max = 1.2}
+anchor_tension_resistance_kn = {min = 2.5, max = 2.5}
+anchor_shear_resistance_kn = {min = 3.0, max = 3.0}
+anchor_embedment_mm = {min = 60.0, max = 60.0}
+minimum_anchor_embedment_mm = {min = 60.0, max = 60.0}
+corner_anchor_edge_distance_x_mm = {min = 85.0, max = 85.0}
+corner_anchor_edge_distance_y_mm = {min = 140.0, max = 140.0}
+minimum_anchor_edge_distance_mm = {min = 75.0, max = 75.0}
+corner_nearest_anchor_spacing_mm = {min = 160.0, max = 160.0}
+minimum_anchor_spacing_mm = {min = 100.0, max = 100.0}
+nominal_cavity_depth_mm = {min = 190.0, max = 190.0}
+measured_wall_offset_mm = {min = 18.0, max = 18.0}
+minimum_bracket_projection_mm = {min = 170.0, max = 170.0}
+maximum_bracket_projection_mm = {min = 230.0, max = 230.0}
+installation_tolerance_allowance_mm = {min = 15.0, max = 15.0}
+fixed_point_count = {min = 1, max = 1}
+sliding_point_count = {min = 2, max = 2}
+site_contexts = ["redrawn-rainscreen-elevation", "bracket-anchor-setout"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-09 facade fixing package"
+visibility = "all_given"
+archetypes = ["ssc09_facade_fixing_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-09 facade fixing package"
+visibility = "all_given"
+archetypes = ["ssc09_facade_fixing_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-09 facade fixing package"
+visibility = "all_given"
+archetypes = ["ssc09_facade_fixing_case"]

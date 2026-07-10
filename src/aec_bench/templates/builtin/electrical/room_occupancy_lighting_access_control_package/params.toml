@@ -1,0 +1,193 @@
+[meta]
+name = "room-occupancy-lighting-access-control-package"
+description = "SSC-08 room occupancy, lighting energy, and access-control metrics"
+long_description = "Calculates source-bound room operations metrics from a deterministic SSC-08 task-owned source pack. The template combines occupant load, lumen-method illuminance, uniformity, lighting energy intensity, access reader capacity, backup battery requirement, and an overall synthetic pass score."
+discipline = "electrical"
+category = "room-operations"
+standards = ["occupant load workflow", "lumen method", "lighting energy review", "access control sizing"]
+tags = ["electrical", "building", "occupancy", "lighting", "access-control", "deterministic"]
+tool_mode = "with-tool"
+
+[params.room_area_m2]
+type = "float"
+unit = "m2"
+description = "ROOM-08-PLAN-02 room area"
+min = 240.0
+max = 240.0
+
+[params.area_per_occupant_m2]
+type = "float"
+unit = "m2/person"
+description = "OCC-08-SCHED-02 area per occupant"
+min = 6.0
+max = 6.0
+
+[params.luminaire_lumens]
+type = "float"
+unit = "lm"
+description = "LGT-08-LAYOUT-02 luminaire lumens"
+min = 3600.0
+max = 3600.0
+
+[params.luminaire_count]
+type = "float"
+description = "LGT-08-LAYOUT-02 luminaire count"
+min = 12.0
+max = 12.0
+
+[params.light_loss_factor]
+type = "float"
+description = "LGT-08-LAYOUT-02 light loss factor"
+min = 0.8
+max = 0.8
+
+[params.utilization_factor]
+type = "float"
+description = "LGT-08-LAYOUT-02 utilization factor"
+min = 0.65
+max = 0.65
+
+[params.minimum_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "LGT-08-LAYOUT-02 minimum illuminance"
+min = 72.0
+max = 72.0
+
+[params.target_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "MEMO-08-ROOM-02 target illuminance"
+min = 90.0
+max = 90.0
+
+[params.minimum_uniformity_ratio]
+type = "float"
+description = "MEMO-08-ROOM-02 minimum uniformity ratio"
+min = 0.7
+max = 0.7
+
+[params.luminaire_power_w]
+type = "float"
+unit = "W"
+description = "ENERGY-08-PROFILE-02 luminaire power"
+min = 32.0
+max = 32.0
+
+[params.operating_hours_per_year]
+type = "float"
+unit = "h/y"
+description = "ENERGY-08-PROFILE-02 annual operating hours"
+min = 3200.0
+max = 3200.0
+
+[params.max_leni_kwh_m2_y]
+type = "float"
+unit = "kWh/m2-y"
+description = "ENERGY-08-PROFILE-02 maximum LENI"
+min = 6.0
+max = 6.0
+
+[params.access_door_count]
+type = "float"
+description = "ACC-08-DEV-02 access door count"
+min = 3.0
+max = 3.0
+
+[params.readers_per_door]
+type = "float"
+description = "ACC-08-DEV-02 readers per door"
+min = 2.0
+max = 2.0
+
+[params.controller_reader_capacity]
+type = "float"
+description = "ACC-08-DEV-02 controller reader capacity"
+min = 8.0
+max = 8.0
+
+[params.reader_load_w]
+type = "float"
+unit = "W"
+description = "ACC-08-DEV-02 reader load"
+min = 8.0
+max = 8.0
+
+[params.controller_panel_load_w]
+type = "float"
+unit = "W"
+description = "ACC-08-DEV-02 panel load"
+min = 25.0
+max = 25.0
+
+[params.backup_runtime_h]
+type = "float"
+unit = "h"
+description = "ACC-08-DEV-02 backup runtime"
+min = 4.0
+max = 4.0
+
+[params.battery_derate_factor]
+type = "float"
+description = "ACC-08-DEV-02 battery derate factor"
+min = 0.85
+max = 0.85
+
+[outputs.design_occupants]
+description = "Ceiling of room area divided by area per occupant"
+tolerance = 0.001
+
+[outputs.average_illuminance_lux]
+description = "Average illuminance by lumen method"
+tolerance = 0.03
+
+[outputs.illuminance_margin_lux]
+description = "Average illuminance minus target illuminance"
+tolerance = 0.03
+
+[outputs.uniformity_ratio]
+description = "Minimum illuminance divided by average illuminance"
+tolerance = 0.003
+
+[outputs.lighting_power_density_w_m2]
+description = "Lighting power density"
+tolerance = 0.03
+
+[outputs.leni_kwh_m2_y]
+description = "Annual lighting energy intensity"
+tolerance = 0.03
+
+[outputs.access_reader_count]
+description = "Access reader count"
+tolerance = 0.001
+
+[outputs.access_controller_spare_points]
+description = "Controller spare reader points"
+tolerance = 0.001
+
+[outputs.access_battery_required_wh]
+description = "Required access-control backup battery energy"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when room operations checks pass"
+tolerance = 0.001
+
+[archetypes.ssc08_room_operations_case]
+description = "Room occupancy, lighting energy, and access-control case"
+site_contexts = ["ssc08-room-operations"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-08 room operations package"
+visibility = "all_given"
+archetypes = ["ssc08_room_operations_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-08 room operations package"
+visibility = "all_given"
+archetypes = ["ssc08_room_operations_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-08 room operations package"
+visibility = "all_given"
+archetypes = ["ssc08_room_operations_case"]

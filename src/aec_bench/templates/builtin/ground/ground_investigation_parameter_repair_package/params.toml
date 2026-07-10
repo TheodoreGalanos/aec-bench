@@ -1,0 +1,167 @@
+# ABOUTME: Defines the SSC-07 ground investigation parameter repair template.
+# ABOUTME: Pins one source-conflict repair, affected-check, and comment-closeout case.
+
+[meta]
+name = "ground-investigation-parameter-repair-package"
+description = "SSC-07 ground parameter repair, affected design check, and closeout metrics"
+long_description = "Calculates source-bound ground investigation repair metrics from a deterministic SSC-07 task-owned source pack. The template combines CPT/lab parameter comparison, adopted repaired phi, affected bearing, wall, and grid checks, and comment closeout."
+discipline = "ground"
+category = "ground-investigation"
+standards = ["geotechnical parameter review", "affected calculation recheck", "comment closeout"]
+tags = ["ground", "parameter-repair", "review", "cpt", "lab-test", "closeout", "deterministic"]
+tool_mode = "with-tool"
+
+[params.cpt_phi_deg]
+type = "float"
+unit = "degrees"
+description = "CPT-07-REPAIR-01 CPT-derived friction angle"
+min = 34.5
+max = 34.5
+
+[params.lab_phi_deg]
+type = "float"
+unit = "degrees"
+description = "LAB-07-REPAIR-01 lab-derived friction angle"
+min = 31.0
+max = 31.0
+
+[params.adopted_phi_deg]
+type = "float"
+unit = "degrees"
+description = "MEMO-07-REPAIR-01 adopted repaired friction angle"
+min = 31.0
+max = 31.0
+
+[params.spt_n1_60]
+type = "float"
+description = "GIR-07-REVIEW-01 reviewed corrected N1,60"
+min = 16.2
+max = 16.2
+
+[params.minimum_n1_60]
+type = "float"
+description = "CALC-07-AFFECTED-01 minimum corrected N1,60"
+min = 15.0
+max = 15.0
+
+[params.applied_bearing_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "CALC-07-AFFECTED-01 applied bearing pressure"
+min = 185.0
+max = 185.0
+
+[params.repaired_allowable_bearing_kpa]
+type = "float"
+unit = "kPa"
+description = "CALC-07-AFFECTED-01 repaired allowable bearing pressure"
+min = 210.0
+max = 210.0
+
+[params.wall_sliding_fs]
+type = "float"
+description = "CALC-07-AFFECTED-01 repaired wall sliding factor of safety"
+min = 1.62
+max = 1.62
+
+[params.minimum_wall_sliding_fs]
+type = "float"
+description = "MEMO-07-REPAIR-01 minimum wall sliding factor of safety"
+min = 1.5
+max = 1.5
+
+[params.repaired_grid_resistance_ohm]
+type = "float"
+unit = "ohm"
+description = "CALC-07-AFFECTED-01 repaired grounding grid resistance"
+min = 1.9
+max = 1.9
+
+[params.maximum_grid_resistance_ohm]
+type = "float"
+unit = "ohm"
+description = "MEMO-07-REPAIR-01 maximum grid resistance"
+min = 2.0
+max = 2.0
+
+[params.closed_comments]
+type = "float"
+unit = "count"
+description = "GIR-07-REVIEW-01 closed parameter-review comments"
+min = 6.0
+max = 6.0
+
+[params.total_comments]
+type = "float"
+unit = "count"
+description = "GIR-07-REVIEW-01 total parameter-review comments"
+min = 6.0
+max = 6.0
+
+[outputs.phi_source_delta_deg]
+description = "Absolute difference between CPT and lab friction angle values"
+tolerance = 0.03
+
+[outputs.adopted_phi_deg]
+description = "Adopted repaired friction angle"
+tolerance = 0.03
+
+[outputs.spt_n1_60_margin]
+description = "Corrected N1,60 minus minimum N1,60"
+tolerance = 0.03
+
+[outputs.bearing_utilization]
+description = "Applied bearing pressure divided by repaired allowable bearing"
+tolerance = 0.03
+
+[outputs.bearing_margin_kpa]
+description = "Repaired allowable bearing minus applied bearing pressure"
+tolerance = 0.03
+
+[outputs.wall_sliding_fs_margin]
+description = "Wall sliding factor of safety minus minimum sliding factor of safety"
+tolerance = 0.03
+
+[outputs.grid_resistance_margin_ohm]
+description = "Maximum grid resistance minus repaired grid resistance"
+tolerance = 0.03
+
+[outputs.comment_closeout_percent]
+description = "Closed comments divided by total comments"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when source adoption, affected checks, and comments pass"
+tolerance = 0.03
+
+[archetypes.ssc07_parameter_repair_case]
+description = "Ground investigation package for one parameter repair and affected-design recheck"
+cpt_phi_deg = {min = 34.5, max = 34.5}
+lab_phi_deg = {min = 31.0, max = 31.0}
+adopted_phi_deg = {min = 31.0, max = 31.0}
+spt_n1_60 = {min = 16.2, max = 16.2}
+minimum_n1_60 = {min = 15.0, max = 15.0}
+applied_bearing_pressure_kpa = {min = 185.0, max = 185.0}
+repaired_allowable_bearing_kpa = {min = 210.0, max = 210.0}
+wall_sliding_fs = {min = 1.62, max = 1.62}
+minimum_wall_sliding_fs = {min = 1.5, max = 1.5}
+repaired_grid_resistance_ohm = {min = 1.9, max = 1.9}
+maximum_grid_resistance_ohm = {min = 2.0, max = 2.0}
+closed_comments = {min = 6.0, max = 6.0}
+total_comments = {min = 6.0, max = 6.0}
+site_contexts = ["parameter-repair", "affected-design-recheck"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-07 parameter repair package"
+visibility = "all_given"
+archetypes = ["ssc07_parameter_repair_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-07 parameter repair package"
+visibility = "all_given"
+archetypes = ["ssc07_parameter_repair_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-07 parameter repair package"
+visibility = "all_given"
+archetypes = ["ssc07_parameter_repair_case"]

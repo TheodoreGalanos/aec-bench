@@ -1,0 +1,242 @@
+[meta]
+name = "coastal-pumpout-generator-autonomy-package"
+description = "SSC-04 coastal pump-out and generator autonomy metrics"
+long_description = "Calculates source-bound coastal pump-out continuity metrics from a deterministic SSC-04 task-owned source pack. The template combines flood inflow volume, pumped volume, storage margin, pump TDH and input power, emergency load, generator margin, fuel runtime, BESS runtime, access freeboard, and an overall synthetic pass score."
+discipline = "electrical"
+category = "coastal-pumpout-autonomy"
+standards = ["pump station continuity workflow", "emergency generator sizing", "fuel autonomy review", "BESS runtime review"]
+tags = ["electrical", "coastal", "pumpout", "generator", "fuel", "bess", "resilience", "deterministic"]
+tool_mode = "with-tool"
+
+[params.inflow_rate_m3_s]
+type = "float"
+unit = "m3/s"
+description = "FLOOD-04-EVENT-07 inflow rate"
+min = 0.28
+max = 0.28
+
+[params.event_duration_h]
+type = "float"
+unit = "h"
+description = "FLOOD-04-EVENT-07 event duration"
+min = 4.0
+max = 4.0
+
+[params.pump_discharge_m3_s]
+type = "float"
+unit = "m3/s"
+description = "PUMP-04-DUTY-07 pump discharge"
+min = 0.24
+max = 0.24
+
+[params.available_storage_m3]
+type = "float"
+unit = "m3"
+description = "PUMPSTA-04-SECTION-07 available storage"
+min = 700.0
+max = 700.0
+
+[params.flood_level_m]
+type = "float"
+unit = "m"
+description = "FLOOD-04-EVENT-07 flood level"
+min = 3.4
+max = 3.4
+
+[params.sump_low_level_m]
+type = "float"
+unit = "m"
+description = "PUMPSTA-04-SECTION-07 sump low level"
+min = 0.4
+max = 0.4
+
+[params.piping_losses_m]
+type = "float"
+unit = "m"
+description = "PUMP-04-DUTY-07 piping losses"
+min = 2.2
+max = 2.2
+
+[params.pump_efficiency]
+type = "float"
+description = "PUMP-04-DUTY-07 pump efficiency"
+min = 0.74
+max = 0.74
+
+[params.motor_efficiency]
+type = "float"
+description = "LOAD-04-ELEC-07 motor efficiency"
+min = 0.92
+max = 0.92
+
+[params.active_pump_count]
+type = "float"
+description = "PUMP-04-DUTY-07 active pump count"
+min = 2.0
+max = 2.0
+
+[params.controls_load_kw]
+type = "float"
+unit = "kW"
+description = "LOAD-04-ELEC-07 controls load"
+min = 3.5
+max = 3.5
+
+[params.lighting_load_kw]
+type = "float"
+unit = "kW"
+description = "LOAD-04-ELEC-07 lighting load"
+min = 1.2
+max = 1.2
+
+[params.generator_capacity_kw]
+type = "float"
+unit = "kW"
+description = "BACKUP-04-FUEL-07 generator capacity"
+min = 60.0
+max = 60.0
+
+[params.generator_derate_factor]
+type = "float"
+description = "BACKUP-04-FUEL-07 generator derate factor"
+min = 0.85
+max = 0.85
+
+[params.fuel_volume_l]
+type = "float"
+unit = "L"
+description = "BACKUP-04-FUEL-07 fuel volume"
+min = 240.0
+max = 240.0
+
+[params.fuel_consumption_l_h]
+type = "float"
+unit = "L/h"
+description = "BACKUP-04-FUEL-07 fuel consumption"
+min = 7.5
+max = 7.5
+
+[params.required_runtime_h]
+type = "float"
+unit = "h"
+description = "MEMO-04-CONTINUITY-07 required runtime"
+min = 24.0
+max = 24.0
+
+[params.bess_capacity_kwh]
+type = "float"
+unit = "kWh"
+description = "BACKUP-04-FUEL-07 BESS capacity"
+min = 80.0
+max = 80.0
+
+[params.bess_usable_fraction]
+type = "float"
+description = "BACKUP-04-FUEL-07 usable BESS fraction"
+min = 0.9
+max = 0.9
+
+[params.minimum_bess_runtime_h]
+type = "float"
+unit = "h"
+description = "MEMO-04-CONTINUITY-07 minimum BESS runtime"
+min = 1.5
+max = 1.5
+
+[params.access_elevation_m]
+type = "float"
+unit = "m"
+description = "PUMPSTA-04-SECTION-07 access elevation"
+min = 4.0
+max = 4.0
+
+[params.required_access_freeboard_m]
+type = "float"
+unit = "m"
+description = "MEMO-04-CONTINUITY-07 required access freeboard"
+min = 0.35
+max = 0.35
+
+[outputs.inflow_volume_m3]
+description = "Flood inflow volume"
+tolerance = 0.03
+
+[outputs.pumped_volume_m3]
+description = "Pumped volume during the event"
+tolerance = 0.03
+
+[outputs.storage_margin_m3]
+description = "Available storage plus pumped volume minus inflow volume"
+tolerance = 0.03
+
+[outputs.pump_total_dynamic_head_m]
+description = "Pump total dynamic head"
+tolerance = 0.03
+
+[outputs.pump_input_power_kw]
+description = "Pump input power per active pump"
+tolerance = 0.03
+
+[outputs.emergency_load_kw]
+description = "Emergency electrical load"
+tolerance = 0.03
+
+[outputs.generator_capacity_margin_kw]
+description = "Derated generator capacity minus emergency load"
+tolerance = 0.03
+
+[outputs.fuel_runtime_margin_h]
+description = "Fuel runtime minus required runtime"
+tolerance = 0.03
+
+[outputs.bess_runtime_h]
+description = "Usable BESS energy divided by emergency load"
+tolerance = 0.03
+
+[outputs.access_freeboard_margin_m]
+description = "Access elevation minus flood level and required freeboard"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when pump-out continuity checks pass"
+tolerance = 0.001
+
+[archetypes.ssc04_coastal_pumpout_case]
+description = "Coastal pump-out and generator autonomy case"
+inflow_rate_m3_s = {min = 0.28, max = 0.28}
+event_duration_h = {min = 4.0, max = 4.0}
+pump_discharge_m3_s = {min = 0.24, max = 0.24}
+available_storage_m3 = {min = 700.0, max = 700.0}
+flood_level_m = {min = 3.4, max = 3.4}
+sump_low_level_m = {min = 0.4, max = 0.4}
+piping_losses_m = {min = 2.2, max = 2.2}
+pump_efficiency = {min = 0.74, max = 0.74}
+motor_efficiency = {min = 0.92, max = 0.92}
+active_pump_count = {min = 2.0, max = 2.0}
+controls_load_kw = {min = 3.5, max = 3.5}
+lighting_load_kw = {min = 1.2, max = 1.2}
+generator_capacity_kw = {min = 60.0, max = 60.0}
+generator_derate_factor = {min = 0.85, max = 0.85}
+fuel_volume_l = {min = 240.0, max = 240.0}
+fuel_consumption_l_h = {min = 7.5, max = 7.5}
+required_runtime_h = {min = 24.0, max = 24.0}
+bess_capacity_kwh = {min = 80.0, max = 80.0}
+bess_usable_fraction = {min = 0.9, max = 0.9}
+minimum_bess_runtime_h = {min = 1.5, max = 1.5}
+access_elevation_m = {min = 4.0, max = 4.0}
+required_access_freeboard_m = {min = 0.35, max = 0.35}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-04 coastal pump-out package"
+visibility = "all_given"
+archetypes = ["ssc04_coastal_pumpout_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-04 coastal pump-out package"
+visibility = "all_given"
+archetypes = ["ssc04_coastal_pumpout_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-04 coastal pump-out package"
+visibility = "all_given"
+archetypes = ["ssc04_coastal_pumpout_case"]

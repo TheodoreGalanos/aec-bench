@@ -1,0 +1,157 @@
+[meta]
+name = "roof-drainage-pv-uplift-package"
+description = "SSC-09 roof drainage, PV layout, and wind uplift metrics"
+long_description = "Calculates source-bound roof drainage and PV uplift metrics from a deterministic SSC-09 task-owned source pack. The template combines roof runoff, gutter and downpipe capacity margins, PV wind uplift, dead load, fixing capacity margin, drainage obstruction margin, and an overall synthetic pass score."
+discipline = "civil"
+category = "roof-pv-drainage-uplift"
+standards = ["roof drainage workflows", "PV wind-uplift workflows", "roof equipment coordination"]
+tags = ["civil", "roof", "drainage", "pv", "wind-uplift", "gutter", "downpipe", "deterministic"]
+tool_mode = "with-tool"
+
+[params.roof_catchment_area_m2]
+type = "float"
+unit = "m2"
+description = "ROOF-09-CATCH-02 roof catchment area"
+min = 1450.0
+max = 1450.0
+
+[params.rainfall_intensity_mm_h]
+type = "float"
+unit = "mm/h"
+description = "ROOF-09-CATCH-02 design rainfall intensity"
+min = 150.0
+max = 150.0
+
+[params.runoff_coefficient]
+type = "float"
+description = "ROOF-09-CATCH-02 runoff coefficient"
+min = 0.95
+max = 0.95
+
+[params.gutter_capacity_l_s]
+type = "float"
+unit = "L/s"
+description = "GUTTER-09-SCHED-02 gutter capacity"
+min = 72.0
+max = 72.0
+
+[params.downpipe_count]
+type = "float"
+description = "GUTTER-09-SCHED-02 downpipe count"
+min = 6.0
+max = 6.0
+
+[params.downpipe_capacity_l_s]
+type = "float"
+unit = "L/s"
+description = "GUTTER-09-SCHED-02 capacity per downpipe"
+min = 12.5
+max = 12.5
+
+[params.pv_array_area_m2]
+type = "float"
+unit = "m2"
+description = "PV-09-LAYOUT-02 PV array area"
+min = 180.0
+max = 180.0
+
+[params.pv_uplift_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "WIND-09-UPLIFT-02 PV uplift pressure"
+min = 1.1
+max = 1.1
+
+[params.pv_dead_load_kpa]
+type = "float"
+unit = "kPa"
+description = "PV-09-LAYOUT-02 PV dead load"
+min = 0.35
+max = 0.35
+
+[params.pv_fixing_capacity_kn]
+type = "float"
+unit = "kN"
+description = "FIX-09-PV-02 PV fixing capacity"
+min = 240.0
+max = 240.0
+
+[params.drainage_obstruction_area_m2]
+type = "float"
+unit = "m2"
+description = "PV-09-LAYOUT-02 drainage obstruction area"
+min = 12.0
+max = 12.0
+
+[params.max_drainage_obstruction_area_m2]
+type = "float"
+unit = "m2"
+description = "MEMO-09-ROOF-PV-02 maximum drainage obstruction area"
+min = 18.0
+max = 18.0
+
+[outputs.roof_runoff_l_s]
+description = "Roof runoff at design rainfall"
+tolerance = 0.03
+
+[outputs.gutter_capacity_margin_l_s]
+description = "Gutter capacity minus roof runoff"
+tolerance = 0.03
+
+[outputs.downpipe_total_capacity_l_s]
+description = "Total downpipe capacity"
+tolerance = 0.03
+
+[outputs.downpipe_capacity_margin_l_s]
+description = "Downpipe capacity minus roof runoff"
+tolerance = 0.03
+
+[outputs.pv_uplift_force_kn]
+description = "PV array uplift force"
+tolerance = 0.03
+
+[outputs.pv_dead_load_kn]
+description = "PV array dead load"
+tolerance = 0.03
+
+[outputs.pv_fixing_margin_kn]
+description = "PV fixing capacity minus uplift force"
+tolerance = 0.03
+
+[outputs.drainage_obstruction_margin_m2]
+description = "Maximum obstruction area minus PV obstruction area"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when drainage, PV fixing, and obstruction checks pass"
+tolerance = 0.001
+
+[archetypes.ssc09_roof_pv_uplift_case]
+description = "Roof drainage, PV layout, and wind uplift case"
+roof_catchment_area_m2 = {min = 1450.0, max = 1450.0}
+rainfall_intensity_mm_h = {min = 150.0, max = 150.0}
+runoff_coefficient = {min = 0.95, max = 0.95}
+gutter_capacity_l_s = {min = 72.0, max = 72.0}
+downpipe_count = {min = 6.0, max = 6.0}
+downpipe_capacity_l_s = {min = 12.5, max = 12.5}
+pv_array_area_m2 = {min = 180.0, max = 180.0}
+pv_uplift_pressure_kpa = {min = 1.1, max = 1.1}
+pv_dead_load_kpa = {min = 0.35, max = 0.35}
+pv_fixing_capacity_kn = {min = 240.0, max = 240.0}
+drainage_obstruction_area_m2 = {min = 12.0, max = 12.0}
+max_drainage_obstruction_area_m2 = {min = 18.0, max = 18.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-09 roof drainage and PV uplift package"
+visibility = "all_given"
+archetypes = ["ssc09_roof_pv_uplift_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-09 roof drainage and PV uplift package"
+visibility = "all_given"
+archetypes = ["ssc09_roof_pv_uplift_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-09 roof drainage and PV uplift package"
+visibility = "all_given"
+archetypes = ["ssc09_roof_pv_uplift_case"]

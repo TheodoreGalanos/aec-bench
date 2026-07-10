@@ -1,0 +1,213 @@
+[meta]
+name = "flap-gate-tide-drainage-resilience-package"
+description = "SSC-04 flap gate, tide, drainage HGL, and resilience metrics"
+long_description = "Calculates source-bound coastal outfall drainage metrics from a deterministic SSC-04 task-owned source pack. The template combines tailwater, outlet velocity, flap gate headloss, upstream HGL, low-point margin, tide-locked storage, pump assist power, control battery margin, and an overall synthetic pass score."
+discipline = "civil"
+category = "coastal-drainage-resilience"
+standards = ["flap gate workflow", "tailwater HGL review", "coastal drainage resilience", "pump assist review"]
+tags = ["civil", "coastal", "outfall", "flap-gate", "tailwater", "hgl", "pump", "deterministic"]
+tool_mode = "with-tool"
+
+[params.pipe_diameter_m]
+type = "float"
+unit = "m"
+description = "OUTFALL-04-SECTION-04 pipe diameter"
+min = 0.75
+max = 0.75
+
+[params.design_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "DRAIN-04-UPSTREAM-04 design flow"
+min = 0.42
+max = 0.42
+
+[params.tide_level_m]
+type = "float"
+unit = "m"
+description = "TIDE-04-TAILWATER-04 tide level"
+min = 2.1
+max = 2.1
+
+[params.surge_allowance_m]
+type = "float"
+unit = "m"
+description = "TIDE-04-TAILWATER-04 surge allowance"
+min = 0.7
+max = 0.7
+
+[params.outfall_invert_m]
+type = "float"
+unit = "m"
+description = "OUTFALL-04-SECTION-04 outfall invert"
+min = 1.2
+max = 1.2
+
+[params.flap_gate_loss_coefficient]
+type = "float"
+description = "FLAP-04-DATA-04 flap gate loss coefficient"
+min = 2.5
+max = 2.5
+
+[params.pipe_friction_loss_m]
+type = "float"
+unit = "m"
+description = "DRAIN-04-UPSTREAM-04 pipe friction loss"
+min = 0.25
+max = 0.25
+
+[params.road_low_point_level_m]
+type = "float"
+unit = "m"
+description = "DRAIN-04-UPSTREAM-04 road low point level"
+min = 3.45
+max = 3.45
+
+[params.incoming_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "DRAIN-04-UPSTREAM-04 incoming flow during tide lock"
+min = 0.42
+max = 0.42
+
+[params.gravity_relief_capacity_m3_s]
+type = "float"
+unit = "m3/s"
+description = "FLAP-04-DATA-04 gravity relief capacity during tailwater event"
+min = 0.35
+max = 0.35
+
+[params.tide_locked_duration_h]
+type = "float"
+unit = "h"
+description = "TIDE-04-TAILWATER-04 tide locked duration"
+min = 2.5
+max = 2.5
+
+[params.backup_storage_m3]
+type = "float"
+unit = "m3"
+description = "DRAIN-04-UPSTREAM-04 backup storage"
+min = 800.0
+max = 800.0
+
+[params.pump_assist_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "PUMP-04-CONTROL-04 pump assist flow"
+min = 0.12
+max = 0.12
+
+[params.pump_assist_head_m]
+type = "float"
+unit = "m"
+description = "PUMP-04-CONTROL-04 pump assist head"
+min = 3.0
+max = 3.0
+
+[params.pump_efficiency]
+type = "float"
+description = "PUMP-04-CONTROL-04 pump efficiency"
+min = 0.7
+max = 0.7
+
+[params.control_battery_capacity_kwh]
+type = "float"
+unit = "kWh"
+description = "PUMP-04-CONTROL-04 control battery capacity"
+min = 18.0
+max = 18.0
+
+[params.control_load_kw]
+type = "float"
+unit = "kW"
+description = "PUMP-04-CONTROL-04 control load"
+min = 4.0
+max = 4.0
+
+[params.required_control_runtime_h]
+type = "float"
+unit = "h"
+description = "PUMP-04-CONTROL-04 required control runtime"
+min = 3.0
+max = 3.0
+
+[outputs.pipe_area_m2]
+description = "Circular outfall pipe area"
+tolerance = 0.03
+
+[outputs.outlet_velocity_m_s]
+description = "Design flow divided by pipe area"
+tolerance = 0.03
+
+[outputs.tailwater_level_m]
+description = "Tide level plus surge allowance"
+tolerance = 0.03
+
+[outputs.outfall_submergence_depth_m]
+description = "Tailwater level minus outfall invert, clipped at zero"
+tolerance = 0.03
+
+[outputs.flap_gate_headloss_m]
+description = "Flap gate local headloss"
+tolerance = 0.03
+
+[outputs.upstream_hgl_m]
+description = "Tailwater, flap gate, and pipe loss HGL"
+tolerance = 0.03
+
+[outputs.road_low_point_hgl_margin_m]
+description = "Road low point level minus upstream HGL"
+tolerance = 0.03
+
+[outputs.storage_margin_m3]
+description = "Backup storage minus blocked volume"
+tolerance = 0.03
+
+[outputs.pump_input_power_kw]
+description = "Pump assist input power"
+tolerance = 0.03
+
+[outputs.control_battery_margin_kwh]
+description = "Battery capacity minus required control energy"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when drainage resilience checks pass"
+tolerance = 0.001
+
+[archetypes.ssc04_flap_gate_resilience_case]
+description = "Flap gate tide drainage resilience case"
+pipe_diameter_m = {min = 0.75, max = 0.75}
+design_flow_m3_s = {min = 0.42, max = 0.42}
+tide_level_m = {min = 2.1, max = 2.1}
+surge_allowance_m = {min = 0.7, max = 0.7}
+outfall_invert_m = {min = 1.2, max = 1.2}
+flap_gate_loss_coefficient = {min = 2.5, max = 2.5}
+pipe_friction_loss_m = {min = 0.25, max = 0.25}
+road_low_point_level_m = {min = 3.45, max = 3.45}
+incoming_flow_m3_s = {min = 0.42, max = 0.42}
+gravity_relief_capacity_m3_s = {min = 0.35, max = 0.35}
+tide_locked_duration_h = {min = 2.5, max = 2.5}
+backup_storage_m3 = {min = 800.0, max = 800.0}
+pump_assist_flow_m3_s = {min = 0.12, max = 0.12}
+pump_assist_head_m = {min = 3.0, max = 3.0}
+pump_efficiency = {min = 0.7, max = 0.7}
+control_battery_capacity_kwh = {min = 18.0, max = 18.0}
+control_load_kw = {min = 4.0, max = 4.0}
+required_control_runtime_h = {min = 3.0, max = 3.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-04 flap gate resilience package"
+visibility = "all_given"
+archetypes = ["ssc04_flap_gate_resilience_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-04 flap gate resilience package"
+visibility = "all_given"
+archetypes = ["ssc04_flap_gate_resilience_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-04 flap gate resilience package"
+visibility = "all_given"
+archetypes = ["ssc04_flap_gate_resilience_case"]

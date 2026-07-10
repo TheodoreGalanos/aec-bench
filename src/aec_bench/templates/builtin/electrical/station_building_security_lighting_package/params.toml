@@ -1,0 +1,231 @@
+# ABOUTME: Defines the SSC-13 station/building security lighting template.
+# ABOUTME: Pins one task-owned station security source pack and expected outputs.
+
+[meta]
+name = "station-building-security-lighting-package"
+description = "SSC-13 station/building lighting, CCTV, access, network, and PoE checks"
+long_description = "Calculates source-bound security lighting metrics from a deterministic SSC-13 task-owned source pack. The template combines a floor plan, lighting grid, CCTV schedule, access-control schedule, network topology, and PoE budget."
+discipline = "electrical"
+category = "security-lighting"
+standards = ["lighting calculation workflow", "CCTV coverage workflow", "access-control schedule review", "PoE budget review"]
+tags = ["electrical", "lighting", "security", "cctv", "access-control", "network", "poe", "deterministic"]
+tool_mode = "with-tool"
+
+[params.grid_lux_01]
+type = "float"
+unit = "lux"
+description = "LIGHT-13-GRID-02 grid point 01"
+min = 210.0
+max = 210.0
+
+[params.grid_lux_02]
+type = "float"
+unit = "lux"
+description = "LIGHT-13-GRID-02 grid point 02"
+min = 205.0
+max = 205.0
+
+[params.grid_lux_03]
+type = "float"
+unit = "lux"
+description = "LIGHT-13-GRID-02 grid point 03"
+min = 198.0
+max = 198.0
+
+[params.grid_lux_04]
+type = "float"
+unit = "lux"
+description = "LIGHT-13-GRID-02 grid point 04"
+min = 215.0
+max = 215.0
+
+[params.grid_lux_05]
+type = "float"
+unit = "lux"
+description = "LIGHT-13-GRID-02 grid point 05"
+min = 202.0
+max = 202.0
+
+[params.grid_lux_06]
+type = "float"
+unit = "lux"
+description = "LIGHT-13-GRID-02 grid point 06"
+min = 196.0
+max = 196.0
+
+[params.required_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "MEMO-13-SECURITY-02 required maintained illuminance"
+min = 160.0
+max = 160.0
+
+[params.cctv_horizontal_pixels]
+type = "float"
+unit = "px"
+description = "CCTV-13-CAM-02 horizontal pixel count"
+min = 1920.0
+max = 1920.0
+
+[params.cctv_target_width_m]
+type = "float"
+unit = "m"
+description = "PLAN-13-ROOM-02 target-zone width"
+min = 12.0
+max = 12.0
+
+[params.required_ppm]
+type = "float"
+description = "MEMO-13-SECURITY-02 required pixels per metre"
+min = 120.0
+max = 120.0
+
+[params.camera_count]
+type = "float"
+unit = "count"
+description = "CCTV-13-CAM-02 camera count"
+min = 4.0
+max = 4.0
+
+[params.camera_network_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-13-TOPO-02 network load per camera"
+min = 5.0
+max = 5.0
+
+[params.access_network_mbps]
+type = "float"
+unit = "Mbps"
+description = "ACCESS-13-CTRL-02 access network load"
+min = 1.5
+max = 1.5
+
+[params.lighting_control_network_mbps]
+type = "float"
+unit = "Mbps"
+description = "LIGHT-13-GRID-02 lighting controller network load"
+min = 0.5
+max = 0.5
+
+[params.network_overhead_factor]
+type = "float"
+description = "NET-13-TOPO-02 network overhead factor"
+min = 1.15
+max = 1.15
+
+[params.uplink_capacity_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-13-TOPO-02 uplink capacity"
+min = 50.0
+max = 50.0
+
+[params.camera_poe_w]
+type = "float"
+unit = "W"
+description = "CCTV-13-CAM-02 PoE load per camera"
+min = 12.5
+max = 12.5
+
+[params.access_controller_count]
+type = "float"
+unit = "count"
+description = "ACCESS-13-CTRL-02 controller count"
+min = 3.0
+max = 3.0
+
+[params.access_controller_poe_w]
+type = "float"
+unit = "W"
+description = "ACCESS-13-CTRL-02 PoE load per controller"
+min = 8.0
+max = 8.0
+
+[params.poe_budget_w]
+type = "float"
+unit = "W"
+description = "NET-13-TOPO-02 PoE switch budget"
+min = 120.0
+max = 120.0
+
+[params.matched_coverage_zones]
+type = "float"
+unit = "count"
+description = "MEMO-13-SECURITY-02 matched coverage zones"
+min = 6.0
+max = 6.0
+
+[params.required_coverage_zones]
+type = "float"
+unit = "count"
+description = "MEMO-13-SECURITY-02 required coverage zones"
+min = 6.0
+max = 6.0
+
+[outputs.average_illuminance_lux]
+description = "Average illuminance across the station/security grid"
+tolerance = 0.003
+
+[outputs.minimum_illuminance_lux]
+description = "Minimum illuminance across the station/security grid"
+tolerance = 0.003
+
+[outputs.uniformity_ratio]
+description = "Minimum illuminance divided by average illuminance"
+tolerance = 0.003
+
+[outputs.illuminance_margin_lux]
+description = "Average illuminance minus required illuminance"
+tolerance = 0.003
+
+[outputs.cctv_pixels_per_m]
+description = "CCTV pixels per metre"
+tolerance = 0.003
+
+[outputs.cctv_ppm_margin]
+description = "CCTV PPM minus required PPM"
+tolerance = 0.003
+
+[outputs.network_load_mbps]
+description = "Network load including overhead"
+tolerance = 0.003
+
+[outputs.network_headroom_mbps]
+description = "Uplink capacity minus network load"
+tolerance = 0.003
+
+[outputs.poe_load_w]
+description = "Total camera and access-control PoE load"
+tolerance = 0.003
+
+[outputs.poe_headroom_w]
+description = "PoE budget minus load"
+tolerance = 0.003
+
+[outputs.coverage_match_fraction]
+description = "Matched coverage zones divided by required zones"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when lighting, CCTV, network, PoE, and coverage checks pass"
+tolerance = 0.001
+
+[archetypes.ssc13_station_security_case]
+description = "Station/building security lighting case"
+site_contexts = ["ssc13-station-security"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-13 station security package"
+visibility = "all_given"
+archetypes = ["ssc13_station_security_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-13 station security package"
+visibility = "all_given"
+archetypes = ["ssc13_station_security_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-13 station security package"
+visibility = "all_given"
+archetypes = ["ssc13_station_security_case"]

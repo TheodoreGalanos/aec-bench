@@ -1,0 +1,236 @@
+[meta]
+name = "fire-pump-power-control-resilience-package"
+description = "SSC-19 fire pump fuel, power, and control resilience metrics"
+long_description = "Calculates source-bound fire pump resilience metrics from a deterministic SSC-19 task-owned source pack. The template combines water horsepower, brake horsepower, motor margin, fuel runtime, control battery energy, feeder voltage drop, fire-flow margin, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "fire-pump-resilience"
+standards = ["fire pump workflows", "emergency power workflows", "feeder voltage-drop workflows"]
+tags = ["mechanical", "fire-pump", "fuel", "power", "controls", "feeder", "resilience", "deterministic"]
+tool_mode = "with-tool"
+
+[params.pump_flow_gpm]
+type = "float"
+unit = "gpm"
+description = "PUMP-19-CURVE-06 pump flow"
+min = 1000.0
+max = 1000.0
+
+[params.pump_head_psi]
+type = "float"
+unit = "psi"
+description = "PUMP-19-CURVE-06 pump head"
+min = 90.0
+max = 90.0
+
+[params.pump_efficiency]
+type = "float"
+description = "PUMP-19-CURVE-06 pump efficiency"
+min = 0.72
+max = 0.72
+
+[params.motor_efficiency]
+type = "float"
+description = "MOTOR-19-FUEL-06 motor efficiency"
+min = 0.94
+max = 0.94
+
+[params.selected_motor_hp]
+type = "float"
+unit = "hp"
+description = "MOTOR-19-FUEL-06 selected motor size"
+min = 125.0
+max = 125.0
+
+[params.fuel_rate_gal_h]
+type = "float"
+unit = "gal/h"
+description = "MOTOR-19-FUEL-06 fuel rate"
+min = 7.2
+max = 7.2
+
+[params.required_runtime_h]
+type = "float"
+unit = "h"
+description = "CRIT-19-AUTH-06 required runtime"
+min = 8.0
+max = 8.0
+
+[params.fuel_tank_gal]
+type = "float"
+unit = "gal"
+description = "MOTOR-19-FUEL-06 fuel tank volume"
+min = 70.0
+max = 70.0
+
+[params.controller_load_kw]
+type = "float"
+unit = "kW"
+description = "CTRL-19-LOAD-06 controller load"
+min = 1.2
+max = 1.2
+
+[params.jockey_pump_load_kw]
+type = "float"
+unit = "kW"
+description = "CTRL-19-LOAD-06 jockey pump control load"
+min = 0.8
+max = 0.8
+
+[params.battery_voltage_v]
+type = "float"
+unit = "V"
+description = "CTRL-19-LOAD-06 battery voltage"
+min = 24.0
+max = 24.0
+
+[params.battery_capacity_ah]
+type = "float"
+unit = "Ah"
+description = "CTRL-19-LOAD-06 battery capacity"
+min = 900.0
+max = 900.0
+
+[params.usable_battery_fraction]
+type = "float"
+description = "CTRL-19-LOAD-06 usable battery fraction"
+min = 0.8
+max = 0.8
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "CTRL-19-LOAD-06 feeder voltage"
+min = 480.0
+max = 480.0
+
+[params.feeder_current_a]
+type = "float"
+unit = "A"
+description = "CTRL-19-LOAD-06 feeder current"
+min = 140.0
+max = 140.0
+
+[params.feeder_length_m]
+type = "float"
+unit = "m"
+description = "CTRL-19-LOAD-06 feeder length"
+min = 80.0
+max = 80.0
+
+[params.conductor_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "CTRL-19-LOAD-06 conductor resistance"
+min = 0.25
+max = 0.25
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "CRIT-19-AUTH-06 maximum voltage drop"
+min = 3.0
+max = 3.0
+
+[params.available_fire_flow_gpm]
+type = "float"
+unit = "gpm"
+description = "SUPPLY-19-CURVE-06 available fire flow"
+min = 1350.0
+max = 1350.0
+
+[params.required_fire_flow_gpm]
+type = "float"
+unit = "gpm"
+description = "SUPPLY-19-CURVE-06 required fire flow"
+min = 1000.0
+max = 1000.0
+
+[outputs.water_horsepower_hp]
+description = "Water horsepower from flow and head"
+tolerance = 0.03
+
+[outputs.brake_horsepower_hp]
+description = "Brake horsepower after pump efficiency"
+tolerance = 0.03
+
+[outputs.motor_input_hp]
+description = "Motor input horsepower after motor efficiency"
+tolerance = 0.03
+
+[outputs.motor_margin_hp]
+description = "Selected motor horsepower minus input horsepower"
+tolerance = 0.03
+
+[outputs.fuel_required_gal]
+description = "Fuel required for the required runtime"
+tolerance = 0.03
+
+[outputs.fuel_margin_gal]
+description = "Fuel tank volume minus required fuel"
+tolerance = 0.03
+
+[outputs.control_energy_required_kwh]
+description = "Controller and jockey load energy"
+tolerance = 0.03
+
+[outputs.battery_energy_available_kwh]
+description = "Usable battery energy"
+tolerance = 0.03
+
+[outputs.battery_energy_margin_kwh]
+description = "Usable battery energy minus required control energy"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "Three-phase feeder voltage drop"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Maximum voltage drop minus calculated voltage drop"
+tolerance = 0.03
+
+[outputs.fire_flow_margin_gpm]
+description = "Available fire flow minus required fire flow"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when motor, fuel, battery, voltage-drop, and flow margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc19_fire_pump_resilience_case]
+description = "Fire pump resilience case with fuel, control battery, voltage drop, and flow checks"
+pump_flow_gpm = {min = 1000.0, max = 1000.0}
+pump_head_psi = {min = 90.0, max = 90.0}
+pump_efficiency = {min = 0.72, max = 0.72}
+motor_efficiency = {min = 0.94, max = 0.94}
+selected_motor_hp = {min = 125.0, max = 125.0}
+fuel_rate_gal_h = {min = 7.2, max = 7.2}
+required_runtime_h = {min = 8.0, max = 8.0}
+fuel_tank_gal = {min = 70.0, max = 70.0}
+controller_load_kw = {min = 1.2, max = 1.2}
+jockey_pump_load_kw = {min = 0.8, max = 0.8}
+battery_voltage_v = {min = 24.0, max = 24.0}
+battery_capacity_ah = {min = 900.0, max = 900.0}
+usable_battery_fraction = {min = 0.8, max = 0.8}
+feeder_voltage_v = {min = 480.0, max = 480.0}
+feeder_current_a = {min = 140.0, max = 140.0}
+feeder_length_m = {min = 80.0, max = 80.0}
+conductor_resistance_ohm_km = {min = 0.25, max = 0.25}
+max_voltage_drop_percent = {min = 3.0, max = 3.0}
+available_fire_flow_gpm = {min = 1350.0, max = 1350.0}
+required_fire_flow_gpm = {min = 1000.0, max = 1000.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-19 fire pump resilience package"
+visibility = "all_given"
+archetypes = ["ssc19_fire_pump_resilience_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-19 fire pump resilience package"
+visibility = "all_given"
+archetypes = ["ssc19_fire_pump_resilience_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-19 fire pump resilience package"
+visibility = "all_given"
+archetypes = ["ssc19_fire_pump_resilience_case"]

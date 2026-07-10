@@ -1,0 +1,181 @@
+[meta]
+name = "construction-noise-vibration-monitoring-package"
+description = "SSC-12 construction noise and vibration monitoring metrics"
+long_description = "Calculates source-bound construction noise, vibration, telemetry, and action-response metrics from a deterministic SSC-12 task-owned source pack."
+discipline = "mechanical"
+category = "construction-monitoring"
+standards = ["construction monitoring workflow", "FTA noise and vibration screening workflow"]
+tags = ["mechanical", "acoustics", "vibration", "construction", "monitoring", "deterministic"]
+tool_mode = "with-tool"
+
+[params.source_sound_power_dba]
+type = "float"
+unit = "dBA"
+description = "EQUIP-12-SOURCE-04 construction source sound power"
+min = 105.0
+max = 105.0
+
+[params.receiver_distance_m]
+type = "float"
+unit = "m"
+description = "RCV-12-MAP-04 receiver distance"
+min = 95.0
+max = 95.0
+
+[params.barrier_insertion_loss_db]
+type = "float"
+unit = "dB"
+description = "STAGE-12-CONST-04 temporary barrier insertion loss"
+min = 8.0
+max = 8.0
+
+[params.background_level_dba]
+type = "float"
+unit = "dBA"
+description = "RCV-12-MAP-04 background level"
+min = 49.0
+max = 49.0
+
+[params.noise_action_threshold_dba]
+type = "float"
+unit = "dBA"
+description = "MON-12-CRIT-04 noise action threshold"
+min = 65.0
+max = 65.0
+
+[params.forcing_frequency_hz]
+type = "float"
+unit = "Hz"
+description = "EQUIP-12-SOURCE-04 vibration forcing frequency"
+min = 28.0
+max = 28.0
+
+[params.ground_natural_frequency_hz]
+type = "float"
+unit = "Hz"
+description = "RCV-12-MAP-04 source path natural frequency"
+min = 10.0
+max = 10.0
+
+[params.damping_ratio]
+type = "float"
+description = "RCV-12-MAP-04 path damping ratio"
+min = 0.05
+max = 0.05
+
+[params.source_vibration_velocity_mm_s]
+type = "float"
+unit = "mm/s"
+description = "EQUIP-12-SOURCE-04 source vibration velocity"
+min = 4.5
+max = 4.5
+
+[params.vibration_path_factor]
+type = "float"
+description = "RCV-12-MAP-04 vibration path factor"
+min = 0.42
+max = 0.42
+
+[params.vibration_action_threshold_mm_s]
+type = "float"
+unit = "mm/s"
+description = "MON-12-CRIT-04 vibration action threshold"
+min = 2.0
+max = 2.0
+
+[params.telemetry_capacity_mb_day]
+type = "float"
+unit = "MB/d"
+description = "MON-12-CRIT-04 telemetry capacity"
+min = 320.0
+max = 320.0
+
+[params.telemetry_load_mb_day]
+type = "float"
+unit = "MB/d"
+description = "MON-12-CRIT-04 telemetry load"
+min = 245.0
+max = 245.0
+
+[params.allowed_response_h]
+type = "float"
+unit = "h"
+description = "LOG-12-ACTION-04 allowed complaint response time"
+min = 24.0
+max = 24.0
+
+[params.planned_response_h]
+type = "float"
+unit = "h"
+description = "LOG-12-ACTION-04 planned complaint response time"
+min = 16.0
+max = 16.0
+
+[outputs.receiver_construction_noise_dba]
+description = "Construction source level at receiver after distance and barrier loss"
+tolerance = 0.003
+
+[outputs.combined_construction_noise_dba]
+description = "Logarithmic sum of construction receiver noise and background"
+tolerance = 0.003
+
+[outputs.noise_action_margin_db]
+description = "Noise action threshold minus combined construction level"
+tolerance = 0.003
+
+[outputs.vibration_transmissibility]
+description = "Damped vibration transmissibility through the construction path"
+tolerance = 0.003
+
+[outputs.receiver_vibration_velocity_mm_s]
+description = "Receiver vibration velocity"
+tolerance = 0.003
+
+[outputs.vibration_action_margin_mm_s]
+description = "Vibration action threshold minus receiver vibration velocity"
+tolerance = 0.003
+
+[outputs.monitoring_data_headroom_mb]
+description = "Telemetry capacity minus daily telemetry load"
+tolerance = 0.003
+
+[outputs.complaint_response_margin_h]
+description = "Allowed response time minus planned response time"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when noise, vibration, telemetry, and response checks pass"
+tolerance = 0.001
+
+[archetypes.ssc12_construction_monitoring_case]
+description = "Construction noise and vibration monitoring case"
+source_sound_power_dba = {min = 105.0, max = 105.0}
+receiver_distance_m = {min = 95.0, max = 95.0}
+barrier_insertion_loss_db = {min = 8.0, max = 8.0}
+background_level_dba = {min = 49.0, max = 49.0}
+noise_action_threshold_dba = {min = 65.0, max = 65.0}
+forcing_frequency_hz = {min = 28.0, max = 28.0}
+ground_natural_frequency_hz = {min = 10.0, max = 10.0}
+damping_ratio = {min = 0.05, max = 0.05}
+source_vibration_velocity_mm_s = {min = 4.5, max = 4.5}
+vibration_path_factor = {min = 0.42, max = 0.42}
+vibration_action_threshold_mm_s = {min = 2.0, max = 2.0}
+telemetry_capacity_mb_day = {min = 320.0, max = 320.0}
+telemetry_load_mb_day = {min = 245.0, max = 245.0}
+allowed_response_h = {min = 24.0, max = 24.0}
+planned_response_h = {min = 16.0, max = 16.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-12 construction monitoring package"
+visibility = "all_given"
+archetypes = ["ssc12_construction_monitoring_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-12 construction monitoring package"
+visibility = "all_given"
+archetypes = ["ssc12_construction_monitoring_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-12 construction monitoring package"
+visibility = "all_given"
+archetypes = ["ssc12_construction_monitoring_case"]

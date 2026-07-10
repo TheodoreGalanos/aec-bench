@@ -1,0 +1,195 @@
+[meta]
+name = "pedestrian-clearance-forecourt-signal-interface-package"
+description = "SSC-08 pedestrian clearance, forecourt, and signal interface metrics"
+long_description = "Calculates source-bound forecourt interface metrics from a deterministic SSC-08 task-owned source pack. The template combines pedestrian clearance timing, all-red timing, forecourt density, discharge width, forecourt illuminance, and an overall synthetic pass score."
+discipline = "civil"
+category = "pedestrian-forecourt-interface"
+standards = ["pedestrian clearance workflow", "traffic signal all-red workflow", "forecourt density review", "lighting review"]
+tags = ["civil", "building", "pedestrian", "forecourt", "signal", "lighting", "deterministic"]
+tool_mode = "with-tool"
+
+[params.crossing_length_m]
+type = "float"
+unit = "m"
+description = "SIGNAL-08-TIMING-07 crossing length"
+min = 18.0
+max = 18.0
+
+[params.pedestrian_speed_m_s]
+type = "float"
+unit = "m/s"
+description = "AUTH-08-ROAD-07 pedestrian speed"
+min = 1.2
+max = 1.2
+
+[params.startup_time_s]
+type = "float"
+unit = "s"
+description = "AUTH-08-ROAD-07 startup time"
+min = 3.0
+max = 3.0
+
+[params.provided_pedestrian_phase_s]
+type = "float"
+unit = "s"
+description = "SIGNAL-08-TIMING-07 provided pedestrian phase"
+min = 24.0
+max = 24.0
+
+[params.approach_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "SIGNAL-08-TIMING-07 approach speed"
+min = 50.0
+max = 50.0
+
+[params.crossing_width_m]
+type = "float"
+unit = "m"
+description = "FORECOURT-08-PLAN-07 crossing width"
+min = 10.0
+max = 10.0
+
+[params.reaction_time_s]
+type = "float"
+unit = "s"
+description = "AUTH-08-ROAD-07 reaction time"
+min = 1.0
+max = 1.0
+
+[params.provided_all_red_s]
+type = "float"
+unit = "s"
+description = "SIGNAL-08-TIMING-07 provided all-red time"
+min = 3.0
+max = 3.0
+
+[params.forecourt_area_m2]
+type = "float"
+unit = "m2"
+description = "FORECOURT-08-PLAN-07 forecourt area"
+min = 260.0
+max = 260.0
+
+[params.peak_forecourt_demand_persons]
+type = "float"
+unit = "persons"
+description = "PED-08-DEMAND-07 peak forecourt demand"
+min = 390.0
+max = 390.0
+
+[params.maximum_forecourt_density_person_m2]
+type = "float"
+unit = "persons/m2"
+description = "PED-08-DEMAND-07 maximum forecourt density"
+min = 2.0
+max = 2.0
+
+[params.discharge_width_factor_mm_per_person]
+type = "float"
+unit = "mm/person"
+description = "PED-08-DEMAND-07 discharge width factor"
+min = 5.0
+max = 5.0
+
+[params.provided_discharge_width_mm]
+type = "float"
+unit = "mm"
+description = "FORECOURT-08-PLAN-07 provided discharge width"
+min = 2400.0
+max = 2400.0
+
+[params.luminaire_lumens]
+type = "float"
+unit = "lm"
+description = "LIGHT-08-LAYOUT-07 luminaire lumens"
+min = 9000.0
+max = 9000.0
+
+[params.luminaire_count]
+type = "float"
+description = "LIGHT-08-LAYOUT-07 luminaire count"
+min = 4.0
+max = 4.0
+
+[params.light_loss_factor]
+type = "float"
+description = "LIGHT-08-LAYOUT-07 light loss factor"
+min = 0.8
+max = 0.8
+
+[params.utilization_factor]
+type = "float"
+description = "LIGHT-08-LAYOUT-07 utilization factor"
+min = 0.6
+max = 0.6
+
+[params.target_illuminance_lux]
+type = "float"
+unit = "lux"
+description = "LIGHT-08-LAYOUT-07 target illuminance"
+min = 50.0
+max = 50.0
+
+[outputs.pedestrian_clearance_time_s]
+description = "Pedestrian clearance time"
+tolerance = 0.03
+
+[outputs.pedestrian_phase_margin_s]
+description = "Provided phase minus pedestrian clearance time"
+tolerance = 0.03
+
+[outputs.all_red_time_s]
+description = "All-red time"
+tolerance = 0.03
+
+[outputs.all_red_margin_s]
+description = "Provided all-red time minus required all-red time"
+tolerance = 0.03
+
+[outputs.forecourt_density_person_m2]
+description = "Forecourt density"
+tolerance = 0.03
+
+[outputs.forecourt_density_margin_person_m2]
+description = "Maximum forecourt density minus actual density"
+tolerance = 0.03
+
+[outputs.required_discharge_width_mm]
+description = "Required discharge width"
+tolerance = 0.03
+
+[outputs.discharge_width_margin_mm]
+description = "Provided discharge width minus required width"
+tolerance = 0.03
+
+[outputs.forecourt_average_illuminance_lux]
+description = "Forecourt average illuminance"
+tolerance = 0.03
+
+[outputs.illuminance_margin_lux]
+description = "Average illuminance minus target"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when forecourt interface checks pass"
+tolerance = 0.001
+
+[archetypes.ssc08_forecourt_signal_case]
+description = "Pedestrian clearance, forecourt, and signal interface case"
+site_contexts = ["ssc08-forecourt-signal"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-08 forecourt interface package"
+visibility = "all_given"
+archetypes = ["ssc08_forecourt_signal_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-08 forecourt interface package"
+visibility = "all_given"
+archetypes = ["ssc08_forecourt_signal_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-08 forecourt interface package"
+visibility = "all_given"
+archetypes = ["ssc08_forecourt_signal_case"]

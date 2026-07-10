@@ -1,0 +1,229 @@
+[meta]
+name = "lift-shaft-car-accessibility-service-package"
+description = "SSC-08 lift shaft, car dimension, and accessibility service metrics"
+long_description = "Calculates source-bound vertical transport metrics from a deterministic SSC-08 task-owned source pack. The template combines car dimension margins, shaft clearance margins, accessible lift capacity, generator allocation, feeder current, voltage-drop margin, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "vertical-transport-accessibility"
+standards = ["lift dimensional workflow", "accessibility service review", "emergency lift power review", "feeder voltage drop"]
+tags = ["mechanical", "building", "lift", "shaft", "accessibility", "emergency-power", "deterministic"]
+tool_mode = "with-tool"
+
+[params.car_internal_width_m]
+type = "float"
+unit = "m"
+description = "CAR-08-DATA-06 car internal width"
+min = 1.6
+max = 1.6
+
+[params.required_car_width_m]
+type = "float"
+unit = "m"
+description = "LIFT-08-RULE-06 required car width"
+min = 1.4
+max = 1.4
+
+[params.car_internal_depth_m]
+type = "float"
+unit = "m"
+description = "CAR-08-DATA-06 car internal depth"
+min = 2.1
+max = 2.1
+
+[params.required_car_depth_m]
+type = "float"
+unit = "m"
+description = "LIFT-08-RULE-06 required car depth"
+min = 2.0
+max = 2.0
+
+[params.shaft_width_m]
+type = "float"
+unit = "m"
+description = "SHAFT-08-PLAN-06 shaft width"
+min = 2.35
+max = 2.35
+
+[params.shaft_depth_m]
+type = "float"
+unit = "m"
+description = "SHAFT-08-PLAN-06 shaft depth"
+min = 2.75
+max = 2.75
+
+[params.side_clearance_m]
+type = "float"
+unit = "m"
+description = "CAR-08-DATA-06 side clearance"
+min = 0.3
+max = 0.3
+
+[params.front_rear_clearance_m]
+type = "float"
+unit = "m"
+description = "CAR-08-DATA-06 front/rear clearance"
+min = 0.25
+max = 0.25
+
+[params.lift_count]
+type = "float"
+description = "ACCESS-08-SCHED-06 lift count"
+min = 2.0
+max = 2.0
+
+[params.car_capacity_persons]
+type = "float"
+unit = "persons"
+description = "CAR-08-DATA-06 car capacity"
+min = 16.0
+max = 16.0
+
+[params.loading_factor]
+type = "float"
+description = "ACCESS-08-SCHED-06 loading factor"
+min = 0.8
+max = 0.8
+
+[params.round_trip_time_s]
+type = "float"
+unit = "s"
+description = "ACCESS-08-SCHED-06 round-trip time"
+min = 95.0
+max = 95.0
+
+[params.accessible_demand_persons_per_5min]
+type = "float"
+unit = "persons/5min"
+description = "ACCESS-08-SCHED-06 accessible demand"
+min = 42.0
+max = 42.0
+
+[params.lift_motor_kw]
+type = "float"
+unit = "kW"
+description = "POWER-08-SCHED-06 lift motor load"
+min = 22.0
+max = 22.0
+
+[params.fire_service_lift_count]
+type = "float"
+description = "LIFT-08-RULE-06 fire-service lift count"
+min = 1.0
+max = 1.0
+
+[params.controls_load_kw]
+type = "float"
+unit = "kW"
+description = "POWER-08-SCHED-06 controls load"
+min = 3.5
+max = 3.5
+
+[params.generator_allocation_kw]
+type = "float"
+unit = "kW"
+description = "POWER-08-SCHED-06 generator allocation"
+min = 32.0
+max = 32.0
+
+[params.voltage_v]
+type = "float"
+unit = "V"
+description = "POWER-08-SCHED-06 feeder voltage"
+min = 400.0
+max = 400.0
+
+[params.power_factor]
+type = "float"
+description = "POWER-08-SCHED-06 power factor"
+min = 0.88
+max = 0.88
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "POWER-08-SCHED-06 feeder length"
+min = 0.09
+max = 0.09
+
+[params.feeder_resistance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "POWER-08-SCHED-06 feeder resistance"
+min = 0.39
+max = 0.39
+
+[params.feeder_reactance_ohm_per_km]
+type = "float"
+unit = "ohm/km"
+description = "POWER-08-SCHED-06 feeder reactance"
+min = 0.08
+max = 0.08
+
+[params.allowable_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "POWER-08-SCHED-06 allowable voltage drop"
+min = 3.0
+max = 3.0
+
+[outputs.car_width_margin_m]
+description = "Car width margin"
+tolerance = 0.03
+
+[outputs.car_depth_margin_m]
+description = "Car depth margin"
+tolerance = 0.03
+
+[outputs.shaft_width_margin_m]
+description = "Shaft width margin"
+tolerance = 0.03
+
+[outputs.shaft_depth_margin_m]
+description = "Shaft depth margin"
+tolerance = 0.03
+
+[outputs.accessible_lift_capacity_persons_per_5min]
+description = "Accessible lift capacity per 5 minutes"
+tolerance = 0.03
+
+[outputs.accessible_capacity_margin_persons_per_5min]
+description = "Accessible lift capacity minus demand"
+tolerance = 0.03
+
+[outputs.emergency_power_load_kw]
+description = "Emergency lift power load"
+tolerance = 0.03
+
+[outputs.generator_allocation_margin_kw]
+description = "Generator allocation margin"
+tolerance = 0.03
+
+[outputs.lift_feeder_current_a]
+description = "Lift feeder current"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_margin_percent]
+description = "Feeder voltage drop margin"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when vertical transport checks pass"
+tolerance = 0.001
+
+[archetypes.ssc08_lift_accessibility_case]
+description = "Lift shaft, car dimension, and accessibility service case"
+site_contexts = ["ssc08-lift-accessibility"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-08 lift accessibility package"
+visibility = "all_given"
+archetypes = ["ssc08_lift_accessibility_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-08 lift accessibility package"
+visibility = "all_given"
+archetypes = ["ssc08_lift_accessibility_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-08 lift accessibility package"
+visibility = "all_given"
+archetypes = ["ssc08_lift_accessibility_case"]

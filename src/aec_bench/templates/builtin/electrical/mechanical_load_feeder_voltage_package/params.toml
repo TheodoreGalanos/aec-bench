@@ -1,0 +1,268 @@
+[meta]
+name = "mechanical-load-feeder-voltage-package"
+description = "SSC-05 mechanical load schedule, feeder current, PFC, ampacity, breaker, and voltage-drop metrics"
+long_description = "Calculates source-bound electrical feeder metrics from a deterministic SSC-05 task-owned source pack. The template combines mechanical equipment demand, future allowance, power-factor correction, three-phase feeder current, cable ampacity derating, breaker continuous loading, voltage drop, and an overall synthetic pass score."
+discipline = "electrical"
+category = "feeder-voltage"
+standards = ["ETAP-style load-flow workflow", "EasyPower one-line and PowerFlow workflow", "SKM PowerTools-style coordination workflow", "AS/NZS 3008.1.1-style cable ampacity workflow"]
+tags = ["electrical", "feeder", "load-schedule", "sld", "power-factor", "ampacity", "breaker", "voltage-drop", "deterministic"]
+tool_mode = "with-tool"
+
+[params.pump_motor_kw]
+type = "float"
+unit = "kW"
+description = "LOAD-05-MECH-SCHED-01 chilled-water pump motor rating"
+min = 22.0
+max = 22.0
+
+[params.pump_quantity]
+type = "float"
+description = "LOAD-05-MECH-SCHED-01 chilled-water pump quantity"
+min = 2.0
+max = 2.0
+
+[params.pump_demand_factor]
+type = "float"
+description = "LOAD-05-MECH-SCHED-01 chilled-water pump demand factor"
+min = 0.65
+max = 0.65
+
+[params.ahu_motor_kw]
+type = "float"
+unit = "kW"
+description = "LOAD-05-MECH-SCHED-01 AHU motor rating"
+min = 11.0
+max = 11.0
+
+[params.ahu_quantity]
+type = "float"
+description = "LOAD-05-MECH-SCHED-01 AHU quantity"
+min = 1.0
+max = 1.0
+
+[params.ahu_demand_factor]
+type = "float"
+description = "LOAD-05-MECH-SCHED-01 AHU demand factor"
+min = 1.0
+max = 1.0
+
+[params.dosing_pump_kw]
+type = "float"
+unit = "kW"
+description = "LOAD-05-MECH-SCHED-01 dosing pump motor rating"
+min = 2.4
+max = 2.4
+
+[params.dosing_quantity]
+type = "float"
+description = "LOAD-05-MECH-SCHED-01 dosing pump quantity"
+min = 2.0
+max = 2.0
+
+[params.dosing_demand_factor]
+type = "float"
+description = "LOAD-05-MECH-SCHED-01 dosing pump demand factor"
+min = 0.8
+max = 0.8
+
+[params.future_allowance_pct]
+type = "float"
+unit = "%"
+description = "LOAD-05-CALC-01 future allowance applied to demand load"
+min = 15.0
+max = 15.0
+
+[params.initial_power_factor]
+type = "float"
+description = "LOAD-05-CALC-01 uncorrected power factor"
+min = 0.82
+max = 0.82
+
+[params.target_power_factor]
+type = "float"
+description = "LOAD-05-CALC-01 target corrected power factor"
+min = 0.93
+max = 0.93
+
+[params.selected_capacitor_kvar]
+type = "float"
+unit = "kVAr"
+description = "LOAD-05-CALC-01 selected capacitor bank size"
+min = 20.0
+max = 20.0
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "FEEDER-05-MCC-01 nominal three-phase feeder voltage"
+min = 415.0
+max = 415.0
+
+[params.feeder_length_m]
+type = "float"
+unit = "m"
+description = "CABLE-05-FDR-01 route length from MSB-05 to MCC-05"
+min = 145.0
+max = 145.0
+
+[params.feeder_voltage_drop_mv_per_a_m]
+type = "float"
+unit = "mV/A/m"
+description = "CABLE-05-FDR-01 source-owned voltage-drop factor"
+min = 1.6
+max = 1.6
+
+[params.base_cable_ampacity_a]
+type = "float"
+unit = "A"
+description = "CABLE-05-FDR-01 base cable ampacity before derating"
+min = 140.0
+max = 140.0
+
+[params.ambient_derating_factor]
+type = "float"
+description = "CABLE-05-FDR-01 ambient temperature derating factor"
+min = 0.94
+max = 0.94
+
+[params.grouping_derating_factor]
+type = "float"
+description = "CABLE-05-FDR-01 grouping derating factor"
+min = 0.85
+max = 0.85
+
+[params.installation_derating_factor]
+type = "float"
+description = "CABLE-05-FDR-01 installation derating factor"
+min = 0.96
+max = 0.96
+
+[params.breaker_trip_a]
+type = "float"
+unit = "A"
+description = "PROT-05-BKR-01 breaker trip rating"
+min = 100.0
+max = 100.0
+
+[params.breaker_continuous_factor]
+type = "float"
+description = "PROT-05-BKR-01 continuous loading factor"
+min = 0.8
+max = 0.8
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "CRIT-05-VDROP-01 owner maximum feeder voltage drop"
+min = 5.0
+max = 5.0
+
+[outputs.connected_load_kw]
+description = "Connected mechanical load from LOAD-05-MECH-SCHED-01"
+tolerance = 0.03
+
+[outputs.demand_load_kw]
+description = "Demand load after source-owned demand factors"
+tolerance = 0.03
+
+[outputs.future_allowance_kw]
+description = "Future allowance applied to the demand load"
+tolerance = 0.03
+
+[outputs.design_load_kw]
+description = "Demand load plus future allowance"
+tolerance = 0.03
+
+[outputs.initial_reactive_power_kvar]
+description = "Reactive power before power-factor correction"
+tolerance = 0.03
+
+[outputs.required_capacitor_kvar]
+description = "Capacitor kVAr required to reach the target power factor"
+tolerance = 0.03
+
+[outputs.selected_capacitor_margin_kvar]
+description = "Selected capacitor size minus required capacitor kVAr"
+tolerance = 0.03
+
+[outputs.corrected_apparent_power_kva]
+description = "Apparent power after correction to the target power factor"
+tolerance = 0.03
+
+[outputs.feeder_current_a]
+description = "FEEDER-05-MCC-01 three-phase current after power-factor correction"
+tolerance = 0.03
+
+[outputs.derated_cable_ampacity_a]
+description = "CABLE-05-FDR-01 ampacity after source-owned derating factors"
+tolerance = 0.03
+
+[outputs.ampacity_margin_a]
+description = "Derated cable ampacity minus feeder current"
+tolerance = 0.03
+
+[outputs.breaker_allowable_current_a]
+description = "PROT-05-BKR-01 continuous allowable current"
+tolerance = 0.03
+
+[outputs.breaker_margin_a]
+description = "Breaker continuous allowable current minus feeder current"
+tolerance = 0.03
+
+[outputs.voltage_drop_v]
+description = "FEEDER-05-MCC-01 source-owned voltage drop"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "FEEDER-05-MCC-01 voltage drop percentage"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Owner maximum voltage drop minus calculated feeder voltage drop"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when PFC, ampacity, breaker, and voltage-drop margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc05_mechanical_feeder_case]
+description = "Mechanical load schedule tied to one SLD feeder, cable, breaker, voltage-drop criterion, and electrical memo"
+pump_motor_kw = {min = 22.0, max = 22.0}
+pump_quantity = {min = 2.0, max = 2.0}
+pump_demand_factor = {min = 0.65, max = 0.65}
+ahu_motor_kw = {min = 11.0, max = 11.0}
+ahu_quantity = {min = 1.0, max = 1.0}
+ahu_demand_factor = {min = 1.0, max = 1.0}
+dosing_pump_kw = {min = 2.4, max = 2.4}
+dosing_quantity = {min = 2.0, max = 2.0}
+dosing_demand_factor = {min = 0.8, max = 0.8}
+future_allowance_pct = {min = 15.0, max = 15.0}
+initial_power_factor = {min = 0.82, max = 0.82}
+target_power_factor = {min = 0.93, max = 0.93}
+selected_capacitor_kvar = {min = 20.0, max = 20.0}
+feeder_voltage_v = {min = 415.0, max = 415.0}
+feeder_length_m = {min = 145.0, max = 145.0}
+feeder_voltage_drop_mv_per_a_m = {min = 1.6, max = 1.6}
+base_cable_ampacity_a = {min = 140.0, max = 140.0}
+ambient_derating_factor = {min = 0.94, max = 0.94}
+grouping_derating_factor = {min = 0.85, max = 0.85}
+installation_derating_factor = {min = 0.96, max = 0.96}
+breaker_trip_a = {min = 100.0, max = 100.0}
+breaker_continuous_factor = {min = 0.8, max = 0.8}
+max_voltage_drop_percent = {min = 5.0, max = 5.0}
+site_contexts = ["mechanical-load-feeder-voltage"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-05 mechanical-load feeder package"
+visibility = "all_given"
+archetypes = ["ssc05_mechanical_feeder_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-05 mechanical-load feeder package"
+visibility = "all_given"
+archetypes = ["ssc05_mechanical_feeder_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-05 mechanical-load feeder package"
+visibility = "all_given"
+archetypes = ["ssc05_mechanical_feeder_case"]

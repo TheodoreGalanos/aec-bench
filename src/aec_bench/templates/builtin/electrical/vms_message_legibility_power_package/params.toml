@@ -1,0 +1,169 @@
+# ABOUTME: Defines the SSC-13 VMS message legibility and power template.
+# ABOUTME: Pins one task-owned VMS source pack and expected outputs.
+
+[meta]
+name = "vms-message-legibility-power-package"
+description = "SSC-13 VMS message legibility, read-time, network, and power checks"
+long_description = "Calculates source-bound VMS operations metrics from a deterministic SSC-13 task-owned source pack. The template combines a VMS schedule, message library, road speed/geometry table, network topology, and power schedule."
+discipline = "electrical"
+category = "vms-operations"
+standards = ["MUTCD message workflow", "VMS legibility review", "NTCIP workflow", "power schedule review"]
+tags = ["electrical", "its", "vms", "message", "legibility", "power", "network", "deterministic"]
+tool_mode = "with-tool"
+
+[params.letter_height_mm]
+type = "float"
+unit = "mm"
+description = "VMS-13-SCHED-05 display letter height"
+min = 320.0
+max = 320.0
+
+[params.legibility_factor_m_per_mm]
+type = "float"
+unit = "m/mm"
+description = "MSG-13-LIB-05 legibility distance factor"
+min = 0.6
+max = 0.6
+
+[params.available_viewing_distance_m]
+type = "float"
+unit = "m"
+description = "ROAD-13-SPEED-05 available VMS viewing distance"
+min = 225.0
+max = 225.0
+
+[params.road_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "ROAD-13-SPEED-05 road speed"
+min = 80.0
+max = 80.0
+
+[params.required_read_time_s]
+type = "float"
+unit = "s"
+description = "MSG-13-LIB-05 required read time"
+min = 6.5
+max = 6.5
+
+[params.display_power_w]
+type = "float"
+unit = "W"
+description = "PWR-13-SCHED-05 VMS display power"
+min = 650.0
+max = 650.0
+
+[params.controller_power_w]
+type = "float"
+unit = "W"
+description = "PWR-13-SCHED-05 VMS controller power"
+min = 85.0
+max = 85.0
+
+[params.modem_power_w]
+type = "float"
+unit = "W"
+description = "PWR-13-SCHED-05 VMS modem power"
+min = 25.0
+max = 25.0
+
+[params.circuit_capacity_w]
+type = "float"
+unit = "W"
+description = "PWR-13-SCHED-05 circuit capacity"
+min = 1200.0
+max = 1200.0
+
+[params.vms_network_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-13-TOPO-05 VMS network load"
+min = 2.8
+max = 2.8
+
+[params.controller_network_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-13-TOPO-05 controller network load"
+min = 0.4
+max = 0.4
+
+[params.network_capacity_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-13-TOPO-05 network capacity"
+min = 10.0
+max = 10.0
+
+[params.compliant_message_count]
+type = "float"
+unit = "count"
+description = "MSG-13-LIB-05 compliant message rows"
+min = 12.0
+max = 12.0
+
+[params.required_message_count]
+type = "float"
+unit = "count"
+description = "MSG-13-LIB-05 required message rows"
+min = 12.0
+max = 12.0
+
+[outputs.required_legibility_distance_m]
+description = "Required legibility distance"
+tolerance = 0.003
+
+[outputs.legibility_distance_margin_m]
+description = "Available viewing distance minus required distance"
+tolerance = 0.003
+
+[outputs.available_read_time_s]
+description = "Available read time at road speed"
+tolerance = 0.003
+
+[outputs.read_time_margin_s]
+description = "Available read time minus required read time"
+tolerance = 0.003
+
+[outputs.vms_power_load_w]
+description = "VMS display/controller/modem power load"
+tolerance = 0.003
+
+[outputs.power_headroom_w]
+description = "Circuit capacity minus VMS load"
+tolerance = 0.003
+
+[outputs.network_load_mbps]
+description = "VMS network load"
+tolerance = 0.003
+
+[outputs.network_headroom_mbps]
+description = "Network capacity minus VMS network load"
+tolerance = 0.003
+
+[outputs.message_policy_match_fraction]
+description = "Compliant message rows divided by required rows"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when VMS legibility, read-time, network, and power checks pass"
+tolerance = 0.001
+
+[archetypes.ssc13_vms_message_case]
+description = "VMS message legibility and power case"
+site_contexts = ["ssc13-vms-message"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-13 VMS package"
+visibility = "all_given"
+archetypes = ["ssc13_vms_message_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-13 VMS package"
+visibility = "all_given"
+archetypes = ["ssc13_vms_message_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-13 VMS package"
+visibility = "all_given"
+archetypes = ["ssc13_vms_message_case"]

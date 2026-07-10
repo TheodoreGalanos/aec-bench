@@ -1,0 +1,267 @@
+[meta]
+name = "staged-road-its-relocation-package"
+description = "SSC-16 staged road and ITS relocation metrics"
+long_description = "Calculates source-bound temporary pedestrian timing, VMS legibility, staged ITS network load, PoE headroom, battery backup, and detour delay metrics from a deterministic SSC-16 task-owned source pack."
+discipline = "electrical"
+category = "road-its-relocation"
+standards = ["temporary traffic workflow", "ITS relocation workflow", "VMS legibility workflow"]
+tags = ["electrical", "construction", "its", "temporary-traffic", "vms", "cctv", "deterministic"]
+tool_mode = "with-tool"
+
+[params.crossing_width_m]
+type = "float"
+unit = "m"
+description = "SIGNAL-16-TIMING-04 temporary pedestrian crossing width"
+min = 18.0
+max = 18.0
+
+[params.pedestrian_walk_speed_m_s]
+type = "float"
+unit = "m/s"
+description = "SIGNAL-16-TIMING-04 pedestrian walk speed"
+min = 1.2
+max = 1.2
+
+[params.pedestrian_startup_time_s]
+type = "float"
+unit = "s"
+description = "SIGNAL-16-TIMING-04 startup allowance"
+min = 3.0
+max = 3.0
+
+[params.provided_ped_clearance_s]
+type = "float"
+unit = "s"
+description = "SIGNAL-16-TIMING-04 provided clearance interval"
+min = 22.0
+max = 22.0
+
+[params.vms_character_height_mm]
+type = "float"
+unit = "mm"
+description = "DEVICE-16-RELOC-04 VMS character height"
+min = 320.0
+max = 320.0
+
+[params.vms_legibility_factor_m_per_mm]
+type = "float"
+unit = "m/mm"
+description = "DEVICE-16-RELOC-04 source-owned legibility factor"
+min = 0.6
+max = 0.6
+
+[params.available_vms_viewing_distance_m]
+type = "float"
+unit = "m"
+description = "TTC-16-PLAN-04 available VMS viewing distance"
+min = 225.0
+max = 225.0
+
+[params.signal_controller_data_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-16-TOPO-04 signal controller data load"
+min = 0.4
+max = 0.4
+
+[params.vms_data_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-16-TOPO-04 VMS data load"
+min = 1.2
+max = 1.2
+
+[params.cctv_data_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-16-TOPO-04 CCTV data load"
+min = 6.0
+max = 6.0
+
+[params.detector_data_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-16-TOPO-04 detector data load"
+min = 0.3
+max = 0.3
+
+[params.gateway_overhead_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-16-TOPO-04 gateway overhead"
+min = 0.5
+max = 0.5
+
+[params.network_capacity_mbps]
+type = "float"
+unit = "Mbps"
+description = "NET-16-TOPO-04 staged network capacity"
+min = 20.0
+max = 20.0
+
+[params.cctv_poe_w]
+type = "float"
+unit = "W"
+description = "POWER-16-SCHED-04 CCTV PoE load"
+min = 18.0
+max = 18.0
+
+[params.detector_poe_w]
+type = "float"
+unit = "W"
+description = "POWER-16-SCHED-04 detector PoE load"
+min = 8.0
+max = 8.0
+
+[params.router_poe_w]
+type = "float"
+unit = "W"
+description = "POWER-16-SCHED-04 router PoE load"
+min = 12.0
+max = 12.0
+
+[params.vms_modem_poe_w]
+type = "float"
+unit = "W"
+description = "POWER-16-SCHED-04 VMS modem PoE load"
+min = 9.0
+max = 9.0
+
+[params.poe_budget_w]
+type = "float"
+unit = "W"
+description = "POWER-16-SCHED-04 PoE budget"
+min = 90.0
+max = 90.0
+
+[params.signal_controller_load_w]
+type = "float"
+unit = "W"
+description = "POWER-16-SCHED-04 signal controller power load"
+min = 120.0
+max = 120.0
+
+[params.vms_power_load_w]
+type = "float"
+unit = "W"
+description = "POWER-16-SCHED-04 VMS power load"
+min = 360.0
+max = 360.0
+
+[params.battery_backup_hours]
+type = "float"
+unit = "h"
+description = "POWER-16-SCHED-04 battery backup duration"
+min = 8.0
+max = 8.0
+
+[params.provided_battery_kwh]
+type = "float"
+unit = "kWh"
+description = "POWER-16-SCHED-04 provided battery energy"
+min = 5.5
+max = 5.5
+
+[params.allowable_detour_delay_s]
+type = "float"
+unit = "s"
+description = "TTC-16-PLAN-04 allowable detour delay"
+min = 75.0
+max = 75.0
+
+[params.estimated_detour_delay_s]
+type = "float"
+unit = "s"
+description = "TTC-16-PLAN-04 estimated detour delay"
+min = 62.0
+max = 62.0
+
+[outputs.pedestrian_clearance_time_s]
+description = "Temporary pedestrian clearance time"
+tolerance = 0.03
+
+[outputs.pedestrian_clearance_margin_s]
+description = "Provided clearance minus required clearance"
+tolerance = 0.03
+
+[outputs.required_vms_legibility_distance_m]
+description = "Required VMS legibility distance"
+tolerance = 0.03
+
+[outputs.vms_legibility_margin_m]
+description = "Available viewing distance minus required legibility distance"
+tolerance = 0.03
+
+[outputs.network_load_mbps]
+description = "Total staged ITS network load"
+tolerance = 0.03
+
+[outputs.network_headroom_mbps]
+description = "Network capacity minus load"
+tolerance = 0.03
+
+[outputs.poe_load_w]
+description = "Total staged PoE load"
+tolerance = 0.03
+
+[outputs.poe_headroom_w]
+description = "PoE budget minus staged load"
+tolerance = 0.03
+
+[outputs.battery_required_kwh]
+description = "Battery energy required for staged ITS backup"
+tolerance = 0.03
+
+[outputs.battery_margin_kwh]
+description = "Provided battery energy minus required battery energy"
+tolerance = 0.03
+
+[outputs.detour_delay_margin_s]
+description = "Allowable detour delay minus estimated delay"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when timing, VMS, network, PoE, battery, and delay checks pass"
+tolerance = 0.001
+
+[archetypes.ssc16_staged_its_case]
+description = "Staged road and ITS relocation case"
+crossing_width_m = {min = 18.0, max = 18.0}
+pedestrian_walk_speed_m_s = {min = 1.2, max = 1.2}
+pedestrian_startup_time_s = {min = 3.0, max = 3.0}
+provided_ped_clearance_s = {min = 22.0, max = 22.0}
+vms_character_height_mm = {min = 320.0, max = 320.0}
+vms_legibility_factor_m_per_mm = {min = 0.6, max = 0.6}
+available_vms_viewing_distance_m = {min = 225.0, max = 225.0}
+signal_controller_data_mbps = {min = 0.4, max = 0.4}
+vms_data_mbps = {min = 1.2, max = 1.2}
+cctv_data_mbps = {min = 6.0, max = 6.0}
+detector_data_mbps = {min = 0.3, max = 0.3}
+gateway_overhead_mbps = {min = 0.5, max = 0.5}
+network_capacity_mbps = {min = 20.0, max = 20.0}
+cctv_poe_w = {min = 18.0, max = 18.0}
+detector_poe_w = {min = 8.0, max = 8.0}
+router_poe_w = {min = 12.0, max = 12.0}
+vms_modem_poe_w = {min = 9.0, max = 9.0}
+poe_budget_w = {min = 90.0, max = 90.0}
+signal_controller_load_w = {min = 120.0, max = 120.0}
+vms_power_load_w = {min = 360.0, max = 360.0}
+battery_backup_hours = {min = 8.0, max = 8.0}
+provided_battery_kwh = {min = 5.5, max = 5.5}
+allowable_detour_delay_s = {min = 75.0, max = 75.0}
+estimated_detour_delay_s = {min = 62.0, max = 62.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-16 staged ITS relocation package"
+visibility = "all_given"
+archetypes = ["ssc16_staged_its_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-16 staged ITS relocation package"
+visibility = "all_given"
+archetypes = ["ssc16_staged_its_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-16 staged ITS relocation package"
+visibility = "all_given"
+archetypes = ["ssc16_staged_its_case"]

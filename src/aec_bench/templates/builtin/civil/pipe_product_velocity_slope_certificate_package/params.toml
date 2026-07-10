@@ -1,0 +1,141 @@
+# ABOUTME: Defines the SSC-15 pipe product certificate template.
+# ABOUTME: Pins one task-owned pipe datasheet, long section, criteria, and memo source pack.
+
+[meta]
+name = "pipe-product-velocity-slope-certificate-package"
+description = "SSC-15 pipe product velocity, slope, capacity, certificate, and lining checks"
+long_description = "Calculates source-bound pipe product compliance metrics from a deterministic SSC-15 task-owned source pack. The template combines one pipe datasheet, pipe schedule, long section, hydraulic criteria sheet, certificate, and pipe product memo."
+discipline = "civil"
+category = "pipe-product-compliance"
+standards = ["pipe velocity review", "gravity pipe slope review", "product certificate review"]
+tags = ["civil", "pipe", "certificate", "velocity", "slope", "manning", "product-compliance", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_l_s]
+type = "float"
+unit = "L/s"
+description = "CRIT-15-HYD-05 design flow through the pipe"
+min = 18.0
+max = 18.0
+
+[params.internal_diameter_mm]
+type = "float"
+unit = "mm"
+description = "PIPE-15-DATA-05 certified internal pipe diameter"
+min = 200.0
+max = 200.0
+
+[params.pipe_slope]
+type = "float"
+description = "LONG-15-SECTION-05 pipe grade"
+min = 0.008
+max = 0.008
+
+[params.minimum_slope]
+type = "float"
+description = "CRIT-15-HYD-05 minimum accepted pipe grade"
+min = 0.006
+max = 0.006
+
+[params.manning_n]
+type = "float"
+description = "PIPE-15-DATA-05 pipe roughness value"
+min = 0.013
+max = 0.013
+
+[params.min_velocity_m_s]
+type = "float"
+unit = "m/s"
+description = "CRIT-15-HYD-05 minimum velocity criterion"
+min = 0.5
+max = 0.5
+
+[params.max_velocity_m_s]
+type = "float"
+unit = "m/s"
+description = "CRIT-15-HYD-05 maximum velocity criterion"
+min = 3.0
+max = 3.0
+
+[params.design_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "PIPE-15-SCHED-05 design pressure at the product use case"
+min = 830.0
+max = 830.0
+
+[params.certificate_pressure_rating_kpa]
+type = "float"
+unit = "kPa"
+description = "CERT-15-PIPE-05 certificate pressure rating"
+min = 1200.0
+max = 1200.0
+
+[params.design_temperature_c]
+type = "float"
+unit = "degC"
+description = "PIPE-15-SCHED-05 design fluid temperature"
+min = 45.0
+max = 45.0
+
+[params.lining_temperature_rating_c]
+type = "float"
+unit = "degC"
+description = "CERT-15-PIPE-05 lining temperature rating"
+min = 60.0
+max = 60.0
+
+[outputs.flow_velocity_m_s]
+description = "Design flow divided by pipe area"
+tolerance = 0.003
+
+[outputs.velocity_low_margin_m_s]
+description = "Flow velocity minus minimum velocity"
+tolerance = 0.003
+
+[outputs.velocity_high_margin_m_s]
+description = "Maximum velocity minus flow velocity"
+tolerance = 0.003
+
+[outputs.manning_capacity_l_s]
+description = "Full-pipe Manning capacity"
+tolerance = 0.03
+
+[outputs.capacity_margin_l_s]
+description = "Manning capacity minus design flow"
+tolerance = 0.03
+
+[outputs.slope_margin]
+description = "Pipe slope minus minimum slope"
+tolerance = 0.0003
+
+[outputs.pressure_certificate_margin_kpa]
+description = "Certificate pressure rating minus design pressure"
+tolerance = 0.03
+
+[outputs.lining_temperature_margin_c]
+description = "Lining temperature rating minus design temperature"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when velocity, capacity, slope, pressure, and lining checks pass"
+tolerance = 0.001
+
+[archetypes.ssc15_pipe_certificate_case]
+description = "Pipe product velocity, slope, and certificate compliance case"
+site_contexts = ["ssc15-pipe-certificate"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-15 pipe product compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_pipe_certificate_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-15 pipe product compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_pipe_certificate_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-15 pipe product compliance package"
+visibility = "all_given"
+archetypes = ["ssc15_pipe_certificate_case"]

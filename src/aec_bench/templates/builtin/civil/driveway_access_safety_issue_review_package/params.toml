@@ -1,0 +1,355 @@
+[meta]
+name = "driveway-access-safety-issue-review-package"
+description = "SSC-01 review-first issue-readiness review of a driveway access safety package"
+long_description = "Review-native long-horizon task over a generated SSC-01 driveway access safety issue packet. The agent receives a multi-file source packet in /workspace/sources/ covering access profile, road edge, culvert, tailwater, roadway spread, sight distance, owner criteria, and comments. The task is to inventory the packet, preserve object identity, recompute only source-owned evidence, assign one status per review item, raise findings/information requests/actions, and make a readiness decision. Packet variants inject missing road-edge evidence, stale access-profile revisions, culvert chainage mismatch, scenario copy-forward, open comments, carried comments, or a genuine freeboard deficiency."
+discipline = "civil"
+category = "road-review"
+standards = ["FHWA HEC-22", "AASHTO Green Book", "driveway access design", "road drainage workflow"]
+tags = ["civil", "road", "review", "issue-readiness", "driveway", "culvert", "access", "safety"]
+tool_mode = "no-tool"
+
+# --- Access profile and culvert drainage ---
+
+[params.driveway_low_level_m]
+type = "float"
+unit = "m"
+description = "ACCESS-SSC01-006 driveway low point level"
+min = 41.80
+max = 43.20
+
+[params.driveway_grade_pct_source]
+type = "float"
+unit = "%"
+description = "ACCESS-SSC01-006 source driveway grade used to derive the high point"
+min = 2.0
+max = 6.5
+
+[params.driveway_length_m]
+type = "float"
+unit = "m"
+description = "ACCESS-SSC01-006 driveway grade length"
+min = 14.0
+max = 32.0
+
+[params.allowable_driveway_grade_pct]
+type = "float"
+unit = "%"
+description = "OPS-SSC01-006 maximum driveway grade"
+min = 7.0
+max = 9.0
+
+[params.culvert_diameter_m]
+type = "float"
+unit = "m"
+description = "CULV-SSC01-006 culvert diameter"
+min = 0.75
+max = 1.20
+
+[params.culvert_mannings_n]
+type = "float"
+description = "CULV-SSC01-006 culvert Manning roughness"
+min = 0.012
+max = 0.016
+
+[params.culvert_slope_pct]
+type = "float"
+unit = "%"
+description = "CULV-SSC01-006 culvert slope"
+min = 0.8
+max = 2.0
+
+[params.design_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "CULV-SSC01-006 design flow"
+min = 0.25
+max = 0.70
+
+[params.tailwater_level_m]
+type = "float"
+unit = "m"
+description = "TAIL-SSC01-006 tailwater level"
+min = 41.20
+max = 42.40
+
+[params.headwater_base_depth_m]
+type = "float"
+unit = "m"
+description = "TAIL-SSC01-006 base headwater depth allowance"
+min = 0.32
+max = 0.58
+
+[params.headwater_loss_factor_m]
+type = "float"
+unit = "m"
+description = "TAIL-SSC01-006 ratio-squared headwater loss factor"
+min = 0.12
+max = 0.32
+
+[params.minimum_freeboard_m]
+type = "float"
+unit = "m"
+description = "OPS-SSC01-006 minimum road-edge freeboard"
+min = 0.10
+max = 0.20
+
+[params.freeboard_margin_target_m]
+type = "float"
+unit = "m"
+description = "Derivation margin between road-edge freeboard and minimum freeboard for passing packets"
+min = 0.08
+max = 0.35
+
+[params.freeboard_deficit_m]
+type = "float"
+unit = "m"
+description = "Derivation deficit between road-edge freeboard and minimum freeboard for failing packets"
+min = 0.03
+max = 0.18
+
+# --- Roadway spread and sight distance ---
+
+[params.gutter_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "ROAD-SSC01-006 gutter flow across the access path"
+min = 0.04
+max = 0.14
+
+[params.cross_slope_pct]
+type = "float"
+unit = "%"
+description = "ROAD-SSC01-006 cross slope"
+min = 2.0
+max = 4.0
+
+[params.longitudinal_slope_pct]
+type = "float"
+unit = "%"
+description = "ROAD-SSC01-006 longitudinal slope"
+min = 0.6
+max = 2.0
+
+[params.gutter_mannings_n]
+type = "float"
+description = "ROAD-SSC01-006 gutter Manning roughness"
+min = 0.014
+max = 0.018
+
+[params.spread_margin_target_m]
+type = "float"
+unit = "m"
+description = "Derivation margin between allowable and computed roadway spread"
+min = 0.4
+max = 2.5
+
+[params.access_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "SIGHT-SSC01-006 access sight-distance speed"
+min = 25.0
+max = 50.0
+
+[params.sight_reaction_time_s]
+type = "float"
+unit = "s"
+description = "SIGHT-SSC01-006 sight-distance reaction time"
+min = 2.0
+max = 2.7
+
+[params.braking_friction_coefficient]
+type = "float"
+description = "SIGHT-SSC01-006 braking friction coefficient"
+min = 0.32
+max = 0.42
+
+[params.access_grade_pct]
+type = "float"
+unit = "%"
+description = "SIGHT-SSC01-006 signed access grade"
+min = 1.0
+max = 6.0
+
+[params.available_sight_margin_m]
+type = "float"
+unit = "m"
+description = "Derivation margin between available and required sight distance"
+min = 12.0
+max = 55.0
+
+# --- Documentary variant helper ---
+
+[params.packet_variant]
+type = "enum"
+description = "Hidden packet-defect variant controlling gold review statuses"
+values = [
+  "clean",
+  "missing_road_edge_level",
+  "stale_access_profile_revision",
+  "culvert_chainage_mismatch",
+  "scenario_copy_forward",
+  "open_critical_comment",
+  "minor_open_comment_carried",
+  "access_freeboard_deficient",
+]
+
+# --- Outputs (review gold state and evidence) ---
+
+[outputs.rlr_01_status]
+description = "Packet completeness status code (0 pass, 1 fail, 2 not applicable, 3 insufficient data)"
+tolerance = 0.0
+
+[outputs.rlr_02_status]
+description = "Object identity status code"
+tolerance = 0.0
+
+[outputs.rlr_03_status]
+description = "Access profile and hydraulic basis status code"
+tolerance = 0.0
+
+[outputs.rlr_04_status]
+description = "Access, culvert, and freeboard adequacy status code"
+tolerance = 0.0
+
+[outputs.rlr_05_status]
+description = "Scenario consequence status code"
+tolerance = 0.0
+
+[outputs.rlr_06_status]
+description = "Secondary road-safety status code"
+tolerance = 0.0
+
+[outputs.rlr_07_status]
+description = "Comment and action closure status code"
+tolerance = 0.0
+
+[outputs.rlr_08_status]
+description = "Readiness decision consistency status code"
+tolerance = 0.0
+
+[outputs.rlr_09_status]
+description = "Claim boundary status code"
+tolerance = 0.0
+
+[outputs.readiness_code]
+description = "Gold readiness decision (0 ready, 1 ready with carried actions, 2 not ready)"
+tolerance = 0.0
+
+[outputs.required_findings_count]
+description = "Findings the review must raise"
+tolerance = 0.0
+
+[outputs.required_information_requests_count]
+description = "Information requests the review must raise"
+tolerance = 0.0
+
+[outputs.required_carried_actions_count]
+description = "Carried actions the review must record"
+tolerance = 0.0
+
+[outputs.driveway_grade_percent]
+description = "Computed driveway grade"
+tolerance = 0.02
+
+[outputs.driveway_grade_margin_percent]
+description = "Allowable grade minus computed grade"
+tolerance = 0.02
+
+[outputs.culvert_capacity_m3_s]
+description = "Full-pipe culvert capacity"
+tolerance = 0.02
+
+[outputs.culvert_capacity_margin_m3_s]
+description = "Culvert capacity minus design flow"
+tolerance = 0.02
+
+[outputs.headwater_level_m]
+description = "Synthetic headwater level"
+tolerance = 0.02
+
+[outputs.freeboard_m]
+description = "Road edge level minus headwater level"
+tolerance = 0.02
+
+[outputs.freeboard_margin_m]
+description = "Freeboard minus minimum freeboard"
+tolerance = 0.02
+
+[outputs.roadway_spread_m]
+description = "Triangular-gutter spread across the access path"
+tolerance = 0.02
+
+[outputs.spread_margin_m]
+description = "Allowable spread minus computed spread"
+tolerance = 0.02
+
+[outputs.sight_distance_required_m]
+description = "Grade-adjusted sight distance required"
+tolerance = 0.02
+
+[outputs.sight_distance_margin_m]
+description = "Available sight distance minus required sight distance"
+tolerance = 0.02
+
+# --- Archetypes ---
+
+[archetypes.urban_service_access]
+description = "Urban arterial service driveway with tighter spread and sight-distance controls"
+site_contexts = ["urban-service-driveway-access", "arterial-maintenance-access"]
+driveway_length_m = {min = 14.0, max = 24.0}
+driveway_grade_pct_source = {min = 3.0, max = 6.5}
+gutter_flow_m3_s = {min = 0.08, max = 0.14}
+access_speed_kmh = {min = 35.0, max = 50.0}
+
+[archetypes.suburban_maintenance_access]
+description = "Suburban maintenance access with moderate culvert and access constraints"
+site_contexts = ["suburban-maintenance-driveway", "peri-urban-culvert-access"]
+driveway_length_m = {min = 18.0, max = 32.0}
+driveway_grade_pct_source = {min = 2.0, max = 5.0}
+gutter_flow_m3_s = {min = 0.04, max = 0.10}
+access_speed_kmh = {min = 25.0, max = 40.0}
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Obvious packet defects: clean, missing road edge, or genuine freeboard deficiency"
+visibility = "partial"
+archetypes = ["urban_service_access", "suburban_maintenance_access"]
+hidden_params = [
+  "packet_variant",
+  "freeboard_margin_target_m",
+  "freeboard_deficit_m",
+  "spread_margin_target_m",
+  "available_sight_margin_m",
+]
+packet_variant = ["clean", "missing_road_edge_level", "access_freeboard_deficient"]
+
+[difficulty.medium]
+description = "Full packet-variant distribution"
+visibility = "partial"
+archetypes = ["urban_service_access", "suburban_maintenance_access"]
+hidden_params = [
+  "packet_variant",
+  "freeboard_margin_target_m",
+  "freeboard_deficit_m",
+  "spread_margin_target_m",
+  "available_sight_margin_m",
+]
+
+[difficulty.hard]
+description = "Subtle documentary defects: stale revisions, chainage mismatch, copied cases, carried comments"
+visibility = "partial"
+archetypes = ["urban_service_access", "suburban_maintenance_access"]
+hidden_params = [
+  "packet_variant",
+  "freeboard_margin_target_m",
+  "freeboard_deficit_m",
+  "spread_margin_target_m",
+  "available_sight_margin_m",
+]
+packet_variant = [
+  "stale_access_profile_revision",
+  "culvert_chainage_mismatch",
+  "scenario_copy_forward",
+  "minor_open_comment_carried",
+]

@@ -1,0 +1,227 @@
+# ABOUTME: Defines the SSC-10 treatment review response and permit-basis template.
+# ABOUTME: Pins one permit, sample, calculation appendix, comment register, authority matrix, and memo source pack.
+
+[meta]
+name = "treatment-review-permit-basis-package"
+description = "SSC-10 treatment review response and permit-basis metrics"
+long_description = "Calculates source-bound treatment review metrics from a deterministic SSC-10 task-owned source pack. The template combines SRT, permit margins, process capacity margins, comment closure, source completeness, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "treatment-permit-review"
+standards = ["permit review workflow", "nitrification SRT workflow", "process calculation appendix workflow"]
+tags = ["mechanical", "wastewater", "permit", "review", "srt", "oxygen", "chemical", "sludge", "deterministic"]
+tool_mode = "with-tool"
+
+[params.base_required_srt_d]
+type = "float"
+unit = "d"
+description = "CALC-10-APPX-08 base required SRT"
+min = 4.5
+max = 4.5
+
+[params.temperature_c]
+type = "float"
+unit = "deg C"
+description = "SAMPLE-10-DATA-08 governing temperature"
+min = 14.0
+max = 14.0
+
+[params.theta_factor]
+type = "float"
+description = "CALC-10-APPX-08 temperature correction factor"
+min = 1.07
+max = 1.07
+
+[params.actual_srt_d]
+type = "float"
+unit = "d"
+description = "CALC-10-APPX-08 actual SRT"
+min = 9.2
+max = 9.2
+
+[params.permit_bod_mg_l]
+type = "float"
+unit = "mg/L"
+description = "PERMIT-10-CRIT-08 permit BOD limit"
+min = 25.0
+max = 25.0
+
+[params.predicted_bod_mg_l]
+type = "float"
+unit = "mg/L"
+description = "SAMPLE-10-DATA-08 predicted BOD"
+min = 18.0
+max = 18.0
+
+[params.permit_ammonia_mg_l]
+type = "float"
+unit = "mg/L"
+description = "PERMIT-10-CRIT-08 permit ammonia limit"
+min = 3.0
+max = 3.0
+
+[params.predicted_ammonia_mg_l]
+type = "float"
+unit = "mg/L"
+description = "SAMPLE-10-DATA-08 predicted ammonia"
+min = 1.9
+max = 1.9
+
+[params.oxygen_required_kg_d]
+type = "float"
+unit = "kg/d"
+description = "CALC-10-APPX-08 oxygen required"
+min = 840.0
+max = 840.0
+
+[params.oxygen_capacity_kg_d]
+type = "float"
+unit = "kg/d"
+description = "CALC-10-APPX-08 oxygen capacity"
+min = 965.0
+max = 965.0
+
+[params.chemical_required_kg_d]
+type = "float"
+unit = "kg/d"
+description = "CALC-10-APPX-08 chemical required"
+min = 182.0
+max = 182.0
+
+[params.chemical_capacity_kg_d]
+type = "float"
+unit = "kg/d"
+description = "CALC-10-APPX-08 chemical capacity"
+min = 220.0
+max = 220.0
+
+[params.sludge_predicted_kg_d]
+type = "float"
+unit = "kg/d"
+description = "CALC-10-APPX-08 sludge predicted"
+min = 910.0
+max = 910.0
+
+[params.sludge_handling_capacity_kg_d]
+type = "float"
+unit = "kg/d"
+description = "CALC-10-APPX-08 sludge handling capacity"
+min = 1040.0
+max = 1040.0
+
+[params.total_review_comments]
+type = "float"
+description = "COMMENT-10-REG-08 total review comments"
+min = 18.0
+max = 18.0
+
+[params.closed_review_comments]
+type = "float"
+description = "COMMENT-10-REG-08 closed review comments"
+min = 16.0
+max = 16.0
+
+[params.critical_comments_open]
+type = "float"
+description = "COMMENT-10-REG-08 critical comments still open"
+min = 0.0
+max = 0.0
+
+[params.source_references_found]
+type = "float"
+description = "AUTH-10-MATRIX-08 source references found"
+min = 13.0
+max = 13.0
+
+[params.source_references_required]
+type = "float"
+description = "AUTH-10-MATRIX-08 source references required"
+min = 14.0
+max = 14.0
+
+[outputs.required_srt_d]
+description = "Temperature-adjusted required SRT"
+tolerance = 0.03
+
+[outputs.srt_margin_d]
+description = "Actual SRT minus required SRT"
+tolerance = 0.03
+
+[outputs.bod_permit_margin_mg_l]
+description = "BOD permit limit minus predicted BOD"
+tolerance = 0.03
+
+[outputs.ammonia_permit_margin_mg_l]
+description = "Ammonia permit limit minus predicted ammonia"
+tolerance = 0.03
+
+[outputs.oxygen_capacity_margin_kg_d]
+description = "Oxygen capacity minus oxygen required"
+tolerance = 0.03
+
+[outputs.chemical_capacity_margin_kg_d]
+description = "Chemical capacity minus chemical required"
+tolerance = 0.03
+
+[outputs.sludge_capacity_margin_kg_d]
+description = "Sludge handling capacity minus predicted sludge"
+tolerance = 0.03
+
+[outputs.comments_resolved_fraction]
+description = "Closed review comments divided by total comments"
+tolerance = 0.03
+
+[outputs.source_completeness_fraction]
+description = "Found source references divided by required references"
+tolerance = 0.03
+
+[outputs.response_completeness_score]
+description = "Average response completeness score"
+tolerance = 0.03
+
+[outputs.critical_comments_open]
+description = "Critical review comments still open"
+tolerance = 0.001
+
+[outputs.overall_pass_score]
+description = "1.0 when permit, process capacity, and critical-comment checks pass"
+tolerance = 0.001
+
+[archetypes.ssc10_treatment_permit_review_case]
+description = "Treatment review response and permit-basis source pack"
+site_contexts = ["treatment-permit-review", "permit-response-margin-check"]
+
+[archetypes.ssc10_treatment_permit_review_case.params]
+base_required_srt_d = {min = 4.5, max = 4.5}
+temperature_c = {min = 14.0, max = 14.0}
+theta_factor = {min = 1.07, max = 1.07}
+actual_srt_d = {min = 9.2, max = 9.2}
+permit_bod_mg_l = {min = 25.0, max = 25.0}
+predicted_bod_mg_l = {min = 18.0, max = 18.0}
+permit_ammonia_mg_l = {min = 3.0, max = 3.0}
+predicted_ammonia_mg_l = {min = 1.9, max = 1.9}
+oxygen_required_kg_d = {min = 840.0, max = 840.0}
+oxygen_capacity_kg_d = {min = 965.0, max = 965.0}
+chemical_required_kg_d = {min = 182.0, max = 182.0}
+chemical_capacity_kg_d = {min = 220.0, max = 220.0}
+sludge_predicted_kg_d = {min = 910.0, max = 910.0}
+sludge_handling_capacity_kg_d = {min = 1040.0, max = 1040.0}
+total_review_comments = {min = 18.0, max = 18.0}
+closed_review_comments = {min = 16.0, max = 16.0}
+critical_comments_open = {min = 0.0, max = 0.0}
+source_references_found = {min = 13.0, max = 13.0}
+source_references_required = {min = 14.0, max = 14.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-10 permit review package"
+visibility = "all_given"
+archetypes = ["ssc10_treatment_permit_review_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-10 permit review package"
+visibility = "all_given"
+archetypes = ["ssc10_treatment_permit_review_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-10 permit review package"
+visibility = "all_given"
+archetypes = ["ssc10_treatment_permit_review_case"]

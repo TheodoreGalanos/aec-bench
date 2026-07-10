@@ -1,0 +1,222 @@
+[meta]
+name = "dewatering-settlement-temporary-power-package"
+description = "SSC-16 dewatering, settlement, and temporary power metrics"
+long_description = "Calculates source-bound dewatering flow, pump power, generator headroom, settlement margin, battery backup, feeder current, and voltage-drop metrics from a deterministic SSC-16 task-owned source pack."
+discipline = "civil"
+category = "dewatering-temporary-power"
+standards = ["dewatering workflow", "settlement monitoring workflow", "temporary power workflow"]
+tags = ["civil", "construction", "dewatering", "settlement", "temporary-power", "deterministic"]
+tool_mode = "with-tool"
+
+[params.excavation_area_m2]
+type = "float"
+unit = "m2"
+description = "EXC-16-PLAN-03 excavation area"
+min = 520.0
+max = 520.0
+
+[params.drawdown_m]
+type = "float"
+unit = "m"
+description = "GW-16-REC-03 required drawdown"
+min = 2.4
+max = 2.4
+
+[params.hydraulic_conductivity_m_day]
+type = "float"
+unit = "m/day"
+description = "GW-16-REC-03 hydraulic conductivity"
+min = 0.8
+max = 0.8
+
+[params.dewatering_influence_factor]
+type = "float"
+description = "GW-16-REC-03 dewatering influence factor"
+min = 0.015
+max = 0.015
+
+[params.pump_head_m]
+type = "float"
+unit = "m"
+description = "PUMP-16-SCHED-03 pump head"
+min = 18.0
+max = 18.0
+
+[params.pump_efficiency]
+type = "float"
+description = "PUMP-16-SCHED-03 pump efficiency"
+min = 0.62
+max = 0.62
+
+[params.motor_efficiency]
+type = "float"
+description = "PUMP-16-SCHED-03 motor efficiency"
+min = 0.90
+max = 0.90
+
+[params.selected_generator_kw]
+type = "float"
+unit = "kW"
+description = "POWER-16-LAYOUT-03 selected temporary generator capacity"
+min = 12.0
+max = 12.0
+
+[params.compressible_layer_thickness_m]
+type = "float"
+unit = "m"
+description = "SETTLE-16-MON-03 compressible layer thickness"
+min = 6.0
+max = 6.0
+
+[params.consolidation_strain]
+type = "float"
+description = "SETTLE-16-MON-03 consolidation strain"
+min = 0.0028
+max = 0.0028
+
+[params.allowable_settlement_mm]
+type = "float"
+unit = "mm"
+description = "SETTLE-16-MON-03 allowable settlement"
+min = 25.0
+max = 25.0
+
+[params.telemetry_load_kw]
+type = "float"
+unit = "kW"
+description = "POWER-16-LAYOUT-03 monitoring telemetry load"
+min = 0.35
+max = 0.35
+
+[params.backup_runtime_h]
+type = "float"
+unit = "h"
+description = "POWER-16-LAYOUT-03 backup runtime"
+min = 6.0
+max = 6.0
+
+[params.provided_battery_kwh]
+type = "float"
+unit = "kWh"
+description = "POWER-16-LAYOUT-03 provided temporary battery energy"
+min = 36.0
+max = 36.0
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "POWER-16-LAYOUT-03 feeder voltage"
+min = 230.0
+max = 230.0
+
+[params.feeder_power_factor]
+type = "float"
+description = "POWER-16-LAYOUT-03 feeder power factor"
+min = 0.88
+max = 0.88
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "POWER-16-LAYOUT-03 feeder length"
+min = 0.08
+max = 0.08
+
+[params.feeder_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "POWER-16-LAYOUT-03 feeder resistance"
+min = 0.22
+max = 0.22
+
+[params.allowed_voltage_drop_percent]
+type = "float"
+unit = "percent"
+description = "POWER-16-LAYOUT-03 allowed voltage drop"
+min = 5.0
+max = 5.0
+
+[outputs.dewatering_flow_l_s]
+description = "Source-owned dewatering flow"
+tolerance = 0.03
+
+[outputs.pump_hydraulic_power_kw]
+description = "Pump hydraulic power"
+tolerance = 0.03
+
+[outputs.pump_input_power_kw]
+description = "Pump input power after pump and motor efficiency"
+tolerance = 0.03
+
+[outputs.generator_headroom_kw]
+description = "Selected generator capacity minus pump input power"
+tolerance = 0.03
+
+[outputs.predicted_settlement_mm]
+description = "Predicted consolidation settlement"
+tolerance = 0.03
+
+[outputs.settlement_margin_mm]
+description = "Allowable settlement minus predicted settlement"
+tolerance = 0.03
+
+[outputs.battery_required_kwh]
+description = "Backup battery energy required"
+tolerance = 0.03
+
+[outputs.battery_margin_kwh]
+description = "Provided battery energy minus required battery energy"
+tolerance = 0.03
+
+[outputs.feeder_current_a]
+description = "Pump temporary feeder current"
+tolerance = 0.03
+
+[outputs.voltage_drop_percent]
+description = "Temporary feeder voltage drop percentage"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Allowed voltage drop minus calculated voltage drop"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when generator, settlement, battery, and voltage-drop checks pass"
+tolerance = 0.001
+
+[archetypes.ssc16_dewatering_power_case]
+description = "Dewatering, settlement, and temporary power case"
+excavation_area_m2 = {min = 520.0, max = 520.0}
+drawdown_m = {min = 2.4, max = 2.4}
+hydraulic_conductivity_m_day = {min = 0.8, max = 0.8}
+dewatering_influence_factor = {min = 0.015, max = 0.015}
+pump_head_m = {min = 18.0, max = 18.0}
+pump_efficiency = {min = 0.62, max = 0.62}
+motor_efficiency = {min = 0.90, max = 0.90}
+selected_generator_kw = {min = 12.0, max = 12.0}
+compressible_layer_thickness_m = {min = 6.0, max = 6.0}
+consolidation_strain = {min = 0.0028, max = 0.0028}
+allowable_settlement_mm = {min = 25.0, max = 25.0}
+telemetry_load_kw = {min = 0.35, max = 0.35}
+backup_runtime_h = {min = 6.0, max = 6.0}
+provided_battery_kwh = {min = 36.0, max = 36.0}
+feeder_voltage_v = {min = 230.0, max = 230.0}
+feeder_power_factor = {min = 0.88, max = 0.88}
+feeder_length_km = {min = 0.08, max = 0.08}
+feeder_resistance_ohm_km = {min = 0.22, max = 0.22}
+allowed_voltage_drop_percent = {min = 5.0, max = 5.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-16 dewatering temporary power package"
+visibility = "all_given"
+archetypes = ["ssc16_dewatering_power_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-16 dewatering temporary power package"
+visibility = "all_given"
+archetypes = ["ssc16_dewatering_power_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-16 dewatering temporary power package"
+visibility = "all_given"
+archetypes = ["ssc16_dewatering_power_case"]

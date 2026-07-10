@@ -1,0 +1,172 @@
+[meta]
+name = "facade-submittal-source-policy-package"
+description = "SSC-09 facade submittal review and source-policy metrics"
+long_description = "Calculates source-bound facade submittal review metrics from a deterministic SSC-09 task-owned source pack. The template combines source traceability, calculator row checks, material schedule matching, utilization row pass checks, review comment closure, boundary-exception resolution, substitution control, response completeness, and an overall synthetic pass score."
+discipline = "structural"
+category = "facade-submittal-policy"
+standards = ["facade submittal workflows", "source traceability review", "response-to-comments workflow"]
+tags = ["structural", "facade", "submittal", "source-policy", "materials", "calculator", "comments", "deterministic"]
+tool_mode = "with-tool"
+
+[params.source_items_traced]
+type = "float"
+description = "SOURCE-09-INDEX-08 traced source items"
+min = 16.0
+max = 16.0
+
+[params.required_source_items]
+type = "float"
+description = "SOURCE-09-INDEX-08 required source items"
+min = 18.0
+max = 18.0
+
+[params.calculator_rows_checked]
+type = "float"
+description = "CALC-09-REPORT-08 checked calculator rows"
+min = 12.0
+max = 12.0
+
+[params.required_calculator_rows]
+type = "float"
+description = "CALC-09-REPORT-08 required calculator rows"
+min = 12.0
+max = 12.0
+
+[params.matching_material_items]
+type = "float"
+description = "MAT-09-SCHEDULE-08 matching material items"
+min = 9.0
+max = 9.0
+
+[params.material_schedule_items]
+type = "float"
+description = "MAT-09-SCHEDULE-08 material schedule items"
+min = 10.0
+max = 10.0
+
+[params.passing_utilization_rows]
+type = "float"
+description = "CALC-09-REPORT-08 passing utilization rows"
+min = 8.0
+max = 8.0
+
+[params.utilization_rows]
+type = "float"
+description = "CALC-09-REPORT-08 utilization rows"
+min = 8.0
+max = 8.0
+
+[params.resolved_comments]
+type = "float"
+description = "COMMENT-09-REVIEW-08 resolved comments"
+min = 5.0
+max = 5.0
+
+[params.review_comments]
+type = "float"
+description = "COMMENT-09-REVIEW-08 review comments"
+min = 6.0
+max = 6.0
+
+[params.approved_boundary_exceptions]
+type = "float"
+description = "SOURCE-09-INDEX-08 approved boundary exceptions"
+min = 2.0
+max = 2.0
+
+[params.boundary_exceptions]
+type = "float"
+description = "SOURCE-09-INDEX-08 boundary exceptions"
+min = 2.0
+max = 2.0
+
+[params.unapproved_substitution_count]
+type = "float"
+description = "MAT-09-SCHEDULE-08 unapproved substitution count"
+min = 0.0
+max = 0.0
+
+[params.response_sections]
+type = "float"
+description = "RESPONSE-09-SUBMITTAL-08 completed response sections"
+min = 9.0
+max = 9.0
+
+[params.required_response_sections]
+type = "float"
+description = "RESPONSE-09-SUBMITTAL-08 required response sections"
+min = 10.0
+max = 10.0
+
+[outputs.source_trace_score]
+description = "Traced source items divided by required source items"
+tolerance = 0.003
+
+[outputs.calculator_check_fraction]
+description = "Checked calculator rows divided by required calculator rows"
+tolerance = 0.003
+
+[outputs.material_match_fraction]
+description = "Matching material items divided by material schedule items"
+tolerance = 0.003
+
+[outputs.utilization_pass_fraction]
+description = "Passing utilization rows divided by utilization rows"
+tolerance = 0.003
+
+[outputs.comment_resolution_fraction]
+description = "Resolved comments divided by review comments"
+tolerance = 0.003
+
+[outputs.boundary_exception_resolution_fraction]
+description = "Approved boundary exceptions divided by boundary exceptions"
+tolerance = 0.003
+
+[outputs.unapproved_substitution_count]
+description = "Unapproved substitution count"
+tolerance = 0.001
+
+[outputs.response_completeness_score]
+description = "Completed response sections divided by required response sections"
+tolerance = 0.003
+
+[outputs.evidence_boundary_score]
+description = "Average of source, calculator, material, utilization, comment, exception, and response fractions"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when facade submittal source-policy checks pass"
+tolerance = 0.001
+
+[archetypes.ssc09_facade_submittal_policy_case]
+description = "Facade submittal review and source-policy case"
+source_items_traced = {min = 16.0, max = 16.0}
+required_source_items = {min = 18.0, max = 18.0}
+calculator_rows_checked = {min = 12.0, max = 12.0}
+required_calculator_rows = {min = 12.0, max = 12.0}
+matching_material_items = {min = 9.0, max = 9.0}
+material_schedule_items = {min = 10.0, max = 10.0}
+passing_utilization_rows = {min = 8.0, max = 8.0}
+utilization_rows = {min = 8.0, max = 8.0}
+resolved_comments = {min = 5.0, max = 5.0}
+review_comments = {min = 6.0, max = 6.0}
+approved_boundary_exceptions = {min = 2.0, max = 2.0}
+boundary_exceptions = {min = 2.0, max = 2.0}
+unapproved_substitution_count = {min = 0.0, max = 0.0}
+response_sections = {min = 9.0, max = 9.0}
+required_response_sections = {min = 10.0, max = 10.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-09 facade submittal review package"
+visibility = "all_given"
+archetypes = ["ssc09_facade_submittal_policy_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-09 facade submittal review package"
+visibility = "all_given"
+archetypes = ["ssc09_facade_submittal_policy_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-09 facade submittal review package"
+visibility = "all_given"
+archetypes = ["ssc09_facade_submittal_policy_case"]

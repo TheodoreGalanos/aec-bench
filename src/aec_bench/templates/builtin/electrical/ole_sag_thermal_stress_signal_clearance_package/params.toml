@@ -1,0 +1,152 @@
+[meta]
+name = "ole-sag-thermal-stress-signal-clearance-package"
+description = "SSC-02 OLE sag, thermal stress, hot-tension, and signal-clearance metrics"
+long_description = "Calculates deterministic SSC-02 OLE metrics from a task-owned synthetic source pack. The template combines thermal stress, thermal tension loss, hot tension, single-span sag, clearance margin to a signal envelope, sag margin, and an overall synthetic pass score."
+discipline = "electrical"
+category = "ole-sag-clearance"
+standards = ["EN 50119-style OLE sag-tension workflow", "rail signal clearance review workflow"]
+tags = ["electrical", "rail", "ole", "sag", "thermal-stress", "clearance", "signal", "deterministic"]
+tool_mode = "with-tool"
+
+[params.span_length_m]
+type = "float"
+unit = "m"
+description = "OLE-02-SPAN-02 controlling OLE span length"
+min = 62.0
+max = 62.0
+
+[params.conductor_unit_weight_n_m]
+type = "float"
+unit = "N/m"
+description = "WIRE-02-DATA-02 conductor unit weight"
+min = 12.0
+max = 12.0
+
+[params.initial_tension_kn]
+type = "float"
+unit = "kN"
+description = "WIRE-02-DATA-02 initial conductor tension"
+min = 32.0
+max = 32.0
+
+[params.thermal_expansion_per_c]
+type = "float"
+unit = "1/deg C"
+description = "WIRE-02-DATA-02 thermal expansion coefficient"
+min = 0.000017
+max = 0.000017
+
+[params.youngs_modulus_mpa]
+type = "float"
+unit = "MPa"
+description = "WIRE-02-DATA-02 Young's modulus"
+min = 110000.0
+max = 110000.0
+
+[params.temp_delta_c]
+type = "float"
+unit = "deg C"
+description = "WEATHER-02-TEMP-02 temperature rise from installation to hot case"
+min = 35.0
+max = 35.0
+
+[params.cross_section_mm2]
+type = "float"
+unit = "mm^2"
+description = "WIRE-02-DATA-02 conductor cross-section area"
+min = 150.0
+max = 150.0
+
+[params.static_clearance_m]
+type = "float"
+unit = "m"
+description = "ROUTE-02-CLEAR-02 static clearance before sag"
+min = 5.6
+max = 5.6
+
+[params.signal_envelope_m]
+type = "float"
+unit = "m"
+description = "ROUTE-02-CLEAR-02 signal envelope elevation"
+min = 5.1
+max = 5.1
+
+[params.max_allowed_sag_m]
+type = "float"
+unit = "m"
+description = "CRIT-02-CLEAR-02 maximum allowed sag"
+min = 0.45
+max = 0.45
+
+[params.allowable_thermal_stress_mpa]
+type = "float"
+unit = "MPa"
+description = "CRIT-02-CLEAR-02 allowable thermal stress"
+min = 90.0
+max = 90.0
+
+[outputs.thermal_stress_mpa]
+description = "Thermal stress from Young's modulus, expansion coefficient, and temperature rise"
+tolerance = 0.03
+
+[outputs.thermal_tension_loss_kn]
+description = "Tension loss corresponding to the thermal stress"
+tolerance = 0.03
+
+[outputs.hot_tension_kn]
+description = "Initial tension minus thermal tension loss"
+tolerance = 0.03
+
+[outputs.sag_m]
+description = "Single-span sag at hot tension"
+tolerance = 0.003
+
+[outputs.clearance_at_sag_m]
+description = "Static clearance minus sag"
+tolerance = 0.003
+
+[outputs.clearance_margin_m]
+description = "Clearance at sag minus signal envelope"
+tolerance = 0.003
+
+[outputs.sag_margin_m]
+description = "Maximum allowed sag minus computed sag"
+tolerance = 0.003
+
+[outputs.thermal_stress_margin_mpa]
+description = "Allowable thermal stress minus computed thermal stress"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when clearance, sag, and thermal-stress margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc02_ole_sag_clearance_case]
+description = "OLE sag and signal-clearance package tied to one span schedule, route clearance table, weather case, wire data sheet, criterion, and memo"
+span_length_m = {min = 62.0, max = 62.0}
+conductor_unit_weight_n_m = {min = 12.0, max = 12.0}
+initial_tension_kn = {min = 32.0, max = 32.0}
+thermal_expansion_per_c = {min = 0.000017, max = 0.000017}
+youngs_modulus_mpa = {min = 110000.0, max = 110000.0}
+temp_delta_c = {min = 35.0, max = 35.0}
+cross_section_mm2 = {min = 150.0, max = 150.0}
+static_clearance_m = {min = 5.6, max = 5.6}
+signal_envelope_m = {min = 5.1, max = 5.1}
+max_allowed_sag_m = {min = 0.45, max = 0.45}
+allowable_thermal_stress_mpa = {min = 90.0, max = 90.0}
+site_contexts = ["ole-sag-clearance"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-02 OLE sag and clearance package"
+visibility = "all_given"
+archetypes = ["ssc02_ole_sag_clearance_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-02 OLE sag and clearance package"
+visibility = "all_given"
+archetypes = ["ssc02_ole_sag_clearance_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-02 OLE sag and clearance package"
+visibility = "all_given"
+archetypes = ["ssc02_ole_sag_clearance_case"]

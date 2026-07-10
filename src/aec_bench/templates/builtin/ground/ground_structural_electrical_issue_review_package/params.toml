@@ -1,0 +1,336 @@
+# ABOUTME: Parameter ranges for the SSC-07 ground structural-electrical review-first package.
+# ABOUTME: Samples source-pack values and hidden packet variants for issue-review instances.
+
+[meta]
+name = "ground-structural-electrical-issue-review-package"
+description = "SSC-07 review of ground bearing and earthing evidence partition"
+long_description = "Review-first source-packet task for a geotechnical/electrical handoff: inventory source files, preserve geotechnical versus resistivity authority, recompute bearing and earthing checks from source-owned methods, and issue an auditable readiness decision."
+discipline = "ground"
+category = "ground-review"
+standards = ["Terzaghi 1943", "IEEE 80-2013", "task-owned synthetic criteria"]
+tags = ["ground", "geotechnical", "earthing", "review", "source-pack", "insufficient-data"]
+tool_mode = "no-tool"
+
+[params.raw_n_value]
+type = "int"
+description = "Raw SPT N value from SPT-07 record"
+min = 18
+max = 26
+
+[params.effective_overburden_kpa]
+type = "float"
+unit = "kPa"
+description = "Effective overburden at the SPT depth"
+min = 112.0
+max = 145.0
+
+[params.design_groundwater_level_m]
+type = "float"
+unit = "m"
+description = "Design groundwater depth below ground level"
+min = 1.45
+max = 2.35
+
+[params.cohesion_kpa]
+type = "float"
+unit = "kPa"
+description = "Effective cohesion for bearing check"
+min = 4.0
+max = 8.0
+
+[params.total_unit_weight_kn_m3]
+type = "float"
+unit = "kN/m3"
+description = "Total soil unit weight"
+min = 18.0
+max = 19.6
+
+[params.footing_width_m]
+type = "float"
+unit = "m"
+description = "Square footing width"
+min = 2.2
+max = 2.8
+
+[params.embedment_depth_m]
+type = "float"
+unit = "m"
+description = "Footing embedment depth"
+min = 1.0
+max = 1.35
+
+[params.factor_of_safety]
+type = "float"
+description = "Source-owned bearing factor of safety"
+min = 3.0
+max = 3.0
+
+[params.bearing_margin_target_kpa]
+type = "float"
+unit = "kPa"
+description = "Hidden clean-case target bearing margin used to derive applied pressure"
+min = 35.0
+max = 70.0
+
+[params.bearing_deficit_kpa]
+type = "float"
+unit = "kPa"
+description = "Hidden deficient-case bearing deficit"
+min = 18.0
+max = 42.0
+
+[params.soil_resistivity_ohm_m]
+type = "float"
+unit = "ohm-m"
+description = "Apparent resistivity from RES-07 traverse"
+min = 65.0
+max = 105.0
+
+[params.grid_length_m]
+type = "float"
+unit = "m"
+description = "Earthing grid length"
+min = 28.0
+max = 38.0
+
+[params.grid_width_m]
+type = "float"
+unit = "m"
+description = "Earthing grid width"
+min = 20.0
+max = 28.0
+
+[params.total_conductor_length_m]
+type = "float"
+unit = "m"
+description = "Total buried grid conductor length"
+min = 320.0
+max = 430.0
+
+[params.burial_depth_m]
+type = "float"
+unit = "m"
+description = "Grid burial depth"
+min = 0.5
+max = 0.75
+
+[params.grid_current_ka]
+type = "float"
+unit = "kA"
+description = "Maximum grid current"
+min = 2.8
+max = 3.8
+
+[params.grid_resistance_margin_target_ohm]
+type = "float"
+unit = "ohm"
+description = "Hidden clean-case grid resistance margin used to derive the limit"
+min = 0.120
+max = 0.280
+
+[params.touch_voltage_margin_target_v]
+type = "float"
+unit = "V"
+description = "Hidden clean-case touch-voltage margin used to derive the limit"
+min = 120.0
+max = 260.0
+
+[params.packet_variant]
+type = "enum"
+description = "Hidden source-packet issue variant"
+values = [
+  "clean",
+  "missing_groundwater_level",
+  "stale_ground_memo_revision",
+  "resistivity_strength_misuse",
+  "scenario_copy_forward",
+  "open_critical_comment",
+  "minor_open_comment_carried",
+  "bearing_fos_deficient",
+]
+
+[outputs.rlr_01_status]
+description = "RLR-01 status code"
+tolerance = 0.01
+
+[outputs.rlr_02_status]
+description = "RLR-02 status code"
+tolerance = 0.01
+
+[outputs.rlr_03_status]
+description = "RLR-03 status code"
+tolerance = 0.01
+
+[outputs.rlr_04_status]
+description = "RLR-04 status code"
+tolerance = 0.01
+
+[outputs.rlr_05_status]
+description = "RLR-05 status code"
+tolerance = 0.01
+
+[outputs.rlr_06_status]
+description = "RLR-06 status code"
+tolerance = 0.01
+
+[outputs.rlr_07_status]
+description = "RLR-07 status code"
+tolerance = 0.01
+
+[outputs.rlr_08_status]
+description = "RLR-08 status code"
+tolerance = 0.01
+
+[outputs.rlr_09_status]
+description = "RLR-09 status code"
+tolerance = 0.01
+
+[outputs.corrected_spt_n60]
+description = "Energy, borehole, sampler, and rod-length corrected SPT N60"
+tolerance = 0.03
+
+[outputs.design_friction_angle_deg]
+description = "Source-owned design friction angle from SPT N60 correlation"
+tolerance = 0.03
+
+[outputs.allowable_bearing_kpa]
+description = "Allowable Terzaghi bearing capacity"
+tolerance = 0.03
+
+[outputs.bearing_margin_kpa]
+description = "Allowable bearing pressure minus applied bearing pressure"
+tolerance = 0.03
+
+[outputs.grid_resistance_ohm]
+description = "Earthing grid resistance"
+tolerance = 0.03
+
+[outputs.grid_resistance_margin_ohm]
+description = "Grid resistance limit minus grid resistance"
+tolerance = 0.03
+
+[outputs.touch_voltage_margin_v]
+description = "Touch voltage limit minus source-owned touch voltage"
+tolerance = 0.03
+
+[outputs.readiness_code]
+description = "Readiness decision code"
+tolerance = 0.01
+
+[outputs.required_findings_count]
+description = "Required finding count"
+tolerance = 0.01
+
+[outputs.required_information_requests_count]
+description = "Required information request count"
+tolerance = 0.01
+
+[outputs.required_carried_actions_count]
+description = "Required carried action count"
+tolerance = 0.01
+
+[archetypes.transport_equipment_site]
+description = "Transport corridor equipment site with shallow square foundation and moderate earthing grid"
+site_contexts = ["transport-equipment-pad", "rail-corridor-ground-grid"]
+raw_n_value = {min = 18, max = 23}
+design_groundwater_level_m = {min = 1.45, max = 2.10}
+soil_resistivity_ohm_m = {min = 65.0, max = 92.0}
+
+[archetypes.coastal_utility_site]
+description = "Coastal utility site with slightly denser sand and larger earthing grid"
+site_contexts = ["coastal-utility-pad", "substation-edge-foundation"]
+raw_n_value = {min = 21, max = 26}
+design_groundwater_level_m = {min = 1.80, max = 2.35}
+soil_resistivity_ohm_m = {min = 78.0, max = 105.0}
+
+[difficulty.easy]
+description = "Obvious packet defects: clean, missing groundwater evidence, or bearing failure"
+visibility = "partial"
+archetypes = ["transport_equipment_site", "coastal_utility_site"]
+hidden_params = [
+  "packet_variant",
+  "bearing_margin_target_kpa",
+  "bearing_deficit_kpa",
+  "grid_resistance_margin_target_ohm",
+  "touch_voltage_margin_target_v",
+]
+vary = [
+  "raw_n_value",
+  "design_groundwater_level_m",
+  "soil_resistivity_ohm_m",
+  "packet_variant",
+]
+packet_variant = ["clean", "missing_groundwater_level", "bearing_fos_deficient"]
+
+[difficulty.medium]
+description = "Full packet-variant distribution"
+visibility = "partial"
+archetypes = ["transport_equipment_site", "coastal_utility_site"]
+hidden_params = [
+  "packet_variant",
+  "bearing_margin_target_kpa",
+  "bearing_deficit_kpa",
+  "grid_resistance_margin_target_ohm",
+  "touch_voltage_margin_target_v",
+]
+vary = [
+  "raw_n_value",
+  "effective_overburden_kpa",
+  "design_groundwater_level_m",
+  "cohesion_kpa",
+  "total_unit_weight_kn_m3",
+  "footing_width_m",
+  "embedment_depth_m",
+  "bearing_margin_target_kpa",
+  "bearing_deficit_kpa",
+  "soil_resistivity_ohm_m",
+  "grid_length_m",
+  "grid_width_m",
+  "total_conductor_length_m",
+  "grid_current_ka",
+  "grid_resistance_margin_target_ohm",
+  "touch_voltage_margin_target_v",
+  "packet_variant",
+]
+
+[difficulty.hard]
+description = "Subtle source-authority, stale-revision, scenario-copy, and comment-closure defects"
+visibility = "partial"
+archetypes = ["transport_equipment_site", "coastal_utility_site"]
+hidden_params = [
+  "packet_variant",
+  "bearing_margin_target_kpa",
+  "bearing_deficit_kpa",
+  "grid_resistance_margin_target_ohm",
+  "touch_voltage_margin_target_v",
+]
+vary = [
+  "raw_n_value",
+  "effective_overburden_kpa",
+  "design_groundwater_level_m",
+  "cohesion_kpa",
+  "total_unit_weight_kn_m3",
+  "footing_width_m",
+  "embedment_depth_m",
+  "bearing_margin_target_kpa",
+  "bearing_deficit_kpa",
+  "soil_resistivity_ohm_m",
+  "grid_length_m",
+  "grid_width_m",
+  "total_conductor_length_m",
+  "burial_depth_m",
+  "grid_current_ka",
+  "grid_resistance_margin_target_ohm",
+  "touch_voltage_margin_target_v",
+  "packet_variant",
+]
+packet_variant = [
+  "clean",
+  "missing_groundwater_level",
+  "stale_ground_memo_revision",
+  "resistivity_strength_misuse",
+  "scenario_copy_forward",
+  "open_critical_comment",
+  "minor_open_comment_carried",
+  "bearing_fos_deficient",
+]

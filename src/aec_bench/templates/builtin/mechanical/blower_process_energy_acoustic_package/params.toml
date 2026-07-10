@@ -1,0 +1,175 @@
+# ABOUTME: Defines the SSC-06 blower process, energy, and acoustic impact template.
+# ABOUTME: Pins one process load, blower data, motor schedule, receiver, and acoustic criterion source pack.
+
+[meta]
+name = "blower-process-energy-acoustic-package"
+description = "SSC-06 blower process, energy, and acoustic impact metrics"
+long_description = "Calculates source-bound blower process and acoustic metrics from a deterministic SSC-06 task-owned source pack. The template combines oxygen demand, required airflow, blower shaft power, motor input and margin, receiver sound level, criterion margin, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "blower-process-acoustic"
+standards = ["process oxygen demand workflow", "blower selection workflow", "acoustic receiver screening"]
+tags = ["mechanical", "blower", "wastewater", "oxygen", "motor", "acoustic", "deterministic"]
+tool_mode = "with-tool"
+
+[params.influent_flow_mld]
+type = "float"
+unit = "ML/d"
+description = "PROCESS-06-BLOWER-02 influent flow basis"
+min = 4.8
+max = 4.8
+
+[params.bod_mg_l]
+type = "float"
+unit = "mg/L"
+description = "PROCESS-06-BLOWER-02 BOD concentration"
+min = 220.0
+max = 220.0
+
+[params.ammonia_mg_l]
+type = "float"
+unit = "mg/L"
+description = "PROCESS-06-BLOWER-02 ammonia concentration"
+min = 28.0
+max = 28.0
+
+[params.bod_oxygen_factor]
+type = "float"
+description = "PROCESS-06-BLOWER-02 oxygen demand factor for BOD"
+min = 1.1
+max = 1.1
+
+[params.nitrification_oxygen_factor]
+type = "float"
+description = "PROCESS-06-BLOWER-02 oxygen demand factor for nitrification"
+min = 4.57
+max = 4.57
+
+[params.blower_air_m3_per_kg_o2]
+type = "float"
+unit = "m3/kg O2"
+description = "BLOWER-06-DATA-02 required air volume per kg O2"
+min = 38.0
+max = 38.0
+
+[params.blower_discharge_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "BLOWER-06-DATA-02 discharge pressure"
+min = 68.0
+max = 68.0
+
+[params.blower_efficiency]
+type = "float"
+description = "BLOWER-06-DATA-02 blower efficiency"
+min = 0.72
+max = 0.72
+
+[params.motor_efficiency]
+type = "float"
+description = "MOTOR-06-SCHED-02 motor efficiency"
+min = 0.94
+max = 0.94
+
+[params.selected_motor_kw]
+type = "float"
+unit = "kW"
+description = "MOTOR-06-SCHED-02 selected motor size"
+min = 90.0
+max = 90.0
+
+[params.source_sound_power_dba]
+type = "float"
+unit = "dBA"
+description = "BLOWER-06-DATA-02 blower source sound level"
+min = 96.0
+max = 96.0
+
+[params.receiver_distance_m]
+type = "float"
+unit = "m"
+description = "RECEIVER-06-PLAN-02 distance to receiver"
+min = 42.0
+max = 42.0
+
+[params.enclosure_insertion_loss_db]
+type = "float"
+unit = "dB"
+description = "ACOUSTIC-06-CRIT-02 enclosure insertion loss"
+min = 14.0
+max = 14.0
+
+[params.receiver_criterion_dba]
+type = "float"
+unit = "dBA"
+description = "ACOUSTIC-06-CRIT-02 receiver criterion"
+min = 55.0
+max = 55.0
+
+[outputs.oxygen_demand_kg_d]
+description = "PROCESS-06-BLOWER-02 oxygen demand"
+tolerance = 0.03
+
+[outputs.required_airflow_m3_min]
+description = "BLOWER-06-DATA-02 airflow required to meet oxygen demand"
+tolerance = 0.03
+
+[outputs.blower_shaft_power_kw]
+description = "BLOWER-06-DATA-02 shaft power at required airflow"
+tolerance = 0.03
+
+[outputs.motor_input_power_kw]
+description = "MOTOR-06-SCHED-02 motor input power"
+tolerance = 0.03
+
+[outputs.motor_size_margin_kw]
+description = "Selected motor size minus motor input power"
+tolerance = 0.03
+
+[outputs.distance_attenuation_db]
+description = "RECEIVER-06-PLAN-02 spherical distance attenuation"
+tolerance = 0.03
+
+[outputs.receiver_spl_dba]
+description = "Receiver sound pressure level after distance and enclosure attenuation"
+tolerance = 0.03
+
+[outputs.criterion_margin_db]
+description = "Acoustic criterion minus receiver sound pressure level"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when motor and acoustic criterion margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc06_blower_process_acoustic_case]
+description = "Blower process, motor, and acoustic source pack"
+influent_flow_mld = {min = 4.8, max = 4.8}
+bod_mg_l = {min = 220.0, max = 220.0}
+ammonia_mg_l = {min = 28.0, max = 28.0}
+bod_oxygen_factor = {min = 1.1, max = 1.1}
+nitrification_oxygen_factor = {min = 4.57, max = 4.57}
+blower_air_m3_per_kg_o2 = {min = 38.0, max = 38.0}
+blower_discharge_pressure_kpa = {min = 68.0, max = 68.0}
+blower_efficiency = {min = 0.72, max = 0.72}
+motor_efficiency = {min = 0.94, max = 0.94}
+selected_motor_kw = {min = 90.0, max = 90.0}
+source_sound_power_dba = {min = 96.0, max = 96.0}
+receiver_distance_m = {min = 42.0, max = 42.0}
+enclosure_insertion_loss_db = {min = 14.0, max = 14.0}
+receiver_criterion_dba = {min = 55.0, max = 55.0}
+site_contexts = ["blower-process-acoustic", "oxygen-motor-noise-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-06 blower process and acoustic package"
+visibility = "all_given"
+archetypes = ["ssc06_blower_process_acoustic_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-06 blower process and acoustic package"
+visibility = "all_given"
+archetypes = ["ssc06_blower_process_acoustic_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-06 blower process and acoustic package"
+visibility = "all_given"
+archetypes = ["ssc06_blower_process_acoustic_case"]

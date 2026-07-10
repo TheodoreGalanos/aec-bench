@@ -1,0 +1,150 @@
+[meta]
+name = "commissioning-calibration-review-package"
+description = "SSC-18 commissioning calibration, loop-test, and process acceptance metrics"
+long_description = "Calculates source-bound commissioning and calibration metrics from a deterministic SSC-18 task-owned source pack. The template combines ideal 4-20 mA signal, as-found calibration error, loop-test pass fraction, process acceptance margin, valve Cv headroom, and an overall synthetic pass score."
+discipline = "electrical"
+category = "commissioning-calibration"
+standards = ["ISA-5", "loop commissioning workflow", "calibration sheet workflow"]
+tags = ["electrical", "instrumentation", "commissioning", "calibration", "loop-test", "valve", "deterministic"]
+tool_mode = "with-tool"
+
+[params.test_process_value_m3_h]
+type = "float"
+unit = "m3/h"
+description = "CAL-18-SHEET-04 test process value"
+min = 68.8
+max = 68.8
+
+[params.lower_range_value_m3_h]
+type = "float"
+unit = "m3/h"
+description = "LOOP-18-SCHED-04 lower range"
+min = 0.0
+max = 0.0
+
+[params.upper_range_value_m3_h]
+type = "float"
+unit = "m3/h"
+description = "LOOP-18-SCHED-04 upper range"
+min = 120.0
+max = 120.0
+
+[params.as_found_signal_ma]
+type = "float"
+unit = "mA"
+description = "CAL-18-SHEET-04 as-found signal"
+min = 13.1
+max = 13.1
+
+[params.calibration_tolerance_ma]
+type = "float"
+unit = "mA"
+description = "CRIT-18-ACCEPT-04 calibration tolerance"
+min = 0.2
+max = 0.2
+
+[params.loop_points_passed]
+type = "float"
+description = "CHECK-18-COMM-04 loop points passed"
+min = 12.0
+max = 12.0
+
+[params.loop_points_total]
+type = "float"
+description = "CHECK-18-COMM-04 loop points total"
+min = 12.0
+max = 12.0
+
+[params.failed_point_count]
+type = "float"
+description = "CHECK-18-COMM-04 failed point count"
+min = 0.0
+max = 0.0
+
+[params.process_acceptance_margin]
+type = "float"
+description = "CRIT-18-ACCEPT-04 process acceptance margin"
+min = 1.8
+max = 1.8
+
+[params.required_valve_cv]
+type = "float"
+description = "VDS-18-FCV-04 required valve Cv"
+min = 56.464
+max = 56.464
+
+[params.selected_valve_cv]
+type = "float"
+description = "VDS-18-FCV-04 selected valve Cv"
+min = 63.0
+max = 63.0
+
+[outputs.ideal_signal_ma]
+description = "Ideal signal at the test process value"
+tolerance = 0.03
+
+[outputs.calibration_error_ma]
+description = "As-found signal minus ideal signal"
+tolerance = 0.03
+
+[outputs.calibration_error_pct_span]
+description = "Absolute calibration error as percent of 16 mA span"
+tolerance = 0.03
+
+[outputs.calibration_margin_ma]
+description = "Calibration tolerance minus absolute error"
+tolerance = 0.03
+
+[outputs.loop_check_pass_fraction]
+description = "Loop points passed divided by total loop points"
+tolerance = 0.03
+
+[outputs.failed_point_count]
+description = "Failed loop/calibration point count"
+tolerance = 0.03
+
+[outputs.process_acceptance_margin]
+description = "Remaining process acceptance margin"
+tolerance = 0.03
+
+[outputs.valve_cv_headroom]
+description = "Selected valve Cv minus required Cv"
+tolerance = 0.03
+
+[outputs.commissioning_completeness_fraction]
+description = "Completeness score for closed commissioning checks"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for commissioning calibration checks"
+tolerance = 0.03
+
+[archetypes.ssc18_commissioning_calibration_case]
+description = "Commissioning calibration and loop-review source pack"
+test_process_value_m3_h = {min = 68.8, max = 68.8}
+lower_range_value_m3_h = {min = 0.0, max = 0.0}
+upper_range_value_m3_h = {min = 120.0, max = 120.0}
+as_found_signal_ma = {min = 13.1, max = 13.1}
+calibration_tolerance_ma = {min = 0.2, max = 0.2}
+loop_points_passed = {min = 12.0, max = 12.0}
+loop_points_total = {min = 12.0, max = 12.0}
+failed_point_count = {min = 0.0, max = 0.0}
+process_acceptance_margin = {min = 1.8, max = 1.8}
+required_valve_cv = {min = 56.464, max = 56.464}
+selected_valve_cv = {min = 63.0, max = 63.0}
+site_contexts = ["commissioning-calibration", "loop-test-review"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-18 commissioning calibration package"
+visibility = "all_given"
+archetypes = ["ssc18_commissioning_calibration_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-18 commissioning calibration package"
+visibility = "all_given"
+archetypes = ["ssc18_commissioning_calibration_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-18 commissioning calibration package"
+visibility = "all_given"
+archetypes = ["ssc18_commissioning_calibration_case"]

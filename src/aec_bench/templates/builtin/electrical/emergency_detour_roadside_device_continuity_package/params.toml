@@ -1,0 +1,264 @@
+[meta]
+name = "emergency-detour-roadside-device-continuity-package"
+description = "SSC-01 emergency detour and roadside device continuity metrics"
+long_description = "Calculates task-owned synthetic SSC-01 detour VMS legibility, network headroom, RF link margin, battery runtime, and feeder voltage-drop metrics."
+discipline = "electrical"
+category = "road-operations"
+standards = ["FHWA MUTCD", "NTCIP", "ITS architecture"]
+tags = ["electrical", "its", "detour", "vms", "rf", "battery", "deterministic"]
+tool_mode = "with-tool"
+
+[params.vms_character_height_in]
+type = "float"
+unit = "in"
+description = "DEV-SSC01-004 VMS character height"
+min = 10.0
+max = 10.0
+
+[params.detour_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "DETOUR-SSC01-004 detour approach speed"
+min = 80.0
+max = 80.0
+
+[params.reading_rate_chars_s]
+type = "float"
+unit = "chars/s"
+description = "MEMO-SSC01-004 reading rate"
+min = 4.0
+max = 4.0
+
+[params.detour_message_length_chars]
+type = "float"
+unit = "chars"
+description = "DEV-SSC01-004 detour message length"
+min = 20.0
+max = 20.0
+
+[params.cctv_count]
+type = "float"
+description = "DEV-SSC01-004 active CCTV count"
+min = 3.0
+max = 3.0
+
+[params.cctv_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "DEV-SSC01-004 load per CCTV stream"
+min = 4.0
+max = 4.0
+
+[params.vms_count]
+type = "float"
+description = "DEV-SSC01-004 active VMS count"
+min = 2.0
+max = 2.0
+
+[params.vms_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "DEV-SSC01-004 load per VMS"
+min = 2.0
+max = 2.0
+
+[params.radio_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "RF-SSC01-004 radio telemetry load"
+min = 1.2
+max = 1.2
+
+[params.controller_load_mbps]
+type = "float"
+unit = "Mbps"
+description = "DEV-SSC01-004 traffic controller load"
+min = 0.8
+max = 0.8
+
+[params.network_overhead_pct]
+type = "float"
+unit = "%"
+description = "MEMO-SSC01-004 network overhead"
+min = 20.0
+max = 20.0
+
+[params.uplink_capacity_mbps]
+type = "float"
+unit = "Mbps"
+description = "PWR-SSC01-004 uplink capacity"
+min = 35.0
+max = 35.0
+
+[params.rf_tx_power_dbm]
+type = "float"
+unit = "dBm"
+description = "RF-SSC01-004 transmit power"
+min = 20.0
+max = 20.0
+
+[params.rf_tx_gain_db]
+type = "float"
+unit = "dB"
+description = "RF-SSC01-004 transmit antenna gain"
+min = 12.0
+max = 12.0
+
+[params.rf_rx_gain_db]
+type = "float"
+unit = "dB"
+description = "RF-SSC01-004 receive antenna gain"
+min = 12.0
+max = 12.0
+
+[params.rf_path_loss_db]
+type = "float"
+unit = "dB"
+description = "RF-SSC01-004 path loss"
+min = 108.0
+max = 108.0
+
+[params.rf_misc_loss_db]
+type = "float"
+unit = "dB"
+description = "RF-SSC01-004 cable and connector loss"
+min = 3.0
+max = 3.0
+
+[params.rf_fade_margin_db]
+type = "float"
+unit = "dB"
+description = "RF-SSC01-004 reserved fade margin"
+min = 10.0
+max = 10.0
+
+[params.rf_receiver_sensitivity_dbm]
+type = "float"
+unit = "dBm"
+description = "RF-SSC01-004 receiver sensitivity"
+min = -90.0
+max = -90.0
+
+[params.battery_capacity_kwh]
+type = "float"
+unit = "kWh"
+description = "PWR-SSC01-004 battery capacity"
+min = 8.0
+max = 8.0
+
+[params.battery_efficiency]
+type = "float"
+description = "PWR-SSC01-004 battery efficiency"
+min = 0.9
+max = 0.9
+
+[params.critical_load_w]
+type = "float"
+unit = "W"
+description = "PWR-SSC01-004 critical detour load"
+min = 650.0
+max = 650.0
+
+[params.required_detour_duration_h]
+type = "float"
+unit = "h"
+description = "MEMO-SSC01-004 required detour operating duration"
+min = 8.0
+max = 8.0
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "PWR-SSC01-004 feeder length"
+min = 0.12
+max = 0.12
+
+[params.conductor_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "PWR-SSC01-004 conductor resistance"
+min = 0.8
+max = 0.8
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "PWR-SSC01-004 nominal feeder voltage"
+min = 230.0
+max = 230.0
+
+[params.power_factor]
+type = "float"
+description = "PWR-SSC01-004 load power factor"
+min = 0.95
+max = 0.95
+
+[params.allowable_voltage_drop_pct]
+type = "float"
+unit = "%"
+description = "PWR-SSC01-004 allowable voltage drop"
+min = 5.0
+max = 5.0
+
+[outputs.vms_reading_time_s]
+description = "Available reading time for the detour VMS"
+tolerance = 0.03
+
+[outputs.vms_message_margin_chars]
+description = "Readable character capacity minus detour message length"
+tolerance = 0.03
+
+[outputs.required_network_mbps]
+description = "Required detour network load"
+tolerance = 0.03
+
+[outputs.network_headroom_mbps]
+description = "Available uplink capacity minus required network load"
+tolerance = 0.03
+
+[outputs.rf_received_power_dbm]
+description = "RF received power"
+tolerance = 0.03
+
+[outputs.rf_link_margin_db]
+description = "RF received power minus receiver sensitivity"
+tolerance = 0.03
+
+[outputs.battery_runtime_h]
+description = "Battery runtime for selected critical load"
+tolerance = 0.03
+
+[outputs.battery_margin_h]
+description = "Battery runtime minus required detour duration"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "Feeder voltage drop at the detour device load"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Allowable voltage drop minus computed voltage drop"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when detour VMS, network, RF, battery, and voltage checks pass"
+tolerance = 0.01
+
+[archetypes.ssc01_detour_device_continuity]
+description = "SSC-01 task-owned synthetic emergency detour device continuity package"
+site_contexts = ["emergency-detour-roadside-device-continuity"]
+
+[difficulty.easy]
+description = "All source-pack values visible"
+visibility = "all_given"
+archetypes = ["ssc01_detour_device_continuity"]
+
+[difficulty.medium]
+description = "Same deterministic source-pack values with package-level aggregation"
+visibility = "all_given"
+archetypes = ["ssc01_detour_device_continuity"]
+
+[difficulty.hard]
+description = "Same deterministic source-pack values with cross-discipline handoff checks"
+visibility = "all_given"
+archetypes = ["ssc01_detour_device_continuity"]

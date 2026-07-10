@@ -1,0 +1,173 @@
+[meta]
+name = "bund-containment-firewater-environmental-isolation-package"
+description = "SSC-19 bund containment, firewater, and environmental isolation metrics"
+long_description = "Calculates source-bound containment and environmental isolation metrics from a deterministic SSC-19 task-owned source pack. The template combines bund volume, rainfall allowance, equipment displacement, firewater runoff, sump isolation capacity, outlet headloss, valve verification, and an overall synthetic pass score."
+discipline = "civil"
+category = "bund-firewater-isolation"
+standards = ["bund containment workflows", "firewater runoff workflows", "environmental isolation workflows"]
+tags = ["civil", "containment", "bund", "firewater", "environmental", "isolation", "deterministic"]
+tool_mode = "with-tool"
+
+[params.largest_container_l]
+type = "float"
+unit = "L"
+description = "INV-19-CHEM-07 largest container volume"
+min = 18000.0
+max = 18000.0
+
+[params.rainfall_depth_mm]
+type = "float"
+unit = "mm"
+description = "BUND-19-LAYOUT-07 rainfall depth"
+min = 110.0
+max = 110.0
+
+[params.bund_area_m2]
+type = "float"
+unit = "m2"
+description = "BUND-19-LAYOUT-07 bund area"
+min = 210.0
+max = 210.0
+
+[params.foam_allowance_l]
+type = "float"
+unit = "L"
+description = "FIREWATER-19-DEMAND-07 foam allowance"
+min = 2500.0
+max = 2500.0
+
+[params.equipment_displacement_l]
+type = "float"
+unit = "L"
+description = "BUND-19-LAYOUT-07 equipment displacement"
+min = 1200.0
+max = 1200.0
+
+[params.bund_capacity_l]
+type = "float"
+unit = "L"
+description = "BUND-19-LAYOUT-07 bund capacity"
+min = 46000.0
+max = 46000.0
+
+[params.firewater_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "FIREWATER-19-DEMAND-07 firewater flow"
+min = 38.0
+max = 38.0
+
+[params.firewater_duration_min]
+type = "float"
+unit = "min"
+description = "FIREWATER-19-DEMAND-07 firewater duration"
+min = 20.0
+max = 20.0
+
+[params.isolation_sump_capacity_l]
+type = "float"
+unit = "L"
+description = "DRAIN-19-ISOLATION-07 isolation sump capacity"
+min = 65000.0
+max = 65000.0
+
+[params.environmental_freeboard_l]
+type = "float"
+unit = "L"
+description = "ENV-19-CRIT-07 environmental freeboard"
+min = 3000.0
+max = 3000.0
+
+[params.outlet_headloss_m]
+type = "float"
+unit = "m"
+description = "DRAIN-19-ISOLATION-07 outlet headloss"
+min = 0.18
+max = 0.18
+
+[params.max_outlet_headloss_m]
+type = "float"
+unit = "m"
+description = "ENV-19-CRIT-07 maximum outlet headloss"
+min = 0.4
+max = 0.4
+
+[params.isolation_valves_total]
+type = "float"
+description = "DRAIN-19-ISOLATION-07 total isolation valves"
+min = 4.0
+max = 4.0
+
+[params.isolation_valves_verified]
+type = "float"
+description = "DRAIN-19-ISOLATION-07 verified isolation valves"
+min = 4.0
+max = 4.0
+
+[outputs.rainfall_allowance_l]
+description = "Rainfall allowance over bund area"
+tolerance = 0.03
+
+[outputs.required_bund_volume_l]
+description = "Required bund volume after rainfall, foam, and displacement"
+tolerance = 0.03
+
+[outputs.bund_capacity_margin_l]
+description = "Bund capacity minus required bund volume"
+tolerance = 0.03
+
+[outputs.firewater_runoff_volume_l]
+description = "Firewater runoff volume"
+tolerance = 0.03
+
+[outputs.isolation_required_volume_l]
+description = "Firewater runoff plus environmental freeboard"
+tolerance = 0.03
+
+[outputs.isolation_capacity_margin_l]
+description = "Isolation capacity minus required isolation volume"
+tolerance = 0.03
+
+[outputs.headloss_margin_m]
+description = "Maximum outlet headloss minus calculated headloss"
+tolerance = 0.03
+
+[outputs.valve_verification_fraction]
+description = "Verified isolation valves divided by total isolation valves"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when bund, isolation, headloss, and valve verification checks pass"
+tolerance = 0.001
+
+[archetypes.ssc19_bund_firewater_isolation_case]
+description = "Bund containment and environmental isolation case with firewater runoff"
+largest_container_l = {min = 18000.0, max = 18000.0}
+rainfall_depth_mm = {min = 110.0, max = 110.0}
+bund_area_m2 = {min = 210.0, max = 210.0}
+foam_allowance_l = {min = 2500.0, max = 2500.0}
+equipment_displacement_l = {min = 1200.0, max = 1200.0}
+bund_capacity_l = {min = 46000.0, max = 46000.0}
+firewater_flow_l_s = {min = 38.0, max = 38.0}
+firewater_duration_min = {min = 20.0, max = 20.0}
+isolation_sump_capacity_l = {min = 65000.0, max = 65000.0}
+environmental_freeboard_l = {min = 3000.0, max = 3000.0}
+outlet_headloss_m = {min = 0.18, max = 0.18}
+max_outlet_headloss_m = {min = 0.4, max = 0.4}
+isolation_valves_total = {min = 4.0, max = 4.0}
+isolation_valves_verified = {min = 4.0, max = 4.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-19 bund and firewater isolation package"
+visibility = "all_given"
+archetypes = ["ssc19_bund_firewater_isolation_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-19 bund and firewater isolation package"
+visibility = "all_given"
+archetypes = ["ssc19_bund_firewater_isolation_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-19 bund and firewater isolation package"
+visibility = "all_given"
+archetypes = ["ssc19_bund_firewater_isolation_case"]

@@ -1,0 +1,187 @@
+[meta]
+name = "marine-berthing-fender-storm-operations-package"
+description = "SSC-04 marine berthing, fender, and storm operation metrics"
+long_description = "Calculates source-bound marine berthing and storm-operation metrics from a deterministic SSC-04 task-owned source pack. The template combines berthing energy, fender capacity margin, mooring load and capacity, storm tide deck clearance, operating-window margin, and an overall synthetic pass score."
+discipline = "structural"
+category = "marine-berthing-operations"
+standards = ["berthing energy workflow", "fender review", "mooring review", "storm operations review"]
+tags = ["structural", "marine", "berthing", "fender", "mooring", "storm-tide", "deterministic"]
+tool_mode = "with-tool"
+
+[params.vessel_mass_t]
+type = "float"
+unit = "t"
+description = "VESSEL-04-DATA-03 vessel mass"
+min = 5000.0
+max = 5000.0
+
+[params.approach_velocity_m_s]
+type = "float"
+unit = "m/s"
+description = "VESSEL-04-DATA-03 approach velocity"
+min = 0.12
+max = 0.12
+
+[params.eccentricity_factor]
+type = "float"
+description = "BERTH-04-LAYOUT-03 eccentricity factor"
+min = 1.2
+max = 1.2
+
+[params.softness_factor]
+type = "float"
+description = "FENDER-04-SCHED-03 softness factor"
+min = 1.1
+max = 1.1
+
+[params.fender_energy_capacity_knm]
+type = "float"
+unit = "kNm"
+description = "FENDER-04-SCHED-03 fender energy capacity"
+min = 65.0
+max = 65.0
+
+[params.wind_pressure_kpa]
+type = "float"
+unit = "kPa"
+description = "TIDE-04-WEATHER-03 storm wind pressure"
+min = 0.65
+max = 0.65
+
+[params.projected_area_m2]
+type = "float"
+unit = "m2"
+description = "VESSEL-04-DATA-03 projected vessel area"
+min = 42.0
+max = 42.0
+
+[params.current_load_kn]
+type = "float"
+unit = "kN"
+description = "TIDE-04-WEATHER-03 current load"
+min = 18.0
+max = 18.0
+
+[params.mooring_line_count]
+type = "float"
+description = "MOORING-04-SCHED-03 mooring line count"
+min = 4.0
+max = 4.0
+
+[params.mooring_line_capacity_kn]
+type = "float"
+unit = "kN"
+description = "MOORING-04-SCHED-03 line capacity"
+min = 20.0
+max = 20.0
+
+[params.mooring_efficiency]
+type = "float"
+description = "MOORING-04-SCHED-03 mooring efficiency"
+min = 0.8
+max = 0.8
+
+[params.storm_tide_level_m]
+type = "float"
+unit = "m"
+description = "TIDE-04-WEATHER-03 storm tide operating level"
+min = 3.1
+max = 3.1
+
+[params.deck_level_m]
+type = "float"
+unit = "m"
+description = "BERTH-04-LAYOUT-03 deck level"
+min = 4.2
+max = 4.2
+
+[params.required_deck_clearance_m]
+type = "float"
+unit = "m"
+description = "MEMO-04-MARINE-03 required deck clearance"
+min = 0.5
+max = 0.5
+
+[params.allowable_downtime_h]
+type = "float"
+unit = "h"
+description = "MEMO-04-MARINE-03 allowable downtime"
+min = 8.0
+max = 8.0
+
+[params.tide_exceedance_h]
+type = "float"
+unit = "h"
+description = "TIDE-04-WEATHER-03 tide exceedance duration"
+min = 5.0
+max = 5.0
+
+[outputs.berthing_energy_knm]
+description = "Berthing energy demand"
+tolerance = 0.03
+
+[outputs.fender_energy_margin_knm]
+description = "Fender energy capacity minus berthing energy"
+tolerance = 0.03
+
+[outputs.environmental_mooring_load_kn]
+description = "Wind and current mooring load"
+tolerance = 0.03
+
+[outputs.mooring_capacity_kn]
+description = "Effective mooring capacity"
+tolerance = 0.03
+
+[outputs.mooring_margin_kn]
+description = "Mooring capacity minus environmental load"
+tolerance = 0.03
+
+[outputs.storm_tide_operating_level_m]
+description = "Storm tide operating level"
+tolerance = 0.03
+
+[outputs.deck_clearance_margin_m]
+description = "Deck level minus storm tide and required clearance"
+tolerance = 0.03
+
+[outputs.allowable_operating_window_margin_h]
+description = "Allowable downtime minus tide exceedance duration"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when fender, mooring, deck clearance, and operations checks pass"
+tolerance = 0.001
+
+[archetypes.ssc04_marine_berthing_case]
+description = "Marine berthing, fender, and storm operations case"
+vessel_mass_t = {min = 5000.0, max = 5000.0}
+approach_velocity_m_s = {min = 0.12, max = 0.12}
+eccentricity_factor = {min = 1.2, max = 1.2}
+softness_factor = {min = 1.1, max = 1.1}
+fender_energy_capacity_knm = {min = 65.0, max = 65.0}
+wind_pressure_kpa = {min = 0.65, max = 0.65}
+projected_area_m2 = {min = 42.0, max = 42.0}
+current_load_kn = {min = 18.0, max = 18.0}
+mooring_line_count = {min = 4.0, max = 4.0}
+mooring_line_capacity_kn = {min = 20.0, max = 20.0}
+mooring_efficiency = {min = 0.8, max = 0.8}
+storm_tide_level_m = {min = 3.1, max = 3.1}
+deck_level_m = {min = 4.2, max = 4.2}
+required_deck_clearance_m = {min = 0.5, max = 0.5}
+allowable_downtime_h = {min = 8.0, max = 8.0}
+tide_exceedance_h = {min = 5.0, max = 5.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-04 marine berthing package"
+visibility = "all_given"
+archetypes = ["ssc04_marine_berthing_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-04 marine berthing package"
+visibility = "all_given"
+archetypes = ["ssc04_marine_berthing_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-04 marine berthing package"
+visibility = "all_given"
+archetypes = ["ssc04_marine_berthing_case"]

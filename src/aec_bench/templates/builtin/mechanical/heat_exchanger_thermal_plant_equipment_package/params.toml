@@ -1,0 +1,192 @@
+# ABOUTME: Defines the SSC-06 heat exchanger and thermal plant equipment template.
+# ABOUTME: Pins one thermal process table, heat-exchanger datasheet, pump curve, motor, and support source pack.
+
+[meta]
+name = "heat-exchanger-thermal-plant-equipment-package"
+description = "SSC-06 heat exchanger and thermal plant equipment metrics"
+long_description = "Calculates source-bound thermal plant equipment metrics from a deterministic SSC-06 task-owned source pack. The template combines heat load, LMTD, UA margin, process flow, circulation pump power, motor margin, support reaction, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "thermal-plant-equipment"
+standards = ["LMTD workflow", "thermal plant equipment workflow", "pump and support handoff workflow"]
+tags = ["mechanical", "thermal", "heat-exchanger", "pump", "motor", "support", "deterministic"]
+tool_mode = "with-tool"
+
+[params.hot_flow_kg_s]
+type = "float"
+unit = "kg/s"
+description = "PROCESS-06-THERMAL-06 hot-side mass flow"
+min = 5.2
+max = 5.2
+
+[params.fluid_cp_kj_kg_c]
+type = "float"
+unit = "kJ/kg-C"
+description = "PROCESS-06-THERMAL-06 fluid specific heat"
+min = 4.18
+max = 4.18
+
+[params.hot_inlet_c]
+type = "float"
+unit = "C"
+description = "PROCESS-06-THERMAL-06 hot inlet temperature"
+min = 85.0
+max = 85.0
+
+[params.hot_outlet_c]
+type = "float"
+unit = "C"
+description = "PROCESS-06-THERMAL-06 hot outlet temperature"
+min = 65.0
+max = 65.0
+
+[params.cold_inlet_c]
+type = "float"
+unit = "C"
+description = "HX-06-DATA-06 cold inlet temperature"
+min = 25.0
+max = 25.0
+
+[params.cold_outlet_c]
+type = "float"
+unit = "C"
+description = "HX-06-DATA-06 cold outlet temperature"
+min = 45.0
+max = 45.0
+
+[params.selected_ua_kw_per_c]
+type = "float"
+unit = "kW/C"
+description = "HX-06-DATA-06 selected heat exchanger UA"
+min = 13.2
+max = 13.2
+
+[params.fluid_density_kg_m3]
+type = "float"
+unit = "kg/m3"
+description = "PROCESS-06-THERMAL-06 fluid density"
+min = 997.0
+max = 997.0
+
+[params.circulation_pump_head_m]
+type = "float"
+unit = "m"
+description = "PUMP-06-CURVE-06 circulation pump head"
+min = 16.0
+max = 16.0
+
+[params.pump_efficiency]
+type = "float"
+description = "PUMP-06-CURVE-06 pump efficiency"
+min = 0.7
+max = 0.7
+
+[params.motor_efficiency]
+type = "float"
+description = "MOTOR-06-SCHED-06 motor efficiency"
+min = 0.94
+max = 0.94
+
+[params.selected_motor_kw]
+type = "float"
+unit = "kW"
+description = "MOTOR-06-SCHED-06 selected motor size"
+min = 2.2
+max = 2.2
+
+[params.heat_exchanger_mass_kg]
+type = "float"
+unit = "kg"
+description = "SUPPORT-06-LAYOUT-06 heat exchanger operating mass"
+min = 1900.0
+max = 1900.0
+
+[params.pump_mass_kg]
+type = "float"
+unit = "kg"
+description = "SUPPORT-06-LAYOUT-06 pump operating mass"
+min = 340.0
+max = 340.0
+
+[params.support_count]
+type = "int"
+description = "SUPPORT-06-LAYOUT-06 active support count"
+min = 4
+max = 4
+
+[outputs.heat_load_kw]
+description = "Thermal process heat load"
+tolerance = 0.03
+
+[outputs.lmtd_c]
+description = "Log mean temperature difference"
+tolerance = 0.03
+
+[outputs.required_ua_kw_per_c]
+description = "Required heat exchanger UA"
+tolerance = 0.03
+
+[outputs.ua_margin_kw_per_c]
+description = "Selected UA minus required UA"
+tolerance = 0.03
+
+[outputs.process_flow_m3_h]
+description = "Hot-side process flow converted to m3/h"
+tolerance = 0.03
+
+[outputs.pump_hydraulic_power_kw]
+description = "Circulation pump hydraulic power"
+tolerance = 0.03
+
+[outputs.pump_shaft_power_kw]
+description = "Circulation pump shaft power"
+tolerance = 0.03
+
+[outputs.motor_input_power_kw]
+description = "MOTOR-06-SCHED-06 motor input power"
+tolerance = 0.03
+
+[outputs.motor_margin_kw]
+description = "Selected motor size minus input power"
+tolerance = 0.03
+
+[outputs.support_service_reaction_kn]
+description = "Support service reaction per support"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when UA and motor margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc06_heat_exchanger_thermal_case]
+description = "Thermal process, heat exchanger, pump, motor, and support source pack"
+hot_flow_kg_s = {min = 5.2, max = 5.2}
+fluid_cp_kj_kg_c = {min = 4.18, max = 4.18}
+hot_inlet_c = {min = 85.0, max = 85.0}
+hot_outlet_c = {min = 65.0, max = 65.0}
+cold_inlet_c = {min = 25.0, max = 25.0}
+cold_outlet_c = {min = 45.0, max = 45.0}
+selected_ua_kw_per_c = {min = 13.2, max = 13.2}
+fluid_density_kg_m3 = {min = 997.0, max = 997.0}
+circulation_pump_head_m = {min = 16.0, max = 16.0}
+pump_efficiency = {min = 0.7, max = 0.7}
+motor_efficiency = {min = 0.94, max = 0.94}
+selected_motor_kw = {min = 2.2, max = 2.2}
+heat_exchanger_mass_kg = {min = 1900.0, max = 1900.0}
+pump_mass_kg = {min = 340.0, max = 340.0}
+support_count = {min = 4, max = 4}
+site_contexts = ["thermal-plant-equipment", "lmtd-pump-support-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-06 heat exchanger thermal package"
+visibility = "all_given"
+archetypes = ["ssc06_heat_exchanger_thermal_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-06 heat exchanger thermal package"
+visibility = "all_given"
+archetypes = ["ssc06_heat_exchanger_thermal_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-06 heat exchanger thermal package"
+visibility = "all_given"
+archetypes = ["ssc06_heat_exchanger_thermal_case"]

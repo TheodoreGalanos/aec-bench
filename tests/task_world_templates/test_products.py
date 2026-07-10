@@ -6,8 +6,6 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-import yaml
-
 from aec_bench.task_world_templates.catalogue import get_template, list_templates
 
 
@@ -34,6 +32,12 @@ def test_builtin_catalogue_covers_composite_task_world_templates() -> None:
         "driveway-access-safety-issue-review-package",
         "roadside-cabinet-serviceability-issue-review-package",
         "corridor-comment-response-issue-review-package",
+        "pump-station-duty-npsh-issue-review-package",
+        "fire-water-storage-hazard-issue-review-package",
+        "product-submittal-compliance-issue-review-package",
+        "ground-structural-electrical-issue-review-package",
+        "coastal-flood-equipment-elevation-issue-review-package",
+        "level-crossing-warning-issue-review-package",
     ]
     assert all(template.data_gaps for template in templates)
     assert all(template.verifier_gates for template in templates)
@@ -78,29 +82,23 @@ def test_long_horizon_is_not_a_standalone_package_or_runtime() -> None:
     assert not Path("src/aec_bench/long_horizon").exists()
 
 
-def test_road_visual_operations_template_matches_task_owned_source_pack() -> None:
+def test_road_visual_operations_template_exposes_expected_handoffs() -> None:
     template = get_template("road-visual-operations-package")
-    source_pack = Path(
-        "docs/task-world-opportunities/real-world-grounding/"
-        "lighting-visual-its-cctv-communications-package/road_visual_operations_source_pack"
-    )
-    ledger = yaml.safe_load((source_pack / "handoff-ledger.yaml").read_text(encoding="utf-8"))
-    source_handoffs = {item["id"]: item["value"] for item in ledger["handoffs"]}
 
     assert template.template_id == "road-visual-operations-package"
     assert template.discipline_scope == ["electrical", "transport", "communications", "security"]
     assert template.example_handoffs() == {
-        "scene_id": source_handoffs["H_SCENE_ID"],
-        "average_illuminance_lux": source_handoffs["H_LIGHT_AVG_LUX"],
-        "minimum_illuminance_lux": source_handoffs["H_LIGHT_MIN_LUX"],
-        "min_to_average_uniformity": source_handoffs["H_LIGHT_U0"],
-        "minimum_camera_ppm": source_handoffs["H_CCTV_MIN_PPM"],
-        "cctv_storage_tb": source_handoffs["H_CCTV_STORAGE_TB"],
-        "vms_message_policy_id": source_handoffs["H_VMS_POLICY_ID"],
-        "network_load_mbps": source_handoffs["H_NETWORK_LOAD_MBPS"],
-        "poe_load_w": source_handoffs["H_POE_LOAD_W"],
-        "fibre_loss_db": source_handoffs["H_FIBRE_LOSS_DB"],
-        "ups_energy_kwh": source_handoffs["H_UPS_ENERGY_KWH"],
+        "scene_id": "RD-SSC13-001",
+        "average_illuminance_lux": 18.875,
+        "minimum_illuminance_lux": 16.8,
+        "min_to_average_uniformity": 0.89,
+        "minimum_camera_ppm": 60.0,
+        "cctv_storage_tb": 1.99584,
+        "vms_message_policy_id": "MSG-POL-01",
+        "network_load_mbps": 16.7,
+        "poe_load_w": 44.0,
+        "fibre_loss_db": 2.347,
+        "ups_energy_kwh": 1.271,
     }
 
 
@@ -165,3 +163,36 @@ def test_ssc01_review_first_companions_preserve_formula_baselines() -> None:
     assert "model_run_evidence" in {gap.id for gap in driveway_access.data_gaps}
     assert "model_run_evidence" in {gap.id for gap in roadside_cabinet.data_gaps}
     assert "model_run_evidence" in {gap.id for gap in corridor.data_gaps}
+
+
+def test_cross_ssc_review_first_templates_compile_with_formula_baselines() -> None:
+    expected_baselines = {
+        "pump-station-duty-npsh-issue-review-package": "pump-station-duty-power-npsh-feeder-package",
+        "fire-water-storage-hazard-issue-review-package": "fire-water-sprinkler-storage-package",
+        "product-submittal-compliance-issue-review-package": "product-submittal-compliance-package",
+        "ground-structural-electrical-issue-review-package": "ground-structural-electrical-safety-package",
+        "coastal-flood-equipment-elevation-issue-review-package": "coastal-flood-outfall-pump-elevation-package",
+        "level-crossing-warning-issue-review-package": "level-crossing-warning-backup-power-package",
+    }
+
+    for template_id, baseline_id in expected_baselines.items():
+        template = get_template(template_id)
+        refs = {ref for stage in template.stages for ref in stage.template_refs}
+        gate_ids = {gate.id for gate in template.verifier_gates}
+
+        assert template.pattern == "source packet -> issue-readiness review -> gated verifier record"
+        assert template_id in refs
+        assert baseline_id in refs
+        assert {
+            "source_inventory",
+            "identity_ledger",
+            "evidence_recompute",
+            "review_linkage",
+            "claim_boundary",
+        } <= gate_ids
+        assert template.compile_task_world_profile().task_unit == "composite-task-world-template"
+        assert {gap.id for gap in template.data_gaps} == {
+            "sme_confirmation",
+            "source_pack_hardening",
+            "accepted_project_sources",
+        }

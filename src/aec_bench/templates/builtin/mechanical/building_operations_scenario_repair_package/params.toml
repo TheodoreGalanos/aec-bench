@@ -1,0 +1,152 @@
+[meta]
+name = "building-operations-scenario-repair-package"
+description = "SSC-08 building operations review and scenario repair metrics"
+long_description = "Calculates source-bound building operations review metrics from a deterministic SSC-08 task-owned source pack. The template combines source trace, occupancy update, affected system checks, comment closure, authority partition, repair action closure, unsupported-value count, evidence-boundary score, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "building-operations-review"
+standards = ["building operations review workflow", "occupancy scenario repair", "comment response workflow", "authority partition review"]
+tags = ["mechanical", "building", "operations", "occupancy", "review", "repair", "traceability", "deterministic"]
+tool_mode = "with-tool"
+
+[params.source_items_traced]
+type = "float"
+description = "PLAN-08-FLOOR-08 source items traced"
+min = 10.0
+max = 10.0
+
+[params.required_source_items]
+type = "float"
+description = "PLAN-08-FLOOR-08 required source items"
+min = 10.0
+max = 10.0
+
+[params.occupancy_rows_updated]
+type = "float"
+description = "OCC-08-SOURCE-08 occupancy rows updated"
+min = 8.0
+max = 8.0
+
+[params.required_occupancy_rows]
+type = "float"
+description = "OCC-08-SOURCE-08 required occupancy rows"
+min = 8.0
+max = 8.0
+
+[params.affected_system_checks_complete]
+type = "float"
+description = "SYSTEM-08-SCHED-08 affected system checks complete"
+min = 11.0
+max = 11.0
+
+[params.required_system_checks]
+type = "float"
+description = "SYSTEM-08-SCHED-08 required system checks"
+min = 12.0
+max = 12.0
+
+[params.resolved_comments]
+type = "float"
+description = "COMMENT-08-REG-08 resolved comments"
+min = 9.0
+max = 9.0
+
+[params.review_comments]
+type = "float"
+description = "COMMENT-08-REG-08 review comments"
+min = 10.0
+max = 10.0
+
+[params.open_critical_comment_count]
+type = "float"
+description = "COMMENT-08-REG-08 open critical comment count"
+min = 0.0
+max = 0.0
+
+[params.partitioned_authority_roles]
+type = "float"
+description = "CRIT-08-MATRIX-08 partitioned authority roles"
+min = 5.0
+max = 5.0
+
+[params.required_authority_roles]
+type = "float"
+description = "CRIT-08-MATRIX-08 required authority roles"
+min = 5.0
+max = 5.0
+
+[params.repair_actions_closed]
+type = "float"
+description = "MEMO-08-REPAIR-08 repair actions closed"
+min = 7.0
+max = 7.0
+
+[params.required_repair_actions]
+type = "float"
+description = "MEMO-08-REPAIR-08 required repair actions"
+min = 8.0
+max = 8.0
+
+[params.unsupported_value_count]
+type = "float"
+description = "MEMO-08-REPAIR-08 unsupported value count"
+min = 0.0
+max = 0.0
+
+[outputs.source_trace_score]
+description = "Source items traced divided by required source items"
+tolerance = 0.003
+
+[outputs.occupancy_update_fraction]
+description = "Updated occupancy rows divided by required occupancy rows"
+tolerance = 0.003
+
+[outputs.affected_system_check_fraction]
+description = "Affected system checks complete divided by required system checks"
+tolerance = 0.003
+
+[outputs.comment_resolution_fraction]
+description = "Resolved comments divided by review comments"
+tolerance = 0.003
+
+[outputs.open_critical_comment_count]
+description = "Open critical comment count"
+tolerance = 0.001
+
+[outputs.authority_partition_score]
+description = "Partitioned authority roles divided by required authority roles"
+tolerance = 0.003
+
+[outputs.repair_action_closure_fraction]
+description = "Closed repair actions divided by required repair actions"
+tolerance = 0.003
+
+[outputs.unsupported_value_count]
+description = "Unsupported value count"
+tolerance = 0.001
+
+[outputs.evidence_boundary_score]
+description = "Average evidence-boundary score"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when operations repair checks pass"
+tolerance = 0.001
+
+[archetypes.ssc08_operations_repair_case]
+description = "Building operations review and scenario repair case"
+site_contexts = ["ssc08-operations-repair"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-08 operations repair package"
+visibility = "all_given"
+archetypes = ["ssc08_operations_repair_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-08 operations repair package"
+visibility = "all_given"
+archetypes = ["ssc08_operations_repair_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-08 operations repair package"
+visibility = "all_given"
+archetypes = ["ssc08_operations_repair_case"]

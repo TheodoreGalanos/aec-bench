@@ -1,0 +1,183 @@
+[meta]
+name = "electrical-source-policy-product-datasheet-package"
+description = "SSC-05 electrical product datasheet, source-policy, rating, and submittal response metrics"
+long_description = "Calculates deterministic SSC-05 datasheet and source-policy metrics from a task-owned synthetic source pack. The template combines datasheet completeness, source traceability, derated product current, cable and breaker margins, voltage-drop margin, protection-setting margin, review comments, and an overall synthetic pass score."
+discipline = "electrical"
+category = "electrical-source-policy-datasheet"
+standards = ["product datasheet review workflow", "submittal register workflow", "electrical source-policy gate workflow"]
+tags = ["electrical", "datasheet", "submittal", "source-policy", "ratings", "protection", "deterministic"]
+tool_mode = "with-tool"
+
+[params.provided_datasheet_fields]
+type = "float"
+description = "DATA-05-PRODUCT-08 provided datasheet fields"
+min = 18.0
+max = 18.0
+
+[params.required_datasheet_fields]
+type = "float"
+description = "DATA-05-PRODUCT-08 required datasheet fields"
+min = 20.0
+max = 20.0
+
+[params.traced_source_values]
+type = "float"
+description = "CALC-05-WORKSHEET-08 source values traced into the calculation"
+min = 6.0
+max = 6.0
+
+[params.required_source_values]
+type = "float"
+description = "CALC-05-WORKSHEET-08 required source values"
+min = 7.0
+max = 7.0
+
+[params.product_nameplate_current_a]
+type = "float"
+unit = "A"
+description = "RATING-05-TABLE-08 product nameplate current"
+min = 240.0
+max = 240.0
+
+[params.product_derating_factor]
+type = "float"
+description = "RATING-05-TABLE-08 product derating factor"
+min = 0.884
+max = 0.884
+
+[params.design_current_a]
+type = "float"
+unit = "A"
+description = "CALC-05-WORKSHEET-08 design current consumed by the calculation"
+min = 160.0
+max = 160.0
+
+[params.cable_allowable_current_a]
+type = "float"
+unit = "A"
+description = "RATING-05-TABLE-08 cable allowable current"
+min = 195.0
+max = 195.0
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "CALC-05-WORKSHEET-08 maximum allowed voltage drop"
+min = 4.0
+max = 4.0
+
+[params.calculated_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "CALC-05-WORKSHEET-08 calculated voltage drop"
+min = 3.1
+max = 3.1
+
+[params.protection_setting_margin_percent]
+type = "float"
+unit = "%"
+description = "CALC-05-WORKSHEET-08 protection setting margin"
+min = 8.0
+max = 8.0
+
+[params.review_comment_count]
+type = "float"
+description = "SUBMIT-05-REGISTER-08 review comment count"
+min = 9.0
+max = 9.0
+
+[params.resolved_comment_count]
+type = "float"
+description = "SUBMIT-05-REGISTER-08 resolved review comments"
+min = 7.0
+max = 7.0
+
+[params.critical_open_comments]
+type = "float"
+description = "SUBMIT-05-REGISTER-08 critical open comments"
+min = 0.0
+max = 0.0
+
+[params.response_completeness_score]
+type = "float"
+description = "RESPONSE-05-SUBMITTAL-08 response completeness score"
+min = 0.92
+max = 0.92
+
+[outputs.datasheet_completeness_fraction]
+description = "Provided datasheet fields divided by required fields"
+tolerance = 0.003
+
+[outputs.source_trace_score]
+description = "Traced source values divided by required source values"
+tolerance = 0.003
+
+[outputs.derated_product_current_a]
+description = "Product nameplate current after derating"
+tolerance = 0.03
+
+[outputs.breaker_rating_margin_a]
+description = "Derated product current minus design current"
+tolerance = 0.03
+
+[outputs.cable_rating_margin_a]
+description = "Cable allowable current minus design current"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Maximum voltage drop minus calculated voltage drop"
+tolerance = 0.03
+
+[outputs.protection_setting_margin_percent]
+description = "Protection setting margin carried from the worksheet"
+tolerance = 0.03
+
+[outputs.open_comments]
+description = "Open review comments"
+tolerance = 0.03
+
+[outputs.critical_open_comments]
+description = "Critical open comments"
+tolerance = 0.03
+
+[outputs.response_completeness_score]
+description = "Response completeness score"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when source, rating, setting, response, and critical-comment checks pass"
+tolerance = 0.001
+
+[archetypes.ssc05_datasheet_source_policy_case]
+description = "Electrical datasheet/source-policy package tied to one product datasheet, certificate, rating table, worksheet, register, and response"
+provided_datasheet_fields = {min = 18.0, max = 18.0}
+required_datasheet_fields = {min = 20.0, max = 20.0}
+traced_source_values = {min = 6.0, max = 6.0}
+required_source_values = {min = 7.0, max = 7.0}
+product_nameplate_current_a = {min = 240.0, max = 240.0}
+product_derating_factor = {min = 0.884, max = 0.884}
+design_current_a = {min = 160.0, max = 160.0}
+cable_allowable_current_a = {min = 195.0, max = 195.0}
+max_voltage_drop_percent = {min = 4.0, max = 4.0}
+calculated_voltage_drop_percent = {min = 3.1, max = 3.1}
+protection_setting_margin_percent = {min = 8.0, max = 8.0}
+review_comment_count = {min = 9.0, max = 9.0}
+resolved_comment_count = {min = 7.0, max = 7.0}
+critical_open_comments = {min = 0.0, max = 0.0}
+response_completeness_score = {min = 0.92, max = 0.92}
+site_contexts = ["electrical-source-policy-datasheet"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-05 datasheet/source-policy package"
+visibility = "all_given"
+archetypes = ["ssc05_datasheet_source_policy_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-05 datasheet/source-policy package"
+visibility = "all_given"
+archetypes = ["ssc05_datasheet_source_policy_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-05 datasheet/source-policy package"
+visibility = "all_given"
+archetypes = ["ssc05_datasheet_source_policy_case"]

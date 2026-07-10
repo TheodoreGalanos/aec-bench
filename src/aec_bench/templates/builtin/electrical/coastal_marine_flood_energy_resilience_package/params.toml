@@ -1,0 +1,273 @@
+[meta]
+name = "coastal-marine-flood-energy-resilience-package"
+description = "SSC-17 coastal or marine flood energy resilience metrics"
+long_description = "Calculates source-bound coastal flood energy resilience metrics from a deterministic SSC-17 task-owned source pack. The template combines flood level, equipment freeboard, outfall submergence, pump energy, BESS/generator backup energy, feeder voltage drop, and an overall synthetic pass score."
+discipline = "electrical"
+category = "coastal-flood-energy-resilience"
+standards = ["coastal flood resilience workflows", "pump backup energy workflows", "equipment elevation workflows"]
+tags = ["electrical", "coastal", "flood", "pump", "outfall", "bess", "generator", "feeder", "resilience", "deterministic"]
+tool_mode = "with-tool"
+
+[params.tide_level_m]
+type = "float"
+unit = "m"
+description = "COAST-SSC17-008 tide level"
+min = 2.1
+max = 2.1
+
+[params.slr_allowance_m]
+type = "float"
+unit = "m"
+description = "COAST-SSC17-008 sea level rise allowance"
+min = 0.35
+max = 0.35
+
+[params.storm_surge_m]
+type = "float"
+unit = "m"
+description = "COAST-SSC17-008 storm surge"
+min = 0.85
+max = 0.85
+
+[params.wave_allowance_m]
+type = "float"
+unit = "m"
+description = "COAST-SSC17-008 wave allowance"
+min = 0.3
+max = 0.3
+
+[params.electrical_equipment_elevation_m]
+type = "float"
+unit = "m"
+description = "EQUIP-SSC17-008 electrical equipment elevation"
+min = 4.25
+max = 4.25
+
+[params.required_equipment_freeboard_m]
+type = "float"
+unit = "m"
+description = "EQUIP-SSC17-008 required equipment freeboard"
+min = 0.45
+max = 0.45
+
+[params.outfall_obvert_level_m]
+type = "float"
+unit = "m"
+description = "PUMP-SSC17-008 outfall obvert level"
+min = 2.95
+max = 2.95
+
+[params.allowable_submergence_m]
+type = "float"
+unit = "m"
+description = "PUMP-SSC17-008 allowable outfall submergence"
+min = 0.8
+max = 0.8
+
+[params.pump_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "PUMP-SSC17-008 pump flow"
+min = 0.16
+max = 0.16
+
+[params.pump_head_m]
+type = "float"
+unit = "m"
+description = "PUMP-SSC17-008 pump head"
+min = 7.2
+max = 7.2
+
+[params.pump_efficiency]
+type = "float"
+description = "PUMP-SSC17-008 pump efficiency"
+min = 0.7
+max = 0.7
+
+[params.pump_runtime_hr]
+type = "float"
+unit = "h"
+description = "PUMP-SSC17-008 pump runtime"
+min = 2.5
+max = 2.5
+
+[params.controls_load_kw]
+type = "float"
+unit = "kW"
+description = "BACKUP-SSC17-008 controls load"
+min = 1.4
+max = 1.4
+
+[params.outage_duration_hr]
+type = "float"
+unit = "h"
+description = "BACKUP-SSC17-008 outage duration"
+min = 5.0
+max = 5.0
+
+[params.bess_nominal_kwh]
+type = "float"
+unit = "kWh"
+description = "BACKUP-SSC17-008 BESS nominal energy"
+min = 150.0
+max = 150.0
+
+[params.max_depth_of_discharge]
+type = "float"
+description = "BACKUP-SSC17-008 maximum depth of discharge"
+min = 0.82
+max = 0.82
+
+[params.inverter_efficiency]
+type = "float"
+description = "BACKUP-SSC17-008 inverter efficiency"
+min = 0.93
+max = 0.93
+
+[params.generator_kw]
+type = "float"
+unit = "kW"
+description = "BACKUP-SSC17-008 generator output"
+min = 35.0
+max = 35.0
+
+[params.generator_runtime_hr]
+type = "float"
+unit = "h"
+description = "BACKUP-SSC17-008 generator runtime"
+min = 1.5
+max = 1.5
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "EQUIP-SSC17-008 feeder voltage"
+min = 480.0
+max = 480.0
+
+[params.feeder_length_m]
+type = "float"
+unit = "m"
+description = "EQUIP-SSC17-008 feeder length"
+min = 165.0
+max = 165.0
+
+[params.feeder_current_a]
+type = "float"
+unit = "A"
+description = "EQUIP-SSC17-008 feeder current"
+min = 64.0
+max = 64.0
+
+[params.conductor_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "EQUIP-SSC17-008 conductor resistance"
+min = 0.321
+max = 0.321
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "EQUIP-SSC17-008 maximum voltage drop"
+min = 4.0
+max = 4.0
+
+[outputs.design_flood_level_m]
+description = "Tide plus SLR, surge, and wave allowance"
+tolerance = 0.03
+
+[outputs.equipment_freeboard_m]
+description = "Electrical equipment elevation minus design flood level"
+tolerance = 0.03
+
+[outputs.equipment_freeboard_margin_m]
+description = "Equipment freeboard minus required freeboard"
+tolerance = 0.03
+
+[outputs.outfall_submergence_m]
+description = "Design flood level minus outfall obvert level"
+tolerance = 0.03
+
+[outputs.outfall_submergence_margin_m]
+description = "Allowable submergence minus calculated submergence"
+tolerance = 0.03
+
+[outputs.pump_input_power_kw]
+description = "Pump electrical input power"
+tolerance = 0.03
+
+[outputs.backup_energy_required_kwh]
+description = "Pump plus controls backup energy required"
+tolerance = 0.03
+
+[outputs.usable_bess_energy_kwh]
+description = "Usable BESS energy"
+tolerance = 0.03
+
+[outputs.generator_energy_kwh]
+description = "Generator energy available"
+tolerance = 0.03
+
+[outputs.backup_energy_available_kwh]
+description = "BESS plus generator energy available"
+tolerance = 0.03
+
+[outputs.backup_energy_margin_kwh]
+description = "Available backup energy minus required backup energy"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "Three-phase feeder voltage drop"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Maximum voltage drop minus calculated voltage drop"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when freeboard, submergence, backup energy, and voltage-drop checks pass"
+tolerance = 0.001
+
+[archetypes.ssc17_coastal_flood_energy_case]
+description = "Coastal flood energy resilience case with equipment elevation, outfall submergence, pump energy, backup source, and feeder"
+tide_level_m = {min = 2.1, max = 2.1}
+slr_allowance_m = {min = 0.35, max = 0.35}
+storm_surge_m = {min = 0.85, max = 0.85}
+wave_allowance_m = {min = 0.3, max = 0.3}
+electrical_equipment_elevation_m = {min = 4.25, max = 4.25}
+required_equipment_freeboard_m = {min = 0.45, max = 0.45}
+outfall_obvert_level_m = {min = 2.95, max = 2.95}
+allowable_submergence_m = {min = 0.8, max = 0.8}
+pump_flow_m3_s = {min = 0.16, max = 0.16}
+pump_head_m = {min = 7.2, max = 7.2}
+pump_efficiency = {min = 0.7, max = 0.7}
+pump_runtime_hr = {min = 2.5, max = 2.5}
+controls_load_kw = {min = 1.4, max = 1.4}
+outage_duration_hr = {min = 5.0, max = 5.0}
+bess_nominal_kwh = {min = 150.0, max = 150.0}
+max_depth_of_discharge = {min = 0.82, max = 0.82}
+inverter_efficiency = {min = 0.93, max = 0.93}
+generator_kw = {min = 35.0, max = 35.0}
+generator_runtime_hr = {min = 1.5, max = 1.5}
+feeder_voltage_v = {min = 480.0, max = 480.0}
+feeder_length_m = {min = 165.0, max = 165.0}
+feeder_current_a = {min = 64.0, max = 64.0}
+conductor_resistance_ohm_km = {min = 0.321, max = 0.321}
+max_voltage_drop_percent = {min = 4.0, max = 4.0}
+site_contexts = ["coastal-marine-flood-energy", "flood-freeboard-pump-backup-feeder-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-17 coastal flood energy package"
+visibility = "all_given"
+archetypes = ["ssc17_coastal_flood_energy_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-17 coastal flood energy package"
+visibility = "all_given"
+archetypes = ["ssc17_coastal_flood_energy_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-17 coastal flood energy package"
+visibility = "all_given"
+archetypes = ["ssc17_coastal_flood_energy_case"]

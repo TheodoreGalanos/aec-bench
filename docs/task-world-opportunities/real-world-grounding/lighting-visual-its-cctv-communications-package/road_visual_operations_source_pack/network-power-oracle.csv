@@ -1,9 +1,0 @@
-check_id,check_type,input_basis,expected_value,unit,threshold,status,notes
-LIGHT-AVG,lighting_summary,average of lighting-grid-results.csv illuminance_lux,18.875,lux,>=15.0,pass,average maintained from eight task-owned grid rows
-LIGHT-MIN,lighting_summary,minimum of lighting-grid-results.csv illuminance_lux,16.800,lux,>=10.0,pass,minimum maintained from LG-05
-LIGHT-U0,lighting_summary,min_lux divided by average_lux,0.890,ratio,>=0.40,pass,min-to-average uniformity
-CCTV-STORAGE,cctv_storage,sum camera storage_tb,1.99584,TB,reported,pass,14 days continuous with 1.10 overhead
-NET-BW,network_bandwidth,sum device-schedule network_load_mbps,16.700,Mbps,<=70.0,pass,100 Mbps uplink at 16.7 percent utilization
-POE-LOAD,poe_power,sum device-schedule poe_load_w,44.000,W,<=120.0,pass,PoE budget has 76 W headroom
-FIB-LOSS,fibre_margin,0.35 dB/km times 0.42 km plus connector/splice/reserve loss,2.347,dB,<=15.0,pass,15 dB budget gives 12.653 dB margin
-UPS-ENERGY,backup_power,(lighting 320 W plus VMS 180 W plus cabinet 40 W) times 2 h divided by 0.85,1.271,kWh,reported,pass,energy required for selected operating case

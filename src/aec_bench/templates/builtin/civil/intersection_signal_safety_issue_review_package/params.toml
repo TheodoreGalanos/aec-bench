@@ -1,0 +1,274 @@
+[meta]
+name = "intersection-signal-safety-issue-review-package"
+description = "SSC-01 review-first issue-readiness review of an intersection signal safety package"
+long_description = "Review-native long-horizon task over a generated SSC-01 intersection signal safety issue packet. The agent receives a multi-file source packet in /workspace/sources/ (document register, intersection layout, approach profile, signal timing sheet, pedestrian crossing sheet, sight-distance note, controller handoff note, criteria and comments), inventories it, preserves object identity, recomputes the package's own stopping-distance and signal-clearance evidence, assigns one status per review item, raises findings/information requests/actions, and issues a readiness decision. Packet variants inject missing pedestrian clearance evidence, stale timing revisions, datum mismatch, scenario copy-forward, open comments, carried comments, or a genuine pedestrian-clearance failure. Scored by a stage-gated custom verifier, not per-key answer matching."
+discipline = "civil"
+category = "road-review"
+standards = ["FHWA MUTCD", "AASHTO Green Book"]
+tags = ["civil", "road", "review", "issue-readiness", "intersection", "signal", "sight-distance"]
+tool_mode = "no-tool"
+
+# --- Approach profile and sight distance ---
+
+[params.approach_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "APP-NB-02 approach design speed"
+min = 50.0
+max = 75.0
+
+[params.approach_grade_pct]
+type = "float"
+unit = "%"
+description = "APP-NB-02 signed approach grade; downhill is negative"
+min = -3.5
+max = 2.0
+
+[params.reaction_time_s]
+type = "float"
+unit = "s"
+description = "CRIT-SSC01-002 stopping sight-distance reaction time"
+min = 2.3
+max = 2.7
+
+[params.braking_friction_coefficient]
+type = "float"
+description = "CRIT-SSC01-002 braking friction coefficient"
+min = 0.34
+max = 0.4
+
+[params.sight_distance_margin_m]
+type = "float"
+unit = "m"
+description = "Derivation margin between computed stopping distance and available sight distance"
+min = 12.0
+max = 45.0
+
+# --- Signal timing ---
+
+[params.yellow_reaction_time_s]
+type = "float"
+unit = "s"
+description = "SIG-SSC01-002 yellow interval perception-reaction term"
+min = 0.9
+max = 1.2
+
+[params.yellow_deceleration_m_s2]
+type = "float"
+unit = "m/s2"
+description = "SIG-SSC01-002 comfortable deceleration rate for yellow timing"
+min = 2.9
+max = 3.4
+
+[params.intersection_width_m]
+type = "float"
+unit = "m"
+description = "INT-SSC01-002 conflict area width for SG-02 all-red clearance"
+min = 24.0
+max = 36.0
+
+[params.design_vehicle_length_m]
+type = "enum"
+unit = "m"
+description = "CRIT-SSC01-002 design vehicle length for all-red clearance"
+values = ["6.0", "12.5", "19.0"]
+
+[params.all_red_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "SIG-SSC01-002 all-red clearance speed"
+min = 40.0
+max = 55.0
+
+# --- Pedestrian crossing ---
+
+[params.pedestrian_startup_time_s]
+type = "float"
+unit = "s"
+description = "PED-X-02 pedestrian startup allowance"
+min = 3.0
+max = 4.0
+
+[params.crossing_width_m]
+type = "float"
+unit = "m"
+description = "PED-X-02 crossing width"
+min = 12.0
+max = 22.0
+
+[params.pedestrian_walk_speed_m_s]
+type = "float"
+unit = "m/s"
+description = "PED-X-02 pedestrian walk speed"
+min = 1.0
+max = 1.3
+
+[params.pedestrian_clearance_margin_s]
+type = "float"
+unit = "s"
+description = "Derivation margin between required and available pedestrian clearance"
+min = 1.0
+max = 4.0
+
+[params.pedestrian_clearance_deficit_s]
+type = "float"
+unit = "s"
+description = "Derivation deficit for the pedestrian-clearance-deficient variant"
+min = 0.4
+max = 2.0
+
+# --- Documentary variant helpers ---
+
+[params.packet_variant]
+type = "enum"
+description = "Hidden packet-defect variant controlling gold review statuses"
+values = [
+  "clean",
+  "missing_pedestrian_clearance",
+  "stale_timing_revision",
+  "approach_datum_mismatch",
+  "scenario_copy_forward",
+  "open_critical_comment",
+  "minor_open_comment_carried",
+  "pedestrian_clearance_deficient",
+]
+
+# --- Outputs (review gold state and evidence) ---
+
+[outputs.rlr_01_status]
+description = "Packet completeness status code (0 pass, 1 fail, 2 not applicable, 3 insufficient data)"
+tolerance = 0.0
+
+[outputs.rlr_02_status]
+description = "Object identity status code"
+tolerance = 0.0
+
+[outputs.rlr_03_status]
+description = "Traffic safety basis status code"
+tolerance = 0.0
+
+[outputs.rlr_04_status]
+description = "Approach user safety status code"
+tolerance = 0.0
+
+[outputs.rlr_05_status]
+description = "Timing scenario consequence status code"
+tolerance = 0.0
+
+[outputs.rlr_06_status]
+description = "Signal handoff resilience status code"
+tolerance = 0.0
+
+[outputs.rlr_07_status]
+description = "Comment and action closure status code"
+tolerance = 0.0
+
+[outputs.rlr_08_status]
+description = "Readiness decision consistency status code"
+tolerance = 0.0
+
+[outputs.rlr_09_status]
+description = "Claim boundary status code"
+tolerance = 0.0
+
+[outputs.readiness_code]
+description = "Gold readiness decision (0 ready, 1 ready with carried actions, 2 not ready)"
+tolerance = 0.0
+
+[outputs.required_findings_count]
+description = "Findings the review must raise"
+tolerance = 0.0
+
+[outputs.required_information_requests_count]
+description = "Information requests the review must raise"
+tolerance = 0.0
+
+[outputs.required_carried_actions_count]
+description = "Carried actions the review must record"
+tolerance = 0.0
+
+[outputs.stopping_distance_m]
+description = "Grade-adjusted stopping distance evidence"
+tolerance = 0.02
+
+[outputs.sight_distance_margin_m]
+description = "Available sight distance minus stopping distance evidence"
+tolerance = 0.02
+
+[outputs.yellow_interval_s]
+description = "Grade-adjusted yellow interval evidence"
+tolerance = 0.02
+
+[outputs.all_red_interval_s]
+description = "All-red clearance interval evidence"
+tolerance = 0.02
+
+[outputs.ped_clearance_required_s]
+description = "Required pedestrian clearance evidence"
+tolerance = 0.02
+
+[outputs.ped_clearance_margin_s]
+description = "Available pedestrian clearance minus required clearance evidence"
+tolerance = 0.02
+
+[outputs.grade_adjusted_braking_distance_m]
+description = "Braking distance component of stopping distance evidence"
+tolerance = 0.02
+
+# --- Archetypes ---
+
+[archetypes.urban_arterial]
+description = "Urban arterial signalized intersection with wide crossing and stronger approach speed"
+site_contexts = ["urban-arterial-signal", "cbd-fringe-intersection"]
+approach_speed_kmh = {min = 55.0, max = 75.0}
+intersection_width_m = {min = 28.0, max = 36.0}
+crossing_width_m = {min = 16.0, max = 22.0}
+
+[archetypes.suburban_collector]
+description = "Suburban collector signalized intersection with shorter crossing and moderate approach speed"
+site_contexts = ["suburban-collector-signal", "school-access-intersection"]
+approach_speed_kmh = {min = 50.0, max = 65.0}
+intersection_width_m = {min = 24.0, max = 31.0}
+crossing_width_m = {min = 12.0, max = 18.0}
+
+# --- Difficulty presets ---
+
+[difficulty.easy]
+description = "Obvious packet defects: clean, missing evidence, or a genuine pedestrian-clearance failure"
+visibility = "partial"
+archetypes = ["urban_arterial", "suburban_collector"]
+hidden_params = [
+  "packet_variant",
+  "sight_distance_margin_m",
+  "pedestrian_clearance_margin_s",
+  "pedestrian_clearance_deficit_s",
+]
+packet_variant = ["clean", "missing_pedestrian_clearance", "pedestrian_clearance_deficient"]
+
+[difficulty.medium]
+description = "Full packet-variant distribution"
+visibility = "partial"
+archetypes = ["urban_arterial", "suburban_collector"]
+hidden_params = [
+  "packet_variant",
+  "sight_distance_margin_m",
+  "pedestrian_clearance_margin_s",
+  "pedestrian_clearance_deficit_s",
+]
+
+[difficulty.hard]
+description = "Subtle documentary defects: stale revisions, datum drift, scenario copy-forward, carried comments"
+visibility = "partial"
+archetypes = ["urban_arterial", "suburban_collector"]
+hidden_params = [
+  "packet_variant",
+  "sight_distance_margin_m",
+  "pedestrian_clearance_margin_s",
+  "pedestrian_clearance_deficit_s",
+]
+packet_variant = [
+  "stale_timing_revision",
+  "approach_datum_mismatch",
+  "scenario_copy_forward",
+  "minor_open_comment_carried",
+]

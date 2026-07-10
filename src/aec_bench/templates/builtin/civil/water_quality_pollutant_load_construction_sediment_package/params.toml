@@ -1,0 +1,169 @@
+# ABOUTME: Defines the SSC-03 water-quality pollutant-load construction sediment template.
+# ABOUTME: Pins one synthetic construction staging, pollutant, basin, and discharge source package.
+
+[meta]
+name = "water-quality-pollutant-load-construction-sediment-package"
+description = "SSC-03 construction runoff, pollutant load, sediment basin, and discharge metrics"
+long_description = "Calculates source-bound water-quality and construction sediment metrics from a deterministic SSC-03 task-owned source pack. The template combines runoff volume, pollutant load, removed and residual load, sediment basin volume, temporary discharge capacity, weir release, capture percentage, and an overall synthetic pass score."
+discipline = "civil"
+category = "water-quality-sediment"
+standards = ["construction sediment basin sizing", "pollutant load estimation", "temporary discharge review", "stormwater water-quality workflows"]
+tags = ["civil", "stormwater", "water-quality", "sediment", "construction", "deterministic"]
+tool_mode = "with-tool"
+
+[params.disturbed_area_ha]
+type = "float"
+unit = "ha"
+description = "STAGE-SSC03-006 disturbed construction area"
+min = 2.4
+max = 2.4
+
+[params.runoff_depth_mm]
+type = "float"
+unit = "mm"
+description = "CATCH-SSC03-006 runoff depth"
+min = 38.0
+max = 38.0
+
+[params.pollutant_concentration_mg_l]
+type = "float"
+unit = "mg/L"
+description = "POLLUT-SSC03-006 event mean pollutant concentration"
+min = 180.0
+max = 180.0
+
+[params.removal_efficiency]
+type = "float"
+description = "BASIN-SSC03-006 sediment basin removal efficiency"
+min = 0.78
+max = 0.78
+
+[params.sediment_basin_volume_m3]
+type = "float"
+unit = "m3"
+description = "BASIN-SSC03-006 available sediment basin volume"
+min = 920.0
+max = 920.0
+
+[params.required_volume_per_ha_m3]
+type = "float"
+unit = "m3/ha"
+description = "MEMO-SSC03-006 required basin volume per disturbed hectare"
+min = 320.0
+max = 320.0
+
+[params.dewatering_flow_l_s]
+type = "float"
+unit = "L/s"
+description = "STAGE-SSC03-006 temporary dewatering flow"
+min = 42.0
+max = 42.0
+
+[params.temporary_channel_capacity_l_s]
+type = "float"
+unit = "L/s"
+description = "BASIN-SSC03-006 temporary discharge channel capacity"
+min = 65.0
+max = 65.0
+
+[params.weir_discharge_coefficient]
+type = "float"
+description = "BASIN-SSC03-006 outlet weir coefficient"
+min = 1.7
+max = 1.7
+
+[params.outlet_weir_length_m]
+type = "float"
+unit = "m"
+description = "BASIN-SSC03-006 outlet weir length"
+min = 1.8
+max = 1.8
+
+[params.outlet_weir_head_m]
+type = "float"
+unit = "m"
+description = "BASIN-SSC03-006 outlet weir head"
+min = 0.22
+max = 0.22
+
+[params.target_capture_percent]
+type = "float"
+unit = "%"
+description = "MEMO-SSC03-006 target pollutant capture"
+min = 75.0
+max = 75.0
+
+[outputs.runoff_volume_m3]
+description = "Construction-stage runoff volume"
+tolerance = 0.03
+
+[outputs.pollutant_load_kg]
+description = "Pollutant load entering the sediment basin"
+tolerance = 0.03
+
+[outputs.removed_load_kg]
+description = "Pollutant load removed by the sediment basin"
+tolerance = 0.03
+
+[outputs.residual_load_kg]
+description = "Residual pollutant load after removal"
+tolerance = 0.03
+
+[outputs.required_basin_volume_m3]
+description = "Required basin volume"
+tolerance = 0.03
+
+[outputs.basin_volume_margin_m3]
+description = "Available basin volume minus required basin volume"
+tolerance = 0.03
+
+[outputs.temporary_discharge_margin_l_s]
+description = "Temporary channel capacity minus dewatering flow"
+tolerance = 0.03
+
+[outputs.weir_release_l_s]
+description = "Outlet weir release capacity"
+tolerance = 0.03
+
+[outputs.capture_percent]
+description = "Pollutant capture percentage"
+tolerance = 0.03
+
+[outputs.capture_margin_percent]
+description = "Capture percentage minus target capture"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for basin volume, discharge, and capture checks"
+tolerance = 0.03
+
+[archetypes.ssc03_water_quality_sediment_case]
+description = "Water-quality pollutant-load and construction sediment case"
+disturbed_area_ha = {min = 2.4, max = 2.4}
+runoff_depth_mm = {min = 38.0, max = 38.0}
+pollutant_concentration_mg_l = {min = 180.0, max = 180.0}
+removal_efficiency = {min = 0.78, max = 0.78}
+sediment_basin_volume_m3 = {min = 920.0, max = 920.0}
+required_volume_per_ha_m3 = {min = 320.0, max = 320.0}
+dewatering_flow_l_s = {min = 42.0, max = 42.0}
+temporary_channel_capacity_l_s = {min = 65.0, max = 65.0}
+weir_discharge_coefficient = {min = 1.7, max = 1.7}
+outlet_weir_length_m = {min = 1.8, max = 1.8}
+outlet_weir_head_m = {min = 0.22, max = 0.22}
+target_capture_percent = {min = 75.0, max = 75.0}
+site_contexts = ["construction-sediment", "water-quality-check"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-03 water-quality sediment package"
+visibility = "all_given"
+archetypes = ["ssc03_water_quality_sediment_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-03 water-quality sediment package"
+visibility = "all_given"
+archetypes = ["ssc03_water_quality_sediment_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-03 water-quality sediment package"
+visibility = "all_given"
+archetypes = ["ssc03_water_quality_sediment_case"]

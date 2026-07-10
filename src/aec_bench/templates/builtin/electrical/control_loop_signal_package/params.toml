@@ -1,0 +1,181 @@
+[meta]
+name = "control-loop-signal-package"
+description = "SSC-18 valve Cv, process value, 4-20 mA signal, and alarm margin metrics"
+long_description = "Calculates source-bound control-loop metrics from a deterministic SSC-18 task-owned source pack. The template combines valve pressure drop and Cv sizing, linear 4-20 mA signal scaling, alarm and trip current conversion, and control-loop headroom checks for a compact generated task instance."
+discipline = "electrical"
+category = "instrumentation-control"
+standards = ["ISA-5", "ISA-75", "ISA-84", "Siemens TIA Portal", "Rockwell Studio 5000"]
+tags = ["electrical", "instrumentation", "controls", "valve-cv", "4-20ma", "alarm", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_rate_m3_h]
+type = "float"
+unit = "m3/h"
+description = "OP-SSC18-LOOP-001 flow rate through FCV-18-101"
+min = 86.0
+max = 86.0
+
+[params.upstream_pressure_bar]
+type = "float"
+unit = "bar"
+description = "VDS-18-FCV-101 upstream pressure"
+min = 6.2
+max = 6.2
+
+[params.downstream_pressure_bar]
+type = "float"
+unit = "bar"
+description = "VDS-18-FCV-101 downstream pressure"
+min = 3.1
+max = 3.1
+
+[params.fluid_specific_gravity]
+type = "float"
+description = "OP-SSC18-LOOP-001 fluid specific gravity"
+min = 1.0
+max = 1.0
+
+[params.fluid_vapor_pressure_bar]
+type = "float"
+unit = "bar"
+description = "OP-SSC18-LOOP-001 fluid vapor pressure"
+min = 0.031
+max = 0.031
+
+[params.fluid_critical_pressure_bar]
+type = "float"
+unit = "bar"
+description = "OP-SSC18-LOOP-001 fluid critical pressure"
+min = 220.64
+max = 220.64
+
+[params.fl_recovery_factor]
+type = "float"
+description = "VDS-18-FCV-101 valve liquid pressure recovery factor"
+min = 0.9
+max = 0.9
+
+[params.selected_valve_cv]
+type = "float"
+description = "VDS-18-FCV-101 selected control valve Cv"
+min = 63.0
+max = 63.0
+
+[params.process_value_m3_h]
+type = "float"
+unit = "m3/h"
+description = "FIT-18-101 current process value"
+min = 68.8
+max = 68.8
+
+[params.lower_range_value_m3_h]
+type = "float"
+unit = "m3/h"
+description = "LS-18-FIC-101 lower range value"
+min = 0.0
+max = 0.0
+
+[params.upper_range_value_m3_h]
+type = "float"
+unit = "m3/h"
+description = "LS-18-FIC-101 upper range value"
+min = 120.0
+max = 120.0
+
+[params.high_alarm_flow_m3_h]
+type = "float"
+unit = "m3/h"
+description = "ALM-18-FLOW-101 high alarm setpoint"
+min = 95.0
+max = 95.0
+
+[params.high_high_trip_flow_m3_h]
+type = "float"
+unit = "m3/h"
+description = "ALM-18-FLOW-101 high-high trip setpoint"
+min = 108.0
+max = 108.0
+
+[outputs.pressure_drop_bar]
+description = "Actual pressure drop across FCV-18-101"
+tolerance = 0.03
+
+[outputs.choked_pressure_drop_bar]
+description = "Choked pressure drop limit from the task-owned valve data"
+tolerance = 0.03
+
+[outputs.cv_required]
+description = "Required valve Cv for the operating case"
+tolerance = 0.03
+
+[outputs.selected_cv_headroom]
+description = "Selected valve Cv minus required Cv"
+tolerance = 0.03
+
+[outputs.valve_travel_pct]
+description = "Required Cv divided by selected Cv"
+tolerance = 0.03
+
+[outputs.span_pct]
+description = "Current process value as percent of the loop range"
+tolerance = 0.03
+
+[outputs.current_signal_ma]
+description = "4-20 mA signal for the current process value"
+tolerance = 0.03
+
+[outputs.reconstructed_process_value]
+description = "Process value reconstructed from the 4-20 mA signal"
+tolerance = 0.03
+
+[outputs.high_alarm_current_ma]
+description = "4-20 mA signal at the high alarm setpoint"
+tolerance = 0.03
+
+[outputs.high_high_trip_current_ma]
+description = "4-20 mA signal at the high-high trip setpoint"
+tolerance = 0.03
+
+[outputs.alarm_current_headroom_ma]
+description = "High alarm current minus current signal"
+tolerance = 0.03
+
+[outputs.trip_flow_headroom_m3_h]
+description = "High-high trip setpoint minus current process value"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Pass score for the task-owned valve, signal, and alarm checks"
+tolerance = 0.03
+
+[archetypes.ssc18_control_loop_case]
+description = "Valve Cv, process value, signal scaling, and alarm handoff package"
+flow_rate_m3_h = {min = 86.0, max = 86.0}
+upstream_pressure_bar = {min = 6.2, max = 6.2}
+downstream_pressure_bar = {min = 3.1, max = 3.1}
+fluid_specific_gravity = {min = 1.0, max = 1.0}
+fluid_vapor_pressure_bar = {min = 0.031, max = 0.031}
+fluid_critical_pressure_bar = {min = 220.64, max = 220.64}
+fl_recovery_factor = {min = 0.9, max = 0.9}
+selected_valve_cv = {min = 63.0, max = 63.0}
+process_value_m3_h = {min = 68.8, max = 68.8}
+lower_range_value_m3_h = {min = 0.0, max = 0.0}
+upper_range_value_m3_h = {min = 120.0, max = 120.0}
+high_alarm_flow_m3_h = {min = 95.0, max = 95.0}
+high_high_trip_flow_m3_h = {min = 108.0, max = 108.0}
+site_contexts = ["valve-signal-loop", "alarm-trip-handoff"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-18 control-loop signal package"
+visibility = "all_given"
+archetypes = ["ssc18_control_loop_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-18 control-loop signal package"
+visibility = "all_given"
+archetypes = ["ssc18_control_loop_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-18 control-loop signal package"
+visibility = "all_given"
+archetypes = ["ssc18_control_loop_case"]

@@ -1,0 +1,289 @@
+# ABOUTME: Defines the SSC-13 remote ITS backup communications template.
+# ABOUTME: Pins one task-owned remote communications source pack and expected outputs.
+
+[meta]
+name = "remote-its-backup-communications-package"
+description = "SSC-13 remote ITS RF, fibre, bandwidth, PoE, and battery checks"
+long_description = "Calculates source-bound remote ITS communications resilience metrics from a deterministic SSC-13 task-owned source pack. The template combines RF link budget, fibre loss, bandwidth, PoE load, and battery autonomy."
+discipline = "electrical"
+category = "its-communications"
+standards = ["RF link budget workflow", "fibre link loss budget", "ITS bandwidth review", "battery autonomy review"]
+tags = ["electrical", "its", "communications", "rf", "fibre", "poe", "battery", "deterministic"]
+tool_mode = "with-tool"
+
+[params.rf_tx_power_dbm]
+type = "float"
+unit = "dBm"
+description = "RF-13-LINK-04 transmit power"
+min = 24.0
+max = 24.0
+
+[params.rf_tx_gain_db]
+type = "float"
+unit = "dB"
+description = "RF-13-LINK-04 transmit antenna gain"
+min = 16.0
+max = 16.0
+
+[params.rf_rx_gain_db]
+type = "float"
+unit = "dB"
+description = "RF-13-LINK-04 receive antenna gain"
+min = 14.0
+max = 14.0
+
+[params.rf_path_loss_db]
+type = "float"
+unit = "dB"
+description = "RF-13-LINK-04 path loss"
+min = 112.0
+max = 112.0
+
+[params.rf_misc_loss_db]
+type = "float"
+unit = "dB"
+description = "RF-13-LINK-04 miscellaneous RF losses"
+min = 3.0
+max = 3.0
+
+[params.rf_receiver_sensitivity_dbm]
+type = "float"
+unit = "dBm"
+description = "RF-13-LINK-04 receiver sensitivity"
+min = -82.0
+max = -82.0
+
+[params.fibre_length_km]
+type = "float"
+unit = "km"
+description = "FIB-13-TOPO-04 fibre length"
+min = 2.4
+max = 2.4
+
+[params.fibre_loss_db_per_km]
+type = "float"
+unit = "dB/km"
+description = "FIB-13-TOPO-04 fibre attenuation"
+min = 0.35
+max = 0.35
+
+[params.connector_count]
+type = "float"
+unit = "count"
+description = "FIB-13-TOPO-04 connector count"
+min = 2.0
+max = 2.0
+
+[params.connector_loss_db]
+type = "float"
+unit = "dB"
+description = "FIB-13-TOPO-04 loss per connector"
+min = 0.5
+max = 0.5
+
+[params.splice_count]
+type = "float"
+unit = "count"
+description = "FIB-13-TOPO-04 splice count"
+min = 4.0
+max = 4.0
+
+[params.splice_loss_db]
+type = "float"
+unit = "dB"
+description = "FIB-13-TOPO-04 loss per splice"
+min = 0.1
+max = 0.1
+
+[params.reserve_loss_db]
+type = "float"
+unit = "dB"
+description = "FIB-13-TOPO-04 reserve loss allowance"
+min = 1.0
+max = 1.0
+
+[params.fibre_budget_db]
+type = "float"
+unit = "dB"
+description = "FIB-13-TOPO-04 optical loss budget"
+min = 18.0
+max = 18.0
+
+[params.cctv_network_mbps]
+type = "float"
+unit = "Mbps"
+description = "BW-13-TABLE-04 CCTV network load"
+min = 8.0
+max = 8.0
+
+[params.vms_network_mbps]
+type = "float"
+unit = "Mbps"
+description = "BW-13-TABLE-04 VMS network load"
+min = 1.5
+max = 1.5
+
+[params.sensor_network_mbps]
+type = "float"
+unit = "Mbps"
+description = "BW-13-TABLE-04 sensor network load"
+min = 0.5
+max = 0.5
+
+[params.controller_network_mbps]
+type = "float"
+unit = "Mbps"
+description = "BW-13-TABLE-04 controller network load"
+min = 0.8
+max = 0.8
+
+[params.network_overhead_factor]
+type = "float"
+description = "BW-13-TABLE-04 network overhead factor"
+min = 1.25
+max = 1.25
+
+[params.backhaul_capacity_mbps]
+type = "float"
+unit = "Mbps"
+description = "BW-13-TABLE-04 backhaul capacity"
+min = 30.0
+max = 30.0
+
+[params.camera_count]
+type = "float"
+unit = "count"
+description = "DEV-13-INV-04 camera count"
+min = 2.0
+max = 2.0
+
+[params.camera_poe_w]
+type = "float"
+unit = "W"
+description = "DEV-13-INV-04 PoE load per camera"
+min = 14.0
+max = 14.0
+
+[params.radio_poe_w]
+type = "float"
+unit = "W"
+description = "DEV-13-INV-04 radio PoE load"
+min = 8.0
+max = 8.0
+
+[params.vms_poe_w]
+type = "float"
+unit = "W"
+description = "DEV-13-INV-04 VMS communications PoE load"
+min = 10.0
+max = 10.0
+
+[params.sensor_poe_w]
+type = "float"
+unit = "W"
+description = "DEV-13-INV-04 sensor PoE load"
+min = 5.0
+max = 5.0
+
+[params.poe_budget_w]
+type = "float"
+unit = "W"
+description = "DEV-13-INV-04 PoE budget"
+min = 90.0
+max = 90.0
+
+[params.backup_load_w]
+type = "float"
+unit = "W"
+description = "PWR-13-BAT-04 backup load"
+min = 140.0
+max = 140.0
+
+[params.autonomy_h]
+type = "float"
+unit = "h"
+description = "PWR-13-BAT-04 autonomy"
+min = 12.0
+max = 12.0
+
+[params.inverter_efficiency]
+type = "float"
+description = "PWR-13-BAT-04 inverter efficiency"
+min = 0.85
+max = 0.85
+
+[params.allowable_depth_of_discharge]
+type = "float"
+description = "PWR-13-BAT-04 allowable depth of discharge"
+min = 0.80
+max = 0.80
+
+[params.battery_capacity_kwh]
+type = "float"
+unit = "kWh"
+description = "PWR-13-BAT-04 battery capacity"
+min = 3.2
+max = 3.2
+
+[outputs.rf_received_power_dbm]
+description = "Received RF power at the remote device"
+tolerance = 0.003
+
+[outputs.rf_fade_margin_db]
+description = "Received RF power minus receiver sensitivity"
+tolerance = 0.003
+
+[outputs.fibre_loss_db]
+description = "Fibre link loss"
+tolerance = 0.003
+
+[outputs.fibre_margin_db]
+description = "Fibre budget minus loss"
+tolerance = 0.003
+
+[outputs.network_load_mbps]
+description = "Network load including overhead"
+tolerance = 0.003
+
+[outputs.network_headroom_mbps]
+description = "Backhaul capacity minus network load"
+tolerance = 0.003
+
+[outputs.poe_load_w]
+description = "Total PoE load"
+tolerance = 0.003
+
+[outputs.poe_headroom_w]
+description = "PoE budget minus load"
+tolerance = 0.003
+
+[outputs.battery_required_kwh]
+description = "Battery energy required for autonomy"
+tolerance = 0.003
+
+[outputs.battery_margin_kwh]
+description = "Installed battery capacity minus required capacity"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when communications and backup checks pass"
+tolerance = 0.001
+
+[archetypes.ssc13_remote_its_case]
+description = "Remote ITS backup communications case"
+site_contexts = ["ssc13-remote-its"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-13 remote ITS package"
+visibility = "all_given"
+archetypes = ["ssc13_remote_its_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-13 remote ITS package"
+visibility = "all_given"
+archetypes = ["ssc13_remote_its_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-13 remote ITS package"
+visibility = "all_given"
+archetypes = ["ssc13_remote_its_case"]

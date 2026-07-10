@@ -1,0 +1,175 @@
+# ABOUTME: Defines the SSC-15 occupancy and fire product-class compliance template.
+# ABOUTME: Pins one task-owned occupancy, product datasheet, authority, and memo source pack.
+
+[meta]
+name = "occupancy-fire-product-class-compliance-package"
+description = "SSC-15 occupancy, fire class, product class, NAC, smoke exhaust, and authority evidence checks"
+long_description = "Calculates source-bound occupancy/fire/product-class compliance metrics from a deterministic SSC-15 task-owned source pack. The template combines one occupancy schedule, product datasheet, fire/hazard class note, authority reference, calculation appendix, and compliance memo."
+discipline = "mechanical"
+category = "code-compliance"
+standards = ["occupant-load review", "fire product class review", "authority evidence review"]
+tags = ["mechanical", "fire", "occupancy", "product-class", "authority", "compliance", "deterministic"]
+tool_mode = "with-tool"
+
+[params.floor_area_m2]
+type = "float"
+unit = "m2"
+description = "OCC-15-SCHED-07 floor area for the occupancy context"
+min = 960.0
+max = 960.0
+
+[params.occupant_area_factor_m2_per_person]
+type = "float"
+unit = "m2/person"
+description = "OCC-15-SCHED-07 occupant area factor"
+min = 10.0
+max = 10.0
+
+[params.product_class_capacity_persons]
+type = "float"
+unit = "persons"
+description = "DAT-15-PRODUCT-07 product class occupancy capacity"
+min = 120.0
+max = 120.0
+
+[params.flame_spread_index]
+type = "float"
+description = "FIRE-15-CLASS-07 product flame spread index"
+min = 25.0
+max = 25.0
+
+[params.flame_spread_limit]
+type = "float"
+description = "AUTH-15-REF-07 flame spread limit"
+min = 75.0
+max = 75.0
+
+[params.smoke_developed_index]
+type = "float"
+description = "FIRE-15-CLASS-07 product smoke developed index"
+min = 80.0
+max = 80.0
+
+[params.smoke_developed_limit]
+type = "float"
+description = "AUTH-15-REF-07 smoke developed limit"
+min = 450.0
+max = 450.0
+
+[params.fire_resistance_rating_min]
+type = "float"
+unit = "min"
+description = "DAT-15-PRODUCT-07 fire resistance rating"
+min = 60.0
+max = 60.0
+
+[params.required_fire_resistance_min]
+type = "float"
+unit = "min"
+description = "AUTH-15-REF-07 required fire resistance"
+min = 45.0
+max = 45.0
+
+[params.nac_device_count]
+type = "float"
+unit = "count"
+description = "CALC-15-APP-07 notification appliance count affected by the product class"
+min = 64.0
+max = 64.0
+
+[params.nac_current_per_device_a]
+type = "float"
+unit = "A"
+description = "CALC-15-APP-07 current per notification appliance"
+min = 0.075
+max = 0.075
+
+[params.nac_supply_capacity_a]
+type = "float"
+unit = "A"
+description = "CALC-15-APP-07 notification appliance circuit supply capacity"
+min = 8.0
+max = 8.0
+
+[params.smoke_exhaust_ach]
+type = "float"
+unit = "ACH"
+description = "CALC-15-APP-07 smoke exhaust air-change rate"
+min = 6.0
+max = 6.0
+
+[params.required_smoke_exhaust_ach]
+type = "float"
+unit = "ACH"
+description = "AUTH-15-REF-07 required smoke exhaust air-change rate"
+min = 5.0
+max = 5.0
+
+[params.authority_evidence_items]
+type = "float"
+unit = "count"
+description = "MEMO-15-CODE-07 authority evidence items provided"
+min = 5.0
+max = 5.0
+
+[params.required_authority_evidence_items]
+type = "float"
+unit = "count"
+description = "MEMO-15-CODE-07 required authority evidence items"
+min = 5.0
+max = 5.0
+
+[outputs.occupant_load_persons]
+description = "Floor area divided by occupant area factor"
+tolerance = 0.03
+
+[outputs.product_class_capacity_margin_persons]
+description = "Product class capacity minus occupant load"
+tolerance = 0.03
+
+[outputs.flame_spread_margin]
+description = "Flame spread limit minus flame spread index"
+tolerance = 0.03
+
+[outputs.smoke_developed_margin]
+description = "Smoke developed limit minus smoke developed index"
+tolerance = 0.03
+
+[outputs.fire_resistance_margin_min]
+description = "Fire resistance rating minus required fire resistance"
+tolerance = 0.03
+
+[outputs.nac_current_margin_a]
+description = "NAC supply capacity minus connected NAC current"
+tolerance = 0.03
+
+[outputs.smoke_exhaust_ach_margin]
+description = "Smoke exhaust ACH minus required ACH"
+tolerance = 0.003
+
+[outputs.authority_evidence_fraction]
+description = "Authority evidence items divided by required evidence items"
+tolerance = 0.003
+
+[outputs.overall_pass_score]
+description = "1.0 when occupancy, fire class, NAC, smoke exhaust, and authority checks pass"
+tolerance = 0.001
+
+[archetypes.ssc15_occupancy_fire_class_case]
+description = "Occupancy, fire, and product-class compliance case"
+site_contexts = ["ssc15-occupancy-fire-class"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-15 occupancy fire product-class package"
+visibility = "all_given"
+archetypes = ["ssc15_occupancy_fire_class_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-15 occupancy fire product-class package"
+visibility = "all_given"
+archetypes = ["ssc15_occupancy_fire_class_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-15 occupancy fire product-class package"
+visibility = "all_given"
+archetypes = ["ssc15_occupancy_fire_class_case"]

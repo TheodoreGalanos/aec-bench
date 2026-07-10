@@ -1,0 +1,177 @@
+[meta]
+name = "switchboard-fault-arcflash-earthing-package"
+description = "SSC-05 switchboard fault duty, arc-flash, earthing, and busbar-force metrics"
+long_description = "Calculates deterministic SSC-05 switchboard safety metrics from a task-owned synthetic source pack. The template combines source fault current, switchboard duty, protection clearing time, incident energy, touch voltage, busbar force, and an overall synthetic pass score."
+discipline = "electrical"
+category = "switchboard-fault-arcflash-earthing"
+standards = ["ETAP-style short-circuit workflow", "EasyPower arc-flash workflow", "SKM PowerTools coordination workflow", "earthing-grid review workflow"]
+tags = ["electrical", "switchboard", "fault-current", "arc-flash", "earthing", "busbar", "deterministic"]
+tool_mode = "with-tool"
+
+[params.utility_fault_mva]
+type = "float"
+unit = "MVA"
+description = "FAULT-05-STUDY-03 upstream utility fault level"
+min = 25.0
+max = 25.0
+
+[params.switchboard_voltage_v]
+type = "float"
+unit = "V"
+description = "SLD-05-SWBD-03 switchboard voltage"
+min = 415.0
+max = 415.0
+
+[params.transformer_contribution_ka]
+type = "float"
+unit = "kA"
+description = "FAULT-05-STUDY-03 transformer fault contribution"
+min = 8.0
+max = 8.0
+
+[params.motor_contribution_ka]
+type = "float"
+unit = "kA"
+description = "FAULT-05-STUDY-03 motor contribution"
+min = 2.3
+max = 2.3
+
+[params.switchboard_fault_rating_ka]
+type = "float"
+unit = "kA"
+description = "SLD-05-SWBD-03 switchboard short-circuit rating"
+min = 50.0
+max = 50.0
+
+[params.arcing_current_factor]
+type = "float"
+description = "RELAY-05-SET-03 arcing-current factor for the synthetic incident-energy check"
+min = 0.82
+max = 0.82
+
+[params.clearing_time_s]
+type = "float"
+unit = "s"
+description = "RELAY-05-SET-03 protection clearing time"
+min = 0.12
+max = 0.12
+
+[params.incident_energy_factor]
+type = "float"
+description = "NOTE-05-SAFETY-03 synthetic incident-energy proportional factor"
+min = 0.4
+max = 0.4
+
+[params.working_distance_m]
+type = "float"
+unit = "m"
+description = "LAYOUT-05-SWBD-03 working distance"
+min = 0.6
+max = 0.6
+
+[params.allowable_incident_energy_cal_cm2]
+type = "float"
+unit = "cal/cm2"
+description = "NOTE-05-SAFETY-03 allowable incident energy for the package check"
+min = 8.0
+max = 8.0
+
+[params.earth_grid_resistance_ohm]
+type = "float"
+unit = "ohm"
+description = "EARTH-05-SOIL-03 earth-grid resistance"
+min = 0.01
+max = 0.01
+
+[params.touch_voltage_limit_v]
+type = "float"
+unit = "V"
+description = "EARTH-05-SOIL-03 touch-voltage limit for the synthetic check"
+min = 500.0
+max = 500.0
+
+[params.busbar_force_factor]
+type = "float"
+description = "LAYOUT-05-SWBD-03 synthetic busbar force factor"
+min = 0.002
+max = 0.002
+
+[params.busbar_force_rating_kn]
+type = "float"
+unit = "kN"
+description = "LAYOUT-05-SWBD-03 busbar bracing rating"
+min = 10.0
+max = 10.0
+
+[outputs.utility_fault_current_ka]
+description = "Utility fault current at the switchboard"
+tolerance = 0.03
+
+[outputs.total_fault_current_ka]
+description = "Total fault current including transformer and motor contributions"
+tolerance = 0.03
+
+[outputs.fault_rating_margin_ka]
+description = "Switchboard fault rating minus total fault current"
+tolerance = 0.03
+
+[outputs.incident_energy_cal_cm2]
+description = "Synthetic incident-energy value"
+tolerance = 0.03
+
+[outputs.incident_energy_margin_cal_cm2]
+description = "Allowable incident energy minus calculated incident energy"
+tolerance = 0.03
+
+[outputs.touch_voltage_v]
+description = "Touch voltage from total fault current and grid resistance"
+tolerance = 0.03
+
+[outputs.touch_voltage_margin_v]
+description = "Touch-voltage limit minus calculated touch voltage"
+tolerance = 0.03
+
+[outputs.busbar_force_kn]
+description = "Synthetic busbar force from total fault current"
+tolerance = 0.03
+
+[outputs.busbar_force_margin_kn]
+description = "Busbar force rating minus calculated force"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when fault, incident-energy, touch-voltage, and busbar margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc05_switchboard_fault_case]
+description = "Switchboard fault and safety package tied to one SLD, fault study, relay sheet, earthing note, and safety memo"
+utility_fault_mva = {min = 25.0, max = 25.0}
+switchboard_voltage_v = {min = 415.0, max = 415.0}
+transformer_contribution_ka = {min = 8.0, max = 8.0}
+motor_contribution_ka = {min = 2.3, max = 2.3}
+switchboard_fault_rating_ka = {min = 50.0, max = 50.0}
+arcing_current_factor = {min = 0.82, max = 0.82}
+clearing_time_s = {min = 0.12, max = 0.12}
+incident_energy_factor = {min = 0.4, max = 0.4}
+working_distance_m = {min = 0.6, max = 0.6}
+allowable_incident_energy_cal_cm2 = {min = 8.0, max = 8.0}
+earth_grid_resistance_ohm = {min = 0.01, max = 0.01}
+touch_voltage_limit_v = {min = 500.0, max = 500.0}
+busbar_force_factor = {min = 0.002, max = 0.002}
+busbar_force_rating_kn = {min = 10.0, max = 10.0}
+site_contexts = ["switchboard-fault-arcflash-earthing"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-05 switchboard fault package"
+visibility = "all_given"
+archetypes = ["ssc05_switchboard_fault_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-05 switchboard fault package"
+visibility = "all_given"
+archetypes = ["ssc05_switchboard_fault_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-05 switchboard fault package"
+visibility = "all_given"
+archetypes = ["ssc05_switchboard_fault_case"]

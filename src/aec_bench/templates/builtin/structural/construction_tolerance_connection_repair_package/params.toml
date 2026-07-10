@@ -1,0 +1,202 @@
+# ABOUTME: Defines the SSC-14 construction tolerance and connection repair template.
+# ABOUTME: Pins one as-built survey, connection detail, tolerance spec, NCR, and repair source pack.
+
+[meta]
+name = "construction-tolerance-connection-repair-package"
+description = "SSC-14 construction tolerance, bracket moment, weld, and repair acceptance metrics"
+long_description = "Calculates source-bound construction tolerance and connection repair metrics from a deterministic SSC-14 task-owned source pack. The template combines measured offset, slot and shim capacity, bracket moment effect, weld carbon-equivalent screening, repair acceptance, and overall pass scoring."
+discipline = "structural"
+category = "field-repair"
+standards = ["construction tolerance", "field NCR workflow", "AS 4100", "weldability screening"]
+tags = ["structural", "construction", "tolerance", "connection", "repair", "NCR", "weld", "deterministic"]
+tool_mode = "with-tool"
+
+[params.measured_offset_mm]
+type = "float"
+unit = "mm"
+description = "SURVEY-SSC14-007 measured connection offset"
+min = 18.0
+max = 18.0
+
+[params.permitted_tolerance_mm]
+type = "float"
+unit = "mm"
+description = "TOL-SSC14-007 permitted setout tolerance"
+min = 10.0
+max = 10.0
+
+[params.available_slot_adjustment_mm]
+type = "float"
+unit = "mm"
+description = "CONN-SSC14-007 available slot adjustment"
+min = 32.0
+max = 32.0
+
+[params.maximum_repair_shim_mm]
+type = "float"
+unit = "mm"
+description = "NCR-SSC14-007 maximum repair shim thickness"
+min = 14.0
+max = 14.0
+
+[params.bracket_service_load_kn]
+type = "float"
+unit = "kN"
+description = "CONN-SSC14-007 bracket service load"
+min = 16.0
+max = 16.0
+
+[params.bracket_arm_m]
+type = "float"
+unit = "m"
+description = "CONN-SSC14-007 bracket arm"
+min = 0.24
+max = 0.24
+
+[params.bracket_moment_capacity_knm]
+type = "float"
+unit = "kNm"
+description = "CONN-SSC14-007 bracket moment capacity"
+min = 7.5
+max = 7.5
+
+[params.carbon_percent]
+type = "float"
+unit = "%"
+description = "NCR-SSC14-007 repair material carbon percentage"
+min = 0.16
+max = 0.16
+
+[params.manganese_percent]
+type = "float"
+unit = "%"
+description = "NCR-SSC14-007 repair material manganese percentage"
+min = 1.1
+max = 1.1
+
+[params.chromium_percent]
+type = "float"
+unit = "%"
+description = "NCR-SSC14-007 repair material chromium percentage"
+min = 0.25
+max = 0.25
+
+[params.molybdenum_percent]
+type = "float"
+unit = "%"
+description = "NCR-SSC14-007 repair material molybdenum percentage"
+min = 0.04
+max = 0.04
+
+[params.vanadium_percent]
+type = "float"
+unit = "%"
+description = "NCR-SSC14-007 repair material vanadium percentage"
+min = 0.01
+max = 0.01
+
+[params.nickel_percent]
+type = "float"
+unit = "%"
+description = "NCR-SSC14-007 repair material nickel percentage"
+min = 0.2
+max = 0.2
+
+[params.copper_percent]
+type = "float"
+unit = "%"
+description = "NCR-SSC14-007 repair material copper percentage"
+min = 0.22
+max = 0.22
+
+[params.weld_carbon_equivalent_limit]
+type = "float"
+description = "NCR-SSC14-007 weldability carbon equivalent limit"
+min = 0.45
+max = 0.45
+
+[params.minimum_remaining_slot_margin_mm]
+type = "float"
+unit = "mm"
+description = "MEMO-SSC14-007 minimum remaining slot margin after repair"
+min = 5.0
+max = 5.0
+
+[outputs.tolerance_exceedance_mm]
+description = "Measured offset minus permitted tolerance, not less than zero"
+tolerance = 0.03
+
+[outputs.required_slot_adjustment_mm]
+description = "Slot adjustment needed to match measured offset"
+tolerance = 0.03
+
+[outputs.remaining_slot_margin_mm]
+description = "Available slot adjustment minus required adjustment"
+tolerance = 0.03
+
+[outputs.repair_shim_margin_mm]
+description = "Maximum shim thickness minus tolerance exceedance"
+tolerance = 0.03
+
+[outputs.baseline_moment_knm]
+description = "Baseline bracket moment"
+tolerance = 0.03
+
+[outputs.added_moment_knm]
+description = "Added moment from tolerance exceedance eccentricity"
+tolerance = 0.03
+
+[outputs.bracket_moment_utilization]
+description = "Total bracket moment divided by bracket capacity"
+tolerance = 0.03
+
+[outputs.weld_carbon_equivalent]
+description = "IIW carbon equivalent for repair material"
+tolerance = 0.03
+
+[outputs.carbon_equivalent_margin]
+description = "Weldability carbon equivalent limit minus calculated value"
+tolerance = 0.03
+
+[outputs.repair_acceptance_score]
+description = "1.0 when slot, shim, bracket, and weld checks pass"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "Overall repair pass score"
+tolerance = 0.03
+
+[archetypes.ssc14_tolerance_repair_case]
+description = "As-built survey, connection detail, tolerance specification, and repair NCR source pack"
+measured_offset_mm = {min = 18.0, max = 18.0}
+permitted_tolerance_mm = {min = 10.0, max = 10.0}
+available_slot_adjustment_mm = {min = 32.0, max = 32.0}
+maximum_repair_shim_mm = {min = 14.0, max = 14.0}
+bracket_service_load_kn = {min = 16.0, max = 16.0}
+bracket_arm_m = {min = 0.24, max = 0.24}
+bracket_moment_capacity_knm = {min = 7.5, max = 7.5}
+carbon_percent = {min = 0.16, max = 0.16}
+manganese_percent = {min = 1.1, max = 1.1}
+chromium_percent = {min = 0.25, max = 0.25}
+molybdenum_percent = {min = 0.04, max = 0.04}
+vanadium_percent = {min = 0.01, max = 0.01}
+nickel_percent = {min = 0.2, max = 0.2}
+copper_percent = {min = 0.22, max = 0.22}
+weld_carbon_equivalent_limit = {min = 0.45, max = 0.45}
+minimum_remaining_slot_margin_mm = {min = 5.0, max = 5.0}
+site_contexts = ["construction-tolerance", "field-repair", "connection-NCR"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-14 construction tolerance package"
+visibility = "all_given"
+archetypes = ["ssc14_tolerance_repair_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-14 construction tolerance package"
+visibility = "all_given"
+archetypes = ["ssc14_tolerance_repair_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-14 construction tolerance package"
+visibility = "all_given"
+archetypes = ["ssc14_tolerance_repair_case"]

@@ -1,0 +1,293 @@
+[meta]
+name = "coastal-flood-outfall-pump-elevation-package"
+description = "SSC-04 coastal flood, outfall, pump, equipment elevation, and feeder metrics"
+long_description = "Calculates source-bound coastal resilience metrics from a deterministic SSC-04 task-owned source pack. The template combines a single coastal datum and planning horizon, sinusoidal outfall submergence, design flood level, tide-locked inflow/storage/pump response, pump motor power, equipment freeboard, and pump feeder voltage drop for one compact generated task instance."
+discipline = "civil"
+category = "coastal-resilience"
+standards = ["NOAA sea level rise scenarios", "FEMA flood utility elevation", "FHWA HEC-22", "USACE Coastal Engineering Manual"]
+tags = ["civil", "coastal", "flood", "outfall", "pump", "freeboard", "electrical-elevation", "deterministic"]
+tool_mode = "with-tool"
+
+[params.present_mean_sea_level_m]
+type = "float"
+unit = "m"
+description = "TIDE-04-HORIZON-01 present mean sea level on the project datum"
+min = 0.15
+max = 0.15
+
+[params.tidal_amplitude_m]
+type = "float"
+unit = "m"
+description = "TIDE-04-HORIZON-01 sinusoidal tide amplitude"
+min = 0.85
+max = 0.85
+
+[params.sea_level_rise_allowance_m]
+type = "float"
+unit = "m"
+description = "TIDE-04-HORIZON-01 sea-level-rise allowance for the planning horizon"
+min = 0.55
+max = 0.55
+
+[params.storm_surge_allowance_m]
+type = "float"
+unit = "m"
+description = "TIDE-04-HORIZON-01 storm-surge allowance for the design coastal event"
+min = 1.10
+max = 1.10
+
+[params.wave_runup_allowance_m]
+type = "float"
+unit = "m"
+description = "TIDE-04-HORIZON-01 wave/runup allowance added to stillwater level"
+min = 0.45
+max = 0.45
+
+[params.equipment_freeboard_allowance_m]
+type = "float"
+unit = "m"
+description = "ELEC-04-SWBD-01 freeboard allowance above the design flood level for equipment"
+min = 0.30
+max = 0.30
+
+[params.outfall_invert_level_m]
+type = "float"
+unit = "m"
+description = "OUTFALL-04-FLAP-01 outfall invert level on the project datum"
+min = 0.60
+max = 0.60
+
+[params.peak_inflow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "BASIN-04-WETWELL-01 design catchment inflow during the tide-locked coastal event"
+min = 0.42
+max = 0.42
+
+[params.tide_locked_duration_h]
+type = "float"
+unit = "h"
+description = "OUTFALL-04-FLAP-01 duration when the flap gate/outfall cannot provide gravity relief"
+min = 3.0
+max = 3.0
+
+[params.pump_discharge_m3_s]
+type = "float"
+unit = "m3/s"
+description = "PUMP-04-FLOOD-01 selected flood pump discharge against the coastal tailwater"
+min = 0.36
+max = 0.36
+
+[params.available_storage_m3]
+type = "float"
+unit = "m3"
+description = "BASIN-04-WETWELL-01 available wet-well/basin storage during the coastal event"
+min = 750.0
+max = 750.0
+
+[params.wetwell_low_operating_level_m]
+type = "float"
+unit = "m"
+description = "PUMP-04-FLOOD-01 wet-well low operating level for static head"
+min = 0.20
+max = 0.20
+
+[params.pipe_and_valve_losses_m]
+type = "float"
+unit = "m"
+description = "PUMP-04-FLOOD-01 discharge pipe, valve, and flap-gate loss allowance"
+min = 1.80
+max = 1.80
+
+[params.pump_efficiency]
+type = "float"
+description = "PUMP-04-FLOOD-01 selected pump efficiency"
+min = 0.72
+max = 0.72
+
+[params.motor_efficiency]
+type = "float"
+description = "PUMP-04-FLOOD-01 selected motor efficiency"
+min = 0.93
+max = 0.93
+
+[params.selected_motor_power_kw]
+type = "float"
+unit = "kW"
+description = "PUMP-04-FLOOD-01 selected motor nameplate power"
+min = 30.0
+max = 30.0
+
+[params.switchboard_elevation_m]
+type = "float"
+unit = "m"
+description = "ELEC-04-SWBD-01 switchboard mounting elevation on the project datum"
+min = 3.62
+max = 3.62
+
+[params.controls_elevation_m]
+type = "float"
+unit = "m"
+description = "ELEC-04-SWBD-01 pump control panel elevation on the project datum"
+min = 3.55
+max = 3.55
+
+[params.feeder_voltage_v]
+type = "float"
+unit = "V"
+description = "FEEDER-04-PUMP-01 three-phase feeder voltage"
+min = 415.0
+max = 415.0
+
+[params.motor_power_factor]
+type = "float"
+description = "FEEDER-04-PUMP-01 motor power factor"
+min = 0.86
+max = 0.86
+
+[params.feeder_resistance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "FEEDER-04-PUMP-01 feeder conductor resistance"
+min = 0.64
+max = 0.64
+
+[params.feeder_reactance_ohm_km]
+type = "float"
+unit = "ohm/km"
+description = "FEEDER-04-PUMP-01 feeder conductor reactance"
+min = 0.08
+max = 0.08
+
+[params.feeder_length_km]
+type = "float"
+unit = "km"
+description = "FEEDER-04-PUMP-01 one-way feeder length"
+min = 0.10
+max = 0.10
+
+[params.voltage_drop_limit_percent]
+type = "float"
+unit = "%"
+description = "FEEDER-04-PUMP-01 source-pack voltage-drop criterion"
+min = 5.0
+max = 5.0
+
+[outputs.present_submergence_percent]
+description = "Percentage of a present tide cycle with water level above the outfall invert"
+tolerance = 0.03
+
+[outputs.future_submergence_percent]
+description = "Percentage of a future tide cycle with water level above the outfall invert"
+tolerance = 0.03
+
+[outputs.submergence_increase_percent]
+description = "Future minus present outfall submergence percentage"
+tolerance = 0.03
+
+[outputs.design_stillwater_level_m]
+description = "Design stillwater level from present MSL, tide amplitude, SLR, and storm surge"
+tolerance = 0.03
+
+[outputs.design_flood_level_m]
+description = "Design flood level including wave/runup allowance"
+tolerance = 0.03
+
+[outputs.minimum_equipment_elevation_m]
+description = "Minimum equipment elevation including source freeboard allowance"
+tolerance = 0.03
+
+[outputs.inflow_volume_m3]
+description = "Coastal event inflow volume during the tide-locked duration"
+tolerance = 0.03
+
+[outputs.pumped_volume_m3]
+description = "Volume pumped during the tide-locked duration"
+tolerance = 0.03
+
+[outputs.storage_margin_m3]
+description = "Available storage plus pumped volume minus inflow volume"
+tolerance = 0.03
+
+[outputs.pump_total_dynamic_head_m]
+description = "Pump total dynamic head against the design coastal flood level"
+tolerance = 0.03
+
+[outputs.pump_hydraulic_power_kw]
+description = "Pump hydraulic power at selected discharge and total dynamic head"
+tolerance = 0.03
+
+[outputs.pump_motor_input_kw]
+description = "Motor input power from hydraulic power, pump efficiency, and motor efficiency"
+tolerance = 0.03
+
+[outputs.pump_motor_margin_kw]
+description = "Selected motor nameplate power minus required motor input power"
+tolerance = 0.03
+
+[outputs.switchboard_freeboard_margin_m]
+description = "Switchboard elevation minus minimum equipment elevation"
+tolerance = 0.03
+
+[outputs.controls_freeboard_margin_m]
+description = "Pump controls elevation minus minimum equipment elevation"
+tolerance = 0.03
+
+[outputs.feeder_current_a]
+description = "Three-phase pump feeder current"
+tolerance = 0.03
+
+[outputs.feeder_voltage_drop_percent]
+description = "Three-phase feeder voltage drop percentage"
+tolerance = 0.03
+
+[outputs.voltage_drop_margin_percent]
+description = "Voltage-drop criterion minus computed voltage drop"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "One when storage, pump, equipment elevation, and feeder voltage-drop checks pass"
+tolerance = 0.03
+
+[archetypes.ssc04_coastal_resilience_case]
+description = "Coastal flood, outfall flap gate, pump duty, equipment elevation, and feeder package"
+present_mean_sea_level_m = {min = 0.15, max = 0.15}
+tidal_amplitude_m = {min = 0.85, max = 0.85}
+sea_level_rise_allowance_m = {min = 0.55, max = 0.55}
+storm_surge_allowance_m = {min = 1.10, max = 1.10}
+wave_runup_allowance_m = {min = 0.45, max = 0.45}
+equipment_freeboard_allowance_m = {min = 0.30, max = 0.30}
+outfall_invert_level_m = {min = 0.60, max = 0.60}
+peak_inflow_m3_s = {min = 0.42, max = 0.42}
+tide_locked_duration_h = {min = 3.0, max = 3.0}
+pump_discharge_m3_s = {min = 0.36, max = 0.36}
+available_storage_m3 = {min = 750.0, max = 750.0}
+wetwell_low_operating_level_m = {min = 0.20, max = 0.20}
+pipe_and_valve_losses_m = {min = 1.80, max = 1.80}
+pump_efficiency = {min = 0.72, max = 0.72}
+motor_efficiency = {min = 0.93, max = 0.93}
+selected_motor_power_kw = {min = 30.0, max = 30.0}
+switchboard_elevation_m = {min = 3.62, max = 3.62}
+controls_elevation_m = {min = 3.55, max = 3.55}
+feeder_voltage_v = {min = 415.0, max = 415.0}
+motor_power_factor = {min = 0.86, max = 0.86}
+feeder_resistance_ohm_km = {min = 0.64, max = 0.64}
+feeder_reactance_ohm_km = {min = 0.08, max = 0.08}
+feeder_length_km = {min = 0.10, max = 0.10}
+voltage_drop_limit_percent = {min = 5.0, max = 5.0}
+site_contexts = ["coastal-outfall-pump-station", "storm-tide-electrical-elevation"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-04 coastal flood outfall pump package"
+visibility = "all_given"
+archetypes = ["ssc04_coastal_resilience_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-04 coastal flood outfall pump package"
+visibility = "all_given"
+archetypes = ["ssc04_coastal_resilience_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-04 coastal flood outfall pump package"
+visibility = "all_given"
+archetypes = ["ssc04_coastal_resilience_case"]

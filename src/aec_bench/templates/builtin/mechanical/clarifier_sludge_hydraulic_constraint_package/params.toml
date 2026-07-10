@@ -1,0 +1,193 @@
+# ABOUTME: Defines the SSC-10 clarifier loading, sludge, and hydraulic constraint template.
+# ABOUTME: Pins one clarifier, sample, sludge, hydraulic profile, criteria, and memo source pack.
+
+[meta]
+name = "clarifier-sludge-hydraulic-constraint-package"
+description = "SSC-10 clarifier loading, sludge, and hydraulic constraint metrics"
+long_description = "Calculates source-bound clarifier metrics from a deterministic SSC-10 task-owned source pack. The template combines surface overflow rate, solids loading, sludge production, wasting capacity, sludge blanket, HRT, recycle flow, and an overall synthetic pass score."
+discipline = "mechanical"
+category = "clarifier-sludge-hydraulics"
+standards = ["clarifier surface loading workflow", "solids loading workflow", "sludge wasting workflow"]
+tags = ["mechanical", "wastewater", "clarifier", "sludge", "sor", "slr", "hrt", "deterministic"]
+tool_mode = "with-tool"
+
+[params.flow_rate_m3_d]
+type = "float"
+unit = "m3/d"
+description = "SAMPLE-10-LOAD-05 design flow"
+min = 7200.0
+max = 7200.0
+
+[params.clarifier_diameter_m]
+type = "float"
+unit = "m"
+description = "CLAR-10-SCHED-05 clarifier diameter"
+min = 24.0
+max = 24.0
+
+[params.mlss_mg_l]
+type = "float"
+unit = "mg/L"
+description = "SAMPLE-10-LOAD-05 MLSS concentration"
+min = 3200.0
+max = 3200.0
+
+[params.max_sor_m3_m2_d]
+type = "float"
+unit = "m3/m2/d"
+description = "PERMIT-10-CRIT-05 maximum surface overflow rate"
+min = 30.0
+max = 30.0
+
+[params.max_slr_kg_m2_d]
+type = "float"
+unit = "kg/m2/d"
+description = "PERMIT-10-CRIT-05 maximum solids loading rate"
+min = 120.0
+max = 120.0
+
+[params.influent_bod_mg_l]
+type = "float"
+unit = "mg/L"
+description = "SAMPLE-10-LOAD-05 influent BOD"
+min = 230.0
+max = 230.0
+
+[params.effluent_bod_mg_l]
+type = "float"
+unit = "mg/L"
+description = "SAMPLE-10-LOAD-05 effluent BOD"
+min = 25.0
+max = 25.0
+
+[params.sludge_yield_kg_kg_bod]
+type = "float"
+unit = "kg/kg BOD"
+description = "SLUDGE-10-WASTE-05 sludge yield"
+min = 0.62
+max = 0.62
+
+[params.wasting_capacity_kg_d]
+type = "float"
+unit = "kg/d"
+description = "SLUDGE-10-WASTE-05 wasting capacity"
+min = 980.0
+max = 980.0
+
+[params.sludge_blanket_limit_m]
+type = "float"
+unit = "m"
+description = "PERMIT-10-CRIT-05 sludge blanket limit"
+min = 0.8
+max = 0.8
+
+[params.measured_sludge_blanket_m]
+type = "float"
+unit = "m"
+description = "SLUDGE-10-WASTE-05 measured sludge blanket"
+min = 0.52
+max = 0.52
+
+[params.clarifier_volume_m3]
+type = "float"
+unit = "m3"
+description = "CLAR-10-SCHED-05 clarifier volume"
+min = 1600.0
+max = 1600.0
+
+[params.min_hrt_hr]
+type = "float"
+unit = "h"
+description = "PERMIT-10-CRIT-05 minimum clarifier HRT"
+min = 3.0
+max = 3.0
+
+[params.recycle_percent]
+type = "float"
+unit = "%"
+description = "HGL-10-PROFILE-05 recycle flow percent"
+min = 35.0
+max = 35.0
+
+[outputs.surface_overflow_rate_m3_m2_d]
+description = "Clarifier surface overflow rate"
+tolerance = 0.03
+
+[outputs.sor_margin_m3_m2_d]
+description = "Maximum SOR minus calculated SOR"
+tolerance = 0.03
+
+[outputs.solids_loading_kg_m2_d]
+description = "Clarifier solids loading rate"
+tolerance = 0.03
+
+[outputs.slr_margin_kg_m2_d]
+description = "Maximum SLR minus calculated SLR"
+tolerance = 0.03
+
+[outputs.bod_removed_kg_d]
+description = "BOD removed by clarifier process basis"
+tolerance = 0.03
+
+[outputs.sludge_production_kg_d]
+description = "Calculated sludge production"
+tolerance = 0.03
+
+[outputs.wasting_capacity_margin_kg_d]
+description = "Wasting capacity minus sludge production"
+tolerance = 0.03
+
+[outputs.sludge_blanket_margin_m]
+description = "Allowed sludge blanket minus measured blanket"
+tolerance = 0.03
+
+[outputs.clarifier_hrt_hr]
+description = "Clarifier hydraulic retention time"
+tolerance = 0.03
+
+[outputs.hrt_margin_hr]
+description = "Clarifier HRT minus minimum HRT"
+tolerance = 0.03
+
+[outputs.recycle_flow_m3_d]
+description = "Recycle flow"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when loading, sludge, blanket, and HRT margins are non-negative"
+tolerance = 0.001
+
+[archetypes.ssc10_clarifier_sludge_hydraulic_case]
+description = "Clarifier loading, sludge, and hydraulic constraint source pack"
+site_contexts = ["clarifier-sludge-hydraulics", "clarifier-loading-sludge-check"]
+
+[archetypes.ssc10_clarifier_sludge_hydraulic_case.params]
+flow_rate_m3_d = {min = 7200.0, max = 7200.0}
+clarifier_diameter_m = {min = 24.0, max = 24.0}
+mlss_mg_l = {min = 3200.0, max = 3200.0}
+max_sor_m3_m2_d = {min = 30.0, max = 30.0}
+max_slr_kg_m2_d = {min = 120.0, max = 120.0}
+influent_bod_mg_l = {min = 230.0, max = 230.0}
+effluent_bod_mg_l = {min = 25.0, max = 25.0}
+sludge_yield_kg_kg_bod = {min = 0.62, max = 0.62}
+wasting_capacity_kg_d = {min = 980.0, max = 980.0}
+sludge_blanket_limit_m = {min = 0.8, max = 0.8}
+measured_sludge_blanket_m = {min = 0.52, max = 0.52}
+clarifier_volume_m3 = {min = 1600.0, max = 1600.0}
+min_hrt_hr = {min = 3.0, max = 3.0}
+recycle_percent = {min = 35.0, max = 35.0}
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-10 clarifier package"
+visibility = "all_given"
+archetypes = ["ssc10_clarifier_sludge_hydraulic_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-10 clarifier package"
+visibility = "all_given"
+archetypes = ["ssc10_clarifier_sludge_hydraulic_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-10 clarifier package"
+visibility = "all_given"
+archetypes = ["ssc10_clarifier_sludge_hydraulic_case"]

@@ -1,0 +1,433 @@
+[meta]
+name = "level-crossing-warning-issue-review-package"
+description = "SSC-02 review-first issue-readiness review of a level-crossing warning and backup-power package"
+long_description = "Review-native long-horizon task over a generated SSC-02 level-crossing issue packet. The agent receives a multi-file source packet in /workspace/sources/ covering route profile, sighting and warning time, crossing controls, backup power, communications, degraded-mode operations, criteria, and review comments. The task is to inventory the packet, preserve route/crossing identity, recompute source-owned evidence, assign one status per review item, raise findings/information requests/actions, and issue a readiness decision. Packet variants inject missing battery evidence, stale warning-time revisions, sighting chainage mismatches, copied degraded-mode scenarios, open comments, carried actions, or genuine warning-time failures. Scored by a stage-gated custom verifier."
+discipline = "electrical"
+category = "rail-review"
+standards = ["49 CFR Part 234", "FHWA MUTCD Part 8", "operator level-crossing workflow"]
+tags = ["electrical", "rail", "review", "issue-readiness", "level-crossing", "warning-time", "backup-power", "long-horizon"]
+tool_mode = "no-tool"
+
+[params.maximum_train_speed_kmh]
+type = "float"
+unit = "km/h"
+description = "Maximum train speed for the controlling crossing approach"
+min = 60.0
+max = 110.0
+
+[params.minimum_warning_time_s]
+type = "float"
+unit = "s"
+description = "Minimum warning time criterion for the crossing approach"
+min = 20.0
+max = 30.0
+
+[params.warning_time_margin_s]
+type = "float"
+unit = "s"
+description = "Derivation margin between provided and minimum warning time"
+min = 4.0
+max = 12.0
+
+[params.warning_time_deficit_s]
+type = "float"
+unit = "s"
+description = "Derivation deficit for the warning-time-deficient variant"
+min = 1.0
+max = 5.0
+
+[params.gate_lowering_time_s]
+type = "float"
+unit = "s"
+description = "Gate lowering duration from the crossing controller sheet"
+min = 8.0
+max = 13.0
+
+[params.gate_start_delay_s]
+type = "float"
+unit = "s"
+description = "Delay from warning start to gate descent"
+min = 2.0
+max = 4.0
+
+[params.required_gate_horizontal_before_arrival_s]
+type = "float"
+unit = "s"
+description = "Required time with gates horizontal before train arrival"
+min = 4.0
+max = 7.0
+
+[params.controller_load_w]
+type = "float"
+unit = "W"
+description = "Crossing controller load"
+min = 160.0
+max = 220.0
+
+[params.flashing_light_load_w]
+type = "float"
+unit = "W"
+description = "Load per flashing-light assembly"
+min = 30.0
+max = 50.0
+
+[params.flashing_light_count]
+type = "int"
+description = "Flashing-light assembly count"
+min = 4
+max = 6
+
+[params.gate_mechanism_load_w]
+type = "float"
+unit = "W"
+description = "Load per gate mechanism"
+min = 80.0
+max = 110.0
+
+[params.gate_mechanism_count]
+type = "int"
+description = "Gate mechanism count"
+min = 2
+max = 4
+
+[params.comms_switch_load_w]
+type = "float"
+unit = "W"
+description = "Communications switch load"
+min = 35.0
+max = 60.0
+
+[params.track_circuit_load_w]
+type = "float"
+unit = "W"
+description = "Track circuit and detector load"
+min = 55.0
+max = 85.0
+
+[params.event_recorder_load_w]
+type = "float"
+unit = "W"
+description = "Event recorder load"
+min = 20.0
+max = 35.0
+
+[params.load_future_allowance_pct]
+type = "float"
+unit = "%"
+description = "Spare and future allowance for crossing signal load"
+min = 10.0
+max = 25.0
+
+[params.required_autonomy_h]
+type = "enum"
+unit = "h"
+description = "Required degraded-mode backup autonomy"
+values = ["6", "8", "12"]
+
+[params.battery_runtime_margin_h]
+type = "float"
+unit = "h"
+description = "Derivation margin between required autonomy and installed battery runtime"
+min = 0.5
+max = 2.5
+
+[params.dc_system_voltage_v]
+type = "float"
+unit = "V"
+description = "DC system voltage"
+min = 48.0
+max = 48.0
+
+[params.depth_of_discharge_pct]
+type = "float"
+unit = "%"
+description = "Usable battery depth of discharge"
+min = 75.0
+max = 85.0
+
+[params.temperature_derating_factor]
+type = "float"
+description = "Battery temperature derating factor"
+min = 0.80
+max = 0.92
+
+[params.inverter_efficiency_pct]
+type = "float"
+unit = "%"
+description = "UPS inverter efficiency"
+min = 90.0
+max = 95.0
+
+[params.load_power_factor]
+type = "float"
+description = "UPS load power factor"
+min = 0.85
+max = 0.95
+
+[params.selected_ups_rating_margin_va]
+type = "float"
+unit = "VA"
+description = "Derivation margin between required and selected UPS rating"
+min = 80.0
+max = 250.0
+
+[params.voltage_drop_margin_target_percent]
+type = "float"
+unit = "%"
+description = "Derivation margin between feeder voltage drop and the source-owned maximum"
+min = 0.5
+max = 2.0
+
+[params.feeder_resistance_milliohm_per_m]
+type = "float"
+unit = "milliohm/m"
+description = "Conductor resistance"
+min = 1.2
+max = 2.2
+
+[params.max_voltage_drop_percent]
+type = "float"
+unit = "%"
+description = "Maximum DC feeder voltage drop"
+min = 4.0
+max = 6.0
+
+[params.fiber_length_km]
+type = "float"
+unit = "km"
+description = "Fiber link length"
+min = 1.0
+max = 4.0
+
+[params.fiber_attenuation_db_per_km]
+type = "float"
+unit = "dB/km"
+description = "Fiber attenuation"
+min = 0.25
+max = 0.45
+
+[params.fiber_connector_count]
+type = "int"
+description = "Fiber connector count"
+min = 2
+max = 6
+
+[params.connector_loss_db]
+type = "float"
+unit = "dB"
+description = "Loss per fiber connector"
+min = 0.2
+max = 0.4
+
+[params.fiber_splice_count]
+type = "int"
+description = "Fiber splice count"
+min = 2
+max = 10
+
+[params.splice_loss_db]
+type = "float"
+unit = "dB"
+description = "Loss per fiber splice"
+min = 0.03
+max = 0.08
+
+[params.patch_panel_allowance_db]
+type = "float"
+unit = "dB"
+description = "Patch-panel allowance"
+min = 0.5
+max = 1.5
+
+[params.optical_tx_power_dbm]
+type = "float"
+unit = "dBm"
+description = "Optical transmitter power"
+min = -4.0
+max = -1.0
+
+[params.receiver_sensitivity_dbm]
+type = "float"
+unit = "dBm"
+description = "Receiver sensitivity"
+min = -26.0
+max = -22.0
+
+[params.required_fiber_margin_db]
+type = "float"
+unit = "dB"
+description = "Required excess fiber margin"
+min = 3.0
+max = 6.0
+
+[params.packet_variant]
+type = "enum"
+description = "Hidden packet-defect variant controlling gold review statuses"
+values = [
+  "clean",
+  "missing_battery_capacity",
+  "stale_warning_revision",
+  "chainage_sighting_mismatch",
+  "scenario_copy_forward",
+  "open_critical_comment",
+  "minor_open_comment_carried",
+  "warning_time_deficient",
+]
+
+[outputs.rlr_01_status]
+description = "Packet completeness status code"
+tolerance = 0.0
+
+[outputs.rlr_02_status]
+description = "Object identity status code"
+tolerance = 0.0
+
+[outputs.rlr_03_status]
+description = "Warning-time basis status code"
+tolerance = 0.0
+
+[outputs.rlr_04_status]
+description = "Crossing warning and backup adequacy status code"
+tolerance = 0.0
+
+[outputs.rlr_05_status]
+description = "Degraded-mode scenario status code"
+tolerance = 0.0
+
+[outputs.rlr_06_status]
+description = "Feeder and fiber resilience status code"
+tolerance = 0.0
+
+[outputs.rlr_07_status]
+description = "Comment and action closure status code"
+tolerance = 0.0
+
+[outputs.rlr_08_status]
+description = "Readiness consistency status code"
+tolerance = 0.0
+
+[outputs.rlr_09_status]
+description = "Claim boundary status code"
+tolerance = 0.0
+
+[outputs.readiness_code]
+description = "Gold readiness decision"
+tolerance = 0.0
+
+[outputs.required_findings_count]
+description = "Findings the review must raise"
+tolerance = 0.0
+
+[outputs.required_information_requests_count]
+description = "Information requests the review must raise"
+tolerance = 0.0
+
+[outputs.required_carried_actions_count]
+description = "Carried actions the review must record"
+tolerance = 0.0
+
+[outputs.maximum_train_speed_m_s]
+description = "Approach train speed evidence"
+tolerance = 0.02
+
+[outputs.provided_warning_time_s]
+description = "Provided warning time from strike-in distance"
+tolerance = 0.02
+
+[outputs.strike_in_distance_m]
+description = "Strike-in distance evidence"
+tolerance = 0.02
+
+[outputs.warning_time_margin_s]
+description = "Warning-time margin evidence"
+tolerance = 0.02
+
+[outputs.gate_horizontal_margin_s]
+description = "Gates-horizontal timing margin evidence"
+tolerance = 0.02
+
+[outputs.design_signal_load_w]
+description = "Design signal load evidence"
+tolerance = 0.02
+
+[outputs.required_battery_capacity_ah]
+description = "Required battery capacity evidence"
+tolerance = 0.02
+
+[outputs.installed_battery_capacity_ah]
+description = "Installed battery capacity evidence"
+tolerance = 0.02
+
+[outputs.battery_runtime_h]
+description = "Battery runtime evidence"
+tolerance = 0.02
+
+[outputs.battery_runtime_margin_h]
+description = "Battery runtime margin evidence"
+tolerance = 0.02
+
+[outputs.dc_voltage_drop_margin_percent]
+description = "DC voltage-drop margin evidence"
+tolerance = 0.02
+
+[outputs.fiber_link_margin_db]
+description = "Fiber link margin evidence"
+tolerance = 0.02
+
+[archetypes.mainline_highway]
+description = "Mainline rail crossing on a highway approach"
+site_contexts = ["mainline-highway-crossing", "regional-arterial-crossing"]
+maximum_train_speed_kmh = {min = 80.0, max = 110.0}
+required_autonomy_h = ["8", "12"]
+
+[archetypes.urban_branch]
+description = "Urban branch-line crossing with tighter equipment cabinet constraints"
+site_contexts = ["urban-branch-crossing", "station-approach-crossing"]
+maximum_train_speed_kmh = {min = 60.0, max = 85.0}
+required_autonomy_h = ["6", "8"]
+
+[difficulty.easy]
+description = "Obvious packet defects: clean, missing backup evidence, or genuine warning-time failure"
+visibility = "partial"
+archetypes = ["mainline_highway", "urban_branch"]
+hidden_params = [
+  "packet_variant",
+  "warning_time_margin_s",
+  "warning_time_deficit_s",
+  "battery_runtime_margin_h",
+  "selected_ups_rating_margin_va",
+  "voltage_drop_margin_target_percent",
+]
+packet_variant = ["clean", "missing_battery_capacity", "warning_time_deficient"]
+
+[difficulty.medium]
+description = "Full packet-variant distribution"
+visibility = "partial"
+archetypes = ["mainline_highway", "urban_branch"]
+hidden_params = [
+  "packet_variant",
+  "warning_time_margin_s",
+  "warning_time_deficit_s",
+  "battery_runtime_margin_h",
+  "selected_ups_rating_margin_va",
+  "voltage_drop_margin_target_percent",
+]
+
+[difficulty.hard]
+description = "Subtle documentary defects: stale warning basis, sighting identity drift, scenario copy-forward, carried comments"
+visibility = "partial"
+archetypes = ["mainline_highway", "urban_branch"]
+hidden_params = [
+  "packet_variant",
+  "warning_time_margin_s",
+  "warning_time_deficit_s",
+  "battery_runtime_margin_h",
+  "selected_ups_rating_margin_va",
+  "voltage_drop_margin_target_percent",
+]
+packet_variant = [
+  "stale_warning_revision",
+  "chainage_sighting_mismatch",
+  "scenario_copy_forward",
+  "minor_open_comment_carried",
+]

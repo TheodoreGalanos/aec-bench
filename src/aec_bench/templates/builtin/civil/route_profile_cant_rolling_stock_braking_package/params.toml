@@ -1,0 +1,204 @@
+[meta]
+name = "route-profile-cant-rolling-stock-braking-package"
+description = "SSC-02 route profile, cant, transition, vertical-curve, Davis resistance, and braking metrics"
+long_description = "Calculates deterministic SSC-02 rail route metrics from a task-owned synthetic source pack. The template combines equilibrium cant, cant deficiency, cant runoff gradient, vertical-curve length, grade-adjusted braking distance, Davis resistance, and an overall synthetic pass score."
+discipline = "civil"
+category = "route-cant-braking"
+standards = ["rail cant and transition workflow", "rolling-stock braking review workflow"]
+tags = ["civil", "rail", "cant", "transition", "vertical-curve", "braking", "davis", "deterministic"]
+tool_mode = "with-tool"
+
+[params.curve_radius_m]
+type = "float"
+unit = "m"
+description = "ALIGN-02-PROFILE-05 controlling curve radius"
+min = 650.0
+max = 650.0
+
+[params.speed_kmh]
+type = "float"
+unit = "km/h"
+description = "OPS-02-SCENARIO-05 operating speed"
+min = 85.0
+max = 85.0
+
+[params.gauge_m]
+type = "float"
+unit = "m"
+description = "ALIGN-02-PROFILE-05 track gauge"
+min = 1.435
+max = 1.435
+
+[params.applied_cant_mm]
+type = "float"
+unit = "mm"
+description = "CANT-02-TABLE-05 applied cant"
+min = 95.0
+max = 95.0
+
+[params.max_cant_deficiency_mm]
+type = "float"
+unit = "mm"
+description = "CRIT-02-COMFORT-05 maximum cant deficiency"
+min = 75.0
+max = 75.0
+
+[params.transition_length_m]
+type = "float"
+unit = "m"
+description = "ALIGN-02-PROFILE-05 transition length"
+min = 120.0
+max = 120.0
+
+[params.cant_gradient_limit_mm_per_m]
+type = "float"
+unit = "mm/m"
+description = "CRIT-02-COMFORT-05 cant runoff gradient limit"
+min = 1.0
+max = 1.0
+
+[params.vertical_curve_radius_m]
+type = "float"
+unit = "m"
+description = "ALIGN-02-PROFILE-05 vertical curve radius"
+min = 4200.0
+max = 4200.0
+
+[params.grade_change_percent]
+type = "float"
+unit = "%"
+description = "ALIGN-02-PROFILE-05 algebraic grade change"
+min = 1.2
+max = 1.2
+
+[params.braking_rate_m_s2]
+type = "float"
+unit = "m/s^2"
+description = "ROLL-02-DATA-05 braking rate"
+min = 0.75
+max = 0.75
+
+[params.reaction_time_s]
+type = "float"
+unit = "s"
+description = "OPS-02-SCENARIO-05 reaction allowance"
+min = 3.0
+max = 3.0
+
+[params.grade_percent]
+type = "float"
+unit = "%"
+description = "ALIGN-02-PROFILE-05 adverse grade for braking"
+min = 0.8
+max = 0.8
+
+[params.davis_a_n_per_t]
+type = "float"
+unit = "N/t"
+description = "ROLL-02-DATA-05 Davis A coefficient"
+min = 4.5
+max = 4.5
+
+[params.davis_b_n_per_t_kmh]
+type = "float"
+unit = "N/t/km/h"
+description = "ROLL-02-DATA-05 Davis B coefficient"
+min = 0.11
+max = 0.11
+
+[params.davis_c_n_per_t_kmh2]
+type = "float"
+unit = "N/t/(km/h)^2"
+description = "ROLL-02-DATA-05 Davis C coefficient"
+min = 0.0035
+max = 0.0035
+
+[params.train_mass_t]
+type = "float"
+unit = "t"
+description = "ROLL-02-DATA-05 train mass"
+min = 380.0
+max = 380.0
+
+[outputs.speed_m_s]
+description = "Operating speed in metres per second"
+tolerance = 0.03
+
+[outputs.equilibrium_cant_mm]
+description = "Equilibrium cant for the controlling curve"
+tolerance = 0.03
+
+[outputs.cant_deficiency_mm]
+description = "Equilibrium cant minus applied cant"
+tolerance = 0.03
+
+[outputs.cant_deficiency_margin_mm]
+description = "Maximum cant deficiency minus computed cant deficiency"
+tolerance = 0.03
+
+[outputs.cant_gradient_mm_per_m]
+description = "Applied cant divided by transition length"
+tolerance = 0.003
+
+[outputs.cant_gradient_margin_mm_per_m]
+description = "Cant runoff gradient limit minus computed gradient"
+tolerance = 0.003
+
+[outputs.vertical_curve_length_m]
+description = "Vertical curve radius times algebraic grade change"
+tolerance = 0.03
+
+[outputs.effective_braking_deceleration_m_s2]
+description = "Braking rate after adverse grade allowance"
+tolerance = 0.003
+
+[outputs.braking_distance_m]
+description = "Reaction plus braking distance"
+tolerance = 0.03
+
+[outputs.davis_resistance_n_per_t]
+description = "Davis rolling resistance per tonne"
+tolerance = 0.03
+
+[outputs.resistance_force_kn]
+description = "Total rolling resistance force"
+tolerance = 0.03
+
+[outputs.overall_pass_score]
+description = "1.0 when cant, transition, and braking checks have non-negative margins"
+tolerance = 0.001
+
+[archetypes.ssc02_route_cant_braking_case]
+description = "Route profile and cant package tied to one alignment profile, cant table, rolling-stock data, comfort criterion, operations scenario, and memo"
+curve_radius_m = {min = 650.0, max = 650.0}
+speed_kmh = {min = 85.0, max = 85.0}
+gauge_m = {min = 1.435, max = 1.435}
+applied_cant_mm = {min = 95.0, max = 95.0}
+max_cant_deficiency_mm = {min = 75.0, max = 75.0}
+transition_length_m = {min = 120.0, max = 120.0}
+cant_gradient_limit_mm_per_m = {min = 1.0, max = 1.0}
+vertical_curve_radius_m = {min = 4200.0, max = 4200.0}
+grade_change_percent = {min = 1.2, max = 1.2}
+braking_rate_m_s2 = {min = 0.75, max = 0.75}
+reaction_time_s = {min = 3.0, max = 3.0}
+grade_percent = {min = 0.8, max = 0.8}
+davis_a_n_per_t = {min = 4.5, max = 4.5}
+davis_b_n_per_t_kmh = {min = 0.11, max = 0.11}
+davis_c_n_per_t_kmh2 = {min = 0.0035, max = 0.0035}
+train_mass_t = {min = 380.0, max = 380.0}
+site_contexts = ["route-cant-braking"]
+
+[difficulty.easy]
+description = "All source-pack values given for the SSC-02 route profile, cant, and braking package"
+visibility = "all_given"
+archetypes = ["ssc02_route_cant_braking_case"]
+
+[difficulty.medium]
+description = "All source-pack values given for the SSC-02 route profile, cant, and braking package"
+visibility = "all_given"
+archetypes = ["ssc02_route_cant_braking_case"]
+
+[difficulty.hard]
+description = "All source-pack values given for the SSC-02 route profile, cant, and braking package"
+visibility = "all_given"
+archetypes = ["ssc02_route_cant_braking_case"]
