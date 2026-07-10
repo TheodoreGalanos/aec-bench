@@ -12,6 +12,8 @@ from aec_bench.harness.local_runtime import (
     patch_workspace_paths,
     read_instruction,
     setup_workspace,
+    stage_verifier_assets,
+    unstage_verifier_assets,
 )
 
 
@@ -53,6 +55,31 @@ class TestSetupWorkspace:
         finally:
             shutil.rmtree(workspace, ignore_errors=True)
 
+    def test_mirrors_nested_environment_assets_at_workspace_root(self, task_dir: Path) -> None:
+        sources = task_dir / "environment" / "sources"
+        sources.mkdir(parents=True)
+        (sources / "document-register.md").write_text("# Document Register\n")
+        (sources / "support" / "basis.txt").parent.mkdir(parents=True)
+        (sources / "support" / "basis.txt").write_text("current basis\n")
+        (task_dir / "instruction.md").write_text("Read /workspace/sources/document-register.md")
+
+        workspace = setup_workspace(str(task_dir))
+        try:
+            patch_workspace_paths(workspace)
+
+            mirrored_register = Path(workspace) / "sources" / "document-register.md"
+            mirrored_basis = Path(workspace) / "sources" / "support" / "basis.txt"
+            assert mirrored_register.read_text() == "# Document Register\n"
+            assert mirrored_basis.read_text() == "current basis\n"
+
+            instruction = (Path(workspace) / "instruction.md").read_text()
+            assert str(mirrored_register) in instruction
+
+            # Keep the original environment layout for backwards compatibility.
+            assert (Path(workspace) / "environment" / "sources" / "document-register.md").exists()
+        finally:
+            shutil.rmtree(workspace, ignore_errors=True)
+
     def test_skips_pycache_directories(self, task_dir: Path) -> None:
         cache = task_dir / "__pycache__"
         cache.mkdir()
@@ -61,6 +88,36 @@ class TestSetupWorkspace:
         workspace = setup_workspace(str(task_dir))
         try:
             assert not (Path(workspace) / "__pycache__").exists()
+        finally:
+            shutil.rmtree(workspace, ignore_errors=True)
+
+    def test_keeps_verifier_assets_out_of_agent_workspace(self, task_dir: Path) -> None:
+        tests_dir = task_dir / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "instance.json").write_text('{"ground_truth": {"answer": 42}}')
+        (tests_dir / "fixtures").mkdir()
+        (tests_dir / "fixtures" / "golden_pass.md").write_text("answer: 42\n")
+
+        workspace = setup_workspace(str(task_dir))
+        try:
+            assert not (Path(workspace) / "tests").exists()
+        finally:
+            shutil.rmtree(workspace, ignore_errors=True)
+
+    def test_stages_verifier_assets_only_for_verification(self, task_dir: Path) -> None:
+        tests_dir = task_dir / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "verify.py").write_text("# verifier\n")
+        (tests_dir / "instance.json").write_text('{"ground_truth": {"answer": 42}}')
+
+        workspace = setup_workspace(str(task_dir))
+        try:
+            stage_verifier_assets(task_dir, workspace)
+            assert (Path(workspace) / "tests" / "verify.py").read_text() == "# verifier\n"
+            assert (Path(workspace) / "tests" / "instance.json").exists()
+
+            unstage_verifier_assets(workspace)
+            assert not (Path(workspace) / "tests").exists()
         finally:
             shutil.rmtree(workspace, ignore_errors=True)
 

@@ -31,6 +31,8 @@ from aec_bench.harness.local_runtime import (
     read_instruction,
     setup_workspace,
     setup_workspace_for_script,
+    stage_verifier_assets,
+    unstage_verifier_assets,
 )
 
 # Output files we expect the adapter to produce
@@ -779,6 +781,7 @@ def run_local(
         output_file = str(Path(workspace) / "output.md")
 
         if not no_verify:
+            stage_verifier_assets(task_dir, workspace)
             console.print("[bold]Running verifier...[/bold]")
             verifier_seconds = _run_verifier(
                 workspace=workspace,
@@ -799,6 +802,7 @@ def run_local(
             assert reward is not None
             console.print("[bold]Running verifier-feedback retry...[/bold]")
             _prepare_verifier_retry_workspace(Path(workspace), "attempt-01")
+            unstage_verifier_assets(workspace)
             base_instruction = read_instruction(workspace)
             retry_instruction = _build_verifier_retry_instruction(
                 workspace=Path(workspace),
@@ -829,6 +833,7 @@ def run_local(
                             file=sys.stderr,
                         )
 
+            stage_verifier_assets(task_dir, workspace)
             retry_verifier_seconds = _run_verifier(
                 workspace=workspace,
                 output_file=str(Path(workspace) / "output.md"),
