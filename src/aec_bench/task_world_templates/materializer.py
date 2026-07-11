@@ -103,12 +103,17 @@ def materialize_template_id_example(template_id: str, output_dir: Path) -> Path:
     return materialize_template_example(get_template(template_id), output_dir)
 
 
-def materialize_template_lifecycle(template: CompositeTaskWorldTemplate, output_dir: Path) -> Path:
+def materialize_template_lifecycle(
+    template: CompositeTaskWorldTemplate,
+    output_dir: Path,
+    *,
+    variant_id: str | None = None,
+) -> Path:
     """Materialize a registered evidence lifecycle for one composite template."""
     template = CompositeTaskWorldTemplate.model_validate(template.model_dump(mode="json"))
     if template.evidence_lifecycle is None:
         raise ValueError(f"template {template.template_id!r} does not define an evidence lifecycle")
-    return materialize_lifecycle_template(template, output_dir)
+    return materialize_lifecycle_template(template, output_dir, variant_id=variant_id)
 
 
 def verify_template_lifecycle(package_dir: Path, run_dir: Path) -> dict[str, Any]:

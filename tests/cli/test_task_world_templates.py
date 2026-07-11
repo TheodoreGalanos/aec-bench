@@ -102,5 +102,72 @@ def test_task_composite_template_lifecycle_commands_materialize_and_verify(tmp_p
 
     assert verified.exit_code == 0, verified.output
     assert json.loads(materialized.output)["data"]["checkpoint_count"] == 3
+    assert json.loads(materialized.output)["data"]["variant_id"] == "staged_full_correction"
     assert json.loads(verified.output)["data"]["overall"] == "pass"
     assert json.loads(verified.output)["data"]["reward"] == 1.0
+
+
+def test_task_composite_template_lifecycle_variant_commands_list_and_materialize(tmp_path: Path) -> None:
+    listed = runner.invoke(
+        app,
+        [
+            "--json",
+            "task",
+            "composite-template",
+            "list-lifecycle-variants",
+            "drainage-model-evidence-lifecycle-review",
+        ],
+    )
+    package = tmp_path / "response-assertion"
+    materialized = runner.invoke(
+        app,
+        [
+            "--json",
+            "task",
+            "composite-template",
+            "materialize-lifecycle",
+            "drainage-model-evidence-lifecycle-review",
+            "--variant",
+            "response_assertion_only",
+            "--output",
+            str(package),
+        ],
+    )
+
+    assert listed.exit_code == 0, listed.output
+    assert materialized.exit_code == 0, materialized.output
+    listed_data = json.loads(listed.output)["data"]
+    materialized_data = json.loads(materialized.output)["data"]
+    assert listed_data["variants"] == [
+        "memo_closeout_missing",
+        "response_assertion_only",
+        "semantic_no_op_release",
+        "staged_full_correction",
+    ]
+    assert materialized_data["variant_id"] == "response_assertion_only"
+    assert json.loads((package / "hidden" / "variant.json").read_text(encoding="utf-8"))["variant_id"] == (
+        "response_assertion_only"
+    )
+
+
+def test_task_composite_template_materialize_lifecycle_rejects_unknown_variant(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "task",
+            "composite-template",
+            "materialize-lifecycle",
+            "drainage-model-evidence-lifecycle-review",
+            "--variant",
+            "not-a-variant",
+            "--output",
+            str(tmp_path / "package"),
+        ],
+    )
+
+    envelope = json.loads(result.output)
+    assert result.exit_code == 1
+    assert envelope["status"] == "error"
+    assert "not-a-variant" in envelope["errors"][0]
+    assert "staged_full_correction" in envelope["errors"][0]

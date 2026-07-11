@@ -18,8 +18,10 @@ from pydantic import Field, NonNegativeFloat, NonNegativeInt
 from aec_bench.contracts.pricing import estimate_cost_usd
 from aec_bench.contracts.trajectory import read_trajectory
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
+from aec_bench.meta_harness.evidence_lifecycle import read_evidence_lifecycle_state
 from aec_bench.meta_harness.evidence_lifecycle_metrics import LifecycleSemanticMetrics
 from aec_bench.meta_harness.ledger import read_ledger
+from aec_bench.task_world_templates.lifecycles import lifecycle_package_variant
 
 
 class LifecycleExperimentMetrics(StrictModel):
@@ -72,6 +74,8 @@ def record_lifecycle_experiment(
     metrics_path = run / "metrics.json"
     manifest_path = run / "experiment-manifest.json"
     selected_index = index_path or run.parent / "experiment-index.jsonl"
+    variant = _package_variant(package)
+    read_evidence_lifecycle_state(package, run)
     _write_json(verification_path, verification)
 
     metrics = _build_metrics(run, agent, verification)
@@ -85,17 +89,20 @@ def record_lifecycle_experiment(
     state = _read_json(run / "state.json")
     experiment_id = f"lifecycle-{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')}-{uuid.uuid4().hex[:12]}"
     output_hashes = _run_artifact_hashes(run)
+    lifecycle_manifest = {
+        "lifecycle_id": state["lifecycle_id"],
+        "world_id": state["world_id"],
+        "spec_sha256": state["lifecycle_spec_sha256"],
+        "package_sha256": state["package_sha256"],
+        "package_files": _tree_hashes(package),
+    }
+    if variant is not None:
+        lifecycle_manifest["variant"] = variant
     manifest = LifecycleExperimentManifest(
         experiment_id=experiment_id,
         created_at=datetime.now(UTC).isoformat(),
         repository=repository,
-        lifecycle={
-            "lifecycle_id": state["lifecycle_id"],
-            "world_id": state["world_id"],
-            "spec_sha256": state["lifecycle_spec_sha256"],
-            "package_sha256": state["package_sha256"],
-            "package_files": _tree_hashes(package),
-        },
+        lifecycle=lifecycle_manifest,
         verifier=_callable_provenance(verifier),
         model={
             "requested_model": agent["model"],
@@ -149,6 +156,9 @@ def record_lifecycle_experiment(
         "manifest_path": str(canonical_manifest),
         "manifest_sha256": manifest_sha256,
     }
+    if variant is not None:
+        index_entry["variant_id"] = variant["variant_id"]
+        index_entry["adaptation"] = variant["adaptation"]
     _append_jsonl(selected_index, index_entry)
     return {
         "experiment_id": experiment_id,
@@ -286,6 +296,10 @@ def _provider_environment() -> dict[str, str]:
         "AZURE_OPENAI_API_DEPLOYMENT_NAME_LM",
     )
     return {name: value for name in allowed if (value := os.getenv(name))}
+
+
+def _package_variant(package_dir: Path) -> dict[str, Any] | None:
+    return lifecycle_package_variant(package_dir)
 
 
 def _run_artifact_hashes(run_dir: Path) -> dict[str, str]:

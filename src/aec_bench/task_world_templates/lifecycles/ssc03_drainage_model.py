@@ -13,6 +13,12 @@ from aec_bench.meta_harness.evidence_lifecycle import load_validated_lifecycle_s
 from aec_bench.meta_harness.evidence_lifecycle_metrics import score_semantic_transitions
 from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate
+from aec_bench.task_world_templates.lifecycles.ssc03_drainage_variants import (
+    Ssc03LifecycleVariantContent,
+    Ssc03LifecycleVariantSpec,
+    compile_ssc03_lifecycle_variant,
+    validate_ssc03_lifecycle_variant_payload,
+)
 
 CHECKPOINT_IDS = ("initial_review", "response_review", "closeout_review")
 GATE_IDS = (
@@ -31,6 +37,7 @@ def materialize_ssc03_evidence_lifecycle(
     output_dir: Path,
     *,
     template: CompositeTaskWorldTemplate | None = None,
+    variant_id: str | None = None,
 ) -> Path:
     """Write the runnable three-release SSC-03 lifecycle package."""
     output = Path(output_dir)
@@ -39,6 +46,9 @@ def materialize_ssc03_evidence_lifecycle(
         raise ValueError(f"unexpected SSC-03 lifecycle template: {template.template_id}")
     if template.evidence_lifecycle is None:
         raise ValueError("SSC-03 lifecycle template is missing its evidence_lifecycle contract")
+    if output.exists() and (not output.is_dir() or any(output.iterdir())):
+        raise ValueError(f"output directory must be empty: {output}")
+    variant, content = _compile_variant_content(variant_id)
 
     _write_json(output / "template.json", template.model_dump(mode="json"))
     _write_json(output / "world.json", template.compile_task_world_payload())
@@ -50,21 +60,15 @@ def materialize_ssc03_evidence_lifecycle(
         path = output / "instructions" / f"{checkpoint_id}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(instruction, encoding="utf-8")
-    for checkpoint_id, files in _releases().items():
-        for relative_path, content in files.items():
+    for checkpoint_id, files in content.releases.items():
+        for relative_path, file_content in files.items():
             path = output / "releases" / checkpoint_id / relative_path
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8")
+            path.write_text(file_content, encoding="utf-8")
 
-    _write_json(output / "hidden" / "gold-submissions.json", _gold_submissions())
-    _write_json(
-        output / "hidden" / "verifier-config.json",
-        {
-            "allowed_evidence_refs": _allowed_evidence_refs(),
-            "decision_evidence_policy": _decision_evidence_policy(),
-            "closure_request_policy": _closure_request_policy(),
-        },
-    )
+    _write_json(output / "hidden" / "variant.json", variant.model_dump(mode="json"))
+    _write_json(output / "hidden" / "gold-submissions.json", content.gold_submissions)
+    _write_json(output / "hidden" / "verifier-config.json", content.verifier_config)
     return output
 
 
@@ -72,6 +76,7 @@ def verify_ssc03_evidence_lifecycle(package_dir: Path, run_dir: Path) -> dict[st
     """Grade checkpoint state and continuity without requiring exact review prose."""
     package = Path(package_dir)
     run = Path(run_dir)
+    validated_ssc03_package_variant(package)
     expected = _read_json(package / "hidden" / "gold-submissions.json")
     config = _read_json(package / "hidden" / "verifier-config.json")
     actual = load_validated_lifecycle_submissions(package, run)
@@ -102,6 +107,53 @@ def verify_ssc03_evidence_lifecycle(package_dir: Path, run_dir: Path) -> dict[st
         "gates": gates,
         "semantic_metrics": semantic_metrics.model_dump(mode="json"),
     }
+
+
+def validated_ssc03_package_variant(package_dir: Path) -> dict[str, Any]:
+    """Return typed variant provenance after checking it against materialized content."""
+    package = Path(package_dir)
+    try:
+        variant = validate_ssc03_lifecycle_variant_payload(_read_json(package / "hidden" / "variant.json"))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError("invalid or missing SSC-03 package variant identity") from exc
+    expected_variant, expected_content = _compile_variant_content(variant.variant_id)
+    actual_content = Ssc03LifecycleVariantContent(
+        releases=_read_release_tree(package),
+        gold_submissions=_read_json(package / "hidden" / "gold-submissions.json"),
+        verifier_config=_read_json(package / "hidden" / "verifier-config.json"),
+    )
+    if variant != expected_variant or actual_content != expected_content:
+        raise ValueError("variant identity does not match materialized package content")
+    return variant.model_dump(mode="json")
+
+
+def _compile_variant_content(
+    variant_id: str | None,
+) -> tuple[Ssc03LifecycleVariantSpec, Ssc03LifecycleVariantContent]:
+    return compile_ssc03_lifecycle_variant(
+        variant_id,
+        seed=Ssc03LifecycleVariantContent(
+            releases=_releases(),
+            gold_submissions=_gold_submissions(),
+            verifier_config={
+                "allowed_evidence_refs": _allowed_evidence_refs(),
+                "decision_evidence_policy": _decision_evidence_policy(),
+                "closure_request_policy": _closure_request_policy(),
+            },
+        ),
+    )
+
+
+def _read_release_tree(package_dir: Path) -> dict[str, dict[str, str]]:
+    releases: dict[str, dict[str, str]] = {}
+    root = package_dir / "releases"
+    for path in sorted(item for item in root.rglob("*") if item.is_file()):
+        relative = path.relative_to(root)
+        if len(relative.parts) < 2:
+            raise ValueError(f"release file must be nested below a checkpoint: {relative}")
+        checkpoint_id, *file_parts = relative.parts
+        releases.setdefault(checkpoint_id, {})["/".join(file_parts)] = path.read_text(encoding="utf-8")
+    return releases
 
 
 def _checkpoint_contract_gate(expected: dict[str, Any], actual: dict[str, Any]) -> dict[str, Any]:
