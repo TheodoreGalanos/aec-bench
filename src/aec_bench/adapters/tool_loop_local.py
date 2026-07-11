@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -341,6 +342,8 @@ class PydanticAiToolLoopClient:
         advisor_config: AdvisorConfig | None = None,
         trajectory_writer: Any | None = None,
         stream_mode: str = "auto",
+        native_tools: list[Callable[..., str]] | None = None,
+        enable_bash: bool = True,
     ) -> None:
         from pydantic_ai import Agent
 
@@ -367,16 +370,19 @@ class PydanticAiToolLoopClient:
             model_settings=model_settings,
         )
 
-        # Register bash tool on the agent
-        executor = BashToolExecutor(workspace=workspace)
+        if enable_bash:
+            executor = BashToolExecutor(workspace=workspace)
 
-        @self._agent.tool_plain
-        def bash(command: str) -> str:
-            """Execute a bash command in the workspace and return stdout/stderr."""
-            result = executor.execute("bash", {"command": command})
-            if result.error_message:
-                return f"Error: {result.error_message}"
-            return result.output_text
+            @self._agent.tool_plain
+            def bash(command: str) -> str:
+                """Execute a bash command in the workspace and return stdout/stderr."""
+                result = executor.execute("bash", {"command": command})
+                if result.error_message:
+                    return f"Error: {result.error_message}"
+                return result.output_text
+
+        for native_tool in native_tools or []:
+            self._agent.tool_plain(native_tool)
 
         # Register advisor as a native tool when the advisor client + config are provided.
         # Mirrors Anthropic's native advisor tool shape: zero parameters, context is
