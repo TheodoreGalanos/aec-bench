@@ -1,5 +1,5 @@
 # ABOUTME: Defines durable runtime records for evidence-lifecycle runs and checkpoints.
-# ABOUTME: Models attempts, submissions, revisits, and recovery lineage independently of task content.
+# ABOUTME: Models recovery lineage and reward-independent semantic diagnostics independently of task content.
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import Field, PositiveInt, model_validator
 
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
+from aec_bench.meta_harness.evidence_lifecycle_metrics import LifecycleSemanticMetrics
 
 
 class LifecycleRunStatus(StrEnum):
@@ -168,6 +169,7 @@ class LifecycleVerificationResult(StrictModel):
     passed: bool
     reward: float = Field(ge=0.0, le=1.0)
     gates: dict[str, LifecycleGateResult] = Field(min_length=1)
+    semantic_metrics: LifecycleSemanticMetrics | None = None
 
     @model_validator(mode="after")
     def validate_outcome_consistency(self) -> LifecycleVerificationResult:

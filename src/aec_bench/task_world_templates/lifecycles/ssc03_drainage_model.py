@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from aec_bench.meta_harness.evidence_lifecycle import load_validated_lifecycle_submissions
+from aec_bench.meta_harness.evidence_lifecycle_metrics import score_semantic_transitions
 from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate
 
@@ -87,6 +88,11 @@ def verify_ssc03_evidence_lifecycle(package_dir: Path, run_dir: Path) -> dict[st
     }
     reward = round(sum(float(gate["score"]) for gate in gates.values()) / len(gates), 4)
     passed = all(bool(gate["passed"]) for gate in gates.values())
+    semantic_metrics = score_semantic_transitions(
+        checkpoint_ids=CHECKPOINT_IDS,
+        expected={checkpoint_id: _semantic_atoms(expected[checkpoint_id]) for checkpoint_id in CHECKPOINT_IDS},
+        actual={checkpoint_id: _semantic_atoms(actual[checkpoint_id]) for checkpoint_id in CHECKPOINT_IDS},
+    )
     return {
         "template_id": "drainage-model-evidence-lifecycle-review",
         "lifecycle_id": "ssc03.drainage-model-evidence-lifecycle",
@@ -94,6 +100,7 @@ def verify_ssc03_evidence_lifecycle(package_dir: Path, run_dir: Path) -> dict[st
         "passed": passed,
         "reward": reward,
         "gates": gates,
+        "semantic_metrics": semantic_metrics.model_dump(mode="json"),
     }
 
 
@@ -379,6 +386,68 @@ def _reference_set(value: Any) -> tuple[set[str], bool]:
     if not isinstance(value, list):
         return set(), True
     return {item for item in value if isinstance(item, str)}, any(not isinstance(item, str) for item in value)
+
+
+def _semantic_atoms(submission: dict[str, Any]) -> dict[str, Any]:
+    """Project one SSC-03 submission into stable, reward-independent state atoms."""
+    atoms: dict[str, Any] = {}
+    matrix = submission.get("review_matrix")
+    matrix = matrix if isinstance(matrix, dict) else {}
+    for index in range(1, 10):
+        item = f"PRV-0{index}"
+        atoms[f"review_matrix.{item}"] = matrix.get(item)
+
+    transition = submission.get("transition_decision")
+    transition = transition if isinstance(transition, dict) else {}
+    for field in ("model_run", "model_report", "design_claim"):
+        atoms[f"transition_decision.{field}"] = transition.get(field)
+    atoms["readiness_decision"] = submission.get("readiness_decision")
+
+    _record_atoms(
+        atoms,
+        collection_name="findings",
+        records=submission.get("findings"),
+        identity_key="finding_id",
+        scalar_fields=("item", "status", "opened_at", "closed_at"),
+    )
+    _record_atoms(
+        atoms,
+        collection_name="closure_evidence_requests",
+        records=submission.get("closure_evidence_requests"),
+        identity_key="request_id",
+        scalar_fields=("finding_id", "status"),
+    )
+    _record_atoms(
+        atoms,
+        collection_name="accepted_decisions",
+        records=submission.get("accepted_decisions"),
+        identity_key="decision_id",
+        scalar_fields=("item", "status", "superseded_by"),
+    )
+    return atoms
+
+
+def _record_atoms(
+    atoms: dict[str, Any],
+    *,
+    collection_name: str,
+    records: Any,
+    identity_key: str,
+    scalar_fields: tuple[str, ...],
+) -> None:
+    if not isinstance(records, list):
+        atoms[f"{collection_name}.__identity_valid"] = False
+        return
+    identified = {
+        record[identity_key]: record
+        for record in records
+        if isinstance(record, dict) and isinstance(record.get(identity_key), str) and record[identity_key]
+    }
+    atoms[f"{collection_name}.__identity_valid"] = len(identified) == len(records)
+    for record_id, record in identified.items():
+        prefix = f"{collection_name}.{record_id}"
+        for field in scalar_fields:
+            atoms[f"{prefix}.{field}"] = record.get(field)
 
 
 def _instructions() -> dict[str, str]:

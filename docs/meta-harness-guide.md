@@ -29,6 +29,7 @@ The important invariant is that agents propose and harness-owned code applies or
 - `aec_bench.meta_harness.model_runner` parses model endpoints and runs structured PydanticAI intake, world, review, and operation stages.
 - `aec_bench.meta_harness.evidence_lifecycle` owns staged evidence release, immutable checkpoint submissions, revisits, branches, and durable attempt lineage.
 - `aec_bench.meta_harness.evidence_lifecycle_local` runs one lifecycle through either a persistent model conversation or fresh checkpoint contexts.
+- `aec_bench.meta_harness.evidence_lifecycle_metrics` compares task-extracted semantic atoms across checkpoints without changing verifier reward.
 - `aec_bench.meta_harness.evidence_lifecycle_experiment` binds code, package, model configuration, prompts, tools, trajectories, metrics, and verification into an indexed experiment record.
 
 ## Evidence Lifecycles
@@ -59,12 +60,31 @@ aec-bench meta-harness lifecycle-run-local \
 Every local invocation writes root-level latest views plus an immutable experiment record:
 
 - `experiment-manifest.json` binds the repository commit and dirty digest, package and verifier hashes, exact model/configuration records, prompts, tool schema, visibility, and output hashes;
-- `metrics.json` normalizes checkpoint and whole-run timing, requests, tool calls, reads, revisits, retries, failures, tokens, and estimated cost;
+- `metrics.json` normalizes checkpoint and whole-run timing, requests, tool calls, reads, revisits, retries, failures, tokens, and estimated cost, and carries semantic-transition diagnostics when the task verifier provides them;
 - `verification.json` preserves the typed lifecycle verifier result;
 - `experiments/<experiment-id>/` preserves the canonical record for each failed, interrupted, resumed, or completed invocation;
 - `experiment-index.jsonl` is append-only and points to each canonical manifest by hash.
 
 This apparatus is an adaptation microscope for fixed-model behavior under staged evidence. Checkpoint progression is ordered and submission-gated; semantic verification occurs over the accumulated lifecycle. It does **not** yet provide action-conditioned evidence transitions, cross-run learner updates, demonstrated transfer, or continual learning.
+
+### Semantic transition diagnostics
+
+Semantic diagnostics are deliberately separate from verifier gates and reward. The task-specific verifier projects each cumulative submission into stable semantic atom IDs; the shared metric function compares those atoms across the declared checkpoint order. Equivalent reference lists are canonicalized as sets before comparison.
+
+The output reports explicit support counts and rates:
+
+- `initial.accuracy` is the fraction of initial semantic atoms that match the expected initial state;
+- `acquisition` is expected changes that move from the correct prior value to the correct new value, divided by all expected changes;
+- `update_precision` is actual changes that end in the expected current value, divided by all actual changes;
+- `update_recall` is expected changes whose current value is correct, divided by all expected changes;
+- `retention` is previously correct, expected-stable atoms that remain correct, divided by all previously correct, expected-stable atoms;
+- `interference` is the complementary count and rate of those prior-correct stable atoms that become incorrect.
+
+An atom that anticipates a future value can receive current-state correctness later, but it does not receive acquisition credit because its prior value was already wrong. A correction to an earlier model mistake can count as a precise update, but it is not evidence-driven acquisition. Rates are `null` when their denominator is zero; zero opportunity is never reported as perfect performance.
+
+SSC-03 currently extracts matrix states, run/report/claim transitions, readiness, stable finding and request identity/state, and accepted-decision status/supersession lineage. Free-form prose and evidence-reference fields with multiple verifier-approved formulations are excluded from exact atom comparison; their existing verifier gates remain authoritative.
+
+These diagnostics are persisted in `verification.json` and copied to `metrics.json` as `semantic_transition`. They are hash-bound by the existing experiment manifest. They do not alter checkpoint progression, model-visible feedback, gate scores, pass/fail, or reward.
 
 ## CLI
 

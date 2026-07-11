@@ -235,8 +235,33 @@ def test_golden_lifecycle_scores_one_without_bypassing_parent_agentic_review(tmp
 
     assert task_run["evidence"]["score"] == {"reward": 1.0, "passed": True}
     assert task_run["evidence"]["verification"]["overall"] == "pass"
+    semantic = task_run["evidence"]["verification"]["semantic_metrics"]
+    assert semantic["initial"]["accuracy"] == 1.0
+    assert semantic["aggregate"]["acquisition"] == 1.0
+    assert semantic["aggregate"]["update_precision"] == 1.0
+    assert semantic["aggregate"]["update_recall"] == 1.0
+    assert semantic["aggregate"]["retention"] == 1.0
+    assert semantic["aggregate"]["interference_count"] == 0
     assert {item["status"] for item in evaluation.closure_results} == {"certified"}
     assert evaluation.overall_status == "review_required"
+
+
+def test_semantic_metrics_separate_missed_acquisition_from_existing_gate_reward(tmp_path: Path) -> None:
+    def mutate(payload: dict) -> None:
+        payload["review_matrix"]["PRV-03"] = "fail"
+
+    package, run_dir = _run_with_mutation(tmp_path, "response_review", mutate)
+
+    result = verify_ssc03_evidence_lifecycle(package, run_dir)
+    semantic = result["semantic_metrics"]
+    initial_to_response = semantic["transitions"][0]
+
+    assert result["gates"]["checkpoint_contract"]["passed"] is False
+    assert initial_to_response["from_checkpoint_id"] == "initial_review"
+    assert initial_to_response["to_checkpoint_id"] == "response_review"
+    assert initial_to_response["acquired_update_count"] < initial_to_response["expected_update_count"]
+    assert initial_to_response["acquisition"] < 1.0
+    assert semantic["aggregate"]["update_recall"] < 1.0
 
 
 def test_verifier_localizes_premature_evidence_reference(tmp_path: Path) -> None:
@@ -293,6 +318,24 @@ def test_verifier_requires_closure_request_response_lineage(tmp_path: Path) -> N
     assert result["reward"] < 1.0
     assert result["gates"]["closure_evidence"]["passed"] is False
     assert "response_review:CER-001:response_refs" in result["gates"]["closure_evidence"]["failures"]
+
+
+def test_semantic_metrics_accept_verifier_valid_closure_reference_supersets(tmp_path: Path) -> None:
+    def mutate(payload: dict) -> None:
+        finding = next(item for item in payload["findings"] if item["finding_id"] == "F-PRV03-001")
+        finding["closure_evidence"].append("RUN-03-REGISTER-01 Rev F")
+        request = next(item for item in payload["closure_evidence_requests"] if item["request_id"] == "CER-001")
+        request["response_refs"].append("RUN-03-REGISTER-01 Rev F")
+
+    package, run_dir = _run_with_mutation(tmp_path, "response_review", mutate)
+
+    result = verify_ssc03_evidence_lifecycle(package, run_dir)
+
+    assert result["overall"] == "pass"
+    assert result["gates"]["closure_evidence"]["passed"] is True
+    assert result["semantic_metrics"]["aggregate"]["acquisition"] == 1.0
+    assert result["semantic_metrics"]["aggregate"]["update_precision"] == 1.0
+    assert result["semantic_metrics"]["aggregate"]["retention"] == 1.0
 
 
 def test_continuity_and_readiness_gates_score_single_errors_fractionally(tmp_path: Path) -> None:
@@ -580,6 +623,11 @@ def test_persistent_session_runner_closes_actual_three_checkpoint_contract(tmp_p
     assert task_run["evidence"]["lifecycle"]["status"] == "complete"
     assert task_run["evidence"]["score"] == {"reward": 1.0, "passed": True}
     assert task_run["evidence"]["verification"]["overall"] == "pass"
+    metrics = _load_json(run_dir / "metrics.json")
+    assert metrics["semantic_transition"]["aggregate"]["acquisition"] == 1.0
+    experiment_id = task_run["evidence"]["experiment"]["experiment_id"]
+    canonical_metrics = _load_json(run_dir / "experiments" / experiment_id / "metrics.json")
+    assert canonical_metrics["semantic_transition"] == metrics["semantic_transition"]
 
 
 def test_branch_from_response_can_complete_and_verify_independently(tmp_path: Path) -> None:
