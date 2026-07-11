@@ -419,14 +419,15 @@ def _review_contract() -> str:
 
 - PRV-01 | Packet completeness: are all required basis, manifest, run-register, report, memo, and criteria
   records present with IDs and revisions?
-- PRV-02 | Source authority and identity: do site, catchment, governing source, run, report, memo, and
-  criteria identities remain traceable without mixing objects?
+- PRV-02 | Stable source authority and basis identity: do the catchment, rainfall, and criteria sources
+  remain traceable without mixing objects? Receipt belongs to PRV-01, run/report identity to PRV-04, and
+  memo/report identity to PRV-06.
 - PRV-03 | Input-revision provenance: does every input revision in the reviewed run manifest equal the
   corresponding current registered revision? This item owns manifest input-revision equality.
 - PRV-04 | Run/report integrity: does the report belong to the registered run and satisfy intrinsic report
   acceptance checks? Record upstream input governance in the transition decision.
 - PRV-05 | Scenario propagation: are the governing rainfall basis and design-storm identity preserved into
-  the reviewed run? Do not duplicate a PRV-03 revision mismatch under PRV-05.
+  the reviewed manifest? Do not duplicate a PRV-03 revision mismatch under PRV-05.
 - PRV-06 | Downstream claim propagation: does the design memo preserve citation and value propagation for
   the reviewed run and report? Record whether that evidence governs in the transition decision.
 - PRV-07 | Comment and action closure: is every critical comment closed and every carried action controlled?
@@ -493,8 +494,10 @@ objects. Matrix values and decisions are lowercase enum strings, not explanatory
 ```
 
 For each failed item, open one finding. Build its ID as `F-` plus the item with its internal hyphen removed plus a
-three-digit sequence, for example the generic pattern `F-PRVXX-NNN`. Allocate closure request IDs sequentially as
-`CER-NNN` when findings first open. Preserve both IDs unchanged in later cumulative submissions.
+three-digit sequence, for example the generic pattern `F-PRVXX-NNN`. Sequence finding and decision IDs independently
+within each PRV item; the first finding and first decision for PRV-06 are therefore numbered `001` regardless of IDs
+used by other items. Allocate closure request IDs sequentially across the task as `CER-NNN` when findings first open.
+Preserve all IDs unchanged in later cumulative submissions.
 
 Decision-bearing items are PRV-01 through PRV-07. For each passing decision-bearing item, retain one active accepted
 decision with ID `D-` plus the item without its internal hyphen plus a three-digit sequence. Preserve accepted records
@@ -504,10 +507,11 @@ and `supersession_reason`, then add the replacement accepted record when the ite
 fields to accepted records. In `basis_refs`, cite only the released sources directly necessary to support that matrix
 item; do not attach the whole packet to every decision.
 
-The decision record for PRV-01 owns the document register; PRV-02 owns the governing basis identity; PRV-04 owns the
-run/report pair; PRV-05 owns the rainfall and design-storm basis; PRV-06 owns the memo/report pair; and PRV-07 owns
-the comment and action register. A report may pass PRV-04's intrinsic integrity check independently, but it may govern
-in the transition only when its parent run governs.
+The decision record for PRV-01 owns the currently released document register; PRV-02 owns the stable catchment,
+rainfall, and criteria identity; PRV-04 owns the run/report pair; PRV-05 owns scenario propagation into the reviewed
+manifest; PRV-06 owns the memo/report pair; and PRV-07 owns the comment and action register. A report may pass
+PRV-04's intrinsic integrity check independently, but it may govern in the transition only when its parent run
+governs.
 
 All arrays are cumulative. An open finding has `closed_at: null` and an empty `closure_evidence` list. A closed finding
 names only released artifacts that satisfy its recorded requirement. An open closure request has an empty
@@ -529,12 +533,14 @@ def _releases() -> dict[str, dict[str, str]]:
             "criteria-comments.md": _CRITERIA,
         },
         "response_review": {
+            "document-register-rev-f.md": _RESPONSE_REGISTER,
             "response-cover.md": _RESPONSE_COVER,
             "model-input-manifest-rev-b.md": _MANIFEST_B,
             "run-register-rev-f.md": _RUN_REGISTER_F,
             "hydraulic-report-043.md": _REPORT_043,
         },
         "closeout_review": {
+            "document-register-rev-g.md": _CLOSEOUT_REGISTER,
             "drainage-design-memo-rev-e.md": _MEMO_E,
             "comment-response.md": _COMMENT_RESPONSE,
         },
@@ -579,7 +585,7 @@ def _gold_submissions() -> dict[str, dict[str, Any]]:
                 "request_id": "CER-001",
                 "finding_id": "F-PRV03-001",
                 "status": "open",
-                "required_evidence": ["current manifest", "rerun identity", "reissued report"],
+                "required_evidence": ["current manifest citing CATCH-03-BASIS-01 Rev D"],
                 "response_refs": [],
             }
         ],
@@ -591,6 +597,7 @@ def _gold_submissions() -> dict[str, dict[str, Any]]:
         "checkpoint_id": "response_review",
         "evidence_refs": initial["evidence_refs"]
         + [
+            "REG-03 Rev F",
             "RESP-03-001 Rev A",
             "MANIFEST-03-042 Rev B",
             "RUN-03-REGISTER-01 Rev F",
@@ -609,11 +616,7 @@ def _gold_submissions() -> dict[str, dict[str, Any]]:
                 "status": "closed",
                 "opened_at": "initial_review",
                 "closed_at": "response_review",
-                "closure_evidence": [
-                    "MANIFEST-03-042 Rev B",
-                    "RUN-03-REGISTER-01 Rev F",
-                    "REPORT-03-043 Rev A",
-                ],
+                "closure_evidence": ["MANIFEST-03-042 Rev B"],
             },
             {
                 "finding_id": "F-PRV06-001",
@@ -629,18 +632,14 @@ def _gold_submissions() -> dict[str, dict[str, Any]]:
                 "request_id": "CER-001",
                 "finding_id": "F-PRV03-001",
                 "status": "closed",
-                "required_evidence": ["current manifest", "rerun identity", "reissued report"],
-                "response_refs": [
-                    "MANIFEST-03-042 Rev B",
-                    "RUN-03-REGISTER-01 Rev F",
-                    "REPORT-03-043 Rev A",
-                ],
+                "required_evidence": ["current manifest citing CATCH-03-BASIS-01 Rev D"],
+                "response_refs": ["MANIFEST-03-042 Rev B"],
             },
             {
                 "request_id": "CER-002",
                 "finding_id": "F-PRV06-001",
                 "status": "open",
-                "required_evidence": ["current design memo", "formal comment response"],
+                "required_evidence": ["current design memo citing and propagating the governing report"],
                 "response_refs": [],
             },
         ],
@@ -650,7 +649,8 @@ def _gold_submissions() -> dict[str, dict[str, Any]]:
     }
     closeout = {
         "checkpoint_id": "closeout_review",
-        "evidence_refs": response["evidence_refs"] + ["MEMO-03-DESIGN-01 Rev E", "RESP-03-CLOSEOUT-01 Rev A"],
+        "evidence_refs": response["evidence_refs"]
+        + ["REG-03 Rev G", "MEMO-03-DESIGN-01 Rev E", "RESP-03-CLOSEOUT-01 Rev A"],
         "review_matrix": _matrix(),
         "transition_decision": {
             "model_run": "governing",
@@ -665,7 +665,7 @@ def _gold_submissions() -> dict[str, dict[str, Any]]:
                 "status": "closed",
                 "opened_at": "response_review",
                 "closed_at": "closeout_review",
-                "closure_evidence": ["MEMO-03-DESIGN-01 Rev E", "RESP-03-CLOSEOUT-01 Rev A"],
+                "closure_evidence": ["MEMO-03-DESIGN-01 Rev E"],
             },
         ],
         "closure_evidence_requests": [
@@ -674,8 +674,8 @@ def _gold_submissions() -> dict[str, dict[str, Any]]:
                 "request_id": "CER-002",
                 "finding_id": "F-PRV06-001",
                 "status": "closed",
-                "required_evidence": ["current design memo", "formal comment response"],
-                "response_refs": ["MEMO-03-DESIGN-01 Rev E", "RESP-03-CLOSEOUT-01 Rev A"],
+                "required_evidence": ["current design memo citing and propagating the governing report"],
+                "response_refs": ["MEMO-03-DESIGN-01 Rev E"],
             },
         ],
         "accepted_decisions": closeout_decisions,
@@ -696,15 +696,23 @@ def _decision_evidence_policy() -> dict[str, dict[str, list[str]]]:
             "required": ["REG-03 Rev E"],
             "allowed": ["REG-03 Rev E"],
         },
+        "D-PRV01-002": {
+            "required": ["REG-03 Rev F"],
+            "allowed": ["REG-03 Rev F"],
+        },
+        "D-PRV01-003": {
+            "required": ["REG-03 Rev G"],
+            "allowed": ["REG-03 Rev G"],
+        },
         "D-PRV02-001": {
-            "required": ["REG-03 Rev E", "CATCH-03-BASIS-01 Rev D", "RAIN-03-BASIS-01 Rev C"],
+            "required": ["CATCH-03-BASIS-01 Rev D", "RAIN-03-BASIS-01 Rev C", "CRIT-SSC03-001 Rev C"],
             "allowed": [
                 "REG-03 Rev E",
+                "REG-03 Rev F",
+                "REG-03 Rev G",
                 "CATCH-03-BASIS-01 Rev D",
                 "RAIN-03-BASIS-01 Rev C",
-                "MANIFEST-03-042 Rev A",
-                "RUN-03-REGISTER-01 Rev E",
-                "REPORT-03-042 Rev A",
+                "CRIT-SSC03-001 Rev C",
             ],
         },
         "D-PRV04-001": {
@@ -716,8 +724,12 @@ def _decision_evidence_policy() -> dict[str, dict[str, list[str]]]:
             "allowed": ["RUN-03-REGISTER-01 Rev F", "REPORT-03-043 Rev A", "CRIT-SSC03-001 Rev C"],
         },
         "D-PRV05-001": {
-            "required": ["RAIN-03-BASIS-01 Rev C"],
+            "required": ["RAIN-03-BASIS-01 Rev C", "MANIFEST-03-042 Rev A"],
             "allowed": ["RAIN-03-BASIS-01 Rev C", "MANIFEST-03-042 Rev A"],
+        },
+        "D-PRV05-002": {
+            "required": ["RAIN-03-BASIS-01 Rev C", "MANIFEST-03-042 Rev B"],
+            "allowed": ["RAIN-03-BASIS-01 Rev C", "MANIFEST-03-042 Rev B"],
         },
         "D-PRV06-001": {
             "required": ["MEMO-03-DESIGN-01 Rev D", "REPORT-03-042 Rev A"],
@@ -737,16 +749,12 @@ def _decision_evidence_policy() -> dict[str, dict[str, list[str]]]:
 def _closure_request_policy() -> dict[str, dict[str, Any]]:
     return {
         "CER-001": {
-            "required_terms": [["manifest"], ["rerun", "run identity", "run register"], ["report"]],
-            "required_response_refs": [
-                "MANIFEST-03-042 Rev B",
-                "RUN-03-REGISTER-01 Rev F",
-                "REPORT-03-043 Rev A",
-            ],
+            "required_terms": [["manifest"], ["catchment basis", "catchment revision", "rev d"]],
+            "required_response_refs": ["MANIFEST-03-042 Rev B"],
         },
         "CER-002": {
-            "required_terms": [["memo"], ["comment response", "formal response"]],
-            "required_response_refs": ["MEMO-03-DESIGN-01 Rev E", "RESP-03-CLOSEOUT-01 Rev A"],
+            "required_terms": [["memo"], ["report", "run", "propagat"]],
+            "required_response_refs": ["MEMO-03-DESIGN-01 Rev E"],
         },
     }
 
@@ -768,10 +776,10 @@ def _initial_decisions() -> list[dict[str, Any]]:
             (
                 "D-PRV02-001",
                 "PRV-02",
-                ["REG-03 Rev E", "CATCH-03-BASIS-01 Rev D", "RAIN-03-BASIS-01 Rev C"],
+                ["CATCH-03-BASIS-01 Rev D", "RAIN-03-BASIS-01 Rev C", "CRIT-SSC03-001 Rev C"],
             ),
             ("D-PRV04-001", "PRV-04", ["RUN-03-REGISTER-01 Rev E", "REPORT-03-042 Rev A"]),
-            ("D-PRV05-001", "PRV-05", ["RAIN-03-BASIS-01 Rev C"]),
+            ("D-PRV05-001", "PRV-05", ["RAIN-03-BASIS-01 Rev C", "MANIFEST-03-042 Rev A"]),
             ("D-PRV06-001", "PRV-06", ["MEMO-03-DESIGN-01 Rev D", "REPORT-03-042 Rev A"]),
             ("D-PRV07-001", "PRV-07", ["COMMENT-03-REGISTER-01 Rev A"]),
         ]
@@ -781,11 +789,25 @@ def _initial_decisions() -> list[dict[str, Any]]:
 def _response_decisions(initial: list[dict[str, Any]]) -> list[dict[str, Any]]:
     decisions = copy.deepcopy(initial)
     by_id = _by_id(decisions, "decision_id")
+    by_id["D-PRV01-001"].update(
+        {
+            "status": "superseded",
+            "superseded_by": "D-PRV01-002",
+            "supersession_reason": "REG-03 Rev F registers the response evidence release.",
+        }
+    )
     by_id["D-PRV04-001"].update(
         {
             "status": "superseded",
             "superseded_by": "D-PRV04-002",
             "supersession_reason": "RUN-03-043 and REPORT-03-043 replace the reviewed run/report object.",
+        }
+    )
+    by_id["D-PRV05-001"].update(
+        {
+            "status": "superseded",
+            "superseded_by": "D-PRV05-002",
+            "supersession_reason": "MANIFEST-03-042 Rev B replaces the reviewed scenario-propagation object.",
         }
     )
     by_id["D-PRV06-001"].update(
@@ -795,13 +817,27 @@ def _response_decisions(initial: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "supersession_reason": "The current memo has not yet propagated the replacement report.",
         }
     )
-    decisions.append(
-        {
-            "decision_id": "D-PRV04-002",
-            "item": "PRV-04",
-            "status": "accepted",
-            "basis_refs": ["RUN-03-REGISTER-01 Rev F", "REPORT-03-043 Rev A"],
-        }
+    decisions.extend(
+        [
+            {
+                "decision_id": "D-PRV01-002",
+                "item": "PRV-01",
+                "status": "accepted",
+                "basis_refs": ["REG-03 Rev F"],
+            },
+            {
+                "decision_id": "D-PRV04-002",
+                "item": "PRV-04",
+                "status": "accepted",
+                "basis_refs": ["RUN-03-REGISTER-01 Rev F", "REPORT-03-043 Rev A"],
+            },
+            {
+                "decision_id": "D-PRV05-002",
+                "item": "PRV-05",
+                "status": "accepted",
+                "basis_refs": ["RAIN-03-BASIS-01 Rev C", "MANIFEST-03-042 Rev B"],
+            },
+        ]
     )
     return decisions
 
@@ -809,14 +845,29 @@ def _response_decisions(initial: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _closeout_decisions(response: list[dict[str, Any]]) -> list[dict[str, Any]]:
     decisions = copy.deepcopy(response)
     by_id = _by_id(decisions, "decision_id")
-    by_id["D-PRV06-001"]["superseded_by"] = "D-PRV06-002"
-    decisions.append(
+    by_id["D-PRV01-002"].update(
         {
-            "decision_id": "D-PRV06-002",
-            "item": "PRV-06",
-            "status": "accepted",
-            "basis_refs": ["MEMO-03-DESIGN-01 Rev E", "REPORT-03-043 Rev A"],
+            "status": "superseded",
+            "superseded_by": "D-PRV01-003",
+            "supersession_reason": "REG-03 Rev G registers the closeout evidence release.",
         }
+    )
+    by_id["D-PRV06-001"]["superseded_by"] = "D-PRV06-002"
+    decisions.extend(
+        [
+            {
+                "decision_id": "D-PRV01-003",
+                "item": "PRV-01",
+                "status": "accepted",
+                "basis_refs": ["REG-03 Rev G"],
+            },
+            {
+                "decision_id": "D-PRV06-002",
+                "item": "PRV-06",
+                "status": "accepted",
+                "basis_refs": ["MEMO-03-DESIGN-01 Rev E", "REPORT-03-043 Rev A"],
+            },
+        ]
     )
     return decisions
 
@@ -934,6 +985,24 @@ Source: CRIT-SSC03-001 Rev C
 - Maximum continuity error: 1.75 percent.
 """
 
+_RESPONSE_REGISTER = """# Response Document Register
+
+Register: REG-03 Rev F
+Supersedes: REG-03 Rev E
+
+| Document | Revision | Status |
+|---|---|---|
+| CATCH-03-BASIS-01 | Rev D | current |
+| RAIN-03-BASIS-01 | Rev C | current |
+| MANIFEST-03-042 | Rev B | current submission |
+| RUN-03-REGISTER-01 | Rev F | current |
+| REPORT-03-043 | Rev A | current submission |
+| MEMO-03-DESIGN-01 | Rev D | current submission |
+| CRIT-SSC03-001 | Rev C | governing criteria |
+| COMMENT-03-REGISTER-01 | Rev A | current |
+| RESP-03-001 | Rev A | current response |
+"""
+
 _RESPONSE_COVER = """# Response Cover
 
 Source: RESP-03-001 Rev A
@@ -964,6 +1033,24 @@ Run: RUN-03-043
 Peak flow: 2.91 m3/s
 Maximum HGL: 20.62 m AHD
 Continuity error: 1.18 percent
+"""
+
+_CLOSEOUT_REGISTER = """# Closeout Document Register
+
+Register: REG-03 Rev G
+Supersedes: REG-03 Rev F
+
+| Document | Revision | Status |
+|---|---|---|
+| CATCH-03-BASIS-01 | Rev D | current |
+| RAIN-03-BASIS-01 | Rev C | current |
+| MANIFEST-03-042 | Rev B | current submission |
+| RUN-03-REGISTER-01 | Rev F | current |
+| REPORT-03-043 | Rev A | current submission |
+| MEMO-03-DESIGN-01 | Rev E | current submission |
+| CRIT-SSC03-001 | Rev C | governing criteria |
+| COMMENT-03-REGISTER-01 | Rev A | current |
+| RESP-03-CLOSEOUT-01 | Rev A | current response |
 """
 
 _MEMO_E = """# Revised Drainage Design Memo
