@@ -57,6 +57,12 @@ The environment returns a `LifecycleEpisodeResult` containing only execution ide
 
 `run_evidence_lifecycle` deliberately accepts only `fresh_context` episode environments: one environment call owns one checkpoint. The persistent runner remains a distinct one-session orchestration because it releases later checkpoints inside the same model conversation. This distinction is part of the benchmark condition, not an implementation shortcut.
 
+### Local Prime lifecycle boundary
+
+The local Prime lifecycle export exposes the persistent condition through a Verifiers `StatefulToolEnv`. One rollout owns the complete lifecycle and one model conversation. The adapter references existing materialized public packages by absolute path, binds their lifecycle-spec and package hashes, binds the exact local AEC-Bench source provenance, and reuses the host lifecycle workspace and control tools. It does not copy the packages or move checkpoint, visibility, submission, or revisit authority into Prime.
+
+The task-owned lifecycle verifier remains the only reward authority and runs only after terminal completion. Incomplete rollouts close their active attempt and receive zero reward. This export is a local execution boundary, not evidence of hosted publication or training, a fresh-context comparison, transfer, or continual learning. See the [Prime Lab integration guide](prime-lab-guide.md) for the export and loading commands.
+
 ### Controlled SSC-03 variants
 
 SSC-03 exposes a small public calibration family through a task-specific event contract. Every variant starts from the same stale-manifest packet and keeps the same three checkpoint IDs. The host selects the event sequence at materialization; callers cannot patch arbitrary files or supply expected answers.
