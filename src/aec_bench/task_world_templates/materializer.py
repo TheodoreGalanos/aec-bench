@@ -9,6 +9,10 @@ from typing import Any, cast
 
 from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate
+from aec_bench.task_world_templates.lifecycles import (
+    materialize_lifecycle_template,
+    verify_lifecycle_template,
+)
 
 
 def materialize_template_example(template: CompositeTaskWorldTemplate, output_dir: Path) -> Path:
@@ -97,6 +101,19 @@ def verify_template_example(package_dir: Path) -> dict[str, Any]:
 
 def materialize_template_id_example(template_id: str, output_dir: Path) -> Path:
     return materialize_template_example(get_template(template_id), output_dir)
+
+
+def materialize_template_lifecycle(template: CompositeTaskWorldTemplate, output_dir: Path) -> Path:
+    """Materialize a registered evidence lifecycle for one composite template."""
+    template = CompositeTaskWorldTemplate.model_validate(template.model_dump(mode="json"))
+    if template.evidence_lifecycle is None:
+        raise ValueError(f"template {template.template_id!r} does not define an evidence lifecycle")
+    return materialize_lifecycle_template(template, output_dir)
+
+
+def verify_template_lifecycle(package_dir: Path, run_dir: Path) -> dict[str, Any]:
+    """Verify one completed lifecycle run through its registered task-specific verifier."""
+    return verify_lifecycle_template(package_dir, run_dir)
 
 
 def _gate_from_required_evidence(

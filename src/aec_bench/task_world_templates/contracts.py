@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import PurePosixPath
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from aec_bench.contracts.task_world import (
     AgenticReviewProfile,
@@ -78,6 +80,68 @@ class DataGapSpec(StrictModel):
     severity: NonEmptyStr = "medium"
 
 
+class EvidenceCheckpointSpec(StrictModel):
+    checkpoint_id: NonEmptyStr
+    title: NonEmptyStr
+    release_path: NonEmptyStr
+    instruction_path: NonEmptyStr
+    submission_path: NonEmptyStr
+    depends_on: list[NonEmptyStr] = Field(default_factory=list)
+    required_submission_fields: list[NonEmptyStr] = Field(default_factory=lambda: ["checkpoint_id"])
+
+    @model_validator(mode="after")
+    def validate_package_paths(self) -> EvidenceCheckpointSpec:
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", self.checkpoint_id) is None:
+            raise ValueError("checkpoint_id must be a safe path segment")
+
+        namespaces = {
+            "release_path": "releases",
+            "instruction_path": "instructions",
+            "submission_path": "submissions",
+        }
+        for field_name, namespace in namespaces.items():
+            raw_path = getattr(self, field_name)
+            path = PurePosixPath(raw_path)
+            if path.is_absolute() or ".." in path.parts:
+                msg = f"{field_name} must stay within the lifecycle package"
+                raise ValueError(msg)
+            if len(path.parts) < 2 or path.parts[0] != namespace:
+                raise ValueError(f"{field_name} must be under {namespace}/")
+        if PurePosixPath(self.instruction_path).suffix != ".md":
+            raise ValueError("instruction_path must name a Markdown file")
+        if PurePosixPath(self.submission_path).suffix != ".json":
+            raise ValueError("submission_path must name a JSON file")
+        if len(self.required_submission_fields) != len(set(self.required_submission_fields)):
+            raise ValueError("required submission fields must be unique")
+        return self
+
+
+class EvidenceLifecycleSpec(StrictModel):
+    lifecycle_id: NonEmptyStr
+    world_id: NonEmptyStr
+    checkpoints: list[EvidenceCheckpointSpec] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_checkpoint_graph(self) -> EvidenceLifecycleSpec:
+        checkpoint_ids = [checkpoint.checkpoint_id for checkpoint in self.checkpoints]
+        if len(checkpoint_ids) != len(set(checkpoint_ids)):
+            raise ValueError("checkpoint ids must be unique")
+
+        submission_paths = [checkpoint.submission_path for checkpoint in self.checkpoints]
+        if len(submission_paths) != len(set(submission_paths)):
+            raise ValueError("submission paths must be unique")
+
+        previous: set[str] = set()
+        for checkpoint in self.checkpoints:
+            unknown = set(checkpoint.depends_on) - previous
+            if unknown:
+                names = ", ".join(sorted(unknown))
+                msg = f"checkpoint dependencies must refer to earlier checkpoints: {names}"
+                raise ValueError(msg)
+            previous.add(checkpoint.checkpoint_id)
+        return self
+
+
 class CompositeTaskWorldTemplate(StrictModel):
     template_id: NonEmptyStr
     name: NonEmptyStr
@@ -91,10 +155,24 @@ class CompositeTaskWorldTemplate(StrictModel):
     verifier_gates: list[VerifierGateSpec]
     deliverables: list[DeliverableSpec]
     data_gaps: list[DataGapSpec]
+    evidence_lifecycle: EvidenceLifecycleSpec | None = None
     subset_axes: list[NonEmptyStr] = Field(default_factory=lambda: ["discipline_scope", "data_gaps"])
     difference_axes: list[NonEmptyStr] = Field(default_factory=lambda: ["verifier_gates", "source_artifacts"])
     projection_axes: list[NonEmptyStr] = Field(default_factory=lambda: ["source_pack", "stage_graph", "verifier_gates"])
     product_axes: list[NonEmptyStr] = Field(default_factory=lambda: ["handoff_chain", "discipline_interface"])
+
+    @model_validator(mode="after")
+    def validate_evidence_lifecycle_alignment(self) -> CompositeTaskWorldTemplate:
+        if self.evidence_lifecycle is None:
+            return self
+        if self.evidence_lifecycle.world_id != self.world_id:
+            raise ValueError("evidence lifecycle world_id must match the composite task world")
+        stage_ids = {stage.id for stage in self.stages}
+        checkpoint_ids = {checkpoint.checkpoint_id for checkpoint in self.evidence_lifecycle.checkpoints}
+        if not checkpoint_ids.issubset(stage_ids):
+            missing = ", ".join(sorted(checkpoint_ids - stage_ids))
+            raise ValueError(f"evidence lifecycle checkpoints must reference stage ids: {missing}")
+        return self
 
     @property
     def world_id(self) -> str:
@@ -161,13 +239,16 @@ class CompositeTaskWorldTemplate(StrictModel):
                 "branch_decisions": [decision.model_dump(mode="json") for decision in self.branch_decisions],
                 "deliverables": [deliverable.model_dump(mode="json") for deliverable in self.deliverables],
                 "data_gaps": [gap.model_dump(mode="json") for gap in self.data_gaps],
+                "evidence_lifecycle": (
+                    self.evidence_lifecycle.model_dump(mode="json") if self.evidence_lifecycle is not None else None
+                ),
                 "operation_handles": self.operation_handles(),
             }
         )
         return payload
 
     def operation_handles(self) -> dict[str, dict[str, Any]]:
-        return {
+        handles = {
             "source_pack": {
                 "paths": ["source_artifacts"],
                 "operation": "projection",
@@ -199,6 +280,13 @@ class CompositeTaskWorldTemplate(StrictModel):
                 "description": "Subset to gaps that block real-world execution.",
             },
         }
+        if self.evidence_lifecycle is not None:
+            handles["evidence_lifecycle"] = {
+                "paths": ["evidence_lifecycle"],
+                "operation": "projection",
+                "description": "Project checkpoint order, release boundaries, and submission contracts.",
+            }
+        return handles
 
     def example_handoffs(self) -> dict[str, Any]:
         return {handoff.id: handoff.example_value for handoff in self.handoffs}
