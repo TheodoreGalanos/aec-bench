@@ -185,6 +185,9 @@ def test_gold_decision_register_preserves_unaffected_and_supersedes_affected(tmp
     assert response["D-PRV01-002"]["status"] == "accepted"
     assert closeout["D-PRV01-002"]["superseded_by"] == "D-PRV01-003"
     assert closeout["D-PRV01-003"]["status"] == "accepted"
+    assert "D-PRV03-001" not in initial
+    assert response["D-PRV03-001"]["status"] == "accepted"
+    assert closeout["D-PRV03-001"] == response["D-PRV03-001"]
     assert response["D-PRV04-001"]["status"] == "superseded"
     assert response["D-PRV04-001"]["superseded_by"] == "D-PRV04-002"
     assert response["D-PRV04-002"]["status"] == "accepted"
@@ -347,6 +350,24 @@ def test_verifier_accepts_stable_prv02_basis_with_one_registered_identity_refere
             item for item in gold[checkpoint_id]["accepted_decisions"] if item["decision_id"] == "D-PRV02-001"
         )
         decision["basis_refs"].append("REG-03 Rev E")
+
+    _run_payloads(package, run_dir, gold)
+    gate = verify_ssc03_evidence_lifecycle(package, run_dir)["gates"]["accepted_decision_preservation"]
+
+    assert gate["passed"] is True
+
+
+def test_verifier_accepts_alternative_complete_prv03_basis(tmp_path: Path) -> None:
+    package = materialize_ssc03_evidence_lifecycle(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    gold = _load_json(package / "hidden" / "gold-submissions.json")
+    alternative = ["MANIFEST-03-042 Rev B", "CATCH-03-BASIS-01 Rev D", "RAIN-03-BASIS-01 Rev C"]
+
+    for checkpoint_id in ("response_review", "closeout_review"):
+        decision = next(
+            item for item in gold[checkpoint_id]["accepted_decisions"] if item["decision_id"] == "D-PRV03-001"
+        )
+        decision["basis_refs"] = alternative
 
     _run_payloads(package, run_dir, gold)
     gate = verify_ssc03_evidence_lifecycle(package, run_dir)["gates"]["accepted_decision_preservation"]

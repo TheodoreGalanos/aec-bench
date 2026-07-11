@@ -293,7 +293,7 @@ def _accepted_decision_gate(config: dict[str, Any], expected: dict[str, Any], ac
             if malformed:
                 failures.append(f"{checkpoint_id}:{decision_id}:basis_shape")
             policy = policies[decision_id]
-            if not set(policy["required"]).issubset(actual_basis):
+            if not _decision_basis_is_complete(policy, actual_basis):
                 failures.append(f"{checkpoint_id}:{decision_id}:basis_required")
             if not actual_basis.issubset(set(policy["allowed"])):
                 failures.append(f"{checkpoint_id}:{decision_id}:basis_disallowed")
@@ -304,6 +304,13 @@ def _accepted_decision_gate(config: dict[str, Any], expected: dict[str, Any], ac
                     failures.append(f"{checkpoint_id}:{decision_id}:basis_changed")
         prior_decisions = actual_decisions
     return _gate(failures, checks)
+
+
+def _decision_basis_is_complete(policy: dict[str, Any], actual_basis: set[str]) -> bool:
+    alternatives = policy.get("required_alternatives")
+    if alternatives is None:
+        alternatives = [policy["required"]]
+    return any(set(required).issubset(actual_basis) for required in alternatives)
 
 
 def _final_readiness_gate(expected: dict[str, Any], actual: dict[str, Any]) -> dict[str, Any]:
@@ -690,7 +697,7 @@ def _allowed_evidence_refs() -> dict[str, list[str]]:
     return {checkpoint_id: list(gold[checkpoint_id]["evidence_refs"]) for checkpoint_id in CHECKPOINT_IDS}
 
 
-def _decision_evidence_policy() -> dict[str, dict[str, list[str]]]:
+def _decision_evidence_policy() -> dict[str, dict[str, Any]]:
     return {
         "D-PRV01-001": {
             "required": ["REG-03 Rev E"],
@@ -713,6 +720,19 @@ def _decision_evidence_policy() -> dict[str, dict[str, list[str]]]:
                 "CATCH-03-BASIS-01 Rev D",
                 "RAIN-03-BASIS-01 Rev C",
                 "CRIT-SSC03-001 Rev C",
+            ],
+        },
+        "D-PRV03-001": {
+            "required_alternatives": [
+                ["MANIFEST-03-042 Rev B", "REG-03 Rev F"],
+                ["MANIFEST-03-042 Rev B", "CATCH-03-BASIS-01 Rev D", "RAIN-03-BASIS-01 Rev C"],
+            ],
+            "allowed": [
+                "REG-03 Rev F",
+                "CATCH-03-BASIS-01 Rev D",
+                "RAIN-03-BASIS-01 Rev C",
+                "MANIFEST-03-042 Rev B",
+                "RUN-03-REGISTER-01 Rev F",
             ],
         },
         "D-PRV04-001": {
@@ -824,6 +844,12 @@ def _response_decisions(initial: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "item": "PRV-01",
                 "status": "accepted",
                 "basis_refs": ["REG-03 Rev F"],
+            },
+            {
+                "decision_id": "D-PRV03-001",
+                "item": "PRV-03",
+                "status": "accepted",
+                "basis_refs": ["MANIFEST-03-042 Rev B", "REG-03 Rev F"],
             },
             {
                 "decision_id": "D-PRV04-002",
