@@ -5825,7 +5825,10 @@ _TEMPLATES = [
             _source(
                 "initial_model_packet",
                 "evidence-release",
-                "Current source register, model manifest, run report, design memo, and criteria at initial review.",
+                (
+                    "Current document, run, and comment registers plus model manifest, report, design memo, "
+                    "and criteria at initial review."
+                ),
                 ["initial_provenance_state"],
             ),
             _source(
@@ -5855,7 +5858,12 @@ _TEMPLATES = [
                 ["drainage-model-run-provenance-issue-review-package"],
                 ["initial_model_packet"],
                 ["initial_review_state", "closure_evidence_requirements"],
-                ["checkpoint_contract", "staged_disclosure", "finding_continuity"],
+                [
+                    "checkpoint_contract",
+                    "reviewer_self_consistency",
+                    "staged_disclosure",
+                    "finding_continuity",
+                ],
             ),
             _stage(
                 "response_review",
@@ -5917,6 +5925,13 @@ _TEMPLATES = [
                 "Every checkpoint records the expected matrix, transition, and readiness state.",
                 ["lifecycle.checkpoints"],
                 "Checkpoint engineering state is incorrect or incomplete.",
+            ),
+            _gate(
+                "reviewer_self_consistency",
+                "handoff_consistency",
+                "PRV-08 reflects whether each submitted transition and readiness state reconciles with its matrix.",
+                ["lifecycle.checkpoints"],
+                "The reviewer's PRV-08 status contradicts the submitted review state.",
             ),
             _gate(
                 "staged_disclosure",

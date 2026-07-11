@@ -23,6 +23,7 @@ from aec_bench.meta_harness.logic_profile import evaluate_logic_profile
 from aec_bench.task_world_templates.catalogue import get_template, list_templates
 from aec_bench.task_world_templates.lifecycles import registered_lifecycle_template_ids
 from aec_bench.task_world_templates.lifecycles.ssc03_drainage_model import (
+    GATE_IDS,
     materialize_ssc03_evidence_lifecycle,
     verify_ssc03_evidence_lifecycle,
 )
@@ -47,6 +48,12 @@ def test_every_lifecycle_template_has_one_executable_registration() -> None:
     declared = {template.template_id for template in list_templates() if template.evidence_lifecycle is not None}
 
     assert registered_lifecycle_template_ids() == declared
+
+
+def test_ssc03_declared_verifier_gates_match_executable_gates() -> None:
+    template = get_template("drainage-model-evidence-lifecycle-review")
+
+    assert tuple(gate.id for gate in template.verifier_gates) == GATE_IDS
 
 
 def test_generic_materializer_uses_the_supplied_template_contract(tmp_path: Path) -> None:
@@ -112,6 +119,29 @@ def test_checkpoint_instruction_publishes_review_and_json_contract_without_answe
     assert "only the released sources directly necessary" in instruction
     assert "F-PRV03-001" not in instruction
     assert '"PRV-03": "fail"' not in instruction
+
+
+def test_initial_packet_registers_run_and_comment_action_evidence(tmp_path: Path) -> None:
+    package = materialize_ssc03_evidence_lifecycle(tmp_path / "package")
+    register = (package / "releases" / "initial_review" / "document-register.md").read_text(encoding="utf-8")
+    comments = (package / "releases" / "initial_review" / "comment-action-register.md").read_text(encoding="utf-8")
+    gold = _load_json(package / "hidden" / "gold-submissions.json")
+
+    assert "RUN-03-REGISTER-01 | Rev E | current" in register
+    assert "COMMENT-03-REGISTER-01 | Rev A | current" in register
+    assert "Open critical comments: 0" in comments
+    assert "Carried actions: 0" in comments
+    assert "COMMENT-03-REGISTER-01 Rev A" in gold["initial_review"]["evidence_refs"]
+
+
+def test_criteria_owns_matrix_localization_and_transition_propagation(tmp_path: Path) -> None:
+    package = materialize_ssc03_evidence_lifecycle(tmp_path / "package")
+    criteria = (package / "releases" / "initial_review" / "criteria-comments.md").read_text(encoding="utf-8")
+
+    assert "PRV-03 owns manifest input-revision equality" in criteria
+    assert "PRV-05 owns rainfall-basis and design-storm identity" in criteria
+    assert "Do not duplicate a PRV-03 revision mismatch under PRV-05" in criteria
+    assert "A report may govern in the transition only when its parent run governs" in criteria
 
 
 def test_gold_decision_register_preserves_unaffected_and_supersedes_affected(tmp_path: Path) -> None:
@@ -183,6 +213,7 @@ def test_verifier_localizes_premature_evidence_reference(tmp_path: Path) -> None
 
     assert result["reward"] < 1.0
     assert result["gates"]["staged_disclosure"]["passed"] is False
+    assert 0.0 < result["gates"]["staged_disclosure"]["score"] < 1.0
     assert result["gates"]["finding_continuity"]["passed"] is True
 
 
@@ -210,7 +241,8 @@ def test_verifier_requires_evidence_backed_finding_closure(tmp_path: Path) -> No
 
     assert result["reward"] < 1.0
     assert result["gates"]["closure_evidence"]["passed"] is False
-    assert "F-PRV03-001" in result["gates"]["closure_evidence"]["failures"]
+    assert 0.0 < result["gates"]["closure_evidence"]["score"] < 1.0
+    assert "response_review:F-PRV03-001:closure_evidence" in result["gates"]["closure_evidence"]["failures"]
 
 
 def test_verifier_requires_closure_request_response_lineage(tmp_path: Path) -> None:
@@ -224,7 +256,23 @@ def test_verifier_requires_closure_request_response_lineage(tmp_path: Path) -> N
 
     assert result["reward"] < 1.0
     assert result["gates"]["closure_evidence"]["passed"] is False
-    assert "CER-001" in result["gates"]["closure_evidence"]["failures"]
+    assert "response_review:CER-001:response_refs" in result["gates"]["closure_evidence"]["failures"]
+
+
+def test_continuity_and_readiness_gates_score_single_errors_fractionally(tmp_path: Path) -> None:
+    package = materialize_ssc03_evidence_lifecycle(tmp_path / "package")
+    gold = _load_json(package / "hidden" / "gold-submissions.json")
+    gold["initial_review"]["findings"][0]["opened_at"] = "response_review"
+    gold["response_review"]["readiness_decision"] = "ready_to_issue"
+    run_dir = tmp_path / "run"
+
+    _run_payloads(package, run_dir, gold)
+    gates = verify_ssc03_evidence_lifecycle(package, run_dir)["gates"]
+
+    assert gates["finding_continuity"]["passed"] is False
+    assert 0.0 < gates["finding_continuity"]["score"] < 1.0
+    assert gates["final_readiness"]["passed"] is False
+    assert 0.0 < gates["final_readiness"]["score"] < 1.0
 
 
 def test_verifier_accepts_equivalent_supersession_reason_prose(tmp_path: Path) -> None:
@@ -237,6 +285,121 @@ def test_verifier_accepts_equivalent_supersession_reason_prose(tmp_path: Path) -
     result = verify_ssc03_evidence_lifecycle(package, run_dir)
 
     assert result["gates"]["accepted_decision_preservation"]["passed"] is True
+
+
+def test_verifier_accepts_allowed_decision_evidence_and_preserves_it_across_checkpoints(tmp_path: Path) -> None:
+    package = materialize_ssc03_evidence_lifecycle(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    gold = _load_json(package / "hidden" / "gold-submissions.json")
+
+    for checkpoint_id in ("initial_review", "response_review", "closeout_review"):
+        decision = next(
+            item for item in gold[checkpoint_id]["accepted_decisions"] if item["decision_id"] == "D-PRV04-001"
+        )
+        decision["basis_refs"].append("CRIT-SSC03-001 Rev C")
+
+    _run_payloads(package, run_dir, gold)
+    result = verify_ssc03_evidence_lifecycle(package, run_dir)
+
+    assert result["gates"]["accepted_decision_preservation"]["passed"] is True
+
+
+def test_verifier_rejects_disallowed_or_rewritten_decision_evidence_fractionally(tmp_path: Path) -> None:
+    package = materialize_ssc03_evidence_lifecycle(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    gold = _load_json(package / "hidden" / "gold-submissions.json")
+    initial = next(
+        item for item in gold["initial_review"]["accepted_decisions"] if item["decision_id"] == "D-PRV04-001"
+    )
+    response = next(
+        item for item in gold["response_review"]["accepted_decisions"] if item["decision_id"] == "D-PRV04-001"
+    )
+    initial["basis_refs"].append("MEMO-03-DESIGN-01 Rev D")
+    response["basis_refs"].append("CRIT-SSC03-001 Rev C")
+
+    _run_payloads(package, run_dir, gold)
+    gate = verify_ssc03_evidence_lifecycle(package, run_dir)["gates"]["accepted_decision_preservation"]
+
+    assert gate["passed"] is False
+    assert 0.0 < gate["score"] < 1.0
+    assert "initial_review:D-PRV04-001:basis_disallowed" in gate["failures"]
+    assert "response_review:D-PRV04-001:basis_changed" in gate["failures"]
+
+
+def test_prv08_is_graded_against_submitted_transition_consistency(tmp_path: Path) -> None:
+    def consistent_self_finding(payload: dict) -> None:
+        payload["transition_decision"]["model_report"] = "governing"
+        payload["review_matrix"]["PRV-08"] = "fail"
+
+    package, run_dir = _run_with_mutation(tmp_path, "initial_review", consistent_self_finding)
+    result = verify_ssc03_evidence_lifecycle(package, run_dir)
+
+    assert result["gates"]["checkpoint_contract"]["passed"] is False
+    assert result["gates"]["reviewer_self_consistency"]["passed"] is True
+
+
+def test_prv08_rejects_pass_when_submitted_transition_is_inconsistent(tmp_path: Path) -> None:
+    def hidden_inconsistency(payload: dict) -> None:
+        payload["transition_decision"]["model_report"] = "governing"
+
+    package, run_dir = _run_with_mutation(tmp_path, "initial_review", hidden_inconsistency)
+    gate = verify_ssc03_evidence_lifecycle(package, run_dir)["gates"]["reviewer_self_consistency"]
+
+    assert gate["passed"] is False
+    assert 0.0 < gate["score"] < 1.0
+    assert "initial_review.PRV-08" in gate["failures"]
+
+
+def test_prv09_is_graded_against_claim_boundary_statement(tmp_path: Path) -> None:
+    def acknowledge_unsafe_claim(payload: dict) -> None:
+        payload["claim_boundary_statement"] = "This task-owned synthetic packet is accepted project evidence."
+        payload["review_matrix"]["PRV-09"] = "fail"
+
+    package, run_dir = _run_with_mutation(tmp_path, "closeout_review", acknowledge_unsafe_claim)
+    gate = verify_ssc03_evidence_lifecycle(package, run_dir)["gates"]["claim_boundary"]
+
+    assert 0.0 < gate["score"] < 1.0
+    assert "closeout_review.statement" in gate["failures"]
+    assert "closeout_review.PRV-09" not in gate["failures"]
+
+
+def test_checkpoint_gate_retains_hard_failure_with_fractional_item_score(tmp_path: Path) -> None:
+    def one_matrix_error(payload: dict) -> None:
+        payload["review_matrix"]["PRV-04"] = "fail"
+
+    package, run_dir = _run_with_mutation(tmp_path, "initial_review", one_matrix_error)
+    gate = verify_ssc03_evidence_lifecycle(package, run_dir)["gates"]["checkpoint_contract"]
+
+    assert gate["passed"] is False
+    assert 0.0 < gate["score"] < 1.0
+    assert "initial_review.review_matrix.PRV-04" in gate["failures"]
+
+
+def test_closure_request_accepts_equivalent_complete_wording_and_rejects_rewrite(tmp_path: Path) -> None:
+    package = materialize_ssc03_evidence_lifecycle(tmp_path / "package")
+    gold = _load_json(package / "hidden" / "gold-submissions.json")
+    equivalent = ["updated current manifest", "registered rerun identity", "reissued hydraulic report"]
+    for checkpoint_id in ("initial_review", "response_review", "closeout_review"):
+        request = next(
+            item for item in gold[checkpoint_id]["closure_evidence_requests"] if item["request_id"] == "CER-001"
+        )
+        request["required_evidence"] = equivalent
+
+    passing_run = tmp_path / "passing-run"
+    _run_payloads(package, passing_run, gold)
+    passing_gate = verify_ssc03_evidence_lifecycle(package, passing_run)["gates"]["closure_evidence"]
+    assert passing_gate["passed"] is True
+
+    rewritten = json.loads(json.dumps(gold))
+    response_request = next(
+        item for item in rewritten["response_review"]["closure_evidence_requests"] if item["request_id"] == "CER-001"
+    )
+    response_request["required_evidence"] = ["manifest only"]
+    failing_run = tmp_path / "failing-run"
+    _run_payloads(package, failing_run, rewritten)
+    failing_gate = verify_ssc03_evidence_lifecycle(package, failing_run)["gates"]["closure_evidence"]
+    assert failing_gate["passed"] is False
+    assert "response_review:CER-001:requirement_changed" in failing_gate["failures"]
 
 
 def test_verifier_rejects_unsafe_claim_boundary_statement(tmp_path: Path) -> None:
@@ -256,7 +419,7 @@ def test_verifier_rejects_unsafe_claim_boundary_statement(tmp_path: Path) -> Non
 
     assert result["reward"] < 1.0
     assert result["gates"]["claim_boundary"]["passed"] is False
-    assert "closeout_review" in result["gates"]["claim_boundary"]["failures"]
+    assert "closeout_review.statement" in result["gates"]["claim_boundary"]["failures"]
 
 
 def test_verifier_rejects_disclaimer_followed_by_positive_readiness_claim(tmp_path: Path) -> None:
@@ -386,6 +549,14 @@ def _run_with_mutation(
 
     run_evidence_lifecycle(package, run_dir, episode_resolver=resolve)
     return package, run_dir
+
+
+def _run_payloads(package: Path, run_dir: Path, payloads: dict[str, dict]) -> None:
+    def resolve(context: dict) -> dict:
+        _write_json(Path(context["submission_path"]), payloads[context["checkpoint_id"]])
+        return {"status": "completed"}
+
+    run_evidence_lifecycle(package, run_dir, episode_resolver=resolve)
 
 
 def _load_json(path: Path) -> dict:

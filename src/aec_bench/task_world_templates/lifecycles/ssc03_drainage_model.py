@@ -16,6 +16,7 @@ from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate
 CHECKPOINT_IDS = ("initial_review", "response_review", "closeout_review")
 GATE_IDS = (
     "checkpoint_contract",
+    "reviewer_self_consistency",
     "staged_disclosure",
     "finding_continuity",
     "closure_evidence",
@@ -55,7 +56,14 @@ def materialize_ssc03_evidence_lifecycle(
             path.write_text(content, encoding="utf-8")
 
     _write_json(output / "hidden" / "gold-submissions.json", _gold_submissions())
-    _write_json(output / "hidden" / "verifier-config.json", {"allowed_evidence_refs": _allowed_evidence_refs()})
+    _write_json(
+        output / "hidden" / "verifier-config.json",
+        {
+            "allowed_evidence_refs": _allowed_evidence_refs(),
+            "decision_evidence_policy": _decision_evidence_policy(),
+            "closure_request_policy": _closure_request_policy(),
+        },
+    )
     return output
 
 
@@ -69,10 +77,11 @@ def verify_ssc03_evidence_lifecycle(package_dir: Path, run_dir: Path) -> dict[st
 
     gates = {
         "checkpoint_contract": _checkpoint_contract_gate(expected, actual),
+        "reviewer_self_consistency": _reviewer_self_consistency_gate(actual),
         "staged_disclosure": _staged_disclosure_gate(config, actual),
         "finding_continuity": _finding_continuity_gate(expected, actual),
-        "closure_evidence": _closure_evidence_gate(expected, actual),
-        "accepted_decision_preservation": _accepted_decision_gate(expected, actual),
+        "closure_evidence": _closure_evidence_gate(config, expected, actual),
+        "accepted_decision_preservation": _accepted_decision_gate(config, expected, actual),
         "final_readiness": _final_readiness_gate(expected, actual),
         "claim_boundary": _claim_boundary_gate(actual),
     }
@@ -88,47 +97,118 @@ def verify_ssc03_evidence_lifecycle(package_dir: Path, run_dir: Path) -> dict[st
     }
 
 
-def _checkpoint_contract_gate(expected: dict, actual: dict) -> dict[str, Any]:
-    fields = ("checkpoint_id", "review_matrix", "transition_decision", "readiness_decision")
-    failures = [
-        f"{checkpoint_id}.{field}"
-        for checkpoint_id in CHECKPOINT_IDS
-        for field in fields
-        if actual[checkpoint_id].get(field) != expected[checkpoint_id].get(field)
-    ]
-    return _gate(failures)
+def _checkpoint_contract_gate(expected: dict[str, Any], actual: dict[str, Any]) -> dict[str, Any]:
+    failures: list[str] = []
+    checks = 0
+    for checkpoint_id in CHECKPOINT_IDS:
+        checks += 1
+        if actual[checkpoint_id].get("checkpoint_id") != expected[checkpoint_id].get("checkpoint_id"):
+            failures.append(f"{checkpoint_id}.checkpoint_id")
+        for item in (f"PRV-0{index}" for index in range(1, 8)):
+            checks += 1
+            if actual[checkpoint_id].get("review_matrix", {}).get(item) != expected[checkpoint_id]["review_matrix"].get(
+                item
+            ):
+                failures.append(f"{checkpoint_id}.review_matrix.{item}")
+        for field in ("model_run", "model_report", "design_claim"):
+            checks += 1
+            if actual[checkpoint_id].get("transition_decision", {}).get(field) != expected[checkpoint_id][
+                "transition_decision"
+            ].get(field):
+                failures.append(f"{checkpoint_id}.transition_decision.{field}")
+        checks += 1
+        if actual[checkpoint_id].get("readiness_decision") != expected[checkpoint_id].get("readiness_decision"):
+            failures.append(f"{checkpoint_id}.readiness_decision")
+    return _gate(failures, checks)
 
 
-def _staged_disclosure_gate(config: dict, actual: dict) -> dict[str, Any]:
-    allowed = config["allowed_evidence_refs"]
+def _reviewer_self_consistency_gate(actual: dict[str, dict[str, Any]]) -> dict[str, Any]:
     failures = []
     for checkpoint_id in CHECKPOINT_IDS:
+        checkpoint = actual[checkpoint_id]
+        expected_status = "pass" if _submitted_state_is_consistent(checkpoint) else "fail"
+        if checkpoint.get("review_matrix", {}).get("PRV-08") != expected_status:
+            failures.append(f"{checkpoint_id}.PRV-08")
+    return _gate(failures, len(CHECKPOINT_IDS))
+
+
+def _submitted_state_is_consistent(checkpoint: dict[str, Any]) -> bool:
+    matrix = checkpoint.get("review_matrix", {})
+    run_status = _governing_status(matrix, ("PRV-02", "PRV-03", "PRV-05"))
+    report_status = _downstream_status(run_status, matrix.get("PRV-04"), positive="governing")
+    claim_status = _downstream_status(report_status, matrix.get("PRV-06"), positive="supported")
+    open_findings = any(
+        isinstance(finding, dict) and finding.get("status") == "open" for finding in checkpoint.get("findings", [])
+    )
+    ready = (
+        all(matrix.get(f"PRV-0{index}") == "pass" for index in range(1, 8))
+        and (run_status, report_status, claim_status) == ("governing", "governing", "supported")
+        and not open_findings
+    )
+    expected_readiness = "ready_to_issue" if ready else "not_ready_to_issue"
+    return (
+        checkpoint.get("transition_decision")
+        == {
+            "model_run": run_status,
+            "model_report": report_status,
+            "design_claim": claim_status,
+        }
+        and checkpoint.get("readiness_decision") == expected_readiness
+    )
+
+
+def _governing_status(matrix: dict[str, Any], items: tuple[str, ...]) -> str:
+    states = [matrix.get(item) for item in items]
+    if any(state in {"insufficient_data", "not_applicable", None} for state in states):
+        return "insufficient_data"
+    return "governing" if all(state == "pass" for state in states) else "non_governing"
+
+
+def _downstream_status(upstream: str, item_status: Any, *, positive: str) -> str:
+    if upstream == "insufficient_data" or item_status in {"insufficient_data", "not_applicable", None}:
+        return "insufficient_data"
+    if upstream != "governing" or item_status != "pass":
+        return "unsupported" if positive == "supported" else "non_governing"
+    return positive
+
+
+def _staged_disclosure_gate(config: dict[str, Any], actual: dict[str, Any]) -> dict[str, Any]:
+    allowed = config["allowed_evidence_refs"]
+    failures = []
+    checks = 0
+    for checkpoint_id in CHECKPOINT_IDS:
         references, malformed = _reference_set(actual[checkpoint_id].get("evidence_refs"))
+        checks += 1 + len(references)
         if malformed:
             failures.append(f"{checkpoint_id}:evidence_refs_shape")
         premature = sorted(references - set(allowed[checkpoint_id]))
         failures.extend(f"{checkpoint_id}:{reference}" for reference in premature)
-    return _gate(failures)
+    return _gate(failures, checks)
 
 
-def _finding_continuity_gate(expected: dict, actual: dict) -> dict[str, Any]:
+def _finding_continuity_gate(expected: dict[str, Any], actual: dict[str, Any]) -> dict[str, Any]:
     failures = []
+    checks = 0
     fields = ("item", "status", "opened_at", "closed_at")
     for checkpoint_id in CHECKPOINT_IDS:
         expected_findings = _by_id(expected[checkpoint_id].get("findings", []), "finding_id")
         actual_findings = _by_id(actual[checkpoint_id].get("findings", []), "finding_id")
+        checks += 1
         if set(actual_findings) != set(expected_findings):
             failures.append(f"{checkpoint_id}:finding_ids")
-            continue
         for finding_id, expected_finding in expected_findings.items():
             for field in fields:
-                if actual_findings[finding_id].get(field) != expected_finding.get(field):
+                checks += 1
+                if actual_findings.get(finding_id, {}).get(field) != expected_finding.get(field):
                     failures.append(f"{checkpoint_id}:{finding_id}:{field}")
-    return _gate(failures)
+    return _gate(failures, checks)
 
 
-def _closure_evidence_gate(expected: dict, actual: dict) -> dict[str, Any]:
+def _closure_evidence_gate(config: dict[str, Any], expected: dict[str, Any], actual: dict[str, Any]) -> dict[str, Any]:
     failures: list[str] = []
+    checks = 0
+    prior_requests: dict[str, dict[str, Any]] = {}
+    policies = config["closure_request_policy"]
     for checkpoint_id in CHECKPOINT_IDS:
         expected_findings = _by_id(expected[checkpoint_id].get("findings", []), "finding_id")
         actual_findings = _by_id(actual[checkpoint_id].get("findings", []), "finding_id")
@@ -136,72 +216,115 @@ def _closure_evidence_gate(expected: dict, actual: dict) -> dict[str, Any]:
             actual_finding = actual_findings.get(finding_id, {})
             expected_refs = set(expected_finding.get("closure_evidence", []))
             actual_refs, malformed = _reference_set(actual_finding.get("closure_evidence"))
+            checks += 2
             if malformed:
-                failures.append(f"{finding_id}:closure_evidence_shape")
+                failures.append(f"{checkpoint_id}:{finding_id}:closure_evidence_shape")
             if expected_finding["status"] == "closed" and not expected_refs.issubset(actual_refs):
-                failures.append(finding_id)
+                failures.append(f"{checkpoint_id}:{finding_id}:closure_evidence")
             if expected_finding["status"] == "open" and actual_refs:
-                failures.append(finding_id)
+                failures.append(f"{checkpoint_id}:{finding_id}:closure_evidence")
         expected_requests = _by_id(expected[checkpoint_id].get("closure_evidence_requests", []), "request_id")
         actual_requests = _by_id(actual[checkpoint_id].get("closure_evidence_requests", []), "request_id")
+        checks += 1
+        if set(actual_requests) != set(expected_requests):
+            failures.append(f"{checkpoint_id}:request_ids")
         for request_id, expected_request in expected_requests.items():
             actual_request = actual_requests.get(request_id, {})
+            checks += 6
+            if actual_request.get("finding_id") != expected_request.get("finding_id"):
+                failures.append(f"{checkpoint_id}:{request_id}:finding_id")
             if actual_request.get("status") != expected_request.get("status"):
-                failures.append(request_id)
-                continue
-            expected_refs = set(expected_request.get("response_refs", []))
+                failures.append(f"{checkpoint_id}:{request_id}:status")
+            requirements = actual_request.get("required_evidence")
+            if not _request_requirements_complete(requirements, policies[request_id]["required_terms"]):
+                failures.append(f"{checkpoint_id}:{request_id}:requirement_incomplete")
+            if request_id in prior_requests and (
+                requirements != prior_requests[request_id].get("required_evidence")
+                or actual_request.get("finding_id") != prior_requests[request_id].get("finding_id")
+            ):
+                failures.append(f"{checkpoint_id}:{request_id}:requirement_changed")
             actual_refs, malformed = _reference_set(actual_request.get("response_refs"))
             if malformed:
-                failures.append(f"{request_id}:response_refs_shape")
-            if expected_request["status"] == "closed" and not expected_refs.issubset(actual_refs):
-                failures.append(request_id)
+                failures.append(f"{checkpoint_id}:{request_id}:response_refs_shape")
+            if expected_request["status"] == "closed":
+                required_refs = set(policies[request_id]["required_response_refs"])
+                if not required_refs.issubset(actual_refs):
+                    failures.append(f"{checkpoint_id}:{request_id}:response_refs")
             if expected_request["status"] == "open" and actual_refs:
-                failures.append(request_id)
-    return _gate(sorted(set(failures)))
+                failures.append(f"{checkpoint_id}:{request_id}:response_refs")
+        prior_requests = actual_requests
+    return _gate(failures, checks)
 
 
-def _accepted_decision_gate(expected: dict, actual: dict) -> dict[str, Any]:
-    failures = []
+def _request_requirements_complete(value: Any, required_terms: list[list[str]]) -> bool:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        return False
+    text = _normalized_text(" ".join(value))
+    return all(any(term in text for term in group) for group in required_terms)
+
+
+def _normalized_text(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+
+
+def _accepted_decision_gate(config: dict[str, Any], expected: dict[str, Any], actual: dict[str, Any]) -> dict[str, Any]:
+    failures: list[str] = []
+    checks = 0
+    prior_decisions: dict[str, dict[str, Any]] = {}
+    policies = config["decision_evidence_policy"]
     for checkpoint_id in CHECKPOINT_IDS:
         expected_decisions = _by_id(expected[checkpoint_id].get("accepted_decisions", []), "decision_id")
         actual_decisions = _by_id(actual[checkpoint_id].get("accepted_decisions", []), "decision_id")
-        if set(actual_decisions) != set(expected_decisions) or any(
-            not _decision_matches(expected_decision, actual_decisions.get(decision_id, {}))
-            for decision_id, expected_decision in expected_decisions.items()
-        ):
-            failures.append(checkpoint_id)
-    return _gate(failures)
+        checks += 1
+        if set(actual_decisions) != set(expected_decisions):
+            failures.append(f"{checkpoint_id}:decision_ids")
+        for decision_id, expected_decision in expected_decisions.items():
+            actual_decision = actual_decisions.get(decision_id, {})
+            for field in ("item", "status", "superseded_by"):
+                checks += 1
+                if actual_decision.get(field) != expected_decision.get(field):
+                    failures.append(f"{checkpoint_id}:{decision_id}:{field}")
+            if expected_decision.get("status") == "superseded":
+                checks += 1
+                if not str(actual_decision.get("supersession_reason", "")).strip():
+                    failures.append(f"{checkpoint_id}:{decision_id}:supersession_reason")
+            actual_basis, malformed = _reference_set(actual_decision.get("basis_refs"))
+            checks += 3
+            if malformed:
+                failures.append(f"{checkpoint_id}:{decision_id}:basis_shape")
+            policy = policies[decision_id]
+            if not set(policy["required"]).issubset(actual_basis):
+                failures.append(f"{checkpoint_id}:{decision_id}:basis_required")
+            if not actual_basis.issubset(set(policy["allowed"])):
+                failures.append(f"{checkpoint_id}:{decision_id}:basis_disallowed")
+            if decision_id in prior_decisions:
+                checks += 1
+                prior_basis, prior_malformed = _reference_set(prior_decisions[decision_id].get("basis_refs"))
+                if prior_malformed or actual_basis != prior_basis:
+                    failures.append(f"{checkpoint_id}:{decision_id}:basis_changed")
+        prior_decisions = actual_decisions
+    return _gate(failures, checks)
 
 
-def _decision_matches(expected: dict[str, Any], actual: dict[str, Any]) -> bool:
-    for field in ("item", "status", "superseded_by"):
-        if actual.get(field) != expected.get(field):
-            return False
-    expected_basis = set(expected.get("basis_refs", []))
-    actual_basis, malformed = _reference_set(actual.get("basis_refs"))
-    if malformed or actual_basis != expected_basis:
-        return False
-    return expected.get("status") != "superseded" or bool(str(actual.get("supersession_reason", "")).strip())
-
-
-def _final_readiness_gate(expected: dict, actual: dict) -> dict[str, Any]:
+def _final_readiness_gate(expected: dict[str, Any], actual: dict[str, Any]) -> dict[str, Any]:
     failures = [
         checkpoint_id
         for checkpoint_id in CHECKPOINT_IDS
         if actual[checkpoint_id].get("readiness_decision") != expected[checkpoint_id]["readiness_decision"]
     ]
-    if actual["closeout_review"].get("readiness_decision") != "ready_to_issue":
-        failures.append("closeout_not_ready")
-    return _gate(failures)
+    return _gate(failures, len(CHECKPOINT_IDS))
 
 
 def _claim_boundary_gate(actual: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    failures = [
-        checkpoint_id
-        for checkpoint_id in CHECKPOINT_IDS
-        if not _claim_boundary_supported(str(actual[checkpoint_id].get("claim_boundary_statement", "")))
-    ]
-    return _gate(failures)
+    failures = []
+    for checkpoint_id in CHECKPOINT_IDS:
+        supported = _claim_boundary_supported(str(actual[checkpoint_id].get("claim_boundary_statement", "")))
+        if not supported:
+            failures.append(f"{checkpoint_id}.statement")
+        expected_matrix = "pass" if supported else "fail"
+        if actual[checkpoint_id].get("review_matrix", {}).get("PRV-09") != expected_matrix:
+            failures.append(f"{checkpoint_id}.PRV-09")
+    return _gate(failures, len(CHECKPOINT_IDS) * 2)
 
 
 def _claim_boundary_supported(statement: str) -> bool:
@@ -232,12 +355,14 @@ def _claim_boundary_supported(statement: str) -> bool:
     )
 
 
-def _gate(failures: list[str]) -> dict[str, Any]:
+def _gate(failures: list[str], checks: int) -> dict[str, Any]:
     unique = sorted(set(failures))
-    return {"passed": not unique, "score": 1.0 if not unique else 0.0, "failures": unique}
+    failed_checks = min(len(unique), checks)
+    score = round((checks - failed_checks) / checks, 4) if checks else 0.0
+    return {"passed": not unique, "score": score, "failures": unique}
 
 
-def _by_id(items: list[dict], key: str) -> dict[str, dict]:
+def _by_id(items: list[dict[str, Any]], key: str) -> dict[str, dict[str, Any]]:
     if not isinstance(items, list):
         return {}
     return {str(item[key]): item for item in items if isinstance(item, dict) and item.get(key)}
@@ -296,11 +421,12 @@ def _review_contract() -> str:
   records present with IDs and revisions?
 - PRV-02 | Source authority and identity: do site, catchment, governing source, run, report, memo, and
   criteria identities remain traceable without mixing objects?
-- PRV-03 | Input-revision provenance: does the reviewed run manifest identify every governing input
-  revision declared by the packet?
+- PRV-03 | Input-revision provenance: does every input revision in the reviewed run manifest equal the
+  corresponding current registered revision? This item owns manifest input-revision equality.
 - PRV-04 | Run/report integrity: does the report belong to the registered run and satisfy intrinsic report
   acceptance checks? Record upstream input governance in the transition decision.
-- PRV-05 | Scenario propagation: is the governing design scenario preserved into the reviewed run?
+- PRV-05 | Scenario propagation: are the governing rainfall basis and design-storm identity preserved into
+  the reviewed run? Do not duplicate a PRV-03 revision mismatch under PRV-05.
 - PRV-06 | Downstream claim propagation: does the design memo preserve citation and value propagation for
   the reviewed run and report? Record whether that evidence governs in the transition decision.
 - PRV-07 | Comment and action closure: is every critical comment closed and every carried action controlled?
@@ -378,6 +504,11 @@ and `supersession_reason`, then add the replacement accepted record when the ite
 fields to accepted records. In `basis_refs`, cite only the released sources directly necessary to support that matrix
 item; do not attach the whole packet to every decision.
 
+The decision record for PRV-01 owns the document register; PRV-02 owns the governing basis identity; PRV-04 owns the
+run/report pair; PRV-05 owns the rainfall and design-storm basis; PRV-06 owns the memo/report pair; and PRV-07 owns
+the comment and action register. A report may pass PRV-04's intrinsic integrity check independently, but it may govern
+in the transition only when its parent run governs.
+
 All arrays are cumulative. An open finding has `closed_at: null` and an empty `closure_evidence` list. A closed finding
 names only released artifacts that satisfy its recorded requirement. An open closure request has an empty
 `response_refs` list. Do not rewrite or remove prior records.
@@ -388,6 +519,7 @@ def _releases() -> dict[str, dict[str, str]]:
     return {
         "initial_review": {
             "document-register.md": _INITIAL_REGISTER,
+            "comment-action-register.md": _COMMENT_ACTION_REGISTER,
             "catchment-basis.md": _CATCHMENT_BASIS,
             "rainfall-basis.md": _RAINFALL_BASIS,
             "model-input-manifest-rev-a.md": _MANIFEST_A,
@@ -413,10 +545,11 @@ def _gold_submissions() -> dict[str, dict[str, Any]]:
     initial_decisions = _initial_decisions()
     response_decisions = _response_decisions(initial_decisions)
     closeout_decisions = _closeout_decisions(response_decisions)
-    initial = {
+    initial: dict[str, Any] = {
         "checkpoint_id": "initial_review",
         "evidence_refs": [
             "REG-03 Rev E",
+            "COMMENT-03-REGISTER-01 Rev A",
             "CATCH-03-BASIS-01 Rev D",
             "RAIN-03-BASIS-01 Rev C",
             "MANIFEST-03-042 Rev A",
@@ -557,6 +690,67 @@ def _allowed_evidence_refs() -> dict[str, list[str]]:
     return {checkpoint_id: list(gold[checkpoint_id]["evidence_refs"]) for checkpoint_id in CHECKPOINT_IDS}
 
 
+def _decision_evidence_policy() -> dict[str, dict[str, list[str]]]:
+    return {
+        "D-PRV01-001": {
+            "required": ["REG-03 Rev E"],
+            "allowed": ["REG-03 Rev E"],
+        },
+        "D-PRV02-001": {
+            "required": ["REG-03 Rev E", "CATCH-03-BASIS-01 Rev D", "RAIN-03-BASIS-01 Rev C"],
+            "allowed": [
+                "REG-03 Rev E",
+                "CATCH-03-BASIS-01 Rev D",
+                "RAIN-03-BASIS-01 Rev C",
+                "MANIFEST-03-042 Rev A",
+                "RUN-03-REGISTER-01 Rev E",
+                "REPORT-03-042 Rev A",
+            ],
+        },
+        "D-PRV04-001": {
+            "required": ["RUN-03-REGISTER-01 Rev E", "REPORT-03-042 Rev A"],
+            "allowed": ["RUN-03-REGISTER-01 Rev E", "REPORT-03-042 Rev A", "CRIT-SSC03-001 Rev C"],
+        },
+        "D-PRV04-002": {
+            "required": ["RUN-03-REGISTER-01 Rev F", "REPORT-03-043 Rev A"],
+            "allowed": ["RUN-03-REGISTER-01 Rev F", "REPORT-03-043 Rev A", "CRIT-SSC03-001 Rev C"],
+        },
+        "D-PRV05-001": {
+            "required": ["RAIN-03-BASIS-01 Rev C"],
+            "allowed": ["RAIN-03-BASIS-01 Rev C", "MANIFEST-03-042 Rev A"],
+        },
+        "D-PRV06-001": {
+            "required": ["MEMO-03-DESIGN-01 Rev D", "REPORT-03-042 Rev A"],
+            "allowed": ["MEMO-03-DESIGN-01 Rev D", "REPORT-03-042 Rev A", "RUN-03-REGISTER-01 Rev E"],
+        },
+        "D-PRV06-002": {
+            "required": ["MEMO-03-DESIGN-01 Rev E", "REPORT-03-043 Rev A"],
+            "allowed": ["MEMO-03-DESIGN-01 Rev E", "REPORT-03-043 Rev A", "RUN-03-REGISTER-01 Rev F"],
+        },
+        "D-PRV07-001": {
+            "required": ["COMMENT-03-REGISTER-01 Rev A"],
+            "allowed": ["COMMENT-03-REGISTER-01 Rev A", "CRIT-SSC03-001 Rev C"],
+        },
+    }
+
+
+def _closure_request_policy() -> dict[str, dict[str, Any]]:
+    return {
+        "CER-001": {
+            "required_terms": [["manifest"], ["rerun", "run identity", "run register"], ["report"]],
+            "required_response_refs": [
+                "MANIFEST-03-042 Rev B",
+                "RUN-03-REGISTER-01 Rev F",
+                "REPORT-03-043 Rev A",
+            ],
+        },
+        "CER-002": {
+            "required_terms": [["memo"], ["comment response", "formal response"]],
+            "required_response_refs": ["MEMO-03-DESIGN-01 Rev E", "RESP-03-CLOSEOUT-01 Rev A"],
+        },
+    }
+
+
 def _matrix(failing_item: str | None = None) -> dict[str, str]:
     return {f"PRV-0{index}": "fail" if f"PRV-0{index}" == failing_item else "pass" for index in range(1, 10)}
 
@@ -571,11 +765,15 @@ def _initial_decisions() -> list[dict[str, Any]]:
         }
         for decision_id, item, basis_refs in [
             ("D-PRV01-001", "PRV-01", ["REG-03 Rev E"]),
-            ("D-PRV02-001", "PRV-02", ["CATCH-03-BASIS-01 Rev D", "RAIN-03-BASIS-01 Rev C"]),
+            (
+                "D-PRV02-001",
+                "PRV-02",
+                ["REG-03 Rev E", "CATCH-03-BASIS-01 Rev D", "RAIN-03-BASIS-01 Rev C"],
+            ),
             ("D-PRV04-001", "PRV-04", ["RUN-03-REGISTER-01 Rev E", "REPORT-03-042 Rev A"]),
             ("D-PRV05-001", "PRV-05", ["RAIN-03-BASIS-01 Rev C"]),
             ("D-PRV06-001", "PRV-06", ["MEMO-03-DESIGN-01 Rev D", "REPORT-03-042 Rev A"]),
-            ("D-PRV07-001", "PRV-07", ["CRIT-SSC03-001 Rev C"]),
+            ("D-PRV07-001", "PRV-07", ["COMMENT-03-REGISTER-01 Rev A"]),
         ]
     ]
 
@@ -659,9 +857,18 @@ Register: REG-03 Rev E
 | CATCH-03-BASIS-01 | Rev D | current |
 | RAIN-03-BASIS-01 | Rev C | current |
 | MANIFEST-03-042 | Rev A | current submission |
+| RUN-03-REGISTER-01 | Rev E | current |
 | REPORT-03-042 | Rev A | current submission |
 | MEMO-03-DESIGN-01 | Rev D | current submission |
 | CRIT-SSC03-001 | Rev C | governing criteria |
+| COMMENT-03-REGISTER-01 | Rev A | current |
+"""
+
+_COMMENT_ACTION_REGISTER = """# Comment and Action Register
+
+Source: COMMENT-03-REGISTER-01 Rev A
+Open critical comments: 0
+Carried actions: 0
 """
 
 _CATCHMENT_BASIS = """# Governing Catchment Basis
@@ -715,7 +922,11 @@ _CRITERIA = """# Model Governance Criteria
 Source: CRIT-SSC03-001 Rev C
 
 - A run may govern only when all manifest input revisions match the current register.
+- PRV-03 owns manifest input-revision equality between the manifest and current registered inputs.
+- PRV-05 owns rainfall-basis and design-storm identity, independent of whether the cited revision is current.
+- Do not duplicate a PRV-03 revision mismatch under PRV-05.
 - Report integrity checks run identity and continuity error independently of upstream governing state.
+- A report may govern in the transition only when its parent run governs.
 - Memo propagation integrity checks cited run/report identity and preservation of reported values.
 - A confirmed defect remains failed until corrected evidence is supplied; request that evidence as a closure
   requirement rather than reclassifying the original defect as insufficient data.
