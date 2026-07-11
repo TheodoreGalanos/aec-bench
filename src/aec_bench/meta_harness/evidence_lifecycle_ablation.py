@@ -25,8 +25,14 @@ from aec_bench.meta_harness.evidence_lifecycle_ablation_plan import (
     LifecycleAblationRunResult,
     LifecycleAblationStudyDesign,
     LifecycleAblationTrial,
-    LifecycleExecutionMode,
     build_lifecycle_ablation_plan,
+)
+from aec_bench.meta_harness.evidence_lifecycle_episode import (
+    InProcessLifecycleEpisodeEnvironment,
+    LifecycleEpisodeRequest,
+    LifecycleEpisodeResult,
+    LifecycleEpisodeUsage,
+    LifecycleExecutionMode,
 )
 from aec_bench.meta_harness.evidence_lifecycle_experiment import (
     LifecycleExperimentSweepContext,
@@ -431,7 +437,7 @@ def _smoke_lifecycle_packages(packages: dict[str, Path]) -> None:
             run_evidence_lifecycle(
                 package,
                 run_dir,
-                episode_resolver=_gold_smoke_resolver(gold),
+                episode_environment=_gold_smoke_environment(gold),
             )
             verification = verify_template_lifecycle(package, run_dir)
             if not verification.get("passed") or float(verification.get("reward", 0.0)) != 1.0:
@@ -584,18 +590,33 @@ def _persisted_contract_error(path: Path, payload: dict[str, Any], *, label: str
     return None
 
 
-def _gold_smoke_resolver(
+def _gold_smoke_environment(
     gold: dict[str, Any],
-) -> Callable[[dict[str, Any]], dict[str, str]]:
-    def resolve(context: dict[str, Any]) -> dict[str, str]:
-        submission = Path(context["submission_path"])
+) -> InProcessLifecycleEpisodeEnvironment:
+    def execute(request: LifecycleEpisodeRequest) -> LifecycleEpisodeResult:
+        submission = Path(request.submission_path)
         _write_json(
             submission,
-            cast(dict[str, Any], gold[context["checkpoint_id"]]),
+            cast(dict[str, Any], gold[request.checkpoint_id]),
         )
-        return {"status": "completed"}
+        return LifecycleEpisodeResult(
+            episode_id=request.episode_id,
+            attempt_id=request.attempt_id,
+            session_id=request.session_id,
+            checkpoint_ids=request.checkpoint_ids,
+            execution_mode=request.execution_mode,
+            memory_visibility_policy=request.memory_visibility_policy,
+            status="completed",
+            requested_adapter="deterministic",
+            requested_model="gold",
+            max_turns_per_session=request.max_turns_per_session,
+            adapter="in_process",
+            resolved_model="gold",
+            configuration={"source": "hidden_gold_smoke"},
+            usage=LifecycleEpisodeUsage(),
+        )
 
-    return resolve
+    return InProcessLifecycleEpisodeEnvironment(executor=execute)
 
 
 def _trial_has_finalizable_state(

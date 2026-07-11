@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import shutil
 import tempfile
 from collections.abc import Callable
@@ -14,6 +15,17 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from aec_bench.ledger.durability import fsync_directory, fsync_tree, mkdir_durable
+from aec_bench.meta_harness.evidence_lifecycle_episode import (
+    LifecycleEpisodeContext,
+    LifecycleEpisodeEnvironment,
+    LifecycleEpisodeEnvironmentFailure,
+    LifecycleEpisodeRequest,
+    LifecycleEpisodeResult,
+    LifecycleExecutionMode,
+    LifecycleVisibilityPolicy,
+    validate_episode_result_identity,
+)
 from aec_bench.meta_harness.evidence_lifecycle_state import (
     CheckpointAttemptRecord,
     CheckpointAttemptStatus,
@@ -30,12 +42,15 @@ from aec_bench.meta_harness.evidence_lifecycle_state import (
 from aec_bench.meta_harness.ledger import append_ledger_entry, read_ledger
 from aec_bench.task_world_templates.contracts import EvidenceCheckpointSpec, EvidenceLifecycleSpec
 
-EpisodeResolver = Callable[[dict[str, Any]], dict[str, Any]]
 LifecycleVerifier = Callable[[Path, Path], dict[str, Any] | LifecycleVerificationResult]
 
 
 class EvidenceLifecycleError(RuntimeError):
     """Raised when a lifecycle package or checkpoint transition is invalid."""
+
+
+class LifecycleEpisodeExecutionError(EvidenceLifecycleError):
+    """Raised when an environment returns a durable failed episode result."""
 
 
 def load_evidence_lifecycle_spec(package_dir: Path) -> EvidenceLifecycleSpec:
@@ -326,6 +341,7 @@ def open_checkpoint_attempt(
     *,
     session_id: str,
     execution_mode: str,
+    episode_request_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Open a checkpoint attempt, interrupting an abandoned active attempt."""
     package = Path(package_dir)
@@ -338,6 +354,8 @@ def open_checkpoint_attempt(
     checkpoint_run = state.checkpoint(checkpoint_id)
     active_attempt = checkpoint_run.active_attempt
     if active_attempt is not None and active_attempt.session_id == session_id:
+        if episode_request_sha256 is not None and active_attempt.episode_request_sha256 != episode_request_sha256:
+            raise EvidenceLifecycleError("active checkpoint attempt request hash changed")
         return _attempt_context(active_attempt)
     if active_attempt is not None:
         active_attempt.status = CheckpointAttemptStatus.INTERRUPTED
@@ -351,6 +369,7 @@ def open_checkpoint_attempt(
         execution_mode=execution_mode,
         status=CheckpointAttemptStatus.ACTIVE,
         resumed_from_attempt_id=previous.attempt_id if previous is not None else None,
+        episode_request_sha256=episode_request_sha256,
     )
     checkpoint_run.attempts.append(attempt)
     _write_state(run, state)
@@ -364,6 +383,7 @@ def open_checkpoint_attempt(
             "attempt_id": attempt.attempt_id,
             "session_id": session_id,
             "resumed_from_attempt_id": attempt.resumed_from_attempt_id,
+            "episode_request_sha256": attempt.episode_request_sha256,
         },
         artifact_refs=[],
     )
@@ -471,28 +491,603 @@ def run_evidence_lifecycle(
     package_dir: Path,
     run_dir: Path,
     *,
-    episode_resolver: EpisodeResolver,
+    episode_environment: LifecycleEpisodeEnvironment,
 ) -> dict[str, Any]:
-    """Run every checkpoint with a fresh resolver call and one persistent workspace."""
+    """Run every checkpoint in a fresh typed episode and one persistent workspace."""
+    execution_mode = LifecycleExecutionMode(episode_environment.execution_mode)
+    if execution_mode is not LifecycleExecutionMode.FRESH_CONTEXT:
+        raise ValueError("checkpoint lifecycle runner requires fresh_context episode execution")
     while True:
-        context = prepare_evidence_checkpoint(package_dir, run_dir)
-        if context["status"] == "complete":
-            return context
-        episode_result = episode_resolver(copy.deepcopy(context))
-        result = submit_evidence_checkpoint(
+        raw_context = prepare_evidence_checkpoint(package_dir, run_dir)
+        if raw_context["status"] == "complete":
+            return raw_context
+        context = LifecycleEpisodeContext.from_runtime_context(raw_context)
+        _recover_host_episode_attempt(context, episode_environment)
+        episode_environment.recover(context)
+        context = LifecycleEpisodeContext.from_runtime_context(prepare_evidence_checkpoint(package_dir, run_dir))
+        _preserve_prior_attempt_submission(context)
+        checkpoint_run = next(item for item in context.checkpoint_runs if item.checkpoint_id == context.checkpoint_id)
+        attempt_sequence = len(checkpoint_run.attempts) + 1
+        session_id = f"{context.checkpoint_id}.session-{attempt_sequence:03d}"
+        attempt_id = f"{context.checkpoint_id}.attempt-{attempt_sequence:03d}"
+        request = _build_episode_request(
+            context,
+            episode_environment,
+            attempt_id=attempt_id,
+            session_id=session_id,
+        )
+        try:
+            episode_environment.prepare(request)
+        except Exception as exc:
+            _quarantine_prepared_host_artifacts(request)
+            request_path = _persist_episode_request(request)
+            attempt = open_checkpoint_attempt(
+                package_dir,
+                run_dir,
+                session_id=session_id,
+                execution_mode=execution_mode.value,
+                episode_request_sha256=_sha256(request_path),
+            )
+            if attempt["attempt_id"] != request.attempt_id or attempt["session_id"] != request.session_id:
+                raise EvidenceLifecycleError(
+                    "published checkpoint attempt does not match allocated episode request"
+                ) from exc
+            failure_kind = "episode_preparation_exception"
+            failure = _failed_episode_result(
+                request,
+                failure_kind=failure_kind,
+                provider_error=str(exc),
+            )
+            _persist_episode_result_or_close(
+                episode_environment,
+                request,
+                failure,
+                package_dir=package_dir,
+                run_dir=run_dir,
+            )
+            reconciliation_errors = _close_episode_failure(
+                episode_environment,
+                request,
+                package_dir=package_dir,
+                run_dir=run_dir,
+                failure_kind=failure_kind,
+                provider_error=str(exc),
+            )
+            _annotate_reconciliation_errors(exc, reconciliation_errors)
+            raise
+        prepared_host_artifacts = _quarantine_prepared_host_artifacts(request)
+        request_path = _persist_episode_request(request)
+        attempt = open_checkpoint_attempt(
             package_dir,
             run_dir,
-            episode_result=episode_result,
+            session_id=session_id,
+            execution_mode=execution_mode.value,
+            episode_request_sha256=_sha256(request_path),
         )
+        if attempt["attempt_id"] != request.attempt_id or attempt["session_id"] != request.session_id:
+            raise EvidenceLifecycleError("published checkpoint attempt does not match allocated episode request")
+        preparation_violations = list(prepared_host_artifacts)
+        if Path(request.submission_path).exists():
+            preparation_violations.append("checkpoint submission")
+        if preparation_violations:
+            failure_kind = "episode_preparation_invalid"
+            provider_error = "episode preparation created reserved artifacts: " + ", ".join(preparation_violations)
+            failure = _failed_episode_result(
+                request,
+                failure_kind=failure_kind,
+                provider_error=provider_error,
+            )
+            _persist_episode_result_or_close(
+                episode_environment,
+                request,
+                failure,
+                package_dir=package_dir,
+                run_dir=run_dir,
+            )
+            reconciliation_errors = _close_episode_failure(
+                episode_environment,
+                request,
+                package_dir=package_dir,
+                run_dir=run_dir,
+                failure_kind=failure_kind,
+                provider_error=provider_error,
+            )
+            error = EvidenceLifecycleError(provider_error)
+            _annotate_reconciliation_errors(error, reconciliation_errors)
+            raise error
+        try:
+            raw_episode_result = episode_environment.execute(request)
+        except LifecycleEpisodeEnvironmentFailure as exc:
+            failure = _failed_episode_result(
+                request,
+                failure_kind=exc.failure_kind,
+                provider_error=str(exc),
+            )
+            _persist_episode_result_or_close(
+                episode_environment,
+                request,
+                failure,
+                package_dir=package_dir,
+                run_dir=run_dir,
+            )
+            reconciliation_errors = _close_episode_failure(
+                episode_environment,
+                request,
+                package_dir=package_dir,
+                run_dir=run_dir,
+                failure_kind=exc.failure_kind,
+                provider_error=str(exc),
+            )
+            _annotate_reconciliation_errors(exc, reconciliation_errors)
+            raise
+        except Exception as exc:
+            failure_kind = "episode_environment_exception"
+            failure = _failed_episode_result(
+                request,
+                failure_kind=failure_kind,
+                provider_error=str(exc),
+            )
+            _persist_episode_result_or_close(
+                episode_environment,
+                request,
+                failure,
+                package_dir=package_dir,
+                run_dir=run_dir,
+            )
+            reconciliation_errors = _close_episode_failure(
+                episode_environment,
+                request,
+                package_dir=package_dir,
+                run_dir=run_dir,
+                failure_kind="episode_environment_exception",
+                provider_error=str(exc),
+            )
+            _annotate_reconciliation_errors(exc, reconciliation_errors)
+            raise
+        try:
+            episode_result = LifecycleEpisodeResult.model_validate(raw_episode_result)
+        except ValidationError as exc:
+            failure_kind = "episode_result_invalid"
+            failure = _failed_episode_result(
+                request,
+                failure_kind=failure_kind,
+                provider_error=str(exc),
+            )
+            _persist_episode_result_or_close(
+                episode_environment,
+                request,
+                failure,
+                package_dir=package_dir,
+                run_dir=run_dir,
+            )
+            reconciliation_errors = _close_episode_failure(
+                episode_environment,
+                request,
+                package_dir=package_dir,
+                run_dir=run_dir,
+                failure_kind=failure_kind,
+                provider_error=str(exc),
+            )
+            error = EvidenceLifecycleError("environment returned an invalid episode result")
+            _annotate_reconciliation_errors(error, reconciliation_errors)
+            raise error from exc
+        try:
+            validate_episode_result_identity(request, episode_result)
+        except ValueError as exc:
+            failure_kind = "episode_result_identity_mismatch"
+            _persist_episode_result_or_close(
+                episode_environment,
+                request,
+                episode_result,
+                package_dir=package_dir,
+                run_dir=run_dir,
+                filename="rejected_episode_result.json",
+            )
+            failure = _failed_episode_result(
+                request,
+                failure_kind=failure_kind,
+                provider_error=str(exc),
+            )
+            _persist_episode_result_or_close(
+                episode_environment,
+                request,
+                failure,
+                package_dir=package_dir,
+                run_dir=run_dir,
+            )
+            reconciliation_errors = _close_episode_failure(
+                episode_environment,
+                request,
+                package_dir=package_dir,
+                run_dir=run_dir,
+                failure_kind=failure_kind,
+                provider_error=str(exc),
+            )
+            error = EvidenceLifecycleError(str(exc))
+            _annotate_reconciliation_errors(error, reconciliation_errors)
+            raise error from exc
+        _persist_episode_result_or_close(
+            episode_environment,
+            request,
+            episode_result,
+            package_dir=package_dir,
+            run_dir=run_dir,
+        )
+        if episode_result.status == "failed":
+            failure_kind = episode_result.failure_kind or "episode_failed"
+            reconciliation_errors = _close_episode_failure(
+                episode_environment,
+                request,
+                package_dir=package_dir,
+                run_dir=run_dir,
+                failure_kind=failure_kind,
+                provider_error=episode_result.provider_error,
+            )
+            error = LifecycleEpisodeExecutionError(
+                f"episode failed at checkpoint {context.checkpoint_id}: {failure_kind}"
+            )
+            _annotate_reconciliation_errors(error, reconciliation_errors)
+            raise error
+        try:
+            result = submit_evidence_checkpoint(
+                package_dir,
+                run_dir,
+                episode_result=episode_result.model_dump(mode="json"),
+            )
+        except Exception as exc:
+            failure_kind = "episode_submission_invalid"
+            reconciliation_errors = _close_episode_failure(
+                episode_environment,
+                request,
+                package_dir=package_dir,
+                run_dir=run_dir,
+                failure_kind=failure_kind,
+                provider_error=str(exc),
+            )
+            _annotate_reconciliation_errors(exc, reconciliation_errors)
+            raise
         if result["status"] == "complete":
             return result
+
+
+def _build_episode_request(
+    context: LifecycleEpisodeContext,
+    environment: LifecycleEpisodeEnvironment,
+    *,
+    attempt_id: str,
+    session_id: str,
+) -> LifecycleEpisodeRequest:
+    """Construct the full host-authored identity for one environment attempt."""
+    return LifecycleEpisodeRequest(
+        episode_id=f"{context.lifecycle_id}.{attempt_id}",
+        lifecycle_id=context.lifecycle_id,
+        world_id=context.world_id,
+        lifecycle_spec_sha256=context.lifecycle_spec_sha256,
+        package_sha256=context.package_sha256,
+        checkpoint_id=context.checkpoint_id,
+        checkpoint_ids=(context.checkpoint_id,),
+        attempt_id=attempt_id,
+        session_id=session_id,
+        execution_mode=LifecycleExecutionMode(environment.execution_mode),
+        memory_visibility_policy=LifecycleVisibilityPolicy(environment.memory_visibility_policy),
+        requested_adapter=environment.requested_adapter,
+        requested_model=environment.requested_model,
+        max_turns_per_session=environment.max_turns_per_session,
+        title=context.title,
+        instruction=context.instruction,
+        workspace=context.workspace,
+        run_dir=context.run_dir,
+        instruction_path=context.instruction_path,
+        submission_path=context.submission_path,
+        released_files=context.released_files,
+        completed_checkpoint_ids=context.completed_checkpoint_ids,
+    )
+
+
+def _failed_episode_result(
+    request: LifecycleEpisodeRequest,
+    *,
+    failure_kind: str,
+    provider_error: str | None,
+) -> LifecycleEpisodeResult:
+    return LifecycleEpisodeResult(
+        episode_id=request.episode_id,
+        attempt_id=request.attempt_id,
+        session_id=request.session_id,
+        checkpoint_ids=request.checkpoint_ids,
+        execution_mode=request.execution_mode,
+        memory_visibility_policy=request.memory_visibility_policy,
+        status="failed",
+        requested_adapter=request.requested_adapter,
+        requested_model=request.requested_model,
+        max_turns_per_session=request.max_turns_per_session,
+        adapter="unresolved",
+        resolved_model="unresolved",
+        configuration={},
+        failure_kind=failure_kind,
+        provider_error=provider_error or failure_kind,
+    )
+
+
+def _persist_episode_request(request: LifecycleEpisodeRequest) -> Path:
+    """Publish the host-authored request before making its attempt active."""
+    request_dir = Path(request.run_dir) / "episodes" / request.checkpoint_id / request.session_id
+    request_path = request_dir / "episode_request.json"
+    payload = json.dumps(request.model_dump(mode="json"), indent=2, sort_keys=True) + "\n"
+    return _persist_host_json(
+        request_path,
+        payload,
+        conflict_message=f"episode request conflicts with durable attempt: {request.attempt_id}",
+    )
+
+
+def _recover_host_episode_attempt(
+    context: LifecycleEpisodeContext,
+    environment: LifecycleEpisodeEnvironment,
+) -> None:
+    """Ensure an interrupted host attempt retains request and result identity."""
+    checkpoint_run = next(item for item in context.checkpoint_runs if item.checkpoint_id == context.checkpoint_id)
+    attempt = checkpoint_run.active_attempt
+    if attempt is None:
+        return
+    result_dir = Path(context.run_dir) / "episodes" / context.checkpoint_id / attempt.session_id
+    request_path = result_dir / "episode_request.json"
+    if not request_path.is_file():
+        if attempt.episode_request_sha256 is not None:
+            raise EvidenceLifecycleError(f"interrupted episode request is missing: {attempt.attempt_id}")
+        return
+    if attempt.episode_request_sha256 is not None and _sha256(request_path) != attempt.episode_request_sha256:
+        raise EvidenceLifecycleError(f"interrupted episode request hash mismatch: {attempt.attempt_id}")
+    request = LifecycleEpisodeRequest.model_validate(_read_json(request_path))
+    expected_request = _build_episode_request(
+        context,
+        environment,
+        attempt_id=attempt.attempt_id,
+        session_id=attempt.session_id,
+    )
+    if request != expected_request:
+        raise EvidenceLifecycleError(f"interrupted episode request identity mismatch: {attempt.attempt_id}")
+    result_path = result_dir / "episode_result.json"
+    if result_path.is_file():
+        result = LifecycleEpisodeResult.model_validate(_read_json(result_path))
+        try:
+            validate_episode_result_identity(request, result)
+        except ValueError as exc:
+            raise EvidenceLifecycleError(f"interrupted episode result identity mismatch: {attempt.attempt_id}") from exc
+        return
+    _persist_episode_result(
+        request,
+        _failed_episode_result(
+            request,
+            failure_kind="interrupted",
+            provider_error="episode interrupted before a durable result was recorded",
+        ),
+    )
+
+
+def _persist_episode_result(
+    request: LifecycleEpisodeRequest,
+    result: LifecycleEpisodeResult,
+    *,
+    filename: str = "episode_result.json",
+) -> Path:
+    """Publish one host-validated per-attempt result before state progression."""
+    result_dir = Path(request.run_dir) / "episodes" / request.checkpoint_id / request.session_id
+    result_path = result_dir / filename
+    payload = json.dumps(result.model_dump(mode="json"), indent=2, sort_keys=True) + "\n"
+    return _persist_host_json(
+        result_path,
+        payload,
+        conflict_message=f"episode result conflicts with durable attempt: {request.attempt_id}",
+    )
+
+
+def _persist_host_json(path: Path, payload: str, *, conflict_message: str) -> Path:
+    """Publish one deterministic host JSON artifact with conflict detection."""
+    mkdir_durable(path.parent)
+    if path.exists():
+        if not path.is_file() or path.read_text(encoding="utf-8") != payload:
+            raise EvidenceLifecycleError(conflict_message)
+        return path
+
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.stem}-",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary_path.replace(path)
+        fsync_directory(path.parent)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+    return path
+
+
+def _persist_episode_result_or_close(
+    environment: LifecycleEpisodeEnvironment,
+    request: LifecycleEpisodeRequest,
+    result: LifecycleEpisodeResult,
+    *,
+    package_dir: Path,
+    run_dir: Path,
+    filename: str = "episode_result.json",
+) -> Path:
+    """Publish a result or close the host attempt if durable publication fails."""
+    try:
+        return _persist_episode_result(request, result, filename=filename)
+    except Exception as exc:
+        reconciliation_errors = _close_episode_failure(
+            environment,
+            request,
+            package_dir=package_dir,
+            run_dir=run_dir,
+            failure_kind="episode_result_persistence_error",
+            provider_error=str(exc),
+        )
+        _annotate_reconciliation_errors(exc, reconciliation_errors)
+        raise
+
+
+def _quarantine_prepared_host_artifacts(request: LifecycleEpisodeRequest) -> tuple[str, ...]:
+    """Move environment-created host-result paths aside before attempt publication."""
+    result_dir = Path(request.run_dir) / "episodes" / request.checkpoint_id / request.session_id
+    quarantined: list[str] = []
+    for filename in ("episode_request.json", "episode_result.json", "rejected_episode_result.json"):
+        source = result_dir / filename
+        if not source.exists():
+            continue
+        if not source.is_file():
+            raise EvidenceLifecycleError(f"reserved episode result path is not a file: {source}")
+        if filename == "episode_request.json":
+            expected = json.dumps(request.model_dump(mode="json"), indent=2, sort_keys=True) + "\n"
+            if source.read_text(encoding="utf-8") == expected:
+                continue
+        destination = result_dir / f"environment_prepared_{filename}"
+        if destination.exists():
+            raise EvidenceLifecycleError(f"prepared episode result quarantine already exists: {destination}")
+        source.replace(destination)
+        fsync_directory(result_dir)
+        quarantined.append(filename)
+    return tuple(quarantined)
+
+
+def _close_episode_failure(
+    environment: LifecycleEpisodeEnvironment,
+    request: LifecycleEpisodeRequest,
+    *,
+    package_dir: Path,
+    run_dir: Path,
+    failure_kind: str,
+    provider_error: str | None,
+) -> tuple[str, ...]:
+    """Close host state, then reconcile environment artifacts without masking failure."""
+    attempt_closed = _fail_episode_attempt_if_active(
+        package_dir,
+        run_dir,
+        session_id=request.session_id,
+        failure_kind=failure_kind,
+    )
+    if not attempt_closed:
+        return ("host attempt was no longer active; environment artifacts were left unchanged",)
+    reconciliation_errors: list[str] = []
+    try:
+        environment.record_failure(
+            request,
+            failure_kind=failure_kind,
+            provider_error=provider_error,
+        )
+    except Exception as exc:
+        reconciliation_errors.append(f"environment failure reconciliation failed: {exc}")
+    try:
+        _preserve_submission_candidate(
+            submission=Path(request.submission_path),
+            run_dir=Path(request.run_dir),
+            checkpoint_id=request.checkpoint_id,
+            session_id=request.session_id,
+            attempt_id=request.attempt_id,
+        )
+    except Exception as exc:
+        reconciliation_errors.append(f"submission candidate preservation failed: {exc}")
+    return tuple(reconciliation_errors)
+
+
+def _annotate_reconciliation_errors(error: BaseException, messages: tuple[str, ...]) -> None:
+    for message in messages:
+        error.add_note(message)
+
+
+def _preserve_prior_attempt_submission(context: LifecycleEpisodeContext) -> None:
+    """Move an unsubmitted candidate under its owning attempt before a retry."""
+    submission = Path(context.submission_path)
+    if not submission.exists():
+        return
+    checkpoint_run = next(item for item in context.checkpoint_runs if item.checkpoint_id == context.checkpoint_id)
+    previous_attempt = checkpoint_run.last_attempt
+    if previous_attempt is None:
+        raise EvidenceLifecycleError("checkpoint submission exists before the first episode attempt")
+    if previous_attempt.status is CheckpointAttemptStatus.SUBMITTED:
+        raise EvidenceLifecycleError("submitted attempt left a mutable active checkpoint candidate")
+
+    _preserve_submission_candidate(
+        submission=submission,
+        run_dir=Path(context.run_dir),
+        checkpoint_id=context.checkpoint_id,
+        session_id=previous_attempt.session_id,
+        attempt_id=previous_attempt.attempt_id,
+    )
+
+
+def _preserve_submission_candidate(
+    *,
+    submission: Path,
+    run_dir: Path,
+    checkpoint_id: str,
+    session_id: str,
+    attempt_id: str,
+) -> bool:
+    """Atomically preserve and remove one attempt-owned mutable submission candidate."""
+    if not submission.exists():
+        return False
+    if not submission.is_file():
+        raise EvidenceLifecycleError(f"checkpoint submission path is not a file: {submission}")
+    archive_dir = run_dir / "episodes" / checkpoint_id / session_id / "failed_submission"
+    archive = archive_dir / "submission.json"
+    mkdir_durable(archive_dir)
+    if archive.exists():
+        if not archive.is_file() or _sha256(archive) != _sha256(submission):
+            raise EvidenceLifecycleError(f"preserved checkpoint candidate conflicts with retry source: {attempt_id}")
+    else:
+        _copy_file_atomic(submission, archive)
+        fsync_tree(archive_dir)
+    submission.unlink()
+    fsync_directory(submission.parent)
+    return True
+
+
+def _fail_episode_attempt_if_active(
+    package_dir: Path,
+    run_dir: Path,
+    *,
+    session_id: str,
+    failure_kind: str,
+) -> bool:
+    """Fail the allocated attempt without masking an already-committed transition."""
+    package = Path(package_dir)
+    run = Path(run_dir)
+    try:
+        spec = load_evidence_lifecycle_spec(package)
+        state = _load_state(package, run, spec)
+    except EvidenceLifecycleError:
+        return False
+    checkpoint_id = state.active_checkpoint_id
+    if checkpoint_id is None:
+        return False
+    attempt = state.checkpoint(checkpoint_id).active_attempt
+    if attempt is None or attempt.session_id != session_id:
+        return False
+    fail_checkpoint_attempt(
+        package,
+        run,
+        session_id=session_id,
+        failure_kind=failure_kind,
+    )
+    return True
 
 
 def build_evidence_lifecycle_task_run_resolver(
     *,
     package_dir: Path,
     run_dir: Path,
-    episode_resolver: EpisodeResolver,
+    episode_environment: LifecycleEpisodeEnvironment,
     verifier: LifecycleVerifier,
 ) -> Callable[[dict[str, Any]], dict[str, Any]]:
     """Wrap a complete evidence lifecycle as one existing meta-harness task_run."""
@@ -501,7 +1096,7 @@ def build_evidence_lifecycle_task_run_resolver(
         lifecycle = run_evidence_lifecycle(
             package_dir,
             run_dir,
-            episode_resolver=episode_resolver,
+            episode_environment=episode_environment,
         )
         verification = validate_lifecycle_verification(verifier(Path(package_dir), Path(run_dir)))
         reward = float(verification["reward"])
@@ -767,6 +1362,8 @@ def _checkpoint_context(
     return {
         "lifecycle_id": state.lifecycle_id,
         "world_id": state.world_id,
+        "lifecycle_spec_sha256": state.lifecycle_spec_sha256,
+        "package_sha256": state.package_sha256,
         "status": state.status.value,
         "active_checkpoint_id": state.active_checkpoint_id,
         "checkpoint_id": checkpoint.checkpoint_id,
@@ -789,6 +1386,8 @@ def _result_context(run_dir: Path, state: EvidenceLifecycleRunState) -> dict[str
     return {
         "lifecycle_id": state.lifecycle_id,
         "world_id": state.world_id,
+        "lifecycle_spec_sha256": state.lifecycle_spec_sha256,
+        "package_sha256": state.package_sha256,
         "status": state.status.value,
         "workspace": str(_workspace(run_dir)),
         "run_dir": str(run_dir),

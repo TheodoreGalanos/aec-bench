@@ -8,7 +8,6 @@ import inspect
 import json
 import re
 import tempfile
-from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
@@ -25,12 +24,15 @@ from aec_bench.contracts.experiment_manifest import AgentConfig
 from aec_bench.contracts.trial_record import AdaptationProvenance, ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.meta_harness.evidence_lifecycle import evidence_lifecycle_package_identity
+from aec_bench.meta_harness.evidence_lifecycle_episode import (
+    LifecycleExecutionMode,
+    LifecycleVisibilityPolicy,
+)
 from aec_bench.meta_harness.evidence_lifecycle_experiment import (
     repository_provenance,
     runtime_dependency_provenance,
 )
 from aec_bench.meta_harness.evidence_lifecycle_local import (
-    LifecycleVisibilityPolicy,
     run_local_evidence_lifecycle_fresh_context,
 )
 from aec_bench.task_world_templates.catalogue import get_template
@@ -43,11 +45,6 @@ from aec_bench.task_world_templates.materializer import (
     materialize_template_lifecycle,
     verify_template_lifecycle,
 )
-
-
-class LifecycleExecutionMode(StrEnum):
-    PERSISTENT_CONTEXT = "persistent_context"
-    FRESH_CONTEXT = "fresh_context"
 
 
 class LifecycleAblationCondition(StrictModel):

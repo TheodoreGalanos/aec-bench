@@ -28,6 +28,7 @@ The important invariant is that agents propose and harness-owned code applies or
 - `aec_bench.meta_harness.aecbench` binds runtime task-run resolvers to `SynchronousHarborWorkflow` and Harbor trial import.
 - `aec_bench.meta_harness.model_runner` parses model endpoints and runs structured PydanticAI intake, world, review, and operation stages.
 - `aec_bench.meta_harness.evidence_lifecycle` owns staged evidence release, immutable checkpoint submissions, revisits, branches, and durable attempt lineage.
+- `aec_bench.meta_harness.evidence_lifecycle_episode` defines the verifier-independent request/result boundary between the lifecycle host and an episode environment.
 - `aec_bench.meta_harness.evidence_lifecycle_local` runs one lifecycle through either a persistent model conversation or fresh checkpoint contexts.
 - `aec_bench.meta_harness.evidence_lifecycle_metrics` compares task-extracted semantic atoms across checkpoints without changing verifier reward.
 - `aec_bench.meta_harness.evidence_lifecycle_experiment` binds code, package, model configuration, prompts, tools, trajectories, metrics, and verification into an indexed experiment record.
@@ -47,6 +48,14 @@ Two additional fresh-context policies define later ablations without deleting au
 - `current_release_only` exposes only the active release and active instruction.
 
 The host workspace tool enforces visibility. All released evidence, archived submissions, trajectories, and conversations remain on disk for audit regardless of the model-visible policy.
+
+### Typed episode boundary
+
+Fresh-context execution crosses a strict `LifecycleEpisodeEnvironment` boundary. Before execution, the host validates the released checkpoint, gives the environment a chance to seal interrupted artifacts, allocates the session and attempt IDs, and constructs a content-bound `LifecycleEpisodeRequest`. The environment durably prepares its empty attempt artifacts; the host then publishes `episode_request.json`, records its SHA-256 in the active attempt, and only then calls `execute`. This ordering leaves recoverable identity even if the process stops in the narrow publication-to-execution window. The request carries lifecycle/package hashes, checkpoint ownership, the exact workspace and submission paths, execution mode, visibility policy, requested adapter/model identity, per-session turn limit, and completed-checkpoint lineage. Recovery reconstructs the expected request from current state and declared environment configuration; finalization reconciles the request hash and stable identity against the immutable snapshot.
+
+The environment returns a `LifecycleEpisodeResult` containing only execution identity, requested and resolved adapter/model identity, configuration, status, failure details, and token usage. Extra fields are rejected, so an adapter cannot return task-owned gates, pass/fail, or reward through the episode seam. The host requires request/result identity to match exactly and publishes a host-validated `episode_result.json` for every returned result or synthesized execution failure. Exceptions, returned failures, identity drift, and missing or invalid submissions close the active attempt as failed and cannot advance the lifecycle. A candidate submission left by a failed attempt is moved under that attempt's session directory and hash-bound as audit evidence; a retry must create its own candidate.
+
+`run_evidence_lifecycle` deliberately accepts only `fresh_context` episode environments: one environment call owns one checkpoint. The persistent runner remains a distinct one-session orchestration because it releases later checkpoints inside the same model conversation. This distinction is part of the benchmark condition, not an implementation shortcut.
 
 ### Controlled SSC-03 variants
 

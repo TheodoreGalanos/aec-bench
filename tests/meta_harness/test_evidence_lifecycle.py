@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, Never
 
 import pytest
 from pydantic import ValidationError
@@ -26,11 +28,19 @@ from aec_bench.meta_harness.evidence_lifecycle import (
     submit_evidence_checkpoint,
     validate_lifecycle_verification,
 )
+from aec_bench.meta_harness.evidence_lifecycle_episode import (
+    LifecycleEpisodeContext,
+    LifecycleEpisodeEnvironment,
+    LifecycleEpisodeRequest,
+    LifecycleEpisodeResult,
+    LifecycleEpisodeUsage,
+    LifecycleExecutionMode,
+)
 from aec_bench.meta_harness.evidence_lifecycle_local import (
     EvidenceLifecycleControlTool,
     EvidenceLifecycleWorkspaceTool,
     LifecycleVisibilityPolicy,
-    build_local_evidence_lifecycle_episode_resolver,
+    build_local_evidence_lifecycle_episode_environment,
     run_local_evidence_lifecycle_fresh_context,
     run_local_evidence_lifecycle_session,
 )
@@ -798,7 +808,11 @@ def test_full_runner_uses_fresh_episode_calls_with_one_persistent_workspace(tmp_
         _write_json(Path(context["submission_path"]), {"checkpoint_id": context["checkpoint_id"]})
         return {"episode_id": f"episode.{context['checkpoint_id']}"}
 
-    result = run_evidence_lifecycle(package, run_dir, episode_resolver=resolve)
+    result = run_evidence_lifecycle(
+        package,
+        run_dir,
+        episode_environment=_FunctionEpisodeEnvironment(resolve),
+    )
 
     assert result["status"] == "complete"
     assert [item["checkpoint_id"] for item in observations] == ["initial_review", "response_review"]
@@ -820,7 +834,7 @@ def test_parent_task_run_resolver_preserves_existing_meta_harness_boundary(tmp_p
     resolver = build_evidence_lifecycle_task_run_resolver(
         package_dir=package,
         run_dir=run_dir,
-        episode_resolver=resolve,
+        episode_environment=_FunctionEpisodeEnvironment(resolve),
         verifier=lambda _package, _run: {
             "lifecycle_id": "lifecycle.demo",
             "reward": 0.75,
@@ -837,18 +851,18 @@ def test_parent_task_run_resolver_preserves_existing_meta_harness_boundary(tmp_p
     assert task_run["evidence"]["lifecycle"]["status"] == "complete"
 
 
-def test_local_episode_resolver_builds_fresh_adapters_in_one_workspace(tmp_path: Path) -> None:
+def test_local_episode_environment_builds_fresh_adapters_in_one_workspace(tmp_path: Path) -> None:
     package = _write_package(tmp_path / "package")
     run_dir = tmp_path / "run"
     registry = _WritingRegistry()
-    resolver = build_local_evidence_lifecycle_episode_resolver(
+    environment = build_local_evidence_lifecycle_episode_environment(
         package_dir=package,
         model="test-model",
         adapter_kind="tool_loop",
         registry=registry,
     )
 
-    result = run_evidence_lifecycle(package, run_dir, episode_resolver=resolver)
+    result = run_evidence_lifecycle(package, run_dir, episode_environment=environment)
 
     assert result["status"] == "complete"
     assert registry.build_count == 2
@@ -866,10 +880,10 @@ def test_local_episode_resolver_builds_fresh_adapters_in_one_workspace(tmp_path:
     } == {"fresh_context"}
 
 
-def test_local_episode_resolver_marks_provider_failure_immediately(tmp_path: Path) -> None:
+def test_local_episode_environment_marks_provider_failure_immediately(tmp_path: Path) -> None:
     package = _write_package(tmp_path / "package")
     run_dir = tmp_path / "run"
-    resolver = build_local_evidence_lifecycle_episode_resolver(
+    environment = build_local_evidence_lifecycle_episode_environment(
         package_dir=package,
         model="test-model",
         adapter_kind="tool_loop",
@@ -877,7 +891,7 @@ def test_local_episode_resolver_marks_provider_failure_immediately(tmp_path: Pat
     )
 
     with pytest.raises(RuntimeError, match="simulated crash"):
-        run_evidence_lifecycle(package, run_dir, episode_resolver=resolver)
+        run_evidence_lifecycle(package, run_dir, episode_environment=environment)
 
     state = _load_json(run_dir / "state.json")
     attempt = state["checkpoint_runs"][0]["attempts"][0]
@@ -886,31 +900,138 @@ def test_local_episode_resolver_marks_provider_failure_immediately(tmp_path: Pat
     assert (run_dir / "episodes" / "initial_review" / "initial_review.session-001" / "agent_result.json").exists()
 
 
-def test_local_episode_resolver_preserves_failed_attempt_artifacts_on_retry(tmp_path: Path) -> None:
+def test_local_episode_environment_reconciles_completed_result_when_submission_is_missing(tmp_path: Path) -> None:
     package = _write_package(tmp_path / "package")
     run_dir = tmp_path / "run"
-    failed = build_local_evidence_lifecycle_episode_resolver(
+    environment = build_local_evidence_lifecycle_episode_environment(
+        package_dir=package,
+        model="test-model",
+        adapter_kind="tool_loop",
+        registry=_CompletedWithoutSubmissionRegistry(),
+    )
+
+    with pytest.raises(EvidenceLifecycleError, match="checkpoint submission not found"):
+        run_evidence_lifecycle(package, run_dir, episode_environment=environment)
+
+    session_dir = run_dir / "episodes" / "initial_review" / "initial_review.session-001"
+    agent_result = _load_json(session_dir / "agent_result.json")
+    assert agent_result["status"] == "failed"
+    assert agent_result["failure_kind"] == "episode_submission_invalid"
+    episode_result = _load_json(session_dir / "episode_result.json")
+    assert episode_result["status"] == "completed"
+    state = _load_json(run_dir / "state.json")
+    assert state["checkpoint_runs"][0]["attempts"][0]["status"] == "failed"
+    normalized = lifecycle_local_runtime._normalized_agent_evidence(
+        model="test-model",
+        adapter_kind="tool_loop",
+        execution_mode="fresh_context",
+        memory_visibility_policy="artifact_memory",
+        max_turns=20,
+        sessions=lifecycle_local_runtime._fresh_context_sessions(run_dir),
+        lifecycle=state,
+    )
+    assert normalized["status"] == "failed"
+    assert normalized["totals"]["failures"] == 1
+
+
+def test_normalized_evidence_uses_host_attempt_when_failure_callback_breaks(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    base_environment = build_local_evidence_lifecycle_episode_environment(
+        package_dir=package,
+        model="test-model",
+        adapter_kind="tool_loop",
+        registry=_CompletedWithoutSubmissionRegistry(),
+    )
+    environment = _FailureRecordingCrashWrapper(base_environment)
+
+    with pytest.raises(EvidenceLifecycleError, match="checkpoint submission not found") as raised:
+        run_evidence_lifecycle(package, run_dir, episode_environment=environment)
+
+    assert any("failure reconciliation failed" in note for note in raised.value.__notes__)
+    session_dir = run_dir / "episodes" / "initial_review" / "initial_review.session-001"
+    assert _load_json(session_dir / "agent_result.json")["status"] == "completed"
+    state = _load_json(run_dir / "state.json")
+    normalized = lifecycle_local_runtime._normalized_agent_evidence(
+        model="test-model",
+        adapter_kind="tool_loop",
+        execution_mode="fresh_context",
+        memory_visibility_policy="artifact_memory",
+        max_turns=20,
+        sessions=lifecycle_local_runtime._fresh_context_sessions(run_dir),
+        lifecycle=state,
+    )
+    assert normalized["status"] == "failed"
+    assert normalized["sessions"][0]["failure_kind"] == "episode_submission_invalid"
+    assert normalized["totals"]["failures"] == 1
+
+
+def test_local_episode_environment_preserves_failed_attempt_artifacts_on_retry(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    failed = build_local_evidence_lifecycle_episode_environment(
         package_dir=package,
         model="test-model",
         adapter_kind="tool_loop",
         registry=_CrashingRegistry(),
     )
     with pytest.raises(RuntimeError, match="simulated crash"):
-        run_evidence_lifecycle(package, run_dir, episode_resolver=failed)
+        run_evidence_lifecycle(package, run_dir, episode_environment=failed)
     failed_result = run_dir / "episodes" / "initial_review" / "initial_review.session-001" / "agent_result.json"
     failed_bytes = failed_result.read_bytes()
 
-    retry = build_local_evidence_lifecycle_episode_resolver(
+    retry = build_local_evidence_lifecycle_episode_environment(
         package_dir=package,
         model="test-model",
         adapter_kind="tool_loop",
         registry=_WritingRegistry(),
     )
-    result = run_evidence_lifecycle(package, run_dir, episode_resolver=retry)
+    result = run_evidence_lifecycle(package, run_dir, episode_environment=retry)
 
     assert result["status"] == "complete"
     assert failed_result.read_bytes() == failed_bytes
     assert (run_dir / "episodes" / "initial_review" / "initial_review.session-002" / "agent_result.json").is_file()
+
+
+def test_local_episode_environment_recovers_crash_after_attempt_publication(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _write_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    environment = build_local_evidence_lifecycle_episode_environment(
+        package_dir=package,
+        model="test-model",
+        adapter_kind="tool_loop",
+        registry=_WritingRegistry(),
+    )
+    original_open_attempt = lifecycle_runtime.open_checkpoint_attempt
+
+    def interrupt_after_publication(*args: Any, **kwargs: Any) -> Never:
+        original_open_attempt(*args, **kwargs)
+        raise KeyboardInterrupt("simulated host interruption")
+
+    monkeypatch.setattr(lifecycle_runtime, "open_checkpoint_attempt", interrupt_after_publication)
+    with pytest.raises(KeyboardInterrupt, match="simulated host interruption"):
+        run_evidence_lifecycle(package, run_dir, episode_environment=environment)
+
+    interrupted_dir = run_dir / "episodes" / "initial_review" / "initial_review.session-001"
+    assert (interrupted_dir / "trajectory.jsonl").is_file()
+    assert not (interrupted_dir / "agent_result.json").exists()
+
+    monkeypatch.setattr(lifecycle_runtime, "open_checkpoint_attempt", original_open_attempt)
+    result = run_evidence_lifecycle(package, run_dir, episode_environment=environment)
+
+    assert result["status"] == "complete"
+    interrupted = _load_json(interrupted_dir / "agent_result.json")
+    assert interrupted["status"] == "failed"
+    assert interrupted["failure_kind"] == "interrupted"
+    assert interrupted["adapter_name"] == "unresolved"
+    state = _load_json(run_dir / "state.json")
+    assert [attempt["status"] for attempt in state["checkpoint_runs"][0]["attempts"]] == [
+        "interrupted",
+        "submitted",
+    ]
 
 
 def test_local_runners_return_the_same_normalized_evidence_schema(tmp_path: Path) -> None:
@@ -1230,7 +1351,7 @@ def test_execution_modes_reject_incompatible_visibility_policies(tmp_path: Path)
             visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
         )
     with pytest.raises(ValueError, match="fresh-context visibility"):
-        build_local_evidence_lifecycle_episode_resolver(
+        build_local_evidence_lifecycle_episode_environment(
             package_dir=package,
             model="test-model",
             visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
@@ -1489,12 +1610,61 @@ def _load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+class _FunctionEpisodeEnvironment:
+    execution_mode = LifecycleExecutionMode.FRESH_CONTEXT
+    memory_visibility_policy = LifecycleVisibilityPolicy.ARTIFACT_MEMORY
+    requested_adapter = "deterministic"
+    requested_model = "gold"
+    max_turns_per_session = 1
+
+    def __init__(self, resolve: Callable[[dict[str, Any]], dict[str, Any]]) -> None:
+        self._resolve = resolve
+
+    def recover(self, _context: LifecycleEpisodeContext) -> None:
+        return None
+
+    def prepare(self, _request: LifecycleEpisodeRequest) -> None:
+        return None
+
+    def record_failure(
+        self,
+        _request: LifecycleEpisodeRequest,
+        *,
+        failure_kind: str,
+        provider_error: str | None,
+    ) -> None:
+        return None
+
+    def execute(self, request: LifecycleEpisodeRequest) -> LifecycleEpisodeResult:
+        configuration = self._resolve(request.model_dump(mode="json"))
+        return LifecycleEpisodeResult(
+            episode_id=request.episode_id,
+            attempt_id=request.attempt_id,
+            session_id=request.session_id,
+            checkpoint_ids=request.checkpoint_ids,
+            execution_mode=request.execution_mode,
+            memory_visibility_policy=request.memory_visibility_policy,
+            status="completed",
+            requested_adapter="deterministic",
+            requested_model="gold",
+            max_turns_per_session=request.max_turns_per_session,
+            adapter="in_process",
+            resolved_model="gold",
+            configuration=configuration,
+            usage=LifecycleEpisodeUsage(),
+        )
+
+
 def _complete_demo_lifecycle(package: Path, run_dir: Path) -> None:
     def resolve(context: dict) -> dict:
         _write_json(Path(context["submission_path"]), {"checkpoint_id": context["checkpoint_id"]})
         return {"status": "completed"}
 
-    run_evidence_lifecycle(package, run_dir, episode_resolver=resolve)
+    run_evidence_lifecycle(
+        package,
+        run_dir,
+        episode_environment=_FunctionEpisodeEnvironment(resolve),
+    )
 
 
 class _WritingRegistry:
@@ -1524,6 +1694,69 @@ class _WritingAdapter:
             usage_cache_read_tokens=0,
             usage_cache_write_tokens=0,
         )
+
+
+class _CompletedWithoutSubmissionRegistry:
+    def build(self, **_kwargs: Any) -> _CompletedWithoutSubmissionAdapter:
+        return _CompletedWithoutSubmissionAdapter()
+
+
+class _CompletedWithoutSubmissionAdapter:
+    def execute(self, _request: Any) -> SimpleNamespace:
+        return SimpleNamespace(
+            agent_output=SimpleNamespace(status=SimpleNamespace(value="completed")),
+            transcript=[],
+            raw_output_text=None,
+            provider_error=None,
+            failure_kind=None,
+            usage_input_tokens=10,
+            usage_output_tokens=2,
+            usage_cache_read_tokens=0,
+            usage_cache_write_tokens=0,
+        )
+
+
+class _FailureRecordingCrashWrapper:
+    def __init__(self, environment: LifecycleEpisodeEnvironment) -> None:
+        self._environment = environment
+
+    @property
+    def execution_mode(self) -> LifecycleExecutionMode:
+        return self._environment.execution_mode
+
+    @property
+    def memory_visibility_policy(self) -> LifecycleVisibilityPolicy:
+        return self._environment.memory_visibility_policy
+
+    @property
+    def requested_adapter(self) -> str:
+        return self._environment.requested_adapter
+
+    @property
+    def requested_model(self) -> str:
+        return self._environment.requested_model
+
+    @property
+    def max_turns_per_session(self) -> int:
+        return self._environment.max_turns_per_session
+
+    def recover(self, context: LifecycleEpisodeContext) -> None:
+        return self._environment.recover(context)
+
+    def prepare(self, request: LifecycleEpisodeRequest) -> None:
+        return self._environment.prepare(request)
+
+    def execute(self, request: LifecycleEpisodeRequest) -> LifecycleEpisodeResult:
+        return self._environment.execute(request)
+
+    def record_failure(
+        self,
+        _request: LifecycleEpisodeRequest,
+        *,
+        failure_kind: str,
+        provider_error: str | None,
+    ) -> None:
+        raise RuntimeError("cannot reconcile local agent result")
 
 
 class _LifecycleSessionRegistry:

@@ -28,6 +28,7 @@ from aec_bench.task_world_templates.lifecycles.ssc03_drainage_model import (
     verify_ssc03_evidence_lifecycle,
 )
 from aec_bench.task_world_templates.materializer import materialize_template_lifecycle
+from tests.support.lifecycle_episode import deterministic_episode_environment
 
 
 def test_ssc03_lifecycle_is_additive_to_single_episode_template() -> None:
@@ -226,7 +227,7 @@ def test_golden_lifecycle_scores_one_without_bypassing_parent_agentic_review(tmp
     resolver = build_evidence_lifecycle_task_run_resolver(
         package_dir=package,
         run_dir=run_dir,
-        episode_resolver=resolve,
+        episode_environment=deterministic_episode_environment(resolve),
         verifier=verify_ssc03_evidence_lifecycle,
     )
     task_run = resolver({"process_id": "process.ssc03"})
@@ -545,7 +546,11 @@ def test_verifier_rejects_unsafe_claim_boundary_statement(tmp_path: Path) -> Non
         _write_json(Path(context["submission_path"]), payload)
         return {"status": "completed"}
 
-    run_evidence_lifecycle(package, run_dir, episode_resolver=resolve)
+    run_evidence_lifecycle(
+        package,
+        run_dir,
+        episode_environment=deterministic_episode_environment(resolve),
+    )
     result = verify_ssc03_evidence_lifecycle(package, run_dir)
 
     assert result["reward"] < 1.0
@@ -565,7 +570,11 @@ def test_verifier_rejects_disclaimer_followed_by_positive_readiness_claim(tmp_pa
         _write_json(Path(context["submission_path"]), payload)
         return {"status": "completed"}
 
-    run_evidence_lifecycle(package, run_dir, episode_resolver=resolve)
+    run_evidence_lifecycle(
+        package,
+        run_dir,
+        episode_environment=deterministic_episode_environment(resolve),
+    )
     result = verify_ssc03_evidence_lifecycle(package, run_dir)
 
     assert result["gates"]["claim_boundary"]["passed"] is False
@@ -594,7 +603,11 @@ def test_three_episode_runner_preserves_only_released_evidence(tmp_path: Path) -
         _write_json(Path(context["submission_path"]), gold[context["checkpoint_id"]])
         return {"status": "completed"}
 
-    result = run_evidence_lifecycle(package, run_dir, episode_resolver=resolve)
+    result = run_evidence_lifecycle(
+        package,
+        run_dir,
+        episode_environment=deterministic_episode_environment(resolve),
+    )
 
     assert result["status"] == "complete"
     assert visibility == [
@@ -668,7 +681,11 @@ def _run_gold(tmp_path: Path) -> tuple[Path, Path]:
         _write_json(Path(context["submission_path"]), gold[context["checkpoint_id"]])
         return {"status": "completed"}
 
-    run_evidence_lifecycle(package, run_dir, episode_resolver=resolve)
+    run_evidence_lifecycle(
+        package,
+        run_dir,
+        episode_environment=deterministic_episode_environment(resolve),
+    )
     return package, run_dir
 
 
@@ -688,7 +705,11 @@ def _run_with_mutation(
         _write_json(Path(context["submission_path"]), payload)
         return {"status": "completed"}
 
-    run_evidence_lifecycle(package, run_dir, episode_resolver=resolve)
+    run_evidence_lifecycle(
+        package,
+        run_dir,
+        episode_environment=deterministic_episode_environment(resolve),
+    )
     return package, run_dir
 
 
@@ -697,7 +718,11 @@ def _run_payloads(package: Path, run_dir: Path, payloads: dict[str, dict]) -> No
         _write_json(Path(context["submission_path"]), payloads[context["checkpoint_id"]])
         return {"status": "completed"}
 
-    run_evidence_lifecycle(package, run_dir, episode_resolver=resolve)
+    run_evidence_lifecycle(
+        package,
+        run_dir,
+        episode_environment=deterministic_episode_environment(resolve),
+    )
 
 
 def _load_json(path: Path) -> dict:
