@@ -9,12 +9,16 @@ from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityChec
 from aec_bench.contracts.trial_record import (
     AdaptationProvenance,
     AgentReference,
+    ArtifactReference,
     Completeness,
     CostRecord,
     DerivationStepRecord,
     EnvironmentSnapshot,
     FileReference,
     InputRecord,
+    LifecycleExecutionRecord,
+    LifecycleSessionRecord,
+    LifecycleTrialProvenance,
     OutputRecord,
     TaskReference,
     TimingRecord,
@@ -167,6 +171,163 @@ def test_trial_record_rejects_complete_missing_input_files() -> None:
     with pytest.raises(ValidationError, match="input_files"):
         build_trial_record(
             inputs=InputRecord(instruction="Review the task."),
+        )
+
+
+def test_trial_record_accepts_typed_lifecycle_execution_and_provenance() -> None:
+    invocation_manifest = ArtifactReference(
+        kind="lifecycle_manifest",
+        path="_artifacts/trial-001/experiment-manifest.json",
+        sha256="a" * 64,
+        media_type="application/json",
+    )
+    invocation_index = ArtifactReference(
+        kind="lifecycle_invocation_index",
+        path="_artifacts/trial-001/experiment-index.jsonl",
+        sha256="1" * 64,
+        media_type="application/x-ndjson",
+    )
+    ablation_manifest = ArtifactReference(
+        kind="lifecycle_ablation_manifest",
+        path="_artifacts/trial-001/sweep/manifest.json",
+        sha256="2" * 64,
+        media_type="application/json",
+    )
+    ablation_plan = ArtifactReference(
+        kind="lifecycle_ablation_plan",
+        path="_artifacts/trial-001/sweep/plan.json",
+        sha256="3" * 64,
+        media_type="application/json",
+    )
+    artifacts = [invocation_manifest, invocation_index, ablation_manifest, ablation_plan]
+    record = build_trial_record(
+        outputs=OutputRecord(
+            agent_output=AgentOutput(
+                status=AgentOutputStatus.COMPLETED,
+                output_path="_artifacts/trial-001",
+                output_format="evidence_lifecycle",
+            ),
+            artifacts=artifacts,
+        ),
+        lifecycle_execution=LifecycleExecutionRecord(
+            execution_mode="fresh_context",
+            memory_visibility_policy="artifact_memory",
+            max_turns_per_session=20,
+            status="completed",
+            sessions=[
+                LifecycleSessionRecord(
+                    session_id="initial_review.session-001",
+                    checkpoint_ids=["initial_review"],
+                    adapter="tool_loop",
+                    resolved_model="anthropic:claude-sonnet-4-20250514",
+                    status="completed",
+                    artifacts=[invocation_manifest],
+                )
+            ],
+        ),
+        lifecycle_provenance=LifecycleTrialProvenance(
+            lifecycle_id="ssc03.drainage-model-evidence-lifecycle",
+            world_id="aec.task_world.composite.drainage-model-evidence-lifecycle-review.v1",
+            spec_sha256="b" * 64,
+            package_sha256="c" * 64,
+            repository_commit="d" * 40,
+            repository_dirty=False,
+            repository_dirty_digest="e" * 64,
+            runtime_provider="anthropic",
+            runtime_distributions=("anthropic==1.0.0", "pydantic-ai-slim==1.0.0"),
+            runtime_dependency_sha256="1" * 64,
+            verifier_qualified_name="aec_bench.verify_ssc03",
+            verifier_source_sha256="f" * 64,
+            invocation_manifest=invocation_manifest,
+            invocation_index=invocation_index,
+            ablation_manifest=ablation_manifest,
+            ablation_plan=ablation_plan,
+        ),
+    )
+
+    assert record.lifecycle_execution is not None
+    assert record.lifecycle_execution.sessions[0].checkpoint_ids == ["initial_review"]
+    assert record.lifecycle_provenance is not None
+    assert record.lifecycle_provenance.package_sha256 == "c" * 64
+
+    dirty = record.model_dump(mode="json")
+    dirty["lifecycle_provenance"]["repository_dirty"] = True
+    with pytest.raises(ValidationError, match="clean_repository"):
+        TrialRecord.model_validate(dirty)
+
+
+def test_complete_lifecycle_record_requires_hashed_output_artifacts() -> None:
+    with pytest.raises(ValidationError, match="outputs.artifacts"):
+        build_trial_record(
+            lifecycle_execution={
+                "execution_mode": "persistent_context",
+                "memory_visibility_policy": "persistent_context",
+                "max_turns_per_session": 60,
+                "status": "completed",
+                "sessions": [
+                    {
+                        "session_id": "session-001",
+                        "checkpoint_ids": ["initial_review"],
+                        "adapter": "tool_loop",
+                        "resolved_model": "anthropic:claude-sonnet-4-20250514",
+                        "status": "completed",
+                        "artifacts": [
+                            {
+                                "kind": "lifecycle_manifest",
+                                "path": "manifest.json",
+                                "sha256": "f" * 64,
+                                "media_type": "application/json",
+                            }
+                        ],
+                    }
+                ],
+            },
+            lifecycle_provenance={
+                "lifecycle_id": "lifecycle.demo",
+                "world_id": "world.demo",
+                "spec_sha256": "a" * 64,
+                "package_sha256": "b" * 64,
+                "repository_commit": "c" * 40,
+                "repository_dirty": False,
+                "repository_dirty_digest": "d" * 64,
+                "runtime_provider": "anthropic",
+                "runtime_distributions": ["anthropic==1.0.0", "pydantic-ai-slim==1.0.0"],
+                "runtime_dependency_sha256": "1" * 64,
+                "verifier_qualified_name": "demo.verify",
+                "verifier_source_sha256": "e" * 64,
+                "invocation_manifest": {
+                    "kind": "lifecycle_manifest",
+                    "path": "manifest.json",
+                    "sha256": "f" * 64,
+                    "media_type": "application/json",
+                },
+            },
+        )
+
+
+def test_lifecycle_execution_rejects_resolved_model_drift() -> None:
+    with pytest.raises(ValidationError, match="resolved model must remain stable"):
+        LifecycleExecutionRecord(
+            execution_mode="fresh_context",
+            memory_visibility_policy="artifact_memory",
+            max_turns_per_session=20,
+            status="completed",
+            sessions=[
+                LifecycleSessionRecord(
+                    session_id="session-001",
+                    checkpoint_ids=["initial_review"],
+                    adapter="tool_loop",
+                    resolved_model="model-a",
+                    status="completed",
+                ),
+                LifecycleSessionRecord(
+                    session_id="session-002",
+                    checkpoint_ids=["response_review"],
+                    adapter="tool_loop",
+                    resolved_model="model-b",
+                    status="completed",
+                ),
+            ],
         )
 
 

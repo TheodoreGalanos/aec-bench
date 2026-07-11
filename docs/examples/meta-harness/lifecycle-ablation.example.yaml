@@ -1,0 +1,30 @@
+# Public calibration sweep for the SSC-03 staged evidence lifecycle.
+# Provider seeds and parallel execution are deliberately unsupported in this version.
+schema_version: "1"
+experiment_id: ssc03-public-calibration
+lifecycle_template_id: drainage-model-evidence-lifecycle-review
+study_design:
+  interpretation: descriptive_calibration
+  turn_budget_scope: per_session
+  execution_order: deterministic_sequential_plan_order
+  randomized: false
+  counterbalanced: false
+  causal_effects_supported: false
+variants:
+  - staged_full_correction
+  - semantic_no_op_release
+  - response_assertion_only
+  - memo_closeout_missing
+agents:
+  - name: tool-loop-model
+    adapter: tool_loop
+    model: claude-sonnet-4-6
+    parameters:
+      # Fresh SSC-03 conditions can open three sessions before retries; this is not a total-trial budget.
+      max_turns_per_session: 60
+repetitions: 1
+output_root: ../../../artifacts/ssc03-public-calibration
+ledger_root: ../../../ledger
+limits:
+  max_trials: 16
+  max_concurrency: 1

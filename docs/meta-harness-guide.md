@@ -79,6 +79,50 @@ Packages materialized before variant identity was introduced do not contain `hid
 
 These committed variants are public calibration cases, not private holdouts. True holdout evidence must remain structurally separate and outside the public repository.
 
+### Lifecycle ablation sweeps
+
+The lifecycle ablation runner expands one strict manifest across:
+
+```text
+public variant × valid execution/visibility condition × agent × repetition
+```
+
+The four valid conditions are the persistent conversation with `persistent_context`, plus fresh checkpoint contexts with `artifact_memory`, `raw_evidence_only`, or `current_release_only`. Invalid mode/policy combinations are rejected instead of entering a larger meaningless Cartesian product.
+
+This release is a **descriptive calibration sweep**, not a randomized causal ablation. Its required `study_design` contract records that the turn budget is per session, execution follows deterministic sequential plan order, trials are neither randomized nor counterbalanced, and causal effects are unsupported. Persistent trials normally use one session. Every fresh-context session owns exactly one checkpoint; a retry opens another attempt-specific session rather than reusing context across checkpoints. Total configured turn capacity is therefore not held constant. Group means locate hypotheses; they do not identify effects of context or memory policy.
+
+Preview an exact plan without materializing persistent packages, writing ledgers, or calling a provider:
+
+```bash
+aec-bench --json meta-harness lifecycle-ablation \
+  --config docs/examples/meta-harness/lifecycle-ablation.example.yaml \
+  --dry-run
+```
+
+The preview classifies every trial as `pending`, `resumable`, `finalizable`, `complete`, or `conflict` using the same persisted-manifest, package, deterministic gold/verifier smoke, runtime-lineage, snapshot, and record checks as execution. Planning and smoke validation materialize each missing variant only in temporary directories so task package/spec hashes can enter the trial identity without changing the requested output tree.
+
+Run or resume the same manifest by omitting `--dry-run`. Trial IDs are full SHA-256 identities over every experimental dimension, materialized task revision, registered scorer, and declared aec-bench source inventory. The runner persists the normalized manifest and expanded plan, rejects code, task, configuration, or storage-contract drift on resume, materializes each public variant once, and runs a deterministic package/gold/verifier smoke gate before any model call. Execution is deliberately sequential in this version.
+
+Each lifecycle invocation retains its task-owned manifest, metrics, verification, sessions, and checkpoint state. Finalization then:
+
+1. resolves the canonical invocation through its per-invocation sealed index entry, ignores abandoned dot-prefixed staging directories, validates every declared run artifact, package file, session, attempt owner, execution mode, visibility policy, per-session turn limit, requested and actual adapter identity, token total, verifier result, and plan field, and repairs a missing or truncated shared discovery index from canonical seals under an inter-process lock;
+2. snapshots only the hash-declared package/run files, canonical invocation and seal, normalized index entry, sweep manifest, and expanded plan under `ledger/<experiment>/_artifacts/<trial-id>/`;
+3. rebuilds and validates the record from staged immutable bytes rather than mutable working paths;
+4. fsyncs every staged file, directory, and newly created ancestor before atomically publishing the snapshot and one typed core `TrialRecord`; and
+5. recovers a validated snapshot left before record publication without calling the model again.
+
+The lifecycle invocation UUID is audit evidence, not a competing sweep identity. Cross-run discovery and resume use the current content-bound plan; historical aggregate evaluation uses the plan referenced by the immutable records themselves. Lifecycle summaries are persisted as `EvaluationArtifact`s and read only the ledger records and their hash-bound snapshots. Changing or deleting a mutable source run—or later changing planner code or Python versions—cannot redefine a finalized result.
+
+Provider failures are first-class zero-reward records with preserved sessions, costs, failure details, and artifacts. A returned adapter implementation that differs from the requested condition is recorded as an actual-adapter identity mismatch and remains an unscored failed execution; it cannot be credited to the planned adapter. Every submitted checkpoint must have one final submitted attempt and durable session ownership in the planned execution mode. Session results are atomically replaced and fsync-durable. A persistent session that crashes after submitting the final checkpoint but before returning an agent result is sealed from its durable attempts and validated trajectory with unresolved model/adapter identity, recorded as `interrupted_after_completion`, and finalized at zero reward without rebuilding an adapter. A torn terminal `agent_result.json` is retained as `agent_result.corrupt.json` before the conservative failure record is published; a malformed trajectory remains a conflict because the runner will not infer or truncate event history. A rerun never overwrites a finalized success or failure under the same trial ID. Fresh-context retries use attempt-specific directories; abandoned fresh or persistent sessions are sealed as interrupted without pretending that a requested model alias was a provider-resolved identity. A completed invocation—or immutable snapshot—that crashed before core record publication is imported without calling the model again, and a valid immutable snapshot cannot be vetoed by later mutable package or run corruption.
+
+Artifact finalization and execution success do not by themselves justify `completeness=complete`. A lifecycle record is complete only when it also carries typed, hash-bound sessions with observed resolved-model and adapter identity and comes from a clean Git repository snapshot whose commit and source inventory can reproduce the adapter, dispatcher, and registered task scorer. Git provenance is accepted only when the loaded `aec_bench` package is actually tracked by that repository; an ignored installation under another project's `.venv` cannot inherit the caller's commit, and tracked nonstandard package layouts are hashed from the package path that ownership validation actually resolved. Installed source uses a freshly recomputed `source-sha256:` identity over the package and installed distribution metadata so in-process source drift changes the plan. Such records remain `partial` because no retrievable repository revision was observed. Dirty-worktree or unresolved-session invocations likewise remain honest `partial` records while preserving the same immutable evidence.
+
+Every trial also binds a separate runtime-dependency provenance object: requested adapter, locally resolved provider family, sorted distribution identities, and a SHA-256 inventory of the current bytes in the `pydantic-ai-slim` base closure plus the selected provider extra and verifier dependencies. Explicit `provider:model` names use a declared provider-to-extra map and unknown provider prefixes fail closed; unprefixed replay/test identities retain the non-provider base closure. When multiple active distribution roots contain the same package, the first import-search path is authoritative. `RECORD` may enumerate files, but its recorded hashes are never trusted; the planner rereads realized bytes, resolves editable `direct_url.json` sources, and invalidates its per-file cache on filesystem identity, size, mtime, or ctime changes. The invocation recaptures this object after execution, finalization requires exact equality with the planned trial, and the typed `TrialRecord` preserves it. Dependency code drift therefore changes plan/trial identity before execution or becomes an explicit conflict if it occurs after planning.
+
+The manifest accepts only lifecycle controls that the current runner applies: `tool_loop` or `pydantic_ai`, plus a required positive `max_turns_per_session`. The explicit name prevents a per-session cap from being mistaken for a total-trial budget. Provider seeds, temperatures, custom clients, prompt overrides, parallel execution, private holdouts, transfer interventions, total-trial budget allocation, randomized or counterbalanced ordering, and automatic causal interpretation are intentionally deferred rather than silently ignored.
+
+The ledger-derived `EvaluationArtifact` repeats the hash-bound study design and reports each group's session count, configured turn capacity, requests, tool calls, tokens, reward, retention, and cost. It deliberately emits no pairwise effect, winner, or causal estimate. A future causal phase must define retry-aware total-trial budget allocation and randomized or counterbalanced execution before such comparisons are valid.
+
 ```bash
 aec-bench meta-harness lifecycle-run-local \
   --package lifecycle-package \
@@ -90,11 +134,11 @@ aec-bench meta-harness lifecycle-run-local \
 
 Every local invocation writes root-level latest views plus an immutable experiment record:
 
-- `experiment-manifest.json` binds the repository commit and dirty digest, package and verifier hashes, exact model/configuration records, prompts, tool schema, visibility, and output hashes;
+- `experiment-manifest.json` is a mutable latest-view alias; its canonical indexed copy binds repository commit, source inventory and dirty digest, package hashes, the scorer/dispatcher chain, execution environment, exact model/configuration records, prompts, tool schema, visibility, and every authoritative run-artifact hash;
 - `metrics.json` normalizes checkpoint and whole-run timing, requests, tool calls, reads, revisits, retries, failures, tokens, and estimated cost, and carries semantic-transition diagnostics when the task verifier provides them;
 - `verification.json` preserves the typed lifecycle verifier result;
-- `experiments/<experiment-id>/` preserves the canonical record for each failed, interrupted, resumed, or completed invocation;
-- `experiment-index.jsonl` is append-only and points to each canonical manifest by hash.
+- `experiments/<experiment-id>/` preserves the canonical record and its `index-entry.json` seal for each failed, interrupted, resumed, or completed invocation;
+- `experiment-index.jsonl` is the shared discovery view, points to each canonical manifest by hash, and is rebuilt under a file lock from valid per-invocation seals after an interrupted append so concurrent repairs cannot lose entries.
 
 This apparatus is an adaptation microscope for fixed-model behavior under staged evidence. Checkpoint progression is ordered and submission-gated; semantic verification occurs over the accumulated lifecycle. It does **not** yet provide action-conditioned evidence transitions, cross-run learner updates, demonstrated transfer, or continual learning.
 

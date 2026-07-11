@@ -159,10 +159,28 @@ Required fields:
 Optional field:
 
 - `cost`
+- `adaptation`
+- `lifecycle_execution`
+- `lifecycle_provenance`
+
+Lifecycle records use typed session and provenance contracts. `lifecycle_execution` preserves mode, visibility policy, the per-session turn limit, requested and actual adapter identity, resolved model identity, usage, failures, checkpoint coverage, and hashed per-session artifacts. An actual adapter that differs from the requested condition is an unscored failed execution, never evidence for the requested adapter. Interrupted sessions whose provider-resolved model was never durably observed use the explicit `unresolved` value and force `completeness=partial`; the requested alias is never substituted as resolved provenance. `lifecycle_provenance` binds lifecycle/world identity, package/spec hashes, repository or installed-source content identity, runtime provider and realized dependency-byte identity, the registered task scorer and dispatcher chain, the canonical invocation manifest and sealed index entry, and the snapshotted ablation manifest and expanded plan.
+
+Lifecycle calibration manifests and plans carry a strict `study_design`: `descriptive_calibration`, per-session turn budgets, deterministic sequential plan order, no randomization, no counterbalancing, and `causal_effects_supported=false`. Evaluation artifacts must repeat this contract and expose the resource envelope beside outcomes. They must not promote group differences to causal effects while those controls remain absent.
 
 Key rule:
 
 - a `complete` record must contain enough provenance to support reproducibility claims.
+- a complete lifecycle record must reference hashed immutable output artifacts; paths back into a mutable working run are not sufficient.
+- lifecycle finalization must reconcile every session, token total, task revision, verification result, and artifact hash against the canonical invocation and its immutable snapshot before publication.
+- the planned runtime provider, sorted dependency distributions, and realized dependency-byte fingerprint must exactly match the canonical invocation before publication.
+- every submitted lifecycle checkpoint must resolve to exactly one final submitted attempt and a durable session owner.
+- every fresh-context session must own exactly one checkpoint; retries use distinct attempt-specific sessions.
+- attempt mode, session mode, visibility policy, actual adapter, and per-session turn limit must reconcile with the planned condition before reward attribution.
+- the per-invocation index seal is authoritative for crash recovery; the shared discovery index may be reconstructed from valid seals without changing invocation identity.
+- immutable snapshot recovery has authority over mutable source package/run aliases once the snapshot exists.
+- ledger publication is exclusive, fsync-durable through newly created ancestors, and atomic; an artifact snapshot left before record publication is recoverable without another model call.
+- session-result publication is atomic and fsync-durable; a torn result from a terminal persistent session is quarantined and replaced by an unresolved zero-reward failure only when its submitted ownership and complete trajectory validate.
+- malformed trajectory history is a conflict and is never truncated or inferred during recovery.
 
 ### EvaluationResult
 

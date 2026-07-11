@@ -22,6 +22,7 @@ class LifecycleTemplateRegistration:
     verifier_name: str
     variant_module_name: str | None = None
     variant_ids_name: str | None = None
+    variant_get_name: str | None = None
     variant_metadata_name: str | None = None
 
 
@@ -35,6 +36,7 @@ _LIFECYCLES = {
             verifier_name="verify_ssc03_evidence_lifecycle",
             variant_module_name="aec_bench.task_world_templates.lifecycles.ssc03_drainage_variants",
             variant_ids_name="list_ssc03_lifecycle_variant_ids",
+            variant_get_name="get_ssc03_lifecycle_variant",
             variant_metadata_name="validated_ssc03_package_variant",
         )
     ]
@@ -53,6 +55,25 @@ def lifecycle_variant_ids(template_id: str) -> tuple[str, ...]:
         return ()
     module = import_module(registration.variant_module_name or registration.module_name)
     return tuple(getattr(module, registration.variant_ids_name)())
+
+
+def lifecycle_variant_metadata(template_id: str, variant_id: str) -> dict[str, Any]:
+    """Return validated host-side metadata for one registered public variant."""
+    registration = _entry(template_id)
+    if registration.variant_get_name is None:
+        raise KeyError(f"lifecycle template {template_id!r} does not declare variant metadata")
+    module = import_module(registration.variant_module_name or registration.module_name)
+    variant = getattr(module, registration.variant_get_name)(variant_id)
+    return cast(dict[str, Any], variant.model_dump(mode="json"))
+
+
+def registered_lifecycle_verifier(template_id: str) -> Callable[[Path, Path], dict[str, Any]]:
+    """Resolve the task-specific verifier that performs lifecycle scoring."""
+    registration = _entry(template_id)
+    return cast(
+        Callable[[Path, Path], dict[str, Any]],
+        getattr(import_module(registration.module_name), registration.verifier_name),
+    )
 
 
 def lifecycle_package_variant(package_dir: Path) -> dict[str, Any] | None:
@@ -102,8 +123,7 @@ def verify_lifecycle_template(package_dir: Path, run_dir: Path) -> dict[str, Any
     lifecycle = EvidenceLifecycleSpec.model_validate(_read_json(Path(package_dir) / "lifecycle.json"))
     if lifecycle != template.evidence_lifecycle:
         raise ValueError("materialized lifecycle contract does not match template.json")
-    registration = _entry(template.template_id)
-    verifier = getattr(import_module(registration.module_name), registration.verifier_name)
+    verifier = registered_lifecycle_verifier(template.template_id)
     return validate_lifecycle_verification(verifier(Path(package_dir), Path(run_dir)))
 
 
