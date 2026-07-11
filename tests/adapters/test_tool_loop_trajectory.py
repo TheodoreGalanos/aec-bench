@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
+import pytest
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
@@ -168,3 +170,88 @@ class TestWorkspaceOutputFallback:
         assert response.done is True
         assert response.output_text == '{"ok": true}\n'
         assert response.error_message is None
+
+
+class TestPydanticAiNativeTools:
+    def test_registers_host_controlled_tool_with_native_agent(self, monkeypatch) -> None:
+        from aec_bench.adapters.tool_loop_local import PydanticAiToolLoopClient
+
+        registered: list[str] = []
+
+        class FakeAgent:
+            def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+                pass
+
+            def tool_plain(self, func=None, /, *, name=None, **_kwargs):
+                def register(callback):
+                    registered.append(name or callback.__name__)
+                    return callback
+
+                return register(func) if func is not None else register
+
+        def submit_checkpoint(checkpoint_id: str) -> str:
+            return checkpoint_id
+
+        monkeypatch.setattr("pydantic_ai.Agent", FakeAgent)
+        monkeypatch.setattr(
+            "aec_bench.adapters.rlm.providers.resolve_pydantic_provider",
+            lambda _model: "test",
+        )
+        monkeypatch.setattr(
+            "aec_bench.adapters.rlm.providers._build_pydantic_model",
+            lambda _model, _provider: object(),
+        )
+        monkeypatch.setattr(
+            "aec_bench.adapters.rlm.providers._build_model_settings",
+            lambda _provider, cache: {},
+        )
+
+        PydanticAiToolLoopClient(
+            "test-model",
+            workspace="/tmp/workspace",
+            native_tools=[submit_checkpoint],
+        )
+
+        assert registered == ["bash", "submit_checkpoint"]
+
+    def test_pydantic_ai_client_can_disable_bash_for_confined_native_tools(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from aec_bench.adapters.tool_loop_local import PydanticAiToolLoopClient
+
+        registered: list[str] = []
+
+        class FakeAgent:
+            def __init__(self, *_args, **_kwargs) -> None:
+                pass
+
+            def tool_plain(self, tool):
+                registered.append(tool.__name__)
+                return tool
+
+        def read_workspace_file(path: str) -> str:
+            return path
+
+        monkeypatch.setattr("pydantic_ai.Agent", FakeAgent)
+        monkeypatch.setattr(
+            "aec_bench.adapters.rlm.providers.resolve_pydantic_provider",
+            lambda _model: "test",
+        )
+        monkeypatch.setattr(
+            "aec_bench.adapters.rlm.providers._build_pydantic_model",
+            lambda _model, _provider: object(),
+        )
+        monkeypatch.setattr(
+            "aec_bench.adapters.rlm.providers._build_model_settings",
+            lambda _provider, cache: {},
+        )
+
+        PydanticAiToolLoopClient(
+            "test-model",
+            workspace="/tmp/workspace",
+            native_tools=[read_workspace_file],
+            enable_bash=False,
+        )
+
+        assert registered == ["read_workspace_file"]
