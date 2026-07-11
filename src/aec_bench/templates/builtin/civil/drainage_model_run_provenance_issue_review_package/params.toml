@@ -1,0 +1,257 @@
+# ABOUTME: Parameter ranges for the SSC-03 model-run provenance review package.
+# ABOUTME: Samples report evidence, propagation deltas, and hidden packet defects.
+
+[meta]
+name = "drainage-model-run-provenance-issue-review-package"
+description = "SSC-03 review of drainage model-run provenance and downstream claim propagation"
+long_description = "Review a generated drainage-model evidence packet across governing input revisions, model manifest, run register, report, and downstream design memo; determine which state governs and whether the package is ready to issue."
+discipline = "civil"
+category = "drainage-review"
+standards = ["EPA SWMM report workflow", "task-owned synthetic model governance criteria"]
+tags = ["civil", "drainage", "model", "provenance", "revision", "report", "review", "source-pack"]
+tool_mode = "no-tool"
+
+[params.current_catchment_area_ha]
+type = "float"
+unit = "ha"
+description = "Governing catchment area"
+min = 16.0
+max = 48.0
+
+[params.previous_area_delta_ha]
+type = "float"
+unit = "ha"
+description = "Hidden area delta between current and superseded catchment revisions"
+min = 0.40
+max = 2.20
+
+[params.report_peak_flow_m3_s]
+type = "float"
+unit = "m3/s"
+description = "Peak flow reported by the reviewed model run"
+min = 1.20
+max = 4.80
+
+[params.report_max_hgl_m_ahd]
+type = "float"
+unit = "m AHD"
+description = "Maximum HGL reported by the reviewed model run"
+min = 11.20
+max = 24.80
+
+[params.maximum_continuity_error_percent]
+type = "float"
+unit = "percent"
+description = "Maximum continuity error owned by the criteria memo"
+min = 1.50
+max = 2.50
+
+[params.continuity_margin_target_percent]
+type = "float"
+unit = "percent"
+description = "Hidden clean-case continuity margin"
+min = 0.20
+max = 0.80
+
+[params.continuity_deficit_percent]
+type = "float"
+unit = "percent"
+description = "Hidden failed-case continuity deficit"
+min = 0.15
+max = 0.60
+
+[params.prior_peak_flow_delta_m3_s]
+type = "float"
+unit = "m3/s"
+description = "Hidden difference between current and superseded report peak flow"
+min = 0.12
+max = 0.55
+
+[params.prior_hgl_delta_m]
+type = "float"
+unit = "m"
+description = "Hidden difference between current and superseded report HGL"
+min = 0.08
+max = 0.35
+
+[params.packet_variant]
+type = "enum"
+description = "Hidden source-packet condition"
+values = [
+  "clean",
+  "missing_manifest_catchment_revision",
+  "stale_catchment_revision",
+  "report_run_id_mismatch",
+  "continuity_limit_exceeded",
+  "scenario_copy_forward",
+  "downstream_memo_stale_report",
+  "open_critical_comment",
+  "minor_open_comment_carried",
+]
+
+[outputs.prv_01_status]
+description = "PRV-01 status code"
+tolerance = 0.01
+
+[outputs.prv_02_status]
+description = "PRV-02 status code"
+tolerance = 0.01
+
+[outputs.prv_03_status]
+description = "PRV-03 status code"
+tolerance = 0.01
+
+[outputs.prv_04_status]
+description = "PRV-04 status code"
+tolerance = 0.01
+
+[outputs.prv_05_status]
+description = "PRV-05 status code"
+tolerance = 0.01
+
+[outputs.prv_06_status]
+description = "PRV-06 status code"
+tolerance = 0.01
+
+[outputs.prv_07_status]
+description = "PRV-07 status code"
+tolerance = 0.01
+
+[outputs.prv_08_status]
+description = "PRV-08 status code"
+tolerance = 0.01
+
+[outputs.prv_09_status]
+description = "PRV-09 status code"
+tolerance = 0.01
+
+[outputs.all_input_revisions_match_score]
+description = "Whether the run manifest cites every governing input revision"
+tolerance = 0.01
+
+[outputs.scenario_match_score]
+description = "Whether the run manifest uses the governing design storm"
+tolerance = 0.01
+
+[outputs.report_run_match_score]
+description = "Whether the report run ID matches the run register"
+tolerance = 0.01
+
+[outputs.continuity_error_percent]
+description = "Reported continuity error"
+tolerance = 0.02
+
+[outputs.continuity_margin_percent]
+description = "Continuity-error acceptance margin"
+tolerance = 0.02
+
+[outputs.report_peak_flow_m3_s]
+description = "Peak flow in the reviewed report"
+tolerance = 0.02
+
+[outputs.memo_peak_flow_m3_s]
+description = "Peak flow adopted by the design memo"
+tolerance = 0.02
+
+[outputs.peak_flow_propagation_delta_m3_s]
+description = "Absolute report-to-memo peak-flow difference"
+tolerance = 0.02
+
+[outputs.report_max_hgl_m_ahd]
+description = "Maximum HGL in the reviewed report"
+tolerance = 0.02
+
+[outputs.memo_max_hgl_m_ahd]
+description = "Maximum HGL adopted by the design memo"
+tolerance = 0.02
+
+[outputs.hgl_propagation_delta_m]
+description = "Absolute report-to-memo HGL difference"
+tolerance = 0.02
+
+[outputs.run_applicability_code]
+description = "Model-run applicability code"
+tolerance = 0.01
+
+[outputs.report_applicability_code]
+description = "Model-report applicability code"
+tolerance = 0.01
+
+[outputs.design_claim_support_code]
+description = "Downstream design-claim support code"
+tolerance = 0.01
+
+[outputs.readiness_code]
+description = "Issue-readiness code"
+tolerance = 0.01
+
+[outputs.required_findings_count]
+description = "Required finding count"
+tolerance = 0.01
+
+[outputs.required_information_requests_count]
+description = "Required information-request count"
+tolerance = 0.01
+
+[outputs.required_carried_actions_count]
+description = "Required carried-action count"
+tolerance = 0.01
+
+[archetypes.urban_infill_catchment]
+description = "Urban infill catchment with a revised impervious-area basis"
+site_contexts = ["urban-infill-catchment", "city-centre-drainage-upgrade"]
+current_catchment_area_ha = {min = 16.0, max = 30.0}
+report_peak_flow_m3_s = {min = 1.20, max = 3.20}
+
+[archetypes.industrial_precinct_catchment]
+description = "Industrial precinct catchment with staged network model revisions"
+site_contexts = ["industrial-precinct-catchment", "brownfield-drainage-upgrade"]
+current_catchment_area_ha = {min = 28.0, max = 48.0}
+report_peak_flow_m3_s = {min = 2.60, max = 4.80}
+
+[difficulty.easy]
+description = "Visible provenance gaps and direct report identity conflicts"
+visibility = "partial"
+archetypes = ["urban_infill_catchment", "industrial_precinct_catchment"]
+hidden_params = [
+  "packet_variant",
+  "previous_area_delta_ha",
+  "continuity_margin_target_percent",
+  "continuity_deficit_percent",
+  "prior_peak_flow_delta_m3_s",
+  "prior_hgl_delta_m",
+]
+packet_variant = ["clean", "missing_manifest_catchment_revision", "report_run_id_mismatch"]
+
+[difficulty.medium]
+description = "Full provenance and propagation condition distribution"
+visibility = "partial"
+archetypes = ["urban_infill_catchment", "industrial_precinct_catchment"]
+hidden_params = [
+  "packet_variant",
+  "previous_area_delta_ha",
+  "continuity_margin_target_percent",
+  "continuity_deficit_percent",
+  "prior_peak_flow_delta_m3_s",
+  "prior_hgl_delta_m",
+]
+
+[difficulty.hard]
+description = "Subtle revision, scenario, acceptance, and downstream propagation conflicts"
+visibility = "partial"
+archetypes = ["urban_infill_catchment", "industrial_precinct_catchment"]
+hidden_params = [
+  "packet_variant",
+  "previous_area_delta_ha",
+  "continuity_margin_target_percent",
+  "continuity_deficit_percent",
+  "prior_peak_flow_delta_m3_s",
+  "prior_hgl_delta_m",
+]
+packet_variant = [
+  "stale_catchment_revision",
+  "continuity_limit_exceeded",
+  "scenario_copy_forward",
+  "downstream_memo_stale_report",
+  "minor_open_comment_carried",
+]

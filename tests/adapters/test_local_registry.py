@@ -610,6 +610,52 @@ max_uses = 4
 
         assert captured["trajectory_writer"] is sentinel_writer
 
+    def test_build_tool_loop_forwards_native_tools(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Host-controlled tools reach the native PydanticAI loop."""
+        from aec_bench.adapters.local_registry import _build_tool_loop
+
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        captured: dict[str, object] = {}
+
+        def fake_client_ctor(model_name: str, **kwargs) -> MagicMock:
+            del model_name
+            captured.update(kwargs)
+            return MagicMock(name="pydantic-ai-client")
+
+        def submit_checkpoint(checkpoint_id: str) -> str:
+            return checkpoint_id
+
+        monkeypatch.setattr(
+            "aec_bench.adapters.tool_loop_local.PydanticAiToolLoopClient",
+            fake_client_ctor,
+        )
+
+        _build_tool_loop(
+            model_name="gpt-4.1-mini",
+            workspace=str(workspace),
+            native_tools=[submit_checkpoint],
+            enable_bash=False,
+        )
+
+        assert captured["native_tools"] == [submit_checkpoint]
+        assert captured["enable_bash"] is False
+
+    def test_build_tool_loop_rejects_confined_tools_with_prebuilt_client(self, tmp_path: Path) -> None:
+        from aec_bench.adapters.local_registry import _build_tool_loop
+
+        def read_workspace_file(path: str) -> str:
+            return path
+
+        with pytest.raises(ValueError, match="prebuilt tool-loop clients cannot accept native tool configuration"):
+            _build_tool_loop(
+                model_name="gpt-4.1-mini",
+                workspace=str(tmp_path),
+                client=MagicMock(),
+                native_tools=[read_workspace_file],
+                enable_bash=False,
+            )
+
     def test_build_tool_loop_with_disabled_advisor_skips_client(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

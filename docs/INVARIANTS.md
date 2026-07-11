@@ -125,6 +125,19 @@ Python enforcement direction:
 
 ---
 
+## 11. Staged Evidence Is Host-Controlled
+
+For evidence-lifecycle tasks, the host owns file disclosure and checkpoint transitions. Model-visible memory policy must not delete or rewrite audit artifacts, and a prior checkpoint submission is immutable within its run.
+
+Python enforcement direction:
+- release only the active checkpoint's declared evidence;
+- archive and hash submissions before advancing;
+- represent revision of an earlier submission as a derived branch;
+- persist attempts, interruptions, failures, resumes, revisits, and visibility policy;
+- bind every local invocation to an immutable experiment manifest and append-only index entry.
+
+---
+
 ## Adapter Reserved Keys
 
 Adapter-internal extraction metadata must use explicit reserved keys and must not leak into benchmark-semantic fields.

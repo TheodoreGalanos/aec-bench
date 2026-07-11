@@ -279,6 +279,8 @@ def _build_tool_loop(
     workspace: str,
     client: Any | None = None,
     trajectory_writer: Any | None = None,
+    native_tools: list[Callable[..., str]] | None = None,
+    enable_bash: bool = True,
     adapter_name: str = "tool_loop",
     **_kwargs: Any,
 ) -> Any:
@@ -325,6 +327,8 @@ def _build_tool_loop(
                 advisor_client = make_rlm_client(advisor_config.model, cache=True)
                 logger.info("Tool-loop advisor client: model=%s", advisor_config.model)
 
+    if client is not None and (native_tools or not enable_bash):
+        raise ValueError("prebuilt tool-loop clients cannot accept native tool configuration")
     if client is None:
         # Import lazily so tests can monkeypatch the symbol on the module.
         from aec_bench.adapters import tool_loop_local as _tll
@@ -335,6 +339,8 @@ def _build_tool_loop(
             advisor_client=advisor_client,
             advisor_config=advisor_config,
             trajectory_writer=trajectory_writer,
+            native_tools=native_tools,
+            enable_bash=enable_bash,
         )
     executor = BashToolExecutor(workspace=workspace)
 

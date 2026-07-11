@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,18 @@ import typer
 
 from aec_bench.cli.output import emit, print_success
 from aec_bench.meta_harness.autonomy import AutonomyConfig, run_autonomous_process
+from aec_bench.meta_harness.evidence_lifecycle import (
+    branch_evidence_lifecycle,
+    prepare_evidence_checkpoint,
+    read_evidence_lifecycle_state,
+    revisit_evidence_checkpoint,
+    submit_evidence_checkpoint,
+)
+from aec_bench.meta_harness.evidence_lifecycle_local import (
+    LifecycleVisibilityPolicy,
+    run_local_evidence_lifecycle_fresh_context,
+    run_local_evidence_lifecycle_session,
+)
 from aec_bench.meta_harness.harbor_task import materialize_harbor_task_package
 from aec_bench.meta_harness.logic_profile import evaluate_logic_profile
 from aec_bench.meta_harness.model_runner import (
@@ -38,8 +51,147 @@ from aec_bench.meta_harness.world_process import (
     build_world_generation_request,
 )
 from aec_bench.meta_harness.world_runtime import run_process
+from aec_bench.task_world_templates.materializer import verify_template_lifecycle
 
 app = typer.Typer(help="Run meta-harness intake, world, operation, and governance processes.")
+
+
+@app.command("lifecycle-start")
+def lifecycle_start_command(
+    package: Path = typer.Option(..., "--package", help="Materialized evidence-lifecycle package"),
+    run_dir: Path = typer.Option(..., "--run-dir", help="Persistent lifecycle run directory"),
+) -> None:
+    """Release the next lifecycle checkpoint into its persistent workspace."""
+    start = time.monotonic()
+    result = prepare_evidence_checkpoint(package, run_dir)
+    emit("meta-harness lifecycle-start", result, start_time=start)
+
+
+@app.command("lifecycle-submit")
+def lifecycle_submit_command(
+    package: Path = typer.Option(..., "--package", help="Materialized evidence-lifecycle package"),
+    run_dir: Path = typer.Option(..., "--run-dir", help="Persistent lifecycle run directory"),
+) -> None:
+    """Accept the active checkpoint submission without releasing future evidence."""
+    start = time.monotonic()
+    result = submit_evidence_checkpoint(package, run_dir)
+    emit("meta-harness lifecycle-submit", result, start_time=start)
+
+
+@app.command("lifecycle-status")
+def lifecycle_status_command(
+    package: Path = typer.Option(..., "--package", help="Materialized evidence-lifecycle package"),
+    run_dir: Path = typer.Option(..., "--run-dir", help="Persistent lifecycle run directory"),
+) -> None:
+    """Read lifecycle state without advancing or accepting a checkpoint."""
+    start = time.monotonic()
+    result = read_evidence_lifecycle_state(package, run_dir)
+    emit("meta-harness lifecycle-status", result, start_time=start)
+
+
+@app.command("lifecycle-revisit")
+def lifecycle_revisit_command(
+    package: Path = typer.Option(..., "--package", help="Materialized evidence-lifecycle package"),
+    run_dir: Path = typer.Option(..., "--run-dir", help="Persistent lifecycle run directory"),
+    checkpoint_id: str = typer.Option(..., "--checkpoint-id", help="Submitted checkpoint to inspect"),
+    reason: str = typer.Option(..., "--reason", help="Reason for revisiting the checkpoint"),
+) -> None:
+    """Inspect and log an immutable prior checkpoint without rewinding the run."""
+    start = time.monotonic()
+    result = revisit_evidence_checkpoint(
+        package,
+        run_dir,
+        checkpoint_id=checkpoint_id,
+        reason=reason,
+    )
+    emit("meta-harness lifecycle-revisit", result, start_time=start)
+
+
+@app.command("lifecycle-branch")
+def lifecycle_branch_command(
+    package: Path = typer.Option(..., "--package", help="Materialized evidence-lifecycle package"),
+    parent_run_dir: Path = typer.Option(..., "--parent-run-dir", help="Existing parent lifecycle run"),
+    branch_run_dir: Path = typer.Option(..., "--branch-run-dir", help="New derived lifecycle run"),
+    checkpoint_id: str = typer.Option(..., "--checkpoint-id", help="Submitted checkpoint to reopen"),
+    branch_id: str = typer.Option(..., "--branch-id", help="Stable identity for the derived run"),
+    reason: str = typer.Option(..., "--reason", help="Reason for branching from the checkpoint"),
+) -> None:
+    """Create an isolated lifecycle run by reopening one submitted checkpoint."""
+    start = time.monotonic()
+    result = branch_evidence_lifecycle(
+        package,
+        parent_run_dir,
+        branch_run_dir,
+        checkpoint_id=checkpoint_id,
+        branch_id=branch_id,
+        reason=reason,
+    )
+    emit("meta-harness lifecycle-branch", result, start_time=start)
+
+
+@app.command("lifecycle-run-local")
+def lifecycle_run_local_command(
+    package: Path = typer.Option(..., "--package", help="Materialized evidence-lifecycle package"),
+    run_dir: Path = typer.Option(..., "--run-dir", help="Persistent lifecycle run directory"),
+    model: str = typer.Option(..., "--model", "-m", help="Model name for the lifecycle agent"),
+    adapter: str = typer.Option("tool_loop", "--adapter", "-a", help="Local adapter kind"),
+    mode: str = typer.Option(
+        "persistent",
+        "--mode",
+        help="Execution mode: persistent (one conversation) or fresh-context (one per checkpoint)",
+    ),
+    process_id: str = typer.Option("process.lifecycle", "--process-id", help="Parent meta-harness process id"),
+    max_turns: int = typer.Option(60, "--max-turns", min=1, help="Maximum model requests for the agent run"),
+    visibility_policy: str | None = typer.Option(
+        None,
+        "--visibility-policy",
+        help="Model-visible memory policy; defaults by execution mode",
+    ),
+) -> None:
+    """Run all lifecycle checkpoints locally, persistent by default."""
+    start = time.monotonic()
+    if mode == "persistent":
+        selected_visibility = _lifecycle_visibility_policy(
+            visibility_policy or LifecycleVisibilityPolicy.PERSISTENT_CONTEXT.value
+        )
+        result = run_local_evidence_lifecycle_session(
+            package_dir=package,
+            run_dir=run_dir,
+            model=model,
+            adapter_kind=adapter,
+            max_turns=max_turns,
+            process_id=process_id,
+            verifier=verify_template_lifecycle,
+            visibility_policy=selected_visibility,
+        )
+    elif mode == "fresh-context":
+        selected_visibility = _lifecycle_visibility_policy(
+            visibility_policy or LifecycleVisibilityPolicy.ARTIFACT_MEMORY.value
+        )
+        result = run_local_evidence_lifecycle_fresh_context(
+            package_dir=package,
+            run_dir=run_dir,
+            model=model,
+            adapter_kind=adapter,
+            max_turns=max_turns,
+            process_id=process_id,
+            verifier=verify_template_lifecycle,
+            visibility_policy=selected_visibility,
+        )
+    else:
+        raise typer.BadParameter("mode must be 'persistent' or 'fresh-context'", param_hint="--mode")
+    emit("meta-harness lifecycle-run-local", result, start_time=start)
+
+
+def _lifecycle_visibility_policy(value: str) -> LifecycleVisibilityPolicy:
+    try:
+        return LifecycleVisibilityPolicy(value)
+    except ValueError as exc:
+        choices = ", ".join(policy.value for policy in LifecycleVisibilityPolicy)
+        raise typer.BadParameter(
+            f"visibility policy must be one of: {choices}",
+            param_hint="--visibility-policy",
+        ) from exc
 
 
 @app.command("logic-evaluate")
@@ -594,7 +746,10 @@ def _task_text(task_text: str | None, task_file: Path | None) -> str:
     return text
 
 
-def _queue_resolver(queue: list[dict[str, Any]], label: str):
+def _queue_resolver(
+    queue: list[dict[str, Any]],
+    label: str,
+) -> Callable[[dict[str, Any]], dict[str, Any]] | None:
     if not queue:
         return None
 
@@ -609,7 +764,7 @@ def _queue_resolver(queue: list[dict[str, Any]], label: str):
 def _governance_queue_resolver(
     proposals: list[dict[str, Any]],
     decisions: list[dict[str, Any]],
-):
+) -> Callable[[dict[str, Any]], dict[str, Any]] | None:
     if not proposals and not decisions:
         return None
 

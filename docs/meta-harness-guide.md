@@ -27,6 +27,44 @@ The important invariant is that agents propose and harness-owned code applies or
 - `aec_bench.meta_harness.harbor` binds generic Harbor-compatible subprocess commands to task-run evidence.
 - `aec_bench.meta_harness.aecbench` binds runtime task-run resolvers to `SynchronousHarborWorkflow` and Harbor trial import.
 - `aec_bench.meta_harness.model_runner` parses model endpoints and runs structured PydanticAI intake, world, review, and operation stages.
+- `aec_bench.meta_harness.evidence_lifecycle` owns staged evidence release, immutable checkpoint submissions, revisits, branches, and durable attempt lineage.
+- `aec_bench.meta_harness.evidence_lifecycle_local` runs one lifecycle through either a persistent model conversation or fresh checkpoint contexts.
+- `aec_bench.meta_harness.evidence_lifecycle_experiment` binds code, package, model configuration, prompts, tools, trajectories, metrics, and verification into an indexed experiment record.
+
+## Evidence Lifecycles
+
+An evidence lifecycle is one evolving task run inside one task world. Evidence is released in declared checkpoint order; each structurally valid submission is archived before the host releases the next packet. A revisit reads an immutable earlier checkpoint without changing active state. Changing an earlier submission creates a derived branch from that checkpoint rather than mutating the parent run.
+
+`lifecycle-run-local` supports two baseline execution conditions:
+
+- `persistent` uses one model conversation across all checkpoints with `persistent_context` visibility;
+- `fresh-context` creates one model context per checkpoint and defaults to `artifact_memory`, where earlier submissions remain model-visible.
+
+Two additional fresh-context policies define later ablations without deleting audit artifacts:
+
+- `raw_evidence_only` exposes cumulative released evidence but hides prior submissions;
+- `current_release_only` exposes only the active release and active instruction.
+
+The host workspace tool enforces visibility. All released evidence, archived submissions, trajectories, and conversations remain on disk for audit regardless of the model-visible policy.
+
+```bash
+aec-bench meta-harness lifecycle-run-local \
+  --package lifecycle-package \
+  --run-dir lifecycle-run \
+  --model "$MODEL_ID" \
+  --mode fresh-context \
+  --visibility-policy artifact_memory
+```
+
+Every local invocation writes root-level latest views plus an immutable experiment record:
+
+- `experiment-manifest.json` binds the repository commit and dirty digest, package and verifier hashes, exact model/configuration records, prompts, tool schema, visibility, and output hashes;
+- `metrics.json` normalizes checkpoint and whole-run timing, requests, tool calls, reads, revisits, retries, failures, tokens, and estimated cost;
+- `verification.json` preserves the typed lifecycle verifier result;
+- `experiments/<experiment-id>/` preserves the canonical record for each failed, interrupted, resumed, or completed invocation;
+- `experiment-index.jsonl` is append-only and points to each canonical manifest by hash.
+
+This apparatus is an adaptation microscope for fixed-model behavior under staged evidence. Checkpoint progression is ordered and submission-gated; semantic verification occurs over the accumulated lifecycle. It does **not** yet provide action-conditioned evidence transitions, cross-run learner updates, demonstrated transfer, or continual learning.
 
 ## CLI
 

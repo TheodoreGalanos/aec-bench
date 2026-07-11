@@ -10,7 +10,12 @@ import typer
 
 from aec_bench.cli.output import emit, print_table
 from aec_bench.task_world_templates.catalogue import get_template, list_templates
-from aec_bench.task_world_templates.materializer import materialize_template_example, verify_template_example
+from aec_bench.task_world_templates.materializer import (
+    materialize_template_example,
+    materialize_template_lifecycle,
+    verify_template_example,
+    verify_template_lifecycle,
+)
 
 app = typer.Typer(help="Inspect composite task-world templates.")
 
@@ -71,6 +76,42 @@ def verify_example_command(
     start = time.monotonic()
     result = verify_template_example(package_dir)
     emit("task composite-template verify-example", result, start_time=start)
+
+
+@app.command("materialize-lifecycle")
+def materialize_lifecycle_command(
+    template_id: str = typer.Argument(..., help="Composite task-world template id"),
+    output: Path = typer.Option(..., "--output", "-o", help="Directory where the lifecycle package is written"),
+) -> None:
+    """Materialize a registered staged evidence-lifecycle package."""
+    start = time.monotonic()
+    try:
+        template = get_template(template_id)
+        package_dir = materialize_template_lifecycle(template, output)
+    except (KeyError, ValueError) as exc:
+        emit("task composite-template materialize-lifecycle", None, errors=[str(exc)], start_time=start)
+        return
+    assert template.evidence_lifecycle is not None
+    emit(
+        "task composite-template materialize-lifecycle",
+        {
+            "template_id": template.template_id,
+            "package_dir": str(package_dir),
+            "checkpoint_count": len(template.evidence_lifecycle.checkpoints),
+        },
+        start_time=start,
+    )
+
+
+@app.command("verify-lifecycle")
+def verify_lifecycle_command(
+    package_dir: Path = typer.Argument(..., help="Materialized lifecycle package directory"),
+    run_dir: Path = typer.Option(..., "--run-dir", help="Completed lifecycle run directory"),
+) -> None:
+    """Verify one completed evidence-lifecycle run."""
+    start = time.monotonic()
+    result = verify_template_lifecycle(package_dir, run_dir)
+    emit("task composite-template verify-lifecycle", result, start_time=start)
 
 
 def _render_templates(data: dict[str, object]) -> None:

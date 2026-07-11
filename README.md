@@ -123,7 +123,7 @@ uv run aec-bench meta-harness recipe \
 The recipe writes a scriptable workspace for intake, world generation, reviewer
 evidence, governance, and comparison artifacts. See
 [docs/meta-harness-guide.md](docs/meta-harness-guide.md) for the full CLI/API
-workflow.
+workflow, including staged evidence-lifecycle execution and experiment provenance.
 
 ### Prime Lab Export
 
