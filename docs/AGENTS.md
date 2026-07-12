@@ -15,6 +15,8 @@ For architectural context, start with [ARCHITECTURE.md](ARCHITECTURE.md) and [IN
 src/aec_bench/
 ├── contracts/       # Boundary models (Pydantic). Depends on nothing.
 ├── tasks/           # Task loading, lifecycle, selection. Depends on contracts.
+├── task_world_templates/ # Composite worlds and deterministic task-owned world runtimes.
+│   └── hydraulics/  # Source-bound public hydraulic screening worlds. Depends on contracts.
 ├── templates/       # Built-in generation templates (ground, electrical). Depends on nothing.
 ├── generation/      # Template engine, scaffolder, dataset composer. Depends on contracts, templates.
 ├── agents/          # Agent utility functions (scripts, env, tools, results, providers). Depends on contracts.

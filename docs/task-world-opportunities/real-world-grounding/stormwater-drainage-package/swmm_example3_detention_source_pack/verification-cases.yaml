@@ -1,0 +1,76 @@
+# ABOUTME: Positive and negative verification cases for the SWMM Example 3 hardening plan.
+# ABOUTME: Names localized failures future runtime verifier work should detect.
+
+cases:
+  - id: baseline_example3_detention_pass
+    expected_result: pass
+    source_files:
+      - Example3.inp
+      - Example3.ini
+      - Site-Post.jpg
+    required_checks:
+      - epa_zip_hash
+      - nested_files_zip_hash
+      - selected_file_hashes
+      - options
+      - object_counts
+      - storage_curve
+      - outlet_structure
+      - target_value_checks
+      - timestep_mismatch_disclosed
+      - area_rounding_mismatch_disclosed
+      - no_municipal_acceptance_claim
+
+  - id: missing_backdrop_fail
+    expected_result: fail
+    failure_stage: source_checks
+    mutation: Remove or rename Site-Post.jpg while leaving Example3.inp backdrop reference intact.
+    expected_diagnostic: missing_source_file
+
+  - id: wrong_routing_mode_fail
+    expected_result: fail
+    failure_stage: model_structure_checks
+    mutation: Change FLOW_ROUTING from DYNWAVE to KINWAVE in Example3.inp.
+    expected_diagnostic: mismatched_options
+
+  - id: missing_storage_curve_point_fail
+    expected_result: fail
+    failure_stage: model_structure_checks
+    mutation: Remove the 2.22 ft / 19659 ft2 SU1 storage curve point.
+    expected_diagnostic: mismatched_storage_curve
+
+  - id: wrong_orifice_offset_fail
+    expected_result: fail
+    failure_stage: model_structure_checks
+    mutation: Change Or3 crest height from 2.22 ft to 1.5 ft.
+    expected_diagnostic: mismatched_outlet_rows
+
+  - id: wrong_weir_width_fail
+    expected_result: fail
+    failure_stage: model_structure_checks
+    mutation: Change W1 width from 1.75 ft to the rejected initial estimate of 3.45 ft.
+    expected_diagnostic: mismatched_outlet_rows
+
+  - id: undisclosed_time_step_mismatch_fail
+    expected_result: fail
+    failure_stage: boundary_checks
+    mutation: Answer claims all model and manual time steps agree at 15 seconds.
+    expected_diagnostic: undisclosed_source_boundary_issues
+
+  - id: unsupported_approval_claim_fail
+    expected_result: fail
+    failure_stage: boundary_checks
+    mutation: Answer claims the EPA teaching example is a municipal accepted drainage report.
+    expected_diagnostic: unsupported_project_approval_claims
+
+  - id: generated_report_claim_without_artifact_fail
+    expected_result: fail
+    failure_stage: boundary_checks
+    mutation: Answer claims continuity, node/link summary, or binary-output evidence was generated in this checkout without a verified SWMM report/output artifact.
+    expected_diagnostic: generated_output_claim_without_report
+
+  - id: swmm_engine_unavailable_boundary_pass
+    expected_result: pass
+    failure_stage: none
+    mutation: Answer correctly reports that static source-pack checks are available but generated SWMM report-output checks are blocked until a controlled SWMM engine is available.
+    expected_diagnostic: swmm_engine_unavailable

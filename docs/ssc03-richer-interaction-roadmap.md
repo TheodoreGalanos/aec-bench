@@ -63,6 +63,14 @@ An existing EPA SWMM Example 3 detention source-pack commit must be reconciled i
 
 PR18 finishes only when source state, run identity, report outputs, tolerances, and verifier calculations are deterministic and content-bound. It still need not expose model-controlled hydraulic actions.
 
+### PR18 implementation decision
+
+The controlled local matrix was repeated on macOS ARM64 with `swmm-toolkit==0.17.0`. Its Python namespace imported on Python 3.13.2 and 3.12.9, but both native `solver` and `output` imports terminated with exit status 137 and no Python exception. No `swmm5` or `runswmm` executable was available. The exact evidence is recorded in `docs/ssc03-swmm-compatibility-matrix.yaml`.
+
+PR18 therefore uses the approved fallback: `ssc03.public.detention-network.v1`, an explicitly synthetic, metric, benchmark-owned deterministic screening world. The recovered seven-file EPA Example 3 packet remains at its canonical path as a separate provenance and manual-target reference; its seven-subcatchment SWMM model is not relabelled as the new two-catchment world.
+
+The public world exposes a model-independent materialize, run, and verify seam plus a Linux gate. It still exposes no model-facing hydraulic action. See `docs/ssc03-hydraulic-world.md`.
+
 ## PR19: interactive hydraulic lifecycle
 
 Connect the PR17 operation protocol to PR18's executable world. Initial actions should remain bounded and typed, for example:

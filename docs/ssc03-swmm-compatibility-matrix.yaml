@@ -1,0 +1,82 @@
+# ABOUTME: Records the controlled native SWMM compatibility gate used to select the PR18 engine route.
+# ABOUTME: Preserves exact local failures so the fallback kernel is not mistaken for SWMM execution.
+
+schema_version: "1"
+checked_on: "2026-07-12"
+probe_runner:
+  tool: uv
+  version: 0.11.28
+  distribution: Homebrew 2026-07-07 aarch64-apple-darwin
+selection_gate:
+  required_project_python: ">=3.13"
+  required_local_platform: macOS arm64
+  outcome: native_bindings_unavailable
+  selected_route: aec-bench.deterministic-hydraulic-screening-kernel
+  claim_boundary: The selected route is a bounded screening kernel and is not SWMM-equivalent execution.
+
+host:
+  operating_system: macOS 15.7.5
+  build: 24G624
+  architecture: arm64
+
+candidate:
+  distribution: swmm-toolkit
+  version: 0.17.0
+  source_repository_commit: 57a1faa00086285ad041eeb15af3f14f68e4c375
+  official_release_page: https://pypi.org/project/swmm-toolkit/0.17.0/
+  selected_wheel: swmm_toolkit-0.17.0-cp39-abi3-macosx_11_0_arm64.whl
+  selected_wheel_sha256: 0390d0afdfb7fb3296638c813dd549b290e0028e6812aac4acab59b442f88870
+  selected_wheel_size_reported: 606.8 kB
+  declared_tags: CPython 3.9+; macOS 11.0+ ARM64
+
+probes:
+  - id: python313_namespace
+    python: 3.13.2
+    command: uv run --with swmm-toolkit==0.17.0 python -u -c "import importlib.metadata as metadata; import swmm.toolkit; print(metadata.version('swmm-toolkit'), 'namespace-ok', flush=True)"
+    exit_status: 0
+    stdout: 0.17.0 namespace-ok
+  - id: python313_solver_binding
+    python: 3.13.2
+    command: uv run --with swmm-toolkit==0.17.0 python -u -c "print('before-solver', flush=True); from swmm.toolkit import solver; print('solver-ok', bool(solver), flush=True)"
+    exit_status: 137
+    stdout: before-solver
+    diagnostic: Process was killed during the native solver import; no Python exception was produced.
+  - id: python313_output_binding
+    python: 3.13.2
+    command: uv run --with swmm-toolkit==0.17.0 python -u -c "print('before-output', flush=True); from swmm.toolkit import output; print('output-ok', bool(output), flush=True)"
+    exit_status: 137
+    stdout: before-output
+    diagnostic: Process was killed during the native output import; no Python exception was produced.
+  - id: python312_namespace
+    python: 3.12.9
+    command: uv run --no-project --python 3.12 --with swmm-toolkit==0.17.0 python -u -c "import platform, importlib.metadata as metadata; import swmm.toolkit; print(platform.python_version(), metadata.version('swmm-toolkit'), 'namespace-ok', flush=True)"
+    exit_status: 0
+    stdout: 3.12.9 0.17.0 namespace-ok
+  - id: python312_solver_binding
+    python: 3.12.9
+    command: uv run --no-project --python 3.12 --with swmm-toolkit==0.17.0 python -u -c "import platform; print(platform.python_version(), 'before-solver', flush=True); from swmm.toolkit import solver; print('solver-ok', bool(solver), flush=True)"
+    exit_status: 137
+    stdout: 3.12.9 before-solver
+    diagnostic: Process was killed during the native solver import; no Python exception was produced.
+  - id: python312_output_binding
+    python: 3.12.9
+    command: uv run --no-project --python 3.12 --with swmm-toolkit==0.17.0 python -u -c "import platform; print(platform.python_version(), 'before-output', flush=True); from swmm.toolkit import output; print('output-ok', bool(output), flush=True)"
+    exit_status: 137
+    stdout: 3.12.9 before-output
+    diagnostic: Process was killed during the native output import; no Python exception was produced.
+  - id: swmm5_executable
+    command: command -v swmm5
+    exit_status: 1
+    stdout: ""
+  - id: runswmm_executable
+    command: command -v runswmm
+    exit_status: 1
+    stdout: ""
+
+decision:
+  reason: The required Python 3.13 macOS arm64 route cannot import either native binding, so it cannot execute or inspect a model safely.
+  actual_swmm_run_attempted: false
+  linux_native_probe_required_after_local_failure: false
+  linux_fallback_gate: .github/workflows/ssc03-hydraulic-world.yml
+  dependency_added: false
+  provider_credentials_required: false

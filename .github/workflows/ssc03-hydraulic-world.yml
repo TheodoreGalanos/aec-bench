@@ -1,0 +1,66 @@
+# ABOUTME: Runs the deterministic SSC-03 hydraulic-world gate on a Linux host.
+# ABOUTME: Checks canonical cross-platform evidence plus the directly affected PR10-PR17 regressions.
+
+name: SSC-03 hydraulic world
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ssc03-hydraulic-world.yml"
+      - ".python-version"
+      - "docs/ssc03-hydraulic-world.md"
+      - "docs/ssc03-swmm-compatibility-matrix.yaml"
+      - "docs/task-world-opportunities/real-world-grounding/stormwater-drainage-package/swmm_example3_detention_source_pack/**"
+      - "pyproject.toml"
+      - "src/aec_bench/cli/output.py"
+      - "src/aec_bench/cli/commands/hydraulic_world.py"
+      - "src/aec_bench/cli/commands/task.py"
+      - "src/aec_bench/contracts/validators.py"
+      - "src/aec_bench/ledger/durability.py"
+      - "src/aec_bench/task_world_templates/hydraulics/**"
+      - "tests/task_world_templates/hydraulics/**"
+      - "uv.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-hydraulic-world:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --frozen
+
+      - name: Run hydraulic unit, integration, and installed-CLI tests
+        run: uv run pytest -q tests/task_world_templates/hydraulics
+
+      - name: Run directly affected lifecycle and template regressions
+        run: >-
+          uv run pytest -q
+          tests/templates/test_detention_outlet_hgl_package.py
+          tests/templates/test_drainage_model_run_provenance_issue_review_package.py
+          tests/task_world_templates/test_ssc03_evidence_lifecycle.py
+          tests/task_world_templates/test_ssc03_evidence_lifecycle_variants.py
+
+      - name: Check lint and formatting
+        run: |
+          uv run ruff check src/aec_bench/task_world_templates/hydraulics src/aec_bench/cli/commands/hydraulic_world.py tests/task_world_templates/hydraulics
+          uv run ruff format --check src/aec_bench/task_world_templates/hydraulics src/aec_bench/cli/commands/hydraulic_world.py tests/task_world_templates/hydraulics
+
+      - name: Check strict types
+        run: uv run mypy src/aec_bench/task_world_templates/hydraulics src/aec_bench/cli/commands/hydraulic_world.py tests/task_world_templates/hydraulics

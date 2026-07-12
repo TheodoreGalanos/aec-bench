@@ -1,0 +1,157 @@
+# ABOUTME: Parsed model and manual target summary for SWMM Applications Manual Example 3.
+# ABOUTME: Gives future verifier work concrete object counts, options, and design values.
+
+source_file: Example3.inp
+manual_file: Swmm_Apps_Manual.pdf
+
+model_options:
+  flow_units: CFS
+  infiltration: HORTON
+  flow_routing: DYNWAVE
+  start_date: "01/01/2007"
+  end_date: "01/04/2007"
+  report_step: "00:01:00"
+  wet_step: "00:01:00"
+  dry_step: "01:00:00"
+  routing_step: "0:00:15"
+  allow_ponding: "NO"
+  link_offsets: DEPTH
+
+object_counts:
+  subcatchments: 7
+  subareas: 7
+  infiltration_rows: 7
+  junctions: 12
+  outfalls: 1
+  storage_units: 1
+  conduits: 12
+  orifices: 3
+  weirs: 1
+  xsections: 16
+  storage_curve_points: 4
+  rainfall_timeseries_rows: 72
+  rainfall_timeseries_rows_per_event: 24
+  coordinates: 14
+  vertices: 26
+  polygons: 145
+  backdrop_files: 1
+
+catchment_summary:
+  subcatchment_area_total_from_inp_acres: 28.92
+  manual_total_area_for_wqcv_acres: 28.94
+  weighted_imperviousness_from_inp_percent: 57.116
+  weighted_imperviousness_using_manual_total_percent: 57.077
+  manual_rounded_imperviousness_percent: 57
+  backdrop_file: Site-Post.jpg
+  map_units: Feet
+  map_dimensions: [0.0, 0.0, 1423.0, 1475.0]
+
+rainfall_timeseries:
+  - id: 2-yr
+    points: 24
+    max_intensity: 2.85
+    summed_interval_values: 11.74
+  - id: 10-yr
+    points: 24
+    max_intensity: 4.87
+    summed_interval_values: 20.53
+  - id: 100-yr
+    points: 24
+    max_intensity: 9.95
+    summed_interval_values: 44.03
+
+storage_unit:
+  id: SU1
+  invert_elevation_ft: 4956
+  max_depth_ft: 6
+  initial_depth_ft: 0
+  storage_curve: SU1
+  curve_points:
+    - depth_ft: 0
+      area_sqft: 14706
+    - depth_ft: 2.22
+      area_sqft: 19659
+    - depth_ft: 2.3
+      area_sqft: 39317
+    - depth_ft: 6
+      area_sqft: 52644
+
+outlet_structure:
+  orifices:
+    - id: Or1
+      inlet: SU1
+      outlet: J_out
+      type: SIDE
+      crest_height_ft: 0
+      discharge_coefficient: 0.65
+      xsection_shape: RECT_CLOSED
+      height_ft: 0.3
+      width_ft: 0.25
+      design_role: WQCV drawdown outlet
+    - id: Or2
+      inlet: SU1
+      outlet: J_out
+      type: SIDE
+      crest_height_ft: 1.5
+      discharge_coefficient: 0.65
+      xsection_shape: RECT_CLOSED
+      height_ft: 0.5
+      width_ft: 2
+      design_role: 2-year peak-release control
+    - id: Or3
+      inlet: SU1
+      outlet: J_out
+      type: SIDE
+      crest_height_ft: 2.22
+      discharge_coefficient: 0.65
+      xsection_shape: RECT_CLOSED
+      height_ft: 0.25
+      width_ft: 0.35
+      design_role: 10-year peak-release control
+  weirs:
+    - id: W1
+      inlet: SU1
+      outlet: J_out
+      type: TRANSVERSE
+      crest_height_ft: 3.17
+      discharge_coefficient: 3.3
+      xsection_shape: RECT_OPEN
+      height_ft: 2.83
+      width_ft: 1.75
+      design_role: 100-year overflow control
+
+manual_design_targets:
+  wqcv:
+    depth_inches: 0.23
+    volume_cubic_feet: 24162
+    drawdown_target_hours: 40
+    final_orifice_drainage_time: "40:12"
+  peak_release_targets:
+    - storm: 2-yr
+      rainfall_depth_inches: 0.98
+      pre_development_peak_cfs: 4.14
+      uncontrolled_post_development_peak_cfs: 33.5
+      final_controlled_peak_cfs: 4.11
+      final_max_storage_depth_ft: 2.21
+    - storm: 10-yr
+      rainfall_depth_inches: 1.71
+      pre_development_peak_cfs: 7.34
+      uncontrolled_post_development_peak_cfs: 62.3
+      final_controlled_peak_cfs: 7.32
+      final_max_storage_depth_ft: 3.17
+    - storm: 100-yr
+      rainfall_depth_inches: 3.67
+      pre_development_peak_cfs: 31.6
+      uncontrolled_post_development_peak_cfs: 163.8
+      final_controlled_peak_cfs: 31.2
+      final_max_storage_depth_ft: 5.42
+      manual_freeboard_calculation_depth_ft: 5.43
+      final_freeboard_ft: 0.53
+
+known_source_boundary_issues:
+  - id: timestep_narrative_vs_inp
+    observation: The manual narrative says final comparison runs used 15-second reporting, wet-weather, and flow-routing steps, but Example3.inp has 1-minute report and wet steps plus a 15-second routing step.
+    verifier_implication: Treat Example3.inp as authoritative for model-file option checks and require answers to disclose the mismatch if they use the manual narrative.
+  - id: area_rounding_manual_vs_inp
+    observation: The manual uses a 28.94-acre study area for WQCV arithmetic, while rounded Example3.inp subcatchment rows sum to 28.92 acres.
+    verifier_implication: Allow small area-rounding tolerance and require source provenance for any WQCV recomputation.
