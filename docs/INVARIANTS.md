@@ -145,6 +145,7 @@ Python enforcement direction:
 - retain each fresh or persistent attempt in its own session directory, including interrupted attempts with unresolved provider identity;
 - require every submitted checkpoint to have one final submitted attempt and durable session ownership before it can contribute reward;
 - require every fresh-context session to own exactly one checkpoint, with retries receiving distinct attempt-specific session directories;
+- cross the fresh-context environment boundary through strict, hash-captured per-attempt request/result contracts, with host-owned attempt identity published before execution, failed candidates preserved under their owning attempt, and no verifier or reward fields accepted from the environment;
 - reconcile attempt/session mode, visibility, per-session turn budget, and requested/actual adapter identity, and keep mismatches as explicit unscored failures;
 - derive cross-run lifecycle summaries from core ledger records and their snapshotted historical plan, never mutable run-directory scans or the current planner state;
 - give an existing immutable snapshot authority over later mutable source state;

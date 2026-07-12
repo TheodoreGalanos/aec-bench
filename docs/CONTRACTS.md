@@ -136,6 +136,16 @@ Key rule:
   roaming the filesystem, so every semantic claim in the generated manifest can
   trace back to task evidence.
 
+### LifecycleEpisodeRequest / LifecycleEpisodeResult
+
+**Boundary:** Evidence-lifecycle host -> Episode environment -> Evidence-lifecycle host
+
+`LifecycleEpisodeRequest` is content-bound to the lifecycle and package hashes and carries host-allocated episode, attempt, and session identity; ordered checkpoint ownership; execution mode; visibility policy; requested adapter/model identity; the per-session turn limit; model-visible instruction; confined workspace and submission paths; and completed-checkpoint lineage. The host asks the environment to durably prepare its empty attempt artifacts, publishes the request, records its SHA-256 in the active attempt, then executes. Recovery and TrialRecord finalization reject request bytes or stable identity that disagree with attempt state, package state, or the declared execution condition.
+
+`LifecycleEpisodeResult` returns only execution-owned state: exact request identity, checkpoint ownership, requested and resolved adapter/model identity, per-session turn limit, configuration, status, failures, and token usage. Strict validation rejects undeclared fields, including verifier gates, pass/fail, expected answers, and reward. The host publishes a validated per-attempt result, preserves failed candidate submissions under their owning sessions, and alone validates and archives successful checkpoint submissions, releases later evidence, and invokes the task-owned verifier after lifecycle execution.
+
+Fresh-context requests own exactly one checkpoint. Persistent execution remains a separate one-session orchestration and must not be represented as repeated fresh episode calls.
+
 ### TrialRecord
 
 **Boundary:** Harness -> Ledger

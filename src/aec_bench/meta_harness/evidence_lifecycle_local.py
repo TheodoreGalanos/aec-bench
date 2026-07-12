@@ -9,7 +9,6 @@ import os
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
@@ -20,6 +19,7 @@ from aec_bench.contracts.trajectory import read_trajectory
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
 from aec_bench.meta_harness.evidence_lifecycle import (
     EvidenceLifecycleError,
+    LifecycleEpisodeExecutionError,
     fail_checkpoint_attempt,
     load_evidence_lifecycle_spec,
     open_checkpoint_attempt,
@@ -30,24 +30,25 @@ from aec_bench.meta_harness.evidence_lifecycle import (
     submit_evidence_checkpoint,
     validate_lifecycle_verification,
 )
+from aec_bench.meta_harness.evidence_lifecycle_episode import (
+    LifecycleEpisodeContext,
+    LifecycleEpisodeEnvironment,
+    LifecycleEpisodeEnvironmentFailure,
+    LifecycleEpisodeRequest,
+    LifecycleEpisodeResult,
+    LifecycleEpisodeUsage,
+)
+from aec_bench.meta_harness.evidence_lifecycle_episode import (
+    LifecycleExecutionMode as LifecycleExecutionMode,
+)
+from aec_bench.meta_harness.evidence_lifecycle_episode import (
+    LifecycleVisibilityPolicy as LifecycleVisibilityPolicy,
+)
 from aec_bench.meta_harness.evidence_lifecycle_experiment import (
     LifecycleExperimentSweepContext,
     record_lifecycle_experiment,
 )
 from aec_bench.trajectory.writer import TrajectoryWriter
-
-
-class _LocalAdapterExecutionFailure(EvidenceLifecycleError):
-    """Stop fresh-context progression after a returned adapter failure."""
-
-
-class LifecycleVisibilityPolicy(StrEnum):
-    """Host-controlled model visibility over the durable lifecycle workspace."""
-
-    PERSISTENT_CONTEXT = "persistent_context"
-    ARTIFACT_MEMORY = "artifact_memory"
-    RAW_EVIDENCE_ONLY = "raw_evidence_only"
-    CURRENT_RELEASE_ONLY = "current_release_only"
 
 
 @dataclass(frozen=True)
@@ -340,6 +341,7 @@ def run_local_evidence_lifecycle_session(
                 memory_visibility_policy=visibility_policy.value,
                 max_turns=max_turns,
                 sessions=_persistent_context_sessions(run),
+                lifecycle=lifecycle,
             ),
             sweep_context=sweep_context,
             repository_dir=repository_dir,
@@ -403,6 +405,7 @@ def run_local_evidence_lifecycle_session(
             memory_visibility_policy=visibility_policy.value,
             max_turns=max_turns,
             sessions=_persistent_context_sessions(run),
+            lifecycle=lifecycle,
         ),
         sweep_context=sweep_context,
         repository_dir=repository_dir,
@@ -478,6 +481,7 @@ def recover_completed_persistent_lifecycle_session(
             memory_visibility_policy=visibility_policy.value,
             max_turns=max_turns,
             sessions=_persistent_context_sessions(run),
+            lifecycle=lifecycle,
         ),
         sweep_context=sweep_context,
         repository_dir=repository_dir,
@@ -504,7 +508,7 @@ def run_local_evidence_lifecycle_fresh_context(
     run = Path(run_dir)
     if visibility_policy == LifecycleVisibilityPolicy.PERSISTENT_CONTEXT:
         raise ValueError("fresh-context visibility cannot be persistent_context")
-    episode_resolver = build_local_evidence_lifecycle_episode_resolver(
+    episode_environment = build_local_evidence_lifecycle_episode_environment(
         package_dir=package,
         model=model,
         adapter_kind=adapter_kind,
@@ -514,8 +518,8 @@ def run_local_evidence_lifecycle_fresh_context(
         require_adapter_identity_match=require_adapter_identity_match,
     )
     try:
-        lifecycle = run_evidence_lifecycle(package, run, episode_resolver=episode_resolver)
-    except _LocalAdapterExecutionFailure:
+        lifecycle = run_evidence_lifecycle(package, run, episode_environment=episode_environment)
+    except LifecycleEpisodeExecutionError:
         lifecycle = read_evidence_lifecycle_state(package, run)
     except Exception:
         lifecycle = read_evidence_lifecycle_state(package, run)
@@ -533,6 +537,7 @@ def run_local_evidence_lifecycle_fresh_context(
                 memory_visibility_policy=visibility_policy.value,
                 max_turns=max_turns,
                 sessions=sessions,
+                lifecycle=lifecycle,
             ),
             sweep_context=sweep_context,
             repository_dir=repository_dir,
@@ -552,55 +557,105 @@ def run_local_evidence_lifecycle_fresh_context(
             memory_visibility_policy=visibility_policy.value,
             max_turns=max_turns,
             sessions=sessions,
+            lifecycle=lifecycle,
         ),
         sweep_context=sweep_context,
         repository_dir=repository_dir,
     )
 
 
-def build_local_evidence_lifecycle_episode_resolver(
-    *,
-    package_dir: Path,
-    model: str,
-    adapter_kind: str = "tool_loop",
-    max_turns: int = 20,
-    registry: Any | None = None,
-    visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
-    require_adapter_identity_match: bool = False,
-) -> Any:
-    """Build a resolver that creates a fresh adapter for every checkpoint."""
-    if visibility_policy == LifecycleVisibilityPolicy.PERSISTENT_CONTEXT:
-        raise ValueError("fresh-context visibility cannot be persistent_context")
-    resolved_registry = registry or LocalAdapterRegistry()
+@dataclass(frozen=True)
+class LocalEvidenceLifecycleEpisodeEnvironment:
+    """Execute fresh checkpoint episodes through one provider-neutral local adapter registry."""
 
-    def resolve(context: dict[str, Any]) -> dict[str, Any]:
-        checkpoint_id = str(context["checkpoint_id"])
-        workspace = str(context["workspace"])
-        checkpoint_run = next(item for item in context["checkpoint_runs"] if item["checkpoint_id"] == checkpoint_id)
+    package_dir: Path
+    model: str
+    adapter_kind: str = "tool_loop"
+    max_turns: int = 20
+    registry: Any | None = None
+    memory_visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.ARTIFACT_MEMORY
+    require_adapter_identity_match: bool = False
+    execution_mode: LifecycleExecutionMode = LifecycleExecutionMode.FRESH_CONTEXT
+
+    @property
+    def requested_adapter(self) -> str:
+        return self.adapter_kind
+
+    @property
+    def requested_model(self) -> str:
+        return self.model
+
+    @property
+    def max_turns_per_session(self) -> int:
+        return self.max_turns
+
+    def __post_init__(self) -> None:
+        if self.memory_visibility_policy is LifecycleVisibilityPolicy.PERSISTENT_CONTEXT:
+            raise ValueError("fresh-context visibility cannot be persistent_context")
+        if self.execution_mode is not LifecycleExecutionMode.FRESH_CONTEXT:
+            raise ValueError("local checkpoint episodes require fresh_context execution")
+
+    def recover(self, context: LifecycleEpisodeContext) -> None:
+        """Seal interrupted session evidence before the host allocates a retry attempt."""
         _seal_interrupted_sessions(
-            run=Path(context["run_dir"]),
-            lifecycle=context,
-            model=model,
-            adapter_kind=adapter_kind,
-            max_turns=max_turns,
-            execution_mode="fresh_context",
-            memory_visibility_policy=visibility_policy.value,
+            run=Path(context.run_dir),
+            lifecycle=context.model_dump(mode="json"),
+            model=self.model,
+            adapter_kind=self.adapter_kind,
+            max_turns=self.max_turns,
+            execution_mode=self.execution_mode.value,
+            memory_visibility_policy=self.memory_visibility_policy.value,
         )
-        session_id = f"{checkpoint_id}.session-{len(checkpoint_run['attempts']) + 1:03d}"
-        episode_dir = Path(context["run_dir"]) / "episodes" / checkpoint_id / session_id
+
+    def prepare(self, request: LifecycleEpisodeRequest) -> None:
+        """Publish a valid empty trajectory before the host records the active attempt."""
+        episode_dir = Path(request.run_dir) / "episodes" / request.checkpoint_id / request.session_id
+        mkdir_durable(episode_dir)
+        trajectory_writer = TrajectoryWriter(path=str(episode_dir / "trajectory.jsonl"))
+        trajectory_writer.close()
+        fsync_directory(episode_dir)
+
+    def record_failure(
+        self,
+        request: LifecycleEpisodeRequest,
+        *,
+        failure_kind: str,
+        provider_error: str | None,
+    ) -> None:
+        """Make the durable local agent result agree with host attempt rejection."""
+        result_path = (
+            Path(request.run_dir) / "episodes" / request.checkpoint_id / request.session_id / "agent_result.json"
+        )
+        if result_path.is_file():
+            payload = _read_json(result_path)
+        else:
+            payload = _failed_agent_result(
+                model=self.model,
+                adapter_kind=self.adapter_kind,
+                max_turns=self.max_turns,
+                session_id=request.session_id,
+                provider_error=provider_error or failure_kind,
+                checkpoint_id=request.checkpoint_id,
+                memory_visibility_policy=self.memory_visibility_policy.value,
+            )
+        payload["status"] = "failed"
+        payload["failure_kind"] = failure_kind
+        if provider_error is not None:
+            payload["provider_error"] = provider_error
+        _write_json(result_path, payload)
+
+    def execute(self, request: LifecycleEpisodeRequest) -> LifecycleEpisodeResult:
+        """Run one already-allocated host episode and return verifier-independent evidence."""
+        checkpoint_id = request.checkpoint_id
+        run_dir = Path(request.run_dir)
+        episode_dir = run_dir / "episodes" / checkpoint_id / request.session_id
         episode_dir.mkdir(parents=True, exist_ok=True)
         trajectory_path = episode_dir / "trajectory.jsonl"
         trajectory_writer = TrajectoryWriter(path=str(trajectory_path))
-        open_checkpoint_attempt(
-            Path(package_dir),
-            Path(context["run_dir"]),
-            session_id=session_id,
-            execution_mode="fresh_context",
-        )
         workspace_tool = EvidenceLifecycleWorkspaceTool(
-            package_dir=Path(package_dir),
-            run_dir=Path(context["run_dir"]),
-            visibility_policy=visibility_policy,
+            package_dir=Path(self.package_dir),
+            run_dir=run_dir,
+            visibility_policy=self.memory_visibility_policy,
         )
         tools = [
             ToolSpec(name="list_workspace", source="builtin", description="List visible lifecycle files."),
@@ -611,11 +666,12 @@ def build_local_evidence_lifecycle_episode_resolver(
                 description="Write the active checkpoint JSON submission.",
             ),
         ]
+        resolved_registry = self.registry or LocalAdapterRegistry()
         try:
             adapter = resolved_registry.build(
-                adapter_kind=adapter_kind,
-                model_name=model,
-                workspace=workspace,
+                adapter_kind=self.adapter_kind,
+                model_name=self.model,
+                workspace=request.workspace,
                 trajectory_writer=trajectory_writer,
                 native_tools=[
                     workspace_tool.list_workspace,
@@ -624,86 +680,103 @@ def build_local_evidence_lifecycle_episode_resolver(
                 ],
                 enable_bash=False,
             )
-            result = adapter.execute(
+            adapter_result = adapter.execute(
                 AdapterRequest(
-                    instruction=str(context["instruction"]),
+                    instruction=request.instruction,
                     system_prompt=_workspace_policy(
-                        context,
+                        request.model_dump(mode="json"),
                         persistent=False,
-                        visibility_policy=visibility_policy,
+                        visibility_policy=self.memory_visibility_policy,
                     ),
                     tools=tools,
-                    configuration={"max_turns": max_turns},
-                    output_path=str(context["submission_path"]),
+                    configuration={"max_turns": self.max_turns},
+                    output_path=request.submission_path,
                     output_format="json",
                 )
             )
         except Exception as exc:
-            fail_checkpoint_attempt(
-                Path(package_dir),
-                Path(context["run_dir"]),
-                session_id=session_id,
-                failure_kind="adapter_exception",
-            )
             _write_json(
                 episode_dir / "agent_result.json",
                 _failed_agent_result(
-                    model=model,
-                    adapter_kind=adapter_kind,
-                    max_turns=max_turns,
-                    session_id=session_id,
+                    model=self.model,
+                    adapter_kind=self.adapter_kind,
+                    max_turns=self.max_turns,
+                    session_id=request.session_id,
                     provider_error=str(exc),
                     checkpoint_id=checkpoint_id,
-                    memory_visibility_policy=visibility_policy.value,
+                    memory_visibility_policy=self.memory_visibility_policy.value,
                 ),
             )
-            raise
+            raise LifecycleEpisodeEnvironmentFailure("adapter_exception", str(exc)) from exc
         finally:
             trajectory_writer.close()
-        if result.raw_output_text and not Path(context["submission_path"]).exists():
-            (episode_dir / "raw_output.md").write_text(result.raw_output_text, encoding="utf-8")
 
-        agent_result = {
-            "checkpoint_id": checkpoint_id,
-            "checkpoint_ids": [checkpoint_id],
-            "status": result.agent_output.status.value,
-            "model": model,
-            "adapter": adapter_kind,
-            "adapter_name": getattr(result, "adapter_name", adapter_kind),
-            "resolved_model": getattr(result, "resolved_model", model),
-            "configuration_record": getattr(result, "configuration_record", {"model": model}),
-            "session_mode": "fresh",
-            "memory_visibility_policy": visibility_policy.value,
-            "session_id": session_id,
-            "max_turns": max_turns,
-            "input_tokens": result.usage_input_tokens or 0,
-            "output_tokens": result.usage_output_tokens or 0,
-            "cache_read_tokens": result.usage_cache_read_tokens or 0,
-            "cache_write_tokens": result.usage_cache_write_tokens or 0,
-            "failure_kind": _enum_value(result.failure_kind),
-            "provider_error": result.provider_error,
-        }
-        _write_conversation(episode_dir / "conversation.jsonl", result.transcript)
+        if adapter_result.raw_output_text and not Path(request.submission_path).exists():
+            (episode_dir / "raw_output.md").write_text(adapter_result.raw_output_text, encoding="utf-8")
+        _write_conversation(episode_dir / "conversation.jsonl", adapter_result.transcript)
+        adapter_name = str(getattr(adapter_result, "adapter_name", self.adapter_kind))
+        resolved_model = str(getattr(adapter_result, "resolved_model", self.model))
         returned_failure = (
             "adapter_identity_mismatch"
-            if require_adapter_identity_match and agent_result["adapter_name"] != adapter_kind
-            else _adapter_failure_kind(result)
+            if self.require_adapter_identity_match and adapter_name != self.adapter_kind
+            else _adapter_failure_kind(adapter_result)
         )
-        if returned_failure is not None:
-            agent_result["status"] = "failed"
-            agent_result["failure_kind"] = returned_failure
-            _write_json(episode_dir / "agent_result.json", agent_result)
-            fail_checkpoint_attempt(
-                Path(package_dir),
-                Path(context["run_dir"]),
-                session_id=session_id,
-                failure_kind=returned_failure,
-            )
-            raise _LocalAdapterExecutionFailure(f"adapter failed at checkpoint {checkpoint_id}: {returned_failure}")
-        _write_json(episode_dir / "agent_result.json", agent_result)
-        return agent_result
+        episode_result = LifecycleEpisodeResult(
+            episode_id=request.episode_id,
+            attempt_id=request.attempt_id,
+            session_id=request.session_id,
+            checkpoint_ids=request.checkpoint_ids,
+            execution_mode=request.execution_mode,
+            memory_visibility_policy=request.memory_visibility_policy,
+            status="failed" if returned_failure is not None else "completed",
+            requested_adapter=self.adapter_kind,
+            requested_model=self.model,
+            max_turns_per_session=self.max_turns,
+            adapter=adapter_name,
+            resolved_model=resolved_model,
+            configuration=cast(
+                dict[str, Any],
+                getattr(adapter_result, "configuration_record", {"model": self.model}),
+            ),
+            usage=LifecycleEpisodeUsage(
+                input_tokens=adapter_result.usage_input_tokens or 0,
+                output_tokens=adapter_result.usage_output_tokens or 0,
+                cache_read_tokens=adapter_result.usage_cache_read_tokens or 0,
+                cache_write_tokens=adapter_result.usage_cache_write_tokens or 0,
+            ),
+            failure_kind=returned_failure,
+            provider_error=adapter_result.provider_error if returned_failure is not None else None,
+        )
+        _write_json(
+            episode_dir / "agent_result.json",
+            _episode_result_agent_payload(
+                episode_result,
+                checkpoint_id=checkpoint_id,
+            ),
+        )
+        return episode_result
 
-    return resolve
+
+def build_local_evidence_lifecycle_episode_environment(
+    *,
+    package_dir: Path,
+    model: str,
+    adapter_kind: str = "tool_loop",
+    max_turns: int = 20,
+    registry: Any | None = None,
+    visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
+    require_adapter_identity_match: bool = False,
+) -> LifecycleEpisodeEnvironment:
+    """Build the typed fresh-checkpoint environment used by the lifecycle host."""
+    return LocalEvidenceLifecycleEpisodeEnvironment(
+        package_dir=Path(package_dir),
+        model=model,
+        adapter_kind=adapter_kind,
+        max_turns=max_turns,
+        registry=registry,
+        memory_visibility_policy=visibility_policy,
+        require_adapter_identity_match=require_adapter_identity_match,
+    )
 
 
 def _persistent_session_instruction(initial: dict[str, Any]) -> str:
@@ -815,6 +888,34 @@ def _agent_result(
     }
 
 
+def _episode_result_agent_payload(
+    result: LifecycleEpisodeResult,
+    *,
+    checkpoint_id: str,
+) -> dict[str, Any]:
+    """Preserve the durable agent-result schema consumed by TrialRecord import."""
+    return {
+        "checkpoint_id": checkpoint_id,
+        "checkpoint_ids": list(result.checkpoint_ids),
+        "status": result.status,
+        "model": result.requested_model,
+        "adapter": result.requested_adapter,
+        "adapter_name": result.adapter,
+        "resolved_model": result.resolved_model,
+        "configuration_record": result.configuration,
+        "session_mode": "fresh",
+        "memory_visibility_policy": result.memory_visibility_policy.value,
+        "session_id": result.session_id,
+        "max_turns": result.max_turns_per_session,
+        "input_tokens": result.usage.input_tokens,
+        "output_tokens": result.usage.output_tokens,
+        "cache_read_tokens": result.usage.cache_read_tokens,
+        "cache_write_tokens": result.usage.cache_write_tokens,
+        "failure_kind": result.failure_kind,
+        "provider_error": result.provider_error,
+    }
+
+
 def _failed_agent_result(
     *,
     model: str,
@@ -856,7 +957,9 @@ def _normalized_agent_evidence(
     memory_visibility_policy: str,
     max_turns: int,
     sessions: list[dict[str, Any]],
+    lifecycle: dict[str, Any],
 ) -> dict[str, Any]:
+    sessions = _reconcile_sessions_with_attempts(sessions, lifecycle)
     token_fields = (
         "input_tokens",
         "output_tokens",
@@ -878,6 +981,30 @@ def _normalized_agent_evidence(
         "sessions": sessions,
         "totals": totals,
     }
+
+
+def _reconcile_sessions_with_attempts(
+    sessions: list[dict[str, Any]],
+    lifecycle: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Make host attempt state authoritative when environment artifacts disagree."""
+    failed_attempts: dict[str, dict[str, Any]] = {}
+    for checkpoint in lifecycle.get("checkpoint_runs", []):
+        for attempt in checkpoint.get("attempts", []):
+            if attempt.get("status") != "submitted":
+                failed_attempts[str(attempt.get("session_id"))] = attempt
+    reconciled: list[dict[str, Any]] = []
+    for session in sessions:
+        payload = dict(session)
+        attempt = failed_attempts.get(str(payload.get("session_id")))
+        if attempt is not None:
+            attempt_status = str(attempt.get("status") or "failed")
+            payload["status"] = "failed"
+            payload["failure_kind"] = str(attempt.get("failure_kind") or attempt_status)
+            if payload.get("provider_error") is None:
+                payload["provider_error"] = f"host attempt ended with status {attempt_status}"
+        reconciled.append(payload)
+    return reconciled
 
 
 def _adapter_failure_kind(result: Any) -> str | None:

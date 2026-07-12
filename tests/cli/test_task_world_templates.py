@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
 from aec_bench.meta_harness.evidence_lifecycle import run_evidence_lifecycle
+from tests.support.lifecycle_episode import deterministic_episode_environment
 
 runner = CliRunner()
 
@@ -86,7 +87,11 @@ def test_task_composite_template_lifecycle_commands_materialize_and_verify(tmp_p
         submission.write_text(json.dumps(gold[context["checkpoint_id"]]), encoding="utf-8")
         return {"status": "completed"}
 
-    run_evidence_lifecycle(package, run_dir, episode_resolver=resolve)
+    run_evidence_lifecycle(
+        package,
+        run_dir,
+        episode_environment=deterministic_episode_environment(resolve),
+    )
     verified = runner.invoke(
         app,
         [

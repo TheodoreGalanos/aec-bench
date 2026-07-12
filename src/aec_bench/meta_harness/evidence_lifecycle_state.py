@@ -6,7 +6,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import Field, PositiveInt, model_validator
+from pydantic import Field, PositiveInt, field_validator, model_validator
 
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.meta_harness.evidence_lifecycle_metrics import LifecycleSemanticMetrics
@@ -46,6 +46,14 @@ class CheckpointAttemptRecord(StrictModel):
     status: CheckpointAttemptStatus
     resumed_from_attempt_id: str | None = None
     failure_kind: str | None = None
+    episode_request_sha256: str | None = None
+
+    @field_validator("episode_request_sha256")
+    @classmethod
+    def validate_episode_request_hash(cls, value: str | None) -> str | None:
+        if value is not None and (len(value) != 64 or any(character not in "0123456789abcdef" for character in value)):
+            raise ValueError("episode_request_sha256 must contain 64 lowercase hexadecimal characters")
+        return value
 
 
 class CheckpointRunRecord(StrictModel):

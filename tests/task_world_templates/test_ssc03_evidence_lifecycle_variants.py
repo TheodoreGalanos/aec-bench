@@ -24,6 +24,7 @@ from aec_bench.task_world_templates.lifecycles.ssc03_drainage_variants import (
     list_ssc03_lifecycle_variant_ids,
 )
 from aec_bench.task_world_templates.materializer import materialize_template_lifecycle
+from tests.support.lifecycle_episode import deterministic_episode_environment
 
 EXPECTED_VARIANTS = (
     "memo_closeout_missing",
@@ -498,7 +499,11 @@ def _run_gold(package: Path, run_dir: Path) -> Path:
         _write_json(Path(context["submission_path"]), gold[context["checkpoint_id"]])
         return {"status": "completed"}
 
-    run_evidence_lifecycle(package, run_dir, episode_resolver=resolve)
+    run_evidence_lifecycle(
+        package,
+        run_dir,
+        episode_environment=deterministic_episode_environment(resolve),
+    )
     return run_dir
 
 

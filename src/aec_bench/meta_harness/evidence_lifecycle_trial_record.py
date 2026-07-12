@@ -57,6 +57,7 @@ from aec_bench.meta_harness.evidence_lifecycle_ablation_plan import (
     LifecycleAblationTrial,
     build_lifecycle_ablation_plan,
 )
+from aec_bench.meta_harness.evidence_lifecycle_episode import LifecycleEpisodeRequest
 from aec_bench.meta_harness.evidence_lifecycle_experiment import (
     LifecycleExperimentManifest,
     LifecycleExperimentMetrics,
@@ -1051,6 +1052,18 @@ def _artifact_kind(relative: Path) -> str:
         return "trajectory"
     if path.endswith("/conversation.jsonl"):
         return "conversation"
+    if path.endswith("/episode_request.json"):
+        return "lifecycle_episode_request"
+    if path.endswith("/episode_result.json"):
+        return "lifecycle_episode_result"
+    if path.endswith("/environment_prepared_episode_request.json"):
+        return "environment_prepared_lifecycle_episode_request"
+    if path.endswith("/environment_prepared_episode_result.json") or path.endswith(
+        "/environment_prepared_rejected_episode_result.json"
+    ):
+        return "environment_prepared_lifecycle_episode_result"
+    if path.endswith("/rejected_episode_result.json"):
+        return "rejected_lifecycle_episode_result"
     if path.endswith("/raw_output.md"):
         return "raw_output"
     if path.endswith("/agent_result.json"):
@@ -1139,6 +1152,36 @@ def _lifecycle_sessions(
                 raise ValueError(f"lifecycle checkpoint attempt has no session owner: {checkpoint_id}")
             if attempt.get("execution_mode") != expected_execution_mode:
                 raise ValueError(f"lifecycle checkpoint attempt execution mode mismatch: {checkpoint_id}")
+            request_relative = Path("episodes") / checkpoint_id / session_id / "episode_request.json"
+            request_hash = attempt.get("episode_request_sha256")
+            declared_request_hash = declared.get(request_relative.as_posix())
+            if request_hash is not None:
+                if expected_execution_mode != "fresh_context":
+                    raise ValueError(f"persistent lifecycle attempt cannot own a fresh request: {session_id}")
+                if request_hash != declared_request_hash:
+                    raise ValueError(f"lifecycle episode request hash does not match attempt state: {session_id}")
+                request = LifecycleEpisodeRequest.model_validate(_read_json(run_dir / request_relative))
+                expected_request_identity = {
+                    "episode_id": f"{state.get('lifecycle_id')}.{attempt.get('attempt_id')}",
+                    "lifecycle_id": state.get("lifecycle_id"),
+                    "world_id": state.get("world_id"),
+                    "lifecycle_spec_sha256": state.get("lifecycle_spec_sha256"),
+                    "package_sha256": state.get("package_sha256"),
+                    "checkpoint_id": checkpoint_id,
+                    "checkpoint_ids": (checkpoint_id,),
+                    "attempt_id": attempt.get("attempt_id"),
+                    "session_id": session_id,
+                    "execution_mode": expected_execution_mode,
+                    "memory_visibility_policy": expected_visibility,
+                    "requested_adapter": model.get("requested_adapter", model.get("adapter")),
+                    "requested_model": model.get("requested_model"),
+                    "max_turns_per_session": execution.get("max_turns_per_session"),
+                }
+                actual_request_identity = {key: getattr(request, key) for key in expected_request_identity}
+                if actual_request_identity != expected_request_identity:
+                    raise ValueError(f"lifecycle episode request identity mismatch: {session_id}")
+            elif declared_request_hash is not None:
+                raise ValueError(f"lifecycle episode request lacks attempt-state hash: {session_id}")
             if session_id not in ordered_session_ids:
                 ordered_session_ids.append(session_id)
             expected_checkpoints.setdefault(session_id, []).append(checkpoint_id)

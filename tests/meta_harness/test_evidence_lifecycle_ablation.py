@@ -19,6 +19,7 @@ import aec_bench.ledger.writer as ledger_writer
 import aec_bench.meta_harness.evidence_lifecycle_ablation as ablation_runtime
 import aec_bench.meta_harness.evidence_lifecycle_ablation_plan as ablation_plan_runtime
 import aec_bench.meta_harness.evidence_lifecycle_experiment as experiment_runtime
+import aec_bench.meta_harness.evidence_lifecycle_trial_record as trial_record_runtime
 from aec_bench.contracts.experiment_manifest import AgentConfig
 from aec_bench.contracts.trial_record import Completeness, TrialRecord
 from aec_bench.ledger.writer import DuplicateTrialRecordError
@@ -67,6 +68,14 @@ VARIANTS = (
     "response_assertion_only",
     "memo_closeout_missing",
 )
+
+
+def test_lifecycle_episode_quarantine_artifact_kinds_distinguish_requests_from_results() -> None:
+    request = Path("run/episodes/initial_review/initial_review.session-001/environment_prepared_episode_request.json")
+    result = Path("run/episodes/initial_review/initial_review.session-001/environment_prepared_episode_result.json")
+
+    assert trial_record_runtime._artifact_kind(request) == "environment_prepared_lifecycle_episode_request"
+    assert trial_record_runtime._artifact_kind(result) == "environment_prepared_lifecycle_episode_result"
 
 
 def test_lifecycle_ablation_condition_rejects_invalid_mode_policy_pairs() -> None:
