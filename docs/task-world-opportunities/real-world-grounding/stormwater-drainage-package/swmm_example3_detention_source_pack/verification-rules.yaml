@@ -1,0 +1,165 @@
+# ABOUTME: Future verifier rule contract for the SWMM Example 3 stormwater source pack.
+# ABOUTME: Defines source, model, target, and diagnostic checks for later runtime packaging.
+
+ruleset:
+  id: swmm_example3_detention_verification_rules
+  status: docs_only_future_verifier_contract
+  source_pack: swmm_example3_detention_source_pack
+
+source_checks:
+  - id: epa_zip_hash
+    description: Verify the official Applications Manual zip URL and SHA-256 before accepting any extracted source file.
+    required: true
+    expected_sha256: 889dd60a53ac85f00ee90db947a67ddc6d0737f46acf818bf7c7c08ac272f0ea
+  - id: nested_files_zip_hash
+    description: Verify nested files.zip before selecting Example3 source files.
+    required: true
+    expected_sha256: 99ef5eb1ec7995fa2db3cc797d75080ab26843a7b523e2bc227717e2d047c9a8
+  - id: selected_file_hashes
+    description: Verify Example3.inp, Example3.ini, and Site-Post.jpg against source-manifest.yaml.
+    required: true
+  - id: redistribution_boundary
+    description: Confirm the answer does not claim the EPA example files were vendored, municipal-approved, or project-issued in this research pass.
+    required: true
+
+model_structure_checks:
+  - id: options
+    required_values:
+      FLOW_UNITS: CFS
+      INFILTRATION: HORTON
+      FLOW_ROUTING: DYNWAVE
+      REPORT_STEP: "00:01:00"
+      WET_STEP: "00:01:00"
+      DRY_STEP: "01:00:00"
+      ROUTING_STEP: "0:00:15"
+      ALLOW_PONDING: "NO"
+      LINK_OFFSETS: DEPTH
+  - id: object_counts
+    required_values:
+      subcatchments: 7
+      junctions: 12
+      outfalls: 1
+      storage_units: 1
+      conduits: 12
+      orifices: 3
+      weirs: 1
+      storage_curve_points: 4
+      rainfall_timeseries_rows: 72
+  - id: storage_curve
+    required_points:
+      - [0, 14706]
+      - [2.22, 19659]
+      - [2.3, 39317]
+      - [6, 52644]
+  - id: outlet_structure
+    required_links:
+      - id: Or1
+        inlet: SU1
+        outlet: J_out
+        type: SIDE
+        crest_height_ft: 0
+        discharge_coefficient: 0.65
+        height_ft: 0.3
+        width_ft: 0.25
+      - id: Or2
+        inlet: SU1
+        outlet: J_out
+        type: SIDE
+        crest_height_ft: 1.5
+        discharge_coefficient: 0.65
+        height_ft: 0.5
+        width_ft: 2
+      - id: Or3
+        inlet: SU1
+        outlet: J_out
+        type: SIDE
+        crest_height_ft: 2.22
+        discharge_coefficient: 0.65
+        height_ft: 0.25
+        width_ft: 0.35
+      - id: W1
+        inlet: SU1
+        outlet: J_out
+        type: TRANSVERSE
+        crest_height_ft: 3.17
+        discharge_coefficient: 3.3
+        height_ft: 2.83
+        width_ft: 1.75
+
+target_value_checks:
+  tolerance:
+    peak_cfs: 0.05
+    depth_ft: 0.02
+    area_acres: 0.03
+  required_values:
+    wqcv_depth_inches: 0.23
+    wqcv_volume_cubic_feet: 24162
+    wqcv_drainage_time: "40:12"
+    peak_release_targets:
+      - storm: 2-yr
+        pre_development_peak_cfs: 4.14
+        uncontrolled_post_development_peak_cfs: 33.5
+        final_controlled_peak_cfs: 4.11
+        final_max_storage_depth_ft: 2.21
+      - storm: 10-yr
+        pre_development_peak_cfs: 7.34
+        uncontrolled_post_development_peak_cfs: 62.3
+        final_controlled_peak_cfs: 7.32
+        final_max_storage_depth_ft: 3.17
+      - storm: 100-yr
+        pre_development_peak_cfs: 31.6
+        uncontrolled_post_development_peak_cfs: 163.8
+        final_controlled_peak_cfs: 31.2
+        final_max_storage_depth_ft: 5.42
+        final_freeboard_ft: 0.53
+
+boundary_checks:
+  - id: timestep_mismatch_disclosed
+    description: Answer must disclose the manual narrative versus Example3.inp time-step mismatch when discussing time-step settings.
+    required: true
+  - id: area_rounding_mismatch_disclosed
+    description: Answer must disclose or tolerate the 28.94-acre manual total versus 28.92-acre inp-row sum if recomputing WQCV.
+    required: true
+  - id: no_municipal_acceptance_claim
+    description: Answer must not claim the EPA teaching example is an accepted municipal design report.
+    required: true
+  - id: generated_output_claim_requires_report_artifact
+    description: Answer must not claim generated SWMM report, continuity, node/link, or binary-output evidence unless a verified report/output artifact is present.
+    required: true
+
+future_report_output_checks:
+  status: blocked_until_controlled_swmm_engine_available
+  description: Future report-output checks require a controlled SWMM engine that can generate report and binary output artifacts from the verified Example3.inp source.
+  attempted_route:
+    package: swmm-toolkit
+    version_seen: 0.17.0
+    failure_mode: Native solver and output binding imports exited with code 1 and no Python traceback in this environment.
+  required_report_sections_when_available:
+    - runoff_continuity_summary
+    - flow_routing_continuity_summary
+    - node_flooding_or_surcharge_status
+    - node_depth_inflow_summary
+    - link_flow_depth_summary
+    - engine_warning_or_nonconvergence_summary
+  required_dynamic_objects_when_available:
+    nodes: [SU1, J_out, O2]
+    links: [Or1, Or2, Or3, W1, C11, C_out]
+  diagnostics_when_unavailable:
+    - swmm_engine_unavailable
+    - report_file_missing
+    - binary_output_missing
+
+diagnostic_fields:
+  - source_file
+  - source_hash_status
+  - missing_sections
+  - mismatched_options
+  - mismatched_object_counts
+  - mismatched_outlet_rows
+  - mismatched_target_values
+  - undisclosed_source_boundary_issues
+  - unsupported_project_approval_claims
+  - swmm_engine_status
+  - report_output_status
+  - report_continuity_status
+  - node_link_summary_status

@@ -9,11 +9,13 @@ from pathlib import Path
 import typer
 import yaml
 
+from aec_bench.cli.commands.hydraulic_world import app as hydraulic_world_app
 from aec_bench.cli.commands.task_world_templates import app as composite_template_app
 from aec_bench.cli.output import console, emit
 
 app = typer.Typer(help="Task management commands.")
 app.add_typer(composite_template_app, name="composite-template")
+app.add_typer(hydraulic_world_app, name="hydraulic-world")
 
 _SEVERITY_ICONS = {"error": "[red]✗[/red]", "warning": "[yellow]⚠[/yellow]", "info": "[dim]✓[/dim]"}
 
