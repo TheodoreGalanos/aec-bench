@@ -172,6 +172,14 @@ Python enforcement direction:
 - mark mounted holdout packages with one generic host-written receipt whose exact allowlist contains no target, prompt, path, operation, verifier, gold, or annotation metadata;
 - reject a sealed receipt before public Prime export, normal experiment recording, or `TrialRecord` finalization until access-controlled full-fidelity storage and a separate redacted publication contract exist;
 - reduce provider materializer, resolver, validation, and verifier failures to stable non-disclosing boundary codes.
+- bind each target freeze to one canonical owner-only audit root before public results, and reject alternate authority, execution, or ledger paths before adapter work;
+- write the run-start authorization hash into lifecycle state and the first durable ledger event before execution; recovery must reject retrofitted markers;
+- record sealed executions only through a separate owner-only finalizer that binds the calibration freeze, target freeze, exclusive claim, selected condition, executing source inventory, runtime/interaction identity, and exact package/run inventory;
+- keep the public recorder and public `TrialRecord` finalizer sealed-package guards unchanged;
+- replay a private snapshot only through an explicitly supplied provider rebound to a temporary copy, never through discovery and never by mutating the immutable snapshot;
+- build the public aggregate receipt by invoking the sealed evaluator over the real private record and explicit mount, never from a caller-constructed summary;
+- expose only the opaque pre-campaign commitment and strict aggregate receipt publicly; keep the full holdout record and PR16 summary private;
+- describe local one-shot enforcement honestly: deletion or restoration by the filesystem owner requires external write-once storage or a transparency service to prevent.
 
 ---
 

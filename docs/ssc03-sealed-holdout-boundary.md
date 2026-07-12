@@ -49,7 +49,17 @@ It contains no target ID, provider path, prompt, source filename, operation ID, 
 
 The selected target's identity, instructions, source packet, action mapping, expected calculations, verifier rules, and provider source remain outside this repository. Its full package, run, ledger, submissions, operation artifacts, and verifier result remain inside the explicitly chosen private roots.
 
-That distinction matters because the existing experiment manifest and `TrialRecord` are intentionally full-fidelity audit artifacts. They include prompts, file inventories, hashes, verifier identity, and paths. PR20 therefore rejects a sealed package before the normal experiment-record or `TrialRecord` path can copy that material. It does not pretend those records are redacted.
+That distinction matters because experiment manifests and `TrialRecord`s are intentionally full-fidelity audit artifacts. They include prompts, file inventories, hashes, verifier identity, and paths. PR20 therefore rejects a sealed package before the normal public experiment-record or `TrialRecord` path can copy that material. It does not pretend those records are redacted.
+
+PR22 adds a separate private recorder without relaxing either public guard. The target freeze commits to one canonical private audit root before public results exist. That root fixes the authority, execution, and ledger paths; changing any of them is rejected before adapter work. The local claim is therefore exclusive within that trusted filesystem namespace. Preventing the filesystem owner from deleting or restoring the whole namespace would require external write-once storage or a transparency service.
+
+A complete private record is explicitly `holdout`, lives under the target-bound owner-only ledger root, and snapshots every regular package and run file plus exactly four authority files: the public calibration freeze, private target freeze, one-shot claim, and private audit manifest. The audit manifest binds the selected condition, runtime and interaction identities, normalized session evidence, verifier result, code provenance, and exact package/run inventories. The claimed clean repository must have the same source inventory as the loaded `aec_bench` package; an unrelated clean checkout cannot lend the run false provenance.
+
+The run-start authorization hash is written into lifecycle state and the first durable ledger event before adapter execution. Recovery requires both bindings, so a run created before the claim cannot be made valid by adding marker files afterward. A persistent- or fresh-context crash with durable attempt lineage and trajectory but no `agent_result.json` is sealed as an interrupted, zero-reward partial record without calling the adapter again.
+
+Validation checks every recorded artifact hash and rejects extra or missing snapshot files. It rebinds the snapshotted package to the explicitly supplied provider in a temporary directory, replays the resolver history, and reruns deterministic task verification there. Replay therefore cannot mutate the immutable snapshot and cannot fall back to public provider discovery.
+
+The sealed PR16 evaluator accepts exactly one private target record and an explicit matching mount. It checks the selected condition and public calibration references against the snapshotted calibration freeze, validates and replays the private record, and reports only descriptive holdout generalization. The public receipt builder invokes this evaluator itself; it does not accept a caller-constructed passing summary.
 
 ## How a private run is mounted
 
@@ -78,6 +88,8 @@ Provider exceptions are replaced at the boundary with stable codes such as `seal
 | Public lifecycle verification without the exact mount | Rejected |
 | Local Prime lifecycle export | Rejected before reading the initial instruction |
 | Normal experiment manifest and `TrialRecord` finalization | Rejected before writing output |
+| Dedicated private holdout finalization | Requires the exact mount, target-bound private layout, freezes, claim, run authorization, selected condition, and owner-only roots |
+| Public aggregate receipt | Reruns the sealed evaluator from the real record and explicit mount; caller summaries are rejected |
 | Public calibration planner | Cannot enumerate or select the provider |
 
 The receipt check takes precedence even if someone places it on a package that otherwise resembles a registered public variant. This closes a subtle export risk: public variant validation alone does not make every instruction byte safe to publish.
@@ -96,4 +108,6 @@ PR20 provides no model-performance result, public calibration result, holdout ge
 
 It also does not make the synthetic pump values engineering-authoritative. Pump curves, wet-well behavior, rising-main assumptions, operating rules, tolerances, and NPSH treatment still require engineering review before a private target is frozen.
 
-PR21 adds the preregistered public-only selector and write-once condition freeze, including runtime, operation-protocol, and tool-schema identity. Its deterministic campaign proof is not model evidence; the paid public run still requires an approved model and spend envelope. PR22 must add access-controlled full-fidelity records plus a separately allowlisted redacted publication receipt before the one-shot holdout audit can be reported.
+PR21 adds the preregistered public-only selector and write-once condition freeze, including runtime, operation-protocol, and tool-schema identity. Its deterministic campaign proof is not model evidence; the paid public run still requires an approved model and spend envelope. PR22 now has the target commitment, target-bound local claim, pre-execution run authorization, one-shot execution and recovery orchestration, sealed PR16 evaluator, internally derived aggregate receipt, recorder seam, and access-controlled full-fidelity record contract.
+
+No actual holdout result can be reported yet. The public calibration campaign has not run, no selected condition has been frozen from real campaign records, and no real private target has consumed its committed slot. The implemented result contract remains descriptive holdout generalization, not causal transfer, learning across runs, or continual learning.

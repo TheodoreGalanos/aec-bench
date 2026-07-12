@@ -8,12 +8,13 @@ import json
 import os
 import stat
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal, TypeVar
 
 from pydantic import Field, FiniteFloat, NonNegativeInt, field_validator, model_validator
 
-from aec_bench.contracts.trial_record import ArtifactReference
+from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
 from aec_bench.meta_harness.evidence_lifecycle import evidence_lifecycle_package_identity
@@ -24,7 +25,10 @@ from aec_bench.meta_harness.evidence_lifecycle_ablation_plan import (
 from aec_bench.meta_harness.evidence_lifecycle_calibration import (
     LifecycleCalibrationFreeze,
 )
-from aec_bench.meta_harness.evidence_lifecycle_transfer import LifecycleTransferSummary
+from aec_bench.meta_harness.evidence_lifecycle_transfer import (
+    LifecycleTransferEvaluationSpec,
+    build_sealed_lifecycle_transfer_evaluation,
+)
 from aec_bench.task_world_templates.lifecycles import (
     SealedLifecycleMount,
     sealed_lifecycle_provider_protocol_identity,
@@ -36,10 +40,13 @@ __all__ = [
     "LifecycleHoldoutAuditOutcomeCounts",
     "LifecycleHoldoutAuditReceipt",
     "LifecycleHoldoutProviderIdentity",
+    "LifecycleHoldoutPrivateLayout",
     "LifecycleHoldoutTargetCommitment",
     "LifecycleHoldoutTargetFreeze",
     "build_lifecycle_holdout_audit_receipt",
     "claim_lifecycle_holdout_audit",
+    "lifecycle_holdout_private_layout",
+    "validate_lifecycle_holdout_target_mount",
     "validate_lifecycle_holdout_target_freeze",
     "write_lifecycle_holdout_audit_receipt",
     "write_lifecycle_holdout_target_commitment",
@@ -53,6 +60,20 @@ _ModelT = TypeVar("_ModelT", bound=StrictModel)
 
 class LifecycleHoldoutAuditAlreadyClaimedError(ValueError):
     """Report that the private authority already consumed its one execution slot."""
+
+
+@dataclass(frozen=True)
+class LifecycleHoldoutPrivateLayout:
+    """Derive every private audit path from the root frozen before public results."""
+
+    root: Path
+    calibration_freeze_path: Path
+    target_freeze_path: Path
+    claim_path: Path
+    execution_root: Path
+    run_start_path: Path
+    run_dir: Path
+    ledger_root: Path
 
 
 class LifecycleHoldoutProviderIdentity(StrictModel):
@@ -83,6 +104,7 @@ class LifecycleHoldoutTargetFreeze(StrictModel):
     public_manifest_sha256: NonEmptyStr
     public_plan_sha256: NonEmptyStr
     public_selection_policy_sha256: NonEmptyStr
+    private_audit_root: NonEmptyStr
     holdout_repetitions: Literal[1]
     lifecycle_id: NonEmptyStr
     world_id: NonEmptyStr
@@ -108,6 +130,14 @@ class LifecycleHoldoutTargetFreeze(StrictModel):
     @classmethod
     def validate_hashes(cls, value: str) -> str:
         return ArtifactReference.validate_sha256(value)
+
+    @field_validator("private_audit_root")
+    @classmethod
+    def validate_private_audit_root(cls, value: str) -> str:
+        path = Path(value)
+        if not path.is_absolute() or path.resolve(strict=False) != path:
+            raise ValueError("private audit root must be a canonical absolute path")
+        return value
 
     @model_validator(mode="after")
     def validate_commitments(self) -> LifecycleHoldoutTargetFreeze:
@@ -232,12 +262,34 @@ def write_lifecycle_holdout_target_freeze(
     output_path: Path,
 ) -> Path:
     """Write one private target freeze against the preregistered public plan."""
+    destination = Path(output_path)
+    private_audit_root = _private_audit_root_for_target_path(destination)
     target = _build_target_freeze(
         calibration_manifest=calibration_manifest,
         mount=mount,
         commitment_salt=commitment_salt,
+        private_audit_root=private_audit_root,
     )
-    return _write_private_idempotent_model(Path(output_path), target)
+    return _write_private_idempotent_model(destination, target)
+
+
+def lifecycle_holdout_private_layout(
+    target: LifecycleHoldoutTargetFreeze,
+) -> LifecycleHoldoutPrivateLayout:
+    """Return the only local private layout authorized by one target freeze."""
+    root = Path(target.private_audit_root)
+    authority = root / "authority"
+    execution = root / "execution"
+    return LifecycleHoldoutPrivateLayout(
+        root=root,
+        calibration_freeze_path=authority / "calibration-freeze.json",
+        target_freeze_path=authority / "target-freeze.json",
+        claim_path=authority / "claim.json",
+        execution_root=execution,
+        run_start_path=execution / "run-start.json",
+        run_dir=execution / "run",
+        ledger_root=root / "ledger",
+    )
 
 
 def validate_lifecycle_holdout_target_freeze(
@@ -247,14 +299,32 @@ def validate_lifecycle_holdout_target_freeze(
     mount: SealedLifecycleMount,
 ) -> LifecycleHoldoutTargetFreeze:
     """Rebuild the target commitment and reject package, plan, or provider drift."""
-    target = _read_model_once(Path(target_freeze_path), LifecycleHoldoutTargetFreeze)
+    target_path = Path(target_freeze_path)
+    target = _read_model_once(target_path, LifecycleHoldoutTargetFreeze)
+    _validate_target_freeze_location(target_path, target)
     expected = _build_target_freeze(
         calibration_manifest=calibration_manifest,
         mount=mount,
         commitment_salt=target.commitment_salt,
+        private_audit_root=Path(target.private_audit_root),
     )
     if target != expected:
         raise ValueError("sealed target freeze does not match the active provider")
+    return target
+
+
+def validate_lifecycle_holdout_target_mount(
+    *,
+    target_freeze_path: Path,
+    mount: SealedLifecycleMount,
+    require_authority_location: bool = True,
+) -> LifecycleHoldoutTargetFreeze:
+    """Validate one private target freeze against an explicitly supplied mount."""
+    target_path = Path(target_freeze_path)
+    target = _read_model_once(target_path, LifecycleHoldoutTargetFreeze)
+    if require_authority_location:
+        _validate_target_freeze_location(target_path, target)
+    _validate_target_against_mount(target, mount)
     return target
 
 
@@ -287,8 +357,13 @@ def claim_lifecycle_holdout_audit(
     output_path: Path,
 ) -> LifecycleHoldoutAuditClaim:
     """Validate both freezes and exclusively publish the pre-execution claim."""
-    calibration = _read_model_once(Path(calibration_freeze_path), LifecycleCalibrationFreeze)
-    target = _read_model_once(Path(target_freeze_path), LifecycleHoldoutTargetFreeze)
+    target_path = Path(target_freeze_path)
+    target = _read_model_once(target_path, LifecycleHoldoutTargetFreeze)
+    _validate_target_freeze_location(target_path, target)
+    layout = lifecycle_holdout_private_layout(target)
+    if Path(calibration_freeze_path) != layout.calibration_freeze_path or Path(output_path) != layout.claim_path:
+        raise ValueError("sealed holdout paths do not match the target-bound private audit layout")
+    calibration = _read_model_once(layout.calibration_freeze_path, LifecycleCalibrationFreeze)
     _validate_target_against_mount(target, mount)
     if (
         calibration.experiment_id != target.public_experiment_id
@@ -313,9 +388,10 @@ def build_lifecycle_holdout_audit_receipt(
     *,
     calibration_freeze: LifecycleCalibrationFreeze,
     target_freeze_path: Path,
-    private_summary: LifecycleTransferSummary,
+    evaluation_spec: LifecycleTransferEvaluationSpec,
+    target_mount: SealedLifecycleMount,
 ) -> LifecycleHoldoutAuditReceipt:
-    """Derive the exact public aggregate from a private PR16 summary."""
+    """Run the sealed evaluator and derive its exact public aggregate."""
     calibration = LifecycleCalibrationFreeze.model_validate(calibration_freeze.model_dump(mode="json"))
     target = _read_model_once(Path(target_freeze_path), LifecycleHoldoutTargetFreeze)
     if (
@@ -324,6 +400,17 @@ def build_lifecycle_holdout_audit_receipt(
         or calibration.plan_sha256 != target.public_plan_sha256
     ):
         raise ValueError("private holdout summary target does not match the calibration campaign")
+    private_summary = build_sealed_lifecycle_transfer_evaluation(
+        evaluation_spec,
+        target_mount=target_mount,
+    )
+    evaluated_reference = evaluation_spec.holdout_target_records[0]
+    evaluated_record = TrialRecord.model_validate_json(Path(evaluated_reference.ledger_path).read_bytes())
+    provenance = evaluated_record.lifecycle_provenance
+    target_reference = provenance.sealed_target_freeze if provenance is not None else None
+    target_freeze_sha256 = hashlib.sha256(Path(target_freeze_path).read_bytes()).hexdigest()
+    if target_reference is None or target_reference.sha256 != target_freeze_sha256:
+        raise ValueError("receipt target freeze does not match the evaluated private record")
     expected_condition = calibration.selected_condition
     selected = private_summary.selected_condition
     if (
@@ -383,6 +470,7 @@ def _build_target_freeze(
     calibration_manifest: LifecycleAblationManifest,
     mount: SealedLifecycleMount,
     commitment_salt: str,
+    private_audit_root: Path,
 ) -> LifecycleHoldoutTargetFreeze:
     manifest = LifecycleAblationManifest.model_validate(calibration_manifest.model_dump(mode="json"))
     policy = manifest.selection_policy
@@ -400,6 +488,7 @@ def _build_target_freeze(
         "public_manifest_sha256": plan.manifest_sha256,
         "public_plan_sha256": plan.plan_sha256,
         "public_selection_policy_sha256": selection_policy_sha256,
+        "private_audit_root": str(private_audit_root),
         "holdout_repetitions": 1,
         "lifecycle_id": package_identity["lifecycle_id"],
         "world_id": package_identity["world_id"],
@@ -474,6 +563,30 @@ def _read_model_once(path: Path, model_type: type[_ModelT]) -> _ModelT:
     if candidate.is_symlink() or not candidate.is_file():
         raise ValueError("write-once artifact path is not a regular file")
     return model_type.model_validate_json(candidate.read_bytes())
+
+
+def _private_audit_root_for_target_path(path: Path) -> Path:
+    destination = Path(path)
+    if (
+        not destination.is_absolute()
+        or destination.resolve(strict=False) != destination
+        or destination.name != "target-freeze.json"
+        or destination.parent.name != "authority"
+    ):
+        raise ValueError("target freeze must use the canonical private audit authority path")
+    root = destination.parent.parent
+    _prepare_private_parent(root)
+    return root
+
+
+def _validate_target_freeze_location(
+    path: Path,
+    target: LifecycleHoldoutTargetFreeze,
+) -> None:
+    layout = lifecycle_holdout_private_layout(target)
+    if Path(path) != layout.target_freeze_path:
+        raise ValueError("target freeze does not match the target-bound private audit layout")
+    _prepare_private_parent(layout.root)
 
 
 def _write_idempotent_model(path: Path, value: StrictModel) -> Path:

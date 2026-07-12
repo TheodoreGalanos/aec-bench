@@ -54,6 +54,8 @@ from aec_bench.meta_harness.evidence_lifecycle_transfer import (
     LifecycleTransferTargetResult,
 )
 from aec_bench.task_world_templates.lifecycles import materialize_sealed_lifecycle
+from tests.meta_harness.test_evidence_lifecycle_sealed_transfer import _sealed_transfer_fixture
+from tests.support.sealed_lifecycle_audit import _campaign_manifest as _sealed_campaign_manifest
 from tests.support.sealed_lifecycle_provider import FakeSealedLifecycleProvider
 
 
@@ -69,7 +71,7 @@ def test_target_freeze_binds_package_tree_provider_protocol_resolver_and_verifie
         calibration_manifest=manifest,
         mount=mount,
         commitment_salt="f" * 64,
-        output_path=tmp_path / "private" / "target-freeze.json",
+        output_path=tmp_path / "private" / "authority" / "target-freeze.json",
     )
     target = validate_lifecycle_holdout_target_freeze(
         calibration_manifest=manifest,
@@ -106,7 +108,7 @@ def test_target_freeze_is_idempotent_and_rejects_package_or_provider_semantic_dr
     manifest = _campaign_manifest(tmp_path)
     provider = FakeSealedLifecycleProvider()
     mount = materialize_sealed_lifecycle(provider, tmp_path / "sealed-package")
-    target_path = tmp_path / "private" / "target-freeze.json"
+    target_path = tmp_path / "private" / "authority" / "target-freeze.json"
 
     first = write_lifecycle_holdout_target_freeze(
         calibration_manifest=manifest,
@@ -140,9 +142,9 @@ def test_audit_claim_binds_both_freezes_and_consumes_the_one_execution_slot(tmp_
         calibration_manifest=manifest,
         mount=mount,
         commitment_salt="f" * 64,
-        output_path=tmp_path / "private" / "target-freeze.json",
+        output_path=tmp_path / "private" / "authority" / "target-freeze.json",
     )
-    claim_path = tmp_path / "private" / "audit" / "claim.json"
+    claim_path = tmp_path / "private" / "authority" / "claim.json"
 
     claim = claim_lifecycle_holdout_audit(
         calibration_freeze_path=calibration_path,
@@ -184,17 +186,17 @@ def test_private_roots_are_owner_only_and_concurrent_claim_allows_one_slot(tmp_p
             calibration_manifest=manifest,
             mount=mount,
             commitment_salt="f" * 64,
-            output_path=insecure_root / "target-freeze.json",
+            output_path=insecure_root / "authority" / "target-freeze.json",
         )
-    assert not (insecure_root / "target-freeze.json").exists()
+    assert not (insecure_root / "authority" / "target-freeze.json").exists()
 
     target_path = write_lifecycle_holdout_target_freeze(
         calibration_manifest=manifest,
         mount=mount,
         commitment_salt="f" * 64,
-        output_path=tmp_path / "private" / "target-freeze.json",
+        output_path=tmp_path / "private" / "authority" / "target-freeze.json",
     )
-    claim_path = tmp_path / "private" / "audit" / "claim.json"
+    claim_path = tmp_path / "private" / "authority" / "claim.json"
 
     def claim() -> str:
         try:
@@ -224,18 +226,18 @@ def test_audit_claim_rejects_calibration_freeze_that_does_not_match_target_commi
         calibration_manifest=manifest,
         mount=mount,
         commitment_salt="f" * 64,
-        output_path=tmp_path / "private" / "target-freeze.json",
+        output_path=tmp_path / "private" / "authority" / "target-freeze.json",
     )
     payload = calibration.model_dump(mode="json")
     payload["plan_sha256"] = "9" * 64
     payload["freeze_sha256"] = _payload_sha256(payload, exclude={"freeze_sha256"})
     mismatched = LifecycleCalibrationFreeze.model_validate(payload)
-    mismatched_path = tmp_path / "mismatched-calibration-freeze.json"
+    mismatched_path = calibration_path
     mismatched_path.write_text(
         json.dumps(mismatched.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    claim_path = tmp_path / "private" / "audit" / "claim.json"
+    claim_path = tmp_path / "private" / "authority" / "claim.json"
 
     with pytest.raises(ValueError, match="does not match the precommitted target campaign"):
         claim_lifecycle_holdout_audit(
@@ -247,23 +249,15 @@ def test_audit_claim_rejects_calibration_freeze_that_does_not_match_target_commi
     assert not claim_path.exists()
 
 
-def test_public_receipt_is_an_exact_allowlist_recomputed_from_private_summary(tmp_path: Path) -> None:
-    manifest = _campaign_manifest(tmp_path)
-    _, calibration = _write_calibration_freeze(tmp_path, manifest=manifest)
-    provider = FakeSealedLifecycleProvider()
-    mount = materialize_sealed_lifecycle(provider, tmp_path / "sealed-package")
-    target_path = write_lifecycle_holdout_target_freeze(
-        calibration_manifest=manifest,
-        mount=mount,
-        commitment_salt="f" * 64,
-        output_path=tmp_path / "private" / "target-freeze.json",
-    )
-    summary = _transfer_summary(tmp_path, reward=1.0)
+def test_public_receipt_is_an_exact_allowlist_recomputed_from_sealed_evidence(tmp_path: Path) -> None:
+    fixture = _sealed_transfer_fixture(tmp_path)
+    calibration = LifecycleCalibrationFreeze.model_validate_json(fixture.audit.calibration_freeze_path.read_bytes())
 
     receipt = build_lifecycle_holdout_audit_receipt(
         calibration_freeze=calibration,
-        target_freeze_path=target_path,
-        private_summary=summary,
+        target_freeze_path=fixture.audit.target_freeze_path,
+        evaluation_spec=fixture.spec,
+        target_mount=fixture.audit.mount,
     )
 
     assert set(receipt.model_dump(mode="json")) == {
@@ -295,7 +289,28 @@ def test_public_receipt_is_an_exact_allowlist_recomputed_from_private_summary(tm
     assert LifecycleHoldoutAuditReceipt.model_validate_json(output.read_bytes()) == receipt
 
 
-def test_public_receipt_rejects_private_fields_and_inconsistent_aggregates(tmp_path: Path) -> None:
+def test_public_receipt_runs_the_real_sealed_evaluator_before_aggregation(tmp_path: Path) -> None:
+    fixture = _sealed_transfer_fixture(tmp_path)
+    calibration = LifecycleCalibrationFreeze.model_validate_json(fixture.audit.calibration_freeze_path.read_bytes())
+
+    receipt = build_lifecycle_holdout_audit_receipt(
+        calibration_freeze=calibration,
+        target_freeze_path=fixture.audit.target_freeze_path,
+        evaluation_spec=fixture.spec,
+        target_mount=fixture.audit.mount,
+    )
+
+    assert receipt.target_record_count == 1
+    assert receipt.eligible_target_count == 1
+    assert receipt.mean_target_reward == 1.0
+    assert receipt.outcome_counts == LifecycleHoldoutAuditOutcomeCounts(
+        evaluated_pass=1,
+        evaluated_fail=0,
+        not_evaluable=0,
+    )
+
+
+def test_public_receipt_rejects_a_caller_fabricated_eligible_summary(tmp_path: Path) -> None:
     manifest = _campaign_manifest(tmp_path)
     _, calibration = _write_calibration_freeze(tmp_path, manifest=manifest)
     provider = FakeSealedLifecycleProvider()
@@ -304,12 +319,45 @@ def test_public_receipt_rejects_private_fields_and_inconsistent_aggregates(tmp_p
         calibration_manifest=manifest,
         mount=mount,
         commitment_salt="f" * 64,
-        output_path=tmp_path / "private" / "target-freeze.json",
+        output_path=tmp_path / "private" / "authority" / "target-freeze.json",
     )
+
+    with pytest.raises(TypeError, match="private_summary"):
+        build_lifecycle_holdout_audit_receipt(
+            calibration_freeze=calibration,
+            target_freeze_path=target_path,
+            private_summary=_transfer_summary(tmp_path, reward=1.0),
+        )
+
+
+def test_public_receipt_binds_the_commitment_to_the_evaluated_private_record(tmp_path: Path) -> None:
+    fixture = _sealed_transfer_fixture(tmp_path)
+    calibration = LifecycleCalibrationFreeze.model_validate_json(fixture.audit.calibration_freeze_path.read_bytes())
+    manifest = _sealed_campaign_manifest(fixture.audit.private_ledger_root.parent.parent)
+    different_target = write_lifecycle_holdout_target_freeze(
+        calibration_manifest=manifest,
+        mount=fixture.audit.mount,
+        commitment_salt="e" * 64,
+        output_path=tmp_path / "different-private" / "authority" / "target-freeze.json",
+    )
+
+    with pytest.raises(ValueError, match="receipt target freeze does not match the evaluated private record"):
+        build_lifecycle_holdout_audit_receipt(
+            calibration_freeze=calibration,
+            target_freeze_path=different_target,
+            evaluation_spec=fixture.spec,
+            target_mount=fixture.audit.mount,
+        )
+
+
+def test_public_receipt_rejects_private_fields_and_inconsistent_aggregates(tmp_path: Path) -> None:
+    fixture = _sealed_transfer_fixture(tmp_path)
+    calibration = LifecycleCalibrationFreeze.model_validate_json(fixture.audit.calibration_freeze_path.read_bytes())
     receipt = build_lifecycle_holdout_audit_receipt(
         calibration_freeze=calibration,
-        target_freeze_path=target_path,
-        private_summary=_transfer_summary(tmp_path, reward=0.0),
+        target_freeze_path=fixture.audit.target_freeze_path,
+        evaluation_spec=fixture.spec,
+        target_mount=fixture.audit.mount,
     )
     payload = receipt.model_dump(mode="json")
     payload["private_record_path"] = str(tmp_path / "private" / "record.json")
@@ -442,8 +490,12 @@ def _write_calibration_freeze(
     }
     payload["freeze_sha256"] = _payload_sha256(payload, exclude={"freeze_sha256"})
     freeze = LifecycleCalibrationFreeze.model_validate(payload)
-    path = tmp_path / "calibration-freeze.json"
+    path = tmp_path / "private" / "authority" / "calibration-freeze.json"
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(path.parent.parent, 0o700)
+    os.chmod(path.parent, 0o700)
     path.write_text(json.dumps(freeze.model_dump(mode="json"), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.chmod(path, 0o600)
     return path, freeze
 
 

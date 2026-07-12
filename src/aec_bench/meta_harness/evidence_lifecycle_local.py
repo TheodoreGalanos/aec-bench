@@ -48,6 +48,7 @@ from aec_bench.meta_harness.evidence_lifecycle_episode import (
     LifecycleVisibilityPolicy as LifecycleVisibilityPolicy,
 )
 from aec_bench.meta_harness.evidence_lifecycle_experiment import (
+    LifecycleExperimentRecorder,
     LifecycleExperimentSweepContext,
     record_lifecycle_experiment,
 )
@@ -288,6 +289,8 @@ def run_local_evidence_lifecycle_session(
     sweep_context: LifecycleExperimentSweepContext | None = None,
     repository_dir: Path | None = None,
     require_adapter_identity_match: bool = False,
+    experiment_recorder: LifecycleExperimentRecorder | None = None,
+    run_authorization_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Run all checkpoints in one adapter execution and one model conversation."""
     if adapter_kind not in {"tool_loop", "pydantic_ai"}:
@@ -297,7 +300,11 @@ def run_local_evidence_lifecycle_session(
 
     package = Path(package_dir)
     run = Path(run_dir)
-    initial = prepare_evidence_checkpoint(package, run)
+    initial = prepare_evidence_checkpoint(
+        package,
+        run,
+        run_authorization_sha256=run_authorization_sha256,
+    )
     if initial["status"] == "complete":
         raise EvidenceLifecycleError("lifecycle run is already complete")
     _seal_interrupted_sessions(
@@ -445,6 +452,7 @@ def run_local_evidence_lifecycle_session(
             ),
             sweep_context=sweep_context,
             repository_dir=repository_dir,
+            experiment_recorder=experiment_recorder,
         )
         raise
     finally:
@@ -509,6 +517,7 @@ def run_local_evidence_lifecycle_session(
         ),
         sweep_context=sweep_context,
         repository_dir=repository_dir,
+        experiment_recorder=experiment_recorder,
     )
 
 
@@ -542,6 +551,58 @@ def validate_completed_persistent_lifecycle_recovery(
     return lifecycle
 
 
+def seal_interrupted_persistent_lifecycle_session_results(
+    *,
+    package_dir: Path,
+    run_dir: Path,
+    model: str,
+    adapter_kind: str,
+    max_turns: int,
+    visibility_policy: LifecycleVisibilityPolicy,
+) -> dict[str, Any]:
+    """Seal missing persistent results without invoking an adapter or publishing an experiment."""
+    return seal_interrupted_lifecycle_session_results(
+        package_dir=package_dir,
+        run_dir=run_dir,
+        model=model,
+        adapter_kind=adapter_kind,
+        max_turns=max_turns,
+        execution_mode=LifecycleExecutionMode.PERSISTENT_CONTEXT,
+        visibility_policy=visibility_policy,
+    )
+
+
+def seal_interrupted_lifecycle_session_results(
+    *,
+    package_dir: Path,
+    run_dir: Path,
+    model: str,
+    adapter_kind: str,
+    max_turns: int,
+    execution_mode: LifecycleExecutionMode,
+    visibility_policy: LifecycleVisibilityPolicy,
+) -> dict[str, Any]:
+    """Seal missing interrupted session results for one frozen mode without invoking an adapter."""
+    lifecycle = read_evidence_lifecycle_state(Path(package_dir), Path(run_dir))
+    session_ids = {
+        str(attempt["session_id"])
+        for checkpoint in lifecycle.get("checkpoint_runs", [])
+        for attempt in checkpoint.get("attempts", [])
+    }
+    if not session_ids:
+        raise EvidenceLifecycleError("interrupted lifecycle has no session lineage")
+    _seal_interrupted_sessions(
+        run=Path(run_dir),
+        lifecycle=lifecycle,
+        model=model,
+        adapter_kind=adapter_kind,
+        max_turns=max_turns,
+        execution_mode=execution_mode.value,
+        memory_visibility_policy=visibility_policy.value,
+    )
+    return lifecycle
+
+
 def recover_completed_persistent_lifecycle_session(
     *,
     package_dir: Path,
@@ -554,6 +615,7 @@ def recover_completed_persistent_lifecycle_session(
     visibility_policy: LifecycleVisibilityPolicy,
     sweep_context: LifecycleExperimentSweepContext,
     repository_dir: Path,
+    experiment_recorder: LifecycleExperimentRecorder | None = None,
 ) -> dict[str, Any]:
     """Seal a complete persistent crash and publish an unscored canonical invocation."""
     package = Path(package_dir)
@@ -585,6 +647,7 @@ def recover_completed_persistent_lifecycle_session(
         ),
         sweep_context=sweep_context,
         repository_dir=repository_dir,
+        experiment_recorder=experiment_recorder,
     )
 
 
@@ -602,6 +665,8 @@ def run_local_evidence_lifecycle_fresh_context(
     sweep_context: LifecycleExperimentSweepContext | None = None,
     repository_dir: Path | None = None,
     require_adapter_identity_match: bool = False,
+    experiment_recorder: LifecycleExperimentRecorder | None = None,
+    run_authorization_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Run every checkpoint in a fresh adapter and return the normalized local result."""
     package = Path(package_dir)
@@ -618,7 +683,12 @@ def run_local_evidence_lifecycle_fresh_context(
         require_adapter_identity_match=require_adapter_identity_match,
     )
     try:
-        lifecycle = run_evidence_lifecycle(package, run, episode_environment=episode_environment)
+        lifecycle = run_evidence_lifecycle(
+            package,
+            run,
+            episode_environment=episode_environment,
+            run_authorization_sha256=run_authorization_sha256,
+        )
     except LifecycleEpisodeExecutionError:
         lifecycle = read_evidence_lifecycle_state(package, run)
     except Exception:
@@ -641,6 +711,7 @@ def run_local_evidence_lifecycle_fresh_context(
             ),
             sweep_context=sweep_context,
             repository_dir=repository_dir,
+            experiment_recorder=experiment_recorder,
         )
         raise
     sessions = _fresh_context_sessions(run)
@@ -661,6 +732,7 @@ def run_local_evidence_lifecycle_fresh_context(
         ),
         sweep_context=sweep_context,
         repository_dir=repository_dir,
+        experiment_recorder=experiment_recorder,
     )
 
 
@@ -1215,6 +1287,7 @@ def _build_local_task_run(
     agent: dict[str, Any],
     sweep_context: LifecycleExperimentSweepContext | None = None,
     repository_dir: Path | None = None,
+    experiment_recorder: LifecycleExperimentRecorder | None = None,
 ) -> dict[str, Any]:
     spec = load_evidence_lifecycle_spec(package)
     verifier_exception: Exception | None = None
@@ -1256,7 +1329,8 @@ def _build_local_task_run(
         )
     reward = float(verification["reward"])
     passed = bool(verification["passed"])
-    experiment = record_lifecycle_experiment(
+    recorder = experiment_recorder if experiment_recorder is not None else record_lifecycle_experiment
+    experiment = recorder(
         package_dir=package,
         run_dir=run,
         agent=agent,
@@ -1401,6 +1475,20 @@ def _supports_evidence_requests(package_dir: Path) -> bool:
 def _supports_lifecycle_operations(package_dir: Path) -> bool:
     spec = load_evidence_lifecycle_spec(Path(package_dir))
     return any(checkpoint.conditional_operations is not None for checkpoint in spec.checkpoints)
+
+
+def build_lifecycle_tool_schema(
+    execution_mode: str,
+    *,
+    supports_evidence_requests: bool,
+    supports_lifecycle_operations: bool = False,
+) -> list[dict[str, str]]:
+    """Build the exact host tool schema bound into lifecycle execution provenance."""
+    return _lifecycle_tool_schema(
+        execution_mode,
+        supports_evidence_requests=supports_evidence_requests,
+        supports_lifecycle_operations=supports_lifecycle_operations,
+    )
 
 
 def _lifecycle_tool_schema(

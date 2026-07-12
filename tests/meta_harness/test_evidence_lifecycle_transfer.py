@@ -79,7 +79,7 @@ from aec_bench.task_world_templates.lifecycles import (
 _RUNTIME_SHA256 = "1" * 64
 
 
-def test_distinct_complete_holdout_under_public_selected_condition_is_evaluated(
+def test_unsealed_partial_holdout_cannot_stand_in_for_a_sealed_target(
     tmp_path: Path,
 ) -> None:
     condition = _condition()
@@ -113,18 +113,18 @@ def test_distinct_complete_holdout_under_public_selected_condition_is_evaluated(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
-    assert result.status == "evaluated"
+    assert result.status == "not_evaluable"
     assert result.study_design.interpretation == "descriptive_holdout_generalization"
     assert result.study_design.selection_basis == "public_calibration"
     assert result.study_design.causal_effects_supported is False
     assert result.study_design.cross_run_learning_supported is False
     assert result.calibration_support_count == 1
-    assert result.eligible_target_count == 1
-    assert result.mean_target_reward == 0.75
-    assert result.target_results[0].verifier_reward == 0.75
-    assert result.target_results[0].verifier_validity is not None
-    assert result.target_results[0].verifier_validity.verifier_completed is True
-    assert result.target_results[0].semantic_diagnostics == semantic
+    assert result.eligible_target_count == 0
+    assert result.mean_target_reward is None
+    assert result.target_results[0].reasons == ("record_incomplete",)
+    assert result.target_results[0].verifier_reward is None
+    assert result.target_results[0].verifier_validity is None
+    assert result.target_results[0].semantic_diagnostics is None
     assert target.record_path.read_bytes() == target_bytes
     assert TrialRecord.model_validate_json(target_bytes).evaluation.reward == 0.75
     serialized = result.model_dump(mode="json")
@@ -244,7 +244,10 @@ def test_target_package_must_be_distinct_from_every_supporting_calibration_packa
     )
 
     assert result.status == "not_evaluable"
-    assert result.target_results[0].reasons == ("target_package_matches_calibration",)
+    assert result.target_results[0].reasons == (
+        "record_incomplete",
+        "target_package_matches_calibration",
+    )
     assert result.mean_target_reward is None
 
 
@@ -291,14 +294,17 @@ def test_target_package_must_be_distinct_from_any_integrity_valid_calibration_in
     assert result.calibration_support_count == 1
     assert "missing_task_visibility" in result.calibration_results[0].reasons
     assert result.status == "not_evaluable"
-    assert result.target_results[0].reasons == ("target_package_matches_calibration",)
+    assert result.target_results[0].reasons == (
+        "record_incomplete",
+        "target_package_matches_calibration",
+    )
 
 
 @pytest.mark.parametrize(
     ("completeness", "verifier_completed", "expected_reason"),
     [
         (Completeness.PARTIAL, True, "record_incomplete"),
-        (Completeness.COMPLETE, False, "verifier_incomplete"),
+        (Completeness.PARTIAL, False, "verifier_incomplete"),
     ],
 )
 def test_partial_or_unverified_target_is_not_evaluable(
@@ -489,7 +495,10 @@ def test_v3_snapshot_cannot_smuggle_v4_evidence_request_fields(tmp_path: Path) -
 
     assert result.status == "not_evaluable"
     assert result.calibration_results[0].reasons == ("snapshot_contract_invalid",)
-    assert result.target_results[0].reasons == ("no_public_calibration_support",)
+    assert result.target_results[0].reasons == (
+        "no_public_calibration_support",
+        "record_incomplete",
+    )
 
 
 @pytest.mark.parametrize(
@@ -532,11 +541,14 @@ def test_transfer_evaluator_fully_validates_v5_operation_snapshot(
     if forge_catalog:
         assert result.calibration_results[0].reasons == ("snapshot_contract_invalid",)
         assert result.status == "not_evaluable"
-        assert result.target_results[0].reasons == ("no_public_calibration_support",)
+        assert result.target_results[0].reasons == (
+            "no_public_calibration_support",
+            "record_incomplete",
+        )
     else:
         assert result.calibration_results[0].reasons == ()
-        assert result.status == "evaluated"
-        assert result.target_results[0].reasons == ()
+        assert result.status == "not_evaluable"
+        assert result.target_results[0].reasons == ("record_incomplete",)
 
 
 def test_transfer_evaluator_rejects_rehashed_malformed_operation_tool_schema(tmp_path: Path) -> None:
@@ -718,7 +730,8 @@ def test_transfer_evaluator_uses_one_exact_prefix_when_snapshot_path_contains_ru
     )
 
     assert result.calibration_results[0].reasons == ()
-    assert result.status == "evaluated"
+    assert result.calibration_results[0].status == "supports_selected_condition"
+    assert result.status == "not_evaluable"
 
 
 def test_transfer_evaluator_replays_nonempty_v5_history_from_reconciled_snapshot_bytes(
@@ -753,7 +766,8 @@ def test_transfer_evaluator_replays_nonempty_v5_history_from_reconciled_snapshot
     )
 
     assert result.calibration_results[0].reasons == ()
-    assert result.status == "evaluated"
+    assert result.calibration_results[0].status == "supports_selected_condition"
+    assert result.status == "not_evaluable"
 
 
 def test_transfer_evaluator_binds_action_free_current_source_to_packaged_resolver(
@@ -896,7 +910,10 @@ def test_transfer_evaluator_binds_v5_visibility_to_validated_package_variant(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
-    assert result.target_results[0].reasons == ("snapshot_contract_invalid",)
+    assert result.target_results[0].reasons == (
+        "record_incomplete",
+        "snapshot_contract_invalid",
+    )
     assert result.status == "not_evaluable"
 
 
@@ -991,21 +1008,19 @@ def test_rehashed_record_fields_must_still_match_the_immutable_snapshot(
         package_sha256="a" * 64,
         reward=1.0,
         condition=condition,
+        completeness=(Completeness.PARTIAL if tampered_field == "completeness" else Completeness.COMPLETE),
+        repository_kind=("source_tree" if tampered_field == "completeness" else "git"),
     )
-    target_visibility = Visibility.PUBLIC if tampered_field == "visibility" else Visibility.HOLDOUT
-    target_package = "a" * 64 if tampered_field == "package_sha256" else "b" * 64
     target = _write_record(
         tmp_path,
         experiment_id="target",
         trial_id="target-001",
-        visibility=target_visibility,
-        package_sha256=target_package,
+        visibility=Visibility.HOLDOUT,
+        package_sha256="b" * 64,
         reward=1.0,
         condition=condition,
-        completeness=(Completeness.PARTIAL if tampered_field == "completeness" else Completeness.COMPLETE),
-        repository_kind=("source_tree" if tampered_field == "completeness" else "git"),
     )
-    payload = json.loads(target.record_path.read_text(encoding="utf-8"))
+    payload = json.loads(calibration.record_path.read_text(encoding="utf-8"))
     if tampered_field == "reward":
         payload["evaluation"]["reward"] = 0.25
     elif tampered_field == "validity_errors":
@@ -1013,19 +1028,19 @@ def test_rehashed_record_fields_must_still_match_the_immutable_snapshot(
     elif tampered_field == "completeness":
         payload["completeness"] = "complete"
     elif tampered_field == "visibility":
-        payload["task"]["visibility"] = "holdout"
+        payload["task"]["visibility"] = None
     else:
         payload["task"]["task_revision"] = "b" * 64
         payload["lifecycle_provenance"]["package_sha256"] = "b" * 64
-    target.record_path.write_text(json.dumps(payload), encoding="utf-8")
-    reference = target.reference.model_copy(update={"sha256": _sha256(target.record_path)})
+    calibration.record_path.write_text(json.dumps(payload), encoding="utf-8")
+    reference = calibration.reference.model_copy(update={"sha256": _sha256(calibration.record_path)})
 
     result = build_lifecycle_transfer_evaluation(
-        _spec(condition=condition, calibration=(calibration.reference,), targets=(reference,))
+        _spec(condition=condition, calibration=(reference,), targets=(target.reference,))
     )
 
     assert result.status == "not_evaluable"
-    assert "snapshot_record_mismatch" in result.target_results[0].reasons
+    assert "snapshot_record_mismatch" in result.calibration_results[0].reasons
     assert result.mean_target_reward is None
 
 
@@ -1135,7 +1150,7 @@ def test_evidence_request_state_contract_rejects_unknown_checkpoint_id(tmp_path:
         validate_evidence_request_run_state(state, spec)
 
 
-def test_eligible_zero_reward_is_evaluated_as_zero_not_missing_evidence(tmp_path: Path) -> None:
+def test_unsealed_zero_reward_is_not_misreported_as_holdout_evidence(tmp_path: Path) -> None:
     condition = _condition()
     calibration = _write_record(
         tmp_path,
@@ -1160,10 +1175,11 @@ def test_eligible_zero_reward_is_evaluated_as_zero_not_missing_evidence(tmp_path
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
-    assert result.status == "evaluated"
-    assert result.eligible_target_count == 1
-    assert result.mean_target_reward == 0.0
-    assert result.target_results[0].verifier_validity is not None
+    assert result.status == "not_evaluable"
+    assert result.eligible_target_count == 0
+    assert result.mean_target_reward is None
+    assert result.target_results[0].reasons == ("record_incomplete",)
+    assert result.target_results[0].verifier_validity is None
 
 
 def test_input_order_does_not_change_evaluation_identity_or_summary(tmp_path: Path) -> None:
@@ -1209,7 +1225,7 @@ def test_input_order_does_not_change_evaluation_identity_or_summary(tmp_path: Pa
     )
 
     assert forward == reverse
-    assert forward.mean_target_reward == 0.5
+    assert forward.mean_target_reward is None
 
 
 def test_cloned_record_identity_cannot_reuse_one_immutable_invocation(tmp_path: Path) -> None:
@@ -1251,7 +1267,8 @@ def test_cloned_record_identity_cannot_reuse_one_immutable_invocation(tmp_path: 
         )
     )
 
-    assert result.eligible_target_count == 1
+    assert result.eligible_target_count == 0
+    assert result.target_results[0].reasons == ("record_incomplete",)
     assert result.target_results[1].status == "not_evaluable"
     assert "snapshot_record_mismatch" in result.target_results[1].reasons
 
@@ -1471,15 +1488,21 @@ def _write_record(
     package_sha256: str,
     reward: float,
     condition: LifecycleTransferCondition,
-    completeness: Completeness = Completeness.COMPLETE,
+    completeness: Completeness | None = None,
     verifier_completed: bool = True,
     semantic_transition: dict[str, object] | None = None,
-    repository_kind: Literal["git", "source_tree"] = "git",
+    repository_kind: Literal["git", "source_tree"] | None = None,
     verification_overall: str | None = None,
     verification_lifecycle_id: str | None = None,
     verification_template_id: str = "drainage-model-evidence-lifecycle-review",
     state_checkpoint_updates: dict[str, object] | None = None,
 ) -> _WrittenRecord:
+    record_completeness = completeness or (
+        Completeness.PARTIAL if visibility is Visibility.HOLDOUT else Completeness.COMPLETE
+    )
+    record_repository_kind = repository_kind or (
+        "source_tree" if record_completeness is Completeness.PARTIAL else "git"
+    )
     execution_mode: Literal["persistent_context", "fresh_context"] = LifecycleExecutionMode(
         condition.execution_mode
     ).value
@@ -1552,7 +1575,7 @@ def _write_record(
         "created_at": "2026-07-12T00:00:00+00:00",
         "repository": {
             "commit": "commit-abc",
-            "repository_kind": repository_kind,
+            "repository_kind": record_repository_kind,
             "dirty": False,
             "dirty_digest": "4" * 64,
         },
@@ -1718,7 +1741,7 @@ def _write_record(
             spec_sha256="3" * 64,
             package_sha256=package_sha256,
             repository_commit="commit-abc",
-            repository_kind=repository_kind,
+            repository_kind=record_repository_kind,
             repository_dirty=False,
             repository_dirty_digest="4" * 64,
             runtime_provider="local",
@@ -1731,7 +1754,7 @@ def _write_record(
             ablation_manifest=ablation_manifest,
             ablation_plan=ablation_plan,
         ),
-        completeness=completeness,
+        completeness=record_completeness,
     )
     record_path = ledger_root / experiment_id / f"{trial_id}.json"
     record_path.parent.mkdir(parents=True, exist_ok=True)

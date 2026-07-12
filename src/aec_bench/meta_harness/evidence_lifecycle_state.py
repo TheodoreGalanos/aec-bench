@@ -389,12 +389,20 @@ class EvidenceLifecycleRunState(StrictModel):
     world_id: NonEmptyStr
     lifecycle_spec_sha256: NonEmptyStr
     package_sha256: NonEmptyStr
+    run_authorization_sha256: str | None = None
     status: LifecycleRunStatus = LifecycleRunStatus.AWAITING_EVIDENCE_RELEASE
     active_checkpoint_id: str | None = None
     checkpoint_runs: list[CheckpointRunRecord]
     revisits: list[CheckpointRevisitRecord] = Field(default_factory=list)
     transitions: list[LifecycleTransitionRecord] = Field(default_factory=list)
     branch: LifecycleBranchRecord | None = None
+
+    @field_validator("run_authorization_sha256")
+    @classmethod
+    def validate_run_authorization_sha256(cls, value: str | None) -> str | None:
+        if value is not None and (len(value) != 64 or any(character not in "0123456789abcdef" for character in value)):
+            raise ValueError("run authorization sha256 must contain 64 lowercase hexadecimal characters")
+        return value
 
     @model_validator(mode="after")
     def validate_run_state(self) -> EvidenceLifecycleRunState:

@@ -250,6 +250,10 @@ class LifecycleTrialProvenance(StrictModel):
     invocation_index: ArtifactReference | None = None
     ablation_manifest: ArtifactReference | None = None
     ablation_plan: ArtifactReference | None = None
+    calibration_freeze: ArtifactReference | None = None
+    sealed_target_freeze: ArtifactReference | None = None
+    sealed_audit_claim: ArtifactReference | None = None
+    sealed_audit_manifest: ArtifactReference | None = None
 
     @field_validator(
         "spec_sha256",
@@ -308,12 +312,31 @@ class TrialRecord(StrictModel):
                 if self.lifecycle_provenance is not None and self.lifecycle_provenance.repository_dirty:
                     missing.append("lifecycle_provenance.clean_repository")
                 if self.lifecycle_provenance is not None:
-                    if self.lifecycle_provenance.invocation_index is None:
-                        missing.append("lifecycle_provenance.invocation_index")
-                    if self.lifecycle_provenance.ablation_manifest is None:
-                        missing.append("lifecycle_provenance.ablation_manifest")
-                    if self.lifecycle_provenance.ablation_plan is None:
-                        missing.append("lifecycle_provenance.ablation_plan")
+                    public_fields = (
+                        "invocation_index",
+                        "ablation_manifest",
+                        "ablation_plan",
+                    )
+                    holdout_fields = (
+                        "calibration_freeze",
+                        "sealed_target_freeze",
+                        "sealed_audit_claim",
+                        "sealed_audit_manifest",
+                    )
+                    required_fields: tuple[str, ...]
+                    forbidden_fields: tuple[str, ...]
+                    if self.task.visibility is Visibility.HOLDOUT:
+                        required_fields = holdout_fields
+                        forbidden_fields = public_fields
+                    else:
+                        required_fields = public_fields
+                        forbidden_fields = holdout_fields
+                    for field in required_fields:
+                        if getattr(self.lifecycle_provenance, field) is None:
+                            missing.append(f"lifecycle_provenance.{field}")
+                    for field in forbidden_fields:
+                        if getattr(self.lifecycle_provenance, field) is not None:
+                            missing.append(f"lifecycle_provenance.forbidden_{field}")
                 if self.lifecycle_execution is not None and not self.lifecycle_execution.sessions:
                     missing.append("lifecycle_execution.sessions")
                 if self.lifecycle_execution is not None and any(
@@ -348,18 +371,17 @@ class TrialRecord(StrictModel):
                 raise ValueError("agent model must match the lifecycle resolved model")
             if adapters and adapters != {self.agent.adapter}:
                 raise ValueError("agent adapter must match lifecycle sessions")
-            if (
-                self.outputs.artifacts
-                and self.lifecycle_provenance is not None
-                and self.lifecycle_provenance.invocation_manifest not in self.outputs.artifacts
-            ):
-                raise ValueError("lifecycle invocation manifest must be included in output artifacts")
             if self.outputs.artifacts and self.lifecycle_provenance is not None:
                 bound_artifacts = (
+                    self.lifecycle_provenance.invocation_manifest,
                     self.lifecycle_provenance.invocation_index,
                     self.lifecycle_provenance.ablation_manifest,
                     self.lifecycle_provenance.ablation_plan,
+                    self.lifecycle_provenance.calibration_freeze,
+                    self.lifecycle_provenance.sealed_target_freeze,
+                    self.lifecycle_provenance.sealed_audit_claim,
+                    self.lifecycle_provenance.sealed_audit_manifest,
                 )
                 if any(artifact is not None and artifact not in self.outputs.artifacts for artifact in bound_artifacts):
-                    raise ValueError("lifecycle sweep provenance must be included in output artifacts")
+                    raise ValueError("lifecycle provenance must be included in output artifacts")
         return self
