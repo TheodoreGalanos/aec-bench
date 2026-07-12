@@ -76,6 +76,8 @@ Public and holdout tasks must remain structurally separate. Holdout-derived feed
 
 Python enforcement direction:
 - visibility fields in task metadata,
+- preserve explicit task visibility in new TrialRecords while accepting missing visibility only for historical parsing;
+- treat missing visibility as ineligible for public-calibration or holdout evaluation rather than inferring it from names or storage paths;
 - filtering built into query/report surfaces,
 - reviewer and export paths respect holdout policy.
 
@@ -152,6 +154,8 @@ Python enforcement direction:
 - publish session results, snapshots, and records atomically and fsync-durably through every new ancestor, and recover terminal-session crashes, artifact-only finalization, or a locked shared invocation index from durable evidence without rerunning the agent;
 - quarantine a torn terminal session result before publishing a conservative unresolved failure, but reject malformed trajectory history rather than silently truncating or reconstructing it;
 - persist the study design with each lifecycle calibration and never make causal claims beyond its budget and ordering controls;
+- evaluate holdout generalization only from hash-pinned complete records and immutable snapshot artifacts under an exactly matched selected condition;
+- keep holdout-derived transfer summaries build-only until their persistence and publication surfaces enforce internal visibility;
 - keep true holdout evidence outside public variant registries and committed packages.
 
 ---

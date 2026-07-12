@@ -19,6 +19,7 @@ from typing import Any, Literal, cast
 
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
+from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trajectory import read_trajectory
 from aec_bench.contracts.trial_record import (
     AdaptationProvenance,
@@ -177,6 +178,12 @@ def _build_lifecycle_trial_record(
         raise ValueError("lifecycle verification does not match planned lifecycle")
     if lifecycle.get("variant") != variant:
         raise ValueError("lifecycle experiment variant does not match package")
+    if not isinstance(variant, dict) or not isinstance(variant.get("visibility"), str):
+        raise ValueError("lifecycle package variant visibility is missing")
+    try:
+        task_visibility = Visibility(variant["visibility"])
+    except ValueError as exc:
+        raise ValueError("lifecycle package variant visibility is invalid") from exc
 
     model = experiment.get("model", {})
     execution = experiment.get("execution", {})
@@ -348,6 +355,7 @@ def _build_lifecycle_trial_record(
         task=TaskReference(
             task_id=manifest.lifecycle_template_id,
             task_revision=str(state["package_sha256"]),
+            visibility=task_visibility,
         ),
         agent=AgentReference(
             adapter=resolved_adapter,
@@ -538,7 +546,7 @@ def validate_lifecycle_ablation_record(
         ledger_root=ledger_root,
         plan=None,
     )
-    if record != expected:
+    if not _matches_historical_record(record, expected):
         raise ValueError("existing TrialRecord does not match its immutable lifecycle ablation snapshot")
 
 
@@ -585,8 +593,22 @@ def validate_historical_lifecycle_ablation_record(
         ledger_root=ledger_root,
         plan=plan,
     )
-    if record != expected:
+    if not _matches_historical_record(record, expected):
         raise ValueError("historical TrialRecord does not match its immutable lifecycle ablation snapshot")
+
+
+def _matches_historical_record(record: TrialRecord, expected: TrialRecord) -> bool:
+    """Allow only the omitted visibility field used by records written before that field existed."""
+    if record == expected:
+        return True
+    if record.task.visibility is not None or "visibility" in record.task.model_fields_set:
+        return False
+    legacy_expected = expected.model_copy(
+        update={
+            "task": expected.task.model_copy(update={"visibility": None}),
+        }
+    )
+    return record == legacy_expected
 
 
 def _record_from_snapshot(

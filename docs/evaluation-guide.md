@@ -75,6 +75,12 @@ The LLM reviewer follows the same boundary. It can flag verifier
 miscalibration, missing evidence, or event candidates, but it never edits
 `reward.json` or `details.json`.
 
+### Descriptive holdout generalization
+
+Lifecycle transfer evaluation is a post-verifier evidence contract, not another execution stage. It reads hash-pinned immutable `TrialRecord` and snapshot artifacts, requires explicit public-calibration and holdout visibility, and checks an exact selected execution condition before reporting target reward. Partial records, incomplete verification, shared source/target package identity, condition drift, or artifact tampering produce `not_evaluable` with explicit reasons.
+
+The result describes holdout generalization under a condition selected on public calibration evidence. It does not report a causal effect, winner, or cross-run learner transfer, and semantic-transition metrics remain optional diagnostics rather than a replacement score. The current API is build-only because generic evaluation persistence does not yet enforce a holdout/internal publication boundary.
+
 ---
 
 ## Trace Analysis Rules

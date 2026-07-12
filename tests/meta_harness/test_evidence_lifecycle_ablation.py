@@ -21,6 +21,7 @@ import aec_bench.meta_harness.evidence_lifecycle_ablation_plan as ablation_plan_
 import aec_bench.meta_harness.evidence_lifecycle_experiment as experiment_runtime
 import aec_bench.meta_harness.evidence_lifecycle_trial_record as trial_record_runtime
 from aec_bench.contracts.experiment_manifest import AgentConfig
+from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import Completeness, TrialRecord
 from aec_bench.ledger.writer import DuplicateTrialRecordError
 from aec_bench.meta_harness.evidence_lifecycle import (
@@ -50,9 +51,17 @@ from aec_bench.meta_harness.evidence_lifecycle_local import (
     LifecycleVisibilityPolicy,
     run_local_evidence_lifecycle_fresh_context,
 )
+from aec_bench.meta_harness.evidence_lifecycle_transfer import (
+    LifecycleTransferCondition,
+    LifecycleTransferEvaluationSpec,
+    LifecycleTransferRecordReference,
+    LifecycleTransferStudyDesign,
+    build_lifecycle_transfer_evaluation,
+)
 from aec_bench.meta_harness.evidence_lifecycle_trial_record import (
     build_lifecycle_trial_record,
     finalize_lifecycle_trial_record,
+    validate_historical_lifecycle_ablation_record,
 )
 from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.lifecycles import registered_lifecycle_verifier
@@ -513,6 +522,7 @@ def test_build_lifecycle_trial_record_maps_validated_working_provenance(tmp_path
     assert record.experiment_id == manifest.experiment_id
     assert record.task.task_id == TEMPLATE_ID
     assert record.task.task_revision == json.loads((run_dir / "state.json").read_text())["package_sha256"]
+    assert record.task.visibility is Visibility.PUBLIC
     assert record.agent.adapter == trial.agent.adapter
     assert record.agent.model == trial.agent.model
     assert record.agent.adapter_revision
@@ -584,6 +594,67 @@ def test_finalize_lifecycle_trial_record_snapshots_artifacts_and_writes_once(tmp
             run_dir=run_dir,
         )
     assert record_path.read_bytes() == original_record
+
+
+def test_historical_lifecycle_record_without_visibility_still_validates_but_is_not_backfilled(
+    tmp_path: Path,
+) -> None:
+    manifest, trial, package, run_dir = _recorded_trial(tmp_path)
+    record_path = finalize_lifecycle_trial_record(
+        manifest=manifest,
+        trial=trial,
+        package_dir=package,
+        run_dir=run_dir,
+    )
+    payload = json.loads(record_path.read_text(encoding="utf-8"))
+    payload["task"].pop("visibility")
+    record_path.write_text(json.dumps(payload), encoding="utf-8")
+    historical = TrialRecord.model_validate_json(record_path.read_text(encoding="utf-8"))
+    plan = build_lifecycle_ablation_plan(manifest)
+
+    validate_historical_lifecycle_ablation_record(historical, manifest, plan, trial)
+
+    assert historical.task.visibility is None
+    assert "visibility" not in historical.task.model_fields_set
+    target_path = Path(manifest.ledger_root) / "holdout" / "target-001.json"
+    target_reference = LifecycleTransferRecordReference(
+        experiment_id="holdout",
+        trial_id="target-001",
+        ledger_path=str(target_path),
+        sha256="0" * 64,
+    )
+    assert historical.lifecycle_execution is not None
+    assert historical.lifecycle_provenance is not None
+    summary = build_lifecycle_transfer_evaluation(
+        LifecycleTransferEvaluationSpec(
+            study_design=LifecycleTransferStudyDesign(
+                interpretation="descriptive_holdout_generalization",
+                selection_basis="public_calibration",
+                causal_effects_supported=False,
+                cross_run_learning_supported=False,
+            ),
+            selected_condition=LifecycleTransferCondition(
+                model=historical.agent.model,
+                adapter=historical.agent.adapter,
+                runtime_dependency_sha256=historical.lifecycle_provenance.runtime_dependency_sha256,
+                execution_mode=historical.lifecycle_execution.execution_mode,
+                memory_visibility_policy=historical.lifecycle_execution.memory_visibility_policy,
+                max_turns_per_session=historical.lifecycle_execution.max_turns_per_session,
+            ),
+            public_calibration_records=(
+                LifecycleTransferRecordReference(
+                    experiment_id=historical.experiment_id,
+                    trial_id=historical.trial_id,
+                    ledger_path=str(record_path),
+                    sha256=_sha256(record_path),
+                ),
+            ),
+            holdout_target_records=(target_reference,),
+        )
+    )
+
+    assert "missing_task_visibility" in summary.calibration_results[0].reasons
+    assert "snapshot_record_mismatch" not in summary.calibration_results[0].reasons
 
 
 def test_finalize_lifecycle_trial_record_recovers_snapshot_left_before_record_write(tmp_path: Path) -> None:

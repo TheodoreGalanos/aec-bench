@@ -147,6 +147,7 @@ def import_harbor_trial(
         task=TaskReference(
             task_id=task.task_id,
             task_revision=harbor_result.task_checksum,
+            visibility=task.visibility,
         ),
         agent=AgentReference(
             adapter=harbor_result.agent_info.name,

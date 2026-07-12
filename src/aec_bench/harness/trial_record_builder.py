@@ -46,7 +46,11 @@ def build_trial_record(
         trial_id=trial_id,
         experiment_id=experiment_id,
         timestamp=timestamp or datetime.now(UTC),
-        task=TaskReference(task_id=task.task_id, task_revision=task_revision),
+        task=TaskReference(
+            task_id=task.task_id,
+            task_revision=task_revision,
+            visibility=task.visibility,
+        ),
         agent=AgentReference(
             adapter=result.adapter_name,
             model=result.resolved_model,
