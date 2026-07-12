@@ -38,6 +38,7 @@ from aec_bench.task_world_templates.lifecycles import (
     materialize_lifecycle_template,
     materialize_sealed_lifecycle,
     registered_lifecycle_template_ids,
+    sealed_lifecycle_mount_active,
     sealed_lifecycle_provider_protocol_identity,
     verify_lifecycle_template,
 )
@@ -58,12 +59,14 @@ class _ExplodingProviderContract:
 
 
 def test_explicit_sealed_mount_runs_real_task_without_mutating_public_registries(tmp_path: Path) -> None:
+    assert sealed_lifecycle_mount_active() is False
     public_before = _public_cli_data()
     public_ids_before = registered_lifecycle_template_ids()
     provider = FakeSealedLifecycleProvider()
     package = tmp_path / "private" / "package"
     run_dir = tmp_path / "private" / "run"
     mount = materialize_sealed_lifecycle(provider, package)
+    assert sealed_lifecycle_mount_active() is False
 
     unmounted_run = tmp_path / "unmounted-run"
     with pytest.raises(SealedLifecycleProviderError, match="^sealed_provider_not_mounted$"):
@@ -71,6 +74,7 @@ def test_explicit_sealed_mount_runs_real_task_without_mutating_public_registries
     assert not unmounted_run.exists()
 
     with mount.activate():
+        assert sealed_lifecycle_mount_active() is True
         initial = prepare_evidence_checkpoint(package, run_dir)
         open_checkpoint_attempt(
             package,
@@ -129,6 +133,7 @@ def test_explicit_sealed_mount_runs_real_task_without_mutating_public_registries
         ) as identity_error:
             verify_lifecycle_template(package, run_dir)
         _assert_sanitized_error(identity_error.value, provider)
+
         provider.failure_stage = None
 
         copied_package = tmp_path / "private" / "copied-package"
@@ -137,6 +142,7 @@ def test_explicit_sealed_mount_runs_real_task_without_mutating_public_registries
             prepare_evidence_checkpoint(copied_package, tmp_path / "copied-run")
         assert not (tmp_path / "copied-run").exists()
 
+    assert sealed_lifecycle_mount_active() is False
     calls_before_listing = provider.calls.copy()
     public_after = _public_cli_data()
     assert provider.calls == calls_before_listing

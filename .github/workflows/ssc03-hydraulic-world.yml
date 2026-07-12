@@ -1,5 +1,5 @@
-# ABOUTME: Runs the deterministic SSC-03 hydraulic, interaction, and sealed-provider gates on Linux.
-# ABOUTME: Checks canonical evidence plus the directly affected lifecycle, export, runtime, and CLI regressions.
+# ABOUTME: Runs deterministic SSC-03 hydraulic, interaction, sealed-provider, and calibration gates on Linux.
+# ABOUTME: Checks real task seams plus the directly affected lifecycle, export, runtime, and CLI regressions.
 
 name: SSC-03 hydraulic world
 
@@ -12,11 +12,14 @@ on:
       - "docs/prime-lab-guide.md"
       - "docs/ssc03-hydraulic-world.md"
       - "docs/ssc03-interactive-hydraulic-lifecycle.md"
+      - "docs/ssc03-public-calibration-freeze.md"
       - "docs/ssc03-richer-interaction-roadmap.md"
       - "docs/ssc03-sealed-holdout-boundary.md"
       - "docs/ssc03-swmm-compatibility-matrix.yaml"
+      - "docs/examples/meta-harness/hydraulic-lifecycle-calibration.example.yaml"
       - "docs/task-world-opportunities/real-world-grounding/stormwater-drainage-package/swmm_example3_detention_source_pack/**"
       - "pyproject.toml"
+      - "src/aec_bench/adapters/rlm/providers.py"
       - "src/aec_bench/cli/output.py"
       - "src/aec_bench/cli/commands/hydraulic_world.py"
       - "src/aec_bench/cli/commands/meta_harness.py"
@@ -34,7 +37,9 @@ on:
       - "src/aec_bench/task_world_templates/lifecycles/**"
       - "tests/cli/test_meta_harness.py"
       - "tests/cli/test_task_world_templates.py"
+      - "tests/adapters/rlm/test_providers.py"
       - "tests/meta_harness/test_evidence_lifecycle*.py"
+      - "tests/meta_harness/test_hydraulic_lifecycle_ablation_smoke.py"
       - "tests/meta_harness/test_hydraulic_operation_chain.py"
       - "tests/meta_harness/test_lifecycle_operation*.py"
       - "tests/prime_lab/test_lifecycle_exporter.py"
@@ -79,12 +84,15 @@ jobs:
       - name: Run directly affected lifecycle and template regressions
         run: >-
           uv run pytest -q
+          tests/adapters/rlm/test_providers.py
           tests/cli/test_meta_harness.py
           tests/cli/test_task_world_templates.py
           tests/meta_harness/test_evidence_lifecycle.py
+          tests/meta_harness/test_evidence_lifecycle_calibration.py
           tests/meta_harness/test_evidence_lifecycle_episode.py
           tests/meta_harness/test_evidence_lifecycle_transfer.py
           tests/meta_harness/test_hydraulic_operation_chain.py
+          tests/meta_harness/test_hydraulic_lifecycle_ablation_smoke.py
           tests/meta_harness/test_lifecycle_operation_branch.py
           tests/meta_harness/test_lifecycle_operation_contracts.py
           tests/meta_harness/test_lifecycle_operation_protocol.py
@@ -104,13 +112,17 @@ jobs:
 
       - name: Check lint and formatting
         run: |
-          uv run ruff check src/aec_bench/meta_harness/evidence_lifecycle*.py src/aec_bench/meta_harness/evidence_request_protocol.py src/aec_bench/meta_harness/lifecycle_operation*.py src/aec_bench/prime_lab/lifecycle_*.py src/aec_bench/task_world_templates/catalogue.py src/aec_bench/task_world_templates/contracts.py src/aec_bench/task_world_templates/hydraulics src/aec_bench/task_world_templates/lifecycles tests/cli/test_task_world_templates.py tests/meta_harness/test_evidence_lifecycle*.py tests/meta_harness/test_hydraulic_operation_chain.py tests/meta_harness/test_lifecycle_operation*.py tests/prime_lab/test_lifecycle_exporter.py tests/support/sealed_lifecycle_provider.py tests/task_world_templates/hydraulics tests/task_world_templates/test_sealed_lifecycle_provider.py
-          uv run ruff format --check src/aec_bench/meta_harness/evidence_lifecycle*.py src/aec_bench/meta_harness/evidence_request_protocol.py src/aec_bench/meta_harness/lifecycle_operation*.py src/aec_bench/prime_lab/lifecycle_*.py src/aec_bench/task_world_templates/catalogue.py src/aec_bench/task_world_templates/contracts.py src/aec_bench/task_world_templates/hydraulics src/aec_bench/task_world_templates/lifecycles tests/cli/test_task_world_templates.py tests/meta_harness/test_evidence_lifecycle*.py tests/meta_harness/test_hydraulic_operation_chain.py tests/meta_harness/test_lifecycle_operation*.py tests/prime_lab/test_lifecycle_exporter.py tests/support/sealed_lifecycle_provider.py tests/task_world_templates/hydraulics tests/task_world_templates/test_sealed_lifecycle_provider.py
+          uv run ruff check src/aec_bench/adapters/rlm/providers.py src/aec_bench/meta_harness/evidence_lifecycle*.py src/aec_bench/meta_harness/evidence_request_protocol.py src/aec_bench/meta_harness/lifecycle_operation*.py src/aec_bench/prime_lab/lifecycle_*.py src/aec_bench/task_world_templates/catalogue.py src/aec_bench/task_world_templates/contracts.py src/aec_bench/task_world_templates/hydraulics src/aec_bench/task_world_templates/lifecycles tests/adapters/rlm/test_providers.py tests/cli/test_task_world_templates.py tests/meta_harness/test_evidence_lifecycle*.py tests/meta_harness/test_hydraulic_lifecycle_ablation_smoke.py tests/meta_harness/test_hydraulic_operation_chain.py tests/meta_harness/test_lifecycle_operation*.py tests/prime_lab/test_lifecycle_exporter.py tests/support/sealed_lifecycle_provider.py tests/task_world_templates/hydraulics tests/task_world_templates/test_sealed_lifecycle_provider.py
+          uv run ruff format --check src/aec_bench/adapters/rlm/providers.py src/aec_bench/meta_harness/evidence_lifecycle*.py src/aec_bench/meta_harness/evidence_request_protocol.py src/aec_bench/meta_harness/lifecycle_operation*.py src/aec_bench/prime_lab/lifecycle_*.py src/aec_bench/task_world_templates/catalogue.py src/aec_bench/task_world_templates/contracts.py src/aec_bench/task_world_templates/hydraulics src/aec_bench/task_world_templates/lifecycles tests/adapters/rlm/test_providers.py tests/cli/test_task_world_templates.py tests/meta_harness/test_evidence_lifecycle*.py tests/meta_harness/test_hydraulic_lifecycle_ablation_smoke.py tests/meta_harness/test_hydraulic_operation_chain.py tests/meta_harness/test_lifecycle_operation*.py tests/prime_lab/test_lifecycle_exporter.py tests/support/sealed_lifecycle_provider.py tests/task_world_templates/hydraulics tests/task_world_templates/test_sealed_lifecycle_provider.py
 
       - name: Check strict types
         run: >-
           uv run mypy
+          src/aec_bench/adapters/rlm/providers.py
           src/aec_bench/meta_harness/evidence_lifecycle.py
+          src/aec_bench/meta_harness/evidence_lifecycle_ablation.py
+          src/aec_bench/meta_harness/evidence_lifecycle_ablation_plan.py
+          src/aec_bench/meta_harness/evidence_lifecycle_calibration.py
           src/aec_bench/meta_harness/evidence_lifecycle_episode.py
           src/aec_bench/meta_harness/evidence_lifecycle_experiment.py
           src/aec_bench/meta_harness/evidence_lifecycle_local.py
@@ -129,10 +141,14 @@ jobs:
           src/aec_bench/task_world_templates/lifecycles/__init__.py
           src/aec_bench/task_world_templates/lifecycles/provider.py
           src/aec_bench/task_world_templates/lifecycles/ssc03_hydraulic_interaction.py
+          src/aec_bench/task_world_templates/lifecycles/ssc03_hydraulic_interaction_smoke.py
           src/aec_bench/task_world_templates/lifecycles/ssc03_hydraulic_interaction_variants.py
           src/aec_bench/task_world_templates/lifecycles/ssc03_hydraulic_interaction_verifier.py
+          tests/adapters/rlm/test_providers.py
           tests/meta_harness/test_evidence_lifecycle_transfer.py
+          tests/meta_harness/test_evidence_lifecycle_calibration.py
           tests/meta_harness/test_hydraulic_operation_chain.py
+          tests/meta_harness/test_hydraulic_lifecycle_ablation_smoke.py
           tests/meta_harness/test_lifecycle_operation_branch.py
           tests/meta_harness/test_lifecycle_operation_contracts.py
           tests/meta_harness/test_lifecycle_operation_protocol.py

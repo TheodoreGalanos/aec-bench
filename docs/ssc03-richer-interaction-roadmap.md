@@ -99,9 +99,13 @@ The first out-of-tree synthetic execution proof uses a pump-station duty lifecyc
 
 ## PR21: preregistered campaign and condition selection
 
-Run the public calibration campaign, select one execution condition using only public evidence, and freeze model, adapter, realized runtime dependency hash, execution mode, visibility policy, turn limit, action-protocol hash, and tool-schema hash before mounting any holdout target.
+PR21 makes the PR19 hydraulic family executable through the existing campaign runner. Its registered task-owned smoke environment creates real operation transactions and runtime action IDs rather than relying on static gold submissions. Credential-free inspection executes that smoke on all four public variants, expands the exact four-condition plan, and leaves the requested campaign roots untouched. Condition-specific model execution begins only in the provider-backed campaign.
 
-This is the first phase that needs provider credentials and a spend/repetition budget. It also needs approval that private synthetic target content may be sent to the selected provider.
+A preregistered policy enters the manifest, plan, and trial identities before execution. After every planned immutable public record exists, the deterministic selector requires full variant/repetition coverage, selects maximum mean verifier reward with a canonical tie-break, and writes one immutable condition binding requested and resolved model/adapter, realized runtime dependencies, execution mode, visibility policy, turn limit, lifecycle-operation protocol, and complete tool schema. It refuses to run under a sealed mount. See [the public calibration and freeze guide](ssc03-public-calibration-freeze.md).
+
+This is the first phase that needs provider credentials plus a public spend/repetition budget. Approval to send private synthetic target content to the selected provider is a separate PR22 prerequisite.
+
+The campaign substrate and deterministic freeze proof do not themselves provide model evidence. The paid public run remains pending an exact model and spend decision; private-target transmission approval is needed only for PR22.
 
 ## PR22: redacted one-shot audit
 

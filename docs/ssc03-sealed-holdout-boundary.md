@@ -96,4 +96,4 @@ PR20 provides no model-performance result, public calibration result, holdout ge
 
 It also does not make the synthetic pump values engineering-authoritative. Pump curves, wet-well behavior, rising-main assumptions, operating rules, tolerances, and NPSH treatment still require engineering review before a private target is frozen.
 
-PR21 selects and freezes an execution condition using public calibration evidence. PR22 must add access-controlled full-fidelity records plus a separately allowlisted redacted publication receipt before the one-shot holdout audit can be reported.
+PR21 adds the preregistered public-only selector and write-once condition freeze, including runtime, operation-protocol, and tool-schema identity. Its deterministic campaign proof is not model evidence; the paid public run still requires an approved model and spend envelope. PR22 must add access-controlled full-fidelity records plus a separately allowlisted redacted publication receipt before the one-shot holdout audit can be reported.

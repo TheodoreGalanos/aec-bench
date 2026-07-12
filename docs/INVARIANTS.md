@@ -158,6 +158,12 @@ Python enforcement direction:
 - publish session results, snapshots, and records atomically and fsync-durably through every new ancestor, and recover terminal-session crashes, artifact-only finalization, or a locked shared invocation index from durable evidence without rerunning the agent;
 - quarantine a torn terminal session result before publishing a conservative unresolved failure, but reject malformed trajectory history rather than silently truncating or reconstructing it;
 - persist the study design with each lifecycle calibration and never make causal claims beyond its budget and ordering controls;
+- preregister the public selection rule, public/holdout repetitions, and a positive finite estimated spend envelope in the campaign manifest before execution;
+- require selectable campaigns to cover the complete registered public variant set and use the normal provider registry rather than an injected execution seam;
+- require every planned immutable public record before selection, preserve incorrect completed outcomes in the score, and make partial or identity-drifting candidates ineligible rather than dropping their bad cells;
+- derive the freeze from the snapshotted historical manifest, plan, and captured interaction identity, and hash the exact bytes used for selection;
+- freeze requested and resolved model/adapter, realized runtime dependencies, mode, visibility, turn limit, lifecycle-operation protocol, and complete tool schema while no sealed holdout mount is active;
+- publish a calibration freeze once, accept byte-identical retries, and reject replacement or evidence drift;
 - evaluate holdout generalization only from hash-pinned complete records and immutable snapshot artifacts under an exactly matched selected condition;
 - keep holdout-derived transfer summaries build-only until their persistence and publication surfaces enforce internal visibility;
 - keep true holdout evidence outside public variant registries and committed packages.

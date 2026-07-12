@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from aec_bench.meta_harness.evidence_lifecycle import validate_lifecycle_verification
+from aec_bench.meta_harness.evidence_lifecycle_episode import LifecycleEpisodeEnvironment
 from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate, EvidenceLifecycleSpec
 from aec_bench.task_world_templates.lifecycles.provider import (
     SEALED_LIFECYCLE_RECEIPT_FILENAME,
@@ -21,6 +22,7 @@ from aec_bench.task_world_templates.lifecycles.provider import (
     _materialize_sealed_lifecycle,
     active_sealed_lifecycle_mount,
     is_sealed_lifecycle_package,
+    sealed_lifecycle_mount_active,
     sealed_lifecycle_provider_protocol_identity,
 )
 
@@ -39,8 +41,10 @@ __all__ = [
     "materialize_lifecycle_template",
     "materialize_sealed_lifecycle",
     "registered_lifecycle_operation_resolver",
+    "registered_lifecycle_smoke_environment",
     "registered_lifecycle_template_ids",
     "registered_lifecycle_verifier",
+    "sealed_lifecycle_mount_active",
     "sealed_lifecycle_provider_protocol_identity",
     "verify_lifecycle_template",
 ]
@@ -57,6 +61,8 @@ class LifecycleTemplateRegistration:
     variant_get_name: str | None = None
     variant_metadata_name: str | None = None
     operation_resolver_name: str | None = None
+    smoke_module_name: str | None = None
+    smoke_environment_name: str | None = None
 
 
 _LIFECYCLES = {
@@ -82,6 +88,8 @@ _LIFECYCLES = {
             variant_get_name="get_ssc03_hydraulic_interaction_variant",
             variant_metadata_name="validated_ssc03_hydraulic_interaction_variant",
             operation_resolver_name="build_ssc03_hydraulic_operation_resolver",
+            smoke_module_name=("aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_interaction_smoke"),
+            smoke_environment_name="build_ssc03_hydraulic_smoke_environment",
         ),
     ]
 }
@@ -153,6 +161,22 @@ def registered_lifecycle_operation_resolver(template_id: str) -> Callable[[Path,
         Callable[[Path, Path], Any],
         getattr(import_module(registration.module_name), registration.operation_resolver_name),
     )
+
+
+def registered_lifecycle_smoke_environment(
+    template_id: str,
+    package_dir: Path,
+) -> LifecycleEpisodeEnvironment | None:
+    """Build an optional task-owned deterministic environment for campaign preflight."""
+    registration = _entry(template_id)
+    if registration.smoke_environment_name is None:
+        return None
+    module = import_module(registration.smoke_module_name or registration.module_name)
+    factory = cast(
+        Callable[[Path], LifecycleEpisodeEnvironment],
+        getattr(module, registration.smoke_environment_name),
+    )
+    return factory(Path(package_dir))
 
 
 def lifecycle_package_variant(package_dir: Path) -> dict[str, Any] | None:
