@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import copy
+import fcntl
 import hashlib
 import json
 import os
 import shutil
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -33,20 +35,61 @@ from aec_bench.meta_harness.evidence_lifecycle_state import (
     CheckpointRunRecord,
     CheckpointRunStatus,
     EvidenceLifecycleRunState,
+    EvidenceRequestOutcome,
+    EvidenceRequestRejection,
     LifecycleBranchRecord,
     LifecycleRunStatus,
     LifecycleTransitionKind,
-    LifecycleTransitionRecord,
     LifecycleVerificationResult,
 )
-from aec_bench.meta_harness.ledger import append_ledger_entry, read_ledger
+from aec_bench.meta_harness.evidence_request_protocol import (
+    EvidenceLifecycleError as EvidenceLifecycleError,
+)
+from aec_bench.meta_harness.evidence_request_protocol import (
+    EvidenceRequestResolution as EvidenceRequestResolution,
+)
+from aec_bench.meta_harness.evidence_request_protocol import (
+    EvidenceRequestResolutionManifest as EvidenceRequestResolutionManifest,
+)
+from aec_bench.meta_harness.evidence_request_protocol import (
+    _append_transition,
+    _branch_action_state_sha256,
+    _checkpoint,
+    _evidence_request_catalog,
+    _validate_evidence_request_state_contract,
+)
+from aec_bench.meta_harness.evidence_request_protocol import (
+    evidence_request_catalog_payload as evidence_request_catalog_payload,
+)
+from aec_bench.meta_harness.evidence_request_protocol import (
+    evidence_request_protocol_identity as evidence_request_protocol_identity,
+)
+from aec_bench.meta_harness.evidence_request_protocol import (
+    validate_evidence_request_run_state as validate_evidence_request_run_state,
+)
+from aec_bench.meta_harness.evidence_request_store import (
+    _assert_evidence_request_artifacts_unchanged,
+    _copy_file_atomic,
+    _copy_release,
+    _inherit_evidence_request_transactions,
+    _ledger_path,
+    _load_evidence_request_resolutions,
+    _read_json,
+    _record_evidence_request_action,
+    _recover_evidence_request_transactions,
+    _sha256,
+    _state_path,
+    _sync_evidence_request_ledger,
+    _sync_transition_ledger,
+    _workspace,
+    _write_evidence_request_catalog,
+    _write_json,
+    _write_state,
+)
+from aec_bench.meta_harness.ledger import append_ledger_entry
 from aec_bench.task_world_templates.contracts import EvidenceCheckpointSpec, EvidenceLifecycleSpec
 
 LifecycleVerifier = Callable[[Path, Path], dict[str, Any] | LifecycleVerificationResult]
-
-
-class EvidenceLifecycleError(RuntimeError):
-    """Raised when a lifecycle package or checkpoint transition is invalid."""
 
 
 class LifecycleEpisodeExecutionError(EvidenceLifecycleError):
@@ -78,9 +121,17 @@ def prepare_evidence_checkpoint(package_dir: Path, run_dir: Path) -> dict[str, A
     """Release exactly the next checkpoint into the persistent agent workspace."""
     package = Path(package_dir)
     run = Path(run_dir)
+    with _lifecycle_state_lock(run):
+        return _prepare_evidence_checkpoint_locked(package, run)
+
+
+def _prepare_evidence_checkpoint_locked(package: Path, run: Path) -> dict[str, Any]:
+    """Release the next checkpoint while holding the per-run mutation lock."""
     spec = load_evidence_lifecycle_spec(package)
+    if any(checkpoint.conditional_evidence is not None for checkpoint in spec.checkpoints):
+        _load_evidence_request_resolutions(package, spec)
     if _state_path(run).exists():
-        state = _load_state(package, run, spec)
+        state = _load_state(package, run, spec, lock_held=True)
     else:
         _preflight_checkpoint(package, spec.checkpoints[0])
         state = _initialize_state(package, run, spec)
@@ -123,6 +174,7 @@ def prepare_evidence_checkpoint(package_dir: Path, run_dir: Path) -> dict[str, A
     )
     state.status = LifecycleRunStatus.AWAITING_CHECKPOINT_SUBMISSION
     state.active_checkpoint_id = checkpoint.checkpoint_id
+    _write_evidence_request_catalog(run, checkpoint, checkpoint_run)
     _write_state(run, state)
     _sync_transition_ledger(run, state)
     append_ledger_entry(
@@ -136,6 +188,164 @@ def prepare_evidence_checkpoint(package_dir: Path, run_dir: Path) -> dict[str, A
     return _checkpoint_context(run, checkpoint, state)
 
 
+def request_evidence_checkpoint(
+    package_dir: Path,
+    run_dir: Path,
+    *,
+    checkpoint_id: str,
+    request_id: str,
+    reason: str,
+    session_id: str,
+) -> dict[str, Any]:
+    """Release one declared conditional evidence packet for the active attempt."""
+    if not checkpoint_id.strip() or not request_id.strip() or not reason.strip():
+        raise EvidenceLifecycleError("evidence request checkpoint, request, and reason must not be blank")
+    package = Path(package_dir)
+    run = Path(run_dir)
+    with _lifecycle_state_lock(run):
+        return _request_evidence_checkpoint_locked(
+            package,
+            run,
+            checkpoint_id=checkpoint_id,
+            request_id=request_id,
+            reason=reason,
+            session_id=session_id,
+        )
+
+
+def _request_evidence_checkpoint_locked(
+    package: Path,
+    run: Path,
+    *,
+    checkpoint_id: str,
+    request_id: str,
+    reason: str,
+    session_id: str,
+) -> dict[str, Any]:
+    spec = load_evidence_lifecycle_spec(package)
+    resolutions = _load_evidence_request_resolutions(package, spec)
+    state = _load_state(package, run, spec, lock_held=True)
+    active_checkpoint_id = state.active_checkpoint_id
+    if active_checkpoint_id is None:
+        raise EvidenceLifecycleError("no checkpoint is active")
+    checkpoint = _checkpoint(spec, active_checkpoint_id)
+    checkpoint_run = state.checkpoint(active_checkpoint_id)
+    attempt = checkpoint_run.active_attempt
+    if attempt is None:
+        raise EvidenceLifecycleError("no checkpoint attempt is active")
+    if attempt.session_id != session_id:
+        raise EvidenceLifecycleError(
+            f"active attempt belongs to {attempt.session_id}; cannot request evidence from {session_id}"
+        )
+
+    if checkpoint_id != active_checkpoint_id:
+        return _record_evidence_request_action(
+            run,
+            spec,
+            state,
+            requested_checkpoint_id=checkpoint_id,
+            request_id=request_id,
+            reason=reason,
+            session_id=session_id,
+            outcome=EvidenceRequestOutcome.REJECTED,
+            rejection=EvidenceRequestRejection.INACTIVE_CHECKPOINT,
+        )
+
+    conditional = checkpoint.conditional_evidence
+    if conditional is None:
+        return _record_evidence_request_action(
+            run,
+            spec,
+            state,
+            requested_checkpoint_id=checkpoint_id,
+            request_id=request_id,
+            reason=reason,
+            session_id=session_id,
+            outcome=EvidenceRequestOutcome.REJECTED,
+            rejection=EvidenceRequestRejection.NOT_SUPPORTED,
+        )
+
+    request = next((item for item in conditional.requests if item.request_id == request_id), None)
+    if request is None:
+        return _record_evidence_request_action(
+            run,
+            spec,
+            state,
+            requested_checkpoint_id=checkpoint_id,
+            request_id=request_id,
+            reason=reason,
+            session_id=session_id,
+            outcome=EvidenceRequestOutcome.REJECTED,
+            rejection=EvidenceRequestRejection.UNKNOWN_REQUEST,
+        )
+
+    prior_release = next(
+        (
+            action
+            for action in checkpoint_run.evidence_request_actions
+            if action.request_id == request_id and action.outcome == EvidenceRequestOutcome.RELEASED
+        ),
+        None,
+    )
+    if prior_release is not None:
+        _assert_evidence_request_artifacts_unchanged(run, prior_release)
+        return _record_evidence_request_action(
+            run,
+            spec,
+            state,
+            requested_checkpoint_id=checkpoint_id,
+            request_id=request_id,
+            reason=reason,
+            session_id=session_id,
+            outcome=EvidenceRequestOutcome.ALREADY_RELEASED,
+            released_artifacts=prior_release.released_artifacts,
+        )
+
+    released_ids = {
+        action.request_id
+        for action in checkpoint_run.evidence_request_actions
+        if action.outcome == EvidenceRequestOutcome.RELEASED
+    }
+    if not set(request.prerequisite_request_ids).issubset(released_ids):
+        return _record_evidence_request_action(
+            run,
+            spec,
+            state,
+            requested_checkpoint_id=checkpoint_id,
+            request_id=request_id,
+            reason=reason,
+            session_id=session_id,
+            outcome=EvidenceRequestOutcome.REJECTED,
+            rejection=EvidenceRequestRejection.PREREQUISITES_INCOMPLETE,
+        )
+    if checkpoint_run.evidence_request_budget_remaining < 1:
+        return _record_evidence_request_action(
+            run,
+            spec,
+            state,
+            requested_checkpoint_id=checkpoint_id,
+            request_id=request_id,
+            reason=reason,
+            session_id=session_id,
+            outcome=EvidenceRequestOutcome.REJECTED,
+            rejection=EvidenceRequestRejection.BUDGET_EXHAUSTED,
+        )
+
+    resolution = resolutions[(checkpoint_id, request_id)]
+    source = package / resolution.source_path
+    return _record_evidence_request_action(
+        run,
+        spec,
+        state,
+        requested_checkpoint_id=checkpoint_id,
+        request_id=request_id,
+        reason=reason,
+        session_id=session_id,
+        outcome=EvidenceRequestOutcome.RELEASED,
+        release_source=source,
+    )
+
+
 def submit_evidence_checkpoint(
     package_dir: Path,
     run_dir: Path,
@@ -145,8 +355,19 @@ def submit_evidence_checkpoint(
     """Accept one structurally valid submission and preserve it outside the workspace."""
     package = Path(package_dir)
     run = Path(run_dir)
+    with _lifecycle_state_lock(run):
+        return _submit_evidence_checkpoint_locked(package, run, episode_result=episode_result)
+
+
+def _submit_evidence_checkpoint_locked(
+    package: Path,
+    run: Path,
+    *,
+    episode_result: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Submit the active checkpoint while holding the per-run mutation lock."""
     spec = load_evidence_lifecycle_spec(package)
-    state = _load_state(package, run, spec)
+    state = _load_state(package, run, spec, lock_held=True)
     checkpoint_id = state.active_checkpoint_id
     if not checkpoint_id:
         raise EvidenceLifecycleError("no checkpoint is awaiting submission")
@@ -222,8 +443,29 @@ def branch_evidence_lifecycle(
     package = Path(package_dir)
     parent_run = Path(parent_run_dir)
     branch_run = Path(branch_run_dir)
+    with _lifecycle_state_lock(parent_run):
+        return _branch_evidence_lifecycle_locked(
+            package,
+            parent_run,
+            branch_run,
+            checkpoint_id=checkpoint_id,
+            branch_id=branch_id,
+            reason=reason,
+        )
+
+
+def _branch_evidence_lifecycle_locked(
+    package: Path,
+    parent_run: Path,
+    branch_run: Path,
+    *,
+    checkpoint_id: str,
+    branch_id: str,
+    reason: str,
+) -> dict[str, Any]:
+    """Create a branch from a stable parent state held under its mutation lock."""
     spec = load_evidence_lifecycle_spec(package)
-    parent_state = _load_state(package, parent_run, spec)
+    parent_state = _load_state(package, parent_run, spec, lock_held=True)
     _assert_prior_submissions_unchanged(parent_run, parent_state)
     try:
         branch_index = next(
@@ -252,6 +494,16 @@ def branch_evidence_lifecycle(
                     released_files=list(inherited.released_files),
                     submission_path=inherited.submission_path,
                     submission_sha256=inherited.submission_sha256,
+                    attempts=[
+                        attempt.model_copy(deep=True, update={"inherited_from_parent": True})
+                        for attempt in inherited.attempts
+                    ],
+                    evidence_request_budget=inherited.evidence_request_budget,
+                    evidence_request_budget_remaining=inherited.evidence_request_budget_remaining,
+                    evidence_request_actions=[
+                        action.model_copy(deep=True, update={"inherited_from_parent": True})
+                        for action in inherited.evidence_request_actions
+                    ],
                     inherited_from_parent=True,
                 )
             )
@@ -261,10 +513,29 @@ def branch_evidence_lifecycle(
                     checkpoint_id=checkpoint.checkpoint_id,
                     status=CheckpointRunStatus.ACTIVE,
                     released_files=list(parent_checkpoint.released_files),
+                    attempts=[
+                        attempt.model_copy(deep=True, update={"inherited_from_parent": True})
+                        for attempt in parent_checkpoint.attempts
+                    ],
+                    evidence_request_budget=parent_checkpoint.evidence_request_budget,
+                    evidence_request_budget_remaining=parent_checkpoint.evidence_request_budget_remaining,
+                    evidence_request_actions=[
+                        action.model_copy(deep=True, update={"inherited_from_parent": True})
+                        for action in parent_checkpoint.evidence_request_actions
+                    ],
                 )
             )
         else:
-            checkpoint_runs.append(CheckpointRunRecord(checkpoint_id=checkpoint.checkpoint_id))
+            request_budget = (
+                checkpoint.conditional_evidence.request_budget if checkpoint.conditional_evidence is not None else 0
+            )
+            checkpoint_runs.append(
+                CheckpointRunRecord(
+                    checkpoint_id=checkpoint.checkpoint_id,
+                    evidence_request_budget=request_budget,
+                    evidence_request_budget_remaining=request_budget,
+                )
+            )
 
     state = EvidenceLifecycleRunState(
         lifecycle_id=spec.lifecycle_id,
@@ -279,6 +550,11 @@ def branch_evidence_lifecycle(
             parent_run_dir=str(parent_run),
             branched_from_checkpoint_id=checkpoint_id,
             parent_submission_sha256=parent_checkpoint.submission_sha256,
+            parent_action_state_sha256=_branch_action_state_sha256(
+                parent_state,
+                branch_index=branch_index,
+                inherited_only=False,
+            ),
             reason=reason,
         ),
     )
@@ -307,6 +583,14 @@ def branch_evidence_lifecycle(
             if index < branch_index:
                 _inherit_submission(parent_run, staging_run, checkpoint)
 
+        _inherit_evidence_request_transactions(parent_run, staging_run, state)
+        for checkpoint in spec.checkpoints[: branch_index + 1]:
+            _write_evidence_request_catalog(
+                staging_run,
+                checkpoint,
+                state.checkpoint(checkpoint.checkpoint_id),
+            )
+
         parent_archive = parent_run / "episodes" / checkpoint_id / "submission.json"
         staged_origin = workspace / "branch_origin" / f"{checkpoint_id}.json"
         staged_submission = workspace / _checkpoint(spec, checkpoint_id).submission_path
@@ -318,6 +602,7 @@ def branch_evidence_lifecycle(
         )
         _write_state(staging_run, state)
         _sync_transition_ledger(staging_run, state)
+        _sync_evidence_request_ledger(staging_run, state)
         final_origin = _workspace(branch_run) / "branch_origin" / f"{checkpoint_id}.json"
         final_submission = _workspace(branch_run) / _checkpoint(spec, checkpoint_id).submission_path
         append_ledger_entry(
@@ -346,8 +631,27 @@ def open_checkpoint_attempt(
     """Open a checkpoint attempt, interrupting an abandoned active attempt."""
     package = Path(package_dir)
     run = Path(run_dir)
+    with _lifecycle_state_lock(run):
+        return _open_checkpoint_attempt_locked(
+            package,
+            run,
+            session_id=session_id,
+            execution_mode=execution_mode,
+            episode_request_sha256=episode_request_sha256,
+        )
+
+
+def _open_checkpoint_attempt_locked(
+    package: Path,
+    run: Path,
+    *,
+    session_id: str,
+    execution_mode: str,
+    episode_request_sha256: str | None,
+) -> dict[str, Any]:
+    """Open an attempt while holding the per-run mutation lock."""
     spec = load_evidence_lifecycle_spec(package)
-    state = _load_state(package, run, spec)
+    state = _load_state(package, run, spec, lock_held=True)
     checkpoint_id = state.active_checkpoint_id
     if checkpoint_id is None:
         raise EvidenceLifecycleError("no checkpoint is active")
@@ -400,8 +704,25 @@ def fail_checkpoint_attempt(
     """Close the active checkpoint attempt after an execution failure."""
     package = Path(package_dir)
     run = Path(run_dir)
+    with _lifecycle_state_lock(run):
+        return _fail_checkpoint_attempt_locked(
+            package,
+            run,
+            session_id=session_id,
+            failure_kind=failure_kind,
+        )
+
+
+def _fail_checkpoint_attempt_locked(
+    package: Path,
+    run: Path,
+    *,
+    session_id: str,
+    failure_kind: str,
+) -> dict[str, Any]:
+    """Fail an attempt while holding the per-run mutation lock."""
     spec = load_evidence_lifecycle_spec(package)
-    state = _load_state(package, run, spec)
+    state = _load_state(package, run, spec, lock_held=True)
     checkpoint_id = state.active_checkpoint_id
     if checkpoint_id is None:
         raise EvidenceLifecycleError("no checkpoint is active")
@@ -443,8 +764,25 @@ def revisit_evidence_checkpoint(
     """Return and log an immutable prior checkpoint without rewinding the run."""
     package = Path(package_dir)
     run = Path(run_dir)
+    with _lifecycle_state_lock(run):
+        return _revisit_evidence_checkpoint_locked(
+            package,
+            run,
+            checkpoint_id=checkpoint_id,
+            reason=reason,
+        )
+
+
+def _revisit_evidence_checkpoint_locked(
+    package: Path,
+    run: Path,
+    *,
+    checkpoint_id: str,
+    reason: str,
+) -> dict[str, Any]:
+    """Record a revisit while holding the per-run mutation lock."""
     spec = load_evidence_lifecycle_spec(package)
-    state = _load_state(package, run, spec)
+    state = _load_state(package, run, spec, lock_held=True)
     _assert_prior_submissions_unchanged(run, state)
     try:
         checkpoint_run = state.checkpoint(checkpoint_id)
@@ -501,10 +839,16 @@ def run_evidence_lifecycle(
         raw_context = prepare_evidence_checkpoint(package_dir, run_dir)
         if raw_context["status"] == "complete":
             return raw_context
-        context = LifecycleEpisodeContext.from_runtime_context(raw_context)
+        context = LifecycleEpisodeContext.from_runtime_context(
+            raw_context,
+            visibility_policy=episode_environment.memory_visibility_policy,
+        )
         _recover_host_episode_attempt(context, episode_environment)
         episode_environment.recover(context)
-        context = LifecycleEpisodeContext.from_runtime_context(prepare_evidence_checkpoint(package_dir, run_dir))
+        context = LifecycleEpisodeContext.from_runtime_context(
+            prepare_evidence_checkpoint(package_dir, run_dir),
+            visibility_policy=episode_environment.memory_visibility_policy,
+        )
         _preserve_prior_attempt_submission(context)
         checkpoint_run = next(item for item in context.checkpoint_runs if item.checkpoint_id == context.checkpoint_id)
         attempt_sequence = len(checkpoint_run.attempts) + 1
@@ -516,6 +860,7 @@ def run_evidence_lifecycle(
             attempt_id=attempt_id,
             session_id=session_id,
         )
+        request = _adopt_compatible_durable_episode_request(request)
         try:
             episode_environment.prepare(request)
         except Exception as exc:
@@ -780,6 +1125,8 @@ def _build_episode_request(
         instruction_path=context.instruction_path,
         submission_path=context.submission_path,
         released_files=context.released_files,
+        evidence_request_catalog=context.evidence_request_catalog,
+        released_evidence_artifacts=context.released_evidence_artifacts,
         completed_checkpoint_ids=context.completed_checkpoint_ids,
     )
 
@@ -813,7 +1160,7 @@ def _persist_episode_request(request: LifecycleEpisodeRequest) -> Path:
     """Publish the host-authored request before making its attempt active."""
     request_dir = Path(request.run_dir) / "episodes" / request.checkpoint_id / request.session_id
     request_path = request_dir / "episode_request.json"
-    payload = json.dumps(request.model_dump(mode="json"), indent=2, sort_keys=True) + "\n"
+    payload = _episode_request_json(request)
     return _persist_host_json(
         request_path,
         payload,
@@ -845,7 +1192,7 @@ def _recover_host_episode_attempt(
         attempt_id=attempt.attempt_id,
         session_id=attempt.session_id,
     )
-    if request != expected_request:
+    if request != expected_request and not _matches_legacy_v1_episode_request(request, expected_request):
         raise EvidenceLifecycleError(f"interrupted episode request identity mismatch: {attempt.attempt_id}")
     result_path = result_dir / "episode_result.json"
     if result_path.is_file():
@@ -948,7 +1295,7 @@ def _quarantine_prepared_host_artifacts(request: LifecycleEpisodeRequest) -> tup
         if not source.is_file():
             raise EvidenceLifecycleError(f"reserved episode result path is not a file: {source}")
         if filename == "episode_request.json":
-            expected = json.dumps(request.model_dump(mode="json"), indent=2, sort_keys=True) + "\n"
+            expected = _episode_request_json(request)
             if source.read_text(encoding="utf-8") == expected:
                 continue
         destination = result_dir / f"environment_prepared_{filename}"
@@ -958,6 +1305,49 @@ def _quarantine_prepared_host_artifacts(request: LifecycleEpisodeRequest) -> tup
         fsync_directory(result_dir)
         quarantined.append(filename)
     return tuple(quarantined)
+
+
+def _adopt_compatible_durable_episode_request(
+    request: LifecycleEpisodeRequest,
+) -> LifecycleEpisodeRequest:
+    """Reuse an exact durable request, including the pre-v2 shape, before environment preparation."""
+    request_path = (
+        Path(request.run_dir) / "episodes" / request.checkpoint_id / request.session_id / "episode_request.json"
+    )
+    if not request_path.is_file():
+        return request
+    try:
+        durable = LifecycleEpisodeRequest.model_validate(_read_json(request_path))
+    except (EvidenceLifecycleError, ValidationError):
+        return request
+    if durable == request or _matches_legacy_v1_episode_request(durable, request):
+        return durable
+    return request
+
+
+def _matches_legacy_v1_episode_request(
+    durable: LifecycleEpisodeRequest,
+    expected: LifecycleEpisodeRequest,
+) -> bool:
+    """Accept only the exact field projection emitted by the v1 episode contract."""
+    v2_fields = {"evidence_request_catalog", "released_evidence_artifacts"}
+    if (
+        durable.schema_version != "1"
+        or expected.schema_version != "2"
+        or not v2_fields.isdisjoint(durable.model_fields_set)
+        or durable.evidence_request_catalog is not None
+        or durable.released_evidence_artifacts
+        or expected.evidence_request_catalog is not None
+        or expected.released_evidence_artifacts
+    ):
+        return False
+    return durable == expected.model_copy(update={"schema_version": "1"})
+
+
+def _episode_request_json(request: LifecycleEpisodeRequest) -> str:
+    excluded = {"evidence_request_catalog", "released_evidence_artifacts"} if request.schema_version == "1" else set()
+    payload = request.model_dump(mode="json", exclude=excluded)
+    return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
 def _close_episode_failure(
@@ -1177,7 +1567,18 @@ def _initialize_state(
         world_id=spec.world_id,
         lifecycle_spec_sha256=_spec_sha256(spec),
         package_sha256=_package_sha256(package_dir),
-        checkpoint_runs=[CheckpointRunRecord(checkpoint_id=item.checkpoint_id) for item in spec.checkpoints],
+        checkpoint_runs=[
+            CheckpointRunRecord(
+                checkpoint_id=item.checkpoint_id,
+                evidence_request_budget=(
+                    item.conditional_evidence.request_budget if item.conditional_evidence is not None else 0
+                ),
+                evidence_request_budget_remaining=(
+                    item.conditional_evidence.request_budget if item.conditional_evidence is not None else 0
+                ),
+            )
+            for item in spec.checkpoints
+        ],
     )
     _write_state(run_dir, state)
     return state
@@ -1187,16 +1588,26 @@ def _load_state(
     package_dir: Path,
     run_dir: Path,
     spec: EvidenceLifecycleSpec,
+    *,
+    lock_held: bool = False,
 ) -> EvidenceLifecycleRunState:
+    if not _state_path(run_dir).is_file():
+        raise EvidenceLifecycleError(f"lifecycle state not found: {_state_path(run_dir)}")
+    if not lock_held:
+        with _lifecycle_state_lock(run_dir):
+            return _load_state(package_dir, run_dir, spec, lock_held=True)
     path = _state_path(run_dir)
     if not path.is_file():
         raise EvidenceLifecycleError(f"lifecycle state not found: {path}")
     payload = _read_json(path)
     version = payload.get("schema_version")
     try:
-        if version == "3":
+        if version == "4":
             state = EvidenceLifecycleRunState.model_validate(payload)
             migrated = False
+        elif version == "3":
+            state = _migrate_v3_state(payload, spec)
+            migrated = True
         elif version == "2":
             state = _migrate_v2_state(payload, package_dir, spec)
             migrated = True
@@ -1216,9 +1627,12 @@ def _load_state(
         raise EvidenceLifecycleError("lifecycle contract does not match lifecycle run")
     if state.package_sha256 != _package_sha256(package_dir):
         raise EvidenceLifecycleError("package does not match lifecycle run")
+    _validate_evidence_request_state_contract(state, spec)
     if migrated:
         _write_state(run_dir, state)
+    _recover_evidence_request_transactions(run_dir, spec, state)
     _sync_transition_ledger(run_dir, state)
+    _sync_evidence_request_ledger(run_dir, state)
     return state
 
 
@@ -1228,6 +1642,16 @@ def _assert_prior_submissions_unchanged(run_dir: Path, state: EvidenceLifecycleR
         branch_origin = _workspace(run_dir) / "branch_origin" / f"{checkpoint_id}.json"
         if not branch_origin.is_file() or _sha256(branch_origin) != state.branch.parent_submission_sha256:
             raise EvidenceLifecycleError(f"branch origin submission changed: {checkpoint_id}")
+        branch_index = next(
+            index for index, checkpoint in enumerate(state.checkpoint_runs) if checkpoint.checkpoint_id == checkpoint_id
+        )
+        action_state_sha256 = _branch_action_state_sha256(
+            state,
+            branch_index=branch_index,
+            inherited_only=True,
+        )
+        if action_state_sha256 != state.branch.parent_action_state_sha256:
+            raise EvidenceLifecycleError(f"branch origin evidence request state changed: {checkpoint_id}")
     for completed in state.checkpoint_runs:
         if completed.status != CheckpointRunStatus.SUBMITTED:
             continue
@@ -1252,6 +1676,8 @@ def _preflight_checkpoint(package_dir: Path, checkpoint: EvidenceCheckpointSpec)
         raise EvidenceLifecycleError(f"checkpoint release not found: {release_source}")
     if not instruction_source.is_file() or instruction_source.is_symlink():
         raise EvidenceLifecycleError(f"checkpoint instruction not found: {instruction_source}")
+    if checkpoint.conditional_evidence is not None and (release_source / "requests").exists():
+        raise EvidenceLifecycleError("checkpoint release uses the reserved requests namespace")
     return instruction_source.read_text(encoding="utf-8")
 
 
@@ -1283,25 +1709,6 @@ def _materialize_checkpoint_release(
         shutil.rmtree(staging_root, ignore_errors=True)
 
 
-def _copy_release(source: Path, destination: Path) -> list[str]:
-    if not source.is_dir() or source.is_symlink():
-        raise EvidenceLifecycleError(f"checkpoint release not found: {source}")
-    destination.mkdir(parents=True, exist_ok=False)
-    released: list[str] = []
-    for source_path in sorted(source.rglob("*")):
-        if source_path.is_symlink():
-            raise EvidenceLifecycleError(f"checkpoint releases may not contain symlinks: {source_path}")
-        relative = source_path.relative_to(source)
-        destination_path = destination / relative
-        if source_path.is_dir():
-            destination_path.mkdir(parents=True, exist_ok=True)
-            continue
-        destination_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_path, destination_path)
-        released.append(relative.as_posix())
-    return released
-
-
 def _copy_checkpoint_instruction(
     package_dir: Path,
     workspace: Path,
@@ -1329,27 +1736,11 @@ def _inherit_submission(
     )
 
 
-def _copy_file_atomic(source: Path, destination: Path) -> None:
-    if not source.is_file():
-        raise EvidenceLifecycleError(f"branch source artifact not found: {source}")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(destination.suffix + ".tmp")
-    shutil.copy2(source, temporary)
-    temporary.replace(destination)
-
-
 def _write_text_atomic(destination: Path, content: str) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     temporary.write_text(content, encoding="utf-8")
     temporary.replace(destination)
-
-
-def _checkpoint(spec: EvidenceLifecycleSpec, checkpoint_id: str) -> EvidenceCheckpointSpec:
-    for checkpoint in spec.checkpoints:
-        if checkpoint.checkpoint_id == checkpoint_id:
-            return checkpoint
-    raise EvidenceLifecycleError(f"unknown checkpoint in lifecycle state: {checkpoint_id}")
 
 
 def _checkpoint_context(
@@ -1359,7 +1750,7 @@ def _checkpoint_context(
 ) -> dict[str, Any]:
     workspace = _workspace(run_dir)
     checkpoint_run = state.checkpoint(checkpoint.checkpoint_id)
-    return {
+    context = {
         "lifecycle_id": state.lifecycle_id,
         "world_id": state.world_id,
         "lifecycle_spec_sha256": state.lifecycle_spec_sha256,
@@ -1380,6 +1771,10 @@ def _checkpoint_context(
         "transitions": [item.model_dump(mode="json") for item in state.transitions],
         "branch": state.branch.model_dump(mode="json") if state.branch is not None else None,
     }
+    catalog = _evidence_request_catalog(checkpoint, checkpoint_run)
+    if catalog is not None:
+        context["evidence_request_catalog"] = catalog
+    return context
 
 
 def _result_context(run_dir: Path, state: EvidenceLifecycleRunState) -> dict[str, Any]:
@@ -1417,43 +1812,47 @@ def _attempt_context(attempt: CheckpointAttemptRecord) -> dict[str, Any]:
     return attempt.model_dump(mode="json")
 
 
-def _append_transition(
-    state: EvidenceLifecycleRunState,
-    *,
-    kind: LifecycleTransitionKind,
-    from_checkpoint_id: str | None,
-    to_checkpoint_id: str | None,
-    reason: str,
-) -> None:
-    state.transitions.append(
-        LifecycleTransitionRecord(
-            transition_id=f"transition-{len(state.transitions) + 1:03d}",
-            kind=kind,
-            from_checkpoint_id=from_checkpoint_id,
-            to_checkpoint_id=to_checkpoint_id,
-            reason=reason,
+def _migrate_v3_state(
+    payload: dict[str, Any],
+    spec: EvidenceLifecycleSpec,
+) -> EvidenceLifecycleRunState:
+    if any(checkpoint.conditional_evidence is not None for checkpoint in spec.checkpoints):
+        raise EvidenceLifecycleError("v3 lifecycle state cannot be paired with conditional evidence")
+    for checkpoint in payload.get("checkpoint_runs", []):
+        if not isinstance(checkpoint, dict):
+            raise EvidenceLifecycleError("invalid v3 lifecycle checkpoint state")
+        if checkpoint.get("inherited_from_parent") and checkpoint.get("attempts"):
+            raise EvidenceLifecycleError("v3 inherited checkpoint cannot contain attempts")
+        forbidden = {
+            "evidence_request_budget",
+            "evidence_request_budget_remaining",
+            "evidence_request_actions",
+        }
+        if forbidden.intersection(checkpoint):
+            raise EvidenceLifecycleError("v3 lifecycle state cannot contain evidence request fields")
+    migrated = copy.deepcopy(payload)
+    for checkpoint in migrated.get("checkpoint_runs", []):
+        checkpoint["evidence_request_budget"] = 0
+        checkpoint["evidence_request_budget_remaining"] = 0
+        checkpoint["evidence_request_actions"] = []
+    migrated["schema_version"] = "3"
+    branch = migrated.get("branch")
+    if isinstance(branch, dict):
+        branch.pop("parent_action_state_sha256", None)
+        provisional = EvidenceLifecycleRunState.model_validate(migrated)
+        branch_checkpoint_id = str(branch["branched_from_checkpoint_id"])
+        branch_index = next(
+            index
+            for index, checkpoint in enumerate(provisional.checkpoint_runs)
+            if checkpoint.checkpoint_id == branch_checkpoint_id
         )
-    )
-
-
-def _sync_transition_ledger(run_dir: Path, state: EvidenceLifecycleRunState) -> None:
-    ledger_path = _ledger_path(run_dir)
-    recorded = {
-        str(entry.get("summary", {}).get("transition_id"))
-        for entry in read_ledger(ledger_path)
-        if entry.get("stage") == "lifecycle_transition"
-    }
-    for transition in state.transitions:
-        if transition.transition_id in recorded:
-            continue
-        append_ledger_entry(
-            ledger_path,
-            process_id=state.lifecycle_id,
-            stage="lifecycle_transition",
-            status=transition.kind.value,
-            summary=transition.model_dump(mode="json"),
-            artifact_refs=[],
+        branch["parent_action_state_sha256"] = _branch_action_state_sha256(
+            provisional,
+            branch_index=branch_index,
+            inherited_only=False,
         )
+    migrated["schema_version"] = "4"
+    return EvidenceLifecycleRunState.model_validate(migrated)
 
 
 def _migrate_v2_state(
@@ -1461,10 +1860,28 @@ def _migrate_v2_state(
     package_dir: Path,
     spec: EvidenceLifecycleSpec,
 ) -> EvidenceLifecycleRunState:
+    if any(checkpoint.conditional_evidence is not None for checkpoint in spec.checkpoints):
+        raise EvidenceLifecycleError("v2 lifecycle state cannot be paired with conditional evidence")
     migrated = copy.deepcopy(payload)
-    migrated["schema_version"] = "3"
     migrated["lifecycle_spec_sha256"] = _spec_sha256(spec)
     migrated["package_sha256"] = _package_sha256(package_dir)
+    migrated["schema_version"] = "3"
+    branch = migrated.get("branch")
+    if isinstance(branch, dict):
+        branch.pop("parent_action_state_sha256", None)
+        provisional = EvidenceLifecycleRunState.model_validate(migrated)
+        branch_checkpoint_id = str(branch["branched_from_checkpoint_id"])
+        branch_index = next(
+            index
+            for index, checkpoint in enumerate(provisional.checkpoint_runs)
+            if checkpoint.checkpoint_id == branch_checkpoint_id
+        )
+        branch["parent_action_state_sha256"] = _branch_action_state_sha256(
+            provisional,
+            branch_index=branch_index,
+            inherited_only=False,
+        )
+    migrated["schema_version"] = "4"
     return EvidenceLifecycleRunState.model_validate(migrated)
 
 
@@ -1473,6 +1890,8 @@ def _migrate_legacy_state(
     package_dir: Path,
     spec: EvidenceLifecycleSpec,
 ) -> EvidenceLifecycleRunState:
+    if any(checkpoint.conditional_evidence is not None for checkpoint in spec.checkpoints):
+        raise EvidenceLifecycleError("legacy lifecycle state cannot be paired with conditional evidence")
     completed = {item["checkpoint_id"]: item for item in payload.get("completed_checkpoints", [])}
     active_checkpoint_id = payload.get("active_checkpoint_id")
     checkpoint_runs = []
@@ -1509,51 +1928,23 @@ def _migrate_legacy_state(
     )
 
 
-def _workspace(run_dir: Path) -> Path:
-    return run_dir / "workspace"
-
-
-def _state_path(run_dir: Path) -> Path:
-    return run_dir / "state.json"
-
-
-def _ledger_path(run_dir: Path) -> Path:
-    return run_dir / "lifecycle_ledger.jsonl"
-
-
-def _write_state(run_dir: Path, state: EvidenceLifecycleRunState) -> None:
-    path = _state_path(run_dir)
-    temporary = path.with_suffix(".json.tmp")
-    _write_json(temporary, state.model_dump(mode="json"))
-    temporary.replace(path)
-
-
-def _read_json(path: Path) -> dict[str, Any]:
+@contextmanager
+def _lifecycle_state_lock(run_dir: Path) -> Iterator[None]:
+    lock_dir = run_dir / ".locks"
+    mkdir_durable(lock_dir)
+    lock_path = lock_dir / "lifecycle-state.lock"
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise EvidenceLifecycleError(f"invalid JSON artifact: {path}") from exc
-    if not isinstance(payload, dict):
-        raise EvidenceLifecycleError(f"JSON artifact must contain an object: {path}")
-    return payload
-
-
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(64 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
 
 
 def _spec_sha256(spec: EvidenceLifecycleSpec) -> str:
     payload = json.dumps(
-        spec.model_dump(mode="json"),
+        spec.model_dump(mode="json", exclude_none=True),
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")

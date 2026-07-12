@@ -85,8 +85,12 @@ One Verifiers rollout spans the whole lifecycle in one persistent conversation.
 The model receives later evidence only after it submits the active checkpoint.
 The environment reuses the host-owned `list_workspace`, `read_workspace_file`,
 `write_checkpoint_submission`, `submit_checkpoint`, and `revisit_checkpoint`
-tools, so the same visibility, path-confinement, immutable-submission, and
-checkpoint-order rules apply inside and outside Prime.
+tools. A package with a conditional-evidence catalogue also receives the
+session-bound `request_evidence(checkpoint_id, request_id, reason)` tool. Legacy
+packages retain the original tool set, and a selected export cannot mix the two
+capabilities. The same visibility, path-confinement, finite-budget,
+immutable-submission, and checkpoint-order rules therefore apply inside and
+outside Prime.
 
 Export one or more materialized public variants with absolute paths:
 
@@ -112,6 +116,14 @@ Reward remains task-owned. `submit_checkpoint` ends the rollout only after the
 final checkpoint is accepted; the registered lifecycle verifier then scores the
 complete run. An incomplete rollout is closed as failed and receives zero
 reward instead of being scored from partial state.
+
+Conditional evidence does not give Prime release authority. Public request IDs,
+descriptions, prerequisites, statuses, and remaining budget are visible in the
+checkpoint catalogue. Hidden package paths stay task-owned. Every boundary-valid
+request is recorded in the same canonical, sequence-addressed and hash-bound host transaction
+used by local persistent and fresh-context execution; malformed arguments return
+a bounded error without becoming lifecycle actions. Session and attempt identity
+are injected by the environment and are not model arguments.
 
 Load the generated package from outside the AEC-Bench repository root. The
 repository has a top-level `agents/` directory that can otherwise shadow the

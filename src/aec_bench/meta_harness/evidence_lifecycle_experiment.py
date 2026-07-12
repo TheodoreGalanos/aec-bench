@@ -35,7 +35,10 @@ from aec_bench.ledger.durability import (
 from aec_bench.ledger.durability import (
     mkdir_durable,
 )
-from aec_bench.meta_harness.evidence_lifecycle import read_evidence_lifecycle_state
+from aec_bench.meta_harness.evidence_lifecycle import (
+    evidence_request_protocol_identity,
+    read_evidence_lifecycle_state,
+)
 from aec_bench.meta_harness.evidence_lifecycle_metrics import LifecycleSemanticMetrics
 from aec_bench.meta_harness.ledger import read_ledger
 from aec_bench.task_world_templates.lifecycles import (
@@ -45,12 +48,18 @@ from aec_bench.task_world_templates.lifecycles import (
 
 
 class LifecycleExperimentMetrics(StrictModel):
-    schema_version: NonEmptyStr = "1"
+    schema_version: Literal["1", "2"] = "2"
     checkpoint_count: NonNegativeInt
     requests: NonNegativeInt
     tool_calls: NonNegativeInt
     reads: NonNegativeInt
     revisits: NonNegativeInt
+    evidence_request_calls: NonNegativeInt = 0
+    accepted_evidence_requests: NonNegativeInt = 0
+    already_released_evidence_requests: NonNegativeInt = 0
+    rejected_evidence_requests: NonNegativeInt = 0
+    evidence_request_budget_consumed: NonNegativeInt = 0
+    evidence_request_artifacts_released: NonNegativeInt = 0
     retries: NonNegativeInt
     failures: NonNegativeInt
     input_tokens: NonNegativeInt
@@ -173,6 +182,21 @@ def record_lifecycle_experiment(
     verifier_chain = [verifier_entrypoint]
     if registered_verifier != verifier_entrypoint:
         verifier_chain.append(registered_verifier)
+    interaction = {
+        **prompts,
+        "tool_schema": tool_schema,
+        "trajectory_hashes": {str(path.relative_to(run)): _sha256(path) for path in trajectories},
+    }
+    if any(tool.get("name") == "request_evidence" for tool in tool_schema):
+        tool_schema_payload = json.dumps(
+            tool_schema,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        interaction["evidence_request_protocol"] = {
+            **evidence_request_protocol_identity(),
+            "tool_schema_sha256": hashlib.sha256(tool_schema_payload).hexdigest(),
+        }
     manifest = LifecycleExperimentManifest(
         experiment_id=experiment_id,
         created_at=datetime.now(UTC).isoformat(),
@@ -210,11 +234,7 @@ def record_lifecycle_experiment(
             "checkpoint_seconds": metrics.checkpoint_seconds,
             "whole_run_seconds": metrics.whole_run_seconds,
         },
-        interaction={
-            **prompts,
-            "tool_schema": tool_schema,
-            "trajectory_hashes": {str(path.relative_to(run)): _sha256(path) for path in trajectories},
-        },
+        interaction=interaction,
         outputs={
             "verification.json": _sha256(verification_path),
             "metrics.json": _sha256(metrics_path),
@@ -284,6 +304,9 @@ def _build_metrics(
     tool_calls = [entry for entry in entries if entry.role == "tool_call"]
     state = _read_json(run_dir / "state.json")
     attempts = [attempt for checkpoint in state["checkpoint_runs"] for attempt in checkpoint.get("attempts", [])]
+    evidence_request_actions = [
+        action for checkpoint in state["checkpoint_runs"] for action in checkpoint.get("evidence_request_actions", [])
+    ]
     timing = _lifecycle_timing(run_dir)
     totals = agent["totals"]
     resolved_model = next(
@@ -305,6 +328,20 @@ def _build_metrics(
         tool_calls=len(tool_calls),
         reads=sum(entry.tool_name == "read_workspace_file" for entry in tool_calls),
         revisits=sum(entry.tool_name == "revisit_checkpoint" for entry in tool_calls),
+        evidence_request_calls=len(evidence_request_actions),
+        accepted_evidence_requests=sum(action.get("outcome") == "released" for action in evidence_request_actions),
+        already_released_evidence_requests=sum(
+            action.get("outcome") == "already_released" for action in evidence_request_actions
+        ),
+        rejected_evidence_requests=sum(action.get("outcome") == "rejected" for action in evidence_request_actions),
+        evidence_request_budget_consumed=sum(
+            int(action.get("budget_consumed", 0)) for action in evidence_request_actions
+        ),
+        evidence_request_artifacts_released=sum(
+            len(action.get("released_artifacts", []))
+            for action in evidence_request_actions
+            if action.get("outcome") == "released"
+        ),
         retries=sum(max(0, len(checkpoint.get("attempts", [])) - 1) for checkpoint in state["checkpoint_runs"]),
         failures=sum(attempt["status"] == "failed" for attempt in attempts),
         input_tokens=int(totals["input_tokens"]),
@@ -745,8 +782,14 @@ def _run_artifact_hashes(run_dir: Path) -> dict[str, str]:
         "verification.json",
     }
     for path in sorted(run_dir.rglob("*")):
-        if path.is_file() and path.name in names and "experiments" not in path.relative_to(run_dir).parts:
-            selected[str(path.relative_to(run_dir))] = _sha256(path)
+        relative = path.relative_to(run_dir)
+        requested_evidence = (
+            relative.parts[:1] == ("evidence_requests",)
+            or (relative.parts[:2] == ("workspace", "inbox") and "requests" in relative.parts[2:])
+            or (relative.parts[:2] == ("workspace", "checkpoints") and path.name == "evidence-requests.json")
+        )
+        if path.is_file() and (path.name in names or requested_evidence) and "experiments" not in relative.parts:
+            selected[str(relative)] = _sha256(path)
     return selected
 
 

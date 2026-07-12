@@ -13,6 +13,7 @@ from typing import Any, cast
 from aec_bench.meta_harness.evidence_lifecycle import (
     evidence_lifecycle_package_identity,
     fail_checkpoint_attempt,
+    load_evidence_lifecycle_spec,
     open_checkpoint_attempt,
     prepare_evidence_checkpoint,
     read_evidence_lifecycle_state,
@@ -60,10 +61,14 @@ def load_local_lifecycle_environment(
     manifest = load_prime_lifecycle_manifest(Path(manifest_path))
     _assert_source_provenance(manifest.source)
     records = _select_records(manifest, variant=variant, num_examples=num_examples, seed=seed)
+    supports_evidence_requests = _records_support_evidence_requests(records)
     dataset = _build_dataset(records)
     vf = importlib.import_module("verifiers")
     rubric = _build_lifecycle_rubric(vf)
-    environment_type = _build_environment_type(vf)
+    environment_type = _build_environment_type(
+        vf,
+        supports_evidence_requests=supports_evidence_requests,
+    )
     return environment_type(
         manifest=manifest,
         records=records,
@@ -89,6 +94,20 @@ def write_checkpoint_submission(
 ) -> str:
     """Write the active checkpoint JSON through the host-confined workspace tool."""
     return _workspace_tool(state).write_checkpoint_submission(checkpoint_id, content)
+
+
+def request_evidence(
+    checkpoint_id: str,
+    request_id: str,
+    reason: str,
+    state: dict[str, Any] | None = None,
+) -> str:
+    """Request one declared evidence packet through the session-bound host tool."""
+    return _control_tool(_required_state(state)).request_evidence(
+        checkpoint_id,
+        request_id,
+        reason,
+    )
 
 
 def submit_checkpoint(checkpoint_id: str, state: dict[str, Any] | None = None) -> str:
@@ -139,7 +158,11 @@ async def aec_bench_lifecycle_reward(state: dict[str, Any]) -> float:
     return reward
 
 
-def _build_environment_type(vf: Any) -> type[Any]:
+def _build_environment_type(
+    vf: Any,
+    *,
+    supports_evidence_requests: bool,
+) -> type[Any]:
     class AecBenchLifecycleEnv(vf.StatefulToolEnv):  # type: ignore[misc]
         execution_mode = "persistent_context"
         memory_visibility_policy = "persistent_context"
@@ -154,21 +177,29 @@ def _build_environment_type(vf: Any) -> type[Any]:
         ) -> None:
             self.lifecycle_manifest = manifest
             self.lifecycle_records = records
+            system_prompt = _SYSTEM_PROMPT
+            if supports_evidence_requests:
+                system_prompt += (
+                    " Inspect the active checkpoint evidence-requests.json catalogue and use request_evidence "
+                    "only when additional declared evidence is needed within its finite budget."
+                )
             super().__init__(
                 tools=[],
                 max_turns=manifest.max_turns,
                 dataset=dataset,
                 eval_dataset=dataset,
                 rubric=rubric,
-                system_prompt=_SYSTEM_PROMPT,
+                system_prompt=system_prompt,
             )
-            for tool in (
+            tools = [
                 list_workspace,
                 read_workspace_file,
                 write_checkpoint_submission,
-                submit_checkpoint,
-                revisit_checkpoint,
-            ):
+            ]
+            if supports_evidence_requests:
+                tools.append(request_evidence)
+            tools.extend([submit_checkpoint, revisit_checkpoint])
+            for tool in tools:
                 self.add_tool(tool, args_to_skip=["state"])
 
         async def setup_state(self, state: dict[str, Any]) -> None:
@@ -287,6 +318,21 @@ def _select_records(
     if not records:
         raise ValueError("lifecycle selection is empty")
     return tuple(records)
+
+
+def _records_support_evidence_requests(
+    records: tuple[PrimeLifecyclePackageRecord, ...],
+) -> bool:
+    capabilities = {
+        any(
+            checkpoint.conditional_evidence is not None
+            for checkpoint in load_evidence_lifecycle_spec(Path(record.package_dir)).checkpoints
+        )
+        for record in records
+    }
+    if len(capabilities) != 1:
+        raise ValueError("selected lifecycle packages must share one conditional evidence capability")
+    return capabilities.pop()
 
 
 def _assert_source_provenance(expected: PrimeLifecycleSourceProvenance) -> None:

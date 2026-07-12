@@ -49,9 +49,25 @@ Two additional fresh-context policies define later ablations without deleting au
 
 The host workspace tool enforces visibility. All released evidence, archived submissions, trajectories, and conversations remain on disk for audit regardless of the model-visible policy.
 
+### Action-conditioned evidence
+
+A checkpoint may optionally declare a public conditional-evidence catalogue: bounded request IDs, descriptions, prerequisites, and a finite budget. Every declared request must remain reachable: its transitive prerequisites plus the request itself must fit within that budget. The public contract contains no release path or expected outcome. A task-owned `hidden/evidence-request-resolutions.json` manifest maps those IDs to confined package directories, and the host exposes the catalogue at `workspace/checkpoints/<checkpoint-id>/evidence-requests.json`.
+
+Action-capable packages add one model-visible tool:
+
+```text
+request_evidence(checkpoint_id, request_id, reason)
+```
+
+The host supplies session and attempt identity. A first valid unique request consumes one budget unit and publishes only its selected packet under `workspace/inbox/<checkpoint-id>/requests/<request-id>/`. A repeated successful request returns `already_released` without another charge. Typed rejections for inactive checkpoints, unknown IDs, unmet prerequisites, exhausted budgets, or unsupported checkpoints release nothing and consume zero; responses do not enumerate valid alternatives or hidden mappings.
+
+Each boundary-valid request becomes a lock-serialized canonical transaction under `run/evidence_requests/<action-id>/` before its model-visible projection and state commit. The record binds outcome, reason, session/attempt ownership, pre/post observable-state hashes, budget arithmetic, and artifact hashes. Malformed or blank tool arguments return a bounded error without creating a lifecycle action; they remain visible in the ordinary tool trajectory. Recovery adopts an identically published transaction exactly once, repairs missing ledger entries, and fails closed on conflicting bytes. Acquired evidence and consumed budget survive retry and are inherited by a branch through its branch point.
+
+Fresh episode requests bind the current public catalogue and hashes of previously acquired conditional evidence. Persistent local, fresh-context, and local Prime execution expose the same three public arguments. Packages without a conditional catalogue retain their previous tool set. Invocation manifests bind the versioned action protocol and exact tool schema; immutable snapshots include canonical transactions, catalogues, and workspace projections. See the [SSC-03 richer interaction roadmap](ssc03-richer-interaction-roadmap.md) for the hydraulic and holdout progression.
+
 ### Typed episode boundary
 
-Fresh-context execution crosses a strict `LifecycleEpisodeEnvironment` boundary. Before execution, the host validates the released checkpoint, gives the environment a chance to seal interrupted artifacts, allocates the session and attempt IDs, and constructs a content-bound `LifecycleEpisodeRequest`. The environment durably prepares its empty attempt artifacts; the host then publishes `episode_request.json`, records its SHA-256 in the active attempt, and only then calls `execute`. This ordering leaves recoverable identity even if the process stops in the narrow publication-to-execution window. The request carries lifecycle/package hashes, checkpoint ownership, the exact workspace and submission paths, execution mode, visibility policy, requested adapter/model identity, per-session turn limit, and completed-checkpoint lineage. Recovery reconstructs the expected request from current state and declared environment configuration; finalization reconciles the request hash and stable identity against the immutable snapshot.
+Fresh-context execution crosses a strict `LifecycleEpisodeEnvironment` boundary. Before execution, the host validates the released checkpoint, gives the environment a chance to seal interrupted artifacts, allocates the session and attempt IDs, and constructs a content-bound `LifecycleEpisodeRequest`. The environment durably prepares its empty attempt artifacts; the host then publishes `episode_request.json`, records its SHA-256 in the active attempt, and only then calls `execute`. This ordering leaves recoverable identity even if the process stops in the narrow publication-to-execution window. The request carries lifecycle/package hashes, checkpoint ownership, the exact workspace and submission paths, execution mode, visibility policy, requested adapter/model identity, per-session turn limit, completed-checkpoint lineage, the public conditional-evidence catalogue when present, and hashes of conditional evidence acquired by earlier attempts. Recovery reconstructs the expected request from current state and declared environment configuration; finalization reconciles the request hash and stable identity against the immutable snapshot.
 
 The environment returns a `LifecycleEpisodeResult` containing only execution identity, requested and resolved adapter/model identity, configuration, status, failure details, and token usage. Extra fields are rejected, so an adapter cannot return task-owned gates, pass/fail, or reward through the episode seam. The host requires request/result identity to match exactly and publishes a host-validated `episode_result.json` for every returned result or synthesized execution failure. Exceptions, returned failures, identity drift, and missing or invalid submissions close the active attempt as failed and cannot advance the lifecycle. A candidate submission left by a failed attempt is moved under that attempt's session directory and hash-bound as audit evidence; a retry must create its own candidate.
 
@@ -59,7 +75,7 @@ The environment returns a `LifecycleEpisodeResult` containing only execution ide
 
 ### Local Prime lifecycle boundary
 
-The local Prime lifecycle export exposes the persistent condition through a Verifiers `StatefulToolEnv`. One rollout owns the complete lifecycle and one model conversation. The adapter references existing materialized public packages by absolute path, binds their lifecycle-spec and package hashes, binds the exact local AEC-Bench source provenance, and reuses the host lifecycle workspace and control tools. It does not copy the packages or move checkpoint, visibility, submission, or revisit authority into Prime.
+The local Prime lifecycle export exposes the persistent condition through a Verifiers `StatefulToolEnv`. One rollout owns the complete lifecycle and one model conversation. The adapter references existing materialized public packages by absolute path, binds their lifecycle-spec and package hashes, binds the exact local AEC-Bench source provenance, and reuses the host lifecycle workspace and control tools. Conditional packages also receive the same session-bound `request_evidence` tool; mixed action-capable and legacy selections are rejected so the environment has one honest tool schema. The adapter does not copy the packages or move checkpoint, visibility, evidence-request, submission, or revisit authority into Prime.
 
 The task-owned lifecycle verifier remains the only reward authority and runs only after terminal completion. Incomplete rollouts close their active attempt and receive zero reward. This export is a local execution boundary, not evidence of hosted publication or training, a fresh-context comparison, transfer, or continual learning. See the [Prime Lab integration guide](prime-lab-guide.md) for the export and loading commands.
 
@@ -165,7 +181,7 @@ Every local invocation writes root-level latest views plus an immutable experime
 - `experiments/<experiment-id>/` preserves the canonical record and its `index-entry.json` seal for each failed, interrupted, resumed, or completed invocation;
 - `experiment-index.jsonl` is the shared discovery view, points to each canonical manifest by hash, and is rebuilt under a file lock from valid per-invocation seals after an interrupted append so concurrent repairs cannot lose entries.
 
-This apparatus is an adaptation microscope for fixed-model behavior under staged evidence. Checkpoint progression is ordered and submission-gated; semantic verification occurs over the accumulated lifecycle. It does **not** yet provide action-conditioned evidence transitions, cross-run learner updates, demonstrated transfer, or continual learning.
+This apparatus is an adaptation microscope for fixed-model behavior under staged evidence. Checkpoint progression is ordered and submission-gated; semantic verification occurs over the accumulated lifecycle. It now provides bounded actions that condition subsequent evidence visibility. It does **not** yet provide executable hydraulic state transitions, cross-run learner updates, demonstrated transfer, or continual learning.
 
 ### Semantic transition diagnostics
 

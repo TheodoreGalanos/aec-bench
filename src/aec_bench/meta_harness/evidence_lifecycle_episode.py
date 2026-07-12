@@ -15,6 +15,7 @@ from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.meta_harness.evidence_lifecycle_state import (
     CheckpointRunRecord,
     LifecycleRunStatus,
+    ReleasedEvidenceArtifact,
 )
 
 
@@ -54,6 +55,36 @@ class LifecycleCompletedCheckpoint(StrictModel):
         return ArtifactReference.validate_sha256(value)
 
 
+class LifecycleEvidenceRequestOption(StrictModel):
+    request_id: NonEmptyStr
+    title: NonEmptyStr
+    description: NonEmptyStr
+    prerequisite_request_ids: tuple[NonEmptyStr, ...] = ()
+    status: Literal[
+        "available",
+        "released",
+        "budget_exhausted",
+        "prerequisites_incomplete",
+    ]
+
+
+class LifecycleEvidenceRequestCatalog(StrictModel):
+    schema_version: Literal["1"] = "1"
+    checkpoint_id: NonEmptyStr
+    request_budget: NonNegativeInt
+    remaining_budget: NonNegativeInt
+    requests: tuple[LifecycleEvidenceRequestOption, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_budget_and_ids(self) -> LifecycleEvidenceRequestCatalog:
+        if self.remaining_budget > self.request_budget:
+            raise ValueError("remaining evidence request budget cannot exceed its initial budget")
+        request_ids = [request.request_id for request in self.requests]
+        if len(request_ids) != len(set(request_ids)):
+            raise ValueError("episode evidence request ids must be unique")
+        return self
+
+
 class LifecycleEpisodeContext(StrictModel):
     """Validated host state available before an episode attempt is opened."""
 
@@ -71,6 +102,8 @@ class LifecycleEpisodeContext(StrictModel):
     instruction_path: NonEmptyStr
     submission_path: NonEmptyStr
     released_files: tuple[NonEmptyStr, ...] = ()
+    evidence_request_catalog: LifecycleEvidenceRequestCatalog | None = None
+    released_evidence_artifacts: tuple[ReleasedEvidenceArtifact, ...] = ()
     completed_checkpoints: tuple[LifecycleCompletedCheckpoint, ...] = ()
     checkpoint_runs: tuple[CheckpointRunRecord, ...]
 
@@ -90,8 +123,26 @@ class LifecycleEpisodeContext(StrictModel):
         return self
 
     @classmethod
-    def from_runtime_context(cls, payload: dict[str, Any]) -> LifecycleEpisodeContext:
-        """Select and validate the stable episode fields from lifecycle runtime state."""
+    def from_runtime_context(
+        cls,
+        payload: dict[str, Any],
+        *,
+        visibility_policy: LifecycleVisibilityPolicy | str,
+    ) -> LifecycleEpisodeContext:
+        """Select the stable episode fields and hash-bind every visible requested artifact."""
+        policy = LifecycleVisibilityPolicy(visibility_policy)
+        checkpoint_runs = tuple(payload["checkpoint_runs"])
+        active_checkpoint = next(item for item in checkpoint_runs if item["checkpoint_id"] == payload["checkpoint_id"])
+        visible_checkpoint_runs = (
+            (active_checkpoint,) if policy is LifecycleVisibilityPolicy.CURRENT_RELEASE_ONLY else checkpoint_runs
+        )
+        released_evidence_artifacts = tuple(
+            artifact
+            for checkpoint in visible_checkpoint_runs
+            for action in checkpoint.get("evidence_request_actions", ())
+            if action.get("outcome") == "released"
+            for artifact in action.get("released_artifacts", ())
+        )
         return cls(
             lifecycle_id=payload["lifecycle_id"],
             world_id=payload["world_id"],
@@ -107,8 +158,10 @@ class LifecycleEpisodeContext(StrictModel):
             instruction_path=payload["instruction_path"],
             submission_path=payload["submission_path"],
             released_files=tuple(payload.get("released_files", ())),
+            evidence_request_catalog=payload.get("evidence_request_catalog"),
+            released_evidence_artifacts=released_evidence_artifacts,
             completed_checkpoints=tuple(payload.get("completed_checkpoints", ())),
-            checkpoint_runs=tuple(payload["checkpoint_runs"]),
+            checkpoint_runs=checkpoint_runs,
         )
 
     @property
@@ -119,7 +172,7 @@ class LifecycleEpisodeContext(StrictModel):
 class LifecycleEpisodeRequest(StrictModel):
     """Host-authored execution request for one lifecycle environment call."""
 
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["1", "2"] = "2"
     episode_id: NonEmptyStr
     lifecycle_id: NonEmptyStr
     world_id: NonEmptyStr
@@ -141,6 +194,8 @@ class LifecycleEpisodeRequest(StrictModel):
     instruction_path: NonEmptyStr
     submission_path: NonEmptyStr
     released_files: tuple[NonEmptyStr, ...] = ()
+    evidence_request_catalog: LifecycleEvidenceRequestCatalog | None = None
+    released_evidence_artifacts: tuple[ReleasedEvidenceArtifact, ...] = ()
     completed_checkpoint_ids: tuple[NonEmptyStr, ...] = ()
 
     @field_validator("lifecycle_spec_sha256", "package_sha256")
@@ -163,6 +218,12 @@ class LifecycleEpisodeRequest(StrictModel):
             raise ValueError("completed checkpoint ids must be unique")
         if len(set(self.released_files)) != len(self.released_files):
             raise ValueError("released files must be unique")
+        if self.evidence_request_catalog is not None:
+            if self.evidence_request_catalog.checkpoint_id != self.checkpoint_id:
+                raise ValueError("evidence request catalogue must match the active checkpoint")
+        artifact_paths = [artifact.path for artifact in self.released_evidence_artifacts]
+        if len(artifact_paths) != len(set(artifact_paths)):
+            raise ValueError("released evidence artifact paths must be unique")
         return self
 
 

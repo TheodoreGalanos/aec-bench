@@ -49,7 +49,10 @@ from aec_bench.ledger.durability import (
 )
 from aec_bench.ledger.writer import DuplicateTrialRecordError, write_trial_record
 from aec_bench.meta_harness.evidence_lifecycle import (
+    evidence_request_catalog_payload,
+    load_evidence_lifecycle_spec,
     read_evidence_lifecycle_state,
+    validate_evidence_request_run_state,
     validate_lifecycle_verification,
 )
 from aec_bench.meta_harness.evidence_lifecycle_ablation_plan import (
@@ -63,7 +66,15 @@ from aec_bench.meta_harness.evidence_lifecycle_experiment import (
     LifecycleExperimentManifest,
     LifecycleExperimentMetrics,
 )
-from aec_bench.meta_harness.evidence_lifecycle_state import EvidenceLifecycleRunState
+from aec_bench.meta_harness.evidence_lifecycle_state import (
+    EvidenceLifecycleRunState,
+    EvidenceRequestActionRecord,
+)
+from aec_bench.meta_harness.evidence_request_protocol import (
+    expected_evidence_request_run_artifact_paths,
+    is_evidence_request_run_artifact_path,
+)
+from aec_bench.task_world_templates.contracts import EvidenceLifecycleSpec
 from aec_bench.task_world_templates.lifecycles import lifecycle_package_variant
 
 
@@ -121,7 +132,7 @@ def _build_lifecycle_trial_record(
     if require_planned_paths:
         read_evidence_lifecycle_state(package, run)
     else:
-        _validate_snapshotted_lifecycle_state(run)
+        _validate_snapshotted_lifecycle_state(package, run)
     state = _read_json(run / "state.json")
     variant = lifecycle_package_variant(package)
     if variant is None or variant.get("variant_id") != trial.variant_id:
@@ -929,11 +940,44 @@ def _validate_declared_run_artifacts(run_dir: Path, experiment: dict[str, Any]) 
             raise ValueError(f"trajectory hash does not match declared run artifact: {relative}")
 
 
-def _validate_snapshotted_lifecycle_state(run_dir: Path) -> None:
+def _validate_snapshotted_lifecycle_state(package_dir: Path, run_dir: Path) -> None:
     state = EvidenceLifecycleRunState.model_validate(_read_json(run_dir / "state.json"))
+    spec = load_evidence_lifecycle_spec(package_dir)
+    validate_evidence_request_run_state(state, spec)
     if state.branch is not None:
         raise ValueError("branched lifecycle snapshots are not supported by ablation finalization")
     for checkpoint in state.checkpoint_runs:
+        checkpoint_spec = next(item for item in spec.checkpoints if item.checkpoint_id == checkpoint.checkpoint_id)
+        expected_catalog = evidence_request_catalog_payload(checkpoint_spec, checkpoint)
+        catalog_path = run_dir / "workspace" / "checkpoints" / checkpoint.checkpoint_id / "evidence-requests.json"
+        catalog_was_released = expected_catalog is not None and checkpoint.status.value != "pending"
+        if not catalog_was_released:
+            if catalog_path.exists():
+                raise ValueError("snapshot contains an unreleased or undeclared evidence request catalogue")
+        elif not catalog_path.is_file() or _read_json(catalog_path) != expected_catalog:
+            raise ValueError("snapshotted evidence request catalogue does not match lifecycle state")
+        for action in checkpoint.evidence_request_actions:
+            transaction = run_dir / "evidence_requests" / action.action_id
+            action_path = transaction / "action.json"
+            committed_path = transaction / "committed.json"
+            if not action_path.is_file() or not committed_path.is_file():
+                raise ValueError(f"snapshotted evidence request transaction is incomplete: {action.action_id}")
+            persisted_action = EvidenceRequestActionRecord.model_validate(_read_json(action_path))
+            if persisted_action != action:
+                raise ValueError("snapshotted evidence request action does not match lifecycle state")
+            committed = _read_json(committed_path)
+            if committed != {"action_id": action.action_id, "status": "committed"}:
+                raise ValueError("snapshotted evidence request transaction is not committed")
+            for artifact in action.released_artifacts:
+                canonical = run_dir / artifact.path
+                workspace = run_dir / "workspace" / artifact.workspace_path
+                if (
+                    not canonical.is_file()
+                    or _sha256(canonical) != artifact.sha256
+                    or not workspace.is_file()
+                    or _sha256(workspace) != artifact.sha256
+                ):
+                    raise ValueError("snapshotted requested evidence artifact hash mismatch")
         if checkpoint.status.value != "submitted":
             continue
         if checkpoint.submission_sha256 is None:
@@ -941,6 +985,32 @@ def _validate_snapshotted_lifecycle_state(run_dir: Path) -> None:
         path = run_dir / "episodes" / checkpoint.checkpoint_id / "submission.json"
         if not path.is_file() or _sha256(path) != checkpoint.submission_sha256:
             raise ValueError(f"snapshotted checkpoint submission hash mismatch: {checkpoint.checkpoint_id}")
+    if any(checkpoint.conditional_evidence is not None for checkpoint in spec.checkpoints):
+        _validate_evidence_request_artifact_inventory(run_dir, state, spec)
+
+
+def _validate_evidence_request_artifact_inventory(
+    run_dir: Path,
+    state: EvidenceLifecycleRunState,
+    spec: EvidenceLifecycleSpec,
+) -> None:
+    expected = expected_evidence_request_run_artifact_paths(state, spec)
+    actual: set[str] = set()
+    for path in sorted(run_dir.rglob("*")):
+        relative = path.relative_to(run_dir).as_posix()
+        if not is_evidence_request_run_artifact_path(relative):
+            continue
+        if path.is_symlink():
+            raise ValueError(f"snapshotted evidence request artifact is a symlink: {relative}")
+        if path.is_file():
+            actual.add(relative)
+    if actual != expected:
+        missing = ", ".join(sorted(expected - actual)) or "none"
+        unexpected = ", ".join(sorted(actual - expected)) or "none"
+        raise ValueError(
+            "snapshotted evidence request artifact inventory does not match lifecycle state: "
+            f"missing={missing}; unexpected={unexpected}"
+        )
 
 
 def _validate_metrics_against_run(
@@ -960,6 +1030,13 @@ def _validate_metrics_against_run(
         for attempt in checkpoint.get("attempts", [])
         if isinstance(attempt, dict)
     ]
+    evidence_request_actions = [
+        action
+        for checkpoint in checkpoint_runs
+        if isinstance(checkpoint, dict)
+        for action in checkpoint.get("evidence_request_actions", [])
+        if isinstance(action, dict)
+    ]
     expected = {
         "checkpoint_count": sum(
             isinstance(checkpoint, dict) and checkpoint.get("status") == "submitted" for checkpoint in checkpoint_runs
@@ -971,6 +1048,29 @@ def _validate_metrics_against_run(
         ),
         "failures": sum(attempt.get("status") == "failed" for attempt in attempts),
     }
+    if state.get("schema_version") == "4":
+        expected.update(
+            {
+                "evidence_request_calls": len(evidence_request_actions),
+                "accepted_evidence_requests": sum(
+                    action.get("outcome") == "released" for action in evidence_request_actions
+                ),
+                "already_released_evidence_requests": sum(
+                    action.get("outcome") == "already_released" for action in evidence_request_actions
+                ),
+                "rejected_evidence_requests": sum(
+                    action.get("outcome") == "rejected" for action in evidence_request_actions
+                ),
+                "evidence_request_budget_consumed": sum(
+                    int(action.get("budget_consumed", 0)) for action in evidence_request_actions
+                ),
+                "evidence_request_artifacts_released": sum(
+                    len(action.get("released_artifacts", []))
+                    for action in evidence_request_actions
+                    if action.get("outcome") == "released"
+                ),
+            }
+        )
     for field, value in expected.items():
         if metrics.get(field) != value:
             raise ValueError(f"lifecycle {field} does not match run state")
@@ -1092,6 +1192,16 @@ def _artifact_kind(relative: Path) -> str:
         return "agent_result"
     if path.endswith("/agent_result.corrupt.json"):
         return "corrupt_agent_result"
+    if path.startswith("run/evidence_requests/") and path.endswith("/action.json"):
+        return "evidence_request_action"
+    if path.startswith("run/evidence_requests/") and path.endswith("/committed.json"):
+        return "evidence_request_commit"
+    if path.startswith("run/evidence_requests/") and "/artifacts/" in path:
+        return "requested_evidence"
+    if path.endswith("/evidence-requests.json"):
+        return "evidence_request_catalog"
+    if path.startswith("run/workspace/inbox/") and "/requests/" in path:
+        return "requested_evidence_projection"
     if path.endswith("/submission.json") or "/submissions/" in path:
         return "checkpoint_submission"
     if path == "run/state.json":

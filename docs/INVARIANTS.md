@@ -133,6 +133,9 @@ For evidence-lifecycle tasks, the host owns file disclosure and checkpoint trans
 
 Python enforcement direction:
 - release only the active checkpoint's declared evidence;
+- expose conditional evidence only through public request IDs and a finite host-owned budget sufficient to reach every declared request; never expose hidden resolution paths or expected outcomes;
+- bind every boundary-valid evidence request to the active host-owned session and attempt, publish a canonical sequence-addressed and hash-bound transaction before model visibility, and record typed zero-cost rejections without leaking valid alternatives;
+- retain acquired conditional evidence and consumed budget across retry and branch inheritance; a derived run cannot unsee evidence visible at its branch point;
 - archive and hash submissions before advancing;
 - represent revision of an earlier submission as a derived branch;
 - persist attempts, interruptions, failures, resumes, revisits, and visibility policy;
@@ -142,6 +145,7 @@ Python enforcement direction:
 - refuse non-empty lifecycle materialization targets and validate variant identity against package content before verification or indexing;
 - finalize lifecycle sweeps through one append-only core `TrialRecord` per planned invocation;
 - snapshot and hash lifecycle inputs and outputs under the ledger before claiming a complete record;
+- snapshot and reconcile conditional action records, commit markers, released bytes, public catalogues, workspace projections, action metrics, and interaction-protocol/tool-schema fingerprints;
 - bind plan and trial identity to materialized package/spec hashes, the actual registered scorer, and the declared aec-bench source inventory;
 - bind each trial to the selected runtime provider and the realized bytes of its active dependency closure, then recapture and reconcile that fingerprint at invocation finalization;
 - retain each fresh or persistent attempt in its own session directory, including interrupted attempts with unresolved provider identity;

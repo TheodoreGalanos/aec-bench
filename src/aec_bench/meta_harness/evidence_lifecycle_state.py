@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from pathlib import PurePosixPath
 from typing import Literal
 
-from pydantic import Field, PositiveInt, field_validator, model_validator
+from pydantic import Field, NonNegativeInt, PositiveInt, field_validator, model_validator
 
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.meta_harness.evidence_lifecycle_metrics import LifecycleSemanticMetrics
@@ -33,9 +34,98 @@ class CheckpointAttemptStatus(StrEnum):
 
 class LifecycleTransitionKind(StrEnum):
     BRANCH = "branch"
+    EVIDENCE_REQUEST = "evidence_request"
     RELEASE = "release"
     SUBMIT = "submit"
     REVISIT = "revisit"
+
+
+class EvidenceRequestOutcome(StrEnum):
+    RELEASED = "released"
+    ALREADY_RELEASED = "already_released"
+    REJECTED = "rejected"
+
+
+class EvidenceRequestRejection(StrEnum):
+    INACTIVE_CHECKPOINT = "inactive_checkpoint"
+    UNKNOWN_REQUEST = "unknown_request"
+    PREREQUISITES_INCOMPLETE = "prerequisites_incomplete"
+    BUDGET_EXHAUSTED = "budget_exhausted"
+    NOT_SUPPORTED = "not_supported"
+
+
+class ReleasedEvidenceArtifact(StrictModel):
+    path: NonEmptyStr
+    workspace_path: NonEmptyStr
+    sha256: NonEmptyStr
+
+    @field_validator("sha256")
+    @classmethod
+    def validate_sha256(cls, value: str) -> str:
+        if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+            raise ValueError("sha256 must contain 64 lowercase hexadecimal characters")
+        return value
+
+    @model_validator(mode="after")
+    def validate_paths(self) -> ReleasedEvidenceArtifact:
+        canonical = PurePosixPath(self.path)
+        workspace = PurePosixPath(self.workspace_path)
+        if canonical.is_absolute() or ".." in canonical.parts or canonical.parts[:1] != ("evidence_requests",):
+            raise ValueError("released evidence artifact path must stay under evidence_requests/")
+        if workspace.is_absolute() or ".." in workspace.parts or workspace.parts[:1] != ("inbox",):
+            raise ValueError("released evidence workspace path must stay under inbox/")
+        return self
+
+
+class EvidenceRequestActionRecord(StrictModel):
+    action_id: NonEmptyStr
+    sequence: PositiveInt
+    checkpoint_id: NonEmptyStr
+    requested_checkpoint_id: NonEmptyStr
+    request_id: NonEmptyStr
+    reason: NonEmptyStr
+    session_id: NonEmptyStr
+    attempt_id: NonEmptyStr
+    outcome: EvidenceRequestOutcome
+    rejection: EvidenceRequestRejection | None = None
+    pre_action_state_sha256: NonEmptyStr
+    post_action_state_sha256: NonEmptyStr
+    released_artifacts: tuple[ReleasedEvidenceArtifact, ...] = ()
+    budget_before: NonNegativeInt
+    budget_consumed: Literal[0, 1]
+    budget_after: NonNegativeInt
+    inherited_from_parent: bool = False
+
+    @field_validator("pre_action_state_sha256", "post_action_state_sha256")
+    @classmethod
+    def validate_state_sha256(cls, value: str) -> str:
+        if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+            raise ValueError("action state sha256 must contain 64 lowercase hexadecimal characters")
+        return value
+
+    @model_validator(mode="after")
+    def validate_outcome_and_budget(self) -> EvidenceRequestActionRecord:
+        if self.budget_after != self.budget_before - self.budget_consumed:
+            raise ValueError("evidence request budget arithmetic is inconsistent")
+        if self.outcome == EvidenceRequestOutcome.RELEASED:
+            if (
+                self.requested_checkpoint_id != self.checkpoint_id
+                or self.rejection is not None
+                or self.budget_consumed != 1
+                or not self.released_artifacts
+            ):
+                raise ValueError("released evidence request must consume budget and record artifacts")
+        elif self.outcome == EvidenceRequestOutcome.ALREADY_RELEASED:
+            if (
+                self.requested_checkpoint_id != self.checkpoint_id
+                or self.rejection is not None
+                or self.budget_consumed != 0
+                or not self.released_artifacts
+            ):
+                raise ValueError("already-released evidence request must preserve its artifacts")
+        elif self.rejection is None or self.budget_consumed != 0 or self.released_artifacts:
+            raise ValueError("rejected evidence request must record only its rejection")
+        return self
 
 
 class CheckpointAttemptRecord(StrictModel):
@@ -47,6 +137,7 @@ class CheckpointAttemptRecord(StrictModel):
     resumed_from_attempt_id: str | None = None
     failure_kind: str | None = None
     episode_request_sha256: str | None = None
+    inherited_from_parent: bool = False
 
     @field_validator("episode_request_sha256")
     @classmethod
@@ -63,6 +154,9 @@ class CheckpointRunRecord(StrictModel):
     submission_path: str | None = None
     submission_sha256: str | None = None
     attempts: list[CheckpointAttemptRecord] = Field(default_factory=list)
+    evidence_request_budget: NonNegativeInt = 0
+    evidence_request_budget_remaining: NonNegativeInt = 0
+    evidence_request_actions: list[EvidenceRequestActionRecord] = Field(default_factory=list)
     inherited_from_parent: bool = False
 
     @model_validator(mode="after")
@@ -76,6 +170,17 @@ class CheckpointRunRecord(StrictModel):
         sequences = [attempt.sequence for attempt in self.attempts]
         if sequences != list(range(1, len(sequences) + 1)):
             raise ValueError("checkpoint attempt sequences must be contiguous")
+        if self.evidence_request_budget_remaining > self.evidence_request_budget:
+            raise ValueError("remaining evidence request budget cannot exceed its initial budget")
+        remaining = self.evidence_request_budget
+        for action in self.evidence_request_actions:
+            if action.checkpoint_id != self.checkpoint_id:
+                raise ValueError("evidence request action checkpoint must match its run record")
+            if action.budget_before != remaining:
+                raise ValueError("evidence request action budget chain is inconsistent")
+            remaining = action.budget_after
+        if remaining != self.evidence_request_budget_remaining:
+            raise ValueError("remaining evidence request budget must match the action history")
         return self
 
     @property
@@ -110,11 +215,19 @@ class LifecycleBranchRecord(StrictModel):
     parent_run_dir: NonEmptyStr
     branched_from_checkpoint_id: NonEmptyStr
     parent_submission_sha256: NonEmptyStr
+    parent_action_state_sha256: str | None = None
     reason: NonEmptyStr
+
+    @field_validator("parent_action_state_sha256")
+    @classmethod
+    def validate_parent_action_state_sha256(cls, value: str | None) -> str | None:
+        if value is not None and (len(value) != 64 or any(character not in "0123456789abcdef" for character in value)):
+            raise ValueError("parent action state sha256 must contain 64 lowercase hexadecimal characters")
+        return value
 
 
 class EvidenceLifecycleRunState(StrictModel):
-    schema_version: Literal["3"] = "3"
+    schema_version: Literal["3", "4"] = "4"
     lifecycle_id: NonEmptyStr
     world_id: NonEmptyStr
     lifecycle_spec_sha256: NonEmptyStr
@@ -155,6 +268,15 @@ class EvidenceLifecycleRunState(StrictModel):
             raise ValueError("checkpoint statuses must follow submitted, active, then pending order")
         if self.branch is not None and self.branch.branched_from_checkpoint_id not in checkpoint_ids:
             raise ValueError("branch checkpoint must exist in lifecycle state")
+        if self.schema_version == "4" and self.branch is not None and self.branch.parent_action_state_sha256 is None:
+            raise ValueError("v4 branch state requires a parent action state sha256")
+        actions = [action for checkpoint in self.checkpoint_runs for action in checkpoint.evidence_request_actions]
+        for expected_sequence, action in enumerate(actions, start=1):
+            expected_action_id = f"evidence-request-{expected_sequence:06d}"
+            if action.sequence != expected_sequence or action.action_id != expected_action_id:
+                raise ValueError(
+                    "evidence request action identities must be contiguous and globally ordered across the run"
+                )
         return self
 
     def checkpoint(self, checkpoint_id: str) -> CheckpointRunRecord:
