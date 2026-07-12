@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -852,9 +853,9 @@ def test_local_episode_resolver_builds_fresh_adapters_in_one_workspace(tmp_path:
     assert result["status"] == "complete"
     assert registry.build_count == 2
     assert len(set(registry.workspaces)) == 1
-    assert (run_dir / "episodes" / "initial_review" / "agent_result.json").exists()
-    assert (run_dir / "episodes" / "response_review" / "agent_result.json").exists()
-    assert (run_dir / "episodes" / "initial_review" / "conversation.jsonl").exists()
+    assert (run_dir / "episodes" / "initial_review" / "initial_review.session-001" / "agent_result.json").exists()
+    assert (run_dir / "episodes" / "response_review" / "response_review.session-001" / "agent_result.json").exists()
+    assert (run_dir / "episodes" / "initial_review" / "initial_review.session-001" / "conversation.jsonl").exists()
     state = _load_json(run_dir / "state.json")
     assert [[attempt["status"] for attempt in checkpoint["attempts"]] for checkpoint in state["checkpoint_runs"]] == [
         ["submitted"],
@@ -882,7 +883,34 @@ def test_local_episode_resolver_marks_provider_failure_immediately(tmp_path: Pat
     attempt = state["checkpoint_runs"][0]["attempts"][0]
     assert attempt["status"] == "failed"
     assert attempt["failure_kind"] == "adapter_exception"
-    assert (run_dir / "episodes" / "initial_review" / "agent_result.json").exists()
+    assert (run_dir / "episodes" / "initial_review" / "initial_review.session-001" / "agent_result.json").exists()
+
+
+def test_local_episode_resolver_preserves_failed_attempt_artifacts_on_retry(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    failed = build_local_evidence_lifecycle_episode_resolver(
+        package_dir=package,
+        model="test-model",
+        adapter_kind="tool_loop",
+        registry=_CrashingRegistry(),
+    )
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        run_evidence_lifecycle(package, run_dir, episode_resolver=failed)
+    failed_result = run_dir / "episodes" / "initial_review" / "initial_review.session-001" / "agent_result.json"
+    failed_bytes = failed_result.read_bytes()
+
+    retry = build_local_evidence_lifecycle_episode_resolver(
+        package_dir=package,
+        model="test-model",
+        adapter_kind="tool_loop",
+        registry=_WritingRegistry(),
+    )
+    result = run_evidence_lifecycle(package, run_dir, episode_resolver=retry)
+
+    assert result["status"] == "complete"
+    assert failed_result.read_bytes() == failed_bytes
+    assert (run_dir / "episodes" / "initial_review" / "initial_review.session-002" / "agent_result.json").is_file()
 
 
 def test_local_runners_return_the_same_normalized_evidence_schema(tmp_path: Path) -> None:
@@ -927,6 +955,59 @@ def test_local_runners_return_the_same_normalized_evidence_schema(tmp_path: Path
         "cache_write_tokens": 0,
         "failures": 0,
     }
+
+
+def test_local_runner_records_aec_bench_source_provenance_not_caller_repository(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _write_package(tmp_path / "package")
+    caller_repository = tmp_path / "caller-repository"
+    caller_repository.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=caller_repository, check=True)
+    (caller_repository / "README.md").write_text("caller repository\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=caller_repository, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Lifecycle Test",
+            "-c",
+            "user.email=lifecycle@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "initial",
+        ],
+        cwd=caller_repository,
+        check=True,
+    )
+    monkeypatch.chdir(caller_repository)
+    run_dir = tmp_path / "run"
+    verification = {
+        "lifecycle_id": "lifecycle.demo",
+        "reward": 1.0,
+        "overall": "pass",
+        "passed": True,
+        "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
+    }
+
+    run_local_evidence_lifecycle_fresh_context(
+        package_dir=package,
+        run_dir=run_dir,
+        model="test-model",
+        registry=_WritingRegistry(),
+        verifier=lambda _package, _run: verification,
+    )
+
+    invocation = _load_json(run_dir / "experiment-manifest.json")
+    expected_root = subprocess.check_output(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=Path(lifecycle_local_runtime.__file__).resolve().parent,
+        text=True,
+    ).strip()
+    assert invocation["repository"]["root"] == expected_root
+    assert invocation["repository"]["root"] != str(caller_repository)
 
 
 @pytest.mark.parametrize("mode", ["persistent_context", "fresh_context"])

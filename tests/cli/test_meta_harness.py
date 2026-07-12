@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import yaml
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
@@ -16,6 +17,111 @@ from aec_bench.task_world_templates.lifecycles.ssc03_drainage_model import (
 
 runner = CliRunner()
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_meta_harness_lifecycle_ablation_dry_run_is_exact_and_write_free(tmp_path: Path) -> None:
+    config_path = tmp_path / "ablation.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "experiment_id": "cli-ablation",
+                "lifecycle_template_id": "drainage-model-evidence-lifecycle-review",
+                "variants": ["response_assertion_only"],
+                "agents": [
+                    {
+                        "name": "agent-a",
+                        "adapter": "tool_loop",
+                        "model": "model-a",
+                        "parameters": {"max_turns_per_session": 10},
+                    }
+                ],
+                "study_design": {
+                    "interpretation": "descriptive_calibration",
+                    "turn_budget_scope": "per_session",
+                    "execution_order": "deterministic_sequential_plan_order",
+                    "randomized": False,
+                    "counterbalanced": False,
+                    "causal_effects_supported": False,
+                },
+                "repetitions": 1,
+                "output_root": "output",
+                "ledger_root": "ledger",
+                "limits": {"max_trials": 4},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "meta-harness",
+            "lifecycle-ablation",
+            "--config",
+            str(config_path),
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)["data"]
+    assert data["dry_run"] is True
+    assert data["plan"]["trial_count"] == 4
+    assert data["plan"]["study_design"]["causal_effects_supported"] is False
+    assert {item["status"] for item in data["trial_statuses"]} == {"pending"}
+    assert {item["memory_visibility_policy"] for item in data["trial_statuses"]} == {
+        "persistent_context",
+        "artifact_memory",
+        "raw_evidence_only",
+        "current_release_only",
+    }
+    assert all(Path(item["run_dir"]).is_absolute() for item in data["trial_statuses"])
+    assert not (tmp_path / "output").exists()
+    assert not (tmp_path / "ledger").exists()
+
+
+def test_meta_harness_lifecycle_ablation_rejects_ignored_agent_parameter(tmp_path: Path) -> None:
+    config_path = tmp_path / "invalid-ablation.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "experiment_id": "cli-ablation",
+                "lifecycle_template_id": "drainage-model-evidence-lifecycle-review",
+                "variants": ["response_assertion_only"],
+                "agents": [
+                    {
+                        "name": "agent-a",
+                        "adapter": "tool_loop",
+                        "model": "model-a",
+                        "parameters": {"seed": 42},
+                    }
+                ],
+                "output_root": "output",
+                "ledger_root": "ledger",
+                "limits": {"max_trials": 4},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "meta-harness",
+            "lifecycle-ablation",
+            "--config",
+            str(config_path),
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 1
+    envelope = json.loads(result.output)
+    assert envelope["status"] == "error"
+    assert "unsupported lifecycle agent parameters: seed" in envelope["errors"][0]
 
 
 def test_meta_harness_lifecycle_commands_prepare_submit_and_report_state(tmp_path: Path) -> None:

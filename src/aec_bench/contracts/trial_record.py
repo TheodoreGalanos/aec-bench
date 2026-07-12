@@ -3,12 +3,13 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import (
     Field,
     NonNegativeFloat,
     NonNegativeInt,
+    PositiveInt,
     field_validator,
     model_validator,
 )
@@ -47,6 +48,20 @@ class FileReference(StrictModel):
     source: str | None = None
 
 
+class ArtifactReference(StrictModel):
+    kind: NonEmptyStr
+    path: NonEmptyStr
+    sha256: NonEmptyStr
+    media_type: NonEmptyStr
+
+    @field_validator("sha256")
+    @classmethod
+    def validate_sha256(cls, value: str) -> str:
+        if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+            raise ValueError("sha256 must contain 64 lowercase hexadecimal characters")
+        return value
+
+
 class InputRecord(StrictModel):
     instruction: NonEmptyStr
     system_prompt: str | None = None
@@ -59,6 +74,7 @@ class OutputRecord(StrictModel):
     conversation_path: str | None = None
     trajectory_path: str | None = None
     agent_result: dict[str, Any] | None = None
+    artifacts: list[ArtifactReference] | None = None
 
 
 class TimingRecord(StrictModel):
@@ -127,6 +143,126 @@ class AdaptationProvenance(StrictModel):
         return self
 
 
+class LifecycleSessionRecord(StrictModel):
+    session_id: NonEmptyStr
+    checkpoint_ids: list[NonEmptyStr] = Field(default_factory=list)
+    requested_adapter: NonEmptyStr | None = None
+    adapter: NonEmptyStr
+    resolved_model: NonEmptyStr
+    execution_mode: Literal["persistent_context", "fresh_context"] | None = None
+    memory_visibility_policy: (
+        Literal[
+            "persistent_context",
+            "artifact_memory",
+            "raw_evidence_only",
+            "current_release_only",
+        ]
+        | None
+    ) = None
+    configuration: dict[str, Any] = Field(default_factory=dict)
+    status: Literal["completed", "failed", "partial"]
+    input_tokens: NonNegativeInt = 0
+    output_tokens: NonNegativeInt = 0
+    cache_read_tokens: NonNegativeInt = 0
+    cache_write_tokens: NonNegativeInt = 0
+    failure_kind: str | None = None
+    provider_error: str | None = None
+    artifacts: list[ArtifactReference] = Field(default_factory=list)
+
+    @field_validator("checkpoint_ids")
+    @classmethod
+    def validate_checkpoint_ids(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("session checkpoint ids must be unique")
+        return value
+
+
+class LifecycleExecutionRecord(StrictModel):
+    execution_mode: Literal["persistent_context", "fresh_context"]
+    memory_visibility_policy: Literal[
+        "persistent_context",
+        "artifact_memory",
+        "raw_evidence_only",
+        "current_release_only",
+    ]
+    max_turns_per_session: PositiveInt
+    status: Literal["completed", "failed", "partial"]
+    sessions: list[LifecycleSessionRecord] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_session_consistency(self) -> "LifecycleExecutionRecord":
+        if self.execution_mode == "persistent_context" and self.memory_visibility_policy != "persistent_context":
+            raise ValueError("persistent lifecycle execution requires persistent_context visibility")
+        if self.execution_mode == "fresh_context" and self.memory_visibility_policy == "persistent_context":
+            raise ValueError("fresh lifecycle execution cannot use persistent_context visibility")
+        resolved_models = {
+            session.resolved_model for session in self.sessions if session.resolved_model != "unresolved"
+        }
+        if len(resolved_models) > 1:
+            raise ValueError("resolved model must remain stable across lifecycle sessions")
+        if len({session.adapter for session in self.sessions if session.adapter != "unresolved"}) > 1:
+            raise ValueError("adapter must remain stable across lifecycle sessions")
+        session_ids = [session.session_id for session in self.sessions]
+        if len(session_ids) != len(set(session_ids)):
+            raise ValueError("lifecycle session ids must be unique")
+        if self.status == "completed" and (
+            not self.sessions or any(session.status != "completed" for session in self.sessions)
+        ):
+            raise ValueError("completed lifecycle execution requires completed sessions")
+        if any(
+            session.execution_mode is not None and session.execution_mode != self.execution_mode
+            for session in self.sessions
+        ):
+            raise ValueError("session execution mode must match lifecycle execution")
+        if any(
+            session.memory_visibility_policy is not None
+            and session.memory_visibility_policy != self.memory_visibility_policy
+            for session in self.sessions
+        ):
+            raise ValueError("session visibility policy must match lifecycle execution")
+        return self
+
+
+class LifecycleTrialProvenance(StrictModel):
+    lifecycle_id: NonEmptyStr
+    world_id: NonEmptyStr
+    spec_sha256: NonEmptyStr
+    package_sha256: NonEmptyStr
+    repository_commit: NonEmptyStr
+    repository_kind: Literal["git", "source_tree"] = "git"
+    repository_dirty: bool
+    repository_dirty_digest: NonEmptyStr
+    runtime_provider: NonEmptyStr
+    runtime_distributions: tuple[NonEmptyStr, ...]
+    runtime_dependency_sha256: NonEmptyStr
+    verifier_qualified_name: NonEmptyStr
+    verifier_source_sha256: NonEmptyStr
+    invocation_manifest: ArtifactReference
+    invocation_index: ArtifactReference | None = None
+    ablation_manifest: ArtifactReference | None = None
+    ablation_plan: ArtifactReference | None = None
+
+    @field_validator(
+        "spec_sha256",
+        "package_sha256",
+        "repository_dirty_digest",
+        "runtime_dependency_sha256",
+        "verifier_source_sha256",
+    )
+    @classmethod
+    def validate_hashes(cls, value: str) -> str:
+        return ArtifactReference.validate_sha256(value)
+
+    @field_validator("runtime_distributions")
+    @classmethod
+    def validate_runtime_distributions(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if not value:
+            raise ValueError("runtime dependency distributions are required")
+        if tuple(sorted(set(value))) != value:
+            raise ValueError("runtime dependency distributions must be sorted and unique")
+        return value
+
+
 class TrialRecord(StrictModel):
     trial_id: NonEmptyStr
     experiment_id: NonEmptyStr
@@ -141,6 +277,8 @@ class TrialRecord(StrictModel):
     timing: TimingRecord
     cost: CostRecord | None = None
     adaptation: AdaptationProvenance | None = None
+    lifecycle_execution: LifecycleExecutionRecord | None = None
+    lifecycle_provenance: LifecycleTrialProvenance | None = None
     completeness: Completeness
 
     @model_validator(mode="after")
@@ -153,7 +291,66 @@ class TrialRecord(StrictModel):
                 missing.append("environment.tool_versions")
             if self.inputs.input_files is None:
                 missing.append("inputs.input_files")
+            if self.lifecycle_execution is not None or self.lifecycle_provenance is not None:
+                if self.lifecycle_execution is None:
+                    missing.append("lifecycle_execution")
+                if self.lifecycle_provenance is None:
+                    missing.append("lifecycle_provenance")
+                if self.lifecycle_provenance is not None and self.lifecycle_provenance.repository_dirty:
+                    missing.append("lifecycle_provenance.clean_repository")
+                if self.lifecycle_provenance is not None:
+                    if self.lifecycle_provenance.invocation_index is None:
+                        missing.append("lifecycle_provenance.invocation_index")
+                    if self.lifecycle_provenance.ablation_manifest is None:
+                        missing.append("lifecycle_provenance.ablation_manifest")
+                    if self.lifecycle_provenance.ablation_plan is None:
+                        missing.append("lifecycle_provenance.ablation_plan")
+                if self.lifecycle_execution is not None and not self.lifecycle_execution.sessions:
+                    missing.append("lifecycle_execution.sessions")
+                if self.lifecycle_execution is not None and any(
+                    not session.artifacts for session in self.lifecycle_execution.sessions
+                ):
+                    missing.append("lifecycle_execution.sessions.artifacts")
+                if self.lifecycle_execution is not None and any(
+                    session.resolved_model == "unresolved" for session in self.lifecycle_execution.sessions
+                ):
+                    missing.append("lifecycle_execution.sessions.resolved_model")
+                if self.lifecycle_execution is not None and any(
+                    session.adapter == "unresolved" for session in self.lifecycle_execution.sessions
+                ):
+                    missing.append("lifecycle_execution.sessions.adapter")
+                if not self.outputs.artifacts:
+                    missing.append("outputs.artifacts")
             if missing:
                 msg = f"complete trial record missing provenance fields: {', '.join(missing)}"
                 raise ValueError(msg)
+        if (self.lifecycle_execution is None) != (self.lifecycle_provenance is None):
+            raise ValueError("lifecycle execution and provenance must be provided together")
+        if self.lifecycle_execution is not None:
+            resolved_models = {
+                session.resolved_model
+                for session in self.lifecycle_execution.sessions
+                if session.resolved_model != "unresolved"
+            }
+            adapters = {
+                session.adapter for session in self.lifecycle_execution.sessions if session.adapter != "unresolved"
+            }
+            if resolved_models and resolved_models != {self.agent.model}:
+                raise ValueError("agent model must match the lifecycle resolved model")
+            if adapters and adapters != {self.agent.adapter}:
+                raise ValueError("agent adapter must match lifecycle sessions")
+            if (
+                self.outputs.artifacts
+                and self.lifecycle_provenance is not None
+                and self.lifecycle_provenance.invocation_manifest not in self.outputs.artifacts
+            ):
+                raise ValueError("lifecycle invocation manifest must be included in output artifacts")
+            if self.outputs.artifacts and self.lifecycle_provenance is not None:
+                bound_artifacts = (
+                    self.lifecycle_provenance.invocation_index,
+                    self.lifecycle_provenance.ablation_manifest,
+                    self.lifecycle_provenance.ablation_plan,
+                )
+                if any(artifact is not None and artifact not in self.outputs.artifacts for artifact in bound_artifacts):
+                    raise ValueError("lifecycle sweep provenance must be included in output artifacts")
         return self

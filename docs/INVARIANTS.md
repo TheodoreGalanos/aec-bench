@@ -138,6 +138,19 @@ Python enforcement direction:
 - derive public semantic variants from validated task-specific event contracts rather than arbitrary file patches;
 - keep host-side variant identity and lineage hash-bound without leaking it into model-visible evidence;
 - refuse non-empty lifecycle materialization targets and validate variant identity against package content before verification or indexing;
+- finalize lifecycle sweeps through one append-only core `TrialRecord` per planned invocation;
+- snapshot and hash lifecycle inputs and outputs under the ledger before claiming a complete record;
+- bind plan and trial identity to materialized package/spec hashes, the actual registered scorer, and the declared aec-bench source inventory;
+- bind each trial to the selected runtime provider and the realized bytes of its active dependency closure, then recapture and reconcile that fingerprint at invocation finalization;
+- retain each fresh or persistent attempt in its own session directory, including interrupted attempts with unresolved provider identity;
+- require every submitted checkpoint to have one final submitted attempt and durable session ownership before it can contribute reward;
+- require every fresh-context session to own exactly one checkpoint, with retries receiving distinct attempt-specific session directories;
+- reconcile attempt/session mode, visibility, per-session turn budget, and requested/actual adapter identity, and keep mismatches as explicit unscored failures;
+- derive cross-run lifecycle summaries from core ledger records and their snapshotted historical plan, never mutable run-directory scans or the current planner state;
+- give an existing immutable snapshot authority over later mutable source state;
+- publish session results, snapshots, and records atomically and fsync-durably through every new ancestor, and recover terminal-session crashes, artifact-only finalization, or a locked shared invocation index from durable evidence without rerunning the agent;
+- quarantine a torn terminal session result before publishing a conservative unresolved failure, but reject malformed trajectory history rather than silently truncating or reconstructing it;
+- persist the study design with each lifecycle calibration and never make causal claims beyond its budget and ordering controls;
 - keep true holdout evidence outside public variant registries and committed packages.
 
 ---

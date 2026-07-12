@@ -47,6 +47,18 @@ def load_evidence_lifecycle_spec(package_dir: Path) -> EvidenceLifecycleSpec:
     return EvidenceLifecycleSpec.model_validate(payload)
 
 
+def evidence_lifecycle_package_identity(package_dir: Path) -> dict[str, str]:
+    """Return the content-bound identity of one validated lifecycle package."""
+    package = Path(package_dir)
+    spec = load_evidence_lifecycle_spec(package)
+    return {
+        "lifecycle_id": spec.lifecycle_id,
+        "world_id": spec.world_id,
+        "spec_sha256": _spec_sha256(spec),
+        "package_sha256": _package_sha256(package),
+    }
+
+
 def prepare_evidence_checkpoint(package_dir: Path, run_dir: Path) -> dict[str, Any]:
     """Release exactly the next checkpoint into the persistent agent workspace."""
     package = Path(package_dir)

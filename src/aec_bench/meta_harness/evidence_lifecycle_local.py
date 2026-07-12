@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -14,6 +16,8 @@ from typing import Any, cast
 from aec_bench.adapters.base import AdapterRequest
 from aec_bench.adapters.local_registry import LocalAdapterRegistry
 from aec_bench.contracts.task_definition import ToolSpec
+from aec_bench.contracts.trajectory import read_trajectory
+from aec_bench.ledger.durability import fsync_directory, mkdir_durable
 from aec_bench.meta_harness.evidence_lifecycle import (
     EvidenceLifecycleError,
     fail_checkpoint_attempt,
@@ -26,7 +30,10 @@ from aec_bench.meta_harness.evidence_lifecycle import (
     submit_evidence_checkpoint,
     validate_lifecycle_verification,
 )
-from aec_bench.meta_harness.evidence_lifecycle_experiment import record_lifecycle_experiment
+from aec_bench.meta_harness.evidence_lifecycle_experiment import (
+    LifecycleExperimentSweepContext,
+    record_lifecycle_experiment,
+)
 from aec_bench.trajectory.writer import TrajectoryWriter
 
 
@@ -208,6 +215,9 @@ def run_local_evidence_lifecycle_session(
     process_id: str = "process.lifecycle",
     registry: Any | None = None,
     visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
+    sweep_context: LifecycleExperimentSweepContext | None = None,
+    repository_dir: Path | None = None,
+    require_adapter_identity_match: bool = False,
 ) -> dict[str, Any]:
     """Run all checkpoints in one adapter execution and one model conversation."""
     if adapter_kind not in {"tool_loop", "pydantic_ai"}:
@@ -220,6 +230,15 @@ def run_local_evidence_lifecycle_session(
     initial = prepare_evidence_checkpoint(package, run)
     if initial["status"] == "complete":
         raise EvidenceLifecycleError("lifecycle run is already complete")
+    _seal_interrupted_sessions(
+        run=run,
+        lifecycle=initial,
+        model=model,
+        adapter_kind=adapter_kind,
+        max_turns=max_turns,
+        execution_mode="persistent_context",
+        memory_visibility_policy=visibility_policy.value,
+    )
 
     session_id = _next_session_id(run)
     session_dir = run / "sessions" / session_id
@@ -303,9 +322,11 @@ def run_local_evidence_lifecycle_session(
             max_turns=max_turns,
             session_id=session_id,
             provider_error=str(exc),
+            memory_visibility_policy=visibility_policy.value,
         )
-        _write_json(session_dir / "agent_result.json", failed_agent_result)
         lifecycle = read_evidence_lifecycle_state(package, run)
+        failed_agent_result["checkpoint_ids"] = _session_checkpoint_ids(lifecycle, session_id)
+        _write_json(session_dir / "agent_result.json", failed_agent_result)
         _build_local_task_run(
             package=package,
             run=run,
@@ -318,8 +339,10 @@ def run_local_evidence_lifecycle_session(
                 execution_mode="persistent_context",
                 memory_visibility_policy=visibility_policy.value,
                 max_turns=max_turns,
-                sessions=[failed_agent_result],
+                sessions=_persistent_context_sessions(run),
             ),
+            sweep_context=sweep_context,
+            repository_dir=repository_dir,
         )
         raise
     finally:
@@ -331,17 +354,37 @@ def run_local_evidence_lifecycle_session(
         adapter_kind=adapter_kind,
         max_turns=max_turns,
         session_id=session_id,
+        memory_visibility_policy=visibility_policy.value,
     )
-    returned_failure = _adapter_failure_kind(result)
+    returned_failure = (
+        "adapter_identity_mismatch"
+        if require_adapter_identity_match and agent_result["adapter_name"] != adapter_kind
+        else _adapter_failure_kind(result)
+    )
     if returned_failure is not None:
+        agent_result["status"] = "failed"
+        agent_result["failure_kind"] = returned_failure
+    lifecycle = read_evidence_lifecycle_state(package, run)
+    if returned_failure is not None and lifecycle["active_checkpoint_id"] is not None:
         fail_checkpoint_attempt(
             package,
             run,
             session_id=session_id,
             failure_kind=returned_failure,
         )
-    lifecycle = read_evidence_lifecycle_state(package, run)
-    agent_result["checkpoint_ids"] = [item["checkpoint_id"] for item in lifecycle["completed_checkpoints"]]
+        lifecycle = read_evidence_lifecycle_state(package, run)
+    if returned_failure is None and lifecycle["status"] != "complete":
+        returned_failure = "lifecycle_incomplete"
+        agent_result["status"] = "failed"
+        agent_result["failure_kind"] = returned_failure
+        fail_checkpoint_attempt(
+            package,
+            run,
+            session_id=session_id,
+            failure_kind=returned_failure,
+        )
+        lifecycle = read_evidence_lifecycle_state(package, run)
+    agent_result["checkpoint_ids"] = _session_checkpoint_ids(lifecycle, session_id)
     _write_json(session_dir / "agent_result.json", agent_result)
     _write_conversation(session_dir / "conversation.jsonl", result.transcript)
     if result.raw_output_text:
@@ -359,8 +402,85 @@ def run_local_evidence_lifecycle_session(
             execution_mode="persistent_context",
             memory_visibility_policy=visibility_policy.value,
             max_turns=max_turns,
-            sessions=[agent_result],
+            sessions=_persistent_context_sessions(run),
         ),
+        sweep_context=sweep_context,
+        repository_dir=repository_dir,
+    )
+
+
+def validate_completed_persistent_lifecycle_recovery(
+    package_dir: Path,
+    run_dir: Path,
+) -> dict[str, Any]:
+    """Validate durable evidence needed to seal a terminal persistent-session crash."""
+    lifecycle = read_evidence_lifecycle_state(Path(package_dir), Path(run_dir))
+    if lifecycle["status"] != "complete":
+        raise EvidenceLifecycleError("persistent terminal recovery requires complete lifecycle state")
+    session_ids = {
+        str(attempt["session_id"])
+        for checkpoint in lifecycle.get("checkpoint_runs", [])
+        for attempt in checkpoint.get("attempts", [])
+    }
+    if not session_ids:
+        raise EvidenceLifecycleError("complete lifecycle has no persistent session lineage")
+    for session_id in sorted(session_ids):
+        session_dir = Path(run_dir) / "sessions" / session_id
+        result_path = session_dir / "agent_result.json"
+        trajectory_path = session_dir / "trajectory.jsonl"
+        if not session_dir.is_dir() or not trajectory_path.is_file():
+            raise EvidenceLifecycleError(f"interrupted session lacks durable trajectory evidence: {session_id}")
+        _validate_session_trajectory(trajectory_path, session_id)
+        if result_path.is_file():
+            try:
+                _read_json(result_path)
+            except (OSError, ValueError):
+                pass
+    return lifecycle
+
+
+def recover_completed_persistent_lifecycle_session(
+    *,
+    package_dir: Path,
+    run_dir: Path,
+    model: str,
+    verifier: Any,
+    adapter_kind: str,
+    max_turns: int,
+    process_id: str,
+    visibility_policy: LifecycleVisibilityPolicy,
+    sweep_context: LifecycleExperimentSweepContext,
+    repository_dir: Path,
+) -> dict[str, Any]:
+    """Seal a complete persistent crash and publish an unscored canonical invocation."""
+    package = Path(package_dir)
+    run = Path(run_dir)
+    lifecycle = validate_completed_persistent_lifecycle_recovery(package, run)
+    _seal_interrupted_sessions(
+        run=run,
+        lifecycle=lifecycle,
+        model=model,
+        adapter_kind=adapter_kind,
+        max_turns=max_turns,
+        execution_mode="persistent_context",
+        memory_visibility_policy=visibility_policy.value,
+    )
+    return _build_local_task_run(
+        package=package,
+        run=run,
+        process_id=process_id,
+        lifecycle=lifecycle,
+        verifier=verifier,
+        agent=_normalized_agent_evidence(
+            model=model,
+            adapter_kind=adapter_kind,
+            execution_mode="persistent_context",
+            memory_visibility_policy=visibility_policy.value,
+            max_turns=max_turns,
+            sessions=_persistent_context_sessions(run),
+        ),
+        sweep_context=sweep_context,
+        repository_dir=repository_dir,
     )
 
 
@@ -375,6 +495,9 @@ def run_local_evidence_lifecycle_fresh_context(
     process_id: str = "process.lifecycle",
     registry: Any | None = None,
     visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
+    sweep_context: LifecycleExperimentSweepContext | None = None,
+    repository_dir: Path | None = None,
+    require_adapter_identity_match: bool = False,
 ) -> dict[str, Any]:
     """Run every checkpoint in a fresh adapter and return the normalized local result."""
     package = Path(package_dir)
@@ -388,6 +511,7 @@ def run_local_evidence_lifecycle_fresh_context(
         max_turns=max_turns,
         registry=registry,
         visibility_policy=visibility_policy,
+        require_adapter_identity_match=require_adapter_identity_match,
     )
     try:
         lifecycle = run_evidence_lifecycle(package, run, episode_resolver=episode_resolver)
@@ -395,12 +519,7 @@ def run_local_evidence_lifecycle_fresh_context(
         lifecycle = read_evidence_lifecycle_state(package, run)
     except Exception:
         lifecycle = read_evidence_lifecycle_state(package, run)
-        spec = load_evidence_lifecycle_spec(package)
-        sessions = [
-            _read_json(run / "episodes" / checkpoint.checkpoint_id / "agent_result.json")
-            for checkpoint in spec.checkpoints
-            if (run / "episodes" / checkpoint.checkpoint_id / "agent_result.json").is_file()
-        ]
+        sessions = _fresh_context_sessions(run)
         _build_local_task_run(
             package=package,
             run=run,
@@ -415,14 +534,11 @@ def run_local_evidence_lifecycle_fresh_context(
                 max_turns=max_turns,
                 sessions=sessions,
             ),
+            sweep_context=sweep_context,
+            repository_dir=repository_dir,
         )
         raise
-    spec = load_evidence_lifecycle_spec(package)
-    sessions = [
-        _read_json(run / "episodes" / checkpoint.checkpoint_id / "agent_result.json")
-        for checkpoint in spec.checkpoints
-        if (run / "episodes" / checkpoint.checkpoint_id / "agent_result.json").is_file()
-    ]
+    sessions = _fresh_context_sessions(run)
     return _build_local_task_run(
         package=package,
         run=run,
@@ -437,6 +553,8 @@ def run_local_evidence_lifecycle_fresh_context(
             max_turns=max_turns,
             sessions=sessions,
         ),
+        sweep_context=sweep_context,
+        repository_dir=repository_dir,
     )
 
 
@@ -448,6 +566,7 @@ def build_local_evidence_lifecycle_episode_resolver(
     max_turns: int = 20,
     registry: Any | None = None,
     visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
+    require_adapter_identity_match: bool = False,
 ) -> Any:
     """Build a resolver that creates a fresh adapter for every checkpoint."""
     if visibility_policy == LifecycleVisibilityPolicy.PERSISTENT_CONTEXT:
@@ -458,8 +577,17 @@ def build_local_evidence_lifecycle_episode_resolver(
         checkpoint_id = str(context["checkpoint_id"])
         workspace = str(context["workspace"])
         checkpoint_run = next(item for item in context["checkpoint_runs"] if item["checkpoint_id"] == checkpoint_id)
+        _seal_interrupted_sessions(
+            run=Path(context["run_dir"]),
+            lifecycle=context,
+            model=model,
+            adapter_kind=adapter_kind,
+            max_turns=max_turns,
+            execution_mode="fresh_context",
+            memory_visibility_policy=visibility_policy.value,
+        )
         session_id = f"{checkpoint_id}.session-{len(checkpoint_run['attempts']) + 1:03d}"
-        episode_dir = Path(context["run_dir"]) / "episodes" / checkpoint_id
+        episode_dir = Path(context["run_dir"]) / "episodes" / checkpoint_id / session_id
         episode_dir.mkdir(parents=True, exist_ok=True)
         trajectory_path = episode_dir / "trajectory.jsonl"
         trajectory_writer = TrajectoryWriter(path=str(trajectory_path))
@@ -526,6 +654,7 @@ def build_local_evidence_lifecycle_episode_resolver(
                     session_id=session_id,
                     provider_error=str(exc),
                     checkpoint_id=checkpoint_id,
+                    memory_visibility_policy=visibility_policy.value,
                 ),
             )
             raise
@@ -544,6 +673,7 @@ def build_local_evidence_lifecycle_episode_resolver(
             "resolved_model": getattr(result, "resolved_model", model),
             "configuration_record": getattr(result, "configuration_record", {"model": model}),
             "session_mode": "fresh",
+            "memory_visibility_policy": visibility_policy.value,
             "session_id": session_id,
             "max_turns": max_turns,
             "input_tokens": result.usage_input_tokens or 0,
@@ -553,10 +683,16 @@ def build_local_evidence_lifecycle_episode_resolver(
             "failure_kind": _enum_value(result.failure_kind),
             "provider_error": result.provider_error,
         }
-        _write_json(episode_dir / "agent_result.json", agent_result)
         _write_conversation(episode_dir / "conversation.jsonl", result.transcript)
-        returned_failure = _adapter_failure_kind(result)
+        returned_failure = (
+            "adapter_identity_mismatch"
+            if require_adapter_identity_match and agent_result["adapter_name"] != adapter_kind
+            else _adapter_failure_kind(result)
+        )
         if returned_failure is not None:
+            agent_result["status"] = "failed"
+            agent_result["failure_kind"] = returned_failure
+            _write_json(episode_dir / "agent_result.json", agent_result)
             fail_checkpoint_attempt(
                 Path(package_dir),
                 Path(context["run_dir"]),
@@ -564,6 +700,7 @@ def build_local_evidence_lifecycle_episode_resolver(
                 failure_kind=returned_failure,
             )
             raise _LocalAdapterExecutionFailure(f"adapter failed at checkpoint {checkpoint_id}: {returned_failure}")
+        _write_json(episode_dir / "agent_result.json", agent_result)
         return agent_result
 
     return resolve
@@ -655,6 +792,7 @@ def _agent_result(
     max_turns: int,
     session_id: str | None = None,
     checkpoint_ids: list[str] | None = None,
+    memory_visibility_policy: str,
 ) -> dict[str, Any]:
     return {
         "checkpoint_ids": checkpoint_ids or [],
@@ -665,6 +803,7 @@ def _agent_result(
         "resolved_model": getattr(result, "resolved_model", model),
         "configuration_record": getattr(result, "configuration_record", {"model": model}),
         "session_mode": "persistent",
+        "memory_visibility_policy": memory_visibility_policy,
         "session_id": session_id,
         "max_turns": max_turns,
         "input_tokens": result.usage_input_tokens or 0,
@@ -684,6 +823,8 @@ def _failed_agent_result(
     session_id: str,
     provider_error: str,
     checkpoint_id: str | None = None,
+    resolved_model: str = "unresolved",
+    memory_visibility_policy: str,
 ) -> dict[str, Any]:
     return {
         "checkpoint_id": checkpoint_id,
@@ -692,9 +833,10 @@ def _failed_agent_result(
         "model": model,
         "adapter": adapter_kind,
         "adapter_name": adapter_kind,
-        "resolved_model": model,
+        "resolved_model": resolved_model,
         "configuration_record": {"model": model, "max_turns": max_turns},
         "session_mode": "persistent" if checkpoint_id is None else "fresh",
+        "memory_visibility_policy": memory_visibility_policy,
         "session_id": session_id,
         "max_turns": max_turns,
         "input_tokens": 0,
@@ -722,11 +864,13 @@ def _normalized_agent_evidence(
         "cache_write_tokens",
     )
     totals = {field: sum(int(session.get(field, 0)) for session in sessions) for field in token_fields}
-    totals["failures"] = sum(session.get("status") == "failed" for session in sessions)
+    totals["failures"] = sum(session.get("status") not in {"completed", "ok"} for session in sessions)
+    resolved_adapters = sorted({str(session.get("adapter_name") or "unresolved") for session in sessions})
     return {
         "schema_version": "1",
         "model": model,
         "adapter": adapter_kind,
+        "resolved_adapters": resolved_adapters,
         "execution_mode": execution_mode,
         "memory_visibility_policy": memory_visibility_policy,
         "max_turns_per_session": max_turns,
@@ -752,10 +896,12 @@ def _build_local_task_run(
     lifecycle: dict[str, Any],
     verifier: Any,
     agent: dict[str, Any],
+    sweep_context: LifecycleExperimentSweepContext | None = None,
+    repository_dir: Path | None = None,
 ) -> dict[str, Any]:
     spec = load_evidence_lifecycle_spec(package)
     verifier_exception: Exception | None = None
-    if lifecycle["status"] == "complete":
+    if lifecycle["status"] == "complete" and agent["status"] == "completed":
         try:
             verification = validate_lifecycle_verification(verifier(package, run))
         except Exception as exc:
@@ -800,6 +946,8 @@ def _build_local_task_run(
         verifier=verifier,
         verification=verification,
         tool_schema=_lifecycle_tool_schema(agent["execution_mode"]),
+        sweep_context=sweep_context,
+        repository_dir=repository_dir,
     )
     if verifier_exception is not None:
         raise verifier_exception
@@ -832,6 +980,96 @@ def _build_local_task_run(
     }
 
 
+def _fresh_context_sessions(run_dir: Path) -> list[dict[str, Any]]:
+    return [_read_json(path) for path in sorted(Path(run_dir).glob("episodes/**/agent_result.json"))]
+
+
+def _persistent_context_sessions(run_dir: Path) -> list[dict[str, Any]]:
+    return [_read_json(path) for path in sorted(Path(run_dir).glob("sessions/*/agent_result.json"))]
+
+
+def _seal_interrupted_sessions(
+    *,
+    run: Path,
+    lifecycle: dict[str, Any],
+    model: str,
+    adapter_kind: str,
+    max_turns: int,
+    execution_mode: str,
+    memory_visibility_policy: str,
+) -> None:
+    checkpoint_runs = lifecycle.get("checkpoint_runs", [])
+    attempts_by_session: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+    for checkpoint in checkpoint_runs:
+        checkpoint_id = str(checkpoint["checkpoint_id"])
+        for attempt in checkpoint.get("attempts", []):
+            session_id = str(attempt["session_id"])
+            attempts_by_session.setdefault(session_id, []).append((checkpoint_id, attempt))
+    for session_id, session_attempts in attempts_by_session.items():
+        first_checkpoint = session_attempts[0][0]
+        if execution_mode == "persistent_context":
+            session_dir = run / "sessions" / session_id
+            checkpoint_value = None
+        else:
+            session_dir = run / "episodes" / first_checkpoint / session_id
+            checkpoint_value = first_checkpoint
+        result_path = session_dir / "agent_result.json"
+        has_active_attempt = any(attempt.get("status") == "active" for _, attempt in session_attempts)
+        terminal_crash = lifecycle.get("status") == "complete" and all(
+            attempt.get("status") == "submitted" for _, attempt in session_attempts
+        )
+        if result_path.is_file() and not has_active_attempt:
+            try:
+                _read_json(result_path)
+            except (OSError, ValueError) as exc:
+                if not terminal_crash:
+                    raise EvidenceLifecycleError(f"interrupted session result is malformed: {session_id}") from exc
+                corrupt_path = session_dir / "agent_result.corrupt.json"
+                if corrupt_path.exists():
+                    raise EvidenceLifecycleError(
+                        f"terminal session already has quarantined result: {session_id}"
+                    ) from exc
+                result_path.replace(corrupt_path)
+                fsync_directory(session_dir)
+            else:
+                continue
+        trajectory_path = session_dir / "trajectory.jsonl"
+        if not session_dir.is_dir() or not trajectory_path.is_file():
+            raise EvidenceLifecycleError(f"interrupted session lacks durable trajectory evidence: {session_id}")
+        _validate_session_trajectory(trajectory_path, session_id)
+        if result_path.is_file():
+            payload = _read_json(result_path)
+        else:
+            payload = _failed_agent_result(
+                model=model,
+                adapter_kind=adapter_kind,
+                max_turns=max_turns,
+                session_id=session_id,
+                provider_error="session interrupted before a durable agent result was recorded",
+                checkpoint_id=checkpoint_value,
+                memory_visibility_policy=memory_visibility_policy,
+            )
+            payload["adapter_name"] = "unresolved"
+        payload["status"] = "failed"
+        payload["failure_kind"] = "interrupted_after_completion" if terminal_crash else "interrupted"
+        payload["checkpoint_ids"] = _session_checkpoint_ids(lifecycle, session_id)
+        if payload.get("provider_error") is None:
+            payload["provider_error"] = (
+                "session interrupted after lifecycle completion"
+                if terminal_crash
+                else "session interrupted before lifecycle completion"
+            )
+        _write_json(result_path, payload)
+
+
+def _session_checkpoint_ids(lifecycle: dict[str, Any], session_id: str) -> list[str]:
+    checkpoint_ids: list[str] = []
+    for checkpoint in lifecycle.get("checkpoint_runs", []):
+        if any(attempt.get("session_id") == session_id for attempt in checkpoint.get("attempts", [])):
+            checkpoint_ids.append(str(checkpoint["checkpoint_id"]))
+    return checkpoint_ids
+
+
 def _lifecycle_tool_schema(execution_mode: str) -> list[dict[str, str]]:
     functions: list[Callable[..., Any]] = [
         EvidenceLifecycleWorkspaceTool.list_workspace,
@@ -860,6 +1098,13 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise EvidenceLifecycleError(f"expected JSON object: {path}")
     return cast(dict[str, Any], payload)
+
+
+def _validate_session_trajectory(path: Path, session_id: str) -> None:
+    try:
+        read_trajectory(path)
+    except (OSError, ValueError) as exc:
+        raise EvidenceLifecycleError(f"session trajectory is malformed: {session_id}") from exc
 
 
 def _next_session_id(run_dir: Path) -> str:
@@ -898,5 +1143,15 @@ def _enum_value(value: Any) -> Any:
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    mkdir_durable(path.parent)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(path)
+        fsync_directory(path.parent)
+    finally:
+        temporary.unlink(missing_ok=True)

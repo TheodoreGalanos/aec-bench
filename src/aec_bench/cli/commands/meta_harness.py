@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import typer
+import yaml  # type: ignore[import-untyped]
 
 from aec_bench.cli.output import emit, print_success
 from aec_bench.meta_harness.autonomy import AutonomyConfig, run_autonomous_process
@@ -19,6 +20,11 @@ from aec_bench.meta_harness.evidence_lifecycle import (
     read_evidence_lifecycle_state,
     revisit_evidence_checkpoint,
     submit_evidence_checkpoint,
+)
+from aec_bench.meta_harness.evidence_lifecycle_ablation import (
+    inspect_lifecycle_ablation_plan,
+    load_lifecycle_ablation_manifest,
+    run_lifecycle_ablation,
 )
 from aec_bench.meta_harness.evidence_lifecycle_local import (
     LifecycleVisibilityPolicy,
@@ -141,7 +147,7 @@ def lifecycle_run_local_command(
         help="Execution mode: persistent (one conversation) or fresh-context (one per checkpoint)",
     ),
     process_id: str = typer.Option("process.lifecycle", "--process-id", help="Parent meta-harness process id"),
-    max_turns: int = typer.Option(60, "--max-turns", min=1, help="Maximum model requests for the agent run"),
+    max_turns: int = typer.Option(60, "--max-turns", min=1, help="Maximum model requests per model session"),
     visibility_policy: str | None = typer.Option(
         None,
         "--visibility-policy",
@@ -192,6 +198,29 @@ def _lifecycle_visibility_policy(value: str) -> LifecycleVisibilityPolicy:
             f"visibility policy must be one of: {choices}",
             param_hint="--visibility-policy",
         ) from exc
+
+
+@app.command("lifecycle-ablation")
+def lifecycle_ablation_command(
+    config: Path = typer.Option(..., "--config", help="Lifecycle ablation YAML manifest"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print the exact plan without writing or calling models"),
+) -> None:
+    """Plan or execute a typed, resumable evidence-lifecycle ablation sweep."""
+    start = time.monotonic()
+    command = "meta-harness lifecycle-ablation"
+    try:
+        manifest = load_lifecycle_ablation_manifest(config)
+        if dry_run:
+            result = {
+                "dry_run": True,
+                **inspect_lifecycle_ablation_plan(manifest),
+            }
+        else:
+            result = run_lifecycle_ablation(manifest).model_dump(mode="json")
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        emit(command, None, errors=[str(exc)], start_time=start)
+        return
+    emit(command, result, start_time=start)
 
 
 @app.command("logic-evaluate")
