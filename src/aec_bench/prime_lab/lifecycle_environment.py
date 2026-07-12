@@ -62,12 +62,14 @@ def load_local_lifecycle_environment(
     _assert_source_provenance(manifest.source)
     records = _select_records(manifest, variant=variant, num_examples=num_examples, seed=seed)
     supports_evidence_requests = _records_support_evidence_requests(records)
+    supports_lifecycle_operations = _records_support_lifecycle_operations(records)
     dataset = _build_dataset(records)
     vf = importlib.import_module("verifiers")
     rubric = _build_lifecycle_rubric(vf)
     environment_type = _build_environment_type(
         vf,
         supports_evidence_requests=supports_evidence_requests,
+        supports_lifecycle_operations=supports_lifecycle_operations,
     )
     return environment_type(
         manifest=manifest,
@@ -106,6 +108,22 @@ def request_evidence(
     return _control_tool(_required_state(state)).request_evidence(
         checkpoint_id,
         request_id,
+        reason,
+    )
+
+
+def execute_operation(
+    checkpoint_id: str,
+    operation_id: str,
+    visible_source_state_sha256: str,
+    reason: str,
+    state: dict[str, Any] | None = None,
+) -> str:
+    """Execute one declared lifecycle operation through the session-bound host tool."""
+    return _control_tool(_required_state(state)).execute_operation(
+        checkpoint_id,
+        operation_id,
+        visible_source_state_sha256,
         reason,
     )
 
@@ -162,6 +180,7 @@ def _build_environment_type(
     vf: Any,
     *,
     supports_evidence_requests: bool,
+    supports_lifecycle_operations: bool,
 ) -> type[Any]:
     class AecBenchLifecycleEnv(vf.StatefulToolEnv):  # type: ignore[misc]
         execution_mode = "persistent_context"
@@ -183,6 +202,13 @@ def _build_environment_type(
                     " Inspect the active checkpoint evidence-requests.json catalogue and use request_evidence "
                     "only when additional declared evidence is needed within its finite budget."
                 )
+            if supports_lifecycle_operations:
+                system_prompt += (
+                    " When the active checkpoint provides operations.json, inspect it with "
+                    "hydraulics/current-source.json. Use execute_operation for declared calculations or source "
+                    "activation, then inspect the returned workspace evidence. Operation output is not "
+                    "verification or reward."
+                )
             super().__init__(
                 tools=[],
                 max_turns=manifest.max_turns,
@@ -198,6 +224,8 @@ def _build_environment_type(
             ]
             if supports_evidence_requests:
                 tools.append(request_evidence)
+            if supports_lifecycle_operations:
+                tools.append(execute_operation)
             tools.extend([submit_checkpoint, revisit_checkpoint])
             for tool in tools:
                 self.add_tool(tool, args_to_skip=["state"])
@@ -332,6 +360,21 @@ def _records_support_evidence_requests(
     }
     if len(capabilities) != 1:
         raise ValueError("selected lifecycle packages must share one conditional evidence capability")
+    return capabilities.pop()
+
+
+def _records_support_lifecycle_operations(
+    records: tuple[PrimeLifecyclePackageRecord, ...],
+) -> bool:
+    capabilities = {
+        any(
+            checkpoint.conditional_operations is not None
+            for checkpoint in load_evidence_lifecycle_spec(Path(record.package_dir)).checkpoints
+        )
+        for record in records
+    }
+    if len(capabilities) != 1:
+        raise ValueError("selected lifecycle packages must share one lifecycle operation capability")
     return capabilities.pop()
 
 

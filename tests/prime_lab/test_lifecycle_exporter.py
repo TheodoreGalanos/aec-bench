@@ -17,6 +17,7 @@ import pytest
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
+from aec_bench.meta_harness.evidence_lifecycle import prepare_evidence_checkpoint
 from aec_bench.prime_lab.lifecycle_environment import load_local_lifecycle_environment
 from aec_bench.prime_lab.lifecycle_exporter import (
     PrimeLifecycleExportConfig,
@@ -26,6 +27,7 @@ from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.materializer import materialize_template_lifecycle
 
 TEMPLATE_ID = "drainage-model-evidence-lifecycle-review"
+INTERACTION_TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
 PUBLIC_VARIANTS = (
     "staged_full_correction",
     "semantic_no_op_release",
@@ -186,6 +188,25 @@ def test_local_lifecycle_environment_rejects_mixed_request_capabilities(tmp_path
     )
 
     with pytest.raises(ValueError, match="share one conditional evidence capability"):
+        load_local_lifecycle_environment(manifest_path=result.manifest_path)
+
+
+def test_local_lifecycle_environment_rejects_mixed_operation_capabilities(tmp_path: Path) -> None:
+    legacy = _materialize(tmp_path / "legacy", PUBLIC_VARIANTS[0])
+    interaction = materialize_template_lifecycle(
+        get_template(INTERACTION_TEMPLATE_ID),
+        tmp_path / "interaction",
+        variant_id="tailwater_revision",
+    )
+    result = export_prime_lifecycle_environment(
+        PrimeLifecycleExportConfig(
+            name="mixed-operation-capabilities",
+            package_dirs=(legacy, interaction),
+            output_dir=tmp_path / "environments",
+        )
+    )
+
+    with pytest.raises(ValueError, match="share one lifecycle operation capability"):
         load_local_lifecycle_environment(manifest_path=result.manifest_path)
 
 
@@ -415,6 +436,80 @@ def test_generated_lifecycle_rollout_exposes_conditional_evidence_only_for_capab
     assert action["session_id"] == "conditional-rollout"
     request_parameters = probe["tool_parameters"][probe["tool_names"].index("request_evidence")]
     assert set(request_parameters["properties"]) == {"checkpoint_id", "request_id", "reason"}
+
+
+def test_generated_lifecycle_rollout_executes_hydraulic_operation_with_public_schema(
+    tmp_path: Path,
+) -> None:
+    package = materialize_template_lifecycle(
+        get_template(INTERACTION_TEMPLATE_ID),
+        tmp_path / "package",
+        variant_id="tailwater_revision",
+    )
+    identity_run = tmp_path / "identity-run"
+    prepare_evidence_checkpoint(package, identity_run)
+    current_source = _read_json(identity_run / "workspace" / "hydraulics" / "current-source.json")
+    result = export_prime_lifecycle_environment(
+        PrimeLifecycleExportConfig(
+            name="ssc03-hydraulic-operation-lifecycle",
+            package_dirs=(package,),
+            output_dir=tmp_path / "environments",
+        )
+    )
+    actions = [
+        {"name": "list_workspace", "arguments": {"path": "hydraulics"}},
+        {
+            "name": "read_workspace_file",
+            "arguments": {"path": "hydraulics/current-source.json"},
+        },
+        {
+            "name": "execute_operation",
+            "arguments": {
+                "checkpoint_id": "baseline_analysis",
+                "operation_id": "hydrology.design-10yr",
+                "visible_source_state_sha256": current_source["visible_source_state_sha256"],
+                "reason": "Calculate the declared baseline design hydrology.",
+            },
+        },
+    ]
+
+    probe = _run_generated_probe(
+        result.package_dir,
+        result.environment_id,
+        tmp_path / "outside-hydraulic-operation",
+        {"trajectory_id": "hydraulic-operation-rollout", "actions": actions},
+    )
+
+    assert probe["tool_names"] == [
+        "list_workspace",
+        "read_workspace_file",
+        "write_checkpoint_submission",
+        "execute_operation",
+        "submit_checkpoint",
+        "revisit_checkpoint",
+    ]
+    responses = cast(list[dict[str, Any]], probe["responses"])
+    assert responses[0]["payload"] == {
+        "status": "ok",
+        "path": "hydraulics",
+        "entries": ["current-source.json"],
+    }
+    operation = responses[2]["payload"]
+    assert operation["status"] == "completed"
+    assert operation["action_id"] == "operation-000001"
+    assert operation["operation_id"] == "hydrology.design-10yr"
+    assert operation["remaining_budget"] == 5
+    assert "session_id" not in json.dumps(operation)
+    assert "attempt_id" not in json.dumps(operation)
+    parameters = probe["tool_parameters"][probe["tool_names"].index("execute_operation")]
+    assert set(parameters["properties"]) == {
+        "checkpoint_id",
+        "operation_id",
+        "visible_source_state_sha256",
+        "reason",
+    }
+    assert "workspace/hydraulics/current-source.json" in probe["run_files"]
+    assert "workspace/inbox/baseline_analysis/operations/operation-000001/hydrology.json" in probe["run_files"]
 
 
 def test_lifecycle_reward_is_task_owned_and_only_runs_at_terminal_state(tmp_path: Path) -> None:

@@ -1380,7 +1380,7 @@ def test_fresh_retry_episode_request_binds_acquired_conditional_evidence(tmp_pat
         session_id="session-002",
     )
 
-    assert request.schema_version == "2"
+    assert request.schema_version == "3"
     assert request.evidence_request_catalog is not None
     assert request.evidence_request_catalog.remaining_budget == 0
     assert len(request.released_evidence_artifacts) == 1

@@ -61,18 +61,32 @@ from aec_bench.meta_harness.evidence_lifecycle_ablation_plan import (
     LifecycleAblationTrial,
     build_lifecycle_ablation_plan,
 )
-from aec_bench.meta_harness.evidence_lifecycle_episode import LifecycleEpisodeRequest
+from aec_bench.meta_harness.evidence_lifecycle_episode import (
+    LifecycleEpisodeRequest,
+    LifecycleOperationCurrentSource,
+)
 from aec_bench.meta_harness.evidence_lifecycle_experiment import (
     LifecycleExperimentManifest,
     LifecycleExperimentMetrics,
+    lifecycle_experiment_metrics_payload,
 )
 from aec_bench.meta_harness.evidence_lifecycle_state import (
     EvidenceLifecycleRunState,
     EvidenceRequestActionRecord,
 )
 from aec_bench.meta_harness.evidence_request_protocol import (
+    EvidenceLifecycleError,
     expected_evidence_request_run_artifact_paths,
     is_evidence_request_run_artifact_path,
+)
+from aec_bench.meta_harness.lifecycle_operation_protocol import (
+    lifecycle_operation_protocol_identity,
+    validate_lifecycle_operation_tool_schema,
+)
+from aec_bench.meta_harness.lifecycle_operation_snapshot import validate_lifecycle_operation_snapshot
+from aec_bench.meta_harness.lifecycle_operation_store import (
+    resolve_lifecycle_operation_current_source,
+    validate_lifecycle_operation_resolver_replay,
 )
 from aec_bench.task_world_templates.contracts import EvidenceLifecycleSpec
 from aec_bench.task_world_templates.lifecycles import lifecycle_package_variant
@@ -143,7 +157,9 @@ def _build_lifecycle_trial_record(
     invocation = _canonical_invocation(run, manifest, trial)
     experiment = invocation.manifest
     verification = validate_lifecycle_verification(_read_json(invocation.verification_path))
-    metrics = LifecycleExperimentMetrics.model_validate(_read_json(invocation.metrics_path)).model_dump(mode="json")
+    metrics = lifecycle_experiment_metrics_payload(
+        LifecycleExperimentMetrics.model_validate(_read_json(invocation.metrics_path))
+    )
     _validate_artifact_hash(
         invocation.verification_path,
         experiment.get("outputs", {}).get("verification.json"),
@@ -944,6 +960,20 @@ def _validate_snapshotted_lifecycle_state(package_dir: Path, run_dir: Path) -> N
     state = EvidenceLifecycleRunState.model_validate(_read_json(run_dir / "state.json"))
     spec = load_evidence_lifecycle_spec(package_dir)
     validate_evidence_request_run_state(state, spec)
+    if state.schema_version == "5":
+        expected_source = resolve_lifecycle_operation_current_source(package_dir, run_dir, state)
+        validate_lifecycle_operation_resolver_replay(package_dir, run_dir, state, spec)
+        validate_lifecycle_operation_snapshot(
+            run_dir,
+            state,
+            spec,
+            expected_current_source=LifecycleOperationCurrentSource(
+                revision_id=expected_source.revision_id,
+                physical_source_state_sha256=expected_source.physical_source_state_sha256,
+                visible_source_state_sha256=expected_source.visible_source_state_sha256,
+                source_state=expected_source.source_state,
+            ),
+        )
     if state.branch is not None:
         raise ValueError("branched lifecycle snapshots are not supported by ablation finalization")
     for checkpoint in state.checkpoint_runs:
@@ -1037,6 +1067,13 @@ def _validate_metrics_against_run(
         for action in checkpoint.get("evidence_request_actions", [])
         if isinstance(action, dict)
     ]
+    operation_actions = [
+        action
+        for checkpoint in checkpoint_runs
+        if isinstance(checkpoint, dict)
+        for action in checkpoint.get("operation_actions", [])
+        if isinstance(action, dict)
+    ]
     expected = {
         "checkpoint_count": sum(
             isinstance(checkpoint, dict) and checkpoint.get("status") == "submitted" for checkpoint in checkpoint_runs
@@ -1071,14 +1108,53 @@ def _validate_metrics_against_run(
                 ),
             }
         )
+    if state.get("schema_version") == "5":
+        if metrics.get("schema_version") != "3":
+            raise ValueError("lifecycle v5 metrics require schema version 3")
+        expected.update(
+            {
+                "operation_calls": len(operation_actions),
+                "completed_operations": sum(action.get("outcome") == "completed" for action in operation_actions),
+                "already_current_operations": sum(
+                    action.get("outcome") == "already_current" for action in operation_actions
+                ),
+                "rejected_operations": sum(action.get("outcome") == "rejected" for action in operation_actions),
+                "operation_budget_consumed": sum(int(action.get("budget_consumed", 0)) for action in operation_actions),
+                "operation_artifacts_produced": sum(
+                    len(action.get("artifacts", []))
+                    for action in operation_actions
+                    if action.get("outcome") == "completed"
+                ),
+            }
+        )
     for field, value in expected.items():
         if metrics.get(field) != value:
             raise ValueError(f"lifecycle {field} does not match run state")
 
     interaction = experiment.get("interaction")
-    trajectory_hashes = interaction.get("trajectory_hashes") if isinstance(interaction, dict) else None
+    if not isinstance(interaction, dict):
+        raise ValueError("lifecycle invocation interaction is malformed")
+    trajectory_hashes = interaction.get("trajectory_hashes")
     if not isinstance(trajectory_hashes, dict):
         raise ValueError("lifecycle invocation trajectory hashes are malformed")
+    if state.get("schema_version") == "5":
+        protocol = interaction.get("lifecycle_operation_protocol")
+        tool_schema = interaction.get("tool_schema")
+        if not isinstance(protocol, dict) or not isinstance(tool_schema, list):
+            raise ValueError("lifecycle invocation operation protocol is missing")
+        encoded_tool_schema = json.dumps(tool_schema, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        expected_protocol = lifecycle_operation_protocol_identity()
+        try:
+            validate_lifecycle_operation_tool_schema(tool_schema)
+        except EvidenceLifecycleError as exc:
+            raise ValueError("lifecycle invocation operation protocol does not match the public tool contract") from exc
+        if (
+            protocol.get("schema_version") != expected_protocol["schema_version"]
+            or protocol.get("sha256") != expected_protocol["sha256"]
+            or protocol.get("tool") != expected_protocol["tool"]
+            or protocol.get("tool_schema_sha256") != hashlib.sha256(encoded_tool_schema).hexdigest()
+        ):
+            raise ValueError("lifecycle invocation operation protocol does not match the public tool contract")
     entries_by_trajectory = [read_trajectory(run_dir / relative) for relative in sorted(trajectory_hashes)]
     entries = [entry for trajectory in entries_by_trajectory for entry in trajectory]
     tool_calls = [entry for entry in entries if entry.role == "tool_call"]
@@ -1202,6 +1278,22 @@ def _artifact_kind(relative: Path) -> str:
         return "evidence_request_catalog"
     if path.startswith("run/workspace/inbox/") and "/requests/" in path:
         return "requested_evidence_projection"
+    if path.startswith("run/lifecycle_operations/") and path.endswith("/request.json"):
+        return "lifecycle_operation_request"
+    if path.startswith("run/lifecycle_operations/") and path.endswith("/action.json"):
+        return "lifecycle_operation_action"
+    if path.startswith("run/lifecycle_operations/") and path.endswith("/result-manifest.json"):
+        return "lifecycle_operation_result_manifest"
+    if path.startswith("run/lifecycle_operations/") and path.endswith("/committed.json"):
+        return "lifecycle_operation_commit"
+    if path.startswith("run/lifecycle_operations/") and "/artifacts/" in path:
+        return "lifecycle_operation_artifact"
+    if path.endswith("/operations.json"):
+        return "lifecycle_operation_catalog"
+    if path == "run/workspace/hydraulics/current-source.json":
+        return "lifecycle_operation_current_source"
+    if path.startswith("run/workspace/inbox/") and "/operations/" in path:
+        return "lifecycle_operation_projection"
     if path.endswith("/submission.json") or "/submissions/" in path:
         return "checkpoint_submission"
     if path == "run/state.json":

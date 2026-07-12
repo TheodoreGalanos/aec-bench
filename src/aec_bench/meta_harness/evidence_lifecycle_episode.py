@@ -14,6 +14,7 @@ from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.meta_harness.evidence_lifecycle_state import (
     CheckpointRunRecord,
+    LifecycleOperationArtifact,
     LifecycleRunStatus,
     ReleasedEvidenceArtifact,
 )
@@ -85,6 +86,56 @@ class LifecycleEvidenceRequestCatalog(StrictModel):
         return self
 
 
+class LifecycleOperationOption(StrictModel):
+    operation_id: NonEmptyStr
+    kind: NonEmptyStr
+    title: NonEmptyStr
+    description: NonEmptyStr
+    prerequisite_operation_ids: tuple[NonEmptyStr, ...] = ()
+    status: Literal[
+        "available",
+        "current_or_reusable",
+        "budget_exhausted",
+        "prerequisites_incomplete",
+    ]
+
+
+class LifecycleOperationCatalog(StrictModel):
+    schema_version: Literal["1"] = "1"
+    checkpoint_id: NonEmptyStr
+    operation_budget: NonNegativeInt
+    remaining_budget: NonNegativeInt
+    visible_source_state_sha256: NonEmptyStr
+    operations: tuple[LifecycleOperationOption, ...] = ()
+
+    @field_validator("visible_source_state_sha256")
+    @classmethod
+    def validate_hash(cls, value: str) -> str:
+        return ArtifactReference.validate_sha256(value)
+
+    @model_validator(mode="after")
+    def validate_budget_and_ids(self) -> LifecycleOperationCatalog:
+        if self.remaining_budget > self.operation_budget:
+            raise ValueError("remaining operation budget cannot exceed its initial budget")
+        operation_ids = [operation.operation_id for operation in self.operations]
+        if len(operation_ids) != len(set(operation_ids)):
+            raise ValueError("episode operation ids must be unique")
+        return self
+
+
+class LifecycleOperationCurrentSource(StrictModel):
+    schema_version: Literal["1"] = "1"
+    revision_id: NonEmptyStr
+    physical_source_state_sha256: NonEmptyStr
+    visible_source_state_sha256: NonEmptyStr
+    source_state: dict[str, Any]
+
+    @field_validator("physical_source_state_sha256", "visible_source_state_sha256")
+    @classmethod
+    def validate_hashes(cls, value: str) -> str:
+        return ArtifactReference.validate_sha256(value)
+
+
 class LifecycleEpisodeContext(StrictModel):
     """Validated host state available before an episode attempt is opened."""
 
@@ -104,6 +155,9 @@ class LifecycleEpisodeContext(StrictModel):
     released_files: tuple[NonEmptyStr, ...] = ()
     evidence_request_catalog: LifecycleEvidenceRequestCatalog | None = None
     released_evidence_artifacts: tuple[ReleasedEvidenceArtifact, ...] = ()
+    operation_catalog: LifecycleOperationCatalog | None = None
+    current_source: LifecycleOperationCurrentSource | None = None
+    visible_operation_artifacts: tuple[LifecycleOperationArtifact, ...] = ()
     completed_checkpoints: tuple[LifecycleCompletedCheckpoint, ...] = ()
     checkpoint_runs: tuple[CheckpointRunRecord, ...]
 
@@ -143,6 +197,13 @@ class LifecycleEpisodeContext(StrictModel):
             if action.get("outcome") == "released"
             for artifact in action.get("released_artifacts", ())
         )
+        visible_operation_artifacts_by_path = {
+            artifact["workspace_path"]: artifact
+            for checkpoint in visible_checkpoint_runs
+            for action in checkpoint.get("operation_actions", ())
+            for artifact in action.get("artifacts", ())
+            if artifact.get("workspace_path") is not None
+        }
         return cls(
             lifecycle_id=payload["lifecycle_id"],
             world_id=payload["world_id"],
@@ -160,6 +221,9 @@ class LifecycleEpisodeContext(StrictModel):
             released_files=tuple(payload.get("released_files", ())),
             evidence_request_catalog=payload.get("evidence_request_catalog"),
             released_evidence_artifacts=released_evidence_artifacts,
+            operation_catalog=payload.get("operation_catalog"),
+            current_source=payload.get("current_source"),
+            visible_operation_artifacts=tuple(visible_operation_artifacts_by_path.values()),
             completed_checkpoints=tuple(payload.get("completed_checkpoints", ())),
             checkpoint_runs=checkpoint_runs,
         )
@@ -172,7 +236,7 @@ class LifecycleEpisodeContext(StrictModel):
 class LifecycleEpisodeRequest(StrictModel):
     """Host-authored execution request for one lifecycle environment call."""
 
-    schema_version: Literal["1", "2"] = "2"
+    schema_version: Literal["1", "2", "3"] = "3"
     episode_id: NonEmptyStr
     lifecycle_id: NonEmptyStr
     world_id: NonEmptyStr
@@ -196,6 +260,9 @@ class LifecycleEpisodeRequest(StrictModel):
     released_files: tuple[NonEmptyStr, ...] = ()
     evidence_request_catalog: LifecycleEvidenceRequestCatalog | None = None
     released_evidence_artifacts: tuple[ReleasedEvidenceArtifact, ...] = ()
+    operation_catalog: LifecycleOperationCatalog | None = None
+    current_source: LifecycleOperationCurrentSource | None = None
+    visible_operation_artifacts: tuple[LifecycleOperationArtifact, ...] = ()
     completed_checkpoint_ids: tuple[NonEmptyStr, ...] = ()
 
     @field_validator("lifecycle_spec_sha256", "package_sha256")
@@ -206,6 +273,12 @@ class LifecycleEpisodeRequest(StrictModel):
     @model_validator(mode="after")
     def validate_execution_boundary(self) -> LifecycleEpisodeRequest:
         _validate_mode_visibility(self.execution_mode, self.memory_visibility_policy)
+        v2_fields = {"evidence_request_catalog", "released_evidence_artifacts"}
+        v3_fields = {"operation_catalog", "current_source", "visible_operation_artifacts"}
+        if self.schema_version == "1" and not (v2_fields | v3_fields).isdisjoint(self.model_fields_set):
+            raise ValueError("v1 episode request cannot carry later-version visibility fields")
+        if self.schema_version == "2" and not v3_fields.isdisjoint(self.model_fields_set):
+            raise ValueError("v2 episode request cannot carry operation visibility fields")
         if len(set(self.checkpoint_ids)) != len(self.checkpoint_ids):
             raise ValueError("episode checkpoint ids must be unique")
         if self.checkpoint_id not in self.checkpoint_ids:
@@ -224,6 +297,20 @@ class LifecycleEpisodeRequest(StrictModel):
         artifact_paths = [artifact.path for artifact in self.released_evidence_artifacts]
         if len(artifact_paths) != len(set(artifact_paths)):
             raise ValueError("released evidence artifact paths must be unique")
+        if self.operation_catalog is not None:
+            if self.operation_catalog.checkpoint_id != self.checkpoint_id:
+                raise ValueError("operation catalogue must match the active checkpoint")
+            if self.current_source is None:
+                raise ValueError("operation catalogue requires the visible current source")
+            if self.operation_catalog.visible_source_state_sha256 != self.current_source.visible_source_state_sha256:
+                raise ValueError("operation catalogue must match the visible current source")
+        if self.visible_operation_artifacts and self.current_source is None:
+            raise ValueError("visible operation artifacts require the visible current source")
+        operation_paths = [artifact.workspace_path for artifact in self.visible_operation_artifacts]
+        if any(path is None for path in operation_paths):
+            raise ValueError("visible operation artifacts require workspace paths")
+        if len(operation_paths) != len(set(operation_paths)):
+            raise ValueError("visible operation artifact paths must be unique")
         return self
 
 

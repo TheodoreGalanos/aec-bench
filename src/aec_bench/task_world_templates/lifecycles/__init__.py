@@ -24,6 +24,7 @@ class LifecycleTemplateRegistration:
     variant_ids_name: str | None = None
     variant_get_name: str | None = None
     variant_metadata_name: str | None = None
+    operation_resolver_name: str | None = None
 
 
 _LIFECYCLES = {
@@ -38,7 +39,18 @@ _LIFECYCLES = {
             variant_ids_name="list_ssc03_lifecycle_variant_ids",
             variant_get_name="get_ssc03_lifecycle_variant",
             variant_metadata_name="validated_ssc03_package_variant",
-        )
+        ),
+        LifecycleTemplateRegistration(
+            template_id="hydraulic-interaction-lifecycle-review",
+            module_name="aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_interaction",
+            materializer_name="materialize_ssc03_hydraulic_interaction_lifecycle",
+            verifier_name="verify_ssc03_hydraulic_interaction_lifecycle",
+            variant_module_name=("aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_interaction_variants"),
+            variant_ids_name="list_ssc03_hydraulic_interaction_variant_ids",
+            variant_get_name="get_ssc03_hydraulic_interaction_variant",
+            variant_metadata_name="validated_ssc03_hydraulic_interaction_variant",
+            operation_resolver_name="build_ssc03_hydraulic_operation_resolver",
+        ),
     ]
 }
 
@@ -73,6 +85,17 @@ def registered_lifecycle_verifier(template_id: str) -> Callable[[Path, Path], di
     return cast(
         Callable[[Path, Path], dict[str, Any]],
         getattr(import_module(registration.module_name), registration.verifier_name),
+    )
+
+
+def registered_lifecycle_operation_resolver(template_id: str) -> Callable[[Path, Path], Any] | None:
+    """Resolve an optional task-owned lifecycle operation resolver factory."""
+    registration = _entry(template_id)
+    if registration.operation_resolver_name is None:
+        return None
+    return cast(
+        Callable[[Path, Path], Any],
+        getattr(import_module(registration.module_name), registration.operation_resolver_name),
     )
 
 

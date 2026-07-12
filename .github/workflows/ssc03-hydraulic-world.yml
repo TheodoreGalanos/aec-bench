@@ -1,5 +1,5 @@
-# ABOUTME: Runs the deterministic SSC-03 hydraulic-world gate on a Linux host.
-# ABOUTME: Checks canonical cross-platform evidence plus the directly affected PR10-PR17 regressions.
+# ABOUTME: Runs the deterministic SSC-03 hydraulic-world and interaction gates on Linux.
+# ABOUTME: Checks canonical evidence plus the directly affected lifecycle, runtime, and CLI regressions.
 
 name: SSC-03 hydraulic world
 
@@ -8,16 +8,40 @@ on:
     paths:
       - ".github/workflows/ssc03-hydraulic-world.yml"
       - ".python-version"
+      - "docs/meta-harness-guide.md"
+      - "docs/prime-lab-guide.md"
       - "docs/ssc03-hydraulic-world.md"
+      - "docs/ssc03-interactive-hydraulic-lifecycle.md"
+      - "docs/ssc03-richer-interaction-roadmap.md"
       - "docs/ssc03-swmm-compatibility-matrix.yaml"
       - "docs/task-world-opportunities/real-world-grounding/stormwater-drainage-package/swmm_example3_detention_source_pack/**"
       - "pyproject.toml"
       - "src/aec_bench/cli/output.py"
       - "src/aec_bench/cli/commands/hydraulic_world.py"
+      - "src/aec_bench/cli/commands/meta_harness.py"
       - "src/aec_bench/cli/commands/task.py"
+      - "src/aec_bench/cli/commands/task_world_templates.py"
       - "src/aec_bench/contracts/validators.py"
       - "src/aec_bench/ledger/durability.py"
+      - "src/aec_bench/meta_harness/evidence_lifecycle*.py"
+      - "src/aec_bench/meta_harness/evidence_request_protocol.py"
+      - "src/aec_bench/meta_harness/lifecycle_operation*.py"
+      - "src/aec_bench/prime_lab/lifecycle_*.py"
+      - "src/aec_bench/task_world_templates/catalogue.py"
+      - "src/aec_bench/task_world_templates/contracts.py"
       - "src/aec_bench/task_world_templates/hydraulics/**"
+      - "src/aec_bench/task_world_templates/lifecycles/**"
+      - "tests/cli/test_meta_harness.py"
+      - "tests/cli/test_task_world_templates.py"
+      - "tests/meta_harness/test_evidence_lifecycle*.py"
+      - "tests/meta_harness/test_hydraulic_operation_chain.py"
+      - "tests/meta_harness/test_lifecycle_operation*.py"
+      - "tests/prime_lab/test_lifecycle_exporter.py"
+      - "tests/templates/test_detention_outlet_hgl_package.py"
+      - "tests/templates/test_drainage_model_run_provenance_issue_review_package.py"
+      - "tests/task_world_templates/test_ssc03_evidence_lifecycle.py"
+      - "tests/task_world_templates/test_ssc03_evidence_lifecycle_variants.py"
+      - "tests/task_world_templates/test_products.py"
       - "tests/task_world_templates/hydraulics/**"
       - "uv.lock"
   workflow_dispatch:
@@ -52,15 +76,65 @@ jobs:
       - name: Run directly affected lifecycle and template regressions
         run: >-
           uv run pytest -q
+          tests/cli/test_meta_harness.py
+          tests/cli/test_task_world_templates.py
+          tests/meta_harness/test_evidence_lifecycle.py
+          tests/meta_harness/test_evidence_lifecycle_episode.py
+          tests/meta_harness/test_evidence_lifecycle_transfer.py
+          tests/meta_harness/test_hydraulic_operation_chain.py
+          tests/meta_harness/test_lifecycle_operation_branch.py
+          tests/meta_harness/test_lifecycle_operation_contracts.py
+          tests/meta_harness/test_lifecycle_operation_protocol.py
+          tests/meta_harness/test_lifecycle_operation_records.py
+          tests/meta_harness/test_lifecycle_operation_recovery.py
+          tests/meta_harness/test_lifecycle_operation_resolver_replay.py
+          tests/meta_harness/test_lifecycle_operation_runtime_tools.py
+          tests/meta_harness/test_lifecycle_operation_snapshot.py
+          tests/meta_harness/test_lifecycle_operation_store.py
+          tests/prime_lab/test_lifecycle_exporter.py
           tests/templates/test_detention_outlet_hgl_package.py
           tests/templates/test_drainage_model_run_provenance_issue_review_package.py
+          tests/task_world_templates/test_products.py
           tests/task_world_templates/test_ssc03_evidence_lifecycle.py
           tests/task_world_templates/test_ssc03_evidence_lifecycle_variants.py
 
       - name: Check lint and formatting
         run: |
-          uv run ruff check src/aec_bench/task_world_templates/hydraulics src/aec_bench/cli/commands/hydraulic_world.py tests/task_world_templates/hydraulics
-          uv run ruff format --check src/aec_bench/task_world_templates/hydraulics src/aec_bench/cli/commands/hydraulic_world.py tests/task_world_templates/hydraulics
+          uv run ruff check src/aec_bench/meta_harness/evidence_lifecycle*.py src/aec_bench/meta_harness/evidence_request_protocol.py src/aec_bench/meta_harness/lifecycle_operation*.py src/aec_bench/prime_lab/lifecycle_*.py src/aec_bench/task_world_templates/catalogue.py src/aec_bench/task_world_templates/contracts.py src/aec_bench/task_world_templates/hydraulics src/aec_bench/task_world_templates/lifecycles tests/cli/test_task_world_templates.py tests/meta_harness/test_evidence_lifecycle*.py tests/meta_harness/test_hydraulic_operation_chain.py tests/meta_harness/test_lifecycle_operation*.py tests/prime_lab/test_lifecycle_exporter.py tests/task_world_templates/hydraulics
+          uv run ruff format --check src/aec_bench/meta_harness/evidence_lifecycle*.py src/aec_bench/meta_harness/evidence_request_protocol.py src/aec_bench/meta_harness/lifecycle_operation*.py src/aec_bench/prime_lab/lifecycle_*.py src/aec_bench/task_world_templates/catalogue.py src/aec_bench/task_world_templates/contracts.py src/aec_bench/task_world_templates/hydraulics src/aec_bench/task_world_templates/lifecycles tests/cli/test_task_world_templates.py tests/meta_harness/test_evidence_lifecycle*.py tests/meta_harness/test_hydraulic_operation_chain.py tests/meta_harness/test_lifecycle_operation*.py tests/prime_lab/test_lifecycle_exporter.py tests/task_world_templates/hydraulics
 
       - name: Check strict types
-        run: uv run mypy src/aec_bench/task_world_templates/hydraulics src/aec_bench/cli/commands/hydraulic_world.py tests/task_world_templates/hydraulics
+        run: >-
+          uv run mypy
+          src/aec_bench/meta_harness/evidence_lifecycle.py
+          src/aec_bench/meta_harness/evidence_lifecycle_episode.py
+          src/aec_bench/meta_harness/evidence_lifecycle_experiment.py
+          src/aec_bench/meta_harness/evidence_lifecycle_local.py
+          src/aec_bench/meta_harness/evidence_lifecycle_state.py
+          src/aec_bench/meta_harness/evidence_lifecycle_transfer.py
+          src/aec_bench/meta_harness/evidence_lifecycle_trial_record.py
+          src/aec_bench/meta_harness/evidence_request_protocol.py
+          src/aec_bench/meta_harness/lifecycle_operation_protocol.py
+          src/aec_bench/meta_harness/lifecycle_operation_snapshot.py
+          src/aec_bench/meta_harness/lifecycle_operation_store.py
+          src/aec_bench/prime_lab/lifecycle_environment.py
+          src/aec_bench/task_world_templates/catalogue.py
+          src/aec_bench/task_world_templates/contracts.py
+          src/aec_bench/task_world_templates/hydraulics
+          src/aec_bench/task_world_templates/lifecycles/__init__.py
+          src/aec_bench/task_world_templates/lifecycles/ssc03_hydraulic_interaction.py
+          src/aec_bench/task_world_templates/lifecycles/ssc03_hydraulic_interaction_variants.py
+          src/aec_bench/task_world_templates/lifecycles/ssc03_hydraulic_interaction_verifier.py
+          tests/meta_harness/test_evidence_lifecycle_transfer.py
+          tests/meta_harness/test_hydraulic_operation_chain.py
+          tests/meta_harness/test_lifecycle_operation_branch.py
+          tests/meta_harness/test_lifecycle_operation_contracts.py
+          tests/meta_harness/test_lifecycle_operation_protocol.py
+          tests/meta_harness/test_lifecycle_operation_records.py
+          tests/meta_harness/test_lifecycle_operation_recovery.py
+          tests/meta_harness/test_lifecycle_operation_resolver_replay.py
+          tests/meta_harness/test_lifecycle_operation_runtime_tools.py
+          tests/meta_harness/test_lifecycle_operation_snapshot.py
+          tests/meta_harness/test_lifecycle_operation_store.py
+          tests/prime_lab/test_lifecycle_exporter.py
+          tests/task_world_templates/hydraulics

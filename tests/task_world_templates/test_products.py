@@ -39,6 +39,7 @@ def test_builtin_catalogue_covers_composite_task_world_templates() -> None:
         "coastal-flood-equipment-elevation-issue-review-package",
         "drainage-model-run-provenance-issue-review-package",
         "level-crossing-warning-issue-review-package",
+        "hydraulic-interaction-lifecycle-review",
         "drainage-model-evidence-lifecycle-review",
     ]
     assert all(template.data_gaps for template in templates)

@@ -142,6 +142,10 @@ def _validate_evidence_request_state_contract(
     state: EvidenceLifecycleRunState,
     spec: EvidenceLifecycleSpec,
 ) -> None:
+    state_checkpoint_ids = [checkpoint.checkpoint_id for checkpoint in state.checkpoint_runs]
+    spec_checkpoint_ids = [checkpoint.checkpoint_id for checkpoint in spec.checkpoints]
+    if state_checkpoint_ids != spec_checkpoint_ids:
+        raise EvidenceLifecycleError("evidence request checkpoint state does not match the lifecycle contract")
     checkpoint_specs = {checkpoint.checkpoint_id: checkpoint for checkpoint in spec.checkpoints}
     for checkpoint_run in state.checkpoint_runs:
         checkpoint_spec = checkpoint_specs[checkpoint_run.checkpoint_id]
@@ -361,26 +365,45 @@ def _branch_action_state_sha256(
 ) -> str:
     checkpoints = []
     for checkpoint in state.checkpoint_runs[: branch_index + 1]:
-        actions = [
+        evidence_actions = [
             action
             for action in checkpoint.evidence_request_actions
             if not inherited_only or action.inherited_from_parent
         ]
-        normalized_actions = []
-        for action in actions:
-            payload = action.model_dump(mode="json")
+        normalized_evidence_actions = []
+        for evidence_action in evidence_actions:
+            payload = evidence_action.model_dump(mode="json")
             payload.pop("inherited_from_parent")
-            normalized_actions.append(payload)
-        checkpoints.append(
-            {
-                "checkpoint_id": checkpoint.checkpoint_id,
-                "evidence_request_budget": checkpoint.evidence_request_budget,
-                "inherited_budget_after": (actions[-1].budget_after if actions else checkpoint.evidence_request_budget),
-                "actions": normalized_actions,
-            }
-        )
+            normalized_evidence_actions.append(payload)
+        checkpoint_payload = {
+            "checkpoint_id": checkpoint.checkpoint_id,
+            "evidence_request_budget": checkpoint.evidence_request_budget,
+            "inherited_budget_after": (
+                evidence_actions[-1].budget_after if evidence_actions else checkpoint.evidence_request_budget
+            ),
+            "actions": normalized_evidence_actions,
+        }
+        if state.schema_version == "5":
+            operation_actions = [
+                action for action in checkpoint.operation_actions if not inherited_only or action.inherited_from_parent
+            ]
+            normalized_operation_actions = []
+            for operation_action in operation_actions:
+                payload = operation_action.model_dump(mode="json")
+                payload.pop("inherited_from_parent")
+                normalized_operation_actions.append(payload)
+            checkpoint_payload.update(
+                {
+                    "operation_budget": checkpoint.operation_budget,
+                    "inherited_operation_budget_after": (
+                        operation_actions[-1].budget_after if operation_actions else checkpoint.operation_budget
+                    ),
+                    "operation_actions": normalized_operation_actions,
+                }
+            )
+        checkpoints.append(checkpoint_payload)
     payload = {
-        "schema_version": "1",
+        "schema_version": "2" if state.schema_version == "5" else "1",
         "lifecycle_id": state.lifecycle_id,
         "package_sha256": state.package_sha256,
         "checkpoints": checkpoints,

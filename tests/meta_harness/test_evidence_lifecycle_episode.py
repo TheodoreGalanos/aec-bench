@@ -15,7 +15,11 @@ import aec_bench.meta_harness.evidence_lifecycle as lifecycle_runtime
 from aec_bench.meta_harness.evidence_lifecycle import (
     EvidenceLifecycleError,
     LifecycleEpisodeExecutionError,
+    execute_lifecycle_operation,
+    open_checkpoint_attempt,
+    prepare_evidence_checkpoint,
     run_evidence_lifecycle,
+    submit_evidence_checkpoint,
 )
 from aec_bench.meta_harness.evidence_lifecycle_episode import (
     LifecycleEpisodeContext,
@@ -27,10 +31,14 @@ from aec_bench.meta_harness.evidence_lifecycle_episode import (
     LifecycleExecutionMode,
     LifecycleVisibilityPolicy,
 )
+from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.contracts import (
     EvidenceCheckpointSpec,
     EvidenceLifecycleSpec,
 )
+from aec_bench.task_world_templates.lifecycles import materialize_lifecycle_template
+
+HYDRAULIC_TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
 
 
 def test_episode_result_rejects_verifier_owned_fields() -> None:
@@ -85,6 +93,164 @@ def test_episode_contract_enforces_mode_visibility_and_failure_consistency() -> 
         LifecycleEpisodeResult.model_validate({**completed.model_dump(mode="json"), "failure_kind": "provider_error"})
     with pytest.raises(ValidationError, match="failed episode requires failure_kind"):
         LifecycleEpisodeResult.model_validate({**completed.model_dump(mode="json"), "status": "failed"})
+
+
+def test_episode_request_versions_reject_later_visibility_fields() -> None:
+    request = _request().model_dump(mode="json")
+
+    with pytest.raises(ValidationError, match="v1 episode request cannot carry later-version"):
+        LifecycleEpisodeRequest.model_validate({**request, "schema_version": "1"})
+    with pytest.raises(ValidationError, match="v2 episode request cannot carry operation visibility"):
+        LifecycleEpisodeRequest.model_validate({**request, "schema_version": "2"})
+
+    v1 = dict(request)
+    v1["schema_version"] = "1"
+    for field_name in (
+        "evidence_request_catalog",
+        "released_evidence_artifacts",
+        "operation_catalog",
+        "current_source",
+        "visible_operation_artifacts",
+    ):
+        v1.pop(field_name)
+    assert LifecycleEpisodeRequest.model_validate(v1).schema_version == "1"
+
+    v2 = dict(request)
+    v2["schema_version"] = "2"
+    for field_name in ("operation_catalog", "current_source", "visible_operation_artifacts"):
+        v2.pop(field_name)
+    assert LifecycleEpisodeRequest.model_validate(v2).schema_version == "2"
+
+
+def test_v3_episode_request_binds_public_operation_state_and_visible_artifacts(tmp_path: Path) -> None:
+    package = materialize_lifecycle_template(
+        get_template(HYDRAULIC_TEMPLATE_ID),
+        tmp_path / "package",
+        variant_id="tailwater_revision",
+    )
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="baseline.session-001",
+        execution_mode="persistent_context",
+    )
+    current_source_path = run_dir / "workspace" / "hydraulics" / "current-source.json"
+    current_source = _read_json(current_source_path)
+    action = execute_lifecycle_operation(
+        package,
+        run_dir,
+        checkpoint_id="baseline_analysis",
+        operation_id="hydrology.design-10yr",
+        visible_source_state_sha256=str(current_source["visible_source_state_sha256"]),
+        reason="Compute the declared design hydrology.",
+        session_id="baseline.session-001",
+    )
+    raw_context = prepare_evidence_checkpoint(package, run_dir)
+    context = LifecycleEpisodeContext.from_runtime_context(
+        raw_context,
+        visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
+    )
+    request = lifecycle_runtime._build_episode_request(
+        context,
+        _RecordingEnvironment(
+            execution_mode=LifecycleExecutionMode.PERSISTENT_CONTEXT,
+            memory_visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
+        ),
+        attempt_id="baseline_analysis.attempt-001",
+        session_id="baseline.session-001",
+    )
+
+    assert request.schema_version == "3"
+    assert request.operation_catalog is not None
+    assert request.operation_catalog.checkpoint_id == "baseline_analysis"
+    assert request.operation_catalog.visible_source_state_sha256 == current_source["visible_source_state_sha256"]
+    assert request.current_source is not None
+    assert request.current_source.model_dump(mode="json") == current_source
+    assert {artifact.workspace_path for artifact in request.visible_operation_artifacts} == {
+        artifact["workspace_path"] for artifact in action["artifacts"] if artifact["workspace_path"] is not None
+    }
+
+
+def test_v3_closeout_binds_prior_operation_evidence_without_offering_operations(tmp_path: Path) -> None:
+    package = materialize_lifecycle_template(
+        get_template(HYDRAULIC_TEMPLATE_ID),
+        tmp_path / "package",
+        variant_id="tailwater_revision",
+    )
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="baseline.session-001",
+        execution_mode="persistent_context",
+    )
+    current_source = _read_json(run_dir / "workspace" / "hydraulics" / "current-source.json")
+    action = execute_lifecycle_operation(
+        package,
+        run_dir,
+        checkpoint_id="baseline_analysis",
+        operation_id="hydrology.design-10yr",
+        visible_source_state_sha256=str(current_source["visible_source_state_sha256"]),
+        reason="Compute evidence retained through closeout.",
+        session_id="baseline.session-001",
+    )
+    _write_json(
+        run_dir / "workspace" / "submissions" / "baseline_analysis.json",
+        {
+            "checkpoint_id": "baseline_analysis",
+            "visible_source_state_sha256": current_source["visible_source_state_sha256"],
+            "selected_operations": {},
+            "accepted_decisions": {},
+            "readiness_decision": "baseline_complete",
+            "claim_boundary": {},
+        },
+    )
+    submit_evidence_checkpoint(package, run_dir)
+    prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="revision.session-001",
+        execution_mode="persistent_context",
+    )
+    _write_json(
+        run_dir / "workspace" / "submissions" / "revision_analysis.json",
+        {
+            "checkpoint_id": "revision_analysis",
+            "revision_id": "tailwater_revision",
+            "visible_source_state_sha256": current_source["visible_source_state_sha256"],
+            "selected_operations": {},
+            "accepted_decisions": {},
+            "supersession_lineage": {},
+            "readiness_decision": "revision_complete",
+            "claim_boundary": {},
+        },
+    )
+    submit_evidence_checkpoint(package, run_dir)
+    raw_context = prepare_evidence_checkpoint(package, run_dir)
+    context = LifecycleEpisodeContext.from_runtime_context(
+        raw_context,
+        visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
+    )
+    request = lifecycle_runtime._build_episode_request(
+        context,
+        _RecordingEnvironment(
+            execution_mode=LifecycleExecutionMode.PERSISTENT_CONTEXT,
+            memory_visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
+        ),
+        attempt_id="closeout_review.attempt-001",
+        session_id="closeout_review.session-001",
+    )
+
+    assert request.operation_catalog is None
+    assert request.current_source is not None
+    assert request.current_source.visible_source_state_sha256 == current_source["visible_source_state_sha256"]
+    assert {artifact.workspace_path for artifact in request.visible_operation_artifacts} == {
+        artifact["workspace_path"] for artifact in action["artifacts"] if artifact["workspace_path"] is not None
+    }
 
 
 def test_runner_opens_host_identity_before_environment_execution(tmp_path: Path) -> None:
@@ -813,6 +979,9 @@ def _downgrade_episode_request_and_state(request_path: Path, state_path: Path) -
     request["schema_version"] = "1"
     request.pop("evidence_request_catalog")
     request.pop("released_evidence_artifacts")
+    request.pop("operation_catalog")
+    request.pop("current_source")
+    request.pop("visible_operation_artifacts")
     request_path.write_text(json.dumps(request, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     state = _read_json(state_path)
