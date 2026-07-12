@@ -17,6 +17,7 @@ import pytest
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
+from aec_bench.prime_lab.lifecycle_environment import load_local_lifecycle_environment
 from aec_bench.prime_lab.lifecycle_exporter import (
     PrimeLifecycleExportConfig,
     export_prime_lifecycle_environment,
@@ -170,6 +171,22 @@ def test_lifecycle_export_rejects_empty_duplicate_and_unregistered_packages(tmp_
                 output_dir=tmp_path / "unregistered-output",
             )
         )
+
+
+def test_local_lifecycle_environment_rejects_mixed_request_capabilities(tmp_path: Path) -> None:
+    legacy = _materialize(tmp_path / "legacy", PUBLIC_VARIANTS[0])
+    conditional = _materialize(tmp_path / "conditional", PUBLIC_VARIANTS[1])
+    _add_conditional_evidence(conditional)
+    result = export_prime_lifecycle_environment(
+        PrimeLifecycleExportConfig(
+            name="mixed-capabilities",
+            package_dirs=(legacy, conditional),
+            output_dir=tmp_path / "environments",
+        )
+    )
+
+    with pytest.raises(ValueError, match="share one conditional evidence capability"):
+        load_local_lifecycle_environment(manifest_path=result.manifest_path)
 
 
 def test_lifecycle_export_rejects_destination_overlap_without_mutating_packages(tmp_path: Path) -> None:
@@ -327,6 +344,77 @@ def test_generated_lifecycle_rollout_advances_all_checkpoints_in_one_persistent_
     assert lifecycle["status"] == "complete"
     assert [attempt["status"] for attempt in attempts] == ["submitted", "submitted", "submitted"]
     assert {attempt["session_id"] for attempt in attempts} == {"gold-rollout"}
+
+
+def test_generated_lifecycle_rollout_exposes_conditional_evidence_only_for_capable_package(
+    tmp_path: Path,
+) -> None:
+    package = _materialize(tmp_path / "package", PUBLIC_VARIANTS[0])
+    _add_conditional_evidence(package)
+    result = export_prime_lifecycle_environment(
+        PrimeLifecycleExportConfig(
+            name="ssc03-conditional-lifecycle",
+            package_dirs=(package,),
+            output_dir=tmp_path / "environments",
+        )
+    )
+    gold = _read_json(package / "hidden" / "gold-submissions.json")
+    checkpoint_ids = [item["checkpoint_id"] for item in _read_json(package / "lifecycle.json")["checkpoints"]]
+    actions: list[dict[str, Any]] = [
+        {
+            "name": "request_evidence",
+            "arguments": {
+                "checkpoint_id": checkpoint_ids[0],
+                "request_id": "survey_revision",
+                "reason": "Resolve the source revision discrepancy.",
+            },
+        }
+    ]
+    for checkpoint_id in checkpoint_ids:
+        actions.extend(
+            [
+                {
+                    "name": "write_checkpoint_submission",
+                    "arguments": {
+                        "checkpoint_id": checkpoint_id,
+                        "content": json.dumps(gold[checkpoint_id]),
+                    },
+                },
+                {"name": "submit_checkpoint", "arguments": {"checkpoint_id": checkpoint_id}},
+            ]
+        )
+
+    probe = _run_generated_probe(
+        result.package_dir,
+        result.environment_id,
+        tmp_path / "outside-conditional",
+        {"trajectory_id": "conditional-rollout", "actions": actions},
+    )
+
+    assert probe["tool_names"] == [
+        "list_workspace",
+        "read_workspace_file",
+        "write_checkpoint_submission",
+        "request_evidence",
+        "submit_checkpoint",
+        "revisit_checkpoint",
+    ]
+    request_response = next(
+        response
+        for response in cast(list[dict[str, Any]], probe["responses"])
+        if response["name"] == "request_evidence"
+    )
+    assert request_response["payload"] == {
+        "status": "released",
+        "checkpoint_id": checkpoint_ids[0],
+        "request_id": "survey_revision",
+        "remaining_budget": 0,
+        "released_files": [f"inbox/{checkpoint_ids[0]}/requests/survey_revision/survey-rev-b.txt"],
+    }
+    action = cast(dict[str, Any], probe["lifecycle"])["checkpoint_runs"][0]["evidence_request_actions"][0]
+    assert action["session_id"] == "conditional-rollout"
+    request_parameters = probe["tool_parameters"][probe["tool_names"].index("request_evidence")]
+    assert set(request_parameters["properties"]) == {"checkpoint_id", "request_id", "reason"}
 
 
 def test_lifecycle_reward_is_task_owned_and_only_runs_at_terminal_state(tmp_path: Path) -> None:
@@ -507,6 +595,46 @@ def test_prime_export_lifecycle_cli_writes_local_only_manifest(tmp_path: Path) -
 
 def _materialize(path: Path, variant_id: str) -> Path:
     return materialize_template_lifecycle(get_template(TEMPLATE_ID), path, variant_id=variant_id)
+
+
+def _add_conditional_evidence(package: Path) -> None:
+    lifecycle_path = package / "lifecycle.json"
+    template_path = package / "template.json"
+    lifecycle = _read_json(lifecycle_path)
+    template = _read_json(template_path)
+    checkpoint_id = lifecycle["checkpoints"][0]["checkpoint_id"]
+    conditional = {
+        "request_budget": 1,
+        "requests": [
+            {
+                "request_id": "survey_revision",
+                "title": "Revised survey",
+                "description": "Obtain the revised survey source.",
+                "prerequisite_request_ids": [],
+            }
+        ],
+    }
+    lifecycle["checkpoints"][0]["conditional_evidence"] = conditional
+    template["evidence_lifecycle"]["checkpoints"][0]["conditional_evidence"] = conditional
+    _write_json(lifecycle_path, lifecycle)
+    _write_json(template_path, template)
+    _write_json(
+        package / "hidden" / "evidence-request-resolutions.json",
+        {
+            "schema_version": "1",
+            "lifecycle_id": lifecycle["lifecycle_id"],
+            "resolutions": [
+                {
+                    "checkpoint_id": checkpoint_id,
+                    "request_id": "survey_revision",
+                    "source_path": f"hidden/evidence_requests/{checkpoint_id}/survey_revision",
+                }
+            ],
+        },
+    )
+    evidence = package / "hidden" / "evidence_requests" / checkpoint_id / "survey_revision"
+    evidence.mkdir(parents=True)
+    (evidence / "survey-rev-b.txt").write_text("revision B\n", encoding="utf-8")
 
 
 def _run_generated_probe(

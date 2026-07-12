@@ -418,6 +418,41 @@ def test_tampered_record_or_snapshot_artifact_is_not_evaluable(tmp_path: Path, t
     assert result.mean_target_reward is None
 
 
+def test_v3_snapshot_cannot_smuggle_v4_evidence_request_fields(tmp_path: Path) -> None:
+    condition = _condition()
+    calibration = _write_record(
+        tmp_path,
+        experiment_id="calibration",
+        trial_id="calibration-001",
+        visibility=Visibility.PUBLIC,
+        package_sha256="a" * 64,
+        reward=1.0,
+        condition=condition,
+        state_checkpoint_updates={
+            "evidence_request_budget": 1,
+            "evidence_request_budget_remaining": 1,
+            "evidence_request_actions": [],
+        },
+    )
+    target = _write_record(
+        tmp_path,
+        experiment_id="target",
+        trial_id="target-001",
+        visibility=Visibility.HOLDOUT,
+        package_sha256="b" * 64,
+        reward=1.0,
+        condition=condition,
+    )
+
+    result = build_lifecycle_transfer_evaluation(
+        _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
+    )
+
+    assert result.status == "not_evaluable"
+    assert result.calibration_results[0].reasons == ("snapshot_contract_invalid",)
+    assert result.target_results[0].reasons == ("no_public_calibration_support",)
+
+
 @pytest.mark.parametrize(
     "tampered_field",
     ["reward", "validity_errors", "completeness", "visibility", "package_sha256"],
@@ -902,6 +937,7 @@ def _write_record(
     verification_overall: str | None = None,
     verification_lifecycle_id: str | None = None,
     verification_template_id: str = "drainage-model-evidence-lifecycle-review",
+    state_checkpoint_updates: dict[str, object] | None = None,
 ) -> _WrittenRecord:
     ledger_root = tmp_path / "ledger"
     artifact_root = ledger_root / experiment_id / "_artifacts" / trial_id
@@ -930,31 +966,28 @@ def _write_record(
         sha256=_sha256(snapshot_path),
         media_type="application/json",
     )
-    state_path = artifact_root / "state.json"
-    state_path.write_text(
-        json.dumps(
+    checkpoint_updates = state_checkpoint_updates or {}
+    state_payload = {
+        "schema_version": "3",
+        "lifecycle_id": f"lifecycle-{trial_id}",
+        "world_id": f"world-{trial_id}",
+        "lifecycle_spec_sha256": "3" * 64,
+        "package_sha256": package_sha256,
+        "status": "complete",
+        "active_checkpoint_id": None,
+        "checkpoint_runs": [
             {
-                "schema_version": "3",
-                "lifecycle_id": f"lifecycle-{trial_id}",
-                "world_id": f"world-{trial_id}",
-                "lifecycle_spec_sha256": "3" * 64,
-                "package_sha256": package_sha256,
-                "status": "complete",
-                "active_checkpoint_id": None,
-                "checkpoint_runs": [
-                    {
-                        "checkpoint_id": checkpoint_id,
-                        "status": "submitted",
-                        "submission_path": f"episodes/{checkpoint_id}/submission.json",
-                        "submission_sha256": "7" * 64,
-                    }
-                    for checkpoint_id in ("initial", "corrected")
-                ],
-            },
-            sort_keys=True,
-        ),
-        encoding="utf-8",
-    )
+                "checkpoint_id": checkpoint_id,
+                "status": "submitted",
+                "submission_path": f"episodes/{checkpoint_id}/submission.json",
+                "submission_sha256": "7" * 64,
+                **checkpoint_updates,
+            }
+            for checkpoint_id in ("initial", "corrected")
+        ],
+    }
+    state_path = artifact_root / "state.json"
+    state_path.write_text(json.dumps(state_payload, sort_keys=True), encoding="utf-8")
     state_reference = ArtifactReference(
         kind="lifecycle_state",
         path=state_path.relative_to(ledger_root).as_posix(),

@@ -75,9 +75,15 @@ The LLM reviewer follows the same boundary. It can flag verifier
 miscalibration, missing evidence, or event candidates, but it never edits
 `reward.json` or `details.json`.
 
+### Conditional-evidence diagnostics
+
+Evidence-request actions are not directly scored and the request protocol does not own reward. They can change later observations and thereby influence a submission that the task verifier scores. Lifecycle operational metrics derive boundary-valid request actions, first successful releases, repeated releases, typed rejections, consumed budget, and released artifact count from durable host action records rather than model prose. Malformed tool calls remain trajectory evidence but are not lifecycle request actions. The invocation manifest separately binds the versioned request protocol and exact model-visible tool schema.
+
+These values diagnose information-gathering behavior and action efficiency. A successful request is not automatically a useful request, and fewer actions are not automatically better. Reward remains task-owned until a task verifier defines what evidence and engineering consequences were sufficient.
+
 ### Descriptive holdout generalization
 
-Lifecycle transfer evaluation is a post-verifier evidence contract, not another execution stage. It reads hash-pinned immutable `TrialRecord` and snapshot artifacts, requires explicit public-calibration and holdout visibility, and checks an exact selected execution condition before reporting target reward. Partial records, incomplete verification, shared source/target package identity, condition drift, or artifact tampering produce `not_evaluable` with explicit reasons.
+Lifecycle transfer evaluation is a post-verifier evidence contract, not another execution stage. It reads hash-pinned immutable `TrialRecord` and snapshot artifacts, requires explicit public-calibration and holdout visibility, and checks an exact selected execution condition before reporting target reward. Version-4 action snapshots additionally reconcile the public request catalogue, action history, canonical transaction bytes, workspace projections, action metrics, and interaction-protocol/tool-schema fingerprints. Partial records, incomplete verification, shared source/target package identity, condition drift, missing action evidence, or artifact tampering produce `not_evaluable` with explicit reasons.
 
 The result describes holdout generalization under a condition selected on public calibration evidence. It does not report a causal effect, winner, or cross-run learner transfer, and semantic-transition metrics remain optional diagnostics rather than a replacement score. The current API is build-only because generic evaluation persistence does not yet enforce a holdout/internal publication boundary.
 

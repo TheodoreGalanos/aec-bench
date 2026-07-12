@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import inspect
 import json
 import platform
@@ -19,10 +20,11 @@ import aec_bench.ledger.writer as ledger_writer
 import aec_bench.meta_harness.evidence_lifecycle_ablation as ablation_runtime
 import aec_bench.meta_harness.evidence_lifecycle_ablation_plan as ablation_plan_runtime
 import aec_bench.meta_harness.evidence_lifecycle_experiment as experiment_runtime
+import aec_bench.meta_harness.evidence_lifecycle_transfer as transfer_runtime
 import aec_bench.meta_harness.evidence_lifecycle_trial_record as trial_record_runtime
 from aec_bench.contracts.experiment_manifest import AgentConfig
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.contracts.trial_record import Completeness, TrialRecord
+from aec_bench.contracts.trial_record import ArtifactReference, Completeness, TrialRecord
 from aec_bench.ledger.writer import DuplicateTrialRecordError
 from aec_bench.meta_harness.evidence_lifecycle import (
     open_checkpoint_attempt,
@@ -64,6 +66,7 @@ from aec_bench.meta_harness.evidence_lifecycle_trial_record import (
     validate_historical_lifecycle_ablation_record,
 )
 from aec_bench.task_world_templates.catalogue import get_template
+from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate
 from aec_bench.task_world_templates.lifecycles import registered_lifecycle_verifier
 from aec_bench.task_world_templates.materializer import (
     materialize_template_lifecycle,
@@ -594,6 +597,101 @@ def test_finalize_lifecycle_trial_record_snapshots_artifacts_and_writes_once(tmp
             run_dir=run_dir,
         )
     assert record_path.read_bytes() == original_record
+
+
+def test_conditional_evidence_transactions_are_declared_and_snapshot_validated(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest, trial, package, run_dir = _conditional_recorded_trial(tmp_path, monkeypatch)
+    invocation = json.loads((run_dir / "experiment-manifest.json").read_text(encoding="utf-8"))
+    artifacts = invocation["outputs"]["artifacts"]
+
+    action_path = "evidence_requests/evidence-request-000001/action.json"
+    commit_path = "evidence_requests/evidence-request-000001/committed.json"
+    requested_path = "evidence_requests/evidence-request-000001/artifacts/survey-rev-b.txt"
+    projection_path = "workspace/inbox/initial_review/requests/survey_revision/survey-rev-b.txt"
+    catalog_path = "workspace/checkpoints/initial_review/evidence-requests.json"
+    assert {action_path, commit_path, requested_path, projection_path, catalog_path}.issubset(artifacts)
+    assert trial_record_runtime._artifact_kind(Path(f"run/{action_path}")) == "evidence_request_action"
+    assert trial_record_runtime._artifact_kind(Path(f"run/{commit_path}")) == "evidence_request_commit"
+    assert trial_record_runtime._artifact_kind(Path(f"run/{requested_path}")) == "requested_evidence"
+    assert trial_record_runtime._artifact_kind(Path(f"run/{projection_path}")) == "requested_evidence_projection"
+    assert trial_record_runtime._artifact_kind(Path(f"run/{catalog_path}")) == "evidence_request_catalog"
+    trial_record_runtime._validate_declared_run_artifacts(run_dir, invocation)
+    trial_record_runtime._validate_snapshotted_lifecycle_state(package, run_dir)
+    for unexpected_relative in (
+        "evidence_requests/evidence-request-000001/untracked.txt",
+        "workspace/inbox/initial_review/requests/untracked/evidence.txt",
+        "workspace/checkpoints/initial_review/untracked/evidence-requests.json",
+    ):
+        unexpected = run_dir / unexpected_relative
+        unexpected.parent.mkdir(parents=True, exist_ok=True)
+        unexpected.write_text("not bound to an action\n", encoding="utf-8")
+        with pytest.raises(ValueError, match="evidence request artifact inventory"):
+            trial_record_runtime._validate_snapshotted_lifecycle_state(package, run_dir)
+        unexpected.unlink()
+
+    record_path = finalize_lifecycle_trial_record(
+        manifest=manifest,
+        trial=trial,
+        package_dir=package,
+        run_dir=run_dir,
+    )
+    record = TrialRecord.model_validate_json(record_path.read_bytes())
+    validate_historical_lifecycle_ablation_record(
+        record,
+        manifest,
+        build_lifecycle_ablation_plan(manifest),
+        trial,
+    )
+    reference = LifecycleTransferRecordReference(
+        experiment_id=record.experiment_id,
+        trial_id=record.trial_id,
+        ledger_path=str(record_path),
+        sha256=_sha256(record_path),
+    )
+    loaded = transfer_runtime._load_record(reference)
+    assert loaded.record == record
+    assert loaded.reasons == ()
+    loaded_artifacts = transfer_runtime._load_artifacts(
+        record,
+        ledger_root=Path(manifest.ledger_root),
+    )
+    assert loaded_artifacts.reasons == ()
+    state_reference = next(
+        artifact for artifact in record.outputs.artifacts or () if artifact.kind == "lifecycle_state"
+    )
+    snapshot_prefix, marker, _ = state_reference.path.rpartition("/run/")
+    assert marker
+    extra_content = b"not bound to an action\n"
+    extra_path = f"{snapshot_prefix}/run/workspace/inbox/initial_review/requests/untracked/evidence.txt"
+    extra_reference = ArtifactReference(
+        kind="requested_evidence_projection",
+        path=extra_path,
+        sha256=hashlib.sha256(extra_content).hexdigest(),
+        media_type="text/plain",
+    )
+    record_with_extra_projection = record.model_copy(
+        update={
+            "outputs": record.outputs.model_copy(
+                update={"artifacts": [*(record.outputs.artifacts or ()), extra_reference]}
+            )
+        }
+    )
+    artifacts_with_extra_projection = dict(loaded_artifacts.content_by_path)
+    artifacts_with_extra_projection[extra_path] = extra_content
+    assert transfer_runtime._snapshot_record_reasons(
+        record_with_extra_projection,
+        artifacts=artifacts_with_extra_projection,
+    ) == ("snapshot_contract_invalid",)
+
+    requested_reference = next(
+        artifact for artifact in record.outputs.artifacts or () if artifact.kind == "requested_evidence"
+    )
+    requested_snapshot = Path(manifest.ledger_root) / requested_reference.path
+    requested_snapshot.write_text("tampered\n", encoding="utf-8")
+    assert transfer_runtime._load_record(reference).reasons == ("artifact_sha256_mismatch",)
 
 
 def test_historical_lifecycle_record_without_visibility_still_validates_but_is_not_backfilled(
@@ -1604,6 +1702,93 @@ def test_run_lifecycle_ablation_records_provider_failure_as_immutable_trial(tmp_
     assert second.skipped_trials == 1
 
 
+def test_provider_failure_before_later_conditional_checkpoint_preserves_pending_catalog_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def materialize_later_conditional_lifecycle(
+        template: CompositeTaskWorldTemplate,
+        output_dir: Path,
+        *,
+        variant_id: str | None = None,
+    ) -> Path:
+        package = materialize_template_lifecycle(
+            template,
+            output_dir,
+            variant_id=variant_id,
+        )
+        _add_later_conditional_evidence(package)
+        return package
+
+    monkeypatch.setattr(
+        ablation_plan_runtime,
+        "materialize_template_lifecycle",
+        materialize_later_conditional_lifecycle,
+    )
+    monkeypatch.setattr(
+        ablation_runtime,
+        "materialize_template_lifecycle",
+        materialize_later_conditional_lifecycle,
+    )
+    manifest = _single_manifest(tmp_path).model_copy(
+        update={"experiment_id": "ssc03-later-conditional-provider-failure"}
+    )
+
+    result = run_lifecycle_ablation(
+        manifest,
+        registry_factory=lambda _trial, _package, _run: _FailedRegistry(),
+    )
+
+    assert result.executed_trials == 1
+    assert result.failed_trials == 1
+    record_path = Path(result.record_paths[0])
+    record = TrialRecord.model_validate_json(record_path.read_bytes())
+    assert not any(
+        artifact.path.endswith("/run/workspace/checkpoints/response_review/evidence-requests.json")
+        for artifact in record.outputs.artifacts or ()
+    )
+    loaded = transfer_runtime._load_artifacts(
+        record,
+        ledger_root=Path(manifest.ledger_root),
+    )
+    assert loaded.reasons == ()
+    assert record.lifecycle_provenance is not None
+    state_reference = next(
+        artifact for artifact in record.outputs.artifacts or () if artifact.kind == "lifecycle_state"
+    )
+    metrics_reference = next(
+        artifact for artifact in record.outputs.artifacts or () if artifact.kind == "lifecycle_metrics"
+    )
+    lifecycle_reference = next(
+        artifact for artifact in record.outputs.artifacts or () if artifact.path.endswith("/package/lifecycle.json")
+    )
+    invocation_reference = record.lifecycle_provenance.invocation_manifest
+    state = transfer_runtime.EvidenceLifecycleRunState.model_validate(
+        json.loads(loaded.content_by_path[state_reference.path])
+    )
+    metrics = transfer_runtime.LifecycleExperimentMetrics.model_validate(
+        json.loads(loaded.content_by_path[metrics_reference.path])
+    )
+    lifecycle = transfer_runtime.EvidenceLifecycleSpec.model_validate(
+        json.loads(loaded.content_by_path[lifecycle_reference.path])
+    )
+    invocation = transfer_runtime.LifecycleExperimentManifest.model_validate(
+        json.loads(loaded.content_by_path[invocation_reference.path])
+    ).model_dump(mode="json")
+
+    assert (
+        transfer_runtime._evidence_request_snapshot_reasons(
+            record,
+            artifacts=loaded.content_by_path,
+            state=state,
+            spec=lifecycle,
+            manifest=invocation,
+            metrics=metrics,
+        )
+        == ()
+    )
+
+
 def test_run_lifecycle_ablation_normalizes_empty_agent_output_as_failed(tmp_path: Path) -> None:
     manifest = _single_manifest(tmp_path).model_copy(update={"experiment_id": "ssc03-empty-output"})
 
@@ -1949,7 +2134,7 @@ def _recorded_trial(
         run_dir=run_dir,
         model=trial.agent.model,
         adapter_kind=trial.agent.adapter,
-        max_turns=20,
+        max_turns=trial.max_turns_per_session,
         registry=_GoldFreshRegistry(package, resolved_model=trial.agent.model),
         verifier=verify_template_lifecycle,
         visibility_policy=trial.memory_visibility_policy,
@@ -1962,6 +2147,148 @@ def _recorded_trial(
         ),
     )
     return manifest, trial, package, run_dir
+
+
+def _conditional_recorded_trial(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[LifecycleAblationManifest, LifecycleAblationTrial, Path, Path]:
+    def materialize_conditional_lifecycle(
+        template: CompositeTaskWorldTemplate,
+        output_dir: Path,
+        *,
+        variant_id: str | None = None,
+    ) -> Path:
+        package = materialize_template_lifecycle(
+            template,
+            output_dir,
+            variant_id=variant_id,
+        )
+        _add_conditional_evidence(package)
+        return package
+
+    monkeypatch.setattr(
+        ablation_plan_runtime,
+        "materialize_template_lifecycle",
+        materialize_conditional_lifecycle,
+    )
+    manifest = _single_manifest(tmp_path).model_copy(update={"experiment_id": "ssc03-conditional-import"})
+    plan = build_lifecycle_ablation_plan(manifest)
+    trial = plan.trials[0]
+    package = materialize_conditional_lifecycle(
+        get_template(TEMPLATE_ID),
+        Path(trial.package_dir),
+        variant_id=trial.variant_id,
+    )
+    run_dir = Path(trial.run_dir)
+    run_local_evidence_lifecycle_fresh_context(
+        package_dir=package,
+        run_dir=run_dir,
+        model=trial.agent.model,
+        adapter_kind=trial.agent.adapter,
+        max_turns=trial.max_turns_per_session,
+        registry=_ConditionalGoldFreshRegistry(package),
+        verifier=verify_template_lifecycle,
+        visibility_policy=trial.memory_visibility_policy,
+        sweep_context=LifecycleExperimentSweepContext(
+            sweep_experiment_id=manifest.experiment_id,
+            planned_trial_id=trial.trial_id,
+            plan_sha256=plan.plan_sha256,
+            condition_id=f"{trial.execution_mode.value}__{trial.memory_visibility_policy.value}",
+            repetition=trial.repetition,
+        ),
+    )
+    return manifest, trial, package, run_dir
+
+
+def _add_conditional_evidence(package: Path) -> None:
+    lifecycle_path = package / "lifecycle.json"
+    template_path = package / "template.json"
+    lifecycle = json.loads(lifecycle_path.read_text(encoding="utf-8"))
+    template = json.loads(template_path.read_text(encoding="utf-8"))
+    checkpoint_id = lifecycle["checkpoints"][0]["checkpoint_id"]
+    conditional = {
+        "request_budget": 1,
+        "requests": [
+            {
+                "request_id": "survey_revision",
+                "title": "Revised survey",
+                "description": "Obtain the revised survey source.",
+                "prerequisite_request_ids": [],
+            }
+        ],
+    }
+    lifecycle["checkpoints"][0]["conditional_evidence"] = conditional
+    template["evidence_lifecycle"]["checkpoints"][0]["conditional_evidence"] = conditional
+    lifecycle_path.write_text(json.dumps(lifecycle, indent=2, sort_keys=True), encoding="utf-8")
+    template_path.write_text(json.dumps(template, indent=2, sort_keys=True), encoding="utf-8")
+    resolution = package / "hidden" / "evidence-request-resolutions.json"
+    resolution.write_text(
+        json.dumps(
+            {
+                "schema_version": "1",
+                "lifecycle_id": lifecycle["lifecycle_id"],
+                "resolutions": [
+                    {
+                        "checkpoint_id": checkpoint_id,
+                        "request_id": "survey_revision",
+                        "source_path": (f"hidden/evidence_requests/{checkpoint_id}/survey_revision"),
+                    }
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    evidence = package / "hidden" / "evidence_requests" / checkpoint_id / "survey_revision"
+    evidence.mkdir(parents=True)
+    (evidence / "survey-rev-b.txt").write_text("revision B\n", encoding="utf-8")
+
+
+def _add_later_conditional_evidence(package: Path) -> None:
+    lifecycle_path = package / "lifecycle.json"
+    template_path = package / "template.json"
+    lifecycle = json.loads(lifecycle_path.read_text(encoding="utf-8"))
+    template = json.loads(template_path.read_text(encoding="utf-8"))
+    checkpoint_id = lifecycle["checkpoints"][1]["checkpoint_id"]
+    conditional = {
+        "request_budget": 1,
+        "requests": [
+            {
+                "request_id": "response_support",
+                "title": "Response support",
+                "description": "Obtain the response-stage support record.",
+                "prerequisite_request_ids": [],
+            }
+        ],
+    }
+    lifecycle["checkpoints"][1]["conditional_evidence"] = conditional
+    template["evidence_lifecycle"]["checkpoints"][1]["conditional_evidence"] = conditional
+    lifecycle_path.write_text(json.dumps(lifecycle, indent=2, sort_keys=True), encoding="utf-8")
+    template_path.write_text(json.dumps(template, indent=2, sort_keys=True), encoding="utf-8")
+    resolution = package / "hidden" / "evidence-request-resolutions.json"
+    resolution.write_text(
+        json.dumps(
+            {
+                "schema_version": "1",
+                "lifecycle_id": lifecycle["lifecycle_id"],
+                "resolutions": [
+                    {
+                        "checkpoint_id": checkpoint_id,
+                        "request_id": "response_support",
+                        "source_path": (f"hidden/evidence_requests/{checkpoint_id}/response_support"),
+                    }
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    evidence = package / "hidden" / "evidence_requests" / checkpoint_id / "response_support"
+    evidence.mkdir(parents=True)
+    (evidence / "support.txt").write_text("response support\n", encoding="utf-8")
 
 
 def _terminal_persistent_state(
@@ -2047,6 +2374,28 @@ class _GoldFreshRegistry:
                 )
 
         return _GoldAdapter()
+
+
+class _ConditionalGoldFreshRegistry(_GoldFreshRegistry):
+    def build(self, *, native_tools: list[object], **kwargs: object) -> object:
+        adapter = super().build(native_tools=native_tools, **kwargs)
+        request_evidence = next(tool for tool in native_tools if getattr(tool, "__name__", "") == "request_evidence")
+
+        class _ConditionalGoldAdapter:
+            def execute(self, request: object) -> object:
+                output_path = Path(request.output_path)
+                if output_path.stem == "initial_review":
+                    response = json.loads(
+                        request_evidence(
+                            "initial_review",
+                            "survey_revision",
+                            "Resolve the source revision discrepancy.",
+                        )
+                    )
+                    assert response["status"] == "released"
+                return adapter.execute(request)
+
+        return _ConditionalGoldAdapter()
 
 
 class _InvalidSchemaRegistry(_GoldFreshRegistry):

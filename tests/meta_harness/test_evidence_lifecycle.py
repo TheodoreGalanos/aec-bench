@@ -6,7 +6,9 @@ from __future__ import annotations
 import json
 import subprocess
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event, Thread
 from types import SimpleNamespace
 from typing import Any, Never
 
@@ -15,6 +17,8 @@ from pydantic import ValidationError
 
 import aec_bench.meta_harness.evidence_lifecycle as lifecycle_runtime
 import aec_bench.meta_harness.evidence_lifecycle_local as lifecycle_local_runtime
+import aec_bench.meta_harness.evidence_request_protocol as evidence_request_protocol_runtime
+import aec_bench.meta_harness.evidence_request_store as evidence_request_store_runtime
 from aec_bench.meta_harness.evidence_lifecycle import (
     EvidenceLifecycleError,
     branch_evidence_lifecycle,
@@ -105,6 +109,156 @@ def test_lifecycle_contract_rejects_duplicate_submission_paths() -> None:
             world_id="world.demo",
             checkpoints=[initial, response],
         )
+
+
+def test_conditional_evidence_contract_rejects_ambiguous_request_graphs() -> None:
+    payload = _checkpoint("initial_review").model_dump(mode="json")
+    payload["conditional_evidence"] = {
+        "request_budget": 1,
+        "requests": [
+            {
+                "request_id": "survey_revision",
+                "title": "Survey revision",
+                "description": "Obtain the revised survey.",
+                "prerequisite_request_ids": ["outlet_inspection"],
+            },
+            {
+                "request_id": "outlet_inspection",
+                "title": "Outlet inspection",
+                "description": "Obtain the outlet inspection.",
+                "prerequisite_request_ids": ["survey_revision"],
+            },
+        ],
+    }
+
+    with pytest.raises(ValidationError, match="must not contain cycles"):
+        EvidenceCheckpointSpec.model_validate(payload)
+
+    payload["conditional_evidence"]["requests"][1]["request_id"] = "survey_revision"
+    payload["conditional_evidence"]["requests"][1]["prerequisite_request_ids"] = []
+    with pytest.raises(ValidationError, match="ids must be unique"):
+        EvidenceCheckpointSpec.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("request_budget", "requests", "unreachable_request_id"),
+    [
+        (
+            1,
+            [
+                {
+                    "request_id": "survey_revision",
+                    "title": "Survey revision",
+                    "description": "Obtain the revised survey.",
+                },
+                {
+                    "request_id": "outlet_inspection",
+                    "title": "Outlet inspection",
+                    "description": "Obtain the outlet inspection.",
+                    "prerequisite_request_ids": ["survey_revision"],
+                },
+            ],
+            "outlet_inspection",
+        ),
+        (
+            2,
+            [
+                {
+                    "request_id": "survey_revision",
+                    "title": "Survey revision",
+                    "description": "Obtain the revised survey.",
+                },
+                {
+                    "request_id": "outlet_inspection",
+                    "title": "Outlet inspection",
+                    "description": "Obtain the outlet inspection.",
+                    "prerequisite_request_ids": ["survey_revision"],
+                },
+                {
+                    "request_id": "model_reconciliation",
+                    "title": "Model reconciliation",
+                    "description": "Obtain the reconciled model record.",
+                    "prerequisite_request_ids": ["outlet_inspection"],
+                },
+            ],
+            "model_reconciliation",
+        ),
+    ],
+)
+def test_conditional_evidence_contract_rejects_requests_unreachable_within_budget(
+    request_budget: int,
+    requests: list[dict[str, Any]],
+    unreachable_request_id: str,
+) -> None:
+    payload = _checkpoint("initial_review").model_dump(mode="json")
+    payload["conditional_evidence"] = {
+        "request_budget": request_budget,
+        "requests": requests,
+    }
+
+    with pytest.raises(
+        ValidationError,
+        match=f"budget cannot satisfy prerequisites for {unreachable_request_id}",
+    ):
+        EvidenceCheckpointSpec.model_validate(payload)
+
+
+def test_conditional_evidence_contract_accepts_every_request_reachable_within_budget() -> None:
+    payload = _checkpoint("initial_review").model_dump(mode="json")
+    payload["conditional_evidence"] = {
+        "request_budget": 2,
+        "requests": [
+            {
+                "request_id": "survey_revision",
+                "title": "Survey revision",
+                "description": "Obtain the revised survey.",
+            },
+            {
+                "request_id": "outlet_inspection",
+                "title": "Outlet inspection",
+                "description": "Obtain the outlet inspection.",
+                "prerequisite_request_ids": ["survey_revision"],
+            },
+            {
+                "request_id": "model_reconciliation",
+                "title": "Model reconciliation",
+                "description": "Obtain the reconciled model record.",
+            },
+        ],
+    }
+
+    checkpoint = EvidenceCheckpointSpec.model_validate(payload)
+
+    assert checkpoint.conditional_evidence is not None
+    assert checkpoint.conditional_evidence.request_budget == 2
+
+
+def test_public_conditional_evidence_contract_rejects_hidden_resolution_paths() -> None:
+    payload = _checkpoint("initial_review").model_dump(mode="json")
+    payload["conditional_evidence"] = {
+        "request_budget": 1,
+        "requests": [
+            {
+                "request_id": "survey_revision",
+                "title": "Survey revision",
+                "description": "Obtain the revised survey.",
+                "source_path": "hidden/evidence_requests/initial_review/survey_revision",
+            }
+        ],
+    }
+
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        EvidenceCheckpointSpec.model_validate(payload)
+
+
+def test_conditional_release_reserves_requests_workspace_namespace(tmp_path: Path) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    reserved = package / "releases/initial_review/requests/preexisting.txt"
+    reserved.parent.mkdir()
+    reserved.write_text("collision\n", encoding="utf-8")
+
+    with pytest.raises(EvidenceLifecycleError, match="reserved requests namespace"):
+        prepare_evidence_checkpoint(package, tmp_path / "run")
 
 
 def test_lifecycle_state_rejects_contradictory_active_and_complete_state() -> None:
@@ -219,6 +373,653 @@ def test_prepare_releases_only_the_active_checkpoint(tmp_path: Path) -> None:
     assert "initial review" in (workspace / "instruction.md").read_text().lower()
 
 
+def test_request_evidence_releases_only_selected_request_and_records_budget(
+    tmp_path: Path,
+) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+
+    run_dir = tmp_path / "run"
+    prepared = prepare_evidence_checkpoint(package, run_dir)
+    catalog_path = run_dir / "workspace/checkpoints/initial_review/evidence-requests.json"
+    initial_catalog = _load_json(catalog_path)
+    assert prepared["evidence_request_catalog"] == initial_catalog
+    assert initial_catalog["remaining_budget"] == 1
+    assert [request["status"] for request in initial_catalog["requests"]] == [
+        "available",
+        "available",
+    ]
+    assert "source_path" not in json.dumps(initial_catalog)
+    assert "hidden" not in json.dumps(initial_catalog)
+    attempt = open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="fresh_context",
+    )
+
+    result = lifecycle_runtime.request_evidence_checkpoint(
+        package,
+        run_dir,
+        checkpoint_id="initial_review",
+        request_id="survey_revision",
+        reason="Resolve the source revision discrepancy.",
+        session_id="session-001",
+    )
+
+    assert result["outcome"] == "released"
+    assert result["attempt_id"] == attempt["attempt_id"]
+    assert result["session_id"] == "session-001"
+    assert result["budget_before"] == 1
+    assert result["budget_consumed"] == 1
+    assert result["budget_after"] == 0
+    assert len(result["pre_action_state_sha256"]) == 64
+    assert len(result["post_action_state_sha256"]) == 64
+    assert result["released_artifacts"][0]["sha256"]
+    requested = run_dir / "workspace/inbox/initial_review/requests"
+    assert (requested / "survey_revision" / "survey-rev-b.txt").read_text(encoding="utf-8") == "revision B\n"
+    assert not (requested / "outlet_inspection").exists()
+
+    state = _load_json(run_dir / "state.json")
+    checkpoint = state["checkpoint_runs"][0]
+    assert checkpoint["evidence_request_budget"] == 1
+    assert checkpoint["evidence_request_budget_remaining"] == 0
+    assert checkpoint["evidence_request_actions"] == [result]
+    updated_catalog = _load_json(catalog_path)
+    assert updated_catalog["remaining_budget"] == 0
+    assert [request["status"] for request in updated_catalog["requests"]] == [
+        "released",
+        "budget_exhausted",
+    ]
+
+
+def test_evidence_request_catalog_preserves_unmet_prerequisite_status_after_budget_exhaustion(
+    tmp_path: Path,
+) -> None:
+    package = _write_prerequisite_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="persistent_context",
+    )
+    for request_id in ("alternative_c", "alternative_d"):
+        lifecycle_runtime.request_evidence_checkpoint(
+            package,
+            run_dir,
+            checkpoint_id="initial_review",
+            request_id=request_id,
+            reason=f"Inspect {request_id}.",
+            session_id="session-001",
+        )
+
+    catalog = _load_json(run_dir / "workspace/checkpoints/initial_review/evidence-requests.json")
+    outlet_status = next(
+        request["status"] for request in catalog["requests"] if request["request_id"] == "outlet_inspection"
+    )
+    rejected = lifecycle_runtime.request_evidence_checkpoint(
+        package,
+        run_dir,
+        checkpoint_id="initial_review",
+        request_id="outlet_inspection",
+        reason="Inspect the outlet evidence.",
+        session_id="session-001",
+    )
+
+    assert outlet_status == "prerequisites_incomplete"
+    assert rejected["rejection"] == "prerequisites_incomplete"
+    assert rejected["budget_after"] == 0
+
+
+def test_repeated_evidence_request_is_idempotent_and_consumes_no_budget(
+    tmp_path: Path,
+) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="persistent_context",
+    )
+    first = lifecycle_runtime.request_evidence_checkpoint(
+        package,
+        run_dir,
+        checkpoint_id="initial_review",
+        request_id="survey_revision",
+        reason="Resolve the source revision discrepancy.",
+        session_id="session-001",
+    )
+
+    repeated = lifecycle_runtime.request_evidence_checkpoint(
+        package,
+        run_dir,
+        checkpoint_id="initial_review",
+        request_id="survey_revision",
+        reason="Recover the result after a lost response.",
+        session_id="session-001",
+    )
+
+    assert repeated["outcome"] == "already_released"
+    assert repeated["budget_before"] == 0
+    assert repeated["budget_consumed"] == 0
+    assert repeated["budget_after"] == 0
+    assert repeated["released_artifacts"] == first["released_artifacts"]
+    assert repeated["pre_action_state_sha256"] == repeated["post_action_state_sha256"]
+    checkpoint = _load_json(run_dir / "state.json")["checkpoint_runs"][0]
+    assert [action["outcome"] for action in checkpoint["evidence_request_actions"]] == [
+        "released",
+        "already_released",
+    ]
+
+
+def test_invalid_evidence_requests_are_recorded_without_leaking_alternatives(
+    tmp_path: Path,
+) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="persistent_context",
+    )
+
+    rejected = lifecycle_runtime.request_evidence_checkpoint(
+        package,
+        run_dir,
+        checkpoint_id="initial_review",
+        request_id="invented_request",
+        reason="Try an undeclared source.",
+        session_id="session-001",
+    )
+
+    assert rejected["outcome"] == "rejected"
+    assert rejected["rejection"] == "unknown_request"
+    assert rejected["budget_before"] == 1
+    assert rejected["budget_consumed"] == 0
+    assert rejected["budget_after"] == 1
+    assert rejected["released_artifacts"] == []
+    assert "survey_revision" not in json.dumps(rejected)
+    assert "outlet_inspection" not in json.dumps(rejected)
+    assert not (run_dir / "workspace/inbox/initial_review/requests").exists()
+
+
+def test_evidence_request_recovers_once_after_release_before_state_commit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="persistent_context",
+    )
+    original_write_state = evidence_request_store_runtime._write_state
+    failed = False
+
+    def fail_action_state_commit(
+        target_run: Path,
+        state: EvidenceLifecycleRunState,
+    ) -> None:
+        nonlocal failed
+        has_action = any(checkpoint.evidence_request_actions for checkpoint in state.checkpoint_runs)
+        if has_action and not failed:
+            failed = True
+            raise RuntimeError("simulated action state commit failure")
+        original_write_state(target_run, state)
+
+    monkeypatch.setattr(evidence_request_store_runtime, "_write_state", fail_action_state_commit)
+    with pytest.raises(RuntimeError, match="simulated action state commit failure"):
+        lifecycle_runtime.request_evidence_checkpoint(
+            package,
+            run_dir,
+            checkpoint_id="initial_review",
+            request_id="survey_revision",
+            reason="Resolve the source revision discrepancy.",
+            session_id="session-001",
+        )
+
+    monkeypatch.setattr(evidence_request_store_runtime, "_write_state", original_write_state)
+    recovered = read_evidence_lifecycle_state(package, run_dir)
+    checkpoint = recovered["checkpoint_runs"][0]
+
+    assert checkpoint["evidence_request_budget_remaining"] == 0
+    assert [action["outcome"] for action in checkpoint["evidence_request_actions"]] == ["released"]
+    assert (run_dir / "workspace/inbox/initial_review/requests/survey_revision/survey-rev-b.txt").read_text(
+        encoding="utf-8"
+    ) == "revision B\n"
+    action_dir = run_dir / "evidence_requests/evidence-request-000001"
+    assert (action_dir / "action.json").is_file()
+    assert (action_dir / "committed.json").is_file()
+
+
+def test_evidence_request_recovery_does_not_publish_pending_checkpoint_catalog(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _write_all_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    pending_catalog = run_dir / "workspace/checkpoints/response_review/evidence-requests.json"
+    assert not pending_catalog.exists()
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="persistent_context",
+    )
+    original_write_state = evidence_request_store_runtime._write_state
+    failed = False
+
+    def fail_action_state_commit(
+        target_run: Path,
+        state: EvidenceLifecycleRunState,
+    ) -> None:
+        nonlocal failed
+        has_action = any(checkpoint.evidence_request_actions for checkpoint in state.checkpoint_runs)
+        if has_action and not failed:
+            failed = True
+            raise RuntimeError("simulated action state commit failure")
+        original_write_state(target_run, state)
+
+    monkeypatch.setattr(evidence_request_store_runtime, "_write_state", fail_action_state_commit)
+    with pytest.raises(RuntimeError, match="simulated action state commit failure"):
+        lifecycle_runtime.request_evidence_checkpoint(
+            package,
+            run_dir,
+            checkpoint_id="initial_review",
+            request_id="survey_revision",
+            reason="Resolve the source revision discrepancy.",
+            session_id="session-001",
+        )
+
+    monkeypatch.setattr(evidence_request_store_runtime, "_write_state", original_write_state)
+    recovered = read_evidence_lifecycle_state(package, run_dir)
+
+    assert recovered["checkpoint_runs"][0]["evidence_request_budget_remaining"] == 0
+    assert not pending_catalog.exists()
+
+
+def test_evidence_request_repairs_action_ledger_after_state_commit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="persistent_context",
+    )
+    original_append = evidence_request_store_runtime.append_ledger_entry
+
+    def fail_action_ledger(*args: Any, **kwargs: Any) -> None:
+        if kwargs.get("stage") == "evidence_request":
+            raise RuntimeError("simulated action ledger failure")
+        original_append(*args, **kwargs)
+
+    monkeypatch.setattr(evidence_request_store_runtime, "append_ledger_entry", fail_action_ledger)
+    with pytest.raises(RuntimeError, match="simulated action ledger failure"):
+        lifecycle_runtime.request_evidence_checkpoint(
+            package,
+            run_dir,
+            checkpoint_id="initial_review",
+            request_id="survey_revision",
+            reason="Resolve the source revision discrepancy.",
+            session_id="session-001",
+        )
+
+    monkeypatch.setattr(evidence_request_store_runtime, "append_ledger_entry", original_append)
+    recovered = read_evidence_lifecycle_state(package, run_dir)
+    action_entries = [
+        json.loads(line)
+        for line in (run_dir / "lifecycle_ledger.jsonl").read_text(encoding="utf-8").splitlines()
+        if json.loads(line)["stage"] == "evidence_request"
+    ]
+
+    assert len(recovered["checkpoint_runs"][0]["evidence_request_actions"]) == 1
+    assert len(action_entries) == 1
+    assert action_entries[0]["summary"]["action_id"] == "evidence-request-000001"
+    assert (run_dir / "evidence_requests/evidence-request-000001/committed.json").is_file()
+
+
+def test_evidence_request_recovers_torn_atomic_commit_marker_publish(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="persistent_context",
+    )
+    original_write_atomic = evidence_request_store_runtime._write_json_atomic_durable
+    interrupted = False
+
+    def interrupt_commit_marker(path: Path, payload: dict[str, Any]) -> None:
+        nonlocal interrupted
+        if path.name == "committed.json" and not interrupted:
+            interrupted = True
+            path.with_suffix(".json.tmp").write_text("{", encoding="utf-8")
+            raise RuntimeError("simulated commit marker publication death")
+        original_write_atomic(path, payload)
+
+    monkeypatch.setattr(
+        evidence_request_store_runtime,
+        "_write_json_atomic_durable",
+        interrupt_commit_marker,
+    )
+    with pytest.raises(RuntimeError, match="simulated commit marker publication death"):
+        lifecycle_runtime.request_evidence_checkpoint(
+            package,
+            run_dir,
+            checkpoint_id="initial_review",
+            request_id="survey_revision",
+            reason="Resolve the source revision discrepancy.",
+            session_id="session-001",
+        )
+
+    monkeypatch.setattr(
+        evidence_request_store_runtime,
+        "_write_json_atomic_durable",
+        original_write_atomic,
+    )
+    recovered = read_evidence_lifecycle_state(package, run_dir)
+    transaction = run_dir / "evidence_requests/evidence-request-000001"
+
+    assert len(recovered["checkpoint_runs"][0]["evidence_request_actions"]) == 1
+    assert _load_json(transaction / "committed.json") == {
+        "action_id": "evidence-request-000001",
+        "status": "committed",
+    }
+    assert not (transaction / "committed.json.tmp").exists()
+
+
+def test_concurrent_evidence_requests_preserve_sequence_and_budget(tmp_path: Path) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="persistent_context",
+    )
+
+    def request(request_id: str) -> dict[str, Any]:
+        return lifecycle_runtime.request_evidence_checkpoint(
+            package,
+            run_dir,
+            checkpoint_id="initial_review",
+            request_id=request_id,
+            reason=f"Inspect {request_id}.",
+            session_id="session-001",
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(request, ["survey_revision", "outlet_inspection"]))
+
+    assert sorted(result["outcome"] for result in results) == ["rejected", "released"]
+    rejected = next(result for result in results if result["outcome"] == "rejected")
+    assert rejected["rejection"] == "budget_exhausted"
+    checkpoint = _load_json(run_dir / "state.json")["checkpoint_runs"][0]
+    assert [action["sequence"] for action in checkpoint["evidence_request_actions"]] == [1, 2]
+    assert checkpoint["evidence_request_budget_remaining"] == 0
+    assert len(list((run_dir / "evidence_requests").glob("evidence-request-*"))) == 2
+
+
+def test_concurrent_submission_cannot_overwrite_an_evidence_request_transition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepared = prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="persistent_context",
+    )
+    _write_json(Path(prepared["submission_path"]), {"checkpoint_id": "initial_review"})
+    submission_ready = Event()
+    release_submission = Event()
+    request_entered = Event()
+    original_write_state = lifecycle_runtime._write_state
+    original_record_action = lifecycle_runtime._record_evidence_request_action
+
+    def pause_submission_publish(
+        target_run: Path,
+        state: EvidenceLifecycleRunState,
+    ) -> None:
+        initial = state.checkpoint("initial_review")
+        if (
+            state.active_checkpoint_id is None
+            and initial.status == CheckpointRunStatus.SUBMITTED
+            and not submission_ready.is_set()
+        ):
+            submission_ready.set()
+            if not release_submission.wait(timeout=5):
+                raise AssertionError("submission concurrency barrier timed out")
+        original_write_state(target_run, state)
+
+    def note_request_entry(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        request_entered.set()
+        return original_record_action(*args, **kwargs)
+
+    monkeypatch.setattr(lifecycle_runtime, "_write_state", pause_submission_publish)
+    monkeypatch.setattr(lifecycle_runtime, "_record_evidence_request_action", note_request_entry)
+    submit_errors: list[Exception] = []
+    request_errors: list[Exception] = []
+
+    def submit() -> None:
+        try:
+            submit_evidence_checkpoint(package, run_dir)
+        except Exception as exc:  # pragma: no cover - asserted below
+            submit_errors.append(exc)
+
+    def request() -> None:
+        try:
+            lifecycle_runtime.request_evidence_checkpoint(
+                package,
+                run_dir,
+                checkpoint_id="initial_review",
+                request_id="survey_revision",
+                reason="Resolve the source revision discrepancy.",
+                session_id="session-001",
+            )
+        except Exception as exc:
+            request_errors.append(exc)
+
+    submit_thread = Thread(target=submit)
+    submit_thread.start()
+    assert submission_ready.wait(timeout=5)
+    request_thread = Thread(target=request)
+    request_thread.start()
+    request_entered.wait(timeout=1)
+    release_submission.set()
+    submit_thread.join(timeout=5)
+    request_thread.join(timeout=5)
+
+    assert not submit_thread.is_alive()
+    assert not request_thread.is_alive()
+    assert submit_errors == []
+    assert len(request_errors) == 1
+    assert isinstance(request_errors[0], EvidenceLifecycleError)
+    assert "no checkpoint is active" in str(request_errors[0])
+    state = read_evidence_lifecycle_state(package, run_dir)
+    state_transitions = {transition["transition_id"]: transition for transition in state["transitions"]}
+    ledger_transitions = {
+        entry["summary"]["transition_id"]: entry["summary"]
+        for entry in _load_jsonl(run_dir / "lifecycle_ledger.jsonl")
+        if entry["stage"] == "lifecycle_transition"
+    }
+    assert ledger_transitions == state_transitions
+
+
+@pytest.mark.parametrize("tamper", ["status", "summary", "artifact_refs"])
+def test_evidence_request_ledger_rejects_conflicting_existing_action_entry(
+    tmp_path: Path,
+    tamper: str,
+) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="persistent_context",
+    )
+    lifecycle_runtime.request_evidence_checkpoint(
+        package,
+        run_dir,
+        checkpoint_id="initial_review",
+        request_id="survey_revision",
+        reason="Resolve the source revision discrepancy.",
+        session_id="session-001",
+    )
+    ledger_path = run_dir / "lifecycle_ledger.jsonl"
+    entries = _load_jsonl(ledger_path)
+    action_entry = next(entry for entry in entries if entry["stage"] == "evidence_request")
+    if tamper == "status":
+        action_entry["status"] = "rejected"
+    elif tamper == "summary":
+        action_entry["summary"]["reason"] = "Forged reason."
+    else:
+        action_entry["artifact_refs"] = []
+    _write_jsonl(ledger_path, entries)
+
+    with pytest.raises(EvidenceLifecycleError, match="evidence request ledger entry conflicts"):
+        read_evidence_lifecycle_state(package, run_dir)
+
+
+def test_transition_ledger_rejects_conflicting_existing_transition_entry(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    ledger_path = run_dir / "lifecycle_ledger.jsonl"
+    entries = _load_jsonl(ledger_path)
+    transition_entry = next(entry for entry in entries if entry["stage"] == "lifecycle_transition")
+    transition_entry["status"] = "submit"
+    _write_jsonl(ledger_path, entries)
+
+    with pytest.raises(EvidenceLifecycleError, match="lifecycle transition ledger entry conflicts"):
+        read_evidence_lifecycle_state(package, run_dir)
+
+
+def test_requested_evidence_rejects_unbound_projection_files(tmp_path: Path) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="persistent_context",
+    )
+    lifecycle_runtime.request_evidence_checkpoint(
+        package,
+        run_dir,
+        checkpoint_id="initial_review",
+        request_id="survey_revision",
+        reason="Resolve the source revision discrepancy.",
+        session_id="session-001",
+    )
+    unexpected = run_dir / "workspace/inbox/initial_review/requests/survey_revision/unbound.txt"
+    unexpected.write_text("unbound evidence\n", encoding="utf-8")
+
+    with pytest.raises(EvidenceLifecycleError, match="artifact file set changed"):
+        read_evidence_lifecycle_state(package, run_dir)
+
+
+def test_lifecycle_state_rejects_cross_checkpoint_action_identity_reordering(
+    tmp_path: Path,
+) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    lifecycle_path = package / "lifecycle.json"
+    lifecycle = _load_json(lifecycle_path)
+    lifecycle["checkpoints"][1]["conditional_evidence"] = {
+        "request_budget": 1,
+        "requests": [
+            {
+                "request_id": "response_support",
+                "title": "Response support",
+                "description": "Obtain the response-stage support record.",
+            }
+        ],
+    }
+    _write_json(lifecycle_path, lifecycle)
+    resolution_path = package / "hidden/evidence-request-resolutions.json"
+    resolutions = _load_json(resolution_path)
+    resolutions["resolutions"].append(
+        {
+            "checkpoint_id": "response_review",
+            "request_id": "response_support",
+            "source_path": "hidden/evidence_requests/response_review/response_support",
+        }
+    )
+    _write_json(resolution_path, resolutions)
+    support = package / "hidden/evidence_requests/response_review/response_support/support.txt"
+    support.parent.mkdir(parents=True)
+    support.write_text("response support\n", encoding="utf-8")
+
+    run_dir = tmp_path / "run"
+    prepared = prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="persistent_context",
+    )
+    lifecycle_runtime.request_evidence_checkpoint(
+        package,
+        run_dir,
+        checkpoint_id="initial_review",
+        request_id="survey_revision",
+        reason="Resolve the source revision discrepancy.",
+        session_id="session-001",
+    )
+    _write_json(Path(prepared["submission_path"]), {"checkpoint_id": "initial_review"})
+    submit_evidence_checkpoint(package, run_dir)
+    prepared = prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-002",
+        execution_mode="persistent_context",
+    )
+    lifecycle_runtime.request_evidence_checkpoint(
+        package,
+        run_dir,
+        checkpoint_id="response_review",
+        request_id="response_support",
+        reason="Inspect the response-stage support record.",
+        session_id="session-002",
+    )
+
+    state = _load_json(run_dir / "state.json")
+    first = state["checkpoint_runs"][0]["evidence_request_actions"][0]
+    second = state["checkpoint_runs"][1]["evidence_request_actions"][0]
+    first["sequence"], second["sequence"] = second["sequence"], first["sequence"]
+    first["action_id"], second["action_id"] = second["action_id"], first["action_id"]
+
+    with pytest.raises(ValidationError, match="globally ordered"):
+        EvidenceLifecycleRunState.model_validate(state)
+
+
 def test_lifecycle_state_persists_first_class_checkpoint_records(tmp_path: Path) -> None:
     package = _write_package(tmp_path / "package")
     run_dir = tmp_path / "run"
@@ -226,7 +1027,7 @@ def test_lifecycle_state_persists_first_class_checkpoint_records(tmp_path: Path)
     prepare_evidence_checkpoint(package, run_dir)
     state = json.loads((run_dir / "state.json").read_text(encoding="utf-8"))
 
-    assert state["schema_version"] == "3"
+    assert state["schema_version"] == "4"
     assert state["lifecycle_spec_sha256"]
     assert state["package_sha256"]
     assert state["status"] == "awaiting_checkpoint_submission"
@@ -278,7 +1079,7 @@ def test_lifecycle_state_migrates_legacy_dictionary_shape(tmp_path: Path) -> Non
     persisted = json.loads((run_dir / "state.json").read_text(encoding="utf-8"))
 
     assert state["active_checkpoint_id"] == "response_review"
-    assert persisted["schema_version"] == "3"
+    assert persisted["schema_version"] == "4"
     assert [item["status"] for item in persisted["checkpoint_runs"]] == ["submitted", "active"]
 
 
@@ -301,8 +1102,171 @@ def test_lifecycle_state_migrates_v2_records_without_losing_attempts(tmp_path: P
 
     migrated = read_evidence_lifecycle_state(package, run_dir)
 
-    assert _load_json(state_path)["schema_version"] == "3"
+    assert _load_json(state_path)["schema_version"] == "4"
     assert migrated["checkpoint_runs"][0]["attempts"][0]["session_id"] == "session-001"
+
+
+def test_lifecycle_state_migrates_v2_branch_with_action_lineage_hash(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    parent_run = tmp_path / "parent"
+    branch_run = tmp_path / "branch"
+    _complete_demo_lifecycle(package, parent_run)
+    branch_evidence_lifecycle(
+        package,
+        parent_run,
+        branch_run,
+        checkpoint_id="initial_review",
+        branch_id="branch.v2-lineage",
+        reason="Resume a branch persisted before action lineage hashes.",
+    )
+    state_path = branch_run / "state.json"
+    state = _load_json(state_path)
+    state["schema_version"] = "2"
+    state.pop("lifecycle_spec_sha256")
+    state.pop("package_sha256")
+    state["branch"].pop("parent_action_state_sha256")
+    for checkpoint in state["checkpoint_runs"]:
+        checkpoint.pop("evidence_request_budget")
+        checkpoint.pop("evidence_request_budget_remaining")
+        checkpoint.pop("evidence_request_actions")
+        for attempt in checkpoint["attempts"]:
+            attempt.pop("inherited_from_parent")
+    _write_json(state_path, state)
+
+    migrated = read_evidence_lifecycle_state(package, branch_run)
+    persisted = _load_json(state_path)
+
+    assert persisted["schema_version"] == "4"
+    assert migrated["branch"]["parent_action_state_sha256"]
+    assert migrated["branch"]["branched_from_checkpoint_id"] == "initial_review"
+
+
+def test_lifecycle_state_migrates_v3_to_v4_without_inventing_actions(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    state_path = run_dir / "state.json"
+    state = _load_json(state_path)
+    state["schema_version"] = "3"
+    for checkpoint in state["checkpoint_runs"]:
+        checkpoint.pop("evidence_request_budget")
+        checkpoint.pop("evidence_request_budget_remaining")
+        checkpoint.pop("evidence_request_actions")
+    _write_json(state_path, state)
+
+    migrated = read_evidence_lifecycle_state(package, run_dir)
+
+    assert migrated["checkpoint_runs"][0]["evidence_request_actions"] == []
+    assert _load_json(state_path)["schema_version"] == "4"
+
+
+def test_v3_branch_rejects_attempts_on_inherited_checkpoint_records(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    parent_run = tmp_path / "parent"
+    branch_run = tmp_path / "branch"
+    _complete_demo_lifecycle(package, parent_run)
+    branch_evidence_lifecycle(
+        package,
+        parent_run,
+        branch_run,
+        checkpoint_id="response_review",
+        branch_id="branch.impossible-v3-lineage",
+        reason="Construct an impossible v3 inherited-attempt payload.",
+    )
+    state_path = branch_run / "state.json"
+    state = _load_json(state_path)
+    state["schema_version"] = "3"
+    state["branch"].pop("parent_action_state_sha256")
+    for checkpoint in state["checkpoint_runs"]:
+        checkpoint.pop("evidence_request_budget")
+        checkpoint.pop("evidence_request_budget_remaining")
+        checkpoint.pop("evidence_request_actions")
+        for attempt in checkpoint["attempts"]:
+            attempt.pop("inherited_from_parent")
+    _write_json(state_path, state)
+
+    with pytest.raises(EvidenceLifecycleError, match="v3 inherited checkpoint cannot contain attempts"):
+        read_evidence_lifecycle_state(package, branch_run)
+
+
+def test_v3_branch_migration_preserves_branch_local_attempts(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    parent_run = tmp_path / "parent"
+    branch_run = tmp_path / "branch"
+    _complete_demo_lifecycle(package, parent_run)
+    branch_evidence_lifecycle(
+        package,
+        parent_run,
+        branch_run,
+        checkpoint_id="response_review",
+        branch_id="branch.legacy-local-attempt",
+        reason="Match the attempt lineage emitted by the PR16 v3 branch runtime.",
+    )
+    state_path = branch_run / "state.json"
+    state = _load_json(state_path)
+    for checkpoint in state["checkpoint_runs"]:
+        checkpoint["attempts"] = []
+    _write_json(state_path, state)
+    open_checkpoint_attempt(
+        package,
+        branch_run,
+        session_id="branch-session-001",
+        execution_mode="fresh_context",
+    )
+    state = _load_json(state_path)
+    state["schema_version"] = "3"
+    state["branch"].pop("parent_action_state_sha256")
+    for checkpoint in state["checkpoint_runs"]:
+        checkpoint.pop("evidence_request_budget")
+        checkpoint.pop("evidence_request_budget_remaining")
+        checkpoint.pop("evidence_request_actions")
+        for attempt in checkpoint["attempts"]:
+            attempt.pop("inherited_from_parent")
+    _write_json(state_path, state)
+
+    migrated = read_evidence_lifecycle_state(package, branch_run)
+
+    assert migrated["checkpoint_runs"][0]["attempts"] == []
+    assert migrated["checkpoint_runs"][1]["attempts"] == [
+        {
+            "attempt_id": "response_review.attempt-001",
+            "session_id": "branch-session-001",
+            "sequence": 1,
+            "execution_mode": "fresh_context",
+            "status": "active",
+            "resumed_from_attempt_id": None,
+            "failure_kind": None,
+            "episode_request_sha256": None,
+            "inherited_from_parent": False,
+        }
+    ]
+
+
+def test_v3_state_cannot_smuggle_conditional_evidence_fields(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    state_path = run_dir / "state.json"
+    state = _load_json(state_path)
+    state["schema_version"] = "3"
+    _write_json(state_path, state)
+
+    with pytest.raises(EvidenceLifecycleError, match="v3 lifecycle state cannot contain"):
+        read_evidence_lifecycle_state(package, run_dir)
+
+
+def test_lifecycle_state_budget_must_match_conditional_contract(tmp_path: Path) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    state_path = run_dir / "state.json"
+    state = _load_json(state_path)
+    state["checkpoint_runs"][0]["evidence_request_budget"] = 2
+    state["checkpoint_runs"][0]["evidence_request_budget_remaining"] = 2
+    _write_json(state_path, state)
+
+    with pytest.raises(EvidenceLifecycleError, match="budget does not match"):
+        read_evidence_lifecycle_state(package, run_dir)
 
 
 def test_open_checkpoint_attempt_marks_abandoned_attempt_interrupted(tmp_path: Path) -> None:
@@ -329,6 +1293,101 @@ def test_open_checkpoint_attempt_marks_abandoned_attempt_interrupted(tmp_path: P
     assert second["attempt_id"] == "initial_review.attempt-002"
     assert [attempt["status"] for attempt in attempts] == ["interrupted", "active"]
     assert second["resumed_from_attempt_id"] == first["attempt_id"]
+
+
+def test_requested_evidence_and_budget_survive_failed_attempt_retry(tmp_path: Path) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    first_attempt = open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="fresh_context",
+    )
+    lifecycle_runtime.request_evidence_checkpoint(
+        package,
+        run_dir,
+        checkpoint_id="initial_review",
+        request_id="survey_revision",
+        reason="Resolve the source revision discrepancy.",
+        session_id="session-001",
+    )
+    fail_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        failure_kind="provider_error",
+    )
+    second_attempt = open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-002",
+        execution_mode="fresh_context",
+    )
+
+    repeated = lifecycle_runtime.request_evidence_checkpoint(
+        package,
+        run_dir,
+        checkpoint_id="initial_review",
+        request_id="survey_revision",
+        reason="Confirm the evidence acquired by the failed attempt remains available.",
+        session_id="session-002",
+    )
+
+    assert repeated["outcome"] == "already_released"
+    assert repeated["attempt_id"] == second_attempt["attempt_id"]
+    assert repeated["budget_after"] == 0
+    checkpoint = _load_json(run_dir / "state.json")["checkpoint_runs"][0]
+    assert [attempt["status"] for attempt in checkpoint["attempts"]] == ["failed", "active"]
+    assert checkpoint["evidence_request_actions"][0]["attempt_id"] == first_attempt["attempt_id"]
+    assert (run_dir / "workspace/inbox/initial_review/requests/survey_revision/survey-rev-b.txt").is_file()
+
+
+def test_fresh_retry_episode_request_binds_acquired_conditional_evidence(tmp_path: Path) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="fresh_context",
+    )
+    lifecycle_runtime.request_evidence_checkpoint(
+        package,
+        run_dir,
+        checkpoint_id="initial_review",
+        request_id="survey_revision",
+        reason="Resolve the source revision discrepancy.",
+        session_id="session-001",
+    )
+    fail_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        failure_kind="provider_error",
+    )
+    context = LifecycleEpisodeContext.from_runtime_context(
+        prepare_evidence_checkpoint(package, run_dir),
+        visibility_policy=LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
+    )
+
+    request = lifecycle_runtime._build_episode_request(
+        context,
+        _FunctionEpisodeEnvironment(lambda _request: {}),
+        attempt_id="initial_review.attempt-002",
+        session_id="session-002",
+    )
+
+    assert request.schema_version == "2"
+    assert request.evidence_request_catalog is not None
+    assert request.evidence_request_catalog.remaining_budget == 0
+    assert len(request.released_evidence_artifacts) == 1
+    artifact = request.released_evidence_artifacts[0]
+    assert artifact.workspace_path == ("inbox/initial_review/requests/survey_revision/survey-rev-b.txt")
+    assert len(artifact.sha256) == 64
+    assert "hidden" not in request.model_dump_json()
 
 
 def test_failed_checkpoint_attempt_is_closed_and_resumed_explicitly(tmp_path: Path) -> None:
@@ -456,6 +1515,49 @@ def test_branch_reopens_selected_checkpoint_without_mutating_parent(tmp_path: Pa
         "checkpoint_id": "initial_review"
     }
     assert branch["transitions"][0]["kind"] == "branch"
+
+
+def test_branch_inherits_requested_evidence_actions_and_consumed_budget(tmp_path: Path) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    parent_run = tmp_path / "parent"
+    branch_run = tmp_path / "branch"
+    prepared = prepare_evidence_checkpoint(package, parent_run)
+    open_checkpoint_attempt(
+        package,
+        parent_run,
+        session_id="session-001",
+        execution_mode="persistent_context",
+    )
+    lifecycle_runtime.request_evidence_checkpoint(
+        package,
+        parent_run,
+        checkpoint_id="initial_review",
+        request_id="survey_revision",
+        reason="Resolve the source revision discrepancy.",
+        session_id="session-001",
+    )
+    _write_json(Path(prepared["submission_path"]), {"checkpoint_id": "initial_review"})
+    submit_evidence_checkpoint(package, parent_run)
+
+    branch = branch_evidence_lifecycle(
+        package,
+        parent_run,
+        branch_run,
+        checkpoint_id="initial_review",
+        branch_id="branch.conditional-evidence",
+        reason="Reconsider the review without unseeing acquired evidence.",
+    )
+
+    checkpoint = branch["checkpoint_runs"][0]
+    assert checkpoint["evidence_request_budget"] == 1
+    assert checkpoint["evidence_request_budget_remaining"] == 0
+    assert len(checkpoint["evidence_request_actions"]) == 1
+    assert checkpoint["evidence_request_actions"][0]["inherited_from_parent"] is True
+    assert branch["branch"]["parent_action_state_sha256"]
+    assert (branch_run / "workspace/inbox/initial_review/requests/survey_revision/survey-rev-b.txt").read_text(
+        encoding="utf-8"
+    ) == "revision B\n"
+    assert (branch_run / "evidence_requests/evidence-request-000001/artifacts/survey-rev-b.txt").is_file()
 
 
 def test_branch_rejects_package_drift_from_parent_run(tmp_path: Path) -> None:
@@ -680,7 +1782,7 @@ def test_prepare_reconciles_transition_ledger_after_append_failure(
 ) -> None:
     package = _write_package(tmp_path / "package")
     run_dir = tmp_path / "run"
-    original_append = lifecycle_runtime.append_ledger_entry
+    original_append = evidence_request_store_runtime.append_ledger_entry
     calls = 0
 
     def fail_first_append(*args, **kwargs):
@@ -690,11 +1792,11 @@ def test_prepare_reconciles_transition_ledger_after_append_failure(
             raise RuntimeError("simulated ledger append failure")
         return original_append(*args, **kwargs)
 
-    monkeypatch.setattr(lifecycle_runtime, "append_ledger_entry", fail_first_append)
+    monkeypatch.setattr(evidence_request_store_runtime, "append_ledger_entry", fail_first_append)
     with pytest.raises(RuntimeError, match="simulated ledger append failure"):
         prepare_evidence_checkpoint(package, run_dir)
 
-    monkeypatch.setattr(lifecycle_runtime, "append_ledger_entry", original_append)
+    monkeypatch.setattr(evidence_request_store_runtime, "append_ledger_entry", original_append)
     prepared = prepare_evidence_checkpoint(package, run_dir)
     entries = [
         json.loads(line) for line in (run_dir / "lifecycle_ledger.jsonl").read_text(encoding="utf-8").splitlines()
@@ -878,6 +1980,29 @@ def test_local_episode_environment_builds_fresh_adapters_in_one_workspace(tmp_pa
     assert {
         attempt["execution_mode"] for checkpoint in state["checkpoint_runs"] for attempt in checkpoint["attempts"]
     } == {"fresh_context"}
+
+
+def test_fresh_local_environment_exposes_session_bound_conditional_request_tool(
+    tmp_path: Path,
+) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    registry = _ConditionalWritingRegistry()
+    environment = build_local_evidence_lifecycle_episode_environment(
+        package_dir=package,
+        model="test-model",
+        adapter_kind="tool_loop",
+        registry=registry,
+    )
+
+    result = run_evidence_lifecycle(package, run_dir, episode_environment=environment)
+
+    assert result["status"] == "complete"
+    assert all("request_evidence" in names for names in registry.native_tool_names)
+    assert all("request_evidence" in names for names in registry.request_tool_names)
+    action = _load_json(run_dir / "state.json")["checkpoint_runs"][0]["evidence_request_actions"][0]
+    assert action["session_id"] == "initial_review.session-001"
+    assert action["attempt_id"] == "initial_review.attempt-001"
 
 
 def test_local_episode_environment_marks_provider_failure_immediately(tmp_path: Path) -> None:
@@ -1267,6 +2392,96 @@ def test_lifecycle_control_tool_rejects_wrong_checkpoint_without_advancing(tmp_p
     assert not (run_dir / "workspace" / "inbox" / "response_review").exists()
 
 
+def test_control_tool_requests_conditional_evidence_without_exposing_host_identity(
+    tmp_path: Path,
+) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="persistent_context",
+    )
+    tool = EvidenceLifecycleControlTool(
+        package_dir=package,
+        run_dir=run_dir,
+        session_id="session-001",
+    )
+
+    response = json.loads(
+        tool.request_evidence(
+            "initial_review",
+            "survey_revision",
+            "Resolve the source revision discrepancy.",
+        )
+    )
+
+    assert response == {
+        "status": "released",
+        "checkpoint_id": "initial_review",
+        "request_id": "survey_revision",
+        "remaining_budget": 0,
+        "released_files": ["inbox/initial_review/requests/survey_revision/survey-rev-b.txt"],
+    }
+    assert "session" not in json.dumps(response)
+    assert "attempt" not in json.dumps(response)
+    assert "sha256" not in json.dumps(response)
+
+
+def test_control_tool_rejects_blank_evidence_request_without_recording_an_action(
+    tmp_path: Path,
+) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="fresh_context",
+    )
+    tool = EvidenceLifecycleControlTool(
+        package_dir=package,
+        run_dir=run_dir,
+        session_id="session-001",
+    )
+
+    response = json.loads(tool.request_evidence("initial_review", "survey_revision", "  "))
+
+    assert response == {
+        "status": "rejected",
+        "error": "evidence request arguments must not be blank",
+    }
+    assert _load_json(run_dir / "state.json")["checkpoint_runs"][0]["evidence_request_actions"] == []
+    assert not (run_dir / "evidence_requests").exists()
+    assert "hidden" not in json.dumps(response)
+
+
+def test_fresh_context_prompt_explains_conditional_evidence_boundary() -> None:
+    prompt = lifecycle_local_runtime._workspace_policy(
+        {
+            "branch": None,
+            "evidence_request_catalog": {
+                "checkpoint_id": "initial_review",
+                "remaining_budget": 1,
+            },
+        },
+        persistent=False,
+        visibility_policy=LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
+        supports_evidence_requests=True,
+    )
+
+    assert "Declared within-checkpoint evidence is released only by request_evidence." in prompt
+
+
+def test_evidence_request_protocol_binds_host_call_validation_boundary() -> None:
+    assert evidence_request_protocol_runtime._EVIDENCE_REQUEST_PROTOCOL["call_validation_rule"] == (
+        "malformed_or_blank_arguments_fail_without_lifecycle_action"
+    )
+
+
 def test_lifecycle_workspace_tool_confines_reads_and_submission_writes(tmp_path: Path) -> None:
     package = _write_package(tmp_path / "package")
     run_dir = tmp_path / "run"
@@ -1329,6 +2544,45 @@ def test_lifecycle_workspace_visibility_policies_control_model_reads_without_del
     assert json.loads(current_release.list_workspace("inbox"))["entries"] == ["response_review"]
     assert "submissions" not in json.loads(current_release.list_workspace("."))["entries"]
     assert (run_dir / "workspace" / "submissions" / "initial_review.json").is_file()
+
+
+def test_requested_evidence_obeys_lifecycle_visibility_policies(tmp_path: Path) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    initial = prepare_evidence_checkpoint(package, run_dir)
+    open_checkpoint_attempt(
+        package,
+        run_dir,
+        session_id="session-001",
+        execution_mode="persistent_context",
+    )
+    lifecycle_runtime.request_evidence_checkpoint(
+        package,
+        run_dir,
+        checkpoint_id="initial_review",
+        request_id="survey_revision",
+        reason="Resolve the source revision discrepancy.",
+        session_id="session-001",
+    )
+    requested_path = "inbox/initial_review/requests/survey_revision/survey-rev-b.txt"
+    current = EvidenceLifecycleWorkspaceTool(
+        package_dir=package,
+        run_dir=run_dir,
+        visibility_policy=LifecycleVisibilityPolicy.CURRENT_RELEASE_ONLY,
+    )
+    assert json.loads(current.read_workspace_file(requested_path))["status"] == "ok"
+
+    _write_json(Path(initial["submission_path"]), {"checkpoint_id": "initial_review"})
+    submit_evidence_checkpoint(package, run_dir)
+    prepare_evidence_checkpoint(package, run_dir)
+    raw = EvidenceLifecycleWorkspaceTool(
+        package_dir=package,
+        run_dir=run_dir,
+        visibility_policy=LifecycleVisibilityPolicy.RAW_EVIDENCE_ONLY,
+    )
+
+    assert json.loads(current.read_workspace_file(requested_path))["status"] == "rejected"
+    assert json.loads(raw.read_workspace_file(requested_path))["status"] == "ok"
 
 
 def test_execution_modes_reject_incompatible_visibility_policies(tmp_path: Path) -> None:
@@ -1422,6 +2676,87 @@ def test_local_session_builds_one_adapter_for_all_checkpoints(tmp_path: Path) ->
     assert task_run["evidence"]["score"] == {"reward": 0.75, "passed": False}
     assert (run_dir / "sessions" / "session-001" / "agent_result.json").exists()
     assert (run_dir / "sessions" / "session-001" / "conversation.jsonl").exists()
+
+
+def test_persistent_local_session_exposes_conditional_request_tool_only_for_capable_package(
+    tmp_path: Path,
+) -> None:
+    package = _write_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    registry = _ConditionalLifecycleSessionRegistry(package=package, run_dir=run_dir)
+
+    task_run = run_local_evidence_lifecycle_session(
+        package_dir=package,
+        run_dir=run_dir,
+        model="test-model",
+        registry=registry,
+        verifier=lambda _package, _run: {
+            "lifecycle_id": "lifecycle.demo",
+            "reward": 1.0,
+            "overall": "pass",
+            "passed": True,
+            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
+        },
+    )
+
+    assert registry.tool_names == [
+        "list_workspace",
+        "read_workspace_file",
+        "write_checkpoint_submission",
+        "request_evidence",
+        "submit_checkpoint",
+        "revisit_checkpoint",
+    ]
+    assert registry.request_tool_names == registry.tool_names
+    action = task_run["evidence"]["lifecycle"]["checkpoint_runs"][0]["evidence_request_actions"][0]
+    assert action["session_id"] == "session-001"
+    manifest = _load_json(run_dir / "experiment-manifest.json")
+    metrics = _load_json(run_dir / "metrics.json")
+    tool_schema_names = [item["name"] for item in manifest["interaction"]["tool_schema"]]
+    assert "request_evidence" in tool_schema_names
+    request_schema = next(item for item in manifest["interaction"]["tool_schema"] if item["name"] == "request_evidence")
+    assert "self" not in request_schema["signature"]
+    assert "session_id" not in request_schema["signature"]
+    assert metrics["evidence_request_calls"] == 1
+    assert metrics["accepted_evidence_requests"] == 1
+    assert metrics["already_released_evidence_requests"] == 0
+    assert metrics["rejected_evidence_requests"] == 0
+    assert metrics["evidence_request_budget_consumed"] == 1
+    assert manifest["interaction"]["evidence_request_protocol"]["sha256"]
+    assert manifest["interaction"]["evidence_request_protocol"]["tool_schema_sha256"]
+    artifact_paths = set(manifest["outputs"]["artifacts"])
+    assert "evidence_requests/evidence-request-000001/action.json" in artifact_paths
+    assert "evidence_requests/evidence-request-000001/committed.json" in artifact_paths
+    assert "evidence_requests/evidence-request-000001/artifacts/survey-rev-b.txt" in artifact_paths
+    assert "workspace/inbox/initial_review/requests/survey_revision/survey-rev-b.txt" in artifact_paths
+    assert "workspace/checkpoints/initial_review/evidence-requests.json" in artifact_paths
+
+
+def test_persistent_session_guidance_uses_package_capability_when_only_later_checkpoint_is_conditional(
+    tmp_path: Path,
+) -> None:
+    package = _write_later_checkpoint_conditional_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    registry = _LifecycleSessionRegistry(package=package, run_dir=run_dir)
+
+    task_run = run_local_evidence_lifecycle_session(
+        package_dir=package,
+        run_dir=run_dir,
+        model="test-model",
+        registry=registry,
+        verifier=lambda _package, _run: {
+            "lifecycle_id": "lifecycle.demo",
+            "reward": 1.0,
+            "overall": "pass",
+            "passed": True,
+            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
+        },
+    )
+
+    assert task_run["evidence"]["lifecycle"]["status"] == "complete"
+    assert "request_evidence" in registry.tool_names
+    assert "Declared within-checkpoint evidence is released only by request_evidence." in registry.system_prompt
+    assert "inspect checkpoints/<checkpoint_id>/evidence-requests.json" in registry.instruction
 
 
 def test_local_session_continues_branch_with_editable_active_draft(tmp_path: Path) -> None:
@@ -1601,6 +2936,154 @@ def _write_package(package: Path) -> Path:
     return package
 
 
+def _write_conditional_package(package: Path) -> Path:
+    package = _write_package(package)
+    lifecycle_path = package / "lifecycle.json"
+    lifecycle = _load_json(lifecycle_path)
+    lifecycle["checkpoints"][0]["conditional_evidence"] = {
+        "request_budget": 1,
+        "requests": [
+            {
+                "request_id": "survey_revision",
+                "title": "Revised survey",
+                "description": "Obtain the revised survey source.",
+            },
+            {
+                "request_id": "outlet_inspection",
+                "title": "Outlet inspection",
+                "description": "Obtain the outlet inspection record.",
+            },
+        ],
+    }
+    _write_json(lifecycle_path, lifecycle)
+    _write_json(
+        package / "hidden" / "evidence-request-resolutions.json",
+        {
+            "schema_version": "1",
+            "lifecycle_id": "lifecycle.demo",
+            "resolutions": [
+                {
+                    "checkpoint_id": "initial_review",
+                    "request_id": "survey_revision",
+                    "source_path": "hidden/evidence_requests/initial_review/survey_revision",
+                },
+                {
+                    "checkpoint_id": "initial_review",
+                    "request_id": "outlet_inspection",
+                    "source_path": "hidden/evidence_requests/initial_review/outlet_inspection",
+                },
+            ],
+        },
+    )
+    survey = package / "hidden/evidence_requests/initial_review/survey_revision/survey-rev-b.txt"
+    survey.parent.mkdir(parents=True)
+    survey.write_text("revision B\n", encoding="utf-8")
+    inspection = package / "hidden/evidence_requests/initial_review/outlet_inspection/inspection.txt"
+    inspection.parent.mkdir(parents=True)
+    inspection.write_text("inspection\n", encoding="utf-8")
+    return package
+
+
+def _write_prerequisite_conditional_package(package: Path) -> Path:
+    package = _write_conditional_package(package)
+    lifecycle_path = package / "lifecycle.json"
+    lifecycle = _load_json(lifecycle_path)
+    conditional = lifecycle["checkpoints"][0]["conditional_evidence"]
+    conditional["request_budget"] = 2
+    conditional["requests"][1]["prerequisite_request_ids"] = ["survey_revision"]
+
+    resolution_path = package / "hidden" / "evidence-request-resolutions.json"
+    resolutions = _load_json(resolution_path)
+    for request_id in ("alternative_c", "alternative_d"):
+        conditional["requests"].append(
+            {
+                "request_id": request_id,
+                "title": request_id.replace("_", " ").title(),
+                "description": f"Obtain {request_id.replace('_', ' ')} evidence.",
+            }
+        )
+        source_path = f"hidden/evidence_requests/initial_review/{request_id}"
+        resolutions["resolutions"].append(
+            {
+                "checkpoint_id": "initial_review",
+                "request_id": request_id,
+                "source_path": source_path,
+            }
+        )
+        evidence = package / source_path / f"{request_id}.txt"
+        evidence.parent.mkdir(parents=True)
+        evidence.write_text(f"{request_id}\n", encoding="utf-8")
+    _write_json(lifecycle_path, lifecycle)
+    _write_json(resolution_path, resolutions)
+    return package
+
+
+def _write_later_checkpoint_conditional_package(package: Path) -> Path:
+    package = _write_package(package)
+    lifecycle_path = package / "lifecycle.json"
+    lifecycle = _load_json(lifecycle_path)
+    lifecycle["checkpoints"][1]["conditional_evidence"] = {
+        "request_budget": 1,
+        "requests": [
+            {
+                "request_id": "response_support",
+                "title": "Response support",
+                "description": "Obtain the response-stage support record.",
+            }
+        ],
+    }
+    _write_json(lifecycle_path, lifecycle)
+    _write_json(
+        package / "hidden" / "evidence-request-resolutions.json",
+        {
+            "schema_version": "1",
+            "lifecycle_id": "lifecycle.demo",
+            "resolutions": [
+                {
+                    "checkpoint_id": "response_review",
+                    "request_id": "response_support",
+                    "source_path": "hidden/evidence_requests/response_review/response_support",
+                }
+            ],
+        },
+    )
+    support = package / "hidden/evidence_requests/response_review/response_support/support.txt"
+    support.parent.mkdir(parents=True)
+    support.write_text("response support\n", encoding="utf-8")
+    return package
+
+
+def _write_all_conditional_package(package: Path) -> Path:
+    package = _write_conditional_package(package)
+    lifecycle_path = package / "lifecycle.json"
+    lifecycle = _load_json(lifecycle_path)
+    lifecycle["checkpoints"][1]["conditional_evidence"] = {
+        "request_budget": 1,
+        "requests": [
+            {
+                "request_id": "response_support",
+                "title": "Response support",
+                "description": "Obtain the response-stage support record.",
+            }
+        ],
+    }
+    _write_json(lifecycle_path, lifecycle)
+    resolutions_path = package / "hidden" / "evidence-request-resolutions.json"
+    resolutions = _load_json(resolutions_path)
+    resolutions["resolutions"].append(
+        {
+            "checkpoint_id": "response_review",
+            "request_id": "response_support",
+            "source_path": "hidden/evidence_requests/response_review/response_support",
+        }
+    )
+    _write_json(resolutions_path, resolutions)
+    support = package / "hidden/evidence_requests/response_review/response_support/support.txt"
+    support.parent.mkdir(parents=True)
+    support.write_text("response support\n", encoding="utf-8")
+    return package
+
+
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -1608,6 +3091,17 @@ def _write_json(path: Path, payload: dict) -> None:
 
 def _load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _load_jsonl(path: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def _write_jsonl(path: Path, entries: list[dict[str, Any]]) -> None:
+    path.write_text(
+        "".join(f"{json.dumps(entry, sort_keys=True)}\n" for entry in entries),
+        encoding="utf-8",
+    )
 
 
 class _FunctionEpisodeEnvironment:
@@ -1676,6 +3170,50 @@ class _WritingRegistry:
         self.build_count += 1
         self.workspaces.append(workspace)
         return _WritingAdapter()
+
+
+class _ConditionalWritingRegistry:
+    def __init__(self) -> None:
+        self.native_tool_names: list[list[str]] = []
+        self.request_tool_names: list[list[str]] = []
+
+    def build(self, *, native_tools, **_kwargs):
+        self.native_tool_names.append([tool.__name__ for tool in native_tools])
+        request_evidence = next(
+            (tool for tool in native_tools if tool.__name__ == "request_evidence"),
+            None,
+        )
+        registry = self
+
+        class _ConditionalWritingAdapter:
+            def execute(self, request):
+                registry.request_tool_names.append([tool.name for tool in request.tools])
+                output_path = Path(request.output_path)
+                checkpoint_id = output_path.stem
+                if checkpoint_id == "initial_review":
+                    assert request_evidence is not None
+                    response = json.loads(
+                        request_evidence(
+                            checkpoint_id,
+                            "survey_revision",
+                            "Resolve the source revision discrepancy.",
+                        )
+                    )
+                    assert response["status"] == "released"
+                _write_json(output_path, {"checkpoint_id": checkpoint_id})
+                return SimpleNamespace(
+                    agent_output=SimpleNamespace(status=SimpleNamespace(value="completed")),
+                    transcript=[],
+                    raw_output_text=None,
+                    provider_error=None,
+                    failure_kind=None,
+                    usage_input_tokens=10,
+                    usage_output_tokens=2,
+                    usage_cache_read_tokens=0,
+                    usage_cache_write_tokens=0,
+                )
+
+        return _ConditionalWritingAdapter()
 
 
 class _WritingAdapter:
@@ -1766,6 +3304,7 @@ class _LifecycleSessionRegistry:
         self.build_count = 0
         self.execute_count = 0
         self.tool_names: list[str] = []
+        self.instruction = ""
         self.system_prompt = ""
         self.enable_bash: bool | None = None
         self.request_tool_names: list[str] = []
@@ -1780,6 +3319,7 @@ class _LifecycleSessionRegistry:
         class _SessionAdapter:
             def execute(self, request):
                 registry.execute_count += 1
+                registry.instruction = request.instruction
                 registry.system_prompt = request.system_prompt
                 registry.request_tool_names = [tool.name for tool in request.tools]
                 while True:
@@ -1807,6 +3347,60 @@ class _LifecycleSessionRegistry:
                 )
 
         return _SessionAdapter()
+
+
+class _ConditionalLifecycleSessionRegistry:
+    def __init__(self, *, package: Path, run_dir: Path) -> None:
+        self.package = package
+        self.run_dir = run_dir
+        self.tool_names: list[str] = []
+        self.request_tool_names: list[str] = []
+
+    def build(self, *, native_tools, **_kwargs):
+        self.tool_names = [tool.__name__ for tool in native_tools]
+        request_evidence = next(tool for tool in native_tools if tool.__name__ == "request_evidence")
+        submit_checkpoint = next(tool for tool in native_tools if tool.__name__ == "submit_checkpoint")
+        registry = self
+
+        class _ConditionalSessionAdapter:
+            def execute(self, request):
+                registry.request_tool_names = [tool.name for tool in request.tools]
+                requested = False
+                while True:
+                    state = read_evidence_lifecycle_state(registry.package, registry.run_dir)
+                    checkpoint_id = state["active_checkpoint_id"]
+                    if checkpoint_id is None:
+                        break
+                    if checkpoint_id == "initial_review" and not requested:
+                        response = json.loads(
+                            request_evidence(
+                                checkpoint_id,
+                                "survey_revision",
+                                "Resolve the source revision discrepancy.",
+                            )
+                        )
+                        assert response["status"] == "released"
+                        requested = True
+                    _write_json(
+                        registry.run_dir / "workspace" / "submissions" / f"{checkpoint_id}.json",
+                        {"checkpoint_id": checkpoint_id},
+                    )
+                    response = json.loads(submit_checkpoint(checkpoint_id))
+                    if response["status"] == "complete":
+                        break
+                return SimpleNamespace(
+                    agent_output=SimpleNamespace(status=SimpleNamespace(value="completed")),
+                    transcript=[],
+                    raw_output_text="Lifecycle complete.",
+                    provider_error=None,
+                    failure_kind=None,
+                    usage_input_tokens=30,
+                    usage_output_tokens=6,
+                    usage_cache_read_tokens=0,
+                    usage_cache_write_tokens=0,
+                )
+
+        return _ConditionalSessionAdapter()
 
 
 class _CrashingRegistry:

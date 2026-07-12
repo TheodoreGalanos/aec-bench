@@ -15,16 +15,30 @@ from aec_bench.contracts.evaluation_result import ValidityCheck
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import ArtifactReference, Completeness, TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
+from aec_bench.meta_harness.evidence_lifecycle import (
+    EvidenceLifecycleError,
+    evidence_request_catalog_payload,
+    evidence_request_protocol_identity,
+    validate_evidence_request_run_state,
+)
 from aec_bench.meta_harness.evidence_lifecycle_episode import (
     LifecycleExecutionMode,
     LifecycleVisibilityPolicy,
 )
-from aec_bench.meta_harness.evidence_lifecycle_experiment import LifecycleExperimentManifest
+from aec_bench.meta_harness.evidence_lifecycle_experiment import (
+    LifecycleExperimentManifest,
+    LifecycleExperimentMetrics,
+)
 from aec_bench.meta_harness.evidence_lifecycle_metrics import LifecycleSemanticMetrics
 from aec_bench.meta_harness.evidence_lifecycle_state import (
     EvidenceLifecycleRunState,
     LifecycleVerificationResult,
 )
+from aec_bench.meta_harness.evidence_request_protocol import (
+    expected_evidence_request_run_artifact_paths,
+    is_evidence_request_run_artifact_path,
+)
+from aec_bench.task_world_templates.contracts import EvidenceLifecycleSpec
 
 
 class LifecycleTransferRecordReference(StrictModel):
@@ -334,7 +348,9 @@ def _snapshot_record_reasons(
     if provenance is None or execution is None:
         return ()
     verification_reference = _artifact_by_kind(record, "lifecycle_verification")
+    metrics_reference = _artifact_by_kind(record, "lifecycle_metrics")
     state_reference = _artifact_by_kind(record, "lifecycle_state")
+    lifecycle_spec_reference = _artifact_by_suffix(record, "/package/lifecycle.json")
     if verification_reference is None or state_reference is None or provenance.invocation_index is None:
         return ("snapshot_contract_missing",)
     try:
@@ -342,11 +358,27 @@ def _snapshot_record_reasons(
         invocation_index = _read_artifact_object(artifacts, provenance.invocation_index)
         verification = _read_artifact_object(artifacts, verification_reference)
         state = _read_artifact_object(artifacts, state_reference)
+        if _v3_state_contains_evidence_request_fields(state):
+            return ("snapshot_contract_invalid",)
         manifest = LifecycleExperimentManifest.model_validate(manifest).model_dump(mode="json")
         verification_result = LifecycleVerificationResult.model_validate(verification)
         state_result = EvidenceLifecycleRunState.model_validate(state)
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError, EvidenceLifecycleError):
         return ("snapshot_contract_invalid",)
+
+    metrics_result: LifecycleExperimentMetrics | None = None
+    lifecycle_spec_result: EvidenceLifecycleSpec | None = None
+    if state_result.schema_version == "4":
+        if metrics_reference is None or lifecycle_spec_reference is None:
+            return ("snapshot_contract_missing",)
+        try:
+            metrics = _read_artifact_object(artifacts, metrics_reference)
+            lifecycle_spec = _read_artifact_object(artifacts, lifecycle_spec_reference)
+            metrics_result = LifecycleExperimentMetrics.model_validate(metrics)
+            lifecycle_spec_result = EvidenceLifecycleSpec.model_validate(lifecycle_spec)
+            validate_evidence_request_run_state(state_result, lifecycle_spec_result)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, EvidenceLifecycleError):
+            return ("snapshot_contract_invalid",)
 
     lifecycle = manifest.get("lifecycle")
     repository = manifest.get("repository")
@@ -384,6 +416,11 @@ def _snapshot_record_reasons(
         or manifest_sweep.get("planned_trial_id") != record.trial_id
     ):
         return ("snapshot_record_mismatch",)
+    if metrics_reference is not None and (
+        outputs.get("metrics.json") != metrics_reference.sha256
+        or declared_artifacts.get("metrics.json") != metrics_reference.sha256
+    ):
+        return ("snapshot_record_mismatch",)
     try:
         runtime_distributions = _string_tuple(runtime.get("distributions"))
         resolved_models = tuple(sorted(_string_tuple(model.get("resolved_models"))))
@@ -411,6 +448,20 @@ def _snapshot_record_reasons(
         or state_checkpoint_ids != session_checkpoint_ids
     ):
         return ("snapshot_record_mismatch",)
+
+    if state_result.schema_version == "4":
+        assert lifecycle_spec_result is not None
+        assert metrics_result is not None
+        evidence_request_reasons = _evidence_request_snapshot_reasons(
+            record,
+            artifacts=artifacts,
+            state=state_result,
+            spec=lifecycle_spec_result,
+            manifest=manifest,
+            metrics=metrics_result,
+        )
+        if evidence_request_reasons:
+            return evidence_request_reasons
 
     output_structurally_valid = state_result.status.value == "complete"
     verifier_completed = verification_result.overall != "incomplete"
@@ -505,8 +556,178 @@ def _snapshot_record_reasons(
     return ()
 
 
+def _v3_state_contains_evidence_request_fields(state: dict[str, object]) -> bool:
+    if state.get("schema_version") != "3":
+        return False
+    checkpoint_runs = state.get("checkpoint_runs")
+    if not isinstance(checkpoint_runs, list):
+        return False
+    forbidden = {
+        "evidence_request_budget",
+        "evidence_request_budget_remaining",
+        "evidence_request_actions",
+    }
+    return any(isinstance(checkpoint, dict) and not forbidden.isdisjoint(checkpoint) for checkpoint in checkpoint_runs)
+
+
+def _evidence_request_snapshot_reasons(
+    record: TrialRecord,
+    *,
+    artifacts: dict[str, bytes],
+    state: EvidenceLifecycleRunState,
+    spec: EvidenceLifecycleSpec,
+    manifest: dict[str, object],
+    metrics: LifecycleExperimentMetrics,
+) -> tuple[str, ...]:
+    actions = [action for checkpoint in state.checkpoint_runs for action in checkpoint.evidence_request_actions]
+    action_capable = any(checkpoint.conditional_evidence is not None for checkpoint in spec.checkpoints)
+    interaction = manifest.get("interaction")
+    if not isinstance(interaction, dict):
+        return ("snapshot_contract_invalid",)
+    if not action_capable:
+        return ("snapshot_contract_invalid",) if actions else ()
+    if _record_evidence_request_run_artifact_paths(record) != expected_evidence_request_run_artifact_paths(
+        state,
+        spec,
+    ):
+        return ("snapshot_contract_invalid",)
+
+    protocol = interaction.get("evidence_request_protocol")
+    tool_schema = interaction.get("tool_schema")
+    if not isinstance(protocol, dict) or not isinstance(tool_schema, list):
+        return ("snapshot_contract_invalid",)
+    expected_protocol = evidence_request_protocol_identity()
+    encoded_tool_schema = json.dumps(
+        tool_schema,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    if (
+        protocol.get("schema_version") != expected_protocol["schema_version"]
+        or protocol.get("sha256") != expected_protocol["sha256"]
+        or protocol.get("tool_schema_sha256") != hashlib.sha256(encoded_tool_schema).hexdigest()
+        or not any(isinstance(tool, dict) and tool.get("name") == "request_evidence" for tool in tool_schema)
+    ):
+        return ("snapshot_contract_invalid",)
+
+    expected_metrics = {
+        "evidence_request_calls": len(actions),
+        "accepted_evidence_requests": sum(action.outcome.value == "released" for action in actions),
+        "already_released_evidence_requests": sum(action.outcome.value == "already_released" for action in actions),
+        "rejected_evidence_requests": sum(action.outcome.value == "rejected" for action in actions),
+        "evidence_request_budget_consumed": sum(action.budget_consumed for action in actions),
+        "evidence_request_artifacts_released": sum(
+            len(action.released_artifacts) for action in actions if action.outcome.value == "released"
+        ),
+    }
+    metrics_payload = metrics.model_dump(mode="json")
+    if any(metrics_payload.get(field) != value for field, value in expected_metrics.items()):
+        return ("snapshot_record_mismatch",)
+    breakdown = record.evaluation.breakdown if isinstance(record.evaluation.breakdown, dict) else {}
+    operational = dict(metrics_payload)
+    operational.pop("semantic_transition", None)
+    if breakdown.get("operational_metrics") != operational:
+        return ("snapshot_record_mismatch",)
+
+    checkpoint_specs = {checkpoint.checkpoint_id: checkpoint for checkpoint in spec.checkpoints}
+    for checkpoint in state.checkpoint_runs:
+        expected_catalog = evidence_request_catalog_payload(
+            checkpoint_specs[checkpoint.checkpoint_id],
+            checkpoint,
+        )
+        catalog_relative = f"workspace/checkpoints/{checkpoint.checkpoint_id}/evidence-requests.json"
+        catalog_content = _run_artifact_content(
+            record,
+            artifacts=artifacts,
+            relative=catalog_relative,
+        )
+        catalog_was_released = expected_catalog is not None and checkpoint.status.value != "pending"
+        if not catalog_was_released:
+            if catalog_content is not None:
+                return ("snapshot_contract_invalid",)
+        else:
+            try:
+                actual_catalog = json.loads(catalog_content.decode("utf-8")) if catalog_content else None
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return ("snapshot_contract_invalid",)
+            if actual_catalog != expected_catalog:
+                return ("snapshot_contract_invalid",)
+
+        for action in checkpoint.evidence_request_actions:
+            action_content = _run_artifact_content(
+                record,
+                artifacts=artifacts,
+                relative=f"evidence_requests/{action.action_id}/action.json",
+            )
+            committed_content = _run_artifact_content(
+                record,
+                artifacts=artifacts,
+                relative=f"evidence_requests/{action.action_id}/committed.json",
+            )
+            try:
+                persisted_action = json.loads(action_content.decode("utf-8")) if action_content else None
+                committed = json.loads(committed_content.decode("utf-8")) if committed_content else None
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return ("snapshot_contract_invalid",)
+            if persisted_action != action.model_dump(mode="json") or committed != {
+                "action_id": action.action_id,
+                "status": "committed",
+            }:
+                return ("snapshot_contract_invalid",)
+            for artifact in action.released_artifacts:
+                canonical = _run_artifact_content(
+                    record,
+                    artifacts=artifacts,
+                    relative=artifact.path,
+                )
+                projection = _run_artifact_content(
+                    record,
+                    artifacts=artifacts,
+                    relative=f"workspace/{artifact.workspace_path}",
+                )
+                if (
+                    canonical is None
+                    or projection is None
+                    or hashlib.sha256(canonical).hexdigest() != artifact.sha256
+                    or hashlib.sha256(projection).hexdigest() != artifact.sha256
+                ):
+                    return ("snapshot_contract_invalid",)
+    return ()
+
+
+def _record_evidence_request_run_artifact_paths(record: TrialRecord) -> frozenset[str]:
+    paths: set[str] = set()
+    for artifact in record.outputs.artifacts or ():
+        normalized = f"/{artifact.path.lstrip('/')}"
+        marker = "/run/"
+        if marker not in normalized:
+            continue
+        relative = normalized.rsplit(marker, maxsplit=1)[1]
+        if is_evidence_request_run_artifact_path(relative):
+            paths.add(relative)
+    return frozenset(paths)
+
+
+def _run_artifact_content(
+    record: TrialRecord,
+    *,
+    artifacts: dict[str, bytes],
+    relative: str,
+) -> bytes | None:
+    suffix = f"/run/{relative}"
+    matches = [artifact for artifact in record.outputs.artifacts or () if artifact.path.endswith(suffix)]
+    if len(matches) != 1:
+        return None
+    return artifacts.get(matches[0].path)
+
+
 def _artifact_by_kind(record: TrialRecord, kind: str) -> ArtifactReference | None:
     matches = [artifact for artifact in record.outputs.artifacts or () if artifact.kind == kind]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _artifact_by_suffix(record: TrialRecord, suffix: str) -> ArtifactReference | None:
+    matches = [artifact for artifact in record.outputs.artifacts or () if artifact.path.endswith(suffix)]
     return matches[0] if len(matches) == 1 else None
 
 

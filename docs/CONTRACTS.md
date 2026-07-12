@@ -140,11 +140,23 @@ Key rule:
 
 **Boundary:** Evidence-lifecycle host -> Episode environment -> Evidence-lifecycle host
 
-`LifecycleEpisodeRequest` is content-bound to the lifecycle and package hashes and carries host-allocated episode, attempt, and session identity; ordered checkpoint ownership; execution mode; visibility policy; requested adapter/model identity; the per-session turn limit; model-visible instruction; confined workspace and submission paths; and completed-checkpoint lineage. The host asks the environment to durably prepare its empty attempt artifacts, publishes the request, records its SHA-256 in the active attempt, then executes. Recovery and TrialRecord finalization reject request bytes or stable identity that disagree with attempt state, package state, or the declared execution condition.
+`LifecycleEpisodeRequest` is content-bound to the lifecycle and package hashes and carries host-allocated episode, attempt, and session identity; ordered checkpoint ownership; execution mode; visibility policy; requested adapter/model identity; the per-session turn limit; model-visible instruction; confined workspace and submission paths; completed-checkpoint lineage; the public conditional-evidence catalogue; and hashes of conditional evidence acquired by prior attempts. The host asks the environment to durably prepare its empty attempt artifacts, publishes the request, records its SHA-256 in the active attempt, then executes. Recovery and TrialRecord finalization reject request bytes or stable identity that disagree with attempt state, package state, or the declared execution condition.
 
 `LifecycleEpisodeResult` returns only execution-owned state: exact request identity, checkpoint ownership, requested and resolved adapter/model identity, per-session turn limit, configuration, status, failures, and token usage. Strict validation rejects undeclared fields, including verifier gates, pass/fail, expected answers, and reward. The host publishes a validated per-attempt result, preserves failed candidate submissions under their owning sessions, and alone validates and archives successful checkpoint submissions, releases later evidence, and invokes the task-owned verifier after lifecycle execution.
 
 Fresh-context requests own exactly one checkpoint. Persistent execution remains a separate one-session orchestration and must not be represented as repeated fresh episode calls.
+
+### ConditionalEvidenceSpec / EvidenceRequestActionRecord
+
+**Boundary:** Public lifecycle package -> Evidence-lifecycle host -> Model-visible workspace
+
+`ConditionalEvidenceSpec` is an optional checkpoint contract containing a positive request budget and one or more public `EvidenceRequestSpec` records. Each request carries a safe ID, title, description, and same-checkpoint prerequisite IDs. IDs are unique, prerequisites must exist, the graph is acyclic, and every request's transitive prerequisite closure plus the request itself must fit within the checkpoint budget. Public request records cannot contain source paths.
+
+The task-owned hidden resolution manifest has exact `(checkpoint_id, request_id)` correspondence with the public catalogue and confines every source to `hidden/evidence_requests/<checkpoint-id>/<request-id>/`. The model-visible projection is fixed at `workspace/inbox/<checkpoint-id>/requests/<request-id>/`; ordinary checkpoint releases cannot occupy the reserved `requests/` namespace.
+
+`EvidenceRequestActionRecord` binds globally contiguous action identity, owning and requested checkpoint identity, request ID and reason, host-bound session/attempt ownership, typed outcome/rejection, pre/post observable-state hashes, canonical and workspace artifact paths and SHA-256 values, budget arithmetic, and branch inheritance. Successful first releases consume one unit; repeated successful requests and typed rejections consume zero. Malformed or blank model-facing arguments are bounded host-call validation failures and do not create lifecycle request actions. Package corruption and session-boundary mismatches are also host failures, not scored model rejections.
+
+Canonical action transactions are published under `run/evidence_requests/<action-id>/` before workspace projection and state commit. Recovery must adopt matching bytes exactly once, reject conflicts, repair missing transition/action ledger entries, and never restore consumed budget on retry or branch.
 
 ### TrialRecord
 
@@ -184,6 +196,7 @@ Key rule:
 - a `complete` record must contain enough provenance to support reproducibility claims.
 - a complete lifecycle record must reference hashed immutable output artifacts; paths back into a mutable working run are not sufficient.
 - lifecycle finalization must reconcile every session, token total, task revision, verification result, and artifact hash against the canonical invocation and its immutable snapshot before publication.
+- action-capable lifecycle snapshots must contain every canonical evidence-request action, commit marker, released artifact, public catalogue, and model-visible projection; state, metrics, protocol hash, and tool-schema hash must reconcile without using model prose.
 - the planned runtime provider, sorted dependency distributions, and realized dependency-byte fingerprint must exactly match the canonical invocation before publication.
 - every submitted lifecycle checkpoint must resolve to exactly one final submitted attempt and a durable session owner.
 - every fresh-context session must own exactly one checkpoint; retries use distinct attempt-specific sessions.

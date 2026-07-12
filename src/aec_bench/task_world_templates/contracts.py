@@ -7,7 +7,7 @@ import re
 from pathlib import PurePosixPath
 from typing import Any
 
-from pydantic import Field, model_validator
+from pydantic import Field, PositiveInt, model_validator
 
 from aec_bench.contracts.task_world import (
     AgenticReviewProfile,
@@ -80,6 +80,83 @@ class DataGapSpec(StrictModel):
     severity: NonEmptyStr = "medium"
 
 
+class EvidenceRequestSpec(StrictModel):
+    request_id: NonEmptyStr
+    title: NonEmptyStr
+    description: NonEmptyStr
+    prerequisite_request_ids: tuple[NonEmptyStr, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_request_id(self) -> EvidenceRequestSpec:
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", self.request_id) is None:
+            raise ValueError("request_id must be a safe path segment")
+        if len(self.prerequisite_request_ids) != len(set(self.prerequisite_request_ids)):
+            raise ValueError("evidence request prerequisites must be unique")
+        if self.request_id in self.prerequisite_request_ids:
+            raise ValueError("evidence request cannot depend on itself")
+        return self
+
+
+class ConditionalEvidenceSpec(StrictModel):
+    request_budget: PositiveInt
+    requests: tuple[EvidenceRequestSpec, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_request_graph(self) -> ConditionalEvidenceSpec:
+        request_ids = [request.request_id for request in self.requests]
+        if len(request_ids) != len(set(request_ids)):
+            raise ValueError("evidence request ids must be unique per checkpoint")
+        if self.request_budget > len(request_ids):
+            raise ValueError("evidence request budget cannot exceed the number of requests")
+
+        known = set(request_ids)
+        prerequisites = {request.request_id: set(request.prerequisite_request_ids) for request in self.requests}
+        for request_id, dependencies in prerequisites.items():
+            unknown = dependencies - known
+            if unknown:
+                names = ", ".join(sorted(unknown))
+                raise ValueError(f"evidence request prerequisites are unknown for {request_id}: {names}")
+
+        visiting: set[str] = set()
+        visited: set[str] = set()
+
+        def visit(request_id: str) -> None:
+            if request_id in visiting:
+                raise ValueError("evidence request prerequisites must not contain cycles")
+            if request_id in visited:
+                return
+            visiting.add(request_id)
+            for dependency in prerequisites[request_id]:
+                visit(dependency)
+            visiting.remove(request_id)
+            visited.add(request_id)
+
+        for request_id in request_ids:
+            visit(request_id)
+
+        prerequisite_closures: dict[str, set[str]] = {}
+
+        def prerequisite_closure(request_id: str) -> set[str]:
+            cached = prerequisite_closures.get(request_id)
+            if cached is not None:
+                return cached
+            closure: set[str] = set()
+            for dependency in prerequisites[request_id]:
+                closure.add(dependency)
+                closure.update(prerequisite_closure(dependency))
+            prerequisite_closures[request_id] = closure
+            return closure
+
+        for request_id in request_ids:
+            required_budget = len(prerequisite_closure(request_id)) + 1
+            if required_budget > self.request_budget:
+                raise ValueError(
+                    f"evidence request budget cannot satisfy prerequisites for {request_id}: "
+                    f"requires {required_budget} requests"
+                )
+        return self
+
+
 class EvidenceCheckpointSpec(StrictModel):
     checkpoint_id: NonEmptyStr
     title: NonEmptyStr
@@ -88,6 +165,7 @@ class EvidenceCheckpointSpec(StrictModel):
     submission_path: NonEmptyStr
     depends_on: list[NonEmptyStr] = Field(default_factory=list)
     required_submission_fields: list[NonEmptyStr] = Field(default_factory=lambda: ["checkpoint_id"])
+    conditional_evidence: ConditionalEvidenceSpec | None = None
 
     @model_validator(mode="after")
     def validate_package_paths(self) -> EvidenceCheckpointSpec:

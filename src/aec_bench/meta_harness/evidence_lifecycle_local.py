@@ -25,6 +25,7 @@ from aec_bench.meta_harness.evidence_lifecycle import (
     open_checkpoint_attempt,
     prepare_evidence_checkpoint,
     read_evidence_lifecycle_state,
+    request_evidence_checkpoint,
     revisit_evidence_checkpoint,
     run_evidence_lifecycle,
     submit_evidence_checkpoint,
@@ -58,6 +59,35 @@ class EvidenceLifecycleControlTool:
     package_dir: Path
     run_dir: Path
     session_id: str = "manual"
+
+    def request_evidence(self, checkpoint_id: str, request_id: str, reason: str) -> str:
+        """Request one declared evidence packet using the active checkpoint budget."""
+        if not checkpoint_id.strip() or not request_id.strip() or not reason.strip():
+            return json.dumps(
+                {
+                    "status": "rejected",
+                    "error": "evidence request arguments must not be blank",
+                }
+            )
+        result = request_evidence_checkpoint(
+            self.package_dir,
+            self.run_dir,
+            checkpoint_id=checkpoint_id,
+            request_id=request_id,
+            reason=reason,
+            session_id=self.session_id,
+        )
+        payload: dict[str, Any] = {
+            "status": result["outcome"],
+            "checkpoint_id": result["requested_checkpoint_id"],
+            "request_id": result["request_id"],
+            "remaining_budget": result["budget_after"],
+        }
+        if result["outcome"] in {"released", "already_released"}:
+            payload["released_files"] = [artifact["workspace_path"] for artifact in result["released_artifacts"]]
+        if result["rejection"] is not None:
+            payload["rejection"] = result["rejection"]
+        return json.dumps(payload)
 
     def submit_checkpoint(self, checkpoint_id: str) -> str:
         """Submit the named checkpoint and release the next evidence packet.
@@ -258,6 +288,49 @@ def run_local_evidence_lifecycle_session(
         run_dir=run,
         visibility_policy=visibility_policy,
     )
+    supports_evidence_requests = _supports_evidence_requests(package)
+    native_tools = [
+        workspace_tool.list_workspace,
+        workspace_tool.read_workspace_file,
+        workspace_tool.write_checkpoint_submission,
+    ]
+    tool_specs = [
+        ToolSpec(name="list_workspace", source="builtin", description="List visible lifecycle files."),
+        ToolSpec(
+            name="read_workspace_file",
+            source="builtin",
+            description="Read one visible lifecycle file.",
+        ),
+        ToolSpec(
+            name="write_checkpoint_submission",
+            source="builtin",
+            description="Write the active checkpoint JSON submission.",
+        ),
+    ]
+    if supports_evidence_requests:
+        native_tools.append(control.request_evidence)
+        tool_specs.append(
+            ToolSpec(
+                name="request_evidence",
+                source="builtin",
+                description="Request one declared evidence packet within the active checkpoint budget.",
+            )
+        )
+    native_tools.extend([control.submit_checkpoint, control.revisit_checkpoint])
+    tool_specs.extend(
+        [
+            ToolSpec(
+                name="submit_checkpoint",
+                source="builtin",
+                description="Archive the active checkpoint and release the next evidence packet.",
+            ),
+            ToolSpec(
+                name="revisit_checkpoint",
+                source="builtin",
+                description="Inspect and log an immutable prior checkpoint without rewinding the run.",
+            ),
+        ]
+    )
     resolved_registry = registry or LocalAdapterRegistry()
     try:
         adapter = resolved_registry.build(
@@ -265,46 +338,22 @@ def run_local_evidence_lifecycle_session(
             model_name=model,
             workspace=initial["workspace"],
             trajectory_writer=trajectory_writer,
-            native_tools=[
-                workspace_tool.list_workspace,
-                workspace_tool.read_workspace_file,
-                workspace_tool.write_checkpoint_submission,
-                control.submit_checkpoint,
-                control.revisit_checkpoint,
-            ],
+            native_tools=native_tools,
             enable_bash=False,
         )
         result = adapter.execute(
             AdapterRequest(
-                instruction=_persistent_session_instruction(initial),
+                instruction=_persistent_session_instruction(
+                    initial,
+                    supports_evidence_requests=supports_evidence_requests,
+                ),
                 system_prompt=_workspace_policy(
                     initial,
                     persistent=True,
                     visibility_policy=visibility_policy,
+                    supports_evidence_requests=supports_evidence_requests,
                 ),
-                tools=[
-                    ToolSpec(name="list_workspace", source="builtin", description="List visible lifecycle files."),
-                    ToolSpec(
-                        name="read_workspace_file",
-                        source="builtin",
-                        description="Read one visible lifecycle file.",
-                    ),
-                    ToolSpec(
-                        name="write_checkpoint_submission",
-                        source="builtin",
-                        description="Write the active checkpoint JSON submission.",
-                    ),
-                    ToolSpec(
-                        name="submit_checkpoint",
-                        source="builtin",
-                        description="Archive the active checkpoint and release the next evidence packet.",
-                    ),
-                    ToolSpec(
-                        name="revisit_checkpoint",
-                        source="builtin",
-                        description="Inspect and log an immutable prior checkpoint without rewinding the run.",
-                    ),
-                ],
+                tools=tool_specs,
                 configuration={"max_turns": max_turns},
                 output_path=str(Path(initial["workspace"]) / "output.md"),
                 output_format="markdown",
@@ -657,6 +706,12 @@ class LocalEvidenceLifecycleEpisodeEnvironment:
             run_dir=run_dir,
             visibility_policy=self.memory_visibility_policy,
         )
+        control = EvidenceLifecycleControlTool(
+            package_dir=Path(self.package_dir),
+            run_dir=run_dir,
+            session_id=request.session_id,
+        )
+        supports_evidence_requests = _supports_evidence_requests(self.package_dir)
         tools = [
             ToolSpec(name="list_workspace", source="builtin", description="List visible lifecycle files."),
             ToolSpec(name="read_workspace_file", source="builtin", description="Read one visible lifecycle file."),
@@ -666,6 +721,20 @@ class LocalEvidenceLifecycleEpisodeEnvironment:
                 description="Write the active checkpoint JSON submission.",
             ),
         ]
+        native_tools = [
+            workspace_tool.list_workspace,
+            workspace_tool.read_workspace_file,
+            workspace_tool.write_checkpoint_submission,
+        ]
+        if supports_evidence_requests:
+            native_tools.append(control.request_evidence)
+            tools.append(
+                ToolSpec(
+                    name="request_evidence",
+                    source="builtin",
+                    description="Request one declared evidence packet within the active checkpoint budget.",
+                )
+            )
         resolved_registry = self.registry or LocalAdapterRegistry()
         try:
             adapter = resolved_registry.build(
@@ -673,11 +742,7 @@ class LocalEvidenceLifecycleEpisodeEnvironment:
                 model_name=self.model,
                 workspace=request.workspace,
                 trajectory_writer=trajectory_writer,
-                native_tools=[
-                    workspace_tool.list_workspace,
-                    workspace_tool.read_workspace_file,
-                    workspace_tool.write_checkpoint_submission,
-                ],
+                native_tools=native_tools,
                 enable_bash=False,
             )
             adapter_result = adapter.execute(
@@ -687,6 +752,7 @@ class LocalEvidenceLifecycleEpisodeEnvironment:
                         request.model_dump(mode="json"),
                         persistent=False,
                         visibility_policy=self.memory_visibility_policy,
+                        supports_evidence_requests=supports_evidence_requests,
                     ),
                     tools=tools,
                     configuration={"max_turns": self.max_turns},
@@ -779,11 +845,23 @@ def build_local_evidence_lifecycle_episode_environment(
     )
 
 
-def _persistent_session_instruction(initial: dict[str, Any]) -> str:
+def _persistent_session_instruction(
+    initial: dict[str, Any],
+    *,
+    supports_evidence_requests: bool,
+) -> str:
+    conditional_guidance = ""
+    if supports_evidence_requests:
+        conditional_guidance = (
+            "Before submitting, inspect checkpoints/<checkpoint_id>/evidence-requests.json. You may call "
+            "request_evidence when that active checkpoint declares a request catalogue; the remaining budget "
+            "is finite.\n"
+        )
     return (
         "This is one staged evidence lifecycle. Complete every checkpoint in this same session.\n\n"
         "For each checkpoint:\n"
         "1. Use list_workspace and read_workspace_file to inspect the active instruction and released evidence.\n"
+        f"{conditional_guidance}"
         "2. Call write_checkpoint_submission with the active checkpoint_id and required JSON content.\n"
         "3. Call submit_checkpoint with the active checkpoint_id.\n"
         "4. If the tool releases another checkpoint, read its returned instruction and continue.\n"
@@ -804,6 +882,7 @@ def _workspace_policy(
     *,
     persistent: bool,
     visibility_policy: LifecycleVisibilityPolicy,
+    supports_evidence_requests: bool,
 ) -> str:
     if visibility_policy in {
         LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
@@ -830,12 +909,14 @@ def _workspace_policy(
             "contains the immutable parent snapshot used for comparison."
         )
     policy += f" Host visibility policy: {visibility_policy.value}."
+    if supports_evidence_requests:
+        policy += " Declared within-checkpoint evidence is released only by request_evidence."
     if persistent:
-        return (
-            policy
-            + " Future evidence is released only by the submit_checkpoint tool. Preserve review continuity across "
+        policy += (
+            " Next-checkpoint evidence is released only by submit_checkpoint. Preserve review continuity across "
             "the full session."
         )
+        return policy
     return policy + " This is a fresh checkpoint context; reconstruct continuity from the persisted review artifacts."
 
 
@@ -854,6 +935,8 @@ def _tool_response(result: dict[str, Any]) -> dict[str, Any]:
                 "released_files": result["released_files"],
             }
         )
+        if result.get("evidence_request_catalog") is not None:
+            payload["evidence_request_catalog"] = result["evidence_request_catalog"]
     return payload
 
 
@@ -1072,7 +1155,10 @@ def _build_local_task_run(
         agent=agent,
         verifier=verifier,
         verification=verification,
-        tool_schema=_lifecycle_tool_schema(agent["execution_mode"]),
+        tool_schema=_lifecycle_tool_schema(
+            agent["execution_mode"],
+            supports_evidence_requests=_supports_evidence_requests(package),
+        ),
         sweep_context=sweep_context,
         repository_dir=repository_dir,
     )
@@ -1130,6 +1216,8 @@ def _seal_interrupted_sessions(
     for checkpoint in checkpoint_runs:
         checkpoint_id = str(checkpoint["checkpoint_id"])
         for attempt in checkpoint.get("attempts", []):
+            if attempt.get("inherited_from_parent"):
+                continue
             session_id = str(attempt["session_id"])
             attempts_by_session.setdefault(session_id, []).append((checkpoint_id, attempt))
     for session_id, session_attempts in attempts_by_session.items():
@@ -1197,12 +1285,23 @@ def _session_checkpoint_ids(lifecycle: dict[str, Any], session_id: str) -> list[
     return checkpoint_ids
 
 
-def _lifecycle_tool_schema(execution_mode: str) -> list[dict[str, str]]:
+def _supports_evidence_requests(package_dir: Path) -> bool:
+    spec = load_evidence_lifecycle_spec(Path(package_dir))
+    return any(checkpoint.conditional_evidence is not None for checkpoint in spec.checkpoints)
+
+
+def _lifecycle_tool_schema(
+    execution_mode: str,
+    *,
+    supports_evidence_requests: bool,
+) -> list[dict[str, str]]:
     functions: list[Callable[..., Any]] = [
         EvidenceLifecycleWorkspaceTool.list_workspace,
         EvidenceLifecycleWorkspaceTool.read_workspace_file,
         EvidenceLifecycleWorkspaceTool.write_checkpoint_submission,
     ]
+    if supports_evidence_requests:
+        functions.append(EvidenceLifecycleControlTool.request_evidence)
     if execution_mode == "persistent_context":
         functions.extend(
             [
@@ -1213,7 +1312,15 @@ def _lifecycle_tool_schema(execution_mode: str) -> list[dict[str, str]]:
     return [
         {
             "name": function.__name__,
-            "signature": str(inspect.signature(function)),
+            "signature": str(
+                inspect.signature(function).replace(
+                    parameters=[
+                        parameter
+                        for name, parameter in inspect.signature(function).parameters.items()
+                        if name != "self"
+                    ]
+                )
+            ),
             "description": inspect.getdoc(function) or "",
         }
         for function in functions
