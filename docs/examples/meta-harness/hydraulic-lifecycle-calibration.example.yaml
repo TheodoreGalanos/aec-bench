@@ -1,5 +1,5 @@
 # ABOUTME: Preregisters the public PR19 hydraulic campaign and deterministic condition selector.
-# ABOUTME: Uses ignored roots and a conservative no-cache Sonnet 4.6 envelope derived from the public pilot.
+# ABOUTME: Uses ignored roots and a preregistered finite execution envelope for the public campaign.
 schema_version: "1"
 experiment_id: ssc03-hydraulic-public-calibration
 lifecycle_template_id: hydraulic-interaction-lifecycle-review
@@ -26,9 +26,7 @@ agents:
 repetitions: 1
 output_root: ../../../artefacts/ssc03-hydraulic-public-calibration/runs
 ledger_root: ../../../artefacts/ssc03-hydraulic-public-calibration/ledger
-# One 37-request persistent pilot cost $4.44 without realized cache usage.
-# Scaling that result to the 60-request cap and three fresh sessions gives about
-# $21.58, with the remaining amount retained as planning headroom.
+# Manual planning guards required by the selectable campaign contract.
 estimated_cost_per_trial_usd: 25.0
 limits:
   max_trials: 16

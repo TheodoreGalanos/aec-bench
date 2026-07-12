@@ -49,19 +49,23 @@ The policy enters the manifest hash, expanded plan hash, and every planned trial
 
 Selectable execution must use the normal provider registry. The injectable registry seam remains available to legacy descriptive development runs, but it cannot mint evidence for a frozen model condition.
 
-The cost values are planning guards, not provider-side billing limits. One repetition of the current design contains 16 trials but 40 potential provider sessions: one session for each persistent trial and three sessions for each fresh-context trial. At 60 requests per session, the configured ceiling is 2,400 requests. The measured public pilot cost $4.44 for 37 requests without realized cache usage. Scaling that observation to 60 requests and three fresh sessions gives about $21.58; the preregistered estimate therefore uses $25 per trial and a $400 campaign envelope. This is conservative planning headroom, not a guarantee that cost grows linearly with requests. Full campaign execution still requires separate approval of that envelope.
+The spend fields are manual planning guards, not provider-side execution limits. One repetition of the current design contains 16 trials but 40 potential provider sessions: one session for each persistent trial and three sessions for each fresh-context trial. At 60 requests per session, the configured ceiling is 2,400 requests. The committed finite envelope is part of the preregistered manifest and full campaign execution still requires separate approval. It is not a guarantee that provider usage grows linearly with requests.
 
-## What the first real model pilot taught us
+## What the model pilots taught us
 
 On 13 July 2026 AEST, one out-of-campaign `major_idf_revision` pilot ran against `au.anthropic.claude-sonnet-4-6` in persistent-context mode with a 40-request limit. The one session completed all three checkpoints, made 37 provider requests and 64 tool calls, and executed the intended 13-operation hydraulic path. It correctly retained the unaffected design chain, recomputed the affected major-event chain, superseded the stale decision, and concluded that the revised major event was not screening-ready.
-
-Recorded usage was 1,252,861 input tokens and 18,328 output tokens, with zero reported cache-read or cache-write tokens. At the [AWS Sydney AU Regional CRIS rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/ap-southeast-2/index.json), that is approximately $4.44. The campaign envelope therefore assumes no cache saving.
 
 The immutable pilot received reward `0.0` because its public submission instructions did not expose the verifier's exact JSON shapes. The shared prose described closeout-only fields during earlier checkpoints and called the memo fields a “scenario-to-decision-ID map” and “readiness”; the model reasonably wrote `scenario_to_decision_id` and `readiness`, while the strict contract required `decision_ids` and `readiness_decision`. The host also accepted undeclared top-level fields and surfaced the problem only at terminal verification.
 
 An in-memory diagnostic replay removed only the undeclared top-level fields and renamed those two memo keys. The unchanged operation evidence and engineering decisions then passed all 11 verifier gates at reward `1.0`. This proves the pilot's substantive evidence was coherent; it does **not** rewrite the immutable pilot, convert it into a scored calibration record, or establish model performance.
 
-The production contract now gives each checkpoint its own exact top-level field list and exact memo key names. Hydraulic checkpoints reject undeclared top-level fields at the model-facing write tool and again at the host submission boundary, so a model can correct its payload before the lifecycle advances. The pilot remains outside the preregistered campaign and is not selection evidence.
+The production contract now gives each checkpoint its own exact top-level field list and exact memo key names. Hydraulic checkpoints reject undeclared top-level fields at the model-facing write tool and again at the host submission boundary, so a model can correct its payload before the lifecycle advances.
+
+A second out-of-campaign `major_idf_revision` pilot then used a freshly materialized fixed-contract package with the same model, persistent-context condition, and 40-request limit. One session completed all three checkpoints with one submitted attempt per checkpoint, 29 model requests, 51 tool calls, and the intended 13-operation path. The revision activated once, recomputed the affected major-event chain, reused the unaffected design chain as already current, and introduced no new operation at closeout. No submission was rejected. All 11 verifier gates passed at reward `1.0`.
+
+This establishes that one fixed real model can complete one repaired-contract public lifecycle. Both pilots remain outside the preregistered campaign and are not selection evidence. They do not establish reliable performance across variants, the best context condition, holdout generalization, transfer, post-training, or continual learning. For a plain-language account of PR18 through PR21, see [the learning capsule](ssc03-long-horizon-pr18-pr21.learning.md).
+
+The repository preserves a [public hash-bound receipt](examples/meta-harness/ssc03-pr21-pilot-receipts.json) for both runs. It records public execution identities, bounded interaction counts, verifier outcomes, and hashes of the local full-fidelity artifacts. It does not publish trajectories, prompts, local paths, or detailed usage, and it does not convert either pilot into campaign evidence.
 
 ## Which records may support selection
 

@@ -1,0 +1,91 @@
+{
+  "artifact_policy": {
+    "full_fidelity_artifacts_committed": false,
+    "receipt_contains_public_identifiers_and_hashes_only": true,
+    "selection_evidence": false
+  },
+  "evidence_class": "out_of_campaign_interface_pilot_receipts",
+  "pilots": [
+    {
+      "adapter": "tool_loop",
+      "artifact_sha256": {
+        "experiment_manifest": "62ff2b49b9801eda4d66ea29148fe98c5f7ca85803a2e1e40fc80d2eb4fe5227",
+        "metrics": "ab08191e8a183c59df09a081424675ddf072c9ba0bb85d461b88f1abd76fb79a",
+        "state": "2be871ae46259099f4dcb2069d9bdac5438d6fed0e4b0fa301aa16867cd898b4",
+        "trajectory": "70e8afe4090b831cbfa276dec4edd3a34bbc7786fa8ae4dff1eff7ccfe6435a7",
+        "verification": "f10ecf780689b9883214a8d05ffe20d6958de7e8e63b249f1ad83654989c3927"
+      },
+      "campaign_membership": "out_of_campaign",
+      "checkpoint_count": 3,
+      "execution_mode": "persistent_context",
+      "experiment_id": "lifecycle-20260712T181750413437Z-459f71a8c798",
+      "lifecycle_id": "ssc03.hydraulic-interaction-lifecycle",
+      "lifecycle_spec_sha256": "d67bee3afbe192243c489d3a3f7cd870495253147158ec1f9d58757aba006add",
+      "max_requests_per_session": 40,
+      "memory_visibility_policy": "persistent_context",
+      "metrics": {
+        "completed_operations": 10,
+        "operation_actions": 13,
+        "reads": 26,
+        "reused_operations": 3,
+        "tool_calls": 64,
+        "model_requests": 37
+      },
+      "model": "au.anthropic.claude-sonnet-4-6",
+      "package_sha256": "651d6018d53ef0d2b25401a3d997e31bbd7a8d28a6f821b9dd8dcddb4be89969",
+      "pilot_id": "interface-discovery",
+      "selection_eligible": false,
+      "session_count": 1,
+      "source_commit": "9bcf50f411beda9453bebd562f3c4a1c161cfc7b",
+      "variant_id": "major_idf_revision",
+      "verification": {
+        "gate_count": 11,
+        "passed": false,
+        "passed_gate_count": 0,
+        "reward": 0.0
+      },
+      "world_id": "aec.task_world.composite.hydraulic-interaction-lifecycle-review"
+    },
+    {
+      "adapter": "tool_loop",
+      "artifact_sha256": {
+        "experiment_manifest": "f2358c3c7f1f1c38d5abf1f9f34c30307f4a1d5625f4575b8ae323e3f606af52",
+        "metrics": "4804a997acca1acd70b2cad854500ff4700c987c6b74901f32b12a269b6e3184",
+        "state": "34f3d1ddd21b5ce1e5e671706306164a78a09e52ff6ca4c64da6651ac6483145",
+        "trajectory": "61fc6a930594169f92a8e6819f43ee2d602a85024e8199f68e9e7a7bd8aa1d51",
+        "verification": "c741e150cdccf9c513b559f51ddad0ffaef3f013d62ff07614f8e6c4ffebe71a"
+      },
+      "campaign_membership": "out_of_campaign",
+      "checkpoint_count": 3,
+      "execution_mode": "persistent_context",
+      "experiment_id": "lifecycle-20260712T190011606739Z-7ff6e18d919b",
+      "lifecycle_id": "ssc03.hydraulic-interaction-lifecycle",
+      "lifecycle_spec_sha256": "0647ef7ea805b51b445b31f4b995e3230c7b4e5eb3fbc9b04c298023564f428a",
+      "max_requests_per_session": 40,
+      "memory_visibility_policy": "persistent_context",
+      "metrics": {
+        "completed_operations": 10,
+        "operation_actions": 13,
+        "reads": 22,
+        "reused_operations": 3,
+        "tool_calls": 51,
+        "model_requests": 29
+      },
+      "model": "au.anthropic.claude-sonnet-4-6",
+      "package_sha256": "006a2a7c85c2a84f4ec4430e9a49f967936c04946d2174cfbd4c8130df36db9c",
+      "pilot_id": "fixed-contract-confirmation",
+      "selection_eligible": false,
+      "session_count": 1,
+      "source_commit": "ef548fab97ffc71223ccbfd4ab2bddedce670ad3",
+      "variant_id": "major_idf_revision",
+      "verification": {
+        "gate_count": 11,
+        "passed": true,
+        "passed_gate_count": 11,
+        "reward": 1.0
+      },
+      "world_id": "aec.task_world.composite.hydraulic-interaction-lifecycle-review"
+    }
+  ],
+  "schema_version": "1"
+}
