@@ -12,6 +12,38 @@ from typing import Any, cast
 
 from aec_bench.meta_harness.evidence_lifecycle import validate_lifecycle_verification
 from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate, EvidenceLifecycleSpec
+from aec_bench.task_world_templates.lifecycles.provider import (
+    SEALED_LIFECYCLE_RECEIPT_FILENAME,
+    SealedLifecycleMount,
+    SealedLifecycleProvider,
+    SealedLifecycleProviderError,
+    _bind_sealed_lifecycle,
+    _materialize_sealed_lifecycle,
+    active_sealed_lifecycle_mount,
+    is_sealed_lifecycle_package,
+    sealed_lifecycle_provider_protocol_identity,
+)
+
+__all__ = [
+    "SEALED_LIFECYCLE_RECEIPT_FILENAME",
+    "LifecycleTemplateRegistration",
+    "SealedLifecycleMount",
+    "SealedLifecycleProvider",
+    "SealedLifecycleProviderError",
+    "bind_sealed_lifecycle",
+    "is_sealed_lifecycle_package",
+    "lifecycle_operation_resolver",
+    "lifecycle_package_variant",
+    "lifecycle_variant_ids",
+    "lifecycle_variant_metadata",
+    "materialize_lifecycle_template",
+    "materialize_sealed_lifecycle",
+    "registered_lifecycle_operation_resolver",
+    "registered_lifecycle_template_ids",
+    "registered_lifecycle_verifier",
+    "sealed_lifecycle_provider_protocol_identity",
+    "verify_lifecycle_template",
+]
 
 
 @dataclass(frozen=True)
@@ -60,6 +92,30 @@ def registered_lifecycle_template_ids() -> set[str]:
     return set(_LIFECYCLES)
 
 
+def materialize_sealed_lifecycle(
+    provider: SealedLifecycleProvider,
+    output_dir: Path,
+) -> SealedLifecycleMount:
+    """Materialize one external holdout without adding it to any public registry."""
+    return _materialize_sealed_lifecycle(
+        provider,
+        output_dir,
+        public_template_ids=frozenset(_LIFECYCLES),
+    )
+
+
+def bind_sealed_lifecycle(
+    provider: SealedLifecycleProvider,
+    package_dir: Path,
+) -> SealedLifecycleMount:
+    """Rebind one existing sealed package for an explicit recovery call context."""
+    return _bind_sealed_lifecycle(
+        provider,
+        package_dir,
+        public_template_ids=frozenset(_LIFECYCLES),
+    )
+
+
 def lifecycle_variant_ids(template_id: str) -> tuple[str, ...]:
     """Return declared materialization variants without exposing hidden task answers."""
     registration = _entry(template_id)
@@ -101,6 +157,8 @@ def registered_lifecycle_operation_resolver(template_id: str) -> Callable[[Path,
 
 def lifecycle_package_variant(package_dir: Path) -> dict[str, Any] | None:
     """Validate and return task-owned variant metadata when a package declares it."""
+    if is_sealed_lifecycle_package(package_dir):
+        return None
     template_path = Path(package_dir) / "template.json"
     if not template_path.is_file():
         return None
@@ -137,8 +195,39 @@ def materialize_lifecycle_template(
     return materializer(Path(output_dir), template=template, variant_id=variant_id)
 
 
+def lifecycle_operation_resolver(package_dir: Path, run_dir: Path) -> Any | None:
+    """Resolve operations from an exact sealed mount or the public registry."""
+    package = Path(package_dir)
+    if is_sealed_lifecycle_package(package):
+        return active_sealed_lifecycle_mount(package).build_operation_resolver(Path(run_dir))
+    template = _read_json(package / "template.json")
+    template_id = template.get("template_id")
+    if not isinstance(template_id, str):
+        raise ValueError("lifecycle package template identity is invalid")
+    factory = registered_lifecycle_operation_resolver(template_id)
+    return None if factory is None else factory(package, Path(run_dir))
+
+
 def verify_lifecycle_template(package_dir: Path, run_dir: Path) -> dict[str, Any]:
     """Validate package identity, then dispatch through the registered task verifier."""
+    if is_sealed_lifecycle_package(package_dir):
+        result = active_sealed_lifecycle_mount(package_dir).verify(Path(run_dir))
+        invalid_result = False
+        validated: dict[str, Any] | None = None
+        try:
+            validated = validate_lifecycle_verification(result)
+            template_payload = _read_json(Path(package_dir) / "template.json")
+            lifecycle = EvidenceLifecycleSpec.model_validate(_read_json(Path(package_dir) / "lifecycle.json"))
+            if validated["lifecycle_id"] != lifecycle.lifecycle_id or validated.get("template_id") not in {
+                None,
+                template_payload.get("template_id"),
+            }:
+                raise ValueError("sealed verifier identity mismatch")
+        except Exception:
+            invalid_result = True
+        if invalid_result or validated is None:
+            raise SealedLifecycleProviderError("sealed_provider_verifier_result_invalid")
+        return validated
     template_path = Path(package_dir) / "template.json"
     template = CompositeTaskWorldTemplate.model_validate(_read_json(template_path))
     if template.evidence_lifecycle is None:

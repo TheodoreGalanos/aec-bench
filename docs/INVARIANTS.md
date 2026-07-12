@@ -161,6 +161,10 @@ Python enforcement direction:
 - evaluate holdout generalization only from hash-pinned complete records and immutable snapshot artifacts under an exactly matched selected condition;
 - keep holdout-derived transfer summaries build-only until their persistence and publication surfaces enforce internal visibility;
 - keep true holdout evidence outside public variant registries and committed packages.
+- mount each holdout provider explicitly for one exact package path and hash; never discover it, register it globally, or allow it to shadow a public template;
+- mark mounted holdout packages with one generic host-written receipt whose exact allowlist contains no target, prompt, path, operation, verifier, gold, or annotation metadata;
+- reject a sealed receipt before public Prime export, normal experiment recording, or `TrialRecord` finalization until access-controlled full-fidelity storage and a separate redacted publication contract exist;
+- reduce provider materializer, resolver, validation, and verifier failures to stable non-disclosing boundary codes.
 
 ---
 

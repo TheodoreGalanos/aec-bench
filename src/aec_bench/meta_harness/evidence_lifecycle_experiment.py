@@ -46,6 +46,7 @@ from aec_bench.meta_harness.lifecycle_operation_protocol import (
     validate_lifecycle_operation_tool_schema,
 )
 from aec_bench.task_world_templates.lifecycles import (
+    is_sealed_lifecycle_package,
     lifecycle_package_variant,
     registered_lifecycle_verifier,
 )
@@ -165,6 +166,8 @@ def record_lifecycle_experiment(
 ) -> dict[str, Any]:
     """Write one self-contained run record and append its immutable index entry."""
     package = Path(package_dir)
+    if is_sealed_lifecycle_package(package):
+        raise ValueError("sealed_holdout_public_record_forbidden")
     run = Path(run_dir)
     verification_path = run / "verification.json"
     metrics_path = run / "metrics.json"

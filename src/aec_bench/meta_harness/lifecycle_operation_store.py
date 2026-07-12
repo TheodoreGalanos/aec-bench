@@ -55,16 +55,12 @@ from aec_bench.task_world_templates.contracts import EvidenceCheckpointSpec, Evi
 
 
 def _resolver_for_package(package_dir: Path, run_dir: Path) -> LifecycleOperationResolver:
-    from aec_bench.task_world_templates.lifecycles import registered_lifecycle_operation_resolver
+    from aec_bench.task_world_templates.lifecycles import lifecycle_operation_resolver
 
-    template = _read_json(package_dir / "template.json")
-    template_id = template.get("template_id")
-    if not isinstance(template_id, str):
-        raise EvidenceLifecycleError("lifecycle package template identity is invalid")
-    factory = registered_lifecycle_operation_resolver(template_id)
-    if factory is None:
+    resolver = lifecycle_operation_resolver(package_dir, run_dir)
+    if resolver is None:
         raise EvidenceLifecycleError("lifecycle package does not support model-facing operations")
-    return cast(LifecycleOperationResolver, factory(package_dir, run_dir))
+    return cast(LifecycleOperationResolver, resolver)
 
 
 def _all_operation_actions(state: EvidenceLifecycleRunState) -> list[LifecycleOperationActionRecord]:

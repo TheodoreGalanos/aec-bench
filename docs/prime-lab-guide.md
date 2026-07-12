@@ -149,6 +149,10 @@ cd /tmp
   -c "from ssc03_persistent_lifecycle import load_environment; print(type(load_environment()).__name__)"
 ```
 
+This lane accepts registered public lifecycle variants only. A package carrying
+the generic sealed-holdout receipt is rejected before its instruction or package
+content is read into an export manifest.
+
 This lane is local-only. It does not support hosted publication, hosted
 execution, training, fresh-context lifecycle conditions, transfer evaluation,
 or continual learning. Those require separate contracts and evidence.

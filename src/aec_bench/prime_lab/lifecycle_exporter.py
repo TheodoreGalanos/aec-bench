@@ -25,7 +25,10 @@ from aec_bench.meta_harness.evidence_lifecycle import (
 )
 from aec_bench.meta_harness.evidence_lifecycle_experiment import repository_provenance
 from aec_bench.prime_lab.exporter import DEFAULT_PRIME_ENVIRONMENTS_DIR, normalise_environment_id
-from aec_bench.task_world_templates.lifecycles import lifecycle_package_variant
+from aec_bench.task_world_templates.lifecycles import (
+    is_sealed_lifecycle_package,
+    lifecycle_package_variant,
+)
 
 
 class PrimeLifecycleSourceProvenance(StrictModel):
@@ -200,6 +203,8 @@ def load_prime_lifecycle_manifest(path: Path) -> PrimeLifecycleExportManifest:
 
 def _validated_public_package_record(package_dir: Path) -> PrimeLifecyclePackageRecord:
     package = Path(package_dir).resolve()
+    if is_sealed_lifecycle_package(package):
+        raise ValueError("sealed_holdout_prime_export_forbidden")
     if not package.is_dir():
         raise ValueError(f"lifecycle package directory not found: {package}")
     try:
