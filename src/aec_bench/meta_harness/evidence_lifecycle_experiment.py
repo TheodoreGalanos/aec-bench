@@ -41,6 +41,10 @@ from aec_bench.meta_harness.evidence_lifecycle import (
 )
 from aec_bench.meta_harness.evidence_lifecycle_metrics import LifecycleSemanticMetrics
 from aec_bench.meta_harness.ledger import read_ledger
+from aec_bench.meta_harness.lifecycle_operation_protocol import (
+    lifecycle_operation_protocol_identity,
+    validate_lifecycle_operation_tool_schema,
+)
 from aec_bench.task_world_templates.lifecycles import (
     lifecycle_package_variant,
     registered_lifecycle_verifier,
@@ -48,7 +52,7 @@ from aec_bench.task_world_templates.lifecycles import (
 
 
 class LifecycleExperimentMetrics(StrictModel):
-    schema_version: Literal["1", "2"] = "2"
+    schema_version: Literal["1", "2", "3"] = "3"
     checkpoint_count: NonNegativeInt
     requests: NonNegativeInt
     tool_calls: NonNegativeInt
@@ -60,6 +64,12 @@ class LifecycleExperimentMetrics(StrictModel):
     rejected_evidence_requests: NonNegativeInt = 0
     evidence_request_budget_consumed: NonNegativeInt = 0
     evidence_request_artifacts_released: NonNegativeInt = 0
+    operation_calls: NonNegativeInt = 0
+    completed_operations: NonNegativeInt = 0
+    already_current_operations: NonNegativeInt = 0
+    rejected_operations: NonNegativeInt = 0
+    operation_budget_consumed: NonNegativeInt = 0
+    operation_artifacts_produced: NonNegativeInt = 0
     retries: NonNegativeInt
     failures: NonNegativeInt
     input_tokens: NonNegativeInt
@@ -70,6 +80,25 @@ class LifecycleExperimentMetrics(StrictModel):
     checkpoint_seconds: dict[str, NonNegativeFloat] = Field(default_factory=dict)
     whole_run_seconds: NonNegativeFloat | None = None
     semantic_transition: LifecycleSemanticMetrics | None = None
+
+
+_V3_OPERATION_METRIC_FIELDS = (
+    "operation_calls",
+    "completed_operations",
+    "already_current_operations",
+    "rejected_operations",
+    "operation_budget_consumed",
+    "operation_artifacts_produced",
+)
+
+
+def lifecycle_experiment_metrics_payload(metrics: LifecycleExperimentMetrics) -> dict[str, Any]:
+    """Preserve each metrics version's exact public field projection."""
+    payload = metrics.model_dump(mode="json")
+    if metrics.schema_version != "3":
+        for field_name in _V3_OPERATION_METRIC_FIELDS:
+            payload.pop(field_name)
+    return payload
 
 
 class LifecycleExperimentSweepContext(StrictModel):
@@ -142,11 +171,14 @@ def record_lifecycle_experiment(
     manifest_path = run / "experiment-manifest.json"
     selected_index = index_path or run.parent / "experiment-index.jsonl"
     variant = _package_variant(package)
-    read_evidence_lifecycle_state(package, run)
+    lifecycle_state = read_evidence_lifecycle_state(package, run)
+    operation_tool_declared = any(tool.get("name") == "execute_operation" for tool in tool_schema)
+    if lifecycle_state.get("schema_version") == "5" or operation_tool_declared:
+        validate_lifecycle_operation_tool_schema(tool_schema)
     _write_json(verification_path, verification)
 
     metrics = _build_metrics(run, agent, verification)
-    metrics_payload = metrics.model_dump(mode="json")
+    metrics_payload = lifecycle_experiment_metrics_payload(metrics)
     if metrics.semantic_transition is None:
         metrics_payload.pop("semantic_transition")
     _write_json(metrics_path, metrics_payload)
@@ -195,6 +227,16 @@ def record_lifecycle_experiment(
         ).encode("utf-8")
         interaction["evidence_request_protocol"] = {
             **evidence_request_protocol_identity(),
+            "tool_schema_sha256": hashlib.sha256(tool_schema_payload).hexdigest(),
+        }
+    if operation_tool_declared:
+        tool_schema_payload = json.dumps(
+            tool_schema,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        interaction["lifecycle_operation_protocol"] = {
+            **lifecycle_operation_protocol_identity(),
             "tool_schema_sha256": hashlib.sha256(tool_schema_payload).hexdigest(),
         }
     manifest = LifecycleExperimentManifest(
@@ -307,6 +349,9 @@ def _build_metrics(
     evidence_request_actions = [
         action for checkpoint in state["checkpoint_runs"] for action in checkpoint.get("evidence_request_actions", [])
     ]
+    operation_actions = [
+        action for checkpoint in state["checkpoint_runs"] for action in checkpoint.get("operation_actions", [])
+    ]
     timing = _lifecycle_timing(run_dir)
     totals = agent["totals"]
     resolved_model = next(
@@ -341,6 +386,14 @@ def _build_metrics(
             len(action.get("released_artifacts", []))
             for action in evidence_request_actions
             if action.get("outcome") == "released"
+        ),
+        operation_calls=len(operation_actions),
+        completed_operations=sum(action.get("outcome") == "completed" for action in operation_actions),
+        already_current_operations=sum(action.get("outcome") == "already_current" for action in operation_actions),
+        rejected_operations=sum(action.get("outcome") == "rejected" for action in operation_actions),
+        operation_budget_consumed=sum(int(action.get("budget_consumed", 0)) for action in operation_actions),
+        operation_artifacts_produced=sum(
+            len(action.get("artifacts", [])) for action in operation_actions if action.get("outcome") == "completed"
         ),
         retries=sum(max(0, len(checkpoint.get("attempts", [])) - 1) for checkpoint in state["checkpoint_runs"]),
         failures=sum(attempt["status"] == "failed" for attempt in attempts),
@@ -788,7 +841,17 @@ def _run_artifact_hashes(run_dir: Path) -> dict[str, str]:
             or (relative.parts[:2] == ("workspace", "inbox") and "requests" in relative.parts[2:])
             or (relative.parts[:2] == ("workspace", "checkpoints") and path.name == "evidence-requests.json")
         )
-        if path.is_file() and (path.name in names or requested_evidence) and "experiments" not in relative.parts:
+        operation_evidence = (
+            relative.parts[:1] == ("lifecycle_operations",)
+            or (relative.parts[:2] == ("workspace", "inbox") and "operations" in relative.parts[2:])
+            or (relative.parts[:2] == ("workspace", "checkpoints") and path.name == "operations.json")
+            or relative.parts == ("workspace", "hydraulics", "current-source.json")
+        )
+        if (
+            path.is_file()
+            and (path.name in names or requested_evidence or operation_evidence)
+            and "experiments" not in relative.parts
+        ):
             selected[str(relative)] = _sha256(path)
     return selected
 

@@ -86,11 +86,13 @@ The model receives later evidence only after it submits the active checkpoint.
 The environment reuses the host-owned `list_workspace`, `read_workspace_file`,
 `write_checkpoint_submission`, `submit_checkpoint`, and `revisit_checkpoint`
 tools. A package with a conditional-evidence catalogue also receives the
-session-bound `request_evidence(checkpoint_id, request_id, reason)` tool. Legacy
-packages retain the original tool set, and a selected export cannot mix the two
-capabilities. The same visibility, path-confinement, finite-budget,
-immutable-submission, and checkpoint-order rules therefore apply inside and
-outside Prime.
+session-bound `request_evidence(checkpoint_id, request_id, reason)` tool. An
+operation-capable package also receives
+`execute_operation(checkpoint_id, operation_id, visible_source_state_sha256,
+reason)`. Selected packages must agree separately on whether each capability is
+present, so one export cannot hide a tool-schema difference. The same
+visibility, path-confinement, finite-budget, immutable-submission, and
+checkpoint-order rules therefore apply inside and outside Prime.
 
 Export one or more materialized public variants with absolute paths:
 
@@ -124,6 +126,17 @@ request is recorded in the same canonical, sequence-addressed and hash-bound hos
 used by local persistent and fresh-context execution; malformed arguments return
 a bounded error without becoming lifecycle actions. Session and attempt identity
 are injected by the environment and are not model arguments.
+
+Hydraulic operations follow the same authority boundary. Prime receives the
+public operation catalogue, current visible source fingerprint, and declared
+result projection. The AEC-Bench host resolves the operation, runs the
+benchmark-owned calculation, records the canonical transaction, decides whether
+the result is newly computed or already current, and invokes the task verifier
+only after lifecycle completion. Prime never receives hidden resolver paths,
+arbitrary source mutation authority, or reward authority. See the
+[interactive hydraulic lifecycle guide](ssc03-interactive-hydraulic-lifecycle.md).
+`hydraulics/current-source.json` remains readable under every visibility policy;
+no other path under `hydraulics/` is exposed through the workspace tool.
 
 Load the generated package from outside the AEC-Bench repository root. The
 repository has a top-level `agents/` directory that can otherwise shadow the

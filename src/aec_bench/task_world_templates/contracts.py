@@ -7,7 +7,7 @@ import re
 from pathlib import PurePosixPath
 from typing import Any
 
-from pydantic import Field, PositiveInt, model_validator
+from pydantic import Field, PositiveInt, field_validator, model_validator
 
 from aec_bench.contracts.task_world import (
     AgenticReviewProfile,
@@ -157,6 +157,91 @@ class ConditionalEvidenceSpec(StrictModel):
         return self
 
 
+class LifecycleOperationSpec(StrictModel):
+    operation_id: NonEmptyStr
+    kind: NonEmptyStr
+    title: NonEmptyStr
+    description: NonEmptyStr
+    prerequisite_operation_ids: tuple[NonEmptyStr, ...] = ()
+
+    @field_validator("operation_id", "kind")
+    @classmethod
+    def validate_safe_identity(cls, value: str) -> str:
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value) is None:
+            raise ValueError("operation identity must be a safe path segment")
+        return value
+
+    @model_validator(mode="after")
+    def validate_prerequisites(self) -> LifecycleOperationSpec:
+        if len(self.prerequisite_operation_ids) != len(set(self.prerequisite_operation_ids)):
+            raise ValueError("operation prerequisites must be unique")
+        if self.operation_id in self.prerequisite_operation_ids:
+            raise ValueError("operation cannot depend on itself")
+        return self
+
+
+class ConditionalOperationSpec(StrictModel):
+    operation_budget: PositiveInt
+    operations: tuple[LifecycleOperationSpec, ...] = Field(min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def validate_operation_graph(self) -> ConditionalOperationSpec:
+        operation_ids = [operation.operation_id for operation in self.operations]
+        if len(operation_ids) != len(set(operation_ids)):
+            raise ValueError("operation ids must be unique per checkpoint")
+        if self.operation_budget > len(operation_ids):
+            raise ValueError("operation budget cannot exceed the number of operations")
+
+        known = set(operation_ids)
+        prerequisites = {
+            operation.operation_id: set(operation.prerequisite_operation_ids) for operation in self.operations
+        }
+        for operation_id, dependencies in prerequisites.items():
+            unknown = dependencies - known
+            if unknown:
+                names = ", ".join(sorted(unknown))
+                raise ValueError(f"operation prerequisites are unknown for {operation_id}: {names}")
+
+        visiting: set[str] = set()
+        visited: set[str] = set()
+
+        def visit(operation_id: str) -> None:
+            if operation_id in visiting:
+                raise ValueError("operation prerequisites must not contain cycles")
+            if operation_id in visited:
+                return
+            visiting.add(operation_id)
+            for dependency in prerequisites[operation_id]:
+                visit(dependency)
+            visiting.remove(operation_id)
+            visited.add(operation_id)
+
+        for operation_id in operation_ids:
+            visit(operation_id)
+
+        prerequisite_closures: dict[str, set[str]] = {}
+
+        def prerequisite_closure(operation_id: str) -> set[str]:
+            cached = prerequisite_closures.get(operation_id)
+            if cached is not None:
+                return cached
+            closure: set[str] = set()
+            for dependency in prerequisites[operation_id]:
+                closure.add(dependency)
+                closure.update(prerequisite_closure(dependency))
+            prerequisite_closures[operation_id] = closure
+            return closure
+
+        for operation_id in operation_ids:
+            required_budget = len(prerequisite_closure(operation_id)) + 1
+            if required_budget > self.operation_budget:
+                raise ValueError(
+                    f"operation budget cannot satisfy prerequisites for {operation_id}: "
+                    f"requires {required_budget} operations"
+                )
+        return self
+
+
 class EvidenceCheckpointSpec(StrictModel):
     checkpoint_id: NonEmptyStr
     title: NonEmptyStr
@@ -166,6 +251,7 @@ class EvidenceCheckpointSpec(StrictModel):
     depends_on: list[NonEmptyStr] = Field(default_factory=list)
     required_submission_fields: list[NonEmptyStr] = Field(default_factory=lambda: ["checkpoint_id"])
     conditional_evidence: ConditionalEvidenceSpec | None = None
+    conditional_operations: ConditionalOperationSpec | None = None
 
     @model_validator(mode="after")
     def validate_package_paths(self) -> EvidenceCheckpointSpec:
@@ -191,6 +277,8 @@ class EvidenceCheckpointSpec(StrictModel):
             raise ValueError("submission_path must name a JSON file")
         if len(self.required_submission_fields) != len(set(self.required_submission_fields)):
             raise ValueError("required submission fields must be unique")
+        if self.conditional_evidence is not None and self.conditional_operations is not None:
+            raise ValueError("checkpoint must not declare both evidence requests and lifecycle operations")
         return self
 
 
@@ -217,6 +305,10 @@ class EvidenceLifecycleSpec(StrictModel):
                 msg = f"checkpoint dependencies must refer to earlier checkpoints: {names}"
                 raise ValueError(msg)
             previous.add(checkpoint.checkpoint_id)
+        supports_evidence = any(checkpoint.conditional_evidence is not None for checkpoint in self.checkpoints)
+        supports_operations = any(checkpoint.conditional_operations is not None for checkpoint in self.checkpoints)
+        if supports_evidence and supports_operations:
+            raise ValueError("lifecycle must not mix evidence-request and operation protocols")
         return self
 
 

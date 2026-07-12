@@ -7,11 +7,13 @@ from aec_bench.task_world_templates.contracts import (
     BranchDecisionSpec,
     CompositeTaskWorldStage,
     CompositeTaskWorldTemplate,
+    ConditionalOperationSpec,
     DataGapSpec,
     DeliverableSpec,
     EvidenceCheckpointSpec,
     EvidenceLifecycleSpec,
     HandoffSpec,
+    LifecycleOperationSpec,
     SourceArtifactSpec,
     VerifierGateSpec,
 )
@@ -28,6 +30,55 @@ def get_template(template_id: str) -> CompositeTaskWorldTemplate:
     known = ", ".join(template.template_id for template in _TEMPLATES)
     msg = f"Unknown composite task-world template '{template_id}'. Known templates: {known}"
     raise KeyError(msg)
+
+
+def _hydraulic_operations(*, include_revision: bool) -> ConditionalOperationSpec:
+    operations: list[LifecycleOperationSpec] = []
+    revision_prerequisite: tuple[str, ...] = ()
+    if include_revision:
+        operations.append(
+            LifecycleOperationSpec(
+                operation_id="source-revision.current",
+                kind="request_source_revision",
+                title="Activate the declared source revision",
+                description="Activate the one public source revision bound to this calibration package.",
+            )
+        )
+        revision_prerequisite = ("source-revision.current",)
+    for scenario_id, title in (("design-10yr", "design"), ("major-100yr", "major")):
+        operations.append(
+            LifecycleOperationSpec(
+                operation_id=f"hydrology.{scenario_id}",
+                kind="run_hydrology",
+                title=f"Run {title}-scenario hydrology",
+                description="Calculate bounded Rational Method hydrology for the declared scenario.",
+                prerequisite_operation_ids=revision_prerequisite,
+            )
+        )
+    for scenario_id, title in (("design-10yr", "design"), ("major-100yr", "major")):
+        operations.append(
+            LifecycleOperationSpec(
+                operation_id=f"detention-outlet.{scenario_id}.declared-outlet",
+                kind="run_detention_outlet",
+                title=f"Run {title}-scenario coupled detention and outlet analysis",
+                description="Execute the declared coupled basin, outlet, and downstream network calculation.",
+                prerequisite_operation_ids=revision_prerequisite + (f"hydrology.{scenario_id}",),
+            )
+        )
+    for scenario_id, title in (("design-10yr", "design"), ("major-100yr", "major")):
+        operations.append(
+            LifecycleOperationSpec(
+                operation_id=f"network-hgl.{scenario_id}.declared-tailwater",
+                kind="run_network_hgl",
+                title=f"Project {title}-scenario network HGL",
+                description="Project HGL evidence from the exact coupled run at the declared boundary.",
+                prerequisite_operation_ids=revision_prerequisite + (f"detention-outlet.{scenario_id}.declared-outlet",),
+            )
+        )
+    return ConditionalOperationSpec(
+        operation_budget=len(operations),
+        operations=tuple(operations),
+    )
 
 
 def _source(
@@ -5808,6 +5859,264 @@ _TEMPLATES = [
             ),
         ],
         deliverable_name="level-crossing-warning-issue-readiness-review",
+    ),
+    CompositeTaskWorldTemplate(
+        template_id="hydraulic-interaction-lifecycle-review",
+        name="Hydraulic Interaction Lifecycle Review",
+        summary=(
+            "Public SSC-03 calibration lifecycle where bounded operations activate one declared revision, "
+            "execute deterministic hydraulic evidence, and preserve selective recomputation lineage."
+        ),
+        pattern=(
+            "baseline source -> bounded hydraulic operations -> declared revision -> selective recomputation "
+            "-> run/report/memo closeout"
+        ),
+        discipline_scope=["civil", "hydrology", "hydraulics", "design-review"],
+        source_artifacts=[
+            _source(
+                "public_hydraulic_source",
+                "typed-source-state",
+                "The immutable public PR18 two-catchment hydraulic screening source.",
+                ["catchments", "scenarios", "basin", "outlet", "network", "criteria"],
+            ),
+            _source(
+                "public_source_revision",
+                "typed-source-revision",
+                "One host-selected public revision activated only through the operation catalogue.",
+                ["revision_identity", "physical_source_state"],
+            ),
+            _source(
+                "operation_transactions",
+                "lifecycle-action-evidence",
+                "Immutable source-bound requests, results, projections, and reuse lineage.",
+                ["action_identity", "source_identity", "calculation_identity"],
+            ),
+        ],
+        stages=[
+            _stage(
+                "baseline_analysis",
+                "Establish baseline hydraulic evidence",
+                "civil",
+                ["detention-outlet-hgl-package"],
+                ["public_hydraulic_source"],
+                ["baseline_run_evidence", "baseline_decisions"],
+                ["checkpoint_contract", "operation_evidence_integrity"],
+            ),
+            _stage(
+                "revision_analysis",
+                "Activate and assess the public source revision",
+                "civil",
+                ["detention-outlet-hgl-package"],
+                ["baseline_run_evidence", "public_source_revision"],
+                ["revision_run_evidence", "supersession_lineage"],
+                [
+                    "source_revision_grounding",
+                    "selective_recomputation",
+                    "affected_decision_update",
+                    "unaffected_decision_retention",
+                ],
+            ),
+            _stage(
+                "closeout_review",
+                "Reconcile run, report, memo, and readiness",
+                "civil",
+                ["detention-outlet-hgl-package"],
+                ["revision_run_evidence", "supersession_lineage"],
+                ["final_hydraulic_review", "final_readiness"],
+                ["run_propagation", "report_propagation", "memo_propagation", "final_readiness"],
+            ),
+        ],
+        handoffs=[
+            _handoff(
+                "operation_evidence_chain",
+                "Source-bound hydrology, coupled-run, and HGL action identities.",
+                "sha256-chain",
+                "baseline_analysis",
+                ["revision_analysis", "closeout_review"],
+                "operation-000001",
+            ),
+            _handoff(
+                "accepted_hydraulic_decisions",
+                "Stable decision IDs retained or explicitly superseded after revision.",
+                "decision-state",
+                "baseline_analysis",
+                ["revision_analysis", "closeout_review"],
+                "source-bound",
+            ),
+            _handoff(
+                "final_readiness_state",
+                "Issue readiness derived from current evidence and provisional synthetic criteria.",
+                "state",
+                "closeout_review",
+                [],
+                "ready_or_not_ready",
+            ),
+        ],
+        verifier_gates=[
+            _gate(
+                "checkpoint_contract",
+                "handoff_consistency",
+                "Every checkpoint provides the required cumulative source, action, decision, and readiness fields.",
+                ["lifecycle.checkpoints"],
+                "The interaction record is incomplete.",
+            ),
+            _gate(
+                "source_revision_grounding",
+                "source_grounding",
+                "Only the registered public revision becomes visible and physically active.",
+                ["lifecycle.operations", "hydraulic.source_state"],
+                "The revision is unbound or stale.",
+            ),
+            _gate(
+                "operation_evidence_integrity",
+                "source_grounding",
+                "Every selected operation reconciles to its canonical transaction and PR18 evidence.",
+                ["lifecycle.operations"],
+                "Operation evidence cannot govern.",
+            ),
+            _gate(
+                "selective_recomputation",
+                "handoff_consistency",
+                "Stale dependency projections are recomputed and current projections may be retained.",
+                ["lifecycle.operation_dependencies"],
+                "Selected engineering evidence is stale.",
+            ),
+            _gate(
+                "affected_decision_update",
+                "handoff_consistency",
+                "Decisions affected by the revision are explicitly superseded.",
+                ["lifecycle.accepted_decisions"],
+                "An affected decision was retained without current evidence.",
+            ),
+            _gate(
+                "unaffected_decision_retention",
+                "handoff_consistency",
+                "Unaffected accepted decisions remain byte-equivalent.",
+                ["lifecycle.accepted_decisions"],
+                "Unrelated accepted work regressed.",
+            ),
+            _gate(
+                "run_propagation",
+                "source_grounding",
+                "The selected run references the active physical and visible source identities.",
+                ["lifecycle.final_run"],
+                "The selected run is stale.",
+            ),
+            _gate(
+                "report_propagation",
+                "deliverable",
+                "The selected report is generated from the selected coupled run.",
+                ["lifecycle.final_report"],
+                "The report does not match the run.",
+            ),
+            _gate(
+                "memo_propagation",
+                "deliverable",
+                "The closeout memo cites the current source, run, report, and decision lineage.",
+                ["lifecycle.final_memo"],
+                "The memo is stale or assertion-only.",
+            ),
+            _gate(
+                "final_readiness",
+                "deliverable",
+                "Readiness follows the complete current evidence and physical criteria state.",
+                ["lifecycle.final_readiness"],
+                "The readiness decision is inconsistent.",
+            ),
+            _gate(
+                "claim_boundary",
+                "source_grounding",
+                "The review preserves the synthetic screening and non-continual-learning claim boundary.",
+                ["lifecycle.claim_boundary"],
+                "The lifecycle overstates its evidence or authority.",
+            ),
+        ],
+        deliverables=[
+            _deliverable(
+                "hydraulic_interaction_closeout",
+                "deliverables/hydraulic-interaction-closeout.json",
+                "Cumulative source, operation, decision, report, memo, and readiness evidence.",
+            )
+        ],
+        data_gaps=[
+            _gap(
+                "project_hydraulic_inputs",
+                "Real work requires accepted project rainfall, survey, network, and outlet inputs.",
+                "high",
+            ),
+            _gap(
+                "engineering_acceptance",
+                "The provisional synthetic criteria require project-specific engineering authority.",
+                "high",
+            ),
+            _gap(
+                "native_solver_fidelity",
+                "The deterministic screening kernel is not SWMM-equivalent simulation.",
+                "medium",
+            ),
+        ],
+        evidence_lifecycle=EvidenceLifecycleSpec(
+            lifecycle_id="ssc03.hydraulic-interaction-lifecycle",
+            world_id="aec.task_world.composite.hydraulic-interaction-lifecycle-review",
+            checkpoints=[
+                EvidenceCheckpointSpec(
+                    checkpoint_id="baseline_analysis",
+                    title="Baseline hydraulic analysis",
+                    release_path="releases/baseline_analysis",
+                    instruction_path="instructions/baseline_analysis.md",
+                    submission_path="submissions/baseline_analysis.json",
+                    required_submission_fields=[
+                        "checkpoint_id",
+                        "visible_source_state_sha256",
+                        "selected_operations",
+                        "accepted_decisions",
+                        "readiness_decision",
+                        "claim_boundary",
+                    ],
+                    conditional_operations=_hydraulic_operations(include_revision=False),
+                ),
+                EvidenceCheckpointSpec(
+                    checkpoint_id="revision_analysis",
+                    title="Revision hydraulic analysis",
+                    release_path="releases/revision_analysis",
+                    instruction_path="instructions/revision_analysis.md",
+                    submission_path="submissions/revision_analysis.json",
+                    depends_on=["baseline_analysis"],
+                    required_submission_fields=[
+                        "checkpoint_id",
+                        "revision_id",
+                        "visible_source_state_sha256",
+                        "selected_operations",
+                        "accepted_decisions",
+                        "supersession_lineage",
+                        "readiness_decision",
+                        "claim_boundary",
+                    ],
+                    conditional_operations=_hydraulic_operations(include_revision=True),
+                ),
+                EvidenceCheckpointSpec(
+                    checkpoint_id="closeout_review",
+                    title="Hydraulic interaction closeout",
+                    release_path="releases/closeout_review",
+                    instruction_path="instructions/closeout_review.md",
+                    submission_path="submissions/closeout_review.json",
+                    depends_on=["revision_analysis"],
+                    required_submission_fields=[
+                        "checkpoint_id",
+                        "visible_source_state_sha256",
+                        "selected_operations",
+                        "run_reference",
+                        "report_reference",
+                        "memo",
+                        "accepted_decisions",
+                        "supersession_lineage",
+                        "readiness_decision",
+                        "claim_boundary",
+                    ],
+                ),
+            ],
+        ),
+        projection_axes=["source_pack", "stage_graph", "verifier_gates", "evidence_lifecycle"],
     ),
     CompositeTaskWorldTemplate(
         template_id="drainage-model-evidence-lifecycle-review",

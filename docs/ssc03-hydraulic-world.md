@@ -164,10 +164,10 @@ These are synthetic benchmark rulings, not project design approvals:
 - Tailwater reduces both orifice and weir head. Positive outlet flow is not accepted when the receiving HGL reaches or exceeds the basin water surface.
 - Exact parameter values create a controlled public fixture with observable pass and failure margins. They are not proposed as generally applicable drainage criteria.
 
-## What PR18 still does not add
+## Where PR18 stops and PR19 begins
 
-PR18 deliberately adds no model-facing hydraulic tool. A model cannot yet request a hydrology run, alter outlet geometry, or select a tailwater boundary through the lifecycle.
+PR18 deliberately contains no model-facing hydraulic tool. Its materialize, run, and verify functions remain model-independent.
 
-That is PR19's job. PR19 can wrap the model-independent `build_hydraulic_run_request` and `execute_hydraulic_world` seam in the PR17 action protocol. Each future action must bind the visible source-state hash and publish the resulting immutable run evidence through host-owned state transitions.
+PR19 wraps those functions in a host-owned lifecycle operation. A model can activate one packaged revision and request declared hydrology, detention/outlet, and HGL calculations. It cannot supply arbitrary source values, hidden paths, scenario IDs, outlet options, or tailwater values. Each action binds the visible source-state fingerprint and publishes only its declared result projection. See [the interactive hydraulic lifecycle guide](ssc03-interactive-hydraulic-lifecycle.md).
 
 PR18 also provides no model-performance evidence, public calibration run, private holdout, transfer claim, post-training result, or continual learning.

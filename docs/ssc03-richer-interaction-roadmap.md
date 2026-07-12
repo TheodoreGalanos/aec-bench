@@ -21,6 +21,8 @@ This is a substrate for ordinary post-training and evaluation first. It is not y
 | PR15 | Local Prime rollout spanning one complete persistent lifecycle |
 | PR16 | Build-only descriptive holdout evaluation from immutable evidence |
 | PR17 | Bounded actions that condition model-visible evidence |
+| PR18 | Deterministic, source-bound public hydraulic screening world |
+| PR19 | Bounded hydraulic operations, source revision, selective recomputation, and closeout verification |
 
 ## PR17: action-conditioned evidence protocol
 
@@ -55,13 +57,13 @@ What PR17 does not prove:
 
 ## PR18: executable hydraulic world
 
-Build a small deterministic public detention/outlet/network world around the SSC-03-LH-01 direction. Use two upstream catchments, a detention basin, an orifice and emergency weir, a short pipe/pit network, tailwater, and explicit discharge, velocity, HGL, storage, and freeboard criteria.
+PR18 built a small deterministic public detention/outlet/network world around the SSC-03-LH-01 direction. It uses two upstream catchments, a detention basin, an orifice and emergency weir, a short pipe/pit network, tailwater, and explicit discharge, velocity, hydraulic grade line (HGL), storage, and freeboard criteria.
 
-The first gate is engine compatibility, not environment authoring. Prior local probes found that `swmm-toolkit==0.17.0` imports its namespace but its native solver/output modules exit unsuccessfully under the tested Python 3.12 and 3.13 runtimes, with no local `swmm5` executable available. PR18 must therefore run a controlled compatibility matrix before selecting an engine. A benchmark-owned deterministic hydraulic kernel remains the fallback and must be described honestly rather than presented as SWMM-equivalent fidelity.
+The first gate was engine compatibility. Earlier probes found that `swmm-toolkit==0.17.0` imported its namespace but its native solver/output modules exited unsuccessfully under the tested Python 3.12 and 3.13 runtimes, with no local `swmm5` executable available. PR18 therefore ran a controlled compatibility matrix before selecting its explicitly named benchmark-owned deterministic fallback.
 
-An existing EPA SWMM Example 3 detention source-pack commit must be reconciled into the PR18 stack. It already carries official source URLs and hashes, a model summary, manual targets, mismatch notes, verification cases, and an implementation brief. Reuse that packet; do not create a duplicate source pack to avoid branch integration.
+The existing EPA SWMM Example 3 detention source packet was reconciled into the PR18 stack rather than duplicated. It carries official source URLs and hashes, a model summary, manual targets, mismatch notes, verification cases, and an implementation brief.
 
-PR18 finishes only when source state, run identity, report outputs, tolerances, and verifier calculations are deterministic and content-bound. It still need not expose model-controlled hydraulic actions.
+PR18 completed with deterministic, content-bound source state, run identity, report outputs, tolerances, and verifier calculations. Its model-independent world still exposes no model-controlled hydraulic action by itself.
 
 ### PR18 implementation decision
 
@@ -73,14 +75,18 @@ The public world exposes a model-independent materialize, run, and verify seam p
 
 ## PR19: interactive hydraulic lifecycle
 
-Connect the PR17 operation protocol to PR18's executable world. Initial actions should remain bounded and typed, for example:
+PR19 connects the PR17 host-action pattern to PR18's executable world. Its public tool remains bounded and typed:
 
-- request a declared source revision;
+- activate the one declared source revision;
 - run hydrology for one declared scenario;
-- run detention/outlet analysis for one option;
-- run network HGL for one declared downstream boundary.
+- run detention/outlet analysis for the declared option;
+- project network HGL for the declared downstream boundary.
 
-Each operation must bind its arguments to the visible source-state hash and produce an immutable request/result/artifact chain. Public calibration revisions should exercise distinct dependency topologies: IDF/climate input, tailwater, outlet geometry, and an administrative no-op. The verifier checks selective recomputation, unaffected-decision retention, run/report/memo propagation, and readiness; action efficiency remains diagnostic until sufficiency is established.
+Every boundary-valid call binds its arguments to the visible source-state hash and produces an immutable transaction. A completed calculation publishes a new result and artifact set. An `already_current` call points to the original artifacts and consumes zero budget; a rejected call publishes no result and also consumes zero. The four public calibration variants change the major-event rainfall input, tailwater, outlet geometry, or only administrative revision identity. The host identifies current work from exact calculation inputs and prerequisite action IDs, while a stale dependency is rejected.
+
+The terminal verifier checks selective recomputation, affected-decision replacement, unaffected-decision retention, canonical PR18 run validity, run/report/memo propagation, readiness, and the claim boundary. Physical failure is not hidden: a reviewer can receive full task reward for correctly reporting that the current source does not meet a screening criterion. Extra rejected actions do not change reward. Action efficiency remains diagnostic because the public catalogue exposes currentness and prerequisite status.
+
+Persistent local, fresh-context, and local Prime execution expose the same four-argument operation tool. Episode requests bind the public operation catalogue when active, current source, and visible operation artifacts. Immutable snapshots, TrialRecords, and experiment manifests additionally bind the canonical transactions. See [the plain-language PR19 guide](ssc03-interactive-hydraulic-lifecycle.md).
 
 ## PR20: sealed holdout boundary
 

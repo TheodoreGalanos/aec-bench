@@ -87,6 +87,14 @@ from aec_bench.meta_harness.evidence_request_store import (
     _write_state,
 )
 from aec_bench.meta_harness.ledger import append_ledger_entry
+from aec_bench.meta_harness.lifecycle_operation_protocol import validate_lifecycle_operation_run_state
+from aec_bench.meta_harness.lifecycle_operation_store import (
+    _execute_lifecycle_operation_locked,
+    _inherit_lifecycle_operation_transactions,
+    _recover_lifecycle_operation_transactions,
+    _sync_lifecycle_operation_ledger,
+    _write_lifecycle_operation_catalog,
+)
 from aec_bench.task_world_templates.contracts import EvidenceCheckpointSpec, EvidenceLifecycleSpec
 
 LifecycleVerifier = Callable[[Path, Path], dict[str, Any] | LifecycleVerificationResult]
@@ -175,6 +183,8 @@ def _prepare_evidence_checkpoint_locked(package: Path, run: Path) -> dict[str, A
     state.status = LifecycleRunStatus.AWAITING_CHECKPOINT_SUBMISSION
     state.active_checkpoint_id = checkpoint.checkpoint_id
     _write_evidence_request_catalog(run, checkpoint, checkpoint_run)
+    if state.schema_version == "5":
+        _write_lifecycle_operation_catalog(package, run, spec, state)
     _write_state(run, state)
     _sync_transition_ledger(run, state)
     append_ledger_entry(
@@ -346,6 +356,44 @@ def _request_evidence_checkpoint_locked(
     )
 
 
+def execute_lifecycle_operation(
+    package_dir: Path,
+    run_dir: Path,
+    *,
+    checkpoint_id: str,
+    operation_id: str,
+    visible_source_state_sha256: str,
+    reason: str,
+    session_id: str,
+) -> dict[str, Any]:
+    """Execute one declared source-bound operation for the active host attempt."""
+    arguments = (checkpoint_id, operation_id, visible_source_state_sha256, reason, session_id)
+    if any(not isinstance(argument, str) or not argument.strip() for argument in arguments):
+        raise EvidenceLifecycleError(
+            "operation checkpoint, id, visible source hash, reason, and session must not be blank"
+        )
+    if len(visible_source_state_sha256) != 64 or any(
+        character not in "0123456789abcdef" for character in visible_source_state_sha256
+    ):
+        raise EvidenceLifecycleError("visible source state sha256 must contain 64 lowercase hexadecimal characters")
+    package = Path(package_dir)
+    run = Path(run_dir)
+    with _lifecycle_state_lock(run):
+        spec = load_evidence_lifecycle_spec(package)
+        state = _load_state(package, run, spec, lock_held=True)
+        return _execute_lifecycle_operation_locked(
+            package,
+            run,
+            spec,
+            state,
+            requested_checkpoint_id=checkpoint_id,
+            operation_id=operation_id,
+            visible_source_state_sha256=visible_source_state_sha256,
+            reason=reason,
+            session_id=session_id,
+        )
+
+
 def submit_evidence_checkpoint(
     package_dir: Path,
     run_dir: Path,
@@ -504,6 +552,12 @@ def _branch_evidence_lifecycle_locked(
                         action.model_copy(deep=True, update={"inherited_from_parent": True})
                         for action in inherited.evidence_request_actions
                     ],
+                    operation_budget=inherited.operation_budget,
+                    operation_budget_remaining=inherited.operation_budget_remaining,
+                    operation_actions=[
+                        action.model_copy(deep=True, update={"inherited_from_parent": True})
+                        for action in inherited.operation_actions
+                    ],
                     inherited_from_parent=True,
                 )
             )
@@ -523,6 +577,12 @@ def _branch_evidence_lifecycle_locked(
                         action.model_copy(deep=True, update={"inherited_from_parent": True})
                         for action in parent_checkpoint.evidence_request_actions
                     ],
+                    operation_budget=parent_checkpoint.operation_budget,
+                    operation_budget_remaining=parent_checkpoint.operation_budget_remaining,
+                    operation_actions=[
+                        action.model_copy(deep=True, update={"inherited_from_parent": True})
+                        for action in parent_checkpoint.operation_actions
+                    ],
                 )
             )
         else:
@@ -534,10 +594,21 @@ def _branch_evidence_lifecycle_locked(
                     checkpoint_id=checkpoint.checkpoint_id,
                     evidence_request_budget=request_budget,
                     evidence_request_budget_remaining=request_budget,
+                    operation_budget=(
+                        checkpoint.conditional_operations.operation_budget
+                        if checkpoint.conditional_operations is not None
+                        else 0
+                    ),
+                    operation_budget_remaining=(
+                        checkpoint.conditional_operations.operation_budget
+                        if checkpoint.conditional_operations is not None
+                        else 0
+                    ),
                 )
             )
 
     state = EvidenceLifecycleRunState(
+        schema_version=parent_state.schema_version,
         lifecycle_id=spec.lifecycle_id,
         world_id=spec.world_id,
         lifecycle_spec_sha256=parent_state.lifecycle_spec_sha256,
@@ -580,16 +651,28 @@ def _branch_evidence_lifecycle_locked(
                 _workspace(parent_run) / "checkpoints" / checkpoint.checkpoint_id / "instruction.md",
                 workspace / "checkpoints" / checkpoint.checkpoint_id / "instruction.md",
             )
+            if state.schema_version == "5" and checkpoint.conditional_operations is not None:
+                _copy_file_atomic(
+                    _workspace(parent_run) / "checkpoints" / checkpoint.checkpoint_id / "operations.json",
+                    workspace / "checkpoints" / checkpoint.checkpoint_id / "operations.json",
+                )
             if index < branch_index:
                 _inherit_submission(parent_run, staging_run, checkpoint)
 
         _inherit_evidence_request_transactions(parent_run, staging_run, state)
+        if state.schema_version == "5":
+            _inherit_lifecycle_operation_transactions(parent_run, staging_run, state)
         for checkpoint in spec.checkpoints[: branch_index + 1]:
             _write_evidence_request_catalog(
                 staging_run,
                 checkpoint,
                 state.checkpoint(checkpoint.checkpoint_id),
             )
+        if state.schema_version == "5":
+            _write_lifecycle_operation_catalog(package, staging_run, spec, state)
+            from aec_bench.meta_harness.lifecycle_operation_snapshot import validate_lifecycle_operation_snapshot
+
+            validate_lifecycle_operation_snapshot(staging_run, state, spec)
 
         parent_archive = parent_run / "episodes" / checkpoint_id / "submission.json"
         staged_origin = workspace / "branch_origin" / f"{checkpoint_id}.json"
@@ -603,6 +686,8 @@ def _branch_evidence_lifecycle_locked(
         _write_state(staging_run, state)
         _sync_transition_ledger(staging_run, state)
         _sync_evidence_request_ledger(staging_run, state)
+        if state.schema_version == "5":
+            _sync_lifecycle_operation_ledger(staging_run, state)
         final_origin = _workspace(branch_run) / "branch_origin" / f"{checkpoint_id}.json"
         final_submission = _workspace(branch_run) / _checkpoint(spec, checkpoint_id).submission_path
         append_ledger_entry(
@@ -1127,6 +1212,9 @@ def _build_episode_request(
         released_files=context.released_files,
         evidence_request_catalog=context.evidence_request_catalog,
         released_evidence_artifacts=context.released_evidence_artifacts,
+        operation_catalog=context.operation_catalog,
+        current_source=context.current_source,
+        visible_operation_artifacts=context.visible_operation_artifacts,
         completed_checkpoint_ids=context.completed_checkpoint_ids,
     )
 
@@ -1192,7 +1280,7 @@ def _recover_host_episode_attempt(
         attempt_id=attempt.attempt_id,
         session_id=attempt.session_id,
     )
-    if request != expected_request and not _matches_legacy_v1_episode_request(request, expected_request):
+    if request != expected_request and not _matches_legacy_episode_request(request, expected_request):
         raise EvidenceLifecycleError(f"interrupted episode request identity mismatch: {attempt.attempt_id}")
     result_path = result_dir / "episode_result.json"
     if result_path.is_file():
@@ -1320,9 +1408,40 @@ def _adopt_compatible_durable_episode_request(
         durable = LifecycleEpisodeRequest.model_validate(_read_json(request_path))
     except (EvidenceLifecycleError, ValidationError):
         return request
-    if durable == request or _matches_legacy_v1_episode_request(durable, request):
+    if durable == request or _matches_legacy_episode_request(durable, request):
         return durable
     return request
+
+
+def _matches_legacy_episode_request(
+    durable: LifecycleEpisodeRequest,
+    expected: LifecycleEpisodeRequest,
+) -> bool:
+    return _matches_legacy_v2_episode_request(durable, expected) or _matches_legacy_v1_episode_request(
+        durable,
+        expected,
+    )
+
+
+def _matches_legacy_v2_episode_request(
+    durable: LifecycleEpisodeRequest,
+    expected: LifecycleEpisodeRequest,
+) -> bool:
+    """Accept the exact field projection emitted before operation state was bound."""
+    v3_fields = {"operation_catalog", "current_source", "visible_operation_artifacts"}
+    if (
+        durable.schema_version != "2"
+        or expected.schema_version != "3"
+        or not v3_fields.isdisjoint(durable.model_fields_set)
+        or durable.operation_catalog is not None
+        or durable.current_source is not None
+        or durable.visible_operation_artifacts
+        or expected.operation_catalog is not None
+        or expected.current_source is not None
+        or expected.visible_operation_artifacts
+    ):
+        return False
+    return durable == expected.model_copy(update={"schema_version": "2"})
 
 
 def _matches_legacy_v1_episode_request(
@@ -1330,22 +1449,38 @@ def _matches_legacy_v1_episode_request(
     expected: LifecycleEpisodeRequest,
 ) -> bool:
     """Accept only the exact field projection emitted by the v1 episode contract."""
-    v2_fields = {"evidence_request_catalog", "released_evidence_artifacts"}
+    later_fields = {
+        "evidence_request_catalog",
+        "released_evidence_artifacts",
+        "operation_catalog",
+        "current_source",
+        "visible_operation_artifacts",
+    }
     if (
         durable.schema_version != "1"
-        or expected.schema_version != "2"
-        or not v2_fields.isdisjoint(durable.model_fields_set)
+        or expected.schema_version not in {"2", "3"}
+        or not later_fields.isdisjoint(durable.model_fields_set)
         or durable.evidence_request_catalog is not None
         or durable.released_evidence_artifacts
+        or durable.operation_catalog is not None
+        or durable.current_source is not None
+        or durable.visible_operation_artifacts
         or expected.evidence_request_catalog is not None
         or expected.released_evidence_artifacts
+        or expected.operation_catalog is not None
+        or expected.current_source is not None
+        or expected.visible_operation_artifacts
     ):
         return False
     return durable == expected.model_copy(update={"schema_version": "1"})
 
 
 def _episode_request_json(request: LifecycleEpisodeRequest) -> str:
-    excluded = {"evidence_request_catalog", "released_evidence_artifacts"} if request.schema_version == "1" else set()
+    excluded: set[str] = set()
+    if request.schema_version == "1":
+        excluded.update({"evidence_request_catalog", "released_evidence_artifacts"})
+    if request.schema_version in {"1", "2"}:
+        excluded.update({"operation_catalog", "current_source", "visible_operation_artifacts"})
     payload = request.model_dump(mode="json", exclude=excluded)
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
@@ -1562,7 +1697,9 @@ def _initialize_state(
     if _state_path(run_dir).exists():
         raise EvidenceLifecycleError(f"lifecycle state already exists: {_state_path(run_dir)}")
     _workspace(run_dir).mkdir(parents=True, exist_ok=True)
+    supports_operations = any(item.conditional_operations is not None for item in spec.checkpoints)
     state = EvidenceLifecycleRunState(
+        schema_version="5" if supports_operations else "4",
         lifecycle_id=spec.lifecycle_id,
         world_id=spec.world_id,
         lifecycle_spec_sha256=_spec_sha256(spec),
@@ -1575,6 +1712,12 @@ def _initialize_state(
                 ),
                 evidence_request_budget_remaining=(
                     item.conditional_evidence.request_budget if item.conditional_evidence is not None else 0
+                ),
+                operation_budget=(
+                    item.conditional_operations.operation_budget if item.conditional_operations is not None else 0
+                ),
+                operation_budget_remaining=(
+                    item.conditional_operations.operation_budget if item.conditional_operations is not None else 0
                 ),
             )
             for item in spec.checkpoints
@@ -1602,7 +1745,7 @@ def _load_state(
     payload = _read_json(path)
     version = payload.get("schema_version")
     try:
-        if version == "4":
+        if version in {"4", "5"}:
             state = EvidenceLifecycleRunState.model_validate(payload)
             migrated = False
         elif version == "3":
@@ -1628,11 +1771,16 @@ def _load_state(
     if state.package_sha256 != _package_sha256(package_dir):
         raise EvidenceLifecycleError("package does not match lifecycle run")
     _validate_evidence_request_state_contract(state, spec)
+    validate_lifecycle_operation_run_state(state, spec)
     if migrated:
         _write_state(run_dir, state)
     _recover_evidence_request_transactions(run_dir, spec, state)
+    if state.schema_version == "5":
+        _recover_lifecycle_operation_transactions(package_dir, run_dir, spec, state)
     _sync_transition_ledger(run_dir, state)
     _sync_evidence_request_ledger(run_dir, state)
+    if state.schema_version == "5":
+        _sync_lifecycle_operation_ledger(run_dir, state)
     return state
 
 
@@ -1651,7 +1799,7 @@ def _assert_prior_submissions_unchanged(run_dir: Path, state: EvidenceLifecycleR
             inherited_only=True,
         )
         if action_state_sha256 != state.branch.parent_action_state_sha256:
-            raise EvidenceLifecycleError(f"branch origin evidence request state changed: {checkpoint_id}")
+            raise EvidenceLifecycleError(f"branch origin action state changed: {checkpoint_id}")
     for completed in state.checkpoint_runs:
         if completed.status != CheckpointRunStatus.SUBMITTED:
             continue
@@ -1774,6 +1922,14 @@ def _checkpoint_context(
     catalog = _evidence_request_catalog(checkpoint, checkpoint_run)
     if catalog is not None:
         context["evidence_request_catalog"] = catalog
+    operation_catalog_path = workspace / "checkpoints" / checkpoint.checkpoint_id / "operations.json"
+    current_source_path = workspace / "hydraulics" / "current-source.json"
+    if current_source_path.is_file():
+        context["current_source"] = _read_json(current_source_path)
+    if operation_catalog_path.is_file():
+        context["operation_catalog"] = _read_json(operation_catalog_path)
+        if not current_source_path.is_file():
+            raise EvidenceLifecycleError("operation catalogue exists without a visible current source")
     return context
 
 

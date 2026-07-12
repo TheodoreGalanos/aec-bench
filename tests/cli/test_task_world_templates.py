@@ -21,8 +21,12 @@ def test_task_composite_template_list_command_emits_template_catalogue() -> None
     assert result.exit_code == 0, result.output
     envelope = json.loads(result.output)
     assert envelope["command"] == "task composite-template list"
-    assert envelope["data"]["count"] == 27
+    assert envelope["data"]["count"] == 28
     assert envelope["data"]["templates"][0]["template_id"] == "stormwater-drainage-package"
+    assert any(
+        template["template_id"] == "hydraulic-interaction-lifecycle-review"
+        for template in envelope["data"]["templates"]
+    )
     assert envelope["data"]["templates"][-1]["template_id"] == "drainage-model-evidence-lifecycle-review"
 
 
@@ -152,6 +156,49 @@ def test_task_composite_template_lifecycle_variant_commands_list_and_materialize
     assert materialized_data["variant_id"] == "response_assertion_only"
     assert json.loads((package / "hidden" / "variant.json").read_text(encoding="utf-8"))["variant_id"] == (
         "response_assertion_only"
+    )
+
+
+def test_task_composite_template_hydraulic_interaction_variants_materialize(tmp_path: Path) -> None:
+    listed = runner.invoke(
+        app,
+        [
+            "--json",
+            "task",
+            "composite-template",
+            "list-lifecycle-variants",
+            "hydraulic-interaction-lifecycle-review",
+        ],
+    )
+    package = tmp_path / "tailwater-interaction"
+    materialized = runner.invoke(
+        app,
+        [
+            "--json",
+            "task",
+            "composite-template",
+            "materialize-lifecycle",
+            "hydraulic-interaction-lifecycle-review",
+            "--variant",
+            "tailwater_revision",
+            "--output",
+            str(package),
+        ],
+    )
+
+    assert listed.exit_code == 0, listed.output
+    assert materialized.exit_code == 0, materialized.output
+    assert json.loads(listed.output)["data"]["variants"] == [
+        "administrative_no_op",
+        "major_idf_revision",
+        "outlet_geometry_revision",
+        "tailwater_revision",
+    ]
+    materialized_data = json.loads(materialized.output)["data"]
+    assert materialized_data["checkpoint_count"] == 3
+    assert materialized_data["variant_id"] == "tailwater_revision"
+    assert json.loads((package / "hidden" / "variant.json").read_text(encoding="utf-8"))["variant_id"] == (
+        "tailwater_revision"
     )
 
 

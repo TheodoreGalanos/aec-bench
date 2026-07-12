@@ -6,7 +6,8 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from tempfile import TemporaryDirectory
 from typing import Literal
 
 from pydantic import NonNegativeInt, PositiveInt, ValidationError, field_validator, model_validator
@@ -21,13 +22,19 @@ from aec_bench.meta_harness.evidence_lifecycle import (
     evidence_request_protocol_identity,
     validate_evidence_request_run_state,
 )
+from aec_bench.meta_harness.evidence_lifecycle_ablation_plan import (
+    LifecycleAblationManifest,
+    LifecycleAblationPlan,
+)
 from aec_bench.meta_harness.evidence_lifecycle_episode import (
     LifecycleExecutionMode,
+    LifecycleOperationCurrentSource,
     LifecycleVisibilityPolicy,
 )
 from aec_bench.meta_harness.evidence_lifecycle_experiment import (
     LifecycleExperimentManifest,
     LifecycleExperimentMetrics,
+    lifecycle_experiment_metrics_payload,
 )
 from aec_bench.meta_harness.evidence_lifecycle_metrics import LifecycleSemanticMetrics
 from aec_bench.meta_harness.evidence_lifecycle_state import (
@@ -38,7 +45,23 @@ from aec_bench.meta_harness.evidence_request_protocol import (
     expected_evidence_request_run_artifact_paths,
     is_evidence_request_run_artifact_path,
 )
-from aec_bench.task_world_templates.contracts import EvidenceLifecycleSpec
+from aec_bench.meta_harness.lifecycle_operation_protocol import (
+    lifecycle_operation_protocol_identity,
+    validate_lifecycle_operation_run_state,
+    validate_lifecycle_operation_tool_schema,
+)
+from aec_bench.meta_harness.lifecycle_operation_snapshot import (
+    expected_lifecycle_operation_run_artifact_paths,
+    is_lifecycle_operation_run_artifact_path,
+    validate_lifecycle_operation_snapshot,
+    validate_lifecycle_operation_snapshot_payloads,
+)
+from aec_bench.meta_harness.lifecycle_operation_store import (
+    resolve_lifecycle_operation_current_source,
+    validate_lifecycle_operation_resolver_replay,
+)
+from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate, EvidenceLifecycleSpec
+from aec_bench.task_world_templates.lifecycles import lifecycle_package_variant
 
 
 class LifecycleTransferRecordReference(StrictModel):
@@ -181,6 +204,13 @@ class _LoadedArtifacts:
     reasons: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class _LifecycleSnapshot:
+    package_content_by_relative: dict[str, bytes]
+    run_content_by_relative: dict[str, bytes]
+    lifecycle_variant: dict[str, object]
+
+
 def build_lifecycle_transfer_evaluation(
     spec: LifecycleTransferEvaluationSpec,
 ) -> LifecycleTransferSummary:
@@ -315,7 +345,7 @@ def _load_artifacts(record: TrialRecord, *, ledger_root: Path) -> _LoadedArtifac
             continue
         try:
             path = (root / relative).resolve()
-        except OSError:
+        except (OSError, ValueError):
             reasons.append("artifact_unresolvable")
             continue
         try:
@@ -368,7 +398,7 @@ def _snapshot_record_reasons(
 
     metrics_result: LifecycleExperimentMetrics | None = None
     lifecycle_spec_result: EvidenceLifecycleSpec | None = None
-    if state_result.schema_version == "4":
+    if state_result.schema_version in {"4", "5"}:
         if metrics_reference is None or lifecycle_spec_reference is None:
             return ("snapshot_contract_missing",)
         try:
@@ -377,6 +407,8 @@ def _snapshot_record_reasons(
             metrics_result = LifecycleExperimentMetrics.model_validate(metrics)
             lifecycle_spec_result = EvidenceLifecycleSpec.model_validate(lifecycle_spec)
             validate_evidence_request_run_state(state_result, lifecycle_spec_result)
+            if state_result.schema_version == "5":
+                validate_lifecycle_operation_run_state(state_result, lifecycle_spec_result)
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError, EvidenceLifecycleError):
             return ("snapshot_contract_invalid",)
 
@@ -402,6 +434,19 @@ def _snapshot_record_reasons(
     declared_artifacts = outputs.get("artifacts")
     if not isinstance(runtime, dict) or not isinstance(variant, dict) or not isinstance(declared_artifacts, dict):
         return ("snapshot_contract_invalid",)
+    lifecycle_snapshot: _LifecycleSnapshot | None = None
+    if state_result.schema_version == "5":
+        assert lifecycle_spec_result is not None
+        try:
+            lifecycle_snapshot = _validate_v5_snapshot_reconciliation(
+                record,
+                artifacts=artifacts,
+                state=state_result,
+                spec=lifecycle_spec_result,
+                manifest=manifest,
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, EvidenceLifecycleError):
+            return ("snapshot_contract_invalid",)
     manifest_sweep = manifest.get("sweep")
     index_sweep = invocation_index.get("sweep")
     if not isinstance(manifest_sweep, dict) or not isinstance(index_sweep, dict):
@@ -449,7 +494,7 @@ def _snapshot_record_reasons(
     ):
         return ("snapshot_record_mismatch",)
 
-    if state_result.schema_version == "4":
+    if state_result.schema_version in {"4", "5"}:
         assert lifecycle_spec_result is not None
         assert metrics_result is not None
         evidence_request_reasons = _evidence_request_snapshot_reasons(
@@ -459,9 +504,25 @@ def _snapshot_record_reasons(
             spec=lifecycle_spec_result,
             manifest=manifest,
             metrics=metrics_result,
+            snapshot=lifecycle_snapshot,
         )
         if evidence_request_reasons:
             return evidence_request_reasons
+    if state_result.schema_version == "5":
+        assert lifecycle_spec_result is not None
+        assert metrics_result is not None
+        assert lifecycle_snapshot is not None
+        operation_reasons = _lifecycle_operation_snapshot_reasons(
+            record,
+            artifacts=artifacts,
+            state=state_result,
+            spec=lifecycle_spec_result,
+            manifest=manifest,
+            metrics=metrics_result,
+            snapshot=lifecycle_snapshot,
+        )
+        if operation_reasons:
+            return operation_reasons
 
     output_structurally_valid = state_result.status.value == "complete"
     verifier_completed = verification_result.overall != "incomplete"
@@ -570,6 +631,380 @@ def _v3_state_contains_evidence_request_fields(state: dict[str, object]) -> bool
     return any(isinstance(checkpoint, dict) and not forbidden.isdisjoint(checkpoint) for checkpoint in checkpoint_runs)
 
 
+def _validate_v5_snapshot_reconciliation(
+    record: TrialRecord,
+    *,
+    artifacts: dict[str, bytes],
+    state: EvidenceLifecycleRunState,
+    spec: EvidenceLifecycleSpec,
+    manifest: dict[str, object],
+) -> _LifecycleSnapshot:
+    provenance = record.lifecycle_provenance
+    if provenance is None or record.outputs.artifacts is None:
+        raise ValueError("v5 lifecycle snapshot provenance is missing")
+    state_reference = _artifact_by_kind(record, "lifecycle_state")
+    metrics_reference = _artifact_by_kind(record, "lifecycle_metrics")
+    verification_reference = _artifact_by_kind(record, "lifecycle_verification")
+    seal_reference = _artifact_by_kind(record, "lifecycle_invocation_seal")
+    metadata_references = (
+        state_reference,
+        metrics_reference,
+        verification_reference,
+        seal_reference,
+        provenance.invocation_index,
+        provenance.ablation_manifest,
+        provenance.ablation_plan,
+    )
+    if any(reference is None for reference in metadata_references):
+        raise ValueError("v5 lifecycle snapshot metadata is incomplete")
+    assert state_reference is not None
+    assert metrics_reference is not None
+    assert verification_reference is not None
+    assert seal_reference is not None
+    assert provenance.invocation_index is not None
+    assert provenance.ablation_manifest is not None
+    assert provenance.ablation_plan is not None
+
+    state_path = _canonical_snapshot_path(state_reference.path)
+    if state_path.parts[-2:] != ("run", "state.json") or len(state_path.parts) < 3:
+        raise ValueError("v5 lifecycle state does not identify one canonical snapshot prefix")
+    snapshot_prefix = PurePosixPath(*state_path.parts[:-2])
+    package_root = snapshot_prefix / "package"
+    run_root = snapshot_prefix / "run"
+
+    lifecycle = manifest.get("lifecycle")
+    outputs = manifest.get("outputs")
+    experiment_id = manifest.get("experiment_id")
+    if not isinstance(lifecycle, dict) or not isinstance(outputs, dict) or not isinstance(experiment_id, str):
+        raise ValueError("v5 lifecycle manifest sections are invalid")
+    experiment_component = PurePosixPath(experiment_id)
+    if experiment_component.parts != (experiment_id,) or experiment_id in {"", ".", ".."}:
+        raise ValueError("v5 lifecycle experiment identity is not one canonical path component")
+    package_hashes = _validated_snapshot_hash_map(lifecycle.get("package_files"), label="package")
+    run_hashes = _validated_snapshot_hash_map(outputs.get("artifacts"), label="run")
+    variant = lifecycle.get("variant")
+    if not isinstance(variant, dict):
+        raise ValueError("v5 lifecycle manifest variant is invalid")
+    if any("experiments" in PurePosixPath(relative).parts for relative in run_hashes):
+        raise ValueError("v5 lifecycle run artifact map overlaps canonical snapshot metadata")
+    manifest_lifecycle_id = lifecycle.get("lifecycle_id")
+    manifest_world_id = lifecycle.get("world_id")
+    if not (
+        isinstance(manifest_lifecycle_id, str)
+        and spec.lifecycle_id == state.lifecycle_id == manifest_lifecycle_id == provenance.lifecycle_id
+    ):
+        raise ValueError("v5 lifecycle semantic identity does not match across the snapshot")
+    if not (
+        isinstance(manifest_world_id, str)
+        and spec.world_id == state.world_id == manifest_world_id == provenance.world_id
+    ):
+        raise ValueError("v5 lifecycle world identity does not match across the snapshot")
+
+    canonical_experiment_root = run_root / "experiments" / experiment_id
+    canonical_metadata_paths = {
+        "manifest": canonical_experiment_root / "experiment-manifest.json",
+        "metrics": canonical_experiment_root / "metrics.json",
+        "verification": canonical_experiment_root / "verification.json",
+        "seal": canonical_experiment_root / "index-entry.json",
+        "index": snapshot_prefix / "experiment-index.jsonl",
+        "ablation_manifest": snapshot_prefix / "sweep" / "manifest.json",
+        "ablation_plan": snapshot_prefix / "sweep" / "plan.json",
+    }
+    expected_metadata_references = {
+        "manifest": provenance.invocation_manifest,
+        "seal": seal_reference,
+        "index": provenance.invocation_index,
+        "ablation_manifest": provenance.ablation_manifest,
+        "ablation_plan": provenance.ablation_plan,
+    }
+    for name, reference in expected_metadata_references.items():
+        if _canonical_snapshot_path(reference.path) != canonical_metadata_paths[name]:
+            raise ValueError(f"v5 lifecycle {name} reference is outside the canonical snapshot layout")
+
+    actual_by_path: dict[PurePosixPath, ArtifactReference] = {}
+    for reference in record.outputs.artifacts:
+        path = _canonical_snapshot_path(reference.path)
+        if path in actual_by_path:
+            raise ValueError("v5 lifecycle snapshot contains duplicate canonical artifact paths")
+        actual_by_path[path] = reference
+    expected_hashes: dict[PurePosixPath, str] = {
+        **{package_root / relative: digest for relative, digest in package_hashes.items()},
+        **{run_root / relative: digest for relative, digest in run_hashes.items()},
+        canonical_metadata_paths["manifest"]: provenance.invocation_manifest.sha256,
+        canonical_metadata_paths["metrics"]: run_hashes.get("metrics.json", ""),
+        canonical_metadata_paths["verification"]: run_hashes.get("verification.json", ""),
+        canonical_metadata_paths["seal"]: seal_reference.sha256,
+        canonical_metadata_paths["index"]: provenance.invocation_index.sha256,
+        canonical_metadata_paths["ablation_manifest"]: provenance.ablation_manifest.sha256,
+        canonical_metadata_paths["ablation_plan"]: provenance.ablation_plan.sha256,
+    }
+    if (
+        not expected_hashes[canonical_metadata_paths["metrics"]]
+        or not expected_hashes[canonical_metadata_paths["verification"]]
+    ):
+        raise ValueError("v5 lifecycle manifest omits canonical metrics or verification")
+    if set(actual_by_path) != set(expected_hashes):
+        raise ValueError("v5 lifecycle snapshot inventory does not match its canonical manifest")
+    if any(actual_by_path[path].sha256 != digest for path, digest in expected_hashes.items()):
+        raise ValueError("v5 lifecycle snapshot artifact hashes do not match its canonical manifest")
+    for name, reference in expected_metadata_references.items():
+        if actual_by_path[canonical_metadata_paths[name]] != reference:
+            raise ValueError(f"v5 lifecycle {name} reference does not match record provenance")
+    if actual_by_path[state_path] != state_reference:
+        raise ValueError("v5 lifecycle state reference does not match the canonical run map")
+    if actual_by_path[run_root / "metrics.json"] != metrics_reference:
+        raise ValueError("v5 lifecycle metrics reference does not match the canonical run map")
+    if actual_by_path[run_root / "verification.json"] != verification_reference:
+        raise ValueError("v5 lifecycle verification reference does not match the canonical run map")
+
+    package_content = _snapshot_content_map(
+        artifacts,
+        references=actual_by_path,
+        root=package_root,
+        declared=package_hashes,
+    )
+    run_content = _snapshot_content_map(
+        artifacts,
+        references=actual_by_path,
+        root=run_root,
+        declared=run_hashes,
+    )
+    template_content = package_content.get("template.json")
+    if template_content is None:
+        raise ValueError("v5 lifecycle package template is missing")
+    template = CompositeTaskWorldTemplate.model_validate_json(template_content)
+    if template.template_id != record.task.task_id:
+        raise ValueError("v5 lifecycle package template does not match the TrialRecord task")
+    if template.evidence_lifecycle != spec:
+        raise ValueError("v5 lifecycle package template and lifecycle contract disagree")
+    _validate_v5_canonical_metadata(
+        record,
+        artifacts=artifacts,
+        references=actual_by_path,
+        paths=canonical_metadata_paths,
+        manifest=manifest,
+        lifecycle_variant=variant,
+        state=state,
+    )
+    computed_package_sha256 = _package_content_sha256(package_content)
+    computed_spec_sha256 = _canonical_sha256(spec.model_dump(mode="json", exclude_none=True))
+    manifest_package_sha256 = lifecycle.get("package_sha256")
+    manifest_spec_sha256 = lifecycle.get("spec_sha256")
+    if not isinstance(manifest_package_sha256, str) or not isinstance(manifest_spec_sha256, str):
+        raise ValueError("v5 lifecycle manifest identities are invalid")
+    if not (state.package_sha256 == manifest_package_sha256 == provenance.package_sha256 == computed_package_sha256):
+        raise ValueError("v5 lifecycle package identity does not match its snapshotted bytes")
+    if not (state.lifecycle_spec_sha256 == manifest_spec_sha256 == provenance.spec_sha256 == computed_spec_sha256):
+        raise ValueError("v5 lifecycle spec identity does not match its canonical contract")
+    lifecycle_content = package_content.get("lifecycle.json")
+    if lifecycle_content is None or EvidenceLifecycleSpec.model_validate_json(lifecycle_content) != spec:
+        raise ValueError("v5 lifecycle package contract does not match the validated spec")
+    return _LifecycleSnapshot(
+        package_content_by_relative=package_content,
+        run_content_by_relative=run_content,
+        lifecycle_variant=dict(variant),
+    )
+
+
+def _validate_v5_canonical_metadata(
+    record: TrialRecord,
+    *,
+    artifacts: dict[str, bytes],
+    references: dict[PurePosixPath, ArtifactReference],
+    paths: dict[str, PurePosixPath],
+    manifest: dict[str, object],
+    lifecycle_variant: dict[str, object],
+    state: EvidenceLifecycleRunState,
+) -> None:
+    provenance = record.lifecycle_provenance
+    execution = record.lifecycle_execution
+    manifest_experiment_id = manifest.get("experiment_id")
+    manifest_sweep = manifest.get("sweep")
+    if provenance is None or execution is None or not isinstance(manifest_experiment_id, str):
+        raise ValueError("v5 lifecycle canonical metadata lacks record provenance")
+    if not isinstance(manifest_sweep, dict):
+        raise ValueError("v5 lifecycle canonical metadata lacks sweep identity")
+
+    seal = _snapshot_object_at(artifacts, references=references, path=paths["seal"])
+    shared_index = _snapshot_object_at(artifacts, references=references, path=paths["index"])
+    expected_shared_manifest_path = f"run/experiments/{manifest_experiment_id}/experiment-manifest.json"
+    if shared_index.get("manifest_path") != expected_shared_manifest_path:
+        raise ValueError("v5 lifecycle shared index has a noncanonical manifest path")
+    normalized_index = dict(shared_index)
+    normalized_index["manifest_path"] = "experiment-manifest.json"
+    if seal != normalized_index:
+        raise ValueError("v5 lifecycle invocation seal and shared index disagree")
+    if (
+        shared_index.get("experiment_id") != manifest_experiment_id
+        or shared_index.get("manifest_sha256") != provenance.invocation_manifest.sha256
+        or shared_index.get("sweep") != manifest_sweep
+    ):
+        raise ValueError("v5 lifecycle invocation index does not bind its canonical manifest")
+
+    ablation_manifest = LifecycleAblationManifest.model_validate(
+        _snapshot_object_at(artifacts, references=references, path=paths["ablation_manifest"])
+    )
+    ablation_plan = LifecycleAblationPlan.model_validate(
+        _snapshot_object_at(artifacts, references=references, path=paths["ablation_plan"])
+    )
+    canonical_ablation_manifest_sha256 = _canonical_sha256(ablation_manifest.model_dump(mode="json"))
+    sweep_experiment_id = manifest_sweep.get("sweep_experiment_id")
+    planned_trial_id = manifest_sweep.get("planned_trial_id")
+    if not (
+        ablation_manifest.experiment_id == ablation_plan.experiment_id == sweep_experiment_id == record.experiment_id
+    ):
+        raise ValueError("v5 lifecycle sweep experiment identity does not match the TrialRecord")
+    if (
+        ablation_plan.manifest_sha256 != canonical_ablation_manifest_sha256
+        or ablation_plan.study_design != ablation_manifest.study_design
+        or manifest_sweep.get("plan_sha256") != ablation_plan.plan_sha256
+    ):
+        raise ValueError("v5 lifecycle sweep plan does not bind its canonical manifest")
+    selected = [trial for trial in ablation_plan.trials if trial.trial_id == planned_trial_id]
+    if len(selected) != 1 or planned_trial_id != record.trial_id:
+        raise ValueError("v5 lifecycle sweep does not select the TrialRecord trial")
+    trial = selected[0]
+    variant_id = lifecycle_variant.get("variant_id")
+    adaptation = lifecycle_variant.get("adaptation")
+    expected_condition_id = f"{trial.execution_mode.value}__{trial.memory_visibility_policy.value}"
+    if (
+        ablation_manifest.lifecycle_template_id != record.task.task_id
+        or trial.variant_id != variant_id
+        or trial.variant_id not in ablation_manifest.variants
+        or trial.adaptation.model_dump(mode="json") != adaptation
+        or trial.lifecycle_id != state.lifecycle_id
+        or trial.world_id != state.world_id
+        or trial.spec_sha256 != state.lifecycle_spec_sha256
+        or trial.package_sha256 != state.package_sha256
+        or trial.agent.adapter != record.agent.adapter
+        or trial.agent.model != record.agent.model
+        or trial.max_turns_per_session != execution.max_turns_per_session
+        or trial.execution_mode.value != execution.execution_mode
+        or trial.memory_visibility_policy.value != execution.memory_visibility_policy
+        or trial.runtime_provenance.adapter != record.agent.adapter
+        or trial.runtime_provenance.provider != provenance.runtime_provider
+        or trial.runtime_provenance.distributions != provenance.runtime_distributions
+        or trial.runtime_provenance.dependency_inventory_sha256 != provenance.runtime_dependency_sha256
+        or manifest_sweep.get("condition_id") != expected_condition_id
+        or manifest_sweep.get("repetition") != trial.repetition
+        or trial.repetition > ablation_manifest.repetitions
+    ):
+        raise ValueError("v5 lifecycle selected sweep trial does not match recorded execution")
+    if trial.agent not in ablation_manifest.agents or not any(
+        condition.execution_mode == trial.execution_mode
+        and condition.memory_visibility_policy == trial.memory_visibility_policy
+        for condition in ablation_manifest.conditions
+    ):
+        raise ValueError("v5 lifecycle selected sweep trial is absent from its manifest")
+    ledger_path = Path(trial.ledger_path)
+    if ledger_path.name != f"{trial.trial_id}.json" or ledger_path.parent.name != record.experiment_id:
+        raise ValueError("v5 lifecycle selected sweep trial has a noncanonical ledger path")
+
+
+def _snapshot_object_at(
+    artifacts: dict[str, bytes],
+    *,
+    references: dict[PurePosixPath, ArtifactReference],
+    path: PurePosixPath,
+) -> dict[str, object]:
+    reference = references[path]
+    content = artifacts.get(reference.path)
+    if content is None:
+        raise ValueError("v5 lifecycle canonical metadata bytes are missing")
+    payload = json.loads(content)
+    if not isinstance(payload, dict):
+        raise ValueError("v5 lifecycle canonical metadata must contain a JSON object")
+    return payload
+
+
+def _canonical_snapshot_path(raw_path: str) -> PurePosixPath:
+    path = PurePosixPath(raw_path)
+    if path.is_absolute() or ".." in path.parts or path.as_posix() != raw_path or path == PurePosixPath("."):
+        raise ValueError("lifecycle snapshot artifact path is not canonical")
+    return path
+
+
+def _validated_snapshot_hash_map(value: object, *, label: str) -> dict[str, str]:
+    if not isinstance(value, dict) or not value:
+        raise ValueError(f"v5 lifecycle manifest {label} artifact map is missing")
+    validated: dict[str, str] = {}
+    for raw_relative, digest in value.items():
+        if not isinstance(raw_relative, str) or not isinstance(digest, str):
+            raise ValueError(f"v5 lifecycle manifest {label} artifact map is invalid")
+        relative = _canonical_snapshot_path(raw_relative)
+        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+            raise ValueError(f"v5 lifecycle manifest {label} artifact hash is invalid")
+        validated[relative.as_posix()] = digest
+    if len(validated) != len(value):
+        raise ValueError(f"v5 lifecycle manifest {label} artifact paths are ambiguous")
+    return validated
+
+
+def _snapshot_content_map(
+    artifacts: dict[str, bytes],
+    *,
+    references: dict[PurePosixPath, ArtifactReference],
+    root: PurePosixPath,
+    declared: dict[str, str],
+) -> dict[str, bytes]:
+    content_by_relative: dict[str, bytes] = {}
+    for relative in declared:
+        path = root / relative
+        reference = references[path]
+        content = artifacts.get(reference.path)
+        if content is None:
+            raise ValueError("v5 lifecycle snapshot artifact bytes are missing")
+        content_by_relative[relative] = content
+    return content_by_relative
+
+
+def _package_content_sha256(content_by_relative: dict[str, bytes]) -> str:
+    digest = hashlib.sha256()
+    for relative, content in sorted(content_by_relative.items()):
+        encoded_relative = relative.encode("utf-8")
+        digest.update(len(encoded_relative).to_bytes(8, "big"))
+        digest.update(encoded_relative)
+        digest.update(content)
+    return digest.hexdigest()
+
+
+def _validate_lifecycle_operation_resolver_snapshot_replay(
+    snapshot: _LifecycleSnapshot,
+    *,
+    state: EvidenceLifecycleRunState,
+    spec: EvidenceLifecycleSpec,
+) -> None:
+    with TemporaryDirectory(prefix="aec-bench-lifecycle-transfer-") as temporary_root:
+        root = Path(temporary_root)
+        package_dir = root / "package"
+        run_dir = root / "run"
+        _materialize_snapshot_content(package_dir, snapshot.package_content_by_relative)
+        _materialize_snapshot_content(run_dir, snapshot.run_content_by_relative)
+        if lifecycle_package_variant(package_dir) != snapshot.lifecycle_variant:
+            raise ValueError("v5 lifecycle package variant does not match its canonical manifest")
+        source = resolve_lifecycle_operation_current_source(package_dir, run_dir, state)
+        expected_current_source = LifecycleOperationCurrentSource(
+            revision_id=source.revision_id,
+            physical_source_state_sha256=source.physical_source_state_sha256,
+            visible_source_state_sha256=source.visible_source_state_sha256,
+            source_state=source.source_state,
+        )
+        validate_lifecycle_operation_snapshot(
+            run_dir,
+            state,
+            spec,
+            expected_current_source=expected_current_source,
+        )
+        validate_lifecycle_operation_resolver_replay(package_dir, run_dir, state, spec)
+
+
+def _materialize_snapshot_content(root: Path, content_by_relative: dict[str, bytes]) -> None:
+    for relative, content in sorted(content_by_relative.items()):
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+
+
 def _evidence_request_snapshot_reasons(
     record: TrialRecord,
     *,
@@ -578,6 +1013,7 @@ def _evidence_request_snapshot_reasons(
     spec: EvidenceLifecycleSpec,
     manifest: dict[str, object],
     metrics: LifecycleExperimentMetrics,
+    snapshot: _LifecycleSnapshot | None = None,
 ) -> tuple[str, ...]:
     actions = [action for checkpoint in state.checkpoint_runs for action in checkpoint.evidence_request_actions]
     action_capable = any(checkpoint.conditional_evidence is not None for checkpoint in spec.checkpoints)
@@ -586,10 +1022,14 @@ def _evidence_request_snapshot_reasons(
         return ("snapshot_contract_invalid",)
     if not action_capable:
         return ("snapshot_contract_invalid",) if actions else ()
-    if _record_evidence_request_run_artifact_paths(record) != expected_evidence_request_run_artifact_paths(
-        state,
-        spec,
-    ):
+    evidence_request_paths = (
+        frozenset(
+            relative for relative in snapshot.run_content_by_relative if is_evidence_request_run_artifact_path(relative)
+        )
+        if snapshot is not None
+        else _record_evidence_request_run_artifact_paths(record)
+    )
+    if evidence_request_paths != expected_evidence_request_run_artifact_paths(state, spec):
         return ("snapshot_contract_invalid",)
 
     protocol = interaction.get("evidence_request_protocol")
@@ -620,7 +1060,7 @@ def _evidence_request_snapshot_reasons(
             len(action.released_artifacts) for action in actions if action.outcome.value == "released"
         ),
     }
-    metrics_payload = metrics.model_dump(mode="json")
+    metrics_payload = lifecycle_experiment_metrics_payload(metrics)
     if any(metrics_payload.get(field) != value for field, value in expected_metrics.items()):
         return ("snapshot_record_mismatch",)
     breakdown = record.evaluation.breakdown if isinstance(record.evaluation.breakdown, dict) else {}
@@ -640,6 +1080,7 @@ def _evidence_request_snapshot_reasons(
             record,
             artifacts=artifacts,
             relative=catalog_relative,
+            snapshot=snapshot,
         )
         catalog_was_released = expected_catalog is not None and checkpoint.status.value != "pending"
         if not catalog_was_released:
@@ -658,11 +1099,13 @@ def _evidence_request_snapshot_reasons(
                 record,
                 artifacts=artifacts,
                 relative=f"evidence_requests/{action.action_id}/action.json",
+                snapshot=snapshot,
             )
             committed_content = _run_artifact_content(
                 record,
                 artifacts=artifacts,
                 relative=f"evidence_requests/{action.action_id}/committed.json",
+                snapshot=snapshot,
             )
             try:
                 persisted_action = json.loads(action_content.decode("utf-8")) if action_content else None
@@ -679,11 +1122,13 @@ def _evidence_request_snapshot_reasons(
                     record,
                     artifacts=artifacts,
                     relative=artifact.path,
+                    snapshot=snapshot,
                 )
                 projection = _run_artifact_content(
                     record,
                     artifacts=artifacts,
                     relative=f"workspace/{artifact.workspace_path}",
+                    snapshot=snapshot,
                 )
                 if (
                     canonical is None
@@ -708,12 +1153,97 @@ def _record_evidence_request_run_artifact_paths(record: TrialRecord) -> frozense
     return frozenset(paths)
 
 
+def _lifecycle_operation_snapshot_reasons(
+    record: TrialRecord,
+    *,
+    artifacts: dict[str, bytes],
+    state: EvidenceLifecycleRunState,
+    spec: EvidenceLifecycleSpec,
+    manifest: dict[str, object],
+    metrics: LifecycleExperimentMetrics,
+    snapshot: _LifecycleSnapshot,
+) -> tuple[str, ...]:
+    actions = [action for checkpoint in state.checkpoint_runs for action in checkpoint.operation_actions]
+    action_capable = any(checkpoint.conditional_operations is not None for checkpoint in spec.checkpoints)
+    interaction = manifest.get("interaction")
+    if not isinstance(interaction, dict) or not action_capable:
+        return ("snapshot_contract_invalid",)
+    operation_paths = frozenset(
+        relative for relative in snapshot.run_content_by_relative if is_lifecycle_operation_run_artifact_path(relative)
+    )
+    if operation_paths != expected_lifecycle_operation_run_artifact_paths(state, spec):
+        return ("snapshot_contract_invalid",)
+
+    protocol = interaction.get("lifecycle_operation_protocol")
+    tool_schema = interaction.get("tool_schema")
+    if not isinstance(protocol, dict) or not isinstance(tool_schema, list):
+        return ("snapshot_contract_invalid",)
+    expected_protocol = lifecycle_operation_protocol_identity()
+    encoded_tool_schema = json.dumps(tool_schema, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    try:
+        validate_lifecycle_operation_tool_schema(tool_schema)
+    except EvidenceLifecycleError:
+        return ("snapshot_contract_invalid",)
+    if (
+        protocol.get("schema_version") != expected_protocol["schema_version"]
+        or protocol.get("sha256") != expected_protocol["sha256"]
+        or protocol.get("tool") != expected_protocol["tool"]
+        or protocol.get("tool_schema_sha256") != hashlib.sha256(encoded_tool_schema).hexdigest()
+    ):
+        return ("snapshot_contract_invalid",)
+
+    expected_metrics = {
+        "operation_calls": len(actions),
+        "completed_operations": sum(action.outcome.value == "completed" for action in actions),
+        "already_current_operations": sum(action.outcome.value == "already_current" for action in actions),
+        "rejected_operations": sum(action.outcome.value == "rejected" for action in actions),
+        "operation_budget_consumed": sum(action.budget_consumed for action in actions),
+        "operation_artifacts_produced": sum(
+            len(action.artifacts) for action in actions if action.outcome.value == "completed"
+        ),
+    }
+    metrics_payload = lifecycle_experiment_metrics_payload(metrics)
+    if metrics.schema_version != "3" or any(
+        metrics_payload.get(field) != value for field, value in expected_metrics.items()
+    ):
+        return ("snapshot_record_mismatch",)
+    breakdown = record.evaluation.breakdown if isinstance(record.evaluation.breakdown, dict) else {}
+    operational = dict(metrics_payload)
+    operational.pop("semantic_transition", None)
+    if breakdown.get("operational_metrics") != operational:
+        return ("snapshot_record_mismatch",)
+
+    try:
+        validate_lifecycle_operation_snapshot_payloads(
+            state=state,
+            spec=spec,
+            artifact_paths=operation_paths,
+            read_artifact=lambda relative: _run_artifact_content(
+                record,
+                artifacts=artifacts,
+                relative=relative,
+                snapshot=snapshot,
+            ),
+        )
+        _validate_lifecycle_operation_resolver_snapshot_replay(
+            snapshot,
+            state=state,
+            spec=spec,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError, EvidenceLifecycleError):
+        return ("snapshot_contract_invalid",)
+    return ()
+
+
 def _run_artifact_content(
     record: TrialRecord,
     *,
     artifacts: dict[str, bytes],
     relative: str,
+    snapshot: _LifecycleSnapshot | None = None,
 ) -> bytes | None:
+    if snapshot is not None:
+        return snapshot.run_content_by_relative.get(relative)
     suffix = f"/run/{relative}"
     matches = [artifact for artifact in record.outputs.artifacts or () if artifact.path.endswith(suffix)]
     if len(matches) != 1:

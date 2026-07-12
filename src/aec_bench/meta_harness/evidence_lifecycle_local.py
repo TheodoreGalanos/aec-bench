@@ -20,6 +20,7 @@ from aec_bench.ledger.durability import fsync_directory, mkdir_durable
 from aec_bench.meta_harness.evidence_lifecycle import (
     EvidenceLifecycleError,
     LifecycleEpisodeExecutionError,
+    execute_lifecycle_operation,
     fail_checkpoint_attempt,
     load_evidence_lifecycle_spec,
     open_checkpoint_attempt,
@@ -54,7 +55,7 @@ from aec_bench.trajectory.writer import TrajectoryWriter
 
 @dataclass(frozen=True)
 class EvidenceLifecycleControlTool:
-    """Host-controlled checkpoint transition exposed to one persistent agent."""
+    """Host-controlled lifecycle actions exposed to one bound agent session."""
 
     package_dir: Path
     run_dir: Path
@@ -88,6 +89,42 @@ class EvidenceLifecycleControlTool:
         if result["rejection"] is not None:
             payload["rejection"] = result["rejection"]
         return json.dumps(payload)
+
+    def execute_operation(
+        self,
+        checkpoint_id: str,
+        operation_id: str,
+        visible_source_state_sha256: str,
+        reason: str,
+    ) -> str:
+        """Execute one declared operation against the named visible source state."""
+        arguments = (checkpoint_id, operation_id, visible_source_state_sha256, reason)
+        if any(not isinstance(argument, str) or not argument.strip() for argument in arguments):
+            return json.dumps(
+                {
+                    "status": "rejected",
+                    "error": "operation arguments must not be blank",
+                }
+            )
+        if len(visible_source_state_sha256) != 64 or any(
+            character not in "0123456789abcdef" for character in visible_source_state_sha256
+        ):
+            return json.dumps(
+                {
+                    "status": "rejected",
+                    "error": "visible source state sha256 must contain 64 lowercase hexadecimal characters",
+                }
+            )
+        result = execute_lifecycle_operation(
+            self.package_dir,
+            self.run_dir,
+            checkpoint_id=checkpoint_id,
+            operation_id=operation_id,
+            visible_source_state_sha256=visible_source_state_sha256,
+            reason=reason,
+            session_id=self.session_id,
+        )
+        return json.dumps(_operation_tool_response(result))
 
     def submit_checkpoint(self, checkpoint_id: str) -> str:
         """Submit the named checkpoint and release the next evidence packet.
@@ -220,6 +257,8 @@ class EvidenceLifecycleWorkspaceTool:
         root = parts[0]
         if root == "instruction.md":
             return len(parts) == 1
+        if root == "hydraulics":
+            return len(parts) == 1 or (len(parts) == 2 and parts[1] == "current-source.json")
         if self.visibility_policy in {
             LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
             LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
@@ -289,6 +328,7 @@ def run_local_evidence_lifecycle_session(
         visibility_policy=visibility_policy,
     )
     supports_evidence_requests = _supports_evidence_requests(package)
+    supports_lifecycle_operations = _supports_lifecycle_operations(package)
     native_tools = [
         workspace_tool.list_workspace,
         workspace_tool.read_workspace_file,
@@ -314,6 +354,15 @@ def run_local_evidence_lifecycle_session(
                 name="request_evidence",
                 source="builtin",
                 description="Request one declared evidence packet within the active checkpoint budget.",
+            )
+        )
+    if supports_lifecycle_operations:
+        native_tools.append(control.execute_operation)
+        tool_specs.append(
+            ToolSpec(
+                name="execute_operation",
+                source="builtin",
+                description="Execute one declared operation against the current visible source state.",
             )
         )
     native_tools.extend([control.submit_checkpoint, control.revisit_checkpoint])
@@ -346,12 +395,14 @@ def run_local_evidence_lifecycle_session(
                 instruction=_persistent_session_instruction(
                     initial,
                     supports_evidence_requests=supports_evidence_requests,
+                    supports_lifecycle_operations=supports_lifecycle_operations,
                 ),
                 system_prompt=_workspace_policy(
                     initial,
                     persistent=True,
                     visibility_policy=visibility_policy,
                     supports_evidence_requests=supports_evidence_requests,
+                    supports_lifecycle_operations=supports_lifecycle_operations,
                 ),
                 tools=tool_specs,
                 configuration={"max_turns": max_turns},
@@ -712,6 +763,7 @@ class LocalEvidenceLifecycleEpisodeEnvironment:
             session_id=request.session_id,
         )
         supports_evidence_requests = _supports_evidence_requests(self.package_dir)
+        supports_lifecycle_operations = _supports_lifecycle_operations(self.package_dir)
         tools = [
             ToolSpec(name="list_workspace", source="builtin", description="List visible lifecycle files."),
             ToolSpec(name="read_workspace_file", source="builtin", description="Read one visible lifecycle file."),
@@ -735,6 +787,15 @@ class LocalEvidenceLifecycleEpisodeEnvironment:
                     description="Request one declared evidence packet within the active checkpoint budget.",
                 )
             )
+        if supports_lifecycle_operations:
+            native_tools.append(control.execute_operation)
+            tools.append(
+                ToolSpec(
+                    name="execute_operation",
+                    source="builtin",
+                    description="Execute one declared operation against the current visible source state.",
+                )
+            )
         resolved_registry = self.registry or LocalAdapterRegistry()
         try:
             adapter = resolved_registry.build(
@@ -753,6 +814,7 @@ class LocalEvidenceLifecycleEpisodeEnvironment:
                         persistent=False,
                         visibility_policy=self.memory_visibility_policy,
                         supports_evidence_requests=supports_evidence_requests,
+                        supports_lifecycle_operations=supports_lifecycle_operations,
                     ),
                     tools=tools,
                     configuration={"max_turns": self.max_turns},
@@ -849,6 +911,7 @@ def _persistent_session_instruction(
     initial: dict[str, Any],
     *,
     supports_evidence_requests: bool,
+    supports_lifecycle_operations: bool = False,
 ) -> str:
     conditional_guidance = ""
     if supports_evidence_requests:
@@ -856,6 +919,13 @@ def _persistent_session_instruction(
             "Before submitting, inspect checkpoints/<checkpoint_id>/evidence-requests.json. You may call "
             "request_evidence when that active checkpoint declares a request catalogue; the remaining budget "
             "is finite.\n"
+        )
+    if supports_lifecycle_operations:
+        conditional_guidance += (
+            "Before submitting, check whether checkpoints/<checkpoint_id>/operations.json exists. When it does, "
+            "read it with hydraulics/current-source.json. Use execute_operation with the current visible source "
+            "hash for declared calculations or source activation; the remaining budget is finite. Read the "
+            "returned workspace artifacts before deciding.\n"
         )
     return (
         "This is one staged evidence lifecycle. Complete every checkpoint in this same session.\n\n"
@@ -883,6 +953,7 @@ def _workspace_policy(
     persistent: bool,
     visibility_policy: LifecycleVisibilityPolicy,
     supports_evidence_requests: bool,
+    supports_lifecycle_operations: bool = False,
 ) -> str:
     if visibility_policy in {
         LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
@@ -911,6 +982,12 @@ def _workspace_policy(
     policy += f" Host visibility policy: {visibility_policy.value}."
     if supports_evidence_requests:
         policy += " Declared within-checkpoint evidence is released only by request_evidence."
+    if supports_lifecycle_operations:
+        policy += (
+            " Declared source-bound calculations and source activation run only through execute_operation. "
+            "When the active checkpoint provides an operations catalogue, use it with the current hash in "
+            "hydraulics/current-source.json. Operation results are evidence, not verification or reward."
+        )
     if persistent:
         policy += (
             " Next-checkpoint evidence is released only by submit_checkpoint. Preserve review continuity across "
@@ -937,6 +1014,36 @@ def _tool_response(result: dict[str, Any]) -> dict[str, Any]:
         )
         if result.get("evidence_request_catalog") is not None:
             payload["evidence_request_catalog"] = result["evidence_request_catalog"]
+    return payload
+
+
+def _operation_tool_response(result: dict[str, Any]) -> dict[str, Any]:
+    """Select the model-facing result without host-only session or storage fields."""
+    artifacts = [
+        {
+            "path": artifact["workspace_path"],
+            "sha256": artifact["sha256"],
+        }
+        for artifact in result["artifacts"]
+        if artifact.get("workspace_path") is not None
+    ]
+    payload = {
+        "status": result["outcome"],
+        "action_id": result["action_id"],
+        "checkpoint_id": result["checkpoint_id"],
+        "operation_id": result["operation_id"],
+        "operation_kind": result["operation_kind"],
+        "disposition": result["disposition"],
+        "visible_source_state_sha256": result["visible_source_state_after_sha256"],
+        "input_projection_sha256": result["input_projection_sha256"],
+        "prerequisite_action_ids": result["prerequisite_action_ids"],
+        "retained_from_action_id": result["retained_from_action_id"],
+        "budget_consumed": result["budget_consumed"],
+        "remaining_budget": result["budget_after"],
+        "artifacts": artifacts,
+    }
+    if result["rejection"] is not None:
+        payload["rejection"] = result["rejection"]
     return payload
 
 
@@ -1158,6 +1265,7 @@ def _build_local_task_run(
         tool_schema=_lifecycle_tool_schema(
             agent["execution_mode"],
             supports_evidence_requests=_supports_evidence_requests(package),
+            supports_lifecycle_operations=_supports_lifecycle_operations(package),
         ),
         sweep_context=sweep_context,
         repository_dir=repository_dir,
@@ -1290,10 +1398,16 @@ def _supports_evidence_requests(package_dir: Path) -> bool:
     return any(checkpoint.conditional_evidence is not None for checkpoint in spec.checkpoints)
 
 
+def _supports_lifecycle_operations(package_dir: Path) -> bool:
+    spec = load_evidence_lifecycle_spec(Path(package_dir))
+    return any(checkpoint.conditional_operations is not None for checkpoint in spec.checkpoints)
+
+
 def _lifecycle_tool_schema(
     execution_mode: str,
     *,
     supports_evidence_requests: bool,
+    supports_lifecycle_operations: bool = False,
 ) -> list[dict[str, str]]:
     functions: list[Callable[..., Any]] = [
         EvidenceLifecycleWorkspaceTool.list_workspace,
@@ -1302,6 +1416,8 @@ def _lifecycle_tool_schema(
     ]
     if supports_evidence_requests:
         functions.append(EvidenceLifecycleControlTool.request_evidence)
+    if supports_lifecycle_operations:
+        functions.append(EvidenceLifecycleControlTool.execute_operation)
     if execution_mode == "persistent_context":
         functions.extend(
             [
