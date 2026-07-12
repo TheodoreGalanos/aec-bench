@@ -113,6 +113,37 @@ def load_evidence_lifecycle_spec(package_dir: Path) -> EvidenceLifecycleSpec:
     return EvidenceLifecycleSpec.model_validate(payload)
 
 
+def canonical_evidence_lifecycle_spec_payload(spec: EvidenceLifecycleSpec) -> dict[str, Any]:
+    """Return a canonical spec payload without behavior-neutral default-true policy fields."""
+    payload = spec.model_dump(mode="json", exclude_none=True)
+    for checkpoint in payload["checkpoints"]:
+        if checkpoint.get("allow_additional_submission_fields") is True:
+            checkpoint.pop("allow_additional_submission_fields")
+    return payload
+
+
+def validate_evidence_checkpoint_submission(
+    checkpoint: EvidenceCheckpointSpec,
+    submission: dict[str, Any],
+) -> None:
+    """Validate the public checkpoint field contract without invoking its verifier."""
+    checkpoint_id = checkpoint.checkpoint_id
+    if submission.get("checkpoint_id") != checkpoint_id:
+        raise EvidenceLifecycleError(
+            f"checkpoint submission id must be {checkpoint_id!r}, got {submission.get('checkpoint_id')!r}"
+        )
+    declared_fields = set(checkpoint.required_submission_fields)
+    missing_fields = sorted(declared_fields - set(submission))
+    if missing_fields:
+        raise EvidenceLifecycleError(f"checkpoint submission missing required fields: {', '.join(missing_fields)}")
+    if not checkpoint.allow_additional_submission_fields:
+        undeclared_fields = sorted(set(submission) - declared_fields)
+        if undeclared_fields:
+            raise EvidenceLifecycleError(
+                f"checkpoint submission contains undeclared fields: {', '.join(undeclared_fields)}"
+            )
+
+
 def evidence_lifecycle_package_identity(package_dir: Path) -> dict[str, str]:
     """Return the content-bound identity of one validated lifecycle package."""
     package = Path(package_dir)
@@ -437,13 +468,7 @@ def _submit_evidence_checkpoint_locked(
     if not submission_path.is_file():
         raise EvidenceLifecycleError(f"checkpoint submission not found: {submission_path}")
     submission = _read_json(submission_path)
-    if submission.get("checkpoint_id") != checkpoint_id:
-        raise EvidenceLifecycleError(
-            f"checkpoint submission id must be {checkpoint_id!r}, got {submission.get('checkpoint_id')!r}"
-        )
-    missing_fields = sorted(field for field in checkpoint.required_submission_fields if field not in submission)
-    if missing_fields:
-        raise EvidenceLifecycleError(f"checkpoint submission missing required fields: {', '.join(missing_fields)}")
+    validate_evidence_checkpoint_submission(checkpoint, submission)
 
     episode_dir = run / "episodes" / checkpoint_id
     episode_dir.mkdir(parents=True, exist_ok=True)
@@ -2111,7 +2136,7 @@ def _lifecycle_state_lock(run_dir: Path) -> Iterator[None]:
 
 def _spec_sha256(spec: EvidenceLifecycleSpec) -> str:
     payload = json.dumps(
-        spec.model_dump(mode="json", exclude_none=True),
+        canonical_evidence_lifecycle_spec_payload(spec),
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")

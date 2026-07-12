@@ -23,8 +23,8 @@ agents:
       # Fresh SSC-03 conditions can open three sessions before retries; this is not a total-trial budget.
       max_turns_per_session: 60
 repetitions: 1
-output_root: ../../../artifacts/ssc03-public-calibration
-ledger_root: ../../../ledger
+output_root: ../../../artefacts/ssc03-public-calibration/runs
+ledger_root: ../../../artefacts/ssc03-public-calibration/ledger
 limits:
   max_trials: 16
   max_concurrency: 1

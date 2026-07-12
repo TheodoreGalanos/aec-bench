@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, TypedDict
 
 from aec_bench.adapters.pydantic_ai_runtime import (
     agent_run_output,
@@ -49,6 +49,7 @@ _ANTHROPIC_PREFIXES = ("claude-",)
 # Together OpenAI-compatible model prefix
 _TOGETHER_PREFIX = "together:"
 _TOGETHER_BASE_URL = "https://api.together.ai/v1"
+_BEDROCK_EXPLICIT_PREFIX = "bedrock:"
 
 
 def detect_provider(model_name: str) -> str:
@@ -58,6 +59,8 @@ def detect_provider(model_name: str) -> str:
     ``"together"``, ``"auto"``.
     """
     lower = model_name.lower()
+    if lower.startswith(_BEDROCK_EXPLICIT_PREFIX):
+        return "bedrock"
     if lower.startswith(_TOGETHER_PREFIX):
         return "together"
     if any(lower.startswith(p) for p in _BEDROCK_PREFIXES):
@@ -73,9 +76,89 @@ def resolve_pydantic_provider(model_name: str, env: Mapping[str, str] | None = N
     """Resolve the PydanticAI provider, using Azure credentials for deployment names."""
     source = env if env is not None else os.environ
     provider = detect_provider(model_name)
+    if provider == "auto" and ":" in model_name:
+        return "auto"
     if provider == "auto" and _has_azure_credentials(source):
         return "azure"
     return provider
+
+
+def preflight_pydantic_model_configuration(model_name: str) -> None:
+    """Validate the routed provider configuration without making a model request."""
+    provider = resolve_pydantic_provider(model_name)
+    if provider == "bedrock":
+        _strip_bedrock_prefix(model_name)
+        _preflight_bedrock_configuration()
+        return
+    model = _build_pydantic_model(model_name, provider)
+    if isinstance(model, str):
+        from pydantic_ai.models import infer_model
+
+        infer_model(model)
+
+
+def _preflight_bedrock_configuration() -> None:
+    """Check Bedrock's local configuration without creating a network-capable client."""
+    if _resolve_aws_credential_source_configuration() is None:
+        msg = (
+            "AWS credential source is not configured; configure a Bedrock bearer token, "
+            "static credentials, a profile or shared config, web identity, container "
+            "credentials, or another resolvable AWS credential-chain source"
+        )
+        raise RuntimeError(msg)
+
+    if not _resolve_aws_region_configuration():
+        msg = "AWS region is not configured; set AWS_REGION or AWS_DEFAULT_REGION, or configure a profile region"
+        raise RuntimeError(msg)
+
+
+def _resolve_aws_credential_source_configuration() -> str | None:
+    """Return the configured AWS credential source without using the credentials.
+
+    Container credentials are recognized by their standard URI configuration so
+    preflight never calls the container endpoint. Other supported sources use
+    Botocore's credential resolver, with metadata retries bounded to prevent an
+    unavailable instance-metadata endpoint from delaying local validation.
+    """
+    if os.environ.get("AWS_BEARER_TOKEN_BEDROCK", ""):
+        return "bedrock-bearer-token"
+    if os.environ.get("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "") or os.environ.get(
+        "AWS_CONTAINER_CREDENTIALS_FULL_URI", ""
+    ):
+        return "container-role"
+
+    try:
+        session = _new_botocore_session()
+        session.set_config_variable("metadata_service_timeout", 1)
+        session.set_config_variable("metadata_service_num_attempts", 1)
+        credentials = session.get_credentials()
+    except Exception as exc:
+        msg = "AWS credential source configuration could not be resolved"
+        raise RuntimeError(msg) from exc
+
+    if credentials is None:
+        return None
+    return str(getattr(credentials, "method", "aws-default-chain"))
+
+
+def _resolve_aws_region_configuration() -> str | None:
+    """Return the AWS region selected by environment or Botocore config."""
+    region = os.environ.get("AWS_REGION", "") or os.environ.get("AWS_DEFAULT_REGION", "")
+    if region:
+        return region
+    try:
+        configured_region = _new_botocore_session().get_config_variable("region")
+    except Exception as exc:
+        msg = "AWS region configuration could not be resolved"
+        raise RuntimeError(msg) from exc
+    return str(configured_region) if configured_region else None
+
+
+def _new_botocore_session() -> Any:
+    """Create Botocore lazily so non-Bedrock users do not require its dependency."""
+    import botocore.session  # type: ignore[import-untyped]
+
+    return botocore.session.Session()
 
 
 def _has_azure_credentials(env: Mapping[str, str]) -> bool:
@@ -92,7 +175,24 @@ def _strip_together_prefix(model_name: str) -> str:
     return model_name
 
 
-def _azure_provider_kwargs(endpoint: str, api_key: str, api_version: str) -> dict[str, str]:
+def _strip_bedrock_prefix(model_name: str) -> str:
+    stripped = (
+        model_name[len(_BEDROCK_EXPLICIT_PREFIX) :]
+        if model_name.lower().startswith(_BEDROCK_EXPLICIT_PREFIX)
+        else model_name
+    )
+    if not stripped.strip():
+        raise ValueError("Bedrock model id must not be blank")
+    return stripped
+
+
+class _AzureProviderKwargs(TypedDict):
+    azure_endpoint: str
+    api_key: str
+    api_version: str
+
+
+def _azure_provider_kwargs(endpoint: str, api_key: str, api_version: str) -> _AzureProviderKwargs:
     return {
         "azure_endpoint": endpoint,
         "api_key": api_key,
@@ -158,9 +258,7 @@ class PydanticAiRlmClient:
                 history.append(ModelResponse(parts=[TextPart(content=msg.content)]))
 
         # Override the system prompt for this call
-        self._agent._system_prompts = (  # noqa: SLF001
-            [system_prompt] if system_prompt else []
-        )
+        self._agent._system_prompts = (system_prompt,) if system_prompt else ()  # noqa: SLF001
 
         try:
             model_settings = self._model_settings
@@ -354,7 +452,7 @@ def _build_pydantic_model(
         if region:
             kwargs["region_name"] = region
         return BedrockConverseModel(
-            model_name,
+            _strip_bedrock_prefix(model_name),
             provider=BedrockProvider(**kwargs),
         )
 

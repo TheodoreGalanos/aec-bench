@@ -172,6 +172,18 @@ The manifest accepts only lifecycle controls that the current runner applies: `t
 
 The ledger-derived `EvaluationArtifact` repeats the hash-bound study design and reports each group's session count, configured turn capacity, requests, tool calls, tokens, reward, retention, and cost. It deliberately emits no pairwise effect, winner, or causal estimate. A future causal phase must define retry-aware total-trial budget allocation and randomized or counterbalanced execution before such comparisons are valid.
 
+PR21 extends this runner to action-driven public tasks. A registered hydraulic smoke environment executes the real bounded operation graph for each public variant and constructs submissions from runtime action IDs, so dry-run inspection no longer assumes every task has static gold submissions. The dry-run expands all declared conditions but does not execute a model in each one. For a fresh selectable campaign, provider-configuration preflight errors fail before campaign files or immutable failure records are created; recovery can still finalize a previously completed immutable snapshot. Preflight confirms a configured credential source, not remote authentication.
+
+A selectable manifest preregisters its deterministic selection rule, public and holdout repetitions, and positive finite estimated spend envelope. After all planned public records exist, freeze one exact condition with:
+
+```bash
+SSC03_CALIBRATION_MODEL_ID="$MODEL_ID" \
+aec-bench --json meta-harness lifecycle-calibration-freeze \
+  --config docs/examples/meta-harness/hydraulic-lifecycle-calibration.example.yaml
+```
+
+The selector validates every record against its immutable snapshot, retains incorrect completed outcomes in mean reward, and requires stable resolved identity, runtime dependency bytes, lifecycle-operation protocol, and tool schema across every public variant/repetition cell. It cannot run under a sealed holdout mount and publishes one write-once artifact. See [the public calibration and freeze guide](ssc03-public-calibration-freeze.md).
+
 ### Evidence-only holdout evaluation
 
 The transfer-evaluation contract is a pure post-verifier read over content-addressed `TrialRecord` references and their immutable snapshot artifacts. It performs no model, adapter, provider, or verifier execution. Record visibility is reconciled with the snapshotted task-owned variant metadata; package and runtime provenance, execution condition, verifier reward, and verifier validity are reconciled with the immutable invocation and verification artifacts. A selected condition is frozen across model, adapter, runtime dependency fingerprint, execution mode, memory visibility policy, and per-session turn limit.

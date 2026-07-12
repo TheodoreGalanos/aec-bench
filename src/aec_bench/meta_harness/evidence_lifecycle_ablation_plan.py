@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import math
 import re
 import tempfile
 from pathlib import Path
@@ -102,6 +103,24 @@ class LifecycleAblationStudyDesign(StrictModel):
     causal_effects_supported: Literal[False]
 
 
+class LifecycleCalibrationSelectionPolicy(StrictModel):
+    objective: Literal["max_mean_verifier_reward"]
+    candidate_coverage: Literal["all_public_variants_and_repetitions"]
+    public_variant_ids: tuple[NonEmptyStr, ...]
+    incomplete_candidate: Literal["ineligible"]
+    tie_break: Literal["canonical_condition_identity"]
+    interaction_protocol: Literal["lifecycle_operation"]
+    public_repetitions: PositiveInt
+    holdout_repetitions: PositiveInt
+
+    @field_validator("public_variant_ids")
+    @classmethod
+    def validate_public_variant_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if not value or tuple(sorted(set(value))) != value:
+            raise ValueError("public variant ids must be non-empty, sorted, and unique")
+        return value
+
+
 class LifecycleAblationManifest(StrictModel):
     schema_version: Literal["1"] = "1"
     experiment_id: NonEmptyStr
@@ -115,6 +134,7 @@ class LifecycleAblationManifest(StrictModel):
     ledger_root: NonEmptyStr
     limits: LifecycleAblationLimits
     estimated_cost_per_trial_usd: NonNegativeFloat | None = None
+    selection_policy: LifecycleCalibrationSelectionPolicy | None = None
 
     @field_validator("experiment_id")
     @classmethod
@@ -178,6 +198,34 @@ class LifecycleAblationManifest(StrictModel):
     def validate_cost_limit(self) -> LifecycleAblationManifest:
         if self.limits.max_estimated_cost_usd is not None and self.estimated_cost_per_trial_usd is None:
             raise ValueError("estimated_cost_per_trial_usd is required when a cost limit is set")
+        if self.selection_policy is not None:
+            declared_public_variants = set(self.selection_policy.public_variant_ids)
+            if set(self.variants) != declared_public_variants:
+                missing = ", ".join(sorted(declared_public_variants - set(self.variants))) or "none"
+                unexpected = ", ".join(sorted(set(self.variants) - declared_public_variants)) or "none"
+                raise ValueError(
+                    "preregistered calibration variants must match its captured public variant ids; "
+                    f"missing={missing}; unexpected={unexpected}"
+                )
+            if self.selection_policy.public_repetitions != self.repetitions:
+                raise ValueError("preregistered public repetitions must match campaign repetitions")
+            estimated_per_trial = self.estimated_cost_per_trial_usd
+            maximum_estimate = self.limits.max_estimated_cost_usd
+            planned_trial_count = len(self.variants) * len(self.agents) * len(self.conditions) * self.repetitions
+            planned_estimate = (
+                float(estimated_per_trial) * planned_trial_count if estimated_per_trial is not None else None
+            )
+            if (
+                estimated_per_trial is None
+                or estimated_per_trial <= 0
+                or not math.isfinite(float(estimated_per_trial))
+                or maximum_estimate is None
+                or maximum_estimate <= 0
+                or not math.isfinite(float(maximum_estimate))
+                or planned_estimate is None
+                or not math.isfinite(planned_estimate)
+            ):
+                raise ValueError("preregistered calibration requires a positive finite estimated spend envelope")
         return self
 
 
@@ -298,6 +346,13 @@ def build_lifecycle_ablation_plan(manifest: LifecycleAblationManifest) -> Lifecy
     unknown = sorted(set(manifest.variants) - known_variants)
     if unknown:
         raise ValueError(f"unknown lifecycle variants for {manifest.lifecycle_template_id}: {', '.join(unknown)}")
+    if manifest.selection_policy is not None and set(manifest.selection_policy.public_variant_ids) != known_variants:
+        missing = ", ".join(sorted(known_variants - set(manifest.selection_policy.public_variant_ids))) or "none"
+        unexpected = ", ".join(sorted(set(manifest.selection_policy.public_variant_ids) - known_variants)) or "none"
+        raise ValueError(
+            "preregistered calibration must capture every currently registered public variant; "
+            f"missing={missing}; unexpected={unexpected}"
+        )
     adaptations = {
         variant_id: AdaptationProvenance.model_validate(
             lifecycle_variant_metadata(manifest.lifecycle_template_id, variant_id)["adaptation"]
@@ -349,6 +404,8 @@ def build_lifecycle_ablation_plan(manifest: LifecycleAblationManifest) -> Lifecy
                         "memory_visibility_policy": condition.memory_visibility_policy.value,
                         "repetition": repetition_index + 1,
                     }
+                    if manifest.selection_policy is not None:
+                        identity["selection_policy"] = manifest.selection_policy.model_dump(mode="json")
                     trial_id = f"trial-{_canonical_sha256(identity)}"
                     trials.append(
                         LifecycleAblationTrial(

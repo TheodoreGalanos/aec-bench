@@ -225,6 +225,11 @@ def active_sealed_lifecycle_mount(package_dir: Path) -> SealedLifecycleMount:
     return mount
 
 
+def sealed_lifecycle_mount_active() -> bool:
+    """Report whether this execution context has a sealed mount without exposing it."""
+    return _ACTIVE_SEALED_LIFECYCLE_MOUNT.get() is not None
+
+
 def _require_exact_active_mount(mount: SealedLifecycleMount) -> None:
     if active_sealed_lifecycle_mount(mount.package_dir) is not mount:
         raise SealedLifecycleProviderError("sealed_provider_not_mounted")

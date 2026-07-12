@@ -195,6 +195,34 @@ def test_control_tool_executes_one_source_bound_operation_without_host_identity_
     assert "attempt_id" not in json.dumps(stale)
 
 
+def test_workspace_tool_rejects_undeclared_hydraulic_submission_fields(tmp_path: Path) -> None:
+    package = _interaction_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    prepare_evidence_checkpoint(package, run_dir)
+    workspace = EvidenceLifecycleWorkspaceTool(
+        package_dir=package,
+        run_dir=run_dir,
+        visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
+    )
+    checkpoint = load_evidence_lifecycle_spec(package).checkpoints[0]
+    submission: dict[str, Any] = {field: {} for field in checkpoint.required_submission_fields}
+    submission["checkpoint_id"] = checkpoint.checkpoint_id
+    submission["memo"] = {}
+
+    response = json.loads(
+        workspace.write_checkpoint_submission(
+            checkpoint.checkpoint_id,
+            json.dumps(submission),
+        )
+    )
+
+    assert response == {
+        "status": "rejected",
+        "error": "checkpoint submission contains undeclared fields: memo",
+    }
+    assert not (run_dir / "workspace" / checkpoint.submission_path).exists()
+
+
 def test_local_tool_schema_captures_operation_capability_in_both_execution_modes() -> None:
     persistent = _lifecycle_tool_schema(
         "persistent_context",

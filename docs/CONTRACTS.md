@@ -146,6 +146,12 @@ Key rule:
 
 Fresh-context requests own exactly one checkpoint. Persistent execution remains a separate one-session orchestration and must not be represented as repeated fresh episode calls.
 
+### EvidenceCheckpointSpec submission fields
+
+**Boundary:** Public lifecycle package -> Model-facing submission tool -> Host checkpoint archive
+
+`required_submission_fields` declares the public top-level fields that must be present. Checkpoints normally remain extensible for compatibility. A checkpoint may instead set `allow_additional_submission_fields: false`, making that declared list the exact public top-level shape. The model-facing write tool and the host submission gate both reject missing or undeclared fields before archival; neither strips or repairs model output. Nested semantic correctness and reward remain the task verifier's responsibility.
+
 ### ConditionalEvidenceSpec / EvidenceRequestActionRecord
 
 **Boundary:** Public lifecycle package -> Evidence-lifecycle host -> Model-visible workspace
@@ -218,6 +224,16 @@ Key rule:
 - ledger publication is exclusive, fsync-durable through newly created ancestors, and atomic; an artifact snapshot left before record publication is recoverable without another model call.
 - session-result publication is atomic and fsync-durable; a torn result from a terminal persistent session is quarantined and replaced by an unresolved zero-reward failure only when its submitted ownership and complete trajectory validate.
 - malformed trajectory history is a conflict and is never truncated or inferred during recovery.
+
+### LifecycleCalibrationSelectionPolicy / LifecycleCalibrationFreeze
+
+**Boundary:** Immutable public calibration ledger -> Frozen holdout execution condition
+
+`LifecycleCalibrationSelectionPolicy` is optional for legacy descriptive sweeps and mandatory for a selectable campaign. It captures the exact public variant IDs, requires equality with the current public registry at fresh planning time, and preregisters full repetition coverage, maximum mean verifier reward, incomplete-candidate ineligibility, canonical identity tie-breaking, the required lifecycle-operation protocol, public repetitions, holdout repetitions, and a positive finite estimated spend envelope. The policy enters manifest, plan, and trial identity before execution. Historical parsing uses the captured IDs rather than consulting a later registry. Selectable execution rejects injected adapter registries and validates the normally routed provider configuration before a fresh campaign writes execution state.
+
+`LifecycleCalibrationFreeze` is a deterministic write-once artifact built only after every planned public record exists at its canonical path and validates against the historical manifest, plan, and interaction contract captured in its immutable snapshot. It parses and hashes the same record and artifact bytes, binds every record by SHA-256, reports all candidate conditions and ineligibility reasons, and freezes requested/resolved model and adapter, runtime provider and realized dependency bytes, execution mode, visibility policy, per-session turn limit, lifecycle-operation protocol hash, and full tool-schema hash. The typed artifact independently recomputes the maximum-reward/canonical-tie-break winner and requires candidate references to partition the public evidence exactly.
+
+Selection refuses to run while a sealed holdout mount is active. Incorrect but complete public outcomes remain scored evidence; missing cells, partial records, unfinished verifier calls, unresolved identity, adapter mismatch, or protocol/tool drift make a candidate ineligible. Atomic publication accepts identical bytes on retry and never replaces a different freeze.
 
 ### LifecycleTransferEvaluationSpec / LifecycleTransferSummary
 

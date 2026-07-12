@@ -1,0 +1,48 @@
+# ABOUTME: Preregisters the public PR19 hydraulic campaign and deterministic condition selector.
+# ABOUTME: Uses ignored roots and a preregistered finite execution envelope for the public campaign.
+schema_version: "1"
+experiment_id: ssc03-hydraulic-public-calibration
+lifecycle_template_id: hydraulic-interaction-lifecycle-review
+study_design:
+  interpretation: descriptive_calibration
+  turn_budget_scope: per_session
+  execution_order: deterministic_sequential_plan_order
+  randomized: false
+  counterbalanced: false
+  causal_effects_supported: false
+variants:
+  - administrative_no_op
+  - major_idf_revision
+  - outlet_geometry_revision
+  - tailwater_revision
+agents:
+  - name: hydraulic-calibration-model
+    adapter: tool_loop
+    # Set SSC03_CALIBRATION_MODEL_ID to one exact provider-routable model ID.
+    model: env:SSC03_CALIBRATION_MODEL_ID
+    parameters:
+      # Fresh conditions open three sessions; this remains a per-session limit.
+      max_turns_per_session: 60
+repetitions: 1
+output_root: ../../../artefacts/ssc03-hydraulic-public-calibration/runs
+ledger_root: ../../../artefacts/ssc03-hydraulic-public-calibration/ledger
+# Manual planning guards required by the selectable campaign contract.
+estimated_cost_per_trial_usd: 25.0
+limits:
+  max_trials: 16
+  max_concurrency: 1
+  # This is a manual planning guard, not a provider-side billing cap.
+  max_estimated_cost_usd: 400.0
+selection_policy:
+  objective: max_mean_verifier_reward
+  candidate_coverage: all_public_variants_and_repetitions
+  public_variant_ids:
+    - administrative_no_op
+    - major_idf_revision
+    - outlet_geometry_revision
+    - tailwater_revision
+  incomplete_candidate: ineligible
+  tie_break: canonical_condition_identity
+  interaction_protocol: lifecycle_operation
+  public_repetitions: 1
+  holdout_repetitions: 1

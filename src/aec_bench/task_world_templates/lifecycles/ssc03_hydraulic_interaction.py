@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate
+from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate, EvidenceCheckpointSpec
 from aec_bench.task_world_templates.hydraulics import build_hydraulic_run_request, materialize_hydraulic_world
 from aec_bench.task_world_templates.hydraulics.contracts import HydraulicSourceState
 from aec_bench.task_world_templates.hydraulics.operations import Ssc03HydraulicOperationResolver
@@ -53,7 +53,7 @@ def materialize_ssc03_hydraulic_interaction_lifecycle(
     _write_json(output / "lifecycle.json", template.evidence_lifecycle.model_dump(mode="json"))
     (output / "README.md").parent.mkdir(parents=True, exist_ok=True)
     (output / "README.md").write_text(_readme(), encoding="utf-8")
-    for checkpoint_id, instruction in _instructions().items():
+    for checkpoint_id, instruction in _instructions(template).items():
         path = output / "instructions" / f"{checkpoint_id}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(instruction, encoding="utf-8")
@@ -157,63 +157,104 @@ def _resolution_manifest(variant: Ssc03HydraulicInteractionVariantSpec) -> dict[
     }
 
 
-def _instructions() -> dict[str, str]:
+def _instructions(template: CompositeTaskWorldTemplate) -> dict[str, str]:
     claim = (
         "Do not describe these synthetic screening calculations as SWMM, authority approval, standards "
         "compliance, project design evidence, transfer, or continual learning."
     )
-    contract = _submission_contract()
+    assert template.evidence_lifecycle is not None
+    checkpoints = {checkpoint.checkpoint_id: checkpoint for checkpoint in template.evidence_lifecycle.checkpoints}
     return {
         "baseline_analysis": (
             "# Baseline hydraulic analysis\n\nExecute the declared baseline hydrology, coupled detention/outlet, "
             "and HGL "
-            f"operations for both scenarios. Submit cumulative source-bound decisions. {claim}\n\n{contract}"
+            "operations for both scenarios. Submit cumulative source-bound decisions. "
+            f"{claim}\n\n{_submission_contract(checkpoints['baseline_analysis'])}"
         ),
         "revision_analysis": (
             "# Revision analysis\n\nActivate the declared revision, retain still-current evidence, "
             "recompute stale evidence, "
-            f"and submit explicit supersession lineage. {claim}\n\n{contract}"
+            f"and submit explicit supersession lineage. {claim}\n\n"
+            f"{_submission_contract(checkpoints['revision_analysis'])}"
         ),
         "closeout_review": (
             "# Closeout review\n\nReconcile the selected run, report, memo, physical criteria, and readiness without "
-            f"inventing missing evidence. {claim}\n\n{contract}"
+            f"inventing missing evidence. {claim}\n\n"
+            f"{_submission_contract(checkpoints['closeout_review'])}"
         ),
     }
 
 
-def _submission_contract() -> str:
-    return """## Structured submission contract
+def _submission_contract(checkpoint: EvidenceCheckpointSpec) -> str:
+    top_level_fields = "\n".join(f"- `{field}`" for field in checkpoint.required_submission_fields)
+    selected_operations = {
+        "baseline_analysis": """Use `visible_source_state_sha256` from
+`workspace/hydraulics/current-source.json`. `selected_operations` is the exact map from every required baseline
+operation ID to the action ID returned for this checkpoint.
+""",
+        "revision_analysis": """Use `visible_source_state_sha256` from
+`workspace/hydraulics/current-source.json`. `selected_operations` includes the source-revision action and every
+required revision operation. Use each current-checkpoint action ID even when its outcome is `already_current`.
+""",
+        "closeout_review": """Use `visible_source_state_sha256` from
+`workspace/hydraulics/current-source.json`. Execute no new operation at closeout. Preserve the revision checkpoint's
+`selected_operations` map exactly.
+""",
+    }
+    decisions = """`accepted_decisions` contains exactly one record for `design-10yr` and one for `major-100yr`.
+Each record contains exactly `decision_id`, `scenario_id`, `hydrology_action_id`, `detention_action_id`,
+`hgl_action_id`, `hydraulic_run_id`, `screening_outcome`, and `failed_criteria`. Use canonical computation action IDs
+rather than an `already_current` wrapper. Use `criteria_met` or `criteria_not_met` for `screening_outcome`, and sort
+`failed_criteria`.
+"""
+    checkpoint_contracts = {
+        "baseline_analysis": (
+            "Use `decision.<scenario>.baseline` decision IDs. No revision, supersession, run/report reference, or "
+            "memo fields belong in this checkpoint.\n"
+        ),
+        "revision_analysis": (
+            "Set `revision_id` to the activated public revision. Retain an unaffected decision byte-for-byte. For "
+            "each affected scenario, use `decision.<scenario>.revision` for the replacement and add exactly one "
+            "`supersession_lineage` record containing `scenario_id`, `superseded_decision_id`, and "
+            "`replacement_decision_id`.\n"
+        ),
+        "closeout_review": """Preserve revision `selected_operations`, `accepted_decisions`, and
+`supersession_lineage` exactly. `run_reference` and `report_reference` are two-entry maps keyed by scenario. Each run
+entry contains exactly `selected_operation_action_id`, `canonical_detention_action_id`, `hydraulic_run_id`, and
+`run_manifest_sha256`. Each report entry contains exactly `selected_operation_action_id`, `canonical_hgl_action_id`,
+`hydraulic_run_id`, and `report_sha256`.
 
-Use `visible_source_state_sha256` from `workspace/hydraulics/current-source.json`.
-`selected_operations` is an exact map from every required public operation ID to the action ID returned for this
-checkpoint. In revision analysis, include the source-revision action and use the current-checkpoint action ID even
-when its outcome is `already_current`.
+`memo` contains exactly these keys and no others:
 
-`accepted_decisions` contains exactly one record for `design-10yr` and one for `major-100yr`. Each record contains:
+- `visible_source_state_sha256`
+- `run_reference`
+- `report_reference`
+- `decision_ids`
+- `supersession_lineage`
+- `readiness_decision`
+- `claim_boundary`
 
-- `decision_id`: `decision.<scenario>.baseline` for the baseline, or `decision.<scenario>.revision` when an affected
-  scenario is replaced;
-- `scenario_id`, `hydrology_action_id`, `detention_action_id`, and `hgl_action_id`, using canonical computation
-  action IDs rather than an `already_current` wrapper;
-- `hydraulic_run_id`;
-- `screening_outcome`: `criteria_met` or `criteria_not_met`;
-- sorted `failed_criteria`.
+`decision_ids` is the two-entry scenario-to-current-decision-ID map. The memo repeats the top-level reference maps,
+supersession lineage, readiness decision, and claim boundary exactly.
+""",
+    }
+    return f"""## Structured submission contract
 
-Retain an unaffected decision byte-for-byte. For each replaced decision, add one `supersession_lineage` record with
-`scenario_id`, `superseded_decision_id`, and `replacement_decision_id`.
+Use exactly these top-level keys and no others:
 
-At closeout, preserve revision `selected_operations`, `accepted_decisions`, and `supersession_lineage` exactly.
-Provide two-entry `run_reference` and `report_reference` maps keyed by scenario. Run entries contain
-`selected_operation_action_id`, `canonical_detention_action_id`, `hydraulic_run_id`, and `run_manifest_sha256`.
-Report entries contain `selected_operation_action_id`, `canonical_hgl_action_id`, `hydraulic_run_id`, and
-`report_sha256`. The structured `memo` repeats the visible source hash, both reference maps, scenario-to-decision-ID
-map, supersession lineage, readiness, and claim boundary.
+{top_level_fields}
+
+{selected_operations[checkpoint.checkpoint_id]}
+
+{decisions}
+
+{checkpoint_contracts[checkpoint.checkpoint_id]}
 
 Use `screening_ready` only when every current scenario criterion passes; otherwise use `not_screening_ready`.
 At every checkpoint, use this exact `claim_boundary` object:
 
 ```json
-{
+{{
   "evidence_class": "benchmark_owned_synthetic_screening",
   "solver_fidelity": "not_swmm_equivalent",
   "authority_status": "no_authority_approval",
@@ -221,7 +262,7 @@ At every checkpoint, use this exact `claim_boundary` object:
   "project_evidence_status": "not_project_design_evidence",
   "model_evidence_status": "no_model_performance_holdout_or_transfer_result",
   "learning_status": "no_post_training_or_continual_learning_result"
-}
+}}
 ```
 """
 

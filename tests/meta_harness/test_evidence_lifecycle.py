@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 from collections.abc import Callable
@@ -109,6 +110,46 @@ def test_lifecycle_contract_rejects_duplicate_submission_paths() -> None:
             world_id="world.demo",
             checkpoints=[initial, response],
         )
+
+
+def test_lifecycle_contract_rejects_exact_shape_without_checkpoint_id() -> None:
+    payload = _checkpoint("initial_review").model_dump(mode="json")
+    payload["required_submission_fields"] = ["review_matrix"]
+    payload["allow_additional_submission_fields"] = False
+
+    with pytest.raises(ValidationError, match="exact submission fields must include checkpoint_id"):
+        EvidenceCheckpointSpec.model_validate(payload)
+
+
+def test_lifecycle_spec_identity_preserves_legacy_default_field_omission(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    contract_path = package / "lifecycle.json"
+    legacy_contract = _load_json(contract_path)
+    for checkpoint in legacy_contract["checkpoints"]:
+        checkpoint.pop("allow_additional_submission_fields")
+    _write_json(contract_path, legacy_contract)
+
+    expected_payload = EvidenceLifecycleSpec.model_validate(legacy_contract).model_dump(
+        mode="json",
+        exclude_none=True,
+    )
+    for checkpoint in expected_payload["checkpoints"]:
+        checkpoint.pop("allow_additional_submission_fields")
+    expected_sha256 = hashlib.sha256(
+        json.dumps(expected_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+    run_dir = tmp_path / "run"
+    identity = lifecycle_runtime.evidence_lifecycle_package_identity(package)
+    prepare_evidence_checkpoint(package, run_dir)
+    state_path = run_dir / "state.json"
+    historical_state = _load_json(state_path)
+    historical_state["lifecycle_spec_sha256"] = expected_sha256
+    _write_json(state_path, historical_state)
+    state = read_evidence_lifecycle_state(package, run_dir)
+
+    assert identity["spec_sha256"] == expected_sha256
+    assert state["lifecycle_spec_sha256"] == expected_sha256
 
 
 def test_conditional_evidence_contract_rejects_ambiguous_request_graphs() -> None:
@@ -1695,6 +1736,28 @@ def test_submission_gate_requires_checkpoint_declared_fields(tmp_path: Path) -> 
     _write_json(Path(prepared["submission_path"]), {"checkpoint_id": "initial_review"})
 
     with pytest.raises(EvidenceLifecycleError, match="missing required fields: review_matrix"):
+        submit_evidence_checkpoint(package, run_dir)
+
+
+def test_submission_gate_rejects_undeclared_fields_when_checkpoint_contract_is_exact(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    contract_path = package / "lifecycle.json"
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    contract["checkpoints"][0]["required_submission_fields"] = ["checkpoint_id", "review_matrix"]
+    contract["checkpoints"][0]["allow_additional_submission_fields"] = False
+    _write_json(contract_path, contract)
+    run_dir = tmp_path / "run"
+    prepared = prepare_evidence_checkpoint(package, run_dir)
+    _write_json(
+        Path(prepared["submission_path"]),
+        {
+            "checkpoint_id": "initial_review",
+            "review_matrix": {},
+            "memo": {},
+        },
+    )
+
+    with pytest.raises(EvidenceLifecycleError, match="undeclared fields: memo"):
         submit_evidence_checkpoint(package, run_dir)
 
 

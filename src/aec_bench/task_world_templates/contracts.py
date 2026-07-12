@@ -250,6 +250,7 @@ class EvidenceCheckpointSpec(StrictModel):
     submission_path: NonEmptyStr
     depends_on: list[NonEmptyStr] = Field(default_factory=list)
     required_submission_fields: list[NonEmptyStr] = Field(default_factory=lambda: ["checkpoint_id"])
+    allow_additional_submission_fields: bool = True
     conditional_evidence: ConditionalEvidenceSpec | None = None
     conditional_operations: ConditionalOperationSpec | None = None
 
@@ -277,6 +278,8 @@ class EvidenceCheckpointSpec(StrictModel):
             raise ValueError("submission_path must name a JSON file")
         if len(self.required_submission_fields) != len(set(self.required_submission_fields)):
             raise ValueError("required submission fields must be unique")
+        if not self.allow_additional_submission_fields and "checkpoint_id" not in self.required_submission_fields:
+            raise ValueError("exact submission fields must include checkpoint_id")
         if self.conditional_evidence is not None and self.conditional_operations is not None:
             raise ValueError("checkpoint must not declare both evidence requests and lifecycle operations")
         return self

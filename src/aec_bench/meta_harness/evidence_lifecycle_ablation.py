@@ -11,6 +11,7 @@ from typing import Any, cast
 
 import yaml  # type: ignore[import-untyped]
 
+from aec_bench.adapters.rlm.providers import preflight_pydantic_model_configuration
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.meta_harness.evidence_lifecycle import (
     evidence_lifecycle_package_identity,
@@ -25,6 +26,7 @@ from aec_bench.meta_harness.evidence_lifecycle_ablation_plan import (
     LifecycleAblationRunResult,
     LifecycleAblationStudyDesign,
     LifecycleAblationTrial,
+    LifecycleCalibrationSelectionPolicy,
     build_lifecycle_ablation_plan,
 )
 from aec_bench.meta_harness.evidence_lifecycle_episode import (
@@ -46,6 +48,7 @@ from aec_bench.meta_harness.evidence_lifecycle_local import (
 from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.lifecycles import (
     lifecycle_package_variant,
+    registered_lifecycle_smoke_environment,
 )
 from aec_bench.task_world_templates.materializer import (
     materialize_template_lifecycle,
@@ -60,6 +63,7 @@ __all__ = [
     "LifecycleAblationRunResult",
     "LifecycleAblationStudyDesign",
     "LifecycleAblationTrial",
+    "LifecycleCalibrationSelectionPolicy",
     "LifecycleExecutionMode",
     "build_lifecycle_ablation_plan",
     "inspect_lifecycle_ablation_plan",
@@ -219,6 +223,9 @@ def run_lifecycle_ablation(
     """Execute or resume a sequential sweep and finalize each invocation once."""
     from aec_bench.meta_harness.evidence_lifecycle_trial_record import finalize_lifecycle_trial_record
 
+    if manifest.selection_policy is not None and registry_factory is not None:
+        raise ValueError("selectable calibration campaigns must use the default provider registry")
+
     plan = build_lifecycle_ablation_plan(manifest)
     output_root = Path(manifest.output_root)
 
@@ -251,6 +258,9 @@ def run_lifecycle_ablation(
             failed += int(_record_execution_failed(record))
             continue
         remaining.append(trial)
+
+    if remaining and registry_factory is None and manifest.selection_policy is not None:
+        _preflight_provider_configuration(remaining)
 
     if remaining:
         _write_or_validate_json(
@@ -395,6 +405,25 @@ def run_lifecycle_ablation(
     )
 
 
+def _preflight_provider_configuration(trials: list[LifecycleAblationTrial]) -> None:
+    """Construct every selected provider before campaign execution writes begin."""
+    failures: set[str] = set()
+    checked: set[str] = set()
+    for trial in trials:
+        model = trial.agent.model
+        if model in checked:
+            continue
+        checked.add(model)
+        try:
+            if model == "test":
+                raise ValueError("selectable calibration does not accept the PydanticAI test model")
+            preflight_pydantic_model_configuration(model)
+        except Exception as exc:
+            failures.add(f"{trial.agent.name} ({model}): {exc}")
+    if failures:
+        raise ValueError("provider configuration preflight failed: " + "; ".join(sorted(failures)))
+
+
 def _ensure_variant_package(manifest: LifecycleAblationManifest, trial: LifecycleAblationTrial) -> Path:
     variant_id = trial.variant_id
     package = Path(manifest.output_root) / "packages" / variant_id
@@ -428,16 +457,22 @@ def _smoke_lifecycle_packages(packages: dict[str, Path]) -> None:
     with tempfile.TemporaryDirectory(prefix="aec-bench-lifecycle-smoke-") as temporary:
         smoke_root = Path(temporary)
         for variant_id, package in sorted(packages.items()):
-            gold_path = package / "hidden" / "gold-submissions.json"
-            if not gold_path.is_file():
-                raise ValueError(f"lifecycle package lacks deterministic smoke submissions: {variant_id}")
-            gold = _read_json(gold_path)
+            template = _read_json(package / "template.json")
+            template_id = template.get("template_id")
+            if not isinstance(template_id, str):
+                raise ValueError(f"lifecycle package has no template identity: {variant_id}")
+            episode_environment = registered_lifecycle_smoke_environment(template_id, package)
+            if episode_environment is None:
+                gold_path = package / "hidden" / "gold-submissions.json"
+                if not gold_path.is_file():
+                    raise ValueError(f"lifecycle package lacks deterministic smoke submissions: {variant_id}")
+                episode_environment = _gold_smoke_environment(_read_json(gold_path))
 
             run_dir = smoke_root / variant_id
             run_evidence_lifecycle(
                 package,
                 run_dir,
-                episode_environment=_gold_smoke_environment(gold),
+                episode_environment=episode_environment,
             )
             verification = verify_template_lifecycle(package, run_dir)
             if not verification.get("passed") or float(verification.get("reward", 0.0)) != 1.0:

@@ -114,8 +114,15 @@ def test_public_instructions_define_the_structured_submission_without_topology_a
         variant_id="major_idf_revision",
     )
 
+    lifecycle = _read_json(package / "lifecycle.json")
+    checkpoints = {item["checkpoint_id"]: item for item in lifecycle["checkpoints"]}
     for checkpoint_id in ("baseline_analysis", "revision_analysis", "closeout_review"):
         instruction = (package / "instructions" / f"{checkpoint_id}.md").read_text(encoding="utf-8")
+        checkpoint = checkpoints[checkpoint_id]
+        assert checkpoint["allow_additional_submission_fields"] is False
+        assert "Use exactly these top-level keys and no others:" in instruction
+        for field in checkpoint["required_submission_fields"]:
+            assert f"- `{field}`" in instruction
         for required in (
             "visible_source_state_sha256",
             "selected_operations",
@@ -127,6 +134,19 @@ def test_public_instructions_define_the_structured_submission_without_topology_a
             assert required in instruction
         for forbidden in ("major-100yr is affected", "design chain is reusable", "expected recomputation"):
             assert forbidden not in instruction.lower()
+
+    baseline_instruction = (package / "instructions" / "baseline_analysis.md").read_text(encoding="utf-8")
+    for closeout_only in ("revision_id", "supersession_lineage", "run_reference", "report_reference", "memo"):
+        assert f"- `{closeout_only}`" not in baseline_instruction
+
+    revision_instruction = (package / "instructions" / "revision_analysis.md").read_text(encoding="utf-8")
+    for closeout_only in ("run_reference", "report_reference", "memo"):
+        assert f"- `{closeout_only}`" not in revision_instruction
+
+    closeout_instruction = (package / "instructions" / "closeout_review.md").read_text(encoding="utf-8")
+    assert "`decision_ids`" in closeout_instruction
+    assert "`readiness_decision`" in closeout_instruction
+    assert "scenario-to-decision-ID" not in closeout_instruction
 
 
 def test_variant_validation_rejects_revision_package_tampering(tmp_path: Path) -> None:

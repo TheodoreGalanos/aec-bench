@@ -26,6 +26,10 @@ from aec_bench.meta_harness.evidence_lifecycle_ablation import (
     load_lifecycle_ablation_manifest,
     run_lifecycle_ablation,
 )
+from aec_bench.meta_harness.evidence_lifecycle_calibration import (
+    LifecycleCalibrationFreeze,
+    write_lifecycle_calibration_freeze,
+)
 from aec_bench.meta_harness.evidence_lifecycle_local import (
     LifecycleVisibilityPolicy,
     run_local_evidence_lifecycle_fresh_context,
@@ -217,6 +221,33 @@ def lifecycle_ablation_command(
             }
         else:
             result = run_lifecycle_ablation(manifest).model_dump(mode="json")
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        emit(command, None, errors=[str(exc)], start_time=start)
+        return
+    emit(command, result, start_time=start)
+
+
+@app.command("lifecycle-calibration-freeze")
+def lifecycle_calibration_freeze_command(
+    config: Path = typer.Option(..., "--config", help="Preregistered lifecycle calibration YAML manifest"),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        help="Write-once frozen condition JSON; defaults inside the campaign output root",
+    ),
+) -> None:
+    """Select and freeze one condition from complete immutable public records."""
+    start = time.monotonic()
+    command = "meta-harness lifecycle-calibration-freeze"
+    try:
+        manifest = load_lifecycle_ablation_manifest(config)
+        destination = output or (Path(manifest.output_root) / "frozen-condition.json")
+        path = write_lifecycle_calibration_freeze(manifest, destination)
+        freeze = LifecycleCalibrationFreeze.model_validate_json(path.read_text(encoding="utf-8"))
+        result = {
+            "freeze_path": str(path.resolve()),
+            "freeze": freeze.model_dump(mode="json"),
+        }
     except (OSError, ValueError, yaml.YAMLError) as exc:
         emit(command, None, errors=[str(exc)], start_time=start)
         return

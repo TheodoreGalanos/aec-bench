@@ -24,6 +24,7 @@ This is a substrate for ordinary post-training and evaluation first. It is not y
 | PR18 | Deterministic, source-bound public hydraulic screening world |
 | PR19 | Bounded hydraulic operations, source revision, selective recomputation, and closeout verification |
 | PR20 | Explicit sealed-provider mounting without public target registration or export |
+| PR21 | Preregistered public calibration, write-once condition selection, and a successful fixed-contract model pilot |
 
 ## PR17: action-conditioned evidence protocol
 
@@ -99,9 +100,13 @@ The first out-of-tree synthetic execution proof uses a pump-station duty lifecyc
 
 ## PR21: preregistered campaign and condition selection
 
-Run the public calibration campaign, select one execution condition using only public evidence, and freeze model, adapter, realized runtime dependency hash, execution mode, visibility policy, turn limit, action-protocol hash, and tool-schema hash before mounting any holdout target.
+PR21 makes the PR19 hydraulic family executable through the existing campaign runner. Its registered task-owned smoke environment creates real operation transactions and runtime action IDs rather than relying on static gold submissions. Credential-free inspection executes that smoke on all four public variants, expands the exact four-condition plan, and leaves the requested campaign roots untouched. Condition-specific model execution begins only in the provider-backed campaign.
 
-This is the first phase that needs provider credentials and a spend/repetition budget. It also needs approval that private synthetic target content may be sent to the selected provider.
+A preregistered policy enters the manifest, plan, and trial identities before execution. After every planned immutable public record exists, the deterministic selector requires full variant/repetition coverage, selects maximum mean verifier reward with a canonical tie-break, and writes one immutable condition binding requested and resolved model/adapter, realized runtime dependencies, execution mode, visibility policy, turn limit, lifecycle-operation protocol, and complete tool schema. It refuses to run under a sealed mount. See [the public calibration and freeze guide](ssc03-public-calibration-freeze.md).
+
+This is the first phase that needs provider credentials plus a public execution/repetition budget. Two out-of-campaign persistent pilots have exercised the complete model path. The first followed the intended engineering path but exposed an ambiguous submission-shape contract before campaign execution. The checkpoint instructions and host field gate were corrected. A second freshly materialized confirmation pilot then completed one session across all three checkpoints, used the intended 13-operation path, submitted each checkpoint once without rejection, and passed all 11 verifier gates at reward `1.0`.
+
+The pilots establish that one fixed real model can complete one repaired-contract public lifecycle. They are not calibration evidence and cannot select a condition. The full public campaign remains pending separate explicit approval. Approval to transmit private synthetic target content remains a separate PR22 prerequisite. See [the plain-language PR18–PR21 learning capsule](ssc03-long-horizon-pr18-pr21.learning.md).
 
 ## PR22: redacted one-shot audit
 
@@ -109,7 +114,7 @@ Run the frozen condition against the sealed target once under the preregistered 
 
 ## Inputs still needed
 
-No provider credentials are needed through PR20.
+Provider credentials have been used only for the two explicitly approved public pilots. The public campaign and any later private-target transmission remain separately gated.
 
 Engineering review is needed for plausible parameter ranges, coupled scenarios, tolerances, dependency invalidation, equivalent information requests, closure policy, pump curves, NPSH, wet-well behavior, and operating rules. Infrastructure work is needed for the controlled solver matrix, private package storage, access-controlled ledgers, and redacted reporting.
 
