@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from aec_bench.contracts.agent_output import AgentOutputStatus
+from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import Completeness, TimingRecord, TrialRecord
 from aec_bench.harness.local_import import (
     ARTIFACT_FILENAMES,
@@ -132,6 +133,7 @@ def test_build_trial_record_constructs_valid_record(tmp_path: Path) -> None:
     assert isinstance(record, TrialRecord)
     assert record.trial_id == "trial-001"
     assert record.experiment_id == "exp-001"
+    assert record.task.visibility is Visibility.PUBLIC
     assert record.agent.model == "test-model"
     assert record.outputs.agent_output.status == AgentOutputStatus.COMPLETED
     assert record.cost is not None

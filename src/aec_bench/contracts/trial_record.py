@@ -16,6 +16,7 @@ from pydantic import (
 
 from aec_bench.contracts.agent_output import AgentOutput
 from aec_bench.contracts.evaluation_result import EvaluationResult
+from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel, ensure_non_empty_string
 
 
@@ -27,6 +28,7 @@ class Completeness(StrEnum):
 class TaskReference(StrictModel):
     task_id: NonEmptyStr
     task_revision: NonEmptyStr
+    visibility: Visibility | None = None
 
 
 class AgentReference(StrictModel):
@@ -188,6 +190,13 @@ class LifecycleExecutionRecord(StrictModel):
     max_turns_per_session: PositiveInt
     status: Literal["completed", "failed", "partial"]
     sessions: list[LifecycleSessionRecord] = Field(default_factory=list)
+
+    @field_validator("max_turns_per_session", mode="before")
+    @classmethod
+    def validate_strict_turn_limit(cls, value: object) -> object:
+        if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+            raise ValueError("max_turns_per_session must be a positive integer")
+        return value
 
     @model_validator(mode="after")
     def validate_session_consistency(self) -> "LifecycleExecutionRecord":

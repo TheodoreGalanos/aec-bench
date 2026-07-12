@@ -62,6 +62,7 @@ def test_build_trial_record_uses_adapter_configuration_record() -> None:
     )
 
     assert record.agent.configuration == {"model": "gpt-5.4-mini", "max_turns": 4}
+    assert record.task.visibility == task.visibility
     assert record.outputs.agent_result == {
         "failure_kind": None,
         "provider_error": None,

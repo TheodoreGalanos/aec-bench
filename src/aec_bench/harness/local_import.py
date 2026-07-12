@@ -269,6 +269,7 @@ def build_trial_record(
         task=TaskReference(
             task_id=task.task_id,
             task_revision="local",
+            visibility=task.visibility,
         ),
         agent=AgentReference(
             adapter=adapter_kind,

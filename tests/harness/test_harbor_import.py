@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from aec_bench.contracts.agent_output import AgentOutputStatus
+from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import Completeness
 from aec_bench.harness.harbor_import import (
     HarborImportError,
@@ -33,6 +34,7 @@ def test_import_harbor_trial_maps_real_successful_trial() -> None:
     assert record.experiment_id == "6834bc30-3801-4a45-a114-afb2d3764b7d"
     assert record.task.task_id == "mechanical/heat-load/audit-office-building/brisbane-8rm"
     assert record.task.task_revision == "b3b51915e026ccfe5393293338afb9360eefdd1d4d17c55760494334241403c5"
+    assert record.task.visibility is Visibility.PUBLIC
     assert record.agent.adapter == "tool-loop-anthropic"
     assert record.agent.adapter_revision == "1.0.0"
     assert record.agent.model == "claude-sonnet-4-6"

@@ -152,6 +152,8 @@ Fresh-context requests own exactly one checkpoint. Persistent execution remains 
 
 Immutable, append-only record of one trial.
 
+`task.visibility` carries the task's explicit `public | holdout` classification when known. The field is optional so historical records still parse, but evaluation code must treat a missing value as unknown rather than inferring visibility from task names, paths, experiment IDs, or variant IDs.
+
 Required fields:
 
 - `trial_id`
@@ -191,6 +193,22 @@ Key rule:
 - ledger publication is exclusive, fsync-durable through newly created ancestors, and atomic; an artifact snapshot left before record publication is recoverable without another model call.
 - session-result publication is atomic and fsync-durable; a torn result from a terminal persistent session is quarantined and replaced by an unresolved zero-reward failure only when its submitted ownership and complete trajectory validate.
 - malformed trajectory history is a conflict and is never truncated or inferred during recovery.
+
+### LifecycleTransferEvaluationSpec / LifecycleTransferSummary
+
+**Boundary:** Immutable lifecycle ledger evidence -> Descriptive holdout evaluation
+
+`LifecycleTransferEvaluationSpec` freezes one selected execution condition and two disjoint sets of content-addressed record references: public calibration support and holdout targets. Each reference binds the experiment ID, trial ID, canonical ledger path, and TrialRecord SHA-256. The selected condition binds model, adapter, runtime-dependency fingerprint, execution mode, model-visible memory policy, and per-session turn limit.
+
+The build-only evaluator validates record bytes and every referenced immutable snapshot artifact before considering eligibility. It reconciles task visibility and package identity with snapshotted variant metadata, condition and runtime provenance with the invocation manifest, and canonical reward and validity with the verification artifact. Public calibration records and holdout targets must carry explicit task visibility, `completeness=complete`, and completed verifier evidence. Targets must match the selected condition exactly and use a package hash distinct from every integrity-valid calibration input.
+
+`LifecycleTransferSummary` reports support counts, per-target eligibility and reasons, canonical verifier reward and validity, optional semantic diagnostics, and mean eligible target reward. Its study design is fixed to `descriptive_holdout_generalization`, selected from `public_calibration`, with causal effects and cross-run learning unsupported. Zero eligible targets produce `mean_target_reward=null`.
+
+Key rule:
+
+- this contract describes holdout generalization under a frozen condition; it does not estimate a transfer effect, select a winner, or demonstrate learner transfer.
+- the evaluator never changes the verifier-owned `TrialRecord.evaluation`.
+- the first contract is intentionally build-only: generic evaluation persistence and CLI publication remain deferred until holdout/internal visibility is enforced there.
 
 ### EvaluationResult
 

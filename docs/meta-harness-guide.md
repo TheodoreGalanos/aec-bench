@@ -138,6 +138,16 @@ The manifest accepts only lifecycle controls that the current runner applies: `t
 
 The ledger-derived `EvaluationArtifact` repeats the hash-bound study design and reports each group's session count, configured turn capacity, requests, tool calls, tokens, reward, retention, and cost. It deliberately emits no pairwise effect, winner, or causal estimate. A future causal phase must define retry-aware total-trial budget allocation and randomized or counterbalanced execution before such comparisons are valid.
 
+### Evidence-only holdout evaluation
+
+The transfer-evaluation contract is a pure post-verifier read over content-addressed `TrialRecord` references and their immutable snapshot artifacts. It performs no model, adapter, provider, or verifier execution. Record visibility is reconciled with the snapshotted task-owned variant metadata; package and runtime provenance, execution condition, verifier reward, and verifier validity are reconciled with the immutable invocation and verification artifacts. A selected condition is frozen across model, adapter, runtime dependency fingerprint, execution mode, memory visibility policy, and per-session turn limit.
+
+Calibration support must be explicitly `public`; targets must be explicitly `holdout`. Missing visibility is not inferred. Both sides must be complete and verifier-finished, every referenced artifact must still match its recorded hash, and a target package must differ from every integrity-valid calibration input regardless of visibility or condition. Calibration failures remain typed `not_supporting` results, while target failures remain typed `not_evaluable` results, each with explicit reasons. If no target is eligible, mean target reward is `null`, not zero or perfect performance.
+
+The fixed study design calls this `descriptive_holdout_generalization` selected from `public_calibration`. It reports canonical holdout verifier reward and validity plus optional semantic diagnostics without computing an effect, uplift, winner, or learner-transfer claim. It does not mutate the underlying verifier result.
+
+This first surface is deliberately a library build function only. There is no CLI, campaign runner, private target materializer, or generic `EvaluationArtifact` write path. The generic `_evaluations/` directory does not yet enforce an internal/holdout publication boundary, so persisting holdout-derived summaries there would create an avoidable leakage surface.
+
 ```bash
 aec-bench meta-harness lifecycle-run-local \
   --package lifecycle-package \
