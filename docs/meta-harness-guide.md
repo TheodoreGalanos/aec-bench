@@ -48,6 +48,37 @@ Two additional fresh-context policies define later ablations without deleting au
 
 The host workspace tool enforces visibility. All released evidence, archived submissions, trajectories, and conversations remain on disk for audit regardless of the model-visible policy.
 
+### Controlled SSC-03 variants
+
+SSC-03 exposes a small public calibration family through a task-specific event contract. Every variant starts from the same stale-manifest packet and keeps the same three checkpoint IDs. The host selects the event sequence at materialization; callers cannot patch arbitrary files or supply expected answers.
+
+| Variant | Response event | Closeout event | Intended pressure |
+| --- | --- | --- | --- |
+| `staged_full_correction` | corrected manifest, rerun, and report | propagated memo | canonical acquisition and closeout |
+| `semantic_no_op_release` | unregistered administrative runtime notice | complete corrected chain | retention under irrelevant evidence |
+| `response_assertion_only` | unregistered correction assertion without artifacts | complete corrected chain | assertion is not closure evidence |
+| `memo_closeout_missing` | corrected manifest, rerun, and report | memo assertion without memo | unresolved evidence must remain not ready |
+
+List or materialize the public variants through the existing task-world surface:
+
+```bash
+aec-bench --json task composite-template list-lifecycle-variants \
+  drainage-model-evidence-lifecycle-review
+
+aec-bench --json task composite-template materialize-lifecycle \
+  drainage-model-evidence-lifecycle-review \
+  --variant response_assertion_only \
+  --output lifecycle-package
+```
+
+Omitting `--variant` selects `staged_full_correction` and preserves the canonical agent-visible instructions and release bytes. Materialization requires an empty output directory so evidence from an earlier package cannot survive into another variant. The validated variant identity and existing adaptation lineage are stored in `hidden/variant.json`; the package hash, lifecycle experiment manifest, and append-only experiment index bind that identity. Variant IDs are not written into model-visible instructions or releases.
+
+Runtime notices are model-visible observations, but they are explicitly not registered project sources and are not added to cumulative `evidence_refs`. This keeps the no-op checkpoint semantically unchanged while still testing whether the reviewer invents an engineering update from irrelevant prose.
+
+Packages materialized before variant identity was introduced do not contain `hidden/variant.json` and are intentionally rejected rather than assigned an inferred label. Rematerialize them from the registered template; the default variant preserves the earlier canonical model-visible bytes.
+
+These committed variants are public calibration cases, not private holdouts. True holdout evidence must remain structurally separate and outside the public repository.
+
 ```bash
 aec-bench meta-harness lifecycle-run-local \
   --package lifecycle-package \

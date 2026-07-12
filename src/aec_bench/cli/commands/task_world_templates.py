@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
@@ -10,6 +11,7 @@ import typer
 
 from aec_bench.cli.output import emit, print_table
 from aec_bench.task_world_templates.catalogue import get_template, list_templates
+from aec_bench.task_world_templates.lifecycles import lifecycle_variant_ids
 from aec_bench.task_world_templates.materializer import (
     materialize_template_example,
     materialize_template_lifecycle,
@@ -82,12 +84,13 @@ def verify_example_command(
 def materialize_lifecycle_command(
     template_id: str = typer.Argument(..., help="Composite task-world template id"),
     output: Path = typer.Option(..., "--output", "-o", help="Directory where the lifecycle package is written"),
+    variant: str | None = typer.Option(None, "--variant", help="Registered semantic lifecycle variant id"),
 ) -> None:
     """Materialize a registered staged evidence-lifecycle package."""
     start = time.monotonic()
     try:
         template = get_template(template_id)
-        package_dir = materialize_template_lifecycle(template, output)
+        package_dir = materialize_template_lifecycle(template, output, variant_id=variant)
     except (KeyError, ValueError) as exc:
         emit("task composite-template materialize-lifecycle", None, errors=[str(exc)], start_time=start)
         return
@@ -98,7 +101,26 @@ def materialize_lifecycle_command(
             "template_id": template.template_id,
             "package_dir": str(package_dir),
             "checkpoint_count": len(template.evidence_lifecycle.checkpoints),
+            "variant_id": _materialized_variant_id(package_dir),
         },
+        start_time=start,
+    )
+
+
+@app.command("list-lifecycle-variants")
+def list_lifecycle_variants_command(
+    template_id: str = typer.Argument(..., help="Composite task-world template id"),
+) -> None:
+    """List public semantic variants registered for one lifecycle template."""
+    start = time.monotonic()
+    try:
+        variants = lifecycle_variant_ids(template_id)
+    except KeyError as exc:
+        emit("task composite-template list-lifecycle-variants", None, errors=[str(exc)], start_time=start)
+        return
+    emit(
+        "task composite-template list-lifecycle-variants",
+        {"template_id": template_id, "variants": list(variants)},
         start_time=start,
     )
 
@@ -112,6 +134,14 @@ def verify_lifecycle_command(
     start = time.monotonic()
     result = verify_template_lifecycle(package_dir, run_dir)
     emit("task composite-template verify-lifecycle", result, start_time=start)
+
+
+def _materialized_variant_id(package_dir: Path) -> str | None:
+    path = package_dir / "hidden" / "variant.json"
+    if not path.is_file():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return str(payload["variant_id"])
 
 
 def _render_templates(data: dict[str, object]) -> None:

@@ -628,6 +628,11 @@ def test_persistent_session_runner_closes_actual_three_checkpoint_contract(tmp_p
     experiment_id = task_run["evidence"]["experiment"]["experiment_id"]
     canonical_metrics = _load_json(run_dir / "experiments" / experiment_id / "metrics.json")
     assert canonical_metrics["semantic_transition"] == metrics["semantic_transition"]
+    manifest = _load_json(run_dir / "experiment-manifest.json")
+    assert manifest["lifecycle"]["variant"]["variant_id"] == "staged_full_correction"
+    index_entry = json.loads((tmp_path / "experiment-index.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert index_entry["variant_id"] == "staged_full_correction"
+    assert index_entry["adaptation"]["variation"] == {"change_topology": "staged_full_correction"}
 
 
 def test_branch_from_response_can_complete_and_verify_independently(tmp_path: Path) -> None:

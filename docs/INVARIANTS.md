@@ -135,6 +135,10 @@ Python enforcement direction:
 - represent revision of an earlier submission as a derived branch;
 - persist attempts, interruptions, failures, resumes, revisits, and visibility policy;
 - bind every local invocation to an immutable experiment manifest and append-only index entry.
+- derive public semantic variants from validated task-specific event contracts rather than arbitrary file patches;
+- keep host-side variant identity and lineage hash-bound without leaking it into model-visible evidence;
+- refuse non-empty lifecycle materialization targets and validate variant identity against package content before verification or indexing;
+- keep true holdout evidence outside public variant registries and committed packages.
 
 ---
 
