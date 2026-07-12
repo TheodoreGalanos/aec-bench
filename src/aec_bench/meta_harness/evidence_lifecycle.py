@@ -553,7 +553,8 @@ def validate_lifecycle_verification(
         if isinstance(payload, LifecycleVerificationResult)
         else LifecycleVerificationResult.model_validate(payload)
     )
-    return result.model_dump(mode="json")
+    excluded = {"semantic_metrics"} if result.semantic_metrics is None else None
+    return result.model_dump(mode="json", exclude=excluded)
 
 
 def _initialize_state(

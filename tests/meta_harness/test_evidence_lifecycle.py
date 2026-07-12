@@ -137,6 +137,55 @@ def test_verification_contract_rejects_out_of_range_and_inconsistent_results() -
         )
 
 
+def test_verification_contract_preserves_legacy_shape_without_semantic_metrics() -> None:
+    result = validate_lifecycle_verification(
+        {
+            "lifecycle_id": "lifecycle.demo",
+            "overall": "pass",
+            "passed": True,
+            "reward": 1.0,
+            "gates": {"demo": {"passed": True, "score": 1.0, "failures": []}},
+        }
+    )
+
+    assert "semantic_metrics" not in result
+
+
+def test_verification_contract_rejects_inconsistent_semantic_metric_counts() -> None:
+    with pytest.raises(ValidationError, match="unsupported_update_count must equal"):
+        validate_lifecycle_verification(
+            {
+                "lifecycle_id": "lifecycle.demo",
+                "overall": "pass",
+                "passed": True,
+                "reward": 1.0,
+                "gates": {"demo": {"passed": True, "score": 1.0, "failures": []}},
+                "semantic_metrics": {
+                    "initial_checkpoint_id": "initial_review",
+                    "initial": {"correct_atoms": 1, "total_atoms": 1, "accuracy": 1.0},
+                    "transitions": [],
+                    "aggregate": {
+                        "expected_update_count": 0,
+                        "actual_update_count": 0,
+                        "aligned_update_count": 0,
+                        "updated_to_expected_count": 0,
+                        "acquired_update_count": 0,
+                        "unsupported_update_count": 1,
+                        "stable_correct_before_count": 0,
+                        "retained_count": 0,
+                        "interference_count": 0,
+                        "acquisition": None,
+                        "update_precision": None,
+                        "update_recall": None,
+                        "update_f1": None,
+                        "retention": None,
+                        "interference": None,
+                    },
+                },
+            }
+        )
+
+
 def test_session_id_uses_highest_existing_sequence(tmp_path: Path) -> None:
     sessions = tmp_path / "sessions"
     (sessions / "session-001").mkdir(parents=True)
@@ -957,6 +1006,32 @@ def test_local_run_records_complete_experiment_provenance_and_normalized_metrics
     assert len(index_entries) == 1
     assert index_entries[0]["experiment_id"] == manifest["experiment_id"]
     assert index_entries[0]["manifest_sha256"] == task_run["evidence"]["experiment"]["manifest_sha256"]
+
+
+def test_operational_metrics_preserve_nullable_legacy_fields_without_semantic_diagnostics(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+
+    run_local_evidence_lifecycle_fresh_context(
+        package_dir=package,
+        run_dir=run_dir,
+        model="unpriced-test-model",
+        registry=_WritingRegistry(),
+        verifier=lambda _package, _run: {
+            "lifecycle_id": "lifecycle.demo",
+            "reward": 1.0,
+            "overall": "pass",
+            "passed": True,
+            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
+        },
+    )
+
+    metrics = _load_json(run_dir / "metrics.json")
+
+    assert "semantic_transition" not in metrics
+    assert "estimated_cost_usd" in metrics
+    assert metrics["estimated_cost_usd"] is None
+    assert "whole_run_seconds" in metrics
 
 
 def test_lifecycle_control_tool_submits_and_releases_next_checkpoint(tmp_path: Path) -> None:

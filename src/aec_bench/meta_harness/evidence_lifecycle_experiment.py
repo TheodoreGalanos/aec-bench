@@ -18,6 +18,7 @@ from pydantic import Field, NonNegativeFloat, NonNegativeInt
 from aec_bench.contracts.pricing import estimate_cost_usd
 from aec_bench.contracts.trajectory import read_trajectory
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
+from aec_bench.meta_harness.evidence_lifecycle_metrics import LifecycleSemanticMetrics
 from aec_bench.meta_harness.ledger import read_ledger
 
 
@@ -37,6 +38,7 @@ class LifecycleExperimentMetrics(StrictModel):
     estimated_cost_usd: NonNegativeFloat | None = None
     checkpoint_seconds: dict[str, NonNegativeFloat] = Field(default_factory=dict)
     whole_run_seconds: NonNegativeFloat | None = None
+    semantic_transition: LifecycleSemanticMetrics | None = None
 
 
 class LifecycleExperimentManifest(StrictModel):
@@ -72,8 +74,11 @@ def record_lifecycle_experiment(
     selected_index = index_path or run.parent / "experiment-index.jsonl"
     _write_json(verification_path, verification)
 
-    metrics = _build_metrics(run, agent)
-    _write_json(metrics_path, metrics.model_dump(mode="json"))
+    metrics = _build_metrics(run, agent, verification)
+    metrics_payload = metrics.model_dump(mode="json")
+    if metrics.semantic_transition is None:
+        metrics_payload.pop("semantic_transition")
+    _write_json(metrics_path, metrics_payload)
     trajectories = sorted(run.glob("**/trajectory.jsonl"))
     prompts = _interaction_prompts(trajectories)
     repository = _repository_provenance(repository_dir or Path.cwd())
@@ -129,7 +134,7 @@ def record_lifecycle_experiment(
     canonical_metrics = experiment_dir / "metrics.json"
     canonical_manifest = experiment_dir / "experiment-manifest.json"
     _write_json(canonical_verification, verification)
-    _write_json(canonical_metrics, metrics.model_dump(mode="json"))
+    _write_json(canonical_metrics, metrics_payload)
     _write_json(canonical_manifest, manifest.model_dump(mode="json"))
     manifest_sha256 = _sha256(canonical_manifest)
     index_entry = {
@@ -156,7 +161,11 @@ def record_lifecycle_experiment(
     }
 
 
-def _build_metrics(run_dir: Path, agent: dict[str, Any]) -> LifecycleExperimentMetrics:
+def _build_metrics(
+    run_dir: Path,
+    agent: dict[str, Any],
+    verification: dict[str, Any],
+) -> LifecycleExperimentMetrics:
     trajectories = sorted(run_dir.glob("**/trajectory.jsonl"))
     entries = [entry for path in trajectories for entry in read_trajectory(path)]
     requests = sum(len({entry.step for entry in read_trajectory(path) if entry.step > 0}) for path in trajectories)
@@ -176,6 +185,8 @@ def _build_metrics(run_dir: Path, agent: dict[str, Any]) -> LifecycleExperimentM
         cache_read_tokens=int(totals["cache_read_tokens"]),
         cache_write_tokens=int(totals["cache_write_tokens"]),
     )
+    semantic_payload = verification.get("semantic_metrics")
+    semantic = LifecycleSemanticMetrics.model_validate(semantic_payload) if semantic_payload is not None else None
     return LifecycleExperimentMetrics(
         checkpoint_count=sum(checkpoint["status"] == "submitted" for checkpoint in state["checkpoint_runs"]),
         requests=requests,
@@ -191,6 +202,7 @@ def _build_metrics(run_dir: Path, agent: dict[str, Any]) -> LifecycleExperimentM
         estimated_cost_usd=cost,
         checkpoint_seconds=timing["checkpoint_seconds"],
         whole_run_seconds=timing["whole_run_seconds"],
+        semantic_transition=semantic,
     )
 
 
