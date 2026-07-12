@@ -106,6 +106,58 @@ def export_prime_lab(
     print_success(f"Exported {result.task_count} task(s) to Prime Lab package: {result.package_dir}")
 
 
+@app.command("export-lifecycle")
+def export_prime_lifecycle(
+    name: str = typer.Option(..., "--name", help="Local lifecycle environment package name"),
+    package: list[Path] | None = typer.Option(
+        None,
+        "--package",
+        help="Existing materialized public lifecycle package; repeatable.",
+    ),
+    output_dir: Path = typer.Option(
+        DEFAULT_PRIME_ENVIRONMENTS_DIR,
+        "--output-dir",
+        "-o",
+        help="Directory for the generated local package.",
+    ),
+    version: str = typer.Option("0.1.0", "--version", help="Generated package version"),
+    max_turns: int = typer.Option(60, "--max-turns", min=1, help="Whole-lifecycle rollout turn limit"),
+    aec_bench_root: Path | None = typer.Option(
+        None,
+        "--aec-bench-root",
+        help="Exact local aec-bench checkout required by the generated package.",
+    ),
+) -> None:
+    """Reference existing evidence lifecycles from one local Verifiers package."""
+    from aec_bench.prime_lab.lifecycle_exporter import (
+        PrimeLifecycleExportConfig,
+        export_prime_lifecycle_environment,
+    )
+
+    if not package:
+        raise typer.BadParameter("at least one --package is required")
+    result = export_prime_lifecycle_environment(
+        PrimeLifecycleExportConfig(
+            name=name,
+            package_dirs=tuple(package),
+            output_dir=output_dir,
+            version=version,
+            max_turns=max_turns,
+            aec_bench_root=aec_bench_root,
+        )
+    )
+    data = {
+        "environment_id": result.environment_id,
+        "package_dir": str(result.package_dir),
+        "manifest_path": str(result.manifest_path),
+        "lifecycle_count": result.lifecycle_count,
+        "local_only": True,
+        "execution_mode": "persistent_context",
+        "memory_visibility_policy": "persistent_context",
+    }
+    emit("prime export-lifecycle", data, human_renderer=_render_prime_lifecycle_export)
+
+
 @app.command("push")
 def prime_push(
     name: str = typer.Option(..., "--name", help="Prime environment package name"),
@@ -1172,6 +1224,16 @@ def _render_smoke(data: dict[str, object]) -> None:
             str(row["detail"]),
         )
     console.print(table)
+
+
+def _render_prime_lifecycle_export(data: dict[str, object]) -> None:
+    from aec_bench.cli.output import console
+
+    console.print(f"Environment: [bold]{data['environment_id']}[/bold]")
+    console.print(f"Package: {data['package_dir']}")
+    console.print(f"Manifest: {data['manifest_path']}")
+    console.print(f"Lifecycles: {data['lifecycle_count']}")
+    console.print("Boundary: local-only persistent lifecycle")
 
 
 def _render_prime_push(data: dict[str, object]) -> None:

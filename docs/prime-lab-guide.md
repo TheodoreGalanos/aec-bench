@@ -12,6 +12,7 @@ taxonomy to the task and harness concepts already used in this repository.
 | Code generation with sandboxes | `PythonEnv` or `SandboxEnv` | Workspace tasks that execute files, scripts, or verifiers | Partial: exported as workspace tools |
 | Multi-turn games and puzzles | Custom `MultiTurnEnv` | Interactive sequential tasks | Not a primary lane yet |
 | Tool use and agentic tasks | `ToolEnv`, `MCPEnv`, or `StatefulToolEnv` | RLM, lambda-RLM, source lookup, document workflows | Supported as stateful workspace export; first-class policy export is next |
+| Persistent evidence lifecycles | `StatefulToolEnv` with host-owned lifecycle tools | Staged evidence review across checkpoints | Supported as a local-only export |
 | Multi-environment training | Multiple `[[env]]` entries with ratios | Cross-domain AEC benchmark suites | Planned config layer |
 
 ## Export Lanes
@@ -72,6 +73,60 @@ Prime shape today:
 This is enough for smoke evals and small hosted runs. The next deeper step is to
 export RLM and lambda-RLM policies into explicit Verifiers state transitions and
 tools, instead of treating them as generic workspace affordances.
+
+### Local Evidence-Lifecycle Environments
+
+Use this lane to expose existing materialized public evidence lifecycles through
+the local Verifiers API. The export is a thin package: it references lifecycle
+packages already on disk and delegates execution to the AEC-Bench lifecycle
+host. It does not copy or rematerialize the lifecycle packages.
+
+One Verifiers rollout spans the whole lifecycle in one persistent conversation.
+The model receives later evidence only after it submits the active checkpoint.
+The environment reuses the host-owned `list_workspace`, `read_workspace_file`,
+`write_checkpoint_submission`, `submit_checkpoint`, and `revisit_checkpoint`
+tools, so the same visibility, path-confinement, immutable-submission, and
+checkpoint-order rules apply inside and outside Prime.
+
+Export one or more materialized public variants with absolute paths:
+
+```bash
+uv run aec-bench prime export-lifecycle \
+  --name ssc03-persistent-lifecycle \
+  --package /absolute/path/to/staged-full-correction \
+  --package /absolute/path/to/semantic-no-op-release \
+  --output-dir /absolute/path/to/prime-rl/environments \
+  --max-turns 60 \
+  --aec-bench-root /absolute/path/to/aec-bench
+```
+
+The generated `lifecycle_manifest.json` binds each absolute package path to its
+lifecycle-spec and package hashes. It also records the exact local AEC-Bench
+source provenance, including the commit, dirty-state digest, and source
+inventory hash. The generated `pyproject.toml` binds that checkout as an
+editable local `[tool.uv.sources]` dependency, so the executing runtime and the
+recorded source are the same tree. Loading and rollout setup reject source
+drift; rollout setup rejects package drift.
+
+Reward remains task-owned. `submit_checkpoint` ends the rollout only after the
+final checkpoint is accepted; the registered lifecycle verifier then scores the
+complete run. An incomplete rollout is closed as failed and receives zero
+reward instead of being scored from partial state.
+
+Load the generated package from outside the AEC-Bench repository root. The
+repository has a top-level `agents/` directory that can otherwise shadow the
+installed `openai-agents` package required by Verifiers:
+
+```bash
+uv sync --python 3.13 --project /absolute/path/to/prime-rl/environments/ssc03-persistent-lifecycle
+cd /tmp
+/absolute/path/to/prime-rl/environments/ssc03-persistent-lifecycle/.venv/bin/python \
+  -c "from ssc03_persistent_lifecycle import load_environment; print(type(load_environment()).__name__)"
+```
+
+This lane is local-only. It does not support hosted publication, hosted
+execution, training, fresh-context lifecycle conditions, transfer evaluation,
+or continual learning. Those require separate contracts and evidence.
 
 ## Defaults and Limits
 
