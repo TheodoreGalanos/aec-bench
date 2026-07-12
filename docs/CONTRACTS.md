@@ -146,6 +146,12 @@ Key rule:
 
 Fresh-context requests own exactly one checkpoint. Persistent execution remains a separate one-session orchestration and must not be represented as repeated fresh episode calls.
 
+### EvidenceCheckpointSpec submission fields
+
+**Boundary:** Public lifecycle package -> Model-facing submission tool -> Host checkpoint archive
+
+`required_submission_fields` declares the public top-level fields that must be present. Checkpoints normally remain extensible for compatibility. A checkpoint may instead set `allow_additional_submission_fields: false`, making that declared list the exact public top-level shape. The model-facing write tool and the host submission gate both reject missing or undeclared fields before archival; neither strips or repairs model output. Nested semantic correctness and reward remain the task verifier's responsibility.
+
 ### ConditionalEvidenceSpec / EvidenceRequestActionRecord
 
 **Boundary:** Public lifecycle package -> Evidence-lifecycle host -> Model-visible workspace

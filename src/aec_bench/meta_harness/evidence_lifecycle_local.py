@@ -30,6 +30,7 @@ from aec_bench.meta_harness.evidence_lifecycle import (
     revisit_evidence_checkpoint,
     run_evidence_lifecycle,
     submit_evidence_checkpoint,
+    validate_evidence_checkpoint_submission,
     validate_lifecycle_verification,
 )
 from aec_bench.meta_harness.evidence_lifecycle_episode import (
@@ -219,10 +220,9 @@ class EvidenceLifecycleWorkspaceTool:
             payload = json.loads(content)
             if not isinstance(payload, dict):
                 raise EvidenceLifecycleError("checkpoint submission must contain a JSON object")
-            if payload.get("checkpoint_id") != checkpoint_id:
-                raise EvidenceLifecycleError(f"checkpoint submission id must be {checkpoint_id!r}")
             spec = load_evidence_lifecycle_spec(self.package_dir)
             checkpoint = next(item for item in spec.checkpoints if item.checkpoint_id == checkpoint_id)
+            validate_evidence_checkpoint_submission(checkpoint, payload)
             destination = Path(state["workspace"]) / checkpoint.submission_path
             _write_json(destination, payload)
         except (EvidenceLifecycleError, json.JSONDecodeError, StopIteration) as exc:

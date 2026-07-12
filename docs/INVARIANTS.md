@@ -137,6 +137,7 @@ Python enforcement direction:
 - bind every boundary-valid evidence request to the active host-owned session and attempt, publish a canonical sequence-addressed and hash-bound transaction before model visibility, and record typed zero-cost rejections without leaking valid alternatives;
 - retain acquired conditional evidence and consumed budget across retry and branch inheritance; a derived run cannot unsee evidence visible at its branch point;
 - archive and hash submissions before advancing;
+- when a checkpoint declares an exact submission field set, reject missing or undeclared top-level fields at both the model-facing write tool and host archival gate; never silently strip model output;
 - represent revision of an earlier submission as a derived branch;
 - persist attempts, interruptions, failures, resumes, revisits, and visibility policy;
 - bind every local invocation to an immutable experiment manifest and append-only index entry.

@@ -18,6 +18,7 @@ from aec_bench.contracts.trial_record import ArtifactReference, Completeness, Tr
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.meta_harness.evidence_lifecycle import (
     EvidenceLifecycleError,
+    canonical_evidence_lifecycle_spec_payload,
     evidence_request_catalog_payload,
     evidence_request_protocol_identity,
     validate_evidence_request_run_state,
@@ -787,7 +788,7 @@ def _validate_v5_snapshot_reconciliation(
         state=state,
     )
     computed_package_sha256 = _package_content_sha256(package_content)
-    computed_spec_sha256 = _canonical_sha256(spec.model_dump(mode="json", exclude_none=True))
+    computed_spec_sha256 = _canonical_sha256(canonical_evidence_lifecycle_spec_payload(spec))
     manifest_package_sha256 = lifecycle.get("package_sha256")
     manifest_spec_sha256 = lifecycle.get("spec_sha256")
     if not isinstance(manifest_package_sha256, str) or not isinstance(manifest_spec_sha256, str):

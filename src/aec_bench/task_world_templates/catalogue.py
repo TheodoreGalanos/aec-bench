@@ -6073,6 +6073,7 @@ _TEMPLATES = [
                         "readiness_decision",
                         "claim_boundary",
                     ],
+                    allow_additional_submission_fields=False,
                     conditional_operations=_hydraulic_operations(include_revision=False),
                 ),
                 EvidenceCheckpointSpec(
@@ -6092,6 +6093,7 @@ _TEMPLATES = [
                         "readiness_decision",
                         "claim_boundary",
                     ],
+                    allow_additional_submission_fields=False,
                     conditional_operations=_hydraulic_operations(include_revision=True),
                 ),
                 EvidenceCheckpointSpec(
@@ -6113,6 +6115,7 @@ _TEMPLATES = [
                         "readiness_decision",
                         "claim_boundary",
                     ],
+                    allow_additional_submission_fields=False,
                 ),
             ],
         ),
