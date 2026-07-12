@@ -77,6 +77,12 @@ Every boundary-valid call becomes a canonical transaction before its workspace p
 
 The public SSC-03 interaction family uses these operations for two scenarios across a baseline, one declared revision, and closeout. Four revisions exercise an administrative no-op, a major-event rainfall change, an outlet-geometry change, and a tailwater change. The task verifier checks the resulting selective recomputation and document lineage independently of action efficiency. See [the interactive hydraulic lifecycle guide](ssc03-interactive-hydraulic-lifecycle.md).
 
+### Sealed external lifecycles
+
+A private holdout lifecycle is supplied by one explicit `SealedLifecycleProvider` instance rather than another registry. The host writes a generic `holdout` receipt, binds the provider to the exact package path and hash, and resolves its operation logic and task verifier only while the package-scoped mount is active. Copying the package or leaving the mount context removes that authority; a new process must explicitly bind the provider again.
+
+Public template, lifecycle, and variant listings never consult the mount. Prime export and the normal full-fidelity experiment/`TrialRecord` paths reject sealed packages before copying prompts, paths, verifier identity, or package files. Provider exceptions become stable redacted codes. The private provider remains task authority only: the host still owns session identity, checkpoint transitions, verifier invocation, verifier-result validation, and reward. See [the sealed holdout boundary guide](ssc03-sealed-holdout-boundary.md).
+
 ### Typed episode boundary
 
 Fresh-context execution crosses a strict `LifecycleEpisodeEnvironment` boundary. Before execution, the host validates the released checkpoint, gives the environment a chance to seal interrupted artifacts, allocates the session and attempt IDs, and constructs a content-bound `LifecycleEpisodeRequest`. The environment durably prepares its empty attempt artifacts; the host then publishes `episode_request.json`, records its SHA-256 in the active attempt, and only then calls `execute`. This ordering leaves recoverable identity even if the process stops in the narrow publication-to-execution window. The request carries lifecycle/package hashes, checkpoint ownership, the exact workspace and submission paths, execution mode, visibility policy, requested adapter/model identity, per-session turn limit, completed-checkpoint lineage, the public conditional-evidence catalogue when present, and hashes of conditional evidence acquired by earlier attempts. Version 3 also binds the current source, the active operation catalogue when one exists, and every operation artifact visible under the selected memory policy. Closeout can retain the current source and earlier visible artifacts without offering an operation catalogue. Recovery reconstructs the expected request from current state and declared environment configuration; finalization reconciles the request hash and stable identity against the immutable snapshot.
@@ -174,7 +180,7 @@ Calibration support must be explicitly `public`; targets must be explicitly `hol
 
 The fixed study design calls this `descriptive_holdout_generalization` selected from `public_calibration`. It reports canonical holdout verifier reward and validity plus optional semantic diagnostics without computing an effect, uplift, winner, or learner-transfer claim. It does not mutate the underlying verifier result.
 
-This first surface is deliberately a library build function only. There is no CLI, campaign runner, private target materializer, or generic `EvaluationArtifact` write path. The generic `_evaluations/` directory does not yet enforce an internal/holdout publication boundary, so persisting holdout-derived summaries there would create an avoidable leakage surface.
+This first surface is deliberately a library build function only. There is no CLI, campaign runner, or generic `EvaluationArtifact` write path. PR20 adds an explicitly mounted private materializer but deliberately blocks its full-fidelity artifacts from the normal public record path. The generic `_evaluations/` directory still does not enforce an internal/holdout publication boundary, so persisting holdout-derived summaries there would create an avoidable leakage surface.
 
 ```bash
 aec-bench meta-harness lifecycle-run-local \

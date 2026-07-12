@@ -128,6 +128,7 @@ def evidence_lifecycle_package_identity(package_dir: Path) -> dict[str, str]:
 def prepare_evidence_checkpoint(package_dir: Path, run_dir: Path) -> dict[str, Any]:
     """Release exactly the next checkpoint into the persistent agent workspace."""
     package = Path(package_dir)
+    _require_active_sealed_lifecycle_mount(package)
     run = Path(run_dir)
     with _lifecycle_state_lock(run):
         return _prepare_evidence_checkpoint_locked(package, run)
@@ -149,7 +150,6 @@ def _prepare_evidence_checkpoint_locked(package: Path, run: Path) -> dict[str, A
     if state.active_checkpoint_id:
         checkpoint = _checkpoint(spec, state.active_checkpoint_id)
         return _checkpoint_context(run, checkpoint, state)
-
     _assert_prior_submissions_unchanged(run, state)
     checkpoint_index = sum(checkpoint.status == CheckpointRunStatus.SUBMITTED for checkpoint in state.checkpoint_runs)
     checkpoint = spec.checkpoints[checkpoint_index]
@@ -196,6 +196,17 @@ def _prepare_evidence_checkpoint_locked(package: Path, run: Path) -> dict[str, A
         artifact_refs=[str(_workspace(run) / "inbox" / checkpoint.checkpoint_id / path) for path in released_files],
     )
     return _checkpoint_context(run, checkpoint, state)
+
+
+def _require_active_sealed_lifecycle_mount(package_dir: Path) -> None:
+    """Fail before run mutation when a sealed package lacks its exact active provider."""
+    from aec_bench.task_world_templates.lifecycles.provider import (
+        active_sealed_lifecycle_mount,
+        is_sealed_lifecycle_package,
+    )
+
+    if is_sealed_lifecycle_package(package_dir):
+        active_sealed_lifecycle_mount(package_dir)
 
 
 def request_evidence_checkpoint(

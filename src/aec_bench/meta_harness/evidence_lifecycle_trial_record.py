@@ -89,7 +89,10 @@ from aec_bench.meta_harness.lifecycle_operation_store import (
     validate_lifecycle_operation_resolver_replay,
 )
 from aec_bench.task_world_templates.contracts import EvidenceLifecycleSpec
-from aec_bench.task_world_templates.lifecycles import lifecycle_package_variant
+from aec_bench.task_world_templates.lifecycles import (
+    is_sealed_lifecycle_package,
+    lifecycle_package_variant,
+)
 
 
 @dataclass(frozen=True)
@@ -137,6 +140,8 @@ def _build_lifecycle_trial_record(
 ) -> TrialRecord:
     """Build a core record from a validated working tree or immutable snapshot."""
     package = Path(package_dir)
+    if is_sealed_lifecycle_package(package):
+        raise ValueError("sealed_holdout_public_record_forbidden")
     run = Path(run_dir)
     if require_planned_paths and package.resolve() != Path(trial.package_dir).resolve():
         raise ValueError("supplied package directory does not match planned trial")
@@ -494,6 +499,8 @@ def finalize_lifecycle_trial_record(
     run_dir: Path,
 ) -> Path:
     """Snapshot immutable lifecycle artifacts and append exactly one core record."""
+    if is_sealed_lifecycle_package(package_dir):
+        raise ValueError("sealed_holdout_public_record_forbidden")
     record_path = Path(trial.ledger_path)
     if record_path.exists():
         raise DuplicateTrialRecordError(f"trial record already exists: {record_path}")

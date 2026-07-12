@@ -23,6 +23,7 @@ This is a substrate for ordinary post-training and evaluation first. It is not y
 | PR17 | Bounded actions that condition model-visible evidence |
 | PR18 | Deterministic, source-bound public hydraulic screening world |
 | PR19 | Bounded hydraulic operations, source revision, selective recomputation, and closeout verification |
+| PR20 | Explicit sealed-provider mounting without public target registration or export |
 
 ## PR17: action-conditioned evidence protocol
 
@@ -90,9 +91,11 @@ Persistent local, fresh-context, and local Prime execution expose the same four-
 
 ## PR20: sealed holdout boundary
 
-Introduce an external provider seam for private materializers, operation resolvers, and verifiers. The public repository contains only generic fake-provider fixtures. Real target IDs, prompts, source packets, action mappings, gold outputs, verifier rules, and per-trial annotations remain outside public registries and exports.
+PR20 introduces an explicit external provider seam for private materializers, operation resolvers, and verifiers. One provider instance is bound to one exact package path plus its file-content and directory-tree hashes for one execution context. It is never inserted into the public template, lifecycle, variant, resolver, or verifier registries, and there is no automatic provider discovery.
 
-The first private synthetic target should be a pump-station duty lifecycle. It shares the abstract interaction contract but changes the physical and documentary graph: wet-well levels, rising main and pump curve, system curve, duty point, power/NPSH, and selection note. This is a stronger structural holdout than a renamed stormwater network.
+A generic host-written receipt marks the package as `holdout` and forbids public registration and export without carrying target metadata. Prime export, normal experiment recording, and `TrialRecord` finalization reject the receipt before reading or copying private content. Provider exceptions are reduced to stable non-disclosing codes. Full-fidelity private records remain future access-controlled work rather than being mislabelled as safe public artifacts.
+
+The first out-of-tree synthetic execution proof uses a pump-station duty lifecycle. It shares the abstract interaction contract but changes the physical and documentary graph: wet-well levels, rising main and pump curve, system curve, duty point, power/NPSH, and selection note. The production tools completed three checkpoints and four prerequisite-bound operations; the host invoked and validated a provider-supplied verifier whose five gates passed at reward `1.0`. The provider, target content, verifier, and full artifacts remain outside the repository. See [the sealed holdout guide](ssc03-sealed-holdout-boundary.md).
 
 ## PR21: preregistered campaign and condition selection
 

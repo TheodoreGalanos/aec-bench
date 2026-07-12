@@ -158,6 +158,18 @@ The task-owned hidden resolution manifest has exact `(checkpoint_id, request_id)
 
 Canonical action transactions are published under `run/evidence_requests/<action-id>/` before workspace projection and state commit. Recovery must adopt matching bytes exactly once, reject conflicts, repair missing transition/action ledger entries, and never restore consumed budget on retry or branch.
 
+### SealedLifecycleProvider / SealedLifecycleMount
+
+**Boundary:** External private task authority -> Evidence-lifecycle host
+
+`SealedLifecycleProvider` is an explicitly supplied, non-discoverable task-authority seam for one already-selected holdout target. It materializes one package, validates that package, builds its lifecycle-operation resolver, and supplies its task verifier. It has no listing, lookup, target-selection, environment-discovery, or public-registration method.
+
+`SealedLifecycleMount` binds that provider to one canonical package path, regular-file content hash, and file-and-directory tree hash inside one execution context. Package-aware resolver and verifier dispatch may consult the exact active mount; template-ID-only registry APIs remain public-only. A copied, changed, unmounted, or public-template-colliding package fails closed.
+
+The host writes an exact allowlisted receipt containing only schema version, `visibility=holdout`, the public provider-protocol hash, and fixed public-registry/export prohibitions. The receipt takes precedence over public variant validation. Prime export and normal experiment/`TrialRecord` recording reject it before reading or copying private content. Provider exceptions cross the boundary only as stable redacted error codes.
+
+The provider does not enter `LifecycleEpisodeRequest`, model tools, or environment results. The host still owns session/attempt identity, checkpoint state, verifier invocation, typed verifier-result validation, and reward.
+
 ### TrialRecord
 
 **Boundary:** Harness -> Ledger
