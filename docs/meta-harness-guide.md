@@ -77,6 +77,14 @@ Every boundary-valid call becomes a canonical transaction before its workspace p
 
 The public SSC-03 interaction family uses these operations for two scenarios across a baseline, one declared revision, and closeout. Four revisions exercise an administrative no-op, a major-event rainfall change, an outlet-geometry change, and a tailwater change. The task verifier checks the resulting selective recomputation and document lineage independently of action efficiency. See [the interactive hydraulic lifecycle guide](ssc03-interactive-hydraulic-lifecycle.md).
 
+The separate SSC-03 design-response successor adds a model-selected source transition without changing the PR21
+calibration family. A prior checkpoint archives exactly one bounded intervention ID. The later
+`source-intervention.selected` operation binds that submission hash to one immutable option package, after which
+unchanged hydrology is reusable and outlet-dependent calculations become stale. The verifier scores honest evidence
+handling separately from whether the chosen intervention resolves every criterion. Registered public tasks with a
+smoke environment can execute the complete credential-free host path through `task composite-template
+run-lifecycle-smoke`. See [the model-selected intervention guide](ssc03-model-selected-intervention.md).
+
 ### Sealed external lifecycles
 
 A private holdout lifecycle is supplied by one explicit `SealedLifecycleProvider` instance rather than another registry. The host writes a generic `holdout` receipt, binds the provider to the exact package path and hash, and resolves its operation logic and task verifier only while the package-scoped mount is active. Copying the package or leaving the mount context removes that authority; a new process must explicitly bind the provider again.

@@ -25,6 +25,8 @@ This is a substrate for ordinary post-training and evaluation first. It is not y
 | PR19 | Bounded hydraulic operations, source revision, selective recomputation, and closeout verification |
 | PR20 | Explicit sealed-provider mounting without public target registration or export |
 | PR21 | Preregistered public calibration, write-once condition selection, and a successful fixed-contract model pilot |
+| PR22 | Target-bound private one-shot execution, recovery, immutable audit evidence, and an allowlisted aggregate receipt |
+| PR23 | A successor task where the model selects a bounded physical intervention before seeing its consequences |
 
 ## PR17: action-conditioned evidence protocol
 
@@ -118,10 +120,37 @@ The sealed PR16 entry point requires exactly one target record plus its explicit
 
 Still pending are the real public campaign, its immutable selected-condition freeze, a real private target execution, and the final stacked audit. The allowed result remains descriptive holdout generalization, not causal transfer or continual learning. Global one-shot enforcement against deletion or restoration by the filesystem owner would require external write-once storage or a transparency service.
 
+## PR23: model-selected physical intervention
+
+PR23 leaves the preregistered PR21 family and PR22 audit contract unchanged. It adds a distinct successor lifecycle for
+task-design work, because changing the calibrated family in place would rewrite the identity of the evidence already
+collected around it.
+
+The successor starts from the public major-rainfall problem source. After diagnosing both scenarios, the model sees two
+bounded intervention descriptions but not their calculated outcomes. It must archive exactly one selection. At the next
+checkpoint, one common `source-intervention.selected` operation reads that immutable submission and activates only the
+corresponding source package. The activation binds the selection hash and both source identities; arbitrary geometry,
+paths, and hidden answers remain unavailable to the model.
+
+Both options change only the outlet section. Hydrology therefore remains current, while detention/outlet and HGL
+evidence must be recomputed. The controlled-orifice option satisfies all declared criteria. The larger emergency-weir
+option resolves the local freeboard problem but leaves a downstream pipe-capacity failure. Its honest record can pass
+every evidence and readiness gate while failing the separate intervention-effectiveness gate. That failure caps scalar
+reward at `0.5`, preserving diagnostic credit without making an ineffective design response look almost successful.
+
+A registered CLI smoke command now runs the complete four-checkpoint task through the production host and task verifier
+without credentials. Two deterministic policies prove the same initial source can lead to different selected source
+hashes, hydraulic results, and terminal outcomes. This is task-mechanics evidence, not language-model performance.
+
+See [the plain-language model-selected intervention guide](ssc03-model-selected-intervention.md).
+
 ## Inputs still needed
 
 Provider credentials have been used only for the two explicitly approved public pilots. The public campaign and any later private-target transmission remain separately gated.
 
-Engineering review is needed for plausible parameter ranges, coupled scenarios, tolerances, dependency invalidation, equivalent information requests, closure policy, pump curves, NPSH, wet-well behavior, and operating rules. Infrastructure work is needed for the controlled solver matrix, private package storage, access-controlled ledgers, and redacted reporting.
+Engineering review is needed for plausible parameter ranges, intervention constructability, coupled scenarios,
+tolerances, equivalent information requests, closure policy, pump curves, NPSH, wet-well behavior, and operating rules.
+Infrastructure work is needed for the controlled solver matrix, private package storage, access-controlled ledgers, and
+redacted reporting.
 
 The progression is deliberate: first make actions observable and auditable, then make them physically consequential, then hide a structurally distinct target, and only then spend model budget.

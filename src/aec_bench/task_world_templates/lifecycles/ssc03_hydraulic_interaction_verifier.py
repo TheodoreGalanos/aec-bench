@@ -637,14 +637,35 @@ def _verify_scenario_evidence(
 
 
 def _package_for_physical_source(package: Path, source_sha256: str) -> Path:
-    candidates = (
-        package / "hidden" / "hydraulic" / "packages" / "baseline",
-        package / "hidden" / "hydraulic" / "packages" / "revision",
-    )
+    candidates = _declared_hydraulic_packages(package)
     for candidate in candidates:
         if _sha256(candidate / "source" / "source-state.json") == source_sha256:
             return candidate
     raise ValueError("operation physical source does not match an embedded PR18 package")
+
+
+def _declared_hydraulic_packages(package: Path) -> tuple[Path, ...]:
+    manifest = _read_json(package / "hidden" / "lifecycle-operation-resolutions.json")
+    raw_paths: list[str] = []
+    for key in ("baseline_package_path", "revision_package_path", "problem_package_path"):
+        value = manifest.get(key)
+        if value is not None:
+            if not isinstance(value, str):
+                raise ValueError("hydraulic package path is invalid")
+            raw_paths.append(value)
+    intervention_paths = manifest.get("intervention_package_paths", {})
+    if not isinstance(intervention_paths, dict) or any(
+        not isinstance(value, str) for value in intervention_paths.values()
+    ):
+        raise ValueError("hydraulic intervention package paths are invalid")
+    raw_paths.extend(str(intervention_paths[key]) for key in sorted(intervention_paths))
+    if not raw_paths or len(raw_paths) != len(set(raw_paths)):
+        raise ValueError("hydraulic package paths are absent or duplicated")
+    package_root = package.resolve()
+    candidates = tuple(package / raw_path for raw_path in raw_paths)
+    if any(not candidate.resolve().is_relative_to(package_root) for candidate in candidates):
+        raise ValueError("hydraulic package path escapes the lifecycle package")
+    return candidates
 
 
 def _expected_decisions(
