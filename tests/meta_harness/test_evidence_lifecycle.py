@@ -41,11 +41,15 @@ from aec_bench.meta_harness.evidence_lifecycle_episode import (
     LifecycleEpisodeUsage,
     LifecycleExecutionMode,
 )
+from aec_bench.meta_harness.evidence_lifecycle_experiment import (
+    LifecycleExperimentSweepContext,
+)
 from aec_bench.meta_harness.evidence_lifecycle_local import (
     EvidenceLifecycleControlTool,
     EvidenceLifecycleWorkspaceTool,
     LifecycleVisibilityPolicy,
     build_local_evidence_lifecycle_episode_environment,
+    recover_completed_persistent_lifecycle_session,
     run_local_evidence_lifecycle_fresh_context,
     run_local_evidence_lifecycle_session,
 )
@@ -2266,6 +2270,170 @@ def test_local_runners_return_the_same_normalized_evidence_schema(tmp_path: Path
     }
 
 
+@pytest.mark.parametrize("execution_mode", ["persistent_context", "fresh_context"])
+def test_local_runners_forward_an_explicit_experiment_recorder(
+    tmp_path: Path,
+    execution_mode: str,
+) -> None:
+    package = _write_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    recorder = _CapturingExperimentRecorder(tmp_path / "private-record")
+    verification = {
+        "lifecycle_id": "lifecycle.demo",
+        "reward": 1.0,
+        "overall": "pass",
+        "passed": True,
+        "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
+    }
+    common: dict[str, Any] = {
+        "package_dir": package,
+        "run_dir": run_dir,
+        "model": "test-model",
+        "verifier": lambda _package, _run: verification,
+        "experiment_recorder": recorder,
+    }
+
+    if execution_mode == "persistent_context":
+        result = run_local_evidence_lifecycle_session(
+            **common,
+            registry=_LifecycleSessionRegistry(package=package, run_dir=run_dir),
+        )
+    else:
+        result = run_local_evidence_lifecycle_fresh_context(
+            **common,
+            registry=_WritingRegistry(),
+        )
+
+    assert len(recorder.calls) == 1
+    call = recorder.calls[0]
+    assert call["package_dir"] == package
+    assert call["run_dir"] == run_dir
+    assert call["verification"] == validate_lifecycle_verification(verification)
+    assert call["agent"]["execution_mode"] == execution_mode
+    assert result["evidence"]["experiment"] == recorder.result
+    assert result["evidence"]["artifacts"]["manifest"] == recorder.result["manifest"]
+    assert not (run_dir / "experiment-manifest.json").exists()
+    assert not (run_dir / "metrics.json").exists()
+    assert not (run_dir / "verification.json").exists()
+    assert not (tmp_path / "experiment-index.jsonl").exists()
+
+
+def test_local_runner_without_explicit_recorder_keeps_public_recording_default(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+
+    result = run_local_evidence_lifecycle_fresh_context(
+        package_dir=package,
+        run_dir=run_dir,
+        model="test-model",
+        registry=_WritingRegistry(),
+        verifier=lambda _package, _run: {
+            "lifecycle_id": "lifecycle.demo",
+            "reward": 1.0,
+            "overall": "pass",
+            "passed": True,
+            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
+        },
+    )
+
+    assert Path(result["evidence"]["experiment"]["manifest"]) == run_dir / "experiment-manifest.json"
+    assert (run_dir / "metrics.json").is_file()
+    assert (run_dir / "verification.json").is_file()
+    assert (tmp_path / "experiment-index.jsonl").is_file()
+
+
+def test_completed_persistent_recovery_forwards_explicit_experiment_recorder(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    session_id = "session-001"
+    session_dir = run_dir / "sessions" / session_id
+    session_dir.mkdir(parents=True)
+    (session_dir / "trajectory.jsonl").write_text("", encoding="utf-8")
+    while True:
+        checkpoint = prepare_evidence_checkpoint(package, run_dir)
+        if checkpoint["status"] == "complete":
+            break
+        open_checkpoint_attempt(
+            package,
+            run_dir,
+            session_id=session_id,
+            execution_mode="persistent_context",
+        )
+        _write_json(Path(checkpoint["submission_path"]), {"checkpoint_id": checkpoint["checkpoint_id"]})
+        submit_evidence_checkpoint(package, run_dir)
+    recorder = _CapturingExperimentRecorder(tmp_path / "private-record")
+
+    result = recover_completed_persistent_lifecycle_session(
+        package_dir=package,
+        run_dir=run_dir,
+        model="test-model",
+        verifier=lambda _package, _run: (_ for _ in ()).throw(
+            AssertionError("failed terminal recovery must not invoke the verifier")
+        ),
+        adapter_kind="tool_loop",
+        max_turns=60,
+        process_id="process.recovery",
+        visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
+        sweep_context=LifecycleExperimentSweepContext(
+            sweep_experiment_id="experiment.recovery",
+            planned_trial_id="trial.recovery",
+            plan_sha256="a" * 64,
+            condition_id="persistent_context__persistent_context",
+            repetition=1,
+        ),
+        repository_dir=Path(__file__).resolve().parent,
+        experiment_recorder=recorder,
+    )
+
+    assert len(recorder.calls) == 1
+    call = recorder.calls[0]
+    assert call["agent"]["status"] == "failed"
+    assert call["verification"]["overall"] == "incomplete"
+    assert call["sweep_context"].planned_trial_id == "trial.recovery"
+    assert result["evidence"]["experiment"] == recorder.result
+    assert _load_json(session_dir / "agent_result.json")["failure_kind"] == "interrupted_after_completion"
+
+
+@pytest.mark.parametrize("execution_mode", ["persistent_context", "fresh_context"])
+def test_experiment_recorder_failure_does_not_fall_back_to_public_recording(
+    tmp_path: Path,
+    execution_mode: str,
+) -> None:
+    package = _write_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    common: dict[str, Any] = {
+        "package_dir": package,
+        "run_dir": run_dir,
+        "model": "test-model",
+        "verifier": lambda _package, _run: {
+            "lifecycle_id": "lifecycle.demo",
+            "reward": 1.0,
+            "overall": "pass",
+            "passed": True,
+            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
+        },
+        "experiment_recorder": _FailingExperimentRecorder(),
+    }
+
+    with pytest.raises(RuntimeError, match="private recorder failed"):
+        if execution_mode == "persistent_context":
+            run_local_evidence_lifecycle_session(
+                **common,
+                registry=_LifecycleSessionRegistry(package=package, run_dir=run_dir),
+            )
+        else:
+            run_local_evidence_lifecycle_fresh_context(
+                **common,
+                registry=_WritingRegistry(),
+            )
+
+    assert read_evidence_lifecycle_state(package, run_dir)["status"] == "complete"
+    assert not (run_dir / "experiment-manifest.json").exists()
+    assert not (run_dir / "metrics.json").exists()
+    assert not (run_dir / "verification.json").exists()
+    assert not (tmp_path / "experiment-index.jsonl").exists()
+
+
 def test_local_runner_records_aec_bench_source_provenance_not_caller_repository(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3165,6 +3333,29 @@ def _write_jsonl(path: Path, entries: list[dict[str, Any]]) -> None:
         "".join(f"{json.dumps(entry, sort_keys=True)}\n" for entry in entries),
         encoding="utf-8",
     )
+
+
+class _CapturingExperimentRecorder:
+    def __init__(self, private_root: Path) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self.result = {
+            "experiment_id": "private-experiment",
+            "manifest": str(private_root / "experiment-manifest.json"),
+            "canonical_manifest": str(private_root / "canonical" / "experiment-manifest.json"),
+            "manifest_sha256": "f" * 64,
+            "metrics": str(private_root / "metrics.json"),
+            "verification": str(private_root / "verification.json"),
+            "index": str(private_root / "experiment-index.jsonl"),
+        }
+
+    def __call__(self, **kwargs: Any) -> Any:
+        self.calls.append(kwargs)
+        return self.result
+
+
+class _FailingExperimentRecorder:
+    def __call__(self, **_kwargs: Any) -> Any:
+        raise RuntimeError("private recorder failed")
 
 
 class _FunctionEpisodeEnvironment:

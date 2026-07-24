@@ -110,7 +110,13 @@ The pilots establish that one fixed real model can complete one repaired-contrac
 
 ## PR22: redacted one-shot audit
 
-Run the frozen condition against the sealed target once under the preregistered repetition policy. Publish only aggregate descriptive results and generic behavioral categories. Keep exact target content, traces, verifier details, and action mappings internal. Use PR16's evaluator to report holdout generalization, not causal transfer or continual learning.
+PR22 first freezes the private target against the preregistered public campaign and publishes only an opaque pre-campaign commitment. The freeze also commits to one canonical owner-only audit root, which fixes the authority, execution, and ledger paths. After public selection, an exclusive local claim binds that target to the exact calibration freeze and consumes the one allowed slot within that trusted filesystem namespace.
+
+The draft now also has one-shot execution and recovery orchestration, an injectable recorder seam, and a dedicated owner-only holdout `TrialRecord`. A run authorization hash enters lifecycle state and the first ledger event before adapter work. The private snapshot binds all package and run bytes, the calibration freeze, target freeze, claim, audit manifest, selected condition, sessions, runtime, operation protocol, tool schema, executing source inventory, and verifier result. Validation checks every artifact and replays the explicit provider's resolver and verifier against a temporary copy without changing the snapshot. The normal public recorder and finalizer remain forbidden for sealed packages.
+
+The sealed PR16 entry point requires exactly one target record plus its explicit mount and reconciles the selected condition and public references to the snapshotted calibration freeze. The public aggregate receipt runs that evaluator internally and rejects caller-built summaries. Terminal recovery can seal a durable interrupted session as a zero-reward partial record without rerunning the adapter.
+
+Still pending are the real public campaign, its immutable selected-condition freeze, a real private target execution, and the final stacked audit. The allowed result remains descriptive holdout generalization, not causal transfer or continual learning. Global one-shot enforcement against deletion or restoration by the filesystem owner would require external write-once storage or a transparency service.
 
 ## Inputs still needed
 

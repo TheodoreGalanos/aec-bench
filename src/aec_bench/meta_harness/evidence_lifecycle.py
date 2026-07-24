@@ -156,25 +156,46 @@ def evidence_lifecycle_package_identity(package_dir: Path) -> dict[str, str]:
     }
 
 
-def prepare_evidence_checkpoint(package_dir: Path, run_dir: Path) -> dict[str, Any]:
+def prepare_evidence_checkpoint(
+    package_dir: Path,
+    run_dir: Path,
+    *,
+    run_authorization_sha256: str | None = None,
+) -> dict[str, Any]:
     """Release exactly the next checkpoint into the persistent agent workspace."""
     package = Path(package_dir)
     _require_active_sealed_lifecycle_mount(package)
     run = Path(run_dir)
     with _lifecycle_state_lock(run):
-        return _prepare_evidence_checkpoint_locked(package, run)
+        return _prepare_evidence_checkpoint_locked(
+            package,
+            run,
+            run_authorization_sha256=run_authorization_sha256,
+        )
 
 
-def _prepare_evidence_checkpoint_locked(package: Path, run: Path) -> dict[str, Any]:
+def _prepare_evidence_checkpoint_locked(
+    package: Path,
+    run: Path,
+    *,
+    run_authorization_sha256: str | None,
+) -> dict[str, Any]:
     """Release the next checkpoint while holding the per-run mutation lock."""
     spec = load_evidence_lifecycle_spec(package)
     if any(checkpoint.conditional_evidence is not None for checkpoint in spec.checkpoints):
         _load_evidence_request_resolutions(package, spec)
     if _state_path(run).exists():
         state = _load_state(package, run, spec, lock_held=True)
+        if run_authorization_sha256 is not None and state.run_authorization_sha256 != run_authorization_sha256:
+            raise EvidenceLifecycleError("lifecycle run authorization does not match existing state")
     else:
         _preflight_checkpoint(package, spec.checkpoints[0])
-        state = _initialize_state(package, run, spec)
+        state = _initialize_state(
+            package,
+            run,
+            spec,
+            run_authorization_sha256=run_authorization_sha256,
+        )
 
     if state.status == LifecycleRunStatus.COMPLETE:
         return _result_context(run, state)
@@ -218,12 +239,18 @@ def _prepare_evidence_checkpoint_locked(package: Path, run: Path) -> dict[str, A
         _write_lifecycle_operation_catalog(package, run, spec, state)
     _write_state(run, state)
     _sync_transition_ledger(run, state)
+    release_summary: dict[str, Any] = {
+        "checkpoint_id": checkpoint.checkpoint_id,
+        "released_files": released_files,
+    }
+    if state.run_authorization_sha256 is not None:
+        release_summary["run_authorization_sha256"] = state.run_authorization_sha256
     append_ledger_entry(
         _ledger_path(run),
         process_id=spec.lifecycle_id,
         stage="evidence_release",
         status="awaiting_checkpoint_submission",
-        summary={"checkpoint_id": checkpoint.checkpoint_id, "released_files": released_files},
+        summary=release_summary,
         artifact_refs=[str(_workspace(run) / "inbox" / checkpoint.checkpoint_id / path) for path in released_files],
     )
     return _checkpoint_context(run, checkpoint, state)
@@ -951,13 +978,18 @@ def run_evidence_lifecycle(
     run_dir: Path,
     *,
     episode_environment: LifecycleEpisodeEnvironment,
+    run_authorization_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Run every checkpoint in a fresh typed episode and one persistent workspace."""
     execution_mode = LifecycleExecutionMode(episode_environment.execution_mode)
     if execution_mode is not LifecycleExecutionMode.FRESH_CONTEXT:
         raise ValueError("checkpoint lifecycle runner requires fresh_context episode execution")
     while True:
-        raw_context = prepare_evidence_checkpoint(package_dir, run_dir)
+        raw_context = prepare_evidence_checkpoint(
+            package_dir,
+            run_dir,
+            run_authorization_sha256=run_authorization_sha256,
+        )
         if raw_context["status"] == "complete":
             return raw_context
         context = LifecycleEpisodeContext.from_runtime_context(
@@ -967,7 +999,11 @@ def run_evidence_lifecycle(
         _recover_host_episode_attempt(context, episode_environment)
         episode_environment.recover(context)
         context = LifecycleEpisodeContext.from_runtime_context(
-            prepare_evidence_checkpoint(package_dir, run_dir),
+            prepare_evidence_checkpoint(
+                package_dir,
+                run_dir,
+                run_authorization_sha256=run_authorization_sha256,
+            ),
             visibility_policy=episode_environment.memory_visibility_policy,
         )
         _preserve_prior_attempt_submission(context)
@@ -1729,6 +1765,8 @@ def _initialize_state(
     package_dir: Path,
     run_dir: Path,
     spec: EvidenceLifecycleSpec,
+    *,
+    run_authorization_sha256: str | None,
 ) -> EvidenceLifecycleRunState:
     if _state_path(run_dir).exists():
         raise EvidenceLifecycleError(f"lifecycle state already exists: {_state_path(run_dir)}")
@@ -1740,6 +1778,7 @@ def _initialize_state(
         world_id=spec.world_id,
         lifecycle_spec_sha256=_spec_sha256(spec),
         package_sha256=_package_sha256(package_dir),
+        run_authorization_sha256=run_authorization_sha256,
         checkpoint_runs=[
             CheckpointRunRecord(
                 checkpoint_id=item.checkpoint_id,
@@ -1760,6 +1799,14 @@ def _initialize_state(
         ],
     )
     _write_state(run_dir, state)
+    if run_authorization_sha256 is not None:
+        append_ledger_entry(
+            _ledger_path(run_dir),
+            process_id=spec.lifecycle_id,
+            stage="run_authorization",
+            status="authorized",
+            summary={"run_authorization_sha256": run_authorization_sha256},
+        )
     return state
 
 
@@ -1955,6 +2002,8 @@ def _checkpoint_context(
         "transitions": [item.model_dump(mode="json") for item in state.transitions],
         "branch": state.branch.model_dump(mode="json") if state.branch is not None else None,
     }
+    if state.run_authorization_sha256 is not None:
+        context["run_authorization_sha256"] = state.run_authorization_sha256
     catalog = _evidence_request_catalog(checkpoint, checkpoint_run)
     if catalog is not None:
         context["evidence_request_catalog"] = catalog
@@ -1970,7 +2019,7 @@ def _checkpoint_context(
 
 
 def _result_context(run_dir: Path, state: EvidenceLifecycleRunState) -> dict[str, Any]:
-    return {
+    context = {
         "lifecycle_id": state.lifecycle_id,
         "world_id": state.world_id,
         "lifecycle_spec_sha256": state.lifecycle_spec_sha256,
@@ -1985,6 +2034,9 @@ def _result_context(run_dir: Path, state: EvidenceLifecycleRunState) -> dict[str
         "transitions": [item.model_dump(mode="json") for item in state.transitions],
         "branch": state.branch.model_dump(mode="json") if state.branch is not None else None,
     }
+    if state.run_authorization_sha256 is not None:
+        context["run_authorization_sha256"] = state.run_authorization_sha256
+    return context
 
 
 def _completed_checkpoints(state: EvidenceLifecycleRunState) -> list[dict[str, Any]]:

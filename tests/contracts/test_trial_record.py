@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
+from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import (
     AdaptationProvenance,
     AgentReference,
@@ -23,6 +24,18 @@ from aec_bench.contracts.trial_record import (
     TaskReference,
     TimingRecord,
     TrialRecord,
+)
+
+_PUBLIC_LIFECYCLE_PROVENANCE_FIELDS = (
+    "invocation_index",
+    "ablation_manifest",
+    "ablation_plan",
+)
+_SEALED_HOLDOUT_PROVENANCE_FIELDS = (
+    "calibration_freeze",
+    "sealed_target_freeze",
+    "sealed_audit_claim",
+    "sealed_audit_manifest",
 )
 
 
@@ -80,6 +93,119 @@ def build_trial_record(**overrides: object) -> TrialRecord:
     }
     payload.update(overrides)
     return TrialRecord.model_validate(payload)
+
+
+def build_lifecycle_artifacts() -> dict[str, ArtifactReference]:
+    return {
+        "invocation_manifest": ArtifactReference(
+            kind="lifecycle_manifest",
+            path="_artifacts/trial-001/invocation-manifest.json",
+            sha256="0" * 64,
+            media_type="application/json",
+        ),
+        "invocation_index": ArtifactReference(
+            kind="lifecycle_invocation_index",
+            path="_artifacts/trial-001/invocation-index.jsonl",
+            sha256="1" * 64,
+            media_type="application/x-ndjson",
+        ),
+        "ablation_manifest": ArtifactReference(
+            kind="lifecycle_ablation_manifest",
+            path="_artifacts/trial-001/sweep/manifest.json",
+            sha256="2" * 64,
+            media_type="application/json",
+        ),
+        "ablation_plan": ArtifactReference(
+            kind="lifecycle_ablation_plan",
+            path="_artifacts/trial-001/sweep/plan.json",
+            sha256="3" * 64,
+            media_type="application/json",
+        ),
+        "calibration_freeze": ArtifactReference(
+            kind="lifecycle_calibration_freeze",
+            path="_artifacts/trial-001/sealed/calibration-freeze.json",
+            sha256="4" * 64,
+            media_type="application/json",
+        ),
+        "sealed_target_freeze": ArtifactReference(
+            kind="lifecycle_sealed_target_freeze",
+            path="_artifacts/trial-001/sealed/target-freeze.json",
+            sha256="5" * 64,
+            media_type="application/json",
+        ),
+        "sealed_audit_claim": ArtifactReference(
+            kind="lifecycle_sealed_audit_claim",
+            path="_artifacts/trial-001/sealed/audit-claim.json",
+            sha256="6" * 64,
+            media_type="application/json",
+        ),
+        "sealed_audit_manifest": ArtifactReference(
+            kind="lifecycle_sealed_audit_manifest",
+            path="_artifacts/trial-001/sealed/audit-manifest.json",
+            sha256="7" * 64,
+            media_type="application/json",
+        ),
+    }
+
+
+def build_complete_lifecycle_record(
+    *,
+    visibility: Visibility,
+    provenance_fields: tuple[str, ...],
+    output_artifact_fields: tuple[str, ...] | None = None,
+) -> TrialRecord:
+    artifacts = build_lifecycle_artifacts()
+    if output_artifact_fields is None:
+        output_artifact_fields = ("invocation_manifest", *provenance_fields)
+    lifecycle_provenance: dict[str, object] = {
+        "lifecycle_id": "ssc03.drainage-model-evidence-lifecycle",
+        "world_id": "aec.task_world.composite.drainage-model-evidence-lifecycle-review.v1",
+        "spec_sha256": "8" * 64,
+        "package_sha256": "9" * 64,
+        "repository_commit": "a" * 40,
+        "repository_dirty": False,
+        "repository_dirty_digest": "b" * 64,
+        "runtime_provider": "anthropic",
+        "runtime_distributions": ("anthropic==1.0.0", "pydantic-ai-slim==1.0.0"),
+        "runtime_dependency_sha256": "c" * 64,
+        "verifier_qualified_name": "aec_bench.verify_ssc03",
+        "verifier_source_sha256": "d" * 64,
+        "invocation_manifest": artifacts["invocation_manifest"],
+    }
+    lifecycle_provenance.update({field: artifacts[field] for field in provenance_fields})
+
+    return build_trial_record(
+        task=TaskReference(
+            task_id="drainage/ssc03/lifecycle",
+            task_revision="git-sha-task",
+            visibility=visibility,
+        ),
+        outputs=OutputRecord(
+            agent_output=AgentOutput(
+                status=AgentOutputStatus.COMPLETED,
+                output_path="_artifacts/trial-001",
+                output_format="evidence_lifecycle",
+            ),
+            artifacts=[artifacts[field] for field in output_artifact_fields],
+        ),
+        lifecycle_execution=LifecycleExecutionRecord(
+            execution_mode="persistent_context",
+            memory_visibility_policy="persistent_context",
+            max_turns_per_session=60,
+            status="completed",
+            sessions=[
+                LifecycleSessionRecord(
+                    session_id="lifecycle.session-001",
+                    checkpoint_ids=["initial_review", "response_review", "revisit"],
+                    adapter="tool_loop",
+                    resolved_model="anthropic:claude-sonnet-4-20250514",
+                    status="completed",
+                    artifacts=[artifacts["invocation_manifest"]],
+                )
+            ],
+        ),
+        lifecycle_provenance=lifecycle_provenance,
+    )
 
 
 # --- Valid construction ---
@@ -302,6 +428,119 @@ def test_complete_lifecycle_record_requires_hashed_output_artifacts() -> None:
                     "media_type": "application/json",
                 },
             },
+        )
+
+
+def test_complete_public_lifecycle_record_accepts_only_public_sweep_provenance() -> None:
+    record = build_complete_lifecycle_record(
+        visibility=Visibility.PUBLIC,
+        provenance_fields=_PUBLIC_LIFECYCLE_PROVENANCE_FIELDS,
+    )
+
+    assert record.lifecycle_provenance is not None
+    for field in _PUBLIC_LIFECYCLE_PROVENANCE_FIELDS:
+        assert getattr(record.lifecycle_provenance, field) is not None
+    for field in _SEALED_HOLDOUT_PROVENANCE_FIELDS:
+        assert getattr(record.lifecycle_provenance, field) is None
+
+
+@pytest.mark.parametrize("missing_field", _PUBLIC_LIFECYCLE_PROVENANCE_FIELDS)
+def test_complete_public_lifecycle_record_requires_every_public_sweep_reference(
+    missing_field: str,
+) -> None:
+    provenance_fields = tuple(field for field in _PUBLIC_LIFECYCLE_PROVENANCE_FIELDS if field != missing_field)
+
+    with pytest.raises(ValidationError):
+        build_complete_lifecycle_record(
+            visibility=Visibility.PUBLIC,
+            provenance_fields=provenance_fields,
+        )
+
+
+@pytest.mark.parametrize("sealed_field", _SEALED_HOLDOUT_PROVENANCE_FIELDS)
+def test_complete_public_lifecycle_record_rejects_sealed_audit_provenance(
+    sealed_field: str,
+) -> None:
+    with pytest.raises(ValidationError):
+        build_complete_lifecycle_record(
+            visibility=Visibility.PUBLIC,
+            provenance_fields=(*_PUBLIC_LIFECYCLE_PROVENANCE_FIELDS, sealed_field),
+        )
+
+
+def test_complete_holdout_lifecycle_record_accepts_only_sealed_audit_provenance() -> None:
+    record = build_complete_lifecycle_record(
+        visibility=Visibility.HOLDOUT,
+        provenance_fields=_SEALED_HOLDOUT_PROVENANCE_FIELDS,
+    )
+
+    assert record.lifecycle_provenance is not None
+    for field in _SEALED_HOLDOUT_PROVENANCE_FIELDS:
+        assert getattr(record.lifecycle_provenance, field) is not None
+    for field in _PUBLIC_LIFECYCLE_PROVENANCE_FIELDS:
+        assert getattr(record.lifecycle_provenance, field) is None
+
+
+@pytest.mark.parametrize("missing_field", _SEALED_HOLDOUT_PROVENANCE_FIELDS)
+def test_complete_holdout_lifecycle_record_requires_every_sealed_audit_reference(
+    missing_field: str,
+) -> None:
+    provenance_fields = tuple(field for field in _SEALED_HOLDOUT_PROVENANCE_FIELDS if field != missing_field)
+
+    with pytest.raises(ValidationError):
+        build_complete_lifecycle_record(
+            visibility=Visibility.HOLDOUT,
+            provenance_fields=provenance_fields,
+        )
+
+
+@pytest.mark.parametrize("public_field", _PUBLIC_LIFECYCLE_PROVENANCE_FIELDS)
+def test_complete_holdout_lifecycle_record_rejects_public_sweep_provenance(
+    public_field: str,
+) -> None:
+    with pytest.raises(ValidationError):
+        build_complete_lifecycle_record(
+            visibility=Visibility.HOLDOUT,
+            provenance_fields=(*_SEALED_HOLDOUT_PROVENANCE_FIELDS, public_field),
+        )
+
+
+@pytest.mark.parametrize(
+    ("visibility", "provenance_fields", "omitted_output_field"),
+    [
+        *[
+            pytest.param(
+                Visibility.PUBLIC,
+                _PUBLIC_LIFECYCLE_PROVENANCE_FIELDS,
+                field,
+                id=f"public-{field}",
+            )
+            for field in ("invocation_manifest", *_PUBLIC_LIFECYCLE_PROVENANCE_FIELDS)
+        ],
+        *[
+            pytest.param(
+                Visibility.HOLDOUT,
+                _SEALED_HOLDOUT_PROVENANCE_FIELDS,
+                field,
+                id=f"holdout-{field}",
+            )
+            for field in ("invocation_manifest", *_SEALED_HOLDOUT_PROVENANCE_FIELDS)
+        ],
+    ],
+)
+def test_complete_lifecycle_record_requires_every_bound_reference_in_output_artifacts(
+    visibility: Visibility,
+    provenance_fields: tuple[str, ...],
+    omitted_output_field: str,
+) -> None:
+    bound_fields = ("invocation_manifest", *provenance_fields)
+    output_artifact_fields = tuple(field for field in bound_fields if field != omitted_output_field)
+
+    with pytest.raises(ValidationError, match="output artifacts"):
+        build_complete_lifecycle_record(
+            visibility=visibility,
+            provenance_fields=provenance_fields,
+            output_artifact_fields=output_artifact_fields,
         )
 
 

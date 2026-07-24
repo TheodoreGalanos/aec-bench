@@ -18,7 +18,7 @@ from collections import deque
 from datetime import UTC, datetime
 from importlib import metadata as importlib_metadata
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, Protocol, TypedDict, cast
 from urllib.parse import unquote, urlparse
 
 from pydantic import Field, NonNegativeFloat, NonNegativeInt, PositiveInt
@@ -111,6 +111,36 @@ class LifecycleExperimentSweepContext(StrictModel):
     repetition: PositiveInt
 
 
+class LifecycleExperimentRecordingResult(TypedDict):
+    """Identify the immutable files produced by one lifecycle recorder."""
+
+    experiment_id: str
+    manifest: str
+    canonical_manifest: str
+    manifest_sha256: str
+    metrics: str
+    verification: str
+    index: str
+
+
+class LifecycleExperimentRecorder(Protocol):
+    """Record verified lifecycle evidence without choosing task or reward authority."""
+
+    def __call__(
+        self,
+        *,
+        package_dir: Path,
+        run_dir: Path,
+        agent: dict[str, Any],
+        verifier: Any,
+        verification: dict[str, Any],
+        tool_schema: list[dict[str, Any]],
+        repository_dir: Path | None = None,
+        index_path: Path | None = None,
+        sweep_context: LifecycleExperimentSweepContext | None = None,
+    ) -> LifecycleExperimentRecordingResult: ...
+
+
 class LifecycleExperimentManifest(StrictModel):
     schema_version: NonEmptyStr = "1"
     experiment_id: NonEmptyStr
@@ -163,7 +193,7 @@ def record_lifecycle_experiment(
     repository_dir: Path | None = None,
     index_path: Path | None = None,
     sweep_context: LifecycleExperimentSweepContext | None = None,
-) -> dict[str, Any]:
+) -> LifecycleExperimentRecordingResult:
     """Write one self-contained run record and append its immutable index entry."""
     package = Path(package_dir)
     if is_sealed_lifecycle_package(package):

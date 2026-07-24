@@ -44,6 +44,7 @@ class FakeSealedLifecycleProvider:
 
     def __init__(self, *, failure_stage: str | None = None) -> None:
         self.failure_stage = failure_stage
+        self.audit_revision = "fixture-audit-v1"
         self.calls: Counter[str] = Counter()
         self.sentinels = {
             "target_id": "PRIVATE_TARGET_SENTINEL_7QX",
@@ -56,6 +57,27 @@ class FakeSealedLifecycleProvider:
             "path": "PRIVATE_PATH_SENTINEL_4YX",
         }
         self.gold_value = 14
+
+    def audit_contract_identity(self, package_dir: Path) -> dict[str, str]:
+        """Return opaque hashes for the provider, resolver, and verifier semantics."""
+        self.calls["audit_contract_identity"] += 1
+        if self.failure_stage == "audit_contract_identity":
+            raise RuntimeError(self.sentinels["verifier_rule"])
+        package = Path(package_dir)
+        if not package.is_dir():
+            raise ValueError(self.sentinels["path"])
+        return {
+            "schema_version": "1",
+            "provider_contract_sha256": _canonical_sha256(
+                {"contract": "fixture-provider", "revision": self.audit_revision}
+            ),
+            "resolver_contract_sha256": _canonical_sha256(
+                {"contract": "fixture-resolver", "revision": self.audit_revision}
+            ),
+            "verifier_contract_sha256": _canonical_sha256(
+                {"contract": "fixture-verifier", "revision": self.audit_revision}
+            ),
+        }
 
     def materialize(self, output_dir: Path) -> Path:
         self.calls["materialize"] += 1

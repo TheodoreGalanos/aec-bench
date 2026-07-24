@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
@@ -27,6 +28,7 @@ from aec_bench.meta_harness.evidence_lifecycle_ablation_plan import (
     LifecycleAblationManifest,
     LifecycleAblationPlan,
 )
+from aec_bench.meta_harness.evidence_lifecycle_calibration import LifecycleCalibrationFreeze
 from aec_bench.meta_harness.evidence_lifecycle_episode import (
     LifecycleExecutionMode,
     LifecycleOperationCurrentSource,
@@ -62,7 +64,7 @@ from aec_bench.meta_harness.lifecycle_operation_store import (
     validate_lifecycle_operation_resolver_replay,
 )
 from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate, EvidenceLifecycleSpec
-from aec_bench.task_world_templates.lifecycles import lifecycle_package_variant
+from aec_bench.task_world_templates.lifecycles import SealedLifecycleMount, lifecycle_package_variant
 
 
 class LifecycleTransferRecordReference(StrictModel):
@@ -216,6 +218,37 @@ def build_lifecycle_transfer_evaluation(
     spec: LifecycleTransferEvaluationSpec,
 ) -> LifecycleTransferSummary:
     """Describe holdout performance under one condition supported by public calibration evidence."""
+    return _build_lifecycle_transfer_evaluation(spec, target_loader=_load_record)
+
+
+def build_sealed_lifecycle_transfer_evaluation(
+    spec: LifecycleTransferEvaluationSpec,
+    *,
+    target_mount: SealedLifecycleMount,
+) -> LifecycleTransferSummary:
+    """Evaluate one private target through an explicitly supplied sealed provider mount."""
+    spec = LifecycleTransferEvaluationSpec.model_validate(spec.model_dump(mode="json"))
+    if len(spec.holdout_target_records) != 1:
+        raise ValueError("sealed lifecycle transfer evaluation requires exactly one target record")
+    target_reference = spec.holdout_target_records[0]
+    loaded_target = _load_sealed_record(target_reference, target_mount=target_mount)
+    if loaded_target.record is not None and not loaded_target.reasons:
+        _validate_sealed_evaluation_authority(
+            spec,
+            record=loaded_target.record,
+            ledger_root=Path(target_reference.ledger_path).parent.parent,
+        )
+    return _build_lifecycle_transfer_evaluation(
+        spec,
+        target_loader=lambda _reference: loaded_target,
+    )
+
+
+def _build_lifecycle_transfer_evaluation(
+    spec: LifecycleTransferEvaluationSpec,
+    *,
+    target_loader: Callable[[LifecycleTransferRecordReference], _LoadedRecord],
+) -> LifecycleTransferSummary:
     spec = LifecycleTransferEvaluationSpec.model_validate(spec.model_dump(mode="json"))
     calibration_loaded = [(_reference, _load_record(_reference)) for _reference in spec.public_calibration_records]
     calibration_results: list[LifecycleTransferCalibrationResult] = []
@@ -243,7 +276,7 @@ def build_lifecycle_transfer_evaluation(
     target_results: list[LifecycleTransferTargetResult] = []
     eligible_rewards: list[float] = []
     for reference in spec.holdout_target_records:
-        loaded = _load_record(reference)
+        loaded = target_loader(reference)
         reasons = list(loaded.reasons)
         semantic_diagnostics: LifecycleSemanticMetrics | None = None
         diagnostic_reasons: tuple[str, ...] = ()
@@ -292,6 +325,82 @@ def build_lifecycle_transfer_evaluation(
     )
 
 
+def _load_sealed_record(
+    reference: LifecycleTransferRecordReference,
+    *,
+    target_mount: SealedLifecycleMount,
+) -> _LoadedRecord:
+    from aec_bench.meta_harness.evidence_lifecycle_holdout_record import (
+        validate_lifecycle_holdout_trial_record,
+    )
+
+    path = Path(reference.ledger_path)
+    reasons: list[str] = []
+    try:
+        path = path.resolve()
+    except OSError:
+        return _LoadedRecord(record=None, reasons=("record_path_unresolvable",))
+    if path.parent.name != reference.experiment_id or path.name != f"{reference.trial_id}.json":
+        reasons.append("record_path_not_canonical")
+    try:
+        record_bytes = path.read_bytes()
+    except FileNotFoundError:
+        return _LoadedRecord(record=None, reasons=_unique_reasons([*reasons, "record_missing"]))
+    except OSError:
+        return _LoadedRecord(record=None, reasons=_unique_reasons([*reasons, "record_unreadable"]))
+    if hashlib.sha256(record_bytes).hexdigest() != reference.sha256:
+        return _LoadedRecord(record=None, reasons=_unique_reasons([*reasons, "record_sha256_mismatch"]))
+    try:
+        record = TrialRecord.model_validate_json(record_bytes)
+    except (ValidationError, ValueError):
+        return _LoadedRecord(record=None, reasons=_unique_reasons([*reasons, "record_invalid"]))
+    if record.experiment_id != reference.experiment_id or record.trial_id != reference.trial_id:
+        reasons.append("record_identity_mismatch")
+    try:
+        validated = validate_lifecycle_holdout_trial_record(
+            record_path=path,
+            private_ledger_root=path.parent.parent,
+            mount=target_mount,
+        )
+        if validated != record:
+            reasons.append("snapshot_record_mismatch")
+    except Exception:
+        reasons.append("snapshot_contract_invalid")
+    return _LoadedRecord(record=record, reasons=_unique_reasons(reasons))
+
+
+def _validate_sealed_evaluation_authority(
+    spec: LifecycleTransferEvaluationSpec,
+    *,
+    record: TrialRecord,
+    ledger_root: Path,
+) -> None:
+    provenance = record.lifecycle_provenance
+    if provenance is None or provenance.calibration_freeze is None:
+        raise ValueError("sealed target has no frozen public calibration authority")
+    freeze_path = Path(ledger_root) / provenance.calibration_freeze.path
+    try:
+        freeze = LifecycleCalibrationFreeze.model_validate_json(freeze_path.read_bytes())
+    except (OSError, ValidationError, ValueError) as exc:
+        raise ValueError("sealed target calibration freeze is invalid") from exc
+    frozen_references = tuple(
+        LifecycleTransferRecordReference.model_validate(item.model_dump(mode="json"))
+        for item in freeze.public_calibration_records
+    )
+    if spec.public_calibration_records != frozen_references:
+        raise ValueError("public calibration records do not match the frozen sealed authority")
+    frozen_condition = LifecycleTransferCondition(
+        model=freeze.selected_condition.resolved_model,
+        adapter=freeze.selected_condition.resolved_adapter,
+        runtime_dependency_sha256=freeze.selected_condition.runtime_dependency_sha256,
+        execution_mode=freeze.selected_condition.execution_mode,
+        memory_visibility_policy=freeze.selected_condition.memory_visibility_policy,
+        max_turns_per_session=freeze.selected_condition.max_turns_per_session,
+    )
+    if spec.selected_condition != frozen_condition:
+        raise ValueError("selected condition does not match the frozen sealed authority")
+
+
 def _load_record(reference: LifecycleTransferRecordReference) -> _LoadedRecord:
     path = Path(reference.ledger_path)
     reasons: list[str] = []
@@ -319,6 +428,14 @@ def _load_record(reference: LifecycleTransferRecordReference) -> _LoadedRecord:
         return _LoadedRecord(record=None, reasons=_unique_reasons(reasons))
     if record.experiment_id != reference.experiment_id or record.trial_id != reference.trial_id:
         reasons.append("record_identity_mismatch")
+    provenance = record.lifecycle_provenance
+    if (
+        record.task.visibility is Visibility.HOLDOUT
+        and provenance is not None
+        and provenance.sealed_target_freeze is not None
+    ):
+        reasons.append("sealed_target_mount_required")
+        return _LoadedRecord(record=record, reasons=_unique_reasons(reasons))
     ledger_root = path.parent.parent
     loaded_artifacts = _load_artifacts(record, ledger_root=ledger_root)
     reasons.extend(loaded_artifacts.reasons)
