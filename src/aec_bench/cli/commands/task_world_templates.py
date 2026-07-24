@@ -10,8 +10,13 @@ from pathlib import Path
 import typer
 
 from aec_bench.cli.output import emit, print_table
+from aec_bench.meta_harness.evidence_lifecycle import run_evidence_lifecycle
+from aec_bench.meta_harness.evidence_request_protocol import EvidenceLifecycleError
 from aec_bench.task_world_templates.catalogue import get_template, list_templates
-from aec_bench.task_world_templates.lifecycles import lifecycle_variant_ids
+from aec_bench.task_world_templates.lifecycles import (
+    lifecycle_variant_ids,
+    registered_lifecycle_smoke_environment,
+)
 from aec_bench.task_world_templates.materializer import (
     materialize_template_example,
     materialize_template_lifecycle,
@@ -136,12 +141,53 @@ def verify_lifecycle_command(
     emit("task composite-template verify-lifecycle", result, start_time=start)
 
 
+@app.command("run-lifecycle-smoke")
+def run_lifecycle_smoke_command(
+    package_dir: Path = typer.Argument(..., help="Materialized public lifecycle package directory"),
+    run_dir: Path = typer.Option(..., "--run-dir", help="Empty output directory for the deterministic run"),
+) -> None:
+    """Run and verify one registered credential-free lifecycle task proof."""
+    start = time.monotonic()
+    try:
+        template_id = _package_template_id(package_dir)
+        environment = registered_lifecycle_smoke_environment(template_id, package_dir)
+        if environment is None:
+            raise ValueError(f"lifecycle template {template_id!r} does not declare a smoke environment")
+        lifecycle = run_evidence_lifecycle(package_dir, run_dir, episode_environment=environment)
+        verification = verify_template_lifecycle(package_dir, run_dir)
+    except (EvidenceLifecycleError, json.JSONDecodeError, KeyError, OSError, ValueError) as exc:
+        emit("task composite-template run-lifecycle-smoke", None, errors=[str(exc)], start_time=start)
+        return
+    emit(
+        "task composite-template run-lifecycle-smoke",
+        {
+            "template_id": template_id,
+            "package_dir": str(package_dir),
+            "run_dir": str(run_dir),
+            "lifecycle_status": lifecycle["status"],
+            "overall": verification["overall"],
+            "passed": verification["passed"],
+            "reward": verification["reward"],
+            "gates": verification["gates"],
+        },
+        start_time=start,
+    )
+
+
 def _materialized_variant_id(package_dir: Path) -> str | None:
     path = package_dir / "hidden" / "variant.json"
     if not path.is_file():
         return None
     payload = json.loads(path.read_text(encoding="utf-8"))
     return str(payload["variant_id"])
+
+
+def _package_template_id(package_dir: Path) -> str:
+    payload = json.loads((Path(package_dir) / "template.json").read_text(encoding="utf-8"))
+    template_id = payload.get("template_id") if isinstance(payload, dict) else None
+    if not isinstance(template_id, str) or not template_id:
+        raise ValueError("lifecycle package template identity is invalid")
+    return template_id
 
 
 def _render_templates(data: dict[str, object]) -> None:

@@ -21,10 +21,14 @@ def test_task_composite_template_list_command_emits_template_catalogue() -> None
     assert result.exit_code == 0, result.output
     envelope = json.loads(result.output)
     assert envelope["command"] == "task composite-template list"
-    assert envelope["data"]["count"] == 28
+    assert envelope["data"]["count"] == 29
     assert envelope["data"]["templates"][0]["template_id"] == "stormwater-drainage-package"
     assert any(
         template["template_id"] == "hydraulic-interaction-lifecycle-review"
+        for template in envelope["data"]["templates"]
+    )
+    assert any(
+        template["template_id"] == "hydraulic-design-response-lifecycle-review"
         for template in envelope["data"]["templates"]
     )
     assert envelope["data"]["templates"][-1]["template_id"] == "drainage-model-evidence-lifecycle-review"
@@ -200,6 +204,44 @@ def test_task_composite_template_hydraulic_interaction_variants_materialize(tmp_
     assert json.loads((package / "hidden" / "variant.json").read_text(encoding="utf-8"))["variant_id"] == (
         "tailwater_revision"
     )
+
+
+def test_task_composite_template_runs_intervention_smoke_end_to_end(tmp_path: Path) -> None:
+    package = tmp_path / "intervention-package"
+    run_dir = tmp_path / "intervention-run"
+    materialized = runner.invoke(
+        app,
+        [
+            "--json",
+            "task",
+            "composite-template",
+            "materialize-lifecycle",
+            "hydraulic-design-response-lifecycle-review",
+            "--output",
+            str(package),
+        ],
+    )
+    executed = runner.invoke(
+        app,
+        [
+            "--json",
+            "task",
+            "composite-template",
+            "run-lifecycle-smoke",
+            str(package),
+            "--run-dir",
+            str(run_dir),
+        ],
+    )
+
+    assert materialized.exit_code == 0, materialized.output
+    assert executed.exit_code == 0, executed.output
+    assert json.loads(materialized.output)["data"]["checkpoint_count"] == 4
+    data = json.loads(executed.output)["data"]
+    assert data["template_id"] == "hydraulic-design-response-lifecycle-review"
+    assert data["lifecycle_status"] == "complete"
+    assert data["overall"] == "pass"
+    assert data["reward"] == 1.0
 
 
 def test_task_composite_template_materialize_lifecycle_rejects_unknown_variant(tmp_path: Path) -> None:

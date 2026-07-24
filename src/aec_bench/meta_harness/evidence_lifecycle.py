@@ -450,6 +450,7 @@ def execute_lifecycle_operation(
     with _lifecycle_state_lock(run):
         spec = load_evidence_lifecycle_spec(package)
         state = _load_state(package, run, spec, lock_held=True)
+        _assert_prior_submissions_unchanged(run, state)
         return _execute_lifecycle_operation_locked(
             package,
             run,

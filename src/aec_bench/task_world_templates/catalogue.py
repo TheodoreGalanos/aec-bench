@@ -32,6 +32,44 @@ def get_template(template_id: str) -> CompositeTaskWorldTemplate:
     raise KeyError(msg)
 
 
+def _hydraulic_calculation_operations(
+    *,
+    source_prerequisites: tuple[str, ...] = (),
+) -> list[LifecycleOperationSpec]:
+    operations: list[LifecycleOperationSpec] = []
+    for scenario_id, title in (("design-10yr", "design"), ("major-100yr", "major")):
+        operations.append(
+            LifecycleOperationSpec(
+                operation_id=f"hydrology.{scenario_id}",
+                kind="run_hydrology",
+                title=f"Run {title}-scenario hydrology",
+                description="Calculate bounded Rational Method hydrology for the declared scenario.",
+                prerequisite_operation_ids=source_prerequisites,
+            )
+        )
+    for scenario_id, title in (("design-10yr", "design"), ("major-100yr", "major")):
+        operations.append(
+            LifecycleOperationSpec(
+                operation_id=f"detention-outlet.{scenario_id}.declared-outlet",
+                kind="run_detention_outlet",
+                title=f"Run {title}-scenario coupled detention and outlet analysis",
+                description="Execute the declared coupled basin, outlet, and downstream network calculation.",
+                prerequisite_operation_ids=source_prerequisites + (f"hydrology.{scenario_id}",),
+            )
+        )
+    for scenario_id, title in (("design-10yr", "design"), ("major-100yr", "major")):
+        operations.append(
+            LifecycleOperationSpec(
+                operation_id=f"network-hgl.{scenario_id}.declared-tailwater",
+                kind="run_network_hgl",
+                title=f"Project {title}-scenario network HGL",
+                description="Project HGL evidence from the exact coupled run at the declared boundary.",
+                prerequisite_operation_ids=source_prerequisites + (f"detention-outlet.{scenario_id}.declared-outlet",),
+            )
+        )
+    return operations
+
+
 def _hydraulic_operations(*, include_revision: bool) -> ConditionalOperationSpec:
     operations: list[LifecycleOperationSpec] = []
     revision_prerequisite: tuple[str, ...] = ()
@@ -45,36 +83,24 @@ def _hydraulic_operations(*, include_revision: bool) -> ConditionalOperationSpec
             )
         )
         revision_prerequisite = ("source-revision.current",)
-    for scenario_id, title in (("design-10yr", "design"), ("major-100yr", "major")):
-        operations.append(
-            LifecycleOperationSpec(
-                operation_id=f"hydrology.{scenario_id}",
-                kind="run_hydrology",
-                title=f"Run {title}-scenario hydrology",
-                description="Calculate bounded Rational Method hydrology for the declared scenario.",
-                prerequisite_operation_ids=revision_prerequisite,
-            )
-        )
-    for scenario_id, title in (("design-10yr", "design"), ("major-100yr", "major")):
-        operations.append(
-            LifecycleOperationSpec(
-                operation_id=f"detention-outlet.{scenario_id}.declared-outlet",
-                kind="run_detention_outlet",
-                title=f"Run {title}-scenario coupled detention and outlet analysis",
-                description="Execute the declared coupled basin, outlet, and downstream network calculation.",
-                prerequisite_operation_ids=revision_prerequisite + (f"hydrology.{scenario_id}",),
-            )
-        )
-    for scenario_id, title in (("design-10yr", "design"), ("major-100yr", "major")):
-        operations.append(
-            LifecycleOperationSpec(
-                operation_id=f"network-hgl.{scenario_id}.declared-tailwater",
-                kind="run_network_hgl",
-                title=f"Project {title}-scenario network HGL",
-                description="Project HGL evidence from the exact coupled run at the declared boundary.",
-                prerequisite_operation_ids=revision_prerequisite + (f"detention-outlet.{scenario_id}.declared-outlet",),
-            )
-        )
+    operations.extend(_hydraulic_calculation_operations(source_prerequisites=revision_prerequisite))
+    return ConditionalOperationSpec(
+        operation_budget=len(operations),
+        operations=tuple(operations),
+    )
+
+
+def _hydraulic_intervention_operations() -> ConditionalOperationSpec:
+    operation_id = "source-intervention.selected"
+    operations = [
+        LifecycleOperationSpec(
+            operation_id=operation_id,
+            kind="activate_source_intervention",
+            title="Activate the selected source intervention",
+            description="Activate only the bounded intervention archived at the prior selection checkpoint.",
+        ),
+        *_hydraulic_calculation_operations(source_prerequisites=(operation_id,)),
+    ]
     return ConditionalOperationSpec(
         operation_budget=len(operations),
         operations=tuple(operations),
@@ -6105,6 +6131,298 @@ _TEMPLATES = [
                     depends_on=["revision_analysis"],
                     required_submission_fields=[
                         "checkpoint_id",
+                        "visible_source_state_sha256",
+                        "selected_operations",
+                        "run_reference",
+                        "report_reference",
+                        "memo",
+                        "accepted_decisions",
+                        "supersession_lineage",
+                        "readiness_decision",
+                        "claim_boundary",
+                    ],
+                    allow_additional_submission_fields=False,
+                ),
+            ],
+        ),
+        projection_axes=["source_pack", "stage_graph", "verifier_gates", "evidence_lifecycle"],
+    ),
+    CompositeTaskWorldTemplate(
+        template_id="hydraulic-design-response-lifecycle-review",
+        name="Hydraulic Design Response Lifecycle Review",
+        summary=(
+            "Successor SSC-03 lifecycle where the reviewer selects one bounded physical intervention, "
+            "activates its exact source state, and carries the resulting hydraulic consequences to closeout."
+        ),
+        pattern=(
+            "issued hydraulic problem -> source-bound diagnosis -> bounded intervention selection -> "
+            "selective recomputation -> consequence-aware closeout"
+        ),
+        discipline_scope=["civil", "hydrology", "hydraulics", "design-review"],
+        source_artifacts=[
+            _source(
+                "issued_hydraulic_problem",
+                "typed-source-state",
+                "The immutable major-rainfall source whose coupled screening criteria require a design response.",
+                ["catchments", "scenarios", "basin", "outlet", "network", "criteria"],
+            ),
+            _source(
+                "public_intervention_catalogue",
+                "bounded-design-options",
+                "Two public source interventions described without their calculated outcomes.",
+                ["intervention_identity", "declared_change", "delivery_class"],
+            ),
+            _source(
+                "operation_transactions",
+                "lifecycle-action-evidence",
+                "Immutable intervention activation, calculation, reuse, and artifact lineage.",
+                ["action_identity", "source_identity", "calculation_identity"],
+            ),
+        ],
+        stages=[
+            _stage(
+                "problem_analysis",
+                "Diagnose the issued hydraulic problem",
+                "civil",
+                ["detention-outlet-hgl-package"],
+                ["issued_hydraulic_problem"],
+                ["problem_run_evidence", "problem_decisions"],
+                ["checkpoint_contract", "operation_evidence_integrity"],
+            ),
+            _stage(
+                "intervention_selection",
+                "Select one bounded design response",
+                "civil",
+                ["detention-outlet-hgl-package"],
+                ["problem_run_evidence", "public_intervention_catalogue"],
+                ["selected_intervention"],
+                ["selection_grounding"],
+                ["bounded_intervention"],
+            ),
+            _stage(
+                "intervention_analysis",
+                "Activate and assess the selected intervention",
+                "civil",
+                ["detention-outlet-hgl-package"],
+                ["problem_decisions", "selected_intervention"],
+                ["intervention_run_evidence", "supersession_lineage"],
+                ["selective_recomputation", "decision_update", "intervention_effectiveness"],
+            ),
+            _stage(
+                "closeout_review",
+                "Reconcile the selected intervention and its consequences",
+                "civil",
+                ["detention-outlet-hgl-package"],
+                ["intervention_run_evidence", "supersession_lineage"],
+                ["final_design_response", "final_readiness"],
+                ["run_propagation", "report_propagation", "memo_propagation", "final_readiness"],
+            ),
+        ],
+        handoffs=[
+            _handoff(
+                "problem_evidence_chain",
+                "Source-bound diagnosis carried into intervention selection.",
+                "sha256-chain",
+                "problem_analysis",
+                ["intervention_selection", "intervention_analysis"],
+                "operation-000001",
+            ),
+            _handoff(
+                "selected_intervention",
+                "The bounded option whose archived selection controls the later source transition.",
+                "intervention-id",
+                "intervention_selection",
+                ["intervention_analysis", "closeout_review"],
+                "controlled_orifice_resize",
+            ),
+            _handoff(
+                "final_readiness_state",
+                "Readiness derived from the activated intervention's complete current evidence.",
+                "state",
+                "closeout_review",
+                [],
+                "ready_or_not_ready",
+            ),
+        ],
+        branch_decisions=[
+            _branch(
+                "bounded_intervention",
+                "Select exactly one declared intervention before its calculated consequences are exposed.",
+                ["controlled_orifice_resize", "emergency_weir_enlargement"],
+                "controlled_orifice_resize",
+                "selected_intervention_id",
+            )
+        ],
+        verifier_gates=[
+            _gate(
+                "checkpoint_contract",
+                "handoff_consistency",
+                "Every checkpoint provides the exact cumulative design-response record.",
+                ["lifecycle.checkpoints"],
+                "The interaction record is incomplete.",
+            ),
+            _gate(
+                "selection_grounding",
+                "source_grounding",
+                "The archived bounded selection alone controls the activated source intervention.",
+                ["lifecycle.selection", "hydraulic.source_state"],
+                "The intervention selection and source transition do not reconcile.",
+            ),
+            _gate(
+                "operation_evidence_integrity",
+                "source_grounding",
+                "Every selected operation reconciles to its canonical transaction and hydraulic evidence.",
+                ["lifecycle.operations"],
+                "Operation evidence cannot govern.",
+            ),
+            _gate(
+                "selective_recomputation",
+                "handoff_consistency",
+                "Unchanged hydrology is retained while outlet-dependent calculations are recomputed.",
+                ["lifecycle.operation_dependencies"],
+                "Selected engineering evidence is stale or needlessly replaced.",
+            ),
+            _gate(
+                "decision_update",
+                "handoff_consistency",
+                "Both source-bound decisions are superseded by the selected intervention evidence.",
+                ["lifecycle.accepted_decisions"],
+                "A decision does not follow the activated intervention.",
+            ),
+            _gate(
+                "intervention_effectiveness",
+                "calculation",
+                "The selected intervention satisfies every declared current screening criterion.",
+                ["lifecycle.accepted_decisions"],
+                "The selected intervention leaves a declared screening criterion unresolved.",
+            ),
+            _gate(
+                "run_propagation",
+                "source_grounding",
+                "The selected runs reference the activated intervention source.",
+                ["lifecycle.final_run"],
+                "The selected run is stale.",
+            ),
+            _gate(
+                "report_propagation",
+                "deliverable",
+                "The selected reports come from the selected intervention runs.",
+                ["lifecycle.final_report"],
+                "The report does not match the intervention run.",
+            ),
+            _gate(
+                "memo_propagation",
+                "deliverable",
+                "The closeout memo cites the selection, source, runs, reports, decisions, and lineage.",
+                ["lifecycle.final_memo"],
+                "The memo is stale or assertion-only.",
+            ),
+            _gate(
+                "final_readiness",
+                "deliverable",
+                "Readiness honestly follows the selected intervention's complete criteria state.",
+                ["lifecycle.final_readiness"],
+                "The readiness decision is inconsistent.",
+            ),
+            _gate(
+                "claim_boundary",
+                "source_grounding",
+                "The review preserves the synthetic screening and non-learning claim boundary.",
+                ["lifecycle.claim_boundary"],
+                "The lifecycle overstates its evidence or authority.",
+            ),
+        ],
+        deliverables=[
+            _deliverable(
+                "hydraulic_design_response_closeout",
+                "deliverables/hydraulic-design-response-closeout.json",
+                "Cumulative selection, source, operation, decision, report, memo, and readiness evidence.",
+            )
+        ],
+        data_gaps=[
+            _gap(
+                "project_hydraulic_inputs",
+                "Real work requires accepted project rainfall, survey, network, and outlet inputs.",
+                "high",
+            ),
+            _gap(
+                "intervention_feasibility",
+                "The synthetic intervention geometry and delivery classes require project engineering review.",
+                "high",
+            ),
+            _gap(
+                "native_solver_fidelity",
+                "The deterministic screening kernel is not SWMM-equivalent simulation.",
+                "medium",
+            ),
+        ],
+        evidence_lifecycle=EvidenceLifecycleSpec(
+            lifecycle_id="ssc03.hydraulic-design-response-lifecycle",
+            world_id="aec.task_world.composite.hydraulic-design-response-lifecycle-review",
+            checkpoints=[
+                EvidenceCheckpointSpec(
+                    checkpoint_id="problem_analysis",
+                    title="Issued hydraulic problem analysis",
+                    release_path="releases/problem_analysis",
+                    instruction_path="instructions/problem_analysis.md",
+                    submission_path="submissions/problem_analysis.json",
+                    required_submission_fields=[
+                        "checkpoint_id",
+                        "visible_source_state_sha256",
+                        "selected_operations",
+                        "accepted_decisions",
+                        "readiness_decision",
+                        "claim_boundary",
+                    ],
+                    allow_additional_submission_fields=False,
+                    conditional_operations=_hydraulic_operations(include_revision=False),
+                ),
+                EvidenceCheckpointSpec(
+                    checkpoint_id="intervention_selection",
+                    title="Bounded intervention selection",
+                    release_path="releases/intervention_selection",
+                    instruction_path="instructions/intervention_selection.md",
+                    submission_path="submissions/intervention_selection.json",
+                    depends_on=["problem_analysis"],
+                    required_submission_fields=[
+                        "checkpoint_id",
+                        "visible_source_state_sha256",
+                        "selected_intervention_id",
+                        "selection_basis",
+                        "claim_boundary",
+                    ],
+                    allow_additional_submission_fields=False,
+                ),
+                EvidenceCheckpointSpec(
+                    checkpoint_id="intervention_analysis",
+                    title="Selected intervention analysis",
+                    release_path="releases/intervention_analysis",
+                    instruction_path="instructions/intervention_analysis.md",
+                    submission_path="submissions/intervention_analysis.json",
+                    depends_on=["intervention_selection"],
+                    required_submission_fields=[
+                        "checkpoint_id",
+                        "selected_intervention_id",
+                        "visible_source_state_sha256",
+                        "selected_operations",
+                        "accepted_decisions",
+                        "supersession_lineage",
+                        "readiness_decision",
+                        "claim_boundary",
+                    ],
+                    allow_additional_submission_fields=False,
+                    conditional_operations=_hydraulic_intervention_operations(),
+                ),
+                EvidenceCheckpointSpec(
+                    checkpoint_id="closeout_review",
+                    title="Hydraulic design-response closeout",
+                    release_path="releases/closeout_review",
+                    instruction_path="instructions/closeout_review.md",
+                    submission_path="submissions/closeout_review.json",
+                    depends_on=["intervention_analysis"],
+                    required_submission_fields=[
+                        "checkpoint_id",
+                        "selected_intervention_id",
                         "visible_source_state_sha256",
                         "selected_operations",
                         "run_reference",

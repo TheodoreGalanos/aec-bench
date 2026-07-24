@@ -91,6 +91,15 @@ _LIFECYCLES = {
             smoke_module_name=("aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_interaction_smoke"),
             smoke_environment_name="build_ssc03_hydraulic_smoke_environment",
         ),
+        LifecycleTemplateRegistration(
+            template_id="hydraulic-design-response-lifecycle-review",
+            module_name="aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_intervention",
+            materializer_name="materialize_ssc03_hydraulic_intervention_lifecycle",
+            verifier_name="verify_ssc03_hydraulic_intervention_lifecycle",
+            operation_resolver_name="build_ssc03_hydraulic_intervention_resolver",
+            smoke_module_name=("aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_intervention_smoke"),
+            smoke_environment_name="build_ssc03_hydraulic_intervention_smoke_environment",
+        ),
     ]
 }
 

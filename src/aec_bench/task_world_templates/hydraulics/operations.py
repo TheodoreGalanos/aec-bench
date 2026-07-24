@@ -43,6 +43,10 @@ _NETWORK_CRITERION_IDS = {
     "pipe_capacity",
     "pipe_velocity",
 }
+_SOURCE_TRANSITION_KINDS = {
+    "activate_source_intervention",
+    "request_source_revision",
+}
 
 
 class Ssc03HydraulicOperationResolver:
@@ -56,10 +60,26 @@ class Ssc03HydraulicOperationResolver:
         self._operation_specs = _load_operation_specs(self.package_dir / "lifecycle.json")
         if set(self._resolutions) != set(self._operation_specs):
             raise EvidenceLifecycleError("operation resolver does not match the public operation catalogue")
+        self._configure_source_packages()
+        for hydraulic_package in self._source_packages():
+            build_hydraulic_run_request(hydraulic_package, scenario_id="design-10yr")
+
+    def _configure_source_packages(self) -> None:
+        """Bind the fixed baseline and revision packages for the calibration lifecycle."""
         self._baseline = self.package_dir / str(self._manifest["baseline_package_path"])
         self._revision = self.package_dir / str(self._manifest["revision_package_path"])
-        for hydraulic_package in (self._baseline, self._revision):
-            build_hydraulic_run_request(hydraulic_package, scenario_id="design-10yr")
+
+    def _source_packages(self) -> tuple[Path, ...]:
+        """Return every immutable source package the resolver may activate."""
+        return (self._baseline, self._revision)
+
+    def _source_transition_operation_ids(self) -> frozenset[str]:
+        """Return operation IDs that change the current source without calculation recursion."""
+        return frozenset({"source-revision.current"})
+
+    def _source_transition_kinds(self) -> frozenset[str]:
+        """Return operation kinds handled by the task-specific source transition hook."""
+        return frozenset({"request_source_revision"})
 
     def current_source(
         self,
@@ -90,6 +110,45 @@ class Ssc03HydraulicOperationResolver:
             resolving=(),
         )
 
+    def _plan_source_transition(
+        self,
+        operation: LifecycleOperationSpec,
+        resolution: dict[str, Any],
+        actions: Sequence[LifecycleOperationActionRecord],
+        *,
+        source_before: LifecycleOperationSourceContext,
+    ) -> LifecycleOperationPlan:
+        """Plan the calibration lifecycle's one fixed source revision."""
+        del actions
+        source_after = _source_context(self._revision, revision_id=str(self._manifest["variant_id"]))
+        payload = {
+            "schema_version": "1",
+            "operation_id": operation.operation_id,
+            "kind": operation.kind,
+            "revision_id": resolution["revision_id"],
+            "source_after": source_after.visible_source_state_sha256,
+            "physical_source_after": source_after.physical_source_state_sha256,
+        }
+        return LifecycleOperationPlan(
+            operation_id=operation.operation_id,
+            operation_kind=operation.kind,
+            disposition=LifecycleOperationDisposition.ACTIVATED,
+            source_before=source_before,
+            source_after=source_after,
+            input_projection_sha256=canonical_json_sha256(payload),
+            prerequisite_action_ids=(),
+            model_visible_artifact_paths=("source-identity.json", "source-state.json"),
+            payload=payload,
+        )
+
+    def _write_source_transition_artifacts(self, plan: LifecycleOperationPlan, artifact_dir: Path) -> None:
+        """Publish the selected source state and its bounded visible identity."""
+        _write_json(artifact_dir / "source-state.json", plan.source_after.source_state)
+        _write_json(
+            artifact_dir / "source-identity.json",
+            _source_identity_payload(plan.source_after),
+        )
+
     def _plan_operation(
         self,
         operation: LifecycleOperationSpec,
@@ -103,10 +162,17 @@ class Ssc03HydraulicOperationResolver:
         resolution = self._resolutions.get(operation.operation_id)
         if resolution is None or resolution.get("kind") != operation.kind:
             raise EvidenceLifecycleError("operation resolver does not match the public operation catalogue")
+        if operation.kind in self._source_transition_kinds():
+            return self._plan_source_transition(
+                operation,
+                resolution,
+                actions,
+                source_before=source_before,
+            )
         calculation_prerequisites = tuple(
             prerequisite_id
             for prerequisite_id in operation.prerequisite_operation_ids
-            if prerequisite_id != "source-revision.current"
+            if prerequisite_id not in self._source_transition_operation_ids()
         )
         prerequisite_action_ids_list: list[str] = []
         visible_artifacts: tuple[str, ...]
@@ -125,19 +191,7 @@ class Ssc03HydraulicOperationResolver:
                 raise LifecycleOperationPrerequisiteError("operation prerequisites are incomplete")
             prerequisite_action_ids_list.append(prerequisite_action.action_id)
         prerequisite_action_ids = tuple(prerequisite_action_ids_list)
-        if operation.kind == "request_source_revision":
-            source_after = _source_context(self._revision, revision_id=str(self._manifest["variant_id"]))
-            payload = {
-                "schema_version": "1",
-                "operation_id": operation.operation_id,
-                "kind": operation.kind,
-                "revision_id": resolution["revision_id"],
-                "source_after": source_after.visible_source_state_sha256,
-                "physical_source_after": source_after.physical_source_state_sha256,
-            }
-            disposition = LifecycleOperationDisposition.ACTIVATED
-            visible_artifacts = ("source-identity.json", "source-state.json")
-        elif operation.kind == "run_hydrology":
+        if operation.kind == "run_hydrology":
             source_after = source_before
             scenario_id = str(resolution["scenario_id"])
             scenario = _selected_scenario(source_before.source_state, scenario_id)
@@ -204,15 +258,8 @@ class Ssc03HydraulicOperationResolver:
 
     def execute(self, plan: LifecycleOperationPlan, artifact_dir: Path) -> None:
         artifact_dir.mkdir(parents=True, exist_ok=True)
-        if plan.operation_kind == "request_source_revision":
-            _write_json(
-                artifact_dir / "source-state.json",
-                plan.source_after.source_state,
-            )
-            _write_json(
-                artifact_dir / "source-identity.json",
-                _source_identity_payload(plan.source_after),
-            )
+        if plan.operation_kind in self._source_transition_kinds():
+            self._write_source_transition_artifacts(plan, artifact_dir)
             return
         if plan.operation_kind == "run_hydrology":
             scenario = plan.payload["scenario"]
@@ -330,28 +377,33 @@ def _action_by_id(
 
 def _load_operation_specs(path: Path) -> dict[str, LifecycleOperationSpec]:
     lifecycle = EvidenceLifecycleSpec.model_validate(_read_json(path))
+    declared_operations = [
+        operation
+        for checkpoint in lifecycle.checkpoints
+        if checkpoint.conditional_operations is not None
+        for operation in checkpoint.conditional_operations.operations
+    ]
+    source_transition_ids = {
+        operation.operation_id for operation in declared_operations if operation.kind in _SOURCE_TRANSITION_KINDS
+    }
     operation_specs: dict[str, LifecycleOperationSpec] = {}
-    for checkpoint in lifecycle.checkpoints:
-        conditional = checkpoint.conditional_operations
-        if conditional is None:
-            continue
-        for operation in conditional.operations:
-            calculation_prerequisites = tuple(
-                prerequisite_id
-                for prerequisite_id in operation.prerequisite_operation_ids
-                if prerequisite_id != "source-revision.current"
-            )
-            normalized = operation.model_copy(
-                update={"prerequisite_operation_ids": calculation_prerequisites},
-                deep=True,
-            )
-            existing = operation_specs.get(operation.operation_id)
-            if existing is not None and (
-                existing.kind != normalized.kind
-                or existing.prerequisite_operation_ids != normalized.prerequisite_operation_ids
-            ):
-                raise EvidenceLifecycleError("operation definition changes across public checkpoints")
-            operation_specs[operation.operation_id] = normalized
+    for operation in declared_operations:
+        calculation_prerequisites = tuple(
+            prerequisite_id
+            for prerequisite_id in operation.prerequisite_operation_ids
+            if prerequisite_id not in source_transition_ids
+        )
+        normalized = operation.model_copy(
+            update={"prerequisite_operation_ids": calculation_prerequisites},
+            deep=True,
+        )
+        existing = operation_specs.get(operation.operation_id)
+        if existing is not None and (
+            existing.kind != normalized.kind
+            or existing.prerequisite_operation_ids != normalized.prerequisite_operation_ids
+        ):
+            raise EvidenceLifecycleError("operation definition changes across public checkpoints")
+        operation_specs[operation.operation_id] = normalized
     return operation_specs
 
 
