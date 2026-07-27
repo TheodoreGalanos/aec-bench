@@ -9,8 +9,9 @@
 | --- | --- |
 | Programme stage | `ASW-0B4 — Generator and certification protocol` |
 | Internal work package | `B4-W2 — Generator protocol` |
-| Status | **Accepted for B4 protocol design only** |
+| Status | **Accepted for B4 protocol design only; amended by the pre-W4 horizon repair** |
 | Repository baseline | `54c31cb4a3550fd1ae33efa2eb5ce7e4253b6468` |
+| Horizon-repair baseline | `eed52934b3fba5b17b9901df0d23a8120febcc0f` |
 | Parent PRD SHA-256 | `56d6fe6a9c69796d819a1995ae63a85392ba85a4240df8baa87df99a76678335` |
 | B1 claim/profile SHA-256 | `1956883951dd70ce52ec89f4c24ed69e5aaa4617796b803668e44002eafed954` |
 | B2 evidence/rights SHA-256 | `8d8e057792763531ebd3c8709f039c0aa7150a22ce734857221cef3339378e96` |
@@ -19,13 +20,37 @@
 | B4 execution-plan SHA-256 | `fad8cb04fad9729a81466e4527e38bcf42cffcc11c940423f610b6ffb8d8118e` |
 | B4-W1 family authority SHA-256 | `337aeab9465a8a1801b67c2ab0b408a2a2f07becddffc4a02161b64e6a8630de` |
 | Reference profile | `AU-NSW-LH-SYN-SPS-v1` |
-| Generator protocol identity | `asw-0b4.generator-protocol.v1` |
+| Generator protocol identity | `asw-0b4.generator-protocol.v2` |
 | Next permitted internal package | `B4-W3 — Independent certification protocol` only |
 
 This record resolves only `B4-D12`. Decisions `B4-D13` through `B4-D17`
 remain open under W3 through W5. This record does not implement the generator,
 run SWMM, certify or promote a family member, create a world, open B5, or earn
 a V-level.
+
+### 1.1 Pre-W4 forced-horizon repair
+
+W4 preflight review found that the original `1,200 s` forced-on snapshots
+could leave the positive-storage operating envelope before their terminal
+period. The W1 anchor clean assessment reaches zero depth at approximately
+second `1,146`, and the original G70 clean Pump B segment reaches zero depth
+at approximately local second `639`. W1 defines no dry-pump, starvation,
+cavitation, or below-storage-boundary physics. W4 therefore cannot hide that
+undefined regime inside a numerical tolerance.
+
+This amendment:
+
+- advances the generator protocol identity from `v1` to `v2`;
+- derives a bounded forced-snapshot duration from the complete W1 envelope;
+- changes individual forced hydraulic snapshots to `120 s`;
+- changes each G70 segment to `60 s`, for a `120 s` complete sequence;
+- makes each G80 checkpoint an explicit `120 s` forced snapshot; and
+- leaves every W1 parameter, equation, case purpose, engine setting, semantic
+  output, serialization rule, and claim boundary unchanged.
+
+No generator or candidate output was run to select these durations. Generator
+protocol `v1` remains historical review evidence but is not an allowed B5
+request identity.
 
 ## 2. Authority, maturity, and placement
 
@@ -658,6 +683,49 @@ three. Any later W4 sensitivity members inside one case/checkpoint are ordered
 by canonical case-content ID. A different execution order is a protocol
 failure even if outputs later happen to match.
 
+Forced-case duration is a diagnostic-observation horizon, not the W1
+`capability.t_draw_limit`. Capability remains an independent calculation at
+`h_start`; a snapshot is not extended to the capability limit.
+
+The forced horizons are bounded before execution from the most conservative
+W1 combination:
+
+```text
+A_w,min
+    = pi (2.80 m)^2 / 4
+    = 6.157521601... m²
+
+Q_net,draw,max
+    = Q_0,max - Q_in_assess,min
+    = 0.046 - 0.014
+    = 0.032 m³/s
+
+t_to_h_stop,min
+    = A_w,min (h_start,min - h_stop,max) / Q_net,draw,max
+    = 125.074657521... s
+
+h_after_120,min
+    = h_start,min - Q_net,draw,max (120 s) / A_w,min
+    = 0.876372467... m
+
+minimum margin above h_stop,max
+    = 0.876372467... - 0.85
+    = 0.026372467... m
+```
+
+The bound deliberately assumes continuous maximum support flow rather than a
+smaller solved operating flow. It is therefore conservative without using a
+generator result. Every individual forced-on snapshot in G12 through G61 and
+each G80 checkpoint lasts `120 s`. G70 divides the same total duration into
+two `60 s` segments, so the complete transfer sequence retains the same
+positive margin even if both pumps sustain the conservative maximum net draw.
+
+A request for one of those cases with another duration rejects. G00 remains
+the separately declared `3,600 s` pumps-off static-storage boundary. If B5 or
+W4 later shows that a claim-critical hydraulic transient cannot be assessed
+inside this bounded window, the case returns for protocol repair; it does not
+extend into an undefined dry-well regime.
+
 ### 12.2 Exact cases
 
 | Case ID | Purpose | Hydraulic stimulus and state |
@@ -665,32 +733,32 @@ failure even if outputs later happen to match.
 | `G00_ZERO_STATIC` | Static-storage limiting boundary | `3,600 s`; zero inflow; both pumps forced off; initial depth `h_start`; explicitly outside family and non-promotable |
 | `G10_CLEAN_A_BASE` | Clean automatic-duty base pattern | `28,800 s`; initial depth `h_stop`; W1 base inflow pattern; automatic Pump A thresholds; `(o_A,c_A)=(0,0)` |
 | `G11_CLEAN_B_BASE` | Label mirror | Exact G10 inputs with Pump B automatic and Pump A off |
-| `G12_CLEAN_ASSESS` | Clean capability snapshot | `1,200 s`; constant `Q_in_assess`; clean Pump A forced on |
-| `G20_OBSTRUCTION_HALF` | Primary mechanism interior | `1,200 s`; constant `Q_in_assess`; Pump A `(0.50,0)` forced on |
-| `G21_OBSTRUCTION_TRIGGER` | W1 primary trigger witness | `1,200 s`; constant `Q_in_assess`; Pump A `(0.75,0)` forced on |
-| `G22_OBSTRUCTION_UPPER` | Primary upper state | `1,200 s`; constant `Q_in_assess`; Pump A `(1,0)` forced on |
-| `G30_CLEARANCE_HALF` | Secondary mechanism interior | `1,200 s`; constant `Q_in_assess`; Pump A `(0,0.50)` forced on |
-| `G31_CLEARANCE_UPPER` | Secondary upper state | `1,200 s`; constant `Q_in_assess`; Pump A `(0,1)` forced on |
-| `G40_COMBINED_HALF` | Combined interior | `1,200 s`; constant `Q_in_assess`; Pump A `(0.50,0.50)` forced on |
-| `G41_COMBINED_UPPER` | Combined upper state | `1,200 s`; constant `Q_in_assess`; Pump A `(1,1)` forced on |
-| `G50_CLEAR_A_PRE` | Ambiguous-history A before clearing | `1,200 s`; constant `Q_in_assess`; Pump A `(0.65,0.10)` forced on |
+| `G12_CLEAN_ASSESS` | Clean capability snapshot | `120 s`; constant `Q_in_assess`; clean Pump A forced on |
+| `G20_OBSTRUCTION_HALF` | Primary mechanism interior | `120 s`; constant `Q_in_assess`; Pump A `(0.50,0)` forced on |
+| `G21_OBSTRUCTION_TRIGGER` | W1 primary trigger witness | `120 s`; constant `Q_in_assess`; Pump A `(0.75,0)` forced on |
+| `G22_OBSTRUCTION_UPPER` | Primary upper state | `120 s`; constant `Q_in_assess`; Pump A `(1,0)` forced on |
+| `G30_CLEARANCE_HALF` | Secondary mechanism interior | `120 s`; constant `Q_in_assess`; Pump A `(0,0.50)` forced on |
+| `G31_CLEARANCE_UPPER` | Secondary upper state | `120 s`; constant `Q_in_assess`; Pump A `(0,1)` forced on |
+| `G40_COMBINED_HALF` | Combined interior | `120 s`; constant `Q_in_assess`; Pump A `(0.50,0.50)` forced on |
+| `G41_COMBINED_UPPER` | Combined upper state | `120 s`; constant `Q_in_assess`; Pump A `(1,1)` forced on |
+| `G50_CLEAR_A_PRE` | Ambiguous-history A before clearing | `120 s`; constant `Q_in_assess`; Pump A `(0.65,0.10)` forced on |
 | `G51_CLEAR_A_POST` | Ambiguous-history A after anchor clearing | Same as G50 with `o_A=0.0975`, `c_A=0.10`; histories retained |
-| `G52_CLEAR_B_PRE` | Ambiguous-history B before clearing | `1,200 s`; constant `Q_in_assess`; Pump A `(0.25,0.742300)` forced on |
+| `G52_CLEAR_B_PRE` | Ambiguous-history B before clearing | `120 s`; constant `Q_in_assess`; Pump A `(0.25,0.742300)` forced on |
 | `G53_CLEAR_B_POST` | Ambiguous-history B after anchor clearing | Same as G52 with `o_A=0.0375`, `c_A=0.742300`; histories retained |
-| `G60_REPAIR_PRE` | Clearance repair before state | `1,200 s`; constant `Q_in_assess`; Pump A `(0.50,0.50)` forced on |
+| `G60_REPAIR_PRE` | Clearance repair before state | `120 s`; constant `Q_in_assess`; Pump A `(0.50,0.50)` forced on |
 | `G61_REPAIR_POST` | Anchor repair effect | Same as G60 with `o_A=0.50`, `c_A=0.05`; histories retained |
-| `G70_TRANSFER` | One physical A-to-B transfer sequence | Segment A: `1,200 s`, Pump A `(0.75,0)` forced on; Segment B: carry final well depth, Pump A off, clean Pump B forced on for `1,200 s`; constant `Q_in_assess` |
-| `G80_NO_MAINTENANCE` | Progression checkpoint family | Four independent capability snapshots at exposure `(0 s,0 starts)`, `(3,600,000 s,500)`, `(7,200,000 s,1,000)`, and `(10,800,000 s,2,000)`; severities recomputed from exact W1 anchor rates and clipping, never copied as rounded constants |
+| `G70_TRANSFER` | One physical A-to-B transfer sequence | Segment A: `60 s`, Pump A `(0.75,0)` forced on; Segment B: carry final well depth, Pump A off, clean Pump B forced on for `60 s`; constant `Q_in_assess` |
+| `G80_NO_MAINTENANCE` | Progression checkpoint family | Four independent `120 s` forced-on capability snapshots at exposure `(0 s,0 starts)`, `(3,600,000 s,500)`, `(7,200,000 s,1,000)`, and `(10,800,000 s,2,000)`; each begins at `h_start` with constant `Q_in_assess`; severities are recomputed from exact W1 anchor rates and clipping, never copied as rounded constants |
 
 ### 12.3 Sequence assembly
 
 G70 produces two segment results and one sequence result:
 
-- segment A semantic time is seconds `1 ... 1,200`;
+- segment A semantic time is seconds `1 ... 60`;
 - segment B receives segment A's exact final binary32 wet-well depth as its
   initial-depth source, records that carry hash, and has local seconds
-  `1 ... 1,200`;
-- the sequence time grid is seconds `1 ... 2,400`;
+  `1 ... 60`;
+- the sequence time grid is seconds `1 ... 120`;
 - sequence series concatenate A then B without duplicating the boundary;
 - segment diagnostics and hashes remain separate;
 - the sequence semantic hash binds both ordered segment hashes and the carry
@@ -1006,7 +1074,7 @@ labels and are intentionally invalid as executable schemas.
 ```json
 {
   "authority": {
-    "protocol": "asw-0b4.generator-protocol.v1",
+    "protocol": "asw-0b4.generator-protocol.v2",
     "profile": "AU-NSW-LH-SYN-SPS-v1",
     "w1_sha256": "337aeab9465a8a1801b67c2ab0b408a2a2f07becddffc4a02161b64e6a8630de",
     "scope": "research-only",
@@ -1028,7 +1096,7 @@ labels and are intentionally invalid as executable schemas.
       "pump-b": {"obstruction": "0", "clearance-loss": "0"}
     },
     "inflow_stimulus": "constant-assessment",
-    "horizon_s": 1200
+    "horizon_s": 120
   },
   "engine": {
     "version": "5.2.4",
@@ -1045,7 +1113,7 @@ labels and are intentionally invalid as executable schemas.
 {
   "status": "candidate-only",
   "case_content_id": "<sha256>",
-  "period_count": 1200,
+  "period_count": 120,
   "series": {
     "wet_well_depth_m": {
       "unit": "m",
