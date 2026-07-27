@@ -69,7 +69,14 @@ experiment-test.yaml
 swarm-*.yaml
 
 # Research working files (seed inventories, assessments)
-research/
+research/*
+
+# Durable asset-stewardship planning authorities
+!research/asset-stewardship/
+research/asset-stewardship/*
+!research/asset-stewardship/asw-0a-baseline-and-authority.md
+!research/asset-stewardship/asset-stewardship-worlds-prd.md
+!research/asset-stewardship/temporal-evidence-frontier-prd.md
 
 # Local run outputs from aec-bench run-local
 _local_runs/
