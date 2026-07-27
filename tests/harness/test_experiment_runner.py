@@ -1,7 +1,9 @@
 # ABOUTME: Tests for manifest-aware Harbor import orchestration in the harness layer.
 # ABOUTME: Verifies selector validation, duplicate handling, and import progress accounting.
 
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,10 +13,18 @@ from aec_bench.contracts.experiment_manifest import (
     ExperimentManifest,
     TaskSelector,
 )
+from aec_bench.contracts.trial_record import (
+    AgentReference,
+    EnvironmentSnapshot,
+    TaskReference,
+    TrialRecord,
+)
+from aec_bench.harness import experiment_runner as experiment_runner_module
 from aec_bench.harness.experiment_runner import (
     ExperimentImportMismatchError,
     HarborImportExperimentRunner,
 )
+from tests.support.trial_record_factories import make_trial_record
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TASKS_ROOT = REPO_ROOT / "tasks"
@@ -24,6 +34,138 @@ _skip_no_job_data = pytest.mark.skipif(
     not HARBOR_JOB_DIR.exists(),
     reason="requires archived Harbor job data in jobs/",
 )
+
+
+def test_runner_transforms_records_before_validation_and_persistence(tmp_path: Path, monkeypatch) -> None:
+    """RunBundle provenance must be attached before a Harbor record enters the ledger."""
+    task_id = "civil/calculation/adaptive"
+    manifest = ExperimentManifest(
+        experiment_id="adaptive-run",
+        name="Adaptive run",
+        tasks=TaskSelector(include_patterns=[task_id]),
+        agents=[AgentConfig(name="agent", adapter="tool_loop", model="test-model")],
+        compute=ComputeConfig(backend="docker"),
+    )
+    record = make_trial_record(
+        experiment_id=manifest.experiment_id,
+        task=TaskReference(task_id=task_id, task_revision="task-sha"),
+        agent=AgentReference(
+            adapter="tool_loop",
+            model="test-model",
+            adapter_revision="adapter-sha",
+            configuration={},
+        ),
+        environment=EnvironmentSnapshot(
+            runtime_image="task-image",
+            compute_backend="docker",
+            tool_versions={},
+        ),
+    )
+    monkeypatch.setattr(
+        experiment_runner_module,
+        "import_harbor_job",
+        lambda **_kwargs: [record],
+    )
+    monkeypatch.setattr(
+        HarborImportExperimentRunner,
+        "_selected_tasks",
+        lambda _self, _manifest: [SimpleNamespace(task_id=task_id)],
+    )
+    transformed_trial_ids: list[str] = []
+
+    def transform(imported):  # noqa: ANN001, ANN201
+        transformed_trial_ids.append(imported.trial_id)
+        return imported.model_copy(update={"dataset_id": "run-bundle:bundle-sha"})
+
+    runner = HarborImportExperimentRunner(
+        repo_root=tmp_path,
+        tasks_root=tmp_path / "tasks",
+        ledger_root=tmp_path / "ledger",
+    )
+    result = runner.import_harbor_job(
+        job_dir=tmp_path / "job",
+        manifest=manifest,
+        record_transform=transform,
+    )
+
+    assert transformed_trial_ids == [record.trial_id]
+    saved = json.loads(result.output_paths[0].read_text(encoding="utf-8"))
+    assert saved["dataset_id"] == "run-bundle:bundle-sha"
+
+
+def test_runner_returns_replayable_paths_for_identical_duplicate_records(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    task_id = "civil/calculation/replayable-import"
+    manifest = ExperimentManifest(
+        experiment_id="replayable-import",
+        name="Replayable import",
+        tasks=TaskSelector(include_patterns=[task_id]),
+        agents=[AgentConfig(name="agent", adapter="tool_loop", model="test-model")],
+        compute=ComputeConfig(backend="docker"),
+    )
+    record = make_trial_record(
+        experiment_id=manifest.experiment_id,
+        task=TaskReference(task_id=task_id, task_revision="task-sha"),
+        agent=AgentReference(
+            adapter="tool_loop",
+            model="test-model",
+            adapter_revision="adapter-sha",
+            configuration={},
+        ),
+        environment=EnvironmentSnapshot(
+            runtime_image="task-image",
+            compute_backend="docker",
+            tool_versions={},
+        ),
+    )
+    monkeypatch.setattr(
+        experiment_runner_module,
+        "import_harbor_job",
+        lambda **_kwargs: [record],
+    )
+    monkeypatch.setattr(
+        HarborImportExperimentRunner,
+        "_selected_tasks",
+        lambda _self, _manifest: [SimpleNamespace(task_id=task_id)],
+    )
+    runner = HarborImportExperimentRunner(
+        repo_root=tmp_path,
+        tasks_root=tmp_path / "tasks",
+        ledger_root=tmp_path / "ledger",
+    )
+
+    first = runner.import_harbor_job(
+        job_dir=tmp_path / "job",
+        manifest=manifest,
+    )
+    replay = runner.import_harbor_job(
+        job_dir=tmp_path / "job",
+        manifest=manifest,
+    )
+
+    assert first.imported_trials == 1
+    assert first.duplicate_trials == 0
+    assert replay.imported_trials == 0
+    assert replay.duplicate_trials == 1
+    assert replay.ledger_paths == first.output_paths
+    assert TrialRecord.model_validate_json(replay.ledger_paths[0].read_bytes()) == record
+
+    conflicting_record = record.model_copy(update={"dataset_id": "different-dataset"})
+    monkeypatch.setattr(
+        experiment_runner_module,
+        "import_harbor_job",
+        lambda **_kwargs: [conflicting_record],
+    )
+    with pytest.raises(
+        ExperimentImportMismatchError,
+        match="duplicate TrialRecord identity resolves to different ledger content",
+    ):
+        runner.import_harbor_job(
+            job_dir=tmp_path / "job",
+            manifest=manifest,
+        )
 
 
 @_skip_no_job_data

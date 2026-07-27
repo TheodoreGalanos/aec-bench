@@ -144,7 +144,7 @@ def test_evaluation_result_rejects_inf_reward() -> None:
 
 
 def test_evaluation_result_rejects_unparseable_output_with_nonzero_reward() -> None:
-    with pytest.raises(ValidationError, match="unparseable"):
+    with pytest.raises(ValidationError, match="invalid outputs"):
         EvaluationResult(
             reward=0.5,
             validity=ValidityCheck(
@@ -166,6 +166,18 @@ def test_evaluation_result_allows_unparseable_output_with_zero_reward() -> None:
     )
 
     assert result.reward == 0.0
+
+
+def test_evaluation_result_rejects_schema_invalid_output_with_nonzero_reward() -> None:
+    with pytest.raises(ValidationError, match="invalid outputs"):
+        EvaluationResult(
+            reward=0.5,
+            validity=ValidityCheck(
+                output_parseable=True,
+                schema_valid=False,
+                verifier_completed=True,
+            ),
+        )
 
 
 # --- ConfidenceMetadata ---

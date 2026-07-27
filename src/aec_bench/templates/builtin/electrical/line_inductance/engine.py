@@ -40,10 +40,10 @@ def _equivalent_gmr(
     if bundle_count == "single":
         return conductor_gmr_m
     if bundle_count == "two":
-        return (conductor_gmr_m * bundle_spacing_m) ** 0.5
+        return float((conductor_gmr_m * bundle_spacing_m) ** 0.5)
     if bundle_count == "three":
-        return (conductor_gmr_m * bundle_spacing_m**2) ** (1.0 / 3.0)
-    return 1.09 * (conductor_gmr_m * bundle_spacing_m**3) ** 0.25
+        return float((conductor_gmr_m * bundle_spacing_m**2) ** (1.0 / 3.0))
+    return float(1.09 * (conductor_gmr_m * bundle_spacing_m**3) ** 0.25)
 
 
 def compute(

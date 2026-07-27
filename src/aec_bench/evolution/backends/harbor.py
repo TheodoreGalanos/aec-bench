@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,7 +14,10 @@ from aec_bench.evolution.backends.local import SolveFn
 from aec_bench.evolution.snapshot import serialise_snapshot
 
 if TYPE_CHECKING:
-    pass
+    from aec_bench.adapters.base import RemoteExecutableAdapter
+    from aec_bench.harness.backend import ComputeBackend
+    from aec_bench.harness.trial_runner import TrialRunner
+    from aec_bench.tasks.instance import ResolvedTaskInstance
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +42,10 @@ def inject_snapshot_into_workspace(
 
 def make_harbor_solve_fn(
     *,
-    trial_runner: object,
-    backend: object,
-    tasks: list[object],
-    adapter: object,
+    trial_runner: TrialRunner,
+    backend: ComputeBackend,
+    tasks: Sequence[ResolvedTaskInstance],
+    adapter: RemoteExecutableAdapter,
     experiment_id: str,
     runtime_image: str = "evolution",
     adapter_revision: str | None = None,

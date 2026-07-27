@@ -81,7 +81,11 @@ class Scratchpad:
         if not self._path.exists():
             return {}
         try:
-            return json.loads(self._path.read_text(encoding="utf-8"))
+            payload = json.loads(self._path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                logger.warning("Scratchpad at %s is not a JSON object, returning empty", self._path)
+                return {}
+            return payload
         except (json.JSONDecodeError, OSError):
             logger.warning("Failed to read scratchpad at %s, returning empty", self._path)
             return {}

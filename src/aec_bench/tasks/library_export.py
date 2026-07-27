@@ -8,7 +8,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import ValidationError
 
@@ -23,6 +23,9 @@ from aec_bench.contracts.library_catalogue import (
 from aec_bench.contracts.seed_task import SeedTask, StructuredSeedField
 from aec_bench.templates.contracts import ParamSpec, TemplateConfig
 from aec_bench.templates.registry import load_template
+
+type _CatalogueDiscipline = Literal["civil", "electrical", "ground", "maritime", "mechanical", "structural"]
+type _CatalogueInputType = Literal["float", "int", "enum", "categorical"]
 
 
 @dataclass(frozen=True)
@@ -115,7 +118,7 @@ def _param_to_input(name: str, spec: ParamSpec) -> InputField:
         name=name,
         description=spec.description,
         unit=spec.unit,
-        type=spec.type.value,  # type: ignore[arg-type]  — ParamType literal matches InputField type
+        type=spec.type.value,  # ParamType is a catalogue input-type subset.
     )
 
 
@@ -137,7 +140,7 @@ def _project_template(cfg: TemplateConfig) -> TemplateEntry:
 
     return TemplateEntry(
         task_id=meta.name,
-        discipline=meta.discipline,  # type: ignore[arg-type]  — both sides use the same 5-literal
+        discipline=cast(_CatalogueDiscipline, meta.discipline),
         category=meta.category,
         category_label=None,
         standards=list(meta.standards),
@@ -147,7 +150,7 @@ def _project_template(cfg: TemplateConfig) -> TemplateEntry:
         description=meta.description,
         long_description=long_desc or None,
         tags=list(meta.tags),
-        tool_mode=meta.tool_mode.value,  # type: ignore[arg-type]  — StrEnum → literal
+        tool_mode=meta.tool_mode.value,
         difficulty_tiers=_sort_difficulty_tiers(list(cfg.difficulty.keys())),
         archetype_count=len(cfg.archetypes),
     )
@@ -160,7 +163,7 @@ def _seed_field_to_input(field: str | StructuredSeedField) -> InputField:
     return InputField(
         name=field.name,
         unit=field.unit,
-        type=field.type,  # type: ignore[arg-type]  — StructuredSeedField.type matches InputField.type subset
+        type=cast(_CatalogueInputType, field.type),
     )
 
 
@@ -177,7 +180,7 @@ def _project_seed(seed: SeedTask) -> SeedEntry:
 
     return SeedEntry(
         task_id=src.task_id,
-        discipline=src.discipline,  # type: ignore[arg-type]  — both sides use the same 5-literal
+        discipline=src.discipline,
         category=src.category_id or src.task_id,
         category_label=src.category_name,
         standards=list(src.standards),

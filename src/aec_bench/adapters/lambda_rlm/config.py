@@ -4,17 +4,13 @@
 from __future__ import annotations
 
 import re
+import tomllib
 import warnings
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from aec_bench.contracts.advisor import AdvisorConfig
 from aec_bench.contracts.synthesis import SynthesisConfig
-
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redef]
 
 
 @dataclass(frozen=True)

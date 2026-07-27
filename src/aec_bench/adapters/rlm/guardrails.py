@@ -5,12 +5,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from aec_bench.adapters.base import AdapterStopReason
+
 
 @dataclass(frozen=True)
 class GuardrailVerdict:
     """Result of checking guardrail state."""
 
     can_continue: bool
+    stop_code: AdapterStopReason | None = None
     stop_reason: str = ""
     budget_warning: bool = False
     budget_consumed_pct: float = 0.0
@@ -79,16 +82,10 @@ class GuardrailState:
         """Evaluate current state and return a verdict."""
         consumed_pct = self._total_tokens / self._token_budget * 100 if self._token_budget > 0 else 0.0
 
-        if self._iteration_count >= self._max_iterations:
-            return GuardrailVerdict(
-                can_continue=False,
-                stop_reason=(f"Iteration cap reached ({self._iteration_count}/{self._max_iterations})"),
-                budget_consumed_pct=consumed_pct,
-            )
-
         if self._total_tokens >= self._token_budget:
             return GuardrailVerdict(
                 can_continue=False,
+                stop_code=AdapterStopReason.TOKEN_BUDGET,
                 stop_reason=(f"Token budget exceeded ({self._total_tokens}/{self._token_budget})"),
                 budget_consumed_pct=consumed_pct,
             )
@@ -96,6 +93,7 @@ class GuardrailState:
         if self._max_subcalls > 0 and self._subcall_count >= self._max_subcalls:
             return GuardrailVerdict(
                 can_continue=False,
+                stop_code=AdapterStopReason.SUBCALL_LIMIT,
                 stop_reason=(f"Subcall limit reached ({self._subcall_count}/{self._max_subcalls})"),
                 budget_consumed_pct=consumed_pct,
             )
@@ -103,6 +101,7 @@ class GuardrailState:
         if self._max_budget_usd > 0 and self._total_cost_usd >= self._max_budget_usd:
             return GuardrailVerdict(
                 can_continue=False,
+                stop_code=AdapterStopReason.COST_BUDGET,
                 stop_reason=(f"USD budget exceeded (${self._total_cost_usd:.4f}/${self._max_budget_usd:.2f})"),
                 budget_consumed_pct=consumed_pct,
             )
@@ -110,9 +109,18 @@ class GuardrailState:
         if self._billable_input_budget > 0 and self._billable_input_tokens >= self._billable_input_budget:
             return GuardrailVerdict(
                 can_continue=False,
+                stop_code=AdapterStopReason.BILLABLE_INPUT_BUDGET,
                 stop_reason=(
                     f"Billable input budget exceeded ({self._billable_input_tokens:,}/{self._billable_input_budget:,})"
                 ),
+                budget_consumed_pct=consumed_pct,
+            )
+
+        if self._iteration_count >= self._max_iterations:
+            return GuardrailVerdict(
+                can_continue=False,
+                stop_code=AdapterStopReason.ITERATION_CAP,
+                stop_reason=(f"Iteration cap reached ({self._iteration_count}/{self._max_iterations})"),
                 budget_consumed_pct=consumed_pct,
             )
 

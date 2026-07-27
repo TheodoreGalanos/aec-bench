@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
@@ -12,6 +13,7 @@ from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
+from textual.events import Key
 from textual.screen import Screen
 from textual.widgets import Collapsible, DataTable, Footer, Input, Static
 
@@ -116,7 +118,7 @@ _ANNOTATED_CYCLE: list[Literal["all", "annotated", "unannotated"]] = [
 _SORT_CYCLE: list[str] = ["reward_asc", "reward_desc", "model", "task", "default"]
 
 
-def _next_in_cycle(current: str, cycle: list[str]) -> str:
+def _next_in_cycle[T: str](current: T, cycle: Sequence[T]) -> T:
     """Return the next value in a cycle list, wrapping around to the start."""
     idx = cycle.index(current) if current in cycle else 0
     return cycle[(idx + 1) % len(cycle)]
@@ -155,7 +157,7 @@ def _error_cell(count: int) -> Text:
     return Text(label, style="dim")
 
 
-class TriageScreen(Screen):
+class TriageScreen(Screen[None]):
     """DataTable-based trial list with keyboard filtering and inline annotation."""
 
     BINDINGS = [
@@ -242,7 +244,7 @@ class TriageScreen(Screen):
             with Collapsible(title="Filters", collapsed=True, classes="triage-filter-collapsible"):
                 yield Static(id="triage-filter-detail", markup=True)
             with Container(classes="triage-table-panel"):
-                table = DataTable(id="triage-table", cursor_type="row")
+                table: DataTable[object] = DataTable(id="triage-table", cursor_type="row")
                 table.loading = True
                 yield table
             yield Input(
@@ -426,7 +428,7 @@ class TriageScreen(Screen):
         self._update_row_annotation(trial_id, self._current_row_key())
         self._render_details()
 
-    def on_key(self, event: object) -> None:
+    def on_key(self, event: Key) -> None:
         """Handle Escape to cancel note input."""
         key = getattr(event, "key", "")
         if key == "escape":
@@ -434,8 +436,8 @@ class TriageScreen(Screen):
             if note_input.has_class("visible"):
                 note_input.remove_class("visible")
                 note_input.value = ""
-                event.prevent_default()  # type: ignore[union-attr]
-                event.stop()  # type: ignore[union-attr]
+                event.prevent_default()
+                event.stop()
 
     def action_undo(self) -> None:
         """Undo the last annotation action."""

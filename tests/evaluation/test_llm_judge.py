@@ -94,6 +94,12 @@ def test_parse_judge_response_malformed_returns_empty() -> None:
     assert results == []
 
 
+def test_parse_judge_response_ignores_non_object_results() -> None:
+    response = json.dumps({"criteria_results": [{"criterion": "A"}, "invalid", 7]})
+
+    assert parse_judge_response(response) == [{"criterion": "A"}]
+
+
 def test_compute_criteria_score_all_pass() -> None:
     criteria = [
         RubricCriterion(text="A", category="essential"),

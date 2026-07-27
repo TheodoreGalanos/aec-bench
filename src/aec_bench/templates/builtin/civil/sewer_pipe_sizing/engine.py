@@ -63,7 +63,7 @@ def _full_pipe_capacity_m3_s(
     """
     area = math.pi * diameter_m**2 / 4.0
     hydraulic_radius = diameter_m / 4.0
-    return (1.0 / mannings_n) * area * hydraulic_radius ** (2.0 / 3.0) * math.sqrt(slope)
+    return float((1.0 / mannings_n) * area * hydraulic_radius ** (2.0 / 3.0) * math.sqrt(slope))
 
 
 def compute(

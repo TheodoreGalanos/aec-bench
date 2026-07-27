@@ -12,9 +12,11 @@ import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.evolution import WorkspaceSnapshot
+from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.contracts.trial_record import (
     AgentReference,
     Completeness,
@@ -92,7 +94,7 @@ def collect_local_trial_record(
     """
     # --- agent_result.json ---------------------------------------------------
     agent_result_path = workspace_dir / "agent_result.json"
-    agent_result: dict | None = None
+    agent_result: dict[str, Any] | None = None
     tokens_in: int | None = None
     tokens_out: int | None = None
     cache_read: int | None = None
@@ -117,7 +119,7 @@ def collect_local_trial_record(
 
     verifier_completed = reward_path.exists()
     reward = 0.0
-    breakdown: dict | None = None
+    breakdown: dict[str, Any] | None = None
 
     if verifier_completed:
         reward_data = json.loads(reward_path.read_text())
@@ -413,10 +415,8 @@ def _run_adapter_in_workspace(
     )
 
     # Declare bash tool when using tool_loop adapter so it passes the allowlist check
-    tools: list = []
+    tools: list[ToolSpec] = []
     if adapter_kind == "tool_loop":
-        from aec_bench.contracts.task_definition import ToolSpec
-
         tools = [
             ToolSpec(
                 name="bash",

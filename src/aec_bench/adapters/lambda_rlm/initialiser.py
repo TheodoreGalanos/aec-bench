@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -22,11 +23,6 @@ from aec_bench.contracts.constitution import ConstitutionManifest
 # inside build_lambda_rlm_adapter to avoid a circular import: constitutional.py →
 # rlm.client → ... → initialiser. Import occurs only when a constitution is
 # actually configured.
-
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redef]
 
 _log = logging.getLogger(__name__)
 

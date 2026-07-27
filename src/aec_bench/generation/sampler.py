@@ -136,6 +136,7 @@ def sample_instance(
         template=config.meta.name,
         template_version="1.0",
         seed=seed,
+        instance_index=instance_index,
         timestamp=datetime.now(tz=UTC),
         difficulty=difficulty_name,
         visibility_level=preset.visibility,

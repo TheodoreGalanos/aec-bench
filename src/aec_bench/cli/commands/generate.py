@@ -4,12 +4,14 @@
 # ruff: noqa: B008
 
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.table import Table
 
 from aec_bench.cli.commands.generate_dockerfiles import generate_dockerfiles_command
 from aec_bench.cli.output import console, emit, print_success, print_warning
+from aec_bench.contracts.task_definition import Visibility
 from aec_bench.templates.registry import discover_templates, load_template, validate_template
 
 app = typer.Typer(help="Generate task instances from templates.", no_args_is_help=True)
@@ -41,8 +43,19 @@ def generate_task(
         help="Comma-separated difficulty names (e.g. easy,medium). Defaults to all presets.",
     ),
     seed: int = typer.Option(42, "--seed", help="Random seed for reproducibility"),
+    start_index: int = typer.Option(
+        0,
+        "--start-index",
+        min=0,
+        help="First stable instance index; subsequent instances increment from it",
+    ),
     output: Path = typer.Option(Path("./tasks/"), "--output", help="Output directory for instances"),
     tool_mode: str | None = typer.Option(None, "--tool-mode", help="Override template tool_mode"),
+    task_visibility: Visibility = typer.Option(
+        Visibility.PUBLIC,
+        "--visibility",
+        help="Registry visibility written explicitly into each generated task",
+    ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print plan without writing files"),
 ) -> None:
     """Generate task instances from a named built-in or local template.
@@ -84,8 +97,8 @@ def generate_task(
         template_dir = template.resolve()
     else:
         assert name is not None
-        template_dir = _find_named_template(name)
-        if template_dir is None:
+        named_template_dir = _find_named_template(name)
+        if named_template_dir is None:
             emit(
                 "generate task",
                 data=None,
@@ -93,6 +106,7 @@ def generate_task(
                 start_time=start,
             )
             return
+        template_dir = named_template_dir
 
     # Load the template
     try:
@@ -130,6 +144,7 @@ def generate_task(
         plan_list = [
             {
                 "instance": i + 1,
+                "instance_index": start_index + i,
                 "difficulty": difficulty_cycle[i % len(difficulty_cycle)],
             }
             for i in range(instances)
@@ -139,10 +154,12 @@ def generate_task(
             "template": resolved_dir.name,
             "output": str(output.resolve()),
             "seed": seed,
+            "start_index": start_index,
+            "visibility": task_visibility.value,
             "instances": plan_list,
         }
 
-        def _render_plan(data: dict) -> None:
+        def _render_plan(data: dict[str, Any]) -> None:
             console.print(f"[bold]Dry run:[/bold] would generate {len(data['instances'])} instance(s)")
             console.print(f"  Template:  {data['template']}")
             console.print(f"  Output:    {data['output']}")
@@ -170,12 +187,13 @@ def generate_task(
 
     for i in range(instances):
         diff = difficulty_cycle[i % len(difficulty_cycle)]
+        instance_index = start_index + i
         instance = sample_instance(
             config=config,
             engine_compute=engine_module.compute,
             difficulty_name=diff,
             seed=seed,
-            instance_index=i,
+            instance_index=instance_index,
         )
         instance_dir = scaffold_task_instance(
             config=config,
@@ -184,12 +202,14 @@ def generate_task(
             instance=instance,
             output_dir=output.resolve(),
             tool_mode_override=tool_mode,
+            task_visibility=task_visibility,
         )
         created_paths.append(instance_dir)
 
     results_list = [
         {
             "index": idx + 1,
+            "instance_index": start_index + i,
             "instance": instance_path.name,
             "difficulty": difficulty_cycle[i % len(difficulty_cycle)],
             "path": str(instance_path),
@@ -204,7 +224,7 @@ def generate_task(
         "instances": results_list,
     }
 
-    def _render_results(data: dict) -> None:
+    def _render_results(data: dict[str, Any]) -> None:
         table = Table(title=f"Generated {data['count']} instance(s)")
         table.add_column("#", justify="right", style="dim")
         table.add_column("Instance")
@@ -267,7 +287,7 @@ def list_templates(
         for cfg, _path in templates
     ]
 
-    def _render(data: list) -> None:
+    def _render(data: list[dict[str, str]]) -> None:
         if not data:
             console.print("[yellow]No templates found.[/yellow]")
             return
@@ -324,10 +344,10 @@ def validate_template_cmd(
         "errors": errors,
     }
 
-    def _render_success(data: dict) -> None:
+    def _render_success(data: dict[str, Any]) -> None:
         print_success(f"Template valid: {data['template']} (0 errors)")
 
-    def _render_failure(data: dict) -> None:
+    def _render_failure(data: dict[str, Any]) -> None:
         console.print(f"[red]Template validation failed ({len(data['errors'])} error(s)):[/red]")
         for error in data["errors"]:
             console.print(f"  [red]\u2022[/red] {error}")
@@ -426,7 +446,7 @@ def generate_suite(
                 "total_templates": len(templates),
             }
 
-            def _render_validate(data: dict) -> None:
+            def _render_validate(data: dict[str, Any]) -> None:
                 print_success(
                     f"Config valid. {data['matched_templates']} template(s) "
                     f"matched, {data['total_templates']} total discovered."
@@ -478,7 +498,7 @@ def generate_suite(
             **plan_summary,
         }
 
-        def _render_dry(data: dict) -> None:
+        def _render_dry(data: dict[str, Any]) -> None:
             _render_plan_table(data)
             console.print("[bold]Dry run:[/bold] no files written.")
 
@@ -502,7 +522,7 @@ def generate_suite(
         "job_config_path": str(out_dir / "job.yaml"),
     }
 
-    def _render_result(data: dict) -> None:
+    def _render_result(data: dict[str, Any]) -> None:
         _render_plan_table(data)
         print_success(f"Generated {data['instances_generated']} instance(s). Manifest: {data['manifest_path']}")
         print_success(f"Harbor job config: {data['job_config_path']}")
@@ -515,7 +535,7 @@ def generate_suite(
     )
 
 
-def _render_plan_table(data: dict) -> None:
+def _render_plan_table(data: dict[str, Any]) -> None:
     """Render the plan summary table for generate suite output."""
     table = Table(title=f"Dataset: {data['suite_name']} ({data['total_instances']} instances)")
     table.add_column("Category", style="bold")

@@ -110,7 +110,7 @@ def _arcing_current_low_voltage(
         + 0.5588 * voltage_kv * lg_ibf
         - 0.00304 * gap_mm * lg_ibf
     )
-    return 10.0**lg_ia
+    return float(10.0**lg_ia)
 
 
 def _arcing_current_high_voltage(ibf: float) -> float:
@@ -119,7 +119,7 @@ def _arcing_current_high_voltage(ibf: float) -> float:
     lg(Ia) = 0.00402 + 0.983 * lg(Ibf)
     """
     lg_ia = 0.00402 + 0.983 * math.log10(ibf)
-    return 10.0**lg_ia
+    return float(10.0**lg_ia)
 
 
 def _normalized_incident_energy(
@@ -136,7 +136,7 @@ def _normalized_incident_energy(
     k1 = _K1_OPEN if enclosure_type == "open" else _K1_BOX
     k2 = _K2_GROUNDED if grounding == "grounded" else _K2_UNGROUNDED
     lg_en = k1 + k2 + 1.081 * math.log10(ia) + 0.0011 * gap_mm
-    return 10.0**lg_en
+    return float(10.0**lg_en)
 
 
 def _incident_energy(
@@ -151,7 +151,7 @@ def _incident_energy(
     E = 4.184 * Cf * En * (t / 0.2) * (610^x / D^x)
     where t is arcing time in seconds, D is working distance in mm.
     """
-    return 4.184 * cf * en * (t / 0.2) * (610.0**x / d**x)
+    return float(4.184 * cf * en * (t / 0.2) * (610.0**x / d**x))
 
 
 def _arc_flash_boundary(
@@ -167,7 +167,7 @@ def _arc_flash_boundary(
     where Eb is the incident energy threshold (1.2 cal/cm2).
     """
     numerator = 4.184 * cf * en * (t / 0.2) * (610.0**x)
-    return (numerator / eb) ** (1.0 / x)
+    return float((numerator / eb) ** (1.0 / x))
 
 
 def _ppe_category(incident_energy: float) -> int:

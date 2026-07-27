@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -12,6 +13,7 @@ from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.usage import RequestUsage
 
 from aec_bench.adapters.pydantic_ai_runtime import (
+    agent_run_usage,
     request_model_response,
     should_retry_with_streaming,
 )
@@ -75,6 +77,13 @@ def test_streaming_required_detection_matches_together_error() -> None:
         "status_code: 400, body: {'message': 'This model only supports streaming. Set \"stream\": true.', "
         "'code': 'streaming_required'}"
     )
+
+
+def test_agent_run_usage_accepts_method_and_property_api_shapes() -> None:
+    usage = object()
+
+    assert agent_run_usage(SimpleNamespace(usage=lambda: usage)) is usage
+    assert agent_run_usage(SimpleNamespace(usage=usage)) is usage
 
 
 def test_request_model_response_uses_non_streaming_first() -> None:

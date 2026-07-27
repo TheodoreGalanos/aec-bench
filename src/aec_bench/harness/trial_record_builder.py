@@ -73,8 +73,23 @@ def build_trial_record(
             conversation_path=conversation_path,
             trajectory_path=trajectory_path,
             agent_result={
+                "completion_reason": (result.completion_reason.value if result.completion_reason is not None else None),
+                "completion_assistance": (
+                    {
+                        "contract_satisfied": result.completion_assistance.contract_satisfied,
+                        "reminder_sent": result.completion_assistance.reminder_sent,
+                        "reminder_turn": result.completion_assistance.reminder_turn,
+                        "explicit_final_turn": result.completion_assistance.explicit_final_turn,
+                    }
+                    if result.completion_assistance is not None
+                    else None
+                ),
+                "completion_commit": (
+                    result.completion_commit.model_dump(mode="json") if result.completion_commit is not None else None
+                ),
                 "failure_kind": (result.failure_kind.value if result.failure_kind is not None else None),
                 "provider_error": result.provider_error,
+                **({"usage_model_calls": result.usage_model_calls} if result.usage_model_calls is not None else {}),
                 "usage_input_tokens": result.usage_input_tokens,
                 "usage_output_tokens": result.usage_output_tokens,
             },

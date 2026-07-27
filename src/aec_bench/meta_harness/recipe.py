@@ -73,6 +73,50 @@ def materialize_harness_comparison_recipe(
     }
 
 
+def materialize_harness_comparison_example(
+    *,
+    output_dir: Path,
+    command_prefix: str = "aec-bench",
+) -> dict[str, Any]:
+    """Write and execute a complete provider-free candidate comparison example."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    brief_path = output_dir / "brief.json"
+    baseline_world_path = output_dir / "baseline-world.json"
+    candidate_world_path = output_dir / "candidate-world.json"
+    baseline_run_path = output_dir / "baseline-run.json"
+    candidate_run_path = output_dir / "candidate-run.json"
+
+    _write_json(brief_path, _example_brief())
+    _write_json(baseline_world_path, _example_world("world.example.baseline"))
+    _write_json(candidate_world_path, _example_world("world.example.candidate"))
+    _write_json(baseline_run_path, _example_task_run("run.example.baseline", reward=0.5))
+    _write_json(candidate_run_path, _example_task_run("run.example.candidate", reward=1.0))
+
+    recipe = materialize_harness_comparison_recipe(
+        output_dir=output_dir,
+        task_text="Compare a verifier-backed candidate harness against a baseline.",
+        process_id="example.meta-harness",
+        baseline_world=baseline_world_path,
+        baseline_run=baseline_run_path,
+        candidate_world=candidate_world_path,
+        candidate_run=candidate_run_path,
+        command_prefix=command_prefix,
+    )
+    comparison = run_harness_comparison_from_files(
+        brief_path=brief_path,
+        baseline_world_path=baseline_world_path,
+        candidate_world_path=candidate_world_path,
+        baseline_run_path=baseline_run_path,
+        candidate_run_path=candidate_run_path,
+        output_dir=output_dir / "comparison",
+    )
+    return {
+        **recipe,
+        "status": "complete",
+        "comparison": comparison,
+    }
+
+
 def run_harness_comparison_from_files(
     *,
     brief_path: Path,
@@ -275,22 +319,7 @@ def _steps(
             "id": "compare",
             "kind": "local_script",
             "description": "Compare baseline and candidate evidence using the generated comparison script.",
-            "command": [
-                "python",
-                "compare_candidate.py",
-                "--brief",
-                paths["brief"],
-                "--baseline-world",
-                paths["baseline_world"],
-                "--candidate-world",
-                paths["candidate_world"],
-                "--baseline-run",
-                paths["baseline_run"],
-                "--candidate-run",
-                paths["candidate_run"],
-                "--output",
-                paths["comparison_output"],
-            ],
+            "command": _comparison_command(command_prefix, paths),
             "writes": ["comparison/comparison.json", "comparison/comparison.md"],
         },
     ]
@@ -362,6 +391,26 @@ def _operation_command(command_prefix: str, paths: dict[str, str], models_config
             str(models_config),
         )
     return command
+
+
+def _comparison_command(command_prefix: str, paths: dict[str, str]) -> list[str]:
+    return _command(
+        command_prefix,
+        "meta-harness",
+        "compare",
+        "--brief",
+        paths["brief"],
+        "--baseline-world",
+        paths["baseline_world"],
+        "--candidate-world",
+        paths["candidate_world"],
+        "--baseline-run",
+        paths["baseline_run"],
+        "--candidate-run",
+        paths["candidate_run"],
+        "--output",
+        paths["comparison_output"],
+    )
 
 
 def _command(command_prefix: str, *parts: str) -> list[str]:
@@ -436,29 +485,45 @@ def _readme(recipe: dict[str, Any]) -> str:
         "# Meta-Harness Candidate Comparison Recipe\n\n"
         "This directory is a scriptable recipe for creating or revising a candidate task world, "
         "running it against a baseline, and comparing evidence.\n\n"
-        "Start with `recipe.json`. Fill any placeholder paths, run the relevant commands, then run:\n\n"
+        "Start with `recipe.json`. Its stages show how to create any missing inputs. "
+        "Once the brief, worlds, and runs exist, reproduce the deterministic comparison with:\n\n"
         "```bash\n"
-        "python compare_candidate.py --brief brief.json --baseline-world baseline-world.json "
-        "--candidate-world candidate-world.json --baseline-run baseline-run.json "
-        "--candidate-run candidate-run.json --output comparison\n"
+        "./run_recipe.sh\n"
         "```\n\n"
         "The comparison script writes `comparison/comparison.json` and `comparison/comparison.md`.\n"
     )
 
 
 def _shell_script(recipe: dict[str, Any]) -> str:
+    paths = recipe["paths"]
     lines = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
         'cd "$(dirname "$0")"',
         "",
-        'echo "Meta-harness recipe: inspect recipe.json, then run the commands you need."',
+        'echo "Meta-harness recipe: validating comparison inputs."',
         "",
     ]
-    for step in recipe["steps"]:
-        lines.append(f"# {step['id']}: {step['description']}")
-        lines.append(" ".join(shlex.quote(part) for part in step["command"]))
-        lines.append("")
+    for label in ("brief", "baseline_world", "candidate_world", "baseline_run", "candidate_run"):
+        path = paths[label]
+        quoted_path = shlex.quote(path)
+        lines.extend(
+            [
+                f"if [[ ! -f {quoted_path} ]]; then",
+                f'  echo "Missing {label}: {path}. See recipe.json for the stage that creates it." >&2',
+                "  exit 2",
+                "fi",
+            ]
+        )
+    comparison_step = next(step for step in recipe["steps"] if step["id"] == "compare")
+    lines.extend(
+        [
+            "",
+            "# Reproduce the provider-free deterministic comparison.",
+            " ".join(shlex.quote(part) for part in comparison_step["command"]),
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -474,7 +539,62 @@ def _comparison_script() -> str:
 
 
 def _path_or_placeholder(path: Path | None, placeholder: str) -> str:
-    return str(path) if path is not None else placeholder
+    return str(path.resolve()) if path is not None else placeholder
+
+
+def _example_brief() -> dict[str, Any]:
+    return {
+        "brief_id": "brief.example",
+        "objective": "Compare a verifier-backed candidate harness against a baseline.",
+        "task_request": "Review a calculation and preserve its verifier evidence.",
+        "evidence_requirements": ["verifier reward", "artifact evidence", "agentic review"],
+    }
+
+
+def _example_world(world_id: str) -> dict[str, Any]:
+    return {
+        "world_id": world_id,
+        "task_unit": "Complete and verify one engineering calculation.",
+        "logic_profile": {
+            "closure_gates": [
+                {
+                    "id": "verifier_passed",
+                    "evidence_key": "score.passed",
+                    "expected": True,
+                }
+            ],
+            "construction_gates": [
+                {
+                    "id": "artifact_witnessed",
+                    "construction_required": ["artifacts.report.path"],
+                }
+            ],
+            "containment_gates": [],
+            "agentic_review": {
+                "required": True,
+                "review_modes": ["verifier_result"],
+            },
+        },
+    }
+
+
+def _example_task_run(run_id: str, *, reward: float) -> dict[str, Any]:
+    return {
+        "run_id": run_id,
+        "evidence": {
+            "score": {"passed": True, "reward": reward},
+            "artifacts": {
+                "report": {
+                    "path": "logs/verifier/artifacts/report.json",
+                }
+            },
+            "agentic_review": {
+                "status": "complete",
+                "reviewed_modes": ["verifier_result"],
+                "findings": [],
+            },
+        },
+    }
 
 
 def _nullable_delta(candidate: float | None, baseline: float | None) -> float | None:

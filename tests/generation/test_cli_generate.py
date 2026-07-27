@@ -1,6 +1,7 @@
 # ABOUTME: Tests for the CLI generate subcommand group.
 # ABOUTME: Covers list-templates, validate-template, and generate task commands via CliRunner.
 
+import tomllib
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -202,3 +203,84 @@ def test_generate_task_from_local_template(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     task_tomls = list(tmp_path.rglob("task.toml"))
     assert len(task_tomls) == 1
+
+
+def test_generate_task_supports_explicit_visibility_and_start_index(tmp_path: Path) -> None:
+    """The CLI must generate auditable split packages without reusing low task indices."""
+    result = runner.invoke(
+        app,
+        [
+            "generate",
+            "task",
+            "terzaghi-bearing-capacity",
+            "--instances",
+            "2",
+            "--difficulty",
+            "easy",
+            "--seed",
+            "901",
+            "--start-index",
+            "10",
+            "--visibility",
+            "holdout",
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payloads = []
+    for task_toml in sorted(tmp_path.rglob("task.toml")):
+        with open(task_toml, "rb") as fh:
+            payloads.append(tomllib.load(fh))
+    assert [payload["generation"]["instance_index"] for payload in payloads] == [10, 11]
+    assert {payload["metadata"]["visibility"] for payload in payloads} == {"holdout"}
+
+
+def test_generate_task_rejects_a_negative_start_index(tmp_path: Path) -> None:
+    """Negative task indices cannot participate in a frozen generation identity."""
+    result = runner.invoke(
+        app,
+        [
+            "generate",
+            "task",
+            "terzaghi-bearing-capacity",
+            "--instances",
+            "1",
+            "--start-index",
+            "-1",
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert list(tmp_path.rglob("task.toml")) == []
+
+
+def test_generate_task_refuses_to_overwrite_an_existing_instance(tmp_path: Path) -> None:
+    """Repeated CLI generation must preserve the first frozen task package."""
+    arguments = [
+        "generate",
+        "task",
+        "terzaghi-bearing-capacity",
+        "--instances",
+        "1",
+        "--difficulty",
+        "easy",
+        "--seed",
+        "901",
+        "--start-index",
+        "10",
+        "--output",
+        str(tmp_path),
+    ]
+    first_result = runner.invoke(app, arguments)
+    assert first_result.exit_code == 0, first_result.output
+    task_toml = next(tmp_path.rglob("task.toml"))
+    original = task_toml.read_bytes()
+
+    second_result = runner.invoke(app, arguments)
+
+    assert second_result.exit_code != 0
+    assert task_toml.read_bytes() == original

@@ -8,9 +8,14 @@ from pathlib import Path
 from typing import Any, cast
 
 from aec_bench.task_world_templates.catalogue import get_template
+from aec_bench.task_world_templates.compiled_world import (
+    CompiledLifecycleWorld,
+    build_compiled_world_envelope,
+    validate_lifecycle_world_adapter,
+)
 from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate
 from aec_bench.task_world_templates.lifecycles import (
-    materialize_lifecycle_template,
+    registered_lifecycle_adapter,
     verify_lifecycle_template,
 )
 
@@ -110,10 +115,29 @@ def materialize_template_lifecycle(
     variant_id: str | None = None,
 ) -> Path:
     """Materialize a registered evidence lifecycle for one composite template."""
+    return compile_template_lifecycle(template, output_dir, variant_id=variant_id).package_dir
+
+
+def compile_template_lifecycle(
+    template: CompositeTaskWorldTemplate,
+    output_dir: Path,
+    *,
+    variant_id: str | None = None,
+) -> CompiledLifecycleWorld:
+    """Compile one lifecycle package and return its canonical identity out of band."""
     template = CompositeTaskWorldTemplate.model_validate(template.model_dump(mode="json"))
     if template.evidence_lifecycle is None:
         raise ValueError(f"template {template.template_id!r} does not define an evidence lifecycle")
-    return materialize_lifecycle_template(template, output_dir, variant_id=variant_id)
+    adapter = registered_lifecycle_adapter(template.template_id)
+    validate_lifecycle_world_adapter(template, adapter)
+    package_dir = adapter.materialize(Path(output_dir), template=template, variant_id=variant_id)
+    envelope = build_compiled_world_envelope(
+        template=template,
+        adapter=adapter,
+        package_dir=package_dir,
+        requested_variant_id=variant_id,
+    )
+    return CompiledLifecycleWorld(package_dir=package_dir, envelope=envelope)
 
 
 def verify_template_lifecycle(package_dir: Path, run_dir: Path) -> dict[str, Any]:

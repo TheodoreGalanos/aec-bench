@@ -157,7 +157,9 @@ def _run(
     except FileNotFoundError as exc:
         return subprocess.CompletedProcess(command, 127, "", str(exc))
     except subprocess.TimeoutExpired as exc:
-        return subprocess.CompletedProcess(command, 124, exc.stdout or "", exc.stderr or "timed out")
+        stdout = exc.stdout.decode(errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        stderr = exc.stderr.decode(errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "timed out")
+        return subprocess.CompletedProcess(command, 124, stdout, stderr)
 
 
 def _summarise_failure(result: subprocess.CompletedProcess[str]) -> str:

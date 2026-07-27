@@ -6,6 +6,7 @@ import json
 import math
 import re
 from pathlib import Path
+from typing import Any
 
 DEFAULT_OUTPUT_FILE = Path("/workspace/output.md")
 DEFAULT_REWARD_FILE = Path("/logs/verifier/reward.json")
@@ -84,7 +85,7 @@ CLAIM_BOUNDARY_CONCEPTS = (
 )
 
 
-def extract_json_block(text: str) -> dict | None:
+def extract_json_block(text: str) -> dict[str, Any] | None:
     matches = re.findall(r"```json\s*\n(.*?)\n\s*```", text, re.DOTALL)
     if not matches:
         return None
@@ -96,6 +97,8 @@ def extract_json_block(text: str) -> dict | None:
 
 
 def value_close(expected: float, actual: object) -> bool:
+    if not isinstance(actual, str | int | float):
+        return False
     try:
         actual_float = float(actual)
     except (TypeError, ValueError):
@@ -103,12 +106,12 @@ def value_close(expected: float, actual: object) -> bool:
     return math.isclose(actual_float, expected, rel_tol=0.02, abs_tol=0.01)
 
 
-def item_gold_status(ground_truth: dict, item_id: str) -> str:
+def item_gold_status(ground_truth: dict[str, Any], item_id: str) -> str:
     code = ground_truth[f"rlr_0{item_id[-1]}_status"]
     return STATUS_NAMES[code]
 
 
-def matching_requests(payload: dict, item_id: str, tokens: tuple[str, ...]) -> list[dict]:
+def matching_requests(payload: dict[str, Any], item_id: str, tokens: tuple[str, ...]) -> list[dict[str, Any]]:
     found = []
     for request in payload.get("information_requests", []):
         if not isinstance(request, dict):
@@ -126,7 +129,7 @@ def matching_requests(payload: dict, item_id: str, tokens: tuple[str, ...]) -> l
     return found
 
 
-def matching_findings(payload: dict, item_id: str) -> list[dict]:
+def matching_findings(payload: dict[str, Any], item_id: str) -> list[dict[str, Any]]:
     found = []
     for finding in payload.get("findings", []):
         if not isinstance(finding, dict):
@@ -139,7 +142,7 @@ def matching_findings(payload: dict, item_id: str) -> list[dict]:
     return found
 
 
-def score_matrix(payload: dict, ground_truth: dict, variant: str) -> tuple[float, dict]:
+def score_matrix(payload: dict[str, Any], ground_truth: dict[str, Any], variant: str) -> tuple[float, dict[str, Any]]:
     matrix = payload.get("review_matrix", {})
     if not isinstance(matrix, dict):
         matrix = {}
@@ -174,7 +177,7 @@ def score_matrix(payload: dict, ground_truth: dict, variant: str) -> tuple[float
     return score, {"score": round(score * GATE_WEIGHTS["matrix"], 4), "items": items}
 
 
-def score_evidence(payload: dict, ground_truth: dict) -> tuple[float, dict]:
+def score_evidence(payload: dict[str, Any], ground_truth: dict[str, Any]) -> tuple[float, dict[str, Any]]:
     evidence = payload.get("computed_evidence", {})
     if not isinstance(evidence, dict):
         evidence = {}
@@ -190,7 +193,7 @@ def score_evidence(payload: dict, ground_truth: dict) -> tuple[float, dict]:
     return score, {"score": round(score * GATE_WEIGHTS["evidence"], 4), "keys": per_key}
 
 
-def score_linkage(payload: dict, ground_truth: dict, variant: str) -> tuple[float, dict]:
+def score_linkage(payload: dict[str, Any], ground_truth: dict[str, Any], variant: str) -> tuple[float, dict[str, Any]]:
     matrix = payload.get("review_matrix", {})
     if not isinstance(matrix, dict):
         matrix = {}
@@ -256,7 +259,9 @@ def score_linkage(payload: dict, ground_truth: dict, variant: str) -> tuple[floa
     return score, {"score": round(score * GATE_WEIGHTS["linkage"], 4), "checks": checks}
 
 
-def score_readiness(payload: dict, ground_truth: dict, evidence_score: float) -> tuple[float, dict]:
+def score_readiness(
+    payload: dict[str, Any], ground_truth: dict[str, Any], evidence_score: float
+) -> tuple[float, dict[str, Any]]:
     decision = str(payload.get("readiness_decision", "")).strip().lower()
     gold_decision = READINESS_NAMES[ground_truth["readiness_code"]]
     reasons: list[str] = []
@@ -335,7 +340,7 @@ def _claim_boundary_supported(statement: str) -> bool:
     )
 
 
-def score_identity_claims(payload: dict) -> tuple[float, dict]:
+def score_identity_claims(payload: dict[str, Any]) -> tuple[float, dict[str, Any]]:
     ledger = payload.get("identity_ledger", {})
     ledger_text = json.dumps(ledger).lower() if isinstance(ledger, dict) else ""
     ledger_hits = sum(1.0 for token in REQUIRED_LEDGER_TOKENS if token in ledger_text)
@@ -349,7 +354,7 @@ def score_identity_claims(payload: dict) -> tuple[float, dict]:
     return score, {"score": round(score * GATE_WEIGHTS["identity_claims"], 4), "checks": checks}
 
 
-def zero_details() -> dict:
+def zero_details() -> dict[str, Any]:
     return {
         "gates": {
             "matrix": {"score": 0.0, "items": {item: 0.0 for item in RLR_ITEMS}},
@@ -362,7 +367,7 @@ def zero_details() -> dict:
     }
 
 
-def score_payload(payload: dict, instance: dict) -> tuple[float, dict]:
+def score_payload(payload: dict[str, Any], instance: dict[str, Any]) -> tuple[float, dict[str, Any]]:
     ground_truth = instance["ground_truth"]
     variant = str(instance["all_params"]["packet_variant"])
 
@@ -392,7 +397,7 @@ def score_payload(payload: dict, instance: dict) -> tuple[float, dict]:
     return round(reward, 2), details
 
 
-def write_result(reward: float, details: dict, path: Path) -> None:
+def write_result(reward: float, details: dict[str, Any], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"reward": reward}))
     (path.parent / "details.json").write_text(json.dumps(details, indent=2))

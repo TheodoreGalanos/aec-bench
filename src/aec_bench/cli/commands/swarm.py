@@ -65,7 +65,7 @@ def swarm_run(
     console.print(f"  Tasks: {len(task_dirs)} task instances")
 
     # Read adapter from workspace manifest
-    import yaml as _yaml  # type: ignore[import-untyped]
+    import yaml as _yaml
 
     raw_manifest: object = _yaml.safe_load((workspace_path / "manifest.yaml").read_text())
     manifest_data = {str(k): v for k, v in raw_manifest.items()} if isinstance(raw_manifest, dict) else {}

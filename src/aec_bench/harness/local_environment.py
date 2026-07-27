@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
 from aec_bench.harness.local_runtime import patch_workspace_paths, setup_workspace
@@ -65,7 +65,10 @@ class HostEnvironment:
 
     def run_adapter(self, adapter: object, request: AdapterRequest) -> AdapterResult:
         """Execute the adapter in-process by calling adapter.execute(request)."""
-        return adapter.execute(request)  # type: ignore[attr-defined]
+        execute = getattr(adapter, "execute", None)
+        if not callable(execute):
+            raise TypeError("local adapter must define a callable execute(request)")
+        return cast(AdapterResult, execute(request))
 
     def run_verifier(
         self,

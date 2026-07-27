@@ -32,9 +32,20 @@ class StatCard(Widget):
         value: str = "",
         label: str = "",
         color: str | None = None,
-        **kwargs: object,
+        *,
+        name: str | None = None,
+        id: str | None = None,
+        classes: str | None = None,
+        disabled: bool = False,
+        markup: bool = True,
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(
+            name=name,
+            id=id,
+            classes=classes,
+            disabled=disabled,
+            markup=markup,
+        )
         self.value = value
         self.label = label
         self.color = color

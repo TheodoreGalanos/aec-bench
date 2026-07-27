@@ -171,17 +171,19 @@ class SectionReviewResult:
         raise AttributeError(f"'{type(self).__name__}' has no '{name}'. {hint}")
 
 
-def _parse_json_from_response(text: str) -> dict[str, Any] | list | None:
+def _parse_json_from_response(text: str) -> dict[str, Any] | list[Any] | None:
     """Extract a JSON value (dict or list) from a fenced code block or raw text."""
     pattern = r"```(?:json)?\s*\n(.*?)```"
     matches = re.findall(pattern, text, re.DOTALL)
     if matches:
         try:
-            return json.loads(matches[-1])
+            payload = json.loads(matches[-1])
+            return payload if isinstance(payload, dict | list) else None
         except json.JSONDecodeError:
             return None
     try:
-        return json.loads(text)
+        payload = json.loads(text)
+        return payload if isinstance(payload, dict | list) else None
     except json.JSONDecodeError:
         pass
     return None
@@ -214,6 +216,9 @@ def default_extract(
             model=model,
             section_context=section_context,
         )
+
+    if not fields:
+        return ExtractResult(values={}, error="extract() requires at least one field")
 
     # Use structured output only when all fields are clean identifiers.
     if hasattr(client, "generate_with_tools") and all(re.fullmatch(r"[a-zA-Z0-9_.-]{1,64}", f) for f in fields):

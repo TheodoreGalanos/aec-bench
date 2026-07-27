@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 from pydantic import Field, NonNegativeFloat, NonNegativeInt, field_validator
 
 from aec_bench.adapters.pydantic_ai_runtime import (

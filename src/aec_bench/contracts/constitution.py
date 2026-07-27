@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import tomllib
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -103,12 +104,6 @@ class ConstitutionManifest:
     def enabled_principle_names(self) -> list[str]:
         """Return names of principles with enabled=True."""
         return [p.name for p in self.principles if p.enabled]
-
-
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
 
 def parse_constitution(toml_str: str) -> ConstitutionManifest:

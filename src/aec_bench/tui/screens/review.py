@@ -41,7 +41,7 @@ from aec_bench.tui.screens.viewer import render_transcript
 from aec_bench.tui.widgets.shared import reward_color
 
 
-class ReviewScreen(Screen):
+class ReviewScreen(Screen[None]):
     """Three-pane review screen: queue, transcript, annotation/calibration/adjudication form."""
 
     BINDINGS = [

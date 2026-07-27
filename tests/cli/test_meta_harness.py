@@ -677,8 +677,68 @@ def test_meta_harness_recipe_command_materializes_scriptable_workflow(tmp_path: 
     assert recipe["steps"][0]["command"][:3] == ["uv", "run", "aec-bench"]
 
 
-def test_meta_harness_docs_examples_are_cli_consumable(tmp_path: Path) -> None:
-    example_root = REPO_ROOT / "docs" / "examples" / "meta-harness"
+def test_meta_harness_example_command_runs_provider_free_comparison(tmp_path: Path) -> None:
+    output_dir = tmp_path / "example"
+
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "meta-harness",
+            "example",
+            "--output",
+            str(output_dir),
+            "--command-prefix",
+            "uv run aec-bench",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)["data"]
+    assert data["status"] == "complete"
+    assert data["comparison"]["recommendation"]["status"] == "candidate_improved"
+    assert (output_dir / "comparison" / "comparison.json").exists()
+
+
+def test_meta_harness_compare_command_writes_reports(tmp_path: Path) -> None:
+    example_dir = tmp_path / "example"
+    example_result = runner.invoke(
+        app,
+        ["--json", "meta-harness", "example", "--output", str(example_dir)],
+    )
+    assert example_result.exit_code == 0, example_result.output
+    comparison_dir = tmp_path / "comparison"
+
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "meta-harness",
+            "compare",
+            "--brief",
+            str(example_dir / "brief.json"),
+            "--baseline-world",
+            str(example_dir / "baseline-world.json"),
+            "--candidate-world",
+            str(example_dir / "candidate-world.json"),
+            "--baseline-run",
+            str(example_dir / "baseline-run.json"),
+            "--candidate-run",
+            str(example_dir / "candidate-run.json"),
+            "--output",
+            str(comparison_dir),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)["data"]
+    assert data["status"] == "complete"
+    assert data["deltas"]["reward"] == 0.5
+    assert (comparison_dir / "comparison.md").exists()
+
+
+def test_meta_harness_fixtures_are_cli_consumable(tmp_path: Path) -> None:
+    example_root = REPO_ROOT / "tests" / "fixtures" / "meta_harness"
     logic_world = example_root / "logic-profile" / "aecbench-verifier-event-world.json"
     logic_run = example_root / "logic-profile" / "aecbench-verifier-event-run.json"
     review_response = example_root / "logic-profile" / "aecbench-verifier-event-review-response.md"

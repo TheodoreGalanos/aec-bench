@@ -67,7 +67,7 @@ def _difficulty_sparkline_data(manifest: DatasetManifest) -> list[float]:
 # ---------------------------------------------------------------------------
 
 
-class DatasetsScreen(Screen):
+class DatasetsScreen(Screen[None]):
     """Versioned benchmark dataset browser with DataTable and drill-down detail."""
 
     BINDINGS = [

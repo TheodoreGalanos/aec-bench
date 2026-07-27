@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 STATUS_PASS = 0.0
 STATUS_FAIL = 1.0
@@ -43,7 +44,7 @@ QUANT_STEPS = {
     "cd_to_ahd_offset_m": 0.01,
 }
 
-VARIANT_GOLD = {
+VARIANT_GOLD: dict[str, dict[str, Any]] = {
     "clean": {"flips": {}, "readiness": READY, "findings": 0.0, "requests": 0.0, "carried": 0.0},
     "missing_switchboard_survey_level": {
         "flips": {"rlr_04_status": STATUS_INSUFFICIENT_DATA},
@@ -102,7 +103,7 @@ def _q(value: float, step: float) -> float:
     return round(round(value / step) * step, 10)
 
 
-def _quantize(params: dict) -> dict:
+def _quantize(params: dict[str, Any]) -> dict[str, Any]:
     """Return params with source-facing values snapped to stable grids."""
     quantized = dict(params)
     quantized["packet_variant"] = str(params["packet_variant"])
@@ -111,7 +112,7 @@ def _quantize(params: dict) -> dict:
     return quantized
 
 
-def _derive(params: dict) -> dict:
+def _derive(params: dict[str, Any]) -> dict[str, Any]:
     """Derive source truth, package claims, and review-state values."""
     p = _quantize(params)
     variant = p["packet_variant"]
@@ -148,7 +149,7 @@ def _derive(params: dict) -> dict:
     }
 
 
-def compute(**params) -> dict[str, float]:
+def compute(**params: Any) -> dict[str, float]:
     """Compute gold review statuses and recomputed evidence for an SSC-04 instance."""
     state = _derive(params)
     variant = state["variant"]
@@ -175,7 +176,7 @@ def compute(**params) -> dict[str, float]:
     return truth
 
 
-def build_sources(all_params: dict) -> dict[str, str]:
+def build_sources(all_params: dict[str, Any]) -> dict[str, str]:
     """Render the seven-file source packet for one instance."""
     state = _derive(all_params)
     p = state["params"]
@@ -318,7 +319,7 @@ def _status_entry(status: float, evidence: str) -> dict[str, str]:
     return {"status": STATUS_NAMES[status], "evidence": evidence}
 
 
-def _base_payload(ground_truth: dict) -> dict:
+def _base_payload(ground_truth: dict[str, Any]) -> dict[str, Any]:
     """Create a gold review payload from ground-truth status codes."""
     source_inventory = [
         {"doc_id": "TIDE-04-BASIS-01", "revision": "Rev D", "status": "current"},
@@ -385,7 +386,7 @@ def _base_payload(ground_truth: dict) -> dict:
     }
 
 
-def build_golden_pass(all_params: dict, ground_truth: dict) -> str:
+def build_golden_pass(all_params: dict[str, Any], ground_truth: dict[str, Any]) -> str:
     """Build a full-credit review response fixture."""
     variant = str(all_params["packet_variant"])
     payload = _base_payload(ground_truth)
@@ -457,7 +458,7 @@ The source packet has been inventoried, recomputed where applicable, and assesse
 """
 
 
-def build_golden_fail(all_params: dict, ground_truth: dict) -> str:
+def build_golden_fail(all_params: dict[str, Any], ground_truth: dict[str, Any]) -> str:
     """Build a fluent unsafe fixture that approves the packet without evidence."""
     payload = {
         "source_inventory": [],

@@ -5,7 +5,11 @@
 
 This guide is for coding agents working in the **implemented** aec-bench codebase. It reflects conventions established through the working code, not aspirational planning docs.
 
-For architectural context, start with [ARCHITECTURE.md](ARCHITECTURE.md) and [INVARIANTS.md](INVARIANTS.md). For domain-specific guidance, see the domain guide files in `docs/` (e.g., `adapters-guide.md`, `harness-guide.md`, `evaluation-guide.md`).
+For architectural context, start with [ARCHITECTURE.md](ARCHITECTURE.md) and
+[INVARIANTS.md](INVARIANTS.md). Public installation, usage, integration, and
+domain guides live at [aecbench.com/docs](https://aecbench.com/docs); this
+repository keeps only the normative architecture, contracts, invariants, project
+structure, and agent instructions.
 
 ---
 

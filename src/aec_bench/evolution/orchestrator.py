@@ -20,6 +20,7 @@ from aec_bench.contracts.evolution import (
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evolution.archive_agent import SelectionResult
 from aec_bench.evolution.engine import AECEvolutionEngine
+from aec_bench.evolution.graveyard import GraveyardMutationAction
 from aec_bench.evolution.strategy import HillClimbStrategy, SelectionStrategy
 from aec_bench.evolution.workspace import Workspace
 
@@ -244,11 +245,11 @@ class EvolutionOrchestrator:
     @staticmethod
     def _extract_mutation_actions(
         mutation: MutationSummary | None,
-    ) -> list[dict] | None:
+    ) -> list[GraveyardMutationAction] | None:
         """Convert a MutationSummary to a list of action dicts for the graveyard."""
         if mutation is None:
             return None
-        actions: list[dict] = []
+        actions: list[GraveyardMutationAction] = []
         if mutation.prompt_modified:
             actions.append({"action_type": "modify_prompt"})
         for name in mutation.skills_added:

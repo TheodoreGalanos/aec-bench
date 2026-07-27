@@ -2,6 +2,24 @@
 
 Use the CLI as a sequence of artifact-producing stages. The skill can guide the user, but the library stays scriptable.
 
+## Verify the Installation
+
+Run the complete provider-free example:
+
+```bash
+aec-bench meta-harness example \
+  --output artefacts/meta-harness/example
+```
+
+Inspect:
+
+- `comparison/comparison.json`
+- `comparison/comparison.md`
+- `recipe.json`
+- `run_recipe.sh`
+
+Run `run_recipe.sh` to reproduce the same comparison through the public CLI.
+
 ## Recipe Workspace
 
 Create a workspace:
@@ -23,6 +41,10 @@ The command writes:
 - `run_recipe.sh`
 - `compare_candidate.py`
 - `README.md`
+
+`run_recipe.sh` validates that the brief, baseline world/run, and candidate
+world/run exist, then performs the deterministic comparison. It does not execute
+placeholder experiment or provider commands.
 
 ## Stage Commands
 
@@ -57,7 +79,7 @@ aec-bench meta-harness operation-orchestrate --brief brief.json --world baseline
 Compare after baseline and candidate evidence exist:
 
 ```bash
-python compare_candidate.py \
+aec-bench meta-harness compare \
   --brief brief.json \
   --baseline-world baseline-world.json \
   --candidate-world candidate-world.json \
@@ -65,3 +87,6 @@ python compare_candidate.py \
   --candidate-run candidate-run.json \
   --output comparison
 ```
+
+For lifecycle ablations and fixed-K adaptive experiments, read
+`experiment-workflows.md`.

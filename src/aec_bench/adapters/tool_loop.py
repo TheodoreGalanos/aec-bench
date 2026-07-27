@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol, cast, runtime_checkable
 
 from aec_bench.adapters.advisor import default_advise
+from aec_bench.adapters.advisor_usage import AdvisorUsageAccumulator
 from aec_bench.adapters.base import (
     AdapterFailureKind,
     AdapterRequest,
@@ -17,6 +18,7 @@ from aec_bench.adapters.base import (
 )
 from aec_bench.adapters.config import record_effective_configuration, resolve_model_alias
 from aec_bench.adapters.rlm.client import RlmClient
+from aec_bench.adapters.runtime_limits import configured_positive_int
 from aec_bench.adapters.transcript import (
     TokenUsage,
     TranscriptEntry,
@@ -57,12 +59,72 @@ class ToolLoopCompletionResponse:
     output_text: str = ""
     tool_call: ToolCall | None = None
     error_message: str | None = None
+    failure_kind: AdapterFailureKind | None = None
+    usage_model_calls: int | None = 1
     usage_input_tokens: int | None = None
     usage_output_tokens: int | None = None
     usage_cache_read_tokens: int | None = None
     usage_cache_write_tokens: int | None = None
     timed_out: bool = False
     done: bool = False
+
+
+@dataclass
+class _ToolLoopUsage:
+    """Aggregate one exact multi-turn provider-call sequence."""
+
+    model_calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    model_calls_complete: bool = True
+    input_complete: bool = True
+    output_complete: bool = True
+    cache_read_complete: bool = True
+    cache_write_complete: bool = True
+
+    def record(self, response: ToolLoopCompletionResponse) -> None:
+        self.model_calls, self.model_calls_complete = _record_optional_usage(
+            total=self.model_calls,
+            complete=self.model_calls_complete,
+            observed=response.usage_model_calls,
+        )
+        self.input_tokens, self.input_complete = _record_optional_usage(
+            total=self.input_tokens,
+            complete=self.input_complete,
+            observed=response.usage_input_tokens,
+        )
+        self.output_tokens, self.output_complete = _record_optional_usage(
+            total=self.output_tokens,
+            complete=self.output_complete,
+            observed=response.usage_output_tokens,
+        )
+        self.cache_read_tokens, self.cache_read_complete = _record_optional_usage(
+            total=self.cache_read_tokens,
+            complete=self.cache_read_complete,
+            observed=response.usage_cache_read_tokens,
+        )
+        self.cache_write_tokens, self.cache_write_complete = _record_optional_usage(
+            total=self.cache_write_tokens,
+            complete=self.cache_write_complete,
+            observed=response.usage_cache_write_tokens,
+        )
+
+
+def _record_optional_usage(
+    *,
+    total: int,
+    complete: bool,
+    observed: int | None,
+) -> tuple[int, bool]:
+    if observed is None:
+        return total, False
+    return total + observed, complete
+
+
+def _complete_usage(total: int, *, complete: bool) -> int | None:
+    return total if complete else None
 
 
 class ToolLoopClient(Protocol):
@@ -114,9 +176,6 @@ class ToolLoopAdapter:
         self._tool_executor = tool_executor
         self._advisor_client = advisor_client
         self._advisor_config = advisor_config
-        self._advisor_calls_made = 0
-        self._advisor_input_tokens = 0
-        self._advisor_output_tokens = 0
 
     def serialize_execution(self) -> SerializedAdapterExecution:
         if not isinstance(self._client, RemoteToolLoopClient):
@@ -133,8 +192,12 @@ class ToolLoopAdapter:
 
     def execute(self, request: AdapterRequest) -> AdapterResult:
         transcript = initialize_transcript(request)
-        max_turns = int(request.configuration.get("max_turns", 8))
+        max_turns = configured_positive_int(request.configuration, "max_turns") or 8
+        max_tool_calls = configured_positive_int(request.configuration, "max_tool_calls")
+        executed_tool_calls = 0
         allowed_tools = {tool.name for tool in request.tools}
+        usage = _ToolLoopUsage()
+        advisor_usage = AdvisorUsageAccumulator() if self._advisor_config is not None else None
 
         for _ in range(max_turns):
             response = self._client.next_turn(
@@ -146,6 +209,7 @@ class ToolLoopAdapter:
                     transcript=list(transcript),
                 )
             )
+            usage.record(response)
 
             if response.tool_call is not None:
                 tool_call = response.tool_call
@@ -159,26 +223,15 @@ class ToolLoopAdapter:
                     )
                 )
 
-                # Intercept advisor tool calls before the allowlist check
-                if (
+                # Intercept advisor tool calls before the task-tool allowlist check.
+                is_advisor_call = (
                     tool_call.tool_name == "advisor"
                     and self._advisor_client is not None
                     and self._advisor_config is not None
                     and self._advisor_config.enabled
-                ):
-                    advisor_output = self._handle_advisor_call(tool_call, transcript)
-                    transcript.append(
-                        TranscriptEntry(
-                            role=TranscriptRole.TOOL,
-                            content=advisor_output,
-                            event=TranscriptEvent.TOOL_RESULT,
-                            tool_name=tool_call.tool_name,
-                            tool_call_id=tool_call.tool_call_id,
-                        )
-                    )
-                    continue
+                )
 
-                if tool_call.tool_name not in allowed_tools:
+                if not is_advisor_call and tool_call.tool_name not in allowed_tools:
                     error_message = f"undeclared tool requested: {tool_call.tool_name}"
                     transcript.append(
                         TranscriptEntry(
@@ -189,7 +242,7 @@ class ToolLoopAdapter:
                             tool_call_id=tool_call.tool_call_id,
                         )
                     )
-                    adv_calls, adv_in, adv_out = self._advisor_usage()
+                    adv_calls, adv_in, adv_out = self._advisor_usage(advisor_usage)
                     return _build_result(
                         adapter_name=self._adapter_name,
                         resolved_model=self._resolved_model,
@@ -199,10 +252,59 @@ class ToolLoopAdapter:
                         status=AgentOutputStatus.FAILED,
                         failure_kind=AdapterFailureKind.UNDECLARED_TOOL_REQUEST,
                         error_message=error_message,
+                        usage=usage,
+                        max_turns=max_turns,
                         usage_advisor_calls=adv_calls,
                         usage_advisor_input_tokens=adv_in,
                         usage_advisor_output_tokens=adv_out,
                     )
+
+                if max_tool_calls is not None and executed_tool_calls >= max_tool_calls:
+                    error_message = f"tool call limit reached ({executed_tool_calls}/{max_tool_calls})"
+                    transcript.append(
+                        TranscriptEntry(
+                            role=TranscriptRole.TOOL,
+                            content=error_message,
+                            event=TranscriptEvent.TOOL_RESULT,
+                            tool_name=tool_call.tool_name,
+                            tool_call_id=tool_call.tool_call_id,
+                        )
+                    )
+                    adv_calls, adv_in, adv_out = self._advisor_usage(advisor_usage)
+                    return _build_result(
+                        adapter_name=self._adapter_name,
+                        resolved_model=self._resolved_model,
+                        configuration=request.configuration,
+                        request=request,
+                        transcript=transcript,
+                        status=AgentOutputStatus.PARTIAL,
+                        failure_kind=AdapterFailureKind.TOOL_CALL_LIMIT_REACHED,
+                        error_message=error_message,
+                        usage=usage,
+                        max_turns=max_turns,
+                        usage_advisor_calls=adv_calls,
+                        usage_advisor_input_tokens=adv_in,
+                        usage_advisor_output_tokens=adv_out,
+                    )
+
+                executed_tool_calls += 1
+                if is_advisor_call:
+                    assert advisor_usage is not None
+                    advisor_output = self._handle_advisor_call(
+                        tool_call,
+                        transcript,
+                        advisor_usage,
+                    )
+                    transcript.append(
+                        TranscriptEntry(
+                            role=TranscriptRole.TOOL,
+                            content=advisor_output,
+                            event=TranscriptEvent.TOOL_RESULT,
+                            tool_name=tool_call.tool_name,
+                            tool_call_id=tool_call.tool_call_id,
+                        )
+                    )
+                    continue
 
                 assert self._tool_executor is not None
                 tool_result = self._tool_executor.execute(
@@ -240,7 +342,10 @@ class ToolLoopAdapter:
                 )
 
             if response.timed_out or response.error_message is not None:
-                adv_calls, adv_in, adv_out = self._advisor_usage()
+                failure_kind = response.failure_kind or (
+                    AdapterFailureKind.TIMEOUT if response.timed_out else AdapterFailureKind.PROVIDER_ERROR
+                )
+                adv_calls, adv_in, adv_out = self._advisor_usage(advisor_usage)
                 return _build_result(
                     adapter_name=self._adapter_name,
                     resolved_model=self._resolved_model,
@@ -248,13 +353,11 @@ class ToolLoopAdapter:
                     request=request,
                     transcript=transcript,
                     status=AgentOutputStatus.FAILED,
-                    failure_kind=(
-                        AdapterFailureKind.TIMEOUT if response.timed_out else AdapterFailureKind.PROVIDER_ERROR
-                    ),
+                    failure_kind=failure_kind,
                     error_message=response.error_message,
                     raw_output_text=response.output_text or None,
-                    usage_input_tokens=response.usage_input_tokens,
-                    usage_output_tokens=response.usage_output_tokens,
+                    usage=usage,
+                    max_turns=max_turns,
                     usage_advisor_calls=adv_calls,
                     usage_advisor_input_tokens=adv_in,
                     usage_advisor_output_tokens=adv_out,
@@ -262,7 +365,7 @@ class ToolLoopAdapter:
 
             if response.done:
                 status = AgentOutputStatus.COMPLETED if response.output_text else AgentOutputStatus.EMPTY
-                adv_calls, adv_in, adv_out = self._advisor_usage()
+                adv_calls, adv_in, adv_out = self._advisor_usage(advisor_usage)
                 return _build_result(
                     adapter_name=self._adapter_name,
                     resolved_model=self._resolved_model,
@@ -272,14 +375,14 @@ class ToolLoopAdapter:
                     status=status,
                     failure_kind=(None if response.output_text else AdapterFailureKind.MISSING_OUTPUT),
                     raw_output_text=response.output_text or None,
-                    usage_input_tokens=response.usage_input_tokens,
-                    usage_output_tokens=response.usage_output_tokens,
+                    usage=usage,
+                    max_turns=max_turns,
                     usage_advisor_calls=adv_calls,
                     usage_advisor_input_tokens=adv_in,
                     usage_advisor_output_tokens=adv_out,
                 )
 
-        adv_calls, adv_in, adv_out = self._advisor_usage()
+        adv_calls, adv_in, adv_out = self._advisor_usage(advisor_usage)
         return _build_result(
             adapter_name=self._adapter_name,
             resolved_model=self._resolved_model,
@@ -289,6 +392,8 @@ class ToolLoopAdapter:
             status=AgentOutputStatus.PARTIAL,
             failure_kind=AdapterFailureKind.TURN_LIMIT_REACHED,
             error_message="turn limit reached",
+            usage=usage,
+            max_turns=max_turns,
             usage_advisor_calls=adv_calls,
             usage_advisor_input_tokens=adv_in,
             usage_advisor_output_tokens=adv_out,
@@ -298,9 +403,12 @@ class ToolLoopAdapter:
         return self._adapter_name
 
     def resolved_model(self) -> str:
-        return self._resolved_model
+        return str(self._resolved_model)
 
-    def _advisor_usage(self) -> tuple[int | None, int | None, int | None]:
+    def _advisor_usage(
+        self,
+        usage: AdvisorUsageAccumulator | None,
+    ) -> tuple[int | None, int | None, int | None]:
         """Return (calls, input_tokens, output_tokens), or all-None when no advisor wired.
 
         Clients that dispatch advisor tool calls internally (e.g. PydanticAI's
@@ -313,26 +421,28 @@ class ToolLoopAdapter:
             return (None, None, None)
         client_usage = getattr(self._client, "advisor_usage", None)
         if callable(client_usage):
-            result = client_usage()
-            if result is not None:
-                return result
-        return (
-            self._advisor_calls_made,
-            self._advisor_input_tokens,
-            self._advisor_output_tokens,
-        )
+            result: object = client_usage()
+            if (
+                isinstance(result, tuple)
+                and len(result) == 3
+                and all(value is None or isinstance(value, int) for value in result)
+            ):
+                return cast(tuple[int | None, int | None, int | None], result)
+        assert usage is not None
+        return usage.snapshot()
 
     def _handle_advisor_call(
         self,
         tool_call: ToolCall,
         transcript: list[TranscriptEntry],
+        usage: AdvisorUsageAccumulator,
     ) -> str:
         """Handle an advisor tool call with windowed transcript context."""
         assert self._advisor_config is not None
         assert self._advisor_client is not None
         cfg = self._advisor_config
 
-        if self._advisor_calls_made >= cfg.max_uses:
+        if usage.calls >= cfg.max_uses:
             return _json.dumps(
                 {
                     "advice": (
@@ -356,19 +466,20 @@ class ToolLoopAdapter:
             {"role": e.role.value, "content": e.content} for e in transcript[-cfg.context_window :] if e.content
         ]
 
-        result = default_advise(
-            request=request,
-            context_messages=context_msgs,
-            client=self._advisor_client,
-            model=cfg.model,
-            max_response_tokens=cfg.max_response_tokens,
-            adapter_context="The executor is using a tool-loop adapter with bash and search tools.",
-        )
-
-        if result.error is None:
-            self._advisor_calls_made += 1
-            self._advisor_input_tokens += result.input_tokens
-            self._advisor_output_tokens += result.output_tokens
+        usage.begin_call()
+        try:
+            result = default_advise(
+                request=request,
+                context_messages=context_msgs,
+                client=self._advisor_client,
+                model=cfg.model,
+                max_response_tokens=cfg.max_response_tokens,
+                adapter_context="The executor is using a tool-loop adapter with bash and search tools.",
+            )
+        except Exception:
+            usage.mark_tokens_unknown()
+            raise
+        usage.record_result(result)
 
         if result.response:
             return _json.dumps(
@@ -400,8 +511,8 @@ def _build_result(
     failure_kind: AdapterFailureKind | None = None,
     error_message: str | None = None,
     raw_output_text: str | None = None,
-    usage_input_tokens: int | None = None,
-    usage_output_tokens: int | None = None,
+    usage: _ToolLoopUsage,
+    max_turns: int,
     usage_advisor_calls: int | None = None,
     usage_advisor_input_tokens: int | None = None,
     usage_advisor_output_tokens: int | None = None,
@@ -421,10 +532,33 @@ def _build_result(
         ),
         transcript=transcript,
         failure_kind=failure_kind,
+        turns_used=_complete_usage(
+            usage.model_calls,
+            complete=usage.model_calls_complete,
+        ),
+        max_turns=max_turns,
         raw_output_text=raw_output_text,
-        provider_error=error_message,
-        usage_input_tokens=usage_input_tokens,
-        usage_output_tokens=usage_output_tokens,
+        provider_error=(error_message if failure_kind is AdapterFailureKind.PROVIDER_ERROR else None),
+        usage_model_calls=_complete_usage(
+            usage.model_calls,
+            complete=usage.model_calls_complete,
+        ),
+        usage_input_tokens=_complete_usage(
+            usage.input_tokens,
+            complete=usage.input_complete,
+        ),
+        usage_output_tokens=_complete_usage(
+            usage.output_tokens,
+            complete=usage.output_complete,
+        ),
+        usage_cache_read_tokens=_complete_usage(
+            usage.cache_read_tokens,
+            complete=usage.cache_read_complete,
+        ),
+        usage_cache_write_tokens=_complete_usage(
+            usage.cache_write_tokens,
+            complete=usage.cache_write_complete,
+        ),
         usage_advisor_calls=usage_advisor_calls,
         usage_advisor_input_tokens=usage_advisor_input_tokens,
         usage_advisor_output_tokens=usage_advisor_output_tokens,
@@ -444,7 +578,7 @@ def _response_payload(response: ToolLoopCompletionResponse) -> dict[str, Any]:
             "tool_name": response.tool_call.tool_name,
             "arguments": response.tool_call.arguments,
         }
-    return {
+    payload = {
         "output_text": response.output_text,
         "tool_call": tool_call,
         "error_message": response.error_message,
@@ -453,6 +587,15 @@ def _response_payload(response: ToolLoopCompletionResponse) -> dict[str, Any]:
         "timed_out": response.timed_out,
         "done": response.done,
     }
+    if response.usage_model_calls != 1:
+        payload["usage_model_calls"] = response.usage_model_calls
+    if response.usage_cache_read_tokens is not None:
+        payload["usage_cache_read_tokens"] = response.usage_cache_read_tokens
+    if response.usage_cache_write_tokens is not None:
+        payload["usage_cache_write_tokens"] = response.usage_cache_write_tokens
+    if response.failure_kind is not None:
+        payload["failure_kind"] = response.failure_kind.value
+    return payload
 
 
 def _response_from_payload(payload: dict[str, Any]) -> ToolLoopCompletionResponse:
@@ -468,8 +611,23 @@ def _response_from_payload(payload: dict[str, Any]) -> ToolLoopCompletionRespons
         output_text=cast(str, payload.get("output_text", "")),
         tool_call=tool_call,
         error_message=cast(str | None, payload.get("error_message")),
+        failure_kind=(
+            AdapterFailureKind(cast(str, payload["failure_kind"])) if payload.get("failure_kind") is not None else None
+        ),
+        usage_model_calls=cast(
+            int | None,
+            payload.get("usage_model_calls", 1),
+        ),
         usage_input_tokens=cast(int | None, payload.get("usage_input_tokens")),
         usage_output_tokens=cast(int | None, payload.get("usage_output_tokens")),
+        usage_cache_read_tokens=cast(
+            int | None,
+            payload.get("usage_cache_read_tokens"),
+        ),
+        usage_cache_write_tokens=cast(
+            int | None,
+            payload.get("usage_cache_write_tokens"),
+        ),
         timed_out=bool(payload.get("timed_out", False)),
         done=bool(payload.get("done", False)),
     )

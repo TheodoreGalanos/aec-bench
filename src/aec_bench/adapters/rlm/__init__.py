@@ -18,6 +18,7 @@ from aec_bench.adapters.rlm.config import (
 from aec_bench.adapters.rlm.engine import ExecutionResult, ReplEnvironment
 from aec_bench.adapters.rlm.initialiser import build_rlm_adapter
 from aec_bench.adapters.rlm.template import ReportTemplate
+from aec_bench.adapters.rlm.turn_execution import TurnExecution, TurnExecutionSurface
 
 __all__ = [
     "ExecutionConfig",
@@ -32,6 +33,8 @@ __all__ = [
     "RlmConfig",
     "RlmMessage",
     "SubcallConfig",
+    "TurnExecution",
+    "TurnExecutionSurface",
     "build_rlm_adapter",
     "parse_rlm_config",
 ]

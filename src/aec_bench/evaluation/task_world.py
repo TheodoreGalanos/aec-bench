@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from aec_bench.contracts.task_world import MaterializedTaskWorldRun, TaskWorldProfile
 
@@ -36,7 +36,8 @@ def load_task_world_profile(task_dir: Path) -> TaskWorldProfile | None:
     if sidecar is None:
         return None
     payload = _read_sidecar(sidecar)
-    merged = _merge_world_payload(_default_profile_payload(task_dir), payload)
+    profile_payload = {key: value for key, value in payload.items() if key in TaskWorldProfile.model_fields}
+    merged = _merge_world_payload(_default_profile_payload(task_dir), profile_payload)
     return TaskWorldProfile.model_validate(merged)
 
 

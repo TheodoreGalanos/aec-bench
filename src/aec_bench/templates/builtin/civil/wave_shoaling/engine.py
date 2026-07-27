@@ -23,7 +23,7 @@ def _fenton_mckee_kd(sigma: float, depth_m: float) -> float:
     sigma2_d_over_g = sigma**2 * depth_m / _G
     # coth(x) = cosh(x) / sinh(x) = 1 / tanh(x)
     coth_term = 1.0 / math.tanh(sigma2_d_over_g**0.75)
-    return sigma2_d_over_g * coth_term ** (2.0 / 3.0)
+    return float(sigma2_d_over_g * coth_term ** (2.0 / 3.0))
 
 
 def _group_velocity_ratio(kd: float) -> float:

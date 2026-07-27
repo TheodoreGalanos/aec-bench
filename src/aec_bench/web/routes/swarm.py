@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
@@ -36,7 +36,7 @@ router = APIRouter()
 
 def _find_swarm_dirs(workspaces_root: Path) -> list[Path]:
     """Scan workspaces_root for directories containing _swarm_runs/events.jsonl."""
-    swarm_dirs = []
+    swarm_dirs: list[Path] = []
     if not workspaces_root.exists():
         return swarm_dirs
     for candidate in workspaces_root.iterdir():
@@ -53,7 +53,7 @@ def _read_summary(swarm_dir: Path) -> dict[str, Any] | None:
     summary_path = swarm_dir / "summary.json"
     if not summary_path.exists():
         return None
-    return json.loads(summary_path.read_text(encoding="utf-8"))
+    return cast(dict[str, Any], json.loads(summary_path.read_text(encoding="utf-8")))
 
 
 def _read_events(swarm_dir: Path, after: int = -1) -> list[dict[str, Any]]:
@@ -286,7 +286,7 @@ def swarm_state(request: Request, workspace: str) -> SwarmStateResponse:
             agent_map = _build_agent_map_from_lineage(swarm_dir / "lineage.json")
             archive = QDArchive.load(archive_path)
             raw_centroids = archive.project_2d_with_centroids(agent_map=agent_map)
-            centroids = [SwarmCentroidSchema(**c) for c in raw_centroids]
+            centroids = [SwarmCentroidSchema.model_validate(centroid) for centroid in raw_centroids]
         except Exception:
             pass
 

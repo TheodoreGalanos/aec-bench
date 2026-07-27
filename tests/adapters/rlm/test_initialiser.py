@@ -148,6 +148,26 @@ def test_build_with_workspace_loads_system_prompt(tmp_path: Path) -> None:
     assert "civil engineer" in adapter._external_system_prompt
 
 
+def test_build_with_compiled_system_prompt_overrides_workspace_copy(tmp_path: Path) -> None:
+    rlm_toml = tmp_path / "rlm.toml"
+    rlm_toml.write_text('[template]\ntier = "flat"\n')
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "system_prompt.md").write_text("Stale workspace prompt.")
+
+    adapter = build_rlm_adapter(
+        rlm_config_path=rlm_toml,
+        client=MagicMock(),
+        adapter_name="test-rlm",
+        model_name="test-model",
+        workspace_path=str(workspace),
+        external_system_prompt="Compiled task prompt.",
+    )
+
+    assert adapter._external_system_prompt == "Compiled task prompt."
+
+
 def test_build_with_workspace_loads_notes(tmp_path: Path) -> None:
     rlm_toml = tmp_path / "rlm.toml"
     rlm_toml.write_text('[template]\ntier = "flat"\n')

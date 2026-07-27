@@ -2,15 +2,21 @@
 # ABOUTME: Converts adapter execution bundles and results to deterministic JSON files.
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
+
+from pydantic import field_validator
 
 from aec_bench.adapters.base import (
+    AdapterCompletionReason,
     AdapterFailureKind,
     AdapterRequest,
     AdapterResult,
+    AdapterStopReason,
+    OutputCompletionAssistance,
     SerializedAdapterExecution,
 )
 from aec_bench.adapters.transcript import (
@@ -20,6 +26,32 @@ from aec_bench.adapters.transcript import (
     TranscriptRole,
 )
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
+from aec_bench.contracts.harness_kernel import (
+    ContentAddressedModel,
+    canonical_content_sha256,
+    validate_sha256,
+)
+from aec_bench.contracts.output_completion import OutputCommitAttestation
+from aec_bench.contracts.task_definition import ToolSpec
+from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext
+from aec_bench.contracts.validators import NonEmptyStr
+
+
+class RuntimeExecutionAttestation(ContentAddressedModel):
+    """Kernel-owned evidence of the driver and request that actually executed."""
+
+    schema_version: Literal["aecbench.runtime-execution-attestation.v1"] = "aecbench.runtime-execution-attestation.v1"
+    adapter_kind: NonEmptyStr
+    adapter_name: NonEmptyStr
+    requested_model: NonEmptyStr
+    resolved_model: NonEmptyStr
+    execution_request_sha256: str
+    meta_harness_context: MetaHarnessTrajectoryContext | None = None
+
+    @field_validator("execution_request_sha256")
+    @classmethod
+    def validate_request_hash(cls, value: str) -> str:
+        return validate_sha256(value)
 
 
 @dataclass(frozen=True)
@@ -36,6 +68,44 @@ class AdapterRequestPayload:
 class ExecutionBundle:
     execution: SerializedAdapterExecution
     request: AdapterRequestPayload
+
+
+def build_entrypoint_execution_bundle(
+    *,
+    instruction: str,
+    adapter_name: str,
+    model_name: str,
+    harbor_kwargs: Mapping[str, Any],
+    output_path: str = "/workspace/output.md",
+    output_format: str = "markdown",
+) -> ExecutionBundle:
+    """Materialize the exact adapter request executed by the Harbor entrypoint agent."""
+    configuration = dict(harbor_kwargs)
+    adapter_kind = configuration.get("adapter", "rlm")
+    if not isinstance(adapter_kind, str) or not adapter_kind.strip():
+        raise ValueError("adapter must be a non-empty string when provided")
+    system_prompt = _entrypoint_system_prompt(configuration.get("system_prompt"))
+    tools = _entrypoint_tool_payloads(configuration.get("tools", []))
+    execution_payload: dict[str, Any] = {}
+    client_payload = configuration.get("client")
+    if isinstance(client_payload, dict):
+        execution_payload["client"] = client_payload
+    return ExecutionBundle(
+        execution=SerializedAdapterExecution(
+            adapter_kind=adapter_kind,
+            adapter_name=adapter_name,
+            resolved_model=model_name,
+            payload=execution_payload,
+        ),
+        request=AdapterRequestPayload(
+            instruction=instruction,
+            system_prompt=system_prompt,
+            tools=tools,
+            configuration=configuration,
+            output_path=output_path,
+            output_format=output_format,
+        ),
+    )
 
 
 def build_execution_bundle(
@@ -62,6 +132,11 @@ def write_execution_bundle(*, path: Path, bundle: ExecutionBundle) -> Path:
     return path
 
 
+def execution_request_sha256(bundle: ExecutionBundle) -> str:
+    """Hash the exact canonical execution request bytes used by runtime attestation."""
+    return canonical_content_sha256(_bundle_payload(bundle))
+
+
 def read_execution_bundle(path: Path) -> ExecutionBundle:
     payload = cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
     execution_payload = cast(dict[str, Any], payload["execution"])
@@ -84,9 +159,17 @@ def read_execution_bundle(path: Path) -> ExecutionBundle:
     )
 
 
-def write_execution_result(*, path: Path, result: AdapterResult) -> Path:
+def write_execution_result(
+    *,
+    path: Path,
+    result: AdapterResult,
+    runtime_attestation: RuntimeExecutionAttestation | None = None,
+) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(_result_payload(result), sort_keys=True), encoding="utf-8")
+    path.write_text(
+        json.dumps(_result_payload(result, runtime_attestation=runtime_attestation), sort_keys=True),
+        encoding="utf-8",
+    )
     return path
 
 
@@ -109,10 +192,28 @@ def read_execution_result(path: Path) -> AdapterResult:
         ),
         transcript=[_transcript_entry(record) for record in transcript_payload],
         failure_kind=_failure_kind(payload.get("failure_kind")),
+        stop_reason=_stop_reason(payload.get("stop_reason")),
+        completion_reason=_completion_reason(payload.get("completion_reason")),
+        completion_assistance=_completion_assistance(payload.get("completion_assistance")),
+        completion_commit=_completion_commit(payload.get("completion_commit")),
+        turns_used=cast(int | None, payload.get("turns_used")),
+        max_turns=cast(int | None, payload.get("max_turns")),
         raw_output_text=cast(str | None, payload.get("raw_output_text")),
         provider_error=cast(str | None, payload.get("provider_error")),
+        usage_model_calls=cast(int | None, payload.get("usage_model_calls")),
         usage_input_tokens=cast(int | None, payload.get("usage_input_tokens")),
         usage_output_tokens=cast(int | None, payload.get("usage_output_tokens")),
+        usage_cache_read_tokens=cast(int | None, payload.get("usage_cache_read_tokens")),
+        usage_cache_write_tokens=cast(int | None, payload.get("usage_cache_write_tokens")),
+        usage_advisor_calls=cast(int | None, payload.get("usage_advisor_calls")),
+        usage_advisor_input_tokens=cast(
+            int | None,
+            payload.get("usage_advisor_input_tokens"),
+        ),
+        usage_advisor_output_tokens=cast(
+            int | None,
+            payload.get("usage_advisor_output_tokens"),
+        ),
     )
 
 
@@ -135,8 +236,12 @@ def _bundle_payload(bundle: ExecutionBundle) -> dict[str, Any]:
     }
 
 
-def _result_payload(result: AdapterResult) -> dict[str, Any]:
-    return {
+def _result_payload(
+    result: AdapterResult,
+    *,
+    runtime_attestation: RuntimeExecutionAttestation | None,
+) -> dict[str, Any]:
+    payload = {
         "adapter_name": result.adapter_name,
         "resolved_model": result.resolved_model,
         "configuration_record": result.configuration_record,
@@ -148,11 +253,70 @@ def _result_payload(result: AdapterResult) -> dict[str, Any]:
         },
         "transcript": [_transcript_payload(entry) for entry in result.transcript],
         "failure_kind": result.failure_kind.value if result.failure_kind is not None else None,
+        "stop_reason": result.stop_reason.value if result.stop_reason is not None else None,
+        "completion_reason": result.completion_reason.value if result.completion_reason is not None else None,
+        "completion_assistance": (
+            {
+                "contract_satisfied": result.completion_assistance.contract_satisfied,
+                "reminder_sent": result.completion_assistance.reminder_sent,
+                "reminder_turn": result.completion_assistance.reminder_turn,
+                "explicit_final_turn": result.completion_assistance.explicit_final_turn,
+            }
+            if result.completion_assistance is not None
+            else None
+        ),
+        "completion_commit": (
+            result.completion_commit.model_dump(mode="json") if result.completion_commit is not None else None
+        ),
+        "turns_used": result.turns_used,
+        "max_turns": result.max_turns,
         "raw_output_text": result.raw_output_text,
         "provider_error": result.provider_error,
         "usage_input_tokens": result.usage_input_tokens,
         "usage_output_tokens": result.usage_output_tokens,
+        "usage_cache_read_tokens": result.usage_cache_read_tokens,
+        "usage_cache_write_tokens": result.usage_cache_write_tokens,
+        "usage_advisor_calls": result.usage_advisor_calls,
+        "usage_advisor_input_tokens": result.usage_advisor_input_tokens,
+        "usage_advisor_output_tokens": result.usage_advisor_output_tokens,
     }
+    if result.usage_model_calls is not None:
+        payload["usage_model_calls"] = result.usage_model_calls
+    if runtime_attestation is not None:
+        payload["runtime_execution_attestation"] = runtime_attestation.model_dump(mode="json")
+    return payload
+
+
+def build_runtime_execution_attestation(
+    *,
+    bundle: ExecutionBundle,
+    result: AdapterResult,
+) -> RuntimeExecutionAttestation:
+    """Attest one result after the execution driver has resolved and returned."""
+    context_payload = bundle.request.configuration.get("meta_harness_context")
+    context = None if context_payload is None else MetaHarnessTrajectoryContext.model_validate(context_payload)
+    return RuntimeExecutionAttestation(
+        adapter_kind=bundle.execution.adapter_kind,
+        adapter_name=result.adapter_name,
+        requested_model=bundle.execution.resolved_model,
+        resolved_model=result.resolved_model,
+        execution_request_sha256=execution_request_sha256(bundle),
+        meta_harness_context=context,
+    )
+
+
+def _entrypoint_system_prompt(value: Any) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("system_prompt must be a non-empty string when provided")
+    return value
+
+
+def _entrypoint_tool_payloads(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        raise ValueError("tools must be a list of ToolSpec payloads")
+    return [ToolSpec.model_validate(tool).model_dump(mode="json") for tool in value]
 
 
 def _transcript_payload(entry: TranscriptEntry) -> dict[str, Any]:
@@ -197,3 +361,56 @@ def _failure_kind(value: Any) -> AdapterFailureKind | None:
     if value is None:
         return None
     return AdapterFailureKind(cast(str, value))
+
+
+def _stop_reason(value: Any) -> AdapterStopReason | None:
+    if value is None:
+        return None
+    return AdapterStopReason(cast(str, value))
+
+
+def _completion_reason(value: Any) -> AdapterCompletionReason | None:
+    if value is None:
+        return None
+    return AdapterCompletionReason(cast(str, value))
+
+
+def _completion_assistance(value: Any) -> OutputCompletionAssistance | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("completion_assistance must be an object when present")
+    expected_keys = {
+        "contract_satisfied",
+        "reminder_sent",
+        "reminder_turn",
+        "explicit_final_turn",
+    }
+    if set(value) != expected_keys:
+        raise ValueError("completion_assistance must contain exactly the declared evidence fields")
+    contract_satisfied = value["contract_satisfied"]
+    reminder_sent = value["reminder_sent"]
+    reminder_turn = value["reminder_turn"]
+    explicit_final_turn = value["explicit_final_turn"]
+    if not isinstance(contract_satisfied, bool) or not isinstance(reminder_sent, bool):
+        raise ValueError("completion_assistance flags must be booleans")
+    for field_name, turn in (
+        ("reminder_turn", reminder_turn),
+        ("explicit_final_turn", explicit_final_turn),
+    ):
+        if turn is not None and (not isinstance(turn, int) or isinstance(turn, bool)):
+            raise ValueError(f"completion_assistance {field_name} must be an integer or null")
+    return OutputCompletionAssistance(
+        contract_satisfied=contract_satisfied,
+        reminder_sent=reminder_sent,
+        reminder_turn=reminder_turn,
+        explicit_final_turn=explicit_final_turn,
+    )
+
+
+def _completion_commit(value: Any) -> OutputCommitAttestation | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("completion_commit must be an object when present")
+    return OutputCommitAttestation.model_validate(value)

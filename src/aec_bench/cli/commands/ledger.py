@@ -3,6 +3,7 @@
 
 import time
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -58,7 +59,7 @@ def list_trials(
         for r in records
     ]
 
-    def _render(d: list) -> None:
+    def _render(d: list[dict[str, Any]]) -> None:
         from rich.table import Table
 
         table = Table(title=f"Ledger: {len(d)} trials")

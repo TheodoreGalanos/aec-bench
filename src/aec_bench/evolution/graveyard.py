@@ -7,6 +7,14 @@ import json
 from collections import deque
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import NotRequired, TypedDict
+
+
+class GraveyardMutationAction(TypedDict):
+    """Mutation action retained with a rejected evolution attempt."""
+
+    action_type: str
+    skill_name: NotRequired[str]
 
 
 @dataclass(frozen=True)
@@ -25,7 +33,7 @@ class GraveyardEntry:
     # None for backwards compatibility with pre-enrichment graveyard files.
     field_failures: dict[str, str] | None = None
     detected_patterns: list[str] | None = None
-    mutation_actions: list[dict] | None = None
+    mutation_actions: list[GraveyardMutationAction] | None = None
     investigation_summary: str | None = None
 
 

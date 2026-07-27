@@ -87,7 +87,7 @@ def _hgl_at_upstream_pit(
     friction_slope = (velocity_m_s * mannings_n / hydraulic_radius_m ** (2.0 / 3.0)) ** 2
     friction_loss_m = friction_slope * pipe_length_m
     pit_loss_m = pit_loss_coefficient * velocity_m_s**2 / (2.0 * _G)
-    return tailwater_level_m + friction_loss_m + pit_loss_m
+    return float(tailwater_level_m + friction_loss_m + pit_loss_m)
 
 
 def compute(

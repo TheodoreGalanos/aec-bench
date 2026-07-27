@@ -4,6 +4,7 @@
 import json
 import time
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -61,7 +62,7 @@ def view() -> None:
         }
     }
 
-    def _render(d: dict) -> None:
+    def _render(d: dict[str, Any]) -> None:
         from rich.table import Table
 
         table = Table(title="aec-bench configuration")
@@ -125,7 +126,14 @@ def resolve_path(key: str, *, cli_override: str | None = None) -> Path:
     from aec_bench.config import load_config
 
     config = load_config()
-    value = getattr(config, key, None)
-    if value is not None and isinstance(value, Path):
+    configured_paths = {
+        "tasks_root": config.tasks_root,
+        "ledger_root": config.ledger_root,
+        "feedback_root": config.feedback_root,
+        "jobs_root": config.jobs_root,
+        "datasets_root": config.datasets_root,
+    }
+    value = configured_paths.get(key)
+    if value is not None:
         return value.resolve()
     return Path(DEFAULTS.get(key, ".")).resolve()

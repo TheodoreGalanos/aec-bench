@@ -3,6 +3,7 @@
 
 """Tests for RLM guardrail tracking — token budget, iteration cap, and depth limit."""
 
+from aec_bench.adapters.base import AdapterStopReason
 from aec_bench.adapters.rlm.guardrails import GuardrailState
 
 
@@ -20,6 +21,7 @@ def test_iteration_cap_triggers_stop() -> None:
     gs.record_iteration(input_tokens=100, output_tokens=50)
     verdict = gs.check()
     assert not verdict.can_continue
+    assert verdict.stop_code is AdapterStopReason.ITERATION_CAP
     assert "iteration" in verdict.stop_reason.lower()
 
 
@@ -28,7 +30,18 @@ def test_token_budget_triggers_stop() -> None:
     gs.record_iteration(input_tokens=300, output_tokens=250)
     verdict = gs.check()
     assert not verdict.can_continue
+    assert verdict.stop_code is AdapterStopReason.TOKEN_BUDGET
     assert "budget" in verdict.stop_reason.lower()
+
+
+def test_non_iteration_resource_stop_takes_precedence_when_limits_cross_together() -> None:
+    gs = GuardrailState(token_budget=100, max_iterations=1, max_subcall_depth=1)
+    gs.record_iteration(input_tokens=80, output_tokens=30)
+
+    verdict = gs.check()
+
+    assert not verdict.can_continue
+    assert verdict.stop_code is AdapterStopReason.TOKEN_BUDGET
 
 
 def test_budget_warning_fires_at_threshold() -> None:
@@ -91,6 +104,7 @@ def test_max_subcalls_triggers_stop() -> None:
     gs.record_subcall_tokens(input_tokens=100, output_tokens=50)
     verdict = gs.check()
     assert not verdict.can_continue
+    assert verdict.stop_code is AdapterStopReason.SUBCALL_LIMIT
     assert "subcall" in verdict.stop_reason.lower()
 
 
@@ -134,6 +148,7 @@ def test_max_budget_usd_triggers_stop() -> None:
     gs.record_iteration(input_tokens=10_000, output_tokens=2_000, cost_usd=0.06)
     verdict = gs.check()
     assert not verdict.can_continue
+    assert verdict.stop_code is AdapterStopReason.COST_BUDGET
     assert "budget" in verdict.stop_reason.lower()
     assert "$" in verdict.stop_reason
 
@@ -206,6 +221,7 @@ def test_billable_input_budget_triggers_stop() -> None:
     )
     verdict = gs.check()
     assert not verdict.can_continue
+    assert verdict.stop_code is AdapterStopReason.BILLABLE_INPUT_BUDGET
     assert "billable" in verdict.stop_reason.lower()
 
 

@@ -92,6 +92,11 @@ class HarborAgentResult(LenientModel):
     cost_usd: float | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def normalize_empty_metadata(cls, value: Any) -> Any:
+        return {} if value is None else value
+
 
 class HarborStageTiming(LenientModel):
     started_at: datetime
@@ -111,6 +116,11 @@ class HarborTrialResult(LenientModel):
     agent_setup: HarborStageTiming | None = None
     agent_execution: HarborStageTiming | None = None
     verifier: HarborStageTiming | None = None
+
+    @field_validator("agent_result", mode="before")
+    @classmethod
+    def normalize_empty_agent_result(cls, value: Any) -> Any:
+        return {} if value is None else value
 
     @field_validator("trial_name", "task_checksum")
     @classmethod

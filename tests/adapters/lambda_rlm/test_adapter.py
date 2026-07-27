@@ -4,6 +4,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from aec_bench.adapters.base import AdapterRequest
 from aec_bench.adapters.lambda_rlm.adapter import LambdaRlmAdapter
 from aec_bench.adapters.lambda_rlm.config import (
@@ -106,6 +108,8 @@ def test_adapter_produces_completed_result(tmp_path: Path):
     assert result.resolved_model == "test-model"
     assert result.usage_input_tokens > 0
     assert result.usage_output_tokens > 0
+    assert result.usage_model_calls == 6
+    assert result.turns_used == 6
     assert len(result.transcript) > 0
 
 
@@ -228,6 +232,54 @@ dtype = "str"
 
     result = adapter.execute(AdapterRequest(instruction="Go."))
     assert result.agent_output.status == AgentOutputStatus.COMPLETED
+
+
+def test_request_max_turns_stops_lambda_pipeline_before_next_model_call(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    class _RecordingClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def generate(self, **kwargs):  # noqa: ANN003, ANN201
+            del kwargs
+            self.calls += 1
+            return _extraction_resp({"data": "value"})
+
+    client = _RecordingClient()
+    single_toml = """
+[[sections]]
+id = "background"
+title = "Background"
+depends_on = []
+generation_mode = "transform"
+writing_guidance = ["Verbatim"]
+input_mapping = ["brief:bg"]
+
+[[sections.fields]]
+name = "context"
+dtype = "str"
+"""
+    adapter = LambdaRlmAdapter(
+        adapter_name="lambda-rlm",
+        model_name="test-model",
+        client=client,
+        template=ReportTemplate(parse_report_template(single_toml)),
+        source_docs={"brief:bg": "Some background."},
+        config=LambdaRlmConfig(review=ReviewConfig(enabled=False)),
+        workspace=str(workspace),
+    )
+
+    with pytest.raises(RuntimeError, match="max_turns=1"):
+        adapter.execute(
+            AdapterRequest(
+                instruction="Use one model call only.",
+                configuration={"max_turns": 1},
+            )
+        )
+
+    assert client.calls == 1
 
 
 def test_adapter_writes_trajectory_entries(tmp_path: Path):

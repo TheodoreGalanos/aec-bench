@@ -12,20 +12,20 @@ def _validate_inputs(
     circuit_capacity_a: float,
 ) -> None:
     """Raise ValueError for invalid input parameters."""
-    for name, value in {
+    for name, quantity in {
         "strobe_quantity": strobe_quantity,
         "horn_quantity": horn_quantity,
         "speaker_quantity": speaker_quantity,
     }.items():
-        if value < 0:
+        if quantity < 0:
             msg = f"{name} must be >= 0"
             raise ValueError(msg)
-    for name, value in {
+    for name, current in {
         "strobe_current_a": strobe_current_a,
         "horn_current_a": horn_current_a,
         "speaker_current_a": speaker_current_a,
     }.items():
-        if value < 0:
+        if current < 0:
             msg = f"{name} must be >= 0"
             raise ValueError(msg)
     if circuit_capacity_a <= 0:

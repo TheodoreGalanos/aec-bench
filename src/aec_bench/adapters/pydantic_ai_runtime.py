@@ -138,6 +138,12 @@ def agent_run_output(result: Any) -> Any:
     return result.output
 
 
+def agent_run_usage(result: Any) -> Any:
+    """Return usage from PydanticAI releases exposing either a method or property."""
+    usage = result.usage
+    return usage() if callable(usage) else usage
+
+
 def _run_agent_stream_sync(agent: Any, user_prompt: Any, **kwargs: Any) -> Any:
     return agent.run_stream_sync(user_prompt, **kwargs)
 

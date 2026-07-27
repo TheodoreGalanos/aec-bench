@@ -6,6 +6,16 @@ from __future__ import annotations
 import math
 from collections import deque
 from dataclasses import dataclass, field
+from typing import TypedDict
+
+
+class CellStats(TypedDict):
+    """Public snapshot of a cell selector's counters and metadata."""
+
+    reward: float
+    discipline: str
+    n_selected: int
+    n_improved: int
 
 
 @dataclass
@@ -57,7 +67,7 @@ class CellSelector:
         if cell_id in self._cells:
             self._cells[cell_id].n_improved += 1
 
-    def cell_stats(self, cell_id: str) -> dict[str, int | float]:
+    def cell_stats(self, cell_id: str) -> CellStats:
         """Return stats for a cell."""
         stats = self._cells[cell_id]
         return {

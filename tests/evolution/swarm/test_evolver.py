@@ -8,10 +8,12 @@ from pathlib import Path
 
 import yaml
 
+from aec_bench.contracts.trial_record import CostRecord
 from aec_bench.evolution.swarm.evolver import (
     SwarmAgentEvolver,
     SwarmEvolverFactory,
     SwarmStepResult,
+    _estimate_evolver_cost,
 )
 
 # ---------------------------------------------------------------------------
@@ -104,6 +106,13 @@ def test_swarm_step_result_has_required_fields() -> None:
     assert result.bd is not None
     assert result.cost_usd == 0.5
     assert result.workspace_version == "v1"
+
+
+def test_estimate_evolver_cost_reads_estimated_cost_from_record() -> None:
+    cost = CostRecord(estimated_cost_usd=1.25)
+
+    assert _estimate_evolver_cost(cost) == 1.25
+    assert _estimate_evolver_cost(None) == 0.0
 
 
 # ---------------------------------------------------------------------------

@@ -280,7 +280,7 @@ def run_local_evidence_lifecycle_session(
     package_dir: Path,
     run_dir: Path,
     model: str,
-    verifier: Any,
+    verifier: Any | None,
     adapter_kind: str = "tool_loop",
     max_turns: int = 60,
     process_id: str = "process.lifecycle",
@@ -292,7 +292,7 @@ def run_local_evidence_lifecycle_session(
     experiment_recorder: LifecycleExperimentRecorder | None = None,
     run_authorization_sha256: str | None = None,
 ) -> dict[str, Any]:
-    """Run all checkpoints in one adapter execution and one model conversation."""
+    """Run all checkpoints in one adapter execution, optionally leaving reward to an external verifier."""
     if adapter_kind not in {"tool_loop", "pydantic_ai"}:
         raise ValueError("persistent evidence lifecycles require a native tool-loop adapter")
     if visibility_policy != LifecycleVisibilityPolicy.PERSISTENT_CONTEXT:
@@ -1283,13 +1283,35 @@ def _build_local_task_run(
     run: Path,
     process_id: str,
     lifecycle: dict[str, Any],
-    verifier: Any,
+    verifier: Any | None,
     agent: dict[str, Any],
     sweep_context: LifecycleExperimentSweepContext | None = None,
     repository_dir: Path | None = None,
     experiment_recorder: LifecycleExperimentRecorder | None = None,
 ) -> dict[str, Any]:
     spec = load_evidence_lifecycle_spec(package)
+    if verifier is None:
+        return {
+            "run_id": f"{process_id}.{spec.lifecycle_id}",
+            "evidence": {
+                "lifecycle": lifecycle,
+                "agent": agent,
+                "verification": {
+                    "status": "not_run",
+                    "reward_owner": "external_verifier",
+                },
+                "execution_security": {
+                    "filesystem_boundary": "workspace_confined_native_tools",
+                    "arbitrary_shell": False,
+                },
+                "artifacts": {
+                    "run_dir": str(run),
+                    "ledger": str(run / "lifecycle_ledger.jsonl"),
+                    "trajectories": sorted(str(path) for path in run.glob("**/trajectory.jsonl")),
+                    "conversations": sorted(str(path) for path in run.glob("**/conversation.jsonl")),
+                },
+            },
+        }
     verifier_exception: Exception | None = None
     if lifecycle["status"] == "complete" and agent["status"] == "completed":
         try:

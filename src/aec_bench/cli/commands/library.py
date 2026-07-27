@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from typing import Any
 
 import click
 import typer
@@ -88,7 +89,7 @@ def export_cmd(
         "disciplines": sorted(catalogue.counts.by_discipline.keys()),
     }
 
-    def _human(data: dict) -> None:
+    def _human(data: dict[str, Any]) -> None:
         skipped = data["skipped_seeds"]
         skipped_note = f" ({skipped} skipped)" if skipped else ""
         print_success(

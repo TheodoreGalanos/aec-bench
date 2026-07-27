@@ -106,6 +106,30 @@ class TestPydanticAiAdvisorTool:
         assert second["confidence"] == 0.0
         assert tool.usage() == (1, 100, 50)
 
+    def test_failed_provider_effect_counts_and_consumes_budget(self) -> None:
+        from aec_bench.adapters.tool_loop_local import PydanticAiAdvisorTool
+
+        advisor_client = ReplayRlmClient(
+            [
+                RlmCompletionResponse(
+                    input_tokens=40,
+                    output_tokens=0,
+                    error_message="provider rejected request",
+                ),
+            ]
+        )
+        tool = PydanticAiAdvisorTool(
+            client=advisor_client,
+            config=AdvisorConfig(model="advisor-model", max_uses=1),
+        )
+
+        first = json.loads(tool("g1", "p1"))
+        second = json.loads(tool("g2", "p2"))
+
+        assert "unavailable" in first["advice"].lower()
+        assert "exhausted" in second["advice"].lower()
+        assert tool.usage() == (1, 40, 0)
+
 
 class TestPydanticAiAdvisorToolCallWithMessages:
     def test_call_with_messages_increments_stats(self) -> None:

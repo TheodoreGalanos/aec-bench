@@ -91,9 +91,9 @@ class LineageTracker:
 
     def save(self, path: Path) -> None:
         """Persist all records and narratives to a JSON file."""
-        entries = []
+        entries: list[dict[str, object]] = []
         for r in self._records:
-            entry: dict = {"record": r.model_dump(mode="json")}
+            entry: dict[str, object] = {"record": r.model_dump(mode="json")}
             narrative = self._narratives.get(r.entry_version)
             if narrative is not None:
                 entry["narrative"] = narrative.model_dump(mode="json")

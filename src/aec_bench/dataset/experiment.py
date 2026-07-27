@@ -13,6 +13,7 @@ from aec_bench.contracts.experiment_manifest import (
     ExperimentManifest,
     TaskSelector,
 )
+from aec_bench.contracts.task_definition import Difficulty
 
 
 def build_experiment_config(
@@ -23,7 +24,7 @@ def build_experiment_config(
     experiment_id: str | None = None,
     name: str | None = None,
     repetitions: int = 1,
-    difficulties: list[str] | None = None,
+    difficulties: list[Difficulty] | None = None,
     include_patterns: list[str] | None = None,
 ) -> ExperimentManifest:
     """Build an ExperimentManifest from a dataset reference and agent/compute config.

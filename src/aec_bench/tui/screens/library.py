@@ -465,7 +465,7 @@ _DISCIPLINE_CYCLE: list[str] = [
 ]
 
 
-def _next_in_cycle(current: str, cycle: list[str]) -> str:
+def _next_in_cycle[T: str](current: T, cycle: Sequence[T]) -> T:
     """Return the next value in a cycle list, wrapping around."""
     idx = cycle.index(current) if current in cycle else 0
     return cycle[(idx + 1) % len(cycle)]
@@ -476,7 +476,7 @@ def _next_in_cycle(current: str, cycle: list[str]) -> str:
 # ---------------------------------------------------------------------------
 
 
-class LibraryScreen(Screen):
+class LibraryScreen(Screen[None]):
     """Browsable inventory of all benchmark seeds, templates, and instances."""
 
     BINDINGS = [
@@ -1017,7 +1017,7 @@ class LibraryScreen(Screen):
 
     def action_cycle_view(self) -> None:
         """Cycle between discipline, category, and datasets tree views."""
-        self._view = _next_in_cycle(self._view, _VIEW_CYCLE)  # type: ignore[assignment]
+        self._view = _next_in_cycle(self._view, _VIEW_CYCLE)
         self._populate_tree()
 
     def action_cycle_discipline(self) -> None:

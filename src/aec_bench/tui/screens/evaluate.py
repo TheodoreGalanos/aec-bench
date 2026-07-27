@@ -154,7 +154,7 @@ def _render_eval_details(
 # ---------------------------------------------------------------------------
 
 
-class EvaluateScreen(Screen):
+class EvaluateScreen(Screen[None]):
     """Adapter x task_prefix heatmap with colour-coded cells and drill-through to Triage."""
 
     BINDINGS = [

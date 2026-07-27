@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 from pydantic import PositiveInt
 
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel

@@ -15,6 +15,7 @@ from pydantic import (
 )
 
 from aec_bench.contracts.agent_output import AgentOutput
+from aec_bench.contracts.evaluation_plane import EvaluationPlanRef
 from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel, ensure_non_empty_string
@@ -276,6 +277,110 @@ class LifecycleTrialProvenance(StrictModel):
         return value
 
 
+class ProposalSessionTrialProvenance(StrictModel):
+    """Pre-import proposal-session evidence bound to exactly one TrialRecord."""
+
+    session_id: NonEmptyStr
+    candidate_id: NonEmptyStr
+    candidate_artifact_sha256: NonEmptyStr
+    proposal_graph_sha256: NonEmptyStr
+    compilation_sha256: NonEmptyStr
+    session_plan_sha256: NonEmptyStr
+    session_receipt: ArtifactReference
+    cleanup_receipt: ArtifactReference
+    task_package_manifest: ArtifactReference
+    runtime_archive_manifest: ArtifactReference
+    expected_trial_records: Literal[1]
+    trial_ordinal: Literal[1]
+
+    @field_validator(
+        "candidate_artifact_sha256",
+        "proposal_graph_sha256",
+        "compilation_sha256",
+        "session_plan_sha256",
+    )
+    @classmethod
+    def validate_hashes(cls, value: str) -> str:
+        return ArtifactReference.validate_sha256(value)
+
+    @property
+    def bound_artifacts(self) -> tuple[ArtifactReference, ...]:
+        """Return the complete pre-import proposal evidence set."""
+        return (
+            self.session_receipt,
+            self.cleanup_receipt,
+            self.task_package_manifest,
+            self.runtime_archive_manifest,
+        )
+
+
+class MetaHarnessTrialProvenance(StrictModel):
+    run_id: NonEmptyStr
+    policy_id: NonEmptyStr
+    kernel_id: NonEmptyStr
+    kernel_sha256: NonEmptyStr
+    harness_id: NonEmptyStr
+    harness_sha256: NonEmptyStr
+    program_id: NonEmptyStr
+    program_sha256: NonEmptyStr
+    bundle_id: NonEmptyStr
+    bundle_sha256: NonEmptyStr
+    parent_bundle_id: NonEmptyStr | None = None
+    world_package_sha256: NonEmptyStr
+    topology_signature_sha256: NonEmptyStr
+    harness_generator_sha256: NonEmptyStr
+    program_generator_sha256: NonEmptyStr
+    split: Literal["discovery", "repair_gate", "calibration", "holdout"]
+    repetition: PositiveInt
+    execution_seed: int | None = None
+    execution_seed_semantics: Literal["paired_repetition_label_only"] = "paired_repetition_label_only"
+    factorial_cell: Literal["h0_p0", "hx_p0", "h0_px", "hx_px"] | None = None
+    paired_block_id: NonEmptyStr | None = None
+    repair_attempt_id: NonEmptyStr | None = None
+    repair_iteration: NonNegativeInt | None = None
+    candidate_manifest: ArtifactReference
+    factorial_plan: ArtifactReference | None = None
+    repair_decision: ArtifactReference | None = None
+    motif_ids: tuple[NonEmptyStr, ...] = ()
+    evaluation_plan_ref: EvaluationPlanRef | None = None
+    proposal_session: ProposalSessionTrialProvenance | None = None
+
+    @field_validator(
+        "kernel_sha256",
+        "harness_sha256",
+        "program_sha256",
+        "bundle_sha256",
+        "world_package_sha256",
+        "topology_signature_sha256",
+        "harness_generator_sha256",
+        "program_generator_sha256",
+    )
+    @classmethod
+    def validate_hashes(cls, value: str) -> str:
+        return ArtifactReference.validate_sha256(value)
+
+    @field_validator("motif_ids")
+    @classmethod
+    def validate_motif_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if tuple(sorted(set(value))) != value:
+            raise ValueError("motif ids must be sorted and unique")
+        return value
+
+    @model_validator(mode="after")
+    def validate_study_lineage(self) -> "MetaHarnessTrialProvenance":
+        factorial_fields = (self.factorial_cell, self.paired_block_id, self.factorial_plan)
+        if any(item is not None for item in factorial_fields) and not all(
+            item is not None for item in factorial_fields
+        ):
+            raise ValueError("factorial cell, paired block, and factorial plan must be provided together")
+        repair_fields = (self.repair_attempt_id, self.repair_iteration, self.repair_decision)
+        if any(item is not None for item in repair_fields) and not all(item is not None for item in repair_fields):
+            raise ValueError("repair attempt, iteration, and decision must be provided together")
+        if self.split == "holdout" and any(item is not None for item in repair_fields):
+            raise ValueError("holdout meta-harness trials cannot contain repair provenance")
+        return self
+
+
 class TrialRecord(StrictModel):
     trial_id: NonEmptyStr
     experiment_id: NonEmptyStr
@@ -292,96 +397,185 @@ class TrialRecord(StrictModel):
     adaptation: AdaptationProvenance | None = None
     lifecycle_execution: LifecycleExecutionRecord | None = None
     lifecycle_provenance: LifecycleTrialProvenance | None = None
+    meta_harness_provenance: MetaHarnessTrialProvenance | None = None
     completeness: Completeness
 
     @model_validator(mode="after")
     def validate_completeness(self) -> "TrialRecord":
-        if self.completeness is Completeness.COMPLETE:
-            missing = []
-            if self.agent.adapter_revision is None:
-                missing.append("agent.adapter_revision")
-            if self.environment.tool_versions is None:
-                missing.append("environment.tool_versions")
-            if self.inputs.input_files is None:
-                missing.append("inputs.input_files")
-            if self.lifecycle_execution is not None or self.lifecycle_provenance is not None:
-                if self.lifecycle_execution is None:
-                    missing.append("lifecycle_execution")
-                if self.lifecycle_provenance is None:
-                    missing.append("lifecycle_provenance")
-                if self.lifecycle_provenance is not None and self.lifecycle_provenance.repository_dirty:
-                    missing.append("lifecycle_provenance.clean_repository")
-                if self.lifecycle_provenance is not None:
-                    public_fields = (
-                        "invocation_index",
-                        "ablation_manifest",
-                        "ablation_plan",
-                    )
-                    holdout_fields = (
-                        "calibration_freeze",
-                        "sealed_target_freeze",
-                        "sealed_audit_claim",
-                        "sealed_audit_manifest",
-                    )
-                    required_fields: tuple[str, ...]
-                    forbidden_fields: tuple[str, ...]
-                    if self.task.visibility is Visibility.HOLDOUT:
-                        required_fields = holdout_fields
-                        forbidden_fields = public_fields
-                    else:
-                        required_fields = public_fields
-                        forbidden_fields = holdout_fields
-                    for field in required_fields:
-                        if getattr(self.lifecycle_provenance, field) is None:
-                            missing.append(f"lifecycle_provenance.{field}")
-                    for field in forbidden_fields:
-                        if getattr(self.lifecycle_provenance, field) is not None:
-                            missing.append(f"lifecycle_provenance.forbidden_{field}")
-                if self.lifecycle_execution is not None and not self.lifecycle_execution.sessions:
-                    missing.append("lifecycle_execution.sessions")
-                if self.lifecycle_execution is not None and any(
-                    not session.artifacts for session in self.lifecycle_execution.sessions
-                ):
-                    missing.append("lifecycle_execution.sessions.artifacts")
-                if self.lifecycle_execution is not None and any(
-                    session.resolved_model == "unresolved" for session in self.lifecycle_execution.sessions
-                ):
-                    missing.append("lifecycle_execution.sessions.resolved_model")
-                if self.lifecycle_execution is not None and any(
-                    session.adapter == "unresolved" for session in self.lifecycle_execution.sessions
-                ):
-                    missing.append("lifecycle_execution.sessions.adapter")
-                if not self.outputs.artifacts:
-                    missing.append("outputs.artifacts")
-            if missing:
-                msg = f"complete trial record missing provenance fields: {', '.join(missing)}"
-                raise ValueError(msg)
-        if (self.lifecycle_execution is None) != (self.lifecycle_provenance is None):
-            raise ValueError("lifecycle execution and provenance must be provided together")
-        if self.lifecycle_execution is not None:
-            resolved_models = {
-                session.resolved_model
-                for session in self.lifecycle_execution.sessions
-                if session.resolved_model != "unresolved"
-            }
-            adapters = {
-                session.adapter for session in self.lifecycle_execution.sessions if session.adapter != "unresolved"
-            }
-            if resolved_models and resolved_models != {self.agent.model}:
-                raise ValueError("agent model must match the lifecycle resolved model")
-            if adapters and adapters != {self.agent.adapter}:
-                raise ValueError("agent adapter must match lifecycle sessions")
-            if self.outputs.artifacts and self.lifecycle_provenance is not None:
-                bound_artifacts = (
-                    self.lifecycle_provenance.invocation_manifest,
-                    self.lifecycle_provenance.invocation_index,
-                    self.lifecycle_provenance.ablation_manifest,
-                    self.lifecycle_provenance.ablation_plan,
-                    self.lifecycle_provenance.calibration_freeze,
-                    self.lifecycle_provenance.sealed_target_freeze,
-                    self.lifecycle_provenance.sealed_audit_claim,
-                    self.lifecycle_provenance.sealed_audit_manifest,
-                )
-                if any(artifact is not None and artifact not in self.outputs.artifacts for artifact in bound_artifacts):
-                    raise ValueError("lifecycle provenance must be included in output artifacts")
+        _validate_complete_trial_fields(self)
+        _validate_lifecycle_pair(self)
+        _validate_lifecycle_bindings(self)
+        _validate_meta_harness_bindings(self)
         return self
+
+
+def _validate_complete_trial_fields(record: TrialRecord) -> None:
+    if record.completeness is not Completeness.COMPLETE:
+        return
+    missing = _complete_trial_missing_fields(record)
+    if missing:
+        msg = f"complete trial record missing provenance fields: {', '.join(missing)}"
+        raise ValueError(msg)
+
+
+def _complete_trial_missing_fields(record: TrialRecord) -> list[str]:
+    missing: list[str] = []
+    if record.agent.adapter_revision is None:
+        missing.append("agent.adapter_revision")
+    if record.environment.tool_versions is None:
+        missing.append("environment.tool_versions")
+    if record.inputs.input_files is None:
+        missing.append("inputs.input_files")
+    if record.lifecycle_execution is not None or record.lifecycle_provenance is not None:
+        missing.extend(_complete_lifecycle_missing_fields(record))
+        if not record.outputs.artifacts:
+            missing.append("outputs.artifacts")
+    if record.meta_harness_provenance is not None and not record.outputs.artifacts:
+        missing.append("meta-harness provenance must be included in output artifacts")
+    return missing
+
+
+def _complete_lifecycle_missing_fields(record: TrialRecord) -> list[str]:
+    missing: list[str] = []
+    if record.lifecycle_execution is None:
+        missing.append("lifecycle_execution")
+    if record.lifecycle_provenance is None:
+        missing.append("lifecycle_provenance")
+    if record.lifecycle_provenance is not None:
+        missing.extend(
+            _complete_lifecycle_provenance_missing_fields(
+                record.lifecycle_provenance,
+                record.task.visibility,
+            )
+        )
+    if record.lifecycle_execution is not None:
+        missing.extend(_complete_lifecycle_execution_missing_fields(record.lifecycle_execution))
+    return missing
+
+
+def _complete_lifecycle_provenance_missing_fields(
+    provenance: LifecycleTrialProvenance,
+    visibility: Visibility | None,
+) -> list[str]:
+    missing: list[str] = []
+    if provenance.repository_dirty:
+        missing.append("lifecycle_provenance.clean_repository")
+    public_fields = ("invocation_index", "ablation_manifest", "ablation_plan")
+    holdout_fields = (
+        "calibration_freeze",
+        "sealed_target_freeze",
+        "sealed_audit_claim",
+        "sealed_audit_manifest",
+    )
+    required_fields, forbidden_fields = (
+        (holdout_fields, public_fields) if visibility is Visibility.HOLDOUT else (public_fields, holdout_fields)
+    )
+    for field in required_fields:
+        if getattr(provenance, field) is None:
+            missing.append(f"lifecycle_provenance.{field}")
+    for field in forbidden_fields:
+        if getattr(provenance, field) is not None:
+            missing.append(f"lifecycle_provenance.forbidden_{field}")
+    return missing
+
+
+def _complete_lifecycle_execution_missing_fields(
+    execution: LifecycleExecutionRecord,
+) -> list[str]:
+    missing: list[str] = []
+    if not execution.sessions:
+        missing.append("lifecycle_execution.sessions")
+    if any(not session.artifacts for session in execution.sessions):
+        missing.append("lifecycle_execution.sessions.artifacts")
+    if any(session.resolved_model == "unresolved" for session in execution.sessions):
+        missing.append("lifecycle_execution.sessions.resolved_model")
+    if any(session.adapter == "unresolved" for session in execution.sessions):
+        missing.append("lifecycle_execution.sessions.adapter")
+    return missing
+
+
+def _validate_lifecycle_pair(record: TrialRecord) -> None:
+    if (record.lifecycle_execution is None) != (record.lifecycle_provenance is None):
+        raise ValueError("lifecycle execution and provenance must be provided together")
+
+
+def _validate_lifecycle_bindings(record: TrialRecord) -> None:
+    execution = record.lifecycle_execution
+    if execution is None:
+        return
+    _validate_lifecycle_agent_bindings(record, execution)
+    _validate_lifecycle_artifact_bindings(record)
+
+
+def _validate_lifecycle_agent_bindings(
+    record: TrialRecord,
+    execution: LifecycleExecutionRecord,
+) -> None:
+    resolved_models = {
+        session.resolved_model for session in execution.sessions if session.resolved_model != "unresolved"
+    }
+    adapters = {session.adapter for session in execution.sessions if session.adapter != "unresolved"}
+    if resolved_models and resolved_models != {record.agent.model}:
+        raise ValueError("agent model must match the lifecycle resolved model")
+    if adapters and adapters != {record.agent.adapter}:
+        raise ValueError("agent adapter must match lifecycle sessions")
+
+
+def _validate_lifecycle_artifact_bindings(record: TrialRecord) -> None:
+    provenance = record.lifecycle_provenance
+    if not record.outputs.artifacts or provenance is None:
+        return
+    bound_artifacts = (
+        provenance.invocation_manifest,
+        provenance.invocation_index,
+        provenance.ablation_manifest,
+        provenance.ablation_plan,
+        provenance.calibration_freeze,
+        provenance.sealed_target_freeze,
+        provenance.sealed_audit_claim,
+        provenance.sealed_audit_manifest,
+    )
+    if any(artifact is not None and artifact not in record.outputs.artifacts for artifact in bound_artifacts):
+        raise ValueError("lifecycle provenance must be included in output artifacts")
+
+
+def _validate_meta_harness_bindings(record: TrialRecord) -> None:
+    provenance = record.meta_harness_provenance
+    if provenance is None:
+        return
+    _validate_meta_harness_visibility(record, provenance)
+    _validate_meta_harness_artifact_bindings(record, provenance)
+    if (
+        record.lifecycle_provenance is not None
+        and record.lifecycle_provenance.package_sha256 != provenance.world_package_sha256
+    ):
+        raise ValueError("lifecycle and meta-harness package hashes must agree")
+
+
+def _validate_meta_harness_visibility(
+    record: TrialRecord,
+    provenance: MetaHarnessTrialProvenance,
+) -> None:
+    if provenance.split == "calibration" and record.task.visibility is not Visibility.PUBLIC:
+        raise ValueError("meta-harness calibration trials must be explicitly public")
+    if provenance.split == "holdout" and record.task.visibility is not Visibility.HOLDOUT:
+        raise ValueError("meta-harness holdout trials must be explicitly holdout")
+
+
+def _validate_meta_harness_artifact_bindings(
+    record: TrialRecord,
+    provenance: MetaHarnessTrialProvenance,
+) -> None:
+    if not record.outputs.artifacts:
+        return
+    bound_artifacts = (
+        provenance.candidate_manifest,
+        provenance.factorial_plan,
+        provenance.repair_decision,
+    )
+    if any(artifact is not None and artifact not in record.outputs.artifacts for artifact in bound_artifacts):
+        raise ValueError("meta-harness provenance must be included in output artifacts")
+    if provenance.proposal_session is not None and any(
+        artifact not in record.outputs.artifacts for artifact in provenance.proposal_session.bound_artifacts
+    ):
+        raise ValueError("proposal session provenance must be included in output artifacts")

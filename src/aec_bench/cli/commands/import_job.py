@@ -54,7 +54,7 @@ def import_job(
         "duplicates": duplicates,
     }
 
-    def _render(d: dict) -> None:
+    def _render(d: dict[str, object]) -> None:
         print_success(
             f"Imported {d['imported']} trials ({d['duplicates']} duplicates skipped) from {d['discovered']} discovered"
         )

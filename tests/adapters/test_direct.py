@@ -31,6 +31,8 @@ def test_direct_adapter_executes_single_turn_and_captures_transcript() -> None:
             output_text="Final answer in markdown.",
             usage_input_tokens=110,
             usage_output_tokens=55,
+            usage_cache_read_tokens=30,
+            usage_cache_write_tokens=10,
         )
     )
     adapter = DirectAdapter(
@@ -58,6 +60,10 @@ def test_direct_adapter_executes_single_turn_and_captures_transcript() -> None:
     assert result.failure_kind is None
     assert result.agent_output.status is AgentOutputStatus.COMPLETED
     assert result.raw_output_text == "Final answer in markdown."
+    assert result.usage_model_calls == 1
+    assert result.turns_used == 1
+    assert result.usage_cache_read_tokens == 30
+    assert result.usage_cache_write_tokens == 10
     assert [entry.role for entry in result.transcript] == [
         TranscriptRole.SYSTEM,
         TranscriptRole.USER,

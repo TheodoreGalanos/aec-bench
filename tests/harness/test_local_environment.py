@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from aec_bench.adapters.base import AdapterRequest
 from aec_bench.harness.local_environment import HostEnvironment
 
 
@@ -54,3 +55,14 @@ class TestHostEnvironmentTeardown:
             assert Path(workspace).is_dir()
         finally:
             shutil.rmtree(workspace, ignore_errors=True)
+
+
+def test_run_adapter_requires_execute_method() -> None:
+    env = HostEnvironment()
+    request = AdapterRequest(
+        instruction="Do the thing.",
+        output_path="/tmp/workspace/output.md",
+    )
+
+    with pytest.raises(TypeError, match="callable execute"):
+        env.run_adapter(object(), request)

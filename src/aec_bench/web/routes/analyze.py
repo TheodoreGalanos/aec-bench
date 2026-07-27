@@ -155,7 +155,7 @@ def analyze_api(
         row_label = _extract_dim(r, rows)
         if row_label is None:
             continue
-        col_label = "" if cols == "none" else _extract_dim(r, cols)  # type: ignore[arg-type]
+        col_label = "" if cols == "none" else _extract_dim(r, cols)
         if col_label is None:
             continue
         buckets[(row_label, col_label)].append(r)

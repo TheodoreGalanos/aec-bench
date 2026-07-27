@@ -1,6 +1,6 @@
 # AEC-Bench
 
-![AEC-Bench hero image showing a pixel-art weight bench with an engineering hard hat.](docs/assets/aec-bench-hero.png)
+![AEC-Bench hero image showing a pixel-art weight bench with an engineering hard hat.](assets/aec-bench-hero.png)
 
 A Python platform for creating, running, and evaluating AEC (Architecture, Engineering, Construction) benchmark tasks for AI agent evaluation.
 
@@ -121,16 +121,17 @@ uv run aec-bench meta-harness recipe \
 ```
 
 The recipe writes a scriptable workspace for intake, world generation, reviewer
-evidence, governance, and comparison artifacts. See
-[docs/meta-harness-guide.md](docs/meta-harness-guide.md) for the full CLI/API
-workflow, including staged evidence-lifecycle execution and experiment provenance.
+evidence, governance, and comparison artifacts. See the public
+[Meta-Harness Runtime](https://aecbench.com/docs/advanced/meta-harness-runtime)
+documentation for the full CLI/API workflow.
 
 ### Prime Lab Export
 
 AEC-Bench can export tasks as Prime Lab environments for local and hosted evals.
 The integration maps deterministic tasks to `SingleTurnEnv`, workspace tasks to
 stateful workspace tools, and RLM/lambda-RLM tasks to policy-aware stateful
-exports. See [docs/prime-lab-guide.md](docs/prime-lab-guide.md).
+exports. See the public [Prime Lab](https://aecbench.com/docs/advanced/prime-lab)
+documentation.
 
 ```bash
 uv run aec-bench prime smoke \
@@ -410,7 +411,7 @@ tasks/                  # Benchmark task seeds and instances
 seeds/                  # Expert-created seed files (from /add-task)
 agents/                 # Ready-to-use default agent implementations
 scripts/                # Utility scripts for local maintenance workflows
-docs/                   # Architecture, contracts, invariants, domain guides
+docs/                   # Repository-owned architecture, contracts, and invariants
 ```
 
 ## Architecture
@@ -455,6 +456,7 @@ uv run ruff format src/ tests/
 - `docs/INVARIANTS.md` — 10 non-negotiable architectural rules
 - `docs/CONTRACTS.md` — Data shapes at every boundary
 - `docs/AGENTS.md` — Agent guide with conventions and shared utilities
+- [Public documentation](https://aecbench.com/docs) — Installation, usage, integrations, and reference guides
 
 ## License
 

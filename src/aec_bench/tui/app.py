@@ -135,7 +135,7 @@ class AecBenchTUI(App[None]):
     # Mode screen factories — lazy imports to avoid circular dependencies
     # ------------------------------------------------------------------
 
-    def _make_dashboard(self) -> Screen:
+    def _make_dashboard(self) -> Screen[None]:
         """Build the DashboardScreen for the dashboard mode."""
         from aec_bench.tui.screens.dashboard import DashboardScreen
 
@@ -149,7 +149,7 @@ class AecBenchTUI(App[None]):
             project_root=self.project_root,
         )
 
-    def _make_explore(self) -> Screen:
+    def _make_explore(self) -> Screen[None]:
         """Build the LibraryScreen for the explore mode."""
         from aec_bench.tui.screens.library import LibraryScreen
 
@@ -159,7 +159,7 @@ class AecBenchTUI(App[None]):
             ledger_root=self.ledger_root,
         )
 
-    def _make_review(self) -> Screen:
+    def _make_review(self) -> Screen[None]:
         """Build the TriageScreen for the review mode."""
         from aec_bench.tui.screens.triage import TriageScreen
 
@@ -168,7 +168,7 @@ class AecBenchTUI(App[None]):
             experiment_id=self.initial_experiment_id,
         )
 
-    def _make_analyse(self) -> Screen:
+    def _make_analyse(self) -> Screen[None]:
         """Build the EvaluateScreen for the analyse mode."""
         from aec_bench.tui.screens.evaluate import EvaluateScreen
 

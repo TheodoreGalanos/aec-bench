@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import random
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 
@@ -16,6 +17,7 @@ from aec_bench.evolution.report_data import list_runs
 from aec_bench.generation.contracts import SampledInstance
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
+from aec_bench.templates.contracts import TemplateConfig
 from aec_bench.templates.registry import load_engine_module, load_template
 
 Strategy = Literal["hill_climb", "qd"]
@@ -161,8 +163,8 @@ def materialise_suite(
 def _sample_instance_with_retries(
     *,
     template_task_id: str,
-    config,
-    engine_compute,
+    config: TemplateConfig,
+    engine_compute: Callable[..., dict[str, float]],
     difficulty: str,
     seed: int,
     instance_index: int,
@@ -220,7 +222,7 @@ def build_arm_config(
     classifier_model: str = "claude-haiku-4-5-20251001",
     evolver_model: str = "claude-sonnet-4-20250514",
     solver_model: str = "claude-sonnet-4-20250514",
-) -> dict:
+) -> dict[str, Any]:
     """Build one evolution YAML config for a benchmark arm."""
     return {
         "workspace_path": str(workspace_path),
@@ -292,7 +294,7 @@ def write_pressure_benchmark_configs(
             config = build_arm_config(
                 experiment_slug=source_experiment_slug,
                 suite_name=suite_name,
-                strategy=strategy,  # type: ignore[arg-type]
+                strategy=strategy,
                 workspace_path=workspace.relative_to(repo_root),
                 batch_size=batch_size,
                 max_cycles=max_cycles,
@@ -325,7 +327,7 @@ def write_benchmark_configs(
             config = build_arm_config(
                 experiment_slug=experiment_slug,
                 suite_name=suite_name,
-                strategy=strategy,  # type: ignore[arg-type]
+                strategy=strategy,
                 workspace_path=workspace.relative_to(repo_root),
                 batch_size=batch_size,
                 max_cycles=max_cycles,
@@ -348,7 +350,7 @@ def build_benchmark(
     batch_size: int = 5,
     max_cycles: int = DEFAULT_MAX_CYCLES,
     difficulties: tuple[str, ...] = DEFAULT_DIFFICULTIES,
-) -> dict:
+) -> dict[str, Any]:
     """Build Experiment 1 benchmark suites, workspaces, configs, and manifest."""
     entries = load_template_entries(index_path)
     selection = select_benchmark_templates(
@@ -418,9 +420,9 @@ def build_benchmark(
     return manifest
 
 
-def summarise_benchmark_runs(config_dir: Path) -> list[dict]:
+def summarise_benchmark_runs(config_dir: Path) -> list[dict[str, Any]]:
     """Summarise the latest run for each benchmark arm config."""
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     for config_path in sorted(config_dir.glob("*.yaml")):
         if config_path.name == "manifest.yaml":
             continue

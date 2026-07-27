@@ -71,6 +71,19 @@ def test_extract_handles_malformed_response() -> None:
     assert result.values == {}
 
 
+def test_extract_without_fields_returns_structured_error() -> None:
+    client = ReplayRlmClient(responses=[])
+
+    result = default_extract(
+        text="Some text.",
+        client=client,
+        model="test-model",
+    )
+
+    assert result.values == {}
+    assert result.error == "extract() requires at least one field"
+
+
 def test_extract_passes_context_to_prompt() -> None:
     responses = [
         RlmCompletionResponse(

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol, runtime_checkable
 
 
 @dataclass(frozen=True)
@@ -50,6 +50,22 @@ class RlmClient(Protocol):
         messages: list[RlmMessage],
         system_prompt: str | None,
         temperature: float | None = None,
+    ) -> RlmCompletionResponse: ...
+
+
+@runtime_checkable
+class ToolCapableRlmClient(Protocol):
+    """Structural client surface for providers supporting native tool calls."""
+
+    def generate_with_tools(
+        self,
+        *,
+        model: str,
+        messages: list[RlmMessage],
+        system_prompt: str | None,
+        tool_name: str,
+        tool_description: str,
+        tool_parameters_schema: dict[str, Any],
     ) -> RlmCompletionResponse: ...
 
 

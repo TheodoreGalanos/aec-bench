@@ -1,0 +1,83 @@
+# Experiment Workflows
+
+Choose the smallest workflow that can answer the research question. Planning and
+validation are provider-free; model execution is not.
+
+## 1. Candidate-versus-baseline smoke comparison
+
+Use this to verify an installation or learn the artifact shape:
+
+```bash
+aec-bench meta-harness example \
+  --output artefacts/meta-harness/example
+```
+
+This is deterministic and makes no model, Harbor, Morph, Modal, or cloud call.
+
+## 2. Evidence-lifecycle ablation
+
+After `aec-bench init`, copy the installed example:
+
+```bash
+cp .claude/skills/meta-harness/examples/lifecycle-ablation.yaml experiment.yaml
+```
+
+Replace `replace-with-your-model`, review the output and ledger roots, then
+inspect the exact trial plan without writing runs or calling a model:
+
+```bash
+aec-bench meta-harness lifecycle-ablation \
+  --config experiment.yaml \
+  --dry-run
+```
+
+Remove `--dry-run` only after the manifest, budgets, provider configuration, and
+output paths have been reviewed.
+
+## 3. Fixed-K candidate search
+
+Use a strict, preregistered `FactorialExperimentSpec` when comparing fixed and
+candidate harnesses under matched budgets:
+
+```bash
+uv run python -m aec_bench.meta_harness.factorial_experiment_cli \
+  --spec factorial-experiment.json \
+  --project-root . \
+  --repo-root . \
+  --tasks-root tasks
+```
+
+This runner uses real Harbor execution and requires the providers and backends
+declared by the spec. It has no implicit demo or mock execution mode.
+
+## 4. Repair-only and adaptive-cycle runs
+
+Run a preregistered paired repair:
+
+```bash
+uv run python -m aec_bench.meta_harness.repair_cli \
+  --spec repair.json
+```
+
+Run a complete adaptive cycle:
+
+```bash
+uv run python -m aec_bench.meta_harness.adaptive_cycle_cli \
+  --spec adaptive-cycle.json
+```
+
+Both commands use real Harbor execution unless an executor is injected by a
+test. Do not treat provider-free contract tests as evidence of learned harnesses,
+successful repair, transfer, or generalisation.
+
+## Experiment checklist
+
+Before execution, confirm:
+
+- the task identities and snapshots are frozen;
+- fixed and candidate harnesses use matched budgets;
+- proposer inputs exclude verifier, reward, oracle, and held-out metadata;
+- output and ledger roots are new or intentionally resumable;
+- model and backend credentials are configured;
+- the preregistered spec validates locally;
+- the result will be imported as durable TrialRecord evidence.

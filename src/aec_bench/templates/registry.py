@@ -99,7 +99,7 @@ def load_engine_module(template_dir: Path) -> ModuleType:
         raise ValueError(msg)
 
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    spec.loader.exec_module(module)
 
     if not hasattr(module, "compute") or not callable(module.compute):
         msg = f"engine.py in {template_dir} must define a callable 'compute' function"

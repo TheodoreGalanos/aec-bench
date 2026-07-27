@@ -91,6 +91,13 @@ class TestRecall:
         result = pad.recall()
         assert "empty" in result.lower()
 
+    def test_recall_treats_non_object_json_as_empty(self, tmp_path: Path) -> None:
+        path = tmp_path / ".scratchpad.json"
+        path.write_text('["not", "a", "scratchpad"]', encoding="utf-8")
+        pad = Scratchpad(path=str(path))
+
+        assert "empty" in pad.recall().lower()
+
     def test_recall_none_truncates_long_previews(self, tmp_path: Path) -> None:
         pad = Scratchpad(path=str(tmp_path / ".scratchpad.json"))
         pad.note("long", "x" * 500)

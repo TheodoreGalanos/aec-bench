@@ -11,6 +11,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from fnmatch import fnmatch
 from pathlib import Path
+from types import ModuleType
 
 from pydantic import Field
 
@@ -202,11 +203,11 @@ def allocate_budget(
     if total_guaranteed > total_max:
         # Distribute total_max evenly across disciplines
         disc_alloc = largest_remainder_round({d: 1.0 for d in by_discipline}, total=total_max)
-        allocation: dict[str, int] = {}
+        constrained_allocation: dict[str, int] = {}
         for disc, disc_templates in by_discipline.items():
             disc_budget = disc_alloc[disc]
             per_template = largest_remainder_round({t: 1.0 for t in disc_templates}, total=disc_budget)
-            allocation.update(per_template)
+            constrained_allocation.update(per_template)
             if disc_budget < min_per_discipline:
                 warnings.append(
                     CoverageWarning(
@@ -216,7 +217,7 @@ def allocate_budget(
                         achieved=disc_budget,
                     )
                 )
-        return allocation, warnings
+        return constrained_allocation, warnings
 
     # Distribute guarantees across templates within each discipline (round-robin)
     allocation = {key: 0 for key in keys}
@@ -566,7 +567,7 @@ def execute_plan(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Cache: template_dir -> (TemplateConfig, engine_module, engine_source)
-    cache: dict[Path, tuple[TemplateConfig, object, str]] = {}
+    cache: dict[Path, tuple[TemplateConfig, ModuleType, str]] = {}
 
     entries: list[InstanceEntry] = []
 

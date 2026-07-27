@@ -213,6 +213,16 @@ def _format_sandbox_sources(
     return "\n\n".join(parts) if parts else "(no source content available)"
 
 
+def _cached_slot_value(
+    scratchpad: dict[str, str | dict[str, str]] | None,
+    slot: str,
+) -> str | None:
+    if scratchpad is None:
+        return None
+    value = scratchpad.get(slot)
+    return value if isinstance(value, str) else None
+
+
 class LambdaRlmSlotResolver:
     """SlotResolver implementation backed by an RlmClient.
 
@@ -261,12 +271,13 @@ class LambdaRlmSlotResolver:
         resolved: dict[str, str] = {}
         remaining: list[str] = []
         for slot in fragment.slots:
-            if self._scratchpad is not None and slot in self._scratchpad:
-                resolved[slot] = self._scratchpad[slot]
+            cached = _cached_slot_value(self._scratchpad, slot)
+            if cached is not None:
+                resolved[slot] = cached
                 # Scratchpad hits: no source consulted this call
                 self.last_slot_provenance[slot] = ()
-            else:
-                remaining.append(slot)
+                continue
+            remaining.append(slot)
 
         if not remaining:
             return resolved

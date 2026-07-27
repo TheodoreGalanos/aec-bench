@@ -150,6 +150,22 @@ class TestBuildPydanticModel:
 
         assert model.model_name == "us.anthropic.claude-sonnet-4-6"
 
+    def test_bedrock_timeout_is_enforced_by_transport(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("AWS_BEARER_TOKEN_BEDROCK", "test-bearer-token")
+        monkeypatch.setenv("AWS_REGION", "us-east-1")
+
+        model = _build_pydantic_model(
+            "bedrock:us.anthropic.claude-sonnet-4-6",
+            "bedrock",
+            timeout_seconds=37.5,
+        )
+
+        assert model.client.meta.config.read_timeout == 37.5
+        assert model.client.meta.config.connect_timeout == 30.0
+
 
 class TestPreflightPydanticModelConfiguration:
     """Tests for provider configuration checks that run before campaign writes."""

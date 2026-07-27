@@ -1,6 +1,5 @@
-# ABOUTME: Provider-backed direct clients for backend-side execution in aec-bench Python.
-# ABOUTME: Implements authenticated Anthropic, Azure OpenAI, and Together direct completions.
-# ABOUTME: Keeps provider env resolution and OpenAI-compatible response parsing in one place.
+# ABOUTME: Provider-backed direct clients for authenticated single-turn model execution.
+# ABOUTME: Applies provider limits and normalizes response text, errors, and token usage.
 
 import json
 import os
@@ -8,7 +7,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from aec_bench.adapters.base import SerializedClientSpec
@@ -55,6 +54,82 @@ class AnthropicDirectClient(DirectClient):
             retry_budget_seconds=self.retry_budget_seconds,
             initial_backoff_seconds=self.initial_backoff_seconds,
             max_backoff_seconds=self.max_backoff_seconds,
+        )
+
+
+@dataclass(frozen=True)
+class BedrockDirectClient(DirectClient):
+    max_tokens: int = 16384
+    stream_mode: str = "auto"
+
+    def complete(self, request: DirectCompletionRequest) -> DirectCompletionResponse:
+        return self._complete(
+            request,
+            max_output_tokens=self.max_tokens,
+            timeout_seconds=None,
+        )
+
+    def complete_bounded(
+        self,
+        request: DirectCompletionRequest,
+        *,
+        timeout_seconds: float,
+        max_output_tokens: int,
+    ) -> DirectCompletionResponse:
+        """Complete one request with provider-enforced output and transport limits."""
+
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+        if max_output_tokens <= 0:
+            raise ValueError("max_output_tokens must be positive")
+        return self._complete(
+            request,
+            max_output_tokens=min(self.max_tokens, max_output_tokens),
+            timeout_seconds=timeout_seconds,
+        )
+
+    def _complete(
+        self,
+        request: DirectCompletionRequest,
+        *,
+        max_output_tokens: int,
+        timeout_seconds: float | None,
+    ) -> DirectCompletionResponse:
+        from aec_bench.adapters.rlm.client import RlmMessage
+        from aec_bench.adapters.rlm.providers import make_rlm_client
+
+        configuration = request.configuration or {}
+        prompt_cache = configuration.get("prompt_cache", True)
+        if not isinstance(prompt_cache, bool):
+            raise ValueError("prompt_cache must be a boolean")
+        temperature_value = configuration.get("temperature")
+        if temperature_value is not None and (
+            isinstance(temperature_value, bool) or not isinstance(temperature_value, int | float)
+        ):
+            raise ValueError("temperature must be numeric")
+        temperature = float(temperature_value) if temperature_value is not None else None
+
+        client_kwargs: dict[str, Any] = {
+            "cache": prompt_cache,
+            "max_tokens": max_output_tokens,
+            "stream_mode": self.stream_mode,
+        }
+        if timeout_seconds is not None:
+            client_kwargs["timeout_seconds"] = timeout_seconds
+        client = make_rlm_client(request.model, **client_kwargs)
+        response = client.generate(
+            model=request.model,
+            messages=[RlmMessage(role="user", content=request.instruction)],
+            system_prompt=request.system_prompt,
+            temperature=temperature,
+        )
+        return DirectCompletionResponse(
+            output_text=response.output_text,
+            error_message=response.error_message,
+            usage_input_tokens=response.input_tokens,
+            usage_output_tokens=response.output_tokens,
+            usage_cache_read_tokens=response.cache_read_tokens,
+            usage_cache_write_tokens=response.cache_write_tokens,
         )
 
 
@@ -184,6 +259,7 @@ def _retrying_request(
             retry_budget_seconds=retry_budget_seconds,
             initial_backoff_seconds=initial_backoff_seconds,
             max_backoff_seconds=max_backoff_seconds,
+            prior_calls=0,
         )
 
     deadline = time.time() + retry_budget_seconds
@@ -202,7 +278,10 @@ def _retrying_request(
         try:
             with urllib.request.urlopen(request, timeout=90) as response:
                 body = json.loads(response.read().decode())
-                return parser(body)
+                return replace(
+                    parser(body),
+                    usage_model_calls=attempt,
+                )
         except urllib.error.HTTPError as exc:
             body_text = ""
             try:
@@ -218,16 +297,25 @@ def _retrying_request(
                     retry_budget_seconds=retry_budget_seconds,
                     initial_backoff_seconds=initial_backoff_seconds,
                     max_backoff_seconds=max_backoff_seconds,
+                    prior_calls=attempt,
                 )
             if exc.code in (400, 401, 403, 404):
-                return DirectCompletionResponse(output_text="", error_message=last_error)
+                return DirectCompletionResponse(
+                    output_text="",
+                    error_message=last_error,
+                    usage_model_calls=attempt,
+                )
             if exc.code == 429:
                 time.sleep(_retry_after(exc, attempt, initial_backoff_seconds, max_backoff_seconds))
                 continue
             if exc.code >= 500:
                 time.sleep(min(initial_backoff_seconds * (2 ** (attempt - 1)), max_backoff_seconds))
                 continue
-            return DirectCompletionResponse(output_text="", error_message=last_error)
+            return DirectCompletionResponse(
+                output_text="",
+                error_message=last_error,
+                usage_model_calls=attempt,
+            )
         except (urllib.error.URLError, ConnectionResetError, TimeoutError, OSError) as exc:
             last_error = f"{type(exc).__name__}: {exc}"
             time.sleep(min(initial_backoff_seconds * (2 ** (attempt - 1)), max_backoff_seconds))
@@ -235,6 +323,7 @@ def _retrying_request(
     return DirectCompletionResponse(
         output_text="",
         error_message=last_error or "retry budget exhausted",
+        usage_model_calls=attempt or None,
     )
 
 
@@ -246,6 +335,7 @@ def _streaming_openai_compatible_request(
     retry_budget_seconds: int,
     initial_backoff_seconds: int,
     max_backoff_seconds: int,
+    prior_calls: int,
 ) -> DirectCompletionResponse:
     streaming_payload = dict(payload)
     streaming_payload["stream"] = True
@@ -263,7 +353,10 @@ def _streaming_openai_compatible_request(
         )
         try:
             with urllib.request.urlopen(request, timeout=90) as response:
-                return _parse_openai_compatible_stream(response)
+                return replace(
+                    _parse_openai_compatible_stream(response),
+                    usage_model_calls=prior_calls + attempt,
+                )
         except urllib.error.HTTPError as exc:
             body_text = ""
             try:
@@ -272,14 +365,22 @@ def _streaming_openai_compatible_request(
                 body_text = ""
             last_error = f"HTTP {exc.code}: {body_text[:200]}"
             if exc.code in (400, 401, 403, 404):
-                return DirectCompletionResponse(output_text="", error_message=last_error)
+                return DirectCompletionResponse(
+                    output_text="",
+                    error_message=last_error,
+                    usage_model_calls=prior_calls + attempt,
+                )
             if exc.code == 429:
                 time.sleep(_retry_after(exc, attempt, initial_backoff_seconds, max_backoff_seconds))
                 continue
             if exc.code >= 500:
                 time.sleep(min(initial_backoff_seconds * (2 ** (attempt - 1)), max_backoff_seconds))
                 continue
-            return DirectCompletionResponse(output_text="", error_message=last_error)
+            return DirectCompletionResponse(
+                output_text="",
+                error_message=last_error,
+                usage_model_calls=prior_calls + attempt,
+            )
         except (urllib.error.URLError, ConnectionResetError, TimeoutError, OSError) as exc:
             last_error = f"{type(exc).__name__}: {exc}"
             time.sleep(min(initial_backoff_seconds * (2 ** (attempt - 1)), max_backoff_seconds))
@@ -287,6 +388,7 @@ def _streaming_openai_compatible_request(
     return DirectCompletionResponse(
         output_text="",
         error_message=last_error or "retry budget exhausted",
+        usage_model_calls=(prior_calls + attempt) or None,
     )
 
 
@@ -298,6 +400,14 @@ def _parse_anthropic_response(body: dict[str, Any]) -> DirectCompletionResponse:
         output_text=output_text,
         usage_input_tokens=cast(int | None, usage.get("input_tokens")),
         usage_output_tokens=cast(int | None, usage.get("output_tokens")),
+        usage_cache_read_tokens=cast(
+            int | None,
+            usage.get("cache_read_input_tokens"),
+        ),
+        usage_cache_write_tokens=cast(
+            int | None,
+            usage.get("cache_creation_input_tokens"),
+        ),
     )
 
 

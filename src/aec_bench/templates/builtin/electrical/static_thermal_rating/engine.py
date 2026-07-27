@@ -38,7 +38,7 @@ def _air_dynamic_viscosity_pa_s(film_temp_c: float) -> float:
     t_kelvin = film_temp_c + 273.15
     # Sutherland's law: mu = C1 * T^1.5 / (T + S)
     # C1 = 1.458e-6 kg/(m·s·K^0.5), S = 110.4 K
-    return 1.458e-6 * t_kelvin**1.5 / (t_kelvin + 110.4)
+    return float(1.458e-6 * t_kelvin**1.5 / (t_kelvin + 110.4))
 
 
 def _air_thermal_conductivity_w_m_k(film_temp_c: float) -> float:
@@ -83,7 +83,7 @@ def _forced_convection_low_re(
 
     qc1 = Kangle * [1.01 + 1.35 * NRe^0.52] * kf * (Tc - Ta)  [W/m]
     """
-    return k_angle * (1.01 + 1.35 * reynolds**0.52) * kf * temp_diff
+    return float(k_angle * (1.01 + 1.35 * reynolds**0.52) * kf * temp_diff)
 
 
 def _forced_convection_high_re(
@@ -96,7 +96,7 @@ def _forced_convection_high_re(
 
     qc2 = Kangle * 0.0754 * NRe^0.6 * kf * (Tc - Ta)  [W/m]
     """
-    return k_angle * 0.0754 * reynolds**0.6 * kf * temp_diff
+    return float(k_angle * 0.0754 * reynolds**0.6 * kf * temp_diff)
 
 
 def _natural_convection(
@@ -110,7 +110,7 @@ def _natural_convection(
     """
     if temp_diff <= 0.0:
         return 0.0
-    return 3.645 * air_density**0.5 * diameter_m**0.75 * temp_diff**1.25
+    return float(3.645 * air_density**0.5 * diameter_m**0.75 * temp_diff**1.25)
 
 
 def _convective_cooling_w_m(

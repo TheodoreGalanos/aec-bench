@@ -25,8 +25,15 @@ jobs/
 # Generated task instances (produced by aec-bench generate dataset)
 tasks/generated/
 
+# Local sealed evaluation packages and archived provider-calibration fixtures
+/sealed_tasks/
+/tests/sealed_tasks/provider_calibration/
+
 # Build artefacts
 artefacts/
+
+# Local run outputs
+/runs/
 
 # Claude journal
 journal/

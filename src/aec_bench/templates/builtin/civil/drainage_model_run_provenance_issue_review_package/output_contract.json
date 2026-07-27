@@ -1,0 +1,18 @@
+{
+  "schema_version": "aecbench.output-completion-contract.v1",
+  "output_path": "/workspace/output.md",
+  "format": "markdown_final_fenced_json",
+  "required_top_level_keys": [
+    "source_inventory",
+    "provenance_ledger",
+    "review_matrix",
+    "computed_evidence",
+    "transition_decision",
+    "findings",
+    "information_requests",
+    "action_register",
+    "readiness_decision",
+    "claim_boundary_statement"
+  ],
+  "require_single_final_json_block": true
+}

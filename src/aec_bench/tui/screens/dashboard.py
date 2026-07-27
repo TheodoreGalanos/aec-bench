@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
+from rich.console import RenderableType
 from rich.text import Text
 from textual import work
 from textual.app import ComposeResult
@@ -33,7 +35,7 @@ _BLOCK_CHARS = frozenset("█▀▄▌▐░▓")
 _SHADOW_CHARS = frozenset("╔╗╚╝║═╠╣╦╩╬")
 
 
-class DashboardScreen(Screen):
+class DashboardScreen(Screen[None]):
     """Dashboard hub: ASCII title, pixel art, stat cards, sparkline, experiment table."""
 
     CSS = """
@@ -181,7 +183,7 @@ class DashboardScreen(Screen):
                             markup=True,
                         )
                         yield Sparkline([], id="reward-sparkline")
-                    table = DataTable(id="experiment-table", cursor_type="row")
+                    table: DataTable[object] = DataTable(id="experiment-table", cursor_type="row")
                     table.loading = True
                     yield table
                     yield Static(self._render_cli_commands(), id="cli-commands")
@@ -306,7 +308,7 @@ class DashboardScreen(Screen):
     # Renderers
     # ------------------------------------------------------------------
 
-    def _render_mascot(self) -> object:
+    def _render_mascot(self) -> RenderableType:
         """Render the mascot image from the JPEG asset using rich-pixels."""
         try:
             from pathlib import Path
@@ -316,12 +318,12 @@ class DashboardScreen(Screen):
 
             mascot_path = Path(__file__).parent.parent / "assets" / "mascot.jpg"
             if mascot_path.exists():
-                img = Image.open(mascot_path)
+                img: Image.Image = Image.open(mascot_path)
                 # Render at 95 cols wide — fits the 100-char branding panel
                 target_w = 95
                 target_h = int(target_w * img.height / img.width)
-                img = img.resize((target_w, target_h), Image.LANCZOS)
-                return Pixels.from_image(img)
+                img = img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                return cast(RenderableType, Pixels.from_image(img))
         except Exception:
             pass
         return Text("aec-bench", style="bold #D4A27F")

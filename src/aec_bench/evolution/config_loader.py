@@ -40,7 +40,7 @@ def merge_harness_config(
     raw = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
     manifest = ExperimentManifest.model_validate(raw)
 
-    updates: dict = {}
+    updates: dict[str, object] = {}
 
     if config.solver is None and manifest.agents:
         updates["solver"] = manifest.agents[0]
