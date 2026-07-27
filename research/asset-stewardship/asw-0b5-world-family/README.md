@@ -1,13 +1,11 @@
-# ABOUTME: Defines the B5-W0/W1/W2 research boundary and approved pre-W3 composition repair.
-# ABOUTME: Prevents research code, raw engine artifacts, candidate semantics, and repair records from becoming production contracts.
+# ABOUTME: Defines the research-only B5-W0 through B5-W5 implementation and its immutable V3 refusal.
+# ABOUTME: Keeps generator, certification, sensitivity, lineage, and decision evidence outside production contracts.
 
 # ASW-0B5 world-family research implementation
 
-This directory contains `B5-W0 — research boundary and canonical
-declarations`, `B5-W1 — real generator`, and `B5-W2 — independent
-certifier` for
-`AU-NSW-LH-SYN-SPS-v1`. W0 turns the accepted B4 authority chain into an
-executable byte and lineage boundary. W1 validates canonical requests,
+This directory contains the research implementation of `B5-W0` through
+`B5-W5` for `AU-NSW-LH-SYN-SPS-v1`. W0 turns the accepted B4 authority
+chain into an executable byte and lineage boundary. W1 validates canonical requests,
 materializes the repaired W1 hydraulic mapping, executes the pinned real SWMM
 engine, extracts allowlisted semantic candidates, and proves exact replay.
 W2 transfers only permitted canonical bytes into a separately executable
@@ -15,15 +13,20 @@ certifier, reconstructs the W1 catalogue and physics independently, evaluates
 exact and qualitative invariants, and emits threshold-free residual
 observations. The approved pre-W3 repair records three rules falsified by
 those observations and the real engine before quantitative composition
-begins. It changes no W1 member, W2 case, generator request, curve, or
-semantic candidate bytes.
+begins. W3 independently composes the preregistered W4 numerical budgets,
+freezes the complete analytical probe inventory, and stops at the anchor's
+first unavoidable hard-ceiling conflict. W4 enforces the package gate and
+emits the research receipt graph. W5 issues one immutable V3 refusal and no
+payload, package, or manifest. These stages change no W1 member, W2 case,
+generator request, curve, or semantic candidate bytes.
 
-It is not an accepted family member, quantitative acceptance, package,
-manifest, runtime adapter, agent tool, scenario, or V3 decision. W2's only
-valid non-rejection state is `quantitative-pending-w4`; it cannot emit pass,
-acceptance, certification, promotion, or V3 claims. Nothing under this
-directory may be imported by `src/aec_bench`, and production behavior must
-continue to work with `research/` physically absent.
+The executed decision is `promotion-generation-reject`; V3 is refused and V4
+is unclaimed. No accepted family member, package, manifest, runtime adapter,
+agent tool, or scenario exists. W2's only valid non-rejection state remains
+`quantitative-pending-w4`; it cannot emit pass, acceptance, certification,
+promotion, or V3 claims. Nothing under this directory may be imported by
+`src/aec_bench`, and production behavior must continue to work with
+`research/` physically absent.
 
 ## Exact scope
 
@@ -79,10 +82,31 @@ The approved pre-W3 repair additionally contains:
 - a formula-derived absolute edge-time window for `C-R12` that preserves
   exact edge identity and forbids fitting, warping, deletion, or phase reset.
 
-B5-W0/W1/W2 and the pre-W3 repair do not:
+B5-W3/W4/W5 additionally contain:
 
-- implement W4 tolerances, probes, or sensitivity decisions;
-- write a family result, promoted package, manifest, or V3 record;
+- a W4-owned canonical input/result reader with exact replay, role-hash,
+  bundle-hash, and W3-result identity checks;
+- independent pump/system roots, root slope, arbitrary-step RK4,
+  hydraulic-settling, capability-margin, and outward-bound calculations;
+- one complete 68-member OAT inventory, five interaction roles, eleven
+  boundary roles, six fixed grids, seven repaired ENG variants, thirty
+  mutation roles, and two replay ordinals;
+- a formula-derived C-R08 lower-bound proof showing that its dynamic term
+  alone consumes the relative hard ceiling before positive representation,
+  root, and curve terms are added;
+- an ordered `family-member-reject` that retains the complete plan and marks
+  downstream engine work as not executed after anchor rejection;
+- an independent package gate that creates no directory for a rejected
+  family;
+- one connected eight-receipt research DAG; and
+- one immutable `promotion-generation-reject` decision with empty payload,
+  package, and manifest inventories.
+
+The implementation does not:
+
+- relax or fit the C-R08 budget;
+- execute sibling engine variants after the anchor's ordered rejection;
+- create a promoted package or manifest;
 - define actor-visible fields, stewardship actions, authority, obligations,
   handover, outcomes, evaluation, or scoring; or
 - establish a production filename, module, schema, or application interface.
@@ -176,13 +200,19 @@ uv run ruff check \
   research/asset-stewardship/asw-0b5-world-family/generator \
   research/asset-stewardship/asw-0b5-world-family/certifier \
   research/asset-stewardship/asw-0b5-world-family/lineage \
+  research/asset-stewardship/asw-0b5-world-family/sensitivity \
+  research/asset-stewardship/asw-0b5-world-family/promotion \
+  research/asset-stewardship/asw-0b5-world-family/run_w3_w5.py \
   research/asset-stewardship/asw-0b5-world-family/tests
 
 MYPYPATH=research/asset-stewardship/asw-0b5-world-family \
   uv run mypy --strict --explicit-package-bases \
   research/asset-stewardship/asw-0b5-world-family/generator \
   research/asset-stewardship/asw-0b5-world-family/certifier \
-  research/asset-stewardship/asw-0b5-world-family/lineage
+  research/asset-stewardship/asw-0b5-world-family/lineage \
+  research/asset-stewardship/asw-0b5-world-family/sensitivity \
+  research/asset-stewardship/asw-0b5-world-family/promotion \
+  research/asset-stewardship/asw-0b5-world-family/run_w3_w5.py
 ```
 
 The tests use real files, real source/build receipts, the real pinned solver
@@ -190,13 +220,22 @@ lifecycle, and the real official output API. They contain no mock engine,
 fabricated SWMM result, fake certification pass, skipped real-engine gate, or
 disabled boundary.
 
-## Next allowed slice
+Run one fresh W3-W5 attempt into an absent local root:
 
-The next staged commit is `B5-W3 — quantitative composition`. It must bind
-`declarations/w3-w4-quantitative-composition-repair.json` before applying the
-accepted W4 budgets to W2's `C-R01` through `C-R24` observations. It may
-evaluate every preregistered sample, derive the repaired `C-R12` window, and
-issue a new composed quantitative result. It may not alter W1/W2 bytes,
-candidate series, raw observations, inherited hard ceilings, or failed-rule
-history; fit a threshold from the candidate; warp or reset edge time; skip a
-required residual; edit a result in place; or promote a family member.
+```sh
+PYTHONPATH=research/asset-stewardship/asw-0b5-world-family \
+  uv run python \
+  research/asset-stewardship/asw-0b5-world-family/run_w3_w5.py \
+  --engine-receipt /absolute/path/to/engine-build-receipt.json \
+  --output /an/absent/local/run-root
+```
+
+## Next allowed step
+
+Return to the W4 authority owner with the retained C-R08 evidence. A versioned
+amendment must decide whether the dynamic-settling allowance belongs inside
+the same `0.1%` root-flow hard ceiling or whether the ceiling definition is
+otherwise inconsistent. The failed generation and V3 refusal remain
+immutable. Any amended protocol creates new authority and generation
+identities and reruns the complete affected path. Production integration,
+package construction, ASW-0C, and ASW-2 remain blocked.

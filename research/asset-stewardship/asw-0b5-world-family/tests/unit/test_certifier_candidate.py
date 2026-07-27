@@ -167,6 +167,17 @@ def test_head_closures_use_original_loss_and_fixed_hgl_semantics() -> None:
     assert abs(static_head - physics.pump_head(values, flow, 0.75, 0.0)) > 1.0
 
 
+def test_numerical_observation_retains_every_raw_residual_for_w4() -> None:
+    result = observations.numerical_observation([0.125, -0.25, 0.0])
+
+    assert result == {
+        "maximum_absolute": "0.25",
+        "sample_count": 3,
+        "signed_sum": "-0.125",
+        "values": ["0.125", "-0.25", "0"],
+    }
+
+
 def test_reconstructs_pinned_engine_report_inflow_at_step_boundaries() -> None:
     authority = boundary.read_w1_declaration(W1_DECLARATION.read_bytes())
     member = request.anchor_member(W1_DECLARATION.read_bytes())
