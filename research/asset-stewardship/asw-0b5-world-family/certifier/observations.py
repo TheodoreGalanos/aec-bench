@@ -27,10 +27,7 @@ SOURCE_BY_SERIES = {
     "discharge_head_m": "derived:fixed-HGL:system.z_d",
 }
 
-NUMERICAL_IDS = tuple(
-    f"C-R{index:02d}"
-    for index in (*range(1, 15), 17, 18, 19, 21, 22, 23)
-)
+NUMERICAL_IDS = tuple(f"C-R{index:02d}" for index in (*range(1, 15), 17, 18, 19, 21, 22, 23))
 
 
 class ObservationError(ValueError):
@@ -79,11 +76,12 @@ def _initial_depth(
     raise ObservationError("unknown initial depth source")
 
 
-def _inflow(
+def expected_report_inflow(
     case: dict[str, Any],
     values: dict[str, Decimal],
     second: int,
 ) -> float:
+    """Reconstruct the rendered time series at the pinned report evaluation instant."""
     stimulus = case["inflow_stimulus"]
     if stimulus == "zero":
         return 0.0
@@ -91,11 +89,54 @@ def _inflow(
         return float(values["inflow.Q_assess"])
     if stimulus != "base-pattern":
         raise ObservationError("unknown inflow stimulus")
-    if second < 5400 or second >= 21600:
-        return float(values["inflow.Q_low"])
-    if second < 10800 or second >= 14400:
-        return float(values["inflow.Q_nominal"])
-    return float(values["inflow.Q_assess"])
+    points = (
+        (0, float(values["inflow.Q_low"])),
+        (5399, float(values["inflow.Q_low"])),
+        (5400, float(values["inflow.Q_nominal"])),
+        (10799, float(values["inflow.Q_nominal"])),
+        (10800, float(values["inflow.Q_assess"])),
+        (14399, float(values["inflow.Q_assess"])),
+        (14400, float(values["inflow.Q_nominal"])),
+        (21599, float(values["inflow.Q_nominal"])),
+        (21600, float(values["inflow.Q_low"])),
+        (28800, float(values["inflow.Q_low"])),
+    )
+    if second < 1 or second > 28800:
+        raise ObservationError("base-pattern report second leaves its horizon")
+    date_origin = 37257.0
+    evaluation_seconds = ((second - 1) * 1000.0 + 1.0) / 1000.0
+    x = date_origin + evaluation_seconds / 86400.0
+    for (left_second, left_value), (right_second, right_value) in zip(
+        points,
+        points[1:],
+        strict=False,
+    ):
+        x1 = date_origin + left_second / 86400.0
+        x2 = date_origin + right_second / 86400.0
+        if x <= x2:
+            return left_value + ((x - x1) * (right_value - left_value) / (x2 - x1))
+    return points[-1][1]
+
+
+def head_closure_residuals(
+    values: dict[str, Decimal],
+    *,
+    clearance_loss: float,
+    flow_m3_s: float,
+    obstruction: float,
+    static_head_m: float,
+) -> tuple[float, float]:
+    """Return original pump/system and repaired net-head/static-HGL closures."""
+    pump_head = physics.pump_head(
+        values,
+        flow_m3_s,
+        obstruction,
+        clearance_loss,
+    )
+    loss_head = physics.system_loss_head(values, flow_m3_s)
+    pump_closure = pump_head - (static_head_m + loss_head)
+    net_head_closure = static_head_m - (pump_head - loss_head)
+    return pump_closure, net_head_closure
 
 
 def segment_state(
@@ -211,10 +252,7 @@ def validate_semantic_exact(
     pump_a = _decoded(semantic, "pump_a_flow_m3_s")
     pump_b = _decoded(semantic, "pump_b_flow_m3_s")
     force_main_hex = semantic["series"]["force_main_flow_m3_s"]["values"]
-    expected_force_main = [
-        physics.binary32_hex(a + b)
-        for a, b in zip(pump_a, pump_b, strict=True)
-    ]
+    expected_force_main = [physics.binary32_hex(a + b) for a, b in zip(pump_a, pump_b, strict=True)]
     if force_main_hex != expected_force_main:
         raise ObservationError("derived force-main series differs")
     depth_hex = semantic["series"]["wet_well_depth_m"]["values"]
@@ -229,9 +267,7 @@ def validate_semantic_exact(
             )
         )
     )
-    if semantic["series"]["discharge_head_m"]["values"] != [
-        discharge_hex
-    ] * expected_periods:
+    if semantic["series"]["discharge_head_m"]["values"] != [discharge_hex] * expected_periods:
         raise ObservationError("fixed discharge HGL differs")
 
 
@@ -246,9 +282,7 @@ def segment_observations(
     """Compute threshold-free W3 observations for one semantic segment."""
     case = request["case"]
     pump_a_state, pump_b_state, selected = segment_state(case, segment_id)
-    expected_periods = (
-        60 if case["case_id"] == "G70_TRANSFER" else case["horizon_s"]
-    )
+    expected_periods = 60 if case["case_id"] == "G70_TRANSFER" else case["horizon_s"]
     validate_semantic_exact(
         semantic,
         request,
@@ -280,15 +314,12 @@ def segment_observations(
     off_flow: list[float] = []
     on_flow: list[float] = []
     for index in range(expected_periods):
-        expected_rate = _inflow(case, values, index + 1)
+        expected_rate = expected_report_inflow(case, values, index + 1)
         expected_inflow.append(inflow[index] - expected_rate)
         pumped = pump_a[index] + pump_b[index]
         pump_sum.append(force_main[index] - pumped)
         volume_identity.append(volume[index] - area * depth[index])
-        mass.append(
-            area * (depth[index] - prior_depth)
-            - (inflow[index] - pumped - overflow[index])
-        )
+        mass.append(area * (depth[index] - prior_depth) - (inflow[index] - pumped - overflow[index]))
         prior_depth = depth[index]
         for flow, setting, state in (
             (pump_a[index], settings_a[index], pump_a_state),
@@ -300,20 +331,16 @@ def segment_observations(
             on_flow.append(flow)
             obstruction = float(state["obstruction"])
             clearance = float(state["clearance-loss"])
-            observed_head = discharge_head[index] - wet_head[index]
-            pump_head.append(
-                observed_head
-                - physics.pump_head(
-                    values,
-                    flow,
-                    obstruction,
-                    clearance,
-                )
+            static_head = discharge_head[index] - wet_head[index]
+            pump_closure, net_head_closure = head_closure_residuals(
+                values,
+                clearance_loss=clearance,
+                flow_m3_s=flow,
+                obstruction=obstruction,
+                static_head_m=static_head,
             )
-            system_head.append(
-                observed_head
-                - physics.system_head(values, flow, depth[index])
-            )
+            pump_head.append(pump_closure)
+            system_head.append(net_head_closure)
             root_flow.append(
                 flow
                 - physics.operating_point(
@@ -323,10 +350,7 @@ def segment_observations(
                     clearance,
                 )
             )
-            reynolds_margin.append(
-                physics.reynolds_number(values, flow)
-                - float(values["system.Re_min"])
-            )
+            reynolds_margin.append(physics.reynolds_number(values, flow) - float(values["system.Re_min"]))
     reference_depth = initial_depth
     reference_running = False
     reference_depth_residual: list[float] = []
@@ -343,17 +367,14 @@ def segment_observations(
         expected_setting_a = int(reference_running and selected == "pump-a")
         expected_setting_b = int(reference_running and selected == "pump-b")
         control_edge_residual.append(
-            float(
-                abs(settings_a[index] - expected_setting_a)
-                + abs(settings_b[index] - expected_setting_b)
-            )
+            float(abs(settings_a[index] - expected_setting_a) + abs(settings_b[index] - expected_setting_b))
         )
         active_state = pump_a_state if selected == "pump-a" else pump_b_state
         reference_depth, reference_flow = physics.rk4_interval(
             values,
             clearance_loss=float(active_state["clearance-loss"]),
             depth_m=reference_depth,
-            inflow_m3_s=_inflow(case, values, index + 1),
+            inflow_m3_s=expected_report_inflow(case, values, index + 1),
             obstruction=float(active_state["obstruction"]),
             running=reference_running,
         )
@@ -365,9 +386,7 @@ def segment_observations(
     for item in mass:
         running_total += item
         cumulative_mass.append(running_total)
-    continuity = float(
-        semantic["diagnostics"]["flow_routing_continuity_error_percent"]
-    )
+    continuity = float(semantic["diagnostics"]["flow_routing_continuity_error_percent"])
     return {
         "C-R01": _summary(volume_identity),
         "C-R02": _summary(mass),
@@ -378,9 +397,7 @@ def segment_observations(
         "C-R07": _summary(system_head),
         "C-R08": _summary(root_flow),
         "C-R09": {
-            "minimum_reynolds_margin": (
-                _text(min(reynolds_margin)) if reynolds_margin else "0"
-            ),
+            "minimum_reynolds_margin": (_text(min(reynolds_margin)) if reynolds_margin else "0"),
             "sample_count": len(reynolds_margin),
         },
         "C-R10": _summary(reference_depth_residual),

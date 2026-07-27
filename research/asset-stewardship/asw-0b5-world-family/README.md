@@ -1,5 +1,5 @@
-# ABOUTME: Defines the B5-W0/W1/W2 research boundary for generation and independent certification.
-# ABOUTME: Prevents research code, raw engine artifacts, and candidate semantics from becoming production contracts.
+# ABOUTME: Defines the B5-W0/W1/W2 research boundary and approved pre-W3 composition repair.
+# ABOUTME: Prevents research code, raw engine artifacts, candidate semantics, and repair records from becoming production contracts.
 
 # ASW-0B5 world-family research implementation
 
@@ -13,7 +13,10 @@ engine, extracts allowlisted semantic candidates, and proves exact replay.
 W2 transfers only permitted canonical bytes into a separately executable
 certifier, reconstructs the W1 catalogue and physics independently, evaluates
 exact and qualitative invariants, and emits threshold-free residual
-observations.
+observations. The approved pre-W3 repair records three rules falsified by
+those observations and the real engine before quantitative composition
+begins. It changes no W1 member, W2 case, generator request, curve, or
+semantic candidate bytes.
 
 It is not an accepted family member, quantitative acceptance, package,
 manifest, runtime adapter, agent tool, scenario, or V3 decision. W2's only
@@ -65,7 +68,18 @@ B5-W2 additionally contains:
 - an end-to-end subprocess gate where generator code, SWMM, raw artifacts,
   engine paths, and the research workspace are absent.
 
-B5-W0/W1/W2 do not:
+The approved pre-W3 repair additionally contains:
+
+- one human-readable decision record preserving the falsifying evidence;
+- one canonical machine authority binding the W3, W4, and engine-mapping
+  predecessor hashes;
+- pinned SWMM report-time reconstruction for `C-R04`;
+- original pump/system and net-head/static-HGL closures for `C-R06` and
+  `C-R07`; and
+- a formula-derived absolute edge-time window for `C-R12` that preserves
+  exact edge identity and forbids fitting, warping, deletion, or phase reset.
+
+B5-W0/W1/W2 and the pre-W3 repair do not:
 
 - implement W4 tolerances, probes, or sensitivity decisions;
 - write a family result, promoted package, manifest, or V3 record;
@@ -178,10 +192,11 @@ disabled boundary.
 
 ## Next allowed slice
 
-The next staged commit is `B5-W3 — quantitative composition`. It may bind the
-accepted W4 tolerance authority to W2's existing `C-R01` through `C-R24`
-observations, evaluate the preregistered treatment for every required sample,
-and issue a composed quantitative result. It may not alter W2 requests,
-generation, curves, semantics, residual definitions, or observed values; tune
-a threshold from the candidate; skip a required residual; or promote a
-family member.
+The next staged commit is `B5-W3 — quantitative composition`. It must bind
+`declarations/w3-w4-quantitative-composition-repair.json` before applying the
+accepted W4 budgets to W2's `C-R01` through `C-R24` observations. It may
+evaluate every preregistered sample, derive the repaired `C-R12` window, and
+issue a new composed quantitative result. It may not alter W1/W2 bytes,
+candidate series, raw observations, inherited hard ceilings, or failed-rule
+history; fit a threshold from the candidate; warp or reset edge time; skip a
+required residual; edit a result in place; or promote a family member.

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from certifier import boundary, candidate, cases, physics
+from certifier import boundary, candidate, cases, observations, physics
 from generator import request, transfer
 
 B5_ROOT = Path(__file__).parents[2]
@@ -32,9 +32,7 @@ def _generation_result() -> dict[str, Any]:
             )
             cases[case_id] = {
                 "case_id": case_id,
-                "request_bytes": request.canonical_json_bytes(
-                    {"case_id": case_id}
-                ),
+                "request_bytes": request.canonical_json_bytes({"case_id": case_id}),
                 "segments": [
                     {
                         "curve_bytes": {
@@ -123,9 +121,7 @@ def test_independent_physics_validates_anchor_and_reconstructs_both_curve_forms(
     assert engine["points"][0]["head_m"] == "0.000000000"
     assert original["points"][-1]["flow_lps"] == "0.000000"
     assert engine["points"][-1]["flow_lps"] == "0.000000"
-    assert float(engine["points"][0]["flow_lps"]) < float(
-        original["points"][0]["flow_lps"]
-    )
+    assert float(engine["points"][0]["flow_lps"]) < float(original["points"][0]["flow_lps"])
 
 
 def test_independent_root_and_one_second_rk4_obey_physical_direction() -> None:
@@ -148,6 +144,46 @@ def test_independent_root_and_one_second_rk4_obey_physical_direction() -> None:
     assert clean_flow > obstructed_flow > 0.0
     assert reference_flow == pytest.approx(obstructed_flow)
     assert next_depth < depth
+
+
+def test_head_closures_use_original_loss_and_fixed_hgl_semantics() -> None:
+    authority = boundary.read_w1_declaration(W1_DECLARATION.read_bytes())
+    member = request.anchor_member(W1_DECLARATION.read_bytes())
+    values = physics.validate_member(member, authority)
+    depth = float(values["well.h_start"])
+    flow = physics.operating_point(values, depth, 0.75, 0.0)
+    static_head = float(values["system.z_d"]) - depth
+
+    pump_closure, net_head_closure = observations.head_closure_residuals(
+        values,
+        clearance_loss=0.0,
+        flow_m3_s=flow,
+        obstruction=0.75,
+        static_head_m=static_head,
+    )
+
+    assert pump_closure == pytest.approx(0.0, abs=1e-12)
+    assert net_head_closure == pytest.approx(-pump_closure, abs=1e-12)
+    assert abs(static_head - physics.pump_head(values, flow, 0.75, 0.0)) > 1.0
+
+
+def test_reconstructs_pinned_engine_report_inflow_at_step_boundaries() -> None:
+    authority = boundary.read_w1_declaration(W1_DECLARATION.read_bytes())
+    member = request.anchor_member(W1_DECLARATION.read_bytes())
+    values = physics.validate_member(member, authority)
+    case = cases.expected_case("G10_CLEAN_A_BASE", values)
+
+    transition_hex = [
+        physics.binary32_hex(observations.expected_report_inflow(case, values, second))
+        for second in (5400, 10800, 14400, 21600)
+    ]
+
+    assert transition_hex == [
+        "3ba3f89a",
+        "3c139001",
+        "3c7dd876",
+        "3c1363f5",
+    ]
 
 
 def test_reconstructs_every_authorized_case_without_generator_catalogue_access() -> None:
