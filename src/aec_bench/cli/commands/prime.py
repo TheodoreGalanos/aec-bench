@@ -9,12 +9,17 @@ import math
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict
 
 import typer
 
 from aec_bench.cli.commands.config import resolve_path
 from aec_bench.cli.output import emit, print_success
-from aec_bench.prime_lab.exporter import DEFAULT_PRIME_ENVIRONMENTS_DIR, normalise_environment_id
+from aec_bench.prime_lab.exporter import (
+    DEFAULT_PRIME_ENVIRONMENTS_DIR,
+    PrimeExportHarnessMode,
+    normalise_environment_id,
+)
 
 app = typer.Typer(help="Export aec-bench tasks for Prime Lab.")
 
@@ -40,6 +45,18 @@ class _PrimeTrainBufferConfig:
     hard_threshold: float | None = None
     easy_fraction: float | None = None
     hard_fraction: float | None = None
+
+
+class _SmokeCheckRow(TypedDict):
+    check: str
+    ok: bool
+    detail: str
+
+
+class _SmokeData(TypedDict):
+    environment_id: str
+    package_dir: str
+    checks: list[_SmokeCheckRow]
 
 
 @app.command("export")
@@ -70,7 +87,6 @@ def export_prime_lab(
 ) -> None:
     """Export selected tasks as a Prime Lab/verifiers environment package."""
     from aec_bench.prime_lab.exporter import (
-        PrimeExportHarnessMode,
         PrimeLabExportConfig,
         export_prime_lab_environment,
     )
@@ -99,7 +115,7 @@ def export_prime_lab(
             output_dir=output_dir,
             task_ids=selected_ids,
             version=version,
-            harness_mode=_parse_harness_mode(harness_mode, PrimeExportHarnessMode),
+            harness_mode=_parse_harness_mode(harness_mode),
             dataset_metadata=dataset_metadata,
         )
     )
@@ -664,7 +680,6 @@ def prime_smoke(
         run_prime_eval_smoke,
     )
     from aec_bench.prime_lab.exporter import (
-        PrimeExportHarnessMode,
         PrimeLabExportConfig,
         export_prime_lab_environment,
     )
@@ -684,7 +699,7 @@ def prime_smoke(
             tasks_root=resolved_tasks_root,
             output_dir=output_dir,
             task_ids=selected_ids,
-            harness_mode=_parse_harness_mode(harness_mode, PrimeExportHarnessMode),
+            harness_mode=_parse_harness_mode(harness_mode),
             dataset_metadata=dataset_metadata,
         )
     )
@@ -703,7 +718,7 @@ def prime_smoke(
             )
         )
 
-    data = {
+    data: _SmokeData = {
         "environment_id": env_id,
         "package_dir": str(result.package_dir),
         "checks": [{"check": check.name, "ok": check.ok, "detail": check.detail} for check in checks],
@@ -787,7 +802,6 @@ def _export_prime_package(
     harness_mode: str,
 ) -> _PrimePackageExport:
     from aec_bench.prime_lab.exporter import (
-        PrimeExportHarnessMode,
         PrimeLabExportConfig,
         export_prime_lab_environment,
     )
@@ -815,7 +829,7 @@ def _export_prime_package(
             output_dir=output_dir,
             task_ids=selected_ids,
             version=version,
-            harness_mode=_parse_harness_mode(harness_mode, PrimeExportHarnessMode),
+            harness_mode=_parse_harness_mode(harness_mode),
             dataset_metadata=dataset_metadata,
         )
     )
@@ -1198,15 +1212,15 @@ def _metadata_remote_environment(metadata: dict[str, object]) -> str | None:
     return None
 
 
-def _parse_harness_mode(raw_mode: str, mode_type: type) -> object:
+def _parse_harness_mode(raw_mode: str) -> PrimeExportHarnessMode:
     normalized = raw_mode.strip().replace("-", "_")
     try:
-        return mode_type(normalized)
+        return PrimeExportHarnessMode(normalized)
     except ValueError as exc:
         raise typer.BadParameter("harness mode must be one of: auto, single-turn, stateful-workspace") from exc
 
 
-def _render_smoke(data: dict[str, object]) -> None:
+def _render_smoke(data: _SmokeData) -> None:
     from rich.table import Table
 
     from aec_bench.cli.output import console

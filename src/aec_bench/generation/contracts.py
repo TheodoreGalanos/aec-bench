@@ -3,6 +3,8 @@
 
 from datetime import datetime
 
+from pydantic import NonNegativeInt
+
 from aec_bench.contracts.validators import StrictModel
 from aec_bench.templates.contracts import VisibilityLevel
 
@@ -14,6 +16,7 @@ class GenerationMetadata(StrictModel):
     template: str
     template_version: str = "1.0"
     seed: int
+    instance_index: NonNegativeInt = 0
     timestamp: datetime
     difficulty: str
     visibility_level: VisibilityLevel

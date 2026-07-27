@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+from typing import Any
 
 from aec_bench.adapters.rlm.client import RlmClient, RlmMessage
 from aec_bench.contracts.remediation import (
@@ -57,17 +58,19 @@ def _build_user_prompt(
     )
 
 
-def _extract_json(text: str) -> dict | None:
+def _extract_json(text: str) -> dict[str, Any] | None:
     """Try plain json.loads; fall back to finding the first JSON object block."""
     try:
-        return json.loads(text)
+        payload = json.loads(text)
+        return payload if isinstance(payload, dict) else None
     except json.JSONDecodeError:
         pass
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
         return None
     try:
-        return json.loads(match.group(0))
+        payload = json.loads(match.group(0))
+        return payload if isinstance(payload, dict) else None
     except json.JSONDecodeError:
         return None
 

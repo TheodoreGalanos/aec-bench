@@ -2,16 +2,132 @@
 # ABOUTME: Keeps common string and path rules explicit and reusable across boundary models.
 
 import os
+from collections.abc import Iterable
+from copy import deepcopy
 from pathlib import PurePath
-from typing import Annotated
+from typing import Annotated, Any, Never, Self, SupportsIndex
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict
+from pydantic import BaseModel, BeforeValidator, ConfigDict, model_validator
 
 
 class StrictModel(BaseModel):
     """Base for all contract models. Rejects extra fields at construction."""
 
     model_config = ConfigDict(extra="forbid")
+
+
+class _FrozenDict(dict[Any, Any]):
+    """Dict-compatible JSON container that rejects mutation through its public API."""
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> Self:
+        copied = type(self)((deepcopy(key, memo), deepcopy(value, memo)) for key, value in self.items())
+        memo[id(self)] = copied
+        return copied
+
+    @staticmethod
+    def _reject_mutation() -> Never:
+        raise TypeError("nested values in frozen contract models are immutable")
+
+    def __setitem__(self, key: Any, value: Any) -> Never:
+        self._reject_mutation()
+
+    def __delitem__(self, key: Any) -> Never:
+        self._reject_mutation()
+
+    def __ior__(self, other: Any) -> Self:  # type: ignore[misc]
+        self._reject_mutation()
+
+    def clear(self) -> Never:
+        self._reject_mutation()
+
+    def pop(self, key: Any, default: Any = None) -> Never:
+        self._reject_mutation()
+
+    def popitem(self) -> Never:
+        self._reject_mutation()
+
+    def setdefault(self, key: Any, default: Any = None) -> Never:
+        self._reject_mutation()
+
+    def update(self, *args: Any, **kwargs: Any) -> Never:
+        self._reject_mutation()
+
+
+class _FrozenList(list[Any]):
+    """List-compatible JSON container that rejects mutation through its public API."""
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> Self:
+        copied = type(self)(deepcopy(value, memo) for value in self)
+        memo[id(self)] = copied
+        return copied
+
+    @staticmethod
+    def _reject_mutation() -> Never:
+        raise TypeError("nested values in frozen contract models are immutable")
+
+    def __setitem__(self, key: Any, value: Any) -> Never:
+        self._reject_mutation()
+
+    def __delitem__(self, key: Any) -> Never:
+        self._reject_mutation()
+
+    def __iadd__(self, value: Iterable[Any]) -> Self:  # type: ignore[misc]
+        self._reject_mutation()
+
+    def __imul__(self, value: SupportsIndex) -> Self:
+        self._reject_mutation()
+
+    def append(self, value: Any) -> Never:
+        self._reject_mutation()
+
+    def clear(self) -> Never:
+        self._reject_mutation()
+
+    def extend(self, values: Any) -> Never:
+        self._reject_mutation()
+
+    def insert(self, index: SupportsIndex, value: Any) -> Never:
+        self._reject_mutation()
+
+    def pop(self, index: SupportsIndex = -1) -> Never:
+        self._reject_mutation()
+
+    def remove(self, value: Any) -> Never:
+        self._reject_mutation()
+
+    def reverse(self) -> Never:
+        self._reject_mutation()
+
+    def sort(self, *args: Any, **kwargs: Any) -> Never:
+        self._reject_mutation()
+
+
+def _deeply_freeze(value: Any) -> Any:
+    if isinstance(value, _FrozenDict | _FrozenList):
+        return value
+    if isinstance(value, dict):
+        return _FrozenDict((key, _deeply_freeze(item)) for key, item in value.items())
+    if isinstance(value, list):
+        return _FrozenList(_deeply_freeze(item) for item in value)
+    if isinstance(value, tuple):
+        return tuple(_deeply_freeze(item) for item in value)
+    if isinstance(value, set):
+        return frozenset(_deeply_freeze(item) for item in value)
+    if isinstance(value, frozenset):
+        return frozenset(_deeply_freeze(item) for item in value)
+    return value
+
+
+class FrozenStrictModel(StrictModel):
+    """Strict contract model with immutable fields and nested containers."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @model_validator(mode="after")
+    def freeze_nested_containers(self) -> Self:
+        for field_name in type(self).model_fields:
+            object.__setattr__(self, field_name, _deeply_freeze(getattr(self, field_name)))
+        return self
 
 
 class LenientModel(BaseModel):

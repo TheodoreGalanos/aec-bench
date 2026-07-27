@@ -510,3 +510,103 @@ class TestToolLoopAdvisorStats:
         assert result.usage_advisor_calls == 1
         assert result.usage_advisor_input_tokens == 100
         assert result.usage_advisor_output_tokens == 50
+
+    def test_failed_advisor_effect_is_counted_and_consumes_budget(self) -> None:
+        advisor_client = ReplayRlmClient(
+            [
+                RlmCompletionResponse(
+                    input_tokens=40,
+                    output_tokens=0,
+                    error_message="provider rejected request",
+                ),
+            ]
+        )
+        main_client = ReplayToolLoopClient(
+            [
+                ToolLoopCompletionResponse(
+                    tool_call=ToolCall(
+                        tool_call_id="tc_1",
+                        tool_name="advisor",
+                        arguments={"goal": "g1", "problem": "p1"},
+                    ),
+                ),
+                ToolLoopCompletionResponse(
+                    tool_call=ToolCall(
+                        tool_call_id="tc_2",
+                        tool_name="advisor",
+                        arguments={"goal": "g2", "problem": "p2"},
+                    ),
+                ),
+                ToolLoopCompletionResponse(output_text="final", done=True),
+            ]
+        )
+
+        adapter = ToolLoopAdapter(
+            adapter_name="test",
+            model_name="test-model",
+            client=main_client,
+            tool_executor=RecordingToolExecutor(results={}),
+            advisor_client=advisor_client,
+            advisor_config=AdvisorConfig(model="advisor-model", max_uses=1),
+        )
+
+        result = adapter.execute(AdapterRequest(instruction="test"))
+
+        assert result.agent_output.status == "completed"
+        assert result.usage_advisor_calls == 1
+        assert result.usage_advisor_input_tokens == 40
+        assert result.usage_advisor_output_tokens == 0
+
+    def test_advisor_budget_and_usage_are_scoped_to_one_execution(self) -> None:
+        advisor_client = ReplayRlmClient(
+            [
+                RlmCompletionResponse(
+                    output_text=_advisor_json(),
+                    input_tokens=100,
+                    output_tokens=50,
+                ),
+                RlmCompletionResponse(
+                    output_text=_advisor_json(),
+                    input_tokens=200,
+                    output_tokens=75,
+                ),
+            ]
+        )
+        main_client = ReplayToolLoopClient(
+            [
+                ToolLoopCompletionResponse(
+                    tool_call=ToolCall(
+                        tool_call_id="tc_1",
+                        tool_name="advisor",
+                        arguments={"goal": "g1", "problem": "p1"},
+                    ),
+                ),
+                ToolLoopCompletionResponse(output_text="first", done=True),
+                ToolLoopCompletionResponse(
+                    tool_call=ToolCall(
+                        tool_call_id="tc_2",
+                        tool_name="advisor",
+                        arguments={"goal": "g2", "problem": "p2"},
+                    ),
+                ),
+                ToolLoopCompletionResponse(output_text="second", done=True),
+            ]
+        )
+        adapter = ToolLoopAdapter(
+            adapter_name="test",
+            model_name="test-model",
+            client=main_client,
+            tool_executor=RecordingToolExecutor(results={}),
+            advisor_client=advisor_client,
+            advisor_config=AdvisorConfig(model="advisor-model", max_uses=1),
+        )
+
+        first = adapter.execute(AdapterRequest(instruction="first"))
+        second = adapter.execute(AdapterRequest(instruction="second"))
+
+        assert first.usage_advisor_calls == 1
+        assert first.usage_advisor_input_tokens == 100
+        assert first.usage_advisor_output_tokens == 50
+        assert second.usage_advisor_calls == 1
+        assert second.usage_advisor_input_tokens == 200
+        assert second.usage_advisor_output_tokens == 75

@@ -2,16 +2,25 @@
 # ABOUTME: that dispatches to library adapters via execution_entrypoint.
 
 import asyncio
+import hashlib
 import json
+import logging
+import tarfile
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from aec_bench.contracts.stage_execution import KernelInstructionOverride
 from agents.entrypoint_agent import (
     _BUNDLE_REMOTE_PATH,
+    _LIBRARY_ARCHIVE_REMOTE_PATH,
     _LIBRARY_SOURCE,
+    _RESULT_REMOTE_PATH,
     EntrypointAgent,
 )
+from tests.support.output_completion import make_output_commit_attestation
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -51,6 +60,10 @@ def test_entrypoint_agent_version() -> None:
     assert agent.version() == "1.0.0"
 
 
+def test_entrypoint_result_path_matches_harbor_artifact_contract() -> None:
+    assert _RESULT_REMOTE_PATH == "/workspace/agent_result.json"
+
+
 # ---------------------------------------------------------------------------
 # setup()
 # ---------------------------------------------------------------------------
@@ -72,16 +85,65 @@ def test_setup_verifies_python_available(tmp_path: Path) -> None:
 
 
 def test_setup_uploads_library_source(tmp_path: Path) -> None:
-    """setup() should upload the library source directory."""
+    """setup() should transfer the library as one archive instead of one file at a time."""
     agent = EntrypointAgent(logs_dir=tmp_path, model_name="test")
     env = _make_environment()
-    # python3 --version succeeds, pydantic_ai import succeeds
-    env.exec.return_value = _make_exec_result(return_code=0, stdout="Python 3.13")
+    archived_names: list[str] = []
+    archived_init: list[bytes] = []
+    setup_commands: list[str] = []
+
+    async def exec_side_effect(cmd: str, **kwargs: Any) -> MagicMock:
+        setup_commands.append(cmd)
+        return _make_exec_result(return_code=0, stdout="Python 3.13")
+
+    async def inspect_upload(local_path: str, remote_path: str) -> None:
+        assert "mkdir -p /workspace/.aec-bench" in setup_commands
+        assert remote_path == _LIBRARY_ARCHIVE_REMOTE_PATH
+        with tarfile.open(local_path, mode="r:gz") as archive:
+            archived_names.extend(member.name for member in archive.getmembers())
+            init_file = archive.extractfile("./__init__.py")
+            assert init_file is not None
+            archived_init.append(init_file.read())
+
+    env.exec = AsyncMock(side_effect=exec_side_effect)
+    env.upload_file = AsyncMock(side_effect=inspect_upload)
 
     with patch("agents.entrypoint_agent.inject_trajectory_writer", new_callable=AsyncMock):
         asyncio.run(agent.setup(env))
 
-    env.upload_dir.assert_called_once_with(str(_LIBRARY_SOURCE), "/opt/aec_bench/aec_bench")
+    env.upload_file.assert_awaited_once()
+    env.upload_dir.assert_not_awaited()
+    assert _LIBRARY_ARCHIVE_REMOTE_PATH.startswith("/workspace/.aec-bench/")
+    assert _LIBRARY_SOURCE.name == "aec_bench"
+    assert "./__init__.py" in archived_names
+    assert archived_init == [(_LIBRARY_SOURCE / "__init__.py").read_bytes()]
+    assert not any("__pycache__" in name for name in archived_names)
+    assert not any(name.endswith((".pyc", ".pyo")) for name in archived_names)
+    assert any(_LIBRARY_ARCHIVE_REMOTE_PATH in call.args[0] for call in env.exec.await_args_list)
+
+
+def test_setup_reports_archive_extraction_failure(tmp_path: Path) -> None:
+    """setup() should preserve remote extraction diagnostics and stop immediately."""
+    agent = EntrypointAgent(logs_dir=tmp_path, model_name="test")
+    env = _make_environment()
+
+    async def exec_side_effect(cmd: str, **kwargs: Any) -> MagicMock:
+        if cmd == "python3 --version":
+            return _make_exec_result(return_code=0, stdout="Python 3.13")
+        if _LIBRARY_ARCHIVE_REMOTE_PATH in cmd:
+            return _make_exec_result(return_code=1, stderr="archive extraction failed")
+        return _make_exec_result(return_code=0)
+
+    env.exec = AsyncMock(side_effect=exec_side_effect)
+
+    with (
+        patch("agents.entrypoint_agent.inject_trajectory_writer", new_callable=AsyncMock) as inject,
+        pytest.raises(RuntimeError, match="archive extraction failed"),
+    ):
+        asyncio.run(agent.setup(env))
+
+    inject.assert_not_awaited()
+    assert not any("pip install" in call.args[0] for call in env.exec.await_args_list)
 
 
 def test_setup_installs_pip_deps_when_pydantic_ai_missing(tmp_path: Path) -> None:
@@ -112,6 +174,30 @@ def test_setup_installs_pip_deps_when_pydantic_ai_missing(tmp_path: Path) -> Non
     # Find the pip install call
     pip_calls = [c for c in env.exec.call_args_list if "pip install" in str(c)]
     assert len(pip_calls) == 1, f"Expected one pip install call, got: {env.exec.call_args_list}"
+    assert '"pydantic-ai[anthropic,bedrock,openai]==1.60.0"' in pip_calls[0].args[0]
+
+
+def test_setup_reports_pip_install_failure(tmp_path: Path) -> None:
+    """setup() should fail before execution when the pinned runtime cannot be installed."""
+    agent = EntrypointAgent(logs_dir=tmp_path, model_name="test")
+    env = _make_environment()
+
+    async def exec_side_effect(cmd: str, **kwargs: Any) -> MagicMock:
+        if "import pydantic_ai" in cmd:
+            return _make_exec_result(return_code=1, stderr="runtime version mismatch")
+        if "pip install" in cmd:
+            return _make_exec_result(return_code=1, stderr="package resolution failed")
+        return _make_exec_result(return_code=0)
+
+    env.exec = AsyncMock(side_effect=exec_side_effect)
+
+    with (
+        patch("agents.entrypoint_agent.inject_trajectory_writer", new_callable=AsyncMock) as inject,
+        pytest.raises(RuntimeError, match="package resolution failed"),
+    ):
+        asyncio.run(agent.setup(env))
+
+    inject.assert_not_awaited()
 
 
 def test_setup_skips_pip_when_pydantic_ai_available(tmp_path: Path) -> None:
@@ -150,8 +236,9 @@ def test_setup_injects_trajectory_writer(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_run_writes_bundle_and_executes(tmp_path: Path) -> None:
+def test_run_writes_bundle_and_executes(tmp_path: Path, monkeypatch: Any) -> None:
     """run() should write an execution bundle and invoke the entrypoint."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
     agent = EntrypointAgent(
         logs_dir=tmp_path,
         model_name="claude-sonnet-4-20250514",
@@ -173,6 +260,10 @@ def test_run_writes_bundle_and_executes(tmp_path: Path) -> None:
         "usage_output_tokens": 567,
         "adapter_name": "entrypoint",
         "resolved_model": "claude-sonnet-4-20250514",
+        "failure_kind": "turn_limit_reached",
+        "stop_reason": "iteration_cap",
+        "turns_used": 8,
+        "max_turns": 8,
     }
 
     async def fake_download(source: str, target: Any) -> None:
@@ -197,6 +288,126 @@ def test_run_writes_bundle_and_executes(tmp_path: Path) -> None:
     # Should have set token counts from result
     assert context.n_input_tokens == 1234
     assert context.n_output_tokens == 567
+    assert context.metadata["failure_kind"] == "turn_limit_reached"
+    assert context.metadata["stop_reason"] == "iteration_cap"
+    assert context.metadata["turns_used"] == 8
+    assert context.metadata["max_turns"] == 8
+
+
+def test_run_surfaces_adapter_completion_reason_in_harbor_metadata(tmp_path: Path) -> None:
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="replay-rlm",
+        adapter="rlm",
+        client={"client_kind": "replay", "payload": {"responses": []}},
+    )
+    env = _make_environment()
+    context = MagicMock(metadata={})
+    env.exec.return_value = _make_exec_result(return_code=0)
+
+    async def fake_download(source: str, target: Any) -> None:
+        Path(target).write_text(
+            json.dumps(
+                {
+                    "adapter_name": "rlm",
+                    "resolved_model": "replay-rlm",
+                    "completion_reason": "output_contract_satisfied",
+                    "completion_assistance": {
+                        "contract_satisfied": True,
+                        "reminder_sent": True,
+                        "reminder_turn": 3,
+                        "explicit_final_turn": 4,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    env.download_file = AsyncMock(side_effect=fake_download)
+
+    asyncio.run(agent.run("Produce the artifact", env, context))
+
+    assert context.metadata["completion_reason"] == "output_contract_satisfied"
+    assert context.metadata["completion_assistance"] == {
+        "contract_satisfied": True,
+        "reminder_sent": True,
+        "reminder_turn": 3,
+        "explicit_final_turn": 4,
+    }
+
+
+def test_run_surfaces_output_commit_attestation_in_harbor_metadata(tmp_path: Path) -> None:
+    attestation = make_output_commit_attestation()
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="replay-rlm",
+        adapter="rlm",
+        client={"client_kind": "replay", "payload": {"responses": []}},
+    )
+    env = _make_environment()
+    context = MagicMock(metadata={})
+    env.exec.return_value = _make_exec_result(return_code=0)
+
+    async def fake_download(source: str, target: Any) -> None:
+        Path(target).write_text(
+            json.dumps(
+                {
+                    "adapter_name": "rlm",
+                    "resolved_model": "replay-rlm",
+                    "completion_reason": "output_contract_committed",
+                    "completion_commit": attestation.model_dump(mode="json"),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    env.download_file = AsyncMock(side_effect=fake_download)
+
+    asyncio.run(agent.run("Produce the artifact", env, context))
+
+    assert context.metadata["completion_reason"] == "output_contract_committed"
+    assert context.metadata["completion_commit"] == attestation.model_dump(mode="json")
+
+
+def test_run_keeps_harbor_runtime_logger_out_of_serialized_configuration(tmp_path: Path) -> None:
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="replay-direct",
+        logger=logging.getLogger("harbor.trial"),
+        adapter="direct",
+        client={"client_kind": "replay", "payload": {"output_text": "done"}},
+    )
+    env = _make_environment()
+    context = MagicMock(metadata={})
+    captured_bundles: list[dict[str, Any]] = []
+    env.exec.return_value = _make_exec_result(return_code=0)
+
+    async def capture_upload(local_path: str, remote_path: str) -> None:
+        if remote_path == _BUNDLE_REMOTE_PATH:
+            captured_bundles.append(json.loads(Path(local_path).read_text()))
+
+    async def fake_download(source: str, target: Any) -> None:
+        Path(target).write_text(json.dumps({"adapter_name": "entrypoint"}), encoding="utf-8")
+
+    env.upload_file = AsyncMock(side_effect=capture_upload)
+    env.download_file = AsyncMock(side_effect=fake_download)
+
+    asyncio.run(agent.run("Use replay output", env, context))
+
+    assert "logger" not in captured_bundles[0]["request"]["configuration"]
+
+
+def test_run_preserves_serialization_error_when_bundle_creation_fails(tmp_path: Path) -> None:
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="replay-direct",
+        adapter="direct",
+        client={"client_kind": "replay", "payload": {"output_text": "done"}},
+        non_serializable=object(),
+    )
+
+    with pytest.raises(TypeError, match="not JSON serializable"):
+        asyncio.run(agent.run("Reject invalid configuration", _make_environment(), MagicMock()))
 
 
 def test_run_uses_default_adapter_kind(tmp_path: Path) -> None:
@@ -284,8 +495,9 @@ def test_run_passes_timeout_to_exec(tmp_path: Path) -> None:
     assert exec_call.kwargs.get("timeout_sec") == 1200
 
 
-def test_bundle_contains_instruction_and_config(tmp_path: Path) -> None:
+def test_bundle_contains_instruction_and_config(tmp_path: Path, monkeypatch: Any) -> None:
     """The execution bundle should contain the instruction and agent config."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
     agent = EntrypointAgent(
         logs_dir=tmp_path,
         model_name="claude-sonnet-4-20250514",
@@ -324,6 +536,61 @@ def test_bundle_contains_instruction_and_config(tmp_path: Path) -> None:
     assert bundle_data["request"]["configuration"]["custom_param"] == "hello"
 
 
+def test_bundle_uses_only_a_content_bound_kernel_instruction_override(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
+    original = "Complete the whole drainage review."
+    effective = "Execute only the declared source_inventory stage."
+    override = KernelInstructionOverride(
+        mode="declared_stage",
+        task_id="civil/review/drainage",
+        original_instruction_sha256=hashlib.sha256(original.encode("utf-8")).hexdigest(),
+        effective_instruction=effective,
+        stage_id="source_inventory",
+        context_manifest_sha256="1" * 64,
+    )
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="claude-sonnet-4-20250514",
+        adapter="tool_loop",
+        kernel_instruction_override=override.model_dump(mode="json"),
+    )
+    env = _make_environment()
+    context = MagicMock()
+    context.metadata = {}
+    env.exec.return_value = _make_exec_result(return_code=0)
+    captured_bundles: list[dict[str, Any]] = []
+
+    async def capture_upload(local_path: str, remote_path: str) -> None:
+        if remote_path == _BUNDLE_REMOTE_PATH:
+            captured_bundles.append(json.loads(Path(local_path).read_text()))
+
+    async def fake_download(source: str, target: Any) -> None:
+        Path(target).parent.mkdir(parents=True, exist_ok=True)
+        Path(target).write_text(json.dumps({"adapter_name": "entrypoint"}))
+
+    env.upload_file = AsyncMock(side_effect=capture_upload)
+    env.download_file = AsyncMock(side_effect=fake_download)
+
+    asyncio.run(agent.run(original, env, context))
+
+    assert captured_bundles[0]["request"]["instruction"] == effective
+    assert captured_bundles[0]["request"]["configuration"]["kernel_instruction_override"] == (
+        override.model_dump(mode="json")
+    )
+
+    mismatched = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="claude-sonnet-4-20250514",
+        adapter="tool_loop",
+        kernel_instruction_override=override.model_dump(mode="json"),
+    )
+    with pytest.raises(ValueError, match="original instruction"):
+        asyncio.run(mismatched.run("Different task bytes.", env, context))
+
+
 def test_bundle_includes_serialized_client_payload(tmp_path: Path) -> None:
     """EntrypointAgent should forward serialized client settings to execution_entrypoint."""
     agent = EntrypointAgent(
@@ -356,3 +623,297 @@ def test_bundle_includes_serialized_client_payload(tmp_path: Path) -> None:
     assert captured_bundles[0]["execution"]["payload"] == {
         "client": {"client_kind": "replay", "payload": {"output_text": "done"}}
     }
+
+
+def test_bundle_materializes_harness_tools_context_and_lineage(tmp_path: Path) -> None:
+    """Typed harness settings must reach the adapter request rather than remain metadata."""
+    tools = [
+        {
+            "name": "read-evidence",
+            "source": "tools/read_evidence.py",
+            "description": "Read one declared evidence packet.",
+            "returns_image": False,
+        }
+    ]
+    meta_harness_context = {
+        "kernel_sha256": "a" * 64,
+        "harness_id": "hx-review",
+        "harness_sha256": "b" * 64,
+        "program_id": "px-review",
+        "program_sha256": "c" * 64,
+        "bundle_id": "bundle-review",
+        "bundle_sha256": "d" * 64,
+        "program_node_id": "review",
+        "binding_ids": ["agent", "tools"],
+        "repair_iteration": 0,
+        "attempt": 1,
+        "motif_ids": [],
+    }
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="replay-tool-loop",
+        adapter="tool_loop",
+        system_prompt="Review evidence conservatively.",
+        tools=tools,
+        meta_harness_context=meta_harness_context,
+    )
+    env = _make_environment()
+    context = MagicMock()
+    context.metadata = {}
+    env.exec.return_value = _make_exec_result(return_code=0)
+    captured_bundles: list[dict[str, Any]] = []
+
+    async def capture_upload(local_path: str, remote_path: str) -> None:
+        if remote_path == _BUNDLE_REMOTE_PATH:
+            captured_bundles.append(json.loads(Path(local_path).read_text()))
+
+    async def fake_download(source: str, target: Any) -> None:
+        Path(target).parent.mkdir(parents=True, exist_ok=True)
+        Path(target).write_text(json.dumps({"adapter_name": "entrypoint"}))
+
+    env.upload_file = AsyncMock(side_effect=capture_upload)
+    env.download_file = AsyncMock(side_effect=fake_download)
+
+    asyncio.run(agent.run("Review this package", env, context))
+
+    request = captured_bundles[0]["request"]
+    assert request["system_prompt"] == "Review evidence conservatively."
+    assert request["tools"] == tools
+    assert request["configuration"]["meta_harness_context"] == meta_harness_context
+
+
+def test_anthropic_client_injects_only_approved_host_secret_without_serializing_it(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    secret = "anthropic-secret-marker"
+    unselected_secret = "openai-secret-marker"
+    monkeypatch.setenv("ANTHROPIC_API_KEY", secret)
+    monkeypatch.setenv("OPENAI_API_KEY", unselected_secret)
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="claude-sonnet-4-20250514",
+        adapter="direct",
+        client={
+            "client_kind": "anthropic_api",
+            "payload": {"api_key_env": "ANTHROPIC_API_KEY", "max_tokens": 4096},
+        },
+    )
+    env = _make_environment()
+    context = MagicMock()
+    context.metadata = {}
+    env.exec.return_value = _make_exec_result(return_code=0)
+    captured_bundles: list[dict[str, Any]] = []
+
+    async def capture_upload(local_path: str, remote_path: str) -> None:
+        if remote_path == _BUNDLE_REMOTE_PATH:
+            captured_bundles.append(json.loads(Path(local_path).read_text()))
+
+    async def fake_download(source: str, target: Any) -> None:
+        Path(target).write_text(json.dumps({"adapter_name": "entrypoint"}))
+
+    env.upload_file = AsyncMock(side_effect=capture_upload)
+    env.download_file = AsyncMock(side_effect=fake_download)
+
+    asyncio.run(agent.run("Use Anthropic", env, context))
+
+    entrypoint_call = next(call for call in env.exec.call_args_list if "execution_entrypoint" in call.args[0])
+    serialized_bundle = json.dumps(captured_bundles[0], sort_keys=True)
+    assert entrypoint_call.kwargs["env"] == {"ANTHROPIC_API_KEY": secret}
+    assert secret not in entrypoint_call.args[0]
+    assert secret not in serialized_bundle
+    assert unselected_secret not in serialized_bundle
+    assert captured_bundles[0]["execution"]["payload"]["client"]["payload"]["api_key_env"] == ("ANTHROPIC_API_KEY")
+
+
+def test_model_selected_azure_provider_receives_only_azure_runtime_configuration(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "azure-secret-marker")
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://approved-resource.openai.azure.com")
+    monkeypatch.setenv("AZURE_OPENAI_API_VERSION", "2025-01-01-preview")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "unselected-anthropic-secret")
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="gpt-4.1-mini",
+        adapter="rlm",
+    )
+    env = _make_environment()
+    context = MagicMock()
+    context.metadata = {}
+    env.exec.return_value = _make_exec_result(return_code=0)
+
+    async def fake_download(source: str, target: Any) -> None:
+        Path(target).write_text(json.dumps({"adapter_name": "entrypoint"}))
+
+    env.download_file = AsyncMock(side_effect=fake_download)
+
+    asyncio.run(agent.run("Use Azure", env, context))
+
+    entrypoint_call = next(call for call in env.exec.call_args_list if "execution_entrypoint" in call.args[0])
+    assert entrypoint_call.kwargs["env"] == {
+        "AZURE_OPENAI_API_KEY": "azure-secret-marker",
+        "AZURE_OPENAI_API_VERSION": "2025-01-01-preview",
+        "AZURE_OPENAI_ENDPOINT": "https://approved-resource.openai.azure.com",
+    }
+
+
+def test_model_selected_bedrock_direct_provider_receives_only_bedrock_runtime_configuration(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setenv("AWS_BEARER_TOKEN_BEDROCK", "bedrock-secret-marker")
+    monkeypatch.setenv("AWS_REGION", "ap-southeast-2")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "unselected-anthropic-secret")
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="au.anthropic.claude-sonnet-4-6",
+        adapter="direct",
+    )
+    env = _make_environment()
+    context = MagicMock()
+    context.metadata = {}
+    env.exec.return_value = _make_exec_result(return_code=0)
+
+    async def fake_download(source: str, target: Any) -> None:
+        Path(target).write_text(json.dumps({"adapter_name": "entrypoint"}))
+
+    env.download_file = AsyncMock(side_effect=fake_download)
+
+    asyncio.run(agent.run("Use Bedrock", env, context))
+
+    entrypoint_call = next(call for call in env.exec.call_args_list if "execution_entrypoint" in call.args[0])
+    assert entrypoint_call.kwargs["env"] == {
+        "AWS_BEARER_TOKEN_BEDROCK": "bedrock-secret-marker",
+        "AWS_REGION": "ap-southeast-2",
+    }
+
+
+def test_missing_required_provider_credential_fails_before_bundle_upload(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.delenv("TOGETHER_API_KEY", raising=False)
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="together:meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        adapter="direct",
+        client={"client_kind": "together_chat", "payload": {}},
+    )
+    env = _make_environment()
+
+    with pytest.raises(RuntimeError, match="TOGETHER_API_KEY"):
+        asyncio.run(agent.run("Use Together", env, MagicMock()))
+
+    env.upload_file.assert_not_awaited()
+    env.exec.assert_not_awaited()
+
+
+def test_replay_client_requires_no_secret_and_receives_no_host_environment(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "must-not-cross")
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="claude-looking-replay-model",
+        adapter="direct",
+        client={"client_kind": "replay", "payload": {"output_text": "done"}},
+    )
+    env = _make_environment()
+    context = MagicMock()
+    context.metadata = {}
+    env.exec.return_value = _make_exec_result(return_code=0)
+
+    async def fake_download(source: str, target: Any) -> None:
+        Path(target).write_text(json.dumps({"adapter_name": "entrypoint"}))
+
+    env.download_file = AsyncMock(side_effect=fake_download)
+
+    asyncio.run(agent.run("Replay", env, context))
+
+    entrypoint_call = next(call for call in env.exec.call_args_list if "execution_entrypoint" in call.args[0])
+    assert "env" not in entrypoint_call.kwargs
+
+
+def test_client_cannot_request_an_unapproved_host_environment_name(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setenv("UNRELATED_PRIVATE_TOKEN", "must-not-cross")
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="claude-sonnet-4-20250514",
+        adapter="direct",
+        client={
+            "client_kind": "anthropic_api",
+            "payload": {"api_key_env": "UNRELATED_PRIVATE_TOKEN"},
+        },
+    )
+
+    with pytest.raises(ValueError, match="not approved for client kind 'anthropic_api'"):
+        asyncio.run(agent.run("Do not exfiltrate", _make_environment(), MagicMock()))
+
+
+def test_literal_provider_secret_in_client_payload_is_rejected_before_serialization(
+    tmp_path: Path,
+) -> None:
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="replay",
+        adapter="direct",
+        client={
+            "client_kind": "replay",
+            "payload": {"api_key": "literal-secret-must-not-serialize"},
+        },
+    )
+
+    with pytest.raises(ValueError, match="provider secrets must come from the host environment"):
+        asyncio.run(agent.run("Reject literals", _make_environment(), MagicMock()))
+
+
+def test_secret_values_are_redacted_from_failure_metadata(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    secret = "metadata-secret-marker"
+    monkeypatch.setenv("ANTHROPIC_API_KEY", secret)
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="claude-sonnet-4-20250514",
+        adapter="direct",
+        client={"client_kind": "anthropic_api", "payload": {}},
+    )
+    env = _make_environment()
+    context = MagicMock()
+    context.metadata = {}
+    env.exec.return_value = _make_exec_result(return_code=1, stderr=f"provider failed with {secret}")
+    env.download_file = AsyncMock(side_effect=RuntimeError(f"download failed near {secret}"))
+
+    asyncio.run(agent.run("Redact failures", env, context))
+
+    serialized_metadata = json.dumps(context.metadata, sort_keys=True)
+    assert secret not in serialized_metadata
+    assert "<redacted>" in serialized_metadata
+
+
+@pytest.mark.parametrize("timeout_sec", [0, -1])
+def test_non_positive_timeout_fails_before_upload_or_execution(
+    tmp_path: Path,
+    timeout_sec: int,
+) -> None:
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="replay",
+        adapter="direct",
+        timeout_sec=timeout_sec,
+        client={"client_kind": "replay", "payload": {"output_text": "done"}},
+    )
+    env = _make_environment()
+
+    with pytest.raises(ValueError, match="timeout_sec must be a positive integer"):
+        asyncio.run(agent.run("Reject invalid timeout", env, MagicMock()))
+
+    env.upload_file.assert_not_awaited()
+    env.exec.assert_not_awaited()

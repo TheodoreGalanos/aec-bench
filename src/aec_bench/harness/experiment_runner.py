@@ -1,6 +1,7 @@
 # ABOUTME: Manifest-aware Harbor import orchestration for the Python harness boundary.
 # ABOUTME: Validates Harbor job artefacts against the planning contracts before ledger persistence.
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -31,6 +32,7 @@ class ExperimentImportResult:
     unexpected_agents: list[str] = field(default_factory=list)
     unexpected_backends: list[str] = field(default_factory=list)
     output_paths: list[Path] = field(default_factory=list)
+    ledger_paths: list[Path] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -44,20 +46,26 @@ class HarborImportExperimentRunner:
         *,
         job_dir: Path,
         manifest: ExperimentManifest,
+        record_transform: Callable[[TrialRecord], TrialRecord] | None = None,
+        resolved_tasks: tuple[TaskDefinition, ...] | None = None,
     ) -> ExperimentImportResult:
-        selected_tasks = self._selected_tasks(manifest)
+        selected_tasks = list(resolved_tasks) if resolved_tasks is not None else self._selected_tasks(manifest)
         selected_task_ids = {task.task_id for task in selected_tasks}
         planned_trials = build_trial_plan(manifest, selected_tasks)
         tracker = ImportProgressTracker(
             experiment_id=manifest.experiment_id,
             selected_task_count=len(selected_task_ids),
         )
-        records = import_harbor_job(
+        imported_records = import_harbor_job(
             job_dir=job_dir,
             repo_root=self.repo_root,
             experiment_id=manifest.experiment_id,
             dataset_id=manifest.tasks.dataset,
         )
+        records = [
+            TrialRecord.model_validate(record if record_transform is None else record_transform(record))
+            for record in imported_records
+        ]
         unexpected_task_ids = sorted(
             {record.task.task_id for record in records if record.task.task_id not in selected_task_ids}
         )
@@ -95,14 +103,22 @@ class HarborImportExperimentRunner:
             )
 
         output_paths: list[Path] = []
+        ledger_paths: list[Path] = []
         for record in records:
             tracker.record_discovered()
             try:
-                output_paths.append(write_trial_record(ledger_root=self.ledger_root, record=record))
-            except DuplicateTrialRecordError:
+                path = write_trial_record(ledger_root=self.ledger_root, record=record)
+            except DuplicateTrialRecordError as error:
+                path = self.ledger_root / record.experiment_id / f"{record.trial_id}.json"
+                if not path.is_file() or path.read_bytes() != record.model_dump_json(indent=2).encode("utf-8"):
+                    raise ExperimentImportMismatchError(
+                        "duplicate TrialRecord identity resolves to different ledger content"
+                    ) from error
                 tracker.record_duplicate()
             else:
+                output_paths.append(path)
                 tracker.record_imported()
+            ledger_paths.append(path)
 
         snapshot = tracker.snapshot()
         return ExperimentImportResult(
@@ -117,6 +133,7 @@ class HarborImportExperimentRunner:
             unexpected_agents=unexpected_agents,
             unexpected_backends=unexpected_backends,
             output_paths=output_paths,
+            ledger_paths=ledger_paths,
         )
 
     def _selected_tasks(self, manifest: ExperimentManifest) -> list[TaskDefinition]:

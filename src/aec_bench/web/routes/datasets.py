@@ -7,6 +7,7 @@ from collections import defaultdict
 
 from fastapi import APIRouter, HTTPException, Request, status
 
+from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.dataset.integrity import verify_dataset_integrity
 from aec_bench.dataset.storage import list_datasets
 from aec_bench.ledger.reader import read_trial_records
@@ -73,7 +74,7 @@ def dataset_detail_api(
     # Always load experiment results
     records = read_trial_records(settings.ledger_root)
     ds_records = [r for r in records if getattr(r, "dataset_id", None) == dataset_id]
-    by_exp: dict[str, list] = defaultdict(list)
+    by_exp: dict[str, list[TrialRecord]] = defaultdict(list)
     for r in ds_records:
         by_exp[r.experiment_id].append(r)
 

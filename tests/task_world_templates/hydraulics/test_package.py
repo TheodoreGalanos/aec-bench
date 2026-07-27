@@ -41,20 +41,20 @@ CANONICAL_RUNTIME_DEPENDENCIES = {
 EXPECTED_MAJOR_PACKAGE_MANIFEST = {
     "artifact_sha256": {
         "README.md": "2ba094a3f6de26e168023e910705fc089dcfaaefdeec1fdd8079e7e3432210dc",
-        "engine/identity.json": "20f62d7ade3c74f8323fe0037b4f10b42b173f0259a0ae00fe2ed33b2aaf7188",
+        "engine/identity.json": "974abdde0550cd2c5cf8e58cc774caa5a9750a1475e331f921800a5240999665",
         "source/source-state.json": "7e361a26f66854e79bfcc9ddeb4cee023b6f2edeacce1ba9a38bdf953253f4c4",
     },
-    "package_sha256": "0aa33961491ff04d9ea293dcbeff30a09c0b812512e1866ee5e6b82feca89ea4",
+    "package_sha256": "10517924e6250ac9d0f3e84d94e817aefc7f1e1a206ffc790eba777ef29626df",
     "schema_version": "1",
     "world_id": WORLD_ID,
 }
 EXPECTED_MAJOR_RUN_ARTIFACTS = {
-    "report.md": "c7befe11360a39f3bd0c003829b286e2b3a2445b0917314345f96631f5f462f5",
-    "request.json": "61524034e2dc43ed16dd870096c2c5b00dc21ea6d481f6d8c27fa3ea18c8cc4b",
-    "results.json": "f96e0c8ea6ba96130334273e4079231a10cc5f267f6fd41e48ab92a63012e344",
-    "timeseries.json": "44757c53830daba2311ced55c5cfb35a402ee849689ef6f222ab9f1044a16630",
+    "report.md": "53d1c3820ed53510b789a3f7e66018327797efef5c82a23553048924d0712997",
+    "request.json": "37fcedf3c6cff689072f3e3d679f23cbd7b25f0a0f2619c47cdc07ae9155432f",
+    "results.json": "d4498f017b88e5fe0519add6dc0ca70e2f841504e45e80f529e949ff93cd81d0",
+    "timeseries.json": "72b7d0272f5c9592d370cc2634f52b2dfb4d01a204497ad7dfc063c2af74c734",
 }
-EXPECTED_MAJOR_RUN_ID = "hydraulic-5bb7156cb1e40dc5fe8970b787126908e8f43db73e19eeaa0277fb3a29b19953"
+EXPECTED_MAJOR_RUN_ID = "hydraulic-accf99ad186cdb1276c1a464695995d6f72dfef22dd0d3055b72b5f6cc9829a4"
 
 
 def _tree_bytes(root: Path) -> dict[str, bytes]:

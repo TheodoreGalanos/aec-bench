@@ -15,10 +15,16 @@ from typing import Protocol, cast
 
 from aec_bench.config import resolve_artifact_path
 from aec_bench.contracts.behavioral_types import (
-    BondType,
-    ClassifiedTrace,
-    StructuralScore,
-    TurnClassification,
+    BondType as BondType,
+)
+from aec_bench.contracts.behavioral_types import (
+    ClassifiedTrace as ClassifiedTrace,
+)
+from aec_bench.contracts.behavioral_types import (
+    StructuralScore as StructuralScore,
+)
+from aec_bench.contracts.behavioral_types import (
+    TurnClassification as TurnClassification,
 )
 from aec_bench.contracts.jsonl import read_jsonl
 from aec_bench.contracts.trial_record import TrialRecord
@@ -539,12 +545,12 @@ def _parse_trajectory_to_turns(path: Path) -> list[Turn]:
     each produce a standalone Turn. All other steps produce one Turn per step with
     assistant content, tool_calls, and tool_results aggregated from their entries.
     """
-    from aec_bench.contracts.trajectory import read_trajectory
+    from aec_bench.contracts.trajectory import TrajectoryEntry, read_trajectory
 
     all_entries = read_trajectory(path)
     # Exclude warmup entries — they are cache priming, not agent reasoning
     entries = [e for e in all_entries if e.call_type != "warmup"]
-    steps: dict[int, list] = {}
+    steps: dict[int, list[TrajectoryEntry]] = {}
     for entry in entries:
         steps.setdefault(entry.step, []).append(entry)
 

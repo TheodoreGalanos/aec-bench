@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import httpx
@@ -148,16 +149,6 @@ class BedrockBehavioralLLMClient:
         from botocore.config import Config
 
         region = os.environ.get(self.region_env, "") or os.environ.get(self.fallback_region_env, "")
-        session_kwargs: dict[str, object] = {}
-        if region:
-            session_kwargs["region_name"] = region
-
-        timeout_config_kwargs: dict[str, object] = {
-            "read_timeout": self.read_timeout_seconds,
-            "connect_timeout": self.connect_timeout_seconds,
-        }
-
-        client_kwargs: dict[str, object] = {}
         bearer_token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK", "")
         if bearer_token:
             from botocore.session import Session as BotocoreSession
@@ -176,16 +167,24 @@ class BedrockBehavioralLLMClient:
 
             session = boto3.Session(
                 botocore_session=_BearerSession(bearer_token),
-                **session_kwargs,
+                region_name=region or None,
             )
-            client_kwargs["config"] = Config(
+            config = Config(
                 signature_version="bearer",
-                **timeout_config_kwargs,
+                read_timeout=self.read_timeout_seconds,
+                connect_timeout=self.connect_timeout_seconds,
             )
-            client = session.client("bedrock-runtime", **client_kwargs)
+            client = session.client("bedrock-runtime", config=config)
         else:
-            client_kwargs["config"] = Config(**timeout_config_kwargs)
-            client = boto3.client("bedrock-runtime", **session_kwargs, **client_kwargs)
+            config = Config(
+                read_timeout=self.read_timeout_seconds,
+                connect_timeout=self.connect_timeout_seconds,
+            )
+            client = boto3.client(
+                "bedrock-runtime",
+                region_name=region or None,
+                config=config,
+            )
 
         deadline = time.monotonic() + self.retry_budget_seconds
         attempt = 0
@@ -256,15 +255,21 @@ def _extract_text(payload: dict[str, object]) -> str:
     return "\n".join(parts)
 
 
-def _extract_bedrock_text(response: dict) -> str:
+def _extract_bedrock_text(response: Mapping[str, object]) -> str:
     """Extract text from a Bedrock Converse API response."""
     output = response.get("output", {})
+    if not isinstance(output, dict):
+        return ""
     message = output.get("message", {})
+    if not isinstance(message, dict):
+        return ""
     content = message.get("content", [])
-    parts = []
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
     for block in content:
         if isinstance(block, dict) and "text" in block:
-            parts.append(block["text"])
+            parts.append(str(block["text"]))
     return "\n".join(parts)
 
 

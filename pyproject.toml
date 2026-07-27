@@ -30,6 +30,7 @@ aec-bench = "aec_bench.cli.main:run"
 
 [dependency-groups]
 dev = [
+    "boto3-stubs>=1.43.56",
     "fastapi>=0.128,<1",
     "hypothesis>=6.130,<7",
     "jsonschema>=4.26.0",
@@ -41,6 +42,7 @@ dev = [
     "pytest>=9.0,<10",
     "rich-pixels>=3.0.1",
     "ruff>=0.11,<0.12",
+    "types-pyyaml>=6.0.12.20260724",
     "uvicorn>=0.38,<1",
     "verifiers>=0.1.14",
 ]
@@ -133,4 +135,5 @@ select = ["E", "F", "I", "B", "UP"]
 [tool.mypy]
 python_version = "3.13"
 files = ["src", "tests"]
+mypy_path = "typings"
 strict = true

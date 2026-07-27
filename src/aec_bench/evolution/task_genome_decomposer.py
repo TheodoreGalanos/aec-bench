@@ -54,10 +54,10 @@ def decompose_task_genome(
     """Run semantic decomposition with an injected or real PydanticAI reviewer."""
     prompt = build_decomposition_prompt(packet)
     if reviewer is not None:
-        result = reviewer(prompt)
-        if isinstance(result, TaskGenomeManifest):
-            return result
-        return TaskGenomeManifest.model_validate(result)
+        reviewer_result = reviewer(prompt)
+        if isinstance(reviewer_result, TaskGenomeManifest):
+            return reviewer_result
+        return TaskGenomeManifest.model_validate(reviewer_result)
 
     from pydantic_ai import Agent
 
@@ -70,5 +70,5 @@ def decompose_task_genome(
         output_type=TaskGenomeManifest,
         retries=2,
     )
-    result = agent.run_sync(prompt)
-    return result.output
+    run_result = agent.run_sync(prompt)
+    return run_result.output

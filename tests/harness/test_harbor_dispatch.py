@@ -1,11 +1,15 @@
 # ABOUTME: Tests for the Harbor dispatch boundary in the Python harness.
 # ABOUTME: Verifies config generation, agent resolution, and injected command execution.
 
+import importlib
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+import pytest
 import yaml  # type: ignore[import-untyped]
+from harbor.models.job.config import JobConfig  # type: ignore[import-untyped]
 
 from aec_bench.contracts.experiment_manifest import (
     AgentConfig,
@@ -15,13 +19,30 @@ from aec_bench.contracts.experiment_manifest import (
     ReviewerEndpointConfig,
     TaskSelector,
 )
+from aec_bench.contracts.harness_instance import AgentBindingConfig
 from aec_bench.harness.harbor_dispatch import (
     MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH,
+    HarborDispatchError,
     HarborExperimentDispatcher,
+    ProposalHarborDispatchInput,
     SubprocessHarborExecutor,
+    build_harbor_entrypoint_execution_bundle,
     build_harbor_job_config,
+    build_proposal_harbor_job_config,
 )
+from aec_bench.harness.proposal_session_config import (
+    ProposalSessionHostConfig,
+)
+from aec_bench.harness.proposal_task_package import (
+    ProposalTaskPackageManifest,
+)
+from aec_bench.meta_harness.program_proposal_compilation import (
+    ProposalRunSessionBundle,
+)
+from aec_bench.tasks.loader import load_task_definition
 from tests.support.task_factories import make_task_definition
+
+_PROPOSAL_MORPH_ENVIRONMENT_IMPORT_PATH = "aec_bench.providers.proposal_morph_harbor:ProposalMorphHarborEnvironment"
 
 
 class FakeExecutor:
@@ -70,6 +91,262 @@ def test_build_harbor_job_config_uses_precise_task_paths() -> None:
     ]
 
 
+def test_build_harbor_job_config_uses_exact_external_task_path(
+    tmp_path: Path,
+) -> None:
+    task = make_task_definition(task_id="civil/proposal-session/source-free")
+    task_path = tmp_path / "derived-task"
+    task_path.mkdir()
+    manifest = ExperimentManifest(
+        experiment_id="proposal-session-001",
+        name="Proposal session",
+        tasks=TaskSelector(include_patterns=[task.task_id]),
+        agents=[AgentConfig(name="proposal", adapter="direct", model="test-model")],
+        compute=ComputeConfig(backend="docker"),
+    )
+
+    config = build_harbor_job_config(
+        manifest=manifest,
+        tasks=[task],
+        task_path_overrides={task.task_id: task_path},
+    )
+
+    assert config["tasks"] == [{"path": str(task_path.resolve())}]
+
+
+def test_build_harbor_job_config_rejects_unmatched_task_path_override(
+    tmp_path: Path,
+) -> None:
+    task = make_task_definition(task_id="civil/proposal-session/source-free")
+    task_path = tmp_path / "derived-task"
+    task_path.mkdir()
+    manifest = ExperimentManifest(
+        experiment_id="proposal-session-001",
+        name="Proposal session",
+        tasks=TaskSelector(include_patterns=[task.task_id]),
+        agents=[AgentConfig(name="proposal", adapter="direct", model="test-model")],
+        compute=ComputeConfig(backend="docker"),
+    )
+
+    with pytest.raises(HarborDispatchError, match="unknown task ids"):
+        build_harbor_job_config(
+            manifest=manifest,
+            tasks=[task],
+            task_path_overrides={"civil/proposal-session/other": task_path},
+        )
+
+
+@pytest.mark.parametrize(
+    ("override_path", "message"),
+    [
+        (Path("relative-derived-task"), "must be absolute"),
+        (Path("/definitely/missing/aec-bench-derived-task"), "must be an existing directory"),
+    ],
+)
+def test_build_harbor_job_config_rejects_unsafe_task_path_override(
+    override_path: Path,
+    message: str,
+) -> None:
+    task = make_task_definition(task_id="civil/proposal-session/source-free")
+    manifest = ExperimentManifest(
+        experiment_id="proposal-session-001",
+        name="Proposal session",
+        tasks=TaskSelector(include_patterns=[task.task_id]),
+        agents=[AgentConfig(name="proposal", adapter="direct", model="test-model")],
+        compute=ComputeConfig(backend="docker"),
+    )
+
+    with pytest.raises(HarborDispatchError, match=message):
+        build_harbor_job_config(
+            manifest=manifest,
+            tasks=[task],
+            task_path_overrides={task.task_id: override_path},
+        )
+
+
+def test_build_harbor_job_config_preserves_manifest_repetitions() -> None:
+    manifest = ExperimentManifest(
+        experiment_id="experiment-repeated",
+        name="Repeated dispatch config",
+        tasks=TaskSelector(domains=["mechanical"]),
+        agents=[AgentConfig(name="direct", adapter="direct", model="test-model")],
+        compute=ComputeConfig(backend="docker"),
+        repetitions=3,
+    )
+
+    config = build_harbor_job_config(
+        manifest=manifest,
+        tasks=[make_task_definition(task_id="mechanical/heat-load/alpha")],
+    )
+
+    assert config["n_attempts"] == 3
+
+
+def test_build_proposal_harbor_job_config_binds_exact_host_runtime_and_fixed_h0(
+    tmp_path: Path,
+) -> None:
+    dispatch, bundle = _proposal_dispatch_input(tmp_path)
+
+    config = build_proposal_harbor_job_config(
+        dispatch=dispatch,
+        jobs_dir=tmp_path / "jobs",
+    )
+
+    parsed = JobConfig.model_validate(config)
+    agent = config["agents"][0]
+    environment = config["environment"]
+    agent_host_config = agent["kwargs"]["proposal_session"]
+    environment_runtime = environment["kwargs"]
+    runtime_fields = (
+        "runtime_archive_path",
+        "runtime_archive_sha256",
+        "runtime_archive_content_sha256",
+    )
+    assert parsed.n_attempts == 1
+    assert len(parsed.tasks) == 1
+    assert len(parsed.agents) == 1
+    assert config["tasks"] == [{"path": str(dispatch.derived_task_path)}]
+    assert agent["import_path"] == "agents.entrypoint_agent:EntrypointAgent"
+    assert agent["model_name"] == _fixed_h0_model(bundle)
+    assert agent["kwargs"] == {
+        "adapter": "proposal_session",
+        "extra_env": {},
+        "proposal_session": dispatch.host_config.model_dump(mode="json"),
+    }
+    assert environment["import_path"] == (_PROPOSAL_MORPH_ENVIRONMENT_IMPORT_PATH)
+    assert environment_runtime == {
+        "compute_backend": "morph",
+        "runtime_archive_path": dispatch.host_config.runtime_archive_path,
+        "runtime_archive_sha256": (dispatch.host_config.runtime_archive_sha256),
+        "runtime_archive_content_sha256": (dispatch.host_config.runtime_archive_content_sha256),
+    }
+    assert {field: agent_host_config[field] for field in runtime_fields} == {
+        field: environment_runtime[field] for field in runtime_fields
+    }
+    assert config["artifacts"] == [
+        {
+            "source": "/workspace/proposal-session",
+            "destination": "agent/proposal-session",
+        },
+        {
+            "source": "/workspace/output.md",
+            "destination": "agent/output.md",
+        },
+        {
+            "source": "/workspace/agent_result.json",
+            "destination": "agent/agent_result.json",
+        },
+    ]
+    assert "client" not in agent["kwargs"]
+    assert "tools" not in agent["kwargs"]
+    assert "system_prompt" not in agent["kwargs"]
+    assert "env" not in agent
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("relative_path", "absolute"),
+        ("task_identity", "task identity"),
+        ("manifest_identity", "task manifest"),
+        ("repetitions", "exactly one repetition"),
+    ),
+)
+def test_build_proposal_harbor_job_config_fails_closed_on_dispatch_drift(
+    tmp_path: Path,
+    mutation: str,
+    message: str,
+) -> None:
+    dispatch, _bundle = _proposal_dispatch_input(tmp_path)
+    if mutation == "relative_path":
+        dispatch = ProposalHarborDispatchInput(
+            host_config=dispatch.host_config,
+            derived_task_path=Path("derived-task"),
+            derived_task=dispatch.derived_task,
+            derived_task_manifest=dispatch.derived_task_manifest,
+        )
+    elif mutation == "task_identity":
+        dispatch = ProposalHarborDispatchInput(
+            host_config=dispatch.host_config,
+            derived_task_path=dispatch.derived_task_path,
+            derived_task=dispatch.derived_task.model_copy(
+                update={"task_id": "civil/proposal-session/other"},
+            ),
+            derived_task_manifest=dispatch.derived_task_manifest,
+        )
+    elif mutation == "manifest_identity":
+        dispatch = ProposalHarborDispatchInput(
+            host_config=dispatch.host_config,
+            derived_task_path=dispatch.derived_task_path,
+            derived_task=dispatch.derived_task,
+            derived_task_manifest=(
+                dispatch.derived_task_manifest.model_copy(
+                    update={"task_id": "civil/proposal-session/other"},
+                )
+            ),
+        )
+    else:
+        dispatch = ProposalHarborDispatchInput(
+            host_config=dispatch.host_config,
+            derived_task_path=dispatch.derived_task_path,
+            derived_task=dispatch.derived_task,
+            derived_task_manifest=dispatch.derived_task_manifest,
+            repetitions=2,
+        )
+
+    with pytest.raises(HarborDispatchError, match=message):
+        build_proposal_harbor_job_config(dispatch=dispatch)
+
+
+def test_build_proposal_harbor_job_config_rejects_tampered_manifest_member(
+    tmp_path: Path,
+) -> None:
+    dispatch, _bundle = _proposal_dispatch_input(tmp_path)
+    verifier = dispatch.derived_task_path / "tests" / "test.sh"
+    verifier.write_bytes(verifier.read_bytes() + b"\n# tampered\n")
+
+    with pytest.raises(HarborDispatchError, match="package member identity"):
+        build_proposal_harbor_job_config(dispatch=dispatch)
+
+
+def test_build_proposal_harbor_job_config_reports_first_sorted_unsafe_member(
+    tmp_path: Path,
+) -> None:
+    dispatch, _bundle = _proposal_dispatch_input(tmp_path)
+    (dispatch.derived_task_path / "aaa-symbolic-link").symlink_to("missing")
+    (dispatch.derived_task_path / "bbb-undeclared").write_text(
+        "undeclared",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        HarborDispatchError,
+        match="contains a symbolic link: aaa-symbolic-link",
+    ):
+        build_proposal_harbor_job_config(dispatch=dispatch)
+
+
+def test_entrypoint_request_prediction_includes_harbor_agent_environment_default() -> None:
+    agent = AgentConfig(
+        name="rlm",
+        adapter="rlm",
+        model="claude-test-model",
+        parameters={"max_turns": 32, "prompt_cache": False},
+    )
+
+    bundle = build_harbor_entrypoint_execution_bundle(
+        agent=agent,
+        instruction="Review the drainage packet.",
+    )
+
+    assert bundle.request.configuration == {
+        "adapter": "rlm",
+        "extra_env": {},
+        "max_turns": 32,
+        "prompt_cache": False,
+    }
+
+
 def test_experiment_manifest_accepts_reviewer_config() -> None:
     manifest = ExperimentManifest(
         experiment_id="experiment-001",
@@ -111,8 +388,6 @@ def test_build_harbor_job_config_maps_morph_to_import_path_environment() -> None
 
 
 def test_build_harbor_job_config_for_morph_validates_as_harbor_config() -> None:
-    from harbor.models.job.config import JobConfig  # type: ignore[import-untyped]
-
     manifest = ExperimentManifest(
         experiment_id="experiment-001",
         name="Morph dispatch config",
@@ -170,6 +445,31 @@ def test_dispatcher_writes_yaml_and_executes_harbor_command(tmp_path: Path) -> N
     assert executor.command == result.command
     assert executor.cwd == tmp_path
     assert written["tasks"] == [{"path": "tasks/mechanical/heat-load/alpha"}]
+
+
+def test_dispatcher_forwards_external_task_path_to_harbor(tmp_path: Path) -> None:
+    task = make_task_definition(task_id="civil/proposal-session/source-free")
+    task_path = tmp_path / "derived-task"
+    task_path.mkdir()
+    manifest = ExperimentManifest(
+        experiment_id="proposal-session-001",
+        name="Proposal session",
+        tasks=TaskSelector(include_patterns=[task.task_id]),
+        agents=[AgentConfig(name="proposal", adapter="direct", model="test-model")],
+        compute=ComputeConfig(backend="docker"),
+    )
+    executor = FakeExecutor()
+
+    result = HarborExperimentDispatcher(project_root=tmp_path).dispatch(
+        manifest=manifest,
+        tasks=[task],
+        config_path=tmp_path / "proposal-session.yaml",
+        task_path_overrides={task.task_id: task_path},
+        executor=executor,
+    )
+
+    written = yaml.safe_load(result.config_path.read_text(encoding="utf-8"))
+    assert written["tasks"] == [{"path": str(task_path.resolve())}]
 
 
 def test_subprocess_executor_adds_project_root_to_pythonpath(
@@ -245,3 +545,52 @@ def test_harbor_agent_config_includes_serialized_client_in_kwargs() -> None:
         "client_kind": "replay",
         "payload": {"output_text": "done"},
     }
+
+
+def _proposal_dispatch_input(
+    tmp_path: Path,
+) -> tuple[ProposalHarborDispatchInput, ProposalRunSessionBundle]:
+    fixture_module = importlib.import_module(
+        "tests.harness.test_proposal_session_config",
+    )
+    host_fixture = cast(
+        Callable[
+            [Path],
+            tuple[
+                ProposalSessionHostConfig,
+                ProposalRunSessionBundle,
+                Path,
+            ],
+        ],
+        fixture_module._host_fixture,
+    )
+    host_config, bundle, derived_task_path = host_fixture(tmp_path)
+    manifest = ProposalTaskPackageManifest.model_validate_json(
+        (derived_task_path / "proposal-task-package.json").read_bytes(),
+    )
+    observed_task = load_task_definition(
+        derived_task_path,
+        derived_task_path.parent.parent,
+    )
+    derived_task = observed_task.model_copy(
+        update={"task_id": manifest.task_id},
+    )
+    return (
+        ProposalHarborDispatchInput(
+            host_config=host_config,
+            derived_task_path=derived_task_path.resolve(),
+            derived_task=derived_task,
+            derived_task_manifest=manifest,
+        ),
+        bundle,
+    )
+
+
+def _fixed_h0_model(bundle: ProposalRunSessionBundle) -> str:
+    bindings = tuple(
+        binding.configuration
+        for binding in bundle.fixed_harness.bindings
+        if isinstance(binding.configuration, AgentBindingConfig)
+    )
+    assert len(bindings) == 1
+    return bindings[0].model

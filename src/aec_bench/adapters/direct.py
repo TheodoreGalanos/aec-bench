@@ -34,8 +34,11 @@ class DirectCompletionRequest:
 class DirectCompletionResponse:
     output_text: str
     error_message: str | None = None
+    usage_model_calls: int | None = 1
     usage_input_tokens: int | None = None
     usage_output_tokens: int | None = None
+    usage_cache_read_tokens: int | None = None
+    usage_cache_write_tokens: int | None = None
     timed_out: bool = False
 
 
@@ -57,15 +60,22 @@ class ReplayDirectClient:
         return self.response
 
     def serialize_client(self) -> SerializedClientSpec:
+        payload = {
+            "output_text": self.response.output_text,
+            "error_message": self.response.error_message,
+            "usage_input_tokens": self.response.usage_input_tokens,
+            "usage_output_tokens": self.response.usage_output_tokens,
+            "timed_out": self.response.timed_out,
+        }
+        if self.response.usage_model_calls != 1:
+            payload["usage_model_calls"] = self.response.usage_model_calls
+        if self.response.usage_cache_read_tokens is not None:
+            payload["usage_cache_read_tokens"] = self.response.usage_cache_read_tokens
+        if self.response.usage_cache_write_tokens is not None:
+            payload["usage_cache_write_tokens"] = self.response.usage_cache_write_tokens
         return SerializedClientSpec(
             client_kind="replay",
-            payload={
-                "output_text": self.response.output_text,
-                "error_message": self.response.error_message,
-                "usage_input_tokens": self.response.usage_input_tokens,
-                "usage_output_tokens": self.response.usage_output_tokens,
-                "timed_out": self.response.timed_out,
-            },
+            payload=payload,
         )
 
 
@@ -135,10 +145,15 @@ class DirectAdapter:
             agent_output=agent_output,
             transcript=transcript,
             failure_kind=_resolve_failure_kind(provider_response),
+            turns_used=1,
+            max_turns=1,
             raw_output_text=provider_response.output_text or None,
             provider_error=provider_response.error_message,
+            usage_model_calls=provider_response.usage_model_calls,
             usage_input_tokens=provider_response.usage_input_tokens,
             usage_output_tokens=provider_response.usage_output_tokens,
+            usage_cache_read_tokens=provider_response.usage_cache_read_tokens,
+            usage_cache_write_tokens=provider_response.usage_cache_write_tokens,
         )
 
     def adapter_name(self) -> str:
@@ -171,8 +186,20 @@ def replay_direct_client_from_payload(payload: dict[str, Any]) -> ReplayDirectCl
         response=DirectCompletionResponse(
             output_text=cast(str, payload.get("output_text", "")),
             error_message=cast(str | None, payload.get("error_message")),
+            usage_model_calls=cast(
+                int | None,
+                payload.get("usage_model_calls", 1),
+            ),
             usage_input_tokens=cast(int | None, payload.get("usage_input_tokens")),
             usage_output_tokens=cast(int | None, payload.get("usage_output_tokens")),
+            usage_cache_read_tokens=cast(
+                int | None,
+                payload.get("usage_cache_read_tokens"),
+            ),
+            usage_cache_write_tokens=cast(
+                int | None,
+                payload.get("usage_cache_write_tokens"),
+            ),
             timed_out=bool(payload.get("timed_out", False)),
         )
     )

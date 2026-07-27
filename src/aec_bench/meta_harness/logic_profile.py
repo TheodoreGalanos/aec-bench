@@ -284,7 +284,8 @@ def _repair_targets_from_finding(finding: dict[str, Any]) -> list[str]:
         "governance_gap": ["governance"],
         "event_candidate": ["world_schema"],
     }
-    return mapping.get(finding.get("category"), [])
+    category = finding.get("category")
+    return mapping.get(category, []) if isinstance(category, str) else []
 
 
 def _overall_status(
@@ -319,7 +320,7 @@ def _condition_matches(condition: dict[str, Any] | None, evidence: dict[str, Any
 
     actual = _lookup(evidence, condition["key"])
     if "equals" in condition:
-        return actual == condition["equals"]
+        return bool(actual == condition["equals"])
     if "exists" in condition:
         return (actual is not MISSING) is condition["exists"]
     if "truthy" in condition:

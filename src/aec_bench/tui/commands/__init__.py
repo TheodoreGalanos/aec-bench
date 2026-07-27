@@ -3,15 +3,20 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 from textual.command import DiscoveryHit, Hit, Hits, Provider
 
+from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.tui.commands.actions import ACTION_ENTRIES, ActionEntry
 from aec_bench.tui.commands.experiments import ExperimentHit, search_experiments
 from aec_bench.tui.commands.screens import SCREEN_ENTRIES, ScreenEntry
 from aec_bench.tui.commands.trials import TrialHit, search_trials
+
+if TYPE_CHECKING:
+    from aec_bench.tui.app import AecBenchTUI
 
 
 class AecBenchProvider(Provider):
@@ -22,7 +27,12 @@ class AecBenchProvider(Provider):
     Trial and experiment search is wired in when ledger_root is available.
     """
 
-    _records_cache: dict[Path, list] = {}
+    _records_cache: dict[Path, list[TrialRecord]] = {}
+
+    @property
+    def _aec_app(self) -> AecBenchTUI:
+        """Return the concrete application surface owned by this provider."""
+        return cast("AecBenchTUI", self.app)
 
     async def discover(self) -> Hits:
         """Yield all discoverable commands (shown before the user types)."""
@@ -105,9 +115,9 @@ class AecBenchProvider(Provider):
                         help=f"{exp_hit.trial_count} trials",
                     )
 
-    def _get_cached_records(self) -> list:
+    def _get_cached_records(self) -> list[TrialRecord]:
         """Return cached trial records, loading from ledger on first access."""
-        ledger_root = Path(self.app.ledger_root)
+        ledger_root = self._aec_app.ledger_root
         if ledger_root not in AecBenchProvider._records_cache:
             from aec_bench.ledger.reader import read_trial_records
 
@@ -117,7 +127,10 @@ class AecBenchProvider(Provider):
                 AecBenchProvider._records_cache[ledger_root] = []
         return AecBenchProvider._records_cache[ledger_root]
 
-    def _build_experiment_entries(self, records: Sequence) -> list[ExperimentHit]:
+    def _build_experiment_entries(
+        self,
+        records: Sequence[TrialRecord],
+    ) -> list[ExperimentHit]:
         """Aggregate trial records into experiment entries for search."""
         from collections import Counter
 
@@ -126,7 +139,10 @@ class AecBenchProvider(Provider):
             counts[record.experiment_id] += 1
         return [ExperimentHit(experiment_id=exp_id, trial_count=count) for exp_id, count in counts.items()]
 
-    def _make_screen_callback(self, entry: ScreenEntry):
+    def _make_screen_callback(
+        self,
+        entry: ScreenEntry,
+    ) -> Callable[[], Awaitable[None]]:
         """Return an async callable that opens the entry's mode or concrete screen."""
 
         async def callback() -> None:
@@ -136,19 +152,20 @@ class AecBenchProvider(Provider):
 
     def _open_screen_entry(self, entry: ScreenEntry) -> None:
         """Open a mode-level or concrete screen entry from the command palette."""
+        app = self._aec_app
         if entry.screen is None:
-            self.app.switch_mode(entry.mode)
+            app.switch_mode(entry.mode)
             return
 
-        self.app.switch_mode(entry.mode)
+        app.switch_mode(entry.mode)
 
         if entry.screen == "datasets":
             from aec_bench.tui.screens.datasets import DatasetsScreen
 
-            self.app.push_screen(
+            app.push_screen(
                 DatasetsScreen(
-                    datasets_root=getattr(self.app, "datasets_root", None),
-                    ledger_root=getattr(self.app, "ledger_root", None),
+                    datasets_root=app.datasets_root,
+                    ledger_root=app.ledger_root,
                 )
             )
             return
@@ -156,10 +173,10 @@ class AecBenchProvider(Provider):
         if entry.screen == "leaderboard":
             from aec_bench.tui.screens.leaderboard import LeaderboardScreen
 
-            self.app.push_screen(
+            app.push_screen(
                 LeaderboardScreen(
-                    ledger_root=self.app.ledger_root,
-                    experiment_id=getattr(self.app, "initial_experiment_id", None),
+                    ledger_root=app.ledger_root,
+                    experiment_id=app.initial_experiment_id,
                 )
             )
             return
@@ -167,66 +184,75 @@ class AecBenchProvider(Provider):
         if entry.screen == "compare":
             from aec_bench.tui.screens.compare import CompareScreen
 
-            self.app.push_screen(
+            app.push_screen(
                 CompareScreen(
-                    ledger_root=self.app.ledger_root,
-                    experiment_id=getattr(self.app, "initial_experiment_id", None),
+                    ledger_root=app.ledger_root,
+                    experiment_id=app.initial_experiment_id,
                 )
             )
             return
 
         if entry.screen == "review":
-            feedback_root = getattr(self.app, "feedback_root", None)
-            reviewer_id = getattr(self.app, "reviewer_id", None)
+            feedback_root = app.feedback_root
+            reviewer_id = app.reviewer_id
             if feedback_root is None or reviewer_id is None:
-                self.app.switch_mode("review")
+                app.switch_mode("review")
                 return
             from aec_bench.tui.screens.review import ReviewScreen
 
-            self.app.push_screen(
+            app.push_screen(
                 ReviewScreen(
-                    ledger_root=self.app.ledger_root,
-                    tasks_root=self.app.tasks_root,
+                    ledger_root=app.ledger_root,
+                    tasks_root=app.tasks_root,
                     feedback_root=feedback_root,
                     reviewer_id=reviewer_id,
                 )
             )
 
-    def _make_action_callback(self, action: ActionEntry):
+    def _make_action_callback(
+        self,
+        action: ActionEntry,
+    ) -> Callable[[], Awaitable[None]]:
         """Return an async callable that runs the named Textual action."""
 
         async def callback() -> None:
-            await self.app.run_action(action.action_name)
+            await self._aec_app.run_action(action.action_name)
 
         return callback
 
-    def _make_trial_callback(self, hit: TrialHit):
+    def _make_trial_callback(
+        self,
+        hit: TrialHit,
+    ) -> Callable[[], Awaitable[None]]:
         """Return an async callable that opens the selected trial in the viewer."""
 
         async def callback() -> None:
             records = self._get_cached_records()
             record = next((item for item in records if item.trial_id == hit.trial_id), None)
             if record is None:
-                self.app.switch_mode("review")
+                self._aec_app.switch_mode("review")
                 return
             siblings = [item for item in records if item.experiment_id == hit.experiment_id]
             from aec_bench.tui.screens.viewer import TrialViewerScreen
 
-            self.app.switch_mode("review")
-            self.app.push_screen(TrialViewerScreen(record=record, siblings=siblings))
+            self._aec_app.switch_mode("review")
+            self._aec_app.push_screen(TrialViewerScreen(record=record, siblings=siblings))
 
         return callback
 
-    def _make_experiment_callback(self, hit: ExperimentHit):
+    def _make_experiment_callback(
+        self,
+        hit: ExperimentHit,
+    ) -> Callable[[], Awaitable[None]]:
         """Return an async callable that opens triage filtered to the experiment."""
 
         async def callback() -> None:
             from aec_bench.tui.screens.triage import TriageScreen
 
-            self.app.switch_mode("review")
-            self.app.push_screen(
+            self._aec_app.switch_mode("review")
+            self._aec_app.push_screen(
                 TriageScreen(
-                    ledger_root=self.app.ledger_root,
+                    ledger_root=self._aec_app.ledger_root,
                     experiment_id=hit.experiment_id,
                 )
             )

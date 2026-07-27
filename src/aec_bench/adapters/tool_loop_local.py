@@ -6,19 +6,25 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from pydantic_ai import RunContext
+from pydantic_ai.exceptions import UsageLimitExceeded
+from pydantic_ai.usage import RunUsage
 
-from aec_bench.adapters.advisor import default_advise
+from aec_bench.adapters.advisor import AdvisorResult, default_advise
+from aec_bench.adapters.advisor_usage import AdvisorUsageAccumulator
+from aec_bench.adapters.base import AdapterFailureKind
 from aec_bench.adapters.pydantic_ai_runtime import (
     agent_run_output,
+    agent_run_usage,
     run_agent_sync_with_streaming_fallback,
 )
 from aec_bench.adapters.rlm.client import RlmClient
+from aec_bench.adapters.runtime_limits import configured_positive_int
 from aec_bench.adapters.tool_loop import (
     ToolExecutionResult,
     ToolLoopCompletionResponse,
@@ -40,7 +46,11 @@ def completion_from_workspace_output(workspace: str) -> ToolLoopCompletionRespon
         return None
     if not output_text.strip():
         return None
-    return ToolLoopCompletionResponse(output_text=output_text, done=True)
+    return ToolLoopCompletionResponse(
+        output_text=output_text,
+        usage_model_calls=None,
+        done=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -60,45 +70,71 @@ class PydanticAiAdvisorTool:
     def __init__(self, *, client: RlmClient, config: AdvisorConfig) -> None:
         self._client = client
         self._config = config
-        self._calls = 0
-        self._input_tokens = 0
-        self._output_tokens = 0
+        self._usage = AdvisorUsageAccumulator()
 
     def __call__(self, goal: str, problem: str) -> str:
-        if self._calls >= self._config.max_uses:
-            return json.dumps(
-                {
-                    "advice": (
-                        f"Advisor budget exhausted ({self._config.max_uses}/"
-                        f"{self._config.max_uses} calls used). Proceed on your own."
-                    ),
-                    "suggested_action": "continue",
-                    "confidence": 0.0,
-                    "reasoning": "max_uses reached",
-                }
-            )
-
-        result = default_advise(
+        return self._invoke(
             request=AdvisorRequest(goal=goal, problem=problem),
             context_messages=[],
-            client=self._client,
-            model=self._config.model,
-            max_response_tokens=self._config.max_response_tokens,
             adapter_context=("The executor is using a tool-loop adapter with bash and search tools."),
         )
 
-        if result.error is None:
-            self._calls += 1
-            self._input_tokens += result.input_tokens
-            self._output_tokens += result.output_tokens
+    def usage(self) -> tuple[int, int | None, int | None]:
+        """Return (calls_made, input_tokens, output_tokens)."""
+        return self._usage.snapshot()
 
-        if result.response:
+    def call_with_messages(self, context_messages: list[dict[str, str]]) -> str:
+        """Invoke the advisor using an explicit transcript slice (Anthropic-style).
+
+        Unlike ``__call__(goal, problem)``, this path mirrors Anthropic's native
+        advisor tool: the executor just signals timing, and the full
+        conversation history is handed over to the advisor model.
+        """
+        return self._invoke(
+            request=AdvisorRequest(goal="", problem=""),
+            context_messages=context_messages,
+            adapter_context=(
+                "You are the advisor for an AI agent using bash tool calls to solve "
+                "an engineering task. Read the transcript above and give concise "
+                "strategic guidance on what the agent should do next."
+            ),
+        )
+
+    def _invoke(
+        self,
+        *,
+        request: AdvisorRequest,
+        context_messages: list[dict[str, str]],
+        adapter_context: str,
+    ) -> str:
+        if self._usage.calls >= self._config.max_uses:
+            return self._exhausted_response()
+        self._usage.begin_call()
+        try:
+            result = default_advise(
+                request=request,
+                context_messages=context_messages,
+                client=self._client,
+                model=self._config.model,
+                max_response_tokens=self._config.max_response_tokens,
+                adapter_context=adapter_context,
+            )
+        except Exception:
+            self._usage.mark_tokens_unknown()
+            raise
+        self._usage.record_result(result)
+        return self._response_json(result)
+
+    @staticmethod
+    def _response_json(result: AdvisorResult) -> str:
+        response = result.response
+        if response is not None:
             return json.dumps(
                 {
-                    "advice": result.response.advice,
-                    "suggested_action": result.response.suggested_action,
-                    "confidence": result.response.confidence,
-                    "reasoning": result.response.reasoning,
+                    "advice": response.advice,
+                    "suggested_action": response.suggested_action,
+                    "confidence": response.confidence,
+                    "reasoning": response.reasoning,
                 }
             )
         return json.dumps(
@@ -110,63 +146,14 @@ class PydanticAiAdvisorTool:
             }
         )
 
-    def usage(self) -> tuple[int, int, int]:
-        """Return (calls_made, input_tokens, output_tokens)."""
-        return (self._calls, self._input_tokens, self._output_tokens)
-
-    def call_with_messages(self, context_messages: list[dict[str, str]]) -> str:
-        """Invoke the advisor using an explicit transcript slice (Anthropic-style).
-
-        Unlike ``__call__(goal, problem)``, this path mirrors Anthropic's native
-        advisor tool: the executor just signals timing, and the full
-        conversation history is handed over to the advisor model.
-        """
-        if self._calls >= self._config.max_uses:
-            return json.dumps(
-                {
-                    "advice": (
-                        f"Advisor budget exhausted ({self._config.max_uses}/"
-                        f"{self._config.max_uses} calls used). Proceed on your own."
-                    ),
-                    "suggested_action": "continue",
-                    "confidence": 0.0,
-                    "reasoning": "max_uses reached",
-                }
-            )
-
-        result = default_advise(
-            request=AdvisorRequest(goal="", problem=""),
-            context_messages=context_messages,
-            client=self._client,
-            model=self._config.model,
-            max_response_tokens=self._config.max_response_tokens,
-            adapter_context=(
-                "You are the advisor for an AI agent using bash tool calls to solve "
-                "an engineering task. Read the transcript above and give concise "
-                "strategic guidance on what the agent should do next."
-            ),
-        )
-
-        if result.error is None:
-            self._calls += 1
-            self._input_tokens += result.input_tokens
-            self._output_tokens += result.output_tokens
-
-        if result.response:
-            return json.dumps(
-                {
-                    "advice": result.response.advice,
-                    "suggested_action": result.response.suggested_action,
-                    "confidence": result.response.confidence,
-                    "reasoning": result.response.reasoning,
-                }
-            )
+    def _exhausted_response(self) -> str:
+        max_uses = self._config.max_uses
         return json.dumps(
             {
-                "advice": "Advisor unavailable",
+                "advice": (f"Advisor budget exhausted ({max_uses}/{max_uses} calls used). Proceed on your own."),
                 "suggested_action": "continue",
                 "confidence": 0.0,
-                "reasoning": "",
+                "reasoning": "max_uses reached",
             }
         )
 
@@ -178,44 +165,53 @@ def pydantic_ai_messages_to_advisor_context(messages: list[Any]) -> list[dict[st
     assistant text, tool calls and tool results become labelled entries the
     advisor model can read directly.
     """
-    from pydantic_ai.messages import (
-        ModelRequest,
-        ModelResponse,
-        SystemPromptPart,
-        TextPart,
-        ToolCallPart,
-        ToolReturnPart,
-        UserPromptPart,
-    )
+    from pydantic_ai.messages import ModelRequest, ModelResponse
 
     result: list[dict[str, str]] = []
-    for msg in messages:
-        if isinstance(msg, ModelRequest):
-            for part in msg.parts:
-                if isinstance(part, SystemPromptPart):
-                    continue
-                if isinstance(part, UserPromptPart):
-                    result.append({"role": "user", "content": str(part.content)})
-                elif isinstance(part, ToolReturnPart):
-                    payload = "" if part.content is None else str(part.content)
-                    result.append({"role": "tool", "content": f"[{part.tool_name}] {payload}"})
-        elif isinstance(msg, ModelResponse):
-            for part in msg.parts:
-                if isinstance(part, TextPart):
-                    if part.content:
-                        result.append({"role": "assistant", "content": part.content})
-                elif isinstance(part, ToolCallPart):
-                    args = part.args if isinstance(part.args, dict) else {}
-                    try:
-                        args_repr = json.dumps(args, ensure_ascii=False)
-                    except (TypeError, ValueError):
-                        args_repr = str(args)
-                    result.append(
-                        {
-                            "role": "assistant",
-                            "content": f"Calling {part.tool_name}({args_repr})",
-                        }
-                    )
+    for message in messages:
+        if isinstance(message, ModelRequest):
+            result.extend(_advisor_request_context(message.parts))
+        elif isinstance(message, ModelResponse):
+            result.extend(_advisor_response_context(message.parts))
+    return result
+
+
+def _advisor_request_context(parts: Sequence[Any]) -> list[dict[str, str]]:
+    """Convert one PydanticAI request's public parts into advisor context."""
+    from pydantic_ai.messages import SystemPromptPart, ToolReturnPart, UserPromptPart
+
+    result: list[dict[str, str]] = []
+    for part in parts:
+        if isinstance(part, SystemPromptPart):
+            continue
+        if isinstance(part, UserPromptPart):
+            result.append({"role": "user", "content": str(part.content)})
+        elif isinstance(part, ToolReturnPart):
+            payload = "" if part.content is None else str(part.content)
+            result.append({"role": "tool", "content": f"[{part.tool_name}] {payload}"})
+    return result
+
+
+def _advisor_response_context(parts: Sequence[Any]) -> list[dict[str, str]]:
+    """Convert one PydanticAI response's public parts into advisor context."""
+    from pydantic_ai.messages import TextPart, ToolCallPart
+
+    result: list[dict[str, str]] = []
+    for part in parts:
+        if isinstance(part, TextPart) and part.content:
+            result.append({"role": "assistant", "content": part.content})
+        elif isinstance(part, ToolCallPart):
+            args = part.args if isinstance(part.args, dict) else {}
+            try:
+                args_repr = json.dumps(args, ensure_ascii=False)
+            except (TypeError, ValueError):
+                args_repr = str(args)
+            result.append(
+                {
+                    "role": "assistant",
+                    "content": f"Calling {part.tool_name}({args_repr})",
+                }
+            )
     return result
 
 
@@ -236,41 +232,45 @@ def emit_pydantic_ai_messages_to_trajectory(
     following ``ModelRequest`` are attributed to the same step so the
     behavioral classifier groups call and result together.
     """
-    from pydantic_ai.messages import (
-        ModelRequest,
-        ModelResponse,
-        SystemPromptPart,
-        TextPart,
-        ToolCallPart,
-        ToolReturnPart,
-        UserPromptPart,
-    )
+    from pydantic_ai.messages import ModelRequest, ModelResponse
 
     for message in messages:
         if isinstance(message, ModelRequest):
-            for part in message.parts:
-                if isinstance(part, SystemPromptPart):
-                    writer.system(str(part.content))
-                elif isinstance(part, UserPromptPart):
-                    writer.user(str(part.content))
-                elif isinstance(part, ToolReturnPart):
-                    output = "" if part.content is None else str(part.content)
-                    writer.tool_result(tool_name=part.tool_name, stdout=output)
-            continue
-        if isinstance(message, ModelResponse):
-            writer.new_step()
-            for part in message.parts:
-                if isinstance(part, TextPart):
-                    if part.content:
-                        writer.thinking(part.content)
-                elif isinstance(part, ToolCallPart):
-                    args = part.args if isinstance(part.args, dict) else {}
-                    command = args.get("command", "") if args else ""
-                    writer.tool_call(
-                        tool_name=part.tool_name,
-                        command=str(command),
-                        arguments=args or None,
-                    )
+            _emit_pydantic_ai_request(message.parts, writer)
+        elif isinstance(message, ModelResponse):
+            _emit_pydantic_ai_response(message.parts, writer)
+
+
+def _emit_pydantic_ai_request(parts: Sequence[Any], writer: Any) -> None:
+    """Emit one PydanticAI request's public parts without opening a new step."""
+    from pydantic_ai.messages import SystemPromptPart, ToolReturnPart, UserPromptPart
+
+    for part in parts:
+        if isinstance(part, SystemPromptPart):
+            writer.system(str(part.content))
+        elif isinstance(part, UserPromptPart):
+            writer.user(str(part.content))
+        elif isinstance(part, ToolReturnPart):
+            output = "" if part.content is None else str(part.content)
+            writer.tool_result(tool_name=part.tool_name, stdout=output)
+
+
+def _emit_pydantic_ai_response(parts: Sequence[Any], writer: Any) -> None:
+    """Emit one PydanticAI response as a distinct trajectory step."""
+    from pydantic_ai.messages import TextPart, ToolCallPart
+
+    writer.new_step()
+    for part in parts:
+        if isinstance(part, TextPart) and part.content:
+            writer.thinking(part.content)
+        elif isinstance(part, ToolCallPart):
+            args = part.args if isinstance(part.args, dict) else {}
+            command = args.get("command", "") if args else ""
+            writer.tool_call(
+                tool_name=part.tool_name,
+                command=str(command),
+                arguments=args or None,
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -415,7 +415,7 @@ class PydanticAiToolLoopClient:
             "on" if self._advisor_tool is not None else "off",
         )
 
-    def advisor_usage(self) -> tuple[int, int, int] | None:
+    def advisor_usage(self) -> tuple[int, int | None, int | None] | None:
         """Return (calls, input_tokens, output_tokens), or None if advisor unwired."""
         if self._advisor_tool is None:
             return None
@@ -429,6 +429,9 @@ class PydanticAiToolLoopClient:
         """
         try:
             return self._run_agent(request)
+        except UsageLimitExceeded as exc:
+            logger.warning("PydanticAI tool loop stopped at a runtime usage limit: %s", exc)
+            return _usage_limit_response(exc, None)
         except Exception as exc:
             fallback = completion_from_workspace_output(self._workspace)
             if fallback is not None:
@@ -440,6 +443,7 @@ class PydanticAiToolLoopClient:
             logger.exception("PydanticAI tool loop client error: %s", exc)
             return ToolLoopCompletionResponse(
                 error_message=str(exc),
+                usage_model_calls=None,
                 done=True,
             )
 
@@ -448,21 +452,29 @@ class PydanticAiToolLoopClient:
         from pydantic_ai.usage import UsageLimits
 
         # Set system prompt
-        self._agent._system_prompts = (  # noqa: SLF001
-            [request.system_prompt] if request.system_prompt else []
-        )
+        self._agent._system_prompts = (request.system_prompt,) if request.system_prompt else ()  # noqa: SLF001
 
         # Run the full agent loop with a request limit to prevent runaway
-        max_turns = int(request.configuration.get("max_turns", 30)) if request.configuration else 30
-        result = run_agent_sync_with_streaming_fallback(
-            self._agent,
-            request.instruction,
-            usage_limits=UsageLimits(request_limit=max_turns),
-            stream_mode=self._stream_mode,
-        )
+        max_turns = configured_positive_int(request.configuration, "max_turns") or 30
+        max_tool_calls = configured_positive_int(request.configuration, "max_tool_calls")
+        run_usage = RunUsage()
+        try:
+            result = run_agent_sync_with_streaming_fallback(
+                self._agent,
+                request.instruction,
+                usage_limits=UsageLimits(
+                    request_limit=max_turns,
+                    tool_calls_limit=max_tool_calls,
+                ),
+                usage=run_usage,
+                stream_mode=self._stream_mode,
+            )
+        except UsageLimitExceeded as exc:
+            logger.warning("PydanticAI tool loop stopped at a runtime usage limit: %s", exc)
+            return _usage_limit_response(exc, run_usage)
 
         output = agent_run_output(result)
-        usage = result.usage()
+        usage = agent_run_usage(result)
         output_text = output if isinstance(output, str) else str(output)
 
         if self._trajectory_writer is not None:
@@ -477,8 +489,41 @@ class PydanticAiToolLoopClient:
         return ToolLoopCompletionResponse(
             output_text=output_text,
             done=True,
+            usage_model_calls=_pydantic_model_calls(usage),
             usage_input_tokens=usage.input_tokens or 0,
             usage_output_tokens=usage.output_tokens or 0,
             usage_cache_read_tokens=getattr(usage, "cache_read_tokens", 0) or 0,
             usage_cache_write_tokens=getattr(usage, "cache_write_tokens", 0) or 0,
         )
+
+
+def _pydantic_model_calls(usage: Any) -> int | None:
+    requests = getattr(usage, "requests", None)
+    if not isinstance(requests, int) or isinstance(requests, bool) or requests < 1:
+        return None
+    return requests
+
+
+def _usage_limit_response(
+    error: UsageLimitExceeded,
+    usage: RunUsage | None,
+) -> ToolLoopCompletionResponse:
+    return ToolLoopCompletionResponse(
+        error_message=str(error),
+        failure_kind=_usage_limit_failure_kind(error),
+        usage_model_calls=None if usage is None else _pydantic_model_calls(usage),
+        usage_input_tokens=None if usage is None else usage.input_tokens,
+        usage_output_tokens=None if usage is None else usage.output_tokens,
+        usage_cache_read_tokens=None if usage is None else usage.cache_read_tokens,
+        usage_cache_write_tokens=None if usage is None else usage.cache_write_tokens,
+        done=True,
+    )
+
+
+def _usage_limit_failure_kind(error: UsageLimitExceeded) -> AdapterFailureKind:
+    message = str(error).lower()
+    if "tool_calls_limit" in message:
+        return AdapterFailureKind.TOOL_CALL_LIMIT_REACHED
+    if "request_limit" in message:
+        return AdapterFailureKind.TURN_LIMIT_REACHED
+    return AdapterFailureKind.TOKEN_BUDGET_REACHED

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import math
+from typing import Any
 
 GAMMA_W = 9.81
 
@@ -61,7 +62,7 @@ SOURCE_FILES = [
     "sources/criteria-comments.md",
 ]
 
-VARIANT_GOLD = {
+VARIANT_GOLD: dict[str, dict[str, Any]] = {
     "clean": {"flips": {}, "readiness": READY, "findings": 0.0, "requests": 0.0, "carried": 0.0},
     "missing_groundwater_level": {
         "flips": {"rlr_04_status": STATUS_INSUFFICIENT_DATA},
@@ -120,7 +121,7 @@ def _q(value: float, step: float) -> float:
     return round(round(value / step) * step, 10)
 
 
-def _quantize(params: dict) -> dict:
+def _quantize(params: dict[str, Any]) -> dict[str, Any]:
     """Return params with source-facing values snapped to stable grids."""
     quantized = dict(params)
     quantized["raw_n_value"] = int(params["raw_n_value"])
@@ -161,7 +162,7 @@ def _water_table_terms(
     return q_kpa, gamma_eff
 
 
-def _allowable_bearing(p: dict, design_phi: float) -> float:
+def _allowable_bearing(p: dict[str, Any], design_phi: float) -> float:
     """Compute allowable bearing capacity for the source-owned square footing check."""
     nc, nq, ngamma = _bearing_factors(design_phi)
     q_kpa, gamma_eff = _water_table_terms(
@@ -171,10 +172,10 @@ def _allowable_bearing(p: dict, design_phi: float) -> float:
         water_depth=p["design_groundwater_level_m"],
     )
     ultimate = p["cohesion_kpa"] * nc * 1.3 + q_kpa * nq + gamma_eff * p["footing_width_m"] * 0.4 * ngamma
-    return ultimate / p["factor_of_safety"]
+    return float(ultimate / p["factor_of_safety"])
 
 
-def _grid_values(p: dict) -> tuple[float, float]:
+def _grid_values(p: dict[str, Any]) -> tuple[float, float]:
     """Compute grid resistance and the task-owned touch-voltage screening value."""
     area = p["grid_length_m"] * p["grid_width_m"]
     resistance = p["soil_resistivity_ohm_m"] * (
@@ -185,7 +186,7 @@ def _grid_values(p: dict) -> tuple[float, float]:
     return resistance, touch_voltage
 
 
-def _derive(params: dict) -> dict:
+def _derive(params: dict[str, Any]) -> dict[str, Any]:
     """Derive source truth, package claims, and review-state values."""
     p = _quantize(params)
     variant = p["packet_variant"]
@@ -219,7 +220,7 @@ def _derive(params: dict) -> dict:
     }
 
 
-def compute(**params) -> dict[str, float]:
+def compute(**params: Any) -> dict[str, float]:
     """Compute gold review statuses and recomputed evidence for an SSC-07 instance."""
     state = _derive(params)
     variant = state["variant"]
@@ -246,7 +247,7 @@ def compute(**params) -> dict[str, float]:
     return truth
 
 
-def build_sources(all_params: dict) -> dict[str, str]:
+def build_sources(all_params: dict[str, Any]) -> dict[str, str]:
     """Render the eight-file source packet for one instance."""
     state = _derive(all_params)
     p = state["params"]
@@ -419,7 +420,7 @@ def _status_entry(item: str, status: float, evidence: str) -> dict[str, str]:
     return {"status": STATUS_NAMES[status], "evidence": evidence or f"{item} checked against the source packet."}
 
 
-def _base_payload(ground_truth: dict) -> dict:
+def _base_payload(ground_truth: dict[str, Any]) -> dict[str, Any]:
     """Create a gold review payload from ground-truth status codes."""
     source_inventory = [
         {"doc_id": "BH-07-LOG-01", "revision": "Rev C", "status": "current"},
@@ -489,7 +490,7 @@ def _base_payload(ground_truth: dict) -> dict:
     }
 
 
-def build_golden_pass(all_params: dict, ground_truth: dict) -> str:
+def build_golden_pass(all_params: dict[str, Any], ground_truth: dict[str, Any]) -> str:
     """Build a full-credit review response fixture."""
     variant = str(all_params["packet_variant"])
     payload = _base_payload(ground_truth)
@@ -557,7 +558,7 @@ The source packet has been inventoried, recomputed where applicable, and assesse
 """
 
 
-def build_golden_fail(all_params: dict, ground_truth: dict) -> str:
+def build_golden_fail(all_params: dict[str, Any], ground_truth: dict[str, Any]) -> str:
     """Build a fluent unsafe fixture that approves the packet without evidence."""
     payload = {
         "source_inventory": [],

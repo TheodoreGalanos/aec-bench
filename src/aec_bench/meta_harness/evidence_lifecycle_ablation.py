@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from aec_bench.adapters.rlm.providers import preflight_pydantic_model_configuration
 from aec_bench.contracts.trial_record import TrialRecord

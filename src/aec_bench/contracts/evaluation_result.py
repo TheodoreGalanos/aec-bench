@@ -101,8 +101,8 @@ class EvaluationResult(StrictModel):
         return value
 
     @model_validator(mode="after")
-    def validate_parseability_reward(self) -> "EvaluationResult":
-        if not self.validity.output_parseable and self.reward > 0.0:
-            msg = "unparseable outputs must have reward 0.0"
+    def validate_output_validity_reward(self) -> "EvaluationResult":
+        if (not self.validity.output_parseable or not self.validity.schema_valid) and self.reward > 0.0:
+            msg = "invalid outputs must have reward 0.0"
             raise ValueError(msg)
         return self

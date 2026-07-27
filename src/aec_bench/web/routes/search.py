@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from typing import Any
 
 from fastapi import APIRouter, Request
 
@@ -67,8 +68,8 @@ def search_api(
     settings = get_web_settings(request)
     query = q.strip()
 
-    template_results: list[dict] = []
-    dataset_results: list[dict] = []
+    template_results: list[dict[str, Any]] = []
+    dataset_results: list[dict[str, Any]] = []
     trial_results: list[TrialSearchResult] = []
     experiment_results: list[ExperimentSearchResult] = []
     workspace_results: list[WorkspaceSearchResult] = []

@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict
 
 import numpy as np
 from ribs.archives import CVTArchive
@@ -22,6 +23,15 @@ class ArchiveEntry:
     task_ids: tuple[str, ...] = ()
     discipline: str = ""
     run_id: str = ""
+
+
+class ArchiveCoverage(TypedDict):
+    """Archive occupancy values consumed by reports and swarm prompts."""
+
+    occupied: int
+    empty: int
+    coverage: float
+    total_centroids: int
 
 
 # The ranges for each BD dimension passed to the CVTArchive.
@@ -152,7 +162,7 @@ class QDArchive:
             return None
         return entry.snapshot
 
-    def project_2d(self) -> list[dict]:
+    def project_2d(self) -> list[dict[str, object]]:
         """PCA-project all archive entries to 2D for visualisation.
 
         Returns an empty list for an empty archive. Returns a single point at the
@@ -165,7 +175,11 @@ class QDArchive:
 
         entries = list(self._entries.values())
 
-        def _entry_to_point(e: ArchiveEntry, x: float = 0.0, y: float = 0.0) -> dict:
+        def _entry_to_point(
+            e: ArchiveEntry,
+            x: float = 0.0,
+            y: float = 0.0,
+        ) -> dict[str, object]:
             return {
                 "x": x,
                 "y": y,
@@ -198,7 +212,7 @@ class QDArchive:
     def project_2d_with_centroids(
         self,
         agent_map: dict[str, str] | None = None,
-    ) -> list[dict]:
+    ) -> list[dict[str, object]]:
         """PCA-project all CVT centroids (occupied + empty) to 2D for Voronoi visualisation.
 
         Unlike project_2d(), this returns all n_centroids cells so that empty cells can be
@@ -233,7 +247,7 @@ class QDArchive:
             _, _, vt = np.linalg.svd(centred, full_matrices=False)
             proj = centred @ vt[:2].T  # (n, 2)
 
-        result = []
+        result: list[dict[str, object]] = []
         for i in range(n):
             entry = self._entries.get(i)
             if entry is not None:
@@ -264,7 +278,7 @@ class QDArchive:
 
         return result
 
-    def to_summary(self) -> dict:
+    def to_summary(self) -> dict[str, object]:
         """Return a summary dict describing archive state and statistics."""
         objectives = [e.bd.reward for e in self._entries.values()]
         disciplines = sorted({e.discipline for e in self._entries.values() if e.discipline})
@@ -327,7 +341,7 @@ class QDArchive:
 
         return selected
 
-    def coverage_report(self) -> dict:
+    def coverage_report(self) -> ArchiveCoverage:
         """Return archive occupancy statistics.
 
         Returns a dict with keys: occupied, empty, coverage, total_centroids.

@@ -129,7 +129,12 @@ def parse_judge_response(response: str) -> list[dict[str, Any]]:
 
     try:
         data = json.loads(json_text)
-        return data.get("criteria_results", [])
+        if not isinstance(data, dict):
+            return []
+        results = data.get("criteria_results", [])
+        if not isinstance(results, list):
+            return []
+        return [result for result in results if isinstance(result, dict)]
     except (json.JSONDecodeError, AttributeError):
         return []
 

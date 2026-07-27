@@ -117,7 +117,10 @@ def _read_result_payload(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
     with path.open(encoding="utf-8") as handle:
-        return json.load(handle)
+        payload = json.load(handle)
+    if not isinstance(payload, dict):
+        raise ValueError(f"expected JSON object in {path}")
+    return payload
 
 
 def _status_from_returncode(returncode: int) -> str:

@@ -29,8 +29,8 @@ class TestDetectDirectProvider:
         assert detect_direct_provider("together:Qwen/Qwen3.7-Max") == "together"
 
     def test_bedrock_models(self) -> None:
-        assert detect_direct_provider("us.anthropic.claude-sonnet-4-6") == "anthropic"
-        # Bedrock models use the Anthropic API pattern through the prefix
+        assert detect_direct_provider("us.anthropic.claude-sonnet-4-6") == "bedrock"
+        assert detect_direct_provider("au.anthropic.claude-sonnet-4-6") == "bedrock"
 
     def test_unknown_model(self) -> None:
         assert detect_direct_provider("some-random-model") == "anthropic"

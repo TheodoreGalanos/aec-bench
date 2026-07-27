@@ -6,12 +6,17 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import cache
 from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
 
 from aec_bench.meta_harness.evidence_lifecycle import validate_lifecycle_verification
 from aec_bench.meta_harness.evidence_lifecycle_episode import LifecycleEpisodeEnvironment
+from aec_bench.task_world_templates.compiled_world import (
+    CallableLifecycleWorldAdapter,
+    LifecycleWorldAdapter,
+)
 from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate, EvidenceLifecycleSpec
 from aec_bench.task_world_templates.lifecycles.provider import (
     SEALED_LIFECYCLE_RECEIPT_FILENAME,
@@ -40,6 +45,7 @@ __all__ = [
     "lifecycle_variant_metadata",
     "materialize_lifecycle_template",
     "materialize_sealed_lifecycle",
+    "registered_lifecycle_adapter",
     "registered_lifecycle_operation_resolver",
     "registered_lifecycle_smoke_environment",
     "registered_lifecycle_template_ids",
@@ -107,6 +113,55 @@ _LIFECYCLES = {
 def registered_lifecycle_template_ids() -> set[str]:
     """Return the template IDs with executable lifecycle registrations."""
     return set(_LIFECYCLES)
+
+
+@cache
+def registered_lifecycle_adapter(template_id: str) -> LifecycleWorldAdapter:
+    """Resolve one typed public lifecycle adapter from the existing registration."""
+    registration = _entry(template_id)
+    module = import_module(registration.module_name)
+    variant_module = import_module(registration.variant_module_name or registration.module_name)
+    smoke_module = import_module(registration.smoke_module_name or registration.module_name)
+    return CallableLifecycleWorldAdapter(
+        schema_version="1",
+        template_id=registration.template_id,
+        materializer_entrypoint=cast(Callable[..., Path], getattr(module, registration.materializer_name)),
+        verifier_entrypoint=cast(
+            Callable[[Path, Path], dict[str, Any]],
+            getattr(module, registration.verifier_name),
+        ),
+        package_validator=(
+            None
+            if registration.variant_metadata_name is None
+            else cast(Callable[[Path], dict[str, Any]], getattr(module, registration.variant_metadata_name))
+        ),
+        variant_ids_entrypoint=(
+            None
+            if registration.variant_ids_name is None
+            else cast(Callable[[], tuple[str, ...]], getattr(variant_module, registration.variant_ids_name))
+        ),
+        variant_metadata_entrypoint=(
+            None
+            if registration.variant_get_name is None
+            else cast(Callable[[str], Any], getattr(variant_module, registration.variant_get_name))
+        ),
+        operation_resolver_factory=(
+            None
+            if registration.operation_resolver_name is None
+            else cast(
+                Callable[[Path, Path], Any],
+                getattr(module, registration.operation_resolver_name),
+            )
+        ),
+        smoke_environment_factory=(
+            None
+            if registration.smoke_environment_name is None
+            else cast(
+                Callable[[Path], LifecycleEpisodeEnvironment],
+                getattr(smoke_module, registration.smoke_environment_name),
+            )
+        ),
+    )
 
 
 def materialize_sealed_lifecycle(

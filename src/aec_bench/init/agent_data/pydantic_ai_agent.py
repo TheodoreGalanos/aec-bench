@@ -1,10 +1,12 @@
 # ABOUTME: Multimodal PydanticAI agent — supports image-returning tools and chart generation.
 # ABOUTME: Subclasses Harbor's BaseAgent directly, composes aec_bench utility functions.
 
+from typing import Any
+
 from harbor.agents.base import BaseAgent
 
 from aec_bench.agents._shell import quote_for_shell
-from aec_bench.agents.env import build_all_provider_env
+from aec_bench.agents.env import build_all_provider_env, require_model_name
 from aec_bench.agents.results import read_agent_result
 from aec_bench.agents.scripts import build_pydantic_ai_script
 from aec_bench.agents.tools import discover_tools, inject_trajectory_writer
@@ -20,18 +22,18 @@ class PydanticAIBenchAgent(BaseAgent):
     def version(self) -> str | None:
         return "1.0.0"
 
-    async def setup(self, environment) -> None:  # type: ignore[override]
+    async def setup(self, environment: Any) -> None:
         result = await environment.exec("python3 --version")
         if result.return_code != 0:
             raise RuntimeError(f"Python3 not available in sandbox.\nstdout: {result.stdout}\nstderr: {result.stderr}")
         await inject_trajectory_writer(environment)
         self._tools = await discover_tools(environment)
 
-    async def run(self, instruction, environment, context) -> None:  # type: ignore[override]
+    async def run(self, instruction: str, environment: Any, context: Any) -> None:
         script = build_pydantic_ai_script()
         env_vars = build_all_provider_env(
             instruction,
-            self.model_name,
+            require_model_name(self.model_name),
             tools=self._tools,
         )
         timeout = 10 * 180 + 60

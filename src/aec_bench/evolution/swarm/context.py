@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from aec_bench.contracts.evolution import BehaviourDescriptor, ConsolidationReport
+from aec_bench.evolution.archive import ArchiveCoverage, ArchiveEntry
 from aec_bench.evolution.swarm.notes import NoteStore
 from aec_bench.evolution.swarm.shared_graveyard import SharedGraveyard
 
@@ -35,11 +36,11 @@ class _ArchiveEntryLike(Protocol):
 class _ArchiveLike(Protocol):
     """Structural type for the QD archive — avoids hard dependency on pyribs/numpy."""
 
-    def coverage_report(self) -> dict: ...
+    def coverage_report(self) -> ArchiveCoverage: ...
 
-    def top_k(self, k: int = 5) -> list: ...
+    def top_k(self, k: int = 5) -> list[ArchiveEntry]: ...
 
-    def to_summary(self) -> dict: ...
+    def to_summary(self) -> dict[str, object]: ...
 
 
 def _format_coverage_section(archive: _ArchiveLike, generation: int) -> str:

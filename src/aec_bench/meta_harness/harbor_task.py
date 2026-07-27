@@ -184,9 +184,13 @@ def _default_task_id(brief: dict[str, Any]) -> str:
 
 def _public_endpoint(endpoint: Any) -> dict[str, Any]:
     if hasattr(endpoint, "to_public_dict"):
-        return endpoint.to_public_dict()
-    if hasattr(endpoint, "public_dict"):
-        return endpoint.public_dict()
-    if hasattr(endpoint, "model_dump"):
-        return endpoint.model_dump(mode="json", exclude_none=True)
-    return dict(endpoint) if isinstance(endpoint, dict) else {"name": str(endpoint)}
+        payload = endpoint.to_public_dict()
+    elif hasattr(endpoint, "public_dict"):
+        payload = endpoint.public_dict()
+    elif hasattr(endpoint, "model_dump"):
+        payload = endpoint.model_dump(mode="json", exclude_none=True)
+    else:
+        payload = endpoint if isinstance(endpoint, dict) else {"name": str(endpoint)}
+    if not isinstance(payload, dict):
+        raise TypeError("public endpoint representation must be a dictionary")
+    return payload

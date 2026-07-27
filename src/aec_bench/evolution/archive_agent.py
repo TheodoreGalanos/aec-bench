@@ -96,6 +96,8 @@ def build_archive_tools(
             missing.append(version_b)
         if missing:
             return f"Version(s) not found in archive: {', '.join(missing)}"
+        assert entry_a is not None
+        assert entry_b is not None
 
         bd_a = entry_a.bd
         bd_b = entry_b.bd
@@ -328,9 +330,8 @@ def run_archive_selection(
     Builds archive tools, runs a PydanticAI agent with a 10-request budget,
     parses the structured tail of the response, and falls back gracefully.
     """
-    from pydantic_ai import Agent
+    from pydantic_ai import Agent, UsageLimitExceeded, UsageLimits
     from pydantic_ai.tools import Tool
-    from pydantic_ai.usage import UsageLimitExceeded, UsageLimits
 
     from aec_bench.evolution.structured_evolver import _build_pydantic_model
 
@@ -344,7 +345,7 @@ def run_archive_selection(
         )
 
     tools_dict = build_archive_tools(archive, graveyard)
-    tools = [Tool(fn, name=name) for name, fn in tools_dict.items()]
+    tools: list[Tool[None]] = [Tool[None](fn, name=name) for name, fn in tools_dict.items()]
 
     model = _build_pydantic_model(model_name)
 

@@ -313,12 +313,10 @@ def _build_remote_solve_fn(
     # Build trial runner
     trial_runner = TrialRunner(artifacts_dir=artifacts_dir)
 
-    backend_tasks: list[object] = list(resolved_tasks)
-
     return make_harbor_solve_fn(
         trial_runner=trial_runner,
         backend=backend,
-        tasks=backend_tasks,
+        tasks=resolved_tasks,
         adapter=adapter,
         experiment_id=experiment_id,
         runtime_image=f"evolution-{config.solver.adapter}",

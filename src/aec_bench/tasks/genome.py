@@ -158,7 +158,10 @@ def _read_json(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8").strip()
     if not text:
         return {}
-    return json.loads(text)
+    payload = json.loads(text)
+    if not isinstance(payload, dict):
+        raise ValueError(f"expected JSON object in {path}")
+    return payload
 
 
 def _read_verifier_files(task_dir: Path) -> dict[str, str]:
@@ -198,8 +201,9 @@ def _extract_role(instruction: str) -> str | None:
 
 
 def _extract_subdomain(task_id: str, task_type: str, metadata: dict[str, Any]) -> str:
-    if task_id.startswith("generated/") and isinstance(metadata.get("category"), str):
-        return metadata["category"]
+    category = metadata.get("category")
+    if task_id.startswith("generated/") and isinstance(category, str):
+        return category
     return task_type
 
 

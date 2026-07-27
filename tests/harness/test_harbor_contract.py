@@ -56,6 +56,39 @@ def test_read_harbor_trial_result_accepts_import_path_environment(tmp_path: Path
     assert result.config.environment.kwargs["compute_backend"] == "morph"
 
 
+@pytest.mark.parametrize("agent_result", [None, {"metadata": None}])
+def test_read_harbor_trial_result_normalizes_empty_failure_agent_result(
+    tmp_path: Path,
+    agent_result: object,
+) -> None:
+    payload = {
+        "trial_name": "trial-morph-failure",
+        "task_checksum": "sha256-task",
+        "config": {
+            "task": {"path": "tasks/electrical/rlm-test"},
+            "agent": {"name": "entrypoint", "model_name": "test-model"},
+            "environment": {
+                "type": None,
+                "import_path": "aec_bench.providers.morph_harbor:MorphHarborEnvironment",
+                "kwargs": {"compute_backend": "morph"},
+            },
+            "job_id": "experiment-failure",
+        },
+        "agent_info": {"name": "entrypoint", "version": "1.0.0"},
+        "agent_result": agent_result,
+        "exception_info": {"message": "remote agent failed"},
+        "started_at": "2026-07-22T00:00:00Z",
+        "finished_at": "2026-07-22T00:00:01Z",
+    }
+    result_path = tmp_path / "result.json"
+    result_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = read_harbor_trial_result(result_path)
+
+    assert result.agent_result.metadata == {}
+    assert result.exception_info == {"message": "remote agent failed"}
+
+
 @_skip_no_job_data
 def test_read_harbor_trial_result_rejects_missing_task_path(tmp_path: Path) -> None:
     payload = json.loads(HARBOR_TRIAL_RESULT.read_text(encoding="utf-8"))

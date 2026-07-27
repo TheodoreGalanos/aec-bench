@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import typer
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 if TYPE_CHECKING:
     from aec_bench.contracts.experiment_manifest import ExperimentManifest

@@ -14,6 +14,7 @@ from textual.containers import Container, Horizontal
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Label, Static
 
+from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.tui.widgets.shared import reward_style
 
 # ---------------------------------------------------------------------------
@@ -36,11 +37,11 @@ class ModelStats:
 # ---------------------------------------------------------------------------
 
 
-def _compute_model_stats(records: list) -> list[ModelStats]:
+def _compute_model_stats(records: list[TrialRecord]) -> list[ModelStats]:
     """Aggregate trial records by model, sorted by mean reward descending."""
     from collections import defaultdict
 
-    groups: dict[str, list] = defaultdict(list)
+    groups: dict[str, list[TrialRecord]] = defaultdict(list)
     for record in records:
         groups[record.agent.model].append(record)
 
@@ -82,7 +83,7 @@ def _render_model_detail(rank: int, stats: ModelStats) -> str:
 # ---------------------------------------------------------------------------
 
 
-class LeaderboardScreen(Screen):
+class LeaderboardScreen(Screen[None]):
     """Model leaderboard ranked by mean reward with drill-down detail panel."""
 
     BINDINGS = [

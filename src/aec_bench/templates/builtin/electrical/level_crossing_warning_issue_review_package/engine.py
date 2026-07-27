@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 STATUS_PASS = 0.0
 STATUS_FAIL = 1.0
@@ -69,7 +70,7 @@ _COUNT_PARAMS = {
 }
 
 
-def _f(params: dict, key: str) -> float:
+def _f(params: dict[str, Any], key: str) -> float:
     return float(params[key])
 
 
@@ -81,7 +82,7 @@ def _snap(value: float, step: float) -> float:
     return round(round(value / step) * step, 10)
 
 
-def _quantize(params: dict) -> dict:
+def _quantize(params: dict[str, Any]) -> dict[str, Any]:
     quantized = dict(params)
     for key, step in _QUANT_STEPS.items():
         quantized[key] = _snap(float(params[key]), step)
@@ -92,7 +93,7 @@ def _quantize(params: dict) -> dict:
     return quantized
 
 
-def _derive(raw_params: dict) -> dict:
+def _derive(raw_params: dict[str, Any]) -> dict[str, Any]:
     p = _quantize(raw_params)
     variant = str(p["packet_variant"])
 
@@ -197,7 +198,7 @@ def _derive(raw_params: dict) -> dict:
     }
 
 
-_VARIANT_GOLD = {
+_VARIANT_GOLD: dict[str, dict[str, Any]] = {
     "clean": {"flips": {}, "readiness": READY, "findings": 0.0, "requests": 0.0, "carried": 0.0},
     "missing_battery_capacity": {
         "flips": {"rlr_04_status": STATUS_INSUFFICIENT_DATA},
@@ -251,7 +252,7 @@ _VARIANT_GOLD = {
 }
 
 
-def compute(**params) -> dict[str, float]:
+def compute(**params: Any) -> dict[str, float]:
     """Return gold review statuses and recomputed evidence for one issue packet."""
     state = _derive(params)
     gold = _VARIANT_GOLD[state["variant"]]
@@ -351,7 +352,7 @@ def _comments_table(variant: str) -> str:
     return "\n".join(lines)
 
 
-def build_sources(all_params: dict) -> dict[str, str]:
+def build_sources(all_params: dict[str, Any]) -> dict[str, str]:
     """Render the source packet for one level-crossing issue review instance."""
     state = _derive(all_params)
     p = state["params"]
@@ -560,7 +561,7 @@ _VARIANT_FINDINGS = {
 }
 
 
-def _golden_payload(all_params: dict, ground_truth: dict) -> dict:
+def _golden_payload(all_params: dict[str, Any], ground_truth: dict[str, Any]) -> dict[str, Any]:
     variant = str(all_params["packet_variant"])
     evidence_notes = {
         "RLR-01": "All required level-crossing source files are present with IDs and revisions.",
@@ -658,7 +659,7 @@ def _golden_payload(all_params: dict, ground_truth: dict) -> dict:
     }
 
 
-def build_golden_pass(all_params: dict, ground_truth: dict) -> str:
+def build_golden_pass(all_params: dict[str, Any], ground_truth: dict[str, Any]) -> str:
     payload = _golden_payload(all_params, ground_truth)
     return (
         "## Issue-Readiness Review - SSC-02 level crossing package\n\n```json\n"
@@ -667,7 +668,7 @@ def build_golden_pass(all_params: dict, ground_truth: dict) -> str:
     )
 
 
-def build_golden_fail(all_params: dict, ground_truth: dict) -> str:
+def build_golden_fail(all_params: dict[str, Any], ground_truth: dict[str, Any]) -> str:
     matrix = {f"RLR-0{index}": {"status": "pass", "evidence": "Reviewed and found in order."} for index in range(1, 10)}
     payload = {
         "review_matrix": matrix,

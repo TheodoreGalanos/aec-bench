@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from aec_bench.meta_harness.recipe import (
+    materialize_harness_comparison_example,
     materialize_harness_comparison_recipe,
     run_harness_comparison_from_files,
 )
@@ -32,7 +33,31 @@ def test_materialize_harness_comparison_recipe_writes_scripts(tmp_path: Path) ->
     assert (output_dir / "run_recipe.sh").exists()
     assert (output_dir / "compare_candidate.py").exists()
     assert recipe["steps"][-1]["id"] == "compare"
-    assert recipe["paths"]["baseline_world"] == "baseline-world.json"
+    assert recipe["paths"]["baseline_world"] == str(Path("baseline-world.json").resolve())
+    run_script = (output_dir / "run_recipe.sh").read_text(encoding="utf-8")
+    assert "<experiment.yaml>" not in run_script
+    assert "python compare_candidate.py" not in run_script
+    assert "meta-harness compare" in run_script
+
+
+def test_materialize_harness_comparison_example_is_complete_and_provider_free(tmp_path: Path) -> None:
+    output_dir = tmp_path / "example"
+
+    result = materialize_harness_comparison_example(
+        output_dir=output_dir,
+        command_prefix="uv run aec-bench",
+    )
+
+    assert result["status"] == "complete"
+    assert result["comparison"]["recommendation"]["status"] == "candidate_improved"
+    assert result["comparison"]["deltas"]["reward"] == 0.5
+    assert (output_dir / "brief.json").exists()
+    assert (output_dir / "baseline-world.json").exists()
+    assert (output_dir / "candidate-world.json").exists()
+    assert (output_dir / "baseline-run.json").exists()
+    assert (output_dir / "candidate-run.json").exists()
+    assert (output_dir / "comparison" / "comparison.json").exists()
+    assert "candidate_improved" in (output_dir / "comparison" / "comparison.md").read_text(encoding="utf-8")
 
 
 def test_run_harness_comparison_from_files_writes_json_and_markdown(tmp_path: Path) -> None:

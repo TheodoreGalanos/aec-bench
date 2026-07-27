@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 from textual import work
 from textual.app import ComposeResult
@@ -28,6 +29,9 @@ from textual.widgets.option_list import Option
 
 from aec_bench.config import resolve_artifact_path
 from aec_bench.contracts.trajectory import TrajectoryEntry
+
+if TYPE_CHECKING:
+    from aec_bench.tui.app import AecBenchTUI
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evaluation.trace_summary import extract_trial_trace_signals
 from aec_bench.ledger.annotations import (
@@ -466,7 +470,7 @@ class VariableDetailModal(ModalScreen[None]):
             self.dismiss()
 
 
-class TrialViewerScreen(Screen):
+class TrialViewerScreen(Screen[None]):
     """Three-pane trial viewer: OptionList steps, RichLog transcript, tabbed details."""
 
     BINDINGS = [
@@ -654,7 +658,7 @@ class TrialViewerScreen(Screen):
 
     def action_review(self) -> None:
         """Launch Review screen if reviewer is configured on the app."""
-        app = self.app
+        app = cast("AecBenchTUI", self.app)
         feedback_root = getattr(app, "feedback_root", None)
         reviewer_id = getattr(app, "reviewer_id", None)
         if feedback_root is None or reviewer_id is None:
@@ -895,10 +899,10 @@ class TrialViewerScreen(Screen):
                 preview = str(value)[:60]
                 sp_lines.append(f"  [bold #D4A27F]{idx}. {key}[/bold #D4A27F]  {preview}")
             scratchpad_widget.update("\n".join(sp_lines))
-        elif scratchpad_keys:
+        elif isinstance(scratchpad_keys, list) and scratchpad_keys:
             sp_lines = ["[dim]Press 'w' to inspect a scratchpad entry[/dim]"]
             for idx, key in enumerate(scratchpad_keys, 1):
-                self._current_scratchpad_keys.append(key)
+                self._current_scratchpad_keys.append(str(key))
                 sp_lines.append(f"  [bold #D4A27F]{idx}. {key}[/bold #D4A27F]")
             scratchpad_widget.update("\n".join(sp_lines))
         elif isinstance(scratchpad, str) and scratchpad:

@@ -6,11 +6,13 @@ import pytest
 from aec_bench.adapters.base import SerializedClientSpec
 from aec_bench.adapters.direct import DirectCompletionRequest
 from aec_bench.adapters.direct_providers import (
+    BedrockDirectClient,
     anthropic_direct_client_from_payload,
     azure_openai_chat_client_from_payload,
     required_env_values_for_client_spec,
     together_chat_client_from_payload,
 )
+from aec_bench.adapters.rlm.client import RlmCompletionResponse
 
 
 def test_anthropic_direct_client_rebuilds_from_payload() -> None:
@@ -48,6 +50,151 @@ def test_together_direct_client_rebuilds_from_payload() -> None:
     assert client.api_key_env == "TOGETHER_API_KEY"
     assert client.base_url == "https://api.together.ai/v1"
     assert client.max_tokens == 2048
+
+
+def test_bedrock_direct_client_uses_bedrock_transport_and_preserves_usage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class _BedrockClient:
+        def generate(
+            self,
+            *,
+            model: str,
+            messages: list[object],
+            system_prompt: str | None,
+            temperature: float | None,
+        ) -> RlmCompletionResponse:
+            captured.update(
+                {
+                    "model": model,
+                    "messages": messages,
+                    "system_prompt": system_prompt,
+                    "temperature": temperature,
+                }
+            )
+            return RlmCompletionResponse(
+                output_text="bedrock answer",
+                input_tokens=321,
+                output_tokens=45,
+            )
+
+    def fake_make_rlm_client(
+        model_name: str,
+        *,
+        cache: bool,
+        max_tokens: int,
+        stream_mode: str,
+    ) -> _BedrockClient:
+        captured.update(
+            {
+                "factory_model": model_name,
+                "cache": cache,
+                "max_tokens": max_tokens,
+                "stream_mode": stream_mode,
+            }
+        )
+        return _BedrockClient()
+
+    monkeypatch.setattr(
+        "aec_bench.adapters.rlm.providers.make_rlm_client",
+        fake_make_rlm_client,
+    )
+    client = BedrockDirectClient(max_tokens=4096)
+
+    response = client.complete(
+        DirectCompletionRequest(
+            model="au.anthropic.claude-sonnet-4-6",
+            instruction="Review the packet.",
+            system_prompt="Use the declared evidence only.",
+            configuration={"prompt_cache": False, "temperature": 0.2},
+        )
+    )
+
+    assert response.output_text == "bedrock answer"
+    assert response.usage_input_tokens == 321
+    assert response.usage_output_tokens == 45
+    assert response.usage_model_calls == 1
+    assert response.usage_cache_read_tokens == 0
+    assert response.usage_cache_write_tokens == 0
+    assert response.error_message is None
+    assert captured["factory_model"] == "au.anthropic.claude-sonnet-4-6"
+    assert captured["cache"] is False
+    assert captured["max_tokens"] == 4096
+    assert captured["stream_mode"] == "auto"
+    assert captured["system_prompt"] == "Use the declared evidence only."
+    assert captured["temperature"] == 0.2
+
+
+def test_bedrock_direct_client_enforces_bounded_request_limits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class _BedrockClient:
+        def generate(
+            self,
+            *,
+            model: str,
+            messages: list[object],
+            system_prompt: str | None,
+            temperature: float | None,
+        ) -> RlmCompletionResponse:
+            captured.update(
+                {
+                    "model": model,
+                    "messages": messages,
+                    "system_prompt": system_prompt,
+                    "temperature": temperature,
+                }
+            )
+            return RlmCompletionResponse(
+                output_text="bounded bedrock answer",
+                input_tokens=123,
+                output_tokens=17,
+            )
+
+    def fake_make_rlm_client(
+        model_name: str,
+        *,
+        cache: bool,
+        max_tokens: int,
+        stream_mode: str,
+        timeout_seconds: float,
+    ) -> _BedrockClient:
+        captured.update(
+            {
+                "factory_model": model_name,
+                "cache": cache,
+                "max_tokens": max_tokens,
+                "stream_mode": stream_mode,
+                "timeout_seconds": timeout_seconds,
+            }
+        )
+        return _BedrockClient()
+
+    monkeypatch.setattr(
+        "aec_bench.adapters.rlm.providers.make_rlm_client",
+        fake_make_rlm_client,
+    )
+    client = BedrockDirectClient(max_tokens=4096)
+
+    response = client.complete_bounded(
+        DirectCompletionRequest(
+            model="au.anthropic.claude-sonnet-4-6",
+            instruction="Return the bounded proposal.",
+            configuration={"prompt_cache": False, "temperature": 0.0},
+        ),
+        timeout_seconds=37.5,
+        max_output_tokens=777,
+    )
+
+    assert response.output_text == "bounded bedrock answer"
+    assert response.usage_input_tokens == 123
+    assert response.usage_output_tokens == 17
+    assert captured["max_tokens"] == 777
+    assert captured["timeout_seconds"] == 37.5
 
 
 def test_together_direct_client_retries_streaming_required(
@@ -107,6 +254,7 @@ def test_together_direct_client_retries_streaming_required(
 
     assert response.error_message is None
     assert response.output_text == "hello world"
+    assert response.usage_model_calls == 2
     assert len(calls) == 2
     assert '"stream": true' not in calls[0]
     assert '"stream": true' in calls[1]

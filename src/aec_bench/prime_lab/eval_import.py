@@ -365,11 +365,15 @@ def _total_seconds(sample: dict[str, Any], timing: dict[str, Any]) -> float:
 def _seconds(value: object) -> float | None:
     if value is None:
         return None
+    if not isinstance(value, str | int | float) or isinstance(value, bool):
+        return None
     return float(value) / 1000.0
 
 
 def _optional_int(value: object) -> int | None:
     if value is None:
+        return None
+    if not isinstance(value, str | int | float) or isinstance(value, bool):
         return None
     return int(float(value))
 

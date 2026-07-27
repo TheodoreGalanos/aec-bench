@@ -6,7 +6,7 @@ from __future__ import annotations
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import uuid4
 
 import typer
@@ -108,7 +108,7 @@ def evaluate_experiment(
         build_evaluation_report(artifact, report)
         console.print(f"[green]Report written to {report}[/green]")
 
-    def _render_evaluate(data: dict) -> None:
+    def _render_evaluate(data: dict[str, Any]) -> None:
         _print_overview_table(experiment, summary)
         _print_adapter_table(by_adapter)
         _print_task_table(by_task)
@@ -121,7 +121,10 @@ def evaluate_experiment(
     )
 
 
-def _print_overview_table(experiment_id: str, summary: dict) -> None:
+def _print_overview_table(
+    experiment_id: str,
+    summary: dict[str, Any],
+) -> None:
     """Print the overview Rich table."""
     from rich.table import Table
 
@@ -136,7 +139,7 @@ def _print_overview_table(experiment_id: str, summary: dict) -> None:
     console.print(table)
 
 
-def _print_adapter_table(by_adapter: dict) -> None:
+def _print_adapter_table(by_adapter: dict[str, Any]) -> None:
     """Print the by-adapter Rich table."""
     if not by_adapter:
         return
@@ -163,7 +166,7 @@ def _print_adapter_table(by_adapter: dict) -> None:
     console.print(table)
 
 
-def _print_task_table(by_task: dict) -> None:
+def _print_task_table(by_task: dict[str, Any]) -> None:
     """Print the by-task-prefix Rich table."""
     if not by_task:
         return

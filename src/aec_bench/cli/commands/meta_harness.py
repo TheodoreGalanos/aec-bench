@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import typer
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from aec_bench.cli.output import emit, print_success
 from aec_bench.meta_harness.autonomy import AutonomyConfig, run_autonomous_process
@@ -54,7 +54,11 @@ from aec_bench.meta_harness.model_runner import (
 )
 from aec_bench.meta_harness.operation_orchestrator import run_operation_orchestrator
 from aec_bench.meta_harness.operation_profile import apply_world_operation
-from aec_bench.meta_harness.recipe import materialize_harness_comparison_recipe
+from aec_bench.meta_harness.recipe import (
+    materialize_harness_comparison_example,
+    materialize_harness_comparison_recipe,
+    run_harness_comparison_from_files,
+)
 from aec_bench.meta_harness.world_process import (
     apply_governance_decision,
     build_problem_brief_request,
@@ -697,6 +701,42 @@ def recipe_command(
         command_prefix=command_prefix,
     )
     emit("meta-harness recipe", result, start_time=start)
+
+
+@app.command("compare")
+def compare_command(
+    brief: Path = typer.Option(..., "--brief", help="Problem-space brief JSON"),
+    baseline_world: Path = typer.Option(..., "--baseline-world", help="Baseline world JSON"),
+    candidate_world: Path = typer.Option(..., "--candidate-world", help="Candidate world JSON"),
+    baseline_run: Path = typer.Option(..., "--baseline-run", help="Baseline task-run JSON"),
+    candidate_run: Path = typer.Option(..., "--candidate-run", help="Candidate task-run JSON"),
+    output: Path = typer.Option(..., "--output", help="Directory for comparison reports"),
+) -> None:
+    """Compare complete baseline and candidate evidence without model calls."""
+    start = time.monotonic()
+    result = run_harness_comparison_from_files(
+        brief_path=brief,
+        baseline_world_path=baseline_world,
+        candidate_world_path=candidate_world,
+        baseline_run_path=baseline_run,
+        candidate_run_path=candidate_run,
+        output_dir=output,
+    )
+    emit("meta-harness compare", result, start_time=start)
+
+
+@app.command("example")
+def example_command(
+    output: Path = typer.Option(..., "--output", help="Directory for the complete example workspace"),
+    command_prefix: str = typer.Option("aec-bench", "--command-prefix", help="Command used in generated scripts"),
+) -> None:
+    """Run a complete provider-free baseline-versus-candidate comparison."""
+    start = time.monotonic()
+    result = materialize_harness_comparison_example(
+        output_dir=output,
+        command_prefix=command_prefix,
+    )
+    emit("meta-harness example", result, start_time=start)
 
 
 @app.command("process")

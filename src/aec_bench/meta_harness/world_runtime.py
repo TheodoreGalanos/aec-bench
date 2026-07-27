@@ -292,7 +292,12 @@ def _first_complete(output: dict[str, Any], key: str) -> Any | None:
 
 
 def _first_complete_result(output: dict[str, Any]) -> dict[str, Any] | None:
-    for result in output.get("results", []):
+    results = output.get("results", [])
+    if not isinstance(results, list):
+        return None
+    for result in results:
+        if not isinstance(result, dict):
+            continue
         if result.get("status") in {"complete", "certified"}:
             return result
     return None

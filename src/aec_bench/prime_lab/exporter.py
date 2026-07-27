@@ -79,7 +79,7 @@ def export_prime_lab_environment(config: PrimeLabExportConfig) -> PrimeLabExport
             ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"),
         )
         _prepare_task_environment_files(tasks_dir / relative_dest)
-        record = {
+        record: dict[str, Any] = {
             "task_id": task_def.task_id,
             "domain": task_def.domain,
             "difficulty": task_def.difficulty.value,

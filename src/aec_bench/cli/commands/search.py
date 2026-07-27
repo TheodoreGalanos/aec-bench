@@ -5,7 +5,7 @@
 
 import time
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, Literal
 
 import typer
 from rich.table import Table
@@ -43,7 +43,7 @@ def search_command(
 
     index = build_index_from_paths(tasks_root, templates_root)
 
-    kind_filter = None
+    kind_filter: Literal["template", "seed"] | None = None
     if templates_only:
         kind_filter = "template"
     elif seeds_only:
@@ -66,7 +66,7 @@ def search_command(
         for r in results
     ]
 
-    def _render(d: list) -> None:
+    def _render(d: list[dict[str, Any]]) -> None:
         if not d:
             console.print(f"[dim]No results for [bold]{query}[/bold][/dim]")
             return

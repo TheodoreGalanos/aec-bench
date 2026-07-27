@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import tomllib
 from typing import Any
 
 from aec_bench.contracts.repl import (
@@ -10,13 +11,8 @@ from aec_bench.contracts.repl import (
     OutputField,
     TreeSection,
 )
-from aec_bench.contracts.report_template import parse_block
+from aec_bench.contracts.report_template import Block, parse_block
 from aec_bench.contracts.rubric import Rubric, RubricCriterion, RubricDimension
-
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redef]
 
 
 def _parse_fields(
@@ -93,7 +89,7 @@ def _parse_sections(section_list: list[dict[str, Any]]) -> list[TreeSection]:
     return sections
 
 
-def _parse_blocks(section_data: dict[str, Any], generation_mode: str | None) -> tuple | None:
+def _parse_blocks(section_data: dict[str, Any], generation_mode: str | None) -> tuple[Block, ...] | None:
     """Parse compose-mode blocks if present, validating against generation_mode."""
     raw_blocks = section_data.get("blocks")
     section_id = section_data.get("id", "<unknown>")

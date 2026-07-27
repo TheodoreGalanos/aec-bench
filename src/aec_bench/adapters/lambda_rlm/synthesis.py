@@ -7,7 +7,10 @@ import hashlib
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pydantic_ai.models import KnownModelName, Model
 
 from aec_bench.adapters.lambda_rlm.criteria import CriteriaBundle
 from aec_bench.contracts.synthesis import (
@@ -78,7 +81,7 @@ def _build_synthesiser_client(config: SynthesisConfig) -> BehavioralLLMClient:
     return build_behavioral_llm_client(model)
 
 
-def _build_synthesiser_pydantic_model(config: SynthesisConfig):  # noqa: ANN202
+def _build_synthesiser_pydantic_model(config: SynthesisConfig) -> Model | KnownModelName | str:
     """Build a pydantic-ai compatible model for tool-loop synthesis.
 
     Mirrors the detection logic in ``_build_synthesiser_client`` — Bedrock
@@ -92,11 +95,8 @@ def _build_synthesiser_pydantic_model(config: SynthesisConfig):  # noqa: ANN202
         from pydantic_ai.models.bedrock import BedrockConverseModel
         from pydantic_ai.providers.bedrock import BedrockProvider
 
-        provider_kwargs: dict[str, str] = {}
         region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
-        if region:
-            provider_kwargs["region_name"] = region
-        return BedrockConverseModel(model, provider=BedrockProvider(**provider_kwargs))
+        return BedrockConverseModel(model, provider=BedrockProvider(region_name=region))
     return model
 
 

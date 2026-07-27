@@ -500,9 +500,9 @@ def test_lifecycle_ablation_manifest_rejects_adapter_controls_runner_does_not_ap
         LifecycleAblationManifest.model_validate(payload)
 
 
-def test_documented_lifecycle_ablation_example_is_a_valid_sixteen_trial_plan() -> None:
+def test_lifecycle_ablation_fixture_is_a_valid_sixteen_trial_plan() -> None:
     manifest = load_lifecycle_ablation_manifest(
-        Path(__file__).resolve().parents[2] / "docs" / "examples" / "meta-harness" / "lifecycle-ablation.example.yaml"
+        Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "meta_harness" / "lifecycle-ablation.example.yaml"
     )
 
     plan = build_lifecycle_ablation_plan(manifest)
@@ -1702,6 +1702,34 @@ def test_run_lifecycle_ablation_records_provider_failure_as_immutable_trial(tmp_
     assert second.skipped_trials == 1
 
 
+def test_run_lifecycle_ablation_preserves_turn_limit_usage_without_provider_failure(
+    tmp_path: Path,
+) -> None:
+    manifest = _persistent_manifest(tmp_path, experiment_id="ssc03-turn-limit")
+
+    result = run_lifecycle_ablation(
+        manifest,
+        registry_factory=lambda _trial, _package, _run: _TurnLimitPersistentRegistry(),
+    )
+
+    assert result.executed_trials == 1
+    assert result.failed_trials == 1
+    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    assert record.lifecycle_execution is not None
+    session = record.lifecycle_execution.sessions[0]
+    assert session.failure_kind == "turn_limit_reached"
+    assert session.provider_error is None
+    assert session.input_tokens == 120
+    assert session.output_tokens == 30
+    assert session.cache_read_tokens == 40
+    assert session.cache_write_tokens == 10
+    assert record.cost is not None
+    assert record.cost.tokens_in == 120
+    assert record.cost.tokens_out == 30
+    assert record.cost.cache_read_tokens == 40
+    assert record.cost.cache_write_tokens == 10
+
+
 def test_provider_failure_before_later_conditional_checkpoint_preserves_pending_catalog_boundary(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2438,6 +2466,29 @@ class _FailedRegistry:
                 )
 
         return _FailedAdapter()
+
+
+class _TurnLimitPersistentRegistry:
+    def build(self, **_kwargs: object) -> object:
+        class _TurnLimitAdapter:
+            def execute(self, _request: object) -> object:
+                return SimpleNamespace(
+                    adapter_name="tool_loop",
+                    resolved_model="deterministic-replay",
+                    configuration_record={"model": "deterministic-replay", "source": "in_process_replay"},
+                    agent_output=SimpleNamespace(status=SimpleNamespace(value="failed")),
+                    transcript=[],
+                    raw_output_text=None,
+                    provider_error=None,
+                    failure_kind=SimpleNamespace(value="turn_limit_reached"),
+                    usage_model_calls=3,
+                    usage_input_tokens=120,
+                    usage_output_tokens=30,
+                    usage_cache_read_tokens=40,
+                    usage_cache_write_tokens=10,
+                )
+
+        return _TurnLimitAdapter()
 
 
 class _EmptyRegistry:

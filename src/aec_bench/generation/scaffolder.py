@@ -5,12 +5,24 @@ import importlib.resources
 import json
 import shutil
 from pathlib import Path
+from types import ModuleType
 
+from aec_bench.contracts.output_completion import OutputCompletionContract
+from aec_bench.contracts.task_definition import Visibility
+from aec_bench.contracts.task_world import (
+    AgenticReviewProfile,
+    ClosureGate,
+    ConstructionGate,
+    LogicProfile,
+    OperationProfile,
+    TaskWorldProfile,
+)
 from aec_bench.generation.cli_wrapper_gen import generate_cli_wrapper
 from aec_bench.generation.contracts import SampledInstance
 from aec_bench.generation.instruction_renderer import render_instruction
 from aec_bench.generation.verifier_gen import generate_verifier
 from aec_bench.images.extensions import generate_dockerfile
+from aec_bench.task_world_templates.catalogue import list_templates as list_composite_templates
 from aec_bench.templates.contracts import TemplateConfig, ToolMode
 from aec_bench.templates.registry import has_custom_verifier, load_engine_module
 
@@ -53,6 +65,7 @@ def _build_task_toml(
     config: TemplateConfig,
     instance: SampledInstance,
     tool_mode: ToolMode,
+    task_visibility: Visibility,
 ) -> str:
     """Produce task.toml content as a string using f-strings (tomllib is read-only).
 
@@ -75,6 +88,7 @@ version = "1.0"
 	domain = "{config.meta.discipline}"
 	category = "{config.meta.category}"
 	difficulty = "{metadata_difficulty}"
+	visibility = "{task_visibility.value}"
 {generation_difficulty_line}	tags = [{tags_toml}]
 
 [agent]
@@ -96,6 +110,7 @@ origin = "generated"
 template = "{meta.template}"
 template_version = "1.0"
 seed = {meta.seed}
+instance_index = {meta.instance_index}
 timestamp = "{timestamp_iso}"
 difficulty = "{meta.difficulty}"
 visibility_level = "{meta.visibility_level}"
@@ -170,10 +185,13 @@ def _build_test_sh() -> str:
     return "\n".join(
         [
             "#!/usr/bin/env bash",
+            "# ABOUTME: Runs the task-owned Python verifier inside Harbor's verifier phase.",
+            "# ABOUTME: Guarantees a fail-closed reward artifact when verification aborts.",
             "set -euo pipefail",
             "mkdir -p /logs/verifier",
             trap_line,
-            "python3 /workspace/tests/verify.py",
+            'SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"',
+            'python3 "$SCRIPT_DIR/verify.py"',
             "",
         ]
     )
@@ -205,7 +223,7 @@ def _build_golden_fail(ground_truth: dict[str, float]) -> str:
 
 
 def _write_source_pack(
-    engine_module,
+    engine_module: ModuleType,
     instance: SampledInstance,
     environment_dir: Path,
 ) -> list[str]:
@@ -228,16 +246,113 @@ def _write_source_pack(
     return written
 
 
+def _copy_output_completion_contract(template_dir: Path, environment_dir: Path) -> None:
+    """Copy a validated, task-owned completion sidecar when the template declares one."""
+    source = template_dir / "output_contract.json"
+    if not source.exists():
+        return
+    OutputCompletionContract.model_validate_json(source.read_text(encoding="utf-8"))
+    shutil.copyfile(source, environment_dir / source.name)
+
+
 def _write_instance_record(instance: SampledInstance, tests_dir: Path) -> None:
     """Write tests/instance.json so a custom verifier can read instance gold state."""
     record = {
         "instance_name": instance.instance_name,
         "seed": instance.metadata.seed,
+        "instance_index": instance.metadata.instance_index,
         "difficulty": instance.difficulty,
         "all_params": instance.all_params,
         "ground_truth": instance.ground_truth,
     }
     (tests_dir / "instance.json").write_text(json.dumps(record, indent=2))
+
+
+def _generated_task_world_profile(
+    config: TemplateConfig,
+    instance: SampledInstance,
+) -> TaskWorldProfile:
+    """Return the strict sidecar shared by generation, review, and adaptive-harness lineage."""
+    world_segments = (
+        config.meta.discipline,
+        config.meta.category,
+        config.meta.name,
+        instance.instance_name,
+    )
+    world_id = "aec_bench.generated." + ".".join(
+        "".join(character.lower() if character.isalnum() else "-" for character in segment).strip("-")
+        for segment in world_segments
+    )
+    return TaskWorldProfile(
+        world_id=world_id,
+        name=f"{config.meta.name}: {instance.instance_name}",
+        task_unit="generated-task-instance",
+        logic_profile=LogicProfile(
+            closure_gates=[
+                ClosureGate(
+                    id="verifier_reward_available",
+                    evidence_key="verifier.reward_available",
+                    expected=True,
+                    authority="task_verifier",
+                    failure_effect="review_blocked",
+                ),
+                ClosureGate(
+                    id="verifier_details_available",
+                    evidence_key="verifier.details_available",
+                    expected=True,
+                    authority="task_verifier",
+                    failure_effect="review_blocked",
+                ),
+            ],
+            construction_gates=[
+                ConstructionGate(
+                    id="generated_answer_has_verifier_witness",
+                    construction_required=["agent.output_md", "verifier.reward", "verifier.details"],
+                    failure_effect="claim_unproven",
+                )
+            ],
+            agentic_review=AgenticReviewProfile(
+                required=True,
+                guidance="Review generated inputs, output artifacts, and verifier evidence together.",
+            ),
+        ),
+        operation_profile=OperationProfile(
+            subset_axes=["visible_parameters", "source_pack"],
+            difference_axes=["difficulty", "archetype", "site_context"],
+            projection_axes=["ground_truth_outputs", "verifier_evidence"],
+            product_axes=["template", "seed", "difficulty"],
+            extension_policy="Preserve template, seed, and sampled-instance provenance across variants.",
+        ),
+    )
+
+
+def _declared_catalogue_topology(template_id: str) -> dict[str, object]:
+    """Project reward-blind catalogue topology without copying example answers."""
+    template = next(
+        (candidate for candidate in list_composite_templates() if candidate.template_id == template_id),
+        None,
+    )
+    if template is None:
+        return {}
+    return {
+        "template_id": template.template_id,
+        "pattern": template.pattern,
+        "stages": [stage.model_dump(mode="json") for stage in template.stages],
+        "handoffs": [
+            handoff.model_dump(
+                mode="json",
+                include={"id", "description", "unit", "producer_stage", "consumer_stages"},
+            )
+            for handoff in template.handoffs
+        ],
+        "branch_decisions": [
+            decision.model_dump(
+                mode="json",
+                include={"id", "description", "allowed", "evidence_key"},
+            )
+            for decision in template.branch_decisions
+        ],
+    }
 
 
 def scaffold_task_instance(
@@ -247,6 +362,9 @@ def scaffold_task_instance(
     instance: SampledInstance,
     output_dir: Path,
     tool_mode_override: str | None = None,
+    task_visibility: Visibility = Visibility.PUBLIC,
+    sealed_output_dir: Path | None = None,
+    public_instruction: str | None = None,
 ) -> Path:
     """Scaffold a complete task instance directory from a TemplateConfig and SampledInstance.
 
@@ -256,30 +374,56 @@ def scaffold_task_instance(
 
     Returns the path to the created instance directory.
     """
+    if (sealed_output_dir is None) != (public_instruction is None):
+        raise ValueError("sealed output and public instruction must be supplied together")
+    if public_instruction is not None and not public_instruction.strip():
+        raise ValueError("public instruction must not be blank")
+    if sealed_output_dir is not None:
+        _validate_disjoint_output_roots(
+            public_root=Path(output_dir),
+            sealed_root=Path(sealed_output_dir),
+        )
+
     tool_mode = _resolve_tool_mode(config, tool_mode_override)
-    engine_module = load_engine_module(template_dir)
 
     # Build the instance directory path: output_dir/discipline/category/template_name/instance_name
     template_name = config.meta.name
-    instance_dir = output_dir / config.meta.discipline / config.meta.category / template_name / instance.instance_name
+    relative_instance_dir = Path(config.meta.discipline) / config.meta.category / template_name / instance.instance_name
+    instance_dir = output_dir / relative_instance_dir
+    sealed_instance_dir = None if sealed_output_dir is None else Path(sealed_output_dir) / relative_instance_dir
+    if instance_dir.exists():
+        raise FileExistsError(f"refusing to overwrite existing task package: {instance_dir}")
+    if sealed_instance_dir is not None and sealed_instance_dir.exists():
+        raise FileExistsError(f"refusing to overwrite existing sealed task package: {sealed_instance_dir}")
+    engine_module = load_engine_module(template_dir)
 
     # Create required subdirectories
     (instance_dir / "environment").mkdir(parents=True, exist_ok=True)
-    (instance_dir / "tests" / "fixtures").mkdir(parents=True, exist_ok=True)
+    (instance_dir / "tests").mkdir(parents=True, exist_ok=True)
+    authority_dir = sealed_instance_dir or instance_dir
+    (authority_dir / "tests" / "fixtures").mkdir(parents=True, exist_ok=True)
 
     # Copy trajectory_writer.py into the environment directory so the Dockerfile can COPY it
     writer_source = importlib.resources.files("aec_bench.trajectory") / "writer.py"
     (instance_dir / "environment" / "trajectory_writer.py").write_text(writer_source.read_text(encoding="utf-8"))
 
     # 1. Write task.toml
-    (instance_dir / "task.toml").write_text(_build_task_toml(config, instance, tool_mode))
+    (instance_dir / "task.toml").write_text(_build_task_toml(config, instance, tool_mode, task_visibility))
 
     # 2. Render and write instruction.md
-    instruction_template = (template_dir / "instruction.md").read_text()
-    rendered_instruction = render_instruction(instruction_template, instance, config)
+    if public_instruction is None:
+        instruction_template = (template_dir / "instruction.md").read_text()
+        rendered_instruction = render_instruction(
+            instruction_template,
+            instance,
+            config,
+        )
+    else:
+        rendered_instruction = public_instruction
     (instance_dir / "instruction.md").write_text(rendered_instruction)
 
-    # 3. Write template-provided source-pack files, then environment/Dockerfile
+    # 3. Write template-provided sidecars and source-pack files, then environment/Dockerfile
+    _copy_output_completion_contract(template_dir, instance_dir / "environment")
     source_files = _write_source_pack(engine_module, instance, instance_dir / "environment")
     (instance_dir / "environment" / "Dockerfile").write_text(_build_dockerfile(config, tool_mode, source_files))
 
@@ -300,7 +444,7 @@ def scaffold_task_instance(
     #    Custom verifiers also get tests/instance.json with the instance gold state.
     if has_custom_verifier(template_dir):
         shutil.copy(template_dir / "verify.py", instance_dir / "tests" / "verify.py")
-        _write_instance_record(instance, instance_dir / "tests")
+        _write_instance_record(instance, authority_dir / "tests")
     else:
         verifier_source = generate_verifier(instance, config)
         (instance_dir / "tests" / "verify.py").write_text(verifier_source)
@@ -319,7 +463,26 @@ def scaffold_task_instance(
         golden_fail = engine_module.build_golden_fail(dict(instance.all_params), dict(instance.ground_truth))
     else:
         golden_fail = _build_golden_fail(instance.ground_truth)
-    (instance_dir / "tests" / "fixtures" / "golden_pass.md").write_text(golden_pass)
-    (instance_dir / "tests" / "fixtures" / "golden_fail.md").write_text(golden_fail)
+    (authority_dir / "tests" / "fixtures" / "golden_pass.md").write_text(golden_pass)
+    (authority_dir / "tests" / "fixtures" / "golden_fail.md").write_text(golden_fail)
+
+    world_profile = _generated_task_world_profile(config, instance)
+    world_payload = world_profile.model_dump(mode="json", exclude_none=True)
+    world_payload.update(_declared_catalogue_topology(config.meta.name))
+    (authority_dir / "world.json").write_text(
+        json.dumps(world_payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
     return instance_dir
+
+
+def _validate_disjoint_output_roots(
+    *,
+    public_root: Path,
+    sealed_root: Path,
+) -> None:
+    public = public_root.resolve()
+    sealed = sealed_root.resolve()
+    if public == sealed or public.is_relative_to(sealed) or sealed.is_relative_to(public):
+        raise ValueError("public and sealed output roots must be physically disjoint")

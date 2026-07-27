@@ -12,6 +12,7 @@ from aec_bench.adapters.tool_loop import (
     ToolLoopAdapter,
     ToolLoopCompletionResponse,
     ToolLoopRequest,
+    replay_tool_loop_client_from_payload,
 )
 from aec_bench.adapters.transcript import TranscriptEvent, TranscriptRole
 from aec_bench.contracts.agent_output import AgentOutputStatus
@@ -46,7 +47,9 @@ def test_tool_loop_adapter_executes_declared_tool_and_records_transcript() -> No
                     tool_call_id="call-1",
                     tool_name="codes_search",
                     arguments={"query": "egress width"},
-                )
+                ),
+                usage_input_tokens=90,
+                usage_output_tokens=20,
             ),
             ToolLoopCompletionResponse(
                 output_text="Final answer in JSONL.",
@@ -91,6 +94,10 @@ def test_tool_loop_adapter_executes_declared_tool_and_records_transcript() -> No
     assert result.configuration_record == {"model": "gpt-5.4-mini", "max_turns": 4}
     assert result.failure_kind is None
     assert result.agent_output.status is AgentOutputStatus.COMPLETED
+    assert result.usage_model_calls == 2
+    assert result.turns_used == 2
+    assert result.usage_input_tokens == 300
+    assert result.usage_output_tokens == 100
     assert [entry.event for entry in result.transcript] == [
         TranscriptEvent.MESSAGE,
         TranscriptEvent.MESSAGE,
@@ -167,6 +174,93 @@ def test_tool_loop_adapter_classifies_turn_limit_reached() -> None:
 
     assert result.agent_output.status is AgentOutputStatus.PARTIAL
     assert result.failure_kind is AdapterFailureKind.TURN_LIMIT_REACHED
+
+
+def test_tool_loop_adapter_preserves_client_reported_request_limit_usage() -> None:
+    client = ScriptedToolLoopClient(
+        responses=[
+            ToolLoopCompletionResponse(
+                error_message="The next request would exceed the request_limit of 3",
+                failure_kind=AdapterFailureKind.TURN_LIMIT_REACHED,
+                usage_model_calls=3,
+                usage_input_tokens=120,
+                usage_output_tokens=30,
+                usage_cache_read_tokens=40,
+                usage_cache_write_tokens=10,
+                done=True,
+            )
+        ]
+    )
+    adapter = ToolLoopAdapter(
+        adapter_name="tool-loop-test",
+        model_name="gpt-5.4",
+        client=client,
+        tool_executor=RecordingToolExecutor(results={}),
+    )
+
+    result = adapter.execute(
+        AdapterRequest(
+            instruction="Stop at the configured request limit.",
+            configuration={"max_turns": 3},
+        )
+    )
+
+    assert result.agent_output.status is AgentOutputStatus.FAILED
+    assert result.failure_kind is AdapterFailureKind.TURN_LIMIT_REACHED
+    assert result.provider_error is None
+    assert result.turns_used == 3
+    assert result.usage_model_calls == 3
+    assert result.usage_input_tokens == 120
+    assert result.usage_output_tokens == 30
+    assert result.usage_cache_read_tokens == 40
+    assert result.usage_cache_write_tokens == 10
+
+
+def test_tool_loop_adapter_stops_before_executing_tool_past_call_limit() -> None:
+    client = ScriptedToolLoopClient(
+        responses=[
+            ToolLoopCompletionResponse(
+                tool_call=ToolCall(
+                    tool_call_id="call-1",
+                    tool_name="codes_search",
+                    arguments={"query": "first"},
+                )
+            ),
+            ToolLoopCompletionResponse(
+                tool_call=ToolCall(
+                    tool_call_id="call-2",
+                    tool_name="codes_search",
+                    arguments={"query": "second"},
+                )
+            ),
+        ]
+    )
+    executor = RecordingToolExecutor(results={"codes_search": ToolExecutionResult(output_text='{"matches": []}')})
+    adapter = ToolLoopAdapter(
+        adapter_name="tool-loop-test",
+        model_name="gpt-5.4",
+        client=client,
+        tool_executor=executor,
+    )
+
+    result = adapter.execute(
+        AdapterRequest(
+            instruction="Use the tool within its call budget.",
+            tools=[
+                ToolSpec(
+                    name="codes_search",
+                    source="environment/codes_search.py",
+                    description="Search code references.",
+                )
+            ],
+            configuration={"max_turns": 4, "max_tool_calls": 1},
+        )
+    )
+
+    assert executor.calls == [("codes_search", {"query": "first"})]
+    assert result.agent_output.status is AgentOutputStatus.PARTIAL
+    assert result.failure_kind is AdapterFailureKind.TOOL_CALL_LIMIT_REACHED
+    assert result.agent_output.error_message == "tool call limit reached (1/1)"
 
 
 def test_tool_loop_adapter_classifies_provider_timeout() -> None:
@@ -295,3 +389,47 @@ def test_tool_loop_adapter_serializes_remote_execution_spec() -> None:
             },
         }
     }
+
+
+def test_tool_loop_replay_preserves_client_reported_failure_kind() -> None:
+    source = ReplayToolLoopClient(
+        responses=[
+            ToolLoopCompletionResponse(
+                error_message="The next request would exceed the request_limit of 3",
+                failure_kind=AdapterFailureKind.TURN_LIMIT_REACHED,
+                usage_model_calls=3,
+                usage_input_tokens=120,
+                usage_output_tokens=30,
+                done=True,
+            )
+        ]
+    )
+    payload = (
+        ToolLoopAdapter(
+            adapter_name="tool-loop-test",
+            model_name="gpt-5.4",
+            client=source,
+            tool_executor=RecordingToolExecutor(results={}),
+        )
+        .serialize_execution()
+        .payload["client"]["payload"]
+    )
+    replay = replay_tool_loop_client_from_payload(payload)
+
+    result = ToolLoopAdapter(
+        adapter_name="tool-loop-test",
+        model_name="gpt-5.4",
+        client=replay,
+        tool_executor=RecordingToolExecutor(results={}),
+    ).execute(
+        AdapterRequest(
+            instruction="Stop at the configured request limit.",
+            configuration={"max_turns": 3},
+        )
+    )
+
+    assert result.failure_kind is AdapterFailureKind.TURN_LIMIT_REACHED
+    assert result.provider_error is None
+    assert result.usage_model_calls == 3
+    assert result.usage_input_tokens == 120
+    assert result.usage_output_tokens == 30

@@ -11,13 +11,16 @@ import shutil
 import subprocess
 import sys
 import time
+import tomllib
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 import typer
 
 from aec_bench.cli.output import StructuredError, console, emit
 from aec_bench.contracts.canonical_refs import CanonicalRefSet, parse_canonical_refs
+from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.evaluation.llm_reviewer import (
     ReviewerEndpointConfig,
     ReviewerRunConfig,
@@ -58,11 +61,7 @@ def load_canonical_refs(task_toml_path: Path) -> CanonicalRefSet:
     """
     if not task_toml_path.exists():
         return CanonicalRefSet()
-    try:
-        import tomllib as _tomllib
-    except ModuleNotFoundError:
-        import tomli as _tomllib  # type: ignore[no-redef]
-    data = _tomllib.loads(task_toml_path.read_text())
+    data = tomllib.loads(task_toml_path.read_text())
     refs_dict = data.get("canonical_refs", {})
     return parse_canonical_refs(refs_dict)
 
@@ -261,7 +260,10 @@ def _prepare_verifier_retry_workspace(workspace: Path, attempt_name: str) -> Pat
     return archive_dir
 
 
-def _write_verifier_retry_summary(workspace: Path, payload: dict[str, object]) -> None:
+def _write_verifier_retry_summary(
+    workspace: Path,
+    payload: Mapping[str, object],
+) -> None:
     retry_path = workspace / "logs" / "verifier" / "retry.json"
     retry_path.parent.mkdir(parents=True, exist_ok=True)
     retry_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -313,10 +315,8 @@ def _run_adapter(
     )
 
     # Declare bash tool when using tool_loop adapter so it passes the allowlist check
-    tools: list = []
+    tools: list[ToolSpec] = []
     if adapter_kind == "tool_loop":
-        from aec_bench.contracts.task_definition import ToolSpec
-
         tools = [
             ToolSpec(
                 name="bash",
@@ -411,7 +411,9 @@ def _run_legacy_script(
     # Read results
     result_path = Path(workspace, "agent_result.json")
     if result_path.exists():
-        return json.loads(result_path.read_text())
+        payload = json.loads(result_path.read_text())
+        if isinstance(payload, dict):
+            return cast(dict[str, object], payload)
     return {}
 
 

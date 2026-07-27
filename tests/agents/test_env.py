@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from aec_bench.agents.env import build_all_provider_env, build_provider_env
+from aec_bench.agents.env import build_all_provider_env, build_provider_env, require_model_name
 
 
 def test_build_provider_env_anthropic_basic() -> None:
@@ -96,6 +96,19 @@ def test_build_provider_env_without_tool_params() -> None:
 def test_build_provider_env_unknown_provider_raises() -> None:
     with pytest.raises(ValueError, match="unknown provider"):
         build_provider_env("nonexistent", "solve", "model", host_env={})
+
+
+def test_require_model_name_rejects_missing_harbor_model() -> None:
+    """Bundled Harbor agents must fail clearly before constructing provider state."""
+
+    with pytest.raises(ValueError, match="requires a model name"):
+        require_model_name(None)
+
+
+def test_require_model_name_preserves_declared_model() -> None:
+    """A declared Harbor model is passed to the provider environment unchanged."""
+
+    assert require_model_name("claude-sonnet-4") == "claude-sonnet-4"
 
 
 def test_build_all_provider_env_injects_all_keys() -> None:

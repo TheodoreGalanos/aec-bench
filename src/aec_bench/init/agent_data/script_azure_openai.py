@@ -1,10 +1,12 @@
 # ABOUTME: Single-turn Azure OpenAI agent — calls Chat Completions API directly, no tools.
 # ABOUTME: Subclasses Harbor's BaseAgent directly, composes aec_bench utility functions.
 
+from typing import Any
+
 from harbor.agents.base import BaseAgent
 
 from aec_bench.agents._shell import quote_for_shell
-from aec_bench.agents.env import build_provider_env
+from aec_bench.agents.env import build_provider_env, require_model_name
 from aec_bench.agents.results import read_agent_result
 
 _SCRIPT = r"""
@@ -112,13 +114,13 @@ class ScriptAzureOpenAIAgent(BaseAgent):
     def version(self) -> str | None:
         return "1.0.0"
 
-    async def setup(self, environment) -> None:  # type: ignore[override]
+    async def setup(self, environment: Any) -> None:
         result = await environment.exec("python3 --version")
         if result.return_code != 0:
             raise RuntimeError(f"Python3 not available in sandbox.\nstdout: {result.stdout}\nstderr: {result.stderr}")
 
-    async def run(self, instruction, environment, context) -> None:  # type: ignore[override]
-        env_vars = build_provider_env("azure_openai", instruction, self.model_name)
+    async def run(self, instruction: str, environment: Any, context: Any) -> None:
+        env_vars = build_provider_env("azure_openai", instruction, require_model_name(self.model_name))
         exec_result = await environment.exec(
             f"python3 -c {quote_for_shell(_SCRIPT)}",
             env=env_vars,

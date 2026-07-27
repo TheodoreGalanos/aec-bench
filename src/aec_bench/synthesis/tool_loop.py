@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
@@ -114,11 +115,13 @@ def synthesise_via_tool_loop(
 
     start = time.monotonic()
     try:
-        result = agent.run_sync(
-            user_msg,
-            usage_limits=UsageLimits(
-                request_limit=cfg.tool_loop_max_turns,
-                output_tokens_limit=cfg.max_output_tokens,
+        result = asyncio.run(
+            agent.run(
+                user_msg,
+                usage_limits=UsageLimits(
+                    request_limit=cfg.tool_loop_max_turns,
+                    output_tokens_limit=cfg.max_output_tokens,
+                ),
             ),
         )
     except Exception as exc:

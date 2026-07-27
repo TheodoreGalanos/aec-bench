@@ -135,7 +135,12 @@ def _output_markdown(operation_run: dict[str, Any]) -> str:
 
 
 def _first_complete_result(model_run: dict[str, Any]) -> dict[str, Any] | None:
-    for result in model_run.get("results", []):
+    results = model_run.get("results", [])
+    if not isinstance(results, list):
+        return None
+    for result in results:
+        if not isinstance(result, dict):
+            continue
         if result.get("status") in {"complete", "certified"}:
             return result
     return None

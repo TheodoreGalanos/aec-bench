@@ -4,15 +4,18 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeVar
 
 from harbor.environments.base import BaseEnvironment, ExecResult  # type: ignore[import-untyped]
 from harbor.models.environment_type import EnvironmentType  # type: ignore[import-untyped]
 from harbor.models.task.config import EnvironmentConfig  # type: ignore[import-untyped]
 from harbor.models.trial.paths import TrialPaths  # type: ignore[import-untyped]
 
+from aec_bench.harness.runtime_dependencies import RUNTIME_PYTHON_PACKAGES
 from aec_bench.providers.morph_cloud import (
     MorphCloudOperations,
     MorphCommandResult,
@@ -21,14 +24,10 @@ from aec_bench.providers.morph_cloud import (
 
 REMOTE_WORKSPACE_DIR = "/workspace"
 REMOTE_LOGS_DIR = "/logs"
+REMOTE_TESTS_DIR = "/tests"
+MORPH_MIN_DISK_SIZE_MB = 8192
 PROJECT_SRC_DIR = Path(__file__).resolve().parents[1]
-RUNTIME_PYTHON_PACKAGES = (
-    "pydantic>=2.11",
-    "pydantic-ai[anthropic,openai]",
-    "httpx>=0.28",
-    "PyYAML>=6.0",
-    "polars>=1.30,<2",
-)
+ProvisionedT = TypeVar("ProvisionedT")
 
 
 class MorphHarborOperations(Protocol):
@@ -43,7 +42,14 @@ class MorphHarborOperations(Protocol):
 
     def start_instance(self, *, snapshot: object) -> object: ...
 
-    def start_trial_container(self, *, instance: object, workspace_dir: str, logs_dir: str) -> None: ...
+    def start_trial_container(
+        self,
+        *,
+        instance: object,
+        workspace_dir: str,
+        logs_dir: str,
+        tests_dir: str,
+    ) -> None: ...
 
     def run_container_command_result(
         self,
@@ -65,11 +71,45 @@ class MorphHarborOperations(Protocol):
 
     def stop_instance(self, *, instance: object) -> None: ...
 
+    def scrub_trial_instance(self, *, instance: object) -> None: ...
+
+    def delete_snapshot(self, *, snapshot: object) -> None: ...
+
 
 @dataclass
 class MorphHarborState:
     snapshot: object
     instance: object
+
+
+async def _run_provisioning_call(
+    operation: Callable[[], ProvisionedT],
+    *,
+    label: str,
+    cancel_cleanup: Callable[[ProvisionedT | None], Awaitable[list[Exception]]],
+) -> ProvisionedT:
+    """Resolve a provider thread and reclaim any late resource before propagating cancellation."""
+
+    worker = asyncio.create_task(asyncio.to_thread(operation))
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError as cancellation:
+        result: ProvisionedT | None = None
+        failures: list[Exception] = []
+        try:
+            result = await worker
+        except Exception as error:
+            failures.append(error)
+        try:
+            failures.extend(await cancel_cleanup(result))
+        except Exception as error:
+            failures.append(error)
+        if failures:
+            raise BaseExceptionGroup(
+                f"Morph Harbor {label} was cancelled and cleanup failed",
+                [cancellation, *failures],
+            ) from cancellation
+        raise
 
 
 class MorphHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
@@ -99,7 +139,7 @@ class MorphHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
         self._operations = operations or MorphCloudOperations(
             vcpus=task_env_config.cpus,
             memory_mb=task_env_config.memory_mb,
-            disk_size_mb=task_env_config.storage_mb,
+            disk_size_mb=max(task_env_config.storage_mb, MORPH_MIN_DISK_SIZE_MB),
         )
         self._project_src_dir = project_src_dir
         self._runtime_packages = runtime_packages
@@ -132,29 +172,132 @@ class MorphHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
 
     async def start(self, force_build: bool) -> None:
         del force_build
-        snapshot = await asyncio.to_thread(
-            self._operations.build_runtime_snapshot,
-            dockerfile_path=self._environment_definition_path,
-            context_dir=self.environment_dir.parent,
-            project_src_dir=self._project_src_dir,
-            runtime_packages=self._runtime_packages,
+
+        async def cleanup_cancelled_snapshot(snapshot: object | None) -> list[Exception]:
+            if snapshot is None:
+                return []
+            return await self._delete_snapshot_errors(snapshot)
+
+        snapshot = await _run_provisioning_call(
+            partial(
+                self._operations.build_runtime_snapshot,
+                dockerfile_path=self._environment_definition_path,
+                context_dir=self.environment_dir,
+                project_src_dir=self._project_src_dir,
+                runtime_packages=self._runtime_packages,
+            ),
+            label="runtime snapshot build",
+            cancel_cleanup=cleanup_cancelled_snapshot,
         )
-        instance = await asyncio.to_thread(self._operations.start_instance, snapshot=snapshot)
-        await asyncio.to_thread(
-            self._operations.start_trial_container,
-            instance=instance,
-            workspace_dir=REMOTE_WORKSPACE_DIR,
-            logs_dir=REMOTE_LOGS_DIR,
-        )
-        self._state = MorphHarborState(snapshot=snapshot, instance=instance)
-        await self.exec("mkdir -p /logs/agent /logs/verifier /logs/artifacts /workspace")
+        instance: object | None = None
+        try:
+
+            async def cleanup_cancelled_instance(instance: object | None) -> list[Exception]:
+                if instance is None:
+                    return await self._delete_snapshot_errors(snapshot)
+                return await self._teardown_errors(
+                    MorphHarborState(snapshot=snapshot, instance=instance),
+                    delete=True,
+                )
+
+            instance = await _run_provisioning_call(
+                partial(self._operations.start_instance, snapshot=snapshot),
+                label="instance start",
+                cancel_cleanup=cleanup_cancelled_instance,
+            )
+            state = MorphHarborState(snapshot=snapshot, instance=instance)
+
+            async def cleanup_cancelled_container(_: None) -> list[Exception]:
+                return await self._teardown_errors(state, delete=True)
+
+            await _run_provisioning_call(
+                partial(
+                    self._operations.start_trial_container,
+                    instance=instance,
+                    workspace_dir=REMOTE_WORKSPACE_DIR,
+                    logs_dir=REMOTE_LOGS_DIR,
+                    tests_dir=REMOTE_TESTS_DIR,
+                ),
+                label="trial-container start",
+                cancel_cleanup=cleanup_cancelled_container,
+            )
+            self._state = state
+
+            async def cleanup_cancelled_initialization(_: MorphCommandResult | None) -> list[Exception]:
+                self._state = None
+                return await self._teardown_errors(state, delete=True)
+
+            await _run_provisioning_call(
+                partial(
+                    self._operations.run_container_command_result,
+                    instance=instance,
+                    command=("bash", "-lc", "mkdir -p /logs/agent /logs/verifier /logs/artifacts /workspace"),
+                ),
+                label="trial-container initialization",
+                cancel_cleanup=cleanup_cancelled_initialization,
+            )
+        except Exception as error:
+            self._state = None
+            if instance is None:
+                cleanup_errors = await self._delete_snapshot_errors(snapshot)
+            else:
+                cleanup_errors = await self._teardown_errors(
+                    MorphHarborState(snapshot=snapshot, instance=instance),
+                    delete=True,
+                )
+            if cleanup_errors:
+                raise ExceptionGroup("Morph Harbor start and rollback failed", [error, *cleanup_errors]) from error
+            raise
 
     async def stop(self, delete: bool) -> None:
-        del delete
         if self._state is None:
             return
-        await asyncio.to_thread(self._operations.stop_instance, instance=self._state.instance)
+        state = self._state
         self._state = None
+        teardown = asyncio.create_task(self._teardown_errors(state, delete=delete))
+        try:
+            errors = await asyncio.shield(teardown)
+        except asyncio.CancelledError as cancellation:
+            failures: list[Exception] = []
+            try:
+                failures.extend(await teardown)
+            except Exception as error:
+                failures.append(error)
+            if failures:
+                raise BaseExceptionGroup(
+                    "Morph Harbor teardown was cancelled and cleanup failed",
+                    [cancellation, *failures],
+                ) from cancellation
+            raise
+        if errors:
+            raise ExceptionGroup("Morph Harbor teardown failed", errors)
+
+    async def _teardown_errors(
+        self,
+        state: MorphHarborState,
+        *,
+        delete: bool,
+    ) -> list[Exception]:
+        errors: list[Exception] = []
+        if delete:
+            try:
+                await asyncio.to_thread(self._operations.scrub_trial_instance, instance=state.instance)
+            except Exception as error:
+                errors.append(error)
+        try:
+            await asyncio.to_thread(self._operations.stop_instance, instance=state.instance)
+        except Exception as error:
+            errors.append(error)
+        if delete:
+            errors.extend(await self._delete_snapshot_errors(state.snapshot))
+        return errors
+
+    async def _delete_snapshot_errors(self, snapshot: object) -> list[Exception]:
+        try:
+            await asyncio.to_thread(self._operations.delete_snapshot, snapshot=snapshot)
+        except Exception as error:
+            return [error]
+        return []
 
     async def upload_file(self, source_path: Path | str, target_path: str) -> None:
         source = Path(source_path)

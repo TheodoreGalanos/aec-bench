@@ -316,6 +316,27 @@ def test_multiple_writes_flushed_before_close(tmp_path: Path) -> None:
     writer.close()
 
 
+def test_meta_harness_context_tracks_current_program_node(tmp_path: Path) -> None:
+    out = tmp_path / "t.jsonl"
+    writer = TrajectoryWriter(str(out))
+    writer.set_meta_harness_context({"program_node_id": "node.first"})
+    writer.new_step()
+    writer.thinking("first")
+    writer.set_meta_harness_context({"program_node_id": "node.second"})
+    writer.new_step()
+    writer.thinking("second")
+    writer.set_meta_harness_context(None)
+    writer.new_step()
+    writer.thinking("outside program")
+    writer.close()
+
+    entries = [entry for entry in read_jsonl(out) if entry.get("role") == "assistant"]
+
+    assert entries[0]["meta_harness"] == {"program_node_id": "node.first"}
+    assert entries[1]["meta_harness"] == {"program_node_id": "node.second"}
+    assert "meta_harness" not in entries[2]
+
+
 # ---------------------------------------------------------------------------
 # tool_result() metadata parameter
 # ---------------------------------------------------------------------------

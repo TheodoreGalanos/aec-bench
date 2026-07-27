@@ -146,7 +146,7 @@ def _render_compare_details(
 # ---------------------------------------------------------------------------
 
 
-class CompareScreen(Screen):
+class CompareScreen(Screen[None]):
     """Model x task_type comparison matrix with colour-coded cells and drill-through to Triage."""
 
     BINDINGS = [

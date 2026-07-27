@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,7 @@ from aec_bench.adapters.lambda_rlm.planner import build_execution_plan
 from aec_bench.adapters.lambda_rlm.state import PlanState
 from aec_bench.adapters.rlm.client import RlmClient, RlmCompletionResponse, RlmMessage
 from aec_bench.adapters.rlm.template import ReportTemplate
+from aec_bench.adapters.runtime_limits import AdapterRuntimeLimitError, configured_positive_int
 from aec_bench.adapters.transcript import (
     TokenUsage,
     TranscriptEntry,
@@ -66,12 +68,22 @@ class _LambdaTranscriptEntry(TranscriptEntry):
 class _TokenCountingClient:
     """Thin wrapper around an RlmClient that accumulates input/output token totals."""
 
-    def __init__(self, inner: RlmClient) -> None:
+    def __init__(self, inner: RlmClient, *, max_calls: int | None = None) -> None:
         self._inner = inner
+        self._max_calls = max_calls
+        self._calls_started = 0
+        self._lock = threading.Lock()
         self.total_input: int = 0
         self.total_output: int = 0
         self.total_cache_read: int = 0
         self.total_cache_write: int = 0
+
+    @property
+    def calls_started(self) -> int:
+        """Return the exact number of provider calls admitted by the wrapper."""
+
+        with self._lock:
+            return self._calls_started
 
     def generate(
         self,
@@ -81,16 +93,24 @@ class _TokenCountingClient:
         system_prompt: str | None,
         temperature: float | None = None,
     ) -> RlmCompletionResponse:
+        with self._lock:
+            if self._max_calls is not None and self._calls_started >= self._max_calls:
+                raise AdapterRuntimeLimitError(
+                    f"max_turns={self._max_calls} exhausted before the next lambda-RLM model call"
+                )
+            self._calls_started += 1
+
         response = self._inner.generate(
             model=model,
             messages=messages,
             system_prompt=system_prompt,
             temperature=temperature,
         )
-        self.total_input += response.input_tokens
-        self.total_output += response.output_tokens
-        self.total_cache_read += response.cache_read_tokens
-        self.total_cache_write += response.cache_write_tokens
+        with self._lock:
+            self.total_input += response.input_tokens
+            self.total_output += response.output_tokens
+            self.total_cache_read += response.cache_read_tokens
+            self.total_cache_write += response.cache_write_tokens
         return response
 
 
@@ -202,7 +222,8 @@ class LambdaRlmAdapter:
 
         # Phases 2–4: Extract → Review → Generate (via PlanExecutor)
         # Wrap client to capture separate input/output token totals
-        counting_client = _TokenCountingClient(self._client)
+        max_turns = configured_positive_int(request.configuration, "max_turns")
+        counting_client = _TokenCountingClient(self._client, max_calls=max_turns)
         source_fidelity = self._constitution.source_fidelity if self._constitution else None
         information_minimality = self._constitution.information_minimality if self._constitution else None
         executor = PlanExecutor(
@@ -329,10 +350,15 @@ class LambdaRlmAdapter:
             ),
             transcript=transcript,
             failure_kind=failure_kind,
+            turns_used=counting_client.calls_started,
+            max_turns=max_turns,
             raw_output_text=output_text,
             provider_error=None,
+            usage_model_calls=counting_client.calls_started,
             usage_input_tokens=total_input,
             usage_output_tokens=total_output,
+            usage_cache_read_tokens=total_cache_read,
+            usage_cache_write_tokens=total_cache_write,
         )
 
     def adapter_name(self) -> str:
@@ -407,6 +433,9 @@ class LambdaRlmAdapter:
         """
         from aec_bench.adapters.lambda_rlm.grounding import run_grounding_check
         from aec_bench.contracts.grounding_report import GroundingReport
+
+        if self._sandbox is None:
+            raise RuntimeError("grounding report requires an initialized document sandbox")
 
         # Back-brief topic digests live in compose_scratchpad under the
         # reserved ``_back_brief`` key (see PlanState docstring). Threading

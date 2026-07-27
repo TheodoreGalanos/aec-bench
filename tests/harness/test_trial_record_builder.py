@@ -1,7 +1,13 @@
 # ABOUTME: Tests for harness-side TrialRecord construction in aec-bench Python.
 # ABOUTME: Covers mapping adapter results into append-only provenance records.
 
-from aec_bench.adapters.base import AdapterFailureKind, AdapterRequest, AdapterResult
+from aec_bench.adapters.base import (
+    AdapterCompletionReason,
+    AdapterFailureKind,
+    AdapterRequest,
+    AdapterResult,
+    OutputCompletionAssistance,
+)
 from aec_bench.adapters.transcript import TranscriptEntry, TranscriptRole
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
@@ -11,6 +17,7 @@ from aec_bench.contracts.trial_record import (
     DerivationStepRecord,
 )
 from aec_bench.harness.trial_record_builder import build_trial_record
+from tests.support.output_completion import make_output_commit_attestation
 from tests.support.task_factories import make_task_definition
 
 
@@ -32,7 +39,15 @@ def test_build_trial_record_uses_adapter_configuration_record() -> None:
             output_format="jsonl",
         ),
         transcript=[TranscriptEntry(role=TranscriptRole.USER, content=task.instruction)],
+        completion_reason=AdapterCompletionReason.OUTPUT_CONTRACT_SATISFIED,
+        completion_assistance=OutputCompletionAssistance(
+            contract_satisfied=True,
+            reminder_sent=True,
+            reminder_turn=3,
+            explicit_final_turn=4,
+        ),
         raw_output_text='{"findings": []}',
+        usage_model_calls=4,
         usage_input_tokens=120,
         usage_output_tokens=40,
     )
@@ -64,11 +79,71 @@ def test_build_trial_record_uses_adapter_configuration_record() -> None:
     assert record.agent.configuration == {"model": "gpt-5.4-mini", "max_turns": 4}
     assert record.task.visibility == task.visibility
     assert record.outputs.agent_result == {
+        "completion_reason": "output_contract_satisfied",
+        "completion_assistance": {
+            "contract_satisfied": True,
+            "reminder_sent": True,
+            "reminder_turn": 3,
+            "explicit_final_turn": 4,
+        },
+        "completion_commit": None,
         "failure_kind": None,
         "provider_error": None,
+        "usage_model_calls": 4,
         "usage_input_tokens": 120,
         "usage_output_tokens": 40,
     }
+
+
+def test_build_trial_record_preserves_output_commit_attestation() -> None:
+    task = make_task_definition()
+    attestation = make_output_commit_attestation()
+    request = AdapterRequest(
+        instruction=task.instruction,
+        output_path=attestation.output_path,
+        output_format="markdown",
+    )
+    result = AdapterResult(
+        adapter_name="rlm",
+        resolved_model="test-model",
+        configuration_record={"output_completion_commit": True},
+        agent_output=AgentOutput(
+            status=AgentOutputStatus.COMPLETED,
+            output_path=attestation.output_path,
+            output_format="markdown",
+        ),
+        transcript=[TranscriptEntry(role=TranscriptRole.USER, content=task.instruction)],
+        completion_reason=AdapterCompletionReason.OUTPUT_CONTRACT_COMMITTED,
+        completion_commit=attestation,
+        turns_used=attestation.commit_turn,
+        max_turns=32,
+    )
+    evaluation = EvaluationResult(
+        reward=1.0,
+        validity=ValidityCheck(
+            output_parseable=True,
+            schema_valid=True,
+            verifier_completed=True,
+        ),
+    )
+
+    record = build_trial_record(
+        trial_id="trial-output-commit",
+        experiment_id="experiment-output-commit",
+        task=task,
+        task_revision="git-sha-task",
+        request=request,
+        result=result,
+        evaluation=evaluation,
+        total_seconds=12.5,
+        runtime_image="ghcr.io/example/task-image:latest",
+        compute_backend="morph",
+        completeness=Completeness.PARTIAL,
+    )
+
+    assert record.outputs.agent_result is not None
+    assert record.outputs.agent_result["completion_reason"] == "output_contract_committed"
+    assert record.outputs.agent_result["completion_commit"] == attestation.model_dump(mode="json")
 
 
 def test_build_trial_record_preserves_failure_kind() -> None:

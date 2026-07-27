@@ -7,6 +7,7 @@ import json
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -32,7 +33,7 @@ class LibraryTemplate:
     discipline: str
     task_id: str
     path: Path
-    params_raw: dict  # parsed params.toml content
+    params_raw: dict[str, Any]  # parsed params.toml content
 
 
 def scan_seeds(tasks_root: Path) -> list[LibrarySeed]:

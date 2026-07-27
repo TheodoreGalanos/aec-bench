@@ -10,6 +10,7 @@ from statistics import mean
 from typing import Any
 
 from aec_bench.contracts.evolution import (
+    DisciplineScore,
     EvolutionCycleRecord,
     EvolutionObservation,
     GateDecision,
@@ -27,6 +28,7 @@ from aec_bench.evaluation.behavioral import (
     score_trace_structural,
 )
 from aec_bench.evolution.analysis import (
+    BehavioralPattern,
     GraduatedScope,
     compute_discipline_scores,
     compute_graduated_scope,
@@ -274,7 +276,14 @@ class AECEvolutionEngine:
         self,
         observations: list[EvolutionObservation],
         history: list[EvolutionCycleRecord],
-    ) -> tuple[float, GraduatedScope, list, list, bool, float | None]:
+    ) -> tuple[
+        float,
+        GraduatedScope,
+        list[DisciplineScore],
+        list[BehavioralPattern],
+        bool,
+        float | None,
+    ]:
         """Compute scores, detect patterns, and determine scope.
 
         Returns (batch_score, scope, discipline_scores, patterns, improving,
@@ -324,7 +333,7 @@ class AECEvolutionEngine:
         self,
         workspace: Workspace,
         scope: GraduatedScope,
-        patterns: list,
+        patterns: list[BehavioralPattern],
     ) -> list[SkillEntry]:
         """Seed skills based on detected behavioral anti-patterns.
 
@@ -356,8 +365,8 @@ class AECEvolutionEngine:
         workspace: Workspace,
         scope: GraduatedScope,
         batch_score: float,
-        discipline_scores: list,
-        patterns: list,
+        discipline_scores: list[DisciplineScore],
+        patterns: list[BehavioralPattern],
         observations: list[EvolutionObservation],
         *,
         structural_score: float | None = None,
@@ -629,17 +638,15 @@ def _merge_mutation_summaries(
     """
     seeded_names = [s.name for s in seeded_skills]
     has_seeds = len(seeded_names) > 0
-    has_evolver = evolver_mutation is not None
-
-    if not has_seeds and not has_evolver:
+    if not has_seeds and evolver_mutation is None:
         return None
 
-    if has_evolver and has_seeds:
+    if evolver_mutation is not None and has_seeds:
         # Merge seeded skill names into the evolver summary
         combined_added = seeded_names + list(evolver_mutation.skills_added)
         return evolver_mutation.model_copy(update={"skills_added": combined_added})
 
-    if has_evolver:
+    if evolver_mutation is not None:
         return evolver_mutation
 
     # Only auto-seeded skills, no evolver changes

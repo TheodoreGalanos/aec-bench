@@ -343,7 +343,8 @@ trigger = "both"
 confidence_threshold = 0.5
 consistency_threshold = 0.8
 """
-        config = parse_lambda_rlm_config(toml)
+        with pytest.warns(UserWarning, match="requires k_candidates > 1"):
+            config = parse_lambda_rlm_config(toml)
         assert config.review.trigger == "both"
         assert config.review.confidence_threshold == 0.5
         assert config.review.consistency_threshold == 0.8
@@ -448,7 +449,8 @@ tier = "dependency_tree"
 [review]
 trigger = "both"
 """
-        config = parse_lambda_rlm_config(toml)
+        with pytest.warns(UserWarning, match="requires k_candidates > 1"):
+            config = parse_lambda_rlm_config(toml)
         assert config.uncertainty_scoring_active is True
 
     def test_trigger_consistency_means_scoring_inactive(self) -> None:
@@ -459,7 +461,8 @@ tier = "dependency_tree"
 [review]
 trigger = "consistency"
 """
-        config = parse_lambda_rlm_config(toml)
+        with pytest.warns(UserWarning, match="requires k_candidates > 1"):
+            config = parse_lambda_rlm_config(toml)
         assert config.uncertainty_scoring_active is False
 
     def test_trigger_never_means_scoring_inactive(self) -> None:

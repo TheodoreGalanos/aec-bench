@@ -9,6 +9,7 @@ import tomllib
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 
 class Severity(StrEnum):
@@ -52,7 +53,7 @@ class ValidationReport:
     def warning_count(self) -> int:
         return sum(1 for f in self.findings if f.severity == Severity.WARNING)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "passed": self.passed,

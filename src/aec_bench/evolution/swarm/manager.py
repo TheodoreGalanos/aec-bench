@@ -7,6 +7,7 @@ import asyncio
 import logging
 import time
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -40,7 +41,11 @@ logger = logging.getLogger(__name__)
 class EvolverFactory(Protocol):
     """Protocol for creating evolver instances — one per agent."""
 
-    def create(self, agent_id: str) -> Any: ...
+    def create(
+        self,
+        agent_id: str,
+        model_override: str | None = None,
+    ) -> Any: ...
 
 
 def _now_iso() -> str:
@@ -464,7 +469,7 @@ class SwarmManager:
             return models[agent_index]
         return self._config.agents.default_model
 
-    def _build_context_provider(self, agent_id: str):
+    def _build_context_provider(self, agent_id: str) -> Callable[[], str]:
         """Create a context provider callback for an agent.
 
         Returns a callable that builds the archive context string from

@@ -1,10 +1,13 @@
 # ABOUTME: Tests for the TrialRecord provenance contract in the aec-bench contracts package.
 # ABOUTME: These tests define completeness rules and nested provenance requirements.
 
+from typing import Literal
+
 import pytest
 from pydantic import ValidationError
 
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
+from aec_bench.contracts.evaluation_plane import EvaluationPlanRef
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import (
@@ -20,7 +23,9 @@ from aec_bench.contracts.trial_record import (
     LifecycleExecutionRecord,
     LifecycleSessionRecord,
     LifecycleTrialProvenance,
+    MetaHarnessTrialProvenance,
     OutputRecord,
+    ProposalSessionTrialProvenance,
     TaskReference,
     TimingRecord,
     TrialRecord,
@@ -544,6 +549,308 @@ def test_complete_lifecycle_record_requires_every_bound_reference_in_output_arti
         )
 
 
+def test_trial_record_accepts_complete_meta_harness_lineage() -> None:
+    candidate_manifest = _artifact("meta_harness_candidate", "candidate.json", "1")
+    factorial_plan = _artifact("meta_harness_factorial_plan", "factorial-plan.json", "2")
+    repair_decision = _artifact("meta_harness_repair_decision", "repair-decision.json", "3")
+    record = build_trial_record(
+        task=TaskReference(
+            task_id="electrical/voltage-drop/au-office-fitout",
+            task_revision="git-sha-task",
+            visibility=Visibility.PUBLIC,
+        ),
+        outputs=OutputRecord(
+            agent_output=AgentOutput(
+                status=AgentOutputStatus.COMPLETED,
+                output_path="/workspace/output.jsonl",
+                output_format="jsonl",
+            ),
+            artifacts=[candidate_manifest, factorial_plan, repair_decision],
+        ),
+        meta_harness_provenance=_meta_harness_provenance(
+            candidate_manifest=candidate_manifest,
+            factorial_plan=factorial_plan,
+            repair_decision=repair_decision,
+        ),
+    )
+
+    restored = TrialRecord.model_validate(record.model_dump(mode="json"))
+
+    assert restored.meta_harness_provenance is not None
+    assert restored.meta_harness_provenance.factorial_cell == "hx_px"
+    assert restored.meta_harness_provenance.motif_ids == ("motif.alpha", "motif.beta")
+
+
+def test_complete_meta_harness_record_requires_bound_artifacts() -> None:
+    candidate_manifest = _artifact("meta_harness_candidate", "candidate.json", "1")
+
+    with pytest.raises(ValidationError, match="meta-harness provenance must be included"):
+        build_trial_record(
+            outputs=OutputRecord(
+                agent_output=AgentOutput(
+                    status=AgentOutputStatus.COMPLETED,
+                    output_path="/workspace/output.jsonl",
+                    output_format="jsonl",
+                ),
+                artifacts=[],
+            ),
+            meta_harness_provenance=_meta_harness_provenance(
+                candidate_manifest=candidate_manifest,
+                factorial_cell=None,
+                paired_block_id=None,
+                repair_attempt_id=None,
+                repair_iteration=None,
+            ),
+        )
+
+
+def test_trial_record_binds_one_completed_proposal_session_and_cleanup() -> None:
+    candidate_manifest = _artifact("meta_harness_candidate", "candidate.json", "1")
+    session_receipt = _artifact(
+        "proposal_session_receipt",
+        "proposal-session/session-receipt.json",
+        "4",
+    )
+    cleanup_receipt = _artifact(
+        "proposal_cleanup_receipt",
+        "proposal-session/cleanup-receipt.json",
+        "5",
+    )
+    task_package_manifest = _artifact(
+        "proposal_task_package_manifest",
+        "proposal-session/task-package.json",
+        "6",
+    )
+    runtime_archive_manifest = _artifact(
+        "proposal_runtime_archive_manifest",
+        "proposal-session/runtime-archive.json",
+        "7",
+    )
+    proposal_session = ProposalSessionTrialProvenance(
+        session_id="proposal-session.001",
+        candidate_id="candidate.001",
+        candidate_artifact_sha256="8" * 64,
+        proposal_graph_sha256="9" * 64,
+        compilation_sha256="a" * 64,
+        session_plan_sha256="b" * 64,
+        session_receipt=session_receipt,
+        cleanup_receipt=cleanup_receipt,
+        task_package_manifest=task_package_manifest,
+        runtime_archive_manifest=runtime_archive_manifest,
+        expected_trial_records=1,
+        trial_ordinal=1,
+    )
+    record = build_trial_record(
+        task=TaskReference(
+            task_id="civil/proposal-session/source-free",
+            task_revision="git-sha-task",
+            visibility=Visibility.PUBLIC,
+        ),
+        outputs=OutputRecord(
+            agent_output=AgentOutput(
+                status=AgentOutputStatus.COMPLETED,
+                output_path="/workspace/output.md",
+                output_format="markdown",
+            ),
+            artifacts=[
+                candidate_manifest,
+                session_receipt,
+                cleanup_receipt,
+                task_package_manifest,
+                runtime_archive_manifest,
+            ],
+        ),
+        meta_harness_provenance=_meta_harness_provenance(
+            candidate_manifest=candidate_manifest,
+            factorial_cell=None,
+            paired_block_id=None,
+            repair_attempt_id=None,
+            repair_iteration=None,
+            proposal_session=proposal_session,
+        ),
+    )
+
+    assert record.meta_harness_provenance is not None
+    assert record.meta_harness_provenance.proposal_session == proposal_session
+    assert proposal_session.expected_trial_records == 1
+    assert proposal_session.trial_ordinal == 1
+
+
+def test_trial_record_rejects_unbound_proposal_session_artifact() -> None:
+    candidate_manifest = _artifact("meta_harness_candidate", "candidate.json", "1")
+    proposal_session = ProposalSessionTrialProvenance(
+        session_id="proposal-session.001",
+        candidate_id="candidate.001",
+        candidate_artifact_sha256="8" * 64,
+        proposal_graph_sha256="9" * 64,
+        compilation_sha256="a" * 64,
+        session_plan_sha256="b" * 64,
+        session_receipt=_artifact(
+            "proposal_session_receipt",
+            "proposal-session/session-receipt.json",
+            "4",
+        ),
+        cleanup_receipt=_artifact(
+            "proposal_cleanup_receipt",
+            "proposal-session/cleanup-receipt.json",
+            "5",
+        ),
+        task_package_manifest=_artifact(
+            "proposal_task_package_manifest",
+            "proposal-session/task-package.json",
+            "6",
+        ),
+        runtime_archive_manifest=_artifact(
+            "proposal_runtime_archive_manifest",
+            "proposal-session/runtime-archive.json",
+            "7",
+        ),
+        expected_trial_records=1,
+        trial_ordinal=1,
+    )
+
+    with pytest.raises(ValidationError, match="proposal session provenance"):
+        build_trial_record(
+            task=TaskReference(
+                task_id="civil/proposal-session/source-free",
+                task_revision="git-sha-task",
+                visibility=Visibility.PUBLIC,
+            ),
+            outputs=OutputRecord(
+                agent_output=AgentOutput(
+                    status=AgentOutputStatus.COMPLETED,
+                    output_path="/workspace/output.md",
+                    output_format="markdown",
+                ),
+                artifacts=[candidate_manifest, proposal_session.session_receipt],
+            ),
+            meta_harness_provenance=_meta_harness_provenance(
+                candidate_manifest=candidate_manifest,
+                factorial_cell=None,
+                paired_block_id=None,
+                repair_attempt_id=None,
+                repair_iteration=None,
+                proposal_session=proposal_session,
+            ),
+        )
+
+
+def test_holdout_meta_harness_trial_rejects_repair_and_factorial_visibility_mismatch() -> None:
+    candidate_manifest = _artifact("meta_harness_candidate", "candidate.json", "1")
+    repair_decision = _artifact("meta_harness_repair_decision", "repair-decision.json", "3")
+
+    with pytest.raises(ValidationError, match="holdout.*repair"):
+        build_trial_record(
+            task=TaskReference(
+                task_id="holdout/task",
+                task_revision="git-sha-task",
+                visibility=Visibility.HOLDOUT,
+            ),
+            meta_harness_provenance=_meta_harness_provenance(
+                split="holdout",
+                candidate_manifest=candidate_manifest,
+                repair_attempt_id="repair.1",
+                repair_decision=repair_decision,
+                repair_iteration=1,
+                factorial_cell=None,
+                paired_block_id=None,
+                factorial_plan=None,
+            ),
+        )
+
+    with pytest.raises(ValidationError, match="calibration.*public"):
+        build_trial_record(
+            task=TaskReference(
+                task_id="holdout/task",
+                task_revision="git-sha-task",
+                visibility=Visibility.HOLDOUT,
+            ),
+            outputs=OutputRecord(
+                agent_output=AgentOutput(
+                    status=AgentOutputStatus.COMPLETED,
+                    output_path="/workspace/output.jsonl",
+                    output_format="jsonl",
+                ),
+                artifacts=[candidate_manifest],
+            ),
+            meta_harness_provenance=_meta_harness_provenance(
+                split="calibration",
+                candidate_manifest=candidate_manifest,
+                factorial_cell=None,
+                paired_block_id=None,
+                repair_attempt_id=None,
+                repair_iteration=None,
+            ),
+        )
+
+
+def test_lifecycle_and_meta_harness_package_hashes_must_agree() -> None:
+    invocation_manifest = _artifact("lifecycle_manifest", "manifest.json", "4")
+    invocation_index = _artifact("lifecycle_invocation_index", "index.jsonl", "5")
+    ablation_manifest = _artifact("lifecycle_ablation_manifest", "ablation.json", "6")
+    ablation_plan = _artifact("lifecycle_ablation_plan", "ablation-plan.json", "7")
+    candidate_manifest = _artifact("meta_harness_candidate", "candidate.json", "1")
+
+    with pytest.raises(ValidationError, match="package hashes must agree"):
+        build_trial_record(
+            outputs=OutputRecord(
+                agent_output=AgentOutput(
+                    status=AgentOutputStatus.COMPLETED,
+                    output_path="_artifacts/trial-001",
+                    output_format="evidence_lifecycle",
+                ),
+                artifacts=[
+                    invocation_manifest,
+                    invocation_index,
+                    ablation_manifest,
+                    ablation_plan,
+                    candidate_manifest,
+                ],
+            ),
+            lifecycle_execution=LifecycleExecutionRecord(
+                execution_mode="fresh_context",
+                memory_visibility_policy="artifact_memory",
+                max_turns_per_session=20,
+                status="completed",
+                sessions=[
+                    LifecycleSessionRecord(
+                        session_id="session.1",
+                        adapter="tool_loop",
+                        resolved_model="anthropic:claude-sonnet-4-20250514",
+                        status="completed",
+                        artifacts=[invocation_manifest],
+                    )
+                ],
+            ),
+            lifecycle_provenance=LifecycleTrialProvenance(
+                lifecycle_id="lifecycle.demo",
+                world_id="world.demo",
+                spec_sha256="a" * 64,
+                package_sha256="b" * 64,
+                repository_commit="c" * 40,
+                repository_dirty=False,
+                repository_dirty_digest="d" * 64,
+                runtime_provider="anthropic",
+                runtime_distributions=("anthropic==1.0.0",),
+                runtime_dependency_sha256="e" * 64,
+                verifier_qualified_name="demo.verify",
+                verifier_source_sha256="f" * 64,
+                invocation_manifest=invocation_manifest,
+                invocation_index=invocation_index,
+                ablation_manifest=ablation_manifest,
+                ablation_plan=ablation_plan,
+            ),
+            meta_harness_provenance=_meta_harness_provenance(
+                candidate_manifest=candidate_manifest,
+                world_package_sha256="9" * 64,
+                factorial_cell=None,
+                paired_block_id=None,
+                repair_attempt_id=None,
+                repair_iteration=None,
+            ),
+        )
+
+
 def test_lifecycle_execution_rejects_resolved_model_drift() -> None:
     with pytest.raises(ValidationError, match="resolved model must remain stable"):
         LifecycleExecutionRecord(
@@ -646,6 +953,82 @@ def test_adaptation_provenance_rejects_empty_variation() -> None:
             variation_key="none",
             variation={},
         )
+
+
+def _artifact(kind: str, path: str, digit: str) -> ArtifactReference:
+    return ArtifactReference(
+        kind=kind,
+        path=path,
+        sha256=digit * 64,
+        media_type="application/json",
+    )
+
+
+def _meta_harness_provenance(
+    *,
+    candidate_manifest: ArtifactReference,
+    split: Literal["discovery", "repair_gate", "calibration", "holdout"] = "repair_gate",
+    world_package_sha256: str = "b" * 64,
+    factorial_cell: Literal["h0_p0", "hx_p0", "h0_px", "hx_px"] | None = "hx_px",
+    paired_block_id: str | None = "block.1",
+    factorial_plan: ArtifactReference | None = None,
+    repair_attempt_id: str | None = "repair.1",
+    repair_decision: ArtifactReference | None = None,
+    repair_iteration: int | None = 1,
+    proposal_session: ProposalSessionTrialProvenance | None = None,
+) -> MetaHarnessTrialProvenance:
+    return MetaHarnessTrialProvenance(
+        run_id="run.meta-harness.001",
+        policy_id="policy.1",
+        kernel_id="kernel.aec-bench",
+        kernel_sha256="a" * 64,
+        harness_id="harness.1",
+        harness_sha256="c" * 64,
+        program_id="program.1",
+        program_sha256="d" * 64,
+        bundle_id="bundle.1",
+        bundle_sha256="e" * 64,
+        parent_bundle_id="bundle.parent",
+        world_package_sha256=world_package_sha256,
+        topology_signature_sha256="f" * 64,
+        harness_generator_sha256="1" * 64,
+        program_generator_sha256="2" * 64,
+        split=split,
+        repetition=1,
+        factorial_cell=factorial_cell,
+        paired_block_id=paired_block_id,
+        repair_attempt_id=repair_attempt_id,
+        repair_iteration=repair_iteration,
+        candidate_manifest=candidate_manifest,
+        factorial_plan=factorial_plan,
+        repair_decision=repair_decision,
+        motif_ids=("motif.alpha", "motif.beta"),
+        proposal_session=proposal_session,
+    )
+
+
+def test_meta_harness_provenance_accepts_opaque_evaluation_plan_ref_and_loads_legacy_without_it() -> None:
+    candidate = _artifact("meta-harness-candidate-manifest", "/tmp/candidate.json", "a")
+    current = _meta_harness_provenance(
+        candidate_manifest=candidate,
+        factorial_plan=_artifact("meta-harness-factorial-plan", "/tmp/factorial.json", "b"),
+        repair_decision=_artifact("meta-harness-repair-decision", "/tmp/repair.json", "c"),
+    )
+    legacy_payload = current.model_dump(mode="json")
+
+    restored_legacy = MetaHarnessTrialProvenance.model_validate(legacy_payload)
+
+    assert restored_legacy.evaluation_plan_ref is None
+
+    plan_ref = EvaluationPlanRef(
+        plan_id="evaluation-plan.stage-9",
+        evaluation_generation="evaluation-generation-1",
+        content_sha256="9" * 64,
+    )
+    governed = current.model_copy(update={"evaluation_plan_ref": plan_ref})
+    restored_governed = MetaHarnessTrialProvenance.model_validate(governed.model_dump(mode="json"))
+
+    assert restored_governed.evaluation_plan_ref == plan_ref
 
 
 # --- Nested model isolation ---

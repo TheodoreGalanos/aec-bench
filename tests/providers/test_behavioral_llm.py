@@ -133,6 +133,7 @@ class TestBedrockBehavioralClient:
 
         monkeypatch.setattr(boto3, "client", fake_boto3_client)
         monkeypatch.setenv("AWS_REGION", "us-east-1")
+        monkeypatch.delenv("AWS_BEARER_TOKEN_BEDROCK", raising=False)
 
         client = BedrockBehavioralLLMClient(
             model="us.anthropic.claude-haiku-4-5-20251001",
@@ -149,9 +150,8 @@ class TestBedrockBehavioralClient:
 class TestBedrockReadTimeoutField:
     """Field-level tests for the read_timeout_seconds extension.
 
-    Avoids the Converse API roundtrip so we don't get tangled in the
-    pre-existing test's monkeypatch issue (it patches boto3.client but the
-    code uses session.client()).
+    Avoids the Converse API roundtrip so timeout propagation can be inspected
+    without coupling the assertions to request and response behavior.
     """
 
     def test_default_preserves_historical_60s_timeout(self) -> None:

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import typer
 
@@ -16,6 +17,11 @@ from aec_bench.cli.output import (
     print_warning,
 )
 from aec_bench.contracts.task_definition import Difficulty
+
+if TYPE_CHECKING:
+    from aec_bench.contracts.dataset import DatasetSource
+    from aec_bench.contracts.task_definition import TaskDefinition
+    from aec_bench.generation.dataset import DatasetManifest as SuiteOutputManifest
 
 app = typer.Typer(help="Create and manage versioned benchmark datasets.")
 
@@ -143,7 +149,7 @@ def _parse_difficulties(values: list[str] | None) -> list[Difficulty]:
     return parsed
 
 
-def _load_suite_output_manifest(suite_output: Path):
+def _load_suite_output_manifest(suite_output: Path) -> SuiteOutputManifest:
     from aec_bench.generation.dataset import DatasetManifest as SuiteOutputManifest
 
     manifest_path = suite_output.resolve()
@@ -158,13 +164,17 @@ def _load_suite_output_manifest(suite_output: Path):
         raise typer.Exit(1) from exc
 
 
-def _load_tasks_from_suite_output(suite_output: Path, tasks_root: Path, manifest):
+def _load_tasks_from_suite_output(
+    suite_output: Path,
+    tasks_root: Path,
+    manifest: SuiteOutputManifest,
+) -> list[TaskDefinition]:
     from aec_bench.tasks.loader import load_task_definition
 
     manifest_path = suite_output.resolve()
     suite_root = manifest_path.parent
     resolved_tasks_root = tasks_root.resolve()
-    tasks = []
+    tasks: list[TaskDefinition] = []
     for entry in manifest.instances:
         task_dir = (suite_root / entry.path).resolve()
         if not task_dir.is_dir():
@@ -183,7 +193,10 @@ def _load_tasks_from_suite_output(suite_output: Path, tasks_root: Path, manifest
     return tasks
 
 
-def _source_from_suite_output(suite_output: Path, manifest):
+def _source_from_suite_output(
+    suite_output: Path,
+    manifest: SuiteOutputManifest,
+) -> DatasetSource:
     from aec_bench.contracts.dataset import DatasetSource
 
     manifest_path = suite_output.resolve()
@@ -284,7 +297,7 @@ def list_datasets_cmd(
     emit("dataset list", data, start_time=start, human_renderer=_render_dataset_list)
 
 
-def _render_dataset_list(data: list) -> None:
+def _render_dataset_list(data: list[dict[str, Any]]) -> None:
     """Human renderer for dataset list output."""
     if not data:
         console.print("[dim]No datasets found.[/dim]")
@@ -379,7 +392,7 @@ def dataset_info(
             parts.append(f"{len(integrity.missing)} missing")
         integrity_errors.append(", ".join(parts))
 
-    def _render(data: dict) -> None:
+    def _render(data: dict[str, Any]) -> None:
         console.print(f"[bold]{data['name']}[/bold] v{data['version']}")
         console.print(f"  {data['summary']}")
         if data.get("purpose"):
@@ -500,10 +513,10 @@ def validate_dataset(
         "is_clean": result.is_clean,
     }
 
-    def _render_success(data: dict) -> None:
+    def _render_success(data: dict[str, Any]) -> None:
         print_success(f"{data['verified']}/{data['total']} tasks verified — clean")
 
-    def _render_failure(data: dict) -> None:
+    def _render_failure(data: dict[str, Any]) -> None:
         if data["drifted"]:
             print_error(f"Drifted tasks: {', '.join(data['drifted'])}")
         if data["missing"]:
@@ -582,7 +595,7 @@ def dataset_results_cmd(
             },
         }
 
-        def _render_empty(data: dict) -> None:
+        def _render_empty(data: dict[str, Any]) -> None:
             console.print(f"[dim]No trial results found for dataset {data['dataset_id']}[/dim]")
             console.print("[dim]Run an experiment referencing this dataset first.[/dim]")
 
@@ -594,7 +607,7 @@ def dataset_results_cmd(
     mean_reward = sum(rewards) / len(rewards) if rewards else 0.0
     passed = sum(1 for r in rewards if r >= 1.0)
     failed = sum(1 for r in rewards if r == 0.0)
-    total_tokens = sum((r.cost.tokens_in or 0) for r in records)
+    total_tokens = sum(record.cost.tokens_in or 0 for record in records if record.cost is not None)
 
     # Per-task results
     trials_list: list[dict[str, object]] = []
@@ -622,7 +635,7 @@ def dataset_results_cmd(
         },
     }
 
-    def _render(data: dict) -> None:
+    def _render(data: dict[str, Any]) -> None:
         from rich.table import Table
 
         summary = data["summary"]

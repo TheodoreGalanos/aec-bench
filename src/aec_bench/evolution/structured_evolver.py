@@ -7,11 +7,13 @@ import logging
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
 
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
+    from pydantic_ai.models import KnownModelName, Model
+
     from aec_bench.evolution.mutation import ParsedMutationResponse
 
 logger = logging.getLogger(__name__)
@@ -186,9 +188,8 @@ def call_structured_evolver_with_tools(
 
     Actions are hard-clipped to the scope limit after Phase 2.
     """
-    from pydantic_ai import Agent
+    from pydantic_ai import Agent, UsageLimitExceeded, UsageLimits
     from pydantic_ai.tools import Tool
-    from pydantic_ai.usage import UsageLimitExceeded, UsageLimits
 
     model = _build_pydantic_model(model_name)
 
@@ -207,7 +208,7 @@ def call_structured_evolver_with_tools(
         wrapper.__doc__ = fn.__doc__
         return wrapper
 
-    tools = [Tool(_wrap_tool(name, fn), name=name) for name, fn in toolset.items()]
+    tools: list[Tool[None]] = [Tool[None](_wrap_tool(name, fn), name=name) for name, fn in toolset.items()]
 
     investigation_system = _build_investigation_system(workspace_root)
 
@@ -310,7 +311,7 @@ def call_structured_evolver_with_tools(
 # ---------------------------------------------------------------------------
 
 
-def _build_pydantic_model(model_name: str) -> object:
+def _build_pydantic_model(model_name: str) -> Model | KnownModelName | str:
     """Build a PydanticAI model object from the model name.
 
     Detects provider from the model name (Bedrock, Azure, Anthropic, Together) and
@@ -326,12 +327,9 @@ def _build_pydantic_model(model_name: str) -> object:
         from pydantic_ai.providers.bedrock import BedrockProvider
 
         region = os.environ.get("AWS_REGION", "") or os.environ.get("AWS_DEFAULT_REGION", "")
-        kwargs: dict[str, str] = {}
-        if region:
-            kwargs["region_name"] = region
         return BedrockConverseModel(
             model_name,
-            provider=BedrockProvider(**kwargs),
+            provider=BedrockProvider(region_name=region or None),
         )
 
     if provider == "azure":
@@ -373,8 +371,18 @@ def _strip_together_prefix(model_name: str) -> str:
     return model_name
 
 
-def _azure_provider_kwargs(endpoint: str, api_key: str, api_version: str) -> dict[str, str]:
-    kwargs = {
+class _AzureProviderKwargs(TypedDict):
+    azure_endpoint: str
+    api_key: str
+    api_version: NotRequired[str]
+
+
+def _azure_provider_kwargs(
+    endpoint: str,
+    api_key: str,
+    api_version: str,
+) -> _AzureProviderKwargs:
+    kwargs: _AzureProviderKwargs = {
         "azure_endpoint": endpoint,
         "api_key": api_key,
     }

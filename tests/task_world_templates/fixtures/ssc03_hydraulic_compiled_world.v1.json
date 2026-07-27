@@ -1,0 +1,29 @@
+{
+  "lifecycle_id": "ssc03.hydraulic-interaction-lifecycle",
+  "lifecycle_spec_sha256": "0647ef7ea805b51b445b31f4b995e3230c7b4e5eb3fbc9b04c298023564f428a",
+  "schema_version": "1",
+  "template_id": "hydraulic-interaction-lifecycle-review",
+  "variants": {
+    "administrative_no_op": {
+      "file_count": 20,
+      "package_sha256": "fa440ce5d480a8b88d99ee6acb35b07ae7dd9d833b3c93eb57577ce0541a37c0",
+      "total_bytes": 68849
+    },
+    "major_idf_revision": {
+      "file_count": 20,
+      "package_sha256": "006a2a7c85c2a84f4ec4430e9a49f967936c04946d2174cfbd4c8130df36db9c",
+      "total_bytes": 68662
+    },
+    "outlet_geometry_revision": {
+      "file_count": 20,
+      "package_sha256": "8d9ff904bb8b7c136fd54e6fdb11976a0146a12505507c218e1bfea7e808cdbc",
+      "total_bytes": 68835
+    },
+    "tailwater_revision": {
+      "file_count": 20,
+      "package_sha256": "443245f41ee643b2b981fbd9edfc8bd018c659a1d466c2937f41cf29c815e228",
+      "total_bytes": 68801
+    }
+  },
+  "world_id": "aec.task_world.composite.hydraulic-interaction-lifecycle-review"
+}

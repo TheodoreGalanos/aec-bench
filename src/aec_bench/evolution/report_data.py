@@ -7,6 +7,7 @@ import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal, NotRequired, TypedDict
 
 import yaml
 
@@ -37,6 +38,56 @@ class EvolutionReportData:
     best_score: float
     final_score: float
     cycles: list[CycleReport] = field(default_factory=list)
+
+
+class EvolutionRunSummary(TypedDict):
+    """Summary of one tagged evolution run."""
+
+    run_id: str
+    cycles: int
+    best_score: float
+    final_score: float
+    strategy: str
+
+
+class FileTreeNode(TypedDict):
+    """Recursive file-tree node returned by evolution report APIs."""
+
+    name: str
+    type: Literal["directory", "file"]
+    status: str
+    children: NotRequired[list[FileTreeNode]]
+
+
+class VersionedFile(TypedDict):
+    """File content read from a tagged workspace version."""
+
+    path: str
+    version: str
+    content: str
+    language: str
+
+
+class VersionedFileDiff(TypedDict):
+    """File diff between adjacent tagged workspace versions."""
+
+    path: str
+    from_version: str | None
+    to_version: str
+    diff: str
+
+
+class WorkspaceRunSummary(TypedDict):
+    """Evolution run card shown by workspace discovery."""
+
+    name: str
+    path: str
+    run_id: str
+    strategy: str
+    cycles: int
+    best_score: float
+    final_score: float
+    model: str
 
 
 _SCORE_PATTERN = re.compile(r"score\s+([\d.]+)")
@@ -208,7 +259,7 @@ def _parse_strategy_from_tag(cwd: Path, tag: str) -> str | None:
     return None
 
 
-def list_runs(workspace_path: Path) -> list[dict]:
+def list_runs(workspace_path: Path) -> list[EvolutionRunSummary]:
     """List all evolution runs in a workspace, grouped by run_id.
 
     Returns a list of dicts sorted most-recent-first, each containing:
@@ -240,7 +291,7 @@ def list_runs(workspace_path: Path) -> list[dict]:
 
     # Parse scores and strategy per run
     config_strategy = _read_strategy(workspace_path)
-    result: list[dict] = []
+    result: list[EvolutionRunSummary] = []
     for run_id, tag_cycles in runs.items():
         tag_cycles.sort(key=lambda tc: tc[1])
         scores: list[float] = []
@@ -274,8 +325,10 @@ def _read_strategy(workspace_path: Path) -> str:
         config_path = workspace_path / config_name
         if config_path.exists():
             data = yaml.safe_load(config_path.read_text())
-            if data and "strategy" in data:
-                return data["strategy"]
+            if isinstance(data, dict):
+                strategy = data.get("strategy")
+                if isinstance(strategy, str):
+                    return strategy
     return "unknown"
 
 
@@ -342,7 +395,10 @@ def _read_workspace_name(workspace_path: Path) -> str:
     manifest = workspace_path / "manifest.yaml"
     if manifest.exists():
         data = yaml.safe_load(manifest.read_text())
-        return data.get("name", "unknown")
+        if isinstance(data, dict):
+            name = data.get("name")
+            if isinstance(name, str):
+                return name
     return "unknown"
 
 
@@ -350,8 +406,12 @@ def _read_model(workspace_path: Path) -> str:
     config = workspace_path / "evolution.yaml"
     if config.exists():
         data = yaml.safe_load(config.read_text())
-        models = data.get("models", {})
-        return models.get("evolver", "unknown")
+        if isinstance(data, dict):
+            models = data.get("models")
+            if isinstance(models, dict):
+                evolver = models.get("evolver")
+                if isinstance(evolver, str):
+                    return evolver
     return "unknown"
 
 
@@ -398,7 +458,7 @@ def _status_char_to_label(char: str) -> str:
 _STATUS_SEVERITY = {"unchanged": 0, "modified": 1, "added": 2, "removed": 3}
 
 
-def _aggregate_status(children: list[dict]) -> str:
+def _aggregate_status(children: list[FileTreeNode]) -> str:
     """Return the most severe status among children nodes."""
     if not children:
         return "unchanged"
@@ -456,19 +516,19 @@ def _get_changed_files_initial(cwd: Path, version: str) -> dict[str, str]:
 def _build_tree_nodes(
     files: list[str],
     changed_files: dict[str, str],
-) -> dict:
+) -> FileTreeNode:
     """Build a nested tree structure from a flat list of file paths.
 
     Returns the root node dict with nested children.
     """
-    root: dict = {
+    root: FileTreeNode = {
         "name": ".",
         "type": "directory",
         "children": [],
         "status": "unchanged",
     }
     # Map directory path -> node for quick lookup
-    dir_nodes: dict[str, dict] = {"": root}
+    dir_nodes: dict[str, FileTreeNode] = {"": root}
 
     for filepath in sorted(files):
         parts = filepath.split("/")
@@ -476,7 +536,7 @@ def _build_tree_nodes(
         for i in range(len(parts) - 1):
             dir_path = "/".join(parts[: i + 1])
             if dir_path not in dir_nodes:
-                dir_node: dict = {
+                dir_node: FileTreeNode = {
                     "name": parts[i],
                     "type": "directory",
                     "children": [],
@@ -489,7 +549,7 @@ def _build_tree_nodes(
         # Add the file node
         status_char = changed_files.get(filepath, "")
         status = _status_char_to_label(status_char) if status_char else "unchanged"
-        file_node: dict = {
+        file_node: FileTreeNode = {
             "name": parts[-1],
             "type": "file",
             "status": status,
@@ -502,7 +562,7 @@ def _build_tree_nodes(
     return root
 
 
-def _propagate_status(node: dict) -> None:
+def _propagate_status(node: FileTreeNode) -> None:
     """Recursively set directory status from children (most severe wins)."""
     if node["type"] == "file":
         return
@@ -511,7 +571,7 @@ def _propagate_status(node: dict) -> None:
     node["status"] = _aggregate_status(node.get("children", []))
 
 
-def get_file_tree_at_version(workspace_path: Path, version: str) -> dict:
+def get_file_tree_at_version(workspace_path: Path, version: str) -> FileTreeNode:
     """Return the file tree at a specific evo-N version.
 
     Uses git ls-tree to list files and git diff to determine change status.
@@ -538,7 +598,11 @@ def get_file_tree_at_version(workspace_path: Path, version: str) -> dict:
     return _build_tree_nodes(files, changed_files)
 
 
-def get_file_at_version(workspace_path: Path, version: str, filepath: str) -> dict:
+def get_file_at_version(
+    workspace_path: Path,
+    version: str,
+    filepath: str,
+) -> VersionedFile:
     """Return file content at a specific version.
 
     Returns dict with path, version, content, and language (detected from
@@ -559,7 +623,7 @@ def get_file_diff_at_version(
     workspace_path: Path,
     version: str,
     filepath: str,
-) -> dict:
+) -> VersionedFileDiff:
     """Return unified diff for a file between the previous version and this one.
 
     For evo-0, the entire file content is shown as additions (diff against
@@ -588,14 +652,14 @@ def get_file_diff_at_version(
 # ---------------------------------------------------------------------------
 
 
-def discover_workspaces(search_root: Path) -> list[dict]:
+def discover_workspaces(search_root: Path) -> list[WorkspaceRunSummary]:
     """Scan search_root for directories containing both manifest.yaml and evolution.yaml.
 
     Returns one entry per **run** (not per workspace directory). Each entry
     contains: name, path (relative to search_root), run_id, strategy,
     cycles, best_score, final_score, model.
     """
-    results: list[dict] = []
+    results: list[WorkspaceRunSummary] = []
     if not search_root.exists():
         return results
 

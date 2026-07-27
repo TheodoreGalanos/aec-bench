@@ -8,12 +8,20 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
+from typing import Any, cast
 
 import pytest
 
+from aec_bench.generation.contracts import SampledInstance
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
+from aec_bench.meta_harness.applicability import profile_task_applicability
+from aec_bench.meta_harness.declared_task_surface import project_declared_task_surface
+from aec_bench.meta_harness.kernel_catalogue import default_kernel_registry
 from aec_bench.task_world_templates.catalogue import get_template as get_composite_template
+from aec_bench.tasks.loader import load_task_definition
+from aec_bench.templates.contracts import TemplateConfig
 from aec_bench.templates.registry import discover_templates, load_engine_module, load_template
 
 TEMPLATE_DIR = (
@@ -24,6 +32,13 @@ TEMPLATE_DIR = (
     / "builtin"
     / "civil"
     / "drainage_model_run_provenance_issue_review_package"
+)
+CHECKED_STAGE1_TASKS = (
+    Path(__file__).resolve().parents[2]
+    / "tasks"
+    / "civil"
+    / "drainage-review"
+    / "drainage-model-run-provenance-issue-review-package"
 )
 
 STATUS_KEYS = [f"prv_0{i}_status" for i in range(1, 10)]
@@ -42,7 +57,7 @@ EVIDENCE_KEYS = [
     "hgl_propagation_delta_m",
 ]
 
-VARIANT_EXPECTATIONS: dict[str, dict] = {
+VARIANT_EXPECTATIONS: dict[str, dict[str, Any]] = {
     "clean": {
         "flips": {},
         "run": 0.0,
@@ -148,13 +163,16 @@ SOURCE_FILES = [
 ]
 
 
-def _load() -> tuple:
+def _load() -> tuple[TemplateConfig, Path, ModuleType]:
     config, template_dir = load_template(TEMPLATE_DIR)
     engine = load_engine_module(template_dir)
     return config, template_dir, engine
 
 
-def _instance_for_variant(variant: str, max_seeds: int = 2000):
+def _instance_for_variant(
+    variant: str,
+    max_seeds: int = 2000,
+) -> tuple[TemplateConfig, Path, ModuleType, SampledInstance]:
     config, template_dir, engine = _load()
     for seed in range(max_seeds):
         instance = sample_instance(config, engine.compute, "medium", seed=seed, instance_index=0)
@@ -163,14 +181,18 @@ def _instance_for_variant(variant: str, max_seeds: int = 2000):
     pytest.fail(f"No instance with variant {variant!r} found in {max_seeds} seeds")
 
 
-def _scaffold_variant(tmp_path: Path, variant: str) -> tuple[Path, dict]:
+def _scaffold_variant(tmp_path: Path, variant: str) -> tuple[Path, dict[str, float]]:
     config, template_dir, engine, instance = _instance_for_variant(variant)
     engine_source = (template_dir / "engine.py").read_text(encoding="utf-8")
     instance_dir = scaffold_task_instance(config, engine_source, template_dir, instance, tmp_path)
     return instance_dir, instance.ground_truth
 
 
-def _run_verifier(instance_dir: Path, input_file: Path, tmp_path: Path) -> tuple[float, dict]:
+def _run_verifier(
+    instance_dir: Path,
+    input_file: Path,
+    tmp_path: Path,
+) -> tuple[float, dict[str, Any]]:
     reward_dir = tmp_path / input_file.stem
     reward_file = reward_dir / "reward.json"
     result = subprocess.run(
@@ -189,17 +211,17 @@ def _run_verifier(instance_dir: Path, input_file: Path, tmp_path: Path) -> tuple
     )
     assert result.returncode == 0, result.stderr
     reward = json.loads(reward_file.read_text(encoding="utf-8"))["reward"]
-    details = json.loads((reward_dir / "details.json").read_text(encoding="utf-8"))
-    return reward, details
+    details = cast(dict[str, Any], json.loads((reward_dir / "details.json").read_text(encoding="utf-8")))
+    return float(reward), details
 
 
-def _extract_json_block(text: str) -> dict:
+def _extract_json_block(text: str) -> dict[str, Any]:
     matches = re.findall(r"```json\s*\n(.*?)\n\s*```", text, re.DOTALL)
     assert matches, "No fenced JSON block found"
-    return json.loads(matches[-1])
+    return cast(dict[str, Any], json.loads(matches[-1]))
 
 
-def _replace_json_block(text: str, payload: dict) -> str:
+def _replace_json_block(text: str, payload: dict[str, Any]) -> str:
     block = "```json\n" + json.dumps(payload, indent=2) + "\n```"
     return re.sub(r"```json\s*\n.*?\n\s*```", lambda _match: block, text, count=1, flags=re.DOTALL)
 
@@ -218,6 +240,52 @@ def test_template_is_discoverable_by_builtin_name() -> None:
     assert config.meta.discipline == "civil"
     assert config.meta.category == "drainage-review"
     assert config.meta.tool_mode.value == "no-tool"
+
+
+def test_checked_stage1_program_recovery_pair_is_distinct_synthetic_long_horizon_evidence(
+    tmp_path: Path,
+) -> None:
+    task_dirs = (
+        CHECKED_STAGE1_TASKS / "industrial-precinct-catchment-industrial-precinct-catchment-00",
+        CHECKED_STAGE1_TASKS / "brownfield-drainage-upgrade-industrial-precinct-catchment-02",
+    )
+    instance_payloads = tuple(
+        json.loads((task_dir / "tests" / "instance.json").read_text(encoding="utf-8")) for task_dir in task_dirs
+    )
+    world_payloads = tuple(json.loads((task_dir / "world.json").read_text(encoding="utf-8")) for task_dir in task_dirs)
+
+    assert [payload["seed"] for payload in instance_payloads] == [7_301, 7_301]
+    assert [payload["difficulty"] for payload in instance_payloads] == ["hard", "hard"]
+    assert [payload["all_params"]["packet_variant"] for payload in instance_payloads] == [
+        "downstream_memo_stale_report",
+        "stale_catchment_revision",
+    ]
+    assert len({payload["instance_name"] for payload in instance_payloads}) == 2
+    assert [payload["template_id"] for payload in world_payloads] == [
+        "drainage-model-run-provenance-issue-review-package",
+        "drainage-model-run-provenance-issue-review-package",
+    ]
+    test_scripts = tuple((task_dir / "tests" / "test.sh").read_text(encoding="utf-8") for task_dir in task_dirs)
+    assert all('python3 "$SCRIPT_DIR/verify.py"' in script for script in test_scripts)
+    assert all("/workspace/tests/verify.py" not in script for script in test_scripts)
+    assert all("python3 /tests/verify.py" not in script for script in test_scripts)
+    topology_counts = [
+        (len(payload["stages"]), len(payload["handoffs"]), len(payload["branch_decisions"]))
+        for payload in world_payloads
+    ]
+    assert topology_counts == [
+        (5, 8, 4),
+        (5, 8, 4),
+    ]
+
+    scores = tuple(
+        (
+            _run_verifier(task_dir, task_dir / "tests" / "fixtures" / "golden_fail.md", tmp_path)[0],
+            _run_verifier(task_dir, task_dir / "tests" / "fixtures" / "golden_pass.md", tmp_path)[0],
+        )
+        for task_dir in task_dirs
+    )
+    assert scores == ((0.31, 1.0), (0.21, 1.0))
 
 
 def test_composite_catalogue_models_the_temporal_provenance_chain() -> None:
@@ -242,6 +310,45 @@ def test_composite_catalogue_models_the_temporal_provenance_chain() -> None:
             "readiness_decision",
         }
     )
+
+
+def test_generated_world_preserves_declared_provenance_topology(tmp_path: Path) -> None:
+    instance_dir, _ground_truth = _scaffold_variant(tmp_path, "downstream_memo_stale_report")
+    template = get_composite_template("drainage-model-run-provenance-issue-review-package")
+
+    world_payload = json.loads((instance_dir / "world.json").read_text(encoding="utf-8"))
+    task = load_task_definition(instance_dir, tmp_path)
+    surface = project_declared_task_surface(task=task, task_dir=instance_dir)
+    applicability = profile_task_applicability(
+        task_refs=(task.task_id,),
+        tasks_root=tmp_path,
+        registry=default_kernel_registry(),
+    )
+
+    assert world_payload["template_id"] == template.template_id
+    assert world_payload["pattern"] == template.pattern
+    assert world_payload["stages"] == [stage.model_dump(mode="json") for stage in template.stages]
+    assert world_payload["handoffs"] == [
+        handoff.model_dump(
+            mode="json",
+            include={"id", "description", "unit", "producer_stage", "consumer_stages"},
+        )
+        for handoff in template.handoffs
+    ]
+    assert world_payload["branch_decisions"] == [
+        decision.model_dump(
+            mode="json",
+            include={"id", "description", "allowed", "evidence_key"},
+        )
+        for decision in template.branch_decisions
+    ]
+    assert all("example_value" not in handoff for handoff in world_payload["handoffs"])
+    assert all("selected_example" not in decision for decision in world_payload["branch_decisions"])
+    assert surface.topology_basis == "stage_handoff_graph"
+    assert surface.canonical_nodes == tuple(sorted(stage.id for stage in template.stages))
+    assert surface.branch_count == len(template.branch_decisions)
+    assert applicability.descriptor.stage_pattern == "fork_join"
+    assert applicability.descriptor.branching_characteristic == "conditional"
 
 
 def test_parameters_vary_across_seeds() -> None:

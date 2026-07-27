@@ -25,15 +25,19 @@ _TOGETHER_PREFIX = "together:"
 def detect_direct_provider(model_name: str) -> str:
     """Detect the direct client provider from the model name.
 
-    Returns ``"anthropic"``, ``"azure"``, or ``"together"``.  Defaults to
-    ``"anthropic"`` for unknown models (Anthropic API is the most common
-    local use case).
+    Returns ``"anthropic"``, ``"azure"``, ``"bedrock"``, or ``"together"``.
+    Defaults to ``"anthropic"`` for unknown models (Anthropic API is the
+    most common local use case).
     """
     lower = model_name.lower()
     if lower.startswith(_TOGETHER_PREFIX):
         return "together"
     if any(lower.startswith(p) for p in _AZURE_PREFIXES):
         return "azure"
+    from aec_bench.adapters.rlm.providers import detect_provider
+
+    if detect_provider(model_name) == "bedrock":
+        return "bedrock"
     return "anthropic"
 
 
@@ -106,10 +110,8 @@ def _build_rlm(
         task_metadata: dict[str, object] = {}
         task_toml = rlm_toml.parent / "task.toml"
         if task_toml.exists():
-            try:
-                import tomllib as _tomllib
-            except ModuleNotFoundError:
-                import tomli as _tomllib  # type: ignore[no-redef]
+            import tomllib as _tomllib
+
             try:
                 task_data = _tomllib.loads(task_toml.read_text())
                 meta = task_data.get("metadata", {})
@@ -168,6 +170,10 @@ def _build_direct(
             from aec_bench.adapters.direct_providers import AzureOpenAIChatDirectClient
 
             client = AzureOpenAIChatDirectClient()
+        elif provider == "bedrock":
+            from aec_bench.adapters.direct_providers import BedrockDirectClient
+
+            client = BedrockDirectClient()
         elif provider == "together":
             from aec_bench.adapters.direct_providers import TogetherChatDirectClient
 
@@ -213,11 +219,15 @@ def _build_lambda_rlm(
     from aec_bench.adapters.rlm.providers import make_rlm_client
 
     ws = Path(workspace)
-    config_path = ws / "lambda-rlm.toml"
-    if not config_path.exists():
-        config_path = ws / "rlm.toml"
-    if not config_path.exists():
-        config_path = None
+    lambda_config_path = ws / "lambda-rlm.toml"
+    fallback_config_path = ws / "rlm.toml"
+    config_path = (
+        lambda_config_path
+        if lambda_config_path.exists()
+        else fallback_config_path
+        if fallback_config_path.exists()
+        else None
+    )
 
     if client is None:
         client = make_rlm_client(model_name)
@@ -242,10 +252,8 @@ def _build_lambda_rlm(
     task_metadata: dict[str, object] = {}
     task_toml = ws / "task.toml"
     if task_toml.exists():
-        try:
-            import tomllib as _tomllib
-        except ModuleNotFoundError:
-            import tomli as _tomllib  # type: ignore[no-redef]
+        import tomllib as _tomllib
+
         try:
             task_data = _tomllib.loads(task_toml.read_text())
             meta = task_data.get("metadata", {})
@@ -304,10 +312,7 @@ def _build_tool_loop(
     advisor_config: AdvisorConfig | None = None
     config_path = Path(workspace) / "tool_loop.toml"
     if config_path.exists():
-        try:
-            import tomllib as _tomllib
-        except ModuleNotFoundError:
-            import tomli as _tomllib  # type: ignore[no-redef]
+        import tomllib as _tomllib
 
         from aec_bench.contracts.validators import resolve_env_ref
 

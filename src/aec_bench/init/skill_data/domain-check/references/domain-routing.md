@@ -8,15 +8,15 @@
 | Domain | Design Guide | Package Path |
 |---|---|---|
 | Contracts | `docs/CONTRACTS.md` | `src/aec_bench/contracts/` |
-| Tasks | `docs/tasks-guide.md` | `src/aec_bench/tasks/` |
-| Templates | (part of generation framework) | `src/aec_bench/templates/` |
-| Generation | (part of generation framework) | `src/aec_bench/generation/` |
+| Tasks | `https://aecbench.com/docs/core/tasks` | `src/aec_bench/tasks/` |
+| Templates | `https://aecbench.com/docs/core/templates` | `src/aec_bench/templates/` |
+| Generation | `https://aecbench.com/docs/core/templates` | `src/aec_bench/generation/` |
 | Agents | `docs/AGENTS.md` (agent contract section) | `src/aec_bench/agents/` |
-| Adapters | `docs/adapters-guide.md` | `src/aec_bench/adapters/` |
-| Harness | `docs/harness-guide.md` | `src/aec_bench/harness/` |
-| Evaluation | `docs/evaluation-guide.md` | `src/aec_bench/evaluation/` |
-| Communication | `docs/communication-guide.md` | `src/aec_bench/communication/` |
-| Feedback | `docs/feedback-guide.md` | `src/aec_bench/feedback/` |
+| Adapters | `https://aecbench.com/docs/agents/harnesses` | `src/aec_bench/adapters/` |
+| Harness | `https://aecbench.com/docs/advanced/backends` | `src/aec_bench/harness/` |
+| Evaluation | `https://aecbench.com/docs/evaluation/scoring` | `src/aec_bench/evaluation/` |
+| Communication | `https://aecbench.com/docs/evaluation/reviewing` | `src/aec_bench/communication/` |
+| Feedback | `https://aecbench.com/docs/evaluation/reviewing` | `src/aec_bench/feedback/` |
 
 ## Cross-Cutting
 

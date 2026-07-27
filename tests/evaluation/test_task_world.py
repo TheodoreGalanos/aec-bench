@@ -21,6 +21,10 @@ def test_materialize_workspace_run_uses_task_world_sidecar(tmp_path: Path) -> No
 world_id: private.winning_work.compliance_review
 name: Submission compliance review world
 task_unit: Review a proposal response against a client returnables matrix.
+template_id: composite-submission-review
+stages:
+  - id: intake
+    title: Intake
 logic_profile:
   closure_gates:
     - id: verifier_reward_available

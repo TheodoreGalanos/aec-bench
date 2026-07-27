@@ -17,6 +17,7 @@ from aec_bench.contracts.evolution import (
     EvolutionObservation,
     ObservationEnrichment,
 )
+from aec_bench.contracts.trial_record import CostRecord, TrialRecord
 from aec_bench.evolution.backends.local import SolveFn, make_local_solve_fn
 from aec_bench.evolution.behaviour import extract_behaviour_descriptor
 from aec_bench.evolution.engine import AECEvolutionEngine
@@ -32,7 +33,7 @@ _CACHE_READ_COST_PER_MTOK = 0.30
 _CACHE_WRITE_COST_PER_MTOK = 3.75
 
 
-def _estimate_trial_cost(trial_record: Any) -> float:
+def _estimate_trial_cost(trial_record: TrialRecord) -> float:
     """Estimate the USD cost of a trial from its CostRecord.
 
     Uses estimated_cost_usd if available. When cache token counts are
@@ -40,17 +41,17 @@ def _estimate_trial_cost(trial_record: Any) -> float:
     in multi-turn conversations, ~80% of input tokens are typically
     cached after the first turn.
     """
-    cost = getattr(trial_record, "cost", None)
+    cost = trial_record.cost
     if cost is None:
         return 0.0
-    estimated = getattr(cost, "estimated_cost_usd", None)
+    estimated = cost.estimated_cost_usd
     if estimated is not None:
         return float(estimated)
 
-    tokens_in = getattr(cost, "tokens_in", 0) or 0
-    tokens_out = getattr(cost, "tokens_out", 0) or 0
-    cache_read = getattr(cost, "cache_read_tokens", None)
-    cache_write = getattr(cost, "cache_write_tokens", None)
+    tokens_in = cost.tokens_in or 0
+    tokens_out = cost.tokens_out or 0
+    cache_read = cost.cache_read_tokens
+    cache_write = cost.cache_write_tokens
 
     output_cost = tokens_out * _OUTPUT_COST_PER_MTOK / 1_000_000
 
@@ -71,6 +72,13 @@ def _estimate_trial_cost(trial_record: Any) -> float:
         input_cost = (uncached * _INPUT_COST_PER_MTOK + cached * _CACHE_READ_COST_PER_MTOK) / 1_000_000
 
     return input_cost + output_cost
+
+
+def _estimate_evolver_cost(cost: CostRecord | None) -> float:
+    """Return the recorded evolver cost in USD, defaulting missing data to zero."""
+    if cost is None or cost.estimated_cost_usd is None:
+        return 0.0
+    return float(cost.estimated_cost_usd)
 
 
 @dataclass(frozen=True)
@@ -204,12 +212,14 @@ class SwarmAgentEvolver:
 
         # 8. Compute score, cost, and parent version
         score = step_result.cycle_record.batch_score if step_result.cycle_record else 0.0
-        evolver_cost = step_result.cycle_record.evolver_cost if step_result.cycle_record else 0.0
+        evolver_cost = _estimate_evolver_cost(
+            step_result.cycle_record.evolver_cost if step_result.cycle_record else None
+        )
         version_after = step_result.cycle_record.workspace_version_after if step_result.cycle_record else version_tag
         version_before = step_result.cycle_record.workspace_version_before if step_result.cycle_record else ""
 
         solver_cost = sum(_estimate_trial_cost(tr) for tr in trial_records)
-        total_cost = (evolver_cost or 0.0) + solver_cost
+        total_cost = evolver_cost + solver_cost
 
         return SwarmStepResult(
             score=score,

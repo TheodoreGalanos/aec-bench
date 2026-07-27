@@ -2,11 +2,13 @@
 # ABOUTME: Detects the produced Harbor job directory and imports TrialRecords after run completion.
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 from aec_bench.contracts.experiment_manifest import ExperimentManifest
+from aec_bench.contracts.task_definition import TaskDefinition
+from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evaluation.llm_reviewer import (
     ReviewerJobResult,
     ReviewerRunConfig,
@@ -40,6 +42,15 @@ class HarborWorkflowResult:
 
 
 @dataclass(frozen=True)
+class HarborDispatchOnlyResult:
+    """Completed Harbor dispatch whose artifacts have not entered a TrialRecord ledger."""
+
+    dispatch: HarborDispatchResult
+    job_dir: Path
+    resolved_tasks: tuple[TaskDefinition, ...]
+
+
+@dataclass(frozen=True)
 class SynchronousHarborWorkflow:
     project_root: Path
     repo_root: Path
@@ -55,10 +66,102 @@ class SynchronousHarborWorkflow:
         executor: HarborCommandExecutor | None = None,
         progress_callback: Callable[[WorkflowProgressSnapshot], None] | None = None,
         reviewer_config: ReviewerRunConfig | None = None,
+        record_transform: Callable[[TrialRecord], TrialRecord] | None = None,
+        resolved_tasks: tuple[TaskDefinition, ...] | None = None,
+        task_path_overrides: Mapping[str, Path] | None = None,
     ) -> HarborWorkflowResult:
-        registry = TaskRegistry(tasks_root=self.tasks_root)
-        registry.reload()
-        selected_tasks = select_manifest_tasks(registry.all(), manifest)
+        dispatch = self.dispatch_only(
+            manifest=manifest,
+            config_path=config_path,
+            executor=executor,
+            progress_callback=progress_callback,
+            resolved_tasks=resolved_tasks,
+            task_path_overrides=task_path_overrides,
+        )
+        return self.import_dispatched(
+            manifest=manifest,
+            dispatched=dispatch,
+            progress_callback=progress_callback,
+            reviewer_config=reviewer_config,
+            record_transform=record_transform,
+        )
+
+    def import_dispatched(
+        self,
+        *,
+        manifest: ExperimentManifest,
+        dispatched: HarborDispatchOnlyResult,
+        progress_callback: Callable[[WorkflowProgressSnapshot], None] | None = None,
+        reviewer_config: ReviewerRunConfig | None = None,
+        record_transform: Callable[[TrialRecord], TrialRecord] | None = None,
+    ) -> HarborWorkflowResult:
+        """Import one completed dispatch without repeating its backend effect."""
+
+        selected_tasks = list(dispatched.resolved_tasks)
+        job_dir = dispatched.job_dir
+        effective_reviewer_config = reviewer_config or reviewer_config_from_manifest(manifest.reviewer)
+        reviewer_result: ReviewerJobResult | None = None
+        if effective_reviewer_config is not None and effective_reviewer_config.enabled:
+            reviewer_result = run_harbor_job_reviewer(
+                job_dir=job_dir,
+                repo_root=self.repo_root,
+                config=effective_reviewer_config,
+            )
+
+        import_runner = HarborImportExperimentRunner(
+            repo_root=self.repo_root,
+            tasks_root=self.tasks_root,
+            ledger_root=self.ledger_root,
+        )
+        progress_tracker = WorkflowProgressTracker(
+            experiment_id=manifest.experiment_id,
+            selected_task_count=len(selected_tasks),
+            planned_trial_count=len(build_trial_plan(manifest, selected_tasks)),
+        )
+        self._emit(progress_callback, progress_tracker.import_started(job_dir=job_dir))
+        import_result = import_runner.import_harbor_job(
+            job_dir=job_dir,
+            manifest=manifest,
+            record_transform=record_transform,
+            resolved_tasks=tuple(selected_tasks),
+        )
+        self._emit(
+            progress_callback,
+            progress_tracker.import_completed(
+                job_dir=job_dir,
+                discovered_trials=import_result.discovered_trials,
+                imported_trials=import_result.imported_trials,
+                duplicate_trials=import_result.duplicate_trials,
+                invalid_trials=import_result.invalid_trials,
+            ),
+        )
+        return HarborWorkflowResult(
+            dispatch=dispatched.dispatch,
+            job_dir=job_dir,
+            import_result=import_result,
+            reviewer_result=reviewer_result,
+        )
+
+    def dispatch_only(
+        self,
+        *,
+        manifest: ExperimentManifest,
+        config_path: Path,
+        executor: HarborCommandExecutor | None = None,
+        progress_callback: Callable[[WorkflowProgressSnapshot], None] | None = None,
+        resolved_tasks: tuple[TaskDefinition, ...] | None = None,
+        task_path_overrides: Mapping[str, Path] | None = None,
+    ) -> HarborDispatchOnlyResult:
+        """Dispatch exact Harbor tasks and locate their job without importing trial evidence."""
+
+        if resolved_tasks is None:
+            registry = TaskRegistry(tasks_root=self.tasks_root)
+            registry.reload()
+            selected_tasks = select_manifest_tasks(registry.all(), manifest)
+        else:
+            selected_tasks = list(resolved_tasks)
+            if select_manifest_tasks(selected_tasks, manifest) != selected_tasks:
+                raise HarborWorkflowError("prevalidated tasks do not satisfy the experiment manifest selector")
         planned_trials = build_trial_plan(manifest, selected_tasks)
         progress_tracker = WorkflowProgressTracker(
             experiment_id=manifest.experiment_id,
@@ -68,11 +171,15 @@ class SynchronousHarborWorkflow:
         before = self._job_dirs()
         self._emit(progress_callback, progress_tracker.dispatch_started())
 
-        dispatcher = HarborExperimentDispatcher(project_root=self.project_root)
+        dispatcher = HarborExperimentDispatcher(
+            project_root=self.project_root,
+            jobs_dir=self.jobs_root,
+        )
         dispatch_result = dispatcher.dispatch(
             manifest=manifest,
             tasks=selected_tasks,
             config_path=config_path,
+            task_path_overrides=task_path_overrides,
             executor=executor,
             execute=True,
         )
@@ -90,38 +197,10 @@ class SynchronousHarborWorkflow:
             after=after,
         )
         self._emit(progress_callback, progress_tracker.job_dir_identified(job_dir=job_dir))
-
-        effective_reviewer_config = reviewer_config or reviewer_config_from_manifest(manifest.reviewer)
-        reviewer_result: ReviewerJobResult | None = None
-        if effective_reviewer_config is not None and effective_reviewer_config.enabled:
-            reviewer_result = run_harbor_job_reviewer(
-                job_dir=job_dir,
-                repo_root=self.repo_root,
-                config=effective_reviewer_config,
-            )
-
-        import_runner = HarborImportExperimentRunner(
-            repo_root=self.repo_root,
-            tasks_root=self.tasks_root,
-            ledger_root=self.ledger_root,
-        )
-        self._emit(progress_callback, progress_tracker.import_started(job_dir=job_dir))
-        import_result = import_runner.import_harbor_job(job_dir=job_dir, manifest=manifest)
-        self._emit(
-            progress_callback,
-            progress_tracker.import_completed(
-                job_dir=job_dir,
-                discovered_trials=import_result.discovered_trials,
-                imported_trials=import_result.imported_trials,
-                duplicate_trials=import_result.duplicate_trials,
-                invalid_trials=import_result.invalid_trials,
-            ),
-        )
-        return HarborWorkflowResult(
+        return HarborDispatchOnlyResult(
             dispatch=dispatch_result,
             job_dir=job_dir,
-            import_result=import_result,
-            reviewer_result=reviewer_result,
+            resolved_tasks=tuple(selected_tasks),
         )
 
     def _job_dirs(self) -> set[Path]:

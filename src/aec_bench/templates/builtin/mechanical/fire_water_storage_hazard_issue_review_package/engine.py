@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import math
+from typing import Any
 
 STATUS_PASS = 0.0
 STATUS_FAIL = 1.0
@@ -69,7 +70,7 @@ def _ceil_to(value: float, step: float) -> float:
     return round(math.ceil(value / step - 1e-9) * step, 10)
 
 
-def _quantize(params: dict) -> dict:
+def _quantize(params: dict[str, Any]) -> dict[str, Any]:
     """Return params with floats snapped to grid and enums cast."""
     quantized = dict(params)
     for name, step in _QUANT_STEPS.items():
@@ -110,7 +111,7 @@ def _class_values(class_name: str, area_adjustment_m2: float) -> dict[str, float
     }
 
 
-def _derive(raw_params: dict) -> dict:
+def _derive(raw_params: dict[str, Any]) -> dict[str, Any]:
     """Compute the full packet state: true metrics, derived criteria, and claims."""
     p = _quantize(raw_params)
     variant = p["packet_variant"]
@@ -153,7 +154,7 @@ def _derive(raw_params: dict) -> dict:
     }
 
 
-_VARIANT_GOLD = {
+_VARIANT_GOLD: dict[str, dict[str, Any]] = {
     "clean": {"flips": {}, "readiness": READY, "findings": 0.0, "requests": 0.0, "carried": 0.0},
     "missing_commodity_classification": {
         "flips": {"rlr_04_status": STATUS_INSUFFICIENT_DATA},
@@ -207,7 +208,7 @@ _VARIANT_GOLD = {
 }
 
 
-def compute(**params) -> dict[str, float]:
+def compute(**params: Any) -> dict[str, float]:
     """Return the gold review state and evidence metrics for one packet instance."""
     state = _derive(params)
     gold = _VARIANT_GOLD[state["variant"]]
@@ -248,7 +249,7 @@ def _register_rows(variant: str) -> list[tuple[str, str, str, str]]:
     ]
 
 
-def build_sources(all_params: dict) -> dict[str, str]:
+def build_sources(all_params: dict[str, Any]) -> dict[str, str]:
     """Render the seven-file source packet for one instance."""
     s = _derive(all_params)
     p = s["params"]
@@ -479,7 +480,7 @@ _VARIANT_FINDINGS = {
 }
 
 
-def _golden_payload(all_params: dict, ground_truth: dict) -> dict:
+def _golden_payload(all_params: dict[str, Any], ground_truth: dict[str, Any]) -> dict[str, Any]:
     """Build the fully correct structured review answer for this instance."""
     state = _derive(all_params)
     variant = state["variant"]
@@ -581,7 +582,7 @@ def _golden_payload(all_params: dict, ground_truth: dict) -> dict:
     }
 
 
-def build_golden_pass(all_params: dict, ground_truth: dict) -> str:
+def build_golden_pass(all_params: dict[str, Any], ground_truth: dict[str, Any]) -> str:
     """Golden correct review: full matrix, evidence, linkage, and readiness decision."""
     payload = _golden_payload(all_params, ground_truth)
     return (
@@ -592,7 +593,7 @@ def build_golden_pass(all_params: dict, ground_truth: dict) -> str:
     )
 
 
-def build_golden_fail(all_params: dict, ground_truth: dict) -> str:
+def build_golden_fail(all_params: dict[str, Any], ground_truth: dict[str, Any]) -> str:
     """Fluent but unsafe memo: all-pass matrix, no evidence, unconditional readiness."""
     matrix = {f"RLR-0{index}": {"status": "pass", "evidence": "Reviewed and found in order."} for index in range(1, 10)}
     payload = {

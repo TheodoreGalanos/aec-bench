@@ -400,3 +400,74 @@ def test_read_trajectory_preserves_metadata(tmp_path: Path) -> None:
     assert len(entries) == 1
     assert entries[0].metadata is not None
     assert entries[0].metadata["tokens"]["cost_cumulative"] == 0.13
+
+
+def test_trajectory_round_trip_preserves_typed_meta_harness_node_lineage(tmp_path: Path) -> None:
+    from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext, read_trajectory
+
+    context = MetaHarnessTrajectoryContext(
+        kernel_sha256="a" * 64,
+        harness_id="harness.1",
+        harness_sha256="b" * 64,
+        program_id="program.1",
+        program_sha256="c" * 64,
+        bundle_id="bundle.1",
+        bundle_sha256="d" * 64,
+        program_node_id="node.calculate",
+        binding_ids=("binding.agent", "binding.tools"),
+        repair_iteration=2,
+        execution_seed=91,
+        attempt=1,
+        motif_ids=("motif.alpha",),
+        proposal_session_id="proposal-session.1",
+        proposal_invocation_id="proposal-session.1.node.calculate.attempt.1",
+    )
+    out = tmp_path / "trajectory.jsonl"
+    writer = TrajectoryWriter(str(out))
+    writer.set_meta_harness_context(context.model_dump(mode="json"))
+    writer.new_step()
+    writer.thinking("Execute the compiled calculation node.")
+    writer.close()
+
+    entries = read_trajectory(out)
+
+    assert entries[0].meta_harness == context
+    assert entries[0].meta_harness.program_node_id == "node.calculate"
+    assert entries[0].meta_harness.execution_seed == 91
+    assert entries[0].meta_harness.proposal_session_id == "proposal-session.1"
+    assert entries[0].meta_harness.proposal_invocation_id == ("proposal-session.1.node.calculate.attempt.1")
+
+
+def test_meta_harness_trajectory_context_rejects_noncanonical_lineage() -> None:
+    from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext
+
+    with pytest.raises(ValidationError, match="sorted and unique"):
+        MetaHarnessTrajectoryContext(
+            kernel_sha256="a" * 64,
+            harness_id="harness.1",
+            harness_sha256="b" * 64,
+            program_id="program.1",
+            program_sha256="c" * 64,
+            bundle_id="bundle.1",
+            bundle_sha256="d" * 64,
+            program_node_id="node.calculate",
+            binding_ids=("binding.tools", "binding.agent", "binding.agent"),
+            motif_ids=(),
+        )
+
+
+def test_meta_harness_trajectory_context_rejects_partial_proposal_invocation_lineage() -> None:
+    from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext
+
+    with pytest.raises(ValidationError, match="proposal session and invocation"):
+        MetaHarnessTrajectoryContext(
+            kernel_sha256="a" * 64,
+            harness_id="harness.1",
+            harness_sha256="b" * 64,
+            program_id="program.1",
+            program_sha256="c" * 64,
+            bundle_id="bundle.1",
+            bundle_sha256="d" * 64,
+            program_node_id="node.calculate",
+            proposal_session_id="proposal-session.1",
+        )

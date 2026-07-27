@@ -3,6 +3,7 @@
 
 import time
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -45,7 +46,7 @@ def summary(
 
     result = summarize_evaluation_records(records)
 
-    def _render(d: dict) -> None:
+    def _render(d: dict[str, Any]) -> None:
         console.print(f"[bold]Experiment Summary[/bold] ({d['n_trials']} trials)")
         console.print(f"  Mean reward: [green]{d['mean_reward']:.3f}[/green]")
         console.print(f"  Total cost:  ${d.get('total_cost_usd', 0):.2f}")
@@ -114,7 +115,7 @@ def leaderboard(
         )
         return
 
-    def _render(d: dict) -> None:
+    def _render(d: dict[str, Any]) -> None:
         from rich.table import Table
 
         rows = d.get("leaderboard", {}).get("entries", [])
@@ -178,7 +179,7 @@ def traces(
         export_trace_summaries_json(summaries, output_path)
         print_success(f"Exported {len(summaries)} trace summaries to {output_path}")
 
-    def _render(d: list) -> None:
+    def _render(d: list[dict[str, Any]]) -> None:
         from rich.table import Table
 
         table = Table(title=f"Trace Summaries ({len(d)} trials)")
@@ -247,7 +248,7 @@ def behavioral(
         export_behavioral_report_json(export, output_path)
         print_success(f"Exported behavioral analysis to {output_path}")
 
-    def _render(d: dict) -> None:
+    def _render(d: dict[str, Any]) -> None:
         from rich.table import Table
 
         table = Table(title="Behavioral Analysis Summary")

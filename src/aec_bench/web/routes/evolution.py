@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, status
 
 from aec_bench.evolution.report_data import (
+    FileTreeNode,
     build_evolution_report_data,
     discover_workspaces,
     get_file_at_version,
@@ -71,7 +72,7 @@ def _resolve_workspace(request: Request, workspace: str) -> Path:
     return ws_path
 
 
-def _dict_to_tree_node(raw: dict) -> FileTreeNodeSchema:
+def _dict_to_tree_node(raw: FileTreeNode) -> FileTreeNodeSchema:
     """Recursively convert a raw tree dict to a FileTreeNodeSchema."""
     children = None
     if raw.get("children") is not None:
@@ -80,7 +81,7 @@ def _dict_to_tree_node(raw: dict) -> FileTreeNodeSchema:
         name=raw["name"],
         type=raw["type"],
         status=raw.get("status", "unchanged"),
-        size=raw.get("size"),
+        size=None,
         children=children,
     )
 
@@ -199,7 +200,9 @@ def evolution_graveyard(request: Request, workspace: str) -> GraveyardResponse:
             failure_reason=e.failure_reason,
             field_failures=e.field_failures,
             detected_patterns=e.detected_patterns,
-            mutation_actions=e.mutation_actions,
+            mutation_actions=(
+                [dict(action) for action in e.mutation_actions] if e.mutation_actions is not None else None
+            ),
             investigation_summary=e.investigation_summary,
         )
         for e in all_entries
@@ -243,7 +246,10 @@ def evolution_file(
 
 
 @router.get("/api/evolution/{workspace}/archive")
-async def get_archive(workspace: str, request: Request) -> dict:
+async def get_archive(
+    workspace: str,
+    request: Request,
+) -> dict[str, object]:
     """Return the QD archive data for a workspace: 2D projection + summary."""
     settings = get_web_settings(request)
     if settings.workspaces_root is None:

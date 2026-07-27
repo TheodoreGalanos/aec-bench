@@ -10,6 +10,14 @@ from typing import Any
 from aec_bench.agents.providers import PROVIDERS, get_provider
 
 
+def require_model_name(model_name: str | None) -> str:
+    """Return a declared Harbor model name or fail before provider setup."""
+
+    if model_name is None:
+        raise ValueError("aec-bench Harbor agent requires a model name")
+    return model_name
+
+
 def build_provider_env(
     provider: str,
     instruction: str,

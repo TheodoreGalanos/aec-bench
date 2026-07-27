@@ -440,7 +440,7 @@ def _world_summary(world: dict[str, Any]) -> dict[str, Any]:
 
 def _world_ref(world: dict[str, Any]) -> str:
     value = world.get("world_id")
-    if not _has_text(value):
+    if not isinstance(value, str) or not value.strip():
         raise ValueError("world must have a non-empty world_id")
     return value
 

@@ -3,12 +3,15 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+
+from pydantic import BaseModel
 
 from aec_bench.adapters.pydantic_ai_runtime import (
     agent_run_output,
@@ -258,7 +261,7 @@ def run_review_model(
 
 
 def attach_review_to_run(run: dict[str, Any], review: dict[str, Any]) -> dict[str, Any]:
-    updated = json.loads(json.dumps(run))
+    updated = copy.deepcopy(run)
     updated.setdefault("evidence", {})["agentic_review"] = review
     return updated
 
@@ -520,7 +523,9 @@ def run_operation_model(
     result = run_agent_sync_with_streaming_fallback(agent, request.user_prompt, stream_mode=endpoint.stream_mode)
     operation_plan = coerce_operation_plan_output(
         agent_run_output(result),
-        available_world_refs={world.get("world_id") for world in worlds if world.get("world_id")},
+        available_world_refs={
+            world_id for world in worlds if isinstance((world_id := world.get("world_id")), str) and world_id
+        },
     )
     execution = run_operation_orchestrator(
         brief=brief,
@@ -543,10 +548,8 @@ def run_operation_model(
 def coerce_problem_space_brief_output(output: Any) -> dict[str, Any]:
     if isinstance(output, str):
         return coerce_problem_space_brief_output(_extract_json_payload(output))
-    if hasattr(output, "model_dump"):
+    if isinstance(output, BaseModel):
         return coerce_problem_space_brief_output(output.model_dump(exclude_none=True))
-    if hasattr(output, "dict"):
-        return coerce_problem_space_brief_output(output.dict(exclude_none=True))
     if not isinstance(output, dict):
         output_type = type(output).__name__
         raise RuntimeError(f"model returned unsupported problem brief type: {output_type}")
@@ -555,16 +558,14 @@ def coerce_problem_space_brief_output(output: Any) -> dict[str, Any]:
     errors = validate_problem_space_brief(brief)
     if errors:
         raise RuntimeError("model returned invalid problem_space_brief: " + "; ".join(errors))
-    return brief
+    return cast(dict[str, Any], brief)
 
 
 def coerce_world_generation_output(output: Any) -> dict[str, Any]:
     if isinstance(output, str):
         return coerce_world_generation_output(_extract_json_payload(output))
-    if hasattr(output, "model_dump"):
+    if isinstance(output, BaseModel):
         return coerce_world_generation_output(output.model_dump(exclude_none=True))
-    if hasattr(output, "dict"):
-        return coerce_world_generation_output(output.dict(exclude_none=True))
     if not isinstance(output, dict):
         output_type = type(output).__name__
         raise RuntimeError(f"model returned unsupported world generation type: {output_type}")
@@ -585,18 +586,18 @@ def coerce_operation_plan_output(
             _extract_json_payload(output),
             available_world_refs=available_world_refs,
         )
-    if hasattr(output, "model_dump"):
+    if isinstance(output, BaseModel):
         return coerce_operation_plan_output(
             output.model_dump(exclude_none=True),
             available_world_refs=available_world_refs,
         )
-    if hasattr(output, "dict"):
-        return coerce_operation_plan_output(output.dict(exclude_none=True), available_world_refs=available_world_refs)
     if not isinstance(output, dict):
         output_type = type(output).__name__
         raise RuntimeError(f"model returned unsupported operation-plan output type: {output_type}")
 
     plan = output.get("operation_plan", output)
+    if not isinstance(plan, dict):
+        raise RuntimeError("model returned operation_plan that is not an object")
     refs = available_world_refs if available_world_refs is not None else _declared_world_refs(plan)
     errors = validate_operation_plan(plan, refs)
     if errors:
@@ -637,7 +638,7 @@ def _coerce_review_output(output: Any) -> dict[str, Any]:
 
     if isinstance(output, ReviewResponse):
         return output.model_dump(mode="json", exclude_none=True)
-    if hasattr(output, "model_dump"):
+    if isinstance(output, BaseModel):
         return output.model_dump(mode="json", exclude_none=True)
     if isinstance(output, dict):
         return ReviewResponse.model_validate(output).model_dump(mode="json", exclude_none=True)
@@ -731,7 +732,7 @@ def build_model_settings(endpoint: ModelEndpoint) -> Any | None:
         from pydantic_ai import ModelSettings
     except ImportError as exc:
         raise _missing_pydantic_ai_error() from exc
-    return ModelSettings(**settings)
+    return cast(ModelSettings, settings)
 
 
 def _problem_space_brief_output_type() -> Any:

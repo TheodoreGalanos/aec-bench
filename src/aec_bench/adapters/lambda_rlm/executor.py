@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -32,7 +33,7 @@ from aec_bench.adapters.lambda_rlm.structure_validator import (
     validate_section_structure,
 )
 from aec_bench.adapters.lambda_rlm.uncertainty import RunningStats, compute_joint_score
-from aec_bench.adapters.rlm.client import RlmClient, RlmMessage
+from aec_bench.adapters.rlm.client import RlmClient, RlmCompletionResponse, RlmMessage
 from aec_bench.adapters.rlm.parallel import parallel
 from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.contracts.constitution import (
@@ -501,18 +502,22 @@ class PlanExecutor:
         # Run source extractions in parallel when multiple sources
         source_items = list(ops_by_source.items())
         if len(source_items) > 1 and self._max_workers > 1:
+
+            def extract_call(
+                source_label: str,
+                source_ops: list[Any],
+            ) -> Callable[[], tuple[str, dict[str, Any]]]:
+                return lambda: self._extract_source(
+                    section_id=section_id,
+                    section_info=section_info,
+                    source_label=source_label,
+                    ops=source_ops,
+                    dependency_context=dependency_context,
+                    state=state,
+                )
+
             results = parallel(
-                [
-                    lambda sl=sl, ops=ops: self._extract_source(
-                        section_id=section_id,
-                        section_info=section_info,
-                        source_label=sl,
-                        ops=ops,
-                        dependency_context=dependency_context,
-                        state=state,
-                    )
-                    for sl, ops in source_items
-                ],
+                [extract_call(source_label, source_ops) for source_label, source_ops in source_items],
                 max_workers=self._max_workers,
             )
             for result in results:
@@ -1415,7 +1420,7 @@ class PlanExecutor:
         k = fill_config.k_candidates
         max_workers = max(1, min(k, self._max_workers))
 
-        def _one_call(i: int):
+        def _one_call(i: int) -> tuple[int, RlmCompletionResponse]:
             response = self._client.generate(
                 model=self._model,
                 messages=[RlmMessage(role="user", content=prompt)],

@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from aec_bench.contracts.task_definition import Visibility
+from aec_bench.contracts.task_world import TaskWorldProfile
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.templates.registry import load_engine_module, load_template
 
@@ -46,6 +48,7 @@ def test_scaffold_creates_directory_structure(tmp_path: Path) -> None:
     expected_files = [
         "task.toml",
         "instruction.md",
+        "world.json",
         "environment/Dockerfile",
         "environment/system_prompt.md",
         "tests/test.sh",
@@ -55,6 +58,11 @@ def test_scaffold_creates_directory_structure(tmp_path: Path) -> None:
     ]
     for rel in expected_files:
         assert (instance_dir / rel).exists(), f"Expected file missing: {rel}"
+
+    world = TaskWorldProfile.model_validate_json((instance_dir / "world.json").read_text(encoding="utf-8"))
+    assert world.world_id.startswith("aec_bench.generated.ground.")
+    assert world.task_unit == "generated-task-instance"
+    assert world.logic_profile.closure_gates
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +155,18 @@ def test_scaffold_verifier_is_valid_python(tmp_path: Path) -> None:
 
     compiled = compile(code, "<generated_verify>", "exec")
     assert compiled is not None
+
+
+def test_scaffold_test_entrypoint_executes_sibling_verifier(tmp_path: Path) -> None:
+    """tests/test.sh must find verify.py under every backend's tests mount."""
+    instance_dir = _generate_test_instance(tmp_path)
+
+    test_script = (instance_dir / "tests" / "test.sh").read_text(encoding="utf-8")
+
+    assert 'SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"' in test_script
+    assert 'python3 "$SCRIPT_DIR/verify.py"' in test_script
+    assert "python3 /tests/verify.py" not in test_script
+    assert "/workspace/tests/verify.py" not in test_script
 
 
 # ---------------------------------------------------------------------------
@@ -288,3 +308,40 @@ def test_scaffold_task_toml_no_tools_section_in_no_tool_mode(tmp_path: Path) -> 
         data = tomllib.load(fh)
 
     assert "tools" not in data, "[tools] section should not be present in no-tool mode"
+
+
+def test_scaffold_records_explicit_task_visibility_and_instance_index(tmp_path: Path) -> None:
+    """Generated research tasks must preserve registry visibility and stable sampling identity."""
+    config, tdir = load_template(TEMPLATE_DIR)
+    engine = load_engine_module(tdir)
+    instance = sample_instance(config, engine.compute, "easy", seed=42, instance_index=12)
+    engine_source = (tdir / "engine.py").read_text()
+
+    from aec_bench.generation.scaffolder import scaffold_task_instance
+
+    instance_dir = scaffold_task_instance(
+        config,
+        engine_source,
+        tdir,
+        instance,
+        tmp_path,
+        task_visibility=Visibility.HOLDOUT,
+    )
+
+    with open(instance_dir / "task.toml", "rb") as fh:
+        data = tomllib.load(fh)
+
+    assert data["metadata"]["visibility"] == "holdout"
+    assert data["generation"]["instance_index"] == 12
+
+
+def test_scaffold_refuses_to_overwrite_an_existing_task_package(tmp_path: Path) -> None:
+    """A second generation pass must not silently replace frozen task bytes."""
+    instance_dir = _generate_test_instance(tmp_path)
+    task_toml = instance_dir / "task.toml"
+    original = task_toml.read_bytes()
+
+    with pytest.raises(FileExistsError, match="refusing to overwrite existing task package"):
+        _generate_test_instance(tmp_path)
+
+    assert task_toml.read_bytes() == original

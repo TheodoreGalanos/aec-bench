@@ -161,13 +161,13 @@ def _inlet_control_headwater(
     hw_sub = (c * intensity**2 + y_coeff + slope_sign * slope) * diameter
 
     if intensity <= 3.5:
-        return hw_unsub
+        return float(hw_unsub)
     elif intensity >= 4.0:
-        return hw_sub
+        return float(hw_sub)
     else:
         # Linear interpolation in the transition zone
         frac = (intensity - 3.5) / 0.5
-        return hw_unsub + frac * (hw_sub - hw_unsub)
+        return float(hw_unsub + frac * (hw_sub - hw_unsub))
 
 
 def _outlet_control_headwater(
@@ -211,7 +211,7 @@ def _outlet_control_headwater(
     # Headwater above inlet invert: HW = H + ho - L*S
     hw = h_total + ho - length * slope
 
-    return hw
+    return float(hw)
 
 
 def compute(

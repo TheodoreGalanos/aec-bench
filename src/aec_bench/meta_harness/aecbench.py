@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from aec_bench.contracts.experiment_manifest import ExperimentManifest
+from aec_bench.evaluation.llm_reviewer import ReviewerJobResult
 from aec_bench.harness.harbor_import import import_harbor_trial
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 
@@ -221,16 +222,16 @@ def _score_from_record_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
-def _reviewer_payload(reviewer_result: Any | None) -> dict[str, Any] | None:
+def _reviewer_payload(reviewer_result: ReviewerJobResult | None) -> dict[str, Any] | None:
     if reviewer_result is None:
         return None
-    if hasattr(reviewer_result, "to_dict"):
-        return reviewer_result.to_dict()
-    if hasattr(reviewer_result, "model_dump"):
-        return reviewer_result.model_dump(mode="json")
-    if hasattr(reviewer_result, "__dict__"):
-        return dict(reviewer_result.__dict__)
-    return None
+    return {
+        "job_dir": str(reviewer_result.job_dir),
+        "trial_count": reviewer_result.trial_count,
+        "complete_count": reviewer_result.complete_count,
+        "error_count": reviewer_result.error_count,
+        "skipped_count": reviewer_result.skipped_count,
+    }
 
 
 def _attach_agentic_review_if_present(

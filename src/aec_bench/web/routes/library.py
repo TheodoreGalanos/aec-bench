@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Request, status
 
-from aec_bench.generation.discovery import scan_templates
+from aec_bench.generation.discovery import LibraryTemplate, scan_templates
 from aec_bench.web.dependencies import get_web_settings
 from aec_bench.web.schemas import (
     LibraryDetailResponse,
@@ -17,7 +19,7 @@ from aec_bench.web.schemas import (
 router = APIRouter()
 
 
-def _template_to_dict(template) -> dict:
+def _template_to_dict(template: LibraryTemplate) -> dict[str, Any]:
     """Convert a LibraryTemplate to a dict for the template context."""
     meta = template.params_raw.get("meta", {})
     params = template.params_raw.get("params", {})
@@ -36,7 +38,7 @@ def _template_to_dict(template) -> dict:
     }
 
 
-def _dict_to_template_schema(d: dict) -> TemplateSchema:
+def _dict_to_template_schema(d: dict[str, Any]) -> TemplateSchema:
     """Convert a _template_to_dict result to a TemplateSchema."""
     return TemplateSchema(
         task_id=d["task_id"],

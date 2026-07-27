@@ -10,6 +10,7 @@ from typing import Any, TypedDict
 
 from aec_bench.adapters.pydantic_ai_runtime import (
     agent_run_output,
+    agent_run_usage,
     request_model_response,
     run_agent_sync_with_streaming_fallback,
 )
@@ -156,7 +157,7 @@ def _resolve_aws_region_configuration() -> str | None:
 
 def _new_botocore_session() -> Any:
     """Create Botocore lazily so non-Bedrock users do not require its dependency."""
-    import botocore.session  # type: ignore[import-untyped]
+    import botocore.session
 
     return botocore.session.Session()
 
@@ -275,7 +276,7 @@ class PydanticAiRlmClient:
             )
 
             output = agent_run_output(result)
-            usage = result.usage()
+            usage = agent_run_usage(result)
             return RlmCompletionResponse(
                 output_text=str(output),
                 input_tokens=usage.input_tokens or 0,
@@ -306,94 +307,18 @@ class PydanticAiRlmClient:
         pass an explicit ``ToolDefinition`` and inspect the raw response parts
         for both text and tool-call content.
         """
-        from pydantic_ai.messages import (
-            ModelRequest,
-            SystemPromptPart,
-            TextPart,
-            ToolCallPart,
-            ToolReturnPart,
-            UserPromptPart,
-        )
-        from pydantic_ai.messages import (
-            ModelResponse as PydanticModelResponse,
-        )
-        from pydantic_ai.models import ModelRequestParameters, infer_model
-        from pydantic_ai.tools import ToolDefinition
+        from pydantic_ai.models import infer_model
 
-        # Resolve the model object (handles both Model instances and strings)
         resolved_model = infer_model(self._model_obj)
-
-        # Build the PydanticAI message list from RlmMessages
-        pydantic_messages: list[ModelRequest | PydanticModelResponse] = []
-
-        # Prepend system prompt as the first request
-        if system_prompt:
-            pydantic_messages.append(ModelRequest(parts=[SystemPromptPart(content=system_prompt)]))
-
-        # Convert RlmMessages to PydanticAI message types, merging
-        # consecutive assistant + tool_call into a single ModelResponse.
-        i = 0
-        while i < len(messages):
-            msg = messages[i]
-
-            if msg.role == "user":
-                pydantic_messages.append(ModelRequest(parts=[UserPromptPart(content=msg.content)]))
-
-            elif msg.role == "assistant":
-                # Check if the next message is a tool_call — merge them
-                parts: list[TextPart | ToolCallPart] = [TextPart(content=msg.content)]
-                if i + 1 < len(messages) and messages[i + 1].role == "tool_call":
-                    next_msg = messages[i + 1]
-                    parts.append(
-                        ToolCallPart(
-                            tool_name=next_msg.tool_name or tool_name,
-                            args={"code": next_msg.content},
-                            tool_call_id=next_msg.tool_call_id or "",
-                        )
-                    )
-                    i += 1  # skip the tool_call message
-                pydantic_messages.append(PydanticModelResponse(parts=parts))
-
-            elif msg.role == "tool_call":
-                # Standalone tool_call without preceding assistant text
-                pydantic_messages.append(
-                    PydanticModelResponse(
-                        parts=[
-                            ToolCallPart(
-                                tool_name=msg.tool_name or tool_name,
-                                args={"code": msg.content},
-                                tool_call_id=msg.tool_call_id or "",
-                            )
-                        ]
-                    )
-                )
-
-            elif msg.role == "tool_result":
-                pydantic_messages.append(
-                    ModelRequest(
-                        parts=[
-                            ToolReturnPart(
-                                tool_name=msg.tool_name or tool_name,
-                                content=msg.content,
-                                tool_call_id=msg.tool_call_id or "",
-                            )
-                        ]
-                    )
-                )
-
-            i += 1
-
-        # Build the tool definition
-        tool_def = ToolDefinition(
-            name=tool_name,
-            description=tool_description,
-            parameters_json_schema=tool_parameters_schema,
+        pydantic_messages = _build_tool_messages(
+            messages,
+            system_prompt=system_prompt,
+            default_tool_name=tool_name,
         )
-
-        # Build request parameters with the tool
-        request_params = ModelRequestParameters(
-            function_tools=[tool_def],
-            allow_text_output=True,
+        request_params = _tool_request_parameters(
+            tool_name=tool_name,
+            tool_description=tool_description,
+            tool_parameters_schema=tool_parameters_schema,
         )
 
         try:
@@ -404,32 +329,7 @@ class PydanticAiRlmClient:
                 model_request_parameters=request_params,
                 stream_mode=self._stream_mode,
             )
-
-            # Extract text and tool call from the response parts
-            output_text = ""
-            result_tool_call: ToolCall | None = None
-
-            for part in response.parts:
-                if isinstance(part, TextPart):
-                    output_text += part.content
-                elif isinstance(part, ToolCallPart):
-                    args_dict = part.args_as_dict()
-                    code = args_dict.get("code", "")
-                    result_tool_call = ToolCall(
-                        name=part.tool_name,
-                        code=code,
-                        call_id=part.tool_call_id,
-                    )
-
-            usage = response.usage
-            return RlmCompletionResponse(
-                output_text=output_text,
-                input_tokens=usage.input_tokens or 0,
-                output_tokens=usage.output_tokens or 0,
-                cache_read_tokens=getattr(usage, "cache_read_tokens", 0) or 0,
-                cache_write_tokens=getattr(usage, "cache_write_tokens", 0) or 0,
-                tool_call=result_tool_call,
-            )
+            return _tool_completion_response(response)
 
         except Exception as exc:
             logger.warning("Provider error in generate_with_tools: %s", exc)
@@ -438,9 +338,132 @@ class PydanticAiRlmClient:
             )
 
 
+def _build_tool_messages(
+    messages: list[RlmMessage],
+    *,
+    system_prompt: str | None,
+    default_tool_name: str,
+) -> list[Any]:
+    from pydantic_ai.messages import (
+        ModelRequest,
+        ModelResponse,
+        SystemPromptPart,
+        TextPart,
+        ToolReturnPart,
+        UserPromptPart,
+    )
+
+    converted: list[Any] = []
+    if system_prompt:
+        converted.append(ModelRequest(parts=[SystemPromptPart(content=system_prompt)]))
+    index = 0
+    while index < len(messages):
+        message = messages[index]
+        if message.role == "user":
+            converted.append(ModelRequest(parts=[UserPromptPart(content=message.content)]))
+        elif message.role == "assistant":
+            parts: list[Any] = [TextPart(content=message.content)]
+            if index + 1 < len(messages) and messages[index + 1].role == "tool_call":
+                index += 1
+                parts.append(
+                    _tool_call_part(
+                        messages[index],
+                        default_tool_name=default_tool_name,
+                    )
+                )
+            converted.append(ModelResponse(parts=parts))
+        elif message.role == "tool_call":
+            converted.append(
+                ModelResponse(
+                    parts=[
+                        _tool_call_part(
+                            message,
+                            default_tool_name=default_tool_name,
+                        )
+                    ]
+                )
+            )
+        elif message.role == "tool_result":
+            converted.append(
+                ModelRequest(
+                    parts=[
+                        ToolReturnPart(
+                            tool_name=(message.tool_name or default_tool_name),
+                            content=message.content,
+                            tool_call_id=message.tool_call_id or "",
+                        )
+                    ]
+                )
+            )
+        index += 1
+    return converted
+
+
+def _tool_call_part(
+    message: RlmMessage,
+    *,
+    default_tool_name: str,
+) -> Any:
+    from pydantic_ai.messages import ToolCallPart
+
+    return ToolCallPart(
+        tool_name=message.tool_name or default_tool_name,
+        args={"code": message.content},
+        tool_call_id=message.tool_call_id or "",
+    )
+
+
+def _tool_request_parameters(
+    *,
+    tool_name: str,
+    tool_description: str,
+    tool_parameters_schema: dict[str, Any],
+) -> Any:
+    from pydantic_ai.models import ModelRequestParameters
+    from pydantic_ai.tools import ToolDefinition
+
+    return ModelRequestParameters(
+        function_tools=[
+            ToolDefinition(
+                name=tool_name,
+                description=tool_description,
+                parameters_json_schema=tool_parameters_schema,
+            )
+        ],
+        allow_text_output=True,
+    )
+
+
+def _tool_completion_response(response: Any) -> RlmCompletionResponse:
+    from pydantic_ai.messages import TextPart, ToolCallPart
+
+    output_text = ""
+    result_tool_call: ToolCall | None = None
+    for part in response.parts:
+        if isinstance(part, TextPart):
+            output_text += part.content
+        elif isinstance(part, ToolCallPart):
+            result_tool_call = ToolCall(
+                name=part.tool_name,
+                code=part.args_as_dict().get("code", ""),
+                call_id=part.tool_call_id,
+            )
+    usage = response.usage
+    return RlmCompletionResponse(
+        output_text=output_text,
+        input_tokens=usage.input_tokens or 0,
+        output_tokens=usage.output_tokens or 0,
+        cache_read_tokens=(getattr(usage, "cache_read_tokens", 0) or 0),
+        cache_write_tokens=(getattr(usage, "cache_write_tokens", 0) or 0),
+        tool_call=result_tool_call,
+    )
+
+
 def _build_pydantic_model(
     model_name: str,
     provider: str,
+    *,
+    timeout_seconds: float | None = None,
 ) -> Any:
     """Build the PydanticAI model object for the detected provider."""
     if provider == "bedrock":
@@ -448,9 +471,14 @@ def _build_pydantic_model(
         from pydantic_ai.providers.bedrock import BedrockProvider
 
         region = os.environ.get("AWS_REGION", "") or os.environ.get("AWS_DEFAULT_REGION", "")
-        kwargs: dict[str, str] = {}
+        kwargs: dict[str, Any] = {}
         if region:
             kwargs["region_name"] = region
+        if timeout_seconds is not None:
+            if timeout_seconds <= 0:
+                raise ValueError("timeout_seconds must be positive")
+            kwargs["aws_read_timeout"] = timeout_seconds
+            kwargs["aws_connect_timeout"] = min(timeout_seconds, 30.0)
         return BedrockConverseModel(
             _strip_bedrock_prefix(model_name),
             provider=BedrockProvider(**kwargs),
@@ -536,7 +564,9 @@ def make_rlm_client(
     model_name: str,
     *,
     cache: bool = True,
+    max_tokens: int | None = None,
     stream_mode: str = "auto",
+    timeout_seconds: float | None = None,
 ) -> PydanticAiRlmClient:
     """Create an RlmClient for the given model name.
 
@@ -546,14 +576,30 @@ def make_rlm_client(
     Requires ``pydantic-ai`` to be installed.
     """
     provider = resolve_pydantic_provider(model_name)
-    pydantic_model = _build_pydantic_model(model_name, provider)
+    pydantic_model = _build_pydantic_model(
+        model_name,
+        provider,
+        timeout_seconds=timeout_seconds,
+    )
     settings = _build_model_settings(provider, cache)
+    if max_tokens is not None:
+        if max_tokens <= 0:
+            raise ValueError("max_tokens must be a positive integer")
+        settings = dict(settings or {})
+        settings["max_tokens"] = max_tokens
+    if timeout_seconds is not None:
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+        settings = dict(settings or {})
+        settings["timeout"] = timeout_seconds
 
     logger.info(
-        "RlmClient: model=%s provider=%s cache=%s",
+        "RlmClient: model=%s provider=%s cache=%s max_tokens=%s timeout_seconds=%s",
         model_name,
         provider,
         cache,
+        max_tokens,
+        timeout_seconds,
     )
 
     return PydanticAiRlmClient(

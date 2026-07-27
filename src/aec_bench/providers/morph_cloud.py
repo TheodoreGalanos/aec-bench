@@ -6,6 +6,7 @@ import hashlib
 import inspect
 import io
 import logging
+import re
 import shlex
 import shutil
 import tarfile
@@ -17,6 +18,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
+_CONTAINER_ENVIRONMENT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
 @dataclass(frozen=True)
@@ -43,9 +45,35 @@ class MorphCloudOperations:
         project_src_dir: Path,
         runtime_packages: tuple[str, ...],
     ) -> object:
-        del dockerfile_path
+        dockerfile_relative_path = _dockerfile_relative_path(
+            dockerfile_path=dockerfile_path,
+            context_dir=context_dir,
+        )
+        base_snapshot = self._create_runtime_build_base_snapshot()
+        builder: Any | None = None
+        runtime_snapshot: object | None = None
+        build_error: Exception | None = None
+        try:
+            builder = self.start_instance(snapshot=base_snapshot)
+            runtime_snapshot = self._build_runtime_on_instance(
+                builder=builder,
+                dockerfile_relative_path=dockerfile_relative_path,
+                context_dir=context_dir,
+                project_src_dir=project_src_dir,
+                runtime_packages=runtime_packages,
+            )
+        except Exception as error:
+            build_error = error
+        return self._complete_runtime_snapshot_build(
+            builder=builder,
+            base_snapshot=base_snapshot,
+            runtime_snapshot=runtime_snapshot,
+            build_error=build_error,
+        )
+
+    def _create_runtime_build_base_snapshot(self) -> object:
         client = self.client_factory()
-        base_snapshot = _call_with_supported_kwargs(
+        return _call_with_supported_kwargs(
             client.snapshots.create,
             image_id=self.base_image_id,
             vcpus=self.vcpus,
@@ -54,73 +82,111 @@ class MorphCloudOperations:
             metadata={"aec-bench-role": "runtime-build"},
             ttl_seconds=self.snapshot_ttl_seconds,
         )
-        builder: Any | None = None
-        try:
-            builder = self.start_instance(snapshot=base_snapshot)
-            if hasattr(builder, "wait_until_ready"):
-                builder.wait_until_ready()
-            self._prepare_docker_host(builder)
-            self._run_host_command(builder, f"rm -rf {shlex.quote(self.build_root)}")
-            self._run_host_command(builder, f"mkdir -p {shlex.quote(self.build_root)}")
-            self.upload_directory(
-                instance=builder,
-                local_path=context_dir,
-                remote_path=f"{self.build_root}/task",
-            )
-            self.upload_directory(
-                instance=builder,
-                local_path=project_src_dir,
-                remote_path=f"{self.build_root}/src/aec_bench",
-            )
-            self.write_instance_file(
-                instance=builder,
-                remote_path=f"{self.build_root}/Dockerfile",
-                content=_runtime_dockerfile(runtime_packages=runtime_packages).encode(),
-            )
-            self._run_host_command(
-                builder,
-                shlex.join(
-                    (
-                        "docker",
-                        "build",
-                        "-t",
-                        self.base_task_image_name,
-                        "-f",
-                        f"{self.build_root}/task/environment/Dockerfile",
-                        f"{self.build_root}/task",
-                    )
-                ),
-                command_timeout_seconds=self.build_timeout_seconds,
-            )
-            self._run_host_command(
-                builder,
-                shlex.join(
-                    (
-                        "docker",
-                        "build",
-                        "-t",
-                        self.runtime_image_name,
-                        "-f",
-                        f"{self.build_root}/Dockerfile",
-                        self.build_root,
-                    )
-                ),
-                command_timeout_seconds=self.build_timeout_seconds,
-            )
-            return _call_with_supported_kwargs(
-                builder.snapshot,
-                digest=_runtime_digest(
-                    context_dir=context_dir,
-                    project_src_dir=project_src_dir,
-                    runtime_packages=runtime_packages,
-                ),
-                metadata={"aec-bench-role": "runtime"},
-                ttl_seconds=self.snapshot_ttl_seconds,
-            )
-        finally:
-            if builder is not None:
+
+    def _build_runtime_on_instance(
+        self,
+        *,
+        builder: Any,
+        dockerfile_relative_path: Path,
+        context_dir: Path,
+        project_src_dir: Path,
+        runtime_packages: tuple[str, ...],
+    ) -> object:
+        remote_context_dir = PurePosixPath(self.build_root) / "task"
+        remote_dockerfile_path = remote_context_dir / PurePosixPath(dockerfile_relative_path.as_posix())
+        if hasattr(builder, "wait_until_ready"):
+            builder.wait_until_ready()
+        self._prepare_docker_host(builder)
+        self._run_host_command(builder, f"rm -rf {shlex.quote(self.build_root)}")
+        self._run_host_command(builder, f"mkdir -p {shlex.quote(self.build_root)}")
+        self.upload_directory(
+            instance=builder,
+            local_path=context_dir,
+            remote_path=f"{self.build_root}/task",
+        )
+        self.upload_directory(
+            instance=builder,
+            local_path=project_src_dir,
+            remote_path=f"{self.build_root}/src/aec_bench",
+        )
+        self.write_instance_file(
+            instance=builder,
+            remote_path=f"{self.build_root}/Dockerfile",
+            content=_runtime_dockerfile(runtime_packages=runtime_packages).encode(),
+        )
+        self._run_host_command(
+            builder,
+            shlex.join(
+                (
+                    "docker",
+                    "build",
+                    "-t",
+                    self.base_task_image_name,
+                    "-f",
+                    str(remote_dockerfile_path),
+                    str(remote_context_dir),
+                )
+            ),
+            command_timeout_seconds=self.build_timeout_seconds,
+        )
+        self._run_host_command(
+            builder,
+            shlex.join(
+                (
+                    "docker",
+                    "build",
+                    "-t",
+                    self.runtime_image_name,
+                    "-f",
+                    f"{self.build_root}/Dockerfile",
+                    self.build_root,
+                )
+            ),
+            command_timeout_seconds=self.build_timeout_seconds,
+        )
+        return _call_with_supported_kwargs(
+            builder.snapshot,
+            digest=_runtime_digest(
+                context_dir=context_dir,
+                project_src_dir=project_src_dir,
+                runtime_packages=runtime_packages,
+            ),
+            metadata={"aec-bench-role": "runtime"},
+            ttl_seconds=self.snapshot_ttl_seconds,
+        )
+
+    def _complete_runtime_snapshot_build(
+        self,
+        *,
+        builder: Any | None,
+        base_snapshot: object,
+        runtime_snapshot: object | None,
+        build_error: Exception | None,
+    ) -> object:
+        cleanup_errors: list[Exception] = []
+        if builder is not None:
+            try:
                 self.stop_instance(instance=builder)
-            _delete_snapshot(snapshot=base_snapshot)
+            except Exception as error:
+                cleanup_errors.append(error)
+        try:
+            self.delete_snapshot(snapshot=base_snapshot)
+        except Exception as error:
+            cleanup_errors.append(error)
+
+        errors = ([build_error] if build_error is not None else []) + cleanup_errors
+        if errors and runtime_snapshot is not None:
+            try:
+                self.delete_snapshot(snapshot=runtime_snapshot)
+            except Exception as error:
+                errors.append(error)
+        if len(errors) == 1:
+            raise errors[0]
+        if errors:
+            raise ExceptionGroup("Morph runtime build and cleanup failed", errors)
+        if runtime_snapshot is None:
+            raise RuntimeError("Morph runtime build produced no snapshot")
+        return runtime_snapshot
 
     def start_instance(self, *, snapshot: object) -> Any:
         client = self.client_factory()
@@ -157,14 +223,43 @@ class MorphCloudOperations:
                 ),
             )
 
-    def start_trial_container(self, *, instance: Any, workspace_dir: str, logs_dir: str) -> None:
+    def start_trial_container(
+        self,
+        *,
+        instance: Any,
+        workspace_dir: str,
+        logs_dir: str,
+        tests_dir: str = "/tests",
+    ) -> None:
         self._run_host_command(
             instance,
-            " && ".join((f"mkdir -p {shlex.quote(workspace_dir)}", f"mkdir -p {shlex.quote(logs_dir)}")),
+            " && ".join(
+                (
+                    f"mkdir -p {shlex.quote(workspace_dir)}",
+                    f"mkdir -p {shlex.quote(logs_dir)}",
+                    f"mkdir -p {shlex.quote(tests_dir)}",
+                )
+            ),
         )
         self._run_host_command(
             instance,
             f"docker rm -f {shlex.quote(self.trial_container_name)} >/dev/null 2>&1 || true",
+        )
+        self._run_host_command(
+            instance,
+            shlex.join(
+                (
+                    "docker",
+                    "run",
+                    "--rm",
+                    "--volume",
+                    f"{workspace_dir}:/aec-bench-host-workspace",
+                    self.runtime_image_name,
+                    "sh",
+                    "-c",
+                    "cp -a /workspace/. /aec-bench-host-workspace/",
+                )
+            ),
         )
         self._run_host_command(
             instance,
@@ -181,6 +276,8 @@ class MorphCloudOperations:
                     f"{workspace_dir}:{workspace_dir}",
                     "--volume",
                     f"{logs_dir}:{logs_dir}",
+                    "--volume",
+                    f"{tests_dir}:{tests_dir}",
                     self.runtime_image_name,
                     "sleep",
                     "infinity",
@@ -206,12 +303,13 @@ class MorphCloudOperations:
         env: dict[str, str] | None = None,
         timeout_seconds: int | None = None,
     ) -> None:
-        self.run_container_command_result(
+        self._run_container_command_result(
             instance=instance,
             command=command,
             workdir=workdir,
             env=env,
             timeout_seconds=timeout_seconds,
+            check=True,
         )
 
     def run_container_command_result(
@@ -229,6 +327,7 @@ class MorphCloudOperations:
             workdir=workdir,
             env=env,
             timeout_seconds=timeout_seconds,
+            check=False,
         )
 
     def read_container_file(self, *, instance: Any, remote_path: str) -> bytes | None:
@@ -278,6 +377,31 @@ class MorphCloudOperations:
     def stop_instance(self, *, instance: Any) -> None:
         instance.stop()
 
+    def scrub_trial_instance(self, *, instance: Any) -> None:
+        commands = (
+            f"docker rm -f {shlex.quote(self.trial_container_name)} >/dev/null 2>&1 || true",
+            "docker image rm -f "
+            f"{shlex.quote(self.runtime_image_name)} {shlex.quote(self.base_task_image_name)} "
+            ">/dev/null 2>&1 || true",
+            "rm -rf -- /workspace /logs /tests " + shlex.quote(self.build_root),
+            "find /tmp -maxdepth 1 -type f -name 'aec-bench-container-env-*.env' -delete",
+            "find /tmp -maxdepth 1 -type f -name 'aec-bench-upload-*.tar.gz' -delete",
+        )
+        errors: list[Exception] = []
+        for command in commands:
+            try:
+                self._run_host_command(instance, command)
+            except Exception as error:
+                errors.append(error)
+        if errors:
+            raise ExceptionGroup("Morph trial scrub failed", errors)
+
+    def delete_snapshot(self, *, snapshot: object) -> None:
+        delete = getattr(snapshot, "delete", None)
+        if not callable(delete):
+            raise RuntimeError("Morph runtime snapshot does not expose deletion")
+        delete()
+
     def _prepare_docker_host(self, instance: Any) -> None:
         self._run_host_command(
             instance,
@@ -297,17 +421,74 @@ class MorphCloudOperations:
         timeout_seconds: int | None = None,
         check: bool = True,
     ) -> "MorphCommandResult":
-        return self._run_host_command(
-            instance,
-            _docker_exec_command(
-                container_name=self.trial_container_name,
-                command=command,
-                workdir=workdir,
-                env=env,
-            ),
-            check=check,
-            command_timeout_seconds=timeout_seconds,
-        )
+        if not env:
+            return self._run_host_command(
+                instance,
+                _docker_exec_command(
+                    container_name=self.trial_container_name,
+                    command=command,
+                    workdir=workdir,
+                    env_file=None,
+                ),
+                check=check,
+                command_timeout_seconds=timeout_seconds,
+            )
+
+        environment_content = _container_environment_file(env)
+        environment_path = f"/tmp/aec-bench-container-env-{uuid4().hex}.env"
+        result: MorphCommandResult | None = None
+        execution_error: Exception | None = None
+        try:
+            self.write_instance_file(
+                instance=instance,
+                remote_path=environment_path,
+                content=environment_content,
+            )
+            self._run_host_command(
+                instance,
+                f"chmod 600 {shlex.quote(environment_path)}",
+            )
+            result = self._run_host_command(
+                instance,
+                _docker_exec_command(
+                    container_name=self.trial_container_name,
+                    command=command,
+                    workdir=workdir,
+                    env_file=environment_path,
+                ),
+                check=check,
+                command_timeout_seconds=timeout_seconds,
+            )
+        except Exception as error:
+            execution_error = error
+
+        cleanup_error: Exception | None = None
+        try:
+            cleanup = self._run_host_command(
+                instance,
+                f"rm -f {shlex.quote(environment_path)}",
+                check=False,
+            )
+            if cleanup.exit_code != 0:
+                cleanup_error = RuntimeError(
+                    "failed to remove temporary Morph container environment file\n"
+                    + _command_failure_message(result=cleanup)
+                )
+        except Exception as error:
+            cleanup_error = error
+
+        if execution_error is not None and cleanup_error is not None:
+            raise ExceptionGroup(
+                "Morph container execution and environment cleanup failed",
+                [execution_error, cleanup_error],
+            )
+        if execution_error is not None:
+            raise execution_error
+        if cleanup_error is not None:
+            raise cleanup_error
+        if result is None:
+            raise RuntimeError("Morph container execution produced no result")
+        return result
 
     def _run_host_command(
         self,
@@ -345,6 +526,13 @@ def morph_object_id(value: object) -> str:
     raise ValueError(msg)
 
 
+def _dockerfile_relative_path(*, dockerfile_path: Path, context_dir: Path) -> Path:
+    try:
+        return dockerfile_path.relative_to(context_dir)
+    except ValueError as error:
+        raise ValueError("Morph Dockerfile must be inside its build context") from error
+
+
 def _morph_client() -> Any:
     try:
         from morphcloud.api import MorphCloudClient
@@ -380,12 +568,12 @@ def _runtime_dockerfile(*, runtime_packages: tuple[str, ...]) -> str:
     return "\n".join(
         (
             "FROM aec-bench-task-base",
-            "RUN (python3 -m pip --version >/dev/null 2>&1 || "
-            "python -m pip --version >/dev/null 2>&1 || "
-            "(apt-get update && apt-get install -y python3-pip && rm -rf /var/lib/apt/lists/*))",
-            f"RUN (python3 -m pip install --no-cache-dir {quoted_packages} || "
-            f"python -m pip install --no-cache-dir {quoted_packages})",
+            "RUN (python3 -m venv /opt/aec-bench-venv || "
+            "(apt-get update && apt-get install -y --no-install-recommends python3-venv && "
+            "rm -rf /var/lib/apt/lists/* && python3 -m venv /opt/aec-bench-venv))",
+            f"RUN /opt/aec-bench-venv/bin/python -m pip install --no-cache-dir {quoted_packages}",
             "COPY src/aec_bench /opt/aec_bench/aec_bench",
+            'ENV PATH="/opt/aec-bench-venv/bin:$PATH"',
             "ENV PYTHONPATH=/opt/aec_bench",
             "",
         )
@@ -428,9 +616,15 @@ def _write_directory_archive(*, local_path: Path, archive_path: Path) -> None:
     with tarfile.open(archive_path, "w:gz") as archive:
         if local_path.is_dir():
             for child in sorted(local_path.iterdir()):
-                archive.add(child, arcname=child.name)
+                archive.add(child, arcname=child.name, filter=_archive_payload_filter)
         else:
-            archive.add(local_path, arcname=local_path.name)
+            archive.add(local_path, arcname=local_path.name, filter=_archive_payload_filter)
+
+
+def _archive_payload_filter(member: tarfile.TarInfo) -> tarfile.TarInfo | None:
+    if _is_transient_python_cache(PurePosixPath(member.name)):
+        return None
+    return member
 
 
 def _docker_exec_command(
@@ -438,17 +632,27 @@ def _docker_exec_command(
     container_name: str,
     command: tuple[str, ...],
     workdir: str | None,
-    env: dict[str, str] | None,
+    env_file: str | None,
 ) -> str:
     docker_command = ["docker", "exec"]
     if workdir is not None:
         docker_command.extend(("--workdir", workdir))
-    if env is not None:
-        for key, value in sorted(env.items()):
-            docker_command.extend(("--env", f"{key}={value}"))
+    if env_file is not None:
+        docker_command.extend(("--env-file", env_file))
     docker_command.append(container_name)
     docker_command.extend(command)
     return shlex.join(docker_command)
+
+
+def _container_environment_file(environment: dict[str, str]) -> bytes:
+    lines: list[str] = []
+    for name, value in sorted(environment.items()):
+        if _CONTAINER_ENVIRONMENT_NAME.fullmatch(name) is None:
+            raise ValueError(f"invalid container environment name: {name!r}")
+        if any(character in value for character in ("\n", "\r", "\0")):
+            raise ValueError(f"container environment value for {name!r} must be single-line")
+        lines.append(f"{name}={value}")
+    return ("\n".join(lines) + "\n").encode("utf-8")
 
 
 def _normalize_command_result(raw_result: object) -> MorphCommandResult:
@@ -502,9 +706,13 @@ def _runtime_digest(
 
 def _hash_directory(*, digest: "hashlib._Hash", directory: Path) -> None:
     for path in sorted(directory.rglob("*")):
-        if path.is_dir() or "__pycache__" in path.parts or path.suffix == ".pyc":
+        if path.is_dir() or _is_transient_python_cache(path):
             continue
         digest.update(str(path.relative_to(directory)).encode())
         digest.update(b"\0")
         digest.update(path.read_bytes())
         digest.update(b"\0")
+
+
+def _is_transient_python_cache(path: Path | PurePosixPath) -> bool:
+    return "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}
