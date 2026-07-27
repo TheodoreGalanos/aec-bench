@@ -1,20 +1,26 @@
-# ABOUTME: Defines the B5-W0/W1 research boundary for canonical declarations and real hydraulic generation.
+# ABOUTME: Defines the B5-W0/W1/W2 research boundary for generation and independent certification.
 # ABOUTME: Prevents research code, raw engine artifacts, and candidate semantics from becoming production contracts.
 
 # ASW-0B5 world-family research implementation
 
 This directory contains `B5-W0 — research boundary and canonical
-declarations` and `B5-W1 — real generator` for
+declarations`, `B5-W1 — real generator`, and `B5-W2 — independent
+certifier` for
 `AU-NSW-LH-SYN-SPS-v1`. W0 turns the accepted B4 authority chain into an
 executable byte and lineage boundary. W1 validates canonical requests,
 materializes the repaired W1 hydraulic mapping, executes the pinned real SWMM
 engine, extracts allowlisted semantic candidates, and proves exact replay.
+W2 transfers only permitted canonical bytes into a separately executable
+certifier, reconstructs the W1 catalogue and physics independently, evaluates
+exact and qualitative invariants, and emits threshold-free residual
+observations.
 
-It is not a generated world, accepted family member, independent
-certification, package, manifest, runtime adapter, agent tool, scenario, or V3
-decision. Nothing under this directory may be imported by `src/aec_bench`,
-and production behavior must continue to work with `research/` physically
-absent.
+It is not an accepted family member, quantitative acceptance, package,
+manifest, runtime adapter, agent tool, scenario, or V3 decision. W2's only
+valid non-rejection state is `quantitative-pending-w4`; it cannot emit pass,
+acceptance, certification, promotion, or V3 claims. Nothing under this
+directory may be imported by `src/aec_bench`, and production behavior must
+continue to work with `research/` physically absent.
 
 ## Exact scope
 
@@ -44,9 +50,23 @@ B5-W1 additionally contains:
 - unit, integration, and end-to-end tests with no mock engine or fabricated
   output.
 
-B5-W0/W1 do not:
+B5-W2 additionally contains:
 
-- implement W3 independent certification;
+- a path-free transport envelope containing exactly request, original-curve,
+  repaired engine-curve, and semantic candidate bytes for each segment;
+- an independently reconstructed 19-case, 23-segment catalogue;
+- certifier-owned canonical parsing, content identities, binary32 decoding,
+  W1 equations, fixed bisection, curve reconstruction, and one-second RK4;
+- exact replay, topology, duty, carry, intervention, progression, source,
+  engine-profile, diagnostic, maturity, and label checks;
+- threshold-free `C-R01` through `C-R24` observations;
+- exact capability, ambiguity, intervention, monotonicity, and label-mirror
+  relations; and
+- an end-to-end subprocess gate where generator code, SWMM, raw artifacts,
+  engine paths, and the research workspace are absent.
+
+B5-W0/W1/W2 do not:
+
 - implement W4 tolerances, probes, or sensitivity decisions;
 - write a family result, promoted package, manifest, or V3 record;
 - define actor-visible fields, stewardship actions, authority, obligations,
@@ -158,8 +178,10 @@ disabled boundary.
 
 ## Next allowed slice
 
-The next staged commit is `B5-W2 — independent certifier`. It must consume
-only canonical candidate artifacts, run with the generator, SWMM, `.inp`,
-`.out`, `.rpt`, and engine paths physically absent, reconstruct both curve
-forms and W1 physics independently, and preserve every W0/W1 rejection and
-research-only boundary.
+The next staged commit is `B5-W3 — quantitative composition`. It may bind the
+accepted W4 tolerance authority to W2's existing `C-R01` through `C-R24`
+observations, evaluate the preregistered treatment for every required sample,
+and issue a composed quantitative result. It may not alter W2 requests,
+generation, curves, semantics, residual definitions, or observed values; tune
+a threshold from the candidate; skip a required residual; or promote a
+family member.

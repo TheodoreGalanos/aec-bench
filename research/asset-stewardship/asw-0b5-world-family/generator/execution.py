@@ -287,6 +287,12 @@ def _execute_segment(
     semantic_path = workspace / "semantic.json"
     semantic_path.write_bytes(semantic_bytes)
     return {
+        "curve_bytes": {
+            "pump-a-engine": segment.pump_a_engine_curve_bytes,
+            "pump-a-original": segment.pump_a_original_curve_bytes,
+            "pump-b-engine": segment.pump_b_engine_curve_bytes,
+            "pump-b-original": segment.pump_b_original_curve_bytes,
+        },
         "curve_evidence": curve_evidence,
         "diagnostics": normalized_diagnostics,
         "input_sha256": segment.input_sha256,
@@ -405,6 +411,7 @@ def _execute_case_with_paths(
             segments=segments,
             carry=carry,
         ),
+        "request_bytes": request.canonical_json_bytes(request_value),
         "segments": segments,
     }
 
