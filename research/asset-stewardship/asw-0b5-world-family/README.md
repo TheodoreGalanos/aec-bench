@@ -21,8 +21,11 @@ payload, package, or manifest. These stages change no W1 member, W2 case,
 generator request, curve, or semantic candidate bytes.
 
 The executed decision is `promotion-generation-reject`; V3 is refused and V4
-is unclaimed. No accepted family member, package, manifest, runtime adapter,
-agent tool, or scenario exists. W2's only valid non-rejection state remains
+is unclaimed. That decision remains immutable. Theo subsequently approved the
+versioned `C-R08` ceiling-composition amendment for a successor generation,
+but that amendment has not yet been executed and does not change the failed
+result. No accepted family member, package, manifest, runtime adapter, agent
+tool, or scenario exists. W2's only valid non-rejection state remains
 `quantitative-pending-w4`; it cannot emit pass, acceptance, certification,
 promotion, or V3 claims. Nothing under this directory may be imported by
 `src/aec_bench`, and production behavior must continue to work with
@@ -102,9 +105,21 @@ B5-W3/W4/W5 additionally contain:
 - one immutable `promotion-generation-reject` decision with empty payload,
   package, and manifest inventories.
 
+The approved post-rejection amendment additionally contains:
+
+- one human-readable decision preserving the failed generation and its
+  symbolic contradiction;
+- one canonical machine authority binding the predecessor protocol, repair,
+  failed generation, composition result, and decision summary;
+- separate ceilings for the declared hydraulic dynamic-model allowance and
+  the non-dynamic C-R08 numerical allowance;
+- an unchanged raw-residual comparison against their outward total; and
+- an explicit requirement for a fresh complete affected run before any new
+  V3 decision.
+
 The implementation does not:
 
-- relax or fit the C-R08 budget;
+- fit the C-R08 budget or mutate the failed result;
 - execute sibling engine variants after the anchor's ordered rejection;
 - create a promoted package or manifest;
 - define actor-visible fields, stewardship actions, authority, obligations,
@@ -232,10 +247,10 @@ PYTHONPATH=research/asset-stewardship/asw-0b5-world-family \
 
 ## Next allowed step
 
-Return to the W4 authority owner with the retained C-R08 evidence. A versioned
-amendment must decide whether the dynamic-settling allowance belongs inside
-the same `0.1%` root-flow hard ceiling or whether the ceiling definition is
-otherwise inconsistent. The failed generation and V3 refusal remain
-immutable. Any amended protocol creates new authority and generation
-identities and reruns the complete affected path. Production integration,
+Bind
+`declarations/w4-c-r08-ceiling-amendment.json` into a new generation identity
+and rerun the complete affected W3-W5 path from a fresh absent output root.
+The failed generation and V3 refusal remain immutable; the successor run may
+produce a positive or negative result only through the ordinary ordered
+gates. Production integration,
 package construction, ASW-0C, and ASW-2 remain blocked.
