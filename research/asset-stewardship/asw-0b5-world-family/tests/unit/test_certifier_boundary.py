@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
-from asw_b5_certifier_boundary import boundary
+from certifier import boundary
 from support import canonical_bytes, generation_declaration
 
 B5_ROOT = Path(__file__).parents[2]

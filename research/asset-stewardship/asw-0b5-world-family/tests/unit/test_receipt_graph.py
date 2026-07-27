@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
-from asw_b5_lineage import receipts
+from lineage import receipts
 from support import canonical_bytes, digest, receipt_envelope
 
 GENERATION_ID = digest("generation")

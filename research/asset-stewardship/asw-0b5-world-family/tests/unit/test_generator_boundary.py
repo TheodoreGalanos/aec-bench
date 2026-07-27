@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 import pytest
-from asw_b5_generator_boundary import boundary
+from generator import boundary
 from support import canonical_bytes, generation_declaration
 
 B5_ROOT = Path(__file__).parents[2]

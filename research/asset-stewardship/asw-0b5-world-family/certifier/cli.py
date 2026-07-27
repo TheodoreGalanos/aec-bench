@@ -8,13 +8,13 @@ import json
 import sys
 from pathlib import Path
 
-from asw_b5_certifier_boundary import boundary
+from certifier import boundary
 
 
 def main(arguments: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if arguments is None else arguments)
     if len(args) != 2 or args[0] not in ("w1", "generation"):
-        print("usage: python -m asw_b5_certifier_boundary.cli {w1|generation} FILE", file=sys.stderr)
+        print("usage: python -m certifier.cli {w1|generation} FILE", file=sys.stderr)
         return 2
     declaration_path = Path(args[1])
     try:

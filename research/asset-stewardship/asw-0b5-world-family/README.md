@@ -21,11 +21,11 @@ B5-W0 contains:
 - one canonical machine-readable W1 declaration with all 49 stable
   identities: 46 scalar records and three fixed composites;
 - one generator-side canonical JSON, identity, path, source, and dependency
-  reader;
+  reader under `generator/`;
 - one separately implemented certifier-side reader for the same
-  specification;
+  specification under `certifier/`;
 - one third, lineage-only implementation of the W5 common receipt envelope,
-  receipt identity, and structural DAG rules; and
+  receipt identity, and structural DAG rules under `lineage/`; and
 - focused unit, integration, and separate-process end-to-end tests.
 
 B5-W0 does not:
@@ -65,7 +65,7 @@ The declaration is research input for later B5 work. It is not the promoted
 
 ## Independence boundary
 
-The generator and certifier packages deliberately share no project import,
+The generator and certifier role directories deliberately share no project import,
 canonical helper, unit helper, source-identity helper, or receipt helper.
 Their permitted common dependencies are the accepted specification, Python's
 standard library, UTF-8, decimal arithmetic, and SHA-256.
@@ -79,7 +79,7 @@ Each reader:
 - calculates the W5 world-generation identity independently; and
 - captures source and dependency inventories under a reader-specific domain.
 
-The lineage package is separate from both readers. It cannot call either
+The lineage role directory is separate from both readers. It cannot call either
 reader, issue promotion, or approve its own output.
 
 ## Identity formulas
@@ -115,7 +115,7 @@ environment-variable name, or mutable alias.
 Run only this research slice:
 
 ```sh
-PYTHONPATH=research/asset-stewardship/asw-0b5-world-family/src:research/asset-stewardship/asw-0b5-world-family/tests \
+PYTHONPATH=research/asset-stewardship/asw-0b5-world-family:research/asset-stewardship/asw-0b5-world-family/tests \
   uv run pytest \
   research/asset-stewardship/asw-0b5-world-family/tests -q
 ```
@@ -124,11 +124,15 @@ Static checks are similarly scoped:
 
 ```sh
 uv run ruff check \
-  research/asset-stewardship/asw-0b5-world-family/src \
+  research/asset-stewardship/asw-0b5-world-family/generator \
+  research/asset-stewardship/asw-0b5-world-family/certifier \
+  research/asset-stewardship/asw-0b5-world-family/lineage \
   research/asset-stewardship/asw-0b5-world-family/tests
 
 uv run mypy --strict --explicit-package-bases \
-  research/asset-stewardship/asw-0b5-world-family/src
+  research/asset-stewardship/asw-0b5-world-family/generator \
+  research/asset-stewardship/asw-0b5-world-family/certifier \
+  research/asset-stewardship/asw-0b5-world-family/lineage
 ```
 
 The tests use real files and real subprocesses. They contain no mock engine,

@@ -7,12 +7,12 @@ import ast
 from pathlib import Path
 
 import pytest
-from asw_b5_certifier_boundary import boundary as certifier
-from asw_b5_generator_boundary import boundary as generator
+from certifier import boundary as certifier
+from generator import boundary as generator
 from support import canonical_bytes, generation_declaration
 
 B5_ROOT = Path(__file__).parents[2]
-SOURCE_ROOT = B5_ROOT / "src"
+SOURCE_ROOT = B5_ROOT
 W1_DECLARATION = B5_ROOT / "declarations" / "w1-member-authority.json"
 
 
@@ -39,19 +39,19 @@ def test_independent_readers_agree_on_valid_w1_and_generation_bytes() -> None:
 
 
 def test_reader_source_graphs_do_not_import_each_other_or_lineage() -> None:
-    generator_path = SOURCE_ROOT / "asw_b5_generator_boundary" / "boundary.py"
-    certifier_path = SOURCE_ROOT / "asw_b5_certifier_boundary" / "boundary.py"
+    generator_path = SOURCE_ROOT / "generator" / "boundary.py"
+    certifier_path = SOURCE_ROOT / "certifier" / "boundary.py"
 
     generator_imports = imported_modules(generator_path)
     certifier_imports = imported_modules(certifier_path)
 
     assert not {
-        "asw_b5_certifier_boundary",
-        "asw_b5_lineage",
+        "certifier",
+        "lineage",
     }.intersection(generator_imports)
     assert not {
-        "asw_b5_generator_boundary",
-        "asw_b5_lineage",
+        "generator",
+        "lineage",
     }.intersection(certifier_imports)
     assert generator_path.read_bytes() != certifier_path.read_bytes()
 
@@ -70,8 +70,8 @@ def test_readers_reject_same_bad_bytes_through_distinct_error_types() -> None:
 
 
 def test_source_and_dependency_capture_are_content_addressed_and_separate() -> None:
-    generator_root = SOURCE_ROOT / "asw_b5_generator_boundary"
-    certifier_root = SOURCE_ROOT / "asw_b5_certifier_boundary"
+    generator_root = SOURCE_ROOT / "generator"
+    certifier_root = SOURCE_ROOT / "certifier"
     source_files = ("boundary.py", "cli.py")
     dependencies = (("python-standard-library", "3.13"),)
 

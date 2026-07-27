@@ -12,7 +12,7 @@ from pathlib import Path
 from support import canonical_bytes, generation_declaration
 
 B5_ROOT = Path(__file__).parents[2]
-SOURCE_ROOT = B5_ROOT / "src"
+SOURCE_ROOT = B5_ROOT
 W1_DECLARATION = B5_ROOT / "declarations" / "w1-member-authority.json"
 
 
@@ -32,24 +32,24 @@ def test_two_processes_agree_on_w1_and_generation_identities(
     tmp_path: Path,
 ) -> None:
     generator_w1 = run_reader(
-        "asw_b5_generator_boundary.cli",
+        "generator.cli",
         "w1",
         W1_DECLARATION,
     )
     certifier_w1 = run_reader(
-        "asw_b5_certifier_boundary.cli",
+        "certifier.cli",
         "w1",
         W1_DECLARATION,
     )
     generation_path = tmp_path / "generation.json"
     generation_path.write_bytes(canonical_bytes(generation_declaration()))
     generator_generation = run_reader(
-        "asw_b5_generator_boundary.cli",
+        "generator.cli",
         "generation",
         generation_path,
     )
     certifier_generation = run_reader(
-        "asw_b5_certifier_boundary.cli",
+        "certifier.cli",
         "generation",
         generation_path,
     )
@@ -72,12 +72,12 @@ def test_two_processes_reject_malformed_bytes_for_their_own_reasons(
     malformed.write_bytes(W1_DECLARATION.read_bytes().replace(b":", b": ", 1))
 
     generator_result = run_reader(
-        "asw_b5_generator_boundary.cli",
+        "generator.cli",
         "w1",
         malformed,
     )
     certifier_result = run_reader(
-        "asw_b5_certifier_boundary.cli",
+        "certifier.cli",
         "w1",
         malformed,
     )
