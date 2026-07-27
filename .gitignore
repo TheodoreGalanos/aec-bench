@@ -86,6 +86,7 @@ research/asset-stewardship/*
 !research/asset-stewardship/au-nsw-lh-syn-sps-v1-sensitivity-tolerance-and-rejection-protocol.md
 !research/asset-stewardship/au-nsw-lh-syn-sps-v1-lineage-and-promotion-protocol.md
 !research/asset-stewardship/au-nsw-lh-syn-sps-v1-b4-adversarial-review-and-decision.md
+!research/asset-stewardship/au-nsw-lh-syn-sps-v1-b5-engine-mapping-repair.md
 !research/asset-stewardship/asw-0b3-swmm-engine-spike/
 research/asset-stewardship/asw-0b3-swmm-engine-spike/*
 !research/asset-stewardship/asw-0b3-swmm-engine-spike/README.md
@@ -104,6 +105,8 @@ research/asset-stewardship/asw-0b5-world-family/*
 !research/asset-stewardship/asw-0b5-world-family/declarations/
 research/asset-stewardship/asw-0b5-world-family/declarations/*
 !research/asset-stewardship/asw-0b5-world-family/declarations/w1-member-authority.json
+!research/asset-stewardship/asw-0b5-world-family/declarations/w2-case-catalogue.json
+!research/asset-stewardship/asw-0b5-world-family/declarations/w2-w4-engine-mapping-repair.json
 !research/asset-stewardship/asw-0b5-world-family/generator/
 !research/asset-stewardship/asw-0b5-world-family/generator/*.py
 !research/asset-stewardship/asw-0b5-world-family/certifier/

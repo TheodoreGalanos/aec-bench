@@ -1,18 +1,20 @@
-# ABOUTME: Defines the B5-W0 research boundary for canonical declarations, independent readers, and receipt identities.
-# ABOUTME: Prevents this code and its layouts from becoming hydraulics, runtime, package, or production contracts.
+# ABOUTME: Defines the B5-W0/W1 research boundary for canonical declarations and real hydraulic generation.
+# ABOUTME: Prevents research code, raw engine artifacts, and candidate semantics from becoming production contracts.
 
 # ASW-0B5 world-family research implementation
 
-This directory contains only `B5-W0 — research boundary and canonical
-declarations` for `AU-NSW-LH-SYN-SPS-v1`. It turns the accepted B4 authority
-chain into the smallest executable byte and lineage boundary needed before the
-real generator can be implemented.
+This directory contains `B5-W0 — research boundary and canonical
+declarations` and `B5-W1 — real generator` for
+`AU-NSW-LH-SYN-SPS-v1`. W0 turns the accepted B4 authority chain into an
+executable byte and lineage boundary. W1 validates canonical requests,
+materializes the repaired W1 hydraulic mapping, executes the pinned real SWMM
+engine, extracts allowlisted semantic candidates, and proves exact replay.
 
-It is not a generated world, accepted family member, hydraulic model,
-certifier, SWMM wrapper, package, manifest, runtime adapter, agent tool,
-scenario, or V3 decision. Nothing under this directory may be imported by
-`src/aec_bench`, and production behavior must continue to work with
-`research/` physically absent.
+It is not a generated world, accepted family member, independent
+certification, package, manifest, runtime adapter, agent tool, scenario, or V3
+decision. Nothing under this directory may be imported by `src/aec_bench`,
+and production behavior must continue to work with `research/` physically
+absent.
 
 ## Exact scope
 
@@ -28,13 +30,25 @@ B5-W0 contains:
   receipt identity, and structural DAG rules under `lineage/`; and
 - focused unit, integration, and separate-process end-to-end tests.
 
-B5-W0 does not:
+B5-W1 additionally contains:
 
-- run or build SWMM;
-- render a W2 request, curve, engine input, case, or trajectory;
-- implement W1 hydraulic equations or W3 independent calculations;
+- the exact repaired W2 case catalogue and mapping authority;
+- fail-closed request, member, case, engine, workspace, and rendering gates;
+- separate canonical original-pump and net-head engine curves;
+- a pinned source/build/receipt boundary for EPA SWMM 5.2.4;
+- the real solver lifecycle with exact one-second pump-setting capture;
+- official output-library extraction by element name;
+- normalized warning, convergence, continuity, and completion diagnostics;
+- canonical binary32 SI series, semantic hashes, and exact G70 carry;
+- two fresh-workspace replays of all 19 cases and 23 engine segments; and
+- unit, integration, and end-to-end tests with no mock engine or fabricated
+  output.
+
+B5-W0/W1 do not:
+
+- implement W3 independent certification;
 - implement W4 tolerances, probes, or sensitivity decisions;
-- write a generated receipt, family result, package, manifest, or V3 record;
+- write a family result, promoted package, manifest, or V3 record;
 - define actor-visible fields, stewardship actions, authority, obligations,
   handover, outcomes, evaluation, or scoring; or
 - establish a production filename, module, schema, or application interface.
@@ -115,6 +129,7 @@ environment-variable name, or mutable alias.
 Run only this research slice:
 
 ```sh
+ASW_B5_ENGINE_RECEIPT=/absolute/path/to/engine-build-receipt.json \
 PYTHONPATH=research/asset-stewardship/asw-0b5-world-family:research/asset-stewardship/asw-0b5-world-family/tests \
   uv run pytest \
   research/asset-stewardship/asw-0b5-world-family/tests -q
@@ -129,19 +144,22 @@ uv run ruff check \
   research/asset-stewardship/asw-0b5-world-family/lineage \
   research/asset-stewardship/asw-0b5-world-family/tests
 
-uv run mypy --strict --explicit-package-bases \
+MYPYPATH=research/asset-stewardship/asw-0b5-world-family \
+  uv run mypy --strict --explicit-package-bases \
   research/asset-stewardship/asw-0b5-world-family/generator \
   research/asset-stewardship/asw-0b5-world-family/certifier \
   research/asset-stewardship/asw-0b5-world-family/lineage
 ```
 
-The tests use real files and real subprocesses. They contain no mock engine,
-fabricated SWMM result, fake certification pass, or disabled boundary.
+The tests use real files, real source/build receipts, the real pinned solver
+lifecycle, and the real official output API. They contain no mock engine,
+fabricated SWMM result, fake certification pass, skipped real-engine gate, or
+disabled boundary.
 
 ## Next allowed slice
 
-Only after this slice is reviewed and merged may `B5-W1` add the real W2
-generator. That later PR must start from these declared bytes and independent
-boundaries, remain research-side, use test-first development, and run the
-exact pinned SWMM engine. It may not weaken a B5-W0 rejection to make a case
-execute.
+The next staged commit is `B5-W2 — independent certifier`. It must consume
+only canonical candidate artifacts, run with the generator, SWMM, `.inp`,
+`.out`, `.rpt`, and engine paths physically absent, reconstruct both curve
+forms and W1 physics independently, and preserve every W0/W1 rejection and
+research-only boundary.

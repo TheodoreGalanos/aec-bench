@@ -37,6 +37,10 @@ AUTHORITY_HASHES = (
         "56502750816efec73ed821ac00ee5ead4ed76ba05e243992f794005980c19b7f",
     ),
     (
+        "w2-w4-repair",
+        "862ef1f5fc70d882d156c0ef9842bb565301344725d2206edfa49c10910576ca",
+    ),
+    (
         "w5",
         "82adf876f18fe51d9f9cc7dfcb0ef02d15c2500993385fffe56974330cf5f3d3",
     ),
