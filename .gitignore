@@ -98,6 +98,27 @@ research/asset-stewardship/asw-0b3-swmm-engine-spike/*
 !research/asset-stewardship/asw-0b3-swmm-engine-spike/src/asw_b3_swmm/*.py
 !research/asset-stewardship/asw-0b3-swmm-engine-spike/tests/
 !research/asset-stewardship/asw-0b3-swmm-engine-spike/tests/*.py
+!research/asset-stewardship/asw-0b5-world-family/
+research/asset-stewardship/asw-0b5-world-family/*
+!research/asset-stewardship/asw-0b5-world-family/README.md
+!research/asset-stewardship/asw-0b5-world-family/declarations/
+research/asset-stewardship/asw-0b5-world-family/declarations/*
+!research/asset-stewardship/asw-0b5-world-family/declarations/w1-member-authority.json
+!research/asset-stewardship/asw-0b5-world-family/generator/
+!research/asset-stewardship/asw-0b5-world-family/generator/*.py
+!research/asset-stewardship/asw-0b5-world-family/certifier/
+!research/asset-stewardship/asw-0b5-world-family/certifier/*.py
+!research/asset-stewardship/asw-0b5-world-family/lineage/
+!research/asset-stewardship/asw-0b5-world-family/lineage/*.py
+!research/asset-stewardship/asw-0b5-world-family/tests/
+research/asset-stewardship/asw-0b5-world-family/tests/*
+!research/asset-stewardship/asw-0b5-world-family/tests/support.py
+!research/asset-stewardship/asw-0b5-world-family/tests/unit/
+!research/asset-stewardship/asw-0b5-world-family/tests/unit/*.py
+!research/asset-stewardship/asw-0b5-world-family/tests/integration/
+!research/asset-stewardship/asw-0b5-world-family/tests/integration/*.py
+!research/asset-stewardship/asw-0b5-world-family/tests/e2e/
+!research/asset-stewardship/asw-0b5-world-family/tests/e2e/*.py
 !research/asset-stewardship/au-nsw-lh-syn-sps-v1-engine-role-decision.md
 !research/asset-stewardship/au-nsw-lh-syn-sps-v1-engine-verification-record.json
 
