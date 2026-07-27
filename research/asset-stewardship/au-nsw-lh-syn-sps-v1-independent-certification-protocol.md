@@ -9,9 +9,10 @@
 | --- | --- |
 | Programme stage | `ASW-0B4 — Generator and certification protocol` |
 | Internal work package | `B4-W3 — Independent certification protocol` |
-| Protocol identity | `asw-0b4.independent-certification-protocol.v1` |
-| Protocol status | Accepted W3 research authority; not implemented, executed, or certified |
+| Protocol identity | `asw-0b4.independent-certification-protocol.v2` |
+| Protocol status | Accepted W3 research authority; amended by the pre-W4 horizon repair; not implemented, executed, or certified |
 | Repository baseline | `5c23c8cf2567dd08cded35207bfb2dd937c1b989` |
+| Horizon-repair baseline | `eed52934b3fba5b17b9901df0d23a8120febcc0f` |
 | Parent PRD SHA-256 | `56d6fe6a9c69796d819a1995ae63a85392ba85a4240df8baa87df99a76678335` |
 | B1 claim/profile SHA-256 | `1956883951dd70ce52ec89f4c24ed69e5aaa4617796b803668e44002eafed954` |
 | B2 evidence/rights SHA-256 | `8d8e057792763531ebd3c8709f039c0aa7150a22ce734857221cef3339378e96` |
@@ -19,7 +20,7 @@
 | B3 compact verification SHA-256 | `db93443b31a197864709e7011af8a6aa15932cbec3260cf1a2afed735ffa3f11` |
 | B4 plan SHA-256 | `fad8cb04fad9729a81466e4527e38bcf42cffcc11c940423f610b6ffb8d8118e` |
 | W1 parameter/mechanism SHA-256 | `337aeab9465a8a1801b67c2ab0b408a2a2f07becddffc4a02161b64e6a8630de` |
-| W2 generator-protocol SHA-256 | `5527d94034499d80f75f1815d932d235bd1c8654229fa19947edcba10e42ab56` |
+| W2 generator-protocol SHA-256 | `66e96610b19920f93ddfa613a1f42e5d9bec6a4eb704905f82ce7b301961d130` |
 | Reference profile | `AU-NSW-LH-SYN-SPS-v1` |
 | Decision resolved here | `B4-D13 — Independent calculation path` |
 | Next permitted internal package | `B4-W4 — Sensitivity, tolerance, and rejection protocol` only |
@@ -29,6 +30,35 @@ is a protocol-identity failure. A later correction to a predecessor requires
 an explicit impact review and a new certification-protocol identity; an
 implementation must not silently accept the nearest available file or a
 path-local substitute.
+
+### 1.1 Pre-W4 compatibility repair
+
+W4 preflight review found that generator protocol `v1` could force a pump
+beyond the positive-storage operating envelope: the clean anchor G12
+assessment reaches zero depth at approximately second `1,146`, G70's clean
+Pump B segment reaches zero at approximately local second `639`, and bounded
+W1 combinations can reach zero sooner. W1 defines no dry-pump or starvation
+physics, so the certifier cannot calculate an expected value there without
+inventing a mechanism.
+
+Generator protocol `v2` now bounds individual forced snapshots to `120 s`,
+G70 to two `60 s` segments, and G80 to explicit `120 s` snapshots. Its
+conservative derivation proves that the complete forced interval retains at
+least `0.026372467... m` above `h_stop,max` across the full W1 envelope.
+
+This amendment:
+
+- advances the independent-certification protocol identity from `v1` to
+  `v2`, as required for a corrected predecessor binding;
+- binds the exact generator protocol `v2` bytes above;
+- updates only duration, period, G70 sequence, and positive-storage
+  precondition checks; and
+- leaves the independent equations, numerical methods, residual definitions,
+  dependency boundary, result states, and W4 ownership unchanged.
+
+No SWMM or candidate output is used as the expected result. Certification
+protocol `v1` remains historical review evidence but is not an allowed B5
+certifier identity.
 
 ## 2. Ruling
 
@@ -516,6 +546,20 @@ The reference uses:
 - fixed pump state within an interval; and
 - no adaptive time step or external numerical library.
 
+Before integration, the certifier independently recomputes W2's conservative
+forced-horizon bound from the canonical W1 member and complete family limits.
+Each forced-on snapshot in G12 through G61 and each G80 checkpoint must have
+exact horizon `120 s`. G70 must have two exact `60 s` segments and a `120 s`
+complete sequence. G00 remains the declared pumps-off `3,600 s` boundary.
+The independently bounded trajectory must remain above `h_stop` for the
+complete forced-on interval. Failure is a case-construction rejection before
+any candidate comparison or W4 tolerance is applied.
+
+The rule prevents an engine-specific empty-storage behavior from becoming
+hidden benchmark physics. If a later hydraulic assessment requires more time
+than the bounded window, W2/W3 return for explicit repair rather than adding a
+dry-well branch inside the certifier.
+
 ### 11.2 Hydraulic derivative
 
 Below overflow:
@@ -708,6 +752,8 @@ These invariants do not wait for numerical tolerances:
 22. No institutional action, authority, obligation, score, handover, closure,
     or actor-visibility decision appears in the hydraulic candidate.
 23. The candidate remains explicitly non-promotable at W3.
+24. Every forced-case duration satisfies the preregistered conservative
+    positive-storage bound before execution.
 
 An invariant involving the magnitude of a floating value is exact only when
 the invariant is representational or sign-based. Near-zero, equality of
@@ -866,13 +912,13 @@ G70 is certified as one ordered physical sequence, not two unrelated runs.
 The certifier independently verifies:
 
 1. segment A has Pump A forced on at `(o_A,c_A)=(0.75,0)` and Pump B off;
-2. segment A has exactly `1,200` intervals;
+2. segment A has exactly `60` intervals;
 3. segment B initial depth is the exact binary32 terminal depth from segment A
    and its carry hash matches those bytes;
 4. the boundary appears once in the concatenated sequence;
 5. segment B has Pump A off and clean Pump B forced on;
-6. segment B has exactly `1,200` intervals;
-7. sequence time is exact `1...2,400`;
+6. segment B has exactly `60` intervals;
+7. sequence time is exact `1...120`;
 8. there is no simultaneous operation or second transfer;
 9. Pump A stops gaining runtime and starts after transfer;
 10. Pump B retains standby history and gains only future exposure;
