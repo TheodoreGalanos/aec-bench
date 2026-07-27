@@ -1,0 +1,58 @@
+{
+  "schema_version": "asw-0b3.spike-probes.v1",
+  "authority": {
+    "stage": "ASW-0B3",
+    "scope": "spike_only",
+    "promotable": false,
+    "world_parameters_selected": false,
+    "purpose": "Disposable diagnostic values used only to exercise pinned-engine calculations and export semantics."
+  },
+  "simulation": {
+    "start": "2020-01-01T00:00:00",
+    "horizon_seconds": 7200,
+    "report_step_seconds": 60,
+    "routing_step_seconds": 1,
+    "flow_units": "LPS",
+    "routing_model": "DYNWAVE",
+    "force_main_equation": "D-W",
+    "threads": 1
+  },
+  "diagnostic_geometry": {
+    "wet_well_shape": "CYLINDRICAL",
+    "wet_well_invert_m": 0.0,
+    "wet_well_max_depth_m": 3.0,
+    "wet_well_initial_depth_m": 1.5,
+    "wet_well_major_axis_m": 2.0,
+    "wet_well_minor_axis_m": 2.0,
+    "wet_well_side_slope": 0.0,
+    "dry_weather_inflow_lps": 5.0,
+    "discharge_invert_m": 5.2,
+    "discharge_max_depth_m": 3.0,
+    "outfall_invert_m": 5.0,
+    "force_main_length_m": 100.0,
+    "force_main_conduit_roughness": 0.01,
+    "force_main_diameter_m": 0.15,
+    "force_main_absolute_roughness_mm": 0.1
+  },
+  "pump_curve": [
+    [0.0, 12.0],
+    [5.0, 10.0],
+    [10.0, 7.0],
+    [15.0, 0.0]
+  ],
+  "components": ["PUMP_A", "PUMP_B"],
+  "probes": [
+    {
+      "id": "a_duty",
+      "purpose": "Initial B1 topology probe with Pump A active and Pump B inactive.",
+      "active_pump": "PUMP_A",
+      "inactive_pump": "PUMP_B"
+    },
+    {
+      "id": "b_duty_label_probe",
+      "purpose": "Separate label-symmetry probe only; not a transfer event or scenario state.",
+      "active_pump": "PUMP_B",
+      "inactive_pump": "PUMP_A"
+    }
+  ]
+}
