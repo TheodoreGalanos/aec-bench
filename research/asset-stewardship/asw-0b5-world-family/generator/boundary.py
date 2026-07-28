@@ -46,6 +46,17 @@ AUTHORITY_HASHES = (
     ),
 )
 
+AMENDED_AUTHORITY_HASHES = AUTHORITY_HASHES + (
+    (
+        "w4-c-r07-amendment",
+        "488c82d09696472533669f21017c19cd4156952f4d075b278de91b580bf2cbf2",
+    ),
+    (
+        "w4-c-r08-amendment",
+        "047576621781aa294b8251be433b9dba7c2efd66ffe759e633d67f26960d9a65",
+    ),
+)
+
 CASE_IDS = (
     "G00_ZERO_STATIC",
     "G10_CLEAN_A_BASE",
@@ -534,7 +545,15 @@ def read_generation_declaration(raw: bytes) -> dict[str, Any]:
         },
         "generation.shape",
     )
-    expected_authorities = [{"role": role, "sha256": sha256} for role, sha256 in AUTHORITY_HASHES]
+    schema_id = declaration["schema_id"]
+    authority_inventory: tuple[tuple[str, str], ...]
+    if schema_id == "asw-0b5.generation-declaration.v1":
+        authority_inventory = AUTHORITY_HASHES
+    elif schema_id == "asw-0b5.generation-declaration.v2":
+        authority_inventory = AMENDED_AUTHORITY_HASHES
+    else:
+        _fail("generation.schema", "generation schema identity changed")
+    expected_authorities = [{"role": role, "sha256": sha256} for role, sha256 in authority_inventory]
     if declaration["authorities"] != expected_authorities:
         _fail("generation.authorities", "profile and W1-W5 authorities must match")
 
@@ -574,8 +593,6 @@ def read_generation_declaration(raw: bytes) -> dict[str, Any]:
 
     if declaration["profile_id"] != PROFILE_ID:
         _fail("generation.profile", "profile identity changed")
-    if declaration["schema_id"] != "asw-0b5.generation-declaration.v1":
-        _fail("generation.schema", "generation schema identity changed")
     if (
         declaration["manifest_specification_id"] != "asw-0b5.promotion-manifest-specification.v1"
         or declaration["package_profile_id"] != "asw-au-nsw-lh-syn-sps.package.v1"

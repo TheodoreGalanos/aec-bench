@@ -1,5 +1,5 @@
 # ABOUTME: Builds the complete W4 analytical inventory and freezes one family decision.
-# ABOUTME: Retains planned probes while enforcing the ordered stop after anchor rejection.
+# ABOUTME: Retains planned probes while enforcing any ordered anchor rejection.
 
 from __future__ import annotations
 
@@ -83,10 +83,21 @@ def freeze_family_decision(
     analytical_inventory_bytes(analytical_inventory)
     if not isinstance(composition_result_content_id, str) or SHA256.fullmatch(composition_result_content_id) is None:
         raise FamilyDecisionError("composition content identity differs")
-    if composition_terminal_state != "w4-budget-reject":
+    if composition_terminal_state not in {
+        "w4-budget-reject",
+        "w4-numerical-reject",
+    }:
         raise FamilyDecisionError("family rejection requires an anchor rejection")
-    if composition_first_failure != ("C-R08-derived-budget-lower-bound-exceeds-relative-ceiling"):
+    if composition_first_failure not in {
+        "C-R02-corrected-residual",
+        "C-R08-derived-budget-lower-bound-exceeds-relative-ceiling",
+    }:
         raise FamilyDecisionError("anchor rejection reason differs")
+    family_failure = (
+        "anchor-w4-budget-reject"
+        if composition_terminal_state == "w4-budget-reject"
+        else "anchor-w4-numerical-reject"
+    )
     value: dict[str, Any] = {
         "analytical_inventory_content_id": analytical_inventory["content_id"],
         "composition_result_content_id": composition_result_content_id,
@@ -100,9 +111,9 @@ def freeze_family_decision(
         "execution": {
             "anchor": composition_terminal_state,
             "downstream": "not-executed-after-anchor-rejection",
-            "ordered_stop_owner": "W4-C-R08-hard-ceiling",
+            "ordered_stop_owner": composition_first_failure,
         },
-        "first_failure": "anchor-w4-budget-reject",
+        "first_failure": family_failure,
         "profile_id": "AU-NSW-LH-SYN-SPS-v1",
         "promotable": False,
         "result_content_id": "",

@@ -17,12 +17,16 @@ from generator import boundary as generator_boundary
 from generator import engine, execution, request, transfer
 from lineage import receipts
 from promotion import decision
-from sensitivity import catalogue, composition, family
+from sensitivity import amendment, catalogue, family, successor
 
 B5_ROOT = Path(__file__).resolve().parent
 W1_DECLARATION = B5_ROOT / "declarations" / "w1-member-authority.json"
 W2_CATALOGUE = B5_ROOT / "declarations" / "w2-case-catalogue.json"
 W2_W4_REPAIR = B5_ROOT / "declarations" / "w2-w4-engine-mapping-repair.json"
+C_R07_AMENDMENT = (
+    B5_ROOT / "declarations" / "w4-c-r07-composition-amendment.json"
+)
+W4_AMENDMENT = B5_ROOT / "declarations" / "w4-c-r08-ceiling-amendment.json"
 W4_PROBES = B5_ROOT / "declarations" / "w4-probe-catalogue.json"
 
 
@@ -110,6 +114,8 @@ def _isolated_certification(
 def build_generation_declaration(
     *,
     authority_bytes: bytes,
+    c_r07_amendment_bytes: bytes,
+    c_r08_amendment_bytes: bytes,
     catalogue_bytes: bytes,
     repair_bytes: bytes,
     engine_identity: dict[str, str],
@@ -118,6 +124,8 @@ def build_generation_declaration(
     sensitivity_source_id: str,
 ) -> bytes:
     """Freeze one exact W3-W5 attempt before engine execution."""
+    amendment.read_c_r07_amendment(c_r07_amendment_bytes)
+    amendment.read_amendment(c_r08_amendment_bytes)
     requests = [
         request.read_request(
             request.build_anchor_request(
@@ -157,7 +165,10 @@ def build_generation_declaration(
         b"isolated-copy-no-generator-no-swmm",
     )
     declaration: dict[str, Any] = {
-        "authorities": [{"role": role, "sha256": sha256} for role, sha256 in generator_boundary.AUTHORITY_HASHES],
+        "authorities": [
+            {"role": role, "sha256": sha256}
+            for role, sha256 in generator_boundary.AMENDED_AUTHORITY_HASHES
+        ],
         "cases": [
             {
                 "case_id": item["case"]["case_id"],
@@ -194,7 +205,7 @@ def build_generation_declaration(
             "ordinals": [0, 1],
             "workspace_policy": "fresh-absent-root",
         },
-        "schema_id": "asw-0b5.generation-declaration.v1",
+        "schema_id": "asw-0b5.generation-declaration.v2",
         "w4_probe_catalogue_content_id": catalogue.PROBE_CATALOGUE_SHA256,
     }
     raw = generator_boundary.canonical_json_bytes(declaration)
@@ -215,7 +226,10 @@ def _receipt(
 ) -> receipts.IdentifiedReceipt:
     return receipts.build_receipt(
         {
-            "authorities": [{"role": role, "sha256": sha256} for role, sha256 in generator_boundary.AUTHORITY_HASHES],
+            "authorities": [
+                {"role": role, "sha256": sha256}
+                for role, sha256 in generator_boundary.AMENDED_AUTHORITY_HASHES
+            ],
             "first_failure": {
                 "code": failure_code,
                 "owner": failure_owner,
@@ -244,8 +258,10 @@ def build_rejection_receipt_chain(
     analytical_inventory_content_id: str,
     family_result_content_id: str,
     promotion_decision_content_id: str,
+    composition_terminal_state: str = "w4-numerical-reject",
+    composition_first_failure: str = "C-R02-corrected-residual",
 ) -> tuple[receipts.IdentifiedReceipt, ...]:
-    """Build the complete connected receipt chain for the ordered V3 refusal."""
+    """Build the connected amended-generation receipt chain through refusal."""
     root = _receipt(
         generation_id=generation_id,
         kind="generation-declaration",
@@ -287,8 +303,8 @@ def build_rejection_receipt_chain(
         parents=(certified.receipt_id,),
         inputs=(("certifier-result", certifier_result_content_id),),
         outputs=(("w4-composition-result", composition_result_content_id),),
-        terminal_state="w4-budget-reject",
-        failure_code="c-r08-budget-ceiling",
+        terminal_state=composition_terminal_state,
+        failure_code=composition_first_failure.lower(),
         failure_owner="w4",
     )
     sensitivity = _receipt(
@@ -309,7 +325,7 @@ def build_rejection_receipt_chain(
         ),
         outputs=(("family-decision", family_result_content_id),),
         terminal_state="family-member-reject",
-        failure_code="anchor-w4-budget-reject",
+        failure_code="anchor-w4-reject",
         failure_owner="w4",
     )
     promotion = _receipt(
@@ -341,7 +357,7 @@ def execute(
     engine_receipt: Path,
     output_root: Path,
 ) -> dict[str, Any]:
-    """Execute the complete ordered W3-W5 rejection path in one absent root."""
+    """Execute the amended ordered W3-W5 rejection path in one absent root."""
     output_root = output_root.resolve()
     if output_root.exists() or output_root.is_symlink():
         raise ValueError("W3-W5 output root must be absent")
@@ -361,6 +377,8 @@ def execute(
     sensitivity_source_id = _sensitivity_source_id()
     generation_bytes = build_generation_declaration(
         authority_bytes=authority_bytes,
+        c_r07_amendment_bytes=C_R07_AMENDMENT.read_bytes(),
+        c_r08_amendment_bytes=W4_AMENDMENT.read_bytes(),
         catalogue_bytes=catalogue_bytes,
         repair_bytes=repair_bytes,
         engine_identity=engine_identity,
@@ -398,11 +416,13 @@ def execute(
         certifier_result_bytes,
     )
 
-    composition_result = composition.compose_generation(
+    composition_result = successor.compose_generation(
         bundle_bytes=bundle_bytes,
         certifier_result_bytes=certifier_result_bytes,
     )
-    composition_bytes = composition.composition_result_bytes(composition_result)
+    composition_bytes = successor.composition_result_bytes(
+        composition_result
+    )
     _write_absent(
         compact / "w4-composition-result.json",
         composition_bytes,
@@ -440,6 +460,8 @@ def execute(
         analytical_inventory_content_id=analytical_inventory["content_id"],
         family_result_content_id=family_result["result_content_id"],
         promotion_decision_content_id=promotion_result["decision_content_id"],
+        composition_terminal_state=composition_result["terminal_state"],
+        composition_first_failure=composition_result["first_failure"],
     )
     receipt_root = compact / "receipts"
     receipt_index: list[dict[str, str]] = []
@@ -477,7 +499,7 @@ def execute(
         "promotion_decision_content_id": promotion_result["decision_content_id"],
         "promotion_terminal_state": promotion_result["terminal_state"],
         "receipt_index_sha256": hashlib.sha256(receipt_index_bytes).hexdigest(),
-        "schema_id": "asw-0b5.w3-w5-decision-summary.v1",
+        "schema_id": "asw-0b5.w3-w5-decision-summary.v2",
         "v3": "refused",
         "v4": "unclaimed",
         "w4_first_failure": composition_result["first_failure"],

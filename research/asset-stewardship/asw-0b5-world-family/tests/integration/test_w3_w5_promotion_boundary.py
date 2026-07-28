@@ -1,4 +1,4 @@
-# ABOUTME: Verifies rejected-family handoff into an isolated promotion-only process.
+# ABOUTME: Verifies successor-family rejection handoff into a promotion-only process.
 # ABOUTME: Proves V3 refusal needs no generator, certifier, sensitivity, SWMM, or research path.
 
 import json
@@ -14,7 +14,7 @@ W1_DECLARATION = B5_ROOT / "declarations" / "w1-member-authority.json"
 PROBE_DECLARATION = B5_ROOT / "declarations" / "w4-probe-catalogue.json"
 
 
-def test_rejected_family_is_refused_in_promotion_only_process(
+def test_successor_rejected_family_is_refused_in_promotion_only_process(
     tmp_path: Path,
 ) -> None:
     inventory = family.build_analytical_inventory(
@@ -24,8 +24,8 @@ def test_rejected_family_is_refused_in_promotion_only_process(
     family_result = family.freeze_family_decision(
         analytical_inventory=inventory,
         composition_result_content_id="1" * 64,
-        composition_terminal_state="w4-budget-reject",
-        composition_first_failure=("C-R08-derived-budget-lower-bound-exceeds-relative-ceiling"),
+        composition_terminal_state="w4-numerical-reject",
+        composition_first_failure="C-R02-corrected-residual",
     )
     isolated = tmp_path / "promotion-only"
     isolated.mkdir()

@@ -1,0 +1,57 @@
+{
+  "authority": {
+    "c_r08_amendment_sha256": "047576621781aa294b8251be433b9dba7c2efd66ffe759e633d67f26960d9a65",
+    "decision_record_sha256": "54d99e270032ac208d2ab4569da99971889ac5dbbcdaf8e6bfdb15276086838a",
+    "profile_id": "AU-NSW-LH-SYN-SPS-v1",
+    "quantitative_composition_repair_sha256": "38ca15bf46f67ee98aa66539701bbd8fc1889c1e268d42f0f724f7942b3c2ff8",
+    "repair_schema_id": "asw-0b5.w4-c-r07-composition-amendment.v1",
+    "scope": "research-private",
+    "w4_protocol_predecessor_sha256": "56502750816efec73ed821ac00ee5ead4ed76ba05e243992f794005980c19b7f"
+  },
+  "boundaries": {
+    "fresh_complete_affected_run_required": true,
+    "package_before_family_pass_allowed": false,
+    "production_import_allowed": false,
+    "result_edit_in_place_allowed": false,
+    "result_relabel_allowed": false,
+    "v1_generation_reload_required": true
+  },
+  "failed_execution": {
+    "decision_summary_sha256": "002fe760042876c1c029365bd981d292961715c8a19d1ee8019b7ba14261efad",
+    "generation_id": "255e5b5cce2b4361bf37857ffbb386ef233bca47e9051b8f25e1689077edff06",
+    "w4_composition_result_content_id": "d9e2408c7af861a6c3ea0befea0a1b6528efcd899305962d07217f1080b5c099",
+    "w4_composition_result_sha256": "aa12b4837d35840756478a3f1459f3ad9c0a6969d1fb64361aa7a26474565cac"
+  },
+  "preserved": [
+    "raw-C-R07-residual-and-sign",
+    "repaired-net-head-static-HGL-equation",
+    "base-curve-segments=32",
+    "B_curve_H=H_0*A/(4*N^2)",
+    "exact-curve-head-render-bound",
+    "binary32-system-render-and-binary64-terms",
+    "C_head_relative=0.001*abs(H_reference)",
+    "steady-eligibility-and-full-pipe-conditions",
+    "outward-arithmetic",
+    "reject-before-residual-precedence",
+    "all-W1-W2-W3-and-family-definition-bytes"
+  ],
+  "rules": {
+    "C-R07": {
+      "candidate_rule": "abs(C-R07_raw_residual)<=T07",
+      "ceiling_rule": "T07<=0.001*abs(H_reference)",
+      "forbidden": [
+        "candidate-fitted-constant",
+        "candidate-derived-correction",
+        "curve-system-budget-substitution",
+        "hard-ceiling-substitution",
+        "result-edit-in-place"
+      ],
+      "rule_id": "asw-0b5.rule.curve-aware-net-head-static-hgl-closure.v1",
+      "tolerance_rule": "T07=outward_sum(B32(H_discharge),B32(H_wet-well),B_curve_H(32,o,c),B_render_head,B_system_render,B64(H_system))"
+    }
+  },
+  "status": "approved-pre-successor-run-amendment",
+  "superseded_rules": [
+    "w4-v1:section-10.3:C-R07-tolerance-without-curve-and-head-render-terms"
+  ]
+}

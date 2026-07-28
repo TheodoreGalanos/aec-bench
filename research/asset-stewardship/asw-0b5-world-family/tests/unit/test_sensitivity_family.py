@@ -55,6 +55,27 @@ def test_anchor_budget_rejection_freezes_family_without_running_siblings() -> No
     assert family.family_result_bytes(result) == catalogue.canonical_json_bytes(result)
 
 
+def test_successor_numerical_rejection_freezes_family_without_siblings() -> None:
+    inventory = family.build_analytical_inventory(
+        authority_bytes=W1_DECLARATION.read_bytes(),
+        probe_catalogue_bytes=PROBE_DECLARATION.read_bytes(),
+    )
+
+    result = family.freeze_family_decision(
+        analytical_inventory=inventory,
+        composition_result_content_id="1" * 64,
+        composition_terminal_state="w4-numerical-reject",
+        composition_first_failure="C-R02-corrected-residual",
+    )
+
+    assert result["terminal_state"] == "family-member-reject"
+    assert result["first_failure"] == "anchor-w4-numerical-reject"
+    assert result["execution"]["anchor"] == "w4-numerical-reject"
+    assert result["execution"]["ordered_stop_owner"] == (
+        "C-R02-corrected-residual"
+    )
+
+
 def test_family_decision_refuses_non_rejection_or_bad_identity() -> None:
     inventory = family.build_analytical_inventory(
         authority_bytes=W1_DECLARATION.read_bytes(),

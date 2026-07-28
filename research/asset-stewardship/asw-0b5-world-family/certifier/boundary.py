@@ -46,6 +46,17 @@ AUTHORITIES = (
     ),
 )
 
+AMENDED_AUTHORITIES = AUTHORITIES + (
+    (
+        "w4-c-r07-amendment",
+        "488c82d09696472533669f21017c19cd4156952f4d075b278de91b580bf2cbf2",
+    ),
+    (
+        "w4-c-r08-amendment",
+        "047576621781aa294b8251be433b9dba7c2efd66ffe759e633d67f26960d9a65",
+    ),
+)
+
 W2_CASES = (
     "G00_ZERO_STATIC",
     "G10_CLEAN_A_BASE",
@@ -539,7 +550,15 @@ def read_generation_declaration(raw: bytes) -> dict[str, Any]:
         ),
         "generation-shape",
     )
-    if document["authorities"] != [{"role": role, "sha256": sha256} for role, sha256 in AUTHORITIES]:
+    schema_id = document["schema_id"]
+    authority_inventory: tuple[tuple[str, str], ...]
+    if schema_id == "asw-0b5.generation-declaration.v1":
+        authority_inventory = AUTHORITIES
+    elif schema_id == "asw-0b5.generation-declaration.v2":
+        authority_inventory = AMENDED_AUTHORITIES
+    else:
+        _reject("generation-schema", "schema mismatch")
+    if document["authorities"] != [{"role": role, "sha256": sha256} for role, sha256 in authority_inventory]:
         _reject("generation-authorities", "wrong authority inventory")
     cases = document["cases"]
     if not isinstance(cases, list) or len(cases) != len(W2_CASES):
@@ -582,8 +601,6 @@ def read_generation_declaration(raw: bytes) -> dict[str, Any]:
 
     if document["profile_id"] != PROFILE:
         _reject("generation-profile", "profile mismatch")
-    if document["schema_id"] != "asw-0b5.generation-declaration.v1":
-        _reject("generation-schema", "schema mismatch")
     if document["manifest_specification_id"] != "asw-0b5.promotion-manifest-specification.v1":
         _reject("generation-manifest-spec", "manifest specification mismatch")
     if document["package_profile_id"] != "asw-au-nsw-lh-syn-sps.package.v1":

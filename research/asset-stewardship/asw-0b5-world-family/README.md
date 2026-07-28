@@ -1,4 +1,4 @@
-# ABOUTME: Defines the research-only B5-W0 through B5-W5 implementation and its immutable V3 refusal.
+# ABOUTME: Defines the research-only B5-W0 through B5-W5 implementation and immutable V3 refusals.
 # ABOUTME: Keeps generator, certification, sensitivity, lineage, and decision evidence outside production contracts.
 
 # ASW-0B5 world-family research implementation
@@ -13,19 +13,21 @@ certifier, reconstructs the W1 catalogue and physics independently, evaluates
 exact and qualitative invariants, and emits threshold-free residual
 observations. The approved pre-W3 repair records three rules falsified by
 those observations and the real engine before quantitative composition
-begins. W3 independently composes the preregistered W4 numerical budgets,
-freezes the complete analytical probe inventory, and stops at the anchor's
-first unavoidable hard-ceiling conflict. W4 enforces the package gate and
-emits the research receipt graph. W5 issues one immutable V3 refusal and no
-payload, package, or manifest. These stages change no W1 member, W2 case,
-generator request, curve, or semantic candidate bytes.
+begins. W3 independently composes the preregistered W4 numerical budgets and
+freezes the complete analytical probe inventory. The predecessor generation
+stops at its C-R08 hard-ceiling conflict. The amended successor proves C-R07
+and C-R08, then stops at the first C-R02 corrected mass residual. W4 enforces
+the package gate and emits each research receipt graph. W5 issues immutable
+V3 refusals and no payload, package, or manifest. These stages change no W1
+member, W2 case, generator request, curve, or semantic candidate bytes.
 
-The executed decision is `promotion-generation-reject`; V3 is refused and V4
-is unclaimed. That decision remains immutable. Theo subsequently approved the
-versioned `C-R08` ceiling-composition amendment for a successor generation,
-but that amendment has not yet been executed and does not change the failed
-result. No accepted family member, package, manifest, runtime adapter, agent
-tool, or scenario exists. W2's only valid non-rejection state remains
+Both executed decisions are `promotion-generation-reject`; V3 is refused and
+V4 is unclaimed. The predecessor and amended successor decisions remain
+immutable. Theo approved versioned C-R07 and C-R08 amendments; both compose in
+the successor generation, whose first ordered failure is instead
+`C-R02-corrected-residual` at G10 report second 1. No accepted family member,
+package, manifest, runtime adapter, agent tool, or scenario exists. W2's only
+valid non-rejection state remains
 `quantitative-pending-w4`; it cannot emit pass, acceptance, certification,
 promotion, or V3 claims. Nothing under this directory may be imported by
 `src/aec_bench`, and production behavior must continue to work with
@@ -105,21 +107,34 @@ B5-W3/W4/W5 additionally contain:
 - one immutable `promotion-generation-reject` decision with empty payload,
   package, and manifest inventories.
 
-The approved post-rejection amendment additionally contains:
+The approved post-rejection amendments additionally contain:
 
-- one human-readable decision preserving the failed generation and its
-  symbolic contradiction;
-- one canonical machine authority binding the predecessor protocol, repair,
-  failed generation, composition result, and decision summary;
+- two human-readable decisions preserving the failed generation and the
+  candidate-independent C-R07/C-R08 composition defects;
+- two canonical machine authorities binding the predecessor protocol,
+  repairs, failed generation, composition result, and decision summary;
+- the curve-chord and exact curve-head-render bounds omitted from the
+  sign-mirrored C-R07 closure;
 - separate ceilings for the declared hydraulic dynamic-model allowance and
   the non-dynamic C-R08 numerical allowance;
 - an unchanged raw-residual comparison against their outward total; and
 - an explicit requirement for a fresh complete affected run before any new
   V3 decision.
 
+The executed amended successor additionally contains:
+
+- one schema-V2 generation binding both amendments while preserving
+  schema-V1 reload;
+- passing amended C-R07 and C-R08 evidence;
+- passing C-R12 edge evidence for all 44 G10 control edges before those
+  timestamps enter mass correction;
+- one ordered `w4-numerical-reject` at G10 report second 1;
+- one distinct connected receipt DAG and immutable V3 refusal; and
+- no execution of later family, ENG, package, or promotion-review stages.
+
 The implementation does not:
 
-- fit the C-R08 budget or mutate the failed result;
+- fit the C-R02, C-R07, or C-R08 budgets or mutate either failed result;
 - execute sibling engine variants after the anchor's ordered rejection;
 - create a promoted package or manifest;
 - define actor-visible fields, stewardship actions, authority, obligations,
@@ -247,10 +262,9 @@ PYTHONPATH=research/asset-stewardship/asw-0b5-world-family \
 
 ## Next allowed step
 
-Bind
-`declarations/w4-c-r08-ceiling-amendment.json` into a new generation identity
-and rerun the complete affected W3-W5 path from a fresh absent output root.
-The failed generation and V3 refusal remain immutable; the successor run may
-produce a positive or negative result only through the ordinary ordered
-gates. Production integration,
-package construction, ASW-0C, and ASW-2 remain blocked.
+Review the G10 first-interval C-R02 evidence against the pinned engine
+integration algorithm and the existing W2/W4 repair order. Any correction
+must be candidate-independent, versioned, explicitly approved, and followed
+by another fresh affected run. Silent first-sample deletion, fitted tolerance,
+production integration, package construction, ASW-0C, and ASW-2 remain
+blocked.

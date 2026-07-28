@@ -13,6 +13,9 @@ B5_ROOT = Path(__file__).parents[2]
 W1_DECLARATION = B5_ROOT / "declarations" / "w1-member-authority.json"
 W2_CATALOGUE = B5_ROOT / "declarations" / "w2-case-catalogue.json"
 W2_W4_REPAIR = B5_ROOT / "declarations" / "w2-w4-engine-mapping-repair.json"
+C_R07_AMENDMENT = B5_ROOT / "declarations" / "w4-c-r07-composition-amendment.json"
+W4_AMENDMENT = B5_ROOT / "declarations" / "w4-c-r08-ceiling-amendment.json"
+V1_GENERATION = B5_ROOT / "results" / "v3-refusal" / "generation-declaration.json"
 
 
 def _engine_identity() -> dict[str, str]:
@@ -32,6 +35,8 @@ def _engine_identity() -> dict[str, str]:
 def test_generation_declaration_is_accepted_by_both_independent_readers() -> None:
     raw = run_w3_w5.build_generation_declaration(
         authority_bytes=W1_DECLARATION.read_bytes(),
+        c_r07_amendment_bytes=C_R07_AMENDMENT.read_bytes(),
+        c_r08_amendment_bytes=W4_AMENDMENT.read_bytes(),
         catalogue_bytes=W2_CATALOGUE.read_bytes(),
         repair_bytes=W2_W4_REPAIR.read_bytes(),
         engine_identity=_engine_identity(),
@@ -47,6 +52,29 @@ def test_generation_declaration_is_accepted_by_both_independent_readers() -> Non
     assert generator_boundary.world_generation_id(raw) == (certifier_boundary.world_generation_id(raw))
     assert (
         generator_value["member_content_id"] == request.anchor_member(W1_DECLARATION.read_bytes())["member_content_id"]
+    )
+    assert generator_value["schema_id"] == "asw-0b5.generation-declaration.v2"
+    assert generator_value["authorities"][-2:] == [
+        {
+            "role": "w4-c-r07-amendment",
+            "sha256": (
+                "488c82d09696472533669f21017c19cd4156952f4d075b278de91b580bf2cbf2"
+            ),
+        },
+        {
+            "role": "w4-c-r08-amendment",
+            "sha256": (
+                "047576621781aa294b8251be433b9dba7c2efd66ffe759e633d67f26960d9a65"
+            ),
+        },
+    ]
+
+
+def test_predecessor_generation_declaration_remains_reloadable() -> None:
+    raw = V1_GENERATION.read_bytes()
+
+    assert generator_boundary.read_generation_declaration(raw) == (
+        certifier_boundary.read_generation_declaration(raw)
     )
 
 
