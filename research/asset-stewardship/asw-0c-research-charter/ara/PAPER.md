@@ -16,6 +16,11 @@ The charter uses amendable semantic revisions during development. It does not
 make hand-written hashes a design requirement. Outcome-bearing study runs must
 still record the realised revisions needed to prevent mixed-version analysis.
 
+ASW-2A2 TDD exposed one schedule conflict. Revision `ASW-0C-2` moves inspection
+before the repair access window because starting the `D`-long inspection at
+`L` would make completion simultaneous with breach, which has higher event
+priority.
+
 Layers:
 
 - `logic/claims.yaml` records the supported design claims.

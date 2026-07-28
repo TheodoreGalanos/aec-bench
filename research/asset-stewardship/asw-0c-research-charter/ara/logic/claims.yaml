@@ -54,3 +54,17 @@ claims:
     tags: [identity, revision]
     domain:
       phase: development
+  - id: C005
+    statement: The reference trajectory must complete inspection before the repair access window to avoid a same-time follow-up breach.
+    status: supported
+    falsification_criteria:
+      - Inspection can start at the repair access time and complete before the declared breach trigger.
+      - Canonical event order applies process completion before obligation breach at the same time.
+    proof:
+      experiments: []
+      evidence: [EV005]
+    dependencies: [C003, C004]
+    provenance: user_revised
+    tags: [schedule, obligation, event-order]
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
