@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, NoReturn, cast
 
 FAMILY_RESULT_DOMAIN = b"asw-0b5.family-decision.v1\0"
+PASSING_FAMILY_RESULT_DOMAIN = b"asw-0b5.family-decision.v2\0"
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
 
@@ -69,7 +70,7 @@ def _read_family(raw: bytes) -> dict[str, Any]:
     value = cast(dict[str, Any], parsed)
     if _canonical(value) != raw:
         _fail("family result is not canonical")
-    if set(value) != {
+    rejection_shape = {
         "analytical_inventory_content_id",
         "composition_result_content_id",
         "coverage",
@@ -80,10 +81,40 @@ def _read_family(raw: bytes) -> dict[str, Any]:
         "result_content_id",
         "schema_id",
         "terminal_state",
-    }:
+    }
+    passing_shape = {
+        "accepted_member_results",
+        "analytical_inventory_content_id",
+        "anchor_result_content_id",
+        "coverage",
+        "engine_result_content_id",
+        "first_failure",
+        "mutation_result_content_id",
+        "profile_id",
+        "promotable",
+        "result_content_id",
+        "retained_predecessor_rejections",
+        "schema_id",
+        "selection_amendment_sha256",
+        "terminal_state",
+    }
+    schema_id = value.get("schema_id")
+    if schema_id == "asw-0b5.family-decision.v1":
+        shape = rejection_shape
+        domain = FAMILY_RESULT_DOMAIN
+    elif schema_id == "asw-0b5.family-decision.v2":
+        shape = passing_shape
+        domain = PASSING_FAMILY_RESULT_DOMAIN
+    else:
+        _fail("family result schema differs")
+    if set(value) != shape:
         _fail("family result shape differs")
-    payload = {key: child for key, child in value.items() if key != "result_content_id"}
-    expected = hashlib.sha256(FAMILY_RESULT_DOMAIN + _canonical(payload)).hexdigest()
+    payload = {
+        key: child
+        for key, child in value.items()
+        if key != "result_content_id"
+    }
+    expected = hashlib.sha256(domain + _canonical(payload)).hexdigest()
     if (
         not isinstance(value["result_content_id"], str)
         or SHA256.fullmatch(value["result_content_id"]) is None
@@ -92,7 +123,6 @@ def _read_family(raw: bytes) -> dict[str, Any]:
         _fail("family result content identity differs")
     if (
         value["profile_id"] != "AU-NSW-LH-SYN-SPS-v1"
-        or value["schema_id"] != "asw-0b5.family-decision.v1"
         or value["promotable"] is not False
     ):
         _fail("family authority differs")
@@ -105,11 +135,24 @@ def authorize_package_root(
     target: Path,
 ) -> Path:
     """Create an empty proposal root only after an exact passing family result."""
-    value = _read_family(family_result_bytes)
-    if value["terminal_state"] != "family-w4-checks-pass":
-        _fail("family-w4-checks-pass is required before package construction")
+    read_passing_family(family_result_bytes)
     target = target.resolve()
     if target.exists() or target.is_symlink():
         _fail("package target must be absent")
     target.mkdir(parents=True)
     return target
+
+
+def read_passing_family(
+    family_result_bytes: bytes,
+) -> dict[str, Any]:
+    """Read one exact passing family decision without changing a path."""
+    value = _read_family(family_result_bytes)
+    if value["terminal_state"] != "family-w4-checks-pass":
+        _fail("family-w4-checks-pass is required before package construction")
+    if (
+        value["first_failure"] != "none"
+        or value["schema_id"] != "asw-0b5.family-decision.v2"
+    ):
+        _fail("passing family authority differs")
+    return value

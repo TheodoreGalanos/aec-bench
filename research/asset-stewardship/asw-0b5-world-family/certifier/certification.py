@@ -9,6 +9,9 @@ from typing import Any
 from certifier import boundary, candidate, cases, observations, physics, pipeline
 
 RESULT_SCHEMA_ID = "asw-0b5.certifier-result.v1"
+SENSITIVITY_RESULT_SCHEMA_ID = (
+    "asw-0b5.certifier-sensitivity-result.v1"
+)
 RESULT_DOMAIN = b"asw-0b5.certifier-result.v1\0"
 CERTIFIER_PROTOCOL_ID = "asw-0b4.independent-certification-protocol.v2"
 
@@ -29,6 +32,7 @@ def _result(
     checks: list[dict[str, str]],
     first_failing_stage: str,
     residual_register: list[dict[str, Any]],
+    schema_id: str = RESULT_SCHEMA_ID,
     terminal_state: str,
 ) -> dict[str, Any]:
     value: dict[str, Any] = {
@@ -45,7 +49,7 @@ def _result(
         "promotable": False,
         "residual_register": residual_register,
         "result_content_id": "",
-        "schema_id": RESULT_SCHEMA_ID,
+        "schema_id": schema_id,
         "terminal_state": terminal_state,
     }
     value["result_content_id"] = _result_content_id(value)
@@ -165,6 +169,128 @@ def certify_bundle(
             ],
             first_failing_stage=stage,
             residual_register=[],
+            terminal_state="certifier-internal-error",
+        )
+
+
+def certify_sensitivity_bundle(
+    bundle_bytes: bytes,
+    authority_bytes: bytes,
+) -> dict[str, Any]:
+    """Certify one declared sensitivity member and fixed W2 case map."""
+    try:
+        bundle = candidate.read_sensitivity_bundle(bundle_bytes)
+        first_request = candidate.read_request(
+            bundle.segments[0].roles["request"]
+        )
+        if (
+            first_request["member"]["member_content_id"]
+            != bundle.member_content_id
+        ):
+            raise pipeline.PipelineReject(
+                "exact-reject",
+                "sensitivity-member-binding",
+            )
+        authority = boundary.read_w1_declaration(authority_bytes)
+        result_cases, checks = pipeline.certify(
+            bundle.segments,
+            authority,
+            case_ids=bundle.case_ids,
+            require_anchor_witnesses=False,
+        )
+        return _result(
+            bundle_bytes=bundle_bytes,
+            cases=result_cases,
+            checks=checks,
+            first_failing_stage="w4-tolerance-required",
+            residual_register=pipeline.residual_register(),
+            schema_id=SENSITIVITY_RESULT_SCHEMA_ID,
+            terminal_state="quantitative-pending-w4",
+        )
+    except candidate.CandidateError as error:
+        return _result(
+            bundle_bytes=bundle_bytes,
+            cases=[],
+            checks=[
+                {
+                    "check_id": "C-INPUT",
+                    "outcome": "reject",
+                    "stage": error.stage,
+                }
+            ],
+            first_failing_stage=error.stage,
+            residual_register=[],
+            schema_id=SENSITIVITY_RESULT_SCHEMA_ID,
+            terminal_state="certifier-input-reject",
+        )
+    except boundary.CertifierBoundaryError as error:
+        return _result(
+            bundle_bytes=bundle_bytes,
+            cases=[],
+            checks=[
+                {
+                    "check_id": "C-AUTHORITY",
+                    "outcome": "reject",
+                    "stage": error.reason,
+                }
+            ],
+            first_failing_stage=error.reason,
+            residual_register=[],
+            schema_id=SENSITIVITY_RESULT_SCHEMA_ID,
+            terminal_state="structural-reject",
+        )
+    except (
+        cases.CaseError,
+        observations.ObservationError,
+        physics.PhysicsError,
+    ) as error:
+        stage = type(error).__name__.removesuffix("Error").lower()
+        return _result(
+            bundle_bytes=bundle_bytes,
+            cases=[],
+            checks=[
+                {
+                    "check_id": "C-EXACT",
+                    "outcome": "reject",
+                    "stage": stage,
+                }
+            ],
+            first_failing_stage=stage,
+            residual_register=[],
+            schema_id=SENSITIVITY_RESULT_SCHEMA_ID,
+            terminal_state="exact-reject",
+        )
+    except pipeline.PipelineReject as error:
+        return _result(
+            bundle_bytes=bundle_bytes,
+            cases=[],
+            checks=[
+                {
+                    "check_id": "C-W3",
+                    "outcome": "reject",
+                    "stage": error.stage,
+                }
+            ],
+            first_failing_stage=error.stage,
+            residual_register=[],
+            schema_id=SENSITIVITY_RESULT_SCHEMA_ID,
+            terminal_state=error.terminal_state,
+        )
+    except Exception as error:  # pragma: no cover - defensive boundary
+        stage = f"internal-{type(error).__name__.lower()}"
+        return _result(
+            bundle_bytes=bundle_bytes,
+            cases=[],
+            checks=[
+                {
+                    "check_id": "C-INTERNAL",
+                    "outcome": "reject",
+                    "stage": stage,
+                }
+            ],
+            first_failing_stage=stage,
+            residual_register=[],
+            schema_id=SENSITIVITY_RESULT_SCHEMA_ID,
             terminal_state="certifier-internal-error",
         )
 

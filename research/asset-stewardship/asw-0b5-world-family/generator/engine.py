@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from generator import boundary
+from repairs import solver_convergence
 
 SWMM_REPOSITORY = "https://github.com/USEPA/Stormwater-Management-Model.git"
 SWMM_VERSION = "5.2.4"
@@ -341,7 +342,7 @@ def request_engine_identity(receipt_path: Path) -> dict[str, str]:
         "output_library_sha256": artifacts["output_library"]["sha256"],
         "patch_sha256": SWMM_PATCH_SHA256,
         "repository": SWMM_REPOSITORY,
-        "settings_id": "asw-0b5.swmm-settings.v2",
+        "settings_id": solver_convergence.ENGINE_SETTINGS_ID,
         "solver_library_sha256": artifacts["solver_library"]["sha256"],
         "version": SWMM_VERSION,
     }

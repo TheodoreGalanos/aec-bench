@@ -15,13 +15,19 @@ from certifier import boundary
 PROFILE_ID = "AU-NSW-LH-SYN-SPS-v1"
 PROTOCOL_ID = "asw-0b5.generator-protocol.v3"
 REPAIR_SHA256 = "862ef1f5fc70d882d156c0ef9842bb565301344725d2206edfa49c10910576ca"
+SOLVER_CONVERGENCE_SHA256 = (
+    "583efcc11501bbe4a07dce8de5c50ae2c6c8dd72d9af76a29eff7ebc47f39859"
+)
 BUNDLE_SCHEMA_ID = "asw-0b5.certifier-input-bundle.v1"
-REQUEST_SCHEMA_ID = "asw-0b5.generator-request.v1"
+SENSITIVITY_BUNDLE_SCHEMA_ID = (
+    "asw-0b5.certifier-sensitivity-bundle.v1"
+)
+REQUEST_SCHEMA_ID = "asw-0b5.generator-request.v2"
 SEMANTIC_SCHEMA_ID = "asw-0b5.semantic-output.v1"
 SEMANTIC_DOMAIN = b"asw-0b4.semantic-output.v1\0"
 MEMBER_DOMAIN = b"asw-0b4.member.v1\0"
 CASE_DOMAIN = b"asw-0b4.case.v1\0"
-REQUEST_DOMAIN = b"asw-0b4.generator-request.v1\0"
+REQUEST_DOMAIN = b"asw-0b5.generator-request.v2\0"
 BINARY32_PATTERN = re.compile(r"[0-9a-f]{8}\Z")
 HEX_BYTES_PATTERN = re.compile(r"(?:[0-9a-f]{2})+\Z")
 SERIES_IDS = (
@@ -73,6 +79,16 @@ class SegmentInputs:
     replay_ordinal: int
     roles: dict[str, bytes]
     segment_id: str
+
+
+@dataclass(frozen=True)
+class SensitivityBundle:
+    """One sensitivity probe with its ordered case map and replay roles."""
+
+    case_ids: tuple[str, ...]
+    member_content_id: str
+    probe_id: str
+    segments: tuple[SegmentInputs, ...]
 
 
 def _parse(raw: bytes, stage: str) -> dict[str, Any]:
@@ -183,6 +199,193 @@ def read_bundle(raw: bytes) -> tuple[SegmentInputs, ...]:
     return tuple(collected)
 
 
+def read_sensitivity_bundle(raw: bytes) -> SensitivityBundle:
+    """Read one exact two-replay sensitivity bundle."""
+    bundle = _parse(raw, "sensitivity-bundle-bytes")
+    _exact_keys(
+        bundle,
+        {
+            "member_content_id",
+            "probe_id",
+            "profile_id",
+            "promotable",
+            "replays",
+            "schema_id",
+        },
+        "sensitivity-bundle-shape",
+    )
+    if (
+        bundle["schema_id"] != SENSITIVITY_BUNDLE_SCHEMA_ID
+        or bundle["profile_id"] != PROFILE_ID
+        or bundle["promotable"] is not False
+        or not isinstance(bundle["member_content_id"], str)
+        or boundary.LOWER_SHA256.fullmatch(
+            bundle["member_content_id"]
+        )
+        is None
+        or not isinstance(bundle["probe_id"], str)
+        or not bundle["probe_id"]
+    ):
+        _reject(
+            "sensitivity-bundle-authority",
+            "sensitivity authority or maturity differs",
+        )
+    replays = bundle["replays"]
+    if not isinstance(replays, list) or len(replays) != 2:
+        _reject(
+            "sensitivity-bundle-shape",
+            "exactly two replays are required",
+        )
+    collected: list[SegmentInputs] = []
+    case_ids: tuple[str, ...] | None = None
+    for ordinal, replay_value in enumerate(replays):
+        replay = _exact_keys(
+            replay_value,
+            {"cases", "ordinal"},
+            "sensitivity-bundle-replay",
+        )
+        if replay["ordinal"] != ordinal:
+            _reject(
+                "sensitivity-bundle-replay",
+                "replay ordinal differs",
+            )
+        cases = replay["cases"]
+        if not isinstance(cases, list) or not cases:
+            _reject(
+                "sensitivity-bundle-case",
+                "case inventory is empty",
+            )
+        raw_case_ids = tuple(
+            case.get("case_id")
+            for case in cases
+            if isinstance(case, dict)
+        )
+        if (
+            len(raw_case_ids) != len(cases)
+            or any(
+                not isinstance(case_id, str)
+                for case_id in raw_case_ids
+            )
+        ):
+            _reject(
+                "sensitivity-bundle-case",
+                "case order or identity differs",
+            )
+        replay_case_ids = tuple(
+            cast(str, case_id) for case_id in raw_case_ids
+        )
+        if (
+            len(set(replay_case_ids)) != len(replay_case_ids)
+            or tuple(
+                case_id
+                for case_id in boundary.W2_CASES
+                if case_id in replay_case_ids
+            )
+            != replay_case_ids
+        ):
+            _reject(
+                "sensitivity-bundle-case",
+                "case order or identity differs",
+            )
+        if case_ids is None:
+            case_ids = replay_case_ids
+        elif replay_case_ids != case_ids:
+            _reject(
+                "sensitivity-bundle-case",
+                "replay case inventory differs",
+            )
+        for case_id, case_value in zip(
+            replay_case_ids,
+            cases,
+            strict=True,
+        ):
+            case = _exact_keys(
+                case_value,
+                {"case_id", "segments"},
+                "sensitivity-bundle-case",
+            )
+            segments = case["segments"]
+            expected_count = SEGMENT_COUNT_BY_CASE[case_id]
+            if (
+                not isinstance(segments, list)
+                or len(segments) != expected_count
+            ):
+                _reject(
+                    "sensitivity-bundle-segment",
+                    f"segment count differs for {case_id}",
+                )
+            expected_ids = (
+                ("segment-a", "segment-b")
+                if case_id == "G70_TRANSFER"
+                else (
+                    tuple(
+                        f"checkpoint-{index}" for index in range(4)
+                    )
+                    if case_id == "G80_NO_MAINTENANCE"
+                    else ("single",)
+                )
+            )
+            for segment_id, segment_value in zip(
+                expected_ids,
+                segments,
+                strict=True,
+            ):
+                segment = _exact_keys(
+                    segment_value,
+                    {"roles", "segment_id"},
+                    "sensitivity-bundle-segment",
+                )
+                if segment["segment_id"] != segment_id:
+                    _reject(
+                        "sensitivity-bundle-segment",
+                        f"expected segment {segment_id}",
+                    )
+                roles = segment["roles"]
+                if (
+                    not isinstance(roles, list)
+                    or len(roles) != len(ROLE_IDS)
+                ):
+                    _reject(
+                        "sensitivity-bundle-role",
+                        "role cardinality differs",
+                    )
+                decoded = {
+                    role_id: _decode_role(role_value, role_id)
+                    for role_id, role_value in zip(
+                        ROLE_IDS,
+                        roles,
+                        strict=True,
+                    )
+                }
+                collected.append(
+                    SegmentInputs(
+                        case_id=case_id,
+                        replay_ordinal=ordinal,
+                        roles=decoded,
+                        segment_id=segment_id,
+                    )
+                )
+    if case_ids is None:
+        _reject(
+            "sensitivity-bundle-case",
+            "case inventory is absent",
+        )
+    per_replay = sum(
+        SEGMENT_COUNT_BY_CASE[case_id] for case_id in case_ids
+    )
+    if len(collected) != 2 * per_replay:
+        _reject(
+            "sensitivity-bundle-segment",
+            "segment inventory differs",
+        )
+    return SensitivityBundle(
+        case_ids=case_ids,
+        member_content_id=bundle["member_content_id"],
+        probe_id=bundle["probe_id"],
+        segments=tuple(collected),
+    )
+
+
 def _content_id(domain: bytes, value: dict[str, Any], identity_field: str) -> str:
     without_identity = {
         key: child for key, child in value.items() if key != identity_field
@@ -217,6 +420,9 @@ def read_request(raw: bytes) -> dict[str, Any]:
         "protocol_id": PROTOCOL_ID,
         "repair_declaration_sha256": REPAIR_SHA256,
         "scope": "research-only",
+        "solver_convergence_amendment_sha256": (
+            SOLVER_CONVERGENCE_SHA256
+        ),
         "w1_declaration_sha256": boundary.REVIEWED_W1_DECLARATION,
         "w1_sha256": dict(boundary.AUTHORITIES)["w1"],
     }
@@ -268,7 +474,7 @@ def read_request(raw: bytes) -> dict[str, Any]:
         engine_value["commit"] != "7952ca837988b1c32f791812eccc9fd64547e093"
         or engine_value["repository"]
         != "https://github.com/USEPA/Stormwater-Management-Model.git"
-        or engine_value["settings_id"] != "asw-0b5.swmm-settings.v2"
+        or engine_value["settings_id"] != "asw-0b5.swmm-settings.v3"
         or engine_value["version"] != "5.2.4"
     ):
         _reject("request-engine", "engine identity differs")

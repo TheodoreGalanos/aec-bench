@@ -91,6 +91,16 @@ def _curve_evidence(
         segment.segment_id,
     )
     roles = segment.roles
+    if pump_a_state == pump_b_state and (
+        roles["pump-a-original-curve"]
+        != roles["pump-b-original-curve"]
+        or roles["pump-a-engine-curve"]
+        != roles["pump-b-engine-curve"]
+    ):
+        raise PipelineReject(
+            "exact-reject",
+            "label-curve-symmetry",
+        )
     _curve_for_state(
         roles["pump-a-original-curve"],
         representation="asw-0b4.pump3-curve.v1",
@@ -129,16 +139,72 @@ def _curve_evidence(
         raise PipelineReject("structural-reject", "curve-evidence-binding")
 
 
-def _verify_replay(segments: tuple[candidate.SegmentInputs, ...]) -> None:
-    if len(segments) != 46:
+def _verify_replay(
+    segments: tuple[candidate.SegmentInputs, ...],
+    case_ids: tuple[str, ...],
+) -> None:
+    per_replay = sum(
+        candidate.SEGMENT_COUNT_BY_CASE[case_id]
+        for case_id in case_ids
+    )
+    if len(segments) != 2 * per_replay:
         raise PipelineReject("certifier-input-reject", "replay-cardinality")
-    for first, second in zip(segments[:23], segments[23:], strict=True):
+    for first, second in zip(
+        segments[:per_replay],
+        segments[per_replay:],
+        strict=True,
+    ):
         if (
-            first.case_id != second.case_id
+            first.replay_ordinal != 0
+            or second.replay_ordinal != 1
+            or first.case_id != second.case_id
             or first.segment_id != second.segment_id
             or first.roles != second.roles
         ):
-            raise PipelineReject("exact-reject", "replay-identity")
+                raise PipelineReject("exact-reject", "replay-identity")
+
+
+def _require_ambiguity_request_distinction(
+    segments: tuple[candidate.SegmentInputs, ...],
+    case_ids: tuple[str, ...],
+) -> None:
+    if not {
+        "G51_CLEAR_A_POST",
+        "G53_CLEAR_B_POST",
+    }.issubset(case_ids):
+        return
+    first_replay = [
+        segment
+        for segment in segments
+        if segment.replay_ordinal == 0
+        and segment.case_id
+        in {"G51_CLEAR_A_POST", "G53_CLEAR_B_POST"}
+    ]
+    requests = {
+        segment.case_id: candidate.read_request(
+            segment.roles["request"]
+        )
+        for segment in first_replay
+    }
+    if set(requests) != {
+        "G51_CLEAR_A_POST",
+        "G53_CLEAR_B_POST",
+    }:
+        raise PipelineReject(
+            "certifier-input-reject",
+            "ambiguity-request-inventory",
+        )
+    state_a = requests["G51_CLEAR_A_POST"]["case"][
+        "mechanism_state"
+    ]["pump-a"]
+    state_b = requests["G53_CLEAR_B_POST"]["case"][
+        "mechanism_state"
+    ]["pump-a"]
+    if state_a == state_b:
+        raise PipelineReject(
+            "qualitative-reject",
+            "ambiguity-response-collapse",
+        )
 
 
 def _carry_value(
@@ -227,36 +293,48 @@ def _quantized_visible_flow(
 def _require_relations(
     internal: dict[str, list[dict[str, Any]]],
     values: dict[str, Decimal],
+    *,
+    require_anchor_witnesses: bool,
 ) -> None:
-    clean_a = internal["G10_CLEAN_A_BASE"][0]["semantic"]
-    clean_b = internal["G11_CLEAN_B_BASE"][0]["semantic"]
-    neutral = (
-        "time_s",
-        "wet_well_depth_m",
-        "wet_well_volume_m3",
-        "wet_well_inflow_m3_s",
-        "wet_well_overflow_m3_s",
-        "force_main_flow_m3_s",
-        "wet_well_head_m",
-        "discharge_head_m",
-    )
-    if any(
-        clean_a["series"][identity]["values"]
-        != clean_b["series"][identity]["values"]
-        for identity in neutral
-    ):
-        raise PipelineReject("qualitative-reject", "label-mirror-hydraulics")
-    for a_name, b_name in (
-        ("pump_a_flow_m3_s", "pump_b_flow_m3_s"),
-        ("pump_b_flow_m3_s", "pump_a_flow_m3_s"),
-        ("pump_a_setting", "pump_b_setting"),
-        ("pump_b_setting", "pump_a_setting"),
-    ):
-        if (
-            clean_a["series"][a_name]["values"]
-            != clean_b["series"][b_name]["values"]
+    if {
+        "G10_CLEAN_A_BASE",
+        "G11_CLEAN_B_BASE",
+    }.issubset(internal):
+        clean_a = internal["G10_CLEAN_A_BASE"][0]["semantic"]
+        clean_b = internal["G11_CLEAN_B_BASE"][0]["semantic"]
+        neutral = (
+            "time_s",
+            "wet_well_depth_m",
+            "wet_well_volume_m3",
+            "wet_well_inflow_m3_s",
+            "wet_well_overflow_m3_s",
+            "force_main_flow_m3_s",
+            "wet_well_head_m",
+            "discharge_head_m",
+        )
+        if any(
+            clean_a["series"][identity]["values"]
+            != clean_b["series"][identity]["values"]
+            for identity in neutral
         ):
-            raise PipelineReject("exact-reject", "label-mirror-series")
+            raise PipelineReject(
+                "qualitative-reject",
+                "label-mirror-hydraulics",
+            )
+        for a_name, b_name in (
+            ("pump_a_flow_m3_s", "pump_b_flow_m3_s"),
+            ("pump_b_flow_m3_s", "pump_a_flow_m3_s"),
+            ("pump_a_setting", "pump_b_setting"),
+            ("pump_b_setting", "pump_a_setting"),
+        ):
+            if (
+                clean_a["series"][a_name]["values"]
+                != clean_b["series"][b_name]["values"]
+            ):
+                raise PipelineReject(
+                    "exact-reject",
+                    "label-mirror-series",
+                )
     capabilities = {
         case_id: float(items[0]["capability"]["operating_flow_m3_s"])
         for case_id, items in internal.items()
@@ -275,60 +353,77 @@ def _require_relations(
         ("G61_REPAIR_POST", "G60_REPAIR_PRE"),
     )
     for better, worse in ordered_relations:
+        if better not in capabilities or worse not in capabilities:
+            continue
         if capabilities[better] < capabilities[worse]:
             raise PipelineReject(
                 "qualitative-reject",
                 f"capability-order-{better}-{worse}",
             )
-    if (
+    if require_anchor_witnesses and "G12_CLEAN_ASSESS" in internal and (
         internal["G12_CLEAN_ASSESS"][0]["capability"]["review_predicate"]
         is not False
     ):
         raise PipelineReject("qualitative-reject", "clean-capability")
-    if (
+    if require_anchor_witnesses and "G21_OBSTRUCTION_TRIGGER" in internal and (
         internal["G21_OBSTRUCTION_TRIGGER"][0]["capability"][
             "review_predicate"
         ]
         is not True
     ):
         raise PipelineReject("qualitative-reject", "trigger-capability")
-    if (
+    if require_anchor_witnesses and "G41_COMBINED_UPPER" in internal and (
         internal["G41_COMBINED_UPPER"][0]["capability"]["review_predicate"]
         is not True
     ):
         raise PipelineReject("qualitative-reject", "upper-capability")
-    history_a = internal["G50_CLEAR_A_PRE"][0]["capability"]
-    history_b = internal["G52_CLEAR_B_PRE"][0]["capability"]
-    if _quantized_visible_flow(history_a, values) != _quantized_visible_flow(
-        history_b,
-        values,
-    ):
-        raise PipelineReject("exact-reject", "ambiguity-visible-flow")
-    response_a = float(
-        internal["G51_CLEAR_A_POST"][0]["capability"][
-            "operating_flow_m3_s"
-        ]
-    )
-    response_b = float(
-        internal["G53_CLEAR_B_POST"][0]["capability"][
-            "operating_flow_m3_s"
-        ]
-    )
-    if response_a == response_b:
-        raise PipelineReject("qualitative-reject", "ambiguity-response")
-    progression = [
-        float(item["capability"]["operating_flow_m3_s"])
-        for item in internal["G80_NO_MAINTENANCE"]
-    ]
-    if any(
-        later > earlier
-        for earlier, later in zip(
-            progression,
-            progression[1:],
-            strict=False,
+    if {"G50_CLEAR_A_PRE", "G52_CLEAR_B_PRE"}.issubset(internal):
+        history_a = internal["G50_CLEAR_A_PRE"][0]["capability"]
+        history_b = internal["G52_CLEAR_B_PRE"][0]["capability"]
+        if _quantized_visible_flow(
+            history_a,
+            values,
+        ) != _quantized_visible_flow(
+            history_b,
+            values,
+        ):
+            raise PipelineReject(
+                "exact-reject",
+                "ambiguity-visible-flow",
+            )
+    if {"G51_CLEAR_A_POST", "G53_CLEAR_B_POST"}.issubset(internal):
+        response_a = float(
+            internal["G51_CLEAR_A_POST"][0]["capability"][
+                "operating_flow_m3_s"
+            ]
         )
-    ):
-        raise PipelineReject("qualitative-reject", "progression-improvement")
+        response_b = float(
+            internal["G53_CLEAR_B_POST"][0]["capability"][
+                "operating_flow_m3_s"
+            ]
+        )
+        if response_a == response_b:
+            raise PipelineReject(
+                "qualitative-reject",
+                "ambiguity-response",
+            )
+    if "G80_NO_MAINTENANCE" in internal:
+        progression = [
+            float(item["capability"]["operating_flow_m3_s"])
+            for item in internal["G80_NO_MAINTENANCE"]
+        ]
+        if any(
+            later > earlier
+            for earlier, later in zip(
+                progression,
+                progression[1:],
+                strict=False,
+            )
+        ):
+            raise PipelineReject(
+                "qualitative-reject",
+                "progression-improvement",
+            )
 
 
 def residual_register() -> list[dict[str, str]]:
@@ -351,18 +446,22 @@ def residual_register() -> list[dict[str, str]]:
 def certify(
     segments: tuple[candidate.SegmentInputs, ...],
     authority: dict[str, Any],
+    *,
+    case_ids: tuple[str, ...] = boundary.W2_CASES,
+    require_anchor_witnesses: bool = True,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     """Run the valid-candidate W3 pipeline and return result-owned evidence."""
-    _verify_replay(segments)
+    _verify_replay(segments, case_ids)
+    _require_ambiguity_request_distinction(segments, case_ids)
     internal: dict[str, list[dict[str, Any]]] = {
-        case_id: [] for case_id in boundary.W2_CASES
+        case_id: [] for case_id in case_ids
     }
     result_cases: list[dict[str, Any]] = []
     segment_cursor = 0
     common_member_id: str | None = None
     common_engine: dict[str, Any] | None = None
     last_request: dict[str, Any] | None = None
-    for case_id in boundary.W2_CASES:
+    for case_id in case_ids:
         expected_count = candidate.SEGMENT_COUNT_BY_CASE[case_id]
         case_segments = segments[
             segment_cursor : segment_cursor + expected_count
@@ -444,6 +543,7 @@ def certify(
     _require_relations(
         internal,
         physics.member_values(last_request["member"]),
+        require_anchor_witnesses=require_anchor_witnesses,
     )
     checks = [
         {"check_id": check_id, "outcome": "satisfied", "stage": stage}

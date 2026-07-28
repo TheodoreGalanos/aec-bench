@@ -87,34 +87,50 @@ def _validate_setting_trace(
     segment: rendering.RenderedSegment,
     run: solver.SolverRun,
 ) -> dict[str, list[int]]:
-    pump_a = list(run.pump_a_settings)
-    pump_b = list(run.pump_b_settings)
-    if len(pump_a) != segment.horizon_s or len(pump_b) != segment.horizon_s:
-        raise ExecutionError("setting trace and report grid differ")
-    if any(a and b for a, b in zip(pump_a, pump_b, strict=True)):
+    full_pump_a = list(run.pump_a_settings)
+    full_pump_b = list(run.pump_b_settings)
+    expected_steps = segment.horizon_s // segment.routing_step_s
+    if (
+        len(full_pump_a) != expected_steps
+        or len(full_pump_b) != expected_steps
+    ):
+        raise ExecutionError("setting trace and routing grid differ")
+    if any(
+        a and b
+        for a, b in zip(full_pump_a, full_pump_b, strict=True)
+    ):
         raise ExecutionError("simultaneous pumping is forbidden")
     selected = segment.selected_pump
     mode = case["control_mode"]
     if selected == "none":
-        if any(pump_a) or any(pump_b):
+        if any(full_pump_a) or any(full_pump_b):
             raise ExecutionError("forced-off case contains an active pump")
     elif selected == "pump-a":
-        if any(pump_b):
+        if any(full_pump_b):
             raise ExecutionError("Pump B is active under Pump A assignment")
-        if mode != "automatic" and pump_a != [1] * segment.horizon_s:
+        if mode != "automatic" and full_pump_a != [1] * expected_steps:
             raise ExecutionError("forced Pump A setting trace differs")
-        if mode == "automatic" and not any(pump_a):
+        if mode == "automatic" and not any(full_pump_a):
             raise ExecutionError("automatic Pump A never starts")
     elif selected == "pump-b":
-        if any(pump_a):
+        if any(full_pump_a):
             raise ExecutionError("Pump A is active under Pump B assignment")
-        if mode != "automatic" and pump_b != [1] * segment.horizon_s:
+        if mode != "automatic" and full_pump_b != [1] * expected_steps:
             raise ExecutionError("forced Pump B setting trace differs")
-        if mode == "automatic" and not any(pump_b):
+        if mode == "automatic" and not any(full_pump_b):
             raise ExecutionError("automatic Pump B never starts")
     else:
         raise ExecutionError(f"unknown segment assignment {selected!r}")
-    return {"pump_a": pump_a, "pump_b": pump_b}
+    ratio = segment.report_step_s // segment.routing_step_s
+    if (
+        segment.report_step_s % segment.routing_step_s != 0
+        or ratio <= 0
+    ):
+        raise ExecutionError("report and routing grids do not align")
+    return {
+        "pump_a": full_pump_a[ratio - 1 :: ratio],
+        "pump_b": full_pump_b[ratio - 1 :: ratio],
+    }
 
 
 def _semantic_series(
@@ -135,10 +151,15 @@ def _semantic_series(
         for a, b in zip(pump_a_m3_s, pump_b_m3_s, strict=True)
     ]
     period_count = cast(int, extracted["period_count"])
+    report_step_s = cast(int, extracted["report_step_seconds"])
     z_d = float(_member_values(request_value["member"])["system.z_d"])
     available: dict[str, dict[str, Any]] = {
         "time_s": semantic.integer_series(
-            range(1, period_count + 1),
+            range(
+                report_step_s,
+                report_step_s * period_count + 1,
+                report_step_s,
+            ),
             source="independent-report-grid",
             unit="s",
         ),
@@ -231,13 +252,14 @@ def _execute_segment(
         report_path=report_path,
         output_path=output_path,
         solver_library=paths.solver_library,
-        expected_periods=segment.horizon_s,
+        expected_steps=segment.horizon_s // segment.routing_step_s,
     )
     normalized_diagnostics = diagnostics.parse_report_bytes(report_path.read_bytes())
     extracted = output.extract_output(
         output_path=output_path,
         output_library=paths.output_library,
-        expected_periods=segment.horizon_s,
+        expected_periods=segment.horizon_s // segment.report_step_s,
+        expected_report_step_s=segment.report_step_s,
     )
     setting_trace = _validate_setting_trace(
         case=request_value["case"],
@@ -359,12 +381,18 @@ def _execute_case_with_paths(
     *,
     paths: _EnginePaths,
     workspace: Path,
+    configuration: rendering.EngineConfiguration = (
+        rendering.DEFAULT_ENGINE_CONFIGURATION
+    ),
 ) -> dict[str, Any]:
     workspace = workspace.resolve()
     engine.require_absent(workspace)
     workspace.mkdir(parents=True)
     case_id = cast(str, request_value["case"]["case_id"])
-    rendered = rendering.render_case(request_value)
+    rendered = rendering.render_case(
+        request_value,
+        configuration=configuration,
+    )
     segments = [
         _execute_segment(
             request_value=request_value,
@@ -380,6 +408,7 @@ def _execute_case_with_paths(
         complete = rendering.render_case(
             request_value,
             carried_depth_m=carried_text,
+            configuration=configuration,
         )
         if len(complete) != 2 or complete[0].input_sha256 != rendered[0].input_sha256:
             raise ExecutionError("G70 segment-A replay changed while rendering carry")
@@ -430,28 +459,239 @@ def execute_case(
     )
 
 
-def _flatten(replay: dict[str, Any]) -> list[dict[str, Any]]:
+def _flatten(
+    replay: dict[str, Any],
+    case_ids: tuple[str, ...],
+) -> list[dict[str, Any]]:
     return [
         segment
-        for case_id in request.CASE_IDS
+        for case_id in case_ids
         for segment in replay["cases"][case_id]["segments"]
     ]
 
 
-def _run_set_sha256(cases: dict[str, Any]) -> str:
+def _run_set_sha256(
+    cases: dict[str, Any],
+    case_ids: tuple[str, ...],
+) -> str:
     payload = {
-        "case_ids": list(request.CASE_IDS),
+        "case_ids": list(case_ids),
         "case_results": [
             {
                 "case_id": case_id,
                 "case_result_sha256": cases[case_id]["case_result_sha256"],
             }
-            for case_id in request.CASE_IDS
+            for case_id in case_ids
         ],
     }
     return hashlib.sha256(
         RUN_SET_DOMAIN + request.canonical_json_bytes(payload)
     ).hexdigest()
+
+
+def _validate_case_ids(case_ids: tuple[str, ...]) -> None:
+    if (
+        not case_ids
+        or len(set(case_ids)) != len(case_ids)
+        or tuple(
+            case_id
+            for case_id in request.CASE_IDS
+            if case_id in case_ids
+        )
+        != case_ids
+    ):
+        raise ExecutionError(
+            "case map must be a non-empty W2-ordered subset"
+        )
+
+
+def _execute_replayed_cases(
+    *,
+    requests: dict[str, dict[str, Any]],
+    case_ids: tuple[str, ...],
+    configuration: rendering.EngineConfiguration,
+    paths: _EnginePaths,
+    workspace: Path,
+) -> dict[str, Any]:
+    replays: list[dict[str, Any]] = []
+    for replay_index in range(2):
+        replay_root = workspace / f"replay-{replay_index}"
+        replay_root.mkdir()
+        cases = {
+            case_id: _execute_case_with_paths(
+                requests[case_id],
+                configuration=configuration,
+                paths=paths,
+                workspace=replay_root / case_id,
+            )
+            for case_id in case_ids
+        }
+        replays.append(
+            {
+                "cases": cases,
+                "replay_index": replay_index,
+                "run_set_sha256": _run_set_sha256(cases, case_ids),
+            }
+        )
+    first = _flatten(replays[0], case_ids)
+    second = _flatten(replays[1], case_ids)
+    expected_segments = sum(
+        2
+        if case_id == "G70_TRANSFER"
+        else 4
+        if case_id == "G80_NO_MAINTENANCE"
+        else 1
+        for case_id in case_ids
+    )
+    if (
+        len(first) != expected_segments
+        or len(second) != expected_segments
+    ):
+        raise ExecutionError(
+            "case map expanded to an unexpected segment count"
+        )
+    replay = {
+        "normalized_diagnostics_equal": [
+            item["diagnostics"] for item in first
+        ]
+        == [item["diagnostics"] for item in second],
+        "raw_binary_outputs_equal": [
+            item["raw_binary_sha256"] for item in first
+        ]
+        == [item["raw_binary_sha256"] for item in second],
+        "rendered_inputs_equal": [
+            item["input_sha256"] for item in first
+        ]
+        == [item["input_sha256"] for item in second],
+        "run_set_hashes_equal": replays[0]["run_set_sha256"]
+        == replays[1]["run_set_sha256"],
+        "semantic_outputs_equal": [
+            item["semantic_output_sha256"] for item in first
+        ]
+        == [
+            item["semantic_output_sha256"] for item in second
+        ],
+        "setting_traces_equal": [
+            item["setting_trace_sha256"] for item in first
+        ]
+        == [item["setting_trace_sha256"] for item in second],
+    }
+    if not all(replay.values()):
+        failed = [name for name, passed in replay.items() if not passed]
+        raise ExecutionError(f"catalogue replay differs: {failed!r}")
+    return {
+        "case_ids": list(case_ids),
+        "engine_execution_count": 2 * expected_segments,
+        "replay": replay,
+        "replays": replays,
+        "segment_count_per_replay": expected_segments,
+    }
+
+
+def execute_member_cases(
+    *,
+    authority_bytes: bytes,
+    catalogue_bytes: bytes,
+    case_ids: tuple[str, ...],
+    member: dict[str, Any],
+    receipt_path: Path,
+    repair_bytes: bytes,
+    solver_convergence_bytes: bytes,
+    workspace: Path,
+) -> dict[str, Any]:
+    """Execute an ordered W2 case map twice for one validated W1 member."""
+    _validate_case_ids(case_ids)
+    workspace = workspace.resolve()
+    engine.require_absent(workspace)
+    workspace.mkdir(parents=True)
+    paths = _verified_engine_paths(receipt_path)
+    engine_identity = engine.request_engine_identity(receipt_path)
+    requests = {
+        case_id: request.read_request(
+            request.build_member_request(
+                authority_bytes=authority_bytes,
+                catalogue_bytes=catalogue_bytes,
+                case_id=case_id,
+                engine_identity=engine_identity,
+                member=member,
+                repair_bytes=repair_bytes,
+                solver_convergence_bytes=solver_convergence_bytes,
+            ),
+            authority_bytes=authority_bytes,
+            catalogue_bytes=catalogue_bytes,
+            repair_bytes=repair_bytes,
+            solver_convergence_bytes=solver_convergence_bytes,
+        )
+        for case_id in case_ids
+    }
+    result = _execute_replayed_cases(
+        requests=requests,
+        case_ids=case_ids,
+        configuration=rendering.EngineConfiguration(),
+        paths=paths,
+        workspace=workspace,
+    )
+    return {
+        **result,
+        "member_content_id": member["member_content_id"],
+    }
+
+
+def execute_diagnostic_cases(
+    *,
+    authority_bytes: bytes,
+    catalogue_bytes: bytes,
+    case_ids: tuple[str, ...],
+    configuration: rendering.EngineConfiguration,
+    receipt_path: Path,
+    repair_bytes: bytes,
+    solver_convergence_bytes: bytes,
+    workspace: Path,
+) -> dict[str, Any]:
+    """Execute one bounded engine diagnostic twice for the anchor member."""
+    _validate_case_ids(case_ids)
+    workspace = workspace.resolve()
+    engine.require_absent(workspace)
+    workspace.mkdir(parents=True)
+    paths = _verified_engine_paths(receipt_path)
+    engine_identity = engine.request_engine_identity(receipt_path)
+    member = request.anchor_member(authority_bytes)
+    requests = {
+        case_id: request.read_request(
+            request.build_member_request(
+                authority_bytes=authority_bytes,
+                catalogue_bytes=catalogue_bytes,
+                case_id=case_id,
+                engine_identity=engine_identity,
+                member=member,
+                repair_bytes=repair_bytes,
+                solver_convergence_bytes=solver_convergence_bytes,
+            ),
+            authority_bytes=authority_bytes,
+            catalogue_bytes=catalogue_bytes,
+            repair_bytes=repair_bytes,
+            solver_convergence_bytes=solver_convergence_bytes,
+        )
+        for case_id in case_ids
+    }
+    result = _execute_replayed_cases(
+        requests=requests,
+        case_ids=case_ids,
+        configuration=configuration,
+        paths=paths,
+        workspace=workspace,
+    )
+    return {
+        **result,
+        "configuration": {
+            "curve_segments": configuration.curve_segments,
+            "report_step_s": configuration.report_step_s,
+            "routing_step_s": configuration.routing_step_s,
+            "rule_step_s": configuration.rule_step_s,
+            "target_mapping": configuration.target_mapping,
+        },
+        "member_content_id": member["member_content_id"],
+    }
 
 
 def execute_catalogue(
@@ -460,75 +700,17 @@ def execute_catalogue(
     catalogue_bytes: bytes,
     receipt_path: Path,
     repair_bytes: bytes,
+    solver_convergence_bytes: bytes,
     workspace: Path,
 ) -> dict[str, Any]:
-    """Execute the ordered W2 catalogue twice and require exact replay evidence."""
-    workspace = workspace.resolve()
-    engine.require_absent(workspace)
-    workspace.mkdir(parents=True)
-    paths = _verified_engine_paths(receipt_path)
-    engine_identity = engine.request_engine_identity(receipt_path)
-    requests = {
-        case_id: request.read_request(
-            request.build_anchor_request(
-                authority_bytes=authority_bytes,
-                catalogue_bytes=catalogue_bytes,
-                case_id=case_id,
-                engine_identity=engine_identity,
-                repair_bytes=repair_bytes,
-            ),
-            authority_bytes=authority_bytes,
-            catalogue_bytes=catalogue_bytes,
-            repair_bytes=repair_bytes,
-        )
-        for case_id in request.CASE_IDS
-    }
-    replays: list[dict[str, Any]] = []
-    for replay_index in range(2):
-        replay_root = workspace / f"replay-{replay_index}"
-        replay_root.mkdir()
-        cases = {
-            case_id: _execute_case_with_paths(
-                requests[case_id],
-                paths=paths,
-                workspace=replay_root / case_id,
-            )
-            for case_id in request.CASE_IDS
-        }
-        replays.append(
-            {
-                "cases": cases,
-                "replay_index": replay_index,
-                "run_set_sha256": _run_set_sha256(cases),
-            }
-        )
-    first = _flatten(replays[0])
-    second = _flatten(replays[1])
-    if len(first) != 23 or len(second) != 23:
-        raise ExecutionError("catalogue did not expand to 23 engine segments")
-    replay = {
-        "normalized_diagnostics_equal": [item["diagnostics"] for item in first]
-        == [item["diagnostics"] for item in second],
-        "raw_binary_outputs_equal": [item["raw_binary_sha256"] for item in first]
-        == [item["raw_binary_sha256"] for item in second],
-        "rendered_inputs_equal": [item["input_sha256"] for item in first]
-        == [item["input_sha256"] for item in second],
-        "run_set_hashes_equal": replays[0]["run_set_sha256"]
-        == replays[1]["run_set_sha256"],
-        "semantic_outputs_equal": [
-            item["semantic_output_sha256"] for item in first
-        ]
-        == [item["semantic_output_sha256"] for item in second],
-        "setting_traces_equal": [item["setting_trace_sha256"] for item in first]
-        == [item["setting_trace_sha256"] for item in second],
-    }
-    if not all(replay.values()):
-        failed = [name for name, passed in replay.items() if not passed]
-        raise ExecutionError(f"catalogue replay differs: {failed!r}")
-    return {
-        "case_ids": list(request.CASE_IDS),
-        "engine_execution_count": 46,
-        "replay": replay,
-        "replays": replays,
-        "segment_count_per_replay": 23,
-    }
+    """Execute the anchor W2 catalogue twice with exact replay evidence."""
+    return execute_member_cases(
+        authority_bytes=authority_bytes,
+        catalogue_bytes=catalogue_bytes,
+        case_ids=request.CASE_IDS,
+        member=request.anchor_member(authority_bytes),
+        receipt_path=receipt_path,
+        repair_bytes=repair_bytes,
+        solver_convergence_bytes=solver_convergence_bytes,
+        workspace=workspace,
+    )

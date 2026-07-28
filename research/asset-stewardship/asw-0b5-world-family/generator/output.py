@@ -214,6 +214,7 @@ def extract_output(
     output_path: Path,
     output_library: Path,
     expected_periods: int,
+    expected_report_step_s: int = 1,
 ) -> dict[str, Any]:
     """Extract the exact repaired-mapping W1 series and metadata by element name."""
     with SwmmOutput(output_path, output_library) as opened:
@@ -225,7 +226,10 @@ def extract_output(
             raise OutputError(f"output API version is {version}, expected 52004")
         if flow_units != 4:
             raise OutputError(f"output flow unit is {flow_units}, expected LPS code 4")
-        if report_step != 1 or period_count != expected_periods:
+        if (
+            report_step != expected_report_step_s
+            or period_count != expected_periods
+        ):
             raise OutputError("output report step or period count differs")
         project_size = opened.project_size()
         if len(project_size) < 3:

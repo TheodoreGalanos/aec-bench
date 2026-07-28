@@ -10,6 +10,7 @@ from decimal import ROUND_HALF_EVEN, Decimal, localcontext
 from typing import Any
 
 from generator import curves
+from repairs import solver_convergence
 
 ALLOWED_SECTIONS = (
     "TITLE",
@@ -32,6 +33,40 @@ class RenderingError(ValueError):
 
 
 @dataclass(frozen=True)
+class EngineConfiguration:
+    """One bounded non-promotable engine diagnostic configuration."""
+
+    curve_segments: int = 32
+    report_step_s: int = 1
+    routing_step_s: int = 1
+    rule_step_s: int = 1
+    target_mapping: str = "base"
+
+    def __post_init__(self) -> None:
+        if self.curve_segments not in {16, 32, 64}:
+            raise RenderingError("diagnostic curve segment count differs")
+        if (
+            self.report_step_s,
+            self.routing_step_s,
+            self.rule_step_s,
+        ) not in {
+            (1, 1, 1),
+            (2, 1, 1),
+            (2, 2, 2),
+        }:
+            raise RenderingError("diagnostic engine step differs")
+        if self.target_mapping not in {
+            "base",
+            "outfall-order-swap",
+            "outfall-target-swap",
+        }:
+            raise RenderingError("diagnostic target mapping differs")
+
+
+DEFAULT_ENGINE_CONFIGURATION = EngineConfiguration()
+
+
+@dataclass(frozen=True)
 class RenderedSegment:
     """One immutable input and curve identity set for a single SWMM execution."""
 
@@ -46,6 +81,8 @@ class RenderedSegment:
     pump_b_engine_curve_sha256: str
     pump_b_original_curve_bytes: bytes
     pump_b_original_curve_sha256: str
+    report_step_s: int
+    routing_step_s: int
     segment_id: str
     selected_pump: str
 
@@ -135,13 +172,20 @@ def _pump_rows(
     *,
     control_mode: str,
     selected_pump: str,
+    target_mapping: str,
     values: dict[str, Decimal],
 ) -> list[str]:
     rows: list[str] = []
-    for pump_id, outfall_id, curve_id, label in (
+    mappings = (
         ("L_PA", "O_HGL_A", "C_EA", "pump-a"),
         ("L_PB", "O_HGL_B", "C_EB", "pump-b"),
-    ):
+    )
+    if target_mapping == "outfall-target-swap":
+        mappings = (
+            ("L_PA", "O_HGL_B", "C_EA", "pump-a"),
+            ("L_PB", "O_HGL_A", "C_EB", "pump-b"),
+        )
+    for pump_id, outfall_id, curve_id, label in mappings:
         status = "OFF"
         startup = Decimal(0)
         shutoff = Decimal(0)
@@ -166,6 +210,7 @@ def _render_segment(
     initial_depth: Decimal,
     pump_a_state: dict[str, str],
     pump_b_state: dict[str, str],
+    configuration: EngineConfiguration,
 ) -> RenderedSegment:
     member = request["member"]
     case = request["case"]
@@ -184,11 +229,13 @@ def _render_segment(
         member,
         obstruction=pump_a_state["obstruction"],
         clearance_loss=pump_a_state["clearance-loss"],
+        segment_count=configuration.curve_segments,
     )
     pump_b_engine_curve = curves.materialize_net_head(
         member,
         obstruction=pump_b_state["obstruction"],
         clearance_loss=pump_b_state["clearance-loss"],
+        segment_count=configuration.curve_segments,
     )
     end_time = _engine_end_time(horizon_s)
     control_mode = case["control_mode"]
@@ -196,6 +243,12 @@ def _render_segment(
         control_mode = "forced-on"
     if control_mode == "forced-off":
         selected_pump = "none"
+    outfall_rows = [
+        f"O_HGL_A {_head(Decimal(0))} FIXED {_head(values['system.z_d'])} NO",
+        f"O_HGL_B {_head(Decimal(0))} FIXED {_head(values['system.z_d'])} NO",
+    ]
+    if configuration.target_mapping == "outfall-order-swap":
+        outfall_rows.reverse()
     sections: list[tuple[str, list[str]]] = [
         (
             "TITLE",
@@ -218,22 +271,24 @@ def _render_segment(
                 "REPORT_START_TIME 00:00:00",
                 "END_DATE 01/01/2002",
                 f"END_TIME {end_time}",
-                "REPORT_STEP 00:00:01",
-                "WET_STEP 00:00:01",
-                "DRY_STEP 00:00:01",
-                "ROUTING_STEP 00:00:01",
-                "RULE_STEP 00:00:01",
+                f"REPORT_STEP {_time(configuration.report_step_s)}",
+                f"WET_STEP {_time(configuration.routing_step_s)}",
+                f"DRY_STEP {_time(configuration.routing_step_s)}",
+                f"ROUTING_STEP {_time(configuration.routing_step_s)}",
+                f"RULE_STEP {_time(configuration.rule_step_s)}",
                 "ALLOW_PONDING NO",
                 "VARIABLE_STEP 0.00",
+                (
+                    "HEAD_TOLERANCE "
+                    f"{solver_convergence.HEAD_TOLERANCE_M}"
+                ),
+                f"MAX_TRIALS {solver_convergence.MAX_TRIALS}",
                 "THREADS 1",
             ],
         ),
         (
             "OUTFALLS",
-            [
-                f"O_HGL_A {_head(Decimal(0))} FIXED {_head(values['system.z_d'])} NO",
-                f"O_HGL_B {_head(Decimal(0))} FIXED {_head(values['system.z_d'])} NO",
-            ],
+            outfall_rows,
         ),
         (
             "STORAGE",
@@ -255,6 +310,7 @@ def _render_segment(
             _pump_rows(
                 control_mode=control_mode,
                 selected_pump=selected_pump,
+                target_mapping=configuration.target_mapping,
                 values=values,
             ),
         ),
@@ -326,6 +382,8 @@ def _render_segment(
         pump_b_original_curve_sha256=curves.curve_sha256(
             pump_b_original_curve
         ),
+        report_step_s=configuration.report_step_s,
+        routing_step_s=configuration.routing_step_s,
         segment_id=segment_id,
         selected_pump=selected_pump,
     )
@@ -335,6 +393,7 @@ def render_case(
     request: dict[str, Any],
     *,
     carried_depth_m: str | None = None,
+    configuration: EngineConfiguration = DEFAULT_ENGINE_CONFIGURATION,
 ) -> tuple[RenderedSegment, ...]:
     """Expand one authorized case into its exact independent SWMM segments."""
     case = request["case"]
@@ -355,6 +414,7 @@ def render_case(
             initial_depth=initial,
             pump_a_state=pump_a_state,
             pump_b_state=pump_b_state,
+            configuration=configuration,
         )
         if carried_depth_m is None:
             return (segment_a,)
@@ -368,6 +428,7 @@ def render_case(
                 initial_depth=Decimal(carried_depth_m),
                 pump_a_state=pump_a_state,
                 pump_b_state=pump_b_state,
+                configuration=configuration,
             ),
         )
     if case["family"] == "progression-checkpoints":
@@ -380,6 +441,7 @@ def render_case(
                 initial_depth=initial,
                 pump_a_state=checkpoint["mechanism_state"],
                 pump_b_state=pump_b_state,
+                configuration=configuration,
             )
             for checkpoint in case["checkpoints"]
         )
@@ -392,5 +454,6 @@ def render_case(
             initial_depth=initial,
             pump_a_state=pump_a_state,
             pump_b_state=pump_b_state,
+            configuration=configuration,
         ),
     )

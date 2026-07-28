@@ -13,7 +13,8 @@
     "w4_protocol_predecessor_sha256": "56502750816efec73ed821ac00ee5ead4ed76ba05e243992f794005980c19b7f"
   },
   "boundaries": {
-    "candidate_numerical_values_allowed_in_correction": false,
+    "candidate_numerical_values_allowed_for_tolerance_or_fitting": false,
+    "candidate_semantic_net_flow_allowed_for_exact_engine_identity": true,
     "fresh_affected_run_required_before_new_decision": true,
     "package_before_family_pass_allowed": false,
     "production_import_allowed": false,
@@ -32,7 +33,7 @@
     "raw-C-R03-cumulative-residual",
     "candidate-engine-and-semantic-bytes",
     "W1-inflow-and-asset-parameters",
-    "existing-signed-quadrature-correction",
+    "independent-W1-quadrature-and-RK4-diagnostics",
     "representation-and-rendering-bounds",
     "unexplained-error-budget",
     "hard-ceilings",
@@ -41,6 +42,7 @@
   ],
   "rules": {
     "C-R02": {
+      "application": "every-report-interval",
       "candidate_rule": "abs(C-R02_raw_residual-E_total)<=T02",
       "first_segment_prior_net_flow_m3_s": "0",
       "forbidden": [
@@ -50,9 +52,16 @@
         "result-edit-in-place",
         "tolerance-widening"
       ],
-      "routing_defect_rule": "E_route=0.5*dt*(Q_net_previous-Q_net_current)",
+      "net_flow_rule": "Q_net,k=Q_in,k-Q_A,k-Q_B,k-Q_overflow,k from exact validated semantic series",
+      "routing_defect_rule": "E_route,k=0.5*dt*(Q_net,k-1-Q_net,k)",
+      "storage_representation_rule": "E_storage,k=A_w*(h_k-h_k-1)-(V_k-V_k-1) from exact C-R01-validated semantic series",
       "rule_id": "asw-0b5.rule.pinned-swmm-trapezoidal-routing-correction.v1",
-      "total_correction_rule": "E_total=E_quad+E_route"
+      "total_correction_rule": "E_total=E_route+E_storage"
+    },
+    "C-R03": {
+      "cumulative_storage_bound_rule": "B_storage_prefix,n=T01(V_0,h_0)+T01(V_n,h_n)+B64(V_n-V_0)",
+      "dependency_rule": "intermediate storage representation terms telescope and cannot be summed as independent errors",
+      "total_budget_rule": "T03,n=B_storage_prefix,n+sum(B_flow,k+B_method,k)"
     }
   },
   "source_evidence": [

@@ -57,6 +57,31 @@ AMENDED_AUTHORITY_HASHES = AUTHORITY_HASHES + (
     ),
 )
 
+CERTIFICATION_AUTHORITY_HASHES = AMENDED_AUTHORITY_HASHES + (
+    (
+        "w4-c-r02-routing-integration-amendment",
+        "d6ada0600f06d5aedd3298882f4e1fdab815eeddc15edc06eb3bc222d60979c5",
+    ),
+    (
+        "solver-convergence-amendment",
+        "583efcc11501bbe4a07dce8de5c50ae2c6c8dd72d9af76a29eff7ebc47f39859",
+    ),
+)
+
+TRAJECTORY_AUTHORITY_HASHES = CERTIFICATION_AUTHORITY_HASHES + (
+    (
+        "control-edge-trajectory-amendment",
+        "161ae844049b6f7956b122827c693b59b68f99adc574af8f54454270f66ccc2a",
+    ),
+)
+
+FAMILY_AUTHORITY_HASHES = TRAJECTORY_AUTHORITY_HASHES + (
+    (
+        "family-member-selection-amendment",
+        "594e507ee5e8e783c80137512bfb918bbc91e5a00692465be0a5c5739b2b1ba5",
+    ),
+)
+
 CASE_IDS = (
     "G00_ZERO_STATIC",
     "G10_CLEAN_A_BASE",
@@ -551,6 +576,12 @@ def read_generation_declaration(raw: bytes) -> dict[str, Any]:
         authority_inventory = AUTHORITY_HASHES
     elif schema_id == "asw-0b5.generation-declaration.v2":
         authority_inventory = AMENDED_AUTHORITY_HASHES
+    elif schema_id == "asw-0b5.generation-declaration.v3":
+        authority_inventory = CERTIFICATION_AUTHORITY_HASHES
+    elif schema_id == "asw-0b5.generation-declaration.v4":
+        authority_inventory = TRAJECTORY_AUTHORITY_HASHES
+    elif schema_id == "asw-0b5.generation-declaration.v5":
+        authority_inventory = FAMILY_AUTHORITY_HASHES
     else:
         _fail("generation.schema", "generation schema identity changed")
     expected_authorities = [{"role": role, "sha256": sha256} for role, sha256 in authority_inventory]

@@ -67,18 +67,22 @@ failure without changing any physical parameter or fitting any tolerance.
 
 ## 3. Corrected signed term
 
-For a report interval of duration `dt`, define independently reconstructed net
-flow:
+For each report interval, define the exact validated semantic net flow:
 
 ```text
 Q_net,k =
-    Q_in,k
-    - Q_pumped,k
-    - Q_overflow,k
+    Q_in,candidate,k
+    - Q_A,candidate,k
+    - Q_B,candidate,k
+    - Q_overflow,candidate,k
 ```
 
-The signed difference between SWMM's trapezoidal increment and the existing
-right-end increment is:
+These values come from the canonical semantic series after the certifier has
+proved their shape, units, source bindings, replay identity, pump sum, off-flow
+rules, and control edges. They are not used to select a tolerance or fit a
+correction.
+
+The source-defined routing term applies to every report interval:
 
 ```text
 E_route,k =
@@ -88,21 +92,57 @@ E_route,k =
 At the start of every fresh SWMM segment:
 
 ```text
-Q_net,0 = 0
+Q_net,engine,0 = 0
 ```
 
-Later values must come from the existing independent W1 inflow, pump, control,
-settling, and overflow reconstruction. Candidate numerical depth, flow,
-volume, continuity, or residual values cannot determine `E_route`.
+The term is an exact evaluation of the pinned engine algorithm. It is not an
+empirical correction.
+
+The W3 raw residual uses depth-derived storage. SWMM also emits the storage
+volume that it advances. After C-R01 proves the exact depth/volume identity,
+retain the signed representation difference:
+
+```text
+E_storage,k =
+    A_w (h_candidate,k - h_candidate,k-1)
+    - (V_candidate,k - V_candidate,k-1)
+```
+
+This term converts the raw depth-derived storage increment to the validated
+engine storage increment. It does not change either candidate series.
 
 The existing raw residual remains unchanged. The corrected comparison becomes:
 
 ```text
-E_total,k = E_quad,k + E_route,k
+E_total,k = E_route,k + E_storage,k
 
 r_corrected,k =
     r_raw,k - E_total,k
 ```
+
+The independently reconstructed W1 quadrature and RK4 traces remain separate
+physical and numerical evidence. They do not enter this engine mass identity
+as a second signed correction. Adding both terms counts ordinary
+trapezoidal change twice.
+
+For C-R03, the storage representation terms are dependency-aware. The
+intermediate storage values cancel in the cumulative balance:
+
+```text
+B_storage,prefix,n =
+    T01(V_candidate,0, h_candidate,0)
+    + T01(V_candidate,n, h_candidate,n)
+    + B64(V_candidate,n - V_candidate,0)
+
+T03,n =
+    B_storage,prefix,n
+    + sum(B_flow,k + B_method,k for k=1...n)
+```
+
+`T01` is the existing C-R01 pointwise storage-identity bound. This keeps the
+depth-to-volume representation uncertainty that C-R01 proves, but the checker
+does not sum the same intermediate storage representation as two independent
+errors at every interval. The cumulative hard ceiling remains unchanged.
 
 The existing outward method allowance, unexplained-error budget, and hard
 ceiling remain mandatory.
@@ -147,7 +187,9 @@ This amendment does not authorize:
 
 - deleting or ignoring the first sample;
 - changing the initial depth or inflow to make the result pass;
-- reading candidate numerical values to fit the correction;
+- using candidate numerical values to select or enlarge a tolerance;
+- using any equation other than the pinned source-defined trapezoidal
+  identity;
 - widening the tolerance or substituting the hard ceiling;
 - relabelling either retained refusal;
 - claiming later mass checks or the family pass;

@@ -12,6 +12,9 @@ B5_ROOT = Path(__file__).parents[2]
 W1_DECLARATION = B5_ROOT / "declarations" / "w1-member-authority.json"
 W2_CATALOGUE = B5_ROOT / "declarations" / "w2-case-catalogue.json"
 W2_W4_REPAIR = B5_ROOT / "declarations" / "w2-w4-engine-mapping-repair.json"
+SOLVER_CONVERGENCE = (
+    B5_ROOT / "declarations" / "solver-convergence-amendment.json"
+)
 
 
 def test_complete_real_catalogue_replays_exactly(tmp_path: Path) -> None:
@@ -23,6 +26,7 @@ def test_complete_real_catalogue_replays_exactly(tmp_path: Path) -> None:
         catalogue_bytes=W2_CATALOGUE.read_bytes(),
         receipt_path=Path(receipt_value),
         repair_bytes=W2_W4_REPAIR.read_bytes(),
+        solver_convergence_bytes=SOLVER_CONVERGENCE.read_bytes(),
         workspace=tmp_path / "catalogue",
     )
 
