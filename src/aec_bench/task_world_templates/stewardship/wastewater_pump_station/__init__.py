@@ -1,6 +1,36 @@
-# ABOUTME: Exposes the certified wastewater pump-station reference-package boundary.
-# ABOUTME: Keeps package validation and models local to the pump-station environment.
+# ABOUTME: Exposes the certified package and physical wastewater pump-station boundary.
+# ABOUTME: Keeps package validation, state, and deterministic physics local to the task.
 
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_kernel import (
+    advance_pump_station,
+    apply_pump_intervention,
+    assess_pump_station,
+    initial_pump_station_state,
+    inspect_pump,
+    pump_station_model_from_package,
+    transfer_duty_to_standby,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
+    ClearanceFinding,
+    ObstructionFinding,
+    OperatingInterval,
+    PumpCapability,
+    PumpCondition,
+    PumpExposure,
+    PumpInspectionObservation,
+    PumpIntervention,
+    PumpInterventionKind,
+    PumpState,
+    PumpStationChangeKind,
+    PumpStationEnvironment,
+    PumpStationHydraulicBalance,
+    PumpStationInputError,
+    PumpStationModel,
+    PumpStationObservation,
+    PumpStationResources,
+    PumpStationResult,
+    PumpStationState,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_models import (
     ReferencePackage,
 )
@@ -16,9 +46,35 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
 __all__ = [
     "EXPECTED_MANIFEST_CONTENT_ID",
     "EXPECTED_PACKAGE_CONTENT_ID",
+    "ClearanceFinding",
+    "ObstructionFinding",
+    "OperatingInterval",
+    "PumpCapability",
+    "PumpCondition",
+    "PumpExposure",
+    "PumpIntervention",
+    "PumpInterventionKind",
+    "PumpInspectionObservation",
+    "PumpState",
+    "PumpStationEnvironment",
+    "PumpStationChangeKind",
+    "PumpStationHydraulicBalance",
+    "PumpStationInputError",
+    "PumpStationModel",
+    "PumpStationObservation",
+    "PumpStationResources",
+    "PumpStationResult",
+    "PumpStationState",
     "REFERENCE_PACKAGE_FILE_NAMES",
     "ReferencePackage",
     "ReferencePackageError",
+    "advance_pump_station",
+    "apply_pump_intervention",
+    "assess_pump_station",
     "bundled_reference_package_root",
+    "initial_pump_station_state",
+    "inspect_pump",
     "load_reference_package",
+    "pump_station_model_from_package",
+    "transfer_duty_to_standby",
 ]
