@@ -68,3 +68,20 @@ claims:
     tags: [schedule, obligation, event-order]
     domain:
       profile: AU-NSW-LH-SYN-SPS-v1
+  - id: C006
+    statement: A fresh actor tenure can receive complete permitted current state and bounded history inside a timed episode without resetting the world or leaking hidden future schedule through actor-visible identity.
+    status: supported
+    falsification_criteria:
+      - Creating a handover changes authoritative station state, clocks, restrictions, obligations, work orders, evidence, or physical condition.
+      - A proposal with a stale base view or information set can execute.
+      - Changing only a hidden future schedule changes the actor view or its identity.
+      - The current view omits a current quantized reading or an active institutional duty.
+    proof:
+      experiments: [E001]
+      evidence: [EV006]
+    dependencies: [C003, C004]
+    provenance: ai_executed
+    tags: [projection, handover, episode, verifier]
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+      implementation_stage: ASW-2A3
