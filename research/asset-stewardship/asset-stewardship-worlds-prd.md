@@ -5,15 +5,15 @@
 
 | Field | Value |
 | --- | --- |
-| Status | ASW-0A accepted; ASW-0B1 is the next permitted stage |
-| Date | 2026-07-27 |
-| Revision | `ASW-PRD-F-2026-07-27` |
-| Content identity | Recorded externally in the [ASW-0A baseline and authority record](asw-0a-baseline-and-authority.md#source-inventory); this document does not carry a self-referential hash |
+| Status | Certified reference package and pure physical kernel merged; ASW-0C charter recorded; stewardship state machine is the next production slice |
+| Date | 2026-07-29 |
+| Revision | `ASW-PRD-G-2026-07-29` |
+| Design revision | Semantic decisions change through reviewed document revisions; this PRD does not require a self-referential or hand-authored content hash |
 | Target repository | `aec-bench` |
-| Target branch/worktree | `feat/asset-stewardship-asw-0a` / `.worktrees/asset-stewardship-asw-0a` |
-| Live implementation audit | 2026-07-27 at PR 24 merge `fdc6215c39add79d4a5549a1bfc058d9baac1b54`, tree `730594c69662369eea08f3e96274dc59778bca38`; clean derivative selected and the inherited documentation-ownership mismatch resolved within the ASW-0A allowlist |
+| Current documentation branch | `feat/wastewater-pump-station-research-charter` |
+| Live implementation status | Reference package reader and pure physical kernel merged through PR 41; actor authority, obligations, work orders, projections, persistence, host execution, and evaluation remain staged |
 | Initial programme boundary | ASW-0 through ASW-4 |
-| Implementation status | Design only; no stewardship-world code exists yet |
+| Implementation status | Asset-local reference-package and physical-kernel production code exists; later stewardship slices remain incomplete |
 | Working programme name | Asset Stewardship Worlds |
 | First study | Obligation continuity under time and handover |
 
@@ -102,6 +102,27 @@ The following remain provisional until ASW-0 or ASW-1 resolves them:
 - exact Python contract names;
 - which conceptual types, if any, earn promotion into the repository-wide `contracts` domain; and
 - whether any shared stewardship runtime is justified after the asset-local vertical slice.
+
+The [ASW-0C research charter](asw-0c-research-charter.md) resolves the first
+action and authority catalogue, continuity treatments, first-study endpoint and
+estimand, logical budgets, trigger policy, event ordering, terminal-liability
+vector, and conclusion rule. Exact production type names remain owned by their
+implementation slices.
+
+### 2.3.1 Design revision during environment development
+
+In this PRD, **freeze** means that a semantic choice is explicit and versioned.
+It does not mean that the developing environment cannot change.
+
+Before outcome-bearing execution, a reviewed revision may change the charter,
+policy, schedule, or implementation. The change must state what changed and why.
+Once confirmatory outcomes begin, a semantic change creates a new study
+generation, and results from the two designs are not pooled.
+
+The PRD and charter do not require hand-authored hashes. Later materialisation
+and run evidence record the realised revisions and artifacts needed for replay.
+Identity is evidence of which design ran; it is not authority to approve that
+design.
 
 ### 2.4 Evidence, rights, and derivation classes
 
@@ -1267,7 +1288,7 @@ Every substage is a separate reviewable change with its own file allowlist, red/
 | ASW-0B3 — Engine roles and research spike | Evaluate candidate engineering software in an isolated, non-authoritative workspace; pin versions/licences/configurations; demonstrate only the calculations and export semantics needed by the profile | Reproducible evidence supports an explicit generator, certifier, runtime, agent-tool, or deferred-live-solver role decision; no spike file or vendor dependency becomes a production contract |
 | ASW-0B4 — Generator and certification protocol | Specify the synthetic family, transformations, engine inputs/outputs, lineage, independent reproduction path, invariants, sensitivities, tolerances, stop rules, and promotion-manifest schema | Generator and certifier can be implemented and reviewed without sharing claim-critical decision logic or relying on hidden data |
 | ASW-0B5 — V3 world-family certification | Generate a small family, replay it from pinned inputs, execute independent certification, reject assumption-fragile members, pass AG-01 through AG-13, and issue the exact promotion manifest | At least one bounded generation reaches V3; all failures remain recorded; V4 remains optional |
-| ASW-0C — Research charter | Freeze the first question, histories, carrier contrasts, endpoint, estimand, minimum meaningful effect, uncertainty, attrition, budgets, and claim ladder | The study can be falsified without changing the world or contract design after outcomes |
+| ASW-0C — Research charter | Record the first question, histories, carrier contrasts, endpoint, estimand, minimum meaningful effect, uncertainty, attrition, budgets, and claim ladder in the [research charter](asw-0c-research-charter.md) | The study can be falsified, while pre-outcome environment changes remain possible through reviewed charter revisions |
 
 ASW-0B3 research may run in parallel with ASW-0A when it remains outside production paths and makes no contract claim. Its outputs cannot enter the repository implementation baseline until ASW-0A, ASW-0B1, and ASW-0B2 are accepted.
 
@@ -1711,26 +1732,26 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | R-28 | Synthetic evidence is reported as empirical or operational authority | Bind every report to profile, generation, V-level, envelope, evidence classes, and explicit non-claims |
 | R-29 | Current-view treatment is made artificially unsafe | Require all actor-visible current restrictions, due obligations, resources, processes, and institutional status in every carrier |
 
-## 22. Open decisions
+## 22. Decision register
 
-| ID | Decision | Required by |
-| --- | --- | --- |
-| OD-01 | Freeze the exact synthetic parameter family and operating envelope within committed profile `AU-NSW-LH-SYN-SPS-v1`. | ASW-0B1/0B4 |
-| OD-02 | Select primary and secondary degradation/failure mechanisms and their independent checks. | ASW-0B4 |
-| OD-03 | Freeze the first action and authority catalogue. | ASW-0C |
-| OD-04 | Choose continuity conditions and information-equivalence policy. | ASW-0C |
-| OD-06 | Freeze the minimal host-execution envelope, capability surface, and sibling world-session execution kind without defining a common world state machine. | ASW-1 |
-| OD-07 | Choose additive `TrialRecord` execution/provenance grouping and the stewardship Harbor import projection. | ASW-1 |
-| OD-08 | Define canonical simultaneous-event ordering. | ASW-1 |
-| OD-09 | Define the initial due-trigger forms and grace/breach semantics. | ASW-1 |
-| OD-10 | Define proposal, conditional authority, execution failure, and cancellation semantics. | ASW-1 |
-| OD-11 | Freeze handover-projection derivation, actor-visible contents, schema/version, content hash, and separately queryable authoritative history. | ASW-1 |
-| OD-12 | Define evaluation-window treatments and terminal-liability vector. | ASW-1 |
-| OD-13 | If the reference scenario exercises a physical terminal event, define its exact behavior while retaining institutional history; otherwise defer the general terminal surface. | ASW-1 or later conditional scope |
-| OD-14 | Approve model-provider budget and repetition plan. | ASW-4 |
-| OD-15 | Define the evidence threshold for proceeding to each conditional expansion. | After ASW-4 |
-| OD-16 | Select and pin the generator/oracle and independent-certification software roles, including disclosed common dependencies. | ASW-0B3 |
-| OD-17 | Freeze the evidence/rights classification and research-to-runtime promotion-manifest shape. | ASW-0B2/0B4 |
+| ID | Decision | Status | Authority or next owner |
+| --- | --- | --- | --- |
+| OD-01 | Define the synthetic parameter family and operating envelope within `AU-NSW-LH-SYN-SPS-v1`. | Resolved | ASW-0B1 and accepted B4 mechanism ruling |
+| OD-02 | Select primary and secondary degradation mechanisms and their independent checks. | Resolved | Obstruction and hydraulic clearance loss in the accepted B4/B5 evidence |
+| OD-03 | Define the first action and authority catalogue. | Resolved | [ASW-0C research charter](asw-0c-research-charter.md#5-first-world-action-catalogue) |
+| OD-04 | Choose continuity conditions and information-equivalence policy. | Resolved | [ASW-0C research charter](asw-0c-research-charter.md#10-matched-histories-and-continuity-treatments) |
+| OD-06 | Define the minimal host-execution envelope, capability surface, and sibling world-session execution kind without a common world state machine. | Conceptually resolved; production promotion deferred | ASW-2C real producer/consumer boundary |
+| OD-07 | Choose additive `TrialRecord` execution/provenance grouping and stewardship Harbor import projection. | Conceptually resolved; production promotion deferred | ASW-2D real exporter/importer boundary |
+| OD-08 | Define canonical simultaneous-event ordering. | Resolved | [ASW-0C research charter](asw-0c-research-charter.md#8-deterministic-event-ordering) |
+| OD-09 | Define initial due-trigger, overdue, and breach semantics. | Resolved | [ASW-0C research charter](asw-0c-research-charter.md#73-trigger-policy) |
+| OD-10 | Define proposal, conditional-authority, execution-failure, and cancellation semantics. | Resolved for the first world | [ASW-0C research charter](asw-0c-research-charter.md#6-authority-scopes-and-separation) |
+| OD-11 | Define handover projection, actor-visible contents, revision, and separately queryable authoritative history. | Open | ASW-2A3 production projection and verifier boundary |
+| OD-12 | Define evaluation-window treatments and terminal-liability vector. | Resolved for the first study | [ASW-0C research charter](asw-0c-research-charter.md#12-budgets-and-evaluation-window) |
+| OD-13 | Define exact behavior for a physical terminal event, or defer the general terminal surface. | Resolved by deferral | The first charter contains no physical terminal event |
+| OD-14 | Approve model-provider identity, token limits, and financial budget. | Open | ASW-4 governance; logical repetitions are already set by ASW-0C |
+| OD-15 | Define the evidence threshold for each conditional expansion. | Open | After ASW-4 |
+| OD-16 | Select generator/oracle and independent-certification software roles. | Resolved | ASW-0B3 through ASW-0B5 |
+| OD-17 | Define evidence/rights classification and research-to-runtime promotion shape. | Resolved | ASW-0B2 through ASW-0B5 |
 
 ## 23. Decision log
 
@@ -1760,9 +1781,18 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | 2026-07-27 | Separate generator, certifier, runtime, agent-tool, and evaluation roles. | Validated software strengthens generation and checking only when common-mode error and self-awarded success are prevented. |
 | 2026-07-27 | Promote only a content-addressed, rights-cleared asset package through an explicit manifest. | Research notes, source documents, solver exports, prototypes, and sealed material must not become runtime dependencies or accidental contracts. |
 | 2026-07-27 | Split research certification into ASW-0B1 through ASW-0B5 and the kernel into ASW-2A0 through ASW-2A3. | Each change now has one authority boundary, a smaller rollback surface, and cumulative tests through its real production path. |
+| 2026-07-29 | Adopt the ASW-0C charter action catalogue, authority separation, study design, event ordering, and obligation policy. | The state machine must implement explicit constructed benchmark rules rather than invent policy while coding. |
+| 2026-07-29 | Retain hydraulic clearance loss as certified secondary physics while omitting clearance repair from the first public action catalogue. | Physical truth and study reachability are separate decisions; narrowing the first study does not rewrite the certified world. |
+| 2026-07-29 | Treat design freezes as reviewed semantic revisions without hand-authored hashes. | The environment can change during development; mixed outcome-bearing designs remain separated through study generations. |
 
 ## 24. Immediate next action
 
-Start **ASW-0B1 — claim and profile freeze**. Freeze `AU-NSW-LH-SYN-SPS-v1`, its fictional Lower Hunter context, two-pump boundary, fixed duty/standby rule, intended benchmark construct, V3 target, and prohibited real-asset, compliance, operational-recommendation, observed-failure-model, and digital-twin claims.
+Review and merge the [ASW-0C research charter](asw-0c-research-charter.md).
+Then start **ASW-2A2 — the asset-local stewardship state machine** from the
+merged baseline.
 
-Do not open ASW-0B2 or any later implementation stage until ASW-0B1 is separately reviewed and accepted.
+That slice implements typed proposals, task-local authority, restrictions,
+obligations, work orders, scheduled processes, canonical event order, and
+transition receipts over the pure physical kernel. It does not add actor
+handover projections, durable storage, CLI, Harbor, `TrialRecord`, provider
+calls, or outcome evaluation.

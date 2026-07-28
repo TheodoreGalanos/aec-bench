@@ -1,0 +1,37 @@
+evidence:
+  - id: EV001
+    kind: note
+    path: evidence/decision-memo.md
+    description: Summary of the supplied programme-decision memo and its proposed action and authority policy.
+    source: /Users/theodoros.galanos/.codex/attachments/cb28b926-b220-41f4-86a5-0109d9d203bc/pasted-text.txt
+    supports: [C001, C003]
+    produced_by: null
+    exact_values_required: false
+    domain: {}
+  - id: EV002
+    kind: note
+    path: evidence/certified-mechanism-note.md
+    description: Repository evidence that clearance loss is the certified secondary mechanism.
+    source: research/asset-stewardship/au-nsw-lh-syn-sps-v1-parameter-family-and-mechanism-rulings.md
+    supports: [C002]
+    produced_by: null
+    exact_values_required: true
+    domain: {}
+  - id: EV003
+    kind: note
+    path: evidence/prd-gap-note.md
+    description: PRD requirements and open decisions that the charter must close.
+    source: research/asset-stewardship/asset-stewardship-worlds-prd.md
+    supports: [C001, C003]
+    produced_by: null
+    exact_values_required: false
+    domain: {}
+  - id: EV004
+    kind: note
+    path: evidence/theo-revision-guidance.md
+    description: Theo's decision that the environment can change during development and does not need charter hashes.
+    source: Current Codex session on 2026-07-29
+    supports: [C004]
+    produced_by: null
+    exact_values_required: false
+    domain: {}
