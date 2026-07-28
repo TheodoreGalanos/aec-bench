@@ -239,6 +239,11 @@ def read_receipt(raw: bytes) -> IdentifiedReceipt:
     )
 
 
+def build_receipt(envelope: dict[str, Any]) -> IdentifiedReceipt:
+    """Canonicalize one explicit envelope and validate it before emission."""
+    return read_receipt(_canonical_bytes(envelope))
+
+
 def _detect_cycles(receipts_by_id: dict[str, IdentifiedReceipt]) -> None:
     visiting: set[str] = set()
     visited: set[str] = set()

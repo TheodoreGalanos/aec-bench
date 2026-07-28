@@ -41,17 +41,22 @@ def _text(value: float) -> str:
     return "0" if rendered in {"", "-0"} else rendered
 
 
-def _summary(values: list[float]) -> dict[str, str | int]:
+def numerical_observation(
+    values: list[float],
+) -> dict[str, str | int | list[str]]:
+    """Retain exact raw W3 residual text and its deterministic compact summary."""
     if not values:
         return {
             "maximum_absolute": "0",
             "sample_count": 0,
             "signed_sum": "0",
+            "values": [],
         }
     return {
         "maximum_absolute": _text(max(abs(value) for value in values)),
         "sample_count": len(values),
         "signed_sum": _text(math.fsum(values)),
+        "values": [_text(value) for value in values],
     }
 
 
@@ -388,22 +393,22 @@ def segment_observations(
         cumulative_mass.append(running_total)
     continuity = float(semantic["diagnostics"]["flow_routing_continuity_error_percent"])
     return {
-        "C-R01": _summary(volume_identity),
-        "C-R02": _summary(mass),
-        "C-R03": _summary(cumulative_mass),
-        "C-R04": _summary(expected_inflow),
-        "C-R05": _summary(pump_sum),
-        "C-R06": _summary(pump_head),
-        "C-R07": _summary(system_head),
-        "C-R08": _summary(root_flow),
+        "C-R01": numerical_observation(volume_identity),
+        "C-R02": numerical_observation(mass),
+        "C-R03": numerical_observation(cumulative_mass),
+        "C-R04": numerical_observation(expected_inflow),
+        "C-R05": numerical_observation(pump_sum),
+        "C-R06": numerical_observation(pump_head),
+        "C-R07": numerical_observation(system_head),
+        "C-R08": numerical_observation(root_flow),
         "C-R09": {
             "minimum_reynolds_margin": (_text(min(reynolds_margin)) if reynolds_margin else "0"),
             "sample_count": len(reynolds_margin),
         },
-        "C-R10": _summary(reference_depth_residual),
-        "C-R11": _summary(reference_flow_residual),
-        "C-R12": _summary(control_edge_residual),
-        "C-R13": _summary(off_flow),
+        "C-R10": numerical_observation(reference_depth_residual),
+        "C-R11": numerical_observation(reference_flow_residual),
+        "C-R12": numerical_observation(control_edge_residual),
+        "C-R13": numerical_observation(off_flow),
         "C-R14": {
             "minimum_running_flow": _text(min(on_flow)) if on_flow else "0",
             "sample_count": len(on_flow),

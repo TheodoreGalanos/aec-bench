@@ -42,6 +42,16 @@ def test_receipt_identity_binds_kind_and_canonical_envelope() -> None:
     assert receipt.receipt_id.islower()
 
 
+def test_builds_canonical_receipt_from_explicit_stage_evidence() -> None:
+    envelope = receipt_envelope(generation_id=GENERATION_ID)
+
+    receipt = receipts.build_receipt(envelope)
+
+    assert receipt.envelope == envelope
+    assert receipt.canonical_bytes == canonical_bytes(envelope)
+    assert receipts.read_receipt(receipt.canonical_bytes) == receipt
+
+
 def test_accepts_connected_stage_ordered_receipt_graph() -> None:
     root = parsed_receipt()
     engine = parsed_receipt(kind="engine-build", parents=(root.receipt_id,))
