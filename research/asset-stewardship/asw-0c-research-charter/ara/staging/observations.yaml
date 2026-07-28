@@ -1,0 +1,7 @@
+observations:
+  - id: O001
+    summary: Provider identity, token limits, and financial approval remain an ASW-4 governance decision.
+    status: open
+    provenance: source
+    domain:
+      constraint: The later provider decision may approve or refuse the study but must not change the logical confirmatory plan after outcomes are observed.

@@ -1,0 +1,56 @@
+claims:
+  - id: C001
+    statement: The first authority catalogue can be an explicit synthetic benchmark policy without claiming utility or industry practice.
+    status: supported
+    falsification_criteria:
+      - The programme presents a constructed authority choice as an empirical or operational rule.
+      - The action is not credible within the certified synthetic physical boundary.
+    proof:
+      experiments: []
+      evidence: [EV001, EV003]
+    dependencies: []
+    provenance: user_revised
+    tags: [authority, synthetic-policy]
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+  - id: C002
+    statement: Hydraulic clearance loss is the certified secondary physical mechanism even when clearance repair is not a first-study public action.
+    status: supported
+    falsification_criteria:
+      - The accepted mechanism ruling or promoted physical member selects a different secondary mechanism.
+    proof:
+      experiments: []
+      evidence: [EV002]
+    dependencies: []
+    provenance: source
+    tags: [physics, mechanism]
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+  - id: C003
+    statement: Proposal, authority, execution, verification acceptance, and administrative closure must remain distinct first-world transitions.
+    status: supported
+    falsification_criteria:
+      - One public action can directly perform and accept its own physical or verification result.
+      - Provisional work-order closure can lift a restriction or fulfil a verification obligation.
+    proof:
+      experiments: []
+      evidence: [EV001, EV003]
+    dependencies: [C001]
+    provenance: user_revised
+    tags: [state-machine, separation]
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+  - id: C004
+    statement: Development design choices can change through reviewed semantic revisions without requiring hand-authored content hashes in the charter.
+    status: supported
+    falsification_criteria:
+      - Different outcome-bearing study revisions are pooled without explicit separation.
+      - A development revision is treated as self-authorising only because of its identity.
+    proof:
+      experiments: []
+      evidence: [EV004]
+    dependencies: []
+    provenance: user
+    tags: [identity, revision]
+    domain:
+      phase: development
