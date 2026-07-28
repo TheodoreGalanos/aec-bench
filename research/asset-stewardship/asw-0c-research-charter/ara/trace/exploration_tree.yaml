@@ -42,9 +42,19 @@ nodes:
   - id: N005
     type: decision
     summary: Use amendable semantic revisions during environment development and defer exact execution identity to the later run boundary.
-    children: []
+    children: [N006]
     also_depends_on: []
     claims_touched: [C004]
     provenance: user
     payload: {}
+    domain: {}
+  - id: N006
+    type: decision
+    summary: Complete inspection before repair access so canonical order does not breach the follow-up before inspection completion.
+    children: []
+    also_depends_on: [N004]
+    claims_touched: [C005]
+    provenance: user_revised
+    payload:
+      result: charter_revised_to_ASW-0C-2
     domain: {}

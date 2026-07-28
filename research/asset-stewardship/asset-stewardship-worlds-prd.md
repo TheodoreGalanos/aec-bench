@@ -7,11 +7,11 @@
 | --- | --- |
 | Status | Certified reference package and pure physical kernel merged; ASW-0C charter recorded; stewardship state machine is the next production slice |
 | Date | 2026-07-29 |
-| Revision | `ASW-PRD-G-2026-07-29` |
+| Revision | `ASW-PRD-H-2026-07-29` |
 | Design revision | Semantic decisions change through reviewed document revisions; this PRD does not require a self-referential or hand-authored content hash |
 | Target repository | `aec-bench` |
-| Current documentation branch | `feat/wastewater-pump-station-research-charter` |
-| Live implementation status | Reference package reader and pure physical kernel merged through PR 41; actor authority, obligations, work orders, projections, persistence, host execution, and evaluation remain staged |
+| Current production branch | `feat/wastewater-pump-station-stewardship-state-machine` |
+| Live implementation status | Reference package reader and pure physical kernel are merged; ASW-2A2 actor authority, obligations, work orders, scheduling, and receipts are in focused implementation |
 | Initial programme boundary | ASW-0 through ASW-4 |
 | Implementation status | Asset-local reference-package and physical-kernel production code exists; later stewardship slices remain incomplete |
 | Working programme name | Asset Stewardship Worlds |
@@ -1784,15 +1784,16 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | 2026-07-29 | Adopt the ASW-0C charter action catalogue, authority separation, study design, event ordering, and obligation policy. | The state machine must implement explicit constructed benchmark rules rather than invent policy while coding. |
 | 2026-07-29 | Retain hydraulic clearance loss as certified secondary physics while omitting clearance repair from the first public action catalogue. | Physical truth and study reachability are separate decisions; narrowing the first study does not rewrite the certified world. |
 | 2026-07-29 | Treat design freezes as reviewed semantic revisions without hand-authored hashes. | The environment can change during development; mixed outcome-bearing designs remain separated through study generations. |
+| 2026-07-29 | Amend ASW-0C to complete inspection before the repair access window. | Starting the `D`-long inspection at `L` would make its completion simultaneous with breach, and canonical order would apply breach first. |
 
 ## 24. Immediate next action
 
-Review and merge the [ASW-0C research charter](asw-0c-research-charter.md).
-Then start **ASW-2A2 — the asset-local stewardship state machine** from the
-merged baseline.
+Complete and review **ASW-2A2 — the asset-local stewardship state machine**
+against [ASW-0C-2](asw-0c-research-charter.md).
 
 That slice implements typed proposals, task-local authority, restrictions,
 obligations, work orders, scheduled processes, canonical event order, and
 transition receipts over the pure physical kernel. It does not add actor
 handover projections, durable storage, CLI, Harbor, `TrialRecord`, provider
-calls, or outcome evaluation.
+calls, or outcome evaluation. After ASW-2A2 merges, start ASW-2A3 projections
+and the task-owned verifier.

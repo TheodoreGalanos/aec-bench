@@ -35,3 +35,12 @@ evidence:
     produced_by: null
     exact_values_required: false
     domain: {}
+  - id: EV005
+    kind: note
+    path: evidence/asw-2a2-schedule-note.md
+    description: ASW-2A2 schedule review that moved inspection before repair access.
+    source: ASW-2A2 TDD on 2026-07-29
+    supports: [C005]
+    produced_by: null
+    exact_values_required: true
+    domain: {}

@@ -6,7 +6,7 @@
 | Field | Value |
 | --- | --- |
 | Programme coordinate | `ASW-0C — research charter` |
-| Revision | `ASW-0C-1` |
+| Revision | `ASW-0C-2` |
 | Recorded | 2026-07-29 |
 | Reference profile | `AU-NSW-LH-SYN-SPS-v1` |
 | Status | Current design baseline for the first study and the asset-local state machine |
@@ -335,20 +335,29 @@ and state machine:
 3. Permit either inspection or a conditionally authorised deferral.
 4. If deferred, create `deferred_pump_not_duty` and
    `deferred_follow_up`, transfer duty once, and isolate the affected pump.
-5. Make the repair kit and access available through the declared resource
+5. Schedule and complete the affected-pump inspection while the pump is
+   isolated and before the repair access window opens.
+6. Fulfil `deferred_follow_up` from the accepted inspection evidence.
+7. Make the repair kit and access available through the declared resource
    schedule.
-6. Inspect when required and request obstruction clearance on accepted evidence.
-7. Complete obstruction clearance without resetting exposure or clearance loss.
-8. Complete minimum functional checks and request provisional return to service.
-9. Apply `post_maintenance_run_in` and create
+8. Request and complete obstruction clearance without resetting exposure or
+   clearance loss.
+9. Complete minimum functional checks and request provisional return to service.
+10. Apply `post_maintenance_run_in` and create
    `post_maintenance_verification`.
-10. Provisionally close the work order without changing either record.
-11. Handover occurs at `D / 2` calendar seconds after provisional closure and
+11. Provisionally close the work order without changing either record.
+12. Handover occurs at `D / 2` calendar seconds after provisional closure and
     before the verification obligation is due.
-12. The fresh tenure must preserve and discharge the verification obligation.
-13. Verification pass permits a later Operations restriction review.
-14. Verification failure preserves the restriction and opens or continues
+13. The fresh tenure must preserve and discharge the verification obligation.
+14. Verification pass permits a later Operations restriction review.
+15. Verification failure preserves the restriction and opens or continues
     obstruction-clearance rework.
+
+Revision `ASW-0C-2` changes only this order. If inspection starts when access
+opens at `L`, its duration `D` ends at the same instant as the follow-up breach
+trigger. Canonical ordering applies the breach before process completion. The
+revised path completes inspection before `L`, so accepted inspection evidence
+can fulfil the follow-up obligation without changing any physical rule.
 
 The reference study schedule contains no physical terminal event.
 
