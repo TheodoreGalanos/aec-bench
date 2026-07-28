@@ -16,6 +16,14 @@ NONCONVERGING_PATTERN = re.compile(
     rb"% of Steps Not Converging\s*:\s*(\d+(?:\.\d+)?)",
     re.IGNORECASE,
 )
+MAXIMUM_TRIALS_PATTERN = re.compile(
+    rb"Maximum Trials\s*\.+\s*(\d+)",
+    re.IGNORECASE,
+)
+HEAD_TOLERANCE_PATTERN = re.compile(
+    rb"Head Tolerance\s*\.+\s*(\d+(?:\.\d+)?)\s+m\b",
+    re.IGNORECASE,
+)
 
 
 class DiagnosticsError(RuntimeError):
@@ -35,12 +43,22 @@ def parse_report_bytes(raw: bytes) -> dict[str, Any]:
         raise DiagnosticsError(f"SWMM report contains {identifiers}")
     continuity = CONTINUITY_PATTERN.findall(raw)
     nonconverging = NONCONVERGING_PATTERN.findall(raw)
+    maximum_trials = MAXIMUM_TRIALS_PATTERN.findall(raw)
+    head_tolerance = HEAD_TOLERANCE_PATTERN.findall(raw)
     completion = b"Analysis begun on:" in raw and b"Analysis ended on:" in raw
     all_steps = b"Convergence obtained at all time steps." in raw
     if len(continuity) != 1:
         raise DiagnosticsError("flow-routing continuity diagnostic is absent or ambiguous")
     if len(nonconverging) != 1:
         raise DiagnosticsError("non-converging-step diagnostic is absent or ambiguous")
+    if len(maximum_trials) != 1:
+        raise DiagnosticsError(
+            "maximum-trials diagnostic is absent or ambiguous"
+        )
+    if len(head_tolerance) != 1:
+        raise DiagnosticsError(
+            "head-tolerance diagnostic is absent or ambiguous"
+        )
     if not completion:
         raise DiagnosticsError("analysis completion marker is absent")
     if not all_steps:
@@ -50,11 +68,25 @@ def parse_report_bytes(raw: bytes) -> dict[str, Any]:
         raise DiagnosticsError(
             f"steps not converging must be exact 0.00, received {nonconverging_text}"
         )
+    maximum_trials_value = int(maximum_trials[0])
+    if maximum_trials_value != 50:
+        raise DiagnosticsError(
+            "maximum trials must be exact 50, received "
+            f"{maximum_trials_value}"
+        )
+    head_tolerance_text = head_tolerance[0].decode("ascii")
+    if head_tolerance_text != "0.000000":
+        raise DiagnosticsError(
+            "reported head tolerance must be exact 0.000000 m, received "
+            f"{head_tolerance_text} m"
+        )
     return {
         "completion_marker": completion,
         "convergence_at_all_steps": all_steps,
         "errors": errors,
         "flow_routing_continuity_error_percent": continuity[0].decode("ascii"),
+        "head_tolerance_reported_m": head_tolerance_text,
+        "maximum_trials": maximum_trials_value,
         "steps_not_converging_percent": nonconverging_text,
         "warnings": warnings,
     }

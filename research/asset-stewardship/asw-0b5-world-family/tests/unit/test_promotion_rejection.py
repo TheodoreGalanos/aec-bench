@@ -2,6 +2,8 @@
 # ABOUTME: Proves a rejected family creates no payload, package, manifest, or false downstream review.
 
 import ast
+import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -27,6 +29,74 @@ def _family_rejection() -> bytes:
     return family.family_result_bytes(result)
 
 
+def _family_pass() -> bytes:
+    value = {
+        "accepted_member_results": {
+            "INT.01.hydraulic-supporting": "1" * 64,
+            "INT.02.hydraulic-opposing": "2" * 64,
+            "INT.03.primary-dominant": "3" * 64,
+        },
+        "analytical_inventory_content_id": "4" * 64,
+        "anchor_result_content_id": "5" * 64,
+        "coverage": {
+            "accepted_interaction_count": 3,
+            "boundary_probe_count": 11,
+            "engine_variant_count": 7,
+            "grid_value_count": 32,
+            "mutation_count": 30,
+            "oat_probe_count": 68,
+            "retained_predecessor_rejection_count": 2,
+        },
+        "engine_result_content_id": "6" * 64,
+        "first_failure": "none",
+        "mutation_result_content_id": "7" * 64,
+        "profile_id": "AU-NSW-LH-SYN-SPS-v1",
+        "promotable": False,
+        "result_content_id": "",
+        "retained_predecessor_rejections": [
+            {
+                "bundle_sha256": "8" * 64,
+                "first_failure": "declared-rejection",
+                "probe_id": "INT.01.hydraulic-supporting",
+            },
+            {
+                "bundle_sha256": "9" * 64,
+                "first_failure": "declared-rejection",
+                "probe_id": "INT.04.secondary-dominant",
+            },
+        ],
+        "schema_id": "asw-0b5.family-decision.v2",
+        "selection_amendment_sha256": "a" * 64,
+        "terminal_state": "family-w4-checks-pass",
+    }
+    payload = {
+        key: child
+        for key, child in value.items()
+        if key != "result_content_id"
+    }
+    canonical = (
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode()
+    value["result_content_id"] = hashlib.sha256(
+        b"asw-0b5.family-decision.v2\0" + canonical
+    ).hexdigest()
+    return (
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode()
+
+
 def test_rejected_family_cannot_authorize_package_proposal(
     tmp_path: Path,
 ) -> None:
@@ -42,6 +112,21 @@ def test_rejected_family_cannot_authorize_package_proposal(
         )
 
     assert not target.exists()
+
+
+def test_passing_family_authorizes_one_absent_package_root(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "package"
+
+    created = package_gate.authorize_package_root(
+        family_result_bytes=_family_pass(),
+        target=target,
+    )
+
+    assert created == target.resolve()
+    assert created.is_dir()
+    assert list(created.iterdir()) == []
 
 
 def test_v3_refusal_is_canonical_immutable_and_names_no_package() -> None:
@@ -69,6 +154,35 @@ def test_v3_refusal_is_canonical_immutable_and_names_no_package() -> None:
     changed["terminal_state"] = "promotion-v3-issued"
     with pytest.raises(decision.PromotionDecisionError, match="identity"):
         decision.promotion_decision_bytes(changed)
+
+
+def test_complete_package_evidence_issues_one_immutable_decision() -> None:
+    result = decision.issue_certified_reference_package(
+        absence_proof_content_id="1" * 64,
+        family_result_bytes=_family_pass(),
+        gate_review_content_id="2" * 64,
+        manifest_content_id="3" * 64,
+        package_conformance_content_id="4" * 64,
+        package_content_id="5" * 64,
+        payload_content_ids=("6" * 64, "7" * 64, "8" * 64),
+        rights_review_content_id="9" * 64,
+        visibility_review_content_id="a" * 64,
+    )
+    raw = decision.promotion_decision_bytes(result)
+
+    assert result["terminal_state"] == "promotion-v3-issued"
+    assert result["first_failure"] == "none"
+    assert result["promotable"] is True
+    assert result["manifest_content_ids"] == ["3" * 64]
+    assert result["package_content_ids"] == ["5" * 64]
+    assert result["payload_content_ids"] == [
+        "6" * 64,
+        "7" * 64,
+        "8" * 64,
+    ]
+    assert result["v3"] == "issued"
+    assert result["v4"] == "unclaimed"
+    assert decision.read_promotion_decision(raw) == result
 
 
 def test_promotion_boundary_imports_no_generation_or_certification_code() -> None:

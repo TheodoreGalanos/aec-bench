@@ -9,6 +9,9 @@ from typing import Any, cast
 from generator import request
 
 BUNDLE_SCHEMA_ID = "asw-0b5.certifier-input-bundle.v1"
+SENSITIVITY_BUNDLE_SCHEMA_ID = (
+    "asw-0b5.certifier-sensitivity-bundle.v1"
+)
 BUNDLE_DOMAIN = b"asw-0b5.certifier-input-bundle.v1\0"
 ROLE_ORDER = (
     "request",
@@ -102,6 +105,127 @@ def build_certifier_bundle(generation_result: dict[str, Any]) -> bytes:
         "promotable": False,
         "replays": serialized_replays,
         "schema_id": BUNDLE_SCHEMA_ID,
+    }
+    return request.canonical_json_bytes(bundle)
+
+
+def build_sensitivity_bundle(
+    generation_result: dict[str, Any],
+    *,
+    case_ids: tuple[str, ...],
+    probe_id: str,
+) -> bytes:
+    """Build a two-replay W3 envelope for one fixed sensitivity case map."""
+    available_case_ids = generation_result.get("case_ids")
+    if (
+        not isinstance(available_case_ids, list)
+        or not case_ids
+        or len(set(case_ids)) != len(case_ids)
+        or [
+            case_id
+            for case_id in request.CASE_IDS
+            if case_id in case_ids
+        ]
+        != list(case_ids)
+        or any(case_id not in available_case_ids for case_id in case_ids)
+        or not isinstance(probe_id, str)
+        or not probe_id
+    ):
+        raise TransferError(
+            "sensitivity case inventory or probe identity differs"
+        )
+    replays = generation_result.get("replays")
+    if not isinstance(replays, list) or len(replays) != 2:
+        raise TransferError(
+            "exactly two sensitivity replays are required"
+        )
+    serialized_replays: list[dict[str, Any]] = []
+    for expected_ordinal, replay_value in enumerate(replays):
+        if (
+            not isinstance(replay_value, dict)
+            or replay_value.get("replay_index") != expected_ordinal
+        ):
+            raise TransferError("sensitivity replay order differs")
+        cases = replay_value.get("cases")
+        if not isinstance(cases, dict):
+            raise TransferError("sensitivity replay cases are absent")
+        serialized_cases: list[dict[str, Any]] = []
+        for case_id in case_ids:
+            case = cases.get(case_id)
+            if not isinstance(case, dict) or case.get("case_id") != case_id:
+                raise TransferError(
+                    f"sensitivity result for {case_id} differs"
+                )
+            request_bytes = case.get("request_bytes")
+            segments = case.get("segments")
+            if (
+                not isinstance(request_bytes, bytes)
+                or not isinstance(segments, list)
+            ):
+                raise TransferError(
+                    f"sensitivity bytes for {case_id} are absent"
+                )
+            serialized_segments: list[dict[str, Any]] = []
+            for segment in segments:
+                curve_bytes = segment.get("curve_bytes")
+                semantic_bytes = segment.get("semantic_bytes")
+                segment_id = segment.get("segment_id")
+                if (
+                    not isinstance(curve_bytes, dict)
+                    or not isinstance(semantic_bytes, bytes)
+                    or not isinstance(segment_id, str)
+                ):
+                    raise TransferError(
+                        "sensitivity segment roles are absent"
+                    )
+                typed_curves = cast(dict[str, bytes], curve_bytes)
+                serialized_segments.append(
+                    {
+                        "roles": [
+                            _role("request", request_bytes),
+                            _role(
+                                "pump-a-original-curve",
+                                typed_curves["pump-a-original"],
+                            ),
+                            _role(
+                                "pump-a-engine-curve",
+                                typed_curves["pump-a-engine"],
+                            ),
+                            _role(
+                                "pump-b-original-curve",
+                                typed_curves["pump-b-original"],
+                            ),
+                            _role(
+                                "pump-b-engine-curve",
+                                typed_curves["pump-b-engine"],
+                            ),
+                            _role(
+                                "semantic-candidate",
+                                semantic_bytes,
+                            ),
+                        ],
+                        "segment_id": segment_id,
+                    }
+                )
+            serialized_cases.append(
+                {
+                    "case_id": case_id,
+                    "segments": serialized_segments,
+                }
+            )
+        serialized_replays.append(
+            {
+                "cases": serialized_cases,
+                "ordinal": expected_ordinal,
+            }
+        )
+    bundle = {
+        "member_content_id": generation_result["member_content_id"],
+        "probe_id": probe_id,
+        "profile_id": request.PROFILE_ID,
+        "promotable": False,
+        "replays": serialized_replays,
+        "schema_id": SENSITIVITY_BUNDLE_SCHEMA_ID,
     }
     return request.canonical_json_bytes(bundle)
 

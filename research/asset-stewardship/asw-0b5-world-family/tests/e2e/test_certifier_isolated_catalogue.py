@@ -17,6 +17,9 @@ B5_ROOT = Path(__file__).parents[2]
 W1_DECLARATION = B5_ROOT / "declarations" / "w1-member-authority.json"
 W2_CATALOGUE = B5_ROOT / "declarations" / "w2-case-catalogue.json"
 W2_W4_REPAIR = B5_ROOT / "declarations" / "w2-w4-engine-mapping-repair.json"
+SOLVER_CONVERGENCE = (
+    B5_ROOT / "declarations" / "solver-convergence-amendment.json"
+)
 
 
 def _mutate_first_semantic(
@@ -64,9 +67,18 @@ def test_complete_real_catalogue_is_certified_without_generator_or_engine(
         catalogue_bytes=W2_CATALOGUE.read_bytes(),
         receipt_path=Path(receipt_value),
         repair_bytes=W2_W4_REPAIR.read_bytes(),
+        solver_convergence_bytes=SOLVER_CONVERGENCE.read_bytes(),
         workspace=tmp_path / "generation",
     )
     bundle = transfer.build_certifier_bundle(generated)
+    sensitivity_bundle = transfer.build_sensitivity_bundle(
+        generated,
+        case_ids=(
+            "G12_CLEAN_ASSESS",
+            "G21_OBSTRUCTION_TRIGGER",
+        ),
+        probe_id="INT.test-subset",
+    )
 
     isolated = tmp_path / "isolated-certifier"
     isolated.mkdir()
@@ -81,6 +93,9 @@ def test_complete_real_catalogue_is_certified_without_generator_or_engine(
     (isolated / "simultaneous.json").write_bytes(
         _mutate_first_semantic(bundle, _make_simultaneous)
     )
+    (isolated / "sensitivity.json").write_bytes(
+        sensitivity_bundle
+    )
     (isolated / "w1.json").write_bytes(W1_DECLARATION.read_bytes())
     script = (
         "from pathlib import Path\n"
@@ -90,6 +105,10 @@ def test_complete_real_catalogue_is_certified_without_generator_or_engine(
         "for name in ('bundle.json','promotable.json','simultaneous.json'):\n"
         " result=certification.certify_bundle(Path(name).read_bytes(),authority)\n"
         " sys.stdout.buffer.write(certification.certification_result_bytes(result))\n"
+        "result=certification.certify_sensitivity_bundle("
+        "Path('sensitivity.json').read_bytes(),authority)\n"
+        "sys.stdout.buffer.write("
+        "certification.certification_result_bytes(result))\n"
     )
     completed = subprocess.run(
         [sys.executable, "-c", script],
@@ -104,7 +123,7 @@ def test_complete_real_catalogue_is_certified_without_generator_or_engine(
     )
 
     assert completed.returncode == 0, completed.stderr.decode("utf-8")
-    result, promotable, simultaneous = [
+    result, promotable, simultaneous, sensitivity = [
         json.loads(line) for line in completed.stdout.splitlines()
     ]
     assert result["terminal_state"] == "quantitative-pending-w4"
@@ -120,6 +139,11 @@ def test_complete_real_catalogue_is_certified_without_generator_or_engine(
     assert promotable["first_failing_stage"] == "semantic-maturity"
     assert simultaneous["terminal_state"] == "exact-reject"
     assert simultaneous["first_failing_stage"] == "observation"
+    assert sensitivity["terminal_state"] == "quantitative-pending-w4"
+    assert [item["case_id"] for item in sensitivity["cases"]] == [
+        "G12_CLEAN_ASSESS",
+        "G21_OBSTRUCTION_TRIGGER",
+    ]
     assert b"/Users/" not in completed.stdout
     assert b"/private/" not in completed.stdout
     assert b'"pass"' not in completed.stdout

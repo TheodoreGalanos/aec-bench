@@ -208,6 +208,8 @@ def validate_semantic_exact(
         "convergence_at_all_steps",
         "errors",
         "flow_routing_continuity_error_percent",
+        "head_tolerance_reported_m",
+        "maximum_trials",
         "steps_not_converging_percent",
         "warnings",
     }:
@@ -218,6 +220,8 @@ def validate_semantic_exact(
         or diagnostics["convergence_at_all_steps"] is not True
         or diagnostics["errors"] != []
         or diagnostics["warnings"] != []
+        or diagnostics["head_tolerance_reported_m"] != "0.000000"
+        or diagnostics["maximum_trials"] != 50
         or diagnostics["steps_not_converging_percent"] != "0.00"
         or not isinstance(continuity, str)
         or CONTINUITY_PATTERN.fullmatch(continuity) is None

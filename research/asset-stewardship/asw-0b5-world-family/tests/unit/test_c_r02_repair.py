@@ -33,13 +33,29 @@ def test_reads_exact_c_r02_routing_integration_amendment() -> None:
         "e31e64bd8f696dcb8edaa5bd2ad76f7286223094703f4181c6a203c03c49b2d0"
     )
     assert value["rules"]["C-R02"]["routing_defect_rule"] == (
-        "E_route=0.5*dt*(Q_net_previous-Q_net_current)"
+        "E_route,k=0.5*dt*(Q_net,k-1-Q_net,k)"
+    )
+    assert value["rules"]["C-R02"]["application"] == (
+        "every-report-interval"
+    )
+    assert value["rules"]["C-R02"]["total_correction_rule"] == (
+        "E_total=E_route+E_storage"
+    )
+    assert value["rules"]["C-R03"]["dependency_rule"] == (
+        "intermediate storage representation terms telescope and "
+        "cannot be summed as independent errors"
     )
     assert (
         value["boundaries"][
-            "candidate_numerical_values_allowed_in_correction"
+            "candidate_numerical_values_allowed_for_tolerance_or_fitting"
         ]
         is False
+    )
+    assert (
+        value["boundaries"][
+            "candidate_semantic_net_flow_allowed_for_exact_engine_identity"
+        ]
+        is True
     )
 
 

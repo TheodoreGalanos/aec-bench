@@ -28,6 +28,8 @@ def test_report_parser_extracts_only_normalized_diagnostics() -> None:
 Flow Routing Continuity
 Continuity Error (%) .....        -0.013
 Most Frequent Nonconverging Nodes
+Maximum Trials ........... 50
+Head Tolerance ........... 0.000000 m
 Convergence obtained at all time steps.
 % of Steps Not Converging   :     0.00
 Analysis begun on: Mon Jul 27 22:15:19 2026
@@ -41,6 +43,8 @@ Analysis ended on: Mon Jul 27 22:15:19 2026
         "convergence_at_all_steps": True,
         "errors": [],
         "flow_routing_continuity_error_percent": "-0.013",
+        "head_tolerance_reported_m": "0.000000",
+        "maximum_trials": 50,
         "steps_not_converging_percent": "0.00",
         "warnings": [],
     }

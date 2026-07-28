@@ -74,9 +74,9 @@ def run_lifecycle(
     report_path: Path,
     output_path: Path,
     solver_library: Path,
-    expected_periods: int,
+    expected_steps: int,
 ) -> SolverRun:
-    """Run one real SWMM segment and record settings after every one-second step."""
+    """Run one real SWMM segment and record settings after each routing step."""
     for role, path in (
         ("input", input_path),
         ("solver library", solver_library),
@@ -86,8 +86,8 @@ def run_lifecycle(
     for role, path in (("report", report_path), ("output", output_path)):
         if path.exists() or path.is_symlink():
             raise SolverError(f"{role} path must be absent")
-    if expected_periods <= 0:
-        raise SolverError("expected period count must be positive")
+    if expected_steps <= 0:
+        raise SolverError("expected solver step count must be positive")
 
     library = ctypes.CDLL(str(solver_library.resolve()))
     _configure(library)
@@ -121,13 +121,13 @@ def run_lifecycle(
             _check(library, code, "swmm_step")
             pump_a.append(_setting(library, pump_a_index, "L_PA"))
             pump_b.append(_setting(library, pump_b_index, "L_PB"))
-            if len(pump_a) > expected_periods:
+            if len(pump_a) > expected_steps:
                 raise SolverError("solver produced more setting instants than expected")
             if elapsed_days.value <= 0.0:
                 break
-        if len(pump_a) != expected_periods:
+        if len(pump_a) != expected_steps:
             raise SolverError(
-                f"solver setting trace has {len(pump_a)} periods, expected {expected_periods}"
+                f"solver setting trace has {len(pump_a)} steps, expected {expected_steps}"
             )
         codes["end"] = int(library.swmm_end())
         _check(library, codes["end"], "swmm_end")

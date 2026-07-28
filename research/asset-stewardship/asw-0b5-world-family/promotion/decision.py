@@ -9,7 +9,9 @@ import re
 from typing import Any, NoReturn, cast
 
 FAMILY_RESULT_DOMAIN = b"asw-0b5.family-decision.v1\0"
+PASSING_FAMILY_RESULT_DOMAIN = b"asw-0b5.family-decision.v2\0"
 PROMOTION_DECISION_DOMAIN = b"asw-0b5.promotion-decision.v1\0"
+ISSUED_DECISION_DOMAIN = b"asw-0b5.promotion-decision.v2\0"
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
 
@@ -75,7 +77,7 @@ def _parse(raw: bytes) -> dict[str, Any]:
 
 def _family_result(raw: bytes) -> dict[str, Any]:
     value = _parse(raw)
-    if set(value) != {
+    rejection_shape = {
         "analytical_inventory_content_id",
         "composition_result_content_id",
         "coverage",
@@ -86,15 +88,40 @@ def _family_result(raw: bytes) -> dict[str, Any]:
         "result_content_id",
         "schema_id",
         "terminal_state",
-    }:
+    }
+    passing_shape = {
+        "accepted_member_results",
+        "analytical_inventory_content_id",
+        "anchor_result_content_id",
+        "coverage",
+        "engine_result_content_id",
+        "first_failure",
+        "mutation_result_content_id",
+        "profile_id",
+        "promotable",
+        "result_content_id",
+        "retained_predecessor_rejections",
+        "schema_id",
+        "selection_amendment_sha256",
+        "terminal_state",
+    }
+    schema_id = value.get("schema_id")
+    if schema_id == "asw-0b5.family-decision.v1":
+        shape = rejection_shape
+        domain = FAMILY_RESULT_DOMAIN
+    elif schema_id == "asw-0b5.family-decision.v2":
+        shape = passing_shape
+        domain = PASSING_FAMILY_RESULT_DOMAIN
+    else:
+        _fail("family result schema differs")
+    if set(value) != shape:
         _fail("family result shape differs")
     payload = {key: child for key, child in value.items() if key != "result_content_id"}
-    expected = hashlib.sha256(FAMILY_RESULT_DOMAIN + _canonical(payload)).hexdigest()
+    expected = hashlib.sha256(domain + _canonical(payload)).hexdigest()
     if value["result_content_id"] != expected:
         _fail("family result identity differs")
     if (
         value["profile_id"] != "AU-NSW-LH-SYN-SPS-v1"
-        or value["schema_id"] != "asw-0b5.family-decision.v1"
         or value["promotable"] is not False
     ):
         _fail("family result authority differs")
@@ -103,7 +130,12 @@ def _family_result(raw: bytes) -> dict[str, Any]:
 
 def _decision_id(value: dict[str, Any]) -> str:
     payload = {key: child for key, child in value.items() if key != "decision_content_id"}
-    return hashlib.sha256(PROMOTION_DECISION_DOMAIN + _canonical(payload)).hexdigest()
+    domain = (
+        ISSUED_DECISION_DOMAIN
+        if value.get("schema_id") == "asw-0b5.promotion-decision.v2"
+        else PROMOTION_DECISION_DOMAIN
+    )
+    return hashlib.sha256(domain + _canonical(payload)).hexdigest()
 
 
 def refuse_v3(family_result_bytes: bytes) -> dict[str, Any]:
@@ -136,6 +168,67 @@ def refuse_v3(family_result_bytes: bytes) -> dict[str, Any]:
     return value
 
 
+def issue_certified_reference_package(
+    *,
+    absence_proof_content_id: str,
+    family_result_bytes: bytes,
+    gate_review_content_id: str,
+    manifest_content_id: str,
+    package_conformance_content_id: str,
+    package_content_id: str,
+    payload_content_ids: tuple[str, str, str],
+    rights_review_content_id: str,
+    visibility_review_content_id: str,
+) -> dict[str, Any]:
+    """Issue one immutable decision for one completely checked package."""
+    family = _family_result(family_result_bytes)
+    if family["terminal_state"] != "family-w4-checks-pass":
+        _fail("issuance requires family-w4-checks-pass")
+    evidence = {
+        "absence_proof_content_id": absence_proof_content_id,
+        "gate_review_content_id": gate_review_content_id,
+        "package_conformance_content_id": (
+            package_conformance_content_id
+        ),
+        "rights_review_content_id": rights_review_content_id,
+        "visibility_review_content_id": (
+            visibility_review_content_id
+        ),
+    }
+    identities = [
+        *evidence.values(),
+        manifest_content_id,
+        package_content_id,
+        *payload_content_ids,
+    ]
+    if (
+        any(
+            not isinstance(identity, str)
+            or SHA256.fullmatch(identity) is None
+            for identity in identities
+        )
+        or len(set(payload_content_ids)) != 3
+    ):
+        _fail("issued package identity differs")
+    value: dict[str, Any] = {
+        "decision_content_id": "",
+        "evidence": evidence,
+        "family_result_content_id": family["result_content_id"],
+        "first_failure": "none",
+        "manifest_content_ids": [manifest_content_id],
+        "package_content_ids": [package_content_id],
+        "payload_content_ids": list(payload_content_ids),
+        "profile_id": "AU-NSW-LH-SYN-SPS-v1",
+        "promotable": True,
+        "schema_id": "asw-0b5.promotion-decision.v2",
+        "terminal_state": "promotion-v3-issued",
+        "v3": "issued",
+        "v4": "unclaimed",
+    }
+    value["decision_content_id"] = _decision_id(value)
+    return value
+
+
 def promotion_decision_bytes(value: dict[str, Any]) -> bytes:
     """Return immutable canonical V3-decision bytes."""
     if value.get("decision_content_id") != _decision_id(value):
@@ -144,24 +237,42 @@ def promotion_decision_bytes(value: dict[str, Any]) -> bytes:
 
 
 def read_promotion_decision(raw: bytes) -> dict[str, Any]:
-    """Independently reload one exact rejected promotion decision."""
+    """Independently reload one exact refusal or issued decision."""
     value = _parse(raw)
     if value.get("decision_content_id") != _decision_id(value):
         _fail("promotion decision identity differs")
+    if value.get("schema_id") == "asw-0b5.promotion-decision.v1":
+        if (
+            value.get("terminal_state")
+            != "promotion-generation-reject"
+            or value.get("promotable") is not False
+            or value.get("v3") != "refused"
+            or value.get("v4") != "unclaimed"
+            or any(
+                value.get(field) != []
+                for field in (
+                    "manifest_content_ids",
+                    "package_content_ids",
+                    "payload_content_ids",
+                )
+            )
+        ):
+            _fail("promotion refusal shape or state differs")
+        return value
     if (
         value.get("schema_id") != "asw-0b5.promotion-decision.v1"
-        or value.get("terminal_state") != "promotion-generation-reject"
-        or value.get("promotable") is not False
-        or value.get("v3") != "refused"
-        or value.get("v4") != "unclaimed"
-        or any(
-            value.get(field) != []
-            for field in (
-                "manifest_content_ids",
-                "package_content_ids",
-                "payload_content_ids",
-            )
-        )
+        and value.get("schema_id")
+        != "asw-0b5.promotion-decision.v2"
     ):
-        _fail("promotion refusal shape or state differs")
+        _fail("promotion decision schema differs")
+    if (
+        value.get("terminal_state") != "promotion-v3-issued"
+        or value.get("promotable") is not True
+        or value.get("v3") != "issued"
+        or value.get("v4") != "unclaimed"
+        or len(value.get("manifest_content_ids", [])) != 1
+        or len(value.get("package_content_ids", [])) != 1
+        or len(value.get("payload_content_ids", [])) != 3
+    ):
+        _fail("issued promotion shape or state differs")
     return value

@@ -17,12 +17,33 @@ from generator import boundary as generator_boundary
 from generator import engine, execution, request, transfer
 from lineage import receipts
 from promotion import decision
-from sensitivity import amendment, catalogue, family, successor
+from repairs import c_r02, control_edge_trajectory, solver_convergence
+from sensitivity import (
+    amendment,
+    catalogue,
+    family,
+    selection_amendment,
+    successor,
+)
 
 B5_ROOT = Path(__file__).resolve().parent
 W1_DECLARATION = B5_ROOT / "declarations" / "w1-member-authority.json"
 W2_CATALOGUE = B5_ROOT / "declarations" / "w2-case-catalogue.json"
 W2_W4_REPAIR = B5_ROOT / "declarations" / "w2-w4-engine-mapping-repair.json"
+C_R02_AMENDMENT = (
+    B5_ROOT / "declarations" / "w4-c-r02-routing-integration-amendment.json"
+)
+SOLVER_CONVERGENCE = (
+    B5_ROOT / "declarations" / "solver-convergence-amendment.json"
+)
+CONTROL_EDGE_AMENDMENT = (
+    B5_ROOT / "declarations" / "control-edge-trajectory-amendment.json"
+)
+FAMILY_SELECTION_AMENDMENT = (
+    B5_ROOT
+    / "declarations"
+    / "family-member-selection-amendment.json"
+)
 C_R07_AMENDMENT = (
     B5_ROOT / "declarations" / "w4-c-r07-composition-amendment.json"
 )
@@ -114,10 +135,14 @@ def _isolated_certification(
 def build_generation_declaration(
     *,
     authority_bytes: bytes,
+    c_r02_amendment_bytes: bytes,
     c_r07_amendment_bytes: bytes,
     c_r08_amendment_bytes: bytes,
     catalogue_bytes: bytes,
+    control_edge_amendment_bytes: bytes,
+    family_selection_amendment_bytes: bytes,
     repair_bytes: bytes,
+    solver_convergence_bytes: bytes,
     engine_identity: dict[str, str],
     generator_source_id: str,
     certifier_source_id: str,
@@ -126,6 +151,12 @@ def build_generation_declaration(
     """Freeze one exact W3-W5 attempt before engine execution."""
     amendment.read_c_r07_amendment(c_r07_amendment_bytes)
     amendment.read_amendment(c_r08_amendment_bytes)
+    c_r02.read_amendment(c_r02_amendment_bytes)
+    control_edge_trajectory.read_amendment(
+        control_edge_amendment_bytes
+    )
+    selection_amendment.read(family_selection_amendment_bytes)
+    solver_convergence.read_amendment(solver_convergence_bytes)
     requests = [
         request.read_request(
             request.build_anchor_request(
@@ -134,10 +165,12 @@ def build_generation_declaration(
                 case_id=case_id,
                 engine_identity=engine_identity,
                 repair_bytes=repair_bytes,
+                solver_convergence_bytes=solver_convergence_bytes,
             ),
             authority_bytes=authority_bytes,
             catalogue_bytes=catalogue_bytes,
             repair_bytes=repair_bytes,
+            solver_convergence_bytes=solver_convergence_bytes,
         )
         for case_id in request.CASE_IDS
     ]
@@ -150,7 +183,15 @@ def build_generation_declaration(
     )
     generator_configuration = _digest(
         b"asw-0b5.generator-configuration.v1\0",
-        (request.MAPPING_REPAIR_SHA256 + catalogue.PROBE_CATALOGUE_SHA256 + sensitivity_source_id).encode("ascii"),
+        (
+            request.MAPPING_REPAIR_SHA256
+            + catalogue.PROBE_CATALOGUE_SHA256
+            + c_r02.AMENDMENT_SHA256
+            + solver_convergence.AMENDMENT_SHA256
+            + control_edge_trajectory.AMENDMENT_SHA256
+            + selection_amendment.AMENDMENT_SHA256
+            + sensitivity_source_id
+        ).encode("ascii"),
     )
     generator_dependencies = _digest(
         b"asw-0b5.generator-dependencies.v1\0",
@@ -167,7 +208,7 @@ def build_generation_declaration(
     declaration: dict[str, Any] = {
         "authorities": [
             {"role": role, "sha256": sha256}
-            for role, sha256 in generator_boundary.AMENDED_AUTHORITY_HASHES
+            for role, sha256 in generator_boundary.FAMILY_AUTHORITY_HASHES
         ],
         "cases": [
             {
@@ -205,7 +246,7 @@ def build_generation_declaration(
             "ordinals": [0, 1],
             "workspace_policy": "fresh-absent-root",
         },
-        "schema_id": "asw-0b5.generation-declaration.v2",
+        "schema_id": "asw-0b5.generation-declaration.v5",
         "w4_probe_catalogue_content_id": catalogue.PROBE_CATALOGUE_SHA256,
     }
     raw = generator_boundary.canonical_json_bytes(declaration)
@@ -227,8 +268,8 @@ def _receipt(
     return receipts.build_receipt(
         {
             "authorities": [
-                {"role": role, "sha256": sha256}
-                for role, sha256 in generator_boundary.AMENDED_AUTHORITY_HASHES
+            {"role": role, "sha256": sha256}
+            for role, sha256 in generator_boundary.FAMILY_AUTHORITY_HASHES
             ],
             "first_failure": {
                 "code": failure_code,
@@ -365,6 +406,12 @@ def execute(
     authority_bytes = W1_DECLARATION.read_bytes()
     catalogue_bytes = W2_CATALOGUE.read_bytes()
     repair_bytes = W2_W4_REPAIR.read_bytes()
+    c_r02_amendment_bytes = C_R02_AMENDMENT.read_bytes()
+    solver_convergence_bytes = SOLVER_CONVERGENCE.read_bytes()
+    control_edge_amendment_bytes = CONTROL_EDGE_AMENDMENT.read_bytes()
+    family_selection_amendment_bytes = (
+        FAMILY_SELECTION_AMENDMENT.read_bytes()
+    )
     engine_identity = engine.request_engine_identity(engine_receipt)
     generator_source_id = generator_boundary.capture_source_identity(
         B5_ROOT,
@@ -377,10 +424,16 @@ def execute(
     sensitivity_source_id = _sensitivity_source_id()
     generation_bytes = build_generation_declaration(
         authority_bytes=authority_bytes,
+        c_r02_amendment_bytes=c_r02_amendment_bytes,
         c_r07_amendment_bytes=C_R07_AMENDMENT.read_bytes(),
         c_r08_amendment_bytes=W4_AMENDMENT.read_bytes(),
         catalogue_bytes=catalogue_bytes,
+        control_edge_amendment_bytes=control_edge_amendment_bytes,
+        family_selection_amendment_bytes=(
+            family_selection_amendment_bytes
+        ),
         repair_bytes=repair_bytes,
+        solver_convergence_bytes=solver_convergence_bytes,
         engine_identity=engine_identity,
         generator_source_id=generator_source_id,
         certifier_source_id=certifier_source_id,
@@ -398,6 +451,7 @@ def execute(
         catalogue_bytes=catalogue_bytes,
         receipt_path=engine_receipt,
         repair_bytes=repair_bytes,
+        solver_convergence_bytes=solver_convergence_bytes,
         workspace=output_root / "raw-generation",
     )
     bundle_bytes = transfer.build_certifier_bundle(generated)
@@ -416,12 +470,14 @@ def execute(
         certifier_result_bytes,
     )
 
-    composition_result = successor.compose_generation(
+    composition_result = successor.compose_predecessor_generation(
         bundle_bytes=bundle_bytes,
         certifier_result_bytes=certifier_result_bytes,
     )
-    composition_bytes = successor.composition_result_bytes(
-        composition_result
+    composition_bytes = (
+        successor.predecessor_composition_result_bytes(
+            composition_result
+        )
     )
     _write_absent(
         compact / "w4-composition-result.json",

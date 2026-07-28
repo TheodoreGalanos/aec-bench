@@ -11,6 +11,9 @@ B5_ROOT = Path(__file__).parents[2]
 W1_DECLARATION = B5_ROOT / "declarations" / "w1-member-authority.json"
 W2_CATALOGUE = B5_ROOT / "declarations" / "w2-case-catalogue.json"
 W2_W4_REPAIR = B5_ROOT / "declarations" / "w2-w4-engine-mapping-repair.json"
+SOLVER_CONVERGENCE = (
+    B5_ROOT / "declarations" / "solver-convergence-amendment.json"
+)
 ENGINE_IDENTITY = {
     "build_receipt_sha256": "1" * 64,
     "commit": "7952ca837988b1c32f791812eccc9fd64547e093",
@@ -18,7 +21,7 @@ ENGINE_IDENTITY = {
     "output_library_sha256": "3" * 64,
     "patch_sha256": "522fa1f285b27bfdd614eae79a841e5b9a7892573521d032f78fdbd281dba894",
     "repository": "https://github.com/USEPA/Stormwater-Management-Model.git",
-    "settings_id": "asw-0b5.swmm-settings.v2",
+    "settings_id": "asw-0b5.swmm-settings.v3",
     "solver_library_sha256": "4" * 64,
     "version": "5.2.4",
 }
@@ -31,6 +34,7 @@ def build(case_id: str) -> dict[str, object]:
         case_id=case_id,
         engine_identity=ENGINE_IDENTITY,
         repair_bytes=W2_W4_REPAIR.read_bytes(),
+        solver_convergence_bytes=SOLVER_CONVERGENCE.read_bytes(),
     )
     return request.read_request(raw)
 
@@ -50,6 +54,8 @@ def test_forced_case_renders_exact_sections_settings_elements_and_curves() -> No
     assert "FORCE_MAIN_EQUATION D-W" in text
     assert "ROUTING_STEP 00:00:01" in text
     assert "REPORT_STEP 00:00:01" in text
+    assert "HEAD_TOLERANCE 0.0000001" in text
+    assert "MAX_TRIALS 50" in text
     assert "END_TIME 0.03347222222222222222222222222222222" in text
     assert "THREADS 1" in text
     assert "WW_B4" in text
@@ -123,3 +129,63 @@ def test_same_request_renders_byte_identically() -> None:
     )
     assert first.pump_a_engine_curve_sha256 == second.pump_a_engine_curve_sha256
     assert first.pump_b_engine_curve_sha256 == second.pump_b_engine_curve_sha256
+
+
+def test_diagnostic_configuration_changes_only_declared_engine_inputs() -> None:
+    case = build("G21_OBSTRUCTION_TRIGGER")
+
+    coarse = rendering.render_case(
+        case,
+        configuration=rendering.EngineConfiguration(
+            curve_segments=16,
+        ),
+    )[0]
+    report_two = rendering.render_case(
+        case,
+        configuration=rendering.EngineConfiguration(
+            report_step_s=2,
+        ),
+    )[0]
+    route_two = rendering.render_case(
+        case,
+        configuration=rendering.EngineConfiguration(
+            report_step_s=2,
+            routing_step_s=2,
+            rule_step_s=2,
+        ),
+    )[0]
+
+    assert sum(
+        line.startswith(b"C_EA ")
+        for line in coarse.input_bytes.splitlines()
+    ) == 17
+    assert b"REPORT_STEP 00:00:02" in report_two.input_bytes
+    assert b"ROUTING_STEP 00:00:01" in report_two.input_bytes
+    assert b"WET_STEP 00:00:01" in report_two.input_bytes
+    assert b"REPORT_STEP 00:00:02" in route_two.input_bytes
+    assert b"ROUTING_STEP 00:00:02" in route_two.input_bytes
+    assert b"WET_STEP 00:00:02" in route_two.input_bytes
+    assert report_two.report_step_s == 2
+    assert route_two.routing_step_s == 2
+
+
+def test_outfall_diagnostics_preserve_names_but_change_declared_mapping() -> None:
+    case = build("G21_OBSTRUCTION_TRIGGER")
+
+    order_swap = rendering.render_case(
+        case,
+        configuration=rendering.EngineConfiguration(
+            target_mapping="outfall-order-swap",
+        ),
+    )[0].input_bytes
+    target_swap = rendering.render_case(
+        case,
+        configuration=rendering.EngineConfiguration(
+            target_mapping="outfall-target-swap",
+        ),
+    )[0].input_bytes
+
+    assert order_swap.index(b"O_HGL_B ") < order_swap.index(b"O_HGL_A ")
+    assert b"L_PA WW_B4 O_HGL_A C_EA ON" in order_swap
+    assert b"L_PA WW_B4 O_HGL_B C_EA ON" in target_swap
+    assert b"L_PB WW_B4 O_HGL_A C_EB OFF" in target_swap

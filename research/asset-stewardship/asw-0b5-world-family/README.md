@@ -1,39 +1,37 @@
-# ABOUTME: Defines the research-only B5-W0 through B5-W5 implementation and immutable V3 refusals.
-# ABOUTME: Keeps generator, certification, sensitivity, lineage, and decision evidence outside production contracts.
+# ABOUTME: Defines the research-only world-family implementation and its certified reference package.
+# ABOUTME: Keeps generation, certification, sensitivity, promotion, and evidence outside production contracts.
 
 # ASW-0B5 world-family research implementation
 
-This directory contains the research implementation of `B5-W0` through
-`B5-W5` for `AU-NSW-LH-SYN-SPS-v1`. W0 turns the accepted B4 authority
-chain into an executable byte and lineage boundary. W1 validates canonical requests,
-materializes the repaired W1 hydraulic mapping, executes the pinned real SWMM
-engine, extracts allowlisted semantic candidates, and proves exact replay.
-W2 transfers only permitted canonical bytes into a separately executable
-certifier, reconstructs the W1 catalogue and physics independently, evaluates
-exact and qualitative invariants, and emits threshold-free residual
-observations. The approved pre-W3 repair records three rules falsified by
-those observations and the real engine before quantitative composition
-begins. W3 independently composes the preregistered W4 numerical budgets and
-freezes the complete analytical probe inventory. The predecessor generation
-stops at its C-R08 hard-ceiling conflict. The amended successor proves C-R07
-and C-R08, then stops at the first C-R02 corrected mass residual. W4 enforces
-the package gate and emits each research receipt graph. W5 issues immutable
-V3 refusals and no payload, package, or manifest. These stages change no W1
-member, W2 case, generator request, curve, or semantic candidate bytes.
+This directory contains the research implementation for
+`AU-NSW-LH-SYN-SPS-v1`. It validates canonical requests, runs the pinned real
+SWMM engine, transfers only permitted bytes to an independent certifier,
+checks the physical family, tests engine settings and deliberately invalid
+inputs, and applies the promotion gates.
 
-Both executed decisions are `promotion-generation-reject`; V3 is refused and
-V4 is unclaimed. The predecessor and amended successor decisions remain
-immutable. Theo approved versioned C-R07 and C-R08 amendments; both compose in
-the successor generation, whose first ordered failure is instead
-`C-R02-corrected-residual` at G10 report second 1. That failure has since been
-traced to the checker omitting SWMM's trapezoidal first-step routing rule.
-Theo approved a third, unbound amendment that corrects the signed comparison
-without changing the failed result or its tolerance. No accepted family
-member, package, manifest, runtime adapter, agent tool, or scenario exists.
-W2's only valid non-rejection state remains
-`quantitative-pending-w4`; it cannot emit pass, acceptance, certification,
-promotion, or V3 claims. Nothing under this directory may be imported by
-`src/aec_bench`, and production behavior must continue to work with
+The final fresh generation passed:
+
+- all 24 anchor physical checks;
+- three approved non-anchor family members;
+- all seven engine-setting variants;
+- all 30 deliberately invalid inputs;
+- all 13 construct-validity gates;
+- rights and visibility review;
+- two byte-identical package builds;
+- package conformance; and
+- a package-only absence check with the research code, SWMM, and network
+  unavailable.
+
+The issued certified reference package is under
+`results/certified-reference/package`. The compact certification record is
+under `results/certified-reference/certification-record`. Earlier rejected
+generations remain unchanged as evidence of the defects that were found and
+repaired. The final formal maturity is V3, which means a construct-valid
+synthetic benchmark package. V4 remains unclaimed.
+
+This result does not create a production runtime, agent tool, stewardship
+scenario, evaluation, or score. Nothing under this directory may be imported
+by `src/aec_bench`, and production behavior must continue to work with
 `research/` physically absent.
 
 ## Exact scope
@@ -137,14 +135,44 @@ The executed amended successor additionally contains:
 - one distinct connected receipt DAG and immutable V3 refusal; and
 - no execution of later family, ENG, package, or promotion-review stages.
 
+The final fresh generation additionally contains:
+
+- passing anchor evidence for all 24 physical checks;
+- three accepted non-anchor members with the required supporting, opposing,
+  and primary-dominant relationships;
+- passing evidence for all seven engine-setting variants;
+- rejection evidence for all 30 deliberately invalid inputs;
+- passing construct-validity, rights, and visibility reviews;
+- one connected 13-receipt certification graph;
+- two byte-identical package builds and an independent package checker;
+- a package-only absence proof; and
+- one issued V3 promotion decision.
+
 The implementation does not:
 
 - fit the C-R02, C-R07, or C-R08 budgets or mutate either failed result;
-- execute sibling engine variants after the anchor's ordered rejection;
-- create a promoted package or manifest;
 - define actor-visible fields, stewardship actions, authority, obligations,
   handover, outcomes, evaluation, or scoring; or
 - establish a production filename, module, schema, or application interface.
+
+## Certified reference package
+
+The issued package contains exactly:
+
+- `physical-member.json`;
+- `physical-reference-checks.json`;
+- `promotion-manifest.json`; and
+- `public-profile.json`.
+
+Its generation identity is
+`738bc2b31f40ae7ea7831a54826c10c7e1f8084e64a6c0e0883bc6290aa84c8e`.
+Its package content identity is
+`642da8bdfad63d7324e0c5886f1f8f3866c9a6bd25f165fa2a5937d68e8a5e16`.
+
+The package excludes raw SWMM files, complete trajectories, rejected
+candidates, research code, agent actions, scores, obligations, and
+institutional fields. It remains a research artifact until a separate
+production reader accepts it through an explicit production contract.
 
 ## Authority and declaration
 
@@ -223,6 +251,10 @@ Run only this research slice:
 
 ```sh
 ASW_B5_ENGINE_RECEIPT=/absolute/path/to/engine-build-receipt.json \
+ASW_B5_RETAINED_BUNDLE=/absolute/path/to/retained-certifier-input.json \
+ASW_B5_RETAINED_CERTIFIER_RESULT=/absolute/path/to/retained-certifier-result.json \
+ASW_B5_FRESH_BUNDLE=/absolute/path/to/fresh-certifier-input.json \
+ASW_B5_FRESH_CERTIFIER_RESULT=/absolute/path/to/fresh-certifier-result.json \
 PYTHONPATH=research/asset-stewardship/asw-0b5-world-family:research/asset-stewardship/asw-0b5-world-family/tests \
   uv run pytest \
   research/asset-stewardship/asw-0b5-world-family/tests -q
@@ -232,21 +264,27 @@ Static checks are similarly scoped:
 
 ```sh
 uv run ruff check \
+  research/asset-stewardship/asw-0b5-world-family/adversarial \
   research/asset-stewardship/asw-0b5-world-family/generator \
   research/asset-stewardship/asw-0b5-world-family/certifier \
   research/asset-stewardship/asw-0b5-world-family/lineage \
+  research/asset-stewardship/asw-0b5-world-family/repairs \
   research/asset-stewardship/asw-0b5-world-family/sensitivity \
   research/asset-stewardship/asw-0b5-world-family/promotion \
+  research/asset-stewardship/asw-0b5-world-family/run_reference_certification.py \
   research/asset-stewardship/asw-0b5-world-family/run_w3_w5.py \
   research/asset-stewardship/asw-0b5-world-family/tests
 
 MYPYPATH=research/asset-stewardship/asw-0b5-world-family \
   uv run mypy --strict --explicit-package-bases \
+  research/asset-stewardship/asw-0b5-world-family/adversarial \
   research/asset-stewardship/asw-0b5-world-family/generator \
   research/asset-stewardship/asw-0b5-world-family/certifier \
   research/asset-stewardship/asw-0b5-world-family/lineage \
+  research/asset-stewardship/asw-0b5-world-family/repairs \
   research/asset-stewardship/asw-0b5-world-family/sensitivity \
   research/asset-stewardship/asw-0b5-world-family/promotion \
+  research/asset-stewardship/asw-0b5-world-family/run_reference_certification.py \
   research/asset-stewardship/asw-0b5-world-family/run_w3_w5.py
 ```
 
@@ -255,21 +293,20 @@ lifecycle, and the real official output API. They contain no mock engine,
 fabricated SWMM result, fake certification pass, skipped real-engine gate, or
 disabled boundary.
 
-Run one fresh W3-W5 attempt into an absent local root:
+Run one fresh complete certification into an absent local root:
 
 ```sh
 PYTHONPATH=research/asset-stewardship/asw-0b5-world-family \
   uv run python \
-  research/asset-stewardship/asw-0b5-world-family/run_w3_w5.py \
+  research/asset-stewardship/asw-0b5-world-family/run_reference_certification.py \
   --engine-receipt /absolute/path/to/engine-build-receipt.json \
   --output /an/absent/local/run-root
 ```
 
 ## Next allowed step
 
-Bind the approved C-R02 routing-integration amendment into a later successor
-generation and run the affected W4/W5 path. The run must continue to the first
-genuine later failure or complete the family; this focused repair does not
-pre-approve either outcome. Silent first-sample deletion, fitted tolerance,
-production integration, package construction before family pass, ASW-0C, and
-ASW-2 remain blocked.
+Start the separate production integration plan with a package reader under
+`src/aec_bench`. The production reader must depend only on the four-file
+package contract. It must not import this research implementation or require
+SWMM, private trajectories, rejected candidates, or the compact certification
+record at runtime.

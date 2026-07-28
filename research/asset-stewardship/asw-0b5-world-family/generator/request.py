@@ -11,19 +11,20 @@ from pathlib import Path
 from typing import Any, NoReturn, cast
 
 from generator import boundary
+from repairs import solver_convergence
 
 PROFILE_ID = boundary.PROFILE_ID
 CASE_IDS = boundary.CASE_IDS
 GENERATOR_PROTOCOL_ID = "asw-0b5.generator-protocol.v3"
 CATALOGUE_SCHEMA_ID = "asw-0b5.w2-case-catalogue.v1"
-REQUEST_SCHEMA_ID = "asw-0b5.generator-request.v1"
+REQUEST_SCHEMA_ID = "asw-0b5.generator-request.v2"
 MAPPING_REPAIR_SCHEMA_ID = "asw-0b5.engine-mapping-repair.v1"
 MAPPING_REPAIR_SHA256 = (
     "862ef1f5fc70d882d156c0ef9842bb565301344725d2206edfa49c10910576ca"
 )
 MEMBER_DOMAIN = b"asw-0b4.member.v1\0"
 CASE_DOMAIN = b"asw-0b4.case.v1\0"
-REQUEST_DOMAIN = b"asw-0b4.generator-request.v1\0"
+REQUEST_DOMAIN = b"asw-0b5.generator-request.v2\0"
 STATE_DOMAIN = b"asw-0b4.pump-state.v1\0"
 ASSIGNMENT_DOMAIN = b"asw-0b4.duty-assignment.v1\0"
 HASH_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
@@ -60,7 +61,7 @@ ENGINE_EXPECTED = {
     "commit": "7952ca837988b1c32f791812eccc9fd64547e093",
     "patch_sha256": "522fa1f285b27bfdd614eae79a841e5b9a7892573521d032f78fdbd281dba894",
     "repository": "https://github.com/USEPA/Stormwater-Management-Model.git",
-    "settings_id": "asw-0b5.swmm-settings.v2",
+    "settings_id": solver_convergence.ENGINE_SETTINGS_ID,
     "version": "5.2.4",
 }
 
@@ -160,6 +161,14 @@ def _default_mapping_repair_path() -> Path:
         Path(__file__).resolve().parents[1]
         / "declarations"
         / "w2-w4-engine-mapping-repair.json"
+    )
+
+
+def _default_solver_convergence_path() -> Path:
+    return (
+        Path(__file__).resolve().parents[1]
+        / "declarations"
+        / "solver-convergence-amendment.json"
     )
 
 
@@ -475,22 +484,33 @@ def _engine_identity(value: object) -> dict[str, Any]:
     return engine
 
 
-def build_anchor_request(
+def build_member_request(
     *,
     authority_bytes: bytes,
     catalogue_bytes: bytes,
     case_id: str,
     engine_identity: dict[str, Any],
+    member: dict[str, Any],
     repair_bytes: bytes,
+    solver_convergence_bytes: bytes,
 ) -> bytes:
-    """Build one complete anchor request for an exact catalogue case."""
+    """Build one complete request for a validated W1 family member."""
     authority_declaration = boundary.read_w1_declaration(authority_bytes)
     read_mapping_repair(repair_bytes)
+    solver_convergence.read_amendment(solver_convergence_bytes)
     catalogue = read_case_catalogue(catalogue_bytes)
     selected = next((case for case in catalogue["cases"] if case["case_id"] == case_id), None)
     if selected is None:
         _fail("case-authorization", f"unknown case {case_id!r}")
-    member = anchor_member(authority_bytes)
+    if (
+        not isinstance(member, dict)
+        or set(member)
+        != {"composites", "member_content_id", "parameters"}
+        or member.get("member_content_id") != member_content_id(member)
+    ):
+        _fail("content-identity", "member content identity differs")
+    _validate_units_and_bounds(member, authority_declaration)
+    _validate_cross_constraints(member)
     case = _materialize_case(selected, member)
     request: dict[str, Any] = {
         "authority": {
@@ -499,6 +519,9 @@ def build_anchor_request(
             "protocol_id": GENERATOR_PROTOCOL_ID,
             "repair_declaration_sha256": MAPPING_REPAIR_SHA256,
             "scope": "research-only",
+            "solver_convergence_amendment_sha256": (
+                solver_convergence.AMENDMENT_SHA256
+            ),
             "w1_declaration_sha256": boundary.W1_DECLARATION_SHA256,
             "w1_sha256": authority_declaration["authority"]["w1_sha256"],
         },
@@ -511,6 +534,27 @@ def build_anchor_request(
     }
     request["request_content_id"] = request_content_id(request)
     return canonical_json_bytes(request)
+
+
+def build_anchor_request(
+    *,
+    authority_bytes: bytes,
+    catalogue_bytes: bytes,
+    case_id: str,
+    engine_identity: dict[str, Any],
+    repair_bytes: bytes,
+    solver_convergence_bytes: bytes,
+) -> bytes:
+    """Build one complete anchor request for an exact catalogue case."""
+    return build_member_request(
+        authority_bytes=authority_bytes,
+        catalogue_bytes=catalogue_bytes,
+        case_id=case_id,
+        engine_identity=engine_identity,
+        member=anchor_member(authority_bytes),
+        repair_bytes=repair_bytes,
+        solver_convergence_bytes=solver_convergence_bytes,
+    )
 
 
 def _require_request_shape(value: dict[str, Any]) -> None:
@@ -544,6 +588,9 @@ def _validate_authority(value: object) -> None:
         "protocol_id": GENERATOR_PROTOCOL_ID,
         "repair_declaration_sha256": MAPPING_REPAIR_SHA256,
         "scope": "research-only",
+        "solver_convergence_amendment_sha256": (
+            solver_convergence.AMENDMENT_SHA256
+        ),
         "w1_declaration_sha256": boundary.W1_DECLARATION_SHA256,
         "w1_sha256": dict(boundary.AUTHORITY_HASHES)["w1"],
     }
@@ -742,6 +789,7 @@ def read_request(
     authority_bytes: bytes | None = None,
     catalogue_bytes: bytes | None = None,
     repair_bytes: bytes | None = None,
+    solver_convergence_bytes: bytes | None = None,
 ) -> dict[str, Any]:
     """Validate a complete W2 request in the protocol's fail-closed order."""
     value = _read_canonical_object(raw, "request-bytes")
@@ -755,11 +803,17 @@ def read_request(
         if repair_bytes is None
         else repair_bytes
     )
+    solver_convergence_raw = (
+        _default_solver_convergence_path().read_bytes()
+        if solver_convergence_bytes is None
+        else solver_convergence_bytes
+    )
     try:
         authority = boundary.read_w1_declaration(authority_raw)
     except boundary.GeneratorBoundaryError as error:
         _fail("authority", str(error))
     read_mapping_repair(repair_raw)
+    solver_convergence.read_amendment(solver_convergence_raw)
     member = cast(dict[str, Any], value["member"])
     _validate_units_and_bounds(member, authority)
     _validate_cross_constraints(member)

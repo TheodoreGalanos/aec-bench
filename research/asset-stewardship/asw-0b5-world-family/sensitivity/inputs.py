@@ -119,12 +119,37 @@ def _decoded_roles(segment: dict[str, Any]) -> tuple[dict[str, bytes], dict[str,
 def read_transfer_bundle(raw: bytes) -> tuple[SegmentEvidence, ...]:
     """Read exact two-replay transfer bytes and return first-replay evidence."""
     bundle = read_canonical_object(raw)
-    if set(bundle) != {"profile_id", "promotable", "replays", "schema_id"}:
+    schema_id = bundle.get("schema_id")
+    if schema_id == "asw-0b5.certifier-input-bundle.v1":
+        expected_keys = {
+            "profile_id",
+            "promotable",
+            "replays",
+            "schema_id",
+        }
+    elif schema_id == "asw-0b5.certifier-sensitivity-bundle.v1":
+        expected_keys = {
+            "member_content_id",
+            "probe_id",
+            "profile_id",
+            "promotable",
+            "replays",
+            "schema_id",
+        }
+        if (
+            not isinstance(bundle["member_content_id"], str)
+            or LOWER_SHA256.fullmatch(bundle["member_content_id"]) is None
+            or not isinstance(bundle["probe_id"], str)
+            or not bundle["probe_id"]
+        ):
+            _fail("sensitivity bundle authority differs")
+    else:
+        _fail("bundle schema differs")
+    if set(bundle) != expected_keys:
         _fail("bundle shape differs")
     if (
         bundle["profile_id"] != "AU-NSW-LH-SYN-SPS-v1"
         or bundle["promotable"] is not False
-        or bundle["schema_id"] != "asw-0b5.certifier-input-bundle.v1"
     ):
         _fail("bundle authority differs")
     replays = bundle["replays"]
@@ -215,7 +240,11 @@ def read_certifier_result(
     }:
         _fail("certifier authority differs")
     if (
-        value["schema_id"] != "asw-0b5.certifier-result.v1"
+        value["schema_id"]
+        not in {
+            "asw-0b5.certifier-result.v1",
+            "asw-0b5.certifier-sensitivity-result.v1",
+        }
         or value["promotable"] is not False
         or value["terminal_state"] != "quantitative-pending-w4"
         or value["first_failing_stage"] != "w4-tolerance-required"

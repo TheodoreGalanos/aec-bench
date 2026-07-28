@@ -9,7 +9,7 @@ import math
 from typing import Any, cast
 
 AMENDMENT_SHA256 = (
-    "9bafd0f955885d1b74893a1785f4607d3f6bbb099c6881cec0f420579883fc19"
+    "d6ada0600f06d5aedd3298882f4e1fdab815eeddc15edc06eb3bc222d60979c5"
 )
 
 
@@ -48,9 +48,30 @@ def read_amendment(raw: bytes) -> dict[str, Any]:
         or document["failed_execution"].get("generation_id")
         != "e31e64bd8f696dcb8edaa5bd2ad76f7286223094703f4181c6a203c03c49b2d0"
         or document["boundaries"].get(
-            "candidate_numerical_values_allowed_in_correction"
+            "candidate_numerical_values_allowed_for_tolerance_or_fitting"
         )
         is not False
+        or document["boundaries"].get(
+            "candidate_semantic_net_flow_allowed_for_exact_engine_identity"
+        )
+        is not True
+        or document["rules"].get("C-R02", {}).get("application")
+        != "every-report-interval"
+        or document["rules"].get("C-R02", {}).get(
+            "routing_defect_rule"
+        )
+        != "E_route,k=0.5*dt*(Q_net,k-1-Q_net,k)"
+        or document["rules"].get("C-R02", {}).get(
+            "total_correction_rule"
+        )
+        != "E_total=E_route+E_storage"
+        or document["rules"].get("C-R03", {}).get(
+            "dependency_rule"
+        )
+        != (
+            "intermediate storage representation terms telescope and "
+            "cannot be summed as independent errors"
+        )
     ):
         raise C_R02RepairError("C-R02 amendment authority differs")
     return document
