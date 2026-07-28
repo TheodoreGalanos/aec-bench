@@ -54,3 +54,13 @@ evidence:
     exact_values_required: true
     domain:
       profile: AU-NSW-LH-SYN-SPS-v1
+  - id: EV007
+    kind: command_output
+    path: evidence/asw-2b-durable-world-run-note.md
+    description: ASW-2B production paths and strict serialization, filesystem reload, timed snapshot, replay, lock, and crash-recovery results.
+    source: feat/wastewater-pump-station-durable-world-run on 2026-07-29
+    supports: [C007]
+    produced_by: E002
+    exact_values_required: true
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1

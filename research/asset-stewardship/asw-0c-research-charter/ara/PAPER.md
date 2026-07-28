@@ -28,6 +28,17 @@ resetting the continuing station. Actor-visible identities use only permitted
 projection content, so a hidden future-schedule change cannot become an
 identity side channel.
 
+ASW-2B adds a task-local durable world run under a host-supplied filesystem
+root. Complete state, proposals, information sets, receipts, applied event
+batches, and commit links are immutable. One lock-serialised atomic pointer
+selects the current state. Snapshot and resume retain simulated duration and
+all current stewardship duties. Retrying the same proposal across the selected
+crash windows cannot duplicate a resource record or physical duty transfer.
+
+This implementation computes content identities from realised artifacts. It
+does not add hashes to the task policy or make the development environment
+immutable.
+
 Layers:
 
 - `logic/claims.yaml` records the supported design claims.

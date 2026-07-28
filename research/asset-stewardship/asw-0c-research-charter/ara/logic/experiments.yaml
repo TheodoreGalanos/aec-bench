@@ -19,3 +19,26 @@ experiments:
     domain:
       profile: AU-NSW-LH-SYN-SPS-v1
       test_count: 49
+  - id: E002
+    verifies: [C007]
+    purpose: Check canonical task-artifact reload, atomic filesystem publication, timed snapshot continuity, and exactly-once crash recovery.
+    setup: Use the bundled certified package, real task state machine, and a temporary host-supplied filesystem root without mocks.
+    procedure:
+      - Run the complete pump-station test folder through pytest.
+      - Stage a resource transition without publishing the current-state pointer and resume from the prior snapshot.
+      - Retry and republish the same proposal, then repeat it after a second resume.
+      - Repeat the crash sequence for a physical duty transfer.
+      - Advance through a scheduled inspection event and resume the timed state.
+      - Run focused Ruff lint, Ruff format, and Mypy checks.
+    metrics:
+      - All pump-station unit, integration, and end-to-end tests pass.
+      - Pre-publication recovery retains the prior selected state.
+      - Post-publication retry returns the stored transition.
+      - Exactly one restriction, obligation, work order, and duty transfer exist.
+      - Calendar duration and applied event identity survive snapshot and resume.
+      - Lint, format, and type checks report no diagnostics.
+    evidence: [EV007]
+    exploratory: false
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+      test_count: 55

@@ -1,0 +1,596 @@
+# ABOUTME: Publishes one pump-station run to a host-supplied filesystem root.
+# ABOUTME: Owns immutable evidence, file locking, atomic current-state selection, and strict reload.
+
+from __future__ import annotations
+
+import fcntl
+import hashlib
+import json
+import os
+import stat
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
+from typing import cast
+
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
+    stewardship_state_id,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    ContinueOperation,
+    PumpStationProposal,
+    PumpStationStewardshipState,
+    PumpStationTransition,
+    PumpStationTransitionReceipt,
+    RequestConditionalDeferral,
+    RequestInspection,
+    RequestObstructionClearance,
+    RequestProvisionalClosure,
+    RequestProvisionalReturn,
+    RequestVerification,
+    TransferDuty,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
+    PumpStationRunStep,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
+    PumpStationInformationSet,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+    PumpStationAppliedEventBatch,
+    PumpStationCurrentRunPointer,
+    PumpStationStagedTransition,
+    PumpStationStateSnapshotRef,
+    PumpStationWorldRunCommit,
+    PumpStationWorldRunError,
+    PumpStationWorldRunManifest,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_serialization import (
+    PUMP_STATION_SERIALIZATION_VERSION,
+    load_pump_station_artifact,
+    pump_station_artifact_bytes,
+    pump_station_artifact_id,
+)
+
+_PROPOSAL_TYPES: dict[str, type[object]] = {
+    proposal_type.__name__: proposal_type
+    for proposal_type in (
+        ContinueOperation,
+        TransferDuty,
+        RequestInspection,
+        RequestConditionalDeferral,
+        RequestObstructionClearance,
+        RequestProvisionalReturn,
+        RequestProvisionalClosure,
+        RequestVerification,
+    )
+}
+
+
+def _fail(code: str, detail: str) -> None:
+    raise PumpStationWorldRunError(code, detail)
+
+
+def _fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _mkdir_durable(path: Path) -> None:
+    missing: list[Path] = []
+    cursor = path
+    while not cursor.exists():
+        missing.append(cursor)
+        cursor = cursor.parent
+    path.mkdir(parents=True, exist_ok=True)
+    for directory in reversed(missing):
+        directory.chmod(0o700)
+        _fsync_directory(directory.parent)
+
+
+def _require_regular_file(path: Path, label: str) -> None:
+    if path.is_symlink():
+        _fail("artifact-confinement", f"{label} is a symbolic link")
+    try:
+        details = path.stat(follow_symlinks=False)
+    except OSError as error:
+        _fail("artifact-integrity", f"{label} is unavailable: {error}")
+    if not stat.S_ISREG(details.st_mode):
+        _fail("artifact-integrity", f"{label} is not a regular file")
+    if stat.S_IMODE(details.st_mode) & 0o077:
+        _fail("artifact-confinement", f"{label} must be host-private")
+
+
+class PumpStationWorldRunRepository:
+    """A confined durable repository for exactly one pump-station world run."""
+
+    def __init__(self, root: Path) -> None:
+        selected = Path(root)
+        if selected.exists() and (selected.is_symlink() or not selected.is_dir()):
+            _fail("artifact-confinement", "world-run root must be a plain directory")
+        _mkdir_durable(selected)
+        selected.chmod(0o700)
+        self._root = selected.resolve(strict=True)
+        self._lock_path = self._root / ".world-run.lock"
+
+    @property
+    def root(self) -> Path:
+        """Return the exact host-supplied run root."""
+        return self._root
+
+    @contextmanager
+    def locked(self) -> Iterator[None]:
+        """Serialize state selection across local processes."""
+        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0)
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(self._lock_path, flags, 0o600)
+        try:
+            details = os.fstat(descriptor)
+            if not stat.S_ISREG(details.st_mode):
+                _fail("artifact-confinement", "world-run lock is not a regular file")
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
+
+    def initialize(
+        self,
+        manifest: PumpStationWorldRunManifest,
+        initial_state: PumpStationStewardshipState,
+    ) -> PumpStationStateSnapshotRef:
+        """Publish an immutable initial state and select it atomically."""
+        with self.locked():
+            if (self._root / "current.json").exists():
+                _fail("world-run-exists", manifest.run_id)
+            self._publish_root_immutable("manifest.json", manifest)
+            self._publish_state(initial_state)
+            commit = PumpStationWorldRunCommit(
+                serialization_version=PUMP_STATION_SERIALIZATION_VERSION,
+                run_id=manifest.run_id,
+                sequence=manifest.initial_sequence,
+                parent_commit_id=None,
+                state_id=manifest.initial_state_id,
+                proposal_id=None,
+                proposal_content_id=None,
+                information_set_content_id=None,
+                receipt_content_id=None,
+                event_batch_content_id=None,
+            )
+            commit_id = pump_station_artifact_id(commit)
+            self._publish_content("commits", commit_id, commit)
+            pointer = PumpStationCurrentRunPointer(
+                serialization_version=PUMP_STATION_SERIALIZATION_VERSION,
+                run_id=manifest.run_id,
+                sequence=manifest.initial_sequence,
+                state_id=manifest.initial_state_id,
+                commit_id=commit_id,
+            )
+            self._replace_current(pointer)
+            return self._snapshot(manifest, pointer)
+
+    def load_manifest(self) -> PumpStationWorldRunManifest:
+        """Reload the immutable run identity."""
+        return load_pump_station_artifact(
+            self._read(self._root / "manifest.json", "world-run manifest"),
+            PumpStationWorldRunManifest,
+        )
+
+    def current_snapshot(self) -> PumpStationStateSnapshotRef:
+        """Reload and validate the atomically selected state reference."""
+        manifest = self.load_manifest()
+        pointer = self._load_current()
+        if pointer.run_id != manifest.run_id:
+            _fail("artifact-integrity", "current pointer belongs to another run")
+        commit = self.load_commit(pointer.commit_id)
+        if (
+            commit.run_id != manifest.run_id
+            or commit.sequence != pointer.sequence
+            or commit.state_id != pointer.state_id
+        ):
+            _fail("artifact-integrity", "current pointer and commit differ")
+        self.load_state(pointer.state_id)
+        return self._snapshot(manifest, pointer)
+
+    def load_state(self, state_id: str) -> PumpStationStewardshipState:
+        """Reload a complete state and verify its semantic identity."""
+        state = load_pump_station_artifact(
+            self._read_content("states", state_id),
+            PumpStationStewardshipState,
+        )
+        if stewardship_state_id(state) != state_id:
+            _fail("artifact-integrity", f"state identity differs for {state_id}")
+        return state
+
+    def load_commit(self, commit_id: str) -> PumpStationWorldRunCommit:
+        """Reload one immutable commit by content identity."""
+        commit = load_pump_station_artifact(
+            self._read_content("commits", commit_id),
+            PumpStationWorldRunCommit,
+        )
+        if pump_station_artifact_id(commit) != commit_id:
+            _fail("artifact-integrity", f"commit identity differs for {commit_id}")
+        return commit
+
+    def stage_transition(
+        self,
+        *,
+        manifest: PumpStationWorldRunManifest,
+        prior_snapshot: PumpStationStateSnapshotRef,
+        proposal: PumpStationProposal,
+        information_set: PumpStationInformationSet,
+        transition: PumpStationTransition,
+    ) -> PumpStationStagedTransition:
+        """Publish all immutable evidence without changing the current pointer."""
+        receipt = transition.receipt
+        if (
+            receipt.sequence != prior_snapshot.sequence + 1
+            or receipt.pre_state_id != prior_snapshot.state_id
+            or receipt.post_state_id != stewardship_state_id(transition.state)
+            or receipt.proposal_id != proposal.context.proposal_id
+        ):
+            _fail("transition-integrity", "transition does not extend the selected state")
+        self._reject_proposal_collision(
+            proposal,
+            information_set=information_set,
+            parent_commit_id=prior_snapshot.commit_id,
+        )
+        state_id = self._publish_state(transition.state)
+        proposal_content_id = pump_station_artifact_id(proposal)
+        information_set_content_id = pump_station_artifact_id(information_set)
+        receipt_content_id = pump_station_artifact_id(receipt)
+        event_batch = PumpStationAppliedEventBatch(
+            transition_id=receipt.transition_id,
+            sequence=receipt.sequence,
+            event_ids=receipt.applied_event_ids,
+            event_types=receipt.applied_event_types,
+        )
+        event_batch_content_id = pump_station_artifact_id(event_batch)
+        self._publish_content("proposals", proposal_content_id, proposal)
+        self._publish_content(
+            "information-sets",
+            information_set_content_id,
+            information_set,
+        )
+        self._publish_content("receipts", receipt_content_id, receipt)
+        self._publish_content("events", event_batch_content_id, event_batch)
+        commit = PumpStationWorldRunCommit(
+            serialization_version=PUMP_STATION_SERIALIZATION_VERSION,
+            run_id=manifest.run_id,
+            sequence=receipt.sequence,
+            parent_commit_id=prior_snapshot.commit_id,
+            state_id=state_id,
+            proposal_id=proposal.context.proposal_id,
+            proposal_content_id=proposal_content_id,
+            information_set_content_id=information_set_content_id,
+            receipt_content_id=receipt_content_id,
+            event_batch_content_id=event_batch_content_id,
+        )
+        commit_id = pump_station_artifact_id(commit)
+        self._publish_content("commits", commit_id, commit)
+        snapshot = PumpStationStateSnapshotRef(
+            run_id=manifest.run_id,
+            episode_id=manifest.episode_id,
+            world_branch_id=manifest.world_branch_id,
+            sequence=receipt.sequence,
+            state_id=state_id,
+            commit_id=commit_id,
+        )
+        return PumpStationStagedTransition(
+            prior_snapshot=prior_snapshot,
+            snapshot=snapshot,
+            proposal=proposal,
+            information_set=information_set,
+            transition=transition,
+            commit=commit,
+        )
+
+    def publish_staged_transition(
+        self,
+        staged: PumpStationStagedTransition,
+    ) -> PumpStationTransition:
+        """Select a fully staged transition with one atomic pointer replacement."""
+        current = self.current_snapshot()
+        if current == staged.snapshot:
+            return self.load_transition(staged.commit)
+        if current != staged.prior_snapshot:
+            _fail("stale-publication", "world run advanced after transition preparation")
+        if pump_station_artifact_id(staged.commit) != staged.snapshot.commit_id:
+            _fail("transition-integrity", "staged commit identity differs")
+        self.load_transition(staged.commit)
+        self._replace_current(
+            PumpStationCurrentRunPointer(
+                serialization_version=PUMP_STATION_SERIALIZATION_VERSION,
+                run_id=staged.snapshot.run_id,
+                sequence=staged.snapshot.sequence,
+                state_id=staged.snapshot.state_id,
+                commit_id=staged.snapshot.commit_id,
+            )
+        )
+        return staged.transition
+
+    def find_committed_proposal(
+        self,
+        proposal_id: str,
+    ) -> PumpStationWorldRunCommit | None:
+        """Return a proposal commit only when it is on the selected chain."""
+        for commit in reversed(self.commits()):
+            if commit.proposal_id == proposal_id:
+                return commit
+        return None
+
+    def commits(self) -> tuple[PumpStationWorldRunCommit, ...]:
+        """Reload the exact selected commit chain from initial state to current."""
+        pointer = self._load_current()
+        chain: list[PumpStationWorldRunCommit] = []
+        seen: set[str] = set()
+        commit_id: str | None = pointer.commit_id
+        while commit_id is not None:
+            if commit_id in seen:
+                _fail("artifact-integrity", "commit chain contains a cycle")
+            seen.add(commit_id)
+            commit = self.load_commit(commit_id)
+            chain.append(commit)
+            commit_id = commit.parent_commit_id
+        chain.reverse()
+        self._validate_chain(tuple(chain), pointer)
+        return tuple(chain)
+
+    def steps(self) -> tuple[PumpStationRunStep, ...]:
+        """Reload every committed proposal, information set, receipt, event batch, and state."""
+        return tuple(
+            PumpStationRunStep(
+                proposal=proposal,
+                information_set=information_set,
+                transition=transition,
+            )
+            for commit in self.commits()[1:]
+            for proposal, information_set, transition in (self._load_step(commit),)
+        )
+
+    def load_transition(
+        self,
+        commit: PumpStationWorldRunCommit,
+    ) -> PumpStationTransition:
+        """Reload the transition selected by one non-initial commit."""
+        _, _, transition = self._load_step(commit)
+        return transition
+
+    def validate_repeated_proposal(
+        self,
+        commit: PumpStationWorldRunCommit,
+        proposal: PumpStationProposal,
+        information_set: PumpStationInformationSet,
+    ) -> PumpStationTransition:
+        """Return a committed retry only when its complete input is identical."""
+        stored_proposal, stored_information_set, transition = self._load_step(commit)
+        if stored_proposal != proposal or stored_information_set != information_set:
+            _fail(
+                "proposal-id-conflict",
+                f"{proposal.context.proposal_id} was already bound to different content",
+            )
+        return transition
+
+    def _load_step(
+        self,
+        commit: PumpStationWorldRunCommit,
+    ) -> tuple[PumpStationProposal, PumpStationInformationSet, PumpStationTransition]:
+        if None in {
+            commit.proposal_id,
+            commit.proposal_content_id,
+            commit.information_set_content_id,
+            commit.receipt_content_id,
+            commit.event_batch_content_id,
+        }:
+            _fail("artifact-integrity", "transition commit lacks evidence references")
+        proposal = self._load_proposal(cast(str, commit.proposal_content_id))
+        information_set = load_pump_station_artifact(
+            self._read_content(
+                "information-sets",
+                cast(str, commit.information_set_content_id),
+            ),
+            PumpStationInformationSet,
+        )
+        receipt = load_pump_station_artifact(
+            self._read_content("receipts", cast(str, commit.receipt_content_id)),
+            PumpStationTransitionReceipt,
+        )
+        event_batch = load_pump_station_artifact(
+            self._read_content(
+                "events",
+                cast(str, commit.event_batch_content_id),
+            ),
+            PumpStationAppliedEventBatch,
+        )
+        state = self.load_state(commit.state_id)
+        if (
+            pump_station_artifact_id(proposal) != commit.proposal_content_id
+            or pump_station_artifact_id(information_set) != commit.information_set_content_id
+            or pump_station_artifact_id(receipt) != commit.receipt_content_id
+            or pump_station_artifact_id(event_batch) != commit.event_batch_content_id
+            or proposal.context.proposal_id != commit.proposal_id
+            or proposal.context.information_set_id != information_set.information_set_id
+            or receipt.proposal_id != commit.proposal_id
+            or receipt.sequence != commit.sequence
+            or receipt.post_state_id != commit.state_id
+            or event_batch.transition_id != receipt.transition_id
+            or event_batch.sequence != receipt.sequence
+            or event_batch.event_ids != receipt.applied_event_ids
+            or event_batch.event_types != receipt.applied_event_types
+        ):
+            _fail("artifact-integrity", "commit evidence does not reconcile")
+        return proposal, information_set, PumpStationTransition(state=state, receipt=receipt)
+
+    def _load_proposal(self, content_id: str) -> PumpStationProposal:
+        payload = self._read_content("proposals", content_id)
+        try:
+            document = json.loads(payload)
+            type_name = document["$type"]
+        except (json.JSONDecodeError, KeyError, TypeError) as error:
+            _fail("artifact-type", f"stored proposal has no valid type: {error}")
+        proposal_type = _PROPOSAL_TYPES.get(type_name)
+        if proposal_type is None:
+            _fail("artifact-type", f"unknown stored proposal type {type_name!r}")
+        return cast(
+            PumpStationProposal,
+            load_pump_station_artifact(payload, proposal_type),
+        )
+
+    def _reject_proposal_collision(
+        self,
+        proposal: PumpStationProposal,
+        *,
+        information_set: PumpStationInformationSet,
+        parent_commit_id: str,
+    ) -> None:
+        commits_root = self._root / "commits"
+        if not commits_root.exists():
+            return
+        for path in commits_root.glob("*.json"):
+            commit = self.load_commit(path.stem)
+            if commit.proposal_id != proposal.context.proposal_id:
+                continue
+            stored_proposal, stored_information_set, _ = self._load_step(commit)
+            if (
+                stored_proposal != proposal
+                or stored_information_set != information_set
+                or commit.parent_commit_id != parent_commit_id
+            ):
+                _fail(
+                    "proposal-id-conflict",
+                    f"{proposal.context.proposal_id} has different staged content",
+                )
+
+    def _validate_chain(
+        self,
+        chain: tuple[PumpStationWorldRunCommit, ...],
+        pointer: PumpStationCurrentRunPointer,
+    ) -> None:
+        if (
+            not chain
+            or chain[0].sequence != self.load_manifest().initial_sequence
+            or chain[0].parent_commit_id is not None
+        ):
+            _fail("artifact-integrity", "commit chain lacks one initial state")
+        manifest = self.load_manifest()
+        if chain[0].state_id != manifest.initial_state_id:
+            _fail("artifact-integrity", "initial commit differs from manifest")
+        previous = chain[0]
+        for commit in chain[1:]:
+            if commit.sequence != previous.sequence + 1:
+                _fail("artifact-integrity", "commit sequence is not contiguous")
+            proposal, information_set, transition = self._load_step(commit)
+            if (
+                commit.parent_commit_id != pump_station_artifact_id(previous)
+                or transition.receipt.pre_state_id != previous.state_id
+                or proposal.context.based_on_sequence != previous.sequence
+                or information_set.base_view.current_state.state_sequence != previous.sequence
+            ):
+                _fail("artifact-integrity", "commit does not extend its parent")
+            previous = commit
+        if (
+            previous.sequence != pointer.sequence
+            or previous.state_id != pointer.state_id
+            or pump_station_artifact_id(previous) != pointer.commit_id
+        ):
+            _fail("artifact-integrity", "commit chain does not reach current pointer")
+
+    def _publish_state(self, state: PumpStationStewardshipState) -> str:
+        state_id = stewardship_state_id(state)
+        self._publish_content("states", state_id, state)
+        return state_id
+
+    def _publish_content(self, collection: str, content_id: str, value: object) -> None:
+        payload = pump_station_artifact_bytes(value)
+        if collection != "states" and hashlib.sha256(payload).hexdigest() != content_id:
+            _fail("artifact-integrity", f"{collection} content identity differs")
+        path = self._root / collection / f"{content_id}.json"
+        self._publish_immutable(path, payload)
+
+    def _publish_root_immutable(self, name: str, value: object) -> None:
+        self._publish_immutable(self._root / name, pump_station_artifact_bytes(value))
+
+    def _publish_immutable(self, path: Path, payload: bytes) -> None:
+        if path.exists():
+            observed = self._read(path, str(path.relative_to(self._root)))
+            if observed != payload:
+                _fail("artifact-collision", str(path.relative_to(self._root)))
+            return
+        _mkdir_durable(path.parent)
+        temporary = path.parent / f".{path.name}.{uuid.uuid4().hex}.tmp"
+        descriptor = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+        )
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            try:
+                os.link(temporary, path)
+            except FileExistsError:
+                if self._read(path, str(path.relative_to(self._root))) != payload:
+                    _fail("artifact-collision", str(path.relative_to(self._root)))
+            _fsync_directory(path.parent)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _replace_current(self, pointer: PumpStationCurrentRunPointer) -> None:
+        payload = pump_station_artifact_bytes(pointer)
+        temporary = self._root / f".current.{uuid.uuid4().hex}.tmp"
+        descriptor = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+        )
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self._root / "current.json")
+            _fsync_directory(self._root)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _load_current(self) -> PumpStationCurrentRunPointer:
+        return load_pump_station_artifact(
+            self._read(self._root / "current.json", "current pointer"),
+            PumpStationCurrentRunPointer,
+        )
+
+    def _read_content(self, collection: str, content_id: str) -> bytes:
+        return self._read(
+            self._root / collection / f"{content_id}.json",
+            f"{collection}/{content_id}.json",
+        )
+
+    def _read(self, path: Path, label: str) -> bytes:
+        _require_regular_file(path, label)
+        try:
+            return path.read_bytes()
+        except OSError as error:
+            _fail("artifact-integrity", f"{label} cannot be read: {error}")
+        raise AssertionError("unreachable")
+
+    @staticmethod
+    def _snapshot(
+        manifest: PumpStationWorldRunManifest,
+        pointer: PumpStationCurrentRunPointer,
+    ) -> PumpStationStateSnapshotRef:
+        return PumpStationStateSnapshotRef(
+            run_id=manifest.run_id,
+            episode_id=manifest.episode_id,
+            world_branch_id=manifest.world_branch_id,
+            sequence=pointer.sequence,
+            state_id=pointer.state_id,
+            commit_id=pointer.commit_id,
+        )

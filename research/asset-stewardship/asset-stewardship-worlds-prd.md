@@ -5,15 +5,15 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Reference package, physical kernel, and stewardship state machine merged; ASW-2A3 projections and task verifier are in focused implementation |
+| Status | ASW-2A0 through ASW-2A3 merged; ASW-2B durable world run is in focused implementation |
 | Date | 2026-07-29 |
-| Revision | `ASW-PRD-I-2026-07-29` |
+| Revision | `ASW-PRD-J-2026-07-29` |
 | Design revision | Semantic decisions change through reviewed document revisions; this PRD does not require a self-referential or hand-authored content hash |
 | Target repository | `aec-bench` |
-| Current production branch | `feat/wastewater-pump-station-projections-verifier` |
-| Live implementation status | ASW-2A0 through ASW-2A2 are merged; ASW-2A3 adds actor views, timed episode and tenure context, handover, information binding, and verifier replay |
+| Current production branch | `feat/wastewater-pump-station-durable-world-run` |
+| Live implementation status | ASW-2A0 through ASW-2A3 are merged; ASW-2B adds immutable run artifacts, atomic transition publication, dynamic snapshots, strict resume, and selected crash recovery |
 | Initial programme boundary | ASW-0 through ASW-4 |
-| Implementation status | Asset-local package, physics, and stewardship state machine exist; projection and verifier code is under review; durable runtime and host integration remain incomplete |
+| Implementation status | Asset-local package, physics, state machine, projections, handover, verifier, and durable filesystem run exist; direct host, CLI, Harbor, records, and evaluation remain incomplete |
 | Working programme name | Asset Stewardship Worlds |
 | First study | Obligation continuity under time and handover |
 
@@ -23,7 +23,7 @@ Introduce an asset-specific persistent stewardship-world engine behind a small s
 
 Reuse the adaptive meta-harness and common execution infrastructure for agent/model execution, content addressing, experiment identity, Harbor dispatch, immutable evidence, and `TrialRecord` persistence. Reuse lifecycle transaction, recovery, and evaluation patterns without extending their checkpoint-specific models into stewardship state. Do not reinterpret SSC-03's `COMPLETE` status as continuing physical-world state.
 
-The live implementation audit confirms an asymmetric starting point. The repository is close to being able to execute, retain, verify, and compare bounded world sessions, but it has no executable stewardship kernel. The core engineering work is therefore a sibling world-semantic vertical slice, not another adapter stack, Harbor stack, artifact store, or meta-harness.
+The initial implementation audit confirmed an asymmetric starting point. The repository was close to being able to execute, retain, verify, and compare bounded world sessions, but it had no executable stewardship kernel. The core engineering work is therefore a sibling world-semantic vertical slice, not another adapter stack, Harbor stack, artifact store, or meta-harness.
 
 Adaptive repair, motif learning, promotion, and the existing four-cell harness/program candidate search are outside the ASW-0 through ASW-4 critical path. The first stewardship study freezes the model, adapter, and harness and varies only the declared continuity treatment.
 
@@ -779,6 +779,47 @@ A complete state snapshot preserves:
 - transition sequence;
 - view/projection lineage; and
 - rule identities.
+
+#### 9.10.1 ASW-2B durable run layout
+
+ASW-2B gives each pump-station world run one host-supplied repository root. The
+root belongs to one run only. The asset-local state machine still owns world
+semantics. `PumpStationWorldRunRepository` owns filesystem publication and
+strict reload.
+
+The serializer identity is `pump-station-world-run.v1`. It writes sorted,
+newline-terminated canonical JSON. Dataclass types use a closed `$type`
+discriminator, decimals use text, enums use their declared values, and tuples
+use ordered arrays. Unknown types, unknown fields, duplicate fields, unsupported
+numbers, non-canonical bytes, and invalid task records fail closed. There are no
+excluded transport fields in this version. The FR-15 transport exclusion
+allowlist is therefore the empty tuple.
+
+| Layout | Mutation | Writer | Reader/reloader | Visibility and authority | ASW-2B maturity |
+| --- | --- | --- | --- | --- | --- |
+| `manifest.json` | Immutable | `PumpStationWorldRun.create` through the repository | `PumpStationWorldRun.resume` through the repository | Host-private run, episode, branch, package, model, asset, and initial-state authority | Asset-local production |
+| `states/<state-id>.json` | Immutable | Repository state publisher | Repository state loader | Host-private complete physical and stewardship truth | Asset-local production |
+| `proposals/<content-id>.json` | Immutable | Repository transition stager | Repository step loader | Host-retained actor-origin decision evidence; not a public file | Asset-local production |
+| `information-sets/<content-id>.json` | Immutable | Repository transition stager | Repository step loader | Host-retained exact actor-visible commitment context; the containing file is not public | Asset-local production |
+| `receipts/<content-id>.json` | Immutable | Repository transition stager | Repository step loader and task verifier input | Host-private authoritative transition result | Asset-local production |
+| `events/<content-id>.json` | Immutable | Repository transition stager | Repository step loader | Host-private applied event IDs and types, including an empty proposal-only batch | Asset-local production |
+| `commits/<content-id>.json` | Immutable | Repository transition stager | Repository chain loader | Host-private link across parent commit, state, proposal, information set, receipt, and event batch | Asset-local production |
+| `current.json` | Atomic replacement only | Repository transition publisher | Snapshot, resume, and step reload | Host-private selector for the one committed state | Asset-local production |
+| `.world-run.lock` | Local coordination file | Repository | Repository | Host-private process coordination; not semantic evidence | Asset-local production |
+
+All immutable transition artifacts are flushed before `current.json` is
+replaced. The replacement and repository directory are then flushed. A local
+file lock serializes current-state selection. A crash before replacement can
+leave an unselected immutable commit, but it cannot change the selected world.
+A retry with the same proposal ID and content can reuse that evidence. Different
+content under the same proposal ID fails closed. A crash after replacement can
+lose only the caller response; the next identical request reloads the committed
+transition and does not apply physical or resource effects again.
+
+`PumpStationStateSnapshotRef` is the dynamic state reference. It contains run,
+episode, branch, sequence, state, and commit identity. It does not overload the
+compiled-package `WorldSnapshotRef`. Resume accepts only the exact state selected
+by `current.json` in ASW-2B. Historical branching remains later scope.
 
 Reset terminology is dimension-specific:
 
@@ -1759,7 +1800,7 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | OD-08 | Define canonical simultaneous-event ordering. | Resolved | [ASW-0C research charter](asw-0c-research-charter.md#8-deterministic-event-ordering) |
 | OD-09 | Define initial due-trigger, overdue, and breach semantics. | Resolved | [ASW-0C research charter](asw-0c-research-charter.md#73-trigger-policy) |
 | OD-10 | Define proposal, conditional-authority, execution-failure, and cancellation semantics. | Resolved for the first world | [ASW-0C research charter](asw-0c-research-charter.md#6-authority-scopes-and-separation) |
-| OD-11 | Define handover projection, actor-visible contents, revision, and separately queryable authoritative history. | Resolved for the in-memory projection; durable history query deferred | ASW-2A3 projection and verifier boundary; ASW-2B artifact repository |
+| OD-11 | Define handover projection, actor-visible contents, revision, and separately queryable authoritative history. | Resolved for the selected durable commit chain; cross-branch history remains later scope | ASW-2A3 projection and verifier boundary; ASW-2B artifact repository |
 | OD-12 | Define evaluation-window treatments and terminal-liability vector. | Resolved for the first study | [ASW-0C research charter](asw-0c-research-charter.md#12-budgets-and-evaluation-window) |
 | OD-13 | Define exact behavior for a physical terminal event, or defer the general terminal surface. | Resolved by deferral | The first charter contains no physical terminal event |
 | OD-14 | Approve model-provider identity, token limits, and financial budget. | Open | ASW-4 governance; logical repetitions are already set by ASW-0C |
@@ -1801,15 +1842,16 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | 2026-07-29 | Amend ASW-0C to complete inspection before the repair access window. | Starting the `D`-long inspection at `L` would make its completion simultaneous with breach, and canonical order would apply breach first. |
 | 2026-07-29 | Model episode time and actor-tenure time separately and keep handover inside the continuing episode. | The environment needs real simulated duration without treating a new actor or conversation as a physical reset. |
 | 2026-07-29 | Compute actor-facing identities from visible projection content only. | A full-state fingerprint in an actor view could reveal that hidden latent or future state differs even when permitted observations are equal. |
+| 2026-07-29 | Publish ASW-2B transitions as immutable task artifacts followed by one lock-serialised atomic current-state pointer. | This gives snapshot, resume, strict replay, and exactly-once physical and resource effects without a database, shared stewardship runtime, or hand-authored hashes. |
 
 ## 24. Immediate next action
 
-Complete and review **ASW-2A3 — actor views, handover, information binding,
-and the task-owned verifier** against
-[ASW-0C-3](asw-0c-research-charter.md).
+Complete and review **ASW-2B — durable world run** against
+[ASW-0C-3](asw-0c-research-charter.md), then start **ASW-2C — direct host
+session**.
 
-That slice projects complete permitted present state, carries bounded history
-across fresh actor tenures, binds every proposal to its exact visible
-information, and replays recorded transitions through a pure verifier. It does
-not add durable storage, CLI, Harbor, `TrialRecord`, provider calls, or outcome
-evaluation. After ASW-2A3 merges, start ASW-2B durable world-run persistence.
+ASW-2C may add only the minimum promoted host-execution types, provider-neutral
+world-session bridge, native typed tools, installed CLI start/resume/verify, and
+capability-disabled lifecycle regression. It must use the accepted ASW-2B
+repository and task semantics. It does not add Harbor import, `TrialRecord`
+changes, study contracts, or model-provider calls.

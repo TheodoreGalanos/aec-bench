@@ -9,7 +9,7 @@
 | Revision | `ASW-0C-3` |
 | Recorded | 2026-07-29 |
 | Reference profile | `AU-NSW-LH-SYN-SPS-v1` |
-| Status | Current design baseline for the first study, state machine, projections, and task verifier |
+| Status | Current design baseline for the first study and implemented asset-local world through ASW-2B |
 | Parent | [Asset Stewardship Worlds PRD](asset-stewardship-worlds-prd.md) |
 | Contract status | Research and programme authority only; not a runtime schema, public API, operational instruction, or compatibility promise |
 
@@ -637,16 +637,22 @@ design after outcomes are known.
 
 ## 17. Next implementation boundary
 
-The next production slice may implement the asset-local stewardship state
-machine with:
+ASW-2A2, ASW-2A3, and ASW-2B now implement the asset-local state machine,
+projections, handover, information binding, task verifier, immutable filesystem
+evidence, atomic transition publication, snapshot, resume, and selected crash
+recovery.
 
-- typed proposals;
-- task-local authority policy;
-- restrictions and obligations;
-- work-order and process state;
-- canonical scheduling;
-- transition receipts over the pure physical kernel; and
-- unit, integration, and in-memory end-to-end tests.
+This implementation record does not change the study policy in revision
+`ASW-0C-3`. Run identities and artifact content identities are computed from
+realised content. The charter does not gain hand-authored hashes.
 
-Actor projections, handover serialization, durable storage, CLI, Harbor,
-`TrialRecord`, provider calls, and outcome evaluation remain outside that slice.
+The next production slice is ASW-2C. It may add:
+
+- the minimum promoted host-execution types;
+- a provider-neutral direct world session;
+- native typed stewardship tools;
+- installed CLI start, resume, and verify commands; and
+- capability-disabled lifecycle regression evidence.
+
+Harbor import, `TrialRecord` changes, study contracts, provider calls, and
+outcome evaluation remain outside ASW-2C.
