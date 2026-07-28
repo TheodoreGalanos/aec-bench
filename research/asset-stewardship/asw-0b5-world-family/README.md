@@ -25,9 +25,12 @@ Both executed decisions are `promotion-generation-reject`; V3 is refused and
 V4 is unclaimed. The predecessor and amended successor decisions remain
 immutable. Theo approved versioned C-R07 and C-R08 amendments; both compose in
 the successor generation, whose first ordered failure is instead
-`C-R02-corrected-residual` at G10 report second 1. No accepted family member,
-package, manifest, runtime adapter, agent tool, or scenario exists. W2's only
-valid non-rejection state remains
+`C-R02-corrected-residual` at G10 report second 1. That failure has since been
+traced to the checker omitting SWMM's trapezoidal first-step routing rule.
+Theo approved a third, unbound amendment that corrects the signed comparison
+without changing the failed result or its tolerance. No accepted family
+member, package, manifest, runtime adapter, agent tool, or scenario exists.
+W2's only valid non-rejection state remains
 `quantitative-pending-w4`; it cannot emit pass, acceptance, certification,
 promotion, or V3 claims. Nothing under this directory may be imported by
 `src/aec_bench`, and production behavior must continue to work with
@@ -109,10 +112,12 @@ B5-W3/W4/W5 additionally contain:
 
 The approved post-rejection amendments additionally contain:
 
-- two human-readable decisions preserving the failed generation and the
-  candidate-independent C-R07/C-R08 composition defects;
-- two canonical machine authorities binding the predecessor protocol,
+- three human-readable decisions preserving the failed generations and the
+  candidate-independent C-R02/C-R07/C-R08 composition defects;
+- three canonical machine authorities binding the predecessor protocol,
   repairs, failed generation, composition result, and decision summary;
+- the pinned SWMM trapezoidal-routing correction omitted from the first
+  C-R02 signed comparison;
 - the curve-chord and exact curve-head-render bounds omitted from the
   sign-mirrored C-R07 closure;
 - separate ceilings for the declared hydraulic dynamic-model allowance and
@@ -262,9 +267,9 @@ PYTHONPATH=research/asset-stewardship/asw-0b5-world-family \
 
 ## Next allowed step
 
-Review the G10 first-interval C-R02 evidence against the pinned engine
-integration algorithm and the existing W2/W4 repair order. Any correction
-must be candidate-independent, versioned, explicitly approved, and followed
-by another fresh affected run. Silent first-sample deletion, fitted tolerance,
-production integration, package construction, ASW-0C, and ASW-2 remain
-blocked.
+Bind the approved C-R02 routing-integration amendment into a later successor
+generation and run the affected W4/W5 path. The run must continue to the first
+genuine later failure or complete the family; this focused repair does not
+pre-approve either outcome. Silent first-sample deletion, fitted tolerance,
+production integration, package construction before family pass, ASW-0C, and
+ASW-2 remain blocked.
