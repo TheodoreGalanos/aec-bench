@@ -5,15 +5,15 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Certified reference package and pure physical kernel merged; ASW-0C charter recorded; stewardship state machine is the next production slice |
+| Status | Reference package, physical kernel, and stewardship state machine merged; ASW-2A3 projections and task verifier are in focused implementation |
 | Date | 2026-07-29 |
-| Revision | `ASW-PRD-H-2026-07-29` |
+| Revision | `ASW-PRD-I-2026-07-29` |
 | Design revision | Semantic decisions change through reviewed document revisions; this PRD does not require a self-referential or hand-authored content hash |
 | Target repository | `aec-bench` |
-| Current production branch | `feat/wastewater-pump-station-stewardship-state-machine` |
-| Live implementation status | Reference package reader and pure physical kernel are merged; ASW-2A2 actor authority, obligations, work orders, scheduling, and receipts are in focused implementation |
+| Current production branch | `feat/wastewater-pump-station-projections-verifier` |
+| Live implementation status | ASW-2A0 through ASW-2A2 are merged; ASW-2A3 adds actor views, timed episode and tenure context, handover, information binding, and verifier replay |
 | Initial programme boundary | ASW-0 through ASW-4 |
-| Implementation status | Asset-local reference-package and physical-kernel production code exists; later stewardship slices remain incomplete |
+| Implementation status | Asset-local package, physics, and stewardship state machine exist; projection and verifier code is under review; durable runtime and host integration remain incomplete |
 | Working programme name | Asset Stewardship Worlds |
 | First study | Obligation continuity under time and handover |
 
@@ -558,6 +558,14 @@ ASW-2 may overlap only the inspection and intervention processes exercised by th
 
 ASW-2 freezes a typed quiescent result for the reference scenario when no future decision-relevant event exists. It does not invent a general post-terminal API. If the selected scenario contains a genuine physical terminal event, ASW-1 must define only the exact terminal behavior exercised by that event; otherwise unknown terminal events fail closed and richer terminal/closeout semantics remain conditional scope.
 
+An episode is a bounded interaction segment on one continuing world branch. It
+has an explicit start on the simulated station calendar and can contain many
+decision points, scheduled processes, time advances, and actor tenures. A
+handover starts a fresh tenure inside the same episode. It does not reset
+calendar time, pump exposure, restrictions, obligations, work orders, evidence,
+or physical condition. Durable episode persistence and chaining enter in
+ASW-2B; the in-memory ASW-2A3 slice proves the time and tenure semantics only.
+
 ### 9.3 Exogenous events and future jitter
 
 Each exogenous event declares:
@@ -636,6 +644,12 @@ Views must not leak:
 - counterfactual replay results.
 
 The verifier uses the action's bound base view and host information set when judging decision-time defensibility. It must not evaluate an earlier action using evidence revealed later.
+
+Actor-visible state and view identities are computed only from the permitted
+projection. They do not change because a hidden future schedule changes.
+Authoritative full-state identities remain in transition receipts and private
+verifier evidence. This separation prevents identity values from becoming a
+latent-state or future-event side channel.
 
 ### 9.6 Obligations
 
@@ -1745,7 +1759,7 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | OD-08 | Define canonical simultaneous-event ordering. | Resolved | [ASW-0C research charter](asw-0c-research-charter.md#8-deterministic-event-ordering) |
 | OD-09 | Define initial due-trigger, overdue, and breach semantics. | Resolved | [ASW-0C research charter](asw-0c-research-charter.md#73-trigger-policy) |
 | OD-10 | Define proposal, conditional-authority, execution-failure, and cancellation semantics. | Resolved for the first world | [ASW-0C research charter](asw-0c-research-charter.md#6-authority-scopes-and-separation) |
-| OD-11 | Define handover projection, actor-visible contents, revision, and separately queryable authoritative history. | Open | ASW-2A3 production projection and verifier boundary |
+| OD-11 | Define handover projection, actor-visible contents, revision, and separately queryable authoritative history. | Resolved for the in-memory projection; durable history query deferred | ASW-2A3 projection and verifier boundary; ASW-2B artifact repository |
 | OD-12 | Define evaluation-window treatments and terminal-liability vector. | Resolved for the first study | [ASW-0C research charter](asw-0c-research-charter.md#12-budgets-and-evaluation-window) |
 | OD-13 | Define exact behavior for a physical terminal event, or defer the general terminal surface. | Resolved by deferral | The first charter contains no physical terminal event |
 | OD-14 | Approve model-provider identity, token limits, and financial budget. | Open | ASW-4 governance; logical repetitions are already set by ASW-0C |
@@ -1785,15 +1799,17 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | 2026-07-29 | Retain hydraulic clearance loss as certified secondary physics while omitting clearance repair from the first public action catalogue. | Physical truth and study reachability are separate decisions; narrowing the first study does not rewrite the certified world. |
 | 2026-07-29 | Treat design freezes as reviewed semantic revisions without hand-authored hashes. | The environment can change during development; mixed outcome-bearing designs remain separated through study generations. |
 | 2026-07-29 | Amend ASW-0C to complete inspection before the repair access window. | Starting the `D`-long inspection at `L` would make its completion simultaneous with breach, and canonical order would apply breach first. |
+| 2026-07-29 | Model episode time and actor-tenure time separately and keep handover inside the continuing episode. | The environment needs real simulated duration without treating a new actor or conversation as a physical reset. |
+| 2026-07-29 | Compute actor-facing identities from visible projection content only. | A full-state fingerprint in an actor view could reveal that hidden latent or future state differs even when permitted observations are equal. |
 
 ## 24. Immediate next action
 
-Complete and review **ASW-2A2 — the asset-local stewardship state machine**
-against [ASW-0C-2](asw-0c-research-charter.md).
+Complete and review **ASW-2A3 — actor views, handover, information binding,
+and the task-owned verifier** against
+[ASW-0C-3](asw-0c-research-charter.md).
 
-That slice implements typed proposals, task-local authority, restrictions,
-obligations, work orders, scheduled processes, canonical event order, and
-transition receipts over the pure physical kernel. It does not add actor
-handover projections, durable storage, CLI, Harbor, `TrialRecord`, provider
-calls, or outcome evaluation. After ASW-2A2 merges, start ASW-2A3 projections
-and the task-owned verifier.
+That slice projects complete permitted present state, carries bounded history
+across fresh actor tenures, binds every proposal to its exact visible
+information, and replays recorded transitions through a pure verifier. It does
+not add durable storage, CLI, Harbor, `TrialRecord`, provider calls, or outcome
+evaluation. After ASW-2A3 merges, start ASW-2B durable world-run persistence.

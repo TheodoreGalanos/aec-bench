@@ -3,11 +3,7 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-from dataclasses import fields, is_dataclass, replace
-from decimal import Decimal
-from enum import Enum
+from dataclasses import replace
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_kernel import (
     advance_pump_station,
@@ -44,6 +40,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_events import (
     sorted_events as _sorted_events,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
+    stewardship_state_id as _state_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     ContinueOperation,
@@ -91,30 +90,10 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_policy import (
     work_order_for_pump as _work_order_for_pump,
 )
-
-
-def _canonical_value(value: object) -> object:
-    if isinstance(value, Enum):
-        return value.value
-    if isinstance(value, Decimal):
-        return str(value)
-    if is_dataclass(value) and not isinstance(value, type):
-        return {field.name: _canonical_value(getattr(value, field.name)) for field in fields(value)}
-    if isinstance(value, tuple):
-        return [_canonical_value(item) for item in value]
-    if value is None or isinstance(value, str | int | float | bool):
-        return value
-    raise TypeError(f"unsupported canonical value {type(value).__name__}")
-
-
-def _state_id(state: PumpStationStewardshipState) -> str:
-    payload = json.dumps(
-        _canonical_value(state),
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
+    PumpStationInformationSet,
+    proposal_binding_error,
+)
 
 
 def _transition_id(sequence: int) -> str:
@@ -556,14 +535,35 @@ def apply_stewardship_proposal(
     model: PumpStationModel,
     state: PumpStationStewardshipState,
     proposal: object,
+    *,
+    information_set: PumpStationInformationSet,
 ) -> PumpStationTransition:
-    """Validate, authorise, and apply one closed first-world proposal."""
+    """Validate a bound information set, authorise, and apply one proposal."""
     if not isinstance(proposal, _PROPOSAL_TYPES):
         raise PumpStationProposalError(
             "proposal-type",
             f"unsupported proposal type {type(proposal).__name__}",
         )
     typed_proposal = proposal
+    binding_error = proposal_binding_error(
+        model,
+        state,
+        typed_proposal.context,
+        information_set,
+    )
+    if binding_error is not None:
+        return _finish_transition(
+            state,
+            state,
+            trigger="proposal",
+            proposal_id=typed_proposal.context.proposal_id,
+            authority=PumpStationAuthorityDecision(
+                outcome=PumpStationAuthorityOutcome.INVALID,
+                required_authorities=(),
+                detail=binding_error,
+            ),
+            execution=PumpStationExecutionOutcome.CANCELLED,
+        )
     authority = _decide_proposal(model, state, typed_proposal)
     if authority.outcome in {
         PumpStationAuthorityOutcome.INVALID,

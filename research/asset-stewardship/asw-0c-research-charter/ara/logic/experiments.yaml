@@ -1,1 +1,21 @@
-experiments: []
+experiments:
+  - id: E001
+    verifies: [C006]
+    purpose: Check timed episode views, fresh-tenure handover, immutable information binding, redaction, and deterministic verifier replay.
+    setup: Use the bundled certified wastewater pump-station package and the task-local in-memory state machine, projector, and verifier.
+    procedure:
+      - Run the complete pump-station test folder through pytest.
+      - Run Ruff lint and format checks over the pump-station production and test paths.
+      - Run mypy over the five changed production modules.
+      - Parse the amended PRD and charter as GitHub-flavoured Markdown.
+    metrics:
+      - All pump-station unit, integration, and end-to-end tests pass.
+      - A hidden future-schedule change leaves the actor view byte-equivalent.
+      - Stale information binding produces an invalid authority result with no physical effect.
+      - Verifier replay matches every recorded transition.
+      - Lint, format, type, and document checks report no diagnostics.
+    evidence: [EV006]
+    exploratory: false
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+      test_count: 49

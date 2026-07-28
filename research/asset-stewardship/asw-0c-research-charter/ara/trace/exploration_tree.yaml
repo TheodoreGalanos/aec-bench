@@ -51,10 +51,23 @@ nodes:
   - id: N006
     type: decision
     summary: Complete inspection before repair access so canonical order does not breach the follow-up before inspection completion.
-    children: []
+    children: [N007]
     also_depends_on: [N004]
     claims_touched: [C005]
     provenance: user_revised
     payload:
       result: charter_revised_to_ASW-0C-2
     domain: {}
+  - id: N007
+    type: experiment
+    summary: Prove timed episode views, fresh-tenure handover, fail-closed binding, redaction, and verifier replay through ASW-2A3.
+    children: []
+    also_depends_on: [N005, N006]
+    claims_touched: [C006]
+    provenance: ai_executed
+    payload:
+      experiment_id: E001
+      result: passed
+      charter_revision: ASW-0C-3
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1

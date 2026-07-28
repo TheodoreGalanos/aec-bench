@@ -155,12 +155,16 @@ class ProposalContext:
     proposal_id: str
     agent_tenure_id: str
     based_on_sequence: int
+    base_view_id: str
+    information_set_id: str
     reason: str
 
     def __post_init__(self) -> None:
         _require_text(self.proposal_id, "proposal_id")
         _require_text(self.agent_tenure_id, "agent_tenure_id")
         _require_non_negative(self.based_on_sequence, "based_on_sequence")
+        _require_text(self.base_view_id, "base_view_id")
+        _require_text(self.information_set_id, "information_set_id")
         _require_text(self.reason, "reason")
 
 

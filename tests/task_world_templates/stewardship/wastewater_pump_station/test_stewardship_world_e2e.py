@@ -9,10 +9,14 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station import (
     ContinueOperation,
     OperatingInterval,
     ProposalContext,
+    PumpStationContinuityCarrier,
+    PumpStationCurrentContext,
     PumpStationEnvironment,
     PumpStationExecutionOutcome,
     PumpStationObligationKind,
     PumpStationObligationStatus,
+    PumpStationObservationHistory,
+    PumpStationProjectionContext,
     PumpStationRestrictionKind,
     PumpStationRestrictionStatus,
     PumpStationWorkOrderStatus,
@@ -25,9 +29,11 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station import (
     TransferDuty,
     advance_pump_station,
     apply_stewardship_proposal,
+    bind_information_set,
     create_stewardship_state,
     initial_pump_station_state,
     load_reference_package,
+    project_actor_view,
     pump_station_model_from_package,
 )
 
@@ -40,17 +46,58 @@ def _environment() -> PumpStationEnvironment:
     )
 
 
-def _context(state, proposal_id: str) -> ProposalContext:
-    return ProposalContext(
+def _bound_context(model, state, proposal_id: str):
+    package = load_reference_package()
+    view = project_actor_view(
+        model,
+        state,
+        PumpStationProjectionContext(
+            episode_id="episode-reference",
+            world_branch_id="branch-reference",
+            actor_id="station-steward",
+            agent_tenure_id="tenure-1",
+            episode_started_at_seconds=0,
+            tenure_started_at_seconds=0,
+            projection_policy_id="pump-station-current-state-v1",
+            source_artifact_ids=(
+                package.package_content_id,
+                package.manifest_content_id,
+            ),
+        ),
+    )
+    information_set = bind_information_set(
+        view,
+        PumpStationObservationHistory(
+            agent_tenure_id="tenure-1",
+            view_ids=(view.view_id,),
+        ),
+        PumpStationCurrentContext(
+            continuity_carrier=PumpStationContinuityCarrier.CURRENT_ACTOR_VIEW,
+            conversation_prefix_id=None,
+            workspace_tool_ids=("propose-pump-station-action",),
+            visible_material_ids=(),
+        ),
+    )
+    context = ProposalContext(
         proposal_id=proposal_id,
         agent_tenure_id="tenure-1",
         based_on_sequence=state.sequence,
+        base_view_id=view.view_id,
+        information_set_id=information_set.information_set_id,
         reason="Reference stewardship journey.",
     )
+    return context, information_set
 
 
-def _apply(model, state, proposal):
-    transition = apply_stewardship_proposal(model, state, proposal)
+def _apply(model, state, proposal_id, proposal_type, **parameters):
+    context, information_set = _bound_context(model, state, proposal_id)
+    proposal = proposal_type(context=context, **parameters)
+    transition = apply_stewardship_proposal(
+        model,
+        state,
+        proposal,
+        information_set=information_set,
+    )
     return transition.state, transition.receipt
 
 
@@ -73,81 +120,81 @@ def _run_reference_journey():
     state, receipt = _apply(
         model,
         state,
-        RequestConditionalDeferral(
-            context=_context(state, "proposal-01-deferral"),
-            pump_id="pump-a",
-        ),
+        "proposal-01-deferral",
+        RequestConditionalDeferral,
+        pump_id="pump-a",
     )
     receipts.append(receipt)
     state, receipt = _apply(
         model,
         state,
-        TransferDuty(context=_context(state, "proposal-02-transfer")),
+        "proposal-02-transfer",
+        TransferDuty,
     )
     receipts.append(receipt)
     state, receipt = _apply(
         model,
         state,
-        RequestInspection(
-            context=_context(state, "proposal-03-inspection"),
-            pump_id="pump-a",
-        ),
+        "proposal-03-inspection",
+        RequestInspection,
+        pump_id="pump-a",
     )
     receipts.append(receipt)
     state, receipt = _apply(
         model,
         state,
-        ContinueOperation(context=_context(state, "proposal-04-complete-inspection")),
+        "proposal-04-complete-inspection",
+        ContinueOperation,
     )
     receipts.append(receipt)
     inspection = state.latest_inspection("pump-a")
     state, receipt = _apply(
         model,
         state,
-        ContinueOperation(context=_context(state, "proposal-05-wait-for-access")),
+        "proposal-05-wait-for-access",
+        ContinueOperation,
     )
     receipts.append(receipt)
     state, receipt = _apply(
         model,
         state,
-        RequestObstructionClearance(
-            context=_context(state, "proposal-06-clear"),
-            pump_id="pump-a",
-            inspection_evidence_id=inspection.evidence_id,
-        ),
+        "proposal-06-clear",
+        RequestObstructionClearance,
+        pump_id="pump-a",
+        inspection_evidence_id=inspection.evidence_id,
     )
     receipts.append(receipt)
     state, receipt = _apply(
         model,
         state,
-        ContinueOperation(context=_context(state, "proposal-07-complete-clearance")),
+        "proposal-07-complete-clearance",
+        ContinueOperation,
     )
     receipts.append(receipt)
     state, receipt = _apply(
         model,
         state,
-        ContinueOperation(context=_context(state, "proposal-08-functional-checks")),
+        "proposal-08-functional-checks",
+        ContinueOperation,
     )
     receipts.append(receipt)
     functional_checks = state.latest_functional_checks("pump-a")
     state, receipt = _apply(
         model,
         state,
-        RequestProvisionalReturn(
-            context=_context(state, "proposal-09-return"),
-            pump_id="pump-a",
-            functional_check_evidence_id=functional_checks.evidence_id,
-        ),
+        "proposal-09-return",
+        RequestProvisionalReturn,
+        pump_id="pump-a",
+        functional_check_evidence_id=functional_checks.evidence_id,
     )
     receipts.append(receipt)
     work_order = state.work_order_for("pump-a")
     state, receipt = _apply(
         model,
         state,
-        RequestProvisionalClosure(
-            context=_context(state, "proposal-10-close"),
-            work_order_id=work_order.work_order_id,
-        ),
+        "proposal-10-close",
+        RequestProvisionalClosure,
+        work_order_id=work_order.work_order_id,
     )
     receipts.append(receipt)
     return model, before, state, tuple(receipts)
@@ -194,18 +241,16 @@ def test_independent_verification_fulfils_obligation_without_lifting_run_in() ->
     state, scheduled = _apply(
         model,
         state,
-        RequestVerification(
-            context=_context(state, "proposal-11-verification"),
-            pump_id="pump-a",
-        ),
+        "proposal-11-verification",
+        RequestVerification,
+        pump_id="pump-a",
     )
 
     state, completed = _apply(
         model,
         state,
-        ContinueOperation(
-            context=_context(state, "proposal-12-complete-verification"),
-        ),
+        "proposal-12-complete-verification",
+        ContinueOperation,
     )
 
     verification = state.obligation(

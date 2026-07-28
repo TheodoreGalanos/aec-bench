@@ -44,3 +44,13 @@ evidence:
     produced_by: null
     exact_values_required: true
     domain: {}
+  - id: EV006
+    kind: command_output
+    path: evidence/asw-2a3-projection-verifier-note.md
+    description: ASW-2A3 production paths and focused test, lint, format, type, redaction, replay, and document results.
+    source: feat/wastewater-pump-station-projections-verifier on 2026-07-29
+    supports: [C006]
+    produced_by: E001
+    exact_values_required: true
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1

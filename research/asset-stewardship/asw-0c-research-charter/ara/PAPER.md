@@ -21,6 +21,13 @@ before the repair access window because starting the `D`-long inspection at
 `L` would make completion simultaneous with breach, which has higher event
 priority.
 
+ASW-2A3 implements actor-visible current state, bounded structured handover,
+exact information-set binding, and pure verifier replay. Episode time and
+actor-tenure time are separate. A handover starts a fresh tenure without
+resetting the continuing station. Actor-visible identities use only permitted
+projection content, so a hidden future-schedule change cannot become an
+identity side channel.
+
 Layers:
 
 - `logic/claims.yaml` records the supported design claims.

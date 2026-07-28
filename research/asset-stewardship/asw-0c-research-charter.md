@@ -6,10 +6,10 @@
 | Field | Value |
 | --- | --- |
 | Programme coordinate | `ASW-0C — research charter` |
-| Revision | `ASW-0C-2` |
+| Revision | `ASW-0C-3` |
 | Recorded | 2026-07-29 |
 | Reference profile | `AU-NSW-LH-SYN-SPS-v1` |
-| Status | Current design baseline for the first study and the asset-local state machine |
+| Status | Current design baseline for the first study, state machine, projections, and task verifier |
 | Parent | [Asset Stewardship Worlds PRD](asset-stewardship-worlds-prd.md) |
 | Contract status | Research and programme authority only; not a runtime schema, public API, operational instruction, or compatibility promise |
 
@@ -400,6 +400,43 @@ Every accepted history is copied to two independent branches:
 The current-view treatment must not be made artificially unsafe by hiding a
 present duty. The only intended treatment difference is bounded accessible
 history and rationale.
+
+### 10.1 Production projection and episode boundary
+
+The first production projection contains:
+
+- the current quantized station observation;
+- duty and standby assignments;
+- station calendar time, pump runtime, and starts;
+- episode elapsed time and actor-tenure elapsed time;
+- current environment, access, and resources;
+- every active restriction and open obligation;
+- current work-order and active-process status; and
+- actor-visible evidence.
+
+It excludes latent pump condition, hidden future events, evaluation-window
+location, verifier output, gold actions, and counterfactual results.
+Actor-visible identities are derived only from this permitted projection.
+Private transition receipts retain the complete authoritative state identity
+needed for replay.
+
+One episode is a timed segment of the continuing station branch. A fresh actor
+handover starts a new tenure inside that episode. It does not reset station
+calendar time, pump exposure, physical condition, resources, restrictions,
+obligations, work orders, or evidence.
+
+Each proposal binds:
+
+- the exact actor view;
+- the tenure's append-only view manifest; and
+- the current continuity carrier, conversation prefix, tool surface, and
+  visible-material manifest.
+
+The structured handover contains the same complete current actor view as the
+current-view condition plus an explicitly bounded list of prior findings,
+action reasons, work effects, restriction and obligation changes, and evidence.
+The caller declares the bound before an outcome-bearing run. The handover
+cannot mutate the world.
 
 ## 11. Endpoint, estimand, and analysis
 
