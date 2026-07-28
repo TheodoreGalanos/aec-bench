@@ -109,6 +109,7 @@ def _finish_transition(
     authority: PumpStationAuthorityDecision | None,
     execution: PumpStationExecutionOutcome,
     clock_delta_seconds: int = 0,
+    applied_event_ids: tuple[str, ...] = (),
     applied_event_types: tuple[PumpStationEventType, ...] = (),
     processes_changed: tuple[str, ...] = (),
     restrictions_changed: tuple[str, ...] = (),
@@ -131,6 +132,7 @@ def _finish_transition(
             pre_state_id=_state_id(previous),
             post_state_id=_state_id(state),
             clock_delta_seconds=clock_delta_seconds,
+            applied_event_ids=applied_event_ids,
             applied_event_types=applied_event_types,
             processes_changed=processes_changed,
             restrictions_changed=restrictions_changed,
@@ -689,6 +691,7 @@ def _advance_to_next_decision_point(
     obligation_changes: tuple[str, ...] = ()
     work_order_changes: tuple[str, ...] = ()
     evidence_created: tuple[str, ...] = ()
+    applied_event_ids: tuple[str, ...] = ()
     applied_event_types: tuple[PumpStationEventType, ...] = ()
     sequence = state.sequence + 1
     for event in sorted(events, key=_event_sort_key):
@@ -702,6 +705,7 @@ def _advance_to_next_decision_point(
             event_evidence,
             event_physical_change,
         ) = _apply_scheduled_event(model, candidate, event, sequence)
+        applied_event_ids = (*applied_event_ids, event.event_id)
         applied_event_types = (*applied_event_types, event.event_type)
         process_changes = (*process_changes, *event_processes)
         restriction_changes = (*restriction_changes, *event_restrictions)
@@ -723,6 +727,7 @@ def _advance_to_next_decision_point(
         authority=authority,
         execution=execution,
         clock_delta_seconds=elapsed,
+        applied_event_ids=applied_event_ids,
         applied_event_types=applied_event_types,
         processes_changed=_unique(process_changes),
         restrictions_changed=_unique(restriction_changes),

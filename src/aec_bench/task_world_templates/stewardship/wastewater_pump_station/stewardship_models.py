@@ -477,6 +477,7 @@ class PumpStationTransitionReceipt:
     pre_state_id: str
     post_state_id: str
     clock_delta_seconds: int
+    applied_event_ids: tuple[str, ...]
     applied_event_types: tuple[PumpStationEventType, ...]
     processes_changed: tuple[str, ...]
     restrictions_changed: tuple[str, ...]

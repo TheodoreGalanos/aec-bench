@@ -61,7 +61,7 @@ nodes:
   - id: N007
     type: experiment
     summary: Prove timed episode views, fresh-tenure handover, fail-closed binding, redaction, and verifier replay through ASW-2A3.
-    children: []
+    children: [N008]
     also_depends_on: [N005, N006]
     claims_touched: [C006]
     provenance: ai_executed
@@ -69,5 +69,18 @@ nodes:
       experiment_id: E001
       result: passed
       charter_revision: ASW-0C-3
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+  - id: N008
+    type: experiment
+    summary: Prove durable timed state, immutable replay, atomic publication, and exactly-once crash recovery through ASW-2B.
+    children: []
+    also_depends_on: [N007]
+    claims_touched: [C007]
+    provenance: ai_executed
+    payload:
+      experiment_id: E002
+      result: passed
+      serialization_version: pump-station-world-run.v1
     domain:
       profile: AU-NSW-LH-SYN-SPS-v1

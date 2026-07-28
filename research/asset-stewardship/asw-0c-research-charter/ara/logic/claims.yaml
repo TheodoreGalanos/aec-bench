@@ -85,3 +85,20 @@ claims:
     domain:
       profile: AU-NSW-LH-SYN-SPS-v1
       implementation_stage: ASW-2A3
+  - id: C007
+    statement: One task-local immutable commit chain and atomic current-state pointer can preserve a timed pump-station episode across resume without duplicating physical or resource effects on retry.
+    status: supported
+    falsification_criteria:
+      - Resume loses or changes a clock, scheduled event, restriction, obligation, work order, process, evidence record, or transition sequence.
+      - A crash before current-state publication changes the selected world.
+      - Repeating one committed proposal ID creates another physical duty transfer or another restriction, obligation, or work order.
+      - Stored unknown, malformed, non-canonical, or identity-inconsistent content reloads successfully.
+    proof:
+      experiments: [E002]
+      evidence: [EV007]
+    dependencies: [C003, C006]
+    provenance: ai_executed
+    tags: [persistence, snapshot, recovery, exactly-once]
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+      implementation_stage: ASW-2B
