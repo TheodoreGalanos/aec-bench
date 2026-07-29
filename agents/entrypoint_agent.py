@@ -19,9 +19,14 @@ from typing import Any, cast
 from harbor.agents.base import BaseAgent
 
 from aec_bench.adapters.local_registry import detect_direct_provider
-from aec_bench.adapters.rlm.providers import detect_provider
+from aec_bench.adapters.rlm.providers import (
+    detect_provider,
+    preflight_pydantic_model_configuration,
+    resolve_pydantic_provider,
+)
 from aec_bench.adapters.runtime_limits import configured_positive_int, validate_runtime_limit_contract
 from aec_bench.agents.tools import inject_trajectory_writer
+from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.harness_instance import AgentBindingConfig
 from aec_bench.contracts.proposal_execution import (
     ProposalSessionExecutionRef,
@@ -52,6 +57,19 @@ from aec_bench.task_world_templates.harbor_export import (
     HarborLifecycleBridge,
     load_harbor_lifecycle_bridge,
     write_harbor_lifecycle_attestation,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
+    PUMP_STATION_HARBOR_BRIDGE_MODE,
+    PUMP_STATION_HARBOR_EXECUTION_KIND,
+    PumpStationHarborBridge,
+    load_pump_station_harbor_bridge,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
+    PUMP_STATION_MODEL_CONTROLLER_MODE,
+    PUMP_STATION_MODEL_MAX_TURNS,
+    PUMP_STATION_REFERENCE_CONTROLLER_ID,
+    run_pump_station_model_session,
+    run_pump_station_reference_session,
 )
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -110,6 +128,34 @@ _CLIENT_ENVIRONMENT_FIELDS = {
     "together_chat": {"api_key_env": "TOGETHER_API_KEY"},
 }
 
+_HOST_MODEL_PROVIDER_ENVIRONMENT_NAMES = {
+    "anthropic": ("ANTHROPIC_API_KEY",),
+    "azure": (
+        "AZURE_OPENAI_API_KEY",
+        "AZURE_OPENAI_API_VERSION",
+        "AZURE_OPENAI_ENDPOINT",
+    ),
+    "bedrock": (
+        "AWS_ACCESS_KEY_ID",
+        "AWS_BEARER_TOKEN_BEDROCK",
+        "AWS_CONFIG_FILE",
+        "AWS_CONTAINER_AUTHORIZATION_TOKEN",
+        "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+        "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+        "AWS_DEFAULT_REGION",
+        "AWS_PROFILE",
+        "AWS_REGION",
+        "AWS_ROLE_ARN",
+        "AWS_ROLE_SESSION_NAME",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_SHARED_CREDENTIALS_FILE",
+        "AWS_WEB_IDENTITY_TOKEN_FILE",
+    ),
+    "openai": ("OPENAI_API_KEY",),
+    "together": ("TOGETHER_API_KEY",),
+}
+
 
 class EntrypointAgent(BaseAgent):
     """Universal Harbor agent that dispatches to library adapters.
@@ -141,6 +187,7 @@ class EntrypointAgent(BaseAgent):
         self._params: dict[str, Any] = kwargs
         self._lifecycle_bridge: HarborLifecycleBridge | None = None
         self._proposal_inputs: LoadedProposalSessionHostInputs | None = None
+        self._world_session_bridge: PumpStationHarborBridge | None = None
 
     @staticmethod
     def name() -> str:
@@ -150,6 +197,10 @@ class EntrypointAgent(BaseAgent):
         return "1.0.0"
 
     async def setup(self, environment: Any) -> None:
+        if "world_session" in self._params:
+            self._validate_world_session_configuration()
+            self._world_session_bridge = load_pump_station_harbor_bridge(Path(environment.environment_dir))
+            return
         if "lifecycle_bridge" in self._params:
             self._validate_lifecycle_configuration()
             self._lifecycle_bridge = load_harbor_lifecycle_bridge(Path(environment.environment_dir))
@@ -305,6 +356,13 @@ class EntrypointAgent(BaseAgent):
         environment: Any,
         context: Any,
     ) -> None:
+        if "world_session" in self._params:
+            await self._run_world_session(
+                instruction=instruction,
+                environment=environment,
+                context=context,
+            )
+            return
         if "lifecycle_bridge" in self._params:
             await self._run_host_lifecycle(instruction=instruction, environment=environment, context=context)
             return
@@ -598,6 +656,182 @@ class EntrypointAgent(BaseAgent):
                 "lifecycle_status": result["evidence"]["lifecycle"]["status"],
                 "reward_owner": "harbor_verifier",
             }
+
+    def _validate_world_session_configuration(self) -> None:
+        if self._params.get("execution_kind") != PUMP_STATION_HARBOR_EXECUTION_KIND:
+            raise ValueError("pump-station world session requires its exact execution kind")
+        if self._params.get("adapter") != "tool_loop":
+            raise ValueError("pump-station world session requires the tool_loop adapter")
+        if self._params.get("extra_env") not in (None, {}):
+            raise ValueError("pump-station world session does not accept environment variables")
+        session = self._params.get("world_session")
+        if not isinstance(session, dict):
+            raise ValueError("pump-station world session bridge configuration differs")
+        controller = session.get("controller")
+        reference_controller = self.model_name == PUMP_STATION_REFERENCE_CONTROLLER_ID
+        expected_session = {"bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE}
+        if not reference_controller:
+            expected_session["controller"] = PUMP_STATION_MODEL_CONTROLLER_MODE
+        if session != expected_session:
+            raise ValueError("pump-station world session bridge configuration differs")
+        if reference_controller and controller is not None:
+            raise ValueError("pump-station reference controller cannot use model mode")
+        if not reference_controller and not str(self.model_name or "").strip():
+            raise ValueError("pump-station model controller requires a model")
+        if "client" in self._params:
+            raise ValueError("pump-station world session does not accept serialized clients")
+        if "tools" in self._params:
+            raise ValueError("pump-station world session owns its exact tool allowlist")
+        if "system_prompt" in self._params:
+            raise ValueError("pump-station world session owns its system prompt")
+        allowed = {
+            "adapter",
+            "execution_kind",
+            "extra_env",
+            "max_turns",
+            "world_session",
+        }
+        unknown = sorted(set(self._params) - allowed)
+        if unknown:
+            raise ValueError("unsupported pump-station world session configuration: " + ", ".join(unknown))
+        validate_runtime_limit_contract(
+            adapter_kind="tool_loop",
+            configuration=self._params,
+        )
+        _reject_serialized_provider_secrets(self._params)
+
+    async def _run_world_session(
+        self,
+        *,
+        instruction: str,
+        environment: Any,
+        context: Any,
+    ) -> None:
+        del instruction
+        self._validate_world_session_configuration()
+        configured_bridge = self._world_session_bridge
+        if configured_bridge is None:
+            raise RuntimeError("pump-station world session setup has not completed")
+        current_bridge = load_pump_station_harbor_bridge(Path(environment.environment_dir))
+        if current_bridge != configured_bridge:
+            raise ValueError("pump-station Harbor task changed after agent setup")
+        session_identity = str(getattr(environment, "session_id", "")).strip()
+        if not session_identity:
+            raise RuntimeError("pump-station Harbor environment has no session identity")
+
+        with tempfile.TemporaryDirectory(prefix="aec-bench-pump-station-harbor-") as raw_run:
+            staging = Path(raw_run)
+            run_dir = staging / "world-session"
+            reference_controller = self.model_name == PUMP_STATION_REFERENCE_CONTROLLER_ID
+            if reference_controller:
+                reference_session = await asyncio.to_thread(
+                    run_pump_station_reference_session,
+                    bridge=current_bridge,
+                    output_dir=run_dir,
+                    session_identity=session_identity,
+                )
+                output_path = staging / "output.md"
+                output_path.write_text(
+                    "The deterministic wastewater pump-station session completed.\n",
+                    encoding="utf-8",
+                )
+                input_tokens = 0
+                output_tokens = 0
+                resolved_model = PUMP_STATION_REFERENCE_CONTROLLER_ID
+                session_status = "completed"
+                world_session_id = reference_session.request.session_id
+            else:
+                model = str(self.model_name or "")
+                provider_environment = _host_model_provider_environment(
+                    model,
+                )
+                max_turns = (
+                    configured_positive_int(self._params, "max_turns")
+                    or PUMP_STATION_MODEL_MAX_TURNS
+                )
+                try:
+                    model_session = await asyncio.to_thread(
+                        run_pump_station_model_session,
+                        bridge=current_bridge,
+                        output_dir=run_dir,
+                        session_identity=session_identity,
+                        model=model,
+                        max_turns=max_turns,
+                        registry=self._lifecycle_registry(),
+                    )
+                except Exception as exc:
+                    context.metadata = {
+                        "adapter_name": "tool_loop",
+                        "bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE,
+                        "bridge_manifest_sha256": (current_bridge.export_manifest_sha256),
+                        "error": _redact_environment_values(
+                            str(exc),
+                            provider_environment,
+                        ),
+                        "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
+                        "model": model,
+                        "resolved_model": model,
+                        "reward_owner": "harbor_verifier",
+                        "world_session_status": "failed",
+                    }
+                    return
+                output_path = run_dir / "output.md"
+                input_tokens = model_session.adapter_result.usage_input_tokens or 0
+                output_tokens = model_session.adapter_result.usage_output_tokens or 0
+                resolved_model = model_session.adapter_result.resolved_model
+                session_status = (
+                    "completed"
+                    if (
+                        model_session.adapter_result.agent_output.status is AgentOutputStatus.COMPLETED
+                        and model_session.verification.valid
+                    )
+                    else "incomplete"
+                )
+                world_session_id = model_session.request.session_id
+            await environment.upload_dir(
+                str(run_dir),
+                current_bridge.output_path,
+            )
+            permissions = await environment.exec(
+                f"chmod -R go-rwx {current_bridge.output_path}",
+            )
+            if permissions.return_code != 0:
+                raise RuntimeError(
+                    "pump-station Harbor could not make uploaded evidence host-private.\n"
+                    f"stdout: {permissions.stdout}\n"
+                    f"stderr: {permissions.stderr}",
+                )
+            await environment.upload_file(
+                str(output_path),
+                "/workspace/output.md",
+            )
+
+        context.n_input_tokens = input_tokens
+        context.n_output_tokens = output_tokens
+        context.metadata = {
+            "adapter_name": "tool_loop",
+            "bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE,
+            "bridge_manifest_sha256": (current_bridge.export_manifest_sha256),
+            "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
+            "model": resolved_model,
+            "resolved_model": resolved_model,
+            "reward_owner": "harbor_verifier",
+            "world_session_id": world_session_id,
+            "world_session_status": session_status,
+        }
+
+
+def _host_model_provider_environment(model_name: str) -> dict[str, str]:
+    """Preflight a host-owned model and select local values for error redaction."""
+
+    preflight_pydantic_model_configuration(model_name)
+    provider = resolve_pydantic_provider(model_name)
+    approved_names = _HOST_MODEL_PROVIDER_ENVIRONMENT_NAMES.get(provider, ())
+    return {
+        name: value
+        for name in approved_names
+        if (value := os.environ.get(name, "").strip())
+    }
 
 
 async def _run_profiled_proposal_session(

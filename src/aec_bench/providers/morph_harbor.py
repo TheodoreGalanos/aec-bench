@@ -159,7 +159,7 @@ class MorphHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
 
     @property
     def can_disable_internet(self) -> bool:
-        return False
+        return True
 
     @property
     def _environment_definition_path(self) -> Path:

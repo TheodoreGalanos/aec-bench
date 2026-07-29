@@ -8,7 +8,11 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol
 
-from aec_bench.contracts.trial_record import ArtifactReference
+from aec_bench.contracts.trial_record import (
+    ArtifactReference,
+    WorldExecutionRecord,
+    WorldTrialProvenance,
+)
 from aec_bench.harness.harbor_contract import HarborTrialResult
 
 
@@ -53,6 +57,14 @@ class ImportedExecutionEvidence(Protocol):
         configuration: dict[str, Any],
     ) -> dict[str, Any]:
         """Return a portable, evidence-bound agent configuration."""
+
+    @property
+    def world_execution(self) -> WorldExecutionRecord | None:
+        """Return the optional stewardship execution projection."""
+
+    @property
+    def world_provenance(self) -> WorldTrialProvenance | None:
+        """Return the optional stewardship provenance projection."""
 
 
 class ImportEvidenceExtension(Protocol):

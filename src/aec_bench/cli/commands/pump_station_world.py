@@ -11,13 +11,25 @@ from typing import cast
 import typer
 
 from aec_bench.cli.output import emit
+from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.contracts.world_session import (
     StewardshipStateSnapshotRef,
     WorldSessionExecutionKind,
     WorldSessionOpenMode,
     WorldSessionRequest,
 )
+from aec_bench.harness.harbor_importing.core import import_harbor_trial
 from aec_bench.harness.world_session import open_world_session
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
+    export_pump_station_harbor_task,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_job import (
+    run_pump_station_harbor_job,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
+    PUMP_STATION_MODEL_MAX_TURNS,
+    PUMP_STATION_REFERENCE_CONTROLLER_ID,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
 )
@@ -180,6 +192,180 @@ def verify_command(
             "final_state_id": report.final_state_id,
             "active_restriction_ids": list(report.active_restriction_ids),
             "open_obligation_ids": list(report.open_obligation_ids),
+        },
+        start_time=started,
+    )
+
+
+@app.command("export-harbor")
+def export_harbor_command(
+    task_dir: Path = typer.Option(
+        ...,
+        "--task-dir",
+        help="New destination for the exported Harbor task",
+    ),
+    project_root: Path = typer.Option(
+        ...,
+        "--project-root",
+        help="AEC-Bench source root used to build the verifier runtime",
+    ),
+) -> None:
+    """Export one provider-free wastewater pump-station Harbor task."""
+
+    started = time.monotonic()
+    exported = export_pump_station_harbor_task(
+        task_dir,
+        project_root=project_root,
+    )
+    emit(
+        "task pump-station-world export-harbor",
+        {
+            "task_dir": str(exported.task_dir),
+            "manifest_path": str(exported.manifest_path),
+            "package_dir": str(exported.package_dir),
+            "verifier_runtime_path": str(exported.verifier_runtime_wheel_path),
+        },
+        start_time=started,
+    )
+
+
+@app.command("run-harbor")
+def run_harbor_command(
+    task_dir: Path = typer.Option(
+        ...,
+        "--task-dir",
+        help="Exported wastewater pump-station Harbor task",
+    ),
+    project_root: Path = typer.Option(
+        ...,
+        "--project-root",
+        help="AEC-Bench source root that contains the entrypoint agent",
+    ),
+    jobs_dir: Path = typer.Option(
+        ...,
+        "--jobs-dir",
+        help="Harbor job result directory",
+    ),
+    config_path: Path = typer.Option(
+        ...,
+        "--config-path",
+        help="Destination for the generated Harbor job config",
+    ),
+    backend: str = typer.Option(
+        "docker",
+        "--backend",
+        help="Harbor environment backend: docker, modal, or morph",
+    ),
+    model: str = typer.Option(
+        PUMP_STATION_REFERENCE_CONTROLLER_ID,
+        "--model",
+        help="Reference controller ID or Bedrock model name",
+    ),
+    max_turns: int = typer.Option(
+        PUMP_STATION_MODEL_MAX_TURNS,
+        "--max-turns",
+        min=1,
+        help="Maximum model requests for a model-controlled session",
+    ),
+    execute: bool = typer.Option(
+        True,
+        "--execute/--no-execute",
+        help="Run Harbor after the config is written",
+    ),
+) -> None:
+    """Prepare and optionally run one local provider-free Harbor job."""
+
+    started = time.monotonic()
+    result = run_pump_station_harbor_job(
+        task_dir=task_dir,
+        project_root=project_root,
+        jobs_dir=jobs_dir,
+        config_path=config_path,
+        backend=backend,
+        model_name=model,
+        max_turns=max_turns,
+        execute=execute,
+    )
+    errors = [] if result.exit_code in (None, 0) else [f"local Harbor job failed with exit code {result.exit_code}"]
+    emit(
+        "task pump-station-world run-harbor",
+        {
+            "config_path": str(result.config_path),
+            "command": list(result.command),
+            "backend": backend,
+            "model": model,
+            "max_turns": max_turns,
+            "executed": execute,
+            "exit_code": result.exit_code,
+        },
+        errors=errors,
+        start_time=started,
+    )
+
+
+@app.command("import-harbor-trial")
+def import_harbor_trial_command(
+    trial_dir: Path = typer.Option(
+        ...,
+        "--trial-dir",
+        help="Completed Harbor trial directory",
+    ),
+    repo_root: Path = typer.Option(
+        ...,
+        "--repo-root",
+        help="Repository root that owns the exported task and trial",
+    ),
+    record_path: Path = typer.Option(
+        ...,
+        "--record-path",
+        help="New TrialRecord JSON path",
+    ),
+) -> None:
+    """Strictly import one verified stewardship Harbor trial."""
+
+    started = time.monotonic()
+    if record_path.exists():
+        raise FileExistsError(f"TrialRecord output already exists: {record_path}")
+    record = import_harbor_trial(
+        trial_dir=trial_dir,
+        repo_root=repo_root,
+    )
+    record_path.parent.mkdir(parents=True, exist_ok=True)
+    record_path.write_text(
+        record.model_dump_json(indent=2) + "\n",
+        encoding="utf-8",
+    )
+    emit(
+        "task pump-station-world import-harbor-trial",
+        {
+            "record_path": str(record_path),
+            "trial_id": record.trial_id,
+            "execution_kind": (None if record.world_execution is None else record.world_execution.execution_kind),
+            "transition_count": (None if record.world_execution is None else record.world_execution.transition_count),
+        },
+        start_time=started,
+    )
+
+
+@app.command("reload-trial-record")
+def reload_trial_record_command(
+    record_path: Path = typer.Option(
+        ...,
+        "--record-path",
+        help="Existing TrialRecord JSON path",
+    ),
+) -> None:
+    """Reload one imported TrialRecord through the strict contract."""
+
+    started = time.monotonic()
+    record = TrialRecord.model_validate_json(record_path.read_text(encoding="utf-8"))
+    emit(
+        "task pump-station-world reload-trial-record",
+        {
+            "record_path": str(record_path),
+            "trial_id": record.trial_id,
+            "execution_kind": (None if record.world_execution is None else record.world_execution.execution_kind),
+            "transition_count": (None if record.world_execution is None else record.world_execution.transition_count),
         },
         start_time=started,
     )

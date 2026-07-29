@@ -358,14 +358,20 @@ class PumpStationWorldSessionFactory:
 
     task_world_id = PUMP_STATION_TASK_WORLD_ID
 
-    def __init__(self, repository_root: Path) -> None:
+    def __init__(
+        self,
+        repository_root: Path,
+        *,
+        package_root: Path | None = None,
+    ) -> None:
         self._repository = PumpStationWorldRunRepository(repository_root)
+        self._package_root = package_root
 
     def open(self, request: WorldSessionRequest) -> PumpStationWorldSession:
         """Open a new or exact resumed session for the requested actor tenure."""
         if request.task_world_id != self.task_world_id:
             raise ValueError("world-session request belongs to another task world")
-        package = load_reference_package()
+        package = load_reference_package(self._package_root)
         model = pump_station_model_from_package(package)
         if request.open_mode is WorldSessionOpenMode.START:
             environment = PumpStationEnvironment(

@@ -79,6 +79,7 @@ def test_morph_cloud_operations_mounts_harbor_verifier_tests() -> None:
     assert commands[0] == "mkdir -p /workspace && mkdir -p /logs && mkdir -p /tests"
     assert "docker run --rm --volume /workspace:/aec-bench-host-workspace" in commands[2]
     assert "cp -a /workspace/. /aec-bench-host-workspace/" in commands[2]
+    assert "--network none" in commands[3]
     assert "--volume /tests:/tests" in commands[3]
 
 

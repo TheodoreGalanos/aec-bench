@@ -253,6 +253,8 @@ def import_harbor_trial(
         evaluation=evaluation,
         timing=_timing_record(harbor_result),
         cost=_cost_record(agent),
+        world_execution=(None if import_evidence is None else import_evidence.world_execution),
+        world_provenance=(None if import_evidence is None else import_evidence.world_provenance),
         completeness=Completeness.PARTIAL,
     )
 

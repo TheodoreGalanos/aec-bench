@@ -147,6 +147,15 @@ class LocalFilesystemHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
             "AEC_BENCH_DETAILS_PATH": str(self._root / "logs" / "verifier" / "details.json"),
             "AEC_BENCH_PYTHON": sys.executable,
         }
+        pump_station_manifest = tests / "world-session-export.json"
+        if pump_station_manifest.is_file():
+            values.update(
+                {
+                    "AEC_BENCH_WORLD_SESSION_DIR": str(self._root / "workspace" / "world-session"),
+                    "AEC_BENCH_EXPORT_MANIFEST": str(pump_station_manifest),
+                    "AEC_BENCH_REFERENCE_PACKAGE_DIR": str(tests / "reference-package"),
+                }
+            )
         if runtime_candidates:
             values["AEC_BENCH_VERIFIER_RUNTIME"] = str(runtime_candidates[0])
         return values

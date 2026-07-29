@@ -21,6 +21,10 @@ _BUILTIN_EXTENSION_PATHS = MappingProxyType(
             "aec_bench.harness.harbor_importing.proposal",
             "PROPOSAL_IMPORT_EVIDENCE_EXTENSION",
         ),
+        "stewardship_world_session": (
+            "aec_bench.harness.harbor_importing.stewardship",
+            "STEWARDSHIP_IMPORT_EVIDENCE_EXTENSION",
+        ),
     }
 )
 
@@ -28,8 +32,12 @@ _BUILTIN_EXTENSION_PATHS = MappingProxyType(
 def execution_kind_from_context(context: ImportEvidenceContext) -> str | None:
     """Resolve the declared execution kind without interpreting its policy."""
 
-    value = context.harbor_result.config.agent.kwargs.get("adapter")
-    return value if isinstance(value, str) and value else None
+    configuration = context.harbor_result.config.agent.kwargs
+    declared = configuration.get("execution_kind")
+    if isinstance(declared, str) and declared:
+        return declared
+    adapter = configuration.get("adapter")
+    return adapter if isinstance(adapter, str) and adapter else None
 
 
 def resolve_import_evidence_extension(
