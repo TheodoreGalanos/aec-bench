@@ -185,5 +185,9 @@ def test_installed_cli_exports_prepares_imports_and_reloads_harbor_trial(
     assert config_path.is_file()
     assert imported["data"]["trial_id"] == "trial-cli"
     assert imported["data"]["transition_count"] == 12
+    assert imported["data"]["evaluation_valid"] is True
+    assert imported["data"]["active_terminal_restrictions"] == 1
     assert reloaded["data"]["trial_id"] == "trial-cli"
     assert reloaded["data"]["execution_kind"] == ("stewardship_world_session")
+    assert reloaded["data"]["evaluation_valid"] is True
+    assert reloaded["data"]["active_terminal_restrictions"] == 1

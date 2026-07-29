@@ -197,6 +197,8 @@ def import_harbor_trial(
         evaluation=evaluation,
         trial_dir=context.trial_dir,
     )
+    if import_evidence is not None:
+        evaluation = import_evidence.augment_evaluation(evaluation)
     task_relative_path = harbor_result.config.task.path
     return TrialRecord(
         trial_id=harbor_result.trial_name,

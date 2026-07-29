@@ -67,11 +67,34 @@ def test_installed_cli_starts_advances_resumes_and_verifies_world(tmp_path: Path
         "tenure-cli-2",
         cwd=tmp_path,
     )
+    advanced_after_handover = _run_cli(
+        "continue-operation",
+        "--run-dir",
+        str(run_dir),
+        "--session-id",
+        "session-cli-4",
+        "--agent-tenure-id",
+        "tenure-cli-2",
+        "--proposal-id",
+        "proposal-cli-2",
+        "--reason",
+        "Continue after the fresh-tenure handover.",
+        cwd=tmp_path,
+    )
     verified = _run_cli("verify", "--run-dir", str(run_dir), cwd=tmp_path)
+    evaluated = _run_cli("evaluate", "--run-dir", str(run_dir), cwd=tmp_path)
 
     assert started["data"]["snapshot"]["sequence"] == 0
     assert advanced["data"]["snapshot"]["sequence"] == 1
     assert resumed["data"]["snapshot"] == advanced["data"]["snapshot"]
     assert resumed["data"]["agent_tenure_id"] == "tenure-cli-2"
+    assert advanced_after_handover["data"]["snapshot"]["sequence"] == 2
     assert verified["data"]["valid"] is True
-    assert verified["data"]["replayed_transition_ids"] == ["transition-0001"]
+    assert verified["data"]["replayed_transition_ids"] == [
+        "transition-0001",
+        "transition-0002",
+    ]
+    assert evaluated["data"]["valid"] is True
+    assert evaluated["data"]["metrics"]["handover_count"] == 1
+    assert evaluated["data"]["metrics"]["handover_omission_count"] == 0
+    assert evaluated["data"]["metrics"]["terminal_liability"]["review_required_physical_state"] is True

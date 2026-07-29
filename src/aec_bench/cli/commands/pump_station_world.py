@@ -18,6 +18,9 @@ from aec_bench.contracts.world_session import (
     WorldSessionOpenMode,
     WorldSessionRequest,
 )
+from aec_bench.evaluation.stewardship import (
+    evaluate_pump_station_stewardship_run,
+)
 from aec_bench.harness.harbor_importing.core import import_harbor_trial
 from aec_bench.harness.world_session import open_world_session
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
@@ -197,6 +200,28 @@ def verify_command(
     )
 
 
+@app.command("evaluate")
+def evaluate_command(
+    run_dir: Path = typer.Option(
+        ...,
+        "--run-dir",
+        help="Existing durable world-run directory",
+    ),
+) -> None:
+    """Reload one pump-station run and report its evaluation vector."""
+
+    started = time.monotonic()
+    evaluation = evaluate_pump_station_stewardship_run(
+        run_dir=run_dir,
+    )
+    emit(
+        "task pump-station-world evaluate",
+        evaluation.model_dump(mode="json"),
+        errors=list(evaluation.gates.errors),
+        start_time=started,
+    )
+
+
 @app.command("export-harbor")
 def export_harbor_command(
     task_dir: Path = typer.Option(
@@ -335,6 +360,7 @@ def import_harbor_trial_command(
         record.model_dump_json(indent=2) + "\n",
         encoding="utf-8",
     )
+    stewardship = record.evaluation.stewardship
     emit(
         "task pump-station-world import-harbor-trial",
         {
@@ -342,6 +368,10 @@ def import_harbor_trial_command(
             "trial_id": record.trial_id,
             "execution_kind": (None if record.world_execution is None else record.world_execution.execution_kind),
             "transition_count": (None if record.world_execution is None else record.world_execution.transition_count),
+            "evaluation_valid": (None if stewardship is None else stewardship.valid),
+            "active_terminal_restrictions": (
+                None if stewardship is None else stewardship.metrics.terminal_liability.active_restriction_count
+            ),
         },
         start_time=started,
     )
@@ -359,6 +389,7 @@ def reload_trial_record_command(
 
     started = time.monotonic()
     record = TrialRecord.model_validate_json(record_path.read_text(encoding="utf-8"))
+    stewardship = record.evaluation.stewardship
     emit(
         "task pump-station-world reload-trial-record",
         {
@@ -366,6 +397,10 @@ def reload_trial_record_command(
             "trial_id": record.trial_id,
             "execution_kind": (None if record.world_execution is None else record.world_execution.execution_kind),
             "transition_count": (None if record.world_execution is None else record.world_execution.transition_count),
+            "evaluation_valid": (None if stewardship is None else stewardship.valid),
+            "active_terminal_restrictions": (
+                None if stewardship is None else stewardship.metrics.terminal_liability.active_restriction_count
+            ),
         },
         start_time=started,
     )

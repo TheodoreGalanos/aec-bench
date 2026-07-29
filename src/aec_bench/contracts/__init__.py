@@ -180,6 +180,11 @@ _EXPORTS_BY_MODULE: dict[str, tuple[str, ...]] = {
         "ErrorTag",
         "EvaluationResult",
         "Judgment",
+        "StewardshipEvaluation",
+        "StewardshipEvaluationEvidence",
+        "StewardshipIntegrityGates",
+        "StewardshipMetricVector",
+        "StewardshipTerminalLiability",
         "ValidityCheck",
     ),
     "aec_bench.contracts.authority": (

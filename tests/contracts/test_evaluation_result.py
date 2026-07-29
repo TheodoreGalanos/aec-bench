@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
+import aec_bench.contracts as contracts
 from aec_bench.contracts.evaluation_result import (
     Annotation,
     ConfidenceMetadata,
@@ -14,10 +15,25 @@ from aec_bench.contracts.evaluation_result import (
     ErrorTag,
     EvaluationResult,
     Judgment,
+    StewardshipEvaluation,
+    StewardshipEvaluationEvidence,
+    StewardshipIntegrityGates,
+    StewardshipMetricVector,
+    StewardshipTerminalLiability,
     ValidityCheck,
 )
 
 # --- Valid construction ---
+
+
+def test_stewardship_evaluation_contracts_are_public_library_exports() -> None:
+    assert {
+        "StewardshipEvaluation",
+        "StewardshipEvaluationEvidence",
+        "StewardshipIntegrityGates",
+        "StewardshipMetricVector",
+        "StewardshipTerminalLiability",
+    }.issubset(contracts.__all__)
 
 
 def test_evaluation_result_accepts_minimal_valid_payload() -> None:
@@ -176,6 +192,94 @@ def test_evaluation_result_rejects_schema_invalid_output_with_nonzero_reward() -
                 output_parseable=True,
                 schema_valid=False,
                 verifier_completed=True,
+            ),
+        )
+
+
+def _stewardship_evaluation(
+    *,
+    artifact_and_replay_integrity: bool = True,
+) -> StewardshipEvaluation:
+    gates = StewardshipIntegrityGates(
+        artifact_and_replay_integrity=artifact_and_replay_integrity,
+        output_and_action_contract_validity=True,
+        authority_and_execution_consistency=True,
+        decision_time_validity=True,
+        obligation_and_restriction_integrity=True,
+        physical_and_service_outcomes_available=True,
+        resource_stewardship_available=True,
+        evidence_and_record_integrity=True,
+        handover_continuity_integrity=True,
+        terminal_stewardship_available=True,
+        errors=(() if artifact_and_replay_integrity else ("artifact and replay evidence differs",)),
+    )
+    return StewardshipEvaluation(
+        schema_version="stewardship-evaluation.v1",
+        valid=artifact_and_replay_integrity,
+        gates=gates,
+        metrics=StewardshipMetricVector(
+            decision_time_invalid_count=0,
+            physical_service_review_required=False,
+            maintenance_intervention_count=1,
+            obligation_breach_count=0,
+            restriction_breach_count=0,
+            evidence_integrity_gap_count=0,
+            consumed_maintenance_resource_count=1,
+            handover_count=1,
+            handover_omission_count=0,
+            terminal_liability=StewardshipTerminalLiability(
+                review_required_physical_state=False,
+                active_restriction_count=1,
+                overdue_calendar_seconds=0,
+                overdue_affected_pump_runtime_seconds=0,
+                breached_obligation_count=0,
+                unresolved_verification_count=0,
+                deferred_work_count=0,
+                unavailable_pump_count=1,
+                consumed_maintenance_resource_count=1,
+                unresolved_evidence=False,
+            ),
+        ),
+        evidence=StewardshipEvaluationEvidence(
+            world_run_manifest_content_id="a" * 64,
+            initial_state_id="b" * 64,
+            terminal_state_id="c" * 64,
+            replayed_transition_ids=("transition-0001",),
+            imported_artifact_sha256=("d" * 64,),
+        ),
+    )
+
+
+def test_evaluation_result_carries_stewardship_metric_vector() -> None:
+    stewardship = _stewardship_evaluation()
+
+    result = EvaluationResult(
+        reward=1.0,
+        validity=ValidityCheck(
+            output_parseable=True,
+            schema_valid=True,
+            verifier_completed=True,
+        ),
+        stewardship=stewardship,
+    )
+    restored = EvaluationResult.model_validate(result.model_dump(mode="json"))
+
+    assert restored.stewardship == stewardship
+    assert restored.stewardship is not None
+    assert restored.stewardship.metrics.terminal_liability.active_restriction_count == 1
+
+
+def test_evaluation_result_blocks_reward_when_stewardship_integrity_fails() -> None:
+    with pytest.raises(ValidationError, match="stewardship integrity failures"):
+        EvaluationResult(
+            reward=1.0,
+            validity=ValidityCheck(
+                output_parseable=True,
+                schema_valid=True,
+                verifier_completed=True,
+            ),
+            stewardship=_stewardship_evaluation(
+                artifact_and_replay_integrity=False,
             ),
         )
 
