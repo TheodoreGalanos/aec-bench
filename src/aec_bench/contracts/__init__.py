@@ -103,6 +103,8 @@ _EXPORTS_BY_MODULE: dict[str, tuple[str, ...]] = {
         "TaskReference",
         "TimingRecord",
         "TrialRecord",
+        "WorldExecutionRecord",
+        "WorldTrialProvenance",
     ),
     "aec_bench.contracts.advisor": (
         "AdvisorConfig",

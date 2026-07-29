@@ -61,6 +61,19 @@ def test_morph_harbor_environment_starts_runtime_snapshot(tmp_path: Path) -> Non
     ]
 
 
+def test_morph_harbor_environment_accepts_disabled_internet(tmp_path: Path) -> None:
+    environment = MorphHarborEnvironment(
+        environment_dir=_write_environment(tmp_path),
+        environment_name="pump-station",
+        session_id="trial-001",
+        trial_paths=TrialPaths(tmp_path / "trial"),
+        task_env_config=_environment_config(allow_internet=False),
+        operations=FakeMorphHarborOperations(),
+    )
+
+    assert environment.can_disable_internet is True
+
+
 @pytest.mark.parametrize(
     ("requested_storage_mb", "expected_disk_size_mb"),
     ((5120, 8192), (10240, 10240)),
@@ -333,7 +346,11 @@ def _write_environment(tmp_path: Path) -> Path:
     return environment_dir
 
 
-def _environment_config(*, storage_mb: int = 10240) -> EnvironmentConfig:
+def _environment_config(
+    *,
+    storage_mb: int = 10240,
+    allow_internet: bool = True,
+) -> EnvironmentConfig:
     return EnvironmentConfig.model_construct(
         build_timeout_sec=600.0,
         docker_image=None,
@@ -342,7 +359,7 @@ def _environment_config(*, storage_mb: int = 10240) -> EnvironmentConfig:
         storage_mb=storage_mb,
         gpus=0,
         gpu_types=None,
-        allow_internet=True,
+        allow_internet=allow_internet,
         mcp_servers=[],
         memory=None,
         storage=None,

@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import shutil
 import tarfile
 from pathlib import Path
 from typing import Any
@@ -13,12 +14,24 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from aec_bench.contracts.stage_execution import KernelInstructionOverride
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
+    PUMP_STATION_HARBOR_BRIDGE_MODE,
+    export_pump_station_harbor_task,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
+    PUMP_STATION_MODEL_CONTROLLER_MODE,
+    PUMP_STATION_REFERENCE_CONTROLLER_ID,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_verifier import (
+    verify_pump_station_harbor_run,
+)
 from agents.entrypoint_agent import (
     _BUNDLE_REMOTE_PATH,
     _LIBRARY_ARCHIVE_REMOTE_PATH,
     _LIBRARY_SOURCE,
     _RESULT_REMOTE_PATH,
     EntrypointAgent,
+    _host_model_provider_environment,
 )
 from tests.support.output_completion import make_output_commit_attestation
 
@@ -229,6 +242,112 @@ def test_setup_injects_trajectory_writer(tmp_path: Path) -> None:
         asyncio.run(agent.setup(env))
 
     mock_inject.assert_awaited_once_with(env)
+
+
+def test_world_session_entrypoint_normalizes_remote_evidence_permissions(
+    tmp_path: Path,
+) -> None:
+    task_dir = tmp_path / "tasks" / "stewardship" / "wastewater-pump-station"
+    exported = export_pump_station_harbor_task(
+        task_dir,
+        project_root=Path(__file__).resolve().parents[2],
+    )
+    agent = EntrypointAgent(
+        logs_dir=tmp_path / "logs",
+        model_name=PUMP_STATION_REFERENCE_CONTROLLER_ID,
+        adapter="tool_loop",
+        execution_kind="stewardship_world_session",
+        extra_env={},
+        world_session={"bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE},
+    )
+    environment = _make_environment()
+    environment.environment_dir = task_dir / "environment"
+    environment.session_id = "harbor-trial-1"
+    captured_run = tmp_path / "captured-world-session"
+    captured_output: list[str] = []
+
+    async def capture_dir(local_path: str, remote_path: str) -> None:
+        assert remote_path == "/workspace/world-session"
+        shutil.copytree(local_path, captured_run)
+
+    async def capture_file(local_path: str, remote_path: str) -> None:
+        assert remote_path == "/workspace/output.md"
+        captured_output.append(Path(local_path).read_text(encoding="utf-8"))
+
+    environment.upload_dir = AsyncMock(side_effect=capture_dir)
+    environment.upload_file = AsyncMock(side_effect=capture_file)
+    environment.exec.return_value = _make_exec_result(return_code=0)
+    context = MagicMock()
+    context.n_input_tokens = 99
+    context.n_output_tokens = 99
+    context.metadata = {}
+
+    asyncio.run(agent.setup(environment))
+    asyncio.run(
+        agent.run(
+            instruction="Complete the exported pump-station stewardship session.",
+            environment=environment,
+            context=context,
+        )
+    )
+    verified = verify_pump_station_harbor_run(
+        run_dir=captured_run,
+        export_manifest_path=exported.manifest_path,
+        package_dir=exported.package_dir,
+        verifier_runtime_path=exported.verifier_runtime_wheel_path,
+    )
+
+    environment.exec.assert_awaited_once_with(
+        "chmod -R go-rwx /workspace/world-session",
+    )
+    assert captured_output == ["The deterministic wastewater pump-station session completed.\n"]
+    assert verified["valid"] is True
+    assert context.n_input_tokens == 0
+    assert context.n_output_tokens == 0
+    assert context.metadata["execution_kind"] == ("stewardship_world_session")
+    assert context.metadata["world_session_status"] == "completed"
+    assert context.metadata["reward_owner"] == "harbor_verifier"
+
+
+def test_world_session_entrypoint_accepts_bedrock_model_controller(
+    tmp_path: Path,
+) -> None:
+    agent = EntrypointAgent(
+        logs_dir=tmp_path / "logs",
+        model_name="au.anthropic.claude-sonnet-4-6",
+        adapter="tool_loop",
+        execution_kind="stewardship_world_session",
+        extra_env={},
+        max_turns=30,
+        world_session={
+            "bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE,
+            "controller": PUMP_STATION_MODEL_CONTROLLER_MODE,
+        },
+    )
+
+    agent._validate_world_session_configuration()
+
+
+def test_world_session_host_model_preflight_accepts_aws_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AWS_BEARER_TOKEN_BEDROCK", raising=False)
+    monkeypatch.setenv("AWS_PROFILE", "pump-station-bedrock")
+    monkeypatch.setenv("AWS_REGION", "ap-southeast-2")
+    monkeypatch.setenv("TOGETHER_API_KEY", "unrelated-provider-key")
+
+    with patch(
+        "agents.entrypoint_agent.preflight_pydantic_model_configuration",
+    ) as preflight:
+        environment = _host_model_provider_environment(
+            "au.anthropic.claude-sonnet-4-6",
+        )
+
+    preflight.assert_called_once_with("au.anthropic.claude-sonnet-4-6")
+    assert environment == {
+        "AWS_PROFILE": "pump-station-bedrock",
+        "AWS_REGION": "ap-southeast-2",
+    }
 
 
 # ---------------------------------------------------------------------------
