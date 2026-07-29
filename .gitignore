@@ -188,6 +188,8 @@ examples/
 !docs/examples/
 !docs/examples/meta-harness/
 !docs/examples/meta-harness/**
+!src/aec_bench/init/skill_data/meta-harness/examples/
+!src/aec_bench/init/skill_data/meta-harness/examples/lifecycle-ablation.yaml
 packages/
 task_decompositions/
 task_genomes/
