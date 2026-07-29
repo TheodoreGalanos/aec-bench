@@ -8,6 +8,10 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
+from aec_bench.contracts.evaluation_result import (
+    EvaluationResult,
+    StewardshipEvaluation,
+)
 from aec_bench.contracts.trial_record import (
     ArtifactReference,
     WorldExecutionRecord,
@@ -17,6 +21,9 @@ from aec_bench.contracts.world_session import (
     StewardshipStateSnapshotRef,
     WorldSessionRequest,
     WorldSessionResult,
+)
+from aec_bench.evaluation.stewardship import (
+    evaluate_pump_station_stewardship_run,
 )
 from aec_bench.harness.harbor_importing.artifact_io import (
     artifact_reference,
@@ -52,6 +59,7 @@ class StewardshipHarborImportEvidence:
     world_provenance: WorldTrialProvenance
     artifacts: tuple[ArtifactReference, ...]
     package_content_id: str
+    evaluation: StewardshipEvaluation
 
     @property
     def execution_kind(self) -> str:
@@ -82,6 +90,17 @@ class StewardshipHarborImportEvidence:
             "transition_count": self.world_execution.transition_count,
         }
         return portable
+
+    def augment_evaluation(
+        self,
+        evaluation: EvaluationResult,
+    ) -> EvaluationResult:
+        """Attach evaluation-owned metrics and enforce hard-gate reward."""
+
+        payload = evaluation.model_dump(mode="python")
+        payload["reward"] = evaluation.reward if self.evaluation.valid else 0.0
+        payload["stewardship"] = self.evaluation
+        return EvaluationResult.model_validate(payload)
 
 
 class StewardshipImportEvidenceExtension:
@@ -160,6 +179,11 @@ def _load_stewardship_evidence(
         inventory=inventory,
         bridge=bridge,
     )
+    evaluation = evaluate_pump_station_stewardship_run(
+        run_dir=run_dir / "world-run",
+        package_root=bridge.package_root,
+        imported_artifact_sha256=tuple(sorted({artifact.sha256 for artifact in artifacts})),
+    )
     execution = WorldExecutionRecord(
         execution_kind=PUMP_STATION_HARBOR_EXECUTION_KIND,
         session_id=request.session_id,
@@ -186,6 +210,7 @@ def _load_stewardship_evidence(
         world_provenance=provenance,
         artifacts=artifacts,
         package_content_id=bridge.package.package_content_id,
+        evaluation=evaluation,
     )
 
 

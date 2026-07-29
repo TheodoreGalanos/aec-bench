@@ -12,6 +12,9 @@ from harbor.models.trial.config import TrialConfig  # type: ignore[import-untype
 from harbor.trial.trial import Trial  # type: ignore[import-untyped]
 
 from aec_bench.contracts.trial_record import TrialRecord
+from aec_bench.evaluation.stewardship import (
+    evaluate_pump_station_stewardship_run,
+)
 from aec_bench.harness.harbor_importing.core import import_harbor_trial
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
@@ -95,6 +98,22 @@ def test_local_harbor_trial_runs_entrypoint_then_independent_verifier(
     assert record.world_execution is not None
     assert record.world_execution.transition_count == 12
     assert record.world_provenance is not None
+    assert record.outputs.artifacts is not None
+    world_session_dir = next(
+        candidate
+        for candidate in (
+            trial_dir / "agent" / "world-session",
+            trial_dir / "artifacts" / "agent" / "world-session",
+        )
+        if candidate.exists()
+    )
+    expected_evaluation = evaluate_pump_station_stewardship_run(
+        run_dir=world_session_dir / "world-run",
+        package_root=exported.package_dir,
+        imported_artifact_sha256=tuple(sorted({artifact.sha256 for artifact in record.outputs.artifacts})),
+    )
+    assert record.evaluation.stewardship == expected_evaluation
+    assert record.evaluation.stewardship.metrics.terminal_liability.active_restriction_count == 1
 
     operations = [
         json.loads(line)
@@ -106,7 +125,9 @@ def test_local_harbor_trial_runs_entrypoint_then_independent_verifier(
         "/workspace/output.md",
         "/tests",
     ]
-    verifier_index = next(index for index, event in enumerate(operations) if event["event"] == "exec")
+    verifier_index = next(
+        index for index, event in enumerate(operations) if event.get("command", "").startswith("/tests/test.sh")
+    )
     tests_index = next(index for index, event in enumerate(operations) if event.get("target") == "/tests")
     assert tests_index < verifier_index
 

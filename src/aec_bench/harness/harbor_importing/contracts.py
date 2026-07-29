@@ -8,6 +8,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol
 
+from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.trial_record import (
     ArtifactReference,
     WorldExecutionRecord,
@@ -57,6 +58,12 @@ class ImportedExecutionEvidence(Protocol):
         configuration: dict[str, Any],
     ) -> dict[str, Any]:
         """Return a portable, evidence-bound agent configuration."""
+
+    def augment_evaluation(
+        self,
+        evaluation: EvaluationResult,
+    ) -> EvaluationResult:
+        """Attach execution-specific evaluation evidence or return it unchanged."""
 
     @property
     def world_execution(self) -> WorldExecutionRecord | None:

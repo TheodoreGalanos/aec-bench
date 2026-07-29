@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.proposal_execution import ProposalSessionReceipt
 from aec_bench.contracts.trial_record import (
     ArtifactReference,
@@ -65,6 +66,14 @@ class ProposalHarborImportEvidence:
             "session_receipt_sha256": self.session_receipt.content_sha256,
         }
         return portable
+
+    def augment_evaluation(
+        self,
+        evaluation: EvaluationResult,
+    ) -> EvaluationResult:
+        """Keep proposal-session evaluation unchanged."""
+
+        return evaluation
 
     @property
     def world_execution(self) -> WorldExecutionRecord | None:
