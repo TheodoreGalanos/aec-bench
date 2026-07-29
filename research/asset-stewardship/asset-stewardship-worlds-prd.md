@@ -580,6 +580,14 @@ Each exogenous event declares:
 
 ASW-2 uses a fixed event schedule. Later treatments change one declared source class at a time.
 
+Future design work should expand the declared event catalogue to increase
+interaction diversity and operational realism. Candidate families include
+physical loading and degradation changes, observation arrival or loss,
+operational demand and duty changes, resource and access changes, and
+institutional events such as handovers or revised restrictions. Each addition
+must preserve deterministic replay, explicit visibility, and controlled
+variation of one source class at a time.
+
 ### 9.4 Action, authority, and execution
 
 An agent proposal includes:
@@ -1843,15 +1851,14 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | 2026-07-29 | Model episode time and actor-tenure time separately and keep handover inside the continuing episode. | The environment needs real simulated duration without treating a new actor or conversation as a physical reset. |
 | 2026-07-29 | Compute actor-facing identities from visible projection content only. | A full-state fingerprint in an actor view could reveal that hidden latent or future state differs even when permitted observations are equal. |
 | 2026-07-29 | Publish ASW-2B transitions as immutable task artifacts followed by one lock-serialised atomic current-state pointer. | This gives snapshot, resume, strict replay, and exactly-once physical and resource effects without a database, shared stewardship runtime, or hand-authored hashes. |
+| 2026-07-29 | Keep the ASW-2C host boundary minimal and provider-neutral while the pump-station package owns its native tools. | The host needs strict start and resume contracts without owning task physics, action names, evaluation policy, or model-provider calls. |
 
 ## 24. Immediate next action
 
-Complete and review **ASW-2B — durable world run** against
-[ASW-0C-3](asw-0c-research-charter.md), then start **ASW-2C — direct host
-session**.
+Complete and review **ASW-2C — direct host session**, then start **ASW-2D —
+Harbor and experimental root**.
 
-ASW-2C may add only the minimum promoted host-execution types, provider-neutral
-world-session bridge, native typed tools, installed CLI start/resume/verify, and
-capability-disabled lifecycle regression. It must use the accepted ASW-2B
-repository and task semantics. It does not add Harbor import, `TrialRecord`
-changes, study contracts, or model-provider calls.
+ASW-2D adds the entrypoint execution discriminator, sibling stewardship
+exporter, local Harbor job, strict importer, immutable artifact reconciliation,
+and the minimum additive `TrialRecord` stewardship fragment. It does not add
+evaluation report contracts, study execution, or model-provider calls.

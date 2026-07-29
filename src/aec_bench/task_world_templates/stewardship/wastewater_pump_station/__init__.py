@@ -124,6 +124,12 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     load_pump_station_artifact,
     pump_station_artifact_bytes,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
+    PUMP_STATION_TASK_WORLD_ID,
+    PUMP_STATION_TOOL_NAMES,
+    PumpStationWorldSession,
+    PumpStationWorldSessionFactory,
+)
 
 __all__ = [
     "EXPECTED_MANIFEST_CONTENT_ID",
@@ -194,7 +200,11 @@ __all__ = [
     "PumpStationWorldRunError",
     "PumpStationWorldRunManifest",
     "PumpStationWorldRunRepository",
+    "PumpStationWorldSession",
+    "PumpStationWorldSessionFactory",
     "PUMP_STATION_SERIALIZATION_VERSION",
+    "PUMP_STATION_TASK_WORLD_ID",
+    "PUMP_STATION_TOOL_NAMES",
     "PUMP_STATION_TRANSPORT_FIELD_EXCLUSIONS",
     "REFERENCE_PACKAGE_FILE_NAMES",
     "ReferencePackage",

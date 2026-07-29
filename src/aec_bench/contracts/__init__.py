@@ -377,6 +377,14 @@ _EXPORTS_BY_MODULE: dict[str, tuple[str, ...]] = {
         "TaskSnapshotRef",
         "WorldSnapshotRef",
     ),
+    "aec_bench.contracts.world_session": (
+        "StewardshipStateSnapshotRef",
+        "WORLD_SESSION_SCHEMA_VERSION",
+        "WorldSessionExecutionKind",
+        "WorldSessionOpenMode",
+        "WorldSessionRequest",
+        "WorldSessionResult",
+    ),
     "aec_bench.contracts.validators": (
         "LenientModel",
         "NonEmptyStr",

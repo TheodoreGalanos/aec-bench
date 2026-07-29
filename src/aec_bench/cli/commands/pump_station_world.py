@@ -1,0 +1,185 @@
+# ABOUTME: Provides installed CLI commands for direct pump-station world sessions.
+# ABOUTME: Starts, advances, resumes, and independently verifies one durable task-owned run.
+
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+from typing import cast
+
+import typer
+
+from aec_bench.cli.output import emit
+from aec_bench.contracts.world_session import (
+    StewardshipStateSnapshotRef,
+    WorldSessionExecutionKind,
+    WorldSessionOpenMode,
+    WorldSessionRequest,
+)
+from aec_bench.harness.world_session import open_world_session
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
+    PumpStationWorldRunRepository,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
+    PUMP_STATION_TASK_WORLD_ID,
+    PumpStationWorldSession,
+    PumpStationWorldSessionFactory,
+)
+
+app = typer.Typer(help="Run the synthetic wastewater pump-station stewardship world.")
+
+
+def _factory(run_dir: Path) -> PumpStationWorldSessionFactory:
+    return PumpStationWorldSessionFactory(run_dir)
+
+
+def _resume_request(
+    run_dir: Path,
+    *,
+    session_id: str,
+    agent_tenure_id: str,
+) -> WorldSessionRequest:
+    repository = PumpStationWorldRunRepository(run_dir)
+    manifest = repository.load_manifest()
+    snapshot = repository.current_snapshot()
+    return WorldSessionRequest(
+        execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
+        open_mode=WorldSessionOpenMode.RESUME,
+        session_id=session_id,
+        task_world_id=PUMP_STATION_TASK_WORLD_ID,
+        agent_tenure_id=agent_tenure_id,
+        run_id=manifest.run_id,
+        episode_id=manifest.episode_id,
+        world_branch_id=manifest.world_branch_id,
+        start_snapshot=StewardshipStateSnapshotRef(
+            run_id=snapshot.run_id,
+            episode_id=snapshot.episode_id,
+            world_branch_id=snapshot.world_branch_id,
+            sequence=snapshot.sequence,
+            state_id=snapshot.state_id,
+            commit_id=snapshot.commit_id,
+        ),
+    )
+
+
+def _open(
+    run_dir: Path,
+    request: WorldSessionRequest,
+) -> PumpStationWorldSession:
+    return cast(
+        PumpStationWorldSession,
+        open_world_session(request, _factory(run_dir)),
+    )
+
+
+@app.command("start")
+def start_command(
+    run_dir: Path = typer.Option(..., "--run-dir", help="Empty directory for the durable world run"),
+    run_id: str = typer.Option(..., "--run-id", help="Stable world-run identity"),
+    episode_id: str = typer.Option(..., "--episode-id", help="Stable episode identity"),
+    world_branch_id: str = typer.Option(..., "--world-branch-id", help="Stable continuing branch identity"),
+    session_id: str = typer.Option(..., "--session-id", help="Direct host-session identity"),
+    agent_tenure_id: str = typer.Option(..., "--agent-tenure-id", help="Current actor-tenure identity"),
+) -> None:
+    """Start one direct session over a new durable pump-station run."""
+    started = time.monotonic()
+    request = WorldSessionRequest(
+        execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
+        open_mode=WorldSessionOpenMode.START,
+        session_id=session_id,
+        task_world_id=PUMP_STATION_TASK_WORLD_ID,
+        agent_tenure_id=agent_tenure_id,
+        run_id=run_id,
+        episode_id=episode_id,
+        world_branch_id=world_branch_id,
+    )
+    session = _open(run_dir, request)
+    emit(
+        "task pump-station-world start",
+        session.result.model_dump(mode="json"),
+        start_time=started,
+    )
+
+
+@app.command("resume")
+def resume_command(
+    run_dir: Path = typer.Option(..., "--run-dir", help="Existing durable world-run directory"),
+    session_id: str = typer.Option(..., "--session-id", help="Direct host-session identity"),
+    agent_tenure_id: str = typer.Option(..., "--agent-tenure-id", help="Fresh or continuing actor tenure"),
+) -> None:
+    """Resume the exact selected world state under one actor tenure."""
+    started = time.monotonic()
+    session = _open(
+        run_dir,
+        _resume_request(
+            run_dir,
+            session_id=session_id,
+            agent_tenure_id=agent_tenure_id,
+        ),
+    )
+    emit(
+        "task pump-station-world resume",
+        session.result.model_dump(mode="json"),
+        start_time=started,
+    )
+
+
+@app.command("continue-operation")
+def continue_operation_command(
+    run_dir: Path = typer.Option(..., "--run-dir", help="Existing durable world-run directory"),
+    session_id: str = typer.Option(..., "--session-id", help="Direct host-session identity"),
+    agent_tenure_id: str = typer.Option(..., "--agent-tenure-id", help="Current actor-tenure identity"),
+    proposal_id: str = typer.Option(..., "--proposal-id", help="Stable proposal identity"),
+    reason: str = typer.Option(..., "--reason", help="Actor reason for continuing operation"),
+) -> None:
+    """Apply the explicit no-intervention proposal and advance simulated time."""
+    started = time.monotonic()
+    session = _open(
+        run_dir,
+        _resume_request(
+            run_dir,
+            session_id=session_id,
+            agent_tenure_id=agent_tenure_id,
+        ),
+    )
+    result = json.loads(
+        session.continue_operation(
+            proposal_id=proposal_id,
+            reason=reason,
+        )
+    )
+    emit(
+        "task pump-station-world continue-operation",
+        result,
+        start_time=started,
+    )
+
+
+@app.command("verify")
+def verify_command(
+    run_dir: Path = typer.Option(..., "--run-dir", help="Existing durable world-run directory"),
+) -> None:
+    """Reload and independently replay all committed pump-station transitions."""
+    started = time.monotonic()
+    session = _open(
+        run_dir,
+        _resume_request(
+            run_dir,
+            session_id="verification-session",
+            agent_tenure_id="verification-tenure",
+        ),
+    )
+    report = session.verify()
+    emit(
+        "task pump-station-world verify",
+        {
+            "valid": report.valid,
+            "issues": list(report.issues),
+            "replayed_transition_ids": list(report.replayed_transition_ids),
+            "final_state_id": report.final_state_id,
+            "active_restriction_ids": list(report.active_restriction_ids),
+            "open_obligation_ids": list(report.open_obligation_ids),
+        },
+        start_time=started,
+    )
