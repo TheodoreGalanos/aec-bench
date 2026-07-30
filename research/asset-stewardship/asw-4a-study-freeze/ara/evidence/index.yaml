@@ -1,0 +1,31 @@
+evidence:
+  - id: EV001
+    kind: note
+    path: evidence/frozen-study-design.md
+    description: Exact ASW-4A design values and their accepted research authority.
+    source: research/asset-stewardship/asw-0c-research-charter.md
+    supports: [C001]
+    produced_by: null
+    exact_values_required: true
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+  - id: EV002
+    kind: command_output
+    path: evidence/asw-4a-verification.md
+    description: Focused contract, analysis, identity, token, spend, immutable-publication, reload, tamper, provider-boundary, lint, format, and type results.
+    source: feat/wastewater-pump-station-asw-4a on 2026-07-31
+    supports: [C001, C002]
+    produced_by: E001
+    exact_values_required: true
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+  - id: EV003
+    kind: note
+    path: evidence/provider-approval-boundary.md
+    description: Open provider, model, token, and spend authority that blocks ASW-4B execution.
+    source: research/asset-stewardship/asset-stewardship-worlds-prd.md OD-14
+    supports: [C003]
+    produced_by: null
+    exact_values_required: true
+    domain:
+      implementation_stage: ASW-4B
