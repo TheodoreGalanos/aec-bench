@@ -1,0 +1,47 @@
+experiments:
+  - id: E001
+    verifies: [C001]
+    purpose: Prove that the provider-independent manifest expands into the exact frozen paired plan and rejects design drift.
+    setup: Use the promoted wastewater pump-station profile and the study-local ASW-4A contracts without provider credentials.
+    procedure:
+      - Build the analysis-fixture manifest from the accepted package and rule identities.
+      - Expand the manifest into all history, window, and treatment-order combinations.
+      - Validate exact counts, counterbalancing, paired identity, hidden windows, logical limits, and content identities.
+      - Bind each planned block to its history and event-schedule identities.
+      - Try invalid phase authority, changed limits, incomplete coverage, duplicate evidence, and identity drift.
+    metrics:
+      - The plan contains 32 paired blocks and 64 trials.
+      - Each history class has 16 blocks and each hidden window is balanced within its class.
+      - Treatment order is balanced within each history and window cell.
+      - Invalid or mixed-identity evidence fails closed.
+      - A model phase requires provider, model, adapter, call, token, currency, and spend approval for that phase.
+    evidence: [EV001, EV002]
+    exploratory: false
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+      phase: analysis_fixture
+  - id: E002
+    verifies: [C002]
+    purpose: Prove the complete provider-free analysis, publication, reload, retry, and tamper-rejection path.
+    setup: Use generated observations with known paired differences and the real host-private immutable artifact repository.
+    procedure:
+      - Generate 64 analysis-only observations with zero provider calls, tokens, spend, and reward changes.
+      - Publish the manifest, plan, treatment-delivery records, observations, and report by content identity.
+      - Publish the same bundle again and compare every artifact identity.
+      - Independently reload all evidence and recompute the report.
+      - Change the stored report bytes and confirm that reload rejects them.
+    metrics:
+      - The report has exact coverage and 32 analyzable pairs.
+      - The known fixture risk difference is -0.5.
+      - The known fixture interval is [-0.65625, -0.34375].
+      - Provider calls, tokens, spend, study outcomes, and reward changes are all zero.
+      - The report conclusion remains analysis_fixture.
+      - A shakedown can report only shakedown and cannot contain study outcomes.
+      - Provider-call, token, currency, and spend overruns fail closed.
+      - Evidence input order does not change the report identity.
+      - Retry is identity-stable and changed evidence fails closed.
+    evidence: [EV002]
+    exploratory: false
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+      phase: analysis_fixture

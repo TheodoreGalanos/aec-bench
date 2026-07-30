@@ -1,0 +1,54 @@
+claims:
+  - id: C001
+    statement: The first stewardship continuity study has one complete provider-independent plan with fixed conditions, limits, endpoint, estimand, uncertainty method, and coverage gates.
+    status: supported
+    falsification_criteria:
+      - The study plan does not contain exactly 32 paired blocks and 64 planned trajectories.
+      - A paired arm differs in current state, current duties, history, event schedule, model condition, logical limits, or evaluation window.
+      - Treatment order, endpoint, conclusion rule, or attrition rule can change without a new manifest identity.
+      - A planned observation can use a different history, event schedule, model condition, or logical limit without becoming ineligible.
+    proof:
+      experiments: [E001]
+      evidence: [EV001, EV002]
+    dependencies: []
+    provenance: ai_executed
+    tags: [study-design, pairing, preregistration]
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+      implementation_stage: ASW-4A
+  - id: C002
+    statement: Provider-free generated fixtures can exercise immutable publication, paired analysis, recovery, and independent reload without producing a model result or changing task reward.
+    status: supported
+    falsification_criteria:
+      - Fixture generation makes a provider call.
+      - A fixture observation is eligible as a shakedown or confirmatory outcome.
+      - The fixture path changes a task reward.
+      - Repeated publication changes an artifact identity.
+      - A changed report reloads successfully or a stored conclusion is trusted without recomputation.
+      - A shakedown report can make a confirmatory conclusion.
+      - Provider evidence can exceed its approved call, token, currency, or spend limit.
+      - Reordering the same retained evidence changes the report identity.
+    proof:
+      experiments: [E002]
+      evidence: [EV002]
+    dependencies: [C001]
+    provenance: ai_executed
+    tags: [provider-free, immutable-evidence, analysis]
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+      implementation_stage: ASW-4A
+  - id: C003
+    statement: A model shakedown needs separate phase-specific approval of provider, model, adapter, call, token, currency, and spend limits before any provider call.
+    status: provisional
+    falsification_criteria:
+      - A provider call starts without a recorded approval that contains all required values.
+      - A shakedown approval is reused for a confirmatory generation.
+      - A shakedown result enters the confirmatory estimand.
+    proof:
+      experiments: []
+      evidence: [EV003]
+    dependencies: [C001, C002]
+    provenance: user
+    tags: [approval, provider, spend]
+    domain:
+      implementation_stage: ASW-4B
