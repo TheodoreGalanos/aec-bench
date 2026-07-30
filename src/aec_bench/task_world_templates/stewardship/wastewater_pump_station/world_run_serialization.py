@@ -12,10 +12,13 @@ from enum import Enum
 from typing import Any, NoReturn, TypeVar, cast, get_args, get_origin, get_type_hints, overload
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+    PUMP_STATION_SERIALIZATION_VERSION as _PUMP_STATION_SERIALIZATION_VERSION,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
     PumpStationWorldRunError,
 )
 
-PUMP_STATION_SERIALIZATION_VERSION = "pump-station-world-run.v1"
+PUMP_STATION_SERIALIZATION_VERSION = _PUMP_STATION_SERIALIZATION_VERSION
 PUMP_STATION_TRANSPORT_FIELD_EXCLUSIONS: tuple[str, ...] = ()
 
 ArtifactT = TypeVar("ArtifactT")

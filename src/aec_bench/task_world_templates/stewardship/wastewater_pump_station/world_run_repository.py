@@ -38,6 +38,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationInformationSet,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+    PUMP_STATION_SERIALIZATION_VERSION,
+    PUMP_STATION_SNAPSHOT_VERSION,
     PumpStationAppliedEventBatch,
     PumpStationCurrentRunPointer,
     PumpStationStagedTransition,
@@ -47,7 +49,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     PumpStationWorldRunManifest,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_serialization import (
-    PUMP_STATION_SERIALIZATION_VERSION,
     load_pump_station_artifact,
     pump_station_artifact_bytes,
     pump_station_artifact_id,
@@ -147,8 +148,17 @@ class PumpStationWorldRunRepository:
     ) -> PumpStationStateSnapshotRef:
         """Publish an immutable initial state and select it atomically."""
         with self.locked():
+            if stewardship_state_id(initial_state) != manifest.initial_state_id:
+                _fail("world-run-identity", "initial state differs from manifest")
             if (self._root / "current.json").exists():
-                _fail("world-run-exists", manifest.run_id)
+                if self.load_manifest() != manifest:
+                    _fail("world-run-exists", f"{manifest.run_id} has different identity")
+                if self.load_state(manifest.initial_state_id) != initial_state:
+                    _fail("world-run-exists", f"{manifest.run_id} has different initial state")
+                current = self.current_snapshot()
+                if current.sequence != manifest.initial_sequence or current.state_id != manifest.initial_state_id:
+                    _fail("world-run-exists", f"{manifest.run_id} has already advanced")
+                return current
             self._publish_root_immutable("manifest.json", manifest)
             self._publish_state(initial_state)
             commit = PumpStationWorldRunCommit(
@@ -275,6 +285,7 @@ class PumpStationWorldRunRepository:
         commit_id = pump_station_artifact_id(commit)
         self._publish_content("commits", commit_id, commit)
         snapshot = PumpStationStateSnapshotRef(
+            snapshot_version=PUMP_STATION_SNAPSHOT_VERSION,
             run_id=manifest.run_id,
             episode_id=manifest.episode_id,
             world_branch_id=manifest.world_branch_id,
@@ -587,6 +598,7 @@ class PumpStationWorldRunRepository:
         pointer: PumpStationCurrentRunPointer,
     ) -> PumpStationStateSnapshotRef:
         return PumpStationStateSnapshotRef(
+            snapshot_version=PUMP_STATION_SNAPSHOT_VERSION,
             run_id=manifest.run_id,
             episode_id=manifest.episode_id,
             world_branch_id=manifest.world_branch_id,

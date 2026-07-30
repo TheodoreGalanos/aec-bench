@@ -43,6 +43,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
     load_reference_package,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PUMP_STATION_AUTHORITY_POLICY_VERSION,
+    PUMP_STATION_RECEIPT_VERSION,
+    PUMP_STATION_TRANSITION_RULE_VERSION,
     ContinueOperation,
     ProposalContext,
     PumpStationAuthority,
@@ -109,6 +112,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     PumpStationWorldRun,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+    PUMP_STATION_SERIALIZATION_VERSION,
+    PUMP_STATION_SNAPSHOT_VERSION,
     PumpStationAppliedEventBatch,
     PumpStationStagedTransition,
     PumpStationStateSnapshotRef,
@@ -119,7 +124,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     PumpStationWorldRunRepository,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_serialization import (
-    PUMP_STATION_SERIALIZATION_VERSION,
     PUMP_STATION_TRANSPORT_FIELD_EXCLUSIONS,
     load_pump_station_artifact,
     pump_station_artifact_bytes,
@@ -202,9 +206,13 @@ __all__ = [
     "PumpStationWorldRunRepository",
     "PumpStationWorldSession",
     "PumpStationWorldSessionFactory",
+    "PUMP_STATION_AUTHORITY_POLICY_VERSION",
+    "PUMP_STATION_RECEIPT_VERSION",
     "PUMP_STATION_SERIALIZATION_VERSION",
+    "PUMP_STATION_SNAPSHOT_VERSION",
     "PUMP_STATION_TASK_WORLD_ID",
     "PUMP_STATION_TOOL_NAMES",
+    "PUMP_STATION_TRANSITION_RULE_VERSION",
     "PUMP_STATION_TRANSPORT_FIELD_EXCLUSIONS",
     "REFERENCE_PACKAGE_FILE_NAMES",
     "ReferencePackage",

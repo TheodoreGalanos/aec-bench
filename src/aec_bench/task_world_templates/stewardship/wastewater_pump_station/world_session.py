@@ -10,6 +10,7 @@ from typing import Any
 
 from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.contracts.world_session import (
+    STEWARDSHIP_STATE_SNAPSHOT_SCHEMA_VERSION,
     StewardshipStateSnapshotRef,
     WorldSessionOpenMode,
     WorldSessionRequest,
@@ -60,6 +61,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     PumpStationWorldRun,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+    PUMP_STATION_SNAPSHOT_VERSION,
     PumpStationStateSnapshotRef,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
@@ -89,6 +91,7 @@ PUMP_STATION_TOOL_NAMES = (
 
 def _snapshot_ref(snapshot: PumpStationStateSnapshotRef) -> StewardshipStateSnapshotRef:
     return StewardshipStateSnapshotRef(
+        schema_version=STEWARDSHIP_STATE_SNAPSHOT_SCHEMA_VERSION,
         run_id=snapshot.run_id,
         episode_id=snapshot.episode_id,
         world_branch_id=snapshot.world_branch_id,
@@ -100,6 +103,7 @@ def _snapshot_ref(snapshot: PumpStationStateSnapshotRef) -> StewardshipStateSnap
 
 def _pump_station_snapshot(snapshot: StewardshipStateSnapshotRef) -> PumpStationStateSnapshotRef:
     return PumpStationStateSnapshotRef(
+        snapshot_version=PUMP_STATION_SNAPSHOT_VERSION,
         run_id=snapshot.run_id,
         episode_id=snapshot.episode_id,
         world_branch_id=snapshot.world_branch_id,

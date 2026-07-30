@@ -20,6 +20,7 @@ from aec_bench.harness.world_session import open_world_session
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     PUMP_STATION_HARBOR_EXECUTION_KIND,
     PumpStationHarborBridge,
+    is_pump_station_harbor_inventory_artifact,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationVerificationReport,
@@ -274,11 +275,10 @@ def _artifact_inventory(
 ) -> dict[str, Any]:
     artifacts: list[dict[str, Any]] = []
     for path in sorted(output_dir.rglob("*")):
-        if not path.is_file() or path.name in {
-            ".world-run.lock",
-            "artifact-inventory.json",
-            "current.json",
-        }:
+        if not path.is_file() or not is_pump_station_harbor_inventory_artifact(
+            output_dir,
+            path,
+        ):
             continue
         payload = path.read_bytes()
         artifacts.append(

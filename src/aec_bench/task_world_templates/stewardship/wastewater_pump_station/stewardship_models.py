@@ -14,6 +14,10 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
     PumpStationState,
 )
 
+PUMP_STATION_RECEIPT_VERSION = "pump-station-transition-receipt.v1"
+PUMP_STATION_AUTHORITY_POLICY_VERSION = "pump-station-authority-policy.v1"
+PUMP_STATION_TRANSITION_RULE_VERSION = "pump-station-transition-rules.v1"
+
 
 class PumpStationProposalError(ValueError):
     """Raised when a proposal or scheduled transition leaves the task contract."""
@@ -468,6 +472,9 @@ class PumpStationStewardshipState:
 class PumpStationTransitionReceipt:
     """Immutable in-memory record of one applied state-machine transition."""
 
+    receipt_version: str
+    authority_policy_version: str
+    transition_rule_version: str
     transition_id: str
     sequence: int
     trigger: str
@@ -485,6 +492,14 @@ class PumpStationTransitionReceipt:
     work_orders_changed: tuple[str, ...]
     evidence_created: tuple[str, ...]
     physical_change: PumpStationChangeKind | None
+
+    def __post_init__(self) -> None:
+        if self.receipt_version != PUMP_STATION_RECEIPT_VERSION:
+            _fail("receipt-version", self.receipt_version)
+        if self.authority_policy_version != PUMP_STATION_AUTHORITY_POLICY_VERSION:
+            _fail("authority-policy-version", self.authority_policy_version)
+        if self.transition_rule_version != PUMP_STATION_TRANSITION_RULE_VERSION:
+            _fail("transition-rule-version", self.transition_rule_version)
 
 
 @dataclass(frozen=True, slots=True)

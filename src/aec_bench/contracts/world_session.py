@@ -11,6 +11,7 @@ from pydantic import model_validator
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 
 WORLD_SESSION_SCHEMA_VERSION = "aecbench.world-session.v1"
+STEWARDSHIP_STATE_SNAPSHOT_SCHEMA_VERSION = "aecbench.stewardship-state-snapshot.v1"
 
 
 class WorldSessionExecutionKind(StrEnum):
@@ -29,6 +30,7 @@ class WorldSessionOpenMode(StrEnum):
 class StewardshipStateSnapshotRef(FrozenStrictModel):
     """Task-neutral identity of one selected dynamic stewardship state."""
 
+    schema_version: str = STEWARDSHIP_STATE_SNAPSHOT_SCHEMA_VERSION
     run_id: NonEmptyStr
     episode_id: NonEmptyStr
     world_branch_id: NonEmptyStr
@@ -37,7 +39,9 @@ class StewardshipStateSnapshotRef(FrozenStrictModel):
     commit_id: NonEmptyStr
 
     @model_validator(mode="after")
-    def validate_sequence(self) -> Self:
+    def validate_snapshot(self) -> Self:
+        if self.schema_version != STEWARDSHIP_STATE_SNAPSHOT_SCHEMA_VERSION:
+            raise ValueError("unsupported stewardship snapshot schema version")
         if self.sequence < 0:
             raise ValueError("snapshot sequence must be non-negative")
         return self
