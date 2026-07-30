@@ -47,6 +47,24 @@ PUMP_STATION_CONTROLLER_MODES = (
 _MANIFEST_NAME = "world-session-export.json"
 _PACKAGE_PATH = "tests/reference-package"
 _MAX_MANIFEST_BYTES = 1024 * 1024
+_NON_AUTHORITY_ARTIFACT_NAMES = frozenset(
+    {
+        ".world-run.lock",
+        "artifact-inventory.json",
+        "current.json",
+    }
+)
+
+
+def is_pump_station_harbor_inventory_artifact(
+    root: Path,
+    path: Path,
+) -> bool:
+    """Return whether one session file is eligible for the Harbor inventory."""
+    relative = path.relative_to(root)
+    if path.name in _NON_AUTHORITY_ARTIFACT_NAMES:
+        return False
+    return not (relative.parts and relative.parts[0] == "world-run" and path.name.startswith("."))
 
 
 @dataclass(frozen=True)
@@ -423,5 +441,6 @@ __all__ = (
     "PUMP_STATION_HARBOR_OUTPUT_PATH",
     "PumpStationHarborBridge",
     "export_pump_station_harbor_task",
+    "is_pump_station_harbor_inventory_artifact",
     "load_pump_station_harbor_bridge",
 )

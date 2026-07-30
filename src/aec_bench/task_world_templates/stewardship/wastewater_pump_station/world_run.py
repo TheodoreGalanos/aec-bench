@@ -14,6 +14,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     stewardship_state_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PUMP_STATION_AUTHORITY_POLICY_VERSION,
+    PUMP_STATION_RECEIPT_VERSION,
+    PUMP_STATION_TRANSITION_RULE_VERSION,
     PumpStationProposal,
     PumpStationStewardshipState,
     PumpStationTransition,
@@ -28,6 +31,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationInformationSet,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+    PUMP_STATION_SERIALIZATION_VERSION,
+    PUMP_STATION_SNAPSHOT_VERSION,
     PumpStationStagedTransition,
     PumpStationStateSnapshotRef,
     PumpStationWorldRunError,
@@ -35,9 +40,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_serialization import (
-    PUMP_STATION_SERIALIZATION_VERSION,
 )
 
 
@@ -76,6 +78,10 @@ class PumpStationWorldRun:
         """Create and atomically select one durable initial state."""
         manifest = PumpStationWorldRunManifest(
             serialization_version=PUMP_STATION_SERIALIZATION_VERSION,
+            snapshot_version=PUMP_STATION_SNAPSHOT_VERSION,
+            receipt_version=PUMP_STATION_RECEIPT_VERSION,
+            authority_policy_version=PUMP_STATION_AUTHORITY_POLICY_VERSION,
+            transition_rule_version=PUMP_STATION_TRANSITION_RULE_VERSION,
             run_id=run_id,
             episode_id=episode_id,
             world_branch_id=world_branch_id,

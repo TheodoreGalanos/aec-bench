@@ -45,6 +45,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     stewardship_state_id as _state_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PUMP_STATION_AUTHORITY_POLICY_VERSION,
+    PUMP_STATION_RECEIPT_VERSION,
+    PUMP_STATION_TRANSITION_RULE_VERSION,
     ContinueOperation,
     PumpStationAuthority,
     PumpStationAuthorityDecision,
@@ -123,6 +126,9 @@ def _finish_transition(
     return PumpStationTransition(
         state=state,
         receipt=PumpStationTransitionReceipt(
+            receipt_version=PUMP_STATION_RECEIPT_VERSION,
+            authority_policy_version=PUMP_STATION_AUTHORITY_POLICY_VERSION,
+            transition_rule_version=PUMP_STATION_TRANSITION_RULE_VERSION,
             transition_id=_transition_id(sequence),
             sequence=sequence,
             trigger=trigger,

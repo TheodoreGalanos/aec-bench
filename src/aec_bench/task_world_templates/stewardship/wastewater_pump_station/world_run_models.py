@@ -6,6 +6,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PUMP_STATION_AUTHORITY_POLICY_VERSION,
+    PUMP_STATION_RECEIPT_VERSION,
+    PUMP_STATION_TRANSITION_RULE_VERSION,
     PumpStationEventType,
     PumpStationProposal,
     PumpStationTransition,
@@ -13,6 +16,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
     PumpStationInformationSet,
 )
+
+PUMP_STATION_SERIALIZATION_VERSION = "pump-station-world-run.v1"
+PUMP_STATION_SNAPSHOT_VERSION = "pump-station-state-snapshot.v1"
 
 
 class PumpStationWorldRunError(RuntimeError):
@@ -32,11 +38,21 @@ def require_world_run_text(value: str, field_name: str) -> None:
         )
 
 
+def require_world_run_version(value: str, expected: str, code: str) -> None:
+    """Reject one unsupported durable artifact version."""
+    if value != expected:
+        raise PumpStationWorldRunError(code, value)
+
+
 @dataclass(frozen=True, slots=True)
 class PumpStationWorldRunManifest:
     """Immutable identity and initial state for one continuing world branch."""
 
     serialization_version: str
+    snapshot_version: str
+    receipt_version: str
+    authority_policy_version: str
+    transition_rule_version: str
     run_id: str
     episode_id: str
     world_branch_id: str
@@ -69,12 +85,38 @@ class PumpStationWorldRunManifest:
                 "world-run-shape",
                 "initial sequence must be non-negative",
             )
+        require_world_run_version(
+            self.serialization_version,
+            PUMP_STATION_SERIALIZATION_VERSION,
+            "serialization-version",
+        )
+        require_world_run_version(
+            self.snapshot_version,
+            PUMP_STATION_SNAPSHOT_VERSION,
+            "snapshot-version",
+        )
+        require_world_run_version(
+            self.receipt_version,
+            PUMP_STATION_RECEIPT_VERSION,
+            "receipt-version",
+        )
+        require_world_run_version(
+            self.authority_policy_version,
+            PUMP_STATION_AUTHORITY_POLICY_VERSION,
+            "authority-policy-version",
+        )
+        require_world_run_version(
+            self.transition_rule_version,
+            PUMP_STATION_TRANSITION_RULE_VERSION,
+            "transition-rule-version",
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class PumpStationStateSnapshotRef:
     """Exact dynamic state selected for one durable pump-station run."""
 
+    snapshot_version: str
     run_id: str
     episode_id: str
     world_branch_id: str
@@ -96,6 +138,11 @@ class PumpStationStateSnapshotRef:
                 "world-run-shape",
                 "snapshot sequence must be non-negative",
             )
+        require_world_run_version(
+            self.snapshot_version,
+            PUMP_STATION_SNAPSHOT_VERSION,
+            "snapshot-version",
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +170,13 @@ class PumpStationWorldRunCommit:
     receipt_content_id: str | None
     event_batch_content_id: str | None
 
+    def __post_init__(self) -> None:
+        require_world_run_version(
+            self.serialization_version,
+            PUMP_STATION_SERIALIZATION_VERSION,
+            "serialization-version",
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class PumpStationCurrentRunPointer:
@@ -133,6 +187,13 @@ class PumpStationCurrentRunPointer:
     sequence: int
     state_id: str
     commit_id: str
+
+    def __post_init__(self) -> None:
+        require_world_run_version(
+            self.serialization_version,
+            PUMP_STATION_SERIALIZATION_VERSION,
+            "serialization-version",
+        )
 
 
 @dataclass(frozen=True, slots=True)

@@ -24,6 +24,7 @@ from aec_bench.task_world_templates.harbor_exporting.stable_io import (
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     PUMP_STATION_HARBOR_EXECUTION_KIND,
     PUMP_STATION_HARBOR_EXPORT_SCHEMA_VERSION,
+    is_pump_station_harbor_inventory_artifact,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
     PUMP_STATION_HARBOR_RUN_SCHEMA_VERSION,
@@ -183,22 +184,13 @@ def _verify_stewardship_objective(
     evidence = state.get("evidence")
     work_orders = state.get("work_orders")
     verification_passed = isinstance(evidence, list) and any(
-        isinstance(item, dict)
-        and item.get("kind") == "post_maintenance_verification"
-        and item.get("passed") is True
+        isinstance(item, dict) and item.get("kind") == "post_maintenance_verification" and item.get("passed") is True
         for item in evidence
     )
     closure_recorded = isinstance(work_orders, list) and any(
-        isinstance(item, dict)
-        and item.get("status") == "provisionally_closed"
-        for item in work_orders
+        isinstance(item, dict) and item.get("status") == "provisionally_closed" for item in work_orders
     )
-    if (
-        transition_count < 1
-        or report.open_obligation_ids
-        or not verification_passed
-        or not closure_recorded
-    ):
+    if transition_count < 1 or report.open_obligation_ids or not verification_passed or not closure_recorded:
         raise ValueError("pump-station stewardship objective is incomplete")
 
 
@@ -208,11 +200,10 @@ def _verify_inventory(root: Path, inventory: dict[str, Any]) -> None:
         raise ValueError("pump-station Harbor artifact inventory is not a list")
     expected: list[dict[str, Any]] = []
     for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.name in {
-            ".world-run.lock",
-            "artifact-inventory.json",
-            "current.json",
-        }:
+        if not path.is_file() or not is_pump_station_harbor_inventory_artifact(
+            root,
+            path,
+        ):
             continue
         payload = path.read_bytes()
         expected.append(
