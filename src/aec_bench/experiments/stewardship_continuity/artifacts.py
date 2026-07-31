@@ -131,6 +131,7 @@ def reload_and_verify_study_report(
     *,
     root: Path,
     report_content_sha256: str,
+    tokens_are_measurements: bool = False,
 ) -> ContinuityStudyReport:
     """Reload exact evidence and compare the stored report with recomputation."""
 
@@ -176,6 +177,7 @@ def reload_and_verify_study_report(
         plan=plan,
         deliveries=deliveries,
         observations=observations,
+        tokens_are_measurements=tokens_are_measurements,
     )
     if recomputed != report:
         raise ImmutableArtifactIntegrityError(

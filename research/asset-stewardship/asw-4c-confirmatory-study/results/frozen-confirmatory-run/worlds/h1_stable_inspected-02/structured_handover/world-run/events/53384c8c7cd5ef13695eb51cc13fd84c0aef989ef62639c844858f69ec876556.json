@@ -1,0 +1,1 @@
+{"$type":"PumpStationAppliedEventBatch","event_ids":["event-0000-access-available","event-0000-repair-kit-available"],"event_types":["access_available","repair_kit_available"],"sequence":4,"transition_id":"transition-0004"}

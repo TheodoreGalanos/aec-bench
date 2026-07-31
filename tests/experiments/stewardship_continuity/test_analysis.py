@@ -300,6 +300,43 @@ def test_analysis_enforces_shakedown_authority_and_source() -> None:
         )
 
 
+def test_analysis_can_measure_total_tokens_without_using_them_as_a_gate() -> None:
+    manifest, plan, deliveries, observations = _build_shakedown_inputs()
+    payload = observations[0].model_dump(mode="json")
+    payload.update(
+        {
+            "content_sha256": "",
+            "provider_call_count": 1,
+            "input_token_count": 10_000,
+            "output_token_count": 2_001,
+            "maximum_input_tokens_in_one_call": 10_000,
+            "maximum_output_tokens_in_one_call": 2_000,
+            "spend_currency": "USD",
+        }
+    )
+    measured = ContinuityObservation.model_validate(payload)
+
+    with pytest.raises(ValueError, match="token authority"):
+        analyse_continuity_study(
+            manifest=manifest,
+            plan=plan,
+            deliveries=deliveries,
+            observations=(measured, *observations[1:]),
+        )
+
+    report = analyse_continuity_study(
+        manifest=manifest,
+        plan=plan,
+        deliveries=deliveries,
+        observations=(measured, *observations[1:]),
+        tokens_are_measurements=True,
+    )
+
+    assert report.provider_call_count == 1
+    assert report.input_token_count == 10_000
+    assert report.output_token_count == 2_001
+
+
 def _build_shakedown_inputs() -> tuple[
     ContinuityStudyManifest,
     ContinuityStudyPlan,

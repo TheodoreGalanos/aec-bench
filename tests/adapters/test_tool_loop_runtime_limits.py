@@ -146,6 +146,53 @@ def test_pydantic_ai_request_limit_failure_preserves_partial_usage(
     assert response.done is True
 
 
+def test_pydantic_ai_host_tool_error_preserves_partial_usage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_after_response(*args: Any, **kwargs: Any) -> NoReturn:
+        usage = kwargs["usage"]
+        assert isinstance(usage, RunUsage)
+        usage.incr(
+            RunUsage(
+                requests=1,
+                input_tokens=12_345,
+                output_tokens=678,
+                cache_read_tokens=0,
+                cache_write_tokens=0,
+            )
+        )
+        raise RuntimeError("artifact-integrity: commit does not extend its parent")
+
+    monkeypatch.setattr(
+        "aec_bench.adapters.tool_loop_local.run_agent_sync_with_streaming_fallback",
+        fail_after_response,
+    )
+
+    client = PydanticAiToolLoopClient.__new__(PydanticAiToolLoopClient)
+    client.__dict__["_agent"] = SimpleNamespace(_system_prompts=())
+    client._workspace = ""
+    client._stream_mode = "auto"
+    client._trajectory_writer = None
+    client._last_request_usages = ()
+
+    response = client.next_turn(
+        ToolLoopRequest(
+            model="test-model",
+            instruction="Use the closed station tools.",
+            configuration={"max_turns": 3},
+        )
+    )
+
+    assert response.error_message == "artifact-integrity: commit does not extend its parent"
+    assert response.failure_kind is AdapterFailureKind.PROVIDER_ERROR
+    assert response.usage_model_calls == 1
+    assert response.usage_input_tokens == 12_345
+    assert response.usage_output_tokens == 678
+    assert response.usage_cache_read_tokens == 0
+    assert response.usage_cache_write_tokens == 0
+    assert response.done is True
+
+
 def test_pydantic_ai_tool_loop_records_per_request_token_maxima(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -499,6 +499,20 @@ class PydanticAiToolLoopClient:
         except UsageLimitExceeded as exc:
             logger.warning("PydanticAI tool loop stopped at a runtime usage limit: %s", exc)
             return _usage_limit_response(exc, run_usage)
+        except Exception as exc:
+            logger.exception("PydanticAI tool loop stopped after a runtime error: %s", exc)
+            return ToolLoopCompletionResponse(
+                error_message=str(exc),
+                failure_kind=AdapterFailureKind.PROVIDER_ERROR,
+                usage_model_calls=_pydantic_model_calls(run_usage),
+                usage_input_tokens=run_usage.input_tokens,
+                usage_output_tokens=run_usage.output_tokens,
+                usage_cache_read_tokens=run_usage.cache_read_tokens,
+                usage_cache_write_tokens=run_usage.cache_write_tokens,
+                maximum_input_tokens_in_one_call=None,
+                maximum_output_tokens_in_one_call=None,
+                done=True,
+            )
 
         output = agent_run_output(result)
         usage = agent_run_usage(result)

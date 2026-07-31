@@ -34,6 +34,7 @@ def analyse_continuity_study(
     plan: ContinuityStudyPlan,
     deliveries: tuple[TreatmentDeliveryRecord, ...],
     observations: tuple[ContinuityObservation, ...],
+    tokens_are_measurements: bool = False,
 ) -> ContinuityStudyReport:
     """Recompute one paired report from exact retained evidence."""
 
@@ -68,6 +69,7 @@ def analyse_continuity_study(
         selected_manifest,
         deliveries=ordered_deliveries,
         observations=ordered_observations,
+        tokens_are_measurements=tokens_are_measurements,
     )
 
     host_fault_counts: Counter[ContinuityTreatment] = Counter()
@@ -247,6 +249,7 @@ def _validate_phase_evidence(
     *,
     deliveries: tuple[TreatmentDeliveryRecord, ...],
     observations: tuple[ContinuityObservation, ...],
+    tokens_are_measurements: bool,
 ) -> None:
     expected_source = {
         ContinuityStudyPhase.ANALYSIS_FIXTURE: ObservationSource.GENERATED_ANALYSIS_FIXTURE,
@@ -278,15 +281,16 @@ def _validate_phase_evidence(
             if observation.provider_call_count
         ):
             raise ValueError("continuity evidence uses an unauthorized spend currency")
-        if (
-            any(
-                observation.maximum_input_tokens_in_one_call > authority.maximum_input_tokens_per_call
-                or observation.maximum_output_tokens_in_one_call > authority.maximum_output_tokens_per_call
-                for observation in observations
-            )
-            or sum(observation.input_token_count + observation.output_token_count for observation in observations)
+        per_call_limit_exceeded = any(
+            observation.maximum_input_tokens_in_one_call > authority.maximum_input_tokens_per_call
+            or observation.maximum_output_tokens_in_one_call > authority.maximum_output_tokens_per_call
+            for observation in observations
+        )
+        total_limit_exceeded = (
+            sum(observation.input_token_count + observation.output_token_count for observation in observations)
             > authority.maximum_total_tokens
-        ):
+        )
+        if per_call_limit_exceeded or (total_limit_exceeded and not tokens_are_measurements):
             raise ValueError("continuity evidence exceeds token authority")
         if sum(observation.spend_microunits for observation in observations) > authority.maximum_spend_microunits:
             raise ValueError("continuity evidence exceeds spend authority")

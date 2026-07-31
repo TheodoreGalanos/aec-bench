@@ -1,0 +1,29 @@
+{
+  "adapter_name": "tool_loop",
+  "advisor_calls": null,
+  "cache_read_tokens": null,
+  "cache_write_tokens": null,
+  "configuration_record": {
+    "advisor_enabled": false,
+    "bash_enabled": false,
+    "cache_enabled": false,
+    "count_tokens_before_request": false,
+    "max_input_tokens": 40000,
+    "max_output_tokens_per_call": 2048,
+    "max_tool_calls": 32,
+    "max_total_tokens": 40000,
+    "max_turns": 16,
+    "model": "au.anthropic.claude-sonnet-4-6"
+  },
+  "failure_kind": "provider_error",
+  "input_tokens": null,
+  "max_turns": 16,
+  "maximum_input_tokens_in_one_call": null,
+  "maximum_output_tokens_in_one_call": null,
+  "output_tokens": null,
+  "provider_calls": null,
+  "provider_error": "status_code: 403, model_name: au.anthropic.claude-sonnet-4-6, body: {'Error': {'Message': 'The security token included in the request is expired', 'Code': 'ExpiredTokenException'}, 'ResponseMetadata': {'RequestId': '19a9effb-7c61-4a93-89fd-6fefd7e9a420', 'HTTPStatusCode': 403, 'HTTPHeaders': {'date': 'Fri, 31 Jul 2026 01:58:06 GMT', 'content-type': 'application/json', 'content-length': '67', 'connection': 'keep-alive', 'x-amzn-requestid': '19a9effb-7c61-4a93-89fd-6fefd7e9a420', 'x-amzn-errortype': 'ExpiredTokenException:http://internal.amazon.com/coral/com.amazon.coral.service/'}, 'RetryAttempts': 0}}",
+  "resolved_model": "au.anthropic.claude-sonnet-4-6",
+  "status": "failed",
+  "turns_used": null
+}
