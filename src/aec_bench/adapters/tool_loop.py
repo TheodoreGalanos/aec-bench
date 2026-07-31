@@ -65,6 +65,8 @@ class ToolLoopCompletionResponse:
     usage_output_tokens: int | None = None
     usage_cache_read_tokens: int | None = None
     usage_cache_write_tokens: int | None = None
+    maximum_input_tokens_in_one_call: int | None = None
+    maximum_output_tokens_in_one_call: int | None = None
     timed_out: bool = False
     done: bool = False
 
@@ -78,11 +80,15 @@ class _ToolLoopUsage:
     output_tokens: int = 0
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
+    maximum_input_tokens_in_one_call: int = 0
+    maximum_output_tokens_in_one_call: int = 0
     model_calls_complete: bool = True
     input_complete: bool = True
     output_complete: bool = True
     cache_read_complete: bool = True
     cache_write_complete: bool = True
+    per_call_input_complete: bool = True
+    per_call_output_complete: bool = True
 
     def record(self, response: ToolLoopCompletionResponse) -> None:
         self.model_calls, self.model_calls_complete = _record_optional_usage(
@@ -110,6 +116,22 @@ class _ToolLoopUsage:
             complete=self.cache_write_complete,
             observed=response.usage_cache_write_tokens,
         )
+        (
+            self.maximum_input_tokens_in_one_call,
+            self.per_call_input_complete,
+        ) = _record_optional_maximum(
+            maximum=self.maximum_input_tokens_in_one_call,
+            complete=self.per_call_input_complete,
+            observed=response.maximum_input_tokens_in_one_call,
+        )
+        (
+            self.maximum_output_tokens_in_one_call,
+            self.per_call_output_complete,
+        ) = _record_optional_maximum(
+            maximum=self.maximum_output_tokens_in_one_call,
+            complete=self.per_call_output_complete,
+            observed=response.maximum_output_tokens_in_one_call,
+        )
 
 
 def _record_optional_usage(
@@ -125,6 +147,17 @@ def _record_optional_usage(
 
 def _complete_usage(total: int, *, complete: bool) -> int | None:
     return total if complete else None
+
+
+def _record_optional_maximum(
+    *,
+    maximum: int,
+    complete: bool,
+    observed: int | None,
+) -> tuple[int, bool]:
+    if observed is None:
+        return maximum, False
+    return max(maximum, observed), complete
 
 
 class ToolLoopClient(Protocol):
@@ -559,6 +592,14 @@ def _build_result(
             usage.cache_write_tokens,
             complete=usage.cache_write_complete,
         ),
+        maximum_input_tokens_in_one_call=_complete_usage(
+            usage.maximum_input_tokens_in_one_call,
+            complete=usage.per_call_input_complete,
+        ),
+        maximum_output_tokens_in_one_call=_complete_usage(
+            usage.maximum_output_tokens_in_one_call,
+            complete=usage.per_call_output_complete,
+        ),
         usage_advisor_calls=usage_advisor_calls,
         usage_advisor_input_tokens=usage_advisor_input_tokens,
         usage_advisor_output_tokens=usage_advisor_output_tokens,
@@ -593,6 +634,10 @@ def _response_payload(response: ToolLoopCompletionResponse) -> dict[str, Any]:
         payload["usage_cache_read_tokens"] = response.usage_cache_read_tokens
     if response.usage_cache_write_tokens is not None:
         payload["usage_cache_write_tokens"] = response.usage_cache_write_tokens
+    if response.maximum_input_tokens_in_one_call is not None:
+        payload["maximum_input_tokens_in_one_call"] = response.maximum_input_tokens_in_one_call
+    if response.maximum_output_tokens_in_one_call is not None:
+        payload["maximum_output_tokens_in_one_call"] = response.maximum_output_tokens_in_one_call
     if response.failure_kind is not None:
         payload["failure_kind"] = response.failure_kind.value
     return payload
@@ -627,6 +672,14 @@ def _response_from_payload(payload: dict[str, Any]) -> ToolLoopCompletionRespons
         usage_cache_write_tokens=cast(
             int | None,
             payload.get("usage_cache_write_tokens"),
+        ),
+        maximum_input_tokens_in_one_call=cast(
+            int | None,
+            payload.get("maximum_input_tokens_in_one_call"),
+        ),
+        maximum_output_tokens_in_one_call=cast(
+            int | None,
+            payload.get("maximum_output_tokens_in_one_call"),
         ),
         timed_out=bool(payload.get("timed_out", False)),
         done=bool(payload.get("done", False)),

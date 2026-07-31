@@ -230,6 +230,18 @@ def create_stewardship_state(
                 scheduled_seconds=(now + current_schedule.access_withdrawal_after_seconds),
             )
         )
+    for index, delay_seconds in enumerate(
+        current_schedule.decision_point_after_seconds,
+        start=1,
+    ):
+        events.append(
+            _event(
+                sequence=0,
+                suffix=f"decision-point-{index:02d}",
+                event_type=PumpStationEventType.DECISION_POINT,
+                scheduled_seconds=(now + delay_seconds),
+            )
+        )
     return PumpStationStewardshipState(
         physical=physical,
         environment=environment,

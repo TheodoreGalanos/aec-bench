@@ -344,6 +344,7 @@ class PydanticAiToolLoopClient:
         stream_mode: str = "auto",
         native_tools: list[Callable[..., str]] | None = None,
         enable_bash: bool = True,
+        cache: bool = True,
     ) -> None:
         from pydantic_ai import Agent
 
@@ -360,7 +361,7 @@ class PydanticAiToolLoopClient:
 
         provider = resolve_pydantic_provider(model_name)
         pydantic_model = _build_pydantic_model(model_name, provider)
-        model_settings = _build_model_settings(provider, cache=True)
+        model_settings = _build_model_settings(provider, cache=cache)
 
         # Build the agent with bash as a native tool
         self._agent = Agent(
@@ -369,6 +370,7 @@ class PydanticAiToolLoopClient:
             retries=2,
             model_settings=model_settings,
         )
+        self._last_request_usages: tuple[tuple[int, int], ...] = ()
 
         if enable_bash:
             executor = BashToolExecutor(workspace=workspace)
@@ -408,9 +410,10 @@ class PydanticAiToolLoopClient:
                 return self._advisor_tool.call_with_messages(context)
 
         logger.info(
-            "PydanticAI tool loop client: model=%s provider=%s cache=True workspace=%s advisor=%s",
+            "PydanticAI tool loop client: model=%s provider=%s cache=%s workspace=%s advisor=%s",
             model_name,
             provider,
+            cache,
             workspace,
             "on" if self._advisor_tool is not None else "off",
         )
@@ -420,6 +423,11 @@ class PydanticAiToolLoopClient:
         if self._advisor_tool is None:
             return None
         return self._advisor_tool.usage()
+
+    def last_request_usages(self) -> tuple[tuple[int, int], ...]:
+        """Return exact input and output token counts for the last provider run."""
+
+        return self._last_request_usages
 
     def next_turn(self, request: ToolLoopRequest) -> ToolLoopCompletionResponse:
         """Run the full tool loop via PydanticAI and return the final result.
@@ -457,6 +465,19 @@ class PydanticAiToolLoopClient:
         # Run the full agent loop with a request limit to prevent runaway
         max_turns = configured_positive_int(request.configuration, "max_turns") or 30
         max_tool_calls = configured_positive_int(request.configuration, "max_tool_calls")
+        max_input_tokens = configured_positive_int(
+            request.configuration,
+            "max_input_tokens",
+        )
+        max_total_tokens = configured_positive_int(
+            request.configuration,
+            "max_total_tokens",
+        )
+        max_output_tokens_per_call = configured_positive_int(
+            request.configuration,
+            "max_output_tokens_per_call",
+        )
+        count_tokens_before_request = bool((request.configuration or {}).get("count_tokens_before_request", False))
         run_usage = RunUsage()
         try:
             result = run_agent_sync_with_streaming_fallback(
@@ -465,8 +486,14 @@ class PydanticAiToolLoopClient:
                 usage_limits=UsageLimits(
                     request_limit=max_turns,
                     tool_calls_limit=max_tool_calls,
+                    input_tokens_limit=max_input_tokens,
+                    total_tokens_limit=max_total_tokens,
+                    count_tokens_before_request=count_tokens_before_request,
                 ),
                 usage=run_usage,
+                model_settings=(
+                    None if max_output_tokens_per_call is None else {"max_tokens": max_output_tokens_per_call}
+                ),
                 stream_mode=self._stream_mode,
             )
         except UsageLimitExceeded as exc:
@@ -475,12 +502,14 @@ class PydanticAiToolLoopClient:
 
         output = agent_run_output(result)
         usage = agent_run_usage(result)
+        result_messages = list(result.all_messages()) if hasattr(result, "all_messages") else []
+        self._last_request_usages = _pydantic_request_usages(result_messages)
         output_text = output if isinstance(output, str) else str(output)
 
         if self._trajectory_writer is not None:
             try:
                 emit_pydantic_ai_messages_to_trajectory(
-                    list(result.all_messages()),
+                    result_messages,
                     self._trajectory_writer,
                 )
             except Exception:
@@ -494,7 +523,30 @@ class PydanticAiToolLoopClient:
             usage_output_tokens=usage.output_tokens or 0,
             usage_cache_read_tokens=getattr(usage, "cache_read_tokens", 0) or 0,
             usage_cache_write_tokens=getattr(usage, "cache_write_tokens", 0) or 0,
+            maximum_input_tokens_in_one_call=max(
+                (item[0] for item in self._last_request_usages),
+                default=0,
+            ),
+            maximum_output_tokens_in_one_call=max(
+                (item[1] for item in self._last_request_usages),
+                default=0,
+            ),
         )
+
+
+def _pydantic_request_usages(
+    messages: list[Any],
+) -> tuple[tuple[int, int], ...]:
+    from pydantic_ai.messages import ModelResponse
+
+    return tuple(
+        (
+            message.usage.input_tokens or 0,
+            message.usage.output_tokens or 0,
+        )
+        for message in messages
+        if isinstance(message, ModelResponse)
+    )
 
 
 def _pydantic_model_calls(usage: Any) -> int | None:
@@ -516,6 +568,8 @@ def _usage_limit_response(
         usage_output_tokens=None if usage is None else usage.output_tokens,
         usage_cache_read_tokens=None if usage is None else usage.cache_read_tokens,
         usage_cache_write_tokens=None if usage is None else usage.cache_write_tokens,
+        maximum_input_tokens_in_one_call=None,
+        maximum_output_tokens_in_one_call=None,
         done=True,
     )
 

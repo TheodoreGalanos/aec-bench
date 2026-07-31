@@ -143,6 +143,7 @@ class PumpStationEvidenceKind(StrEnum):
 class PumpStationEventType(StrEnum):
     """Deterministic scheduled event used by the first-world scheduler."""
 
+    DECISION_POINT = "decision_point"
     OBLIGATION_DUE = "obligation_due"
     OBLIGATION_OVERDUE = "obligation_overdue"
     OBLIGATION_BREACH = "obligation_breach"
@@ -287,6 +288,7 @@ class PumpStationSchedule:
     access_available_after_seconds: int
     repair_kit_available_after_seconds: int
     access_withdrawal_after_seconds: int | None = None
+    decision_point_after_seconds: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         _require_non_negative(
@@ -302,6 +304,10 @@ class PumpStationSchedule:
                 self.access_withdrawal_after_seconds,
                 "access_withdrawal_after_seconds",
             )
+        for value in self.decision_point_after_seconds:
+            _require_non_negative(value, "decision_point_after_seconds")
+        if len(set(self.decision_point_after_seconds)) != len(self.decision_point_after_seconds):
+            raise ValueError("decision_point_after_seconds must not contain duplicates")
 
 
 @dataclass(frozen=True, slots=True)

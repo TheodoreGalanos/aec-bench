@@ -3,7 +3,12 @@
 
 from __future__ import annotations
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from collections.abc import Mapping
+
+from aec_bench.contracts.harness_kernel import (
+    canonical_content_sha256,
+    validate_sha256,
+)
 from aec_bench.evaluation.stewardship import STEWARDSHIP_EVALUATION_SCHEMA_VERSION
 from aec_bench.experiments.stewardship_continuity.contracts import (
     ContinuityBlock,
@@ -104,6 +109,9 @@ def build_provider_free_manifest() -> ContinuityStudyManifest:
 
 def build_continuity_plan(
     manifest: ContinuityStudyManifest,
+    *,
+    history_snapshot_sha256_by_slot: Mapping[str, str] | None = None,
+    event_schedule_sha256_by_slot: Mapping[str, str] | None = None,
 ) -> ContinuityStudyPlan:
     """Expand the frozen design into 32 paired, counterbalanced blocks."""
 
@@ -111,6 +119,20 @@ def build_continuity_plan(
         manifest.model_dump(mode="json"),
     )
     budget_sha256 = logical_budget_sha256(selected.logical_budget)
+    history_overrides = dict(history_snapshot_sha256_by_slot or {})
+    event_overrides = dict(event_schedule_sha256_by_slot or {})
+    valid_history_slots = {
+        f"{history_class.value}-{repetition:02d}"
+        for repetition in range(1, selected.blocks_per_history + 1)
+        for history_class in ContinuityHistoryClass
+    }
+    unexpected_slots = (set(history_overrides) | set(event_overrides)) - valid_history_slots
+    if unexpected_slots:
+        raise ValueError(
+            "continuity identity override uses an unknown history slot: " + ", ".join(sorted(unexpected_slots))
+        )
+    for digest in (*history_overrides.values(), *event_overrides.values()):
+        validate_sha256(digest)
     blocks: list[ContinuityBlock] = []
 
     for repetition in range(1, selected.blocks_per_history + 1):
@@ -119,21 +141,27 @@ def build_continuity_plan(
         for history_class in ContinuityHistoryClass:
             sequence_index = len(blocks) + 1
             history_slot_id = f"{history_class.value}-{repetition:02d}"
-            history_snapshot_sha256 = canonical_content_sha256(
-                {
-                    "kind": "planned-provider-free-continuity-history.v1",
-                    "study_generation_id": selected.study_generation_id,
-                    "history_slot_id": history_slot_id,
-                    "history_class": history_class.value,
-                }
+            history_snapshot_sha256 = history_overrides.get(
+                history_slot_id,
+                canonical_content_sha256(
+                    {
+                        "kind": "planned-provider-free-continuity-history.v1",
+                        "study_generation_id": selected.study_generation_id,
+                        "history_slot_id": history_slot_id,
+                        "history_class": history_class.value,
+                    }
+                ),
             )
-            event_schedule_sha256 = canonical_content_sha256(
-                {
-                    "kind": selected.event_schedule_revision,
-                    "study_generation_id": selected.study_generation_id,
-                    "history_slot_id": history_slot_id,
-                    "evaluation_window": evaluation_window.value,
-                }
+            event_schedule_sha256 = event_overrides.get(
+                history_slot_id,
+                canonical_content_sha256(
+                    {
+                        "kind": selected.event_schedule_revision,
+                        "study_generation_id": selected.study_generation_id,
+                        "history_slot_id": history_slot_id,
+                        "evaluation_window": evaluation_window.value,
+                    }
+                ),
             )
             block_id = continuity_block_id(
                 study_id=selected.study_id,

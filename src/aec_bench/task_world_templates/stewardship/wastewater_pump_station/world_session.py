@@ -32,6 +32,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     ContinueOperation,
     ProposalContext,
     PumpStationProposal,
+    PumpStationSchedule,
     RequestConditionalDeferral,
     RequestInspection,
     RequestObstructionClearance,
@@ -48,12 +49,15 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     verify_stewardship_run,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
+    PumpStationActorHistoryEntry,
     PumpStationActorView,
     PumpStationContinuityCarrier,
     PumpStationCurrentContext,
     PumpStationInformationSet,
     PumpStationObservationHistory,
     PumpStationProjectionContext,
+    PumpStationStructuredHandover,
+    actor_history_entry,
     bind_information_set,
     project_actor_view,
 )
@@ -188,6 +192,52 @@ class PumpStationWorldSession:
             )
             for name in PUMP_STATION_TOOL_NAMES
         )
+
+    @property
+    def actor_view(self) -> PumpStationActorView:
+        """Return the exact host-side actor view used by this tenure."""
+
+        return self._view
+
+    @property
+    def actor_history(self) -> tuple[PumpStationActorHistoryEntry, ...]:
+        """Return bounded-source entries reconstructed from durable proposals."""
+
+        return tuple(actor_history_entry(step.transition, step.proposal) for step in self._run.steps())
+
+    @property
+    def event_schedule_sha256(self) -> str:
+        """Return a commitment to the hidden remaining event schedule."""
+
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
+            stewardship_content_id,
+        )
+
+        return stewardship_content_id(self._run.state.scheduled_events)
+
+    def install_structured_handover(
+        self,
+        handover: PumpStationStructuredHandover,
+    ) -> None:
+        """Bind one host-created handover before the fresh tenure acts."""
+
+        if self._request.open_mode is not WorldSessionOpenMode.RESUME:
+            raise ValueError("structured handover requires a resumed fresh tenure")
+        if len(self._view_ids) != 1:
+            raise ValueError("structured handover must be installed before the tenure acts")
+        if self._current_context.continuity_carrier is not PumpStationContinuityCarrier.CURRENT_ACTOR_VIEW:
+            raise ValueError("continuity material is already installed")
+        if handover.to_tenure_id != self._request.agent_tenure_id:
+            raise ValueError("structured handover belongs to another recipient tenure")
+        if handover.current_actor_view != self._view:
+            raise ValueError("structured handover current view differs from the live session")
+        self._current_context = PumpStationCurrentContext(
+            continuity_carrier=PumpStationContinuityCarrier.STRUCTURED_HANDOVER,
+            conversation_prefix_id=None,
+            workspace_tool_ids=PUMP_STATION_TOOL_NAMES,
+            visible_material_ids=(handover.handover_id,),
+        )
+        self._information_set = self._bind_information_set()
 
     @property
     def native_tools(self) -> tuple[Callable[..., str], ...]:
@@ -367,9 +417,11 @@ class PumpStationWorldSessionFactory:
         repository_root: Path,
         *,
         package_root: Path | None = None,
+        schedule: PumpStationSchedule | None = None,
     ) -> None:
         self._repository = PumpStationWorldRunRepository(repository_root)
         self._package_root = package_root
+        self._schedule = schedule
 
     def open(self, request: WorldSessionRequest) -> PumpStationWorldSession:
         """Open a new or exact resumed session for the requested actor tenure."""
@@ -397,6 +449,7 @@ class PumpStationWorldSessionFactory:
                 model,
                 physical,
                 environment,
+                schedule=self._schedule,
             )
             run = PumpStationWorldRun.create(
                 repository=self._repository,

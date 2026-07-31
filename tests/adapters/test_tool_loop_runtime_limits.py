@@ -43,18 +43,30 @@ def test_pydantic_ai_tool_loop_receives_request_and_tool_call_limits(
     client.__dict__["_agent"] = SimpleNamespace(_system_prompts=())
     client._stream_mode = "auto"
     client._trajectory_writer = None
+    client._last_request_usages = ()
 
     response = client._run_agent(
         ToolLoopRequest(
             model="test-model",
             instruction="Use at most two tools.",
-            configuration={"max_turns": 3, "max_tool_calls": 2},
+            configuration={
+                "max_turns": 3,
+                "max_tool_calls": 2,
+                "max_input_tokens": 500_000,
+                "max_total_tokens": 500_000,
+                "max_output_tokens_per_call": 2_048,
+                "count_tokens_before_request": True,
+            },
         )
     )
 
     usage_limits = captured["usage_limits"]
     assert usage_limits.request_limit == 3
     assert usage_limits.tool_calls_limit == 2
+    assert usage_limits.input_tokens_limit == 500_000
+    assert usage_limits.total_tokens_limit == 500_000
+    assert usage_limits.count_tokens_before_request is True
+    assert captured["model_settings"] == {"max_tokens": 2_048}
     assert response.done is True
     assert response.usage_model_calls == 3
 
@@ -113,6 +125,7 @@ def test_pydantic_ai_request_limit_failure_preserves_partial_usage(
     client.__dict__["_agent"] = SimpleNamespace(_system_prompts=())
     client._stream_mode = "auto"
     client._trajectory_writer = None
+    client._last_request_usages = ()
 
     response = client.next_turn(
         ToolLoopRequest(
@@ -131,3 +144,57 @@ def test_pydantic_ai_request_limit_failure_preserves_partial_usage(
     assert response.usage_cache_read_tokens == 40
     assert response.usage_cache_write_tokens == 10
     assert response.done is True
+
+
+def test_pydantic_ai_tool_loop_records_per_request_token_maxima(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic_ai.messages import ModelResponse, TextPart
+    from pydantic_ai.usage import RequestUsage
+
+    class _Result:
+        def usage(self) -> RunUsage:
+            return RunUsage(
+                requests=2,
+                input_tokens=1_700,
+                output_tokens=350,
+            )
+
+        def all_messages(self) -> list[ModelResponse]:
+            return [
+                ModelResponse(
+                    parts=[TextPart(content="first")],
+                    usage=RequestUsage(input_tokens=700, output_tokens=150),
+                ),
+                ModelResponse(
+                    parts=[TextPart(content="second")],
+                    usage=RequestUsage(input_tokens=1_000, output_tokens=200),
+                ),
+            ]
+
+    monkeypatch.setattr(
+        "aec_bench.adapters.tool_loop_local.run_agent_sync_with_streaming_fallback",
+        lambda *args, **kwargs: _Result(),
+    )
+    monkeypatch.setattr(
+        "aec_bench.adapters.tool_loop_local.agent_run_output",
+        lambda _result: "done",
+    )
+
+    client = PydanticAiToolLoopClient.__new__(PydanticAiToolLoopClient)
+    client.__dict__["_agent"] = SimpleNamespace(_system_prompts=())
+    client._stream_mode = "auto"
+    client._trajectory_writer = None
+    client._last_request_usages = ()
+
+    response = client._run_agent(
+        ToolLoopRequest(
+            model="test-model",
+            instruction="Finish.",
+            configuration={"max_turns": 2},
+        )
+    )
+
+    assert response.maximum_input_tokens_in_one_call == 1_000
+    assert response.maximum_output_tokens_in_one_call == 200
+    assert client.last_request_usages() == ((700, 150), (1_000, 200))

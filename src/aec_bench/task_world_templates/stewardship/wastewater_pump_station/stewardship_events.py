@@ -49,6 +49,7 @@ _EVENT_PRIORITY = {
     PumpStationEventType.ACCESS_WITHDRAWN: 4,
     PumpStationEventType.REPAIR_KIT_AVAILABLE: 4,
     PumpStationEventType.PROCESS_COMPLETION: 6,
+    PumpStationEventType.DECISION_POINT: 8,
 }
 
 
@@ -473,7 +474,9 @@ def apply_scheduled_event(
     evidence_created: tuple[str, ...] = ()
     physical_change: PumpStationChangeKind | None = None
     execution = PumpStationExecutionOutcome.COMPLETED
-    if event.event_type is PumpStationEventType.ACCESS_AVAILABLE:
+    if event.event_type is PumpStationEventType.DECISION_POINT:
+        pass
+    elif event.event_type is PumpStationEventType.ACCESS_AVAILABLE:
         state = replace(
             state,
             resources=replace(

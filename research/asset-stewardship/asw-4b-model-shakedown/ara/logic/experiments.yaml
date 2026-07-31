@@ -1,0 +1,63 @@
+experiments:
+  - id: E001
+    verifies: [C001]
+    purpose: Bind the exact user-approved provider and logical authority before execution.
+    setup: Build the ASW-4B manifest without provider credentials or provider calls.
+    procedure:
+      - Record the provider, route, model, adapter, execution path, and disabled capabilities.
+      - Record all call, token, spend, proposal, command, and handover limits.
+      - Bind the approval to the content-addressed model condition and shakedown phase.
+      - Calculate the most expensive permitted token mix under the combined limits.
+    metrics:
+      - The model condition and provider authority validate.
+      - The exact maximum cost is 2082538 USD microunits.
+      - The approved maximum is 2500000 USD microunits.
+      - The manifest allows no study outcomes and no task-reward changes.
+    evidence: [EV001, EV002]
+    exploratory: false
+    domain:
+      phase: shakedown
+  - id: E002
+    verifies: [C002]
+    purpose: Build and replay the real H2 history and structured handover without a provider.
+    setup: Use the promoted wastewater pump-station data and direct durable host session.
+    procedure:
+      - Drive the accepted maintenance history through real station tools.
+      - Advance to the hidden neutral decision point at half one diagnostic period after provisional closure.
+      - Resume the same branch under one fresh tenure.
+      - Create and install the bounded structured handover before the fresh tenure acts.
+      - Replay the durable transition chain and validate the live H2 records.
+    metrics:
+      - The history contains 11 real transitions before handover.
+      - Replay is valid.
+      - The handover has one active run-in limit and one open verification duty.
+      - The work order is provisionally closed.
+      - The duty trigger is 1.5 diagnostic periods after handover.
+    evidence: [EV002]
+    exploratory: false
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+      history_class: h2_worsening_verification
+      treatment: structured_handover
+  - id: E003
+    verifies: [C003]
+    purpose: Execute and independently reload the one approved model shakedown.
+    setup: Use the content-bound ASW-4B manifest, one H2 structured handover, and host-side Bedrock credentials.
+    procedure:
+      - Publish the manifest, real plan identity, treatment delivery, and handover before the model runs.
+      - Run the model through the closed direct host tools.
+      - Enforce provider, token, tool, proposal, command, cache, advisor, bash, and spend limits.
+      - Persist adapter, world, usage, observation, execution, and report evidence.
+      - Scan the evidence for credential names and values.
+      - Independently reload the execution and recompute the report.
+    metrics:
+      - Exactly one trajectory runs.
+      - Provider calls are no more than 16.
+      - Total tokens are no more than 500000.
+      - Spend is no more than 2500000 USD microunits.
+      - Cache tokens, advisor calls, study outcomes, and reward changes are zero.
+      - The report conclusion is shakedown.
+    evidence: [EV003, EV004]
+    exploratory: true
+    domain:
+      phase: shakedown

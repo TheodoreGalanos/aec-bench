@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -559,7 +560,7 @@ max_uses = 4
 
         captured: dict[str, object] = {}
 
-        def fake_client_ctor(model_name: str, **kwargs) -> MagicMock:
+        def fake_client_ctor(model_name: str, **kwargs: Any) -> MagicMock:
             captured["model_name"] = model_name
             captured.update(kwargs)
             return MagicMock(name="pydantic-ai-client")
@@ -640,6 +641,36 @@ max_uses = 4
 
         assert captured["native_tools"] == [submit_checkpoint]
         assert captured["enable_bash"] is False
+
+    def test_build_tool_loop_forwards_disabled_cache(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A study can turn provider prompt caching off before construction."""
+        from aec_bench.adapters.local_registry import _build_tool_loop
+
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        captured: dict[str, object] = {}
+
+        def fake_client_ctor(model_name: str, **kwargs) -> MagicMock:
+            del model_name
+            captured.update(kwargs)
+            return MagicMock(name="pydantic-ai-client")
+
+        monkeypatch.setattr(
+            "aec_bench.adapters.tool_loop_local.PydanticAiToolLoopClient",
+            fake_client_ctor,
+        )
+
+        _build_tool_loop(
+            model_name="au.anthropic.claude-sonnet-4-6",
+            workspace=str(workspace),
+            cache=False,
+        )
+
+        assert captured["cache"] is False
 
     def test_build_tool_loop_rejects_confined_tools_with_prebuilt_client(self, tmp_path: Path) -> None:
         from aec_bench.adapters.local_registry import _build_tool_loop

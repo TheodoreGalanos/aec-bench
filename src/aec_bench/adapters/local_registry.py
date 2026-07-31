@@ -289,6 +289,7 @@ def _build_tool_loop(
     trajectory_writer: Any | None = None,
     native_tools: list[Callable[..., str]] | None = None,
     enable_bash: bool = True,
+    cache: bool = True,
     adapter_name: str = "tool_loop",
     **_kwargs: Any,
 ) -> Any:
@@ -346,6 +347,7 @@ def _build_tool_loop(
             trajectory_writer=trajectory_writer,
             native_tools=native_tools,
             enable_bash=enable_bash,
+            cache=cache,
         )
     executor = BashToolExecutor(workspace=workspace)
 
