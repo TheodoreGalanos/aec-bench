@@ -126,6 +126,8 @@ class AdapterResult:
     usage_output_tokens: int | None = None
     usage_cache_read_tokens: int | None = None
     usage_cache_write_tokens: int | None = None
+    maximum_input_tokens_in_one_call: int | None = None
+    maximum_output_tokens_in_one_call: int | None = None
     usage_advisor_calls: int | None = None
     usage_advisor_input_tokens: int | None = None
     usage_advisor_output_tokens: int | None = None

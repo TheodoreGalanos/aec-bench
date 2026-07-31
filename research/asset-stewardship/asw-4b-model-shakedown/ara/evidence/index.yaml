@@ -1,0 +1,41 @@
+evidence:
+  - id: EV001
+    kind: note
+    path: evidence/theo-provider-approval.md
+    description: Exact user-approved provider, model, execution, token, spend, and logical limits recorded before execution.
+    source: Theo approval on 2026-07-31
+    supports: [C001]
+    produced_by: null
+    exact_values_required: true
+    domain:
+      implementation_stage: ASW-4B
+  - id: EV002
+    kind: command_output
+    path: evidence/provider-free-gates.md
+    description: Provider-free price, authority, real H2 history, handover, replay, adapter-limit, lint, type, integration, and end-to-end checks.
+    source: feat/wastewater-pump-station-asw-4b on 2026-07-31
+    supports: [C001, C002]
+    produced_by: E001
+    exact_values_required: true
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+  - id: EV003
+    kind: command_output
+    path: evidence/model-shakedown-result.md
+    description: Exact provider usage, station result, immutable identities, secret scan, and independent reload from the one authorized trajectory.
+    source: ASW-4B host-private model run
+    supports: [C003]
+    produced_by: E003
+    exact_values_required: true
+    domain:
+      implementation_stage: ASW-4B
+  - id: EV004
+    kind: command_output
+    path: evidence/count-tokens-preflight-failure.md
+    description: Redacted evidence of the denied CountTokens preflight and the reduced remaining provider-call limit.
+    source: ASW-4B Bedrock preflight on 2026-07-31
+    supports: [C001, C003]
+    produced_by: E003
+    exact_values_required: true
+    domain:
+      implementation_stage: ASW-4B

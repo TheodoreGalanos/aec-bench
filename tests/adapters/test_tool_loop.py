@@ -187,6 +187,8 @@ def test_tool_loop_adapter_preserves_client_reported_request_limit_usage() -> No
                 usage_output_tokens=30,
                 usage_cache_read_tokens=40,
                 usage_cache_write_tokens=10,
+                maximum_input_tokens_in_one_call=50,
+                maximum_output_tokens_in_one_call=12,
                 done=True,
             )
         ]
@@ -214,6 +216,8 @@ def test_tool_loop_adapter_preserves_client_reported_request_limit_usage() -> No
     assert result.usage_output_tokens == 30
     assert result.usage_cache_read_tokens == 40
     assert result.usage_cache_write_tokens == 10
+    assert result.maximum_input_tokens_in_one_call == 50
+    assert result.maximum_output_tokens_in_one_call == 12
 
 
 def test_tool_loop_adapter_stops_before_executing_tool_past_call_limit() -> None:
@@ -400,6 +404,8 @@ def test_tool_loop_replay_preserves_client_reported_failure_kind() -> None:
                 usage_model_calls=3,
                 usage_input_tokens=120,
                 usage_output_tokens=30,
+                maximum_input_tokens_in_one_call=50,
+                maximum_output_tokens_in_one_call=12,
                 done=True,
             )
         ]
@@ -433,3 +439,5 @@ def test_tool_loop_replay_preserves_client_reported_failure_kind() -> None:
     assert result.usage_model_calls == 3
     assert result.usage_input_tokens == 120
     assert result.usage_output_tokens == 30
+    assert result.maximum_input_tokens_in_one_call == 50
+    assert result.maximum_output_tokens_in_one_call == 12

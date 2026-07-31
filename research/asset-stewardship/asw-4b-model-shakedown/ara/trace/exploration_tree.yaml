@@ -1,0 +1,98 @@
+nodes:
+  - id: N001
+    type: decision
+    summary: Theo approved the exact ASW-4B values for one H2 structured-handover shakedown.
+    children: [N002]
+    also_depends_on: []
+    claims_touched: [C001]
+    provenance: user
+    payload:
+      result: accepted
+      approved_on: "2026-07-31"
+      trajectory_count: 1
+      confirmatory_eligible: false
+    domain:
+      implementation_stage: ASW-4B
+  - id: N002
+    type: experiment
+    summary: Freeze and test the phase-bound authority without a provider call.
+    children: [N003]
+    also_depends_on: [N001]
+    claims_touched: [C001]
+    provenance: ai_executed
+    payload:
+      experiment_id: E001
+      result: passed
+      maximum_spend_microunits: 2082538
+    domain:
+      implementation_stage: ASW-4B
+  - id: N003
+    type: decision
+    summary: Add one task-local neutral decision event because the production schedule had no exact halfway handover event.
+    children: [N004]
+    also_depends_on: [N002]
+    claims_touched: [C002]
+    provenance: ai_executed
+    payload:
+      shared_extraction: false
+      physical_change: false
+      operating_record_change: false
+      event_priority: 8
+    domain:
+      implementation_stage: ASW-4B
+  - id: N004
+    type: experiment
+    summary: Build, resume, hand over, and replay the real H2 history.
+    children: [N005]
+    also_depends_on: [N003]
+    claims_touched: [C002]
+    provenance: ai_executed
+    payload:
+      experiment_id: E002
+      result: passed
+      history_transitions: 11
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+  - id: N005
+    type: experiment
+    summary: Stop before inference when Bedrock denies the CountTokens preflight.
+    children: [N006]
+    also_depends_on: [N004]
+    claims_touched: [C001, C003]
+    provenance: ai_executed
+    payload:
+      experiment_id: E003
+      result: failed_preflight
+      provider_calls: 1
+      model_inference_calls: 0
+      remaining_provider_calls: 15
+      repair: disable_count_tokens_preflight
+    domain:
+      implementation_stage: ASW-4B
+  - id: N006
+    type: experiment
+    summary: Run the single authorized model trajectory with the remaining call authority and verify its immutable evidence.
+    children: []
+    also_depends_on: [N005]
+    claims_touched: [C003]
+    provenance: ai_executed
+    payload:
+      experiment_id: E003
+      result: passed
+      diagnostic_result: continuity_failure
+      provider_calls: 4
+      model_inference_calls: 3
+      input_tokens: 17510
+      output_tokens: 1245
+      spend_microunits: 78326
+      host_commands: 3
+      agent_proposals: 1
+      final_open_duties: 1
+      final_active_limits: 1
+      durable_replay_valid: true
+      credential_scan_passed: true
+      independent_report_reload_passed: true
+      study_outcomes: 0
+      task_reward_changes: 0
+    domain:
+      implementation_stage: ASW-4B
