@@ -1,0 +1,26 @@
+experiments:
+  - id: E001
+    verifies: [C001, C002, C003]
+    purpose: Audit the completed ASW-4 study against its frozen programme checkpoint.
+    setup: Use the merged ASW-4C design, immutable report, recovery findings, and ASW-3C promotion review without a provider call.
+    procedure:
+      - Confirm the frozen research question, treatment difference, outcome, analysis, and coverage rules.
+      - Compare the final report values with all frozen coverage and integrity gates.
+      - Separate eligible world outcomes from typed host faults and endpoint-prefix recovery.
+      - Confirm that no missing trajectory was repeated or replaced.
+      - Confirm that the final report was independently reloaded from all 64 completion records.
+      - Decide whether the result establishes a useful research object and a concrete next hypothesis.
+      - Check whether the ASW-3C publication candidate meets its later promotion conditions.
+    metrics:
+      - Planned, observed, eligible, and analyzable trajectory coverage.
+      - Host-fault count and arm imbalance.
+      - Paired binary outcomes, risk difference, and frozen interval.
+      - Report content identity and independent reload status.
+      - Provider request, spend, and measured token totals.
+      - Authorized next stages and retained architecture limits.
+    evidence: [EV001, EV002, EV003]
+    exploratory: false
+    domain:
+      phase: programme_checkpoint
+      provider_calls: 0
+      result: accepted

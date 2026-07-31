@@ -5,15 +5,15 @@
 
 | Field | Value |
 | --- | --- |
-| Status | ASW-2A0 through ASW-2A3 merged; ASW-2B durable world run is in focused implementation |
-| Date | 2026-07-29 |
-| Revision | `ASW-PRD-J-2026-07-29` |
+| Status | ASW-0 through ASW-4 complete; the ASW-4 programme checkpoint authorizes ASW-5 only |
+| Date | 2026-07-31 |
+| Revision | `ASW-PRD-K-2026-07-31` |
 | Design revision | Semantic decisions change through reviewed document revisions; this PRD does not require a self-referential or hand-authored content hash |
 | Target repository | `aec-bench` |
-| Current production branch | `feat/wastewater-pump-station-durable-world-run` |
-| Live implementation status | ASW-2A0 through ASW-2A3 are merged; ASW-2B adds immutable run artifacts, atomic transition publication, dynamic snapshots, strict resume, and selected crash recovery |
+| Current production branch | `main` at ASW-4C merge `8ecf053e14b976e9686bb02de9da02b29781b856` |
+| Live implementation status | The certified world, production runtime, falsification stages, direct and Harbor execution, immutable evaluation, and first confirmatory study are complete |
 | Initial programme boundary | ASW-0 through ASW-4 |
-| Implementation status | Asset-local package, physics, state machine, projections, handover, verifier, and durable filesystem run exist; direct host, CLI, Harbor, records, and evaluation remain incomplete |
+| Implementation status | The asset-local world, direct host, installed CLI, Harbor path, durable records, evaluation, falsification stages, and first study are complete; ASW-5 is the only authorized expansion |
 | Working programme name | Asset Stewardship Worlds |
 | First study | Obligation continuity under time and handover |
 
@@ -1546,6 +1546,24 @@ condition indication
 
 **Programme checkpoint:** do not build ASW-5 through ASW-10 merely because the engine permits it. Continue only if ASW-4 establishes a useful stewardship research object and a concrete next hypothesis.
 
+**Checkpoint decision — 2026-07-31:** ASW-4 is accepted. The complete study
+produced independently reloadable evidence, valid world-owned success and
+failure outcomes, and a bounded zero-difference result. This establishes a
+useful research object without supporting a structured-handover benefit in the
+tested world.
+
+The checkpoint authorizes ASW-5 only. Its provisional hypothesis is that
+information continuity can affect outcomes or process quality when correct
+action depends on several overlapping required follow-ups, work processes,
+operating limits, and reserved resources. ASW-5 implementation and
+falsification remain provider-free. A later model study needs a new freeze and
+separate provider authority.
+
+[The ASW-4 programme checkpoint](asw-4-programme-checkpoint/ara/PAPER.md)
+records the result audit, decision, next-stage entry gate, and retained limits.
+ASW-6 through ASW-10, shared extraction, and a new provider study remain
+unauthorized.
+
 ### ASW-5 — Rich obligations and work processes
 
 **Conditional scope:**
@@ -1811,8 +1829,8 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | OD-11 | Define handover projection, actor-visible contents, revision, and separately queryable authoritative history. | Resolved for the selected durable commit chain; cross-branch history remains later scope | ASW-2A3 projection and verifier boundary; ASW-2B artifact repository |
 | OD-12 | Define evaluation-window treatments and terminal-liability vector. | Resolved for the first study | [ASW-0C research charter](asw-0c-research-charter.md#12-budgets-and-evaluation-window) |
 | OD-13 | Define exact behavior for a physical terminal event, or defer the general terminal surface. | Resolved by deferral | The first charter contains no physical terminal event |
-| OD-14 | Approve model-provider identity, token limits, and financial budget. | Open | ASW-4 governance; logical repetitions are already set by ASW-0C |
-| OD-15 | Define the evidence threshold for each conditional expansion. | Open | After ASW-4 |
+| OD-14 | Approve model-provider identity, token limits, and financial budget. | Resolved for ASW-4 only | Phase-bound ASW-4B and ASW-4C approvals; no provider authority carries into ASW-5 |
+| OD-15 | Define the evidence threshold for each conditional expansion. | Resolved for ASW-5; later stages remain conditional | [ASW-4 programme checkpoint](asw-4-programme-checkpoint/ara/PAPER.md) |
 | OD-16 | Select generator/oracle and independent-certification software roles. | Resolved | ASW-0B3 through ASW-0B5 |
 | OD-17 | Define evidence/rights classification and research-to-runtime promotion shape. | Resolved | ASW-0B2 through ASW-0B5 |
 
@@ -1852,13 +1870,19 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | 2026-07-29 | Compute actor-facing identities from visible projection content only. | A full-state fingerprint in an actor view could reveal that hidden latent or future state differs even when permitted observations are equal. |
 | 2026-07-29 | Publish ASW-2B transitions as immutable task artifacts followed by one lock-serialised atomic current-state pointer. | This gives snapshot, resume, strict replay, and exactly-once physical and resource effects without a database, shared stewardship runtime, or hand-authored hashes. |
 | 2026-07-29 | Keep the ASW-2C host boundary minimal and provider-neutral while the pump-station package owns its native tools. | The host needs strict start and resume contracts without owning task physics, action names, evaluation policy, or model-provider calls. |
+| 2026-07-31 | Accept the ASW-4 programme checkpoint and authorize ASW-5 only. | The first study produced a useful, independently reloadable research object and an exact zero-difference result; richer overlapping work provides a concrete next hypothesis without assuming that structured handover will improve it. |
 
 ## 24. Immediate next action
 
-Complete and review **ASW-2C — direct host session**, then start **ASW-2D —
-Harbor and experimental root**.
+Complete **ASW-5 — rich obligations and work processes** as one bounded,
+provider-free stage.
 
-ASW-2D adds the entrypoint execution discriminator, sibling stewardship
-exporter, local Harbor job, strict importer, immutable artifact reconciliation,
-and the minimum additive `TrialRecord` stewardship fragment. It does not add
-evaluation report contracts, study execution, or model-provider calls.
+Freeze its state changes and conservation checks before implementation. Then
+add composite triggers, dependencies, waiver and suspension, nested operating
+limits, reservations, spare and access processes, dependency-aware rescheduling
+and cancellation, and overlapping work orders. The exit gate must prove replay,
+resume, crash recovery, and fresh-agent handover without duplicated work, lost
+state, or resource-conservation errors.
+
+ASW-5 does not authorize a model study, temporal retrieval, shared extraction,
+imperfect repair, or coupled assets.
