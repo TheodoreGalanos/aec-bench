@@ -1,0 +1,27 @@
+{
+  "adapter_name": "tool_loop",
+  "advisor_calls": null,
+  "cache_read_tokens": null,
+  "cache_write_tokens": null,
+  "configuration_record": {
+    "advisor_enabled": false,
+    "bash_enabled": false,
+    "cache_enabled": false,
+    "count_tokens_before_request": false,
+    "max_output_tokens_per_call": 2048,
+    "max_tool_calls": 32,
+    "max_turns": 16,
+    "model": "au.anthropic.claude-sonnet-4-6"
+  },
+  "failure_kind": "provider_error",
+  "input_tokens": null,
+  "max_turns": 16,
+  "maximum_input_tokens_in_one_call": null,
+  "maximum_output_tokens_in_one_call": null,
+  "output_tokens": null,
+  "provider_calls": null,
+  "provider_error": "artifact-integrity: commit does not extend its parent",
+  "resolved_model": "au.anthropic.claude-sonnet-4-6",
+  "status": "failed",
+  "turns_used": null
+}

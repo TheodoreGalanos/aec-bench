@@ -1,0 +1,28 @@
+{
+  "adapter_name": "tool_loop",
+  "advisor_calls": null,
+  "cache_read_tokens": 0,
+  "cache_write_tokens": 0,
+  "configuration_record": {
+    "advisor_enabled": false,
+    "bash_enabled": false,
+    "cache_enabled": false,
+    "count_tokens_before_request": true,
+    "max_input_tokens": 7798170,
+    "max_output_tokens_per_call": 2048,
+    "max_tool_calls": 32,
+    "max_turns": 16,
+    "model": "au.anthropic.claude-sonnet-4-6"
+  },
+  "failure_kind": "provider_error",
+  "input_tokens": 0,
+  "max_turns": 16,
+  "maximum_input_tokens_in_one_call": null,
+  "maximum_output_tokens_in_one_call": null,
+  "output_tokens": 0,
+  "provider_calls": null,
+  "provider_error": "status_code: 403, model_name: au.anthropic.claude-sonnet-4-6, body: {'Error': {'Message': 'User: arn:aws:sts::831926582066:assumed-role/AWSReservedSSO_BedrockViewer_de0909c1a32cfe45/Theodoros.Galanos@aurecongroup.com is not authorized to perform: bedrock:CountTokens on resource: arn:aws:bedrock:ap-southeast-2::foundation-model/anthropic.claude-sonnet-4-6 because no identity-based policy allows the bedrock:CountTokens action', 'Code': 'AccessDeniedException'}, 'ResponseMetadata': {'RequestId': '2b7c7196-3e2a-4906-a35f-f503a634ea79', 'HTTPStatusCode': 403, 'HTTPHeaders': {'date': 'Fri, 31 Jul 2026 03:57:47 GMT', 'content-type': 'application/json', 'content-length': '350', 'connection': 'keep-alive', 'x-amzn-requestid': '2b7c7196-3e2a-4906-a35f-f503a634ea79', 'x-amzn-errortype': 'AccessDeniedException:http://internal.amazon.com/coral/com.amazon.coral.service/'}, 'RetryAttempts': 0}}",
+  "resolved_model": "au.anthropic.claude-sonnet-4-6",
+  "status": "failed",
+  "turns_used": null
+}

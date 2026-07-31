@@ -1,0 +1,52 @@
+claims:
+  - id: C001
+    statement: ASW-4C can construct 32 real matched blocks whose paired treatment branches start from the same current station state and current duties.
+    status: supported
+    falsification_criteria:
+      - The plan does not contain 16 H1 and 16 H2 blocks.
+      - H1 and H2 do not have the same quantized current scalar reading.
+      - A paired branch differs in current state, current duties, hidden event schedule, or evaluation window before treatment delivery.
+      - A history or branch does not replay through the independent verifier.
+    proof:
+      experiments: [E001]
+      evidence: [EV001, EV003]
+    dependencies: []
+    provenance: ai_suggested
+    tags: [matched-history, temporal, replay]
+    domain:
+      implementation_stage: ASW-4C
+  - id: C002
+    statement: ASW-4C can execute and safely resume all 64 frozen trajectories while enforcing one phase-bound provider authority and retaining immutable evidence.
+    status: supported
+    falsification_criteria:
+      - A provider call occurs before exact confirmatory approval.
+      - A run exceeds a provider-call, spend, model-turn, proposal, command, or handover limit.
+      - A resumed run replaces or repeats retained outcome evidence.
+      - Provider evidence, world evidence, or the final report cannot be independently reloaded.
+      - Credential material enters retained evidence.
+    proof:
+      experiments: [E002]
+      evidence: [EV002, EV003, EV004, EV005, EV006]
+    dependencies: [C001]
+    provenance: ai_suggested
+    tags: [provider-authority, recovery, immutable-evidence]
+    domain:
+      implementation_stage: ASW-4C
+  - id: C003
+    statement: The frozen structured-handover treatment changes the paired risk of required-follow-up continuity failure by at least the prespecified meaningful amount.
+    status: rejected
+    falsification_criteria:
+      - The eligible paired risk difference does not meet the ASW-4A support rule.
+      - Fewer than 28 blocks are eligible.
+      - Host-fault arm imbalance exceeds two.
+      - Any outcome or analysis rule differs from ASW-4A.
+    proof:
+      experiments: [E003]
+      evidence: [EV001, EV004, EV006]
+    dependencies: [C001, C002]
+    provenance: user
+    tags: [confirmatory, continuity, paired-effect]
+    domain:
+      implementation_stage: ASW-4C
+      execution_status: complete
+      frozen_conclusion: inconclusive

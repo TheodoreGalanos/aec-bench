@@ -1,0 +1,2 @@
+# Preserve content-addressed provider output while checking normal source whitespace.
+research/asset-stewardship/asw-4c-confirmatory-study/results/**/output.md whitespace=-trailing-space

@@ -89,6 +89,9 @@ research/asset-stewardship/*
 !research/asset-stewardship/asw-4b-model-shakedown/
 !research/asset-stewardship/asw-4b-model-shakedown/**
 research/asset-stewardship/asw-4b-model-shakedown/**/.world-run.lock
+!research/asset-stewardship/asw-4c-confirmatory-study/
+!research/asset-stewardship/asw-4c-confirmatory-study/**
+research/asset-stewardship/asw-4c-confirmatory-study/**/.world-run.lock
 !research/asset-stewardship/au-nsw-lh-syn-sps-v1-parameter-family-and-mechanism-rulings.md
 !research/asset-stewardship/au-nsw-lh-syn-sps-v1-generator-protocol.md
 !research/asset-stewardship/au-nsw-lh-syn-sps-v1-independent-certification-protocol.md

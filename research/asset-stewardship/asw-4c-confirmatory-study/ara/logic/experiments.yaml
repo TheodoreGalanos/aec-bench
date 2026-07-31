@@ -1,0 +1,71 @@
+experiments:
+  - id: E001
+    verifies: [C001]
+    purpose: Build and replay the real H1 and H2 histories and prove paired treatment equivalence.
+    setup: Use the promoted pump-station data and direct durable host session without a provider.
+    procedure:
+      - Build the H1 stable-inspected history through a real standby inspection and operation.
+      - Build the H2 worsening-verification history through the frozen maintenance path.
+      - Match their quantized current scalar reading.
+      - Rebuild each history in two independent treatment branches.
+      - Bind the hidden three-period or four-period evaluation window.
+      - Replay each branch and compare current state and current duties before treatment.
+    metrics:
+      - 32 planned blocks and 64 planned trajectories.
+      - Equal paired current-state and current-duty identities.
+      - Equal H1 and H2 quantized scalar readings.
+      - Valid independent replay for every prepared branch.
+    evidence: [EV001, EV003]
+    exploratory: false
+    domain:
+      phase: confirmatory
+      result: passed
+  - id: E002
+    verifies: [C002]
+    purpose: Execute the frozen model trajectories within one exact phase authority.
+    setup: Use the content-bound manifest, closed direct station tools, and host-side Bedrock credentials.
+    procedure:
+      - Publish the manifest and plan before the first provider call.
+      - Deliver the assigned current view or structured handover before each outcome.
+      - Execute in frozen order and retain each completed trial before the next trial.
+      - Advance the host to the hidden evaluation endpoint after model execution.
+      - Verify each world and classify its endpoint.
+      - Resume from retained evidence after an interruption.
+      - Scan retained evidence for credential material.
+    metrics:
+      - 64 retained trajectory records or explicit typed ineligibility records.
+      - Provider calls and spend within the approved phase limits, with token use retained as measured evidence.
+      - Zero cache use, advisor calls, reward changes, and credential findings.
+      - Independent world and artifact reload.
+    evidence: [EV002, EV003, EV004, EV005, EV006]
+    exploratory: false
+    domain:
+      phase: confirmatory
+      result: passed_with_typed_attrition
+      completed_trajectories: 64
+      host_faults: 4
+      repeated_trajectories: 0
+  - id: E003
+    verifies: [C003]
+    purpose: Apply the frozen paired analysis and conclusion rules to retained ASW-4C evidence.
+    setup: Use only confirmatory observations bound to the frozen manifest and plan.
+    procedure:
+      - Check planned, observed, paired, and host-fault coverage.
+      - Exclude only pairs that meet a frozen typed ineligibility rule.
+      - Calculate the structured-handover minus current-view paired risk difference.
+      - Run the 20000-replicate paired block bootstrap with seed 20260729.
+      - Apply the frozen support, refute, inconclusive, or coverage-blocked rule.
+      - Reload all inputs and recompute the report independently.
+    metrics:
+      - Eligible block count and host-fault arm imbalance.
+      - Paired risk difference and two-sided 95 percent interval.
+      - Frozen bounded conclusion.
+      - Stable content identity after independent reload.
+    evidence: [EV001, EV004, EV006]
+    exploratory: false
+    domain:
+      phase: confirmatory
+      result: inconclusive
+      analyzable_blocks: 28
+      paired_risk_difference: 0.0
+      confidence_interval: [0.0, 0.0]
