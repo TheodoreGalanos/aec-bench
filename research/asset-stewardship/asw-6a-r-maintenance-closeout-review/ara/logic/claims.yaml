@@ -1,0 +1,72 @@
+claims:
+  - id: C001
+    statement: One Pump A closeout review case can be derived from a committed verified history without changing the source world state or selected commit.
+    status: supported
+    falsification_criteria:
+      - Case preparation changes the source snapshot, state bytes, commit chain, or replay result.
+      - The case cannot be reconstructed from its source-bound receipts.
+    proof:
+      experiments: [E001, E002, E004]
+      evidence: [EV002, EV003, EV004, EV012]
+    dependencies: []
+    provenance: user_revised
+    tags: [derived-case, immutability, replay]
+    domain:
+      stage: ASW-6A-R
+  - id: C002
+    statement: The wrong-component citation is visible in the treated pack while its treatment identity and verifier target stay private from the reviewer.
+    status: supported
+    falsification_criteria:
+      - The treated closeout cites Pump A functional checks instead of Pump B functional checks.
+      - Actor material exposes the issue class, expected impact map, unaffected control set, verifier target, latent state, or future events.
+    proof:
+      experiments: [E001, E002, E003, E005]
+      evidence: [EV002, EV004, EV012]
+    dependencies: [C001]
+    provenance: user_revised
+    tags: [review-pack, redaction, planted-issue]
+    domain:
+      stage: ASW-6A-R
+  - id: C003
+    statement: A typed review can record the exact finding, affected records, unaffected duties, missing evidence, disposition, follow-up, and source references for independent evaluation.
+    status: supported
+    falsification_criteria:
+      - A required review field can be omitted or bound to another case.
+      - The verifier accepts the wrong affected set, unaffected set, missing evidence, disposition, or source reference.
+    proof:
+      experiments: [E002, E003, E005]
+      evidence: [EV002, EV004, EV012]
+    dependencies: [C001, C002]
+    provenance: user_revised
+    tags: [structured-review, verification, source-binding]
+    domain:
+      stage: ASW-6A-R
+  - id: C004
+    statement: Direct Python, installed JSON, handover, replay, crash recovery, and local Harbor preserve one review case and one evaluation result.
+    status: supported
+    falsification_criteria:
+      - Supported paths expose different reviewer packs or produce different case or evaluation identities.
+      - Retry or recovery publishes duplicate case or review records.
+    proof:
+      experiments: [E003, E004, E005, E006]
+      evidence: [EV002, EV003, EV004, EV012]
+    dependencies: [C001, C002, C003]
+    provenance: user_revised
+    tags: [parity, durability, harbor]
+    domain:
+      stage: ASW-6A-R
+  - id: C005
+    statement: One separately authorized real model agent can inspect the fixed treated pack and submit an independently verified review through the closed reviewer tools.
+    status: rejected
+    falsification_criteria:
+      - The model cannot complete the review through the declared reviewer interface.
+      - The private verifier rejects any required review field.
+      - Actions, findings, token use, or cost cannot be reconstructed from captured evidence.
+    proof:
+      experiments: [E007]
+      evidence: [EV007, EV008, EV009, EV010, EV011]
+    dependencies: [C001, C002, C003, C004]
+    provenance: user_revised
+    tags: [agent-shakedown, model-evidence, token-accounting]
+    domain:
+      stage: ASW-6A-R

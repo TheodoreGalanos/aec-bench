@@ -1,0 +1,30 @@
+{
+  "active_restriction_ids": [
+    "restriction-0000-pump-b-work"
+  ],
+  "final_state_id": "a33e7620497fd84f7a63371463c0e2793d9238cec27c2f831b2c2ad66d1202e0",
+  "issues": [],
+  "open_obligation_ids": [],
+  "replayed_transition_ids": [
+    "transition-0001",
+    "transition-0002",
+    "transition-0003",
+    "transition-0004",
+    "transition-0005",
+    "transition-0006",
+    "transition-0007",
+    "transition-0008",
+    "transition-0009",
+    "transition-0010",
+    "transition-0011",
+    "transition-0012",
+    "transition-0013",
+    "transition-0014",
+    "transition-0015",
+    "transition-0016",
+    "transition-0017",
+    "transition-0018",
+    "transition-0019"
+  ],
+  "valid": true
+}

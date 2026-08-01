@@ -1,0 +1,6 @@
+sessions:
+  - id: S001
+    date: 2026-08-01
+    summary: Reviewed the ASW-6A-R boundary, selected one Pump A closeout issue, required a real-agent shakedown, and received Theo approval for the complete mechanism scope.
+    trace_nodes: [N001, N002, N003]
+    evidence: [EV001]

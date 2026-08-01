@@ -56,6 +56,18 @@ def verify_pump_station_harbor_run(
 
     root = Path(run_dir)
     manifest = _read_json(export_manifest_path)
+    bridge_payload = _mapping(manifest.get("bridge"), "bridge")
+    if bridge_payload.get("maintenance_review") is True:
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review_harbor import (
+            verify_pump_station_harbor_review_run,
+        )
+
+        return verify_pump_station_harbor_review_run(
+            run_dir=root,
+            export_manifest_path=export_manifest_path,
+            package_dir=package_dir,
+            verifier_runtime_path=verifier_runtime_path,
+        )
     if (
         manifest.get("schema_version") != PUMP_STATION_HARBOR_EXPORT_SCHEMA_VERSION
         or manifest.get("execution_kind") != PUMP_STATION_HARBOR_EXECUTION_KIND
@@ -63,7 +75,6 @@ def verify_pump_station_harbor_run(
     ):
         raise ValueError("pump-station Harbor export identity differs")
     package_payload = _mapping(manifest.get("package"), "package")
-    bridge_payload = _mapping(manifest.get("bridge"), "bridge")
     rich_work_processes = bool(bridge_payload.get("rich_work_processes", False))
     evidence_health = bool(bridge_payload.get("evidence_health", False))
     expected_tools = (

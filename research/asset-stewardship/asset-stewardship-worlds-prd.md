@@ -5,15 +5,15 @@
 
 | Field | Value |
 | --- | --- |
-| Status | ASW-0 through ASW-6A complete; ASW-6A-R and all later expansions remain conditional |
-| Date | 2026-08-01 |
-| Revision | `ASW-PRD-N-2026-08-01` |
+| Status | ASW-0 through ASW-6A-R complete; all later expansions remain conditional |
+| Date | 2026-08-02 |
+| Revision | `ASW-PRD-O-2026-08-02` |
 | Design revision | Semantic decisions change through reviewed document revisions; this PRD does not require a self-referential or hand-authored content hash |
 | Target repository | `aec-bench` |
-| Current production basis | `main` at ASW-5I merge `a91801e2dd9291a3ec1bc02d52382dce46a0379c` |
-| Live implementation status | The certified world, production runtime, falsification stages, direct and Harbor execution, immutable evaluation, first confirmatory study, rich work processes, separate actor and host-control interfaces, and local evidence health are complete |
+| Current production basis | `main` at ASW-6A merge `56578f61d097830aa788e2d2c7848049c60dfebc` |
+| Live implementation status | The certified world, production runtime, falsification stages, direct and Harbor execution, immutable evaluation, first confirmatory study, rich work processes, separate actor and host-control interfaces, local evidence health, and maintenance closeout review are complete |
 | Initial programme boundary | ASW-0 through ASW-4 |
-| Implementation status | The ASW-6A provider-free gate passed; no later expansion is active or authorized |
+| Implementation status | The ASW-6A-R provider-free mechanism passed; one approved real-agent shakedown completed with an exact-verifier rejection; no later expansion is active or authorized |
 | Working programme name | Asset Stewardship Worlds |
 | First study | Obligation continuity under time and handover |
 
@@ -1739,6 +1739,9 @@ state for the fixed treatment, handover, sensor-check, and physical-inspection
 history. No model or external-provider call was made. The
 [ASW-6A research artifact](asw-6a-local-evidence-health/ara/PAPER.md) records
 the supported claims, exact evidence, architecture, and retained limits.
+[ASW-6A-R research artifact](asw-6a-r-maintenance-closeout-review/ara/PAPER.md)
+records the accepted review mechanism and the unchanged negative real-agent
+result.
 
 The optional temporal-evidence companion may contribute its nested
 `ASW-6A-TE0` through `ASW-6A-TE4` slices only after a later parent checkpoint
@@ -1757,7 +1760,7 @@ independent verification engineer. The review object is the named Pump A
 maintenance closeout and return-to-service pack, not the simulator or an
 abstract dump of world state.
 
-**Conditional scope:**
+**Accepted scope:**
 
 - assemble the review pack from the condition and defect history, work order
   and approved scope, work processes and dependencies, access and resource
@@ -1802,18 +1805,31 @@ source; direct, machine-readable local, and local-Harbor E2Es must prove actor
 redaction, private verifier reconstruction, negative access, replay, and exact
 finding evaluation.
 
-ASW-6A-R starts only after the local evidence-health contract can represent the
+ASW-6A-R started after the local evidence-health contract could represent the
 age, quality, provenance, operating regime, and contradictions used by the
-review. Its mechanism design and provider-free falsification do not authorize a
-model study. Any agent review study requires its own frozen design, shakedown,
-provider authority, budget, and confirmatory gate. ASW-6A-R does not add a new
-physical mutation; maintenance-induced or controlled physical defects remain
-ASW-7B scope.
+review. Theo separately approved one exact real-agent shakedown authority and
+budget. That shakedown does not authorize a confirmatory model study or another
+provider call. ASW-6A-R does not add a new physical mutation;
+maintenance-induced or controlled physical defects remain ASW-7B scope.
 
 **Exit gate:** the review pack is bound to one replay-valid history; the planted
 issue does not corrupt authoritative world state; the private verifier can
 check the exact finding, affected and unaffected set, evidence boundary, and
 disposition; and no latent or future truth leaks to the reviewer.
+
+**Accepted result, 2026-08-02:** the provider-free mechanism passed 22 focused
+tests, 17 related regression tests, and the 214-test wastewater pump-station
+folder. Direct Python, installed JSON, handover, replay, crash recovery, local
+Harbor, redaction, and independent verification passed. One approved real-agent
+shakedown found the planted wrong-component evidence citation and rejected the
+closeout, but the exact verifier rejected its affected-record, follow-up, and
+source-reference sets. The run used three provider calls, 15,927 tokens, and
+USD 0.079949. No retry occurred, and the private target did not change. The
+stage is complete because its execution and verification mechanism passed; the
+agent response remains a negative result. The
+[research artifact](asw-6a-r-maintenance-closeout-review/ara/PAPER.md) retains
+the authority, trajectory, token and cost record, verifier report, and rejected
+agent claim.
 
 #### ASW-6B — Optional external historical-archive adapter
 
@@ -2175,20 +2191,20 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | 2026-08-01 | Accept the ASW-5I provider-free gate and activate the existing ASW-6A authority. | Exact-bound actor calls, control separation, installed JSON execution, local Harbor use, durable replay, negative access, and cumulative compatibility passed. Later evidence, review, rollout, and physical-treatment controls remain unavailable. |
 | 2026-08-01 | Approve the ASW-6A local evidence-health rule freeze. | Version 3 preserves earlier bytes, uses one fixed stale and delay interval, adds one non-latent condition-check choice, and limits host treatments to six deterministic task-owned classes with private control identity. |
 | 2026-08-01 | Accept the ASW-6A provider-free gate and close the local evidence-health stage. | Version 3 compatibility, six evidence treatments, sensor and physical inspection choice, durable retry and recovery, handover privacy, installed JSON, and local Harbor parity passed. No authority is granted to ASW-6A-R or any later stage. |
+| 2026-08-02 | Approve one exact ASW-6A-R real-agent shakedown authority. | The authority fixes the Amazon Bedrock route, model, adapter, provider-call, turn, tool-call, token, and cost limits before execution. It permits one run only and does not carry into another model study. |
+| 2026-08-02 | Accept the ASW-6A-R mechanism and retain its negative real-agent result. | Provider-free execution, persistence, redaction, Harbor parity, and independent verification passed. The agent found the planted issue but failed three exact report fields. No retry or verifier change is permitted after this observed result. |
 
 ## 24. Immediate next action
 
-Review the accepted **ASW-6A — local evidence health** checkpoint and decide
-separately whether to authorize ASW-6A-R maintenance closeout review design.
-The completed local evidence-health stage is the entry evidence for that
-decision; it does not activate the review stage by itself.
+Review the accepted **ASW-6A-R — maintenance closeout and return-to-service
+review** checkpoint and decide separately which conditional stage, if any, to
+authorize next. The negative agent result creates one bounded contract question:
+whether follow-up actions need typed public codes and whether the evaluator
+should require exact sets or permit justified additional affected records and
+source references. It does not authorize a contract change or another run.
 
-ASW-6A does not authorize ASW-6A-R, temporal retrieval, an external archive,
-a model study, shared extraction, imperfect repair, rollout fan-out, or coupled
-assets.
-
-The Pump A maintenance closeout review remains conditional ASW-6A-R work. It
-can start only after the local evidence-health exit gate passes and a separate
-checkpoint authorizes it. State-addressable rollout fan-out remains conditional
-ASW-7A work and can include an eligible review checkpoint only after its own
-entry gate.
+ASW-6A-R does not authorize temporal retrieval, an external archive, a
+confirmatory model study, shared extraction, imperfect repair, rollout fan-out,
+or coupled assets. State-addressable rollout fan-out remains conditional ASW-7A
+work and can include an eligible review checkpoint only after its own entry
+gate.

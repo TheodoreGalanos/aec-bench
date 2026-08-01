@@ -13,8 +13,6 @@ import yaml
 from harbor.models.job.config import JobConfig  # type: ignore[import-untyped]
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
-    PUMP_STATION_HARBOR_BRIDGE_MODE,
-    PUMP_STATION_HARBOR_EXECUTION_KIND,
     load_pump_station_harbor_bridge,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
@@ -48,7 +46,7 @@ def build_pump_station_harbor_job_config(
     """Build one validated local Harbor configuration for the exported task."""
 
     task_root = Path(task_dir).resolve(strict=True)
-    load_pump_station_harbor_bridge(task_root / "environment")
+    bridge = load_pump_station_harbor_bridge(task_root / "environment")
     environment = _harbor_environment(backend)
     model = model_name.strip()
     if not model:
@@ -56,10 +54,12 @@ def build_pump_station_harbor_job_config(
     if max_turns < 1:
         raise ValueError("pump-station Harbor max turns must be positive")
     reference_controller = model == PUMP_STATION_REFERENCE_CONTROLLER_ID
-    world_session = {"bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE}
+    if bridge.maintenance_review and not reference_controller:
+        raise ValueError("pump-station review model runs require the separately approved direct host runner")
+    world_session = {"bridge_mode": bridge.bridge_mode}
     agent_kwargs: dict[str, Any] = {
         "adapter": "tool_loop",
-        "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
+        "execution_kind": bridge.execution_kind,
         "world_session": world_session,
     }
     agent_name = "pump-station-reference-controller"

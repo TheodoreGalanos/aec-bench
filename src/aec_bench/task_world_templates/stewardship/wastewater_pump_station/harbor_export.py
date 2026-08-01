@@ -23,6 +23,12 @@ from aec_bench.task_world_templates.harbor_exporting.stable_io import (
     directory_sha256,
     file_sha256,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review_control import (
+    PUMP_STATION_REVIEW_TASK_ID,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review_session import (
+    PUMP_STATION_REVIEW_TOOL_NAMES,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_models import (
     ReferencePackage,
 )
@@ -39,18 +45,22 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_se
 
 PUMP_STATION_HARBOR_EXECUTION_KIND: Final[Literal["stewardship_world_session"]] = "stewardship_world_session"
 PUMP_STATION_HARBOR_BRIDGE_MODE = "wastewater_pump_station_reference"
+PUMP_STATION_REVIEW_HARBOR_EXECUTION_KIND: Final[Literal["stewardship_review_session"]] = "stewardship_review_session"
+PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE = "wastewater_pump_station_closeout_review"
 PUMP_STATION_HARBOR_OUTPUT_PATH = "/workspace/world-session"
 PUMP_STATION_HARBOR_EXPORT_SCHEMA_VERSION = "aecbench.pump-station-harbor-export.v1"
 PUMP_STATION_CONTROLLER_MODES = (
     "deterministic_reference",
     "model_tool_loop",
 )
+PUMP_STATION_REVIEW_CONTROLLER_MODES = ("deterministic_reference",)
 
 _MANIFEST_NAME = "world-session-export.json"
 _PACKAGE_PATH = "tests/reference-package"
 _MAX_MANIFEST_BYTES = 1024 * 1024
 _NON_AUTHORITY_ARTIFACT_NAMES = frozenset(
     {
+        ".review-case.lock",
         ".world-run.lock",
         "artifact-inventory.json",
         "current.json",
@@ -94,6 +104,10 @@ class PumpStationHarborBridge:
     output_path: str
     rich_work_processes: bool
     evidence_health: bool
+    maintenance_review: bool
+    execution_kind: str
+    task_world_id: str
+    bridge_mode: str
 
 
 def export_pump_station_harbor_task(
@@ -102,6 +116,7 @@ def export_pump_station_harbor_task(
     project_root: Path,
     rich_work_processes: bool = False,
     evidence_health: bool = False,
+    maintenance_review: bool = False,
 ) -> ExportedPumpStationHarborTask:
     """Materialize one immutable task package for provider-free Harbor execution."""
 
@@ -120,8 +135,9 @@ def export_pump_station_harbor_task(
             task_dir=staging,
             project_root=root,
             package=package,
-            rich_work_processes=(rich_work_processes or evidence_health),
-            evidence_health=evidence_health,
+            rich_work_processes=(rich_work_processes or evidence_health or maintenance_review),
+            evidence_health=(evidence_health or maintenance_review),
+            maintenance_review=maintenance_review,
         )
         staging.rename(destination)
     return ExportedPumpStationHarborTask(
@@ -159,9 +175,21 @@ def load_pump_station_harbor_bridge(
     )
     if manifest["schema_version"] != PUMP_STATION_HARBOR_EXPORT_SCHEMA_VERSION:
         raise ValueError("unsupported pump-station Harbor export version")
-    if manifest["execution_kind"] != PUMP_STATION_HARBOR_EXECUTION_KIND:
+    bridge_payload = _mapping(manifest["bridge"], "bridge")
+    maintenance_review = bool(bridge_payload.get("maintenance_review", False))
+    expected_execution_kind = (
+        PUMP_STATION_REVIEW_HARBOR_EXECUTION_KIND if maintenance_review else PUMP_STATION_HARBOR_EXECUTION_KIND
+    )
+    expected_task_world_id = PUMP_STATION_REVIEW_TASK_ID if maintenance_review else PUMP_STATION_TASK_WORLD_ID
+    expected_bridge_mode = (
+        PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE if maintenance_review else PUMP_STATION_HARBOR_BRIDGE_MODE
+    )
+    expected_controller_modes = (
+        PUMP_STATION_REVIEW_CONTROLLER_MODES if maintenance_review else PUMP_STATION_CONTROLLER_MODES
+    )
+    if manifest["execution_kind"] != expected_execution_kind:
         raise ValueError("pump-station Harbor execution kind differs")
-    if manifest["task_world_id"] != PUMP_STATION_TASK_WORLD_ID:
+    if manifest["task_world_id"] != expected_task_world_id:
         raise ValueError("pump-station Harbor task-world identity differs")
     agent_surface = _mapping(manifest["agent_surface"], "agent_surface")
     if agent_surface.get("allow_internet") is not False or agent_surface.get("dependencies") != list(
@@ -169,7 +197,6 @@ def load_pump_station_harbor_bridge(
     ):
         raise ValueError("pump-station Harbor agent runtime differs")
     package_payload = _mapping(manifest["package"], "package")
-    bridge_payload = _mapping(manifest["bridge"], "bridge")
     harbor_payload = _mapping(manifest["harbor"], "harbor")
     verifier_payload = _mapping(manifest["verifier"], "verifier")
     package_root = task_root / str(package_payload["path"])
@@ -185,14 +212,19 @@ def load_pump_station_harbor_bridge(
         PUMP_STATION_TOOL_NAMES,
         PUMP_STATION_RICH_WORK_TOOL_NAMES,
         PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES,
+        PUMP_STATION_REVIEW_TOOL_NAMES,
     }:
         raise ValueError("pump-station Harbor tool catalogue differs")
     rich_work_processes = bool(bridge_payload.get("rich_work_processes", False))
     evidence_health = bool(bridge_payload.get("evidence_health", False))
+    if maintenance_review and not (rich_work_processes and evidence_health):
+        raise ValueError("pump-station review requires version 3 rich work")
     if evidence_health and not rich_work_processes:
         raise ValueError("pump-station evidence health requires rich work")
     expected_tools = (
-        PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES
+        PUMP_STATION_REVIEW_TOOL_NAMES
+        if maintenance_review
+        else PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES
         if evidence_health
         else PUMP_STATION_RICH_WORK_TOOL_NAMES
         if rich_work_processes
@@ -201,9 +233,9 @@ def load_pump_station_harbor_bridge(
     if allowed_tools != expected_tools:
         raise ValueError("pump-station Harbor work profile and tools differ")
     if (
-        bridge_payload["mode"] != PUMP_STATION_HARBOR_BRIDGE_MODE
+        bridge_payload["mode"] != expected_bridge_mode
         or bridge_payload["output_path"] != PUMP_STATION_HARBOR_OUTPUT_PATH
-        or tuple(bridge_payload.get("controller_modes", ())) != PUMP_STATION_CONTROLLER_MODES
+        or tuple(bridge_payload.get("controller_modes", ())) != expected_controller_modes
     ):
         raise ValueError("pump-station Harbor bridge contract differs")
     if harbor_payload["reward_owner"] != "harbor_verifier":
@@ -225,6 +257,10 @@ def load_pump_station_harbor_bridge(
         output_path=PUMP_STATION_HARBOR_OUTPUT_PATH,
         rich_work_processes=rich_work_processes,
         evidence_health=evidence_health,
+        maintenance_review=maintenance_review,
+        execution_kind=expected_execution_kind,
+        task_world_id=expected_task_world_id,
+        bridge_mode=expected_bridge_mode,
     )
 
 
@@ -235,6 +271,7 @@ def _write_export(
     package: ReferencePackage,
     rich_work_processes: bool,
     evidence_health: bool,
+    maintenance_review: bool,
 ) -> ExportedPumpStationHarborTask:
     task_dir.mkdir()
     tests_dir = task_dir / "tests"
@@ -255,9 +292,18 @@ def _write_export(
     dockerfile_path = environment_dir / "Dockerfile"
     task_toml_path = task_dir / "task.toml"
     test_script_path = tests_dir / "test.sh"
-    instruction_path.write_text(_instruction_text(), encoding="utf-8")
+    instruction_path.write_text(
+        _instruction_text(maintenance_review=maintenance_review),
+        encoding="utf-8",
+    )
     dockerfile_path.write_text(_dockerfile_text(), encoding="utf-8")
-    task_toml_path.write_text(_task_toml_text(package), encoding="utf-8")
+    task_toml_path.write_text(
+        _task_toml_text(
+            package,
+            maintenance_review=maintenance_review,
+        ),
+        encoding="utf-8",
+    )
     test_script_path.write_text(
         _test_script_text(runtime.path.name),
         encoding="utf-8",
@@ -270,6 +316,7 @@ def _write_export(
         runtime=runtime,
         rich_work_processes=rich_work_processes,
         evidence_health=evidence_health,
+        maintenance_review=maintenance_review,
     )
     manifest_path = task_dir / _MANIFEST_NAME
     _write_json(manifest_path, manifest)
@@ -290,15 +337,38 @@ def _export_manifest(
     runtime: RuntimeWheel,
     rich_work_processes: bool,
     evidence_health: bool,
+    maintenance_review: bool,
 ) -> dict[str, Any]:
     instruction = task_dir / "instruction.md"
     dockerfile = task_dir / "environment" / "Dockerfile"
     task_toml = task_dir / "task.toml"
     test_script = task_dir / "tests" / "test.sh"
+    bridge = {
+        "mode": (PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE if maintenance_review else PUMP_STATION_HARBOR_BRIDGE_MODE),
+        "allowed_tools": list(
+            PUMP_STATION_REVIEW_TOOL_NAMES
+            if maintenance_review
+            else PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES
+            if evidence_health
+            else PUMP_STATION_RICH_WORK_TOOL_NAMES
+            if rich_work_processes
+            else PUMP_STATION_TOOL_NAMES
+        ),
+        "rich_work_processes": rich_work_processes,
+        "evidence_health": evidence_health,
+        "output_path": PUMP_STATION_HARBOR_OUTPUT_PATH,
+        "controller_modes": list(
+            PUMP_STATION_REVIEW_CONTROLLER_MODES if maintenance_review else PUMP_STATION_CONTROLLER_MODES
+        ),
+    }
+    if maintenance_review:
+        bridge["maintenance_review"] = True
     return {
         "schema_version": PUMP_STATION_HARBOR_EXPORT_SCHEMA_VERSION,
-        "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
-        "task_world_id": PUMP_STATION_TASK_WORLD_ID,
+        "execution_kind": (
+            PUMP_STATION_REVIEW_HARBOR_EXECUTION_KIND if maintenance_review else PUMP_STATION_HARBOR_EXECUTION_KIND
+        ),
+        "task_world_id": (PUMP_STATION_REVIEW_TASK_ID if maintenance_review else PUMP_STATION_TASK_WORLD_ID),
         "package": {
             "path": _PACKAGE_PATH,
             "profile_id": package.profile_id,
@@ -315,20 +385,7 @@ def _export_manifest(
             "allow_internet": False,
             "dependencies": list(RUNTIME_DEPENDENCIES),
         },
-        "bridge": {
-            "mode": PUMP_STATION_HARBOR_BRIDGE_MODE,
-            "allowed_tools": list(
-                PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES
-                if evidence_health
-                else PUMP_STATION_RICH_WORK_TOOL_NAMES
-                if rich_work_processes
-                else PUMP_STATION_TOOL_NAMES
-            ),
-            "rich_work_processes": rich_work_processes,
-            "evidence_health": evidence_health,
-            "output_path": PUMP_STATION_HARBOR_OUTPUT_PATH,
-            "controller_modes": list(PUMP_STATION_CONTROLLER_MODES),
-        },
+        "bridge": bridge,
         "harbor": {
             "reward_owner": "harbor_verifier",
             "task_toml": "task.toml",
@@ -368,7 +425,17 @@ def _validated_project_root(project_root: Path) -> Path:
     return root
 
 
-def _instruction_text() -> str:
+def _instruction_text(*, maintenance_review: bool = False) -> str:
+    if maintenance_review:
+        return (
+            "# Wastewater pump-station maintenance closeout review\n\n"
+            "Review the named Pump A closeout pack through the declared "
+            "reviewer tools. Identify any source-bound evidence issue and submit "
+            "every required review field. The selected controller must preserve "
+            "the complete review evidence at "
+            f"`{PUMP_STATION_HARBOR_OUTPUT_PATH}`. Harbor owns reward and runs "
+            "the independent verifier after the agent phase.\n"
+        )
     return (
         "# Wastewater pump-station stewardship session\n\n"
         "Operate the host-owned pump-station world through its declared stewardship "
@@ -388,7 +455,17 @@ def _dockerfile_text() -> str:
     )
 
 
-def _task_toml_text(package: ReferencePackage) -> str:
+def _task_toml_text(
+    package: ReferencePackage,
+    *,
+    maintenance_review: bool = False,
+) -> str:
+    task_world_id = PUMP_STATION_REVIEW_TASK_ID if maintenance_review else PUMP_STATION_TASK_WORLD_ID
+    tags = (
+        '["asset-stewardship", "pump-station", "maintenance-review"]'
+        if maintenance_review
+        else '["asset-stewardship", "pump-station", "world-session"]'
+    )
     return (
         "# ABOUTME: Declares one provider-neutral wastewater pump-station Harbor task.\n"
         "# ABOUTME: Binds task metadata while Harbor retains independent reward ownership.\n"
@@ -398,8 +475,8 @@ def _task_toml_text(package: ReferencePackage) -> str:
         'category = "asset-stewardship"\n'
         'domain = "mechanical"\n'
         'visibility = "public"\n'
-        'tags = ["asset-stewardship", "pump-station", "world-session"]\n'
-        f"task_world_id = {json.dumps(PUMP_STATION_TASK_WORLD_ID)}\n"
+        f"tags = {tags}\n"
+        f"task_world_id = {json.dumps(task_world_id)}\n"
         f"reference_profile_id = {json.dumps(package.profile_id)}\n"
         f"reference_generation_id = {json.dumps(package.generation_id)}\n\n"
         "[agent]\n"

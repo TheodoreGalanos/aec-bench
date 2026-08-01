@@ -1,0 +1,17 @@
+concepts:
+  - id: CON001
+    name: derived_review_case
+    definition: A content-addressed review object built from one immutable verified world snapshot without joining the source commit chain.
+    relations: [CON002, CON003]
+  - id: CON002
+    name: treated_closeout_pack
+    definition: The reviewer-visible Pump A maintenance pack after one allowlisted fallible-record treatment is applied.
+    relations: [CON001, CON004]
+  - id: CON003
+    name: private_verifier_target
+    definition: Host-only expected finding, impact, unaffected duties, evidence boundary, disposition, and follow-up used for exact evaluation.
+    relations: [CON001, CON004]
+  - id: CON004
+    name: source_bound_review
+    definition: One immutable reviewer submission bound to the case, pack, tenure, and cited source records.
+    relations: [CON002, CON003]
