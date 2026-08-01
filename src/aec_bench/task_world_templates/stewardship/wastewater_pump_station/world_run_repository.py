@@ -18,17 +18,20 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     stewardship_state_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    CancelProcess,
     ContinueOperation,
     PumpStationProposal,
     PumpStationStewardshipState,
     PumpStationTransition,
     PumpStationTransitionReceipt,
     RequestConditionalDeferral,
+    RequestDependencyWaiver,
     RequestInspection,
     RequestObstructionClearance,
     RequestProvisionalClosure,
     RequestProvisionalReturn,
     RequestVerification,
+    ResumeProcess,
     TransferDuty,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
@@ -39,7 +42,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
     PUMP_STATION_SERIALIZATION_VERSION,
-    PUMP_STATION_SNAPSHOT_VERSION,
     PumpStationAppliedEventBatch,
     PumpStationCurrentRunPointer,
     PumpStationStagedTransition,
@@ -47,6 +49,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     PumpStationWorldRunCommit,
     PumpStationWorldRunError,
     PumpStationWorldRunManifest,
+    PumpStationWorldRunMigration,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_serialization import (
     load_pump_station_artifact,
@@ -65,6 +68,9 @@ _PROPOSAL_TYPES: dict[str, type[object]] = {
         RequestProvisionalReturn,
         RequestProvisionalClosure,
         RequestVerification,
+        ResumeProcess,
+        CancelProcess,
+        RequestDependencyWaiver,
     )
 }
 
@@ -150,6 +156,13 @@ class PumpStationWorldRunRepository:
         with self.locked():
             if stewardship_state_id(initial_state) != manifest.initial_state_id:
                 _fail("world-run-identity", "initial state differs from manifest")
+            expected_state_version = (
+                "pump-station-stewardship-state.v2"
+                if manifest.snapshot_version.endswith(".v2")
+                else "pump-station-stewardship-state.v1"
+            )
+            if initial_state.state_version != expected_state_version:
+                _fail("state-version", "state and snapshot versions differ")
             if (self._root / "current.json").exists():
                 if self.load_manifest() != manifest:
                     _fail("world-run-exists", f"{manifest.run_id} has different identity")
@@ -244,6 +257,9 @@ class PumpStationWorldRunRepository:
             or receipt.pre_state_id != prior_snapshot.state_id
             or receipt.post_state_id != stewardship_state_id(transition.state)
             or receipt.proposal_id != proposal.context.proposal_id
+            or receipt.receipt_version != manifest.receipt_version
+            or receipt.authority_policy_version != manifest.authority_policy_version
+            or receipt.transition_rule_version != manifest.transition_rule_version
         ):
             _fail("transition-integrity", "transition does not extend the selected state")
         self._reject_proposal_collision(
@@ -285,7 +301,7 @@ class PumpStationWorldRunRepository:
         commit_id = pump_station_artifact_id(commit)
         self._publish_content("commits", commit_id, commit)
         snapshot = PumpStationStateSnapshotRef(
-            snapshot_version=PUMP_STATION_SNAPSHOT_VERSION,
+            snapshot_version=manifest.snapshot_version,
             run_id=manifest.run_id,
             episode_id=manifest.episode_id,
             world_branch_id=manifest.world_branch_id,
@@ -387,6 +403,28 @@ class PumpStationWorldRunRepository:
                 f"{proposal.context.proposal_id} was already bound to different content",
             )
         return transition
+
+    def publish_migration(self, migration: PumpStationWorldRunMigration) -> None:
+        """Publish one immutable migration lineage record at the target root."""
+        manifest = self.load_manifest()
+        if (
+            migration.target_run_id != manifest.run_id
+            or migration.target_world_branch_id != manifest.world_branch_id
+            or migration.target_state_id != manifest.initial_state_id
+            or migration.target_snapshot_version != manifest.snapshot_version
+            or migration.target_receipt_version != manifest.receipt_version
+            or migration.target_authority_policy_version != manifest.authority_policy_version
+            or migration.target_transition_rule_version != manifest.transition_rule_version
+        ):
+            _fail("migration-integrity", "migration target differs from manifest")
+        self._publish_root_immutable("migration.json", migration)
+
+    def load_migration(self) -> PumpStationWorldRunMigration:
+        """Reload the immutable migration lineage for a migrated run."""
+        return load_pump_station_artifact(
+            self._read(self._root / "migration.json", "world-run migration"),
+            PumpStationWorldRunMigration,
+        )
 
     def _load_step(
         self,
@@ -598,7 +636,7 @@ class PumpStationWorldRunRepository:
         pointer: PumpStationCurrentRunPointer,
     ) -> PumpStationStateSnapshotRef:
         return PumpStationStateSnapshotRef(
-            snapshot_version=PUMP_STATION_SNAPSHOT_VERSION,
+            snapshot_version=manifest.snapshot_version,
             run_id=manifest.run_id,
             episode_id=manifest.episode_id,
             world_branch_id=manifest.world_branch_id,

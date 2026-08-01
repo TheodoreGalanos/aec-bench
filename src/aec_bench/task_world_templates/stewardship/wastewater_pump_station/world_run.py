@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpStationModel,
 )
@@ -14,9 +16,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     stewardship_state_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PUMP_STATION_AUTHORITY_POLICY_VERSION,
-    PUMP_STATION_RECEIPT_VERSION,
-    PUMP_STATION_TRANSITION_RULE_VERSION,
+    PUMP_STATION_STATE_VERSION_V1,
+    PUMP_STATION_STATE_VERSION_V2,
     PumpStationProposal,
     PumpStationStewardshipState,
     PumpStationTransition,
@@ -31,12 +32,16 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationInformationSet,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+    PUMP_STATION_MIGRATION_VERSION,
+    PUMP_STATION_RECORD_VERSIONS_V1,
+    PUMP_STATION_RECORD_VERSIONS_V2,
     PUMP_STATION_SERIALIZATION_VERSION,
-    PUMP_STATION_SNAPSHOT_VERSION,
+    PumpStationRecordVersions,
     PumpStationStagedTransition,
     PumpStationStateSnapshotRef,
     PumpStationWorldRunError,
     PumpStationWorldRunManifest,
+    PumpStationWorldRunMigration,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
@@ -74,14 +79,25 @@ class PumpStationWorldRun:
         run_id: str,
         episode_id: str,
         world_branch_id: str,
+        record_versions: PumpStationRecordVersions = PUMP_STATION_RECORD_VERSIONS_V1,
     ) -> PumpStationWorldRun:
         """Create and atomically select one durable initial state."""
+        expected_state_version = (
+            PUMP_STATION_STATE_VERSION_V2
+            if record_versions == PUMP_STATION_RECORD_VERSIONS_V2
+            else PUMP_STATION_STATE_VERSION_V1
+        )
+        if initial_state.state_version != expected_state_version:
+            _fail(
+                "state-version",
+                "initial state and durable record versions differ",
+            )
         manifest = PumpStationWorldRunManifest(
             serialization_version=PUMP_STATION_SERIALIZATION_VERSION,
-            snapshot_version=PUMP_STATION_SNAPSHOT_VERSION,
-            receipt_version=PUMP_STATION_RECEIPT_VERSION,
-            authority_policy_version=PUMP_STATION_AUTHORITY_POLICY_VERSION,
-            transition_rule_version=PUMP_STATION_TRANSITION_RULE_VERSION,
+            snapshot_version=record_versions.snapshot_version,
+            receipt_version=record_versions.receipt_version,
+            authority_policy_version=record_versions.authority_policy_version,
+            transition_rule_version=record_versions.transition_rule_version,
             run_id=run_id,
             episode_id=episode_id,
             world_branch_id=world_branch_id,
@@ -101,6 +117,56 @@ class PumpStationWorldRun:
             model=model,
             manifest=manifest,
         )
+
+    def migrate_to_v2(
+        self,
+        *,
+        repository: PumpStationWorldRunRepository,
+        run_id: str,
+        world_branch_id: str,
+    ) -> PumpStationWorldRun:
+        """Continue one version-1 state as a new version-2 run with lineage."""
+        if self._manifest.record_versions != PUMP_STATION_RECORD_VERSIONS_V1:
+            _fail("migration-source-version", str(self._manifest.record_versions))
+        source_snapshot = self.snapshot()
+        migrated_state = replace(
+            self.state,
+            state_version=PUMP_STATION_STATE_VERSION_V2,
+            dependencies=(),
+            dependency_waivers=(),
+            resource_reservations=(),
+        )
+        migrated = PumpStationWorldRun.create(
+            repository=repository,
+            package=self._package,
+            model=self._model,
+            initial_state=migrated_state,
+            run_id=run_id,
+            episode_id=self._manifest.episode_id,
+            world_branch_id=world_branch_id,
+            record_versions=PUMP_STATION_RECORD_VERSIONS_V2,
+        )
+        target_snapshot = migrated.snapshot()
+        repository.publish_migration(
+            PumpStationWorldRunMigration(
+                migration_version=PUMP_STATION_MIGRATION_VERSION,
+                source_run_id=self._manifest.run_id,
+                source_world_branch_id=self._manifest.world_branch_id,
+                source_state_id=source_snapshot.state_id,
+                source_snapshot_version=self._manifest.snapshot_version,
+                source_receipt_version=self._manifest.receipt_version,
+                source_authority_policy_version=(self._manifest.authority_policy_version),
+                source_transition_rule_version=(self._manifest.transition_rule_version),
+                target_run_id=migrated.manifest.run_id,
+                target_world_branch_id=migrated.manifest.world_branch_id,
+                target_state_id=target_snapshot.state_id,
+                target_snapshot_version=migrated.manifest.snapshot_version,
+                target_receipt_version=migrated.manifest.receipt_version,
+                target_authority_policy_version=(migrated.manifest.authority_policy_version),
+                target_transition_rule_version=(migrated.manifest.transition_rule_version),
+            )
+        )
+        return migrated
 
     @classmethod
     def resume(

@@ -1,0 +1,80 @@
+claims:
+  - id: C001
+    statement: ASW-5 can represent overlapping dependency-aware work with deterministic blocked, active, suspended, resumed, cancelled, completed, failed, and interrupted transitions.
+    status: supported
+    falsification_criteria:
+      - A declared state transition is unavailable or non-deterministic.
+      - Suspension pauses a required follow-up due date.
+      - Resume repeats completed work or does not use remaining duration.
+      - A late completion event changes cancelled or completed work.
+    proof:
+      experiments: [E001, E003, E004]
+      evidence: [EV001, EV003]
+    dependencies: []
+    provenance: user
+    tags: [work-processes, lifecycle, deterministic-time]
+    domain:
+      implementation_stage: ASW-5
+  - id: C002
+    statement: ASW-5 preserves access, intervention-slot, and repair-kit conservation across start, suspension, resume, cancellation, completion, replay, and crash recovery.
+    status: supported
+    falsification_criteria:
+      - A resource has two live reservations.
+      - Suspension or cancellation releases or consumes a resource against the frozen rule.
+      - Interrupted or suspended work changes the physical asset.
+      - Replay or crash recovery changes resource ownership or consumption.
+    proof:
+      experiments: [E001, E002, E004]
+      evidence: [EV001, EV003]
+    dependencies: [C001]
+    provenance: user
+    tags: [resources, conservation, recovery]
+    domain:
+      implementation_stage: ASW-5
+  - id: C003
+    statement: Only Work Management can waive an administrative closeout dependency with accepted named evidence, and the waiver cannot change physical, safety, evidence, resource, follow-up, or operating-limit state.
+    status: supported
+    falsification_criteria:
+      - A non-administrative dependency can be waived.
+      - A role other than Work Management can approve the waiver.
+      - Missing, forged, or unaccepted evidence permits the waiver.
+      - The waiver completes work or changes a follow-up, resource, or operating limit.
+    proof:
+      experiments: [E001, E004]
+      evidence: [EV001, EV003]
+    dependencies: []
+    provenance: user
+    tags: [waiver, authority, evidence]
+    domain:
+      implementation_stage: ASW-5
+  - id: C004
+    statement: Nested access limits and live process state remain visible through bounded views and structured handover without hidden-state leakage.
+    status: supported
+    falsification_criteria:
+      - The parent-child operating-limit chain is absent from an authorized view or handover.
+      - A fresh agent cannot identify safe resume, cancellation, or reordering options.
+      - A view or handover exposes latent physical truth or unaccepted evidence.
+    proof:
+      experiments: [E002, E003, E004]
+      evidence: [EV001, EV003]
+    dependencies: [C001]
+    provenance: user
+    tags: [views, handover, redaction]
+    domain:
+      implementation_stage: ASW-5
+  - id: C005
+    statement: ASW-5 version 2 records preserve version 1 reload and replay, migrate by new content-addressed snapshots with explicit source lineage, leave version 1 bytes unchanged, and reject unknown versions.
+    status: supported
+    falsification_criteria:
+      - A valid version 1 run cannot reload or replay.
+      - Migration changes a version 1 object or omits source lineage.
+      - Two identical migrations produce different target content.
+      - An unknown version is accepted.
+    proof:
+      experiments: [E002, E004]
+      evidence: [EV002, EV003]
+    dependencies: []
+    provenance: user
+    tags: [schema-version, migration, replay, lineage]
+    domain:
+      implementation_stage: ASW-5

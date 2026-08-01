@@ -1,0 +1,106 @@
+experiments:
+  - id: E001
+    verifies: [C001, C002, C003]
+    purpose: Prove the frozen transition, dependency, waiver, and resource rules at unit level.
+    setup: Use deterministic pump-station states and typed proposals without a model provider.
+    procedure:
+      - Write each unit test before its implementation.
+      - Exercise all declared process states and transition guards.
+      - Exercise fixed AND dependencies and every waiver rejection path.
+      - Check every reservation, release, retention, and consumption rule.
+      - Check that suspended and interrupted work has no partial physical effect.
+    metrics:
+      - Declared transition coverage.
+      - Dependency and waiver rejection coverage.
+      - Resource conservation after each transition.
+      - Due-date movement during suspension.
+    evidence: [EV001, EV003]
+    exploratory: false
+    domain:
+      phase: unit
+      provider_calls: 0
+  - id: E002
+    verifies: [C002, C004, C005]
+    purpose: Prove durable publication, version compatibility, replay, views, and handover at integration level.
+    setup: Use retained version 1 fixtures and new version 2 runs in local durable repositories.
+    procedure:
+      - Reload and replay a version 1 run.
+      - Migrate the version 1 state into a new version 2 snapshot with source lineage.
+      - Confirm byte identity for all version 1 source objects.
+      - Resume, publish, crash, recover, and replay version 2 work.
+      - Compare bounded views and structured handovers before and after recovery.
+      - Reject unknown versions before any state change.
+    metrics:
+      - Version 1 reload and replay identity.
+      - Source-object byte identity.
+      - Migration-lineage completeness.
+      - Version 2 replay and recovery identity.
+      - View and handover parity.
+    evidence: [EV001, EV002, EV003]
+    exploratory: false
+    domain:
+      phase: integration
+      provider_calls: 0
+  - id: E003
+    verifies: [C001, C004]
+    purpose: Complete the frozen overlapping-work scenario through both production execution paths.
+    setup: Use the direct host and local Harbor paths with the same version 2 world and no model provider.
+    procedure:
+      - Start Pump A verification and Pump B inspection and clearance work.
+      - Advance access preparation and repair-kit delivery.
+      - Withdraw access while work is active.
+      - Hand the live world to a fresh agent tenure.
+      - Resume, cancel, or reorder the work under the frozen rules.
+      - Evaluate and independently reload both TrialRecords.
+    metrics:
+      - Direct and Harbor terminal-state parity.
+      - Process and resource conservation.
+      - Parent-child operating-limit visibility.
+      - TrialRecord reload and evaluation parity.
+    evidence: [EV001, EV003]
+    exploratory: false
+    domain:
+      phase: end_to_end
+      provider_calls: 0
+  - id: E004
+    verifies: [C001, C002, C003, C004, C005]
+    purpose: Falsify ASW-5 with semantic and durability attacks.
+    setup: Use direct typed calls and controlled local repository interruption.
+    procedure:
+      - Attack stale views, forged evidence, double reservation, and invalid waiver.
+      - Deliver a completion event after cancellation.
+      - Deliver simultaneous events in deterministic order.
+      - Interrupt durable publication and recover it.
+      - Inspect agent views and handovers for hidden-state leakage.
+      - Submit unknown record and rule versions.
+    metrics:
+      - Rejected invalid transitions.
+      - State identity before and after rejected attacks.
+      - Deterministic simultaneous-event receipts.
+      - Crash-recovery and replay identity.
+      - Hidden-field absence.
+    evidence: [EV001, EV002, EV003]
+    exploratory: false
+    domain:
+      phase: adversarial
+      provider_calls: 0
+  - id: E005
+    verifies: []
+    purpose: Compare the final ASW-5 test state with clean origin/main and identify inherited repository-wide failures.
+    setup: Use the live ASW-5 worktree, a temporary clean origin/main source copy, and the project virtual environment.
+    procedure:
+      - Run the four focused ASW-5 test modules.
+      - Run the complete pump-station test directory.
+      - Run the complete repository suite with unambiguous module identities.
+      - Re-run every repository-wide failure against clean origin/main or alone when the failure depends on order or worktree identity.
+    metrics:
+      - Focused ASW-5 pass count.
+      - Complete pump-station pass and failure counts.
+      - Clean-main failure parity.
+      - Standalone result for order-sensitive tests.
+      - Worktree-name sensitivity.
+    evidence: [EV003]
+    exploratory: true
+    domain:
+      phase: cumulative_gate_diagnosis
+      provider_calls: 0

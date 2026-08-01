@@ -54,6 +54,12 @@ _PERMITTED_AUTHORITY_OUTCOMES = {
     PumpStationAuthorityOutcome.PERMITTED,
     PumpStationAuthorityOutcome.PERMITTED_WITH_CONDITIONS,
 }
+_LIVE_PROCESS_STATUSES = {
+    PumpStationProcessStatus.IN_PROGRESS,
+    PumpStationProcessStatus.BLOCKED,
+    PumpStationProcessStatus.ACTIVE,
+    PumpStationProcessStatus.SUSPENDED,
+}
 
 
 def evaluate_pump_station_stewardship_run(
@@ -236,9 +242,7 @@ def _handover_counts(
         expected_obligations = {
             item.obligation_id for item in state.obligations if item.status is not PumpStationObligationStatus.FULFILLED
         }
-        expected_processes = {
-            item.process_id for item in state.processes if item.status is PumpStationProcessStatus.IN_PROGRESS
-        }
+        expected_processes = _live_process_ids(state)
         visible_restrictions = {item.restriction_id for item in visible.restrictions}
         visible_obligations = {item.obligation_id for item in visible.obligations}
         visible_processes = {item.process_id for item in visible.processes}
@@ -246,6 +250,13 @@ def _handover_counts(
         omissions += len(expected_obligations - visible_obligations)
         omissions += len(expected_processes - visible_processes)
     return handovers, omissions
+
+
+def _live_process_ids(
+    state: PumpStationStewardshipState,
+) -> set[str]:
+    """Return every process that remains live across a tenure boundary."""
+    return {process.process_id for process in state.processes if process.status in _LIVE_PROCESS_STATUSES}
 
 
 def _terminal_liability(

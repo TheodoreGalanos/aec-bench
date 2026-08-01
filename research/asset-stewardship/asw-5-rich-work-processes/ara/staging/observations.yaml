@@ -1,0 +1,48 @@
+observations:
+  - id: O001
+    summary: Overlapping work can make information continuity measurable, but ASW-5 does not test a model or a handover treatment effect.
+    status: provisional
+    source: ASW-4 programme checkpoint and ASW-5 rule freeze
+    next_action: Prove the world semantics before a later study design is considered.
+    domain:
+      possible_future_treatment: information_continuity
+  - id: O002
+    summary: Fixed AND dependencies are sufficient for the approved reference scenario.
+    status: provisional
+    source: ASW-5 rule freeze
+    next_action: Record a concrete unmet case before considering a richer dependency language.
+    domain:
+      architecture_limit: fixed_and_dependencies
+  - id: O003
+    summary: Process quality could later include safe-action rate, recovery time, resource efficiency, and reasoning cost.
+    status: open
+    source: ASW-5 planning discussion
+    next_action: Freeze measures prospectively only if ASW-5 passes its semantic exit gate and another study is authorized.
+    domain:
+      study_design: future
+  - id: O004
+    summary: A later data-generation stage can select one verified full-world state and fan out many agent continuations, with controlled future-world changes as an optional separate axis.
+    status: open
+    source: Theo's ASW planning decision on 2026-08-01
+    next_action: Retain this as conditional ASW-7A and do not expand the provider-free ASW-5 exit gate.
+    domain:
+      planned_stage: ASW-7A
+      current_stage_scope: excluded
+  - id: O005
+    summary: The focused ASW-5 and cumulative pump-station gates pass; wider repository checks retain eight baseline failures, one worktree-name assumption, and one order-dependent reviewer failure.
+    status: supported
+    source: evidence/current-test-status.md
+    next_action: Track the wider repository failures outside ASW-5 and keep them visible in later cumulative checks.
+    domain:
+      inherited_from_origin_main: true
+      blocking_gate: false
+  - id: O006
+    summary: The frozen access interruption permits complete, replay-valid work but causes one deadline breach because suspension does not pause calendar obligations.
+    status: supported
+    source: evidence/current-test-status.md
+    next_action: Keep execution completion, verification reward, and temporal stewardship evaluation as separate outcomes in any later study.
+    domain:
+      harbor_execution_reward: 1.0
+      imported_trial_reward: 0.0
+      obligation_breach_count: 1
+      provider_calls: 0

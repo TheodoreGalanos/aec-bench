@@ -6,7 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import types
-from dataclasses import fields, is_dataclass
+from dataclasses import MISSING, fields, is_dataclass
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from typing import Any, NoReturn, TypeVar, cast, get_args, get_origin, get_type_hints, overload
@@ -23,34 +23,104 @@ PUMP_STATION_TRANSPORT_FIELD_EXCLUSIONS: tuple[str, ...] = ()
 
 ArtifactT = TypeVar("ArtifactT")
 
+_V1 = "v1"
+_V2 = "v2"
+_V1_FIELD_EXCLUSIONS = {
+    "PumpStationStewardshipState": {
+        "state_version",
+        "dependencies",
+        "dependency_waivers",
+        "resource_reservations",
+    },
+    "PumpStationProcess": {
+        "remaining_duration_seconds",
+        "dependency_ids",
+        "suspended_at_seconds",
+        "cancelled_at_seconds",
+    },
+    "PumpStationRestriction": {"parent_restriction_id"},
+    "PumpStationCurrentStateView": {
+        "state_version",
+        "dependencies",
+        "dependency_waivers",
+        "resource_reservations",
+    },
+}
+
 
 def _fail(code: str, detail: str) -> NoReturn:
     raise PumpStationWorldRunError(code, detail)
 
 
-def _encoded(value: object) -> object:
+def _record_profile(value: object) -> str:
+    type_name = type(value).__name__
+    if type_name == "PumpStationStewardshipState":
+        return _V2 if str(getattr(value, "state_version", "")).endswith(".v2") else _V1
+    if type_name == "PumpStationCurrentStateView":
+        return _V2 if str(getattr(value, "state_version", "")).endswith(".v2") else _V1
+    if type_name in {"PumpStationActorView", "PumpStationStructuredHandover"}:
+        current = getattr(value, "current_state", None) or getattr(
+            getattr(value, "current_actor_view", None), "current_state", None
+        )
+        if current is not None:
+            return _record_profile(current)
+    if type_name == "PumpStationInformationSet":
+        return _record_profile(cast(Any, value).base_view)
+    if type_name == "PumpStationTransitionReceipt":
+        return _V2 if str(getattr(value, "receipt_version", "")).endswith(".v2") else _V1
+    return _V2
+
+
+def _document_profile(value: object) -> str:
+    if isinstance(value, dict):
+        type_name = value.get("$type")
+        if type_name in {"PumpStationStewardshipState", "PumpStationCurrentStateView"}:
+            return _V2 if str(value.get("state_version", "")).endswith(".v2") else _V1
+        if type_name == "PumpStationTransitionReceipt":
+            return _V2 if str(value.get("receipt_version", "")).endswith(".v2") else _V1
+        profiles = tuple(_document_profile(child) for child in value.values())
+        if _V1 in profiles:
+            return _V1
+    if isinstance(value, list):
+        profiles = tuple(_document_profile(child) for child in value)
+        if _V1 in profiles:
+            return _V1
+    return _V2
+
+
+def _encoded(value: object, profile: str) -> object:
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, Decimal):
         return str(value)
     if is_dataclass(value) and not isinstance(value, type):
+        exclusions = _V1_FIELD_EXCLUSIONS.get(type(value).__name__, set()) if profile == _V1 else set()
         return {
             "$type": type(value).__name__,
-            **{field.name: _encoded(getattr(value, field.name)) for field in fields(value)},
+            **{
+                field.name: _encoded(getattr(value, field.name), profile)
+                for field in fields(value)
+                if field.name not in exclusions
+            },
         }
     if isinstance(value, tuple):
-        return [_encoded(item) for item in value]
+        return [_encoded(item, profile) for item in value]
     if value is None or type(value) in {str, int, bool}:
         return value
     _fail("artifact-type", f"unsupported value {type(value).__name__}")
     raise AssertionError("unreachable")
 
 
-def pump_station_artifact_bytes(value: object) -> bytes:
+def pump_station_artifact_bytes(
+    value: object,
+    *,
+    record_profile: str | None = None,
+) -> bytes:
     """Return one canonical, newline-terminated task artifact."""
+    profile = record_profile or _record_profile(value)
     return (
         json.dumps(
-            _encoded(value),
+            _encoded(value, profile),
             ensure_ascii=False,
             separators=(",", ":"),
             sort_keys=True,
@@ -59,9 +129,13 @@ def pump_station_artifact_bytes(value: object) -> bytes:
     ).encode("utf-8")
 
 
-def pump_station_artifact_id(value: object) -> str:
+def pump_station_artifact_id(
+    value: object,
+    *,
+    record_profile: str | None = None,
+) -> str:
     """Return the content identity of one canonical task artifact."""
-    return hashlib.sha256(pump_station_artifact_bytes(value)).hexdigest()
+    return hashlib.sha256(pump_station_artifact_bytes(value, record_profile=record_profile)).hexdigest()
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -81,7 +155,7 @@ def _expected_value(expected: object) -> object:
     return getattr(expected, "__value__", expected)
 
 
-def _decode_union(value: object, expected: object) -> object:
+def _decode_union(value: object, expected: object, profile: str) -> object:
     options = get_args(expected)
     if value is None and type(None) in options:
         return None
@@ -90,14 +164,14 @@ def _decode_union(value: object, expected: object) -> object:
         for option in options:
             candidate = _expected_value(option)
             if isinstance(candidate, type) and is_dataclass(candidate) and candidate.__name__ == type_name:
-                return _decode(value, candidate)
+                return _decode(value, candidate, profile)
         _fail("artifact-type", f"unknown stored type {type_name}")
     failures: list[PumpStationWorldRunError] = []
     for option in options:
         if option is type(None):
             continue
         try:
-            return _decode(value, option)
+            return _decode(value, option, profile)
         except PumpStationWorldRunError as error:
             failures.append(error)
     detail = failures[0] if failures else "no matching union member"
@@ -105,7 +179,7 @@ def _decode_union(value: object, expected: object) -> object:
     raise AssertionError("unreachable")
 
 
-def _decode_dataclass(value: object, expected: type[Any]) -> object:
+def _decode_dataclass(value: object, expected: type[Any], profile: str) -> object:
     if not isinstance(value, dict):
         _fail("artifact-shape", f"{expected.__name__} must be an object")
     if value.get("$type") != expected.__name__:
@@ -114,11 +188,28 @@ def _decode_dataclass(value: object, expected: type[Any]) -> object:
             f"expected {expected.__name__}, received {value.get('$type')!r}",
         )
     declared_fields = fields(expected)
-    expected_keys = {"$type", *(field.name for field in declared_fields)}
+    exclusions = _V1_FIELD_EXCLUSIONS.get(expected.__name__, set()) if profile == _V1 else set()
+    expected_keys = {
+        "$type",
+        *(field.name for field in declared_fields if field.name not in exclusions),
+    }
     if set(value) != expected_keys:
         _fail("artifact-shape", f"{expected.__name__} fields differ")
     type_hints = get_type_hints(expected)
-    decoded = {field.name: _decode(value[field.name], type_hints[field.name]) for field in declared_fields}
+    decoded: dict[str, object] = {}
+    for field in declared_fields:
+        if field.name in value:
+            decoded[field.name] = _decode(
+                value[field.name],
+                type_hints[field.name],
+                profile,
+            )
+        elif field.name in exclusions and field.default is not MISSING:
+            decoded[field.name] = field.default
+        elif field.name in exclusions and field.default_factory is not MISSING:
+            decoded[field.name] = field.default_factory()
+        else:
+            _fail("artifact-shape", f"{expected.__name__} lacks {field.name}")
     try:
         return expected(**decoded)
     except PumpStationWorldRunError:
@@ -128,26 +219,26 @@ def _decode_dataclass(value: object, expected: type[Any]) -> object:
     raise AssertionError("unreachable")
 
 
-def _decode_tuple(value: object, expected: object) -> tuple[object, ...]:
+def _decode_tuple(value: object, expected: object, profile: str) -> tuple[object, ...]:
     if not isinstance(value, list):
         _fail("artifact-shape", "tuple value must be a JSON array")
     members = get_args(expected)
     if len(members) == 2 and members[1] is Ellipsis:
-        return tuple(_decode(item, members[0]) for item in value)
+        return tuple(_decode(item, members[0], profile) for item in value)
     if len(value) != len(members):
         _fail("artifact-shape", "fixed tuple length differs")
-    return tuple(_decode(item, member) for item, member in zip(value, members, strict=True))
+    return tuple(_decode(item, member, profile) for item, member in zip(value, members, strict=True))
 
 
-def _decode(value: object, expected: object) -> object:
+def _decode(value: object, expected: object, profile: str) -> object:
     expected = _expected_value(expected)
     origin = get_origin(expected)
     if origin is types.UnionType or isinstance(expected, types.UnionType):
-        return _decode_union(value, expected)
+        return _decode_union(value, expected, profile)
     if origin is tuple:
-        return _decode_tuple(value, expected)
+        return _decode_tuple(value, expected, profile)
     if isinstance(expected, type) and is_dataclass(expected):
-        return _decode_dataclass(value, expected)
+        return _decode_dataclass(value, expected, profile)
     if isinstance(expected, type) and issubclass(expected, Enum):
         try:
             return expected(value)
@@ -177,14 +268,29 @@ def _decode(value: object, expected: object) -> object:
 
 
 @overload
-def load_pump_station_artifact(payload: bytes, expected_type: type[ArtifactT]) -> ArtifactT: ...
+def load_pump_station_artifact(
+    payload: bytes,
+    expected_type: type[ArtifactT],
+    *,
+    record_profile: str | None = None,
+) -> ArtifactT: ...
 
 
 @overload
-def load_pump_station_artifact(payload: bytes, expected_type: object) -> object: ...
+def load_pump_station_artifact(
+    payload: bytes,
+    expected_type: object,
+    *,
+    record_profile: str | None = None,
+) -> object: ...
 
 
-def load_pump_station_artifact(payload: bytes, expected_type: object) -> object:
+def load_pump_station_artifact(
+    payload: bytes,
+    expected_type: object,
+    *,
+    record_profile: str | None = None,
+) -> object:
     """Strictly rebuild one declared task artifact from canonical bytes."""
     try:
         text = payload.decode("utf-8")
@@ -198,7 +304,8 @@ def load_pump_station_artifact(payload: bytes, expected_type: object) -> object:
         raise
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         _fail("canonical-json", str(error))
-    restored = _decode(document, expected_type)
-    if pump_station_artifact_bytes(restored) != payload:
+    profile = record_profile or _document_profile(document)
+    restored = _decode(document, expected_type, profile)
+    if pump_station_artifact_bytes(restored, record_profile=profile) != payload:
         _fail("canonical-json", "stored bytes are not canonical")
     return restored

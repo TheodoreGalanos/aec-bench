@@ -29,19 +29,23 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
     load_reference_package,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    CancelProcess,
     ContinueOperation,
     ProposalContext,
     PumpStationProposal,
     PumpStationSchedule,
     RequestConditionalDeferral,
+    RequestDependencyWaiver,
     RequestInspection,
     RequestObstructionClearance,
     RequestProvisionalClosure,
     RequestProvisionalReturn,
     RequestVerification,
+    ResumeProcess,
     TransferDuty,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
+    create_rich_work_reference_state,
     create_stewardship_state,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
@@ -65,6 +69,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     PumpStationWorldRun,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+    PUMP_STATION_RECORD_VERSIONS_V1,
+    PUMP_STATION_RECORD_VERSIONS_V2,
     PUMP_STATION_SNAPSHOT_VERSION,
     PumpStationStateSnapshotRef,
 )
@@ -91,6 +97,13 @@ PUMP_STATION_TOOL_NAMES = (
     "request_post_maintenance_verification",
     "snapshot_pump_station",
 )
+PUMP_STATION_RICH_WORK_TOOL_NAMES = (
+    *PUMP_STATION_TOOL_NAMES[:-1],
+    "resume_process",
+    "cancel_process",
+    "request_dependency_waiver",
+    PUMP_STATION_TOOL_NAMES[-1],
+)
 
 
 def _snapshot_ref(snapshot: PumpStationStateSnapshotRef) -> StewardshipStateSnapshotRef:
@@ -105,9 +118,13 @@ def _snapshot_ref(snapshot: PumpStationStateSnapshotRef) -> StewardshipStateSnap
     )
 
 
-def _pump_station_snapshot(snapshot: StewardshipStateSnapshotRef) -> PumpStationStateSnapshotRef:
+def _pump_station_snapshot(
+    snapshot: StewardshipStateSnapshotRef,
+    *,
+    snapshot_version: str = PUMP_STATION_SNAPSHOT_VERSION,
+) -> PumpStationStateSnapshotRef:
     return PumpStationStateSnapshotRef(
-        snapshot_version=PUMP_STATION_SNAPSHOT_VERSION,
+        snapshot_version=snapshot_version,
         run_id=snapshot.run_id,
         episode_id=snapshot.episode_id,
         world_branch_id=snapshot.world_branch_id,
@@ -135,6 +152,11 @@ class PumpStationWorldSession:
     ) -> None:
         self._request = request
         self._run = run
+        self._tool_names = (
+            PUMP_STATION_RICH_WORK_TOOL_NAMES
+            if run.manifest.snapshot_version.endswith(".v2")
+            else PUMP_STATION_TOOL_NAMES
+        )
         state = run.state
         initial_state = run.repository.load_state(run.manifest.initial_state_id)
         episode_started_at_seconds = initial_state.physical.calendar_seconds
@@ -150,7 +172,11 @@ class PumpStationWorldSession:
             agent_tenure_id=request.agent_tenure_id,
             episode_started_at_seconds=episode_started_at_seconds,
             tenure_started_at_seconds=tenure_started_at_seconds,
-            projection_policy_id=PUMP_STATION_PROJECTION_POLICY_ID,
+            projection_policy_id=(
+                "pump-station-current-state.v2"
+                if run.manifest.snapshot_version.endswith(".v2")
+                else PUMP_STATION_PROJECTION_POLICY_ID
+            ),
             source_artifact_ids=(
                 run.package.package_content_id,
                 run.package.manifest_content_id,
@@ -159,7 +185,7 @@ class PumpStationWorldSession:
         self._current_context = PumpStationCurrentContext(
             continuity_carrier=PumpStationContinuityCarrier.CURRENT_ACTOR_VIEW,
             conversation_prefix_id=None,
-            workspace_tool_ids=PUMP_STATION_TOOL_NAMES,
+            workspace_tool_ids=self._tool_names,
             visible_material_ids=(),
         )
         self._view = self._project()
@@ -178,7 +204,7 @@ class PumpStationWorldSession:
             snapshot=_snapshot_ref(self._run.snapshot()),
             actor_view_id=self._view.view_id,
             information_set_id=self._information_set.information_set_id,
-            tool_names=PUMP_STATION_TOOL_NAMES,
+            tool_names=self._tool_names,
         )
 
     @property
@@ -190,7 +216,7 @@ class PumpStationWorldSession:
                 source="builtin",
                 description=getattr(self, name).__doc__ or name.replace("_", " "),
             )
-            for name in PUMP_STATION_TOOL_NAMES
+            for name in self._tool_names
         )
 
     @property
@@ -198,6 +224,11 @@ class PumpStationWorldSession:
         """Return the exact host-side actor view used by this tenure."""
 
         return self._view
+
+    @property
+    def run(self) -> PumpStationWorldRun:
+        """Return the durable run used by the host session."""
+        return self._run
 
     @property
     def actor_history(self) -> tuple[PumpStationActorHistoryEntry, ...]:
@@ -234,7 +265,7 @@ class PumpStationWorldSession:
         self._current_context = PumpStationCurrentContext(
             continuity_carrier=PumpStationContinuityCarrier.STRUCTURED_HANDOVER,
             conversation_prefix_id=None,
-            workspace_tool_ids=PUMP_STATION_TOOL_NAMES,
+            workspace_tool_ids=self._tool_names,
             visible_material_ids=(handover.handover_id,),
         )
         self._information_set = self._bind_information_set()
@@ -242,7 +273,7 @@ class PumpStationWorldSession:
     @property
     def native_tools(self) -> tuple[Callable[..., str], ...]:
         """Return the bound native functions in the declared tool order."""
-        return tuple(getattr(self, name) for name in PUMP_STATION_TOOL_NAMES)
+        return tuple(getattr(self, name) for name in self._tool_names)
 
     def observe_pump_station(self) -> str:
         """Read the complete current actor view without latent or future state."""
@@ -342,6 +373,52 @@ class PumpStationWorldSession:
             )
         )
 
+    def resume_process(
+        self,
+        proposal_id: str,
+        reason: str,
+        process_id: str,
+    ) -> str:
+        """Resume blocked or suspended work after dependency and resource checks."""
+        return self._apply(
+            ResumeProcess(
+                context=self._proposal_context(proposal_id, reason),
+                process_id=process_id,
+            )
+        )
+
+    def cancel_process(
+        self,
+        proposal_id: str,
+        reason: str,
+        process_id: str,
+    ) -> str:
+        """Cancel live work and release its unused reservations."""
+        return self._apply(
+            CancelProcess(
+                context=self._proposal_context(proposal_id, reason),
+                process_id=process_id,
+            )
+        )
+
+    def request_dependency_waiver(
+        self,
+        proposal_id: str,
+        reason: str,
+        process_id: str,
+        dependency_id: str,
+        evidence_id: str,
+    ) -> str:
+        """Request a narrow administrative closeout waiver with named evidence."""
+        return self._apply(
+            RequestDependencyWaiver(
+                context=self._proposal_context(proposal_id, reason),
+                process_id=process_id,
+                dependency_id=dependency_id,
+                evidence_id=evidence_id,
+            )
+        )
+
     def snapshot_pump_station(self) -> str:
         """Read the exact current dynamic snapshot reference."""
         return self.result.snapshot.model_dump_json()
@@ -418,10 +495,12 @@ class PumpStationWorldSessionFactory:
         *,
         package_root: Path | None = None,
         schedule: PumpStationSchedule | None = None,
+        rich_work_processes: bool = False,
     ) -> None:
         self._repository = PumpStationWorldRunRepository(repository_root)
         self._package_root = package_root
         self._schedule = schedule
+        self._rich_work_processes = rich_work_processes
 
     def open(self, request: WorldSessionRequest) -> PumpStationWorldSession:
         """Open a new or exact resumed session for the requested actor tenure."""
@@ -430,27 +509,33 @@ class PumpStationWorldSessionFactory:
         package = load_reference_package(self._package_root)
         model = pump_station_model_from_package(package)
         if request.open_mode is WorldSessionOpenMode.START:
-            environment = PumpStationEnvironment(
-                inflow_m3_s=model.inflow.assessment_m3_s,
-                wet_well_level_m=model.wet_well.start_level_m,
-                isolated=False,
-            )
-            physical = advance_pump_station(
-                model,
-                initial_pump_station_state(model),
-                OperatingInterval(
-                    elapsed_seconds=PUMP_STATION_REVIEW_RUNTIME_SECONDS,
-                    duty_runtime_seconds=PUMP_STATION_REVIEW_RUNTIME_SECONDS,
-                    duty_completed_starts=PUMP_STATION_REVIEW_COMPLETED_STARTS,
-                    environment=environment,
-                ),
-            ).state
-            state = create_stewardship_state(
-                model,
-                physical,
-                environment,
-                schedule=self._schedule,
-            )
+            if self._rich_work_processes:
+                state = create_rich_work_reference_state(
+                    model,
+                    schedule=self._schedule,
+                )
+            else:
+                environment = PumpStationEnvironment(
+                    inflow_m3_s=model.inflow.assessment_m3_s,
+                    wet_well_level_m=model.wet_well.start_level_m,
+                    isolated=False,
+                )
+                physical = advance_pump_station(
+                    model,
+                    initial_pump_station_state(model),
+                    OperatingInterval(
+                        elapsed_seconds=PUMP_STATION_REVIEW_RUNTIME_SECONDS,
+                        duty_runtime_seconds=PUMP_STATION_REVIEW_RUNTIME_SECONDS,
+                        duty_completed_starts=PUMP_STATION_REVIEW_COMPLETED_STARTS,
+                        environment=environment,
+                    ),
+                ).state
+                state = create_stewardship_state(
+                    model,
+                    physical,
+                    environment,
+                    schedule=self._schedule,
+                )
             run = PumpStationWorldRun.create(
                 repository=self._repository,
                 package=package,
@@ -459,6 +544,9 @@ class PumpStationWorldSessionFactory:
                 run_id=request.run_id,
                 episode_id=request.episode_id,
                 world_branch_id=request.world_branch_id,
+                record_versions=(
+                    PUMP_STATION_RECORD_VERSIONS_V2 if self._rich_work_processes else PUMP_STATION_RECORD_VERSIONS_V1
+                ),
             )
         else:
             if request.start_snapshot is None:
@@ -467,6 +555,9 @@ class PumpStationWorldSessionFactory:
                 repository=self._repository,
                 package=package,
                 model=model,
-                snapshot=_pump_station_snapshot(request.start_snapshot),
+                snapshot=_pump_station_snapshot(
+                    request.start_snapshot,
+                    snapshot_version=self._repository.load_manifest().snapshot_version,
+                ),
             )
         return PumpStationWorldSession(request=request, run=run)

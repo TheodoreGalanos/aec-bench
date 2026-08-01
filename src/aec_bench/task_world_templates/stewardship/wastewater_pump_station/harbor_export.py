@@ -31,6 +31,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
     load_reference_package,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
+    PUMP_STATION_RICH_WORK_TOOL_NAMES,
     PUMP_STATION_TASK_WORLD_ID,
     PUMP_STATION_TOOL_NAMES,
 )
@@ -90,12 +91,14 @@ class PumpStationHarborBridge:
     verifier_runtime_sha256: str
     allowed_tools: tuple[str, ...]
     output_path: str
+    rich_work_processes: bool
 
 
 def export_pump_station_harbor_task(
     task_dir: Path,
     *,
     project_root: Path,
+    rich_work_processes: bool = False,
 ) -> ExportedPumpStationHarborTask:
     """Materialize one immutable task package for provider-free Harbor execution."""
 
@@ -114,6 +117,7 @@ def export_pump_station_harbor_task(
             task_dir=staging,
             project_root=root,
             package=package,
+            rich_work_processes=rich_work_processes,
         )
         staging.rename(destination)
     return ExportedPumpStationHarborTask(
@@ -173,8 +177,15 @@ def load_pump_station_harbor_bridge(
     ):
         raise ValueError("pump-station Harbor package differs from the export")
     allowed_tools = tuple(cast(list[str], bridge_payload["allowed_tools"]))
-    if allowed_tools != PUMP_STATION_TOOL_NAMES:
+    if allowed_tools not in {
+        PUMP_STATION_TOOL_NAMES,
+        PUMP_STATION_RICH_WORK_TOOL_NAMES,
+    }:
         raise ValueError("pump-station Harbor tool catalogue differs")
+    rich_work_processes = bool(bridge_payload.get("rich_work_processes", False))
+    expected_tools = PUMP_STATION_RICH_WORK_TOOL_NAMES if rich_work_processes else PUMP_STATION_TOOL_NAMES
+    if allowed_tools != expected_tools:
+        raise ValueError("pump-station Harbor work profile and tools differ")
     if (
         bridge_payload["mode"] != PUMP_STATION_HARBOR_BRIDGE_MODE
         or bridge_payload["output_path"] != PUMP_STATION_HARBOR_OUTPUT_PATH
@@ -198,6 +209,7 @@ def load_pump_station_harbor_bridge(
         verifier_runtime_sha256=runtime_sha256,
         allowed_tools=allowed_tools,
         output_path=PUMP_STATION_HARBOR_OUTPUT_PATH,
+        rich_work_processes=rich_work_processes,
     )
 
 
@@ -206,6 +218,7 @@ def _write_export(
     task_dir: Path,
     project_root: Path,
     package: ReferencePackage,
+    rich_work_processes: bool,
 ) -> ExportedPumpStationHarborTask:
     task_dir.mkdir()
     tests_dir = task_dir / "tests"
@@ -239,6 +252,7 @@ def _write_export(
         package=package,
         package_dir=package_dir,
         runtime=runtime,
+        rich_work_processes=rich_work_processes,
     )
     manifest_path = task_dir / _MANIFEST_NAME
     _write_json(manifest_path, manifest)
@@ -257,6 +271,7 @@ def _export_manifest(
     package: ReferencePackage,
     package_dir: Path,
     runtime: RuntimeWheel,
+    rich_work_processes: bool,
 ) -> dict[str, Any]:
     instruction = task_dir / "instruction.md"
     dockerfile = task_dir / "environment" / "Dockerfile"
@@ -284,7 +299,10 @@ def _export_manifest(
         },
         "bridge": {
             "mode": PUMP_STATION_HARBOR_BRIDGE_MODE,
-            "allowed_tools": list(PUMP_STATION_TOOL_NAMES),
+            "allowed_tools": list(
+                PUMP_STATION_RICH_WORK_TOOL_NAMES if rich_work_processes else PUMP_STATION_TOOL_NAMES
+            ),
+            "rich_work_processes": rich_work_processes,
             "output_path": PUMP_STATION_HARBOR_OUTPUT_PATH,
             "controller_modes": list(PUMP_STATION_CONTROLLER_MODES),
         },

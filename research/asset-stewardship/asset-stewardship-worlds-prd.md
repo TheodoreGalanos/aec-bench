@@ -883,7 +883,7 @@ Evaluation may reconstruct selected alternatives on demand in a separate private
 | FR-21 | Counterfactual branches must be replayable on demand without eager materialisation or realised-branch leakage. | Must by ASW-3 |
 | FR-22 | Composite triggers, obligation dependencies, waiver and suspension transitions, reservations, and arbitrary additional overlapping processes beyond the fixed ASW-2 inspection/intervention pair must be supported. | Conditional ASW-5 |
 | FR-23 | Sensor health, calibration, stale evidence, delayed results, and contradictory records must be supported. | Conditional ASW-6 |
-| FR-24 | Imperfect restoration, recurrence, maintenance-induced defects, and rework must be supported. | Conditional ASW-7 |
+| FR-24 | State-addressable rollout fan-out, imperfect restoration, recurrence, maintenance-induced defects, and rework must be supported. | Conditional ASW-7 |
 | FR-25 | Arbitrary coupled assets, generalized transferred duty beyond the fixed A/B profile rule, shared resources, constrained outages, and endogenous backlog must be supported. | Conditional ASW-8 |
 | FR-26 | Governed institutional proposals must version and selectively propagate FMECA or schedule changes. | Conditional ASW-9 |
 | FR-27 | Durable learner changes must remain independently identifiable from conversation, structured handover, procedure, and institution changes. | Conditional ASW-10 |
@@ -1605,7 +1605,29 @@ ASW-6B implementation and pilot work exist only if the companion's local determi
 
 **Exit gate:** the approved exploratory pilot is offline-verifiable, preserves unknown-frontier and external-origin labels, changes no parent world or information-set contract, and is reported as non-study evidence—or the eligibility review records an explicit stop.
 
-### ASW-7 — Imperfect repair, recurrence, and richer counterfactual analysis
+### ASW-7 — State-addressable rollouts and richer counterfactual analysis
+
+#### ASW-7A — State-addressable rollout fan-out
+
+**Conditional scope:**
+
+- select a committed, verified full-world snapshot as one immutable rollout origin;
+- create multiple isolated child continuations from that same state without moving or rewriting the parent branch;
+- hold future world conditions fixed to measure agent variation, or apply one declared and governed future-world variation as a separate treatment axis;
+- bind every child to the parent snapshot, world and rule versions, event schedule, information boundary, agent condition, rollout seed, and verification result;
+- keep all children from one origin together during training, development, and evaluation splitting; and
+- keep start-point selection host-owned so later outcomes or hidden future state are not exposed to the agent.
+
+ASW-7A mechanism design and provider-free falsification do not authorize model
+rollouts. Any agent data-generation study requires its own frozen design, small
+shakedown, provider authority, budgets, and confirmatory gate.
+
+**Exit gate:** fixed-condition children begin from the same complete state and
+diverge only after the declared origin; the parent remains unchanged; every
+child replays from complete bound inputs; sibling lineage is complete; and no
+hidden future state leaks through origin selection or public identities.
+
+#### ASW-7B — Imperfect repair, recurrence, and controlled world alternatives
 
 **Conditional scope:**
 
@@ -1615,9 +1637,9 @@ ASW-6B implementation and pilot work exist only if the companion's local determi
 - recurrence versus continuation;
 - maintenance-induced defects;
 - common-cause failures; and
-- asset-specific intervention alternatives and multi-branch private counterfactual analysis beyond the minimal ASW-3 containment primitive.
+- asset-specific intervention alternatives and controlled future-world variations beyond the minimal ASW-3 containment primitive.
 
-**Exit gate:** recurrence types remain distinguishable and counterfactual replay is reproducible without model leakage.
+**Exit gate:** recurrence types remain distinguishable, controlled world alternatives retain their ASW-7A parent lineage, and counterfactual replay is reproducible without model leakage.
 
 ### ASW-8 — Coupled assets and endogenous backlog
 
@@ -1871,6 +1893,7 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | 2026-07-29 | Publish ASW-2B transitions as immutable task artifacts followed by one lock-serialised atomic current-state pointer. | This gives snapshot, resume, strict replay, and exactly-once physical and resource effects without a database, shared stewardship runtime, or hand-authored hashes. |
 | 2026-07-29 | Keep the ASW-2C host boundary minimal and provider-neutral while the pump-station package owns its native tools. | The host needs strict start and resume contracts without owning task physics, action names, evaluation policy, or model-provider calls. |
 | 2026-07-31 | Accept the ASW-4 programme checkpoint and authorize ASW-5 only. | The first study produced a useful, independently reloadable research object and an exact zero-difference result; richer overlapping work provides a concrete next hypothesis without assuming that structured handover will improve it. |
+| 2026-08-01 | Place state-addressable rollout fan-out in conditional ASW-7A, before imperfect-repair and environment-variation work in ASW-7B. | Reusing one verified start for many agent continuations is a data-generation primitive distinct from changing world conditions; it needs rich durable state and lineage but must not expand provider-free ASW-5. |
 
 ## 24. Immediate next action
 
@@ -1886,3 +1909,8 @@ state, or resource-conservation errors.
 
 ASW-5 does not authorize a model study, temporal retrieval, shared extraction,
 imperfect repair, or coupled assets.
+
+State-addressable rollout fan-out is retained as conditional ASW-7A work. It is
+not part of the ASW-5 exit gate. The programme must complete ASW-5 and pass the
+required later checkpoints before ASW-7A implementation or any rollout study is
+authorized.

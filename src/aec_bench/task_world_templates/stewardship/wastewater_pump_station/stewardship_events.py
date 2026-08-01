@@ -30,7 +30,10 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationProcessKind,
     PumpStationProcessStatus,
     PumpStationProposalError,
+    PumpStationResourceKind,
     PumpStationRestriction,
+    PumpStationRestrictionKind,
+    PumpStationRestrictionStatus,
     PumpStationScheduledEvent,
     PumpStationStewardshipState,
     PumpStationWorkOrder,
@@ -273,7 +276,8 @@ def _complete_obstruction_clearance(
     PumpStationChangeKind | None,
     tuple[str, ...],
 ]:
-    if (
+    rich_work = state.state_version.endswith(".v2")
+    if not rich_work and (
         state.resources.access_window_seconds < model.resources.access_duration_seconds
         or state.resources.available_intervention_slots < 1
     ):
@@ -293,6 +297,10 @@ def _complete_obstruction_clearance(
             None,
             (interrupted.process_id,),
         )
+    reserved_slot = any(
+        item.kind is PumpStationResourceKind.INTERVENTION_SLOT and item.process_id == process.process_id
+        for item in state.resource_reservations
+    )
     physical = apply_pump_intervention(
         model,
         state.physical,
@@ -303,7 +311,7 @@ def _complete_obstruction_clearance(
         PumpStationResources(
             access_window_seconds=state.resources.access_window_seconds,
             repair_kit_available=state.resources.repair_kit_available,
-            available_intervention_slots=(state.resources.available_intervention_slots),
+            available_intervention_slots=(state.resources.available_intervention_slots + int(reserved_slot)),
         ),
         state.environment,
     )
@@ -319,15 +327,30 @@ def _complete_obstruction_clearance(
         physical=physical.state,
         processes=replace_process(state.processes, completed),
     )
-    candidate, checks = schedule_process(
-        candidate,
-        sequence=sequence,
-        kind=PumpStationProcessKind.FUNCTIONAL_CHECKS,
-        pump_id=process.pump_id,
-        work_order=order,
-        duration_seconds=model.resources.access_duration_seconds // 4,
-        performer=PumpStationAuthority.MAINTENANCE,
-    )
+    if rich_work:
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rich_work_processes import (
+            schedule_rich_process,
+        )
+
+        candidate, checks = schedule_rich_process(
+            candidate,
+            sequence=sequence,
+            kind=PumpStationProcessKind.FUNCTIONAL_CHECKS,
+            pump_id=process.pump_id,
+            work_order=order,
+            duration_seconds=model.resources.access_duration_seconds // 4,
+            performer=PumpStationAuthority.MAINTENANCE,
+        )
+    else:
+        candidate, checks = schedule_process(
+            candidate,
+            sequence=sequence,
+            kind=PumpStationProcessKind.FUNCTIONAL_CHECKS,
+            pump_id=process.pump_id,
+            work_order=order,
+            duration_seconds=model.resources.access_duration_seconds // 4,
+            performer=PumpStationAuthority.MAINTENANCE,
+        )
     return (
         candidate,
         PumpStationExecutionOutcome.COMPLETED,
@@ -474,6 +497,7 @@ def apply_scheduled_event(
     evidence_created: tuple[str, ...] = ()
     physical_change: PumpStationChangeKind | None = None
     execution = PumpStationExecutionOutcome.COMPLETED
+    rich_work = state.state_version.endswith(".v2")
     if event.event_type is PumpStationEventType.DECISION_POINT:
         pass
     elif event.event_type is PumpStationEventType.ACCESS_AVAILABLE:
@@ -484,16 +508,66 @@ def apply_scheduled_event(
                 access_window_seconds=model.resources.access_duration_seconds,
             ),
         )
+        if event.process_id is not None:
+            process = _find_process(state.processes, event.process_id)
+            if process.status in {
+                PumpStationProcessStatus.ACTIVE,
+                PumpStationProcessStatus.IN_PROGRESS,
+            }:
+                completed = replace(
+                    process,
+                    status=PumpStationProcessStatus.COMPLETED,
+                    remaining_duration_seconds=0,
+                )
+                state = replace(
+                    state,
+                    processes=replace_process(state.processes, completed),
+                )
+                process_changes = (process.process_id,)
+        if rich_work:
+            from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rich_work_processes import (
+                lift_access_restrictions,
+            )
+
+            state, lifted = lift_access_restrictions(state, event.event_id)
+            restriction_changes = (*restriction_changes, *lifted)
     elif event.event_type is PumpStationEventType.ACCESS_WITHDRAWN:
         state = replace(
             state,
             resources=replace(state.resources, access_window_seconds=0),
         )
+        if rich_work:
+            from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rich_work_processes import (
+                suspend_access_dependent_processes,
+            )
+
+            state, suspended, restricted = suspend_access_dependent_processes(
+                state,
+                sequence,
+            )
+            process_changes = (*process_changes, *suspended)
+            restriction_changes = (*restriction_changes, *restricted)
     elif event.event_type is PumpStationEventType.REPAIR_KIT_AVAILABLE:
         state = replace(
             state,
             resources=replace(state.resources, repair_kit_available=True),
         )
+        if event.process_id is not None:
+            process = _find_process(state.processes, event.process_id)
+            if process.status in {
+                PumpStationProcessStatus.ACTIVE,
+                PumpStationProcessStatus.IN_PROGRESS,
+            }:
+                completed = replace(
+                    process,
+                    status=PumpStationProcessStatus.COMPLETED,
+                    remaining_duration_seconds=0,
+                )
+                state = replace(
+                    state,
+                    processes=replace_process(state.processes, completed),
+                )
+                process_changes = (process.process_id,)
     elif event.event_type in {
         PumpStationEventType.OBLIGATION_DUE,
         PumpStationEventType.OBLIGATION_OVERDUE,
@@ -539,6 +613,33 @@ def apply_scheduled_event(
                 "process event has no process identity",
             )
         process = _find_process(state.processes, event.process_id)
+        if rich_work and process.status in {
+            PumpStationProcessStatus.COMPLETED,
+            PumpStationProcessStatus.FAILED,
+            PumpStationProcessStatus.INTERRUPTED,
+            PumpStationProcessStatus.CANCELLED,
+        }:
+            return (
+                state,
+                execution,
+                (),
+                (),
+                (),
+                (),
+                (),
+                None,
+            )
+        if rich_work and process.status is not PumpStationProcessStatus.ACTIVE:
+            return (
+                state,
+                execution,
+                (),
+                (),
+                (),
+                (),
+                (),
+                None,
+            )
         if process.kind is PumpStationProcessKind.INSPECTION:
             state, evidence_id, obligation_changes = _complete_inspection(
                 model,
@@ -591,6 +692,60 @@ def apply_scheduled_event(
             updated_process = _find_process(state.processes, process.process_id)
             if updated_process.status is PumpStationProcessStatus.FAILED:
                 execution = PumpStationExecutionOutcome.FAILED
+        if rich_work:
+            from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rich_work_processes import (
+                release_process_resources,
+                resume_process,
+            )
+
+            successful_clearance = (
+                process.kind is PumpStationProcessKind.OBSTRUCTION_CLEARANCE
+                and execution is PumpStationExecutionOutcome.COMPLETED
+            )
+            state = release_process_resources(
+                state,
+                process.process_id,
+                consume_repair_kit=successful_clearance,
+            )
+            if successful_clearance:
+                checks = next(
+                    (
+                        item
+                        for item in reversed(state.processes)
+                        if item.kind is PumpStationProcessKind.FUNCTIONAL_CHECKS
+                        and item.pump_id == process.pump_id
+                        and item.status is PumpStationProcessStatus.BLOCKED
+                    ),
+                    None,
+                )
+                if checks is not None:
+                    resumed = resume_process(state, checks.process_id, sequence)
+                    if resumed is not None:
+                        state, active_checks = resumed
+                        process_changes = (*process_changes, active_checks.process_id)
+            if process.kind is PumpStationProcessKind.POST_MAINTENANCE_VERIFICATION and evidence_created:
+                evidence_id = evidence_created[-1]
+                restrictions = state.restrictions
+                for restriction in state.restrictions:
+                    if (
+                        restriction.kind is PumpStationRestrictionKind.POST_MAINTENANCE_RUN_IN
+                        and restriction.pump_id == process.pump_id
+                        and restriction.status is PumpStationRestrictionStatus.ACTIVE
+                    ):
+                        lifted_restriction = replace(
+                            restriction,
+                            status=PumpStationRestrictionStatus.LIFTED,
+                            evidence_id=evidence_id,
+                        )
+                        restrictions = replace_restriction(
+                            restrictions,
+                            lifted_restriction,
+                        )
+                        restriction_changes = (
+                            *restriction_changes,
+                            restriction.restriction_id,
+                        )
+                state = replace(state, restrictions=restrictions)
     return (
         state,
         execution,
