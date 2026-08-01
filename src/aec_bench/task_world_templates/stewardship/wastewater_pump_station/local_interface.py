@@ -13,6 +13,9 @@ from aec_bench.contracts.world_interface import (
     WorldControlRequest,
 )
 from aec_bench.contracts.world_session import WorldSessionOpenMode, WorldSessionRequest
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_control import (
+    PumpStationEvidenceControlRequest,
+)
 
 PUMP_STATION_LOCAL_INTERFACE_SCHEMA_VERSION = "pump-station.local-interface.v1"
 
@@ -25,8 +28,9 @@ class PumpStationLocalInterfaceRequest(FrozenStrictModel):
     operation: NonEmptyStr
     session_request: WorldSessionRequest | None = None
     action_request: WorldActorActionRequest | None = None
-    control_request: WorldControlRequest | None = None
+    control_request: WorldControlRequest | PumpStationEvidenceControlRequest | None = None
     authority_id: NonEmptyStr | None = None
+    evidence_health: bool = False
 
     @model_validator(mode="after")
     def validate_request(self) -> Self:
@@ -43,6 +47,8 @@ class PumpStationLocalInterfaceRequest(FrozenStrictModel):
                 raise ValueError("actor invoke requires exactly one action request")
             if self.control_request is not None or self.authority_id is not None:
                 raise ValueError("actor local-interface request cannot contain host control")
+            if self.evidence_health:
+                raise ValueError("actor local-interface request cannot select a host profile")
             return self
         if self.operation not in {"capabilities", "execute"}:
             raise ValueError("control local-interface operation is unavailable")

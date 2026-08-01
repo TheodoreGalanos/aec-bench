@@ -12,8 +12,11 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import cast
+from typing import NoReturn, cast
 
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
+    PumpStationEvidenceTreatmentRequest,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
     stewardship_state_id,
 )
@@ -25,6 +28,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationTransition,
     PumpStationTransitionReceipt,
     RequestConditionalDeferral,
+    RequestConditionCheck,
     RequestDependencyWaiver,
     RequestInspection,
     RequestObstructionClearance,
@@ -64,6 +68,7 @@ _PROPOSAL_TYPES: dict[str, type[object]] = {
         TransferDuty,
         RequestInspection,
         RequestConditionalDeferral,
+        RequestConditionCheck,
         RequestObstructionClearance,
         RequestProvisionalReturn,
         RequestProvisionalClosure,
@@ -74,8 +79,10 @@ _PROPOSAL_TYPES: dict[str, type[object]] = {
     )
 }
 
+type PumpStationDurableInput = PumpStationProposal | PumpStationEvidenceTreatmentRequest
 
-def _fail(code: str, detail: str) -> None:
+
+def _fail(code: str, detail: str) -> NoReturn:
     raise PumpStationWorldRunError(code, detail)
 
 
@@ -156,11 +163,11 @@ class PumpStationWorldRunRepository:
         with self.locked():
             if stewardship_state_id(initial_state) != manifest.initial_state_id:
                 _fail("world-run-identity", "initial state differs from manifest")
-            expected_state_version = (
-                "pump-station-stewardship-state.v2"
-                if manifest.snapshot_version.endswith(".v2")
-                else "pump-station-stewardship-state.v1"
-            )
+            expected_state_version = {
+                "pump-station-state-snapshot.v1": "pump-station-stewardship-state.v1",
+                "pump-station-state-snapshot.v2": "pump-station-stewardship-state.v2",
+                "pump-station-state-snapshot.v3": "pump-station-stewardship-state.v3",
+            }[manifest.snapshot_version]
             if initial_state.state_version != expected_state_version:
                 _fail("state-version", "state and snapshot versions differ")
             if (self._root / "current.json").exists():
@@ -241,6 +248,25 @@ class PumpStationWorldRunRepository:
             _fail("artifact-integrity", f"commit identity differs for {commit_id}")
         return commit
 
+    def snapshot_for_commit(
+        self,
+        commit: PumpStationWorldRunCommit,
+    ) -> PumpStationStateSnapshotRef:
+        """Return the exact snapshot selected by one commit on the live chain."""
+        commit_id = pump_station_artifact_id(commit)
+        if all(pump_station_artifact_id(item) != commit_id for item in self.commits()):
+            _fail("artifact-integrity", "commit is not on the selected chain")
+        manifest = self.load_manifest()
+        return PumpStationStateSnapshotRef(
+            snapshot_version=manifest.snapshot_version,
+            run_id=manifest.run_id,
+            episode_id=manifest.episode_id,
+            world_branch_id=manifest.world_branch_id,
+            sequence=commit.sequence,
+            state_id=commit.state_id,
+            commit_id=commit_id,
+        )
+
     def stage_transition(
         self,
         *,
@@ -318,6 +344,83 @@ class PumpStationWorldRunRepository:
             commit=commit,
         )
 
+    def stage_control_transition(
+        self,
+        *,
+        manifest: PumpStationWorldRunManifest,
+        prior_snapshot: PumpStationStateSnapshotRef,
+        control_request: PumpStationEvidenceTreatmentRequest,
+        transition: PumpStationTransition,
+    ) -> PumpStationStagedTransition:
+        """Publish one host-control transition without an actor information set."""
+        receipt = transition.receipt
+        if (
+            receipt.sequence != prior_snapshot.sequence + 1
+            or receipt.pre_state_id != prior_snapshot.state_id
+            or receipt.post_state_id != stewardship_state_id(transition.state)
+            or receipt.proposal_id is not None
+            or receipt.receipt_version != manifest.receipt_version
+            or receipt.authority_policy_version != manifest.authority_policy_version
+            or receipt.transition_rule_version != manifest.transition_rule_version
+            or control_request.based_on_sequence != prior_snapshot.sequence
+            or control_request.base_state_id != prior_snapshot.state_id
+            or control_request.base_commit_id != prior_snapshot.commit_id
+        ):
+            _fail("transition-integrity", "control transition does not extend the selected state")
+        self._reject_control_collision(
+            control_request,
+            parent_commit_id=prior_snapshot.commit_id,
+        )
+        state_id = self._publish_state(transition.state)
+        request_content_id = pump_station_artifact_id(control_request)
+        receipt_content_id = pump_station_artifact_id(receipt)
+        event_batch = PumpStationAppliedEventBatch(
+            transition_id=receipt.transition_id,
+            sequence=receipt.sequence,
+            event_ids=receipt.applied_event_ids,
+            event_types=receipt.applied_event_types,
+        )
+        event_batch_content_id = pump_station_artifact_id(event_batch)
+        self._publish_content(
+            "control-requests",
+            request_content_id,
+            control_request,
+        )
+        self._publish_content("receipts", receipt_content_id, receipt)
+        self._publish_content("events", event_batch_content_id, event_batch)
+        commit = PumpStationWorldRunCommit(
+            serialization_version=PUMP_STATION_SERIALIZATION_VERSION,
+            run_id=manifest.run_id,
+            sequence=receipt.sequence,
+            parent_commit_id=prior_snapshot.commit_id,
+            state_id=state_id,
+            proposal_id=control_request.request_id,
+            proposal_content_id=request_content_id,
+            information_set_content_id=None,
+            receipt_content_id=receipt_content_id,
+            event_batch_content_id=event_batch_content_id,
+        )
+        commit_id = pump_station_artifact_id(commit)
+        self._publish_content("commits", commit_id, commit)
+        snapshot = PumpStationStateSnapshotRef(
+            snapshot_version=manifest.snapshot_version,
+            run_id=manifest.run_id,
+            episode_id=manifest.episode_id,
+            world_branch_id=manifest.world_branch_id,
+            sequence=receipt.sequence,
+            state_id=state_id,
+            commit_id=commit_id,
+        )
+        return PumpStationStagedTransition(
+            prior_snapshot=prior_snapshot,
+            snapshot=snapshot,
+            proposal=None,
+            information_set=None,
+            transition=transition,
+            commit=commit,
+            control_request=control_request,
+        )
+
     def publish_staged_transition(
         self,
         staged: PumpStationStagedTransition,
@@ -348,7 +451,21 @@ class PumpStationWorldRunRepository:
     ) -> PumpStationWorldRunCommit | None:
         """Return a proposal commit only when it is on the selected chain."""
         for commit in reversed(self.commits()):
-            if commit.proposal_id == proposal_id:
+            if commit.proposal_id == proposal_id and commit.information_set_content_id is not None:
+                return commit
+        return None
+
+    def find_committed_control_request(
+        self,
+        request_id: str,
+    ) -> PumpStationWorldRunCommit | None:
+        """Return one selected host-control commit by idempotent request identity."""
+        for commit in reversed(self.commits()):
+            if (
+                commit.proposal_id == request_id
+                and commit.information_set_content_id is None
+                and commit.proposal_content_id is not None
+            ):
                 return commit
         return None
 
@@ -371,15 +488,32 @@ class PumpStationWorldRunRepository:
 
     def steps(self) -> tuple[PumpStationRunStep, ...]:
         """Reload every committed proposal, information set, receipt, event batch, and state."""
-        return tuple(
-            PumpStationRunStep(
-                proposal=proposal,
-                information_set=information_set,
-                transition=transition,
-            )
-            for commit in self.commits()[1:]
-            for proposal, information_set, transition in (self._load_step(commit),)
-        )
+        steps: list[PumpStationRunStep] = []
+        for commit in self.commits()[1:]:
+            durable_input, information_set, transition = self._load_step(commit)
+            if isinstance(durable_input, PumpStationEvidenceTreatmentRequest):
+                steps.append(
+                    PumpStationRunStep(
+                        proposal=None,
+                        information_set=None,
+                        transition=transition,
+                        control_request=durable_input,
+                    )
+                )
+            else:
+                if information_set is None:
+                    _fail(
+                        "artifact-integrity",
+                        "proposal commit lacks an information set",
+                    )
+                steps.append(
+                    PumpStationRunStep(
+                        proposal=durable_input,
+                        information_set=information_set,
+                        transition=transition,
+                    )
+                )
+        return tuple(steps)
 
     def load_transition(
         self,
@@ -396,13 +530,41 @@ class PumpStationWorldRunRepository:
         information_set: PumpStationInformationSet,
     ) -> PumpStationTransition:
         """Return a committed retry only when its complete input is identical."""
-        stored_proposal, stored_information_set, transition = self._load_step(commit)
-        if stored_proposal != proposal or stored_information_set != information_set:
+        stored_input, stored_information_set, transition = self._load_step(commit)
+        if (
+            isinstance(stored_input, PumpStationEvidenceTreatmentRequest)
+            or stored_input != proposal
+            or stored_information_set != information_set
+        ):
             _fail(
                 "proposal-id-conflict",
                 f"{proposal.context.proposal_id} was already bound to different content",
             )
         return transition
+
+    def validate_repeated_control_request(
+        self,
+        commit: PumpStationWorldRunCommit,
+        request: PumpStationEvidenceTreatmentRequest,
+    ) -> PumpStationTransition:
+        """Return one committed control retry only when its input is identical."""
+        stored_input, information_set, transition = self._load_step(commit)
+        if stored_input != request or information_set is not None:
+            _fail(
+                "control-request-id-conflict",
+                f"{request.request_id} is already bound to different content",
+            )
+        return transition
+
+    def recover_control_request(
+        self,
+        commit: PumpStationWorldRunCommit,
+    ) -> tuple[PumpStationEvidenceTreatmentRequest, PumpStationTransition]:
+        """Reload one immutable host-control input and its transition."""
+        stored_input, information_set, transition = self._load_step(commit)
+        if not isinstance(stored_input, PumpStationEvidenceTreatmentRequest) or information_set is not None:
+            _fail("artifact-integrity", "commit is not a host-control transition")
+        return stored_input, transition
 
     def publish_migration(self, migration: PumpStationWorldRunMigration) -> None:
         """Publish one immutable migration lineage record at the target root."""
@@ -429,23 +591,37 @@ class PumpStationWorldRunRepository:
     def _load_step(
         self,
         commit: PumpStationWorldRunCommit,
-    ) -> tuple[PumpStationProposal, PumpStationInformationSet, PumpStationTransition]:
+    ) -> tuple[
+        PumpStationDurableInput,
+        PumpStationInformationSet | None,
+        PumpStationTransition,
+    ]:
         if None in {
             commit.proposal_id,
             commit.proposal_content_id,
-            commit.information_set_content_id,
             commit.receipt_content_id,
             commit.event_batch_content_id,
         }:
             _fail("artifact-integrity", "transition commit lacks evidence references")
-        proposal = self._load_proposal(cast(str, commit.proposal_content_id))
-        information_set = load_pump_station_artifact(
-            self._read_content(
-                "information-sets",
-                cast(str, commit.information_set_content_id),
-            ),
-            PumpStationInformationSet,
-        )
+        control_step = commit.information_set_content_id is None
+        if control_step:
+            durable_input: PumpStationDurableInput = load_pump_station_artifact(
+                self._read_content(
+                    "control-requests",
+                    cast(str, commit.proposal_content_id),
+                ),
+                PumpStationEvidenceTreatmentRequest,
+            )
+            information_set = None
+        else:
+            durable_input = self._load_proposal(cast(str, commit.proposal_content_id))
+            information_set = load_pump_station_artifact(
+                self._read_content(
+                    "information-sets",
+                    cast(str, commit.information_set_content_id),
+                ),
+                PumpStationInformationSet,
+            )
         receipt = load_pump_station_artifact(
             self._read_content("receipts", cast(str, commit.receipt_content_id)),
             PumpStationTransitionReceipt,
@@ -459,13 +635,9 @@ class PumpStationWorldRunRepository:
         )
         state = self.load_state(commit.state_id)
         if (
-            pump_station_artifact_id(proposal) != commit.proposal_content_id
-            or pump_station_artifact_id(information_set) != commit.information_set_content_id
+            pump_station_artifact_id(durable_input) != commit.proposal_content_id
             or pump_station_artifact_id(receipt) != commit.receipt_content_id
             or pump_station_artifact_id(event_batch) != commit.event_batch_content_id
-            or proposal.context.proposal_id != commit.proposal_id
-            or proposal.context.information_set_id != information_set.information_set_id
-            or receipt.proposal_id != commit.proposal_id
             or receipt.sequence != commit.sequence
             or receipt.post_state_id != commit.state_id
             or event_batch.transition_id != receipt.transition_id
@@ -474,7 +646,30 @@ class PumpStationWorldRunRepository:
             or event_batch.event_types != receipt.applied_event_types
         ):
             _fail("artifact-integrity", "commit evidence does not reconcile")
-        return proposal, information_set, PumpStationTransition(state=state, receipt=receipt)
+        if isinstance(durable_input, PumpStationEvidenceTreatmentRequest):
+            if (
+                information_set is not None
+                or durable_input.request_id != commit.proposal_id
+                or receipt.proposal_id is not None
+                or not receipt.trigger.startswith("host-control:")
+            ):
+                _fail("artifact-integrity", "control commit evidence does not reconcile")
+        elif (
+            information_set is None
+            or pump_station_artifact_id(information_set) != commit.information_set_content_id
+            or durable_input.context.proposal_id != commit.proposal_id
+            or durable_input.context.information_set_id != information_set.information_set_id
+            or receipt.proposal_id != commit.proposal_id
+        ):
+            _fail("artifact-integrity", "proposal commit evidence does not reconcile")
+        return (
+            durable_input,
+            information_set,
+            PumpStationTransition(
+                state=state,
+                receipt=receipt,
+            ),
+        )
 
     def _load_proposal(self, content_id: str) -> PumpStationProposal:
         payload = self._read_content("proposals", content_id)
@@ -505,15 +700,35 @@ class PumpStationWorldRunRepository:
             commit = self.load_commit(path.stem)
             if commit.proposal_id != proposal.context.proposal_id:
                 continue
-            stored_proposal, stored_information_set, _ = self._load_step(commit)
+            stored_input, stored_information_set, _ = self._load_step(commit)
             if (
-                stored_proposal != proposal
+                stored_input != proposal
                 or stored_information_set != information_set
                 or commit.parent_commit_id != parent_commit_id
             ):
                 _fail(
                     "proposal-id-conflict",
                     f"{proposal.context.proposal_id} has different staged content",
+                )
+
+    def _reject_control_collision(
+        self,
+        request: PumpStationEvidenceTreatmentRequest,
+        *,
+        parent_commit_id: str,
+    ) -> None:
+        commits_root = self._root / "commits"
+        if not commits_root.exists():
+            return
+        for path in commits_root.glob("*.json"):
+            commit = self.load_commit(path.stem)
+            if commit.proposal_id != request.request_id:
+                continue
+            stored_input, information_set, _ = self._load_step(commit)
+            if stored_input != request or information_set is not None or commit.parent_commit_id != parent_commit_id:
+                _fail(
+                    "control-request-id-conflict",
+                    f"{request.request_id} has different staged content",
                 )
 
     def _validate_chain(
@@ -534,13 +749,25 @@ class PumpStationWorldRunRepository:
         for commit in chain[1:]:
             if commit.sequence != previous.sequence + 1:
                 _fail("artifact-integrity", "commit sequence is not contiguous")
-            proposal, information_set, transition = self._load_step(commit)
-            if (
-                commit.parent_commit_id != pump_station_artifact_id(previous)
-                or transition.receipt.pre_state_id != previous.state_id
-                or proposal.context.based_on_sequence != previous.sequence
-                or information_set.base_view.current_state.state_sequence != previous.sequence
-            ):
+            durable_input, information_set, transition = self._load_step(commit)
+            extends_parent = (
+                commit.parent_commit_id == pump_station_artifact_id(previous)
+                and transition.receipt.pre_state_id == previous.state_id
+            )
+            if isinstance(durable_input, PumpStationEvidenceTreatmentRequest):
+                input_matches_parent = (
+                    information_set is None
+                    and durable_input.based_on_sequence == previous.sequence
+                    and durable_input.base_state_id == previous.state_id
+                    and durable_input.base_commit_id == pump_station_artifact_id(previous)
+                )
+            else:
+                input_matches_parent = (
+                    information_set is not None
+                    and durable_input.context.based_on_sequence == previous.sequence
+                    and information_set.base_view.current_state.state_sequence == previous.sequence
+                )
+            if not extends_parent or not input_matches_parent:
                 _fail("artifact-integrity", "commit does not extend its parent")
             previous = commit
         if (

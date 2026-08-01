@@ -30,6 +30,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationWorkOrder,
     PumpStationWorkOrderStatus,
     RequestConditionalDeferral,
+    RequestConditionCheck,
     RequestDependencyWaiver,
     RequestInspection,
     RequestObstructionClearance,
@@ -44,6 +45,7 @@ PROPOSAL_TYPES = (
     ContinueOperation,
     TransferDuty,
     RequestInspection,
+    RequestConditionCheck,
     RequestConditionalDeferral,
     RequestObstructionClearance,
     RequestProvisionalReturn,
@@ -155,7 +157,7 @@ def _required_authorities(
 ) -> tuple[PumpStationAuthority, ...]:
     if isinstance(
         proposal,
-        ContinueOperation | TransferDuty | RequestProvisionalReturn,
+        ContinueOperation | TransferDuty | RequestProvisionalReturn | RequestConditionCheck,
     ):
         return (PumpStationAuthority.OPERATIONS,)
     if isinstance(proposal, RequestInspection | RequestObstructionClearance):
@@ -205,6 +207,7 @@ def decide_proposal(
     if isinstance(
         proposal,
         RequestInspection
+        | RequestConditionCheck
         | RequestConditionalDeferral
         | RequestObstructionClearance
         | RequestProvisionalReturn
@@ -271,6 +274,13 @@ def decide_proposal(
                 required,
                 "an inspection is already in progress",
             )
+    elif isinstance(proposal, RequestConditionCheck):
+        if not state.state_version.endswith(".v3") or len(state.evidence_sources) != 1:
+            return _authority(
+                PumpStationAuthorityOutcome.INVALID,
+                required,
+                "condition check requires the version 3 observation source",
+            )
     elif isinstance(proposal, RequestObstructionClearance):
         inspection = evidence(state, proposal.inspection_evidence_id)
         if (
@@ -278,7 +288,7 @@ def decide_proposal(
             or inspection.kind is not PumpStationEvidenceKind.INSPECTION
             or inspection.pump_id != proposal.pump_id
             or inspection.inspection is None
-            or (state.state_version.endswith(".v2") and inspection.accepted_by is None)
+            or (not state.state_version.endswith(".v1") and inspection.accepted_by is None)
         ):
             return _authority(
                 PumpStationAuthorityOutcome.DEFERRED_PENDING_PREREQUISITES,
@@ -297,7 +307,7 @@ def decide_proposal(
                 required,
                 "the affected pump must not be the duty pump",
             )
-        if not state.state_version.endswith(".v2") and (
+        if state.state_version.endswith(".v1") and (
             state.resources.access_window_seconds < model.resources.access_duration_seconds
             or state.resources.available_intervention_slots < 1
         ):

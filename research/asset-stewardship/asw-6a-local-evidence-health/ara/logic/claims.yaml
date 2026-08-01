@@ -1,0 +1,75 @@
+claims:
+  - id: C001
+    statement: Version 3 makes evidence health explicit without changing version 1 or version 2 durable bytes or replay results.
+    status: supported
+    falsification_criteria:
+      - A version 1 or version 2 artifact byte changes.
+      - A supported historical run no longer reloads or replays.
+    proof:
+      experiments: [E001, E004]
+      evidence: [EV002, EV003, EV004, EV005]
+    dependencies: []
+    provenance: user_revised
+    tags: [versioning, compatibility, evidence-health]
+    domain:
+      stage: ASW-6A
+  - id: C002
+    statement: The six approved evidence treatments are task-owned, deterministic, durable, idempotent, and hidden from the actor except for their permitted effects.
+    status: supported
+    falsification_criteria:
+      - An exact retry creates another transition or effect.
+      - A treatment identity, future activation, hidden value, or unaffected-control set enters an actor view.
+      - Replay produces a different treatment result.
+    proof:
+      experiments: [E002, E003, E006]
+      evidence: [EV002]
+    dependencies: [C001]
+    provenance: user_revised
+    tags: [treatments, idempotency, privacy]
+    domain:
+      stage: ASW-6A
+  - id: C003
+    statement: Every version 3 actor-visible evidence item exposes enough health data to distinguish current, stale, delayed, contradictory, superseded, and regime-mismatched records without latent truth.
+    status: supported
+    falsification_criteria:
+      - A visible evidence item lacks time, age, quality, provenance, component scope, baseline, or operating regime.
+      - Latent physical condition or a hidden correct value is visible.
+      - Two required evidence-health states become indistinguishable.
+    proof:
+      experiments: [E001, E002, E005]
+      evidence: [EV002]
+    dependencies: [C001, C002]
+    provenance: user_revised
+    tags: [projection, partial-observability, evidence]
+    domain:
+      stage: ASW-6A
+  - id: C004
+    statement: The condition-check action uses only the health-aware sensor path and cannot satisfy the physical-inspection requirement for obstruction clearance.
+    status: supported
+    falsification_criteria:
+      - The action reads latent pump condition directly.
+      - Its evidence can authorize physical obstruction clearance.
+      - The actor cannot choose between condition check and physical inspection.
+    proof:
+      experiments: [E002, E005]
+      evidence: [EV002]
+    dependencies: [C003]
+    provenance: user_revised
+    tags: [inspection-choice, authority, latent-state]
+    domain:
+      stage: ASW-6A
+  - id: C005
+    statement: Direct Python, installed JSON, handover, resume, replay, crash recovery, and local Harbor preserve the same version 3 evidence semantics.
+    status: supported
+    falsification_criteria:
+      - Two supported execution paths produce different public evidence-health results from the same history.
+      - A handover omits a decision-relevant health state.
+      - Strict reload or replay rejects a valid version 3 history.
+    proof:
+      experiments: [E003, E004, E005, E006, E007, E008]
+      evidence: [EV002, EV003, EV004, EV005]
+    dependencies: [C001, C002, C003, C004]
+    provenance: user_revised
+    tags: [parity, replay, handover, harbor]
+    domain:
+      stage: ASW-6A

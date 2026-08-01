@@ -1,0 +1,8 @@
+Command scope:
+- existing pump-station Harbor tests
+- existing rich-work end-to-end tests
+- existing ASW-5I interface tests
+- existing ASW-3B persistence tests
+
+Result:
+35 passed in 78.35s

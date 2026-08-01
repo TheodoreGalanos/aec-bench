@@ -1,0 +1,17 @@
+concepts:
+  - id: CON001
+    name: evidence_health
+    definition: Actor-visible facts that identify evidence time, age, source, quality, component, baseline, regime, and record relations.
+    relations: [CON002, CON003]
+  - id: CON002
+    name: evidence_treatment
+    definition: One allowlisted host-private task rule that changes observation or evidence quality without assigning latent physical state.
+    relations: [CON001, CON004]
+  - id: CON003
+    name: condition_check
+    definition: A sensor-based actor choice that uses only visible observations and does not replace physical inspection authority.
+    relations: [CON001]
+  - id: CON004
+    name: control_transition
+    definition: A durable zero-clock world transition that schedules one private treatment on the same replayable branch.
+    relations: [CON002]

@@ -46,6 +46,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationTransition,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
+    create_evidence_health_reference_state,
     create_rich_work_reference_state,
     create_stewardship_state,
 )
@@ -72,6 +73,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
     PUMP_STATION_RECORD_VERSIONS_V1,
     PUMP_STATION_RECORD_VERSIONS_V2,
+    PUMP_STATION_RECORD_VERSIONS_V3,
     PUMP_STATION_SNAPSHOT_VERSION,
     PumpStationStateSnapshotRef,
 )
@@ -104,6 +106,11 @@ PUMP_STATION_RICH_WORK_TOOL_NAMES = (
     "cancel_process",
     "request_dependency_waiver",
     PUMP_STATION_TOOL_NAMES[-1],
+)
+PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES = (
+    *PUMP_STATION_RICH_WORK_TOOL_NAMES[:-1],
+    "request_condition_check",
+    PUMP_STATION_RICH_WORK_TOOL_NAMES[-1],
 )
 
 
@@ -153,12 +160,15 @@ class PumpStationWorldSession:
     ) -> None:
         self._request = request
         self._run = run
+        self._evidence_health = run.manifest.snapshot_version.endswith(".v3")
+        self._rich_work_processes = not run.manifest.snapshot_version.endswith(".v1")
         self._tool_names = (
-            PUMP_STATION_RICH_WORK_TOOL_NAMES
-            if run.manifest.snapshot_version.endswith(".v2")
+            PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES
+            if self._evidence_health
+            else PUMP_STATION_RICH_WORK_TOOL_NAMES
+            if self._rich_work_processes
             else PUMP_STATION_TOOL_NAMES
         )
-        self._rich_work_processes = run.manifest.snapshot_version.endswith(".v2")
         self._actor_results: dict[
             str,
             tuple[WorldActorActionRequest, WorldActorActionResult],
@@ -179,8 +189,10 @@ class PumpStationWorldSession:
             episode_started_at_seconds=episode_started_at_seconds,
             tenure_started_at_seconds=tenure_started_at_seconds,
             projection_policy_id=(
-                "pump-station-current-state.v2"
-                if run.manifest.snapshot_version.endswith(".v2")
+                "pump-station-current-state.v3"
+                if self._evidence_health
+                else "pump-station-current-state.v2"
+                if self._rich_work_processes
                 else PUMP_STATION_PROJECTION_POLICY_ID
             ),
             source_artifact_ids=(
@@ -232,6 +244,7 @@ class PumpStationWorldSession:
         return pump_station_actor_capabilities(
             task_world_id=self._request.task_world_id,
             rich_work_processes=self._rich_work_processes,
+            evidence_health=self._evidence_health,
         )
 
     @property
@@ -309,7 +322,11 @@ class PumpStationWorldSession:
     def actor_history(self) -> tuple[PumpStationActorHistoryEntry, ...]:
         """Return bounded-source entries reconstructed from durable proposals."""
 
-        return tuple(actor_history_entry(step.transition, step.proposal) for step in self._run.steps())
+        return tuple(
+            actor_history_entry(step.transition, step.proposal)
+            for step in self._run.steps()
+            if step.proposal is not None
+        )
 
     @property
     def event_schedule_sha256(self) -> str:
@@ -379,6 +396,19 @@ class PumpStationWorldSession:
         return self._invoke_actor_tool(
             proposal_id,
             "request_inspection",
+            {"reason": reason, "pump_id": pump_id},
+        )
+
+    def request_condition_check(
+        self,
+        proposal_id: str,
+        reason: str,
+        pump_id: str,
+    ) -> str:
+        """Request one sensor-based condition check for a named pump."""
+        return self._invoke_actor_tool(
+            proposal_id,
+            "request_condition_check",
             {"reason": reason, "pump_id": pump_id},
         )
 
@@ -626,11 +656,13 @@ class PumpStationWorldSessionFactory:
         package_root: Path | None = None,
         schedule: PumpStationSchedule | None = None,
         rich_work_processes: bool = False,
+        evidence_health: bool = False,
     ) -> None:
         self._repository = PumpStationWorldRunRepository(repository_root)
         self._package_root = package_root
         self._schedule = schedule
-        self._rich_work_processes = rich_work_processes
+        self._evidence_health = evidence_health
+        self._rich_work_processes = rich_work_processes or evidence_health
 
     def open(self, request: WorldSessionRequest) -> PumpStationWorldSession:
         """Open a new or exact resumed session for the requested actor tenure."""
@@ -639,7 +671,12 @@ class PumpStationWorldSessionFactory:
         package = load_reference_package(self._package_root)
         model = pump_station_model_from_package(package)
         if request.open_mode is WorldSessionOpenMode.START:
-            if self._rich_work_processes:
+            if self._evidence_health:
+                state = create_evidence_health_reference_state(
+                    model,
+                    schedule=self._schedule,
+                )
+            elif self._rich_work_processes:
                 state = create_rich_work_reference_state(
                     model,
                     schedule=self._schedule,
@@ -675,7 +712,11 @@ class PumpStationWorldSessionFactory:
                 episode_id=request.episode_id,
                 world_branch_id=request.world_branch_id,
                 record_versions=(
-                    PUMP_STATION_RECORD_VERSIONS_V2 if self._rich_work_processes else PUMP_STATION_RECORD_VERSIONS_V1
+                    PUMP_STATION_RECORD_VERSIONS_V3
+                    if self._evidence_health
+                    else PUMP_STATION_RECORD_VERSIONS_V2
+                    if self._rich_work_processes
+                    else PUMP_STATION_RECORD_VERSIONS_V1
                 ),
             )
         else:

@@ -14,7 +14,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     sorted_events,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PUMP_STATION_STATE_VERSION_V2,
     PumpStationAuthority,
     PumpStationDependencyKind,
     PumpStationDependencyWaiver,
@@ -49,8 +48,8 @@ _TERMINAL_PROCESS_STATUSES = {
 
 
 def is_rich_work_state(state: PumpStationStewardshipState) -> bool:
-    """Return whether the state uses the version-2 rich-work contract."""
-    return state.state_version == PUMP_STATION_STATE_VERSION_V2
+    """Return whether the state uses a rich-work contract."""
+    return not state.state_version.endswith(".v1")
 
 
 def resource_requirements(

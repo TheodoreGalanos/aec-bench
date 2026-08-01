@@ -5,6 +5,14 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
+    PumpStationEvidenceHealth,
+    PumpStationEvidenceQuality,
+    PumpStationEvidenceTreatment,
+    PumpStationEvidenceTreatmentClass,
+    PumpStationEvidenceTreatmentStatus,
+    PumpStationObservationSource,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_kernel import (
     apply_pump_intervention,
     assess_pump_station,
@@ -45,6 +53,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 )
 
 _EVENT_PRIORITY = {
+    PumpStationEventType.EVIDENCE_TREATMENT_ACTIVATION: 1,
+    PumpStationEventType.EVIDENCE_RELEASE: 2,
     PumpStationEventType.OBLIGATION_DUE: 3,
     PumpStationEventType.OBLIGATION_OVERDUE: 3,
     PumpStationEventType.OBLIGATION_BREACH: 3,
@@ -87,6 +97,8 @@ def new_event(
     scheduled_seconds: int,
     process_id: str | None = None,
     obligation_id: str | None = None,
+    treatment_id: str | None = None,
+    evidence_id: str | None = None,
 ) -> PumpStationScheduledEvent:
     """Create one deterministic scheduled event."""
     return PumpStationScheduledEvent(
@@ -95,6 +107,48 @@ def new_event(
         scheduled_seconds=scheduled_seconds,
         process_id=process_id,
         obligation_id=obligation_id,
+        treatment_id=treatment_id,
+        evidence_id=evidence_id,
+    )
+
+
+def _replace_source(
+    sources: tuple[PumpStationObservationSource, ...],
+    updated: PumpStationObservationSource,
+) -> tuple[PumpStationObservationSource, ...]:
+    return tuple(updated if item.source_id == updated.source_id else item for item in sources)
+
+
+def _replace_treatment(
+    treatments: tuple[PumpStationEvidenceTreatment, ...],
+    updated: PumpStationEvidenceTreatment,
+) -> tuple[PumpStationEvidenceTreatment, ...]:
+    return tuple(updated if item.treatment_id == updated.treatment_id else item for item in treatments)
+
+
+def _find_treatment(
+    treatments: tuple[PumpStationEvidenceTreatment, ...],
+    treatment_id: str,
+) -> PumpStationEvidenceTreatment:
+    for treatment in treatments:
+        if treatment.treatment_id == treatment_id:
+            return treatment
+    raise PumpStationProposalError(
+        "scheduled-event",
+        f"missing evidence treatment {treatment_id}",
+    )
+
+
+def _find_source(
+    sources: tuple[PumpStationObservationSource, ...],
+    source_id: str,
+) -> PumpStationObservationSource:
+    for source in sources:
+        if source.source_id == source_id:
+            return source
+    raise PumpStationProposalError(
+        "scheduled-event",
+        f"missing observation source {source_id}",
     )
 
 
@@ -225,6 +279,13 @@ def _complete_inspection(
         created_at_seconds=state.physical.calendar_seconds,
         produced_by=PumpStationAuthority.MAINTENANCE,
         accepted_by=PumpStationAuthority.ENGINEERING,
+        health=_completed_evidence_health(
+            state,
+            source_id="physical-inspection",
+            pump_id=process.pump_id,
+            baseline_id=f"{process.pump_id}-physical-condition.v1",
+            accepted=True,
+        ),
         inspection=inspection,
     )
     completed = replace(process, status=PumpStationProcessStatus.COMPLETED)
@@ -276,7 +337,7 @@ def _complete_obstruction_clearance(
     PumpStationChangeKind | None,
     tuple[str, ...],
 ]:
-    rich_work = state.state_version.endswith(".v2")
+    rich_work = not state.state_version.endswith(".v1")
     if not rich_work and (
         state.resources.access_window_seconds < model.resources.access_duration_seconds
         or state.resources.available_intervention_slots < 1
@@ -375,6 +436,13 @@ def _complete_functional_checks(
         produced_by=PumpStationAuthority.MAINTENANCE,
         accepted_by=(PumpStationAuthority.VERIFICATION if passed else None),
         passed=passed,
+        health=_completed_evidence_health(
+            state,
+            source_id="maintenance-functional-checks",
+            pump_id=process.pump_id,
+            baseline_id=f"{process.pump_id}-post-maintenance-baseline.v1",
+            accepted=passed,
+        ),
     )
     updated_process = replace(
         process,
@@ -426,6 +494,13 @@ def _complete_verification(
         produced_by=PumpStationAuthority.VERIFICATION,
         accepted_by=PumpStationAuthority.VERIFICATION,
         passed=passed,
+        health=_completed_evidence_health(
+            state,
+            source_id="independent-verification",
+            pump_id=process.pump_id,
+            baseline_id=f"{process.pump_id}-post-maintenance-baseline.v1",
+            accepted=True,
+        ),
     )
     updated_process = replace(
         process,
@@ -474,6 +549,30 @@ def _complete_verification(
     )
 
 
+def _completed_evidence_health(
+    state: PumpStationStewardshipState,
+    *,
+    source_id: str,
+    pump_id: str,
+    baseline_id: str,
+    accepted: bool,
+) -> PumpStationEvidenceHealth | None:
+    if not state.state_version.endswith(".v3"):
+        return None
+    now = state.physical.calendar_seconds
+    return PumpStationEvidenceHealth(
+        observed_at_seconds=now,
+        produced_at_seconds=now,
+        available_at_seconds=now,
+        source_id=source_id,
+        component_scope=(pump_id,),
+        baseline_id=baseline_id,
+        operating_regime_id=(f"{state.physical.duty_pump_id}-duty-{state.physical.standby_pump_id}-standby.v1"),
+        accepted=accepted,
+        quality=PumpStationEvidenceQuality.CURRENT,
+    )
+
+
 def apply_scheduled_event(
     model: PumpStationModel,
     state: PumpStationStewardshipState,
@@ -487,6 +586,8 @@ def apply_scheduled_event(
     tuple[str, ...],
     tuple[str, ...],
     tuple[str, ...],
+    tuple[str, ...],
+    tuple[str, ...],
     PumpStationChangeKind | None,
 ]:
     """Apply one event after the scheduler has advanced physical time."""
@@ -495,11 +596,104 @@ def apply_scheduled_event(
     obligation_changes: tuple[str, ...] = ()
     work_order_changes: tuple[str, ...] = ()
     evidence_created: tuple[str, ...] = ()
+    evidence_sources_changed: tuple[str, ...] = ()
+    evidence_treatments_changed: tuple[str, ...] = ()
     physical_change: PumpStationChangeKind | None = None
     execution = PumpStationExecutionOutcome.COMPLETED
-    rich_work = state.state_version.endswith(".v2")
+    rich_work = not state.state_version.endswith(".v1")
     if event.event_type is PumpStationEventType.DECISION_POINT:
-        pass
+        sources = state.evidence_sources
+        for source in state.evidence_sources:
+            if not source.refresh_enabled or not source.reading_available:
+                continue
+            assessment = assess_pump_station(model, state.physical, state.environment)
+            updated_source = replace(
+                source,
+                observation=assessment.observation,
+                observed_at_seconds=state.physical.calendar_seconds,
+                produced_at_seconds=state.physical.calendar_seconds,
+                available_at_seconds=state.physical.calendar_seconds,
+                operating_regime_id=(f"{state.physical.duty_pump_id}-duty-{state.physical.standby_pump_id}-standby.v1"),
+            )
+            sources = _replace_source(sources, updated_source)
+            evidence_sources_changed = (*evidence_sources_changed, source.source_id)
+        state = replace(state, evidence_sources=sources)
+    elif event.event_type is PumpStationEventType.EVIDENCE_TREATMENT_ACTIVATION:
+        if event.treatment_id is None:
+            raise PumpStationProposalError(
+                "scheduled-event",
+                "treatment activation has no treatment identity",
+            )
+        treatment = _find_treatment(state.evidence_treatments, event.treatment_id)
+        if treatment.status is not PumpStationEvidenceTreatmentStatus.SCHEDULED:
+            raise PumpStationProposalError(
+                "scheduled-event",
+                "treatment activation is not scheduled",
+            )
+        source = _find_source(
+            state.evidence_sources,
+            treatment.request.target_source_id,
+        )
+        treatment_class = treatment.request.treatment_class
+        updated_source = source
+        if treatment_class is PumpStationEvidenceTreatmentClass.CALIBRATION_LAPSE:
+            updated_source = replace(source, quality=PumpStationEvidenceQuality.SUSPECT)
+        elif treatment_class is PumpStationEvidenceTreatmentClass.STALE_SAMPLE:
+            updated_source = replace(source, refresh_enabled=False)
+        elif treatment_class is PumpStationEvidenceTreatmentClass.OBSERVATION_LOSS:
+            updated_source = replace(
+                source,
+                quality=PumpStationEvidenceQuality.UNAVAILABLE,
+                reading_available=False,
+            )
+        elif treatment_class is PumpStationEvidenceTreatmentClass.BASELINE_CHANGE:
+            updated_source = replace(
+                source,
+                baseline_id="station-condition-baseline.v2",
+            )
+        updated_treatment = replace(
+            treatment,
+            status=PumpStationEvidenceTreatmentStatus.ACTIVE,
+            activated_sequence=sequence,
+            activated_at_seconds=state.physical.calendar_seconds,
+        )
+        state = replace(
+            state,
+            evidence_sources=_replace_source(
+                state.evidence_sources,
+                updated_source,
+            ),
+            evidence_treatments=_replace_treatment(
+                state.evidence_treatments,
+                updated_treatment,
+            ),
+        )
+        if updated_source != source:
+            evidence_sources_changed = (source.source_id,)
+        evidence_treatments_changed = (treatment.treatment_id,)
+    elif event.event_type is PumpStationEventType.EVIDENCE_RELEASE:
+        if event.evidence_id is None:
+            raise PumpStationProposalError(
+                "scheduled-event",
+                "evidence release has no evidence identity",
+            )
+        pending = next(
+            (item for item in state.pending_evidence if item.evidence.evidence_id == event.evidence_id),
+            None,
+        )
+        if pending is None or pending.release_at_seconds != state.physical.calendar_seconds:
+            raise PumpStationProposalError(
+                "scheduled-event",
+                f"missing pending evidence {event.evidence_id}",
+            )
+        state = replace(
+            state,
+            evidence=(*state.evidence, pending.evidence),
+            pending_evidence=tuple(
+                item for item in state.pending_evidence if item.evidence.evidence_id != event.evidence_id
+            ),
+        )
+        evidence_created = (pending.evidence.evidence_id,)
     elif event.event_type is PumpStationEventType.ACCESS_AVAILABLE:
         state = replace(
             state,
@@ -627,12 +821,16 @@ def apply_scheduled_event(
                 (),
                 (),
                 (),
+                (),
+                (),
                 None,
             )
         if rich_work and process.status is not PumpStationProcessStatus.ACTIVE:
             return (
                 state,
                 execution,
+                (),
+                (),
                 (),
                 (),
                 (),
@@ -754,5 +952,7 @@ def apply_scheduled_event(
         obligation_changes,
         work_order_changes,
         evidence_created,
+        evidence_sources_changed,
+        evidence_treatments_changed,
         physical_change,
     )

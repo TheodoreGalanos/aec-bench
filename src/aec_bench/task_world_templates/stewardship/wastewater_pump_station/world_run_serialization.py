@@ -25,6 +25,7 @@ ArtifactT = TypeVar("ArtifactT")
 
 _V1 = "v1"
 _V2 = "v2"
+_V3 = "v3"
 _V1_FIELD_EXCLUSIONS = {
     "PumpStationStewardshipState": {
         "state_version",
@@ -46,6 +47,29 @@ _V1_FIELD_EXCLUSIONS = {
         "resource_reservations",
     },
 }
+_V3_FIELD_EXCLUSIONS = {
+    "PumpStationStewardshipState": {
+        "evidence_sources",
+        "evidence_treatments",
+        "pending_evidence",
+    },
+    "PumpStationEvidence": {"health", "condition_observation"},
+    "PumpStationScheduledEvent": {"treatment_id", "evidence_id"},
+    "PumpStationTransitionReceipt": {
+        "evidence_sources_changed",
+        "evidence_treatments_changed",
+    },
+    "PumpStationCurrentStateView": {
+        "observation_source",
+    },
+}
+
+
+def _field_exclusions(type_name: str, profile: str) -> set[str]:
+    exclusions = set(_V3_FIELD_EXCLUSIONS.get(type_name, set())) if profile != _V3 else set()
+    if profile == _V1:
+        exclusions.update(_V1_FIELD_EXCLUSIONS.get(type_name, set()))
+    return exclusions
 
 
 def _fail(code: str, detail: str) -> NoReturn:
@@ -55,9 +79,15 @@ def _fail(code: str, detail: str) -> NoReturn:
 def _record_profile(value: object) -> str:
     type_name = type(value).__name__
     if type_name == "PumpStationStewardshipState":
-        return _V2 if str(getattr(value, "state_version", "")).endswith(".v2") else _V1
+        version = str(getattr(value, "state_version", ""))
+        if version.endswith(".v3"):
+            return _V3
+        return _V2 if version.endswith(".v2") else _V1
     if type_name == "PumpStationCurrentStateView":
-        return _V2 if str(getattr(value, "state_version", "")).endswith(".v2") else _V1
+        version = str(getattr(value, "state_version", ""))
+        if version.endswith(".v3"):
+            return _V3
+        return _V2 if version.endswith(".v2") else _V1
     if type_name in {"PumpStationActorView", "PumpStationStructuredHandover"}:
         current = getattr(value, "current_state", None) or getattr(
             getattr(value, "current_actor_view", None), "current_state", None
@@ -67,7 +97,12 @@ def _record_profile(value: object) -> str:
     if type_name == "PumpStationInformationSet":
         return _record_profile(cast(Any, value).base_view)
     if type_name == "PumpStationTransitionReceipt":
-        return _V2 if str(getattr(value, "receipt_version", "")).endswith(".v2") else _V1
+        version = str(getattr(value, "receipt_version", ""))
+        if version.endswith(".v3"):
+            return _V3
+        return _V2 if version.endswith(".v2") else _V1
+    if type_name == "PumpStationEvidence" and getattr(value, "health", None) is not None:
+        return _V3
     return _V2
 
 
@@ -75,17 +110,29 @@ def _document_profile(value: object) -> str:
     if isinstance(value, dict):
         type_name = value.get("$type")
         if type_name in {"PumpStationStewardshipState", "PumpStationCurrentStateView"}:
-            return _V2 if str(value.get("state_version", "")).endswith(".v2") else _V1
+            version = str(value.get("state_version", ""))
+            if version.endswith(".v3"):
+                return _V3
+            return _V2 if version.endswith(".v2") else _V1
         if type_name == "PumpStationTransitionReceipt":
-            return _V2 if str(value.get("receipt_version", "")).endswith(".v2") else _V1
+            version = str(value.get("receipt_version", ""))
+            if version.endswith(".v3"):
+                return _V3
+            return _V2 if version.endswith(".v2") else _V1
+        if type_name == "PumpStationEvidence" and value.get("health") is not None:
+            return _V3
         profiles = tuple(_document_profile(child) for child in value.values())
         if _V1 in profiles:
             return _V1
+        if _V2 in profiles:
+            return _V2
     if isinstance(value, list):
         profiles = tuple(_document_profile(child) for child in value)
         if _V1 in profiles:
             return _V1
-    return _V2
+        if _V2 in profiles:
+            return _V2
+    return _V3
 
 
 def _encoded(value: object, profile: str) -> object:
@@ -94,7 +141,7 @@ def _encoded(value: object, profile: str) -> object:
     if isinstance(value, Decimal):
         return str(value)
     if is_dataclass(value) and not isinstance(value, type):
-        exclusions = _V1_FIELD_EXCLUSIONS.get(type(value).__name__, set()) if profile == _V1 else set()
+        exclusions = _field_exclusions(type(value).__name__, profile)
         return {
             "$type": type(value).__name__,
             **{
@@ -188,7 +235,7 @@ def _decode_dataclass(value: object, expected: type[Any], profile: str) -> objec
             f"expected {expected.__name__}, received {value.get('$type')!r}",
         )
     declared_fields = fields(expected)
-    exclusions = _V1_FIELD_EXCLUSIONS.get(expected.__name__, set()) if profile == _V1 else set()
+    exclusions = _field_exclusions(expected.__name__, profile)
     expected_keys = {
         "$type",
         *(field.name for field in declared_fields if field.name not in exclusions),

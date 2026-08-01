@@ -1,0 +1,38 @@
+nodes:
+  - id: N001
+    type: question
+    summary: Define the smallest local evidence-health semantics needed before a maintenance closeout review or temporal study.
+    children: [N002]
+    also_depends_on: []
+    claims_touched: [C001, C002, C003, C004, C005]
+    provenance: source
+    payload:
+      source: ASW-5 programme checkpoint and ASW-5I interface gate
+    domain:
+      stage: ASW-6A
+  - id: N002
+    type: decision
+    summary: Approve version 3, fixed age and delay values, six treatment classes, one condition-check action, and actor-effect-only visibility.
+    children: [N003]
+    also_depends_on: []
+    claims_touched: [C001, C002, C003, C004, C005]
+    provenance: user_revised
+    payload:
+      date: 2026-08-01
+      stale_after_seconds: 28800
+      delay_seconds: 28800
+      treatment_version: 1
+      activation: next_decision_point
+    domain:
+      provider_calls_authorized: false
+  - id: N003
+    type: experiment
+    summary: Implement and falsify the complete approved ASW-6A stage through unit, integration, compatibility, direct, installed, handover, recovery, and local-Harbor gates.
+    children: []
+    also_depends_on: [N002]
+    claims_touched: [C001, C002, C003, C004, C005]
+    provenance: ai_suggested
+    payload:
+      experiments: [E001, E002, E003, E004, E005, E006, E007, E008]
+    domain:
+      status: completed

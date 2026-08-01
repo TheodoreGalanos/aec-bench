@@ -5,6 +5,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
+    PumpStationEvidenceTreatmentRequest,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpStationModel,
 )
@@ -20,6 +23,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationTransition,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
+    apply_evidence_treatment_schedule,
     apply_stewardship_proposal,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
@@ -28,6 +32,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
     PUMP_STATION_RECORD_VERSIONS_V1,
     PUMP_STATION_RECORD_VERSIONS_V2,
+    PUMP_STATION_RECORD_VERSIONS_V3,
     PumpStationRecordVersions,
 )
 
@@ -36,9 +41,18 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 class PumpStationRunStep:
     """One recorded bound proposal and its resulting transition."""
 
-    proposal: PumpStationProposal
-    information_set: PumpStationInformationSet
+    proposal: PumpStationProposal | None
+    information_set: PumpStationInformationSet | None
     transition: PumpStationTransition
+    control_request: PumpStationEvidenceTreatmentRequest | None = None
+
+    def __post_init__(self) -> None:
+        actor_step = self.proposal is not None and self.information_set is not None
+        control_step = self.control_request is not None
+        if actor_step == control_step:
+            raise ValueError("run step requires exactly one actor or control input")
+        if self.proposal is None and self.information_set is not None:
+            raise ValueError("control run step cannot contain an information set")
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,16 +75,19 @@ def verify_stewardship_run(
     record_versions: PumpStationRecordVersions | None = None,
 ) -> PumpStationVerificationReport:
     """Replay immutable run steps from the declared initial state."""
-    selected_versions = record_versions or (
-        PUMP_STATION_RECORD_VERSIONS_V2
-        if initial_state.state_version.endswith(".v2")
-        else PUMP_STATION_RECORD_VERSIONS_V1
+    selected_versions = (
+        record_versions
+        or {
+            "pump-station-stewardship-state.v1": PUMP_STATION_RECORD_VERSIONS_V1,
+            "pump-station-stewardship-state.v2": PUMP_STATION_RECORD_VERSIONS_V2,
+            "pump-station-stewardship-state.v3": PUMP_STATION_RECORD_VERSIONS_V3,
+        }[initial_state.state_version]
     )
-    expected_state_version = (
-        "pump-station-stewardship-state.v2"
-        if selected_versions == PUMP_STATION_RECORD_VERSIONS_V2
-        else "pump-station-stewardship-state.v1"
-    )
+    expected_state_version = {
+        PUMP_STATION_RECORD_VERSIONS_V1: "pump-station-stewardship-state.v1",
+        PUMP_STATION_RECORD_VERSIONS_V2: "pump-station-stewardship-state.v2",
+        PUMP_STATION_RECORD_VERSIONS_V3: "pump-station-stewardship-state.v3",
+    }[selected_versions]
     state = initial_state
     issues: list[str] = []
     if initial_state.state_version != expected_state_version:
@@ -79,12 +96,21 @@ def verify_stewardship_run(
     for step in steps:
         transition_id = step.transition.receipt.transition_id
         try:
-            replayed = apply_stewardship_proposal(
-                model,
-                state,
-                step.proposal,
-                information_set=step.information_set,
-            )
+            if step.control_request is not None:
+                replayed = apply_evidence_treatment_schedule(
+                    state,
+                    step.control_request,
+                )
+            else:
+                if step.proposal is None or step.information_set is None:
+                    issues.append(f"transition-replay-error:{transition_id}:run-step-shape")
+                    break
+                replayed = apply_stewardship_proposal(
+                    model,
+                    state,
+                    step.proposal,
+                    information_set=step.information_set,
+                )
         except PumpStationProposalError as error:
             issues.append(f"transition-replay-error:{transition_id}:{error.code}")
             break

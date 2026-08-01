@@ -6,10 +6,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
+    PumpStationEvidenceQuality,
+    evidence_quality_at,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_kernel import (
     assess_pump_station,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
+    PumpInspectionObservation,
     PumpStationEnvironment,
     PumpStationModel,
     PumpStationObservation,
@@ -21,8 +26,10 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     CancelProcess,
     ContinueOperation,
     ProposalContext,
+    PumpStationAuthority,
     PumpStationDependencyWaiver,
     PumpStationEvidence,
+    PumpStationEvidenceKind,
     PumpStationObligation,
     PumpStationObligationStatus,
     PumpStationProcess,
@@ -37,6 +44,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationWorkOrder,
     PumpStationWorkResources,
     RequestConditionalDeferral,
+    RequestConditionCheck,
     RequestDependencyWaiver,
     RequestInspection,
     RequestObstructionClearance,
@@ -106,6 +114,49 @@ class PumpStationPumpClockView:
 
 
 @dataclass(frozen=True, slots=True)
+class PumpStationObservationSourceView:
+    """Actor-visible source, timing, and quality of the current station reading."""
+
+    source_id: str
+    component_scope: tuple[str, ...]
+    baseline_id: str
+    operating_regime_id: str
+    observed_at_seconds: int
+    produced_at_seconds: int
+    available_at_seconds: int
+    age_seconds: int
+    quality: PumpStationEvidenceQuality
+    observation: PumpStationObservation | None
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationEvidenceView:
+    """Actor-visible evidence with computed age and explicit provenance."""
+
+    evidence_id: str
+    kind: PumpStationEvidenceKind
+    pump_id: str
+    produced_by: PumpStationAuthority
+    accepted_by: PumpStationAuthority | None
+    accepted: bool
+    source_id: str
+    component_scope: tuple[str, ...]
+    baseline_id: str
+    operating_regime_id: str
+    observed_at_seconds: int
+    produced_at_seconds: int
+    available_at_seconds: int
+    age_seconds: int
+    quality: PumpStationEvidenceQuality
+    applicable: bool
+    contradicts_evidence_id: str | None
+    supersedes_evidence_id: str | None
+    inspection: PumpInspectionObservation | None = None
+    condition_observation: PumpStationObservation | None = None
+    passed: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class PumpStationCurrentStateView:
     """Complete authorised present state without latent or future information."""
 
@@ -117,17 +168,18 @@ class PumpStationCurrentStateView:
     duty_transfer_count: int
     pumps: tuple[PumpStationPumpClockView, ...]
     environment: PumpStationEnvironment
-    observation: PumpStationObservation
+    observation: PumpStationObservation | None
     resources: PumpStationWorkResources
     restrictions: tuple[PumpStationRestriction, ...]
     obligations: tuple[PumpStationObligation, ...]
     work_orders: tuple[PumpStationWorkOrder, ...]
     processes: tuple[PumpStationProcess, ...]
-    evidence: tuple[PumpStationEvidence, ...]
+    evidence: tuple[PumpStationEvidence | PumpStationEvidenceView, ...]
     state_version: str = "pump-station-stewardship-state.v1"
     dependencies: tuple[PumpStationProcessDependency, ...] = ()
     dependency_waivers: tuple[PumpStationDependencyWaiver, ...] = ()
     resource_reservations: tuple[PumpStationResourceReservation, ...] = ()
+    observation_source: PumpStationObservationSourceView | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,6 +284,7 @@ _ACTION_TYPES: dict[type[object], str] = {
     ContinueOperation: "continue_operation",
     TransferDuty: "transfer_duty",
     RequestInspection: "request_inspection",
+    RequestConditionCheck: "request_condition_check",
     RequestConditionalDeferral: "request_conditional_deferral",
     RequestObstructionClearance: "request_obstruction_clearance",
     RequestProvisionalReturn: "request_provisional_return",
@@ -308,6 +361,73 @@ def _current_state_view(
             PumpStationProcessStatus.SUSPENDED,
         }
     )
+    profile = "v3" if state.state_version.endswith(".v3") else "v2" if state.state_version.endswith(".v2") else "v1"
+    observation: PumpStationObservation | None = assessment.observation
+    observation_source: PumpStationObservationSourceView | None = None
+    visible_evidence: tuple[PumpStationEvidence | PumpStationEvidenceView, ...] = state.evidence
+    if profile == "v3":
+        if len(state.evidence_sources) != 1:
+            raise ValueError("version 3 requires exactly one observation source")
+        source = state.evidence_sources[0]
+        source_quality = evidence_quality_at(
+            source.quality,
+            observed_at_seconds=source.observed_at_seconds,
+            now_seconds=state.physical.calendar_seconds,
+        )
+        observation = source.observation if source.reading_available else None
+        observation_source = PumpStationObservationSourceView(
+            source_id=source.source_id,
+            component_scope=source.component_scope,
+            baseline_id=source.baseline_id,
+            operating_regime_id=source.operating_regime_id,
+            observed_at_seconds=source.observed_at_seconds,
+            produced_at_seconds=source.produced_at_seconds,
+            available_at_seconds=source.available_at_seconds,
+            age_seconds=state.physical.calendar_seconds - source.observed_at_seconds,
+            quality=source_quality,
+            observation=observation,
+        )
+        projected_evidence: list[PumpStationEvidenceView] = []
+        for item in state.evidence:
+            if item.health is None:
+                raise ValueError("version 3 evidence lacks health metadata")
+            health = item.health
+            applicable = health.source_id != source.source_id or (
+                health.baseline_id == source.baseline_id and health.operating_regime_id == source.operating_regime_id
+            )
+            quality = evidence_quality_at(
+                health.quality,
+                observed_at_seconds=health.observed_at_seconds,
+                now_seconds=state.physical.calendar_seconds,
+            )
+            if not applicable and quality is PumpStationEvidenceQuality.CURRENT:
+                quality = PumpStationEvidenceQuality.SUSPECT
+            projected_evidence.append(
+                PumpStationEvidenceView(
+                    evidence_id=item.evidence_id,
+                    kind=item.kind,
+                    pump_id=item.pump_id,
+                    produced_by=item.produced_by,
+                    accepted_by=item.accepted_by,
+                    accepted=health.accepted,
+                    source_id=health.source_id,
+                    component_scope=health.component_scope,
+                    baseline_id=health.baseline_id,
+                    operating_regime_id=health.operating_regime_id,
+                    observed_at_seconds=health.observed_at_seconds,
+                    produced_at_seconds=health.produced_at_seconds,
+                    available_at_seconds=health.available_at_seconds,
+                    age_seconds=(state.physical.calendar_seconds - health.observed_at_seconds),
+                    quality=quality,
+                    applicable=applicable,
+                    contradicts_evidence_id=health.contradicts_evidence_id,
+                    supersedes_evidence_id=health.supersedes_evidence_id,
+                    inspection=item.inspection,
+                    condition_observation=item.condition_observation,
+                    passed=item.passed,
+                )
+            )
+        visible_evidence = tuple(projected_evidence)
     visible_state = {
         "state_sequence": state.sequence,
         "calendar_seconds": state.physical.calendar_seconds,
@@ -316,16 +436,15 @@ def _current_state_view(
         "duty_transfer_count": state.physical.duty_transfer_count,
         "pumps": pumps,
         "environment": state.environment,
-        "observation": assessment.observation,
+        "observation": observation,
         "resources": state.resources,
         "restrictions": restrictions,
         "obligations": obligations,
         "work_orders": state.work_orders,
         "processes": processes,
-        "evidence": state.evidence,
+        "evidence": visible_evidence,
     }
-    profile = "v2" if state.state_version.endswith(".v2") else "v1"
-    if profile == "v2":
+    if profile in {"v2", "v3"}:
         visible_state.update(
             {
                 "state_version": state.state_version,
@@ -334,6 +453,8 @@ def _current_state_view(
                 "resource_reservations": state.resource_reservations,
             }
         )
+    if profile == "v3":
+        visible_state["observation_source"] = observation_source
     return PumpStationCurrentStateView(
         state_id=stewardship_content_id(
             visible_state,
@@ -346,17 +467,18 @@ def _current_state_view(
         duty_transfer_count=state.physical.duty_transfer_count,
         pumps=pumps,
         environment=state.environment,
-        observation=assessment.observation,
+        observation=observation,
         resources=state.resources,
         restrictions=restrictions,
         obligations=obligations,
         work_orders=state.work_orders,
         processes=processes,
-        evidence=state.evidence,
+        evidence=visible_evidence,
         state_version=state.state_version,
         dependencies=state.dependencies,
         dependency_waivers=state.dependency_waivers,
         resource_reservations=state.resource_reservations,
+        observation_source=observation_source,
     )
 
 
@@ -388,7 +510,9 @@ def project_actor_view(
     return PumpStationActorView(
         view_id=stewardship_content_id(
             identity_payload,
-            record_profile=("v2" if state.state_version.endswith(".v2") else "v1"),
+            record_profile=(
+                "v3" if state.state_version.endswith(".v3") else "v2" if state.state_version.endswith(".v2") else "v1"
+            ),
         ),
         episode_id=context.episode_id,
         world_branch_id=context.world_branch_id,
@@ -470,7 +594,13 @@ def _information_set_id(
             "observation_history": observation_history,
             "current_context": current_context,
         },
-        record_profile=("v2" if base_view.current_state.state_version.endswith(".v2") else "v1"),
+        record_profile=(
+            "v3"
+            if base_view.current_state.state_version.endswith(".v3")
+            else "v2"
+            if base_view.current_state.state_version.endswith(".v2")
+            else "v1"
+        ),
     )
 
 

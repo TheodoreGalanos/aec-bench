@@ -1,0 +1,11 @@
+Ruff lint:
+All checks passed.
+
+Ruff format:
+All changed Python files are formatted.
+
+MyPy source:
+Success: no issues found in 28 source files
+
+MyPy ASW-6A tests:
+Success: no issues found in 6 source files
