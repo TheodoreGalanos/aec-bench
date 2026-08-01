@@ -19,9 +19,12 @@ from aec_bench.contracts.harness_kernel import (
 from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review import (
+    PUMP_STATION_REVIEW_PACK_POLICY_V2,
+    PumpStationReviewActionCode,
     PumpStationReviewDisposition,
     PumpStationReviewFinding,
     PumpStationReviewPublicCase,
+    PumpStationReviewRecordAssessment,
     PumpStationReviewRecordKind,
     PumpStationReviewSubmission,
     PumpStationReviewSubmissionReceipt,
@@ -166,6 +169,8 @@ def build_reference_review_submission(
     reviewer_tenure_id: str,
 ) -> PumpStationReviewSubmission:
     """Derive the deterministic reference answer from visible records only."""
+    if public_case.pack.pack_policy != PUMP_STATION_REVIEW_PACK_POLICY_V2:
+        raise ValueError("reference reviewer requires the version 2 review contract")
     closeout = next(
         item
         for item in public_case.pack.records
@@ -190,6 +195,16 @@ def build_reference_review_submission(
         for item in public_case.pack.records
         if item.kind is PumpStationReviewRecordKind.DUTY_FOLLOW_UP and item.component_id == closeout.component_id
     )
+    work_order = next(
+        item
+        for item in public_case.pack.records
+        if item.kind is PumpStationReviewRecordKind.WORK_ORDER and item.component_id == closeout.component_id
+    )
+    restriction = next(
+        item
+        for item in public_case.pack.records
+        if item.kind is PumpStationReviewRecordKind.OPERATING_RESTRICTION and item.component_id == closeout.component_id
+    )
     return PumpStationReviewSubmission(
         review_id=review_id,
         case_id=public_case.case_id,
@@ -203,9 +218,30 @@ def build_reference_review_submission(
         missing_evidence_ids=correct.source_record_ids,
         disposition=PumpStationReviewDisposition.REJECT_CLOSEOUT,
         required_follow_up=(
-            "correct-functional-check-citation",
-            "reissue-pump-a-closeout",
+            PumpStationReviewActionCode.CORRECT_FUNCTIONAL_CHECK_CITATION,
+            PumpStationReviewActionCode.REISSUE_PUMP_A_CLOSEOUT,
         ),
+        review_rationale=(
+            "Pump A cannot be closed out against Pump B functional checks. "
+            "The Pump A checks remain the missing decisive evidence, while the "
+            "work order and run-in restriction remain related operating context."
+        ),
+        related_record_assessments=(
+            PumpStationReviewRecordAssessment(
+                record_id=work_order.record_id,
+                rationale=(
+                    "The work order defines the maintenance scope, but the citation error does not change that scope."
+                ),
+            ),
+            PumpStationReviewRecordAssessment(
+                record_id=restriction.record_id,
+                rationale=(
+                    "The run-in restriction remains relevant to return to service, "
+                    "but it is not made incorrect by the citation."
+                ),
+            ),
+        ),
+        additional_recommendations=("Retain the run-in restriction until the corrected closeout is reviewed.",),
         source_record_ids=(
             closeout.record_id,
             correct.source_record_ids[0],
@@ -267,6 +303,8 @@ class PumpStationReviewSession:
         submission: PumpStationReviewSubmission,
     ) -> PumpStationReviewSubmissionReceipt:
         """Publish one case-bound review without exposing its evaluation target."""
+        if self._public_case.pack.pack_policy != PUMP_STATION_REVIEW_PACK_POLICY_V2:
+            raise ValueError("review session requires the version 2 review contract")
         if (
             submission.case_id != self._public_case.case_id
             or submission.public_case_content_sha256 != self._public_case.content_sha256
@@ -294,10 +332,13 @@ class PumpStationReviewSession:
         unaffected_duty_ids: list[str],
         missing_evidence_ids: list[str],
         disposition: PumpStationReviewDisposition,
-        required_follow_up: list[str],
+        required_follow_up: list[PumpStationReviewActionCode],
+        review_rationale: str,
+        related_record_assessments: list[dict[str, str]],
+        additional_recommendations: list[str],
         source_record_ids: list[str],
     ) -> str:
-        """Submit every required review field against visible source records."""
+        """Submit direct impact, coded work, and written context from visible records."""
         receipt = self.submit_review(
             PumpStationReviewSubmission(
                 review_id=review_id,
@@ -311,7 +352,12 @@ class PumpStationReviewSession:
                 unaffected_duty_ids=tuple(unaffected_duty_ids),
                 missing_evidence_ids=tuple(missing_evidence_ids),
                 disposition=PumpStationReviewDisposition(disposition),
-                required_follow_up=tuple(required_follow_up),
+                required_follow_up=tuple(PumpStationReviewActionCode(item) for item in required_follow_up),
+                review_rationale=review_rationale,
+                related_record_assessments=tuple(
+                    PumpStationReviewRecordAssessment.model_validate(item) for item in related_record_assessments
+                ),
+                additional_recommendations=tuple(additional_recommendations),
                 source_record_ids=tuple(source_record_ids),
             )
         )

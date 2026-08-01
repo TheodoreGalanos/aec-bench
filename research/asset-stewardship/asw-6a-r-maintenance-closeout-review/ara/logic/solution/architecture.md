@@ -13,12 +13,18 @@ target. Preparation and issue-treatment receipts bind both sides without
 changing the source world pointer or any source artifact.
 
 The reviewer session exposes only observe, handover, and typed review
-submission. Each action binds to the current case, pack, tenure, and source
-records. The review repository publishes each accepted review immutably and
-returns exact retries without duplicate records.
+submission. Version 2 uses controlled values for process-essential decisions
+and actions. It also requests a written review rationale, related-record
+assessments, and additional recommendations. Each action binds to the current
+case, pack, tenure, and source records. The review repository publishes each
+accepted review immutably and returns exact retries without duplicate records.
 
 The independent verifier reloads the source world, proves the selected history
 again, reconstructs the untreated and treated packs, checks their one declared
 difference, and evaluates every required review field against the private
-target. Direct, installed JSON, and local Harbor use these same task-owned
-contracts and repository.
+target. The verifier checks the direct affected set and required action codes
+exactly. It requires every decisive source reference but permits extra visible
+sources. Related records and recommendations remain part of the expert record
+without changing process work. Version 1 remains readable for prior evidence.
+Direct, installed JSON, and local Harbor use these same task-owned contracts
+and repository.

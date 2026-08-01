@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Self
+from typing import Any, Self
 
 from pydantic import field_validator, model_validator
 
@@ -15,7 +15,7 @@ from aec_bench.contracts.harness_kernel import (
     ContentAddressedModel,
     validate_sha256,
 )
-from aec_bench.contracts.validators import NonEmptyStr
+from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationVerificationReport,
 )
@@ -24,6 +24,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 )
 
 PUMP_STATION_REVIEW_PACK_POLICY_V1 = "pump-a-closeout-pack.v1"
+PUMP_STATION_REVIEW_PACK_POLICY_V2 = "pump-a-closeout-pack.v2"
 PUMP_STATION_REVIEW_ISSUE_VERSION_V1 = "wrong-component-evidence-citation.v1"
 PUMP_STATION_REVIEW_VISIBILITY_POLICY_V1 = "reviewer-pack-only.v1"
 
@@ -57,6 +58,13 @@ class PumpStationReviewDisposition(StrEnum):
     ACCEPT_CLOSEOUT = "accept_closeout"
     ACCEPT_WITH_FOLLOW_UP = "accept_with_follow_up"
     REJECT_CLOSEOUT = "reject_closeout"
+
+
+class PumpStationReviewActionCode(StrEnum):
+    """Required actions that the closeout process can route."""
+
+    CORRECT_FUNCTIONAL_CHECK_CITATION = "correct-functional-check-citation"
+    REISSUE_PUMP_A_CLOSEOUT = "reissue-pump-a-closeout"
 
 
 class PumpStationReviewRecordKind(StrEnum):
@@ -97,6 +105,18 @@ def _require_distinct_non_empty(values: tuple[str, ...], field_name: str) -> tup
     return values
 
 
+class PumpStationReviewRecordAssessment(FrozenStrictModel):
+    """Written assessment of one related but not directly affected record."""
+
+    record_id: NonEmptyStr
+    rationale: NonEmptyStr
+
+    @field_validator("record_id")
+    @classmethod
+    def validate_record_id(cls, value: str) -> str:
+        return _require_safe_id(value, "record_id")
+
+
 class PumpStationReviewPreparationRequest(ContentAddressedModel):
     """Exact host-private request to derive one review case."""
 
@@ -123,7 +143,10 @@ class PumpStationReviewPreparationRequest(ContentAddressedModel):
     def validate_frozen_scope(self) -> Self:
         if self.schema_version != "pump-station.review-preparation-request.v1":
             raise ValueError("unsupported review preparation schema version")
-        if self.pack_policy != PUMP_STATION_REVIEW_PACK_POLICY_V1:
+        if self.pack_policy not in {
+            PUMP_STATION_REVIEW_PACK_POLICY_V1,
+            PUMP_STATION_REVIEW_PACK_POLICY_V2,
+        }:
             raise ValueError("unsupported pack policy")
         if self.issue_version != PUMP_STATION_REVIEW_ISSUE_VERSION_V1:
             raise ValueError("unsupported issue version")
@@ -179,8 +202,8 @@ class PumpStationReviewIssueSpecification(ContentAddressedModel):
         return self
 
 
-class PumpStationReviewVerifierTarget(ContentAddressedModel):
-    """Host-private expected answer used by the independent verifier."""
+class PumpStationReviewVerifierTargetV1(ContentAddressedModel):
+    """Version 1 host-private exact answer retained for evidence replay."""
 
     schema_version: str = "pump-station.review-verifier-target.v1"
     finding: PumpStationReviewFinding
@@ -206,8 +229,35 @@ class PumpStationReviewVerifierTarget(ContentAddressedModel):
         return self
 
 
-class PumpStationReviewSubmission(ContentAddressedModel):
-    """One immutable source-bound reviewer response."""
+class PumpStationReviewVerifierTarget(ContentAddressedModel):
+    """Host-private version 2 answer for hybrid expert review."""
+
+    schema_version: str = "pump-station.review-verifier-target.v2"
+    finding: PumpStationReviewFinding
+    affected_record_ids: tuple[NonEmptyStr, ...]
+    unaffected_duty_ids: tuple[NonEmptyStr, ...]
+    missing_evidence_ids: tuple[NonEmptyStr, ...]
+    disposition: PumpStationReviewDisposition
+    required_follow_up: tuple[PumpStationReviewActionCode, ...]
+    required_source_record_ids: tuple[NonEmptyStr, ...]
+
+    @model_validator(mode="after")
+    def validate_target(self) -> Self:
+        if self.schema_version != "pump-station.review-verifier-target.v2":
+            raise ValueError("unsupported review verifier target version")
+        for field_name in (
+            "affected_record_ids",
+            "unaffected_duty_ids",
+            "missing_evidence_ids",
+            "required_follow_up",
+            "required_source_record_ids",
+        ):
+            _require_distinct_non_empty(tuple(getattr(self, field_name)), field_name)
+        return self
+
+
+class PumpStationReviewSubmissionV1(ContentAddressedModel):
+    """Version 1 reviewer response retained for evidence replay."""
 
     schema_version: str = "pump-station.review-submission.v1"
     review_id: NonEmptyStr
@@ -248,6 +298,82 @@ class PumpStationReviewSubmission(ContentAddressedModel):
         ):
             _require_distinct_non_empty(tuple(getattr(self, field_name)), field_name)
         return self
+
+
+class PumpStationReviewSubmission(ContentAddressedModel):
+    """Version 2 source-bound response with codes and written assessment."""
+
+    schema_version: str = "pump-station.review-submission.v2"
+    review_id: NonEmptyStr
+    case_id: NonEmptyStr
+    public_case_content_sha256: str
+    pack_content_sha256: str
+    reviewer_tenure_id: NonEmptyStr
+    finding: PumpStationReviewFinding
+    finding_summary: NonEmptyStr
+    affected_record_ids: tuple[NonEmptyStr, ...]
+    unaffected_duty_ids: tuple[NonEmptyStr, ...]
+    missing_evidence_ids: tuple[NonEmptyStr, ...]
+    disposition: PumpStationReviewDisposition
+    required_follow_up: tuple[PumpStationReviewActionCode, ...]
+    review_rationale: NonEmptyStr
+    related_record_assessments: tuple[PumpStationReviewRecordAssessment, ...] = ()
+    additional_recommendations: tuple[NonEmptyStr, ...] = ()
+    source_record_ids: tuple[NonEmptyStr, ...]
+
+    @field_validator("review_id", "case_id")
+    @classmethod
+    def validate_stable_ids(cls, value: str, info: object) -> str:
+        field_name = getattr(info, "field_name", "identifier")
+        return _require_safe_id(value, str(field_name))
+
+    @field_validator("public_case_content_sha256", "pack_content_sha256")
+    @classmethod
+    def validate_content_hash(cls, value: str) -> str:
+        return validate_sha256(value)
+
+    @model_validator(mode="after")
+    def validate_submission(self) -> Self:
+        if self.schema_version != "pump-station.review-submission.v2":
+            raise ValueError("unsupported review submission schema version")
+        for field_name in (
+            "affected_record_ids",
+            "unaffected_duty_ids",
+            "missing_evidence_ids",
+            "required_follow_up",
+            "source_record_ids",
+        ):
+            _require_distinct_non_empty(tuple(getattr(self, field_name)), field_name)
+        related_ids = tuple(item.record_id for item in self.related_record_assessments)
+        if len(related_ids) != len(set(related_ids)):
+            raise ValueError("related_record_assessments must use distinct records")
+        if set(related_ids).intersection(self.affected_record_ids):
+            raise ValueError("related record must not be directly affected")
+        if len(self.additional_recommendations) != len(set(self.additional_recommendations)):
+            raise ValueError("additional_recommendations must be distinct")
+        return self
+
+
+PumpStationReviewSubmissionAny = PumpStationReviewSubmissionV1 | PumpStationReviewSubmission
+PumpStationReviewVerifierTargetAny = PumpStationReviewVerifierTargetV1 | PumpStationReviewVerifierTarget
+
+
+def parse_pump_station_review_submission(payload: dict[str, Any]) -> PumpStationReviewSubmissionAny:
+    """Load a review submission through its explicit schema version."""
+    if payload.get("schema_version") == "pump-station.review-submission.v1":
+        return PumpStationReviewSubmissionV1.model_validate(payload)
+    if payload.get("schema_version") == "pump-station.review-submission.v2":
+        return PumpStationReviewSubmission.model_validate(payload)
+    raise ValueError("unsupported review submission schema version")
+
+
+def parse_pump_station_review_verifier_target(payload: dict[str, Any]) -> PumpStationReviewVerifierTargetAny:
+    """Load a private verifier target through its explicit schema version."""
+    if payload.get("schema_version") == "pump-station.review-verifier-target.v1":
+        return PumpStationReviewVerifierTargetV1.model_validate(payload)
+    if payload.get("schema_version") == "pump-station.review-verifier-target.v2":
+        return PumpStationReviewVerifierTarget.model_validate(payload)
+    raise ValueError("unsupported review verifier target version")
 
 
 class PumpStationReviewSubmissionReceipt(ContentAddressedModel):
@@ -330,7 +456,10 @@ class PumpStationReviewPack(ContentAddressedModel):
     def validate_pack(self) -> Self:
         if self.schema_version != "pump-station.review-pack.v1":
             raise ValueError("unsupported review pack version")
-        if self.pack_policy != PUMP_STATION_REVIEW_PACK_POLICY_V1:
+        if self.pack_policy not in {
+            PUMP_STATION_REVIEW_PACK_POLICY_V1,
+            PUMP_STATION_REVIEW_PACK_POLICY_V2,
+        }:
             raise ValueError("unsupported pack policy")
         if self.reviewed_component_id != "pump-a":
             raise ValueError("review pack must concern pump-a")
@@ -479,7 +608,7 @@ class PreparedPumpStationReviewCase:
     untreated_pack: PumpStationReviewPack
     public_case: PumpStationReviewPublicCase
     issue: PumpStationReviewIssueSpecification
-    verifier_target: PumpStationReviewVerifierTarget
+    verifier_target: PumpStationReviewVerifierTargetAny
     preparation_receipt: PumpStationReviewPreparationReceipt
     treatment_receipt: PumpStationReviewTreatmentReceipt
     manifest: PumpStationReviewCaseManifest
@@ -506,7 +635,9 @@ def derive_pump_station_review_case(
 __all__ = (
     "PUMP_STATION_REVIEW_ISSUE_VERSION_V1",
     "PUMP_STATION_REVIEW_PACK_POLICY_V1",
+    "PUMP_STATION_REVIEW_PACK_POLICY_V2",
     "PUMP_STATION_REVIEW_VISIBILITY_POLICY_V1",
+    "PumpStationReviewActionCode",
     "PumpStationReviewDisposition",
     "PumpStationReviewFinding",
     "PumpStationReviewIssueClass",
@@ -517,12 +648,19 @@ __all__ = (
     "PumpStationReviewPreparationRequest",
     "PumpStationReviewPublicCase",
     "PumpStationReviewCaseManifest",
+    "PumpStationReviewRecordAssessment",
     "PumpStationReviewRecordKind",
     "PumpStationReviewerRole",
     "PumpStationReviewSubmission",
+    "PumpStationReviewSubmissionAny",
+    "PumpStationReviewSubmissionV1",
     "PumpStationReviewSubmissionReceipt",
     "PumpStationReviewTreatmentReceipt",
     "PumpStationReviewVerifierTarget",
+    "PumpStationReviewVerifierTargetAny",
+    "PumpStationReviewVerifierTargetV1",
     "PreparedPumpStationReviewCase",
     "derive_pump_station_review_case",
+    "parse_pump_station_review_submission",
+    "parse_pump_station_review_verifier_target",
 )

@@ -68,7 +68,7 @@ nodes:
   - id: N006
     type: observation
     summary: The agent found the core issue, but extra visible-record concerns and hidden canonical follow-up codes prevented an exact pass.
-    children: []
+    children: [N007]
     also_depends_on: [N005]
     claims_touched: [C005]
     provenance: ai_executed
@@ -77,3 +77,30 @@ nodes:
       differing_fields: [affected_records, required_follow_up, source_references]
     domain:
       follow_up_question: typed_action_codes_and_set_semantics
+  - id: N007
+    type: decision
+    summary: Use controlled values for process-essential work and written language for expert assessment, with strict direct impact and a separate related-record section.
+    children: [N008]
+    also_depends_on: [N006]
+    claims_touched: [C003, C006]
+    provenance: user_revised
+    payload:
+      decision_date: 2026-08-02
+      decision_evidence: EV013
+      prior_agent_result_changed: false
+    domain:
+      provider_calls_authorized: 0
+      review_contract_version: 2
+  - id: N008
+    type: experiment
+    summary: Implement and validate the version 2 hybrid contract while retaining version 1 reload.
+    children: []
+    also_depends_on: [N007]
+    claims_touched: [C006]
+    provenance: ai_executed
+    payload:
+      experiment: E008
+      evidence: [EV014]
+      outcome: supported
+    domain:
+      provider_calls: 0

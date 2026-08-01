@@ -8,7 +8,9 @@ from pathlib import Path
 
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review import (
+    PUMP_STATION_REVIEW_PACK_POLICY_V1,
     PreparedPumpStationReviewCase,
+    PumpStationReviewActionCode,
     PumpStationReviewCaseManifest,
     PumpStationReviewDisposition,
     PumpStationReviewFinding,
@@ -21,6 +23,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintena
     PumpStationReviewRecordKind,
     PumpStationReviewTreatmentReceipt,
     PumpStationReviewVerifierTarget,
+    PumpStationReviewVerifierTargetAny,
+    PumpStationReviewVerifierTargetV1,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_kernel import (
     pump_station_model_from_package,
@@ -521,22 +525,41 @@ def derive_pump_station_review_case(
             restriction.restriction_id,
         ),
     )
-    verifier_target = PumpStationReviewVerifierTarget(
-        finding=PumpStationReviewFinding.WRONG_COMPONENT_EVIDENCE_CITATION,
-        affected_record_ids=(request.target_record_id,),
-        unaffected_duty_ids=(obligation.obligation_id,),
-        missing_evidence_ids=original_closeout.evidence_ids,
-        disposition=PumpStationReviewDisposition.REJECT_CLOSEOUT,
-        required_follow_up=(
-            "correct-functional-check-citation",
-            "reissue-pump-a-closeout",
-        ),
-        required_source_record_ids=(
-            request.target_record_id,
-            original_closeout.evidence_ids[0],
-            pump_b_checks.source_record_ids[0],
-        ),
-    )
+    verifier_target: PumpStationReviewVerifierTargetAny
+    if request.pack_policy == PUMP_STATION_REVIEW_PACK_POLICY_V1:
+        verifier_target = PumpStationReviewVerifierTargetV1(
+            finding=PumpStationReviewFinding.WRONG_COMPONENT_EVIDENCE_CITATION,
+            affected_record_ids=(request.target_record_id,),
+            unaffected_duty_ids=(obligation.obligation_id,),
+            missing_evidence_ids=original_closeout.evidence_ids,
+            disposition=PumpStationReviewDisposition.REJECT_CLOSEOUT,
+            required_follow_up=(
+                "correct-functional-check-citation",
+                "reissue-pump-a-closeout",
+            ),
+            required_source_record_ids=(
+                request.target_record_id,
+                original_closeout.evidence_ids[0],
+                pump_b_checks.source_record_ids[0],
+            ),
+        )
+    else:
+        verifier_target = PumpStationReviewVerifierTarget(
+            finding=PumpStationReviewFinding.WRONG_COMPONENT_EVIDENCE_CITATION,
+            affected_record_ids=(request.target_record_id,),
+            unaffected_duty_ids=(obligation.obligation_id,),
+            missing_evidence_ids=original_closeout.evidence_ids,
+            disposition=PumpStationReviewDisposition.REJECT_CLOSEOUT,
+            required_follow_up=(
+                PumpStationReviewActionCode.CORRECT_FUNCTIONAL_CHECK_CITATION,
+                PumpStationReviewActionCode.REISSUE_PUMP_A_CLOSEOUT,
+            ),
+            required_source_record_ids=(
+                request.target_record_id,
+                original_closeout.evidence_ids[0],
+                pump_b_checks.source_record_ids[0],
+            ),
+        )
     case_id = f"review-case-{request.content_sha256[:24]}"
     public_case = PumpStationReviewPublicCase(
         case_id=case_id,

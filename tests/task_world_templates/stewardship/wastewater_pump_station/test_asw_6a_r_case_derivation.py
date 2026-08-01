@@ -16,7 +16,7 @@ from aec_bench.contracts.world_session import (
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review import (
     PUMP_STATION_REVIEW_ISSUE_VERSION_V1,
-    PUMP_STATION_REVIEW_PACK_POLICY_V1,
+    PUMP_STATION_REVIEW_PACK_POLICY_V2,
     PUMP_STATION_REVIEW_VISIBILITY_POLICY_V1,
     PumpStationReviewDisposition,
     PumpStationReviewerRole,
@@ -45,7 +45,7 @@ def _request(snapshot: PumpStationStateSnapshotRef) -> PumpStationReviewPreparat
         asset_id="synthetic-wastewater-pump-station",
         reviewed_component_id="pump-a",
         maintenance_case_id="work-order-pump-a",
-        pack_policy=PUMP_STATION_REVIEW_PACK_POLICY_V1,
+        pack_policy=PUMP_STATION_REVIEW_PACK_POLICY_V2,
         issue_class=PumpStationReviewIssueClass.WRONG_COMPONENT_EVIDENCE_CITATION,
         issue_version=PUMP_STATION_REVIEW_ISSUE_VERSION_V1,
         target_record_id="closeout-record-pump-a",

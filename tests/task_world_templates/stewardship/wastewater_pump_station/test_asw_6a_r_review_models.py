@@ -11,15 +11,22 @@ from pydantic import ValidationError
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review import (
     PUMP_STATION_REVIEW_ISSUE_VERSION_V1,
     PUMP_STATION_REVIEW_PACK_POLICY_V1,
+    PUMP_STATION_REVIEW_PACK_POLICY_V2,
     PUMP_STATION_REVIEW_VISIBILITY_POLICY_V1,
+    PumpStationReviewActionCode,
     PumpStationReviewDisposition,
     PumpStationReviewerRole,
     PumpStationReviewFinding,
     PumpStationReviewIssueClass,
     PumpStationReviewIssueSpecification,
     PumpStationReviewPreparationRequest,
+    PumpStationReviewRecordAssessment,
     PumpStationReviewSubmission,
+    PumpStationReviewSubmissionV1,
     PumpStationReviewVerifierTarget,
+    PumpStationReviewVerifierTargetV1,
+    parse_pump_station_review_submission,
+    parse_pump_station_review_verifier_target,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
     PUMP_STATION_SNAPSHOT_VERSION_V3,
@@ -46,7 +53,7 @@ def _preparation_request(**changes: object) -> PumpStationReviewPreparationReque
         "asset_id": "synthetic-wastewater-pump-station",
         "reviewed_component_id": "pump-a",
         "maintenance_case_id": "work-order-pump-a",
-        "pack_policy": PUMP_STATION_REVIEW_PACK_POLICY_V1,
+        "pack_policy": PUMP_STATION_REVIEW_PACK_POLICY_V2,
         "issue_class": PumpStationReviewIssueClass.WRONG_COMPONENT_EVIDENCE_CITATION,
         "issue_version": PUMP_STATION_REVIEW_ISSUE_VERSION_V1,
         "target_record_id": "closeout-record-pump-a",
@@ -72,9 +79,17 @@ def _review_submission(**changes: object) -> PumpStationReviewSubmission:
         "missing_evidence_ids": ("evidence-0000-functional-checks-pump-a",),
         "disposition": PumpStationReviewDisposition.REJECT_CLOSEOUT,
         "required_follow_up": (
-            "correct-functional-check-citation",
-            "reissue-pump-a-closeout",
+            PumpStationReviewActionCode.CORRECT_FUNCTIONAL_CHECK_CITATION,
+            PumpStationReviewActionCode.REISSUE_PUMP_A_CLOSEOUT,
         ),
+        "review_rationale": ("Pump A cannot be closed out against functional checks for Pump B."),
+        "related_record_assessments": (
+            {
+                "record_id": "work-order-pump-a",
+                "rationale": "The work order is related, but its approved scope is not changed by the citation error.",
+            },
+        ),
+        "additional_recommendations": ("Confirm the corrected closeout during the next assurance review.",),
         "source_record_ids": (
             "closeout-record-pump-a",
             "evidence-0000-functional-checks-pump-a",
@@ -89,6 +104,7 @@ def test_frozen_review_values_and_preparation_binding_are_exact() -> None:
     request = _preparation_request()
 
     assert PUMP_STATION_REVIEW_PACK_POLICY_V1 == "pump-a-closeout-pack.v1"
+    assert PUMP_STATION_REVIEW_PACK_POLICY_V2 == "pump-a-closeout-pack.v2"
     assert PUMP_STATION_REVIEW_ISSUE_VERSION_V1 == "wrong-component-evidence-citation.v1"
     assert PUMP_STATION_REVIEW_VISIBILITY_POLICY_V1 == "reviewer-pack-only.v1"
     assert tuple(PumpStationReviewIssueClass) == (PumpStationReviewIssueClass.WRONG_COMPONENT_EVIDENCE_CITATION,)
@@ -135,6 +151,7 @@ def test_review_submission_requires_every_frozen_field_and_distinct_ids() -> Non
         "missing_evidence_ids",
         "disposition",
         "required_follow_up",
+        "review_rationale",
         "source_record_ids",
     ):
         incomplete = dict(payload)
@@ -149,6 +166,81 @@ def test_review_submission_requires_every_frozen_field_and_distinct_ids() -> Non
                 "closeout-record-pump-a",
             )
         )
+
+
+def test_hybrid_review_uses_public_action_codes_and_keeps_written_assessment() -> None:
+    submission = _review_submission()
+
+    assert submission.required_follow_up == (
+        PumpStationReviewActionCode.CORRECT_FUNCTIONAL_CHECK_CITATION,
+        PumpStationReviewActionCode.REISSUE_PUMP_A_CLOSEOUT,
+    )
+    assert submission.review_rationale.startswith("Pump A cannot be closed out")
+    assert submission.related_record_assessments == (
+        PumpStationReviewRecordAssessment(
+            record_id="work-order-pump-a",
+            rationale=("The work order is related, but its approved scope is not changed by the citation error."),
+        ),
+    )
+    assert submission.additional_recommendations == (
+        "Confirm the corrected closeout during the next assurance review.",
+    )
+
+    with pytest.raises(ValidationError, match="Input should be"):
+        _review_submission(required_follow_up=("write-a-good-report",))
+    with pytest.raises(ValidationError, match="related record must not be directly affected"):
+        _review_submission(
+            related_record_assessments=(
+                {
+                    "record_id": "closeout-record-pump-a",
+                    "rationale": "This record is already in the direct affected set.",
+                },
+            )
+        )
+
+
+def test_version_1_review_contract_still_reloads_without_migration() -> None:
+    submission = PumpStationReviewSubmissionV1(
+        review_id="review-v1",
+        case_id="case-review-v1",
+        public_case_content_sha256="a" * 64,
+        pack_content_sha256="b" * 64,
+        reviewer_tenure_id="tenure-review-v1",
+        finding=PumpStationReviewFinding.WRONG_COMPONENT_EVIDENCE_CITATION,
+        finding_summary="The Pump A closeout cites Pump B functional checks.",
+        affected_record_ids=("closeout-record-pump-a",),
+        unaffected_duty_ids=("obligation-0000-pump-a-verification",),
+        missing_evidence_ids=("evidence-0000-functional-checks-pump-a",),
+        disposition=PumpStationReviewDisposition.REJECT_CLOSEOUT,
+        required_follow_up=(
+            "correct-functional-check-citation",
+            "reissue-pump-a-closeout",
+        ),
+        source_record_ids=(
+            "closeout-record-pump-a",
+            "evidence-0000-functional-checks-pump-a",
+            "evidence-functional-checks-pump-b",
+        ),
+    )
+    target = PumpStationReviewVerifierTargetV1(
+        finding=PumpStationReviewFinding.WRONG_COMPONENT_EVIDENCE_CITATION,
+        affected_record_ids=("closeout-record-pump-a",),
+        unaffected_duty_ids=("obligation-0000-pump-a-verification",),
+        missing_evidence_ids=("evidence-0000-functional-checks-pump-a",),
+        disposition=PumpStationReviewDisposition.REJECT_CLOSEOUT,
+        required_follow_up=(
+            "correct-functional-check-citation",
+            "reissue-pump-a-closeout",
+        ),
+        required_source_record_ids=(
+            "closeout-record-pump-a",
+            "evidence-0000-functional-checks-pump-a",
+            "evidence-functional-checks-pump-b",
+        ),
+    )
+
+    assert parse_pump_station_review_submission(submission.model_dump(mode="json")) == submission
+    assert parse_pump_station_review_verifier_target(target.model_dump(mode="json")) == target
     with pytest.raises(ValidationError, match="source_record_ids must be distinct"):
         _review_submission(
             source_record_ids=(
@@ -180,8 +272,8 @@ def test_private_issue_and_verifier_target_do_not_fit_the_public_request() -> No
         missing_evidence_ids=("evidence-0000-functional-checks-pump-a",),
         disposition=PumpStationReviewDisposition.REJECT_CLOSEOUT,
         required_follow_up=(
-            "correct-functional-check-citation",
-            "reissue-pump-a-closeout",
+            PumpStationReviewActionCode.CORRECT_FUNCTIONAL_CHECK_CITATION,
+            PumpStationReviewActionCode.REISSUE_PUMP_A_CLOSEOUT,
         ),
         required_source_record_ids=(
             "closeout-record-pump-a",

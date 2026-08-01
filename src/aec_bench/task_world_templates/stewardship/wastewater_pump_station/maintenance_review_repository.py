@@ -31,9 +31,12 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintena
     PumpStationReviewPreparationRequest,
     PumpStationReviewPublicCase,
     PumpStationReviewSubmission,
+    PumpStationReviewSubmissionAny,
     PumpStationReviewSubmissionReceipt,
     PumpStationReviewTreatmentReceipt,
-    PumpStationReviewVerifierTarget,
+    PumpStationReviewVerifierTargetAny,
+    parse_pump_station_review_submission,
+    parse_pump_station_review_verifier_target,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationVerificationReport,
@@ -391,10 +394,8 @@ class PumpStationReviewCaseRepository:
         with self.locked():
             existing = self._review_pointer_if_present(submission.review_id)
             if existing is not None:
-                stored = self._load_model(
-                    "review-submissions",
+                stored = self._load_review_submission(
                     existing.review_content_sha256,
-                    PumpStationReviewSubmission,
                 )
                 if stored != submission:
                     _fail(
@@ -420,6 +421,9 @@ class PumpStationReviewCaseRepository:
                 visible_source_ids.update(record.evidence_ids)
             if not set(submission.affected_record_ids).issubset(record_ids):
                 raise ValueError("affected record is outside the visible pack")
+            related_record_ids = {item.record_id for item in submission.related_record_assessments}
+            if not related_record_ids.issubset(record_ids):
+                raise ValueError("related record is outside the visible pack")
             if not set(submission.unaffected_duty_ids).issubset(record_ids):
                 raise ValueError("unaffected duty is outside the visible pack")
             if not set(submission.missing_evidence_ids).issubset(visible_source_ids):
@@ -455,14 +459,10 @@ class PumpStationReviewCaseRepository:
             )
             return receipt
 
-    def load_review(self, review_id: str) -> PumpStationReviewSubmission:
+    def load_review(self, review_id: str) -> PumpStationReviewSubmissionAny:
         """Strictly reload one immutable reviewer submission."""
         pointer = self._load_review_pointer(review_id)
-        return self._load_model(
-            "review-submissions",
-            pointer.review_content_sha256,
-            PumpStationReviewSubmission,
-        )
+        return self._load_review_submission(pointer.review_content_sha256)
 
     def load_review_receipt(
         self,
@@ -522,10 +522,8 @@ class PumpStationReviewCaseRepository:
             manifest.issue_content_sha256,
             PumpStationReviewIssueSpecification,
         )
-        target = self._load_model(
-            "verifier-targets",
+        target = self._load_review_verifier_target(
             manifest.verifier_target_content_sha256,
-            PumpStationReviewVerifierTarget,
         )
         preparation_receipt = self._load_model(
             "preparation-receipts",
@@ -752,6 +750,32 @@ class PumpStationReviewCaseRepository:
             _fail(
                 "review-artifact-integrity",
                 f"{collection} content identity differs",
+            )
+        return value
+
+    def _load_review_submission(
+        self,
+        content_id: str,
+    ) -> PumpStationReviewSubmissionAny:
+        payload = self._read_json("review-submissions", content_id)
+        value = parse_pump_station_review_submission(payload)
+        if value.content_sha256 != content_id:
+            _fail(
+                "review-artifact-integrity",
+                "review-submissions content identity differs",
+            )
+        return value
+
+    def _load_review_verifier_target(
+        self,
+        content_id: str,
+    ) -> PumpStationReviewVerifierTargetAny:
+        payload = self._read_json("verifier-targets", content_id)
+        value = parse_pump_station_review_verifier_target(payload)
+        if value.content_sha256 != content_id:
+            _fail(
+                "review-artifact-integrity",
+                "verifier-targets content identity differs",
             )
         return value
 

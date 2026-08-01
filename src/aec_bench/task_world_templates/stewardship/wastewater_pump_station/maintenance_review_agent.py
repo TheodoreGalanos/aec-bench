@@ -88,8 +88,13 @@ def build_pump_station_review_adapter_request(
             "First call observe_closeout_pack. Check the records against one "
             "another. Do not infer hidden state or ask for private controls. "
             "Before you finish, call submit_closeout_review with the finding, "
-            "affected records, unaffected duties, missing evidence, disposition, "
-            "required follow-up, and source references. Do not invent an identifier."
+            "directly affected records, unaffected duties, missing evidence, "
+            "disposition, public action codes, review rationale, related-record "
+            "assessments, additional recommendations, and source references. Use "
+            "the affected-record field only for records that are directly incorrect. "
+            "Use related-record assessments for wider operating context. Use action "
+            "codes for required process work and natural language for the expert "
+            "review rationale. Do not invent an identifier."
         ),
         tools=list(tool_specs),
         configuration=configuration,

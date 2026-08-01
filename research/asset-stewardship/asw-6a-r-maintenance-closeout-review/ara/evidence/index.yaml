@@ -117,3 +117,24 @@ evidence:
     exact_values_required: true
     domain:
       provider_calls: 0
+  - id: EV013
+    kind: note
+    path: evidence/asw-6a-r-hybrid-contract-decision.md
+    description: Theo-approved boundary for public action codes, written expert assessment, strict direct impact, related records, required source coverage, and version 1 compatibility.
+    source: Theo decision on 2026-08-02
+    supports: []
+    produced_by: null
+    exact_values_required: true
+    domain:
+      stage: ASW-6A-R
+      review_contract_version: 2
+  - id: EV014
+    kind: command_output
+    path: evidence/logs/hybrid-contract-validation.txt
+    description: TDD, focused provider-free tests, final affected-path checks, Ruff, and MyPy evidence for the version 2 hybrid contract.
+    source: focused ASW-6A-R pytest, Ruff, and MyPy commands
+    supports: [C006]
+    produced_by: E008
+    exact_values_required: true
+    domain:
+      provider_calls: 0

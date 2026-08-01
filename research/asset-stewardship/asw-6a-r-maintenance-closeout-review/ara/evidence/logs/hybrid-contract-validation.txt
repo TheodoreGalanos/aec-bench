@@ -1,0 +1,29 @@
+ASW-6A-R hybrid contract validation
+
+TDD red phase:
+- Three selected contract tests failed during collection because the version 2
+  pack policy and hybrid review types did not exist.
+
+TDD first green phase:
+- Three selected unit, integration, and agent-contract tests passed.
+
+Final focused ASW-6A-R phase:
+- Eight ASW-6A-R test files completed with 24 collected tests and no cached
+  failures.
+- Coverage included models, derivation, reviewer session, durable repository,
+  host control, installed JSON, local Harbor, and provider-free agent contracts.
+
+Final affected-path phase after type-boundary corrections:
+- Version 1 contract reload completed with no cached failure.
+- Version 2 case derivation completed with no cached failure.
+- Local Harbor reference parity completed with no cached failure.
+
+Static checks:
+- Ruff format completed on the 11 changed code and test files.
+- Ruff check passed.
+- MyPy passed on 11 changed production and test files.
+
+Scope:
+- Provider calls: 0.
+- The 214-test pump-station folder was not repeated.
+- The full repository test suite was not run.
