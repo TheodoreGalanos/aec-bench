@@ -1,0 +1,35 @@
+{
+  "actor_view_id": "f9c9ed9178b58a9fb84ad8cac57679e72d40ca80f25ca27fbbd8e9afd989aa7e",
+  "agent_tenure_id": "source-tenure-674e049fddfa3cc1352c-2",
+  "execution_kind": "stewardship_world_session",
+  "information_set_id": "017cd849293ec6ce13361d3dfad1fdcdf842b38763c5bc12eb07a61ee0f0a088",
+  "open_mode": "resume",
+  "schema_version": "aecbench.world-session.v1",
+  "session_id": "source-session-674e049fddfa3cc1352c-2",
+  "snapshot": {
+    "commit_id": "8f860388d7346cb2ea4761b173cc6b00e8d488206024c5e6ce30d78346ac80b9",
+    "episode_id": "source-episode-674e049fddfa3cc1352c",
+    "run_id": "source-run-674e049fddfa3cc1352c",
+    "schema_version": "aecbench.stewardship-state-snapshot.v1",
+    "sequence": 19,
+    "state_id": "a33e7620497fd84f7a63371463c0e2793d9238cec27c2f831b2c2ad66d1202e0",
+    "world_branch_id": "source-branch-674e049fddfa3cc1352c"
+  },
+  "task_world_id": "wastewater-pump-station-stewardship.v1",
+  "tool_names": [
+    "observe_pump_station",
+    "continue_operation",
+    "transfer_duty",
+    "request_inspection",
+    "request_conditional_deferral",
+    "request_obstruction_clearance",
+    "request_provisional_return",
+    "request_provisional_closure",
+    "request_post_maintenance_verification",
+    "resume_process",
+    "cancel_process",
+    "request_dependency_waiver",
+    "request_condition_check",
+    "snapshot_pump_station"
+  ]
+}

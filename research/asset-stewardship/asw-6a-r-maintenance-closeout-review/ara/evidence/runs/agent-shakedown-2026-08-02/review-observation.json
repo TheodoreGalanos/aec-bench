@@ -1,0 +1,418 @@
+{
+  "content_sha256": "68df13da12d258c89ec8f26442a7b43a53d3a57d19929e2293665a37fea2dbd7",
+  "handover": null,
+  "public_case": {
+    "case_id": "review-case-edaa775e1b5be15f258bb231",
+    "case_name": "Pump A maintenance closeout review",
+    "content_sha256": "f542f9af56f4083a23f90fcbc2fbbef5a3a34513184c2b400feba65fcb65be01",
+    "pack": {
+      "asset_id": "synthetic-wastewater-pump-station",
+      "content_sha256": "6cdc13e947dfb52bdf1934400c0059852f4148b49a039e4accd36d64e34da16a",
+      "maintenance_case_id": "work-order-pump-a",
+      "pack_name": "Pump A maintenance closeout and return-to-service pack",
+      "pack_policy": "pump-a-closeout-pack.v1",
+      "records": [
+        {
+          "component_id": "pump-a",
+          "content_sha256": "bb10386be14d0f8c335dc73b8131c8280bb63ca701d8f1b05ab32cb53b8f29df",
+          "evidence_ids": [
+            "evidence-0000-functional-checks-pump-a",
+            "evidence-0014-verification"
+          ],
+          "kind": "condition_history",
+          "record_id": "condition-history-pump-a",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "evidence-0000-functional-checks-pump-a",
+            "evidence-0014-verification"
+          ],
+          "source_sequence": 19,
+          "statement": "Pump A has accepted post-maintenance checks and independent verification in the selected history.",
+          "status": "verified",
+          "title": "Pump A condition history"
+        },
+        {
+          "component_id": "pump-a",
+          "content_sha256": "6ade6e7cad8cb5577a968259bfe28f47262043d1625aa01be2f9c2151d8e6fd0",
+          "evidence_ids": [],
+          "kind": "defect_history",
+          "record_id": "defect-history-pump-a",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "work-order-pump-a",
+            "restriction-0000-pump-a-run-in"
+          ],
+          "source_sequence": 19,
+          "statement": "The selected history begins after Pump A maintenance scope completion and retains a run-in restriction.",
+          "status": "scope_completed",
+          "title": "Pump A defect and return history"
+        },
+        {
+          "component_id": "pump-a",
+          "content_sha256": "a2cf24cadc813ca28780b837d4b165fadabc444eb04d754863e1d6cfeeb826f4",
+          "evidence_ids": [],
+          "kind": "work_order",
+          "record_id": "work-order-pump-a",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "work-order-pump-a"
+          ],
+          "source_sequence": 0,
+          "statement": "The Pump A maintenance work order has completed its approved physical scope.",
+          "status": "in_progress",
+          "title": "Pump A work order"
+        },
+        {
+          "component_id": "pump-a",
+          "content_sha256": "f245ee11e8b942b4a663702f779c50afd71ac1e65fc30ca868a57ef2b7c21430",
+          "evidence_ids": [],
+          "kind": "approved_scope",
+          "record_id": "approved-scope-pump-a",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "work-order-pump-a"
+          ],
+          "source_sequence": 0,
+          "statement": "Complete maintenance, functional checks, controlled return, and post-maintenance verification for Pump A.",
+          "status": "approved",
+          "title": "Approved Pump A scope"
+        },
+        {
+          "component_id": "pump-a",
+          "content_sha256": "e5f44e3e4239d0a4fe53d7fc3869e53950f5957ebcb0984309baca2fe74179c3",
+          "evidence_ids": [],
+          "kind": "work_process",
+          "record_id": "process-0001-post_maintenance_verification",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "process-0001-post_maintenance_verification"
+          ],
+          "source_sequence": 19,
+          "statement": "The timed Pump A verification process completed after its declared interruption and resume.",
+          "status": "completed",
+          "title": "Pump A post-maintenance verification process"
+        },
+        {
+          "component_id": "pump-a",
+          "content_sha256": "61465da581b52bbaa7c6b0eacf6e991b498dcf44948d3d5d24bf3f71c19b661e",
+          "evidence_ids": [],
+          "kind": "dependency",
+          "record_id": "dependencies-pump-a-verification",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "dependency-0001-post_maintenance_verification-01",
+            "dependency-0001-post_maintenance_verification-02",
+            "dependency-0001-post_maintenance_verification-03",
+            "dependency-0001-post_maintenance_verification-04",
+            "dependency-0001-post_maintenance_verification-05"
+          ],
+          "source_sequence": 19,
+          "statement": "The process records physical, safety, resource, and administrative dependencies.",
+          "status": "satisfied",
+          "title": "Pump A verification dependencies"
+        },
+        {
+          "component_id": "site",
+          "content_sha256": "423f58e9f0319a4e57a4a46009431a0589ff6faae60087b978e5ad7782f6440d",
+          "evidence_ids": [],
+          "kind": "access_and_resources",
+          "record_id": "access-and-resources-selected-snapshot",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "transition-0001",
+            "transition-0002",
+            "transition-0003",
+            "transition-0004",
+            "transition-0005",
+            "transition-0006",
+            "transition-0007",
+            "transition-0008",
+            "transition-0009",
+            "transition-0010",
+            "transition-0011",
+            "transition-0012",
+            "transition-0013",
+            "transition-0014",
+            "transition-0015",
+            "transition-0016",
+            "transition-0017",
+            "transition-0018",
+            "transition-0019"
+          ],
+          "source_sequence": 19,
+          "statement": "The selected history records access withdrawal, restoration, and repair-kit use through scheduled work events.",
+          "status": "recorded",
+          "title": "Access and resource record"
+        },
+        {
+          "component_id": "pump-b",
+          "content_sha256": "c2d99e5907cf702ed1c565ca85a48aa82c9c61154ee3bf89f3c7480c6296bca8",
+          "evidence_ids": [
+            "evidence-0016-inspection"
+          ],
+          "kind": "inspection_evidence",
+          "record_id": "evidence-0016-inspection",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "evidence-0016-inspection"
+          ],
+          "source_sequence": 19,
+          "statement": "This concurrent Pump B inspection record is included to preserve component identity across the station pack.",
+          "status": "accepted",
+          "title": "Pump B inspection evidence"
+        },
+        {
+          "component_id": "pump-b",
+          "content_sha256": "3df44d12effd18c9fccb4f8a70bffcacb867ab9576b7f8a21f9225f83db5bd6d",
+          "evidence_ids": [],
+          "kind": "intervention_evidence",
+          "record_id": "intervention-record-pump-b",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "transition-0003",
+            "transition-0004",
+            "transition-0005",
+            "transition-0006",
+            "transition-0007",
+            "transition-0008",
+            "transition-0011",
+            "transition-0012",
+            "transition-0014",
+            "transition-0016",
+            "transition-0018",
+            "transition-0019"
+          ],
+          "source_sequence": 19,
+          "statement": "The selected history records the separate Pump B obstruction-clearance intervention.",
+          "status": "completed",
+          "title": "Pump B intervention receipt"
+        },
+        {
+          "component_id": "pump-a",
+          "content_sha256": "938595d0a7c976519c79f384ec7f65b50d8e8c2244397cd767b63d39d59feddd",
+          "evidence_ids": [
+            "evidence-0000-functional-checks-pump-a"
+          ],
+          "kind": "functional_check_evidence",
+          "record_id": "evidence-0000-functional-checks-pump-a",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "evidence-0000-functional-checks-pump-a"
+          ],
+          "source_sequence": 19,
+          "statement": "Pump A functional checks passed and were accepted for the Pump A post-maintenance baseline.",
+          "status": "accepted",
+          "title": "Pump A functional-check evidence"
+        },
+        {
+          "component_id": "pump-b",
+          "content_sha256": "f3caca9eb8fd722319db22f74a8e0be5b11aec0c6d3b377978b8b21e2439305f",
+          "evidence_ids": [
+            "evidence-0019-functional-checks"
+          ],
+          "kind": "functional_check_evidence",
+          "record_id": "evidence-0019-functional-checks",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "evidence-0019-functional-checks"
+          ],
+          "source_sequence": 19,
+          "statement": "Pump B functional checks passed after the separate Pump B intervention.",
+          "status": "accepted",
+          "title": "Pump B functional-check evidence"
+        },
+        {
+          "component_id": "pump-a",
+          "content_sha256": "782e6ffb6ccfcbc0ba810effea3624d2f04015cd8dab105b4fc69265c91150e2",
+          "evidence_ids": [
+            "evidence-0000-functional-checks-pump-a"
+          ],
+          "kind": "provisional_return",
+          "record_id": "provisional-return-record-pump-a",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "work-order-pump-a",
+            "restriction-0000-pump-a-run-in"
+          ],
+          "source_sequence": 19,
+          "statement": "Pump A was returned under the active run-in restriction after accepted functional checks.",
+          "status": "provisional",
+          "title": "Pump A provisional return"
+        },
+        {
+          "component_id": "pump-a",
+          "content_sha256": "b303d68bdf305c65f5d876c58e1d3ac93ab7bbc842a21752a076f5f2605d5f4a",
+          "evidence_ids": [
+            "evidence-0019-functional-checks"
+          ],
+          "kind": "closeout",
+          "record_id": "closeout-record-pump-a",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "work-order-pump-a",
+            "evidence-0014-verification"
+          ],
+          "source_sequence": 19,
+          "statement": "The closeout claims that Pump A scope and functional checks support the return-to-service decision.",
+          "status": "issued_for_review",
+          "title": "Pump A maintenance closeout"
+        },
+        {
+          "component_id": "pump-a",
+          "content_sha256": "ab021521ae626bfecb381926a09dfa0f5c2563de92750f10e1a46280b5e2f534",
+          "evidence_ids": [
+            "evidence-0014-verification"
+          ],
+          "kind": "post_maintenance_verification",
+          "record_id": "evidence-0014-verification",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "evidence-0014-verification"
+          ],
+          "source_sequence": 19,
+          "statement": "Independent Pump A post-maintenance verification passed.",
+          "status": "accepted",
+          "title": "Pump A post-maintenance verification evidence"
+        },
+        {
+          "component_id": "pump-a",
+          "content_sha256": "b1d8dec861d27a04ac39c32c9ea3cff315113d43e5274d8576655d2c8741b16b",
+          "evidence_ids": [],
+          "kind": "operating_restriction",
+          "record_id": "restriction-0000-pump-a-run-in",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "restriction-0000-pump-a-run-in"
+          ],
+          "source_sequence": 0,
+          "statement": "The Pump A post-maintenance run-in restriction remains active after verification.",
+          "status": "lifted",
+          "title": "Pump A run-in restriction"
+        },
+        {
+          "component_id": "pump-a",
+          "content_sha256": "05d3332369d24af65d3506344c0f01345149da3ed3b86942f7de1db30ea8cbaf",
+          "evidence_ids": [
+            "evidence-0014-verification"
+          ],
+          "kind": "duty_follow_up",
+          "record_id": "obligation-0000-pump-a-verification",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "obligation-0000-pump-a-verification"
+          ],
+          "source_sequence": 0,
+          "statement": "The Pump A post-maintenance verification duty was fulfilled by accepted independent evidence.",
+          "status": "fulfilled",
+          "title": "Pump A verification duty"
+        },
+        {
+          "component_id": "site",
+          "content_sha256": "8e47d85e929b4f16faa645fd4142eb5e8afe7ea1dfcb3e6a0cb85188fc73075f",
+          "evidence_ids": [],
+          "kind": "decision_lineage",
+          "record_id": "decision-lineage-selected-history",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "transition-0001",
+            "transition-0002",
+            "transition-0003",
+            "transition-0004",
+            "transition-0005",
+            "transition-0006",
+            "transition-0007",
+            "transition-0008",
+            "transition-0009",
+            "transition-0010",
+            "transition-0011",
+            "transition-0012",
+            "transition-0013",
+            "transition-0014",
+            "transition-0015",
+            "transition-0016",
+            "transition-0017",
+            "transition-0018",
+            "transition-0019"
+          ],
+          "source_sequence": 19,
+          "statement": "Each selected action has an immutable proposal, authority decision, receipt, and resulting state.",
+          "status": "verified",
+          "title": "Decision lineage"
+        },
+        {
+          "component_id": "site",
+          "content_sha256": "a68140bd44753bc00348bc2521affa27280484b7dc632bb0e5da1bf5bc1d1287",
+          "evidence_ids": [],
+          "kind": "handover_lineage",
+          "record_id": "handover-lineage-selected-history",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "source-tenure-674e049fddfa3cc1352c-1",
+            "source-tenure-674e049fddfa3cc1352c-2"
+          ],
+          "source_sequence": 19,
+          "statement": "The selected work history spans two bound actor tenures without changing the world branch.",
+          "status": "verified",
+          "title": "Reviewer-relevant handover lineage"
+        },
+        {
+          "component_id": "pump-a",
+          "content_sha256": "79c9d62961e877587fea2130a117ee6d99643c7e652ed16ebb708bd9729f9461",
+          "evidence_ids": [],
+          "kind": "fmeca_basis",
+          "record_id": "fmeca-basis-pump-a",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "642da8bdfad63d7324e0c5886f1f8f3866c9a6bd25f165fa2a5937d68e8a5e16"
+          ],
+          "source_sequence": 19,
+          "statement": "The applicable synthetic failure basis covers obstruction, clearance loss, capability review, and controlled return.",
+          "status": "applicable",
+          "title": "Pump A FMECA basis"
+        },
+        {
+          "component_id": "pump-a",
+          "content_sha256": "bf006243494071fb604475ff48970393124dd55b254f7f586013262f7ba72495",
+          "evidence_ids": [],
+          "kind": "maintenance_schedule_basis",
+          "record_id": "maintenance-schedule-basis-pump-a",
+          "schema_version": "pump-station.review-pack-record.v1",
+          "source_record_ids": [
+            "ab9a6b91afb0aff6229fafd10b6d748e873904cf8f43c3d195f56f57775209b8"
+          ],
+          "source_sequence": 19,
+          "statement": "The applicable synthetic schedule uses declared access, resource, process-duration, and verification timing rules.",
+          "status": "applicable",
+          "title": "Pump A maintenance schedule basis"
+        }
+      ],
+      "reviewed_component_id": "pump-a",
+      "schema_version": "pump-station.review-pack.v1",
+      "source_snapshot": {
+        "commit_id": "8f860388d7346cb2ea4761b173cc6b00e8d488206024c5e6ce30d78346ac80b9",
+        "episode_id": "source-episode-674e049fddfa3cc1352c",
+        "run_id": "source-run-674e049fddfa3cc1352c",
+        "sequence": 19,
+        "snapshot_version": "pump-station-state-snapshot.v3",
+        "state_id": "a33e7620497fd84f7a63371463c0e2793d9238cec27c2f831b2c2ad66d1202e0",
+        "world_branch_id": "source-branch-674e049fddfa3cc1352c"
+      }
+    },
+    "reviewer_role": "asset_engineer",
+    "schema_version": "pump-station.review-public-case.v1",
+    "source_snapshot": {
+      "commit_id": "8f860388d7346cb2ea4761b173cc6b00e8d488206024c5e6ce30d78346ac80b9",
+      "episode_id": "source-episode-674e049fddfa3cc1352c",
+      "run_id": "source-run-674e049fddfa3cc1352c",
+      "sequence": 19,
+      "snapshot_version": "pump-station-state-snapshot.v3",
+      "state_id": "a33e7620497fd84f7a63371463c0e2793d9238cec27c2f831b2c2ad66d1202e0",
+      "world_branch_id": "source-branch-674e049fddfa3cc1352c"
+    },
+    "source_verified": true
+  },
+  "reviewer_tenure_id": "review-tenure-674e049fddfa3cc1352c",
+  "schema_version": "pump-station.review-observation.v1",
+  "session_id": "review-session-674e049fddfa3cc1352c",
+  "submitted_review_ids": []
+}

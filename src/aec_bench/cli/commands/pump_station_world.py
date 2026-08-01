@@ -37,6 +37,10 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_s
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.local_interface import (
     PumpStationLocalInterfaceRequest,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review_local_interface import (
+    PumpStationReviewLocalInterfaceRequest,
+    execute_pump_station_review_local_request,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_control import (
     PumpStationWorldControl,
 )
@@ -150,6 +154,45 @@ def interface_command(
             payload = control.execute(request.control_request).model_dump(mode="json")
     emit(
         "task pump-station-world interface",
+        payload,
+        start_time=started,
+    )
+
+
+@app.command("review-interface")
+def review_interface_command(
+    source_run_dir: Path = typer.Option(
+        ...,
+        "--source-run-dir",
+        help="Immutable source pump-station run directory",
+    ),
+    review_dir: Path = typer.Option(
+        ...,
+        "--review-dir",
+        help="Durable derived review-case directory",
+    ),
+    request_path: Path = typer.Option(
+        ...,
+        "--request-path",
+        help="Strict review JSON interface request",
+    ),
+    host_authority_id: str | None = typer.Option(
+        None,
+        "--host-authority-id",
+        help="Host-only review-control authority identity",
+    ),
+) -> None:
+    """Execute one machine-readable review or host-control request."""
+    started = time.monotonic()
+    request = PumpStationReviewLocalInterfaceRequest.model_validate_json(request_path.read_text(encoding="utf-8"))
+    payload = execute_pump_station_review_local_request(
+        source_run_root=source_run_dir,
+        review_repository_root=review_dir,
+        request=request,
+        host_authority_id=host_authority_id,
+    )
+    emit(
+        "task pump-station-world review-interface",
         payload,
         start_time=started,
     )

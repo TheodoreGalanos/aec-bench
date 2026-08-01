@@ -1,0 +1,119 @@
+evidence:
+  - id: EV001
+    kind: note
+    path: evidence/asw-6a-r-rule-freeze.md
+    description: Theo-approved ASW-6A-R review object, planted issue, privacy boundary, execution paths, and agent-evidence requirement.
+    source: Theo decision on 2026-08-01
+    supports: []
+    produced_by: null
+    exact_values_required: true
+    domain:
+      stage: ASW-6A-R
+  - id: EV002
+    kind: command_output
+    path: evidence/logs/focused-asw-6a-r.txt
+    description: All 22 ASW-6A-R unit, integration, installed-JSON, recovery, handover, and local-Harbor tests passed without a provider call.
+    source: focused ASW-6A-R pytest command
+    supports: [C001, C002, C003, C004]
+    produced_by: E001
+    exact_values_required: true
+    domain:
+      additional_experiments: [E002, E003, E004, E005, E006]
+  - id: EV003
+    kind: command_output
+    path: evidence/logs/touched-regression.txt
+    description: All 17 related world-session and Harbor regression tests passed.
+    source: focused touched-regression pytest command
+    supports: [C001, C004]
+    produced_by: E006
+    exact_values_required: true
+    domain: {}
+  - id: EV004
+    kind: command_output
+    path: evidence/logs/static-quality.txt
+    description: Ruff, changed-file formatting, production MyPy, entry-point MyPy, ASW-6A-R test MyPy, and the whitespace check passed.
+    source: project Ruff, MyPy, and git diff checks
+    supports: [C001, C002, C003, C004]
+    produced_by: E001
+    exact_values_required: true
+    domain:
+      additional_experiments: [E002, E003, E004, E005, E006]
+  - id: EV005
+    kind: note
+    path: evidence/theo-provider-approval.md
+    description: Theo's exact approval for the one ASW-6A-R Bedrock agent run.
+    source: Theo decision on 2026-08-02
+    supports: []
+    produced_by: null
+    exact_values_required: true
+    domain:
+      experiment: E007
+  - id: EV006
+    kind: dataset
+    path: evidence/agent-authority.json
+    description: Content-addressed provider, model, route, adapter, limit, price, and spend authority for E007.
+    source: EV005
+    supports: []
+    produced_by: null
+    exact_values_required: true
+    domain:
+      authority_content_sha256: f8cacee272560ecff04143372ec9b9da64d10aa8486248c1dc476bdfd1009a4e
+  - id: EV007
+    kind: command_output
+    path: evidence/runs/agent-shakedown-2026-08-02/agent-result.json
+    description: Authority evaluation, provider calls, token counts, analysis-token reporting, cost, and rejected review result for the one real agent run.
+    source: ASW-6A-R authority-bound model runner
+    supports: [C005]
+    produced_by: E007
+    exact_values_required: true
+    domain:
+      outcome: rejected
+  - id: EV008
+    kind: command_output
+    path: evidence/runs/agent-shakedown-2026-08-02/review-verification-report.json
+    description: Independently recomputed exact review report showing three matching and three differing content groups plus the unaffected duty match.
+    source: ASW-6A-R private review verifier
+    supports: [C005]
+    produced_by: E007
+    exact_values_required: true
+    domain:
+      valid: false
+  - id: EV009
+    kind: note
+    path: evidence/agent-shakedown-result.md
+    description: Concise result, usage, mismatch, and interpretation record for the one approved real-agent run.
+    source: EV006, EV007, and EV008
+    supports: [C005]
+    produced_by: E007
+    exact_values_required: true
+    domain:
+      provider_retries: 0
+  - id: EV010
+    kind: log
+    path: evidence/runs/agent-shakedown-2026-08-02/trajectory.jsonl
+    description: Closed-tool trajectory with one observation call, one review-submission call, and the model's final summary.
+    source: ASW-6A-R tool-loop adapter
+    supports: [C005]
+    produced_by: E007
+    exact_values_required: true
+    domain:
+      tool_calls: 2
+  - id: EV011
+    kind: dataset
+    path: evidence/runs/agent-shakedown-2026-08-02/artifact-inventory.json
+    description: Immutable file hashes binding the authority, source world, case, review, trajectory, conversation, and result.
+    source: ASW-6A-R model-run evidence writer
+    supports: [C005]
+    produced_by: E007
+    exact_values_required: true
+    domain: {}
+  - id: EV012
+    kind: command_output
+    path: evidence/logs/cumulative-pump-station.txt
+    description: The complete wastewater pump-station folder passed with 214 tests after the real-agent run.
+    source: uv run pytest -q tests/task_world_templates/stewardship/wastewater_pump_station
+    supports: [C001, C002, C003, C004]
+    produced_by: E006
+    exact_values_required: true
+    domain:
+      provider_calls: 0

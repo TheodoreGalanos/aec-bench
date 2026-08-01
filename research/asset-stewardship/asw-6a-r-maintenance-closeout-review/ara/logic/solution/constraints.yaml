@@ -1,0 +1,17 @@
+constraints:
+  - id: K001
+    statement: Derive the review case from one committed and independently verified source snapshot.
+  - id: K002
+    statement: Keep the source world state, commit chain, physical state, and current pointer unchanged.
+  - id: K003
+    statement: Permit only the version 1 wrong-component evidence citation treatment for this stage.
+  - id: K004
+    statement: Do not expose the issue class, expected impact map, unaffected control set, verifier target, latent state, or future events to the reviewer.
+  - id: K005
+    statement: Require every review field and bind every source reference to the visible pack.
+  - id: K006
+    statement: Do not make a model-provider call before exact provider authority and limits are approved.
+  - id: K007
+    statement: Do not add an external archive, temporal retrieval, branch fan-out, or physical treatment.
+  - id: K008
+    statement: Do not run the full repository test suite for this stage.

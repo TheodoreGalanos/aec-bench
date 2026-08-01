@@ -1,0 +1,10 @@
+{
+  "case_id": "review-case-edaa775e1b5be15f258bb231",
+  "content_sha256": "13f171ef43d2cde663e8ceee02d159088dfdd4c691fd3af915cc091f6e66ad45",
+  "public_case_content_sha256": "f542f9af56f4083a23f90fcbc2fbbef5a3a34513184c2b400feba65fcb65be01",
+  "review_content_sha256": "e1e471e8c8af2f2c178a488134eca7742fc9efb25bd52a270ae643d5a94f566f",
+  "review_id": "review-case-edaa775e1b5be15f258bb231",
+  "reviewer_tenure_id": "review-tenure-674e049fddfa3cc1352c",
+  "schema_version": "pump-station.review-submission-receipt.v1",
+  "status": "accepted"
+}

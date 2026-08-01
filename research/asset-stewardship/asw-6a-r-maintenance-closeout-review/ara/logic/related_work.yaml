@@ -1,0 +1,13 @@
+related_work:
+  - id: RW001
+    title: ASW-5 rich work processes
+    relation: Supplies the fixed overlapping Pump A and Pump B maintenance history and its work evidence.
+    source: research/asset-stewardship/asw-5-rich-work-processes/ara/PAPER.md
+  - id: RW002
+    title: ASW-5I actor and control interfaces
+    relation: Supplies the separated actor and host-control pattern used by the review task.
+    source: research/asset-stewardship/asw-5i-actor-control-interfaces/ara/PAPER.md
+  - id: RW003
+    title: ASW-6A local evidence health
+    relation: Supplies explicit evidence time, quality, provenance, scope, baseline, regime, and contradiction semantics.
+    source: research/asset-stewardship/asw-6a-local-evidence-health/ara/PAPER.md

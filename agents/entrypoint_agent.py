@@ -61,6 +61,8 @@ from aec_bench.task_world_templates.harbor_export import (
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
     PUMP_STATION_HARBOR_EXECUTION_KIND,
+    PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE,
+    PUMP_STATION_REVIEW_HARBOR_EXECUTION_KIND,
     PumpStationHarborBridge,
     load_pump_station_harbor_bridge,
 )
@@ -72,6 +74,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_s
     run_pump_station_model_session,
     run_pump_station_reference_session,
     run_pump_station_rich_work_reference_session,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review_harbor import (
+    run_pump_station_review_reference_session,
 )
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -660,18 +665,30 @@ class EntrypointAgent(BaseAgent):
             }
 
     def _validate_world_session_configuration(self) -> None:
-        if self._params.get("execution_kind") != PUMP_STATION_HARBOR_EXECUTION_KIND:
+        session = self._params.get("world_session")
+        if not isinstance(session, dict):
+            raise ValueError("pump-station world session bridge configuration differs")
+        bridge_mode = session.get("bridge_mode")
+        maintenance_review = bridge_mode == PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE
+        expected_execution_kind = (
+            PUMP_STATION_REVIEW_HARBOR_EXECUTION_KIND if maintenance_review else PUMP_STATION_HARBOR_EXECUTION_KIND
+        )
+        if self._params.get("execution_kind") != expected_execution_kind:
             raise ValueError("pump-station world session requires its exact execution kind")
+        if bridge_mode not in {
+            PUMP_STATION_HARBOR_BRIDGE_MODE,
+            PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE,
+        }:
+            raise ValueError("pump-station world session bridge configuration differs")
         if self._params.get("adapter") != "tool_loop":
             raise ValueError("pump-station world session requires the tool_loop adapter")
         if self._params.get("extra_env") not in (None, {}):
             raise ValueError("pump-station world session does not accept environment variables")
-        session = self._params.get("world_session")
-        if not isinstance(session, dict):
-            raise ValueError("pump-station world session bridge configuration differs")
         controller = session.get("controller")
         reference_controller = self.model_name == PUMP_STATION_REFERENCE_CONTROLLER_ID
-        expected_session = {"bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE}
+        if maintenance_review and not reference_controller:
+            raise ValueError("pump-station review model runs require the separately approved direct host runner")
+        expected_session = {"bridge_mode": bridge_mode}
         if not reference_controller:
             expected_session["controller"] = PUMP_STATION_MODEL_CONTROLLER_MODE
         if session != expected_session:
@@ -717,6 +734,11 @@ class EntrypointAgent(BaseAgent):
         current_bridge = load_pump_station_harbor_bridge(Path(environment.environment_dir))
         if current_bridge != configured_bridge:
             raise ValueError("pump-station Harbor task changed after agent setup")
+        if (
+            self._params.get("execution_kind") != current_bridge.execution_kind
+            or self._params["world_session"].get("bridge_mode") != current_bridge.bridge_mode
+        ):
+            raise ValueError("pump-station Harbor bridge identity changed after setup")
         session_identity = str(getattr(environment, "session_id", "")).strip()
         if not session_identity:
             raise RuntimeError("pump-station Harbor environment has no session identity")
@@ -726,29 +748,42 @@ class EntrypointAgent(BaseAgent):
             run_dir = staging / "world-session"
             reference_controller = self.model_name == PUMP_STATION_REFERENCE_CONTROLLER_ID
             if reference_controller:
-                reference_runner = (
-                    run_pump_station_evidence_health_reference_session
-                    if current_bridge.evidence_health
-                    else run_pump_station_rich_work_reference_session
-                    if current_bridge.rich_work_processes
-                    else run_pump_station_reference_session
-                )
-                reference_session = await asyncio.to_thread(
-                    reference_runner,
-                    bridge=current_bridge,
-                    output_dir=run_dir,
-                    session_identity=session_identity,
-                )
+                if current_bridge.maintenance_review:
+                    review_session = await asyncio.to_thread(
+                        run_pump_station_review_reference_session,
+                        bridge=current_bridge,
+                        output_dir=run_dir,
+                        session_identity=session_identity,
+                    )
+                    world_session_id = review_session.observation.session_id
+                else:
+                    reference_runner = (
+                        run_pump_station_evidence_health_reference_session
+                        if current_bridge.evidence_health
+                        else run_pump_station_rich_work_reference_session
+                        if current_bridge.rich_work_processes
+                        else run_pump_station_reference_session
+                    )
+                    world_session = await asyncio.to_thread(
+                        reference_runner,
+                        bridge=current_bridge,
+                        output_dir=run_dir,
+                        session_identity=session_identity,
+                    )
+                    world_session_id = world_session.request.session_id
                 output_path = staging / "output.md"
                 output_path.write_text(
-                    "The deterministic wastewater pump-station session completed.\n",
+                    (
+                        "The deterministic wastewater pump-station closeout review completed.\n"
+                        if current_bridge.maintenance_review
+                        else "The deterministic wastewater pump-station session completed.\n"
+                    ),
                     encoding="utf-8",
                 )
                 input_tokens = 0
                 output_tokens = 0
                 resolved_model = PUMP_STATION_REFERENCE_CONTROLLER_ID
                 session_status = "completed"
-                world_session_id = reference_session.request.session_id
             else:
                 model = str(self.model_name or "")
                 provider_environment = _host_model_provider_environment(
@@ -768,13 +803,13 @@ class EntrypointAgent(BaseAgent):
                 except Exception as exc:
                     context.metadata = {
                         "adapter_name": "tool_loop",
-                        "bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE,
+                        "bridge_mode": current_bridge.bridge_mode,
                         "bridge_manifest_sha256": (current_bridge.export_manifest_sha256),
                         "error": _redact_environment_values(
                             str(exc),
                             provider_environment,
                         ),
-                        "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
+                        "execution_kind": current_bridge.execution_kind,
                         "model": model,
                         "resolved_model": model,
                         "reward_owner": "harbor_verifier",
@@ -816,9 +851,9 @@ class EntrypointAgent(BaseAgent):
         context.n_output_tokens = output_tokens
         context.metadata = {
             "adapter_name": "tool_loop",
-            "bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE,
+            "bridge_mode": current_bridge.bridge_mode,
             "bridge_manifest_sha256": (current_bridge.export_manifest_sha256),
-            "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
+            "execution_kind": current_bridge.execution_kind,
             "model": resolved_model,
             "resolved_model": resolved_model,
             "reward_owner": "harbor_verifier",

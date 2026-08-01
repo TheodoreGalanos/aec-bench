@@ -1,0 +1,20 @@
+{
+  "agent_tenure_id": "source-tenure-674e049fddfa3cc1352c-2",
+  "episode_id": "source-episode-674e049fddfa3cc1352c",
+  "execution_kind": "stewardship_world_session",
+  "open_mode": "resume",
+  "run_id": "source-run-674e049fddfa3cc1352c",
+  "schema_version": "aecbench.world-session.v1",
+  "session_id": "source-session-674e049fddfa3cc1352c-2",
+  "start_snapshot": {
+    "commit_id": "2573c6cec9997004b8af2c8d843e456925452342d1d6a1b76640940f315b25c7",
+    "episode_id": "source-episode-674e049fddfa3cc1352c",
+    "run_id": "source-run-674e049fddfa3cc1352c",
+    "schema_version": "aecbench.stewardship-state-snapshot.v1",
+    "sequence": 11,
+    "state_id": "877d6743655444d0fc8f7cb1960a09b72fa126326adad306dd77455bda3dff50",
+    "world_branch_id": "source-branch-674e049fddfa3cc1352c"
+  },
+  "task_world_id": "wastewater-pump-station-stewardship.v1",
+  "world_branch_id": "source-branch-674e049fddfa3cc1352c"
+}
