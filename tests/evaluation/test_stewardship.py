@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
 from aec_bench.evaluation.stewardship import (
+    _live_process_ids,
     evaluate_pump_station_stewardship_run,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station import (
@@ -17,13 +19,16 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station import (
     PumpStationContinuityCarrier,
     PumpStationCurrentContext,
     PumpStationEnvironment,
+    PumpStationInformationSet,
     PumpStationObservationHistory,
+    PumpStationProcessStatus,
     PumpStationProjectionContext,
     PumpStationWorldRun,
     PumpStationWorldRunRepository,
     RequestConditionalDeferral,
     advance_pump_station,
     bind_information_set,
+    create_rich_work_reference_state,
     create_stewardship_state,
     initial_pump_station_state,
     load_reference_package,
@@ -39,6 +44,40 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_s
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_handover_liability_includes_every_live_process_status() -> None:
+    model = pump_station_model_from_package(load_reference_package())
+    state = create_rich_work_reference_state(model)
+    process = state.processes[0]
+    statuses = (
+        PumpStationProcessStatus.IN_PROGRESS,
+        PumpStationProcessStatus.BLOCKED,
+        PumpStationProcessStatus.ACTIVE,
+        PumpStationProcessStatus.SUSPENDED,
+        PumpStationProcessStatus.COMPLETED,
+        PumpStationProcessStatus.FAILED,
+        PumpStationProcessStatus.INTERRUPTED,
+        PumpStationProcessStatus.CANCELLED,
+    )
+    state = replace(
+        state,
+        processes=tuple(
+            replace(
+                process,
+                process_id=f"process-evaluation-{status.value}",
+                status=status,
+            )
+            for status in statuses
+        ),
+    )
+
+    assert _live_process_ids(state) == {
+        "process-evaluation-in_progress",
+        "process-evaluation-blocked",
+        "process-evaluation-active",
+        "process-evaluation-suspended",
+    }
 
 
 def _evaluation_run(
@@ -86,7 +125,7 @@ def _bind_deferral(
     *,
     proposal_id: str,
     pump_id: str,
-):
+) -> tuple[RequestConditionalDeferral, PumpStationInformationSet]:
     state = run.state
     view = project_actor_view(
         run.model,

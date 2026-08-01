@@ -25,7 +25,11 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_e
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationVerificationReport,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
+    create_structured_handover,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
+    PUMP_STATION_RICH_WORK_TOOL_NAMES,
     PUMP_STATION_TASK_WORLD_ID,
     PUMP_STATION_TOOL_NAMES,
     PumpStationWorldSession,
@@ -130,6 +134,242 @@ def run_pump_station_reference_session(
     )
 
 
+def run_pump_station_rich_work_reference_session(
+    *,
+    bridge: PumpStationHarborBridge,
+    output_dir: Path,
+    session_identity: str,
+) -> CompletedPumpStationReferenceSession:
+    """Execute the rich overlapping-work trajectory without a model provider."""
+    if not bridge.rich_work_processes:
+        raise ValueError("pump-station Harbor bridge does not enable rich work")
+    identity = session_identity.strip()
+    if not identity:
+        raise ValueError("pump-station Harbor session identity is required")
+    destination = Path(output_dir)
+    if destination.exists():
+        raise FileExistsError(f"world-session output already exists: {destination}")
+    destination.mkdir(parents=True)
+    repository_root = destination / "world-run"
+    start_request = _world_session_request(identity)
+    factory = PumpStationWorldSessionFactory(
+        repository_root,
+        package_root=bridge.package_root,
+        rich_work_processes=True,
+    )
+    first = cast(
+        PumpStationWorldSession,
+        open_world_session(start_request, factory),
+    )
+    start_snapshot = first.result.snapshot
+    suspended_snapshot = _execute_rich_work_until_handover(first)
+    resume_request = WorldSessionRequest(
+        execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
+        open_mode=WorldSessionOpenMode.RESUME,
+        session_id=f"session.{identity}.handover",
+        task_world_id=PUMP_STATION_TASK_WORLD_ID,
+        agent_tenure_id=f"tenure.{identity}.handover",
+        run_id=start_request.run_id,
+        episode_id=start_request.episode_id,
+        world_branch_id=start_request.world_branch_id,
+        start_snapshot=suspended_snapshot,
+    )
+    second = cast(
+        PumpStationWorldSession,
+        open_world_session(resume_request, factory),
+    )
+    second.install_structured_handover(
+        create_structured_handover(
+            second.actor_view,
+            from_tenure_id=start_request.agent_tenure_id,
+            history=first.actor_history,
+            maximum_history_entries=32,
+        )
+    )
+    _execute_rich_work_after_handover(second)
+    verification = second.verify()
+    if not verification.valid:
+        raise ValueError("rich-work pump-station reference session did not verify")
+    _write_session_evidence(
+        destination=destination,
+        request=resume_request,
+        result=second.result,
+        verification=verification,
+    )
+    _write_json(
+        destination / "artifact-inventory.json",
+        _artifact_inventory(
+            bridge=bridge,
+            output_dir=destination,
+            start_snapshot=start_snapshot.model_dump(mode="json"),
+            end_snapshot=second.result.snapshot.model_dump(mode="json"),
+            tool_names=PUMP_STATION_RICH_WORK_TOOL_NAMES,
+        ),
+    )
+    return CompletedPumpStationReferenceSession(
+        request=resume_request,
+        result=second.result,
+        verification=verification,
+        output_dir=destination,
+    )
+
+
+def _rich_state(session: PumpStationWorldSession) -> dict[str, Any]:
+    payload = json.loads(session.observe_pump_station())
+    return cast(dict[str, Any], payload["current_state"])
+
+
+def _rich_process(
+    state: dict[str, Any],
+    kind: str,
+    pump_id: str,
+) -> dict[str, Any]:
+    processes = cast(list[dict[str, Any]], state["processes"])
+    return next(item for item in processes if item["kind"] == kind and item["pump_id"] == pump_id)
+
+
+def _continue_rich_until(
+    session: PumpStationWorldSession,
+    *,
+    prefix: str,
+    predicate: Any,
+) -> dict[str, Any]:
+    for index in range(1, 16):
+        session.continue_operation(
+            f"{prefix}-{index:02d}",
+            "Advance to the next declared event.",
+        )
+        state = _rich_state(session)
+        if predicate(state):
+            return state
+    raise ValueError("rich-work reference event did not arrive")
+
+
+def _execute_rich_work_until_handover(
+    session: PumpStationWorldSession,
+) -> Any:
+    reason = "Execute the deterministic rich-work stewardship journey."
+    verification = json.loads(
+        session.request_post_maintenance_verification(
+            "proposal-verification",
+            reason,
+            "pump-a",
+        )
+    )["view"]["current_state"]
+    verification_process = _rich_process(
+        verification,
+        "post_maintenance_verification",
+        "pump-a",
+    )
+    session.request_inspection("proposal-inspection", reason, "pump-b")
+    session.transfer_duty("proposal-transfer", reason)
+    ready = _continue_rich_until(
+        session,
+        prefix="proposal-ready",
+        predicate=lambda state: state["resources"]["repair_kit_available"],
+    )
+    dependency = next(
+        item
+        for item in cast(list[dict[str, Any]], ready["dependencies"])
+        if item["process_id"] == verification_process["process_id"] and item["kind"] == "administrative_closeout"
+    )
+    evidence = next(
+        item
+        for item in cast(list[dict[str, Any]], ready["evidence"])
+        if item["kind"] == "functional_checks" and item["pump_id"] == "pump-a"
+    )
+    session.request_dependency_waiver(
+        "proposal-waiver",
+        reason,
+        str(verification_process["process_id"]),
+        str(dependency["dependency_id"]),
+        str(evidence["evidence_id"]),
+    )
+    session.resume_process(
+        "proposal-resume-verification",
+        reason,
+        str(verification_process["process_id"]),
+    )
+    _continue_rich_until(
+        session,
+        prefix="proposal-withdraw",
+        predicate=lambda state: _rich_process(
+            state,
+            "post_maintenance_verification",
+            "pump-a",
+        )["status"]
+        == "suspended",
+    )
+    return session.result.snapshot
+
+
+def _execute_rich_work_after_handover(
+    session: PumpStationWorldSession,
+) -> None:
+    reason = "Continue the deterministic rich-work stewardship journey."
+    restored = _continue_rich_until(
+        session,
+        prefix="proposal-restore",
+        predicate=lambda state: state["resources"]["access_window_seconds"] > 0,
+    )
+    verification = _rich_process(
+        restored,
+        "post_maintenance_verification",
+        "pump-a",
+    )
+    session.resume_process(
+        "proposal-resume-after-handover",
+        reason,
+        str(verification["process_id"]),
+    )
+    _continue_rich_until(
+        session,
+        prefix="proposal-complete-verification",
+        predicate=lambda state: not any(
+            item["kind"] == "post_maintenance_verification" and item["pump_id"] == "pump-a"
+            for item in cast(list[dict[str, Any]], state["processes"])
+        ),
+    )
+    inspection = _rich_process(_rich_state(session), "inspection", "pump-b")
+    session.resume_process(
+        "proposal-resume-inspection",
+        reason,
+        str(inspection["process_id"]),
+    )
+    inspected = _continue_rich_until(
+        session,
+        prefix="proposal-complete-inspection",
+        predicate=lambda state: any(
+            item["kind"] == "inspection" and item["pump_id"] == "pump-b"
+            for item in cast(list[dict[str, Any]], state["evidence"])
+        ),
+    )
+    inspection_evidence = next(
+        item
+        for item in cast(list[dict[str, Any]], inspected["evidence"])
+        if item["kind"] == "inspection" and item["pump_id"] == "pump-b"
+    )
+    session.request_obstruction_clearance(
+        "proposal-clearance",
+        reason,
+        "pump-b",
+        str(inspection_evidence["evidence_id"]),
+    )
+    _continue_rich_until(
+        session,
+        prefix="proposal-complete-clearance",
+        predicate=lambda state: not state["resources"]["repair_kit_available"],
+    )
+    _continue_rich_until(
+        session,
+        prefix="proposal-complete-checks",
+        predicate=lambda state: any(
+            item["kind"] == "functional_checks" and item["pump_id"] == "pump-b"
+            for item in cast(list[dict[str, Any]], state["evidence"])
+        ),
+    )
+
+
 def run_pump_station_model_session(
     *,
     bridge: PumpStationHarborBridge,
@@ -173,8 +413,12 @@ def run_pump_station_model_session(
         )
         adapter_result = adapter.execute(
             AdapterRequest(
-                instruction=_model_instruction(),
-                system_prompt=_model_system_prompt(),
+                instruction=_model_instruction(
+                    rich_work_processes=bridge.rich_work_processes,
+                ),
+                system_prompt=_model_system_prompt(
+                    rich_work_processes=bridge.rich_work_processes,
+                ),
                 tools=list(session.tool_specs),
                 configuration={"max_turns": max_turns},
                 output_path=str(destination / "output.md"),
@@ -272,6 +516,7 @@ def _artifact_inventory(
     controller_id: str = PUMP_STATION_REFERENCE_CONTROLLER_ID,
     start_snapshot: dict[str, Any],
     end_snapshot: dict[str, Any],
+    tool_names: tuple[str, ...] = PUMP_STATION_TOOL_NAMES,
 ) -> dict[str, Any]:
     artifacts: list[dict[str, Any]] = []
     for path in sorted(output_dir.rglob("*")):
@@ -297,7 +542,7 @@ def _artifact_inventory(
         "verifier_runtime_sha256": bridge.verifier_runtime_sha256,
         "package_content_id": bridge.package.package_content_id,
         "package_manifest_content_id": bridge.package.manifest_content_id,
-        "tool_names": list(PUMP_STATION_TOOL_NAMES),
+        "tool_names": list(tool_names),
         "start_snapshot": start_snapshot,
         "end_snapshot": end_snapshot,
         "transition_count": end_snapshot["sequence"] - start_snapshot["sequence"],
@@ -331,6 +576,7 @@ def _open_pump_station_session(
             PumpStationWorldSessionFactory(
                 repository_root,
                 package_root=bridge.package_root,
+                rich_work_processes=bridge.rich_work_processes,
             ),
         ),
     )
@@ -342,7 +588,17 @@ def _local_adapter_registry() -> Any:
     return LocalAdapterRegistry()
 
 
-def _model_system_prompt() -> str:
+def _model_system_prompt(*, rich_work_processes: bool = False) -> str:
+    if rich_work_processes:
+        return (
+            "You are the accountable wastewater pump-station steward. Use only "
+            "the declared pump-station tools and live identifiers from the current "
+            "actor view. Treat blocked, active, or suspended work as unfinished. "
+            "Recheck dependencies and resources before resume or cancellation. "
+            "Never invent evidence or hidden state. Stop only when Pump A has "
+            "passed post-maintenance verification, Pump B has passed functional "
+            "checks, and no live work or follow-up remains."
+        )
     return (
         "You are the accountable wastewater pump-station steward. "
         "Use only the declared pump-station tools. Work only from the current "
@@ -356,7 +612,21 @@ def _model_system_prompt() -> str:
     )
 
 
-def _model_instruction() -> str:
+def _model_instruction(*, rich_work_processes: bool = False) -> str:
+    if rich_work_processes:
+        return (
+            "Observe the pump station. Request post-maintenance verification for "
+            "pump-a and inspection for pump-b, then transfer duty away from pump-b. "
+            "Continue until access and the repair kit are available. Use the live "
+            "accepted functional-check evidence and administrative-closeout "
+            "dependency to request the permitted Pump A waiver, then resume Pump A "
+            "verification. When access is withdrawn, continue until it returns and "
+            "resume the suspended verification with its remaining duration. Complete "
+            "Pump A verification, resume and complete Pump B inspection, then request "
+            "obstruction clearance with the live inspection evidence. If work is "
+            "suspended, wait for access and resume it. Continue through clearance and "
+            "functional checks. Use a unique proposal identifier for every action."
+        )
     return (
         "Start by observing the pump station. Follow this order exactly and use "
         "the live identifiers from the current view: conditionally defer pump-a, "
@@ -470,5 +740,6 @@ __all__ = (
     "PUMP_STATION_MODEL_MAX_TURNS",
     "PUMP_STATION_REFERENCE_CONTROLLER_ID",
     "run_pump_station_model_session",
+    "run_pump_station_rich_work_reference_session",
     "run_pump_station_reference_session",
 )

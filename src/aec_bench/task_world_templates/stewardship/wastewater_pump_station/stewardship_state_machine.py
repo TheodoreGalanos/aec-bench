@@ -8,6 +8,7 @@ from dataclasses import replace
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_kernel import (
     advance_pump_station,
     assess_pump_station,
+    initial_pump_station_state,
     transfer_duty_to_standby,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
@@ -46,18 +47,28 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PUMP_STATION_AUTHORITY_POLICY_VERSION,
+    PUMP_STATION_AUTHORITY_POLICY_VERSION_V2,
     PUMP_STATION_RECEIPT_VERSION,
+    PUMP_STATION_RECEIPT_VERSION_V2,
+    PUMP_STATION_STATE_VERSION_V1,
+    PUMP_STATION_STATE_VERSION_V2,
     PUMP_STATION_TRANSITION_RULE_VERSION,
+    PUMP_STATION_TRANSITION_RULE_VERSION_V2,
+    CancelProcess,
     ContinueOperation,
     PumpStationAuthority,
     PumpStationAuthorityDecision,
     PumpStationAuthorityOutcome,
     PumpStationEventType,
+    PumpStationEvidence,
+    PumpStationEvidenceKind,
     PumpStationExecutionOutcome,
     PumpStationObligation,
     PumpStationObligationKind,
     PumpStationObligationStatus,
+    PumpStationProcess,
     PumpStationProcessKind,
+    PumpStationProcessStatus,
     PumpStationProposalError,
     PumpStationRestriction,
     PumpStationRestrictionKind,
@@ -71,11 +82,13 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationWorkOrderStatus,
     PumpStationWorkResources,
     RequestConditionalDeferral,
+    RequestDependencyWaiver,
     RequestInspection,
     RequestObstructionClearance,
     RequestProvisionalClosure,
     RequestProvisionalReturn,
     RequestVerification,
+    ResumeProcess,
     TransferDuty,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_policy import (
@@ -123,12 +136,17 @@ def _finish_transition(
 ) -> PumpStationTransition:
     sequence = previous.sequence + 1
     state = replace(candidate, sequence=sequence)
+    rich_work = state.state_version == PUMP_STATION_STATE_VERSION_V2
     return PumpStationTransition(
         state=state,
         receipt=PumpStationTransitionReceipt(
-            receipt_version=PUMP_STATION_RECEIPT_VERSION,
-            authority_policy_version=PUMP_STATION_AUTHORITY_POLICY_VERSION,
-            transition_rule_version=PUMP_STATION_TRANSITION_RULE_VERSION,
+            receipt_version=(PUMP_STATION_RECEIPT_VERSION_V2 if rich_work else PUMP_STATION_RECEIPT_VERSION),
+            authority_policy_version=(
+                PUMP_STATION_AUTHORITY_POLICY_VERSION_V2 if rich_work else PUMP_STATION_AUTHORITY_POLICY_VERSION
+            ),
+            transition_rule_version=(
+                PUMP_STATION_TRANSITION_RULE_VERSION_V2 if rich_work else PUMP_STATION_TRANSITION_RULE_VERSION
+            ),
             transition_id=_transition_id(sequence),
             sequence=sequence,
             trigger=trigger,
@@ -187,6 +205,7 @@ def create_stewardship_state(
     environment: PumpStationEnvironment,
     *,
     schedule: PumpStationSchedule | None = None,
+    state_version: str = PUMP_STATION_STATE_VERSION_V1,
 ) -> PumpStationStewardshipState:
     """Create the initial in-memory stewardship state over a physical state."""
     assessment = assess_pump_station(
@@ -230,6 +249,15 @@ def create_stewardship_state(
                 scheduled_seconds=(now + current_schedule.access_withdrawal_after_seconds),
             )
         )
+    if current_schedule.access_restored_after_seconds is not None:
+        events.append(
+            _event(
+                sequence=0,
+                suffix="access-restored",
+                event_type=PumpStationEventType.ACCESS_AVAILABLE,
+                scheduled_seconds=(now + current_schedule.access_restored_after_seconds),
+            )
+        )
     for index, delay_seconds in enumerate(
         current_schedule.decision_point_after_seconds,
         start=1,
@@ -257,6 +285,191 @@ def create_stewardship_state(
         processes=(),
         evidence=(),
         scheduled_events=_sorted_events(tuple(events)),
+        state_version=state_version,
+    )
+
+
+def create_rich_work_reference_state(
+    model: PumpStationModel,
+    *,
+    schedule: PumpStationSchedule | None = None,
+) -> PumpStationStewardshipState:
+    """Create the approved overlapping-work reference state from real physics."""
+    environment = PumpStationEnvironment(
+        inflow_m3_s=model.inflow.assessment_m3_s,
+        wet_well_level_m=model.wet_well.start_level_m,
+        isolated=False,
+    )
+    physical = replace(
+        initial_pump_station_state(model),
+        duty_pump_id="pump-b",
+        standby_pump_id="pump-a",
+    )
+    physical = advance_pump_station(
+        model,
+        physical,
+        OperatingInterval(
+            elapsed_seconds=7_200_000,
+            duty_runtime_seconds=7_200_000,
+            duty_completed_starts=1_000,
+            environment=environment,
+        ),
+    ).state
+    current_schedule = schedule or PumpStationSchedule(
+        access_available_after_seconds=model.resources.repair_kit_lead_seconds,
+        repair_kit_available_after_seconds=model.resources.repair_kit_lead_seconds,
+        access_withdrawal_after_seconds=(
+            model.resources.repair_kit_lead_seconds + model.inflow.diagnostic_period_seconds // 2
+        ),
+        access_restored_after_seconds=(
+            model.resources.repair_kit_lead_seconds
+            + model.inflow.diagnostic_period_seconds // 2
+            + model.resources.access_duration_seconds
+        ),
+    )
+    base = create_stewardship_state(
+        model,
+        physical,
+        environment,
+        schedule=current_schedule,
+        state_version=PUMP_STATION_STATE_VERSION_V2,
+    )
+    work_order_a = PumpStationWorkOrder(
+        work_order_id="work-order-pump-a",
+        pump_id="pump-a",
+        status=PumpStationWorkOrderStatus.SCOPE_COMPLETED,
+        created_sequence=0,
+    )
+    work_order_b = PumpStationWorkOrder(
+        work_order_id="work-order-pump-b",
+        pump_id="pump-b",
+        status=PumpStationWorkOrderStatus.OPEN,
+        created_sequence=0,
+    )
+    resource_order = PumpStationWorkOrder(
+        work_order_id="work-order-site-resources",
+        pump_id="site",
+        status=PumpStationWorkOrderStatus.IN_PROGRESS,
+        created_sequence=0,
+    )
+    pump_a_limit = PumpStationRestriction(
+        restriction_id="restriction-0000-pump-a-run-in",
+        kind=PumpStationRestrictionKind.POST_MAINTENANCE_RUN_IN,
+        pump_id="pump-a",
+        status=PumpStationRestrictionStatus.ACTIVE,
+        created_sequence=0,
+        evidence_id="evidence-0000-functional-checks-pump-a",
+    )
+    pump_b_limit = PumpStationRestriction(
+        restriction_id="restriction-0000-pump-b-work",
+        kind=PumpStationRestrictionKind.POST_MAINTENANCE_RUN_IN,
+        pump_id="pump-b",
+        status=PumpStationRestrictionStatus.ACTIVE,
+        created_sequence=0,
+    )
+    verification = PumpStationObligation(
+        obligation_id="obligation-0000-pump-a-verification",
+        kind=PumpStationObligationKind.POST_MAINTENANCE_VERIFICATION,
+        pump_id="pump-a",
+        status=PumpStationObligationStatus.ACTIVE,
+        originating_proposal_id="scenario-entry",
+        responsible_authority=PumpStationAuthority.VERIFICATION,
+        linked_restriction_id=pump_a_limit.restriction_id,
+        due_calendar_seconds=(physical.calendar_seconds + 10 * model.inflow.diagnostic_period_seconds),
+        due_runtime_seconds=(
+            physical.pump("pump-a").exposure.runtime_seconds + 10 * model.inflow.diagnostic_period_seconds
+        ),
+        created_sequence=0,
+    )
+    accepted_checks = PumpStationEvidence(
+        evidence_id="evidence-0000-functional-checks-pump-a",
+        kind=PumpStationEvidenceKind.FUNCTIONAL_CHECKS,
+        pump_id="pump-a",
+        created_at_seconds=physical.calendar_seconds,
+        produced_by=PumpStationAuthority.MAINTENANCE,
+        accepted_by=PumpStationAuthority.VERIFICATION,
+        passed=True,
+    )
+    processes: list[PumpStationProcess] = []
+    events: list[PumpStationScheduledEvent] = []
+    for event in base.scheduled_events:
+        if event.event_type is PumpStationEventType.ACCESS_AVAILABLE and event.event_id.endswith("access-available"):
+            process = PumpStationProcess(
+                process_id="process-0000-access-preparation",
+                kind=PumpStationProcessKind.ACCESS_PREPARATION,
+                pump_id="site",
+                work_order_id=resource_order.work_order_id,
+                status=PumpStationProcessStatus.ACTIVE,
+                started_at_seconds=physical.calendar_seconds,
+                completion_at_seconds=event.scheduled_seconds,
+                performer=PumpStationAuthority.WORK_MANAGEMENT,
+                remaining_duration_seconds=(event.scheduled_seconds - physical.calendar_seconds),
+            )
+            processes.append(process)
+            events.append(replace(event, process_id=process.process_id))
+        elif event.event_type is PumpStationEventType.REPAIR_KIT_AVAILABLE:
+            process = PumpStationProcess(
+                process_id="process-0000-repair-kit-delivery",
+                kind=PumpStationProcessKind.REPAIR_KIT_DELIVERY,
+                pump_id="site",
+                work_order_id=resource_order.work_order_id,
+                status=PumpStationProcessStatus.ACTIVE,
+                started_at_seconds=physical.calendar_seconds,
+                completion_at_seconds=event.scheduled_seconds,
+                performer=PumpStationAuthority.WORK_MANAGEMENT,
+                remaining_duration_seconds=(event.scheduled_seconds - physical.calendar_seconds),
+            )
+            processes.append(process)
+            events.append(replace(event, process_id=process.process_id))
+        else:
+            events.append(event)
+    events.extend(_obligation_events(model, verification, 0))
+    return replace(
+        base,
+        restrictions=(pump_a_limit, pump_b_limit),
+        obligations=(verification,),
+        work_orders=(work_order_a, work_order_b, resource_order),
+        processes=tuple(processes),
+        evidence=(accepted_checks,),
+        scheduled_events=_sorted_events(tuple(events)),
+    )
+
+
+def _schedule_work_process(
+    state: PumpStationStewardshipState,
+    *,
+    sequence: int,
+    kind: PumpStationProcessKind,
+    pump_id: str,
+    work_order: PumpStationWorkOrder,
+    duration_seconds: int,
+    performer: PumpStationAuthority,
+    source_evidence_id: str | None = None,
+) -> tuple[PumpStationStewardshipState, PumpStationProcess]:
+    if state.state_version == PUMP_STATION_STATE_VERSION_V2:
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rich_work_processes import (
+            schedule_rich_process,
+        )
+
+        return schedule_rich_process(
+            state,
+            sequence=sequence,
+            kind=kind,
+            pump_id=pump_id,
+            work_order=work_order,
+            duration_seconds=duration_seconds,
+            performer=performer,
+            source_evidence_id=source_evidence_id,
+        )
+    return _schedule_process(
+        state,
+        sequence=sequence,
+        kind=kind,
+        pump_id=pump_id,
+        work_order=work_order,
+        duration_seconds=duration_seconds,
+        performer=performer,
+        source_evidence_id=source_evidence_id,
     )
 
 
@@ -361,7 +574,7 @@ def _apply_inspection_request(
             candidate,
             work_orders=(*candidate.work_orders, work_order),
         )
-    candidate, process = _schedule_process(
+    candidate, process = _schedule_work_process(
         candidate,
         sequence=sequence,
         kind=PumpStationProcessKind.INSPECTION,
@@ -395,7 +608,7 @@ def _apply_clearance_request(
             "stewardship-state",
             "clearance permission requires a work order",
         )
-    candidate, process = _schedule_process(
+    candidate, process = _schedule_work_process(
         state,
         sequence=sequence,
         kind=PumpStationProcessKind.OBSTRUCTION_CLEARANCE,
@@ -530,7 +743,7 @@ def _apply_verification_request(
             "stewardship-state",
             "verification requires a work order",
         )
-    candidate, process = _schedule_process(
+    candidate, process = _schedule_work_process(
         state,
         sequence=sequence,
         kind=PumpStationProcessKind.POST_MAINTENANCE_VERIFICATION,
@@ -548,6 +761,94 @@ def _apply_verification_request(
         authority=authority,
         execution=PumpStationExecutionOutcome.SCHEDULED,
         processes_changed=(process.process_id,),
+    )
+
+
+def _apply_resume_process(
+    state: PumpStationStewardshipState,
+    proposal: ResumeProcess,
+    authority: PumpStationAuthorityDecision,
+) -> PumpStationTransition:
+    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rich_work_processes import (
+        resume_process,
+    )
+
+    resumed = resume_process(
+        state,
+        proposal.process_id,
+        state.sequence + 1,
+    )
+    if resumed is None:
+        return _finish_transition(
+            state,
+            state,
+            trigger="proposal",
+            proposal_id=proposal.context.proposal_id,
+            authority=PumpStationAuthorityDecision(
+                outcome=PumpStationAuthorityOutcome.DEFERRED_PENDING_PREREQUISITES,
+                required_authorities=authority.required_authorities,
+                detail="one or more fixed dependencies or resources are unavailable",
+            ),
+            execution=PumpStationExecutionOutcome.CANCELLED,
+        )
+    candidate, process = resumed
+    return _finish_transition(
+        state,
+        candidate,
+        trigger="proposal",
+        proposal_id=proposal.context.proposal_id,
+        authority=authority,
+        execution=PumpStationExecutionOutcome.IN_PROGRESS,
+        processes_changed=(process.process_id,),
+        work_orders_changed=(process.work_order_id,),
+    )
+
+
+def _apply_cancel_process(
+    state: PumpStationStewardshipState,
+    proposal: CancelProcess,
+    authority: PumpStationAuthorityDecision,
+) -> PumpStationTransition:
+    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rich_work_processes import (
+        cancel_process,
+    )
+
+    candidate, process = cancel_process(state, proposal.process_id)
+    return _finish_transition(
+        state,
+        candidate,
+        trigger="proposal",
+        proposal_id=proposal.context.proposal_id,
+        authority=authority,
+        execution=PumpStationExecutionOutcome.CANCELLED,
+        processes_changed=(process.process_id,),
+    )
+
+
+def _apply_dependency_waiver(
+    state: PumpStationStewardshipState,
+    proposal: RequestDependencyWaiver,
+    authority: PumpStationAuthorityDecision,
+) -> PumpStationTransition:
+    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rich_work_processes import (
+        apply_dependency_waiver,
+    )
+
+    candidate, _ = apply_dependency_waiver(
+        state,
+        process_id=proposal.process_id,
+        dependency_id=proposal.dependency_id,
+        evidence_id=proposal.evidence_id,
+        sequence=state.sequence + 1,
+    )
+    return _finish_transition(
+        state,
+        candidate,
+        trigger="proposal",
+        proposal_id=proposal.context.proposal_id,
+        authority=authority,
+        execution=PumpStationExecutionOutcome.COMPLETED,
+        processes_changed=(proposal.process_id,),
     )
 
 
@@ -636,6 +937,12 @@ def apply_stewardship_proposal(
             typed_proposal,
             authority,
         )
+    if isinstance(typed_proposal, ResumeProcess):
+        return _apply_resume_process(state, typed_proposal, authority)
+    if isinstance(typed_proposal, CancelProcess):
+        return _apply_cancel_process(state, typed_proposal, authority)
+    if isinstance(typed_proposal, RequestDependencyWaiver):
+        return _apply_dependency_waiver(state, typed_proposal, authority)
     return _apply_verification_request(
         model,
         state,

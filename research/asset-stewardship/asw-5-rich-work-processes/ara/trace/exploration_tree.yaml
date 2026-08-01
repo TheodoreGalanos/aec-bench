@@ -1,0 +1,90 @@
+nodes:
+  - id: N001
+    type: question
+    summary: Can a continuing asset world preserve overlapping work across interruption, resource competition, durable replay, and handover?
+    children: [N002]
+    also_depends_on: []
+    claims_touched: [C001, C002, C003, C004, C005]
+    provenance: user
+    payload:
+      programme_stage: ASW-5
+    domain:
+      implementation_stage: ASW-5
+  - id: N002
+    type: decision
+    summary: Freeze one asset-local, provider-free pump-station scenario with exact process, resource, waiver, and operating-limit rules.
+    children: [N003]
+    also_depends_on: [N001]
+    claims_touched: [C001, C002, C003, C004]
+    provenance: user
+    payload:
+      approved_on: "2026-08-01"
+      provider_calls_authorized: false
+      general_dependency_language: false
+    domain:
+      implementation_stage: ASW-5
+  - id: N003
+    type: decision
+    summary: Introduce version 2 only because ASW-5 creates a real second schema, while preserving version 1 objects and semantics.
+    children: [N004]
+    also_depends_on: [N002]
+    claims_touched: [C005]
+    provenance: user
+    payload:
+      source_version: 1
+      target_version: 2
+      migration_in_place: false
+    domain:
+      implementation_stage: ASW-5
+  - id: N004
+    type: experiment
+    summary: Run red-green-refactor unit, integration, end-to-end, and attack tests without a model provider.
+    children: [N005, N006]
+    also_depends_on: [N003]
+    claims_touched: [C001, C002, C003, C004, C005]
+    provenance: ai_suggested
+    payload:
+      experiment_ids: [E001, E002, E003, E004]
+      status: completed
+      provider_calls: 0
+    domain:
+      implementation_stage: ASW-5
+  - id: N005
+    type: decision
+    summary: Retain state-addressable rollout fan-out as conditional ASW-7A and keep it outside ASW-5.
+    children: []
+    also_depends_on: [N004]
+    claims_touched: []
+    provenance: ai_suggested
+    payload:
+      decision_status: accepted
+      rollout_origin: verified_full_world_state
+      environment_change_required: false
+      provider_calls_authorized: false
+    domain:
+      current_stage: ASW-5
+      planned_stage: ASW-7A
+  - id: N006
+    type: observation
+    summary: Focused ASW-5 and cumulative pump-station tests pass; wider repository failures were isolated from the ASW-5 change.
+    children: []
+    also_depends_on: [N004]
+    claims_touched: []
+    provenance: ai_executed
+    payload:
+      experiment_id: E005
+      focused_asw5_passed: 17
+      cumulative_passed: 163
+      cumulative_failed: 0
+      harbor_execution_reward: 1.0
+      imported_trial_reward: 0.0
+      obligation_breach_count: 1
+      handover_count: 1
+      handover_omission_count: 0
+      repository_passed: 7601
+      repository_failed: 10
+      repository_skipped: 21
+      inherited_from_origin_main: true
+    domain:
+      implementation_stage: ASW-5
+      gate_status: passed

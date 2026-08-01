@@ -70,6 +70,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_s
     PUMP_STATION_REFERENCE_CONTROLLER_ID,
     run_pump_station_model_session,
     run_pump_station_reference_session,
+    run_pump_station_rich_work_reference_session,
 )
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -724,8 +725,13 @@ class EntrypointAgent(BaseAgent):
             run_dir = staging / "world-session"
             reference_controller = self.model_name == PUMP_STATION_REFERENCE_CONTROLLER_ID
             if reference_controller:
+                reference_runner = (
+                    run_pump_station_rich_work_reference_session
+                    if current_bridge.rich_work_processes
+                    else run_pump_station_reference_session
+                )
                 reference_session = await asyncio.to_thread(
-                    run_pump_station_reference_session,
+                    reference_runner,
                     bridge=current_bridge,
                     output_dir=run_dir,
                     session_identity=session_identity,

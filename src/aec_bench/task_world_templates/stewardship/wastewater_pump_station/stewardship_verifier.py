@@ -25,6 +25,11 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
     PumpStationInformationSet,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+    PUMP_STATION_RECORD_VERSIONS_V1,
+    PUMP_STATION_RECORD_VERSIONS_V2,
+    PumpStationRecordVersions,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,10 +57,24 @@ def verify_stewardship_run(
     model: PumpStationModel,
     initial_state: PumpStationStewardshipState,
     steps: tuple[PumpStationRunStep, ...],
+    *,
+    record_versions: PumpStationRecordVersions | None = None,
 ) -> PumpStationVerificationReport:
     """Replay immutable run steps from the declared initial state."""
+    selected_versions = record_versions or (
+        PUMP_STATION_RECORD_VERSIONS_V2
+        if initial_state.state_version.endswith(".v2")
+        else PUMP_STATION_RECORD_VERSIONS_V1
+    )
+    expected_state_version = (
+        "pump-station-stewardship-state.v2"
+        if selected_versions == PUMP_STATION_RECORD_VERSIONS_V2
+        else "pump-station-stewardship-state.v1"
+    )
     state = initial_state
     issues: list[str] = []
+    if initial_state.state_version != expected_state_version:
+        issues.append("initial-state-version-mismatch")
     replayed_transition_ids: list[str] = []
     for step in steps:
         transition_id = step.transition.receipt.transition_id

@@ -18,14 +18,18 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     stewardship_content_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    CancelProcess,
     ContinueOperation,
     ProposalContext,
+    PumpStationDependencyWaiver,
     PumpStationEvidence,
     PumpStationObligation,
     PumpStationObligationStatus,
     PumpStationProcess,
+    PumpStationProcessDependency,
     PumpStationProcessStatus,
     PumpStationProposal,
+    PumpStationResourceReservation,
     PumpStationRestriction,
     PumpStationRestrictionStatus,
     PumpStationStewardshipState,
@@ -33,11 +37,13 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationWorkOrder,
     PumpStationWorkResources,
     RequestConditionalDeferral,
+    RequestDependencyWaiver,
     RequestInspection,
     RequestObstructionClearance,
     RequestProvisionalClosure,
     RequestProvisionalReturn,
     RequestVerification,
+    ResumeProcess,
     TransferDuty,
 )
 
@@ -118,6 +124,10 @@ class PumpStationCurrentStateView:
     work_orders: tuple[PumpStationWorkOrder, ...]
     processes: tuple[PumpStationProcess, ...]
     evidence: tuple[PumpStationEvidence, ...]
+    state_version: str = "pump-station-stewardship-state.v1"
+    dependencies: tuple[PumpStationProcessDependency, ...] = ()
+    dependency_waivers: tuple[PumpStationDependencyWaiver, ...] = ()
+    resource_reservations: tuple[PumpStationResourceReservation, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,6 +237,9 @@ _ACTION_TYPES: dict[type[object], str] = {
     RequestProvisionalReturn: "request_provisional_return",
     RequestProvisionalClosure: "request_provisional_closure",
     RequestVerification: "request_post_maintenance_verification",
+    ResumeProcess: "resume_process",
+    CancelProcess: "cancel_process",
+    RequestDependencyWaiver: "request_dependency_waiver",
 }
 
 
@@ -284,7 +297,17 @@ def _current_state_view(
     obligations = tuple(
         obligation for obligation in state.obligations if obligation.status is not PumpStationObligationStatus.FULFILLED
     )
-    processes = tuple(process for process in state.processes if process.status is PumpStationProcessStatus.IN_PROGRESS)
+    processes = tuple(
+        process
+        for process in state.processes
+        if process.status
+        in {
+            PumpStationProcessStatus.IN_PROGRESS,
+            PumpStationProcessStatus.BLOCKED,
+            PumpStationProcessStatus.ACTIVE,
+            PumpStationProcessStatus.SUSPENDED,
+        }
+    )
     visible_state = {
         "state_sequence": state.sequence,
         "calendar_seconds": state.physical.calendar_seconds,
@@ -301,8 +324,21 @@ def _current_state_view(
         "processes": processes,
         "evidence": state.evidence,
     }
+    profile = "v2" if state.state_version.endswith(".v2") else "v1"
+    if profile == "v2":
+        visible_state.update(
+            {
+                "state_version": state.state_version,
+                "dependencies": state.dependencies,
+                "dependency_waivers": state.dependency_waivers,
+                "resource_reservations": state.resource_reservations,
+            }
+        )
     return PumpStationCurrentStateView(
-        state_id=stewardship_content_id(visible_state),
+        state_id=stewardship_content_id(
+            visible_state,
+            record_profile=profile,
+        ),
         state_sequence=state.sequence,
         calendar_seconds=state.physical.calendar_seconds,
         duty_pump_id=state.physical.duty_pump_id,
@@ -317,6 +353,10 @@ def _current_state_view(
         work_orders=state.work_orders,
         processes=processes,
         evidence=state.evidence,
+        state_version=state.state_version,
+        dependencies=state.dependencies,
+        dependency_waivers=state.dependency_waivers,
+        resource_reservations=state.resource_reservations,
     )
 
 
@@ -346,7 +386,10 @@ def project_actor_view(
         "current_state": current_state,
     }
     return PumpStationActorView(
-        view_id=stewardship_content_id(identity_payload),
+        view_id=stewardship_content_id(
+            identity_payload,
+            record_profile=("v2" if state.state_version.endswith(".v2") else "v1"),
+        ),
         episode_id=context.episode_id,
         world_branch_id=context.world_branch_id,
         actor_id=context.actor_id,
@@ -426,7 +469,8 @@ def _information_set_id(
             "base_view_id": base_view.view_id,
             "observation_history": observation_history,
             "current_context": current_context,
-        }
+        },
+        record_profile=("v2" if base_view.current_state.state_version.endswith(".v2") else "v1"),
     )
 
 

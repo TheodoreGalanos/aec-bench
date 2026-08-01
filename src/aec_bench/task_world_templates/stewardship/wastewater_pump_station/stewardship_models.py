@@ -14,9 +14,35 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
     PumpStationState,
 )
 
-PUMP_STATION_RECEIPT_VERSION = "pump-station-transition-receipt.v1"
-PUMP_STATION_AUTHORITY_POLICY_VERSION = "pump-station-authority-policy.v1"
-PUMP_STATION_TRANSITION_RULE_VERSION = "pump-station-transition-rules.v1"
+PUMP_STATION_STATE_VERSION_V1 = "pump-station-stewardship-state.v1"
+PUMP_STATION_STATE_VERSION_V2 = "pump-station-stewardship-state.v2"
+PUMP_STATION_RECEIPT_VERSION_V1 = "pump-station-transition-receipt.v1"
+PUMP_STATION_RECEIPT_VERSION_V2 = "pump-station-transition-receipt.v2"
+PUMP_STATION_AUTHORITY_POLICY_VERSION_V1 = "pump-station-authority-policy.v1"
+PUMP_STATION_AUTHORITY_POLICY_VERSION_V2 = "pump-station-authority-policy.v2"
+PUMP_STATION_TRANSITION_RULE_VERSION_V1 = "pump-station-transition-rules.v1"
+PUMP_STATION_TRANSITION_RULE_VERSION_V2 = "pump-station-transition-rules.v2"
+
+PUMP_STATION_RECEIPT_VERSION = PUMP_STATION_RECEIPT_VERSION_V1
+PUMP_STATION_AUTHORITY_POLICY_VERSION = PUMP_STATION_AUTHORITY_POLICY_VERSION_V1
+PUMP_STATION_TRANSITION_RULE_VERSION = PUMP_STATION_TRANSITION_RULE_VERSION_V1
+
+_SUPPORTED_RECEIPT_VERSIONS = {
+    PUMP_STATION_RECEIPT_VERSION_V1,
+    PUMP_STATION_RECEIPT_VERSION_V2,
+}
+_SUPPORTED_AUTHORITY_POLICY_VERSIONS = {
+    PUMP_STATION_AUTHORITY_POLICY_VERSION_V1,
+    PUMP_STATION_AUTHORITY_POLICY_VERSION_V2,
+}
+_SUPPORTED_TRANSITION_RULE_VERSIONS = {
+    PUMP_STATION_TRANSITION_RULE_VERSION_V1,
+    PUMP_STATION_TRANSITION_RULE_VERSION_V2,
+}
+_SUPPORTED_STATE_VERSIONS = {
+    PUMP_STATION_STATE_VERSION_V1,
+    PUMP_STATION_STATE_VERSION_V2,
+}
 
 
 class PumpStationProposalError(ValueError):
@@ -78,6 +104,7 @@ class PumpStationRestrictionKind(StrEnum):
 
     DEFERRED_PUMP_NOT_DUTY = "deferred_pump_not_duty"
     POST_MAINTENANCE_RUN_IN = "post_maintenance_run_in"
+    NO_INTERVENTION = "no_intervention"
 
 
 class PumpStationRestrictionStatus(StrEnum):
@@ -121,15 +148,39 @@ class PumpStationProcessKind(StrEnum):
     OBSTRUCTION_CLEARANCE = "obstruction_clearance"
     FUNCTIONAL_CHECKS = "functional_checks"
     POST_MAINTENANCE_VERIFICATION = "post_maintenance_verification"
+    ACCESS_PREPARATION = "access_preparation"
+    REPAIR_KIT_DELIVERY = "repair_kit_delivery"
 
 
 class PumpStationProcessStatus(StrEnum):
     """Current execution state of a timed work process."""
 
     IN_PROGRESS = "in_progress"
+    BLOCKED = "blocked"
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
     COMPLETED = "completed"
     FAILED = "failed"
     INTERRUPTED = "interrupted"
+    CANCELLED = "cancelled"
+
+
+class PumpStationDependencyKind(StrEnum):
+    """Fixed dependency classes used by rich pump-station work."""
+
+    PHYSICAL = "physical"
+    SAFETY = "safety"
+    EVIDENCE = "evidence"
+    RESOURCE = "resource"
+    ADMINISTRATIVE_CLOSEOUT = "administrative_closeout"
+
+
+class PumpStationResourceKind(StrEnum):
+    """Reservable work resources in the rich pump-station scenario."""
+
+    ACCESS = "access"
+    REPAIR_KIT = "repair_kit"
+    INTERVENTION_SLOT = "intervention_slot"
 
 
 class PumpStationEvidenceKind(StrEnum):
@@ -260,6 +311,43 @@ class RequestVerification:
         _require_text(self.pump_id, "pump_id")
 
 
+@dataclass(frozen=True, slots=True)
+class ResumeProcess:
+    """Request safe continuation of blocked or suspended work."""
+
+    context: ProposalContext
+    process_id: str
+
+    def __post_init__(self) -> None:
+        _require_text(self.process_id, "process_id")
+
+
+@dataclass(frozen=True, slots=True)
+class CancelProcess:
+    """Request cancellation of live work and release of unused resources."""
+
+    context: ProposalContext
+    process_id: str
+
+    def __post_init__(self) -> None:
+        _require_text(self.process_id, "process_id")
+
+
+@dataclass(frozen=True, slots=True)
+class RequestDependencyWaiver:
+    """Request a Work Management waiver for one administrative dependency."""
+
+    context: ProposalContext
+    process_id: str
+    dependency_id: str
+    evidence_id: str
+
+    def __post_init__(self) -> None:
+        _require_text(self.process_id, "process_id")
+        _require_text(self.dependency_id, "dependency_id")
+        _require_text(self.evidence_id, "evidence_id")
+
+
 type PumpStationProposal = (
     ContinueOperation
     | TransferDuty
@@ -269,6 +357,9 @@ type PumpStationProposal = (
     | RequestProvisionalReturn
     | RequestProvisionalClosure
     | RequestVerification
+    | ResumeProcess
+    | CancelProcess
+    | RequestDependencyWaiver
 )
 
 
@@ -288,6 +379,7 @@ class PumpStationSchedule:
     access_available_after_seconds: int
     repair_kit_available_after_seconds: int
     access_withdrawal_after_seconds: int | None = None
+    access_restored_after_seconds: int | None = None
     decision_point_after_seconds: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
@@ -304,6 +396,15 @@ class PumpStationSchedule:
                 self.access_withdrawal_after_seconds,
                 "access_withdrawal_after_seconds",
             )
+        if self.access_restored_after_seconds is not None:
+            _require_non_negative(
+                self.access_restored_after_seconds,
+                "access_restored_after_seconds",
+            )
+            if self.access_withdrawal_after_seconds is None:
+                raise ValueError("access restoration requires one access withdrawal")
+            if self.access_restored_after_seconds <= self.access_withdrawal_after_seconds:
+                raise ValueError("access restoration must follow access withdrawal")
         for value in self.decision_point_after_seconds:
             _require_non_negative(value, "decision_point_after_seconds")
         if len(set(self.decision_point_after_seconds)) != len(self.decision_point_after_seconds):
@@ -339,6 +440,7 @@ class PumpStationRestriction:
     status: PumpStationRestrictionStatus
     created_sequence: int
     evidence_id: str | None = None
+    parent_restriction_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -381,6 +483,70 @@ class PumpStationProcess:
     completion_at_seconds: int
     performer: PumpStationAuthority
     source_evidence_id: str | None = None
+    remaining_duration_seconds: int | None = None
+    dependency_ids: tuple[str, ...] = ()
+    suspended_at_seconds: int | None = None
+    cancelled_at_seconds: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.remaining_duration_seconds is not None:
+            _require_non_negative(
+                self.remaining_duration_seconds,
+                "remaining_duration_seconds",
+            )
+        if len(set(self.dependency_ids)) != len(self.dependency_ids):
+            _fail("stewardship-state", "process dependency_ids must be distinct")
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationProcessDependency:
+    """One fixed AND dependency for a named work process."""
+
+    dependency_id: str
+    process_id: str
+    kind: PumpStationDependencyKind
+    detail: str
+    satisfied: bool
+    evidence_id: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_text(self.dependency_id, "dependency_id")
+        _require_text(self.process_id, "process_id")
+        _require_text(self.detail, "detail")
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationDependencyWaiver:
+    """Approved waiver of one administrative closeout dependency."""
+
+    waiver_id: str
+    process_id: str
+    dependency_id: str
+    evidence_id: str
+    approved_by: PumpStationAuthority
+    created_sequence: int
+
+    def __post_init__(self) -> None:
+        _require_text(self.waiver_id, "waiver_id")
+        _require_text(self.process_id, "process_id")
+        _require_text(self.dependency_id, "dependency_id")
+        _require_text(self.evidence_id, "evidence_id")
+        _require_non_negative(self.created_sequence, "created_sequence")
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationResourceReservation:
+    """One live reservation of a bounded shared work resource."""
+
+    reservation_id: str
+    kind: PumpStationResourceKind
+    process_id: str
+    created_sequence: int
+
+    def __post_init__(self) -> None:
+        _require_text(self.reservation_id, "reservation_id")
+        _require_text(self.process_id, "process_id")
+        _require_non_negative(self.created_sequence, "created_sequence")
 
 
 @dataclass(frozen=True, slots=True)
@@ -422,6 +588,21 @@ class PumpStationStewardshipState:
     processes: tuple[PumpStationProcess, ...]
     evidence: tuple[PumpStationEvidence, ...]
     scheduled_events: tuple[PumpStationScheduledEvent, ...]
+    state_version: str = PUMP_STATION_STATE_VERSION_V1
+    dependencies: tuple[PumpStationProcessDependency, ...] = ()
+    dependency_waivers: tuple[PumpStationDependencyWaiver, ...] = ()
+    resource_reservations: tuple[PumpStationResourceReservation, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.state_version not in _SUPPORTED_STATE_VERSIONS:
+            _fail("state-version", self.state_version)
+        reservation_kinds = tuple(item.kind for item in self.resource_reservations)
+        if len(set(reservation_kinds)) != len(reservation_kinds):
+            _fail("resource-reservation", "a resource has more than one reservation")
+        if self.state_version == PUMP_STATION_STATE_VERSION_V1 and (
+            self.dependencies or self.dependency_waivers or self.resource_reservations
+        ):
+            _fail("state-version", "version 1 cannot contain rich-work records")
 
     def restriction(
         self,
@@ -451,6 +632,20 @@ class PumpStationStewardshipState:
             if work_order.pump_id == pump_id:
                 return work_order
         raise LookupError(f"missing work order for {pump_id}")
+
+    def process(self, process_id: str) -> PumpStationProcess:
+        """Return one process by identity."""
+        for process in self.processes:
+            if process.process_id == process_id:
+                return process
+        raise LookupError(f"missing process {process_id}")
+
+    def dependency(self, dependency_id: str) -> PumpStationProcessDependency:
+        """Return one process dependency by identity."""
+        for dependency in self.dependencies:
+            if dependency.dependency_id == dependency_id:
+                return dependency
+        raise LookupError(f"missing dependency {dependency_id}")
 
     def latest_inspection(self, pump_id: str) -> PumpStationEvidence:
         """Return the latest inspection evidence for one pump."""
@@ -500,12 +695,27 @@ class PumpStationTransitionReceipt:
     physical_change: PumpStationChangeKind | None
 
     def __post_init__(self) -> None:
-        if self.receipt_version != PUMP_STATION_RECEIPT_VERSION:
+        if self.receipt_version not in _SUPPORTED_RECEIPT_VERSIONS:
             _fail("receipt-version", self.receipt_version)
-        if self.authority_policy_version != PUMP_STATION_AUTHORITY_POLICY_VERSION:
+        if self.authority_policy_version not in _SUPPORTED_AUTHORITY_POLICY_VERSIONS:
             _fail("authority-policy-version", self.authority_policy_version)
-        if self.transition_rule_version != PUMP_STATION_TRANSITION_RULE_VERSION:
+        if self.transition_rule_version not in _SUPPORTED_TRANSITION_RULE_VERSIONS:
             _fail("transition-rule-version", self.transition_rule_version)
+        expected = {
+            PUMP_STATION_RECEIPT_VERSION_V1: (
+                PUMP_STATION_AUTHORITY_POLICY_VERSION_V1,
+                PUMP_STATION_TRANSITION_RULE_VERSION_V1,
+            ),
+            PUMP_STATION_RECEIPT_VERSION_V2: (
+                PUMP_STATION_AUTHORITY_POLICY_VERSION_V2,
+                PUMP_STATION_TRANSITION_RULE_VERSION_V2,
+            ),
+        }[self.receipt_version]
+        if (
+            self.authority_policy_version,
+            self.transition_rule_version,
+        ) != expected:
+            _fail("receipt-version", "receipt, policy, and rule versions differ")
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,10 +8,12 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
     PumpStationModel,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    CancelProcess,
     ContinueOperation,
     PumpStationAuthority,
     PumpStationAuthorityDecision,
     PumpStationAuthorityOutcome,
+    PumpStationDependencyKind,
     PumpStationEvidence,
     PumpStationEvidenceKind,
     PumpStationObligation,
@@ -28,11 +30,13 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationWorkOrder,
     PumpStationWorkOrderStatus,
     RequestConditionalDeferral,
+    RequestDependencyWaiver,
     RequestInspection,
     RequestObstructionClearance,
     RequestProvisionalClosure,
     RequestProvisionalReturn,
     RequestVerification,
+    ResumeProcess,
     TransferDuty,
 )
 
@@ -45,6 +49,9 @@ PROPOSAL_TYPES = (
     RequestProvisionalReturn,
     RequestProvisionalClosure,
     RequestVerification,
+    ResumeProcess,
+    CancelProcess,
+    RequestDependencyWaiver,
 )
 
 
@@ -119,7 +126,13 @@ def active_process(
         if (
             process.kind is kind
             and process.pump_id == pump_id
-            and process.status is PumpStationProcessStatus.IN_PROGRESS
+            and process.status
+            in {
+                PumpStationProcessStatus.IN_PROGRESS,
+                PumpStationProcessStatus.BLOCKED,
+                PumpStationProcessStatus.ACTIVE,
+                PumpStationProcessStatus.SUSPENDED,
+            }
         ):
             return process
     return None
@@ -157,6 +170,13 @@ def _required_authorities(
         )
     if isinstance(proposal, RequestProvisionalClosure):
         return (PumpStationAuthority.WORK_MANAGEMENT,)
+    if isinstance(proposal, RequestDependencyWaiver):
+        return (PumpStationAuthority.WORK_MANAGEMENT,)
+    if isinstance(proposal, CancelProcess | ResumeProcess):
+        return (
+            PumpStationAuthority.MAINTENANCE,
+            PumpStationAuthority.OPERATIONS,
+        )
     return (PumpStationAuthority.VERIFICATION,)
 
 
@@ -258,6 +278,7 @@ def decide_proposal(
             or inspection.kind is not PumpStationEvidenceKind.INSPECTION
             or inspection.pump_id != proposal.pump_id
             or inspection.inspection is None
+            or (state.state_version.endswith(".v2") and inspection.accepted_by is None)
         ):
             return _authority(
                 PumpStationAuthorityOutcome.DEFERRED_PENDING_PREREQUISITES,
@@ -276,7 +297,7 @@ def decide_proposal(
                 required,
                 "the affected pump must not be the duty pump",
             )
-        if (
+        if not state.state_version.endswith(".v2") and (
             state.resources.access_window_seconds < model.resources.access_duration_seconds
             or state.resources.available_intervention_slots < 1
         ):
@@ -297,6 +318,88 @@ def decide_proposal(
                 PumpStationAuthorityOutcome.DENIED,
                 required,
                 "obstruction clearance is already in progress",
+            )
+    elif isinstance(proposal, ResumeProcess):
+        try:
+            process = state.process(proposal.process_id)
+        except LookupError:
+            return _authority(
+                PumpStationAuthorityOutcome.INVALID,
+                required,
+                "proposal names an unknown process",
+            )
+        if process.status not in {
+            PumpStationProcessStatus.BLOCKED,
+            PumpStationProcessStatus.SUSPENDED,
+        }:
+            return _authority(
+                PumpStationAuthorityOutcome.DENIED,
+                required,
+                "only blocked or suspended work can resume",
+            )
+        if any(
+            restriction.kind is PumpStationRestrictionKind.NO_INTERVENTION
+            and restriction.pump_id == process.pump_id
+            and restriction.status is PumpStationRestrictionStatus.ACTIVE
+            for restriction in state.restrictions
+        ):
+            return _authority(
+                PumpStationAuthorityOutcome.DEFERRED_PENDING_PREREQUISITES,
+                required,
+                "an active no-intervention limit blocks resume",
+            )
+        return _authority(
+            PumpStationAuthorityOutcome.PERMITTED_WITH_CONDITIONS,
+            required,
+            "resume must recheck all fixed dependencies and reservations",
+        )
+    elif isinstance(proposal, CancelProcess):
+        try:
+            process = state.process(proposal.process_id)
+        except LookupError:
+            return _authority(
+                PumpStationAuthorityOutcome.INVALID,
+                required,
+                "proposal names an unknown process",
+            )
+        if process.status not in {
+            PumpStationProcessStatus.BLOCKED,
+            PumpStationProcessStatus.ACTIVE,
+            PumpStationProcessStatus.SUSPENDED,
+        }:
+            return _authority(
+                PumpStationAuthorityOutcome.DENIED,
+                required,
+                "only live work can be cancelled",
+            )
+    elif isinstance(proposal, RequestDependencyWaiver):
+        try:
+            process = state.process(proposal.process_id)
+            dependency = state.dependency(proposal.dependency_id)
+        except LookupError:
+            return _authority(
+                PumpStationAuthorityOutcome.INVALID,
+                required,
+                "proposal names an unknown process or dependency",
+            )
+        named_evidence = evidence(state, proposal.evidence_id)
+        if named_evidence is None or named_evidence.accepted_by is None:
+            return _authority(
+                PumpStationAuthorityOutcome.DEFERRED_PENDING_PREREQUISITES,
+                required,
+                "named accepted evidence is not available",
+            )
+        if dependency.process_id != process.process_id:
+            return _authority(
+                PumpStationAuthorityOutcome.INVALID,
+                required,
+                "dependency belongs to another process",
+            )
+        if dependency.kind is not PumpStationDependencyKind.ADMINISTRATIVE_CLOSEOUT:
+            return _authority(
+                PumpStationAuthorityOutcome.DENIED,
+                required,
+                "only administrative closeout can be waived",
             )
     elif isinstance(proposal, RequestProvisionalReturn):
         checks = evidence(state, proposal.functional_check_evidence_id)

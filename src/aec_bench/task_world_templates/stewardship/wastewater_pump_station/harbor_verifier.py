@@ -37,6 +37,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationVerificationReport,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
+    PUMP_STATION_RICH_WORK_TOOL_NAMES,
     PUMP_STATION_TASK_WORLD_ID,
     PUMP_STATION_TOOL_NAMES,
     PumpStationWorldSessionFactory,
@@ -61,6 +62,11 @@ def verify_pump_station_harbor_run(
     ):
         raise ValueError("pump-station Harbor export identity differs")
     package_payload = _mapping(manifest.get("package"), "package")
+    bridge_payload = _mapping(manifest.get("bridge"), "bridge")
+    rich_work_processes = bool(bridge_payload.get("rich_work_processes", False))
+    expected_tools = PUMP_STATION_RICH_WORK_TOOL_NAMES if rich_work_processes else PUMP_STATION_TOOL_NAMES
+    if tuple(bridge_payload.get("allowed_tools", ())) != expected_tools:
+        raise ValueError("pump-station Harbor bridge tools differ")
     package = load_reference_package(package_dir)
     if (
         package.package_content_id != package_payload.get("package_content_id")
@@ -85,7 +91,7 @@ def verify_pump_station_harbor_run(
         or inventory.get("verifier_runtime_sha256") != verifier_payload.get("runtime_wheel_sha256")
         or inventory.get("package_content_id") != package.package_content_id
         or inventory.get("package_manifest_content_id") != package.manifest_content_id
-        or tuple(inventory.get("tool_names", ())) != PUMP_STATION_TOOL_NAMES
+        or tuple(inventory.get("tool_names", ())) != expected_tools
     ):
         raise ValueError("pump-station Harbor artifact inventory identity differs")
     _verify_inventory(root, inventory)
@@ -95,7 +101,7 @@ def verify_pump_station_harbor_run(
         result.snapshot != end_snapshot
         or int(inventory.get("transition_count", -1)) != end_snapshot.sequence - start_snapshot.sequence
         or request.execution_kind is not WorldSessionExecutionKind.STEWARDSHIP
-        or request.open_mode is not WorldSessionOpenMode.START
+        or request.open_mode is not (WorldSessionOpenMode.RESUME if rich_work_processes else WorldSessionOpenMode.START)
         or (
             request.session_id,
             request.task_world_id,
@@ -111,6 +117,7 @@ def verify_pump_station_harbor_run(
     resumed = PumpStationWorldSessionFactory(
         root / "world-run",
         package_root=Path(package_dir),
+        rich_work_processes=rich_work_processes,
     ).open(
         WorldSessionRequest(
             execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
@@ -135,6 +142,7 @@ def verify_pump_station_harbor_run(
         actor_view=_read_actor_view(resumed),
         report=report,
         transition_count=transition_count,
+        rich_work_processes=rich_work_processes,
     )
     return {
         "valid": True,
@@ -179,6 +187,7 @@ def _verify_stewardship_objective(
     actor_view: dict[str, Any],
     report: PumpStationVerificationReport,
     transition_count: int,
+    rich_work_processes: bool,
 ) -> None:
     state = _mapping(actor_view.get("current_state"), "final actor state")
     evidence = state.get("evidence")
@@ -190,7 +199,23 @@ def _verify_stewardship_objective(
     closure_recorded = isinstance(work_orders, list) and any(
         isinstance(item, dict) and item.get("status") == "provisionally_closed" for item in work_orders
     )
-    if transition_count < 1 or report.open_obligation_ids or not verification_passed or not closure_recorded:
+    rich_completion = (
+        isinstance(evidence, list)
+        and any(
+            isinstance(item, dict)
+            and item.get("kind") == "functional_checks"
+            and item.get("pump_id") == "pump-b"
+            and item.get("passed") is True
+            for item in evidence
+        )
+        and not state.get("resources", {}).get("repair_kit_available", True)
+        and not any(
+            isinstance(item, dict) and item.get("status") in {"active", "suspended"}
+            for item in cast(list[object], state.get("processes", []))
+        )
+    )
+    administrative_completion = rich_completion if rich_work_processes else closure_recorded
+    if transition_count < 1 or report.open_obligation_ids or not verification_passed or not administrative_completion:
         raise ValueError("pump-station stewardship objective is incomplete")
 
 
