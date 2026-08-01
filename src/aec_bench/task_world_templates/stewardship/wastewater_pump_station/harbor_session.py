@@ -17,6 +17,12 @@ from aec_bench.contracts.world_session import (
     WorldSessionResult,
 )
 from aec_bench.harness.world_session import open_world_session
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
+    PUMP_STATION_EVIDENCE_TREATMENT_VERSION_V1,
+    PUMP_STATION_EVIDENCE_VISIBILITY_POLICY_V1,
+    PumpStationEvidenceTreatmentClass,
+    PumpStationEvidenceTreatmentRequest,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     PUMP_STATION_HARBOR_EXECUTION_KIND,
     PumpStationHarborBridge,
@@ -28,7 +34,13 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
     create_structured_handover,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_control import (
+    PumpStationEvidenceControlRequest,
+    PumpStationEvidenceControlResult,
+    PumpStationWorldControl,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
+    PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES,
     PUMP_STATION_RICH_WORK_TOOL_NAMES,
     PUMP_STATION_TASK_WORLD_ID,
     PUMP_STATION_TOOL_NAMES,
@@ -209,6 +221,152 @@ def run_pump_station_rich_work_reference_session(
     return CompletedPumpStationReferenceSession(
         request=resume_request,
         result=second.result,
+        verification=verification,
+        output_dir=destination,
+    )
+
+
+def run_pump_station_evidence_health_reference_session(
+    *,
+    bridge: PumpStationHarborBridge,
+    output_dir: Path,
+    session_identity: str,
+) -> CompletedPumpStationReferenceSession:
+    """Execute one provider-free evidence-health trajectory through local Harbor."""
+    if not bridge.evidence_health:
+        raise ValueError("pump-station Harbor bridge does not enable evidence health")
+    identity = session_identity.strip()
+    if not identity:
+        raise ValueError("pump-station Harbor session identity is required")
+    destination = Path(output_dir)
+    if destination.exists():
+        raise FileExistsError(f"world-session output already exists: {destination}")
+    destination.mkdir(parents=True)
+    repository_root = destination / "world-run"
+    start_request = _world_session_request(identity)
+    factory = PumpStationWorldSessionFactory(
+        repository_root,
+        package_root=bridge.package_root,
+        evidence_health=True,
+    )
+    first = cast(
+        PumpStationWorldSession,
+        open_world_session(start_request, factory),
+    )
+    start_snapshot = first.result.snapshot
+    run_snapshot = first.run.snapshot()
+    decision_point = min(
+        event.scheduled_seconds
+        for event in first.run.state.scheduled_events
+        if event.event_type.value == "decision_point"
+    )
+    treatment_request = PumpStationEvidenceTreatmentRequest(
+        request_id="treatment-reference-calibration",
+        run_id=run_snapshot.run_id,
+        episode_id=run_snapshot.episode_id,
+        world_branch_id=run_snapshot.world_branch_id,
+        base_state_id=run_snapshot.state_id,
+        base_commit_id=run_snapshot.commit_id,
+        based_on_sequence=run_snapshot.sequence,
+        treatment_class=PumpStationEvidenceTreatmentClass.CALIBRATION_LAPSE,
+        treatment_version=PUMP_STATION_EVIDENCE_TREATMENT_VERSION_V1,
+        target_source_id="station-condition-sensor",
+        effective_decision_point_seconds=decision_point,
+        visibility_policy=PUMP_STATION_EVIDENCE_VISIBILITY_POLICY_V1,
+    )
+    scheduled = PumpStationWorldControl(
+        repository_root,
+        authorised_principal_ids=("harbor-evidence-control",),
+        package_root=bridge.package_root,
+        evidence_health=True,
+    ).execute(
+        PumpStationEvidenceControlRequest(
+            request_id=treatment_request.request_id,
+            operation="schedule_evidence_treatment",
+            task_world_id=PUMP_STATION_TASK_WORLD_ID,
+            authority_id="harbor-evidence-control",
+            treatment_request=treatment_request,
+        )
+    )
+    if not isinstance(scheduled, PumpStationEvidenceControlResult):
+        raise TypeError("evidence-health control returned the wrong result type")
+    scheduled_snapshot = scheduled.receipt.result_snapshot
+    if scheduled_snapshot is None:
+        raise ValueError("evidence-health schedule returned no snapshot")
+    activation_request = WorldSessionRequest(
+        execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
+        open_mode=WorldSessionOpenMode.RESUME,
+        session_id=f"session.{identity}.activation",
+        task_world_id=PUMP_STATION_TASK_WORLD_ID,
+        agent_tenure_id=start_request.agent_tenure_id,
+        run_id=start_request.run_id,
+        episode_id=start_request.episode_id,
+        world_branch_id=start_request.world_branch_id,
+        start_snapshot=scheduled_snapshot,
+    )
+    activation_session = cast(
+        PumpStationWorldSession,
+        open_world_session(activation_request, factory),
+    )
+    activation_session.continue_operation(
+        "proposal-reference-activation",
+        "Continue to the declared evidence-health decision point.",
+    )
+    handover_request = WorldSessionRequest(
+        execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
+        open_mode=WorldSessionOpenMode.RESUME,
+        session_id=f"session.{identity}.handover",
+        task_world_id=PUMP_STATION_TASK_WORLD_ID,
+        agent_tenure_id=f"tenure.{identity}.handover",
+        run_id=start_request.run_id,
+        episode_id=start_request.episode_id,
+        world_branch_id=start_request.world_branch_id,
+        start_snapshot=activation_session.result.snapshot,
+    )
+    recipient = cast(
+        PumpStationWorldSession,
+        open_world_session(handover_request, factory),
+    )
+    recipient.install_structured_handover(
+        create_structured_handover(
+            recipient.actor_view,
+            from_tenure_id=start_request.agent_tenure_id,
+            history=activation_session.actor_history,
+            maximum_history_entries=8,
+        )
+    )
+    recipient.request_condition_check(
+        "proposal-reference-condition-check",
+        "Record the visible sensor condition after handover.",
+        "pump-a",
+    )
+    recipient.request_inspection(
+        "proposal-reference-physical-inspection",
+        "Request the separate physical inspection after the sensor check.",
+        "pump-b",
+    )
+    verification = recipient.verify()
+    if not verification.valid:
+        raise ValueError("evidence-health pump-station reference session did not verify")
+    _write_session_evidence(
+        destination=destination,
+        request=handover_request,
+        result=recipient.result,
+        verification=verification,
+    )
+    _write_json(
+        destination / "artifact-inventory.json",
+        _artifact_inventory(
+            bridge=bridge,
+            output_dir=destination,
+            start_snapshot=start_snapshot.model_dump(mode="json"),
+            end_snapshot=recipient.result.snapshot.model_dump(mode="json"),
+            tool_names=PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES,
+        ),
+    )
+    return CompletedPumpStationReferenceSession(
+        request=handover_request,
+        result=recipient.result,
         verification=verification,
         output_dir=destination,
     )
@@ -577,6 +735,7 @@ def _open_pump_station_session(
                 repository_root,
                 package_root=bridge.package_root,
                 rich_work_processes=bridge.rich_work_processes,
+                evidence_health=bridge.evidence_health,
             ),
         ),
     )
@@ -739,6 +898,7 @@ __all__ = (
     "PUMP_STATION_MODEL_CONTROLLER_MODE",
     "PUMP_STATION_MODEL_MAX_TURNS",
     "PUMP_STATION_REFERENCE_CONTROLLER_ID",
+    "run_pump_station_evidence_health_reference_session",
     "run_pump_station_model_session",
     "run_pump_station_rich_work_reference_session",
     "run_pump_station_reference_session",

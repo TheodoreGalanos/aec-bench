@@ -20,6 +20,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     ProposalContext,
     PumpStationProposal,
     RequestConditionalDeferral,
+    RequestConditionCheck,
     RequestDependencyWaiver,
     RequestInspection,
     RequestObstructionClearance,
@@ -43,6 +44,7 @@ PUMP_STATION_ACTOR_ACTION_NAMES = (
     "resume_process",
     "cancel_process",
     "request_dependency_waiver",
+    "request_condition_check",
 )
 
 
@@ -97,6 +99,7 @@ _ARGUMENT_MODELS: dict[str, type[ActorArguments]] = {
     "resume_process": _ProcessArguments,
     "cancel_process": _ProcessArguments,
     "request_dependency_waiver": _DependencyWaiverArguments,
+    "request_condition_check": _PumpArguments,
 }
 
 _ACTION_DESCRIPTIONS = {
@@ -111,6 +114,7 @@ _ACTION_DESCRIPTIONS = {
     "resume_process": "Resume blocked or suspended work after dependency checks.",
     "cancel_process": "Cancel live work and release unused reservations.",
     "request_dependency_waiver": "Request one narrow dependency waiver with named evidence.",
+    "request_condition_check": "Request one sensor-based condition check for a named pump.",
 }
 
 
@@ -118,10 +122,17 @@ def pump_station_actor_capabilities(
     *,
     task_world_id: str,
     rich_work_processes: bool,
+    evidence_health: bool = False,
 ) -> WorldActorCapabilityCatalogue:
     """Return the closed task-owned action catalogue for the selected world version."""
 
-    names = PUMP_STATION_ACTOR_ACTION_NAMES if rich_work_processes else PUMP_STATION_ACTOR_ACTION_NAMES[:8]
+    names: tuple[str, ...]
+    if evidence_health:
+        names = PUMP_STATION_ACTOR_ACTION_NAMES
+    elif rich_work_processes:
+        names = PUMP_STATION_ACTOR_ACTION_NAMES[:11]
+    else:
+        names = PUMP_STATION_ACTOR_ACTION_NAMES[:8]
     actions = tuple(
         WorldActorActionCapability(
             name=name,
@@ -133,7 +144,13 @@ def pump_station_actor_capabilities(
     return WorldActorCapabilityCatalogue(
         task_world_id=task_world_id,
         interface_version=PUMP_STATION_ACTOR_INTERFACE_VERSION,
-        observation_schema_ref=("pump-station.actor-view.v2" if rich_work_processes else "pump-station.actor-view.v1"),
+        observation_schema_ref=(
+            "pump-station.actor-view.v3"
+            if evidence_health
+            else "pump-station.actor-view.v2"
+            if rich_work_processes
+            else "pump-station.actor-view.v1"
+        ),
         actions=actions,
     )
 
@@ -167,6 +184,11 @@ def pump_station_proposal_from_actor_request(
         return TransferDuty(context=context)
     if request.action_name == "request_inspection":
         return RequestInspection(context=context, pump_id=cast(_PumpArguments, arguments).pump_id)
+    if request.action_name == "request_condition_check":
+        return RequestConditionCheck(
+            context=context,
+            pump_id=cast(_PumpArguments, arguments).pump_id,
+        )
     if request.action_name == "request_conditional_deferral":
         return RequestConditionalDeferral(
             context=context,

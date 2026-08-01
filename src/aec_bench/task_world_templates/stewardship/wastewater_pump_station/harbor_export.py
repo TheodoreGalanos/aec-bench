@@ -31,6 +31,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
     load_reference_package,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
+    PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES,
     PUMP_STATION_RICH_WORK_TOOL_NAMES,
     PUMP_STATION_TASK_WORLD_ID,
     PUMP_STATION_TOOL_NAMES,
@@ -92,6 +93,7 @@ class PumpStationHarborBridge:
     allowed_tools: tuple[str, ...]
     output_path: str
     rich_work_processes: bool
+    evidence_health: bool
 
 
 def export_pump_station_harbor_task(
@@ -99,6 +101,7 @@ def export_pump_station_harbor_task(
     *,
     project_root: Path,
     rich_work_processes: bool = False,
+    evidence_health: bool = False,
 ) -> ExportedPumpStationHarborTask:
     """Materialize one immutable task package for provider-free Harbor execution."""
 
@@ -117,7 +120,8 @@ def export_pump_station_harbor_task(
             task_dir=staging,
             project_root=root,
             package=package,
-            rich_work_processes=rich_work_processes,
+            rich_work_processes=(rich_work_processes or evidence_health),
+            evidence_health=evidence_health,
         )
         staging.rename(destination)
     return ExportedPumpStationHarborTask(
@@ -180,10 +184,20 @@ def load_pump_station_harbor_bridge(
     if allowed_tools not in {
         PUMP_STATION_TOOL_NAMES,
         PUMP_STATION_RICH_WORK_TOOL_NAMES,
+        PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES,
     }:
         raise ValueError("pump-station Harbor tool catalogue differs")
     rich_work_processes = bool(bridge_payload.get("rich_work_processes", False))
-    expected_tools = PUMP_STATION_RICH_WORK_TOOL_NAMES if rich_work_processes else PUMP_STATION_TOOL_NAMES
+    evidence_health = bool(bridge_payload.get("evidence_health", False))
+    if evidence_health and not rich_work_processes:
+        raise ValueError("pump-station evidence health requires rich work")
+    expected_tools = (
+        PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES
+        if evidence_health
+        else PUMP_STATION_RICH_WORK_TOOL_NAMES
+        if rich_work_processes
+        else PUMP_STATION_TOOL_NAMES
+    )
     if allowed_tools != expected_tools:
         raise ValueError("pump-station Harbor work profile and tools differ")
     if (
@@ -210,6 +224,7 @@ def load_pump_station_harbor_bridge(
         allowed_tools=allowed_tools,
         output_path=PUMP_STATION_HARBOR_OUTPUT_PATH,
         rich_work_processes=rich_work_processes,
+        evidence_health=evidence_health,
     )
 
 
@@ -219,6 +234,7 @@ def _write_export(
     project_root: Path,
     package: ReferencePackage,
     rich_work_processes: bool,
+    evidence_health: bool,
 ) -> ExportedPumpStationHarborTask:
     task_dir.mkdir()
     tests_dir = task_dir / "tests"
@@ -253,6 +269,7 @@ def _write_export(
         package_dir=package_dir,
         runtime=runtime,
         rich_work_processes=rich_work_processes,
+        evidence_health=evidence_health,
     )
     manifest_path = task_dir / _MANIFEST_NAME
     _write_json(manifest_path, manifest)
@@ -272,6 +289,7 @@ def _export_manifest(
     package_dir: Path,
     runtime: RuntimeWheel,
     rich_work_processes: bool,
+    evidence_health: bool,
 ) -> dict[str, Any]:
     instruction = task_dir / "instruction.md"
     dockerfile = task_dir / "environment" / "Dockerfile"
@@ -300,9 +318,14 @@ def _export_manifest(
         "bridge": {
             "mode": PUMP_STATION_HARBOR_BRIDGE_MODE,
             "allowed_tools": list(
-                PUMP_STATION_RICH_WORK_TOOL_NAMES if rich_work_processes else PUMP_STATION_TOOL_NAMES
+                PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES
+                if evidence_health
+                else PUMP_STATION_RICH_WORK_TOOL_NAMES
+                if rich_work_processes
+                else PUMP_STATION_TOOL_NAMES
             ),
             "rich_work_processes": rich_work_processes,
+            "evidence_health": evidence_health,
             "output_path": PUMP_STATION_HARBOR_OUTPUT_PATH,
             "controller_modes": list(PUMP_STATION_CONTROLLER_MODES),
         },

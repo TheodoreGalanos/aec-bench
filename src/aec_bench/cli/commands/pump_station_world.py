@@ -131,6 +131,16 @@ def interface_command(
         control = PumpStationWorldControl(
             run_dir,
             authorised_principal_ids=(host_authority_id,),
+            evidence_health=(
+                request.evidence_health
+                or request.control_request is not None
+                and request.control_request.operation
+                in {
+                    "schedule_evidence_treatment",
+                    "inspect_evidence_treatment",
+                    "recover_evidence_treatment",
+                }
+            ),
         )
         if request.operation == "capabilities":
             assert request.authority_id is not None

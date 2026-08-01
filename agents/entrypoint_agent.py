@@ -68,6 +68,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_s
     PUMP_STATION_MODEL_CONTROLLER_MODE,
     PUMP_STATION_MODEL_MAX_TURNS,
     PUMP_STATION_REFERENCE_CONTROLLER_ID,
+    run_pump_station_evidence_health_reference_session,
     run_pump_station_model_session,
     run_pump_station_reference_session,
     run_pump_station_rich_work_reference_session,
@@ -726,7 +727,9 @@ class EntrypointAgent(BaseAgent):
             reference_controller = self.model_name == PUMP_STATION_REFERENCE_CONTROLLER_ID
             if reference_controller:
                 reference_runner = (
-                    run_pump_station_rich_work_reference_session
+                    run_pump_station_evidence_health_reference_session
+                    if current_bridge.evidence_health
+                    else run_pump_station_rich_work_reference_session
                     if current_bridge.rich_work_processes
                     else run_pump_station_reference_session
                 )
@@ -751,10 +754,7 @@ class EntrypointAgent(BaseAgent):
                 provider_environment = _host_model_provider_environment(
                     model,
                 )
-                max_turns = (
-                    configured_positive_int(self._params, "max_turns")
-                    or PUMP_STATION_MODEL_MAX_TURNS
-                )
+                max_turns = configured_positive_int(self._params, "max_turns") or PUMP_STATION_MODEL_MAX_TURNS
                 try:
                     model_session = await asyncio.to_thread(
                         run_pump_station_model_session,
@@ -833,11 +833,7 @@ def _host_model_provider_environment(model_name: str) -> dict[str, str]:
     preflight_pydantic_model_configuration(model_name)
     provider = resolve_pydantic_provider(model_name)
     approved_names = _HOST_MODEL_PROVIDER_ENVIRONMENT_NAMES.get(provider, ())
-    return {
-        name: value
-        for name in approved_names
-        if (value := os.environ.get(name, "").strip())
-    }
+    return {name: value for name in approved_names if (value := os.environ.get(name, "").strip())}
 
 
 async def _run_profiled_proposal_session(

@@ -4,7 +4,11 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import NoReturn
 
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
+    PumpStationEvidenceTreatmentRequest,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpStationModel,
 )
@@ -18,12 +22,15 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PUMP_STATION_STATE_VERSION_V1,
     PUMP_STATION_STATE_VERSION_V2,
+    PUMP_STATION_STATE_VERSION_V3,
     PumpStationProposal,
     PumpStationStewardshipState,
     PumpStationTransition,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
+    apply_evidence_treatment_schedule,
     apply_stewardship_proposal,
+    materialize_evidence_health_state,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationRunStep,
@@ -35,6 +42,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     PUMP_STATION_MIGRATION_VERSION,
     PUMP_STATION_RECORD_VERSIONS_V1,
     PUMP_STATION_RECORD_VERSIONS_V2,
+    PUMP_STATION_RECORD_VERSIONS_V3,
     PUMP_STATION_SERIALIZATION_VERSION,
     PumpStationRecordVersions,
     PumpStationStagedTransition,
@@ -48,7 +56,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 )
 
 
-def _fail(code: str, detail: str) -> None:
+def _fail(code: str, detail: str) -> NoReturn:
     raise PumpStationWorldRunError(code, detail)
 
 
@@ -82,11 +90,13 @@ class PumpStationWorldRun:
         record_versions: PumpStationRecordVersions = PUMP_STATION_RECORD_VERSIONS_V1,
     ) -> PumpStationWorldRun:
         """Create and atomically select one durable initial state."""
-        expected_state_version = (
-            PUMP_STATION_STATE_VERSION_V2
-            if record_versions == PUMP_STATION_RECORD_VERSIONS_V2
-            else PUMP_STATION_STATE_VERSION_V1
-        )
+        expected_state_version = {
+            PUMP_STATION_RECORD_VERSIONS_V1: PUMP_STATION_STATE_VERSION_V1,
+            PUMP_STATION_RECORD_VERSIONS_V2: PUMP_STATION_STATE_VERSION_V2,
+            PUMP_STATION_RECORD_VERSIONS_V3: PUMP_STATION_STATE_VERSION_V3,
+        }.get(record_versions)
+        if expected_state_version is None:
+            _fail("record-versions", str(record_versions))
         if initial_state.state_version != expected_state_version:
             _fail(
                 "state-version",
@@ -164,6 +174,53 @@ class PumpStationWorldRun:
                 target_receipt_version=migrated.manifest.receipt_version,
                 target_authority_policy_version=(migrated.manifest.authority_policy_version),
                 target_transition_rule_version=(migrated.manifest.transition_rule_version),
+            )
+        )
+        return migrated
+
+    def migrate_to_v3(
+        self,
+        *,
+        repository: PumpStationWorldRunRepository,
+        run_id: str,
+        world_branch_id: str,
+    ) -> PumpStationWorldRun:
+        """Continue one version-2 state as a new version-3 evidence-health run."""
+        if self._manifest.record_versions != PUMP_STATION_RECORD_VERSIONS_V2:
+            _fail("migration-source-version", str(self._manifest.record_versions))
+        source_snapshot = self.snapshot()
+        migrated_state = materialize_evidence_health_state(
+            self._model,
+            self.state,
+        )
+        migrated = PumpStationWorldRun.create(
+            repository=repository,
+            package=self._package,
+            model=self._model,
+            initial_state=migrated_state,
+            run_id=run_id,
+            episode_id=self._manifest.episode_id,
+            world_branch_id=world_branch_id,
+            record_versions=PUMP_STATION_RECORD_VERSIONS_V3,
+        )
+        target_snapshot = migrated.snapshot()
+        repository.publish_migration(
+            PumpStationWorldRunMigration(
+                migration_version=PUMP_STATION_MIGRATION_VERSION,
+                source_run_id=self._manifest.run_id,
+                source_world_branch_id=self._manifest.world_branch_id,
+                source_state_id=source_snapshot.state_id,
+                source_snapshot_version=self._manifest.snapshot_version,
+                source_receipt_version=self._manifest.receipt_version,
+                source_authority_policy_version=self._manifest.authority_policy_version,
+                source_transition_rule_version=self._manifest.transition_rule_version,
+                target_run_id=migrated.manifest.run_id,
+                target_world_branch_id=migrated.manifest.world_branch_id,
+                target_state_id=target_snapshot.state_id,
+                target_snapshot_version=migrated.manifest.snapshot_version,
+                target_receipt_version=migrated.manifest.receipt_version,
+                target_authority_policy_version=migrated.manifest.authority_policy_version,
+                target_transition_rule_version=migrated.manifest.transition_rule_version,
             )
         )
         return migrated
@@ -286,9 +343,94 @@ class PumpStationWorldRun:
             )
             return self._repository.publish_staged_transition(staged)
 
+    def stage_evidence_treatment(
+        self,
+        request: PumpStationEvidenceTreatmentRequest,
+    ) -> PumpStationStagedTransition:
+        """Write immutable host-control evidence without selecting its state."""
+        with self._repository.locked():
+            prior = self._repository.current_snapshot()
+            committed = self._repository.find_committed_control_request(
+                request.request_id,
+            )
+            if committed is not None:
+                _fail("control-request-already-committed", request.request_id)
+            self._validate_control_scope(request, prior)
+            state = self._repository.load_state(prior.state_id)
+            transition = apply_evidence_treatment_schedule(state, request)
+            return self._repository.stage_control_transition(
+                manifest=self._manifest,
+                prior_snapshot=prior,
+                control_request=request,
+                transition=transition,
+            )
+
+    def schedule_evidence_treatment(
+        self,
+        request: PumpStationEvidenceTreatmentRequest,
+    ) -> PumpStationTransition:
+        """Schedule or exactly recover one durable evidence treatment."""
+        with self._repository.locked():
+            committed = self._repository.find_committed_control_request(
+                request.request_id,
+            )
+            if committed is not None:
+                return self._repository.validate_repeated_control_request(
+                    committed,
+                    request,
+                )
+            prior = self._repository.current_snapshot()
+            self._validate_control_scope(request, prior)
+            state = self._repository.load_state(prior.state_id)
+            transition = apply_evidence_treatment_schedule(state, request)
+            staged = self._repository.stage_control_transition(
+                manifest=self._manifest,
+                prior_snapshot=prior,
+                control_request=request,
+                transition=transition,
+            )
+            return self._repository.publish_staged_transition(staged)
+
+    def recover_evidence_treatment(
+        self,
+        request_id: str,
+    ) -> tuple[PumpStationEvidenceTreatmentRequest, PumpStationTransition]:
+        """Reload one selected immutable treatment request and transition."""
+        commit = self._repository.find_committed_control_request(request_id)
+        if commit is None:
+            _fail("control-request-not-found", request_id)
+        return self._repository.recover_control_request(commit)
+
     def steps(self) -> tuple[PumpStationRunStep, ...]:
         """Reload all selected run steps for independent replay."""
         return self._repository.steps()
+
+    def _validate_control_scope(
+        self,
+        request: PumpStationEvidenceTreatmentRequest,
+        snapshot: PumpStationStateSnapshotRef,
+    ) -> None:
+        observed = (
+            request.run_id,
+            request.episode_id,
+            request.world_branch_id,
+            request.base_state_id,
+            request.base_commit_id,
+            request.based_on_sequence,
+        )
+        expected = (
+            self._manifest.run_id,
+            self._manifest.episode_id,
+            self._manifest.world_branch_id,
+            snapshot.state_id,
+            snapshot.commit_id,
+            snapshot.sequence,
+        )
+        if observed != expected:
+            _fail(
+                "control-request-scope",
+                "treatment request does not bind the selected world snapshot",
+            )
 
     @staticmethod
     def _validate_identity(

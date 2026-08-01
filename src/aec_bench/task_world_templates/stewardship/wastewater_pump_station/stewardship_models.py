@@ -7,21 +7,31 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import NoReturn
 
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
+    PumpStationEvidenceHealth,
+    PumpStationEvidenceTreatment,
+    PumpStationObservationSource,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpInspectionObservation,
     PumpStationChangeKind,
     PumpStationEnvironment,
+    PumpStationObservation,
     PumpStationState,
 )
 
 PUMP_STATION_STATE_VERSION_V1 = "pump-station-stewardship-state.v1"
 PUMP_STATION_STATE_VERSION_V2 = "pump-station-stewardship-state.v2"
+PUMP_STATION_STATE_VERSION_V3 = "pump-station-stewardship-state.v3"
 PUMP_STATION_RECEIPT_VERSION_V1 = "pump-station-transition-receipt.v1"
 PUMP_STATION_RECEIPT_VERSION_V2 = "pump-station-transition-receipt.v2"
+PUMP_STATION_RECEIPT_VERSION_V3 = "pump-station-transition-receipt.v3"
 PUMP_STATION_AUTHORITY_POLICY_VERSION_V1 = "pump-station-authority-policy.v1"
 PUMP_STATION_AUTHORITY_POLICY_VERSION_V2 = "pump-station-authority-policy.v2"
+PUMP_STATION_AUTHORITY_POLICY_VERSION_V3 = "pump-station-authority-policy.v3"
 PUMP_STATION_TRANSITION_RULE_VERSION_V1 = "pump-station-transition-rules.v1"
 PUMP_STATION_TRANSITION_RULE_VERSION_V2 = "pump-station-transition-rules.v2"
+PUMP_STATION_TRANSITION_RULE_VERSION_V3 = "pump-station-transition-rules.v3"
 
 PUMP_STATION_RECEIPT_VERSION = PUMP_STATION_RECEIPT_VERSION_V1
 PUMP_STATION_AUTHORITY_POLICY_VERSION = PUMP_STATION_AUTHORITY_POLICY_VERSION_V1
@@ -30,18 +40,22 @@ PUMP_STATION_TRANSITION_RULE_VERSION = PUMP_STATION_TRANSITION_RULE_VERSION_V1
 _SUPPORTED_RECEIPT_VERSIONS = {
     PUMP_STATION_RECEIPT_VERSION_V1,
     PUMP_STATION_RECEIPT_VERSION_V2,
+    PUMP_STATION_RECEIPT_VERSION_V3,
 }
 _SUPPORTED_AUTHORITY_POLICY_VERSIONS = {
     PUMP_STATION_AUTHORITY_POLICY_VERSION_V1,
     PUMP_STATION_AUTHORITY_POLICY_VERSION_V2,
+    PUMP_STATION_AUTHORITY_POLICY_VERSION_V3,
 }
 _SUPPORTED_TRANSITION_RULE_VERSIONS = {
     PUMP_STATION_TRANSITION_RULE_VERSION_V1,
     PUMP_STATION_TRANSITION_RULE_VERSION_V2,
+    PUMP_STATION_TRANSITION_RULE_VERSION_V3,
 }
 _SUPPORTED_STATE_VERSIONS = {
     PUMP_STATION_STATE_VERSION_V1,
     PUMP_STATION_STATE_VERSION_V2,
+    PUMP_STATION_STATE_VERSION_V3,
 }
 
 
@@ -189,12 +203,15 @@ class PumpStationEvidenceKind(StrEnum):
     INSPECTION = "inspection"
     FUNCTIONAL_CHECKS = "functional_checks"
     POST_MAINTENANCE_VERIFICATION = "post_maintenance_verification"
+    CONDITION_CHECK = "condition_check"
 
 
 class PumpStationEventType(StrEnum):
     """Deterministic scheduled event used by the first-world scheduler."""
 
     DECISION_POINT = "decision_point"
+    EVIDENCE_TREATMENT_ACTIVATION = "evidence_treatment_activation"
+    EVIDENCE_RELEASE = "evidence_release"
     OBLIGATION_DUE = "obligation_due"
     OBLIGATION_OVERDUE = "obligation_overdue"
     OBLIGATION_BREACH = "obligation_breach"
@@ -241,6 +258,17 @@ class TransferDuty:
 @dataclass(frozen=True, slots=True)
 class RequestInspection:
     """Request a scheduled inspection of one named pump."""
+
+    context: ProposalContext
+    pump_id: str
+
+    def __post_init__(self) -> None:
+        _require_text(self.pump_id, "pump_id")
+
+
+@dataclass(frozen=True, slots=True)
+class RequestConditionCheck:
+    """Request one sensor-based condition check for a named pump."""
 
     context: ProposalContext
     pump_id: str
@@ -352,6 +380,7 @@ type PumpStationProposal = (
     ContinueOperation
     | TransferDuty
     | RequestInspection
+    | RequestConditionCheck
     | RequestConditionalDeferral
     | RequestObstructionClearance
     | RequestProvisionalReturn
@@ -561,6 +590,21 @@ class PumpStationEvidence:
     accepted_by: PumpStationAuthority | None
     inspection: PumpInspectionObservation | None = None
     passed: bool | None = None
+    health: PumpStationEvidenceHealth | None = None
+    condition_observation: PumpStationObservation | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationPendingEvidence:
+    """One produced evidence item held until its fixed availability time."""
+
+    evidence: PumpStationEvidence
+    treatment_id: str
+    release_at_seconds: int
+
+    def __post_init__(self) -> None:
+        _require_text(self.treatment_id, "treatment_id")
+        _require_non_negative(self.release_at_seconds, "release_at_seconds")
 
 
 @dataclass(frozen=True, slots=True)
@@ -572,6 +616,8 @@ class PumpStationScheduledEvent:
     scheduled_seconds: int
     process_id: str | None = None
     obligation_id: str | None = None
+    treatment_id: str | None = None
+    evidence_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -592,6 +638,9 @@ class PumpStationStewardshipState:
     dependencies: tuple[PumpStationProcessDependency, ...] = ()
     dependency_waivers: tuple[PumpStationDependencyWaiver, ...] = ()
     resource_reservations: tuple[PumpStationResourceReservation, ...] = ()
+    evidence_sources: tuple[PumpStationObservationSource, ...] = ()
+    evidence_treatments: tuple[PumpStationEvidenceTreatment, ...] = ()
+    pending_evidence: tuple[PumpStationPendingEvidence, ...] = ()
 
     def __post_init__(self) -> None:
         if self.state_version not in _SUPPORTED_STATE_VERSIONS:
@@ -603,6 +652,10 @@ class PumpStationStewardshipState:
             self.dependencies or self.dependency_waivers or self.resource_reservations
         ):
             _fail("state-version", "version 1 cannot contain rich-work records")
+        if self.state_version != PUMP_STATION_STATE_VERSION_V3 and (
+            self.evidence_sources or self.evidence_treatments or self.pending_evidence
+        ):
+            _fail("state-version", "only version 3 can contain evidence-health records")
 
     def restriction(
         self,
@@ -693,6 +746,8 @@ class PumpStationTransitionReceipt:
     work_orders_changed: tuple[str, ...]
     evidence_created: tuple[str, ...]
     physical_change: PumpStationChangeKind | None
+    evidence_sources_changed: tuple[str, ...] = ()
+    evidence_treatments_changed: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.receipt_version not in _SUPPORTED_RECEIPT_VERSIONS:
@@ -709,6 +764,10 @@ class PumpStationTransitionReceipt:
             PUMP_STATION_RECEIPT_VERSION_V2: (
                 PUMP_STATION_AUTHORITY_POLICY_VERSION_V2,
                 PUMP_STATION_TRANSITION_RULE_VERSION_V2,
+            ),
+            PUMP_STATION_RECEIPT_VERSION_V3: (
+                PUMP_STATION_AUTHORITY_POLICY_VERSION_V3,
+                PUMP_STATION_TRANSITION_RULE_VERSION_V3,
             ),
         }[self.receipt_version]
         if (

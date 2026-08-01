@@ -36,12 +36,36 @@ _V1_FIELD_EXCLUSIONS = {
         "resource_reservations",
     },
 }
+_V3_FIELD_EXCLUSIONS = {
+    "PumpStationStewardshipState": {
+        "evidence_sources",
+        "evidence_treatments",
+        "pending_evidence",
+    },
+    "PumpStationEvidence": {"health", "condition_observation"},
+    "PumpStationScheduledEvent": {"treatment_id", "evidence_id"},
+    "PumpStationTransitionReceipt": {
+        "evidence_sources_changed",
+        "evidence_treatments_changed",
+    },
+    "PumpStationCurrentStateView": {"observation_source"},
+}
+
+
+def _field_exclusions(type_name: str, profile: str) -> set[str]:
+    exclusions = set(_V3_FIELD_EXCLUSIONS.get(type_name, set())) if profile != "v3" else set()
+    if profile == "v1":
+        exclusions.update(_V1_FIELD_EXCLUSIONS.get(type_name, set()))
+    return exclusions
 
 
 def _record_profile(value: object) -> str:
     type_name = type(value).__name__
     if type_name in {"PumpStationStewardshipState", "PumpStationCurrentStateView"}:
-        return "v2" if str(getattr(value, "state_version", "")).endswith(".v2") else "v1"
+        version = str(getattr(value, "state_version", ""))
+        if version.endswith(".v3"):
+            return "v3"
+        return "v2" if version.endswith(".v2") else "v1"
     if type_name == "PumpStationActorView":
         return _record_profile(cast(Any, value).current_state)
     if type_name == "PumpStationStructuredHandover":
@@ -50,6 +74,13 @@ def _record_profile(value: object) -> str:
         return _record_profile(cast(Any, value).base_view)
     if type_name == "PumpStationTransition":
         return _record_profile(cast(Any, value).state)
+    if type_name == "PumpStationTransitionReceipt":
+        version = str(getattr(value, "receipt_version", ""))
+        if version.endswith(".v3"):
+            return "v3"
+        return "v2" if version.endswith(".v2") else "v1"
+    if type_name == "PumpStationEvidence" and getattr(value, "health", None) is not None:
+        return "v3"
     return "v2"
 
 
@@ -65,7 +96,7 @@ def canonical_stewardship_value(
     if isinstance(value, Decimal):
         return str(value)
     if is_dataclass(value) and not isinstance(value, type):
-        exclusions = _V1_FIELD_EXCLUSIONS.get(type(value).__name__, set()) if profile == "v1" else set()
+        exclusions = _field_exclusions(type(value).__name__, profile)
         return {
             field.name: canonical_stewardship_value(
                 getattr(value, field.name),

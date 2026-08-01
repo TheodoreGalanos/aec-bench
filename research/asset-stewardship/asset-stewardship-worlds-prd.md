@@ -5,15 +5,15 @@
 
 | Field | Value |
 | --- | --- |
-| Status | ASW-0 through ASW-5I complete; the ASW-5I gate authorizes ASW-6A local evidence health only |
+| Status | ASW-0 through ASW-6A complete; ASW-6A-R and all later expansions remain conditional |
 | Date | 2026-08-01 |
-| Revision | `ASW-PRD-M-2026-08-01` |
+| Revision | `ASW-PRD-N-2026-08-01` |
 | Design revision | Semantic decisions change through reviewed document revisions; this PRD does not require a self-referential or hand-authored content hash |
 | Target repository | `aec-bench` |
-| Current production basis | `main` at ASW-5 checkpoint merge `1b2288342d42ce90e63ca7a4ca0aa716383b3c34` |
-| Live implementation status | The certified world, production runtime, falsification stages, direct and Harbor execution, immutable evaluation, first confirmatory study, rich work processes, and separate actor and host-control interfaces are complete |
+| Current production basis | `main` at ASW-5I merge `a91801e2dd9291a3ec1bc02d52382dce46a0379c` |
+| Live implementation status | The certified world, production runtime, falsification stages, direct and Harbor execution, immutable evaluation, first confirmatory study, rich work processes, separate actor and host-control interfaces, and local evidence health are complete |
 | Initial programme boundary | ASW-0 through ASW-4 |
-| Implementation status | ASW-5I actor and host-control interfaces passed their provider-free gate; ASW-6A local evidence health is the only authorized expansion |
+| Implementation status | The ASW-6A provider-free gate passed; no later expansion is active or authorized |
 | Working programme name | Asset Stewardship Worlds |
 | First study | Obligation continuity under time and handover |
 
@@ -1683,6 +1683,31 @@ ASW-6A-R, the temporal-evidence contribution, and ASW-6B remain conditional.
 - changed post-maintenance baselines; and
 - deterministic observation-quality treatments.
 
+**Approved rule freeze — 2026-08-01:**
+
+- publish evidence-health runs as version 3 state, snapshot, receipt, authority,
+  and transition records while preserving version 1 and version 2 bytes;
+- retain physical inspection and add `request_condition_check` as a
+  sensor-based choice that cannot satisfy physical-clearance authority;
+- record observation, production, and availability time, source, component
+  scope, baseline, operating regime, acceptance, contradiction, and
+  supersession, and compute age in the actor view;
+- use `current`, `suspect`, and `unavailable` quality states;
+- classify evidence as stale only when age is greater than `28,800` seconds;
+- delay selected evidence for exactly `28,800` seconds while preserving its
+  original observation time;
+- allow only `calibration_lapse`, `evidence_delay`, `stale_sample`,
+  `contradictory_report`, `observation_loss`, and `baseline_change` treatment
+  classes at treatment version 1;
+- activate each treatment at the next declared decision point through a
+  durable transition that does not advance the clock;
+- expose the resulting source, quality, age, relation, baseline, and regime
+  facts to the actor, but keep the treatment identity, hidden correct value,
+  unaffected controls, and future activation private; and
+- require exact retry after process restart, direct and local-interface parity,
+  handover, replay, crash recovery, and local-Harbor parity without a provider
+  call or full-repository test run.
+
 **Control API extension:**
 
 - add allowlisted host operations to declare and schedule one deterministic
@@ -1705,6 +1730,15 @@ ASW-6A-R, the temporal-evidence contribution, and ASW-6B remain conditional.
 prove typed success, unavailable-capability failure, wrong-branch and
 stale-sequence rejection, idempotent retry, exact replay, public/private
 separation, and actor projection parity before ASW-6A can pass.
+
+**Accepted provider-free result — 2026-08-01:** the focused ASW-6A gate passed
+27 tests, the touched regression gate passed 35 tests, and the complete
+pump-station folder passed 192 tests. Ruff lint, Ruff format, source MyPy, and
+ASW-6A test MyPy passed. Direct and local Harbor produced the same version 3
+state for the fixed treatment, handover, sensor-check, and physical-inspection
+history. No model or external-provider call was made. The
+[ASW-6A research artifact](asw-6a-local-evidence-health/ara/PAPER.md) records
+the supported claims, exact evidence, architecture, and retained limits.
 
 The optional temporal-evidence companion may contribute its nested
 `ASW-6A-TE0` through `ASW-6A-TE4` slices only after a later parent checkpoint
@@ -2139,26 +2173,15 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | 2026-08-01 | Accept the ASW-5 programme checkpoint and authorize ASW-6A local evidence health only. | ASW-5 passed its provider-free replay, handover, compatibility, and conservation gates. Evidence age, quality, provenance, operating regime, and contradictions are the next required semantics before a closeout review or temporal-retrieval study. |
 | 2026-08-01 | Add ASW-5I as the interface gate between ASW-5 and ASW-6A, with separate actor and host-control APIs. | The task-specific Python session already supplied actor actions and Harbor already consumed them. A supported actor contract now gives direct and Harbor clients one action path, while a separate control contract manages the run without giving host rights to the actor. |
 | 2026-08-01 | Accept the ASW-5I provider-free gate and activate the existing ASW-6A authority. | Exact-bound actor calls, control separation, installed JSON execution, local Harbor use, durable replay, negative access, and cumulative compatibility passed. Later evidence, review, rollout, and physical-treatment controls remain unavailable. |
+| 2026-08-01 | Approve the ASW-6A local evidence-health rule freeze. | Version 3 preserves earlier bytes, uses one fixed stale and delay interval, adds one non-latent condition-check choice, and limits host treatments to six deterministic task-owned classes with private control identity. |
+| 2026-08-01 | Accept the ASW-6A provider-free gate and close the local evidence-health stage. | Version 3 compatibility, six evidence treatments, sensor and physical inspection choice, durable retry and recovery, handover privacy, installed JSON, and local Harbor parity passed. No authority is granted to ASW-6A-R or any later stage. |
 
 ## 24. Immediate next action
 
-Complete **ASW-6A — local evidence health** as one bounded, provider-free
-stage on the accepted ASW-5I actor and control interfaces.
-
-Freeze the evidence record, sensor, calibration, delay, staleness,
-contradiction, supersession, and operating-regime rules before implementation.
-Then add only the deterministic observation-quality paths exercised by the
-Pump A and Pump B histories. The exit gate must prove that latent truth remains
-concealed and that every actor-visible evidence item has explicit age, quality,
-provenance, component scope, and applicable operating regime through views,
-handover, replay, resume, and Harbor import.
-
-Add only the ASW-6A control operations for declared evidence-quality
-treatments. Bind each treatment to the exact branch, snapshot, sequence,
-source, treatment version, decision point, visibility policy, and request
-identity. Keep its private manifest outside the actor view. Prove retry,
-resume, replay, wrong-branch rejection, stale-sequence rejection, and
-direct/local/Harbor projection parity.
+Review the accepted **ASW-6A — local evidence health** checkpoint and decide
+separately whether to authorize ASW-6A-R maintenance closeout review design.
+The completed local evidence-health stage is the entry evidence for that
+decision; it does not activate the review stage by itself.
 
 ASW-6A does not authorize ASW-6A-R, temporal retrieval, an external archive,
 a model study, shared extraction, imperfect repair, rollout fan-out, or coupled

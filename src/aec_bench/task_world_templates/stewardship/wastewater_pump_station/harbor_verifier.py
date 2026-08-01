@@ -37,6 +37,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationVerificationReport,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
+    PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES,
     PUMP_STATION_RICH_WORK_TOOL_NAMES,
     PUMP_STATION_TASK_WORLD_ID,
     PUMP_STATION_TOOL_NAMES,
@@ -64,7 +65,14 @@ def verify_pump_station_harbor_run(
     package_payload = _mapping(manifest.get("package"), "package")
     bridge_payload = _mapping(manifest.get("bridge"), "bridge")
     rich_work_processes = bool(bridge_payload.get("rich_work_processes", False))
-    expected_tools = PUMP_STATION_RICH_WORK_TOOL_NAMES if rich_work_processes else PUMP_STATION_TOOL_NAMES
+    evidence_health = bool(bridge_payload.get("evidence_health", False))
+    expected_tools = (
+        PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES
+        if evidence_health
+        else PUMP_STATION_RICH_WORK_TOOL_NAMES
+        if rich_work_processes
+        else PUMP_STATION_TOOL_NAMES
+    )
     if tuple(bridge_payload.get("allowed_tools", ())) != expected_tools:
         raise ValueError("pump-station Harbor bridge tools differ")
     package = load_reference_package(package_dir)
@@ -118,6 +126,7 @@ def verify_pump_station_harbor_run(
         root / "world-run",
         package_root=Path(package_dir),
         rich_work_processes=rich_work_processes,
+        evidence_health=evidence_health,
     ).open(
         WorldSessionRequest(
             execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
@@ -143,6 +152,7 @@ def verify_pump_station_harbor_run(
         report=report,
         transition_count=transition_count,
         rich_work_processes=rich_work_processes,
+        evidence_health=evidence_health,
     )
     return {
         "valid": True,
@@ -188,6 +198,7 @@ def _verify_stewardship_objective(
     report: PumpStationVerificationReport,
     transition_count: int,
     rich_work_processes: bool,
+    evidence_health: bool,
 ) -> None:
     state = _mapping(actor_view.get("current_state"), "final actor state")
     evidence = state.get("evidence")
@@ -199,6 +210,20 @@ def _verify_stewardship_objective(
     closure_recorded = isinstance(work_orders, list) and any(
         isinstance(item, dict) and item.get("status") == "provisionally_closed" for item in work_orders
     )
+    if evidence_health:
+        source = state.get("observation_source")
+        processes = state.get("processes")
+        condition_recorded = isinstance(evidence, list) and any(
+            isinstance(item, dict) and item.get("kind") == "condition_check" and item.get("quality") == "suspect"
+            for item in evidence
+        )
+        physical_inspection_requested = isinstance(processes, list) and any(
+            isinstance(item, dict) and item.get("kind") == "inspection" for item in processes
+        )
+        source_suspect = isinstance(source, dict) and source.get("quality") == "suspect"
+        if transition_count < 4 or not condition_recorded or not physical_inspection_requested or not source_suspect:
+            raise ValueError("pump-station evidence-health objective is incomplete")
+        return
     rich_completion = (
         isinstance(evidence, list)
         and any(

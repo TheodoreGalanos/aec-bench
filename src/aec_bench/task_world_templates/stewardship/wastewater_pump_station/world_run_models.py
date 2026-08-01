@@ -5,13 +5,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
+    PumpStationEvidenceTreatmentRequest,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PUMP_STATION_AUTHORITY_POLICY_VERSION_V1,
     PUMP_STATION_AUTHORITY_POLICY_VERSION_V2,
+    PUMP_STATION_AUTHORITY_POLICY_VERSION_V3,
     PUMP_STATION_RECEIPT_VERSION_V1,
     PUMP_STATION_RECEIPT_VERSION_V2,
+    PUMP_STATION_RECEIPT_VERSION_V3,
     PUMP_STATION_TRANSITION_RULE_VERSION_V1,
     PUMP_STATION_TRANSITION_RULE_VERSION_V2,
+    PUMP_STATION_TRANSITION_RULE_VERSION_V3,
     PumpStationEventType,
     PumpStationProposal,
     PumpStationTransition,
@@ -23,6 +29,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 PUMP_STATION_SERIALIZATION_VERSION = "pump-station-world-run.v1"
 PUMP_STATION_SNAPSHOT_VERSION_V1 = "pump-station-state-snapshot.v1"
 PUMP_STATION_SNAPSHOT_VERSION_V2 = "pump-station-state-snapshot.v2"
+PUMP_STATION_SNAPSHOT_VERSION_V3 = "pump-station-state-snapshot.v3"
 PUMP_STATION_SNAPSHOT_VERSION = PUMP_STATION_SNAPSHOT_VERSION_V1
 PUMP_STATION_MIGRATION_VERSION = "pump-station-world-run-migration.v1"
 
@@ -49,9 +56,16 @@ PUMP_STATION_RECORD_VERSIONS_V2 = PumpStationRecordVersions(
     authority_policy_version=PUMP_STATION_AUTHORITY_POLICY_VERSION_V2,
     transition_rule_version=PUMP_STATION_TRANSITION_RULE_VERSION_V2,
 )
+PUMP_STATION_RECORD_VERSIONS_V3 = PumpStationRecordVersions(
+    snapshot_version=PUMP_STATION_SNAPSHOT_VERSION_V3,
+    receipt_version=PUMP_STATION_RECEIPT_VERSION_V3,
+    authority_policy_version=PUMP_STATION_AUTHORITY_POLICY_VERSION_V3,
+    transition_rule_version=PUMP_STATION_TRANSITION_RULE_VERSION_V3,
+)
 PUMP_STATION_SUPPORTED_RECORD_VERSIONS = (
     PUMP_STATION_RECORD_VERSIONS_V1,
     PUMP_STATION_RECORD_VERSIONS_V2,
+    PUMP_STATION_RECORD_VERSIONS_V3,
 )
 
 
@@ -194,14 +208,18 @@ class PumpStationStateSnapshotRef:
             )
         require_world_run_version(
             self.snapshot_version,
-            (PUMP_STATION_SNAPSHOT_VERSION_V1, PUMP_STATION_SNAPSHOT_VERSION_V2),
+            (
+                PUMP_STATION_SNAPSHOT_VERSION_V1,
+                PUMP_STATION_SNAPSHOT_VERSION_V2,
+                PUMP_STATION_SNAPSHOT_VERSION_V3,
+            ),
             "snapshot-version",
         )
 
 
 @dataclass(frozen=True, slots=True)
 class PumpStationWorldRunMigration:
-    """Immutable source lineage for one version-1 to version-2 continuation."""
+    """Immutable source lineage for one supported next-version continuation."""
 
     migration_version: str
     source_run_id: str
@@ -246,10 +264,15 @@ class PumpStationWorldRunMigration:
             authority_policy_version=self.target_authority_policy_version,
             transition_rule_version=self.target_transition_rule_version,
         )
-        if source != PUMP_STATION_RECORD_VERSIONS_V1:
-            raise PumpStationWorldRunError("migration-source-version", str(source))
-        if target != PUMP_STATION_RECORD_VERSIONS_V2:
-            raise PumpStationWorldRunError("migration-target-version", str(target))
+        supported_pairs = {
+            (PUMP_STATION_RECORD_VERSIONS_V1, PUMP_STATION_RECORD_VERSIONS_V2),
+            (PUMP_STATION_RECORD_VERSIONS_V2, PUMP_STATION_RECORD_VERSIONS_V3),
+        }
+        if (source, target) not in supported_pairs:
+            raise PumpStationWorldRunError(
+                "migration-version-pair",
+                f"{source} -> {target}",
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -309,7 +332,8 @@ class PumpStationStagedTransition:
 
     prior_snapshot: PumpStationStateSnapshotRef
     snapshot: PumpStationStateSnapshotRef
-    proposal: PumpStationProposal
-    information_set: PumpStationInformationSet
+    proposal: PumpStationProposal | None
+    information_set: PumpStationInformationSet | None
     transition: PumpStationTransition
     commit: PumpStationWorldRunCommit
+    control_request: PumpStationEvidenceTreatmentRequest | None = None

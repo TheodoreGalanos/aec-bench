@@ -1,0 +1,29 @@
+observations:
+  - id: O001
+    summary: The provider-free ASW-6A treatment, compatibility, parity, recovery, and local-Harbor gates passed.
+    status: supported
+    source: EV002, EV003, EV004, and EV005
+    next_action: Keep the supported local evidence-health boundary fixed until a later stage has separate authority.
+    domain:
+      stage: ASW-6A
+  - id: O002
+    summary: Maintenance closeout review remains the next candidate only after the ASW-6A checkpoint.
+    status: open
+    source: Parent roadmap
+    next_action: Keep ASW-6A-R disabled until a separate decision.
+    domain:
+      planned_stage: ASW-6A-R
+  - id: O003
+    summary: Temporal evidence and retrieval remain outside the local evidence-health stage.
+    status: open
+    source: Temporal evidence companion plan
+    next_action: Keep ASW-6A-TE0 through ASW-6A-TE4 disabled.
+    domain:
+      planned_stage: conditional_temporal_contribution
+  - id: O004
+    summary: ASW-6A added local evidence health only and made no model or external-provider call.
+    status: supported
+    source: Provider-free test evidence and environment record
+    next_action: Do not infer maintenance closeout or temporal-study authority from this result.
+    domain:
+      stage: ASW-6A
