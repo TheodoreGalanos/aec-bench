@@ -90,7 +90,17 @@ failures outside ASW-5. Eight failures reproduced at the unchanged
 baseline, which identifies a full-suite order dependency. These wider
 repository defects remain visible but do not falsify the ASW-5 claims.
 
-## Retained later step
+## Retained later steps
+
+A human-grounded maintenance closeout and return-to-service review is retained
+for conditional ASW-6A-R. The first review object is the named Pump A case pack:
+condition and defect history, work order and scope, work and resource records,
+inspection and intervention evidence, functional checks, provisional return and
+closeout, post-maintenance verification, restrictions, obligations, handover
+lineage, and the applicable FMECA and maintenance-schedule basis. A controlled
+review issue belongs in a fallible record, claim, decision, or omission. It must
+not corrupt authoritative world state. This review is not part of ASW-5 and has
+no model-provider authority from this rule freeze.
 
 State-addressable rollout fan-out is retained for conditional ASW-7A. It will
 allow a later study to select one verified full-world state and create many

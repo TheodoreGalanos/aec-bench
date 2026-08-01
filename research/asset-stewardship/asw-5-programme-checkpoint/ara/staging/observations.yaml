@@ -1,0 +1,30 @@
+observations:
+  - id: O001
+    summary: Explicit evidence health may make continuity and decision quality measurable in a way that the ASW-4 binary handover contrast did not.
+    status: provisional
+    source: ASW-5 programme checkpoint on 2026-08-01
+    next_action: Test local evidence-health semantics provider-free in ASW-6A before defining a review or model study.
+    domain:
+      planned_stage: ASW-6A
+  - id: O002
+    summary: The Pump A maintenance closeout and return-to-service pack is the planned first human-grounded review object.
+    status: open
+    source: Theo's roadmap decision on 2026-08-01
+    next_action: Keep ASW-6A-R blocked until the ASW-6A local evidence-health exit gate and a separate checkpoint pass.
+    domain:
+      planned_stage: ASW-6A-R
+      provider_calls_authorized: false
+  - id: O003
+    summary: An eligible review checkpoint can later become an immutable origin for state-addressable rollout fan-out.
+    status: open
+    source: Theo's roadmap decision on 2026-08-01
+    next_action: Keep implementation in conditional ASW-7A after the review mechanics and their checkpoint pass.
+    domain:
+      planned_stage: ASW-7A
+  - id: O004
+    summary: A later model study needs process-quality measures and a prospective no-meaningful-difference rule.
+    status: open
+    source: ASW-4 and ASW-5 checkpoint review
+    next_action: Freeze these measures before any later shakedown or confirmatory provider call.
+    domain:
+      planned_stage: later_model_study

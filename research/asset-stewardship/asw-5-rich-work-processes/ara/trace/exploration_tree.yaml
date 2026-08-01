@@ -39,7 +39,7 @@ nodes:
   - id: N004
     type: experiment
     summary: Run red-green-refactor unit, integration, end-to-end, and attack tests without a model provider.
-    children: [N005, N006]
+    children: [N005, N006, N007]
     also_depends_on: [N003]
     claims_touched: [C001, C002, C003, C004, C005]
     provenance: ai_suggested
@@ -88,3 +88,20 @@ nodes:
     domain:
       implementation_stage: ASW-5
       gate_status: passed
+  - id: N007
+    type: decision
+    summary: Retain a human-grounded Pump A maintenance closeout and return-to-service review as conditional ASW-6A-R and keep it outside ASW-5.
+    children: []
+    also_depends_on: [N004]
+    claims_touched: []
+    provenance: user_revised
+    payload:
+      decision_status: accepted
+      reviewer_roles: [asset_engineer, maintenance_assurance_engineer, independent_verification_engineer]
+      review_object: pump_a_maintenance_closeout_and_return_to_service_pack
+      issue_location: fallible_record_claim_decision_or_omission
+      authoritative_state_corruption_allowed: false
+      provider_calls_authorized: false
+    domain:
+      current_stage: ASW-5
+      planned_stage: ASW-6A-R

@@ -5,15 +5,15 @@
 
 | Field | Value |
 | --- | --- |
-| Status | ASW-0 through ASW-4 complete; the ASW-4 programme checkpoint authorizes ASW-5 only |
-| Date | 2026-07-31 |
-| Revision | `ASW-PRD-K-2026-07-31` |
+| Status | ASW-0 through ASW-5 complete; the ASW-5 programme checkpoint authorizes ASW-6A local evidence health only |
+| Date | 2026-08-01 |
+| Revision | `ASW-PRD-L-2026-08-01` |
 | Design revision | Semantic decisions change through reviewed document revisions; this PRD does not require a self-referential or hand-authored content hash |
 | Target repository | `aec-bench` |
-| Current production branch | `main` at ASW-4C merge `8ecf053e14b976e9686bb02de9da02b29781b856` |
-| Live implementation status | The certified world, production runtime, falsification stages, direct and Harbor execution, immutable evaluation, and first confirmatory study are complete |
+| Current production branch | `main` at ASW-5 merge `be24edd42dc16b01ff13f8a860c402ecde297501` |
+| Live implementation status | The certified world, production runtime, falsification stages, direct and Harbor execution, immutable evaluation, first confirmatory study, and rich work-process stage are complete |
 | Initial programme boundary | ASW-0 through ASW-4 |
-| Implementation status | The asset-local world, direct host, installed CLI, Harbor path, durable records, evaluation, falsification stages, and first study are complete; ASW-5 is the only authorized expansion |
+| Implementation status | ASW-5 rich work processes passed their provider-free gate; ASW-6A local evidence health is the only authorized expansion |
 | Working programme name | Asset Stewardship Worlds |
 | First study | Obligation continuity under time and handover |
 
@@ -882,7 +882,7 @@ Evaluation may reconstruct selected alternatives on demand in a separate private
 | FR-20 | The controller must support hidden or overlapping evaluation windows and post-window continuation without exposing the boundary. | Must |
 | FR-21 | Counterfactual branches must be replayable on demand without eager materialisation or realised-branch leakage. | Must by ASW-3 |
 | FR-22 | Composite triggers, obligation dependencies, waiver and suspension transitions, reservations, and arbitrary additional overlapping processes beyond the fixed ASW-2 inspection/intervention pair must be supported. | Conditional ASW-5 |
-| FR-23 | Sensor health, calibration, stale evidence, delayed results, and contradictory records must be supported. | Conditional ASW-6 |
+| FR-23 | Sensor health, calibration, stale evidence, delayed results, contradictory records, and a maintenance closeout review over a named asset case pack must be supported. | Conditional ASW-6 |
 | FR-24 | State-addressable rollout fan-out, imperfect restoration, recurrence, maintenance-induced defects, and rework must be supported. | Conditional ASW-7 |
 | FR-25 | Arbitrary coupled assets, generalized transferred duty beyond the fixed A/B profile rule, shared resources, constrained outages, and endogenous backlog must be supported. | Conditional ASW-8 |
 | FR-26 | Governed institutional proposals must version and selectively propagate FMECA or schedule changes. | Conditional ASW-9 |
@@ -1579,13 +1579,30 @@ unauthorized.
 
 **Exit gate:** composite obligations and overlapping processes replay and survive handover without conservation errors.
 
+**Checkpoint decision — 2026-08-01:** ASW-5 is accepted. The provider-free
+stage passed its focused and cumulative gates. Replay, version migration,
+direct and Harbor execution, fresh-agent handover, and resource conservation
+remained valid under overlapping work and a forced access interruption. The
+interruption produced one visible verification-deadline breach, as required by
+the frozen rule that suspension does not pause a required follow-up deadline.
+
+The checkpoint authorizes ASW-6A local evidence-health design, implementation,
+and falsification only. It does not authorize ASW-6A-R, temporal retrieval,
+ASW-6B, ASW-7, shared extraction, or a model study.
+
+[The ASW-5 programme checkpoint](asw-5-programme-checkpoint/ara/PAPER.md)
+records the result audit, decision, next-stage entry gate, and retained limits.
+
 ### ASW-6 — Partial observability and evidence health
 
-ASW-6 is conditional and uses two explicit parent-owned substage labels so the parent and companion roadmaps cannot silently diverge. Neither substage is part of the ASW-0 through ASW-4 critical path.
+ASW-6 uses explicit parent-owned substage labels so the parent and companion
+roadmaps cannot silently diverge. ASW-6A local evidence health is authorized by
+the ASW-5 checkpoint. ASW-6A-R, the temporal-evidence contribution, and ASW-6B
+remain conditional.
 
 #### ASW-6A — Local evidence health
 
-**Conditional scope:**
+**Authorized provider-free scope:**
 
 - inspection choice;
 - sensor state and calibration;
@@ -1595,9 +1612,55 @@ ASW-6 is conditional and uses two explicit parent-owned substage labels so the p
 - changed post-maintenance baselines; and
 - deterministic observation-quality treatments.
 
-The optional temporal-evidence companion may contribute its nested `ASW-6A-TE0` through `ASW-6A-TE4` slices only after the ASW-4 checkpoint authorizes that hypothesis. Those slices contribute to this parent-owned milestone; they do not replace or own sensor, calibration, observation-quality, contradictory-record, or post-maintenance-baseline work.
+The optional temporal-evidence companion may contribute its nested
+`ASW-6A-TE0` through `ASW-6A-TE4` slices only after a later parent checkpoint
+explicitly authorizes that hypothesis. The ASW-5 checkpoint does not authorize
+them. Those slices contribute to this parent-owned milestone; they do not
+replace or own sensor, calibration, observation-quality, contradictory-record,
+or post-maintenance-baseline work.
 
 **Exit gate:** latent truth remains concealed and every evidence item carries age, quality, provenance, and applicable operating regime.
+
+##### ASW-6A-R — Maintenance closeout and return-to-service review
+
+This review is a human asset-assurance task over one fixed, valid world history.
+The first reviewer role is an asset engineer, maintenance-assurance engineer, or
+independent verification engineer. The review object is the named Pump A
+maintenance closeout and return-to-service pack, not the simulator or an
+abstract dump of world state.
+
+**Conditional scope:**
+
+- assemble the review pack from the condition and defect history, work order
+  and approved scope, work processes and dependencies, access and resource
+  records, inspection and intervention evidence, functional checks,
+  provisional return and closeout records, post-maintenance verification,
+  active restrictions and open obligations, decision and handover lineage, and
+  the applicable FMECA and maintenance-schedule basis;
+- introduce one declared class of credible review issue in a fallible record,
+  claim, decision, or omission while keeping authoritative world state valid;
+- begin with bounded issues such as evidence for the wrong component, evidence
+  that predates the work, incomplete work recorded as complete, a result that
+  conflicts with physical evidence, or a missing restriction or verification
+  obligation in the closeout or handover record;
+- require a source-bound review record that identifies the finding, affected
+  and unaffected records or duties, missing evidence, disposition, and required
+  follow-up; and
+- keep the planted issue, expected impact map, latent truth, and verifier target
+  private from the reviewer.
+
+ASW-6A-R starts only after the local evidence-health contract can represent the
+age, quality, provenance, operating regime, and contradictions used by the
+review. Its mechanism design and provider-free falsification do not authorize a
+model study. Any agent review study requires its own frozen design, shakedown,
+provider authority, budget, and confirmatory gate. ASW-6A-R does not add a new
+physical mutation; maintenance-induced or controlled physical defects remain
+ASW-7B scope.
+
+**Exit gate:** the review pack is bound to one replay-valid history; the planted
+issue does not corrupt authoritative world state; the private verifier can
+check the exact finding, affected and unaffected set, evidence boundary, and
+disposition; and no latent or future truth leaks to the reviewer.
 
 #### ASW-6B — Optional external historical-archive adapter
 
@@ -1611,7 +1674,7 @@ ASW-6B implementation and pilot work exist only if the companion's local determi
 
 **Conditional scope:**
 
-- select a committed, verified full-world snapshot as one immutable rollout origin;
+- select a committed, verified full-world snapshot, including an eligible review checkpoint, as one immutable rollout origin;
 - create multiple isolated child continuations from that same state without moving or rewriting the parent branch;
 - hold future world conditions fixed to measure agent variation, or apply one declared and governed future-world variation as a separate treatment axis;
 - bind every child to the parent snapshot, world and rule versions, event schedule, information boundary, agent condition, rollout seed, and verification result;
@@ -1851,8 +1914,8 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | OD-11 | Define handover projection, actor-visible contents, revision, and separately queryable authoritative history. | Resolved for the selected durable commit chain; cross-branch history remains later scope | ASW-2A3 projection and verifier boundary; ASW-2B artifact repository |
 | OD-12 | Define evaluation-window treatments and terminal-liability vector. | Resolved for the first study | [ASW-0C research charter](asw-0c-research-charter.md#12-budgets-and-evaluation-window) |
 | OD-13 | Define exact behavior for a physical terminal event, or defer the general terminal surface. | Resolved by deferral | The first charter contains no physical terminal event |
-| OD-14 | Approve model-provider identity, token limits, and financial budget. | Resolved for ASW-4 only | Phase-bound ASW-4B and ASW-4C approvals; no provider authority carries into ASW-5 |
-| OD-15 | Define the evidence threshold for each conditional expansion. | Resolved for ASW-5; later stages remain conditional | [ASW-4 programme checkpoint](asw-4-programme-checkpoint/ara/PAPER.md) |
+| OD-14 | Approve model-provider identity, token limits, and financial budget. | Resolved for ASW-4 only | Phase-bound ASW-4B and ASW-4C approvals; no provider authority carries into ASW-5 or ASW-6A |
+| OD-15 | Define the evidence threshold for each conditional expansion. | Resolved through ASW-6A local evidence health; later stages remain conditional | [ASW-5 programme checkpoint](asw-5-programme-checkpoint/ara/PAPER.md) |
 | OD-16 | Select generator/oracle and independent-certification software roles. | Resolved | ASW-0B3 through ASW-0B5 |
 | OD-17 | Define evidence/rights classification and research-to-runtime promotion shape. | Resolved | ASW-0B2 through ASW-0B5 |
 
@@ -1894,23 +1957,28 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | 2026-07-29 | Keep the ASW-2C host boundary minimal and provider-neutral while the pump-station package owns its native tools. | The host needs strict start and resume contracts without owning task physics, action names, evaluation policy, or model-provider calls. |
 | 2026-07-31 | Accept the ASW-4 programme checkpoint and authorize ASW-5 only. | The first study produced a useful, independently reloadable research object and an exact zero-difference result; richer overlapping work provides a concrete next hypothesis without assuming that structured handover will improve it. |
 | 2026-08-01 | Place state-addressable rollout fan-out in conditional ASW-7A, before imperfect-repair and environment-variation work in ASW-7B. | Reusing one verified start for many agent continuations is a data-generation primitive distinct from changing world conditions; it needs rich durable state and lineage but must not expand provider-free ASW-5. |
+| 2026-08-01 | Add a human-grounded Pump A maintenance closeout and return-to-service review as ASW-6A-R. | A credible asset review reconciles a named case pack of condition, work, test, control, obligation, and handover records against the maintenance basis. The planted issue belongs in a fallible record, claim, decision, or omission rather than corrupting authoritative world state. |
+| 2026-08-01 | Accept the ASW-5 programme checkpoint and authorize ASW-6A local evidence health only. | ASW-5 passed its provider-free replay, handover, compatibility, and conservation gates. Evidence age, quality, provenance, operating regime, and contradictions are the next required semantics before a closeout review or temporal-retrieval study. |
 
 ## 24. Immediate next action
 
-Complete **ASW-5 — rich obligations and work processes** as one bounded,
-provider-free stage.
+Complete **ASW-6A — local evidence health** as one bounded, provider-free
+stage.
 
-Freeze its state changes and conservation checks before implementation. Then
-add composite triggers, dependencies, waiver and suspension, nested operating
-limits, reservations, spare and access processes, dependency-aware rescheduling
-and cancellation, and overlapping work orders. The exit gate must prove replay,
-resume, crash recovery, and fresh-agent handover without duplicated work, lost
-state, or resource-conservation errors.
+Freeze the evidence record, sensor, calibration, delay, staleness,
+contradiction, supersession, and operating-regime rules before implementation.
+Then add only the deterministic observation-quality paths exercised by the
+Pump A and Pump B histories. The exit gate must prove that latent truth remains
+concealed and that every actor-visible evidence item has explicit age, quality,
+provenance, component scope, and applicable operating regime through views,
+handover, replay, resume, and Harbor import.
 
-ASW-5 does not authorize a model study, temporal retrieval, shared extraction,
-imperfect repair, or coupled assets.
+ASW-6A does not authorize ASW-6A-R, temporal retrieval, an external archive,
+a model study, shared extraction, imperfect repair, rollout fan-out, or coupled
+assets.
 
-State-addressable rollout fan-out is retained as conditional ASW-7A work. It is
-not part of the ASW-5 exit gate. The programme must complete ASW-5 and pass the
-required later checkpoints before ASW-7A implementation or any rollout study is
-authorized.
+The Pump A maintenance closeout review remains conditional ASW-6A-R work. It
+can start only after the local evidence-health exit gate passes and a separate
+checkpoint authorizes it. State-addressable rollout fan-out remains conditional
+ASW-7A work and can include an eligible review checkpoint only after its own
+entry gate.

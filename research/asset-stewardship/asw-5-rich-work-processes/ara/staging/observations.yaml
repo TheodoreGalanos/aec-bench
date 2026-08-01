@@ -46,3 +46,13 @@ observations:
       imported_trial_reward: 0.0
       obligation_breach_count: 1
       provider_calls: 0
+  - id: O007
+    summary: A later asset review should use the Pump A maintenance closeout and return-to-service pack as its human review object, with one credible issue in a fallible record, claim, decision, or omission.
+    status: open
+    source: Theo's asset-review planning decision on 2026-08-01
+    next_action: Implement this only as conditional ASW-6A-R after local evidence-health mechanics pass, and keep it outside the ASW-5 exit gate.
+    domain:
+      planned_stage: ASW-6A-R
+      review_object: pump_a_maintenance_closeout_and_return_to_service_pack
+      authoritative_state_corruption_allowed: false
+      current_stage_scope: excluded

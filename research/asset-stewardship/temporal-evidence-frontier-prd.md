@@ -1,30 +1,35 @@
 # ABOUTME: Defines the optional temporal-evidence and backresearch capability for asset-stewardship worlds.
-# ABOUTME: Extends the stewardship PRD without putting any TEF contract, retrieval, or external provider on the ASW-1–ASW-4 path.
+# ABOUTME: Extends the stewardship PRD without putting any TEF contract, retrieval, or external provider on the ASW-1–ASW-5 path.
 
 # Temporal Evidence Frontier — Companion Product Requirements Document
 
 | Field | Value |
 | --- | --- |
-| Status | ASW-0A accepted; TEF remains disabled through the ASW-4 checkpoint |
-| Date | 2026-07-27 |
-| Revision | `TEF-PRD-F-2026-07-27` |
+| Status | ASW-5 accepted; TEF remains disabled while ASW-6A local evidence health is built |
+| Date | 2026-08-01 |
+| Revision | `TEF-PRD-G-2026-08-01` |
 | Companion content identity | Recorded externally in the [ASW-0A baseline and authority record](asw-0a-baseline-and-authority.md); the document does not carry a self-referential hash |
 | Target repository | `aec-bench` |
-| Target branch/worktree | `feat/asset-stewardship-asw-0a` / `.worktrees/asset-stewardship-asw-0a` |
-| Implementation baseline | Accepted ASW-0A derivative of merged PR24 commit `fdc6215c39add79d4a5549a1bfc058d9baac1b54`, tree `730594c69662369eea08f3e96274dc59778bca38`; the focused documentation-ownership gate passes |
+| Target branch/worktree | `main` at ASW-5 merge `be24edd42dc16b01ff13f8a860c402ecde297501` / a clean stage worktree |
+| Implementation baseline | Accepted ASW-5 asset-local world with versioned state, rich work processes, direct and Harbor execution, durable replay, and independent evaluation |
 | Parent product document | [Asset Stewardship Worlds PRD](asset-stewardship-worlds-prd.md) |
-| Required parent revision | `ASW-PRD-F-2026-07-27` |
-| Parent content hash | `56d6fe6a9c69796d819a1995ae63a85392ba85a4240df8baa87df99a76678335` |
+| Required parent revision | `ASW-PRD-L-2026-08-01` |
+| Parent content hash | `962c85815ba2c7c48f58a0f7b7702427bd0b536b54626afc30b74da0f8cb5bd3` |
 | Required parent world | `AU-NSW-LH-SYN-SPS-v1`, independently certified to parent validity level V3 |
 | Capability status | Design only; no temporal-evidence or BackSearch implementation exists |
-| Core programme impact | No TEF schema, field, tool, capability declaration, or implementation dependency in ASW-1 through ASW-4 |
+| Core programme impact | No TEF schema, field, tool, capability declaration, or implementation dependency in ASW-1 through ASW-5 or the authorized ASW-6A local evidence-health core |
 | Canonical implementation | ASW-6A local deterministic temporal evidence store |
 | Optional integration | ASW-6B external historical-archive adapter |
 | First confirmatory study | Retrieval-state continuity under delayed evidence |
 
 ## Executive decision
 
-After the parent ASW-4 checkpoint, add a capability-gated **Temporal Evidence Frontier** to the certified synthetic stewardship world. The capability is introduced only with its real ASW-6A producer and consumer; no TEF-specific declaration is reserved in ASW-1 through ASW-4.
+After a later parent checkpoint explicitly authorizes the temporal hypothesis,
+add a capability-gated **Temporal Evidence Frontier** to the certified
+synthetic stewardship world. The ASW-5 checkpoint does not give that authority.
+The capability is introduced only with its real ASW-6A producer and consumer;
+no TEF-specific declaration is reserved in ASW-1 through ASW-5 or the local
+evidence-health core.
 
 The capability generalises SSC-03's staged evidence precedent from host-pushed release of a fixed evidence catalogue to agent-pulled retrieval over a host-controlled, time-bounded, actor-specific corpus. It is a targeted extension to the proposed stewardship architecture, not a redesign and not a dependency of the initial obligation-continuity study.
 
@@ -204,11 +209,12 @@ This PRD does not establish that:
 
 Temporal-evidence implementation depends on the parent-certified package `AU-NSW-LH-SYN-SPS-v1`: a fictional duplex submersible wastewater pumping-station archetype in a Lower Hunter, New South Wales operating context.
 
-Before ASW-6A:
+Before ASW-6A-TE0:
 
 - the package must pass the parent V3 construct-valid benchmark gate;
 - its world, generator, independent-certifier, source, rights, derivation, assumption, engine-role, and promotion manifests must be frozen and content-addressed;
 - the parent ASW-4 obligation-continuity study and checkpoint must be accepted; and
+- a later parent checkpoint must explicitly authorize the temporal hypothesis; and
 - TEF must record the exact parent revision, package identity, lineage head, and certification report it consumes.
 
 V4 empirical or SME calibration is optional and is not a TEF prerequisite. V3 does not support claims that the package is an identified real station, a compliance design, an operational recommendation, or a digital twin.
@@ -322,7 +328,7 @@ The programme introduces no TEF seam before ASW-6:
 - Parent ASW-0A through ASW-0C freeze the baseline, certify `AU-NSW-LH-SYN-SPS-v1` to V3, and preregister the first stewardship study without a TEF deliverable.
 - Parent ASW-1 through ASW-4 own the generic world, host information-set, projection, execution, falsification, and obligation-continuity study contracts. No field, capability declaration, tool, schema, registry entry, compatibility placeholder, or import is added on TEF's behalf.
 - Temporal retrieval is behaviorally absent through ASW-4: there is no TEF object with `enabled: false`, no search/fetch surface, and no synthetic temporal field in historical records.
-- ASW-6A may begin only after the parent V3 package, ASW-4 study, and programme checkpoint are accepted. It implements and validates the local deterministic capability while consuming the parent-owned information-set boundary.
+- ASW-6A-TE0 may begin only after the parent V3 package and ASW-4 study are accepted and a later parent checkpoint explicitly authorizes the temporal hypothesis. It implements and validates the local deterministic capability while consuming the parent-owned information-set boundary.
 - Temporal Study 1 then tests retrieval-state continuity over that local deterministic capability.
 - ASW-6B0 may begin a paper-only eligibility and governance review after TS1-A; provider implementation and the external pilot remain blocked until TS1-C is accepted.
 
@@ -1175,11 +1181,17 @@ The first obligation-continuity study must not mix:
 - retrieval-state handover; or
 - search budget.
 
-Temporal work proceeds only after the ASW-4 programme checkpoint authorizes a concrete next hypothesis.
+Temporal work proceeds only after a parent programme checkpoint explicitly
+authorizes the temporal hypothesis. The ASW-5 checkpoint authorizes local
+evidence health only and keeps this companion disabled.
 
 ### ASW-6A — Temporal-evidence contribution to the parent evidence-health milestone
 
-The parent owns the overall ASW-6A evidence-health milestone, including any sensor, calibration, observation-quality, contradictory-record, or post-maintenance-baseline work. This companion contributes only the optional temporal-frontier slices below. Those slices may start only after the parent ASW-4 checkpoint explicitly authorizes the hypothesis.
+The parent owns the overall ASW-6A evidence-health milestone, including any
+sensor, calibration, observation-quality, contradictory-record, or
+post-maintenance-baseline work. This companion contributes only the optional
+temporal-frontier slices below. Those slices may start only after a later parent
+checkpoint explicitly authorizes the temporal hypothesis.
 
 Within this companion, **accepted TEF contribution** means ASW-6A-TE0 through ASW-6A-TE4 have passed and a parent checkpoint has accepted their evidence. It does not mean the broader parent ASW-6A milestone is complete.
 
@@ -1761,13 +1773,14 @@ No hook may be bypassed.
 
 Do no TEF implementation now.
 
-Execute the parent critical path in order:
+Complete the parent ASW-6A local evidence-health stage first. It must define and
+test sensor state, calibration, evidence age, quality, provenance, component
+scope, operating regime, delay, staleness, contradiction, and changed
+post-maintenance baselines without a temporal corpus, search tool, retrieval
+state, or provider.
 
-1. Begin ASW-0B1 by freezing the `AU-NSW-LH-SYN-SPS-v1` claim, fictional regional profile, two-pump boundary, intended benchmark construct, V3 target, and prohibited claims.
-2. Progress through ASW-0B2 to ASW-0B5 only after each preceding stage is separately reviewed and accepted: classify sources and rights; select and separate engine roles; freeze generator and independent-certifier protocols; and certify the package to V3 with complete derivation, assumption, and lineage evidence.
-3. ASW-0C preregisters the parent study histories, carrier treatment, complete-current-view rule, endpoint, estimand, budgets, and claim limits.
-4. ASW-1 and ASW-2 implement only the parent world and generic host-execution boundaries.
-5. ASW-3 falsifies those boundaries.
-6. ASW-4 runs the TEF-free obligation-continuity study and checkpoint with temporal retrieval absent; its separately authorized model-provider executions remain governed by the parent.
-
-Only an accepted ASW-4 checkpoint may authorize ASW-6A-TE0. The next companion action is then a bounded scenario-and-corpus design review using the already-certified parent package—not asset selection, external-provider selection, code, or a speculative shared contract.
+After that provider-free exit gate, a parent checkpoint can decide whether the
+temporal hypothesis is useful and can authorize ASW-6A-TE0 only. The first
+companion action would then be a bounded scenario-and-corpus design review using
+the certified parent package. It would not select an external provider, add
+code, or create a shared contract.

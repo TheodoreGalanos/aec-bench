@@ -1,0 +1,29 @@
+experiments:
+  - id: E001
+    verifies: [C001, C002, C003, C004]
+    purpose: Audit the completed ASW-5 stage against its frozen provider-free programme gate.
+    setup: Use the merged ASW-5 rules, compatibility record, final focused and cumulative test evidence, installed direct and Harbor evidence, and strict evaluation result without a provider call.
+    procedure:
+      - Confirm the approved process, resource, dependency, waiver, nested-limit, and compatibility rules.
+      - Compare the final test results with the frozen unit, integration, end-to-end, and attack gate.
+      - Confirm direct and Harbor final-state and evaluation parity.
+      - Confirm replay, independent verification, strict TrialRecord reload, and complete handover.
+      - Trace the forced access interruption to the retained verification-deadline breach.
+      - Confirm version 1 byte preservation, version 2 migration lineage, and unknown-version rejection.
+      - Separate known wider repository failures from the bounded ASW-5 claims.
+      - Decide whether the result supports a local evidence-health entry gate.
+    metrics:
+      - Focused and cumulative test counts.
+      - Provider-call count.
+      - Direct and Harbor state and evaluation equality.
+      - Replay and verifier status.
+      - Handover and omission counts.
+      - Resource reservation and consumption conservation.
+      - Required-follow-up breach count and imported reward.
+      - Historical reload, migration-lineage, and unknown-version behavior.
+    evidence: [EV001, EV002, EV003]
+    exploratory: false
+    domain:
+      phase: programme_checkpoint
+      provider_calls: 0
+      result: accepted
