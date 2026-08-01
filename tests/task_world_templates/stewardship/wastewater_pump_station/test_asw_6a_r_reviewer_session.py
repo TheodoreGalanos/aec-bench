@@ -12,6 +12,7 @@ from test_asw_6a_r_case_derivation import _request
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review import (
     PreparedPumpStationReviewCase,
+    PumpStationReviewActionCode,
     PumpStationReviewDisposition,
     PumpStationReviewFinding,
     PumpStationReviewSubmission,
@@ -110,6 +111,16 @@ def test_fresh_tenure_receives_same_redacted_pack_and_submits_exact_review(
         review_id="review-001",
         reviewer_tenure_id="review-tenure-002",
     )
+    submission = PumpStationReviewSubmission.model_validate(
+        {
+            **submission.model_dump(mode="json", exclude={"content_sha256"}),
+            "source_record_ids": [
+                *submission.source_record_ids,
+                "work-order-pump-a",
+                "restriction-0000-pump-a-run-in",
+            ],
+        }
+    )
 
     receipt = second.submit_review(submission)
     repeated = second.submit_review(submission)
@@ -137,6 +148,11 @@ def test_fresh_tenure_receives_same_redacted_pack_and_submits_exact_review(
     assert verified.disposition_matches is True
     assert verified.follow_up_matches is True
     assert verified.source_references_match is True
+    assert submission.review_rationale
+    assert {item.record_id for item in submission.related_record_assessments} == {
+        "work-order-pump-a",
+        "restriction-0000-pump-a-run-in",
+    }
     assert "issue_class" not in public_text
     assert "verifier_target" not in public_text
     assert "unaffected_control_ids" not in public_text
@@ -170,7 +186,10 @@ def test_wrong_review_is_persisted_but_independent_verifier_rejects_it(
         unaffected_duty_ids=("obligation-0000-pump-a-verification",),
         missing_evidence_ids=("evidence-0000-functional-checks-pump-a",),
         disposition=PumpStationReviewDisposition.ACCEPT_CLOSEOUT,
-        required_follow_up=("archive-closeout",),
+        required_follow_up=(PumpStationReviewActionCode.CORRECT_FUNCTIONAL_CHECK_CITATION,),
+        review_rationale="The visible records were read, but the closeout decision is wrong.",
+        related_record_assessments=(),
+        additional_recommendations=("Archive the closeout after correction.",),
         source_record_ids=("work-order-pump-a",),
     )
 

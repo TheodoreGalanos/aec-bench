@@ -46,8 +46,22 @@ observations:
       claim_status: rejected
   - id: O007
     summary: The public follow-up field accepts free text while the private verifier expects exact canonical action codes.
-    status: open
+    status: supported
     source: EV009
-    next_action: Review typed follow-up and exact-set semantics before another agent study.
+    next_action: Use the approved version 2 hybrid contract before any separately authorized later agent study.
     domain:
-      stage_candidate: post-ASW-6A-R
+      resolved_by: EV013
+  - id: O008
+    summary: Process-required work needs public controlled action codes, while expert rationale and recommendations should remain written language.
+    status: supported
+    source: EV013
+    next_action: Keep the version 2 structured and written fields separate in all execution paths.
+    domain:
+      review_contract_version: 2
+  - id: O009
+    summary: The version 2 provider-free tests and static checks completed without another provider call.
+    status: supported
+    source: EV014
+    next_action: Preserve C005 as the unchanged negative version 1 run and require separate approval before any later model run.
+    domain:
+      provider_calls_made: 0

@@ -123,6 +123,9 @@ def test_agent_request_uses_only_review_tools_and_approved_limits() -> None:
     assert request.system_prompt is not None
     assert request.instruction is not None
     assert "submit_closeout_review" in request.system_prompt
+    assert "action codes" in request.system_prompt
+    assert "review rationale" in request.system_prompt
+    assert "directly affected records" in request.system_prompt
     assert "pump-b" not in (request.system_prompt + request.instruction).lower()
     assert "wrong_component_evidence_citation" not in (request.system_prompt + request.instruction)
 

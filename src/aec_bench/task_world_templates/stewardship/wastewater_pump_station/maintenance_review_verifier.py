@@ -11,6 +11,8 @@ from pydantic import model_validator
 from aec_bench.contracts.harness_kernel import ContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review import (
+    PumpStationReviewSubmissionV1,
+    PumpStationReviewVerifierTargetV1,
     derive_pump_station_review_case,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review_repository import (
@@ -21,7 +23,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintena
 class PumpStationReviewVerificationReport(ContentAddressedModel):
     """Independent exact-field evaluation of one immutable review."""
 
-    schema_version: str = "pump-station.review-verification-report.v1"
+    schema_version: str = "pump-station.review-verification-report.v2"
     case_id: NonEmptyStr
     review_id: NonEmptyStr
     source_state_id: NonEmptyStr
@@ -39,7 +41,10 @@ class PumpStationReviewVerificationReport(ContentAddressedModel):
 
     @model_validator(mode="after")
     def validate_report(self) -> Self:
-        if self.schema_version != "pump-station.review-verification-report.v1":
+        if self.schema_version not in {
+            "pump-station.review-verification-report.v1",
+            "pump-station.review-verification-report.v2",
+        }:
             raise ValueError("unsupported review verification report version")
         checks = (
             self.source_valid,
@@ -83,13 +88,25 @@ def verify_pump_station_review(
         and reconstructed.source_verification.final_state_id == stored.public_case.source_snapshot.state_id
     )
     case_reconstructed = reconstructed == stored
+    uses_v1_contract = isinstance(submission, PumpStationReviewSubmissionV1)
+    if uses_v1_contract != isinstance(target, PumpStationReviewVerifierTargetV1):
+        raise ValueError("review submission and verifier target versions differ")
     finding_matches = submission.finding is target.finding
-    affected_records_match = submission.affected_record_ids == target.affected_record_ids
-    unaffected_duties_match = submission.unaffected_duty_ids == target.unaffected_duty_ids
-    missing_evidence_matches = submission.missing_evidence_ids == target.missing_evidence_ids
+    if uses_v1_contract:
+        affected_records_match = submission.affected_record_ids == target.affected_record_ids
+        unaffected_duties_match = submission.unaffected_duty_ids == target.unaffected_duty_ids
+        missing_evidence_matches = submission.missing_evidence_ids == target.missing_evidence_ids
+        follow_up_matches = submission.required_follow_up == target.required_follow_up
+        source_references_match = submission.source_record_ids == target.required_source_record_ids
+        report_schema_version = "pump-station.review-verification-report.v1"
+    else:
+        affected_records_match = set(submission.affected_record_ids) == set(target.affected_record_ids)
+        unaffected_duties_match = set(submission.unaffected_duty_ids) == set(target.unaffected_duty_ids)
+        missing_evidence_matches = set(submission.missing_evidence_ids) == set(target.missing_evidence_ids)
+        follow_up_matches = set(submission.required_follow_up) == set(target.required_follow_up)
+        source_references_match = set(target.required_source_record_ids).issubset(submission.source_record_ids)
+        report_schema_version = "pump-station.review-verification-report.v2"
     disposition_matches = submission.disposition is target.disposition
-    follow_up_matches = submission.required_follow_up == target.required_follow_up
-    source_references_match = submission.source_record_ids == target.required_source_record_ids
     receipt_matches = (
         receipt.review_content_sha256 == submission.content_sha256
         and receipt.case_id == case_id
@@ -114,9 +131,9 @@ def verify_pump_station_review(
     if not disposition_matches:
         issues.append("disposition differs")
     if not follow_up_matches:
-        issues.append("follow-up differs")
+        issues.append("required action codes differ")
     if not source_references_match:
-        issues.append("source references differ")
+        issues.append("required source references are missing")
     valid = all(
         (
             source_valid,
@@ -131,6 +148,7 @@ def verify_pump_station_review(
         )
     )
     return PumpStationReviewVerificationReport(
+        schema_version=report_schema_version,
         case_id=case_id,
         review_id=review_id,
         source_state_id=stored.public_case.source_snapshot.state_id,

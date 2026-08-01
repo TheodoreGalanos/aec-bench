@@ -8,10 +8,14 @@ constraints:
   - id: K004
     statement: Do not expose the issue class, expected impact map, unaffected control set, verifier target, latent state, or future events to the reviewer.
   - id: K005
-    statement: Require every review field and bind every source reference to the visible pack.
+    statement: Require controlled process fields and a written review rationale, and bind every source reference to the visible pack.
   - id: K006
     statement: Do not make a model-provider call before exact provider authority and limits are approved.
   - id: K007
     statement: Do not add an external archive, temporal retrieval, branch fan-out, or physical treatment.
   - id: K008
     statement: Do not run the full repository test suite for this stage.
+  - id: K009
+    statement: Keep the direct affected-record set strict, place wider context in related-record assessments, and permit extra visible source references only when all decisive references remain present.
+  - id: K010
+    statement: Preserve version 1 evidence without migration and make no provider call during the version 2 contract revision.

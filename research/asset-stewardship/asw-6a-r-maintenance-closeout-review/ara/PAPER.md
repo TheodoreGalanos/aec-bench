@@ -54,6 +54,20 @@ marks affected records, follow-up, and source references as different. C005 is
 rejected for this run. No retry occurred, and the target was not changed after
 the result.
 
+Theo approved a hybrid version 2 review contract on 2026-08-02. Process work
+now uses public controlled action codes. The submitted expert record also keeps
+a written review rationale, related-record assessments, and additional written
+recommendations. Directly affected records remain an exact set. Every decisive
+source reference is required, but extra visible sources do not cause an
+automatic failure. Version 1 submissions and targets remain readable without
+migration.
+
+The version 2 provider-free gate completed with 24 focused tests and no cached
+failures. Three final affected-path checks then completed after the type-boundary
+corrections. Ruff and MyPy passed. C006 is supported by EV014. No provider call
+was made, C005 remains rejected for the original run, and no old run artifact
+was changed.
+
 ## Artifact map
 
 - `logic/claims.yaml` records falsifiable mechanism and agent claims.
@@ -62,4 +76,4 @@ the result.
 - `evidence/index.yaml` links the approved rule decision and later outputs.
 - `trace/exploration_tree.yaml` records the decision and execution sequence.
 - `staging/observations.yaml` records the negative agent result and the exposed
-  interface-to-verifier question.
+  interface-to-verifier question and its version 2 resolution.

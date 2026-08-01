@@ -113,3 +113,22 @@ experiments:
       provider_authority: f8cacee272560ecff04143372ec9b9da64d10aa8486248c1dc476bdfd1009a4e
       outcome: rejected
       provider_retries: 0
+  - id: E008
+    verifies: [C006]
+    purpose: Prove the version 2 hybrid review contract without another provider call.
+    setup: The accepted Pump A closeout case, version 1 compatibility models, version 2 reviewer tools, and the independent verifier.
+    procedure:
+      - Confirm that public process work accepts only declared action codes and requires a written review rationale.
+      - Submit related-record assessments and extra visible source references while keeping the direct affected set strict.
+      - Reject missing required actions, missing decisive sources, and records outside the visible pack.
+      - Reload version 1 submissions and verifier targets without migration.
+      - Exercise direct, installed JSON, durable repository, and local Harbor paths.
+    metrics:
+      - Version 2 review verification result.
+      - Version 1 reload result.
+      - Focused unit, integration, and end-to-end failures.
+    evidence: [EV014]
+    exploratory: false
+    domain:
+      test_layer: provider_free_contract_revision
+      provider_calls: 0

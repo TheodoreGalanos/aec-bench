@@ -34,14 +34,16 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_s
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review import (
     PUMP_STATION_REVIEW_ISSUE_VERSION_V1,
-    PUMP_STATION_REVIEW_PACK_POLICY_V1,
+    PUMP_STATION_REVIEW_PACK_POLICY_V2,
     PUMP_STATION_REVIEW_VISIBILITY_POLICY_V1,
     PumpStationReviewerRole,
     PumpStationReviewIssueClass,
     PumpStationReviewPreparationRequest,
     PumpStationReviewPublicCase,
     PumpStationReviewSubmission,
+    PumpStationReviewSubmissionAny,
     PumpStationReviewSubmissionReceipt,
+    parse_pump_station_review_submission,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review_agent import (
     PumpStationReviewAgentAuthority,
@@ -85,7 +87,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_se
 )
 from aec_bench.trajectory.writer import TrajectoryWriter
 
-PUMP_STATION_REVIEW_HARBOR_RUN_SCHEMA_VERSION = "aecbench.pump-station-review-harbor-run.v1"
+PUMP_STATION_REVIEW_HARBOR_RUN_SCHEMA_VERSION_V1 = "aecbench.pump-station-review-harbor-run.v1"
+PUMP_STATION_REVIEW_HARBOR_RUN_SCHEMA_VERSION = "aecbench.pump-station-review-harbor-run.v2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,7 +205,7 @@ def _prepare_review_session(
         asset_id=pump_station_model_from_package(bridge.package).asset_id,
         reviewed_component_id="pump-a",
         maintenance_case_id="work-order-pump-a",
-        pack_policy=PUMP_STATION_REVIEW_PACK_POLICY_V1,
+        pack_policy=PUMP_STATION_REVIEW_PACK_POLICY_V2,
         issue_class=(PumpStationReviewIssueClass.WRONG_COMPONENT_EVIDENCE_CITATION),
         issue_version=PUMP_STATION_REVIEW_ISSUE_VERSION_V1,
         target_record_id="closeout-record-pump-a",
@@ -381,7 +384,10 @@ def run_pump_station_review_model_session(
     receipt: PumpStationReviewSubmissionReceipt | None = None
     verification: PumpStationReviewVerificationReport | None = None
     if len(review_ids) == 1:
-        submission = repository.load_review(review_ids[0])
+        loaded_submission = repository.load_review(review_ids[0])
+        if not isinstance(loaded_submission, PumpStationReviewSubmission):
+            raise ValueError("new model review did not use the version 2 contract")
+        submission = loaded_submission
         receipt = repository.load_review_receipt(review_ids[0])
         verification = verify_pump_station_review(
             source_run_root=source_root,
@@ -661,7 +667,11 @@ def verify_pump_station_harbor_review_run(
         raise ValueError("pump-station Harbor review verifier runtime differs")
     inventory = _read_json(root / "artifact-inventory.json")
     if (
-        inventory.get("schema_version") != PUMP_STATION_REVIEW_HARBOR_RUN_SCHEMA_VERSION
+        inventory.get("schema_version")
+        not in {
+            PUMP_STATION_REVIEW_HARBOR_RUN_SCHEMA_VERSION_V1,
+            PUMP_STATION_REVIEW_HARBOR_RUN_SCHEMA_VERSION,
+        }
         or inventory.get("execution_kind") != PUMP_STATION_REVIEW_HARBOR_EXECUTION_KIND
         or inventory.get("task_world_id") != PUMP_STATION_REVIEW_TASK_ID
         or inventory.get("export_manifest_sha256") != file_sha256(export_manifest_path)
@@ -674,7 +684,7 @@ def verify_pump_station_harbor_review_run(
     _verify_inventory(root, inventory)
     session_request = PumpStationReviewSessionRequest.model_validate(_read_json(root / "review-session-request.json"))
     observation = PumpStationReviewObservation.model_validate(_read_json(root / "review-observation.json"))
-    submission = PumpStationReviewSubmission.model_validate(_read_json(root / "review-submission.json"))
+    submission = parse_pump_station_review_submission(_read_json(root / "review-submission.json"))
     receipt = PumpStationReviewSubmissionReceipt.model_validate(_read_json(root / "review-submission-receipt.json"))
     stored_report = PumpStationReviewVerificationReport.model_validate(
         _read_json(root / "review-verification-report.json")
@@ -718,7 +728,7 @@ def _verify_model_reviewer(
     *,
     root: Path,
     inventory: dict[str, Any],
-    submission: PumpStationReviewSubmission,
+    submission: PumpStationReviewSubmissionAny,
     report: PumpStationReviewVerificationReport,
 ) -> None:
     authority = PumpStationReviewAgentAuthority.model_validate(_read_json(root / "agent-authority.json"))

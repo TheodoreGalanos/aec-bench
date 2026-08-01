@@ -7,13 +7,13 @@
 | --- | --- |
 | Status | ASW-0 through ASW-6A-R complete; all later expansions remain conditional |
 | Date | 2026-08-02 |
-| Revision | `ASW-PRD-O-2026-08-02` |
+| Revision | `ASW-PRD-P-2026-08-02` |
 | Design revision | Semantic decisions change through reviewed document revisions; this PRD does not require a self-referential or hand-authored content hash |
 | Target repository | `aec-bench` |
-| Current production basis | `main` at ASW-6A merge `56578f61d097830aa788e2d2c7848049c60dfebc` |
+| Current production basis | `main` at ASW-6A-R merge `ee72f7e6aa1713af4a41327039364e7d70e30643` |
 | Live implementation status | The certified world, production runtime, falsification stages, direct and Harbor execution, immutable evaluation, first confirmatory study, rich work processes, separate actor and host-control interfaces, local evidence health, and maintenance closeout review are complete |
 | Initial programme boundary | ASW-0 through ASW-4 |
-| Implementation status | The ASW-6A-R provider-free mechanism passed; one approved real-agent shakedown completed with an exact-verifier rejection; no later expansion is active or authorized |
+| Implementation status | The ASW-6A-R hybrid version 2 contract passed its provider-free gate; the earlier version 1 real-agent rejection remains unchanged; no later expansion is active or authorized |
 | Working programme name | Asset Stewardship Worlds |
 | First study | Obligation continuity under time and handover |
 
@@ -1774,9 +1774,10 @@ abstract dump of world state.
   that predates the work, incomplete work recorded as complete, a result that
   conflicts with physical evidence, or a missing restriction or verification
   obligation in the closeout or handover record;
-- require a source-bound review record that identifies the finding, affected
-  and unaffected records or duties, missing evidence, disposition, and required
-  follow-up; and
+- require a source-bound review record that identifies the finding, directly
+  affected and unaffected records or duties, missing evidence, disposition,
+  process-required action codes, written review rationale, related-record
+  assessment, additional recommendations, and source references; and
 - keep the planted issue, expected impact map, latent truth, and verifier target
   private from the reviewer.
 
@@ -1830,6 +1831,16 @@ agent response remains a negative result. The
 [research artifact](asw-6a-r-maintenance-closeout-review/ara/PAPER.md) retains
 the authority, trajectory, token and cost record, verifier report, and rejected
 agent claim.
+
+**Hybrid contract revision, 2026-08-02:** version 2 uses public controlled
+values where the process must route work or make a repeatable decision. It uses
+written language for the expert rationale, related-record assessment, and
+additional recommendations. Directly affected records and required action
+codes remain strict. Every decisive source reference is required, while extra
+visible source records are permitted. Version 1 submissions and verifier
+targets remain readable without migration. The 24 focused ASW-6A-R tests,
+three final affected-path checks, Ruff, and MyPy completed without a provider
+call. The earlier negative agent run and its private target remain unchanged.
 
 #### ASW-6B — Optional external historical-archive adapter
 
@@ -2193,15 +2204,15 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | 2026-08-01 | Accept the ASW-6A provider-free gate and close the local evidence-health stage. | Version 3 compatibility, six evidence treatments, sensor and physical inspection choice, durable retry and recovery, handover privacy, installed JSON, and local Harbor parity passed. No authority is granted to ASW-6A-R or any later stage. |
 | 2026-08-02 | Approve one exact ASW-6A-R real-agent shakedown authority. | The authority fixes the Amazon Bedrock route, model, adapter, provider-call, turn, tool-call, token, and cost limits before execution. It permits one run only and does not carry into another model study. |
 | 2026-08-02 | Accept the ASW-6A-R mechanism and retain its negative real-agent result. | Provider-free execution, persistence, redaction, Harbor parity, and independent verification passed. The agent found the planted issue but failed three exact report fields. No retry or verifier change is permitted after this observed result. |
+| 2026-08-02 | Approve and accept the ASW-6A-R hybrid version 2 review contract. | Process-required work now uses public action codes, while expert rationale, related-record context, and additional recommendations remain written language. Direct impact stays strict, decisive sources are required, extra visible sources are permitted, version 1 evidence remains readable, and no provider call was made. |
 
 ## 24. Immediate next action
 
 Review the accepted **ASW-6A-R — maintenance closeout and return-to-service
 review** checkpoint and decide separately which conditional stage, if any, to
-authorize next. The negative agent result creates one bounded contract question:
-whether follow-up actions need typed public codes and whether the evaluator
-should require exact sets or permit justified additional affected records and
-source references. It does not authorize a contract change or another run.
+authorize next. The version 2 hybrid contract resolves the bounded action-code
+and set-semantics question raised by the negative agent result. It does not
+authorize another model run.
 
 ASW-6A-R does not authorize temporal retrieval, an external archive, a
 confirmatory model study, shared extraction, imperfect repair, rollout fan-out,
