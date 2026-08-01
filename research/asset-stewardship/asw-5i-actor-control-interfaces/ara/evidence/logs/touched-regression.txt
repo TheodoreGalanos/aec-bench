@@ -1,0 +1,12 @@
+Result:
+.................                                                        [100%]
+17 passed in 58.06s
+
+Scope:
+- shared world-session contract
+- ASW-5I contract and harness tests
+- direct world-session harness
+- pump-station world session
+- pump-station Harbor trial
+- ASW-5I installed and local-Harbor E2Es
+- actor-side run-creation rejection

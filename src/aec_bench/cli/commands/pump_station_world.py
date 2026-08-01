@@ -22,6 +22,7 @@ from aec_bench.evaluation.stewardship import (
     evaluate_pump_station_stewardship_run,
 )
 from aec_bench.harness.harbor_importing.core import import_harbor_trial
+from aec_bench.harness.world_interface import invoke_world_actor, observe_world_actor
 from aec_bench.harness.world_session import open_world_session
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     export_pump_station_harbor_task,
@@ -32,6 +33,12 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_j
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
     PUMP_STATION_MODEL_MAX_TURNS,
     PUMP_STATION_REFERENCE_CONTROLLER_ID,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.local_interface import (
+    PumpStationLocalInterfaceRequest,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_control import (
+    PumpStationWorldControl,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
@@ -85,6 +92,56 @@ def _open(
     return cast(
         PumpStationWorldSession,
         open_world_session(request, _factory(run_dir)),
+    )
+
+
+@app.command("interface")
+def interface_command(
+    run_dir: Path = typer.Option(..., "--run-dir", help="Durable world-run directory"),
+    request_path: Path = typer.Option(..., "--request-path", help="Strict JSON interface request"),
+    host_authority_id: str | None = typer.Option(
+        None,
+        "--host-authority-id",
+        help="Host-only control authority identity",
+    ),
+) -> None:
+    """Execute one strict machine-readable actor or host-control request."""
+
+    started = time.monotonic()
+    request = PumpStationLocalInterfaceRequest.model_validate_json(request_path.read_text(encoding="utf-8"))
+    if request.surface == "actor":
+        assert request.session_request is not None
+        session = _open(run_dir, request.session_request)
+        if request.operation == "capabilities":
+            payload = session.actor_capabilities.model_dump(mode="json")
+        elif request.operation == "observe":
+            payload = observe_world_actor(session).model_dump(mode="json")
+        else:
+            assert request.action_request is not None
+            payload = invoke_world_actor(
+                session,
+                request.action_request,
+            ).model_dump(mode="json")
+    else:
+        if host_authority_id is None:
+            raise typer.BadParameter(
+                "host control requires --host-authority-id",
+                param_hint="--host-authority-id",
+            )
+        control = PumpStationWorldControl(
+            run_dir,
+            authorised_principal_ids=(host_authority_id,),
+        )
+        if request.operation == "capabilities":
+            assert request.authority_id is not None
+            payload = control.capabilities(request.authority_id).model_dump(mode="json")
+        else:
+            assert request.control_request is not None
+            payload = control.execute(request.control_request).model_dump(mode="json")
+    emit(
+        "task pump-station-world interface",
+        payload,
+        start_time=started,
     )
 
 

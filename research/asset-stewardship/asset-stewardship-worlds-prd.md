@@ -5,15 +5,15 @@
 
 | Field | Value |
 | --- | --- |
-| Status | ASW-0 through ASW-5 complete; the ASW-5 programme checkpoint authorizes ASW-6A local evidence health only |
+| Status | ASW-0 through ASW-5I complete; the ASW-5I gate authorizes ASW-6A local evidence health only |
 | Date | 2026-08-01 |
-| Revision | `ASW-PRD-L-2026-08-01` |
+| Revision | `ASW-PRD-M-2026-08-01` |
 | Design revision | Semantic decisions change through reviewed document revisions; this PRD does not require a self-referential or hand-authored content hash |
 | Target repository | `aec-bench` |
-| Current production branch | `main` at ASW-5 merge `be24edd42dc16b01ff13f8a860c402ecde297501` |
-| Live implementation status | The certified world, production runtime, falsification stages, direct and Harbor execution, immutable evaluation, first confirmatory study, and rich work-process stage are complete |
+| Current production basis | `main` at ASW-5 checkpoint merge `1b2288342d42ce90e63ca7a4ca0aa716383b3c34` |
+| Live implementation status | The certified world, production runtime, falsification stages, direct and Harbor execution, immutable evaluation, first confirmatory study, rich work processes, and separate actor and host-control interfaces are complete |
 | Initial programme boundary | ASW-0 through ASW-4 |
-| Implementation status | ASW-5 rich work processes passed their provider-free gate; ASW-6A local evidence health is the only authorized expansion |
+| Implementation status | ASW-5I actor and host-control interfaces passed their provider-free gate; ASW-6A local evidence health is the only authorized expansion |
 | Working programme name | Asset Stewardship Worlds |
 | First study | Obligation continuity under time and handover |
 
@@ -371,7 +371,7 @@ flowchart TD
 
 ### 7.1 Minimal host-execution seam
 
-The shared seam is deliberately smaller than a common world API. It standardises how the host:
+The shared seam is deliberately smaller than a common world-semantic API. It standardises how the host:
 
 - identifies and validates a content-addressed world package;
 - creates or resumes an execution;
@@ -382,7 +382,7 @@ The shared seam is deliberately smaller than a common world API. It standardises
 - invokes an independent verifier; and
 - produces artifacts suitable for `TrialRecord` finalisation.
 
-It does not standardise clocks, actions, state, schedulers, obligations, transition semantics, or projections. Those remain stewardship-owned until a later promotion review finds a second demonstrated consumer or an unavoidable stable host boundary.
+It does not standardise task action types, action fields, clocks, state, schedulers, obligations, transition semantics, or projections. Those remain stewardship-owned. ASW-5I standardises only the task-neutral actor invocation and host-control envelopes after the direct and Harbor consumers proved that stable boundary.
 
 SSC-03 may continue to interpret its interaction as finite checkpoints. The stewardship engine interprets its interaction as views, proposed actions, scheduled processes, events, and resumable state.
 
@@ -860,7 +860,7 @@ Evaluation may reconstruct selected alternatives on demand in a separate private
 
 | ID | Requirement | Initial priority |
 | --- | --- | --- |
-| FR-01 | The common harness must dispatch lifecycle and stewardship as distinct typed execution kinds through a minimal host-execution envelope for package, execution, session, artifact, verifier-handoff, and failure identity; it must not require a shared state machine or world-operation surface. | Must |
+| FR-01 | The common harness must dispatch lifecycle and stewardship as distinct typed execution kinds through a minimal host-execution envelope for package, execution, session, artifact, verifier-handoff, and failure identity; it must not require a shared state machine or shared task-operation semantics. | Must |
 | FR-02 | The host must persist reference profile, certified generation, promotion manifest, world, branch, window, tenure, conversation, institution, asset, schedule, projection, and rule identities; ASW-0 through ASW-4 must explicitly record `adaptation_mode=none`. | Must |
 | FR-03 | The stewardship engine must maintain typed entity-scoped clocks with conditional advancement. | Must |
 | FR-04 | A deterministic scheduler must advance to the next declared decision point and order simultaneous events canonically. | Must |
@@ -887,6 +887,8 @@ Evaluation may reconstruct selected alternatives on demand in a separate private
 | FR-25 | Arbitrary coupled assets, generalized transferred duty beyond the fixed A/B profile rule, shared resources, constrained outages, and endogenous backlog must be supported. | Conditional ASW-8 |
 | FR-26 | Governed institutional proposals must version and selectively propagate FMECA or schedule changes. | Conditional ASW-9 |
 | FR-27 | Durable learner changes must remain independently identifiable from conversation, structured handover, procedure, and institution changes. | Conditional ASW-10 |
+| FR-28 | A supported actor API must let an authorised client discover task-owned actions, observe only the permitted actor view, invoke one allowlisted action against the exact current view and information set, and receive its immutable receipt and next view. Direct and Harbor execution must use the same actor contract. | ASW-5I |
+| FR-29 | A separate host-only control API must expose declared run-management capabilities without exposing them to the actor or permitting raw state edits. Review issues, branch fan-out, event treatments, and physical defect controls enter this API only in the later stage that supplies their real task-owned producer, consumer, and verifier. | ASW-5I and later capability stages |
 
 ASW-1 defines the rule and a candidate list of transport-only fields excluded from FR-15 byte equivalence. ASW-2B freezes the exact allowlist alongside the canonical serializer, real writer, and reader/reloader. The allowlist cannot expand after a study generation is issued; any later change creates a new serialization and study identity.
 
@@ -1593,12 +1595,81 @@ ASW-6B, ASW-7, shared extraction, or a model study.
 [The ASW-5 programme checkpoint](asw-5-programme-checkpoint/ara/PAPER.md)
 records the result audit, decision, next-stage entry gate, and retained limits.
 
+### ASW-5I — Actor and world-control interfaces
+
+ASW-5I promotes the demonstrated session boundary without moving task-specific
+actions, state semantics, or verification rules into the shared host. The
+accepted ASW-5 checkpoint remains the authority for local evidence-health work.
+The later interface decision inserts ASW-5I as its required entry gate.
+
+**Actor API scope:**
+
+- define one task-neutral session envelope for capability discovery,
+  actor-visible observation, allowlisted action invocation, transition results,
+  and public session results;
+- keep action names, input rules, decision-right checks, projections, and action
+  effects owned by the task world;
+- bind each consequential action to the exact branch, sequence, actor tenure,
+  base view, and information set, with an idempotent request identity;
+- use the same actor contract from direct Python, a machine-readable installed
+  interface, and the Harbor model-tool loop; and
+- exclude latent state, future events, private counterfactuals, verifier targets,
+  and host-only methods from the actor capability catalogue.
+
+**Control API scope:**
+
+- define a separate host-authorised surface to enumerate, create, open, resume,
+  inspect progress, snapshot, and verify a durable world run;
+- permit host-owned clock or event progression only through declared,
+  task-validated operations, never by selecting an actor action;
+- return typed results and immutable receipts for every control operation that
+  changes durable state;
+- expose capability presence and version explicitly, and fail closed for an
+  unavailable operation; and
+- prohibit direct field mutation and access through the actor API.
+
+The first transport is an importable Python contract plus one machine-readable
+local interface. An HTTP service is not required. Harbor remains the canonical
+full-trial runner and consumes the actor API rather than defining a second
+action implementation.
+
+Later stages extend the control API only when they exercise a real capability:
+
+- ASW-6A adds governed observation and evidence-quality treatments;
+- ASW-6A-R adds review-pack creation and planted record issues;
+- ASW-7A adds state-addressable branch creation and rollout fan-out; and
+- ASW-7B adds governed physical variation, maintenance-induced defects, and
+  imperfect restoration.
+
+**Exit gate:** one deterministic actor journey produces equivalent semantic
+results through direct Python, the machine-readable local interface, and local
+Harbor; host controls are absent from actor capabilities; stale-view,
+wrong-branch, wrong-information-set, duplicate, unknown, and unauthorised calls
+fail closed; resume and replay preserve exact lineage; and cumulative unit,
+integration, installed-interface, local-Harbor, and end-to-end tests pass with
+pristine output.
+
+**Checkpoint decision — 2026-08-01:** Theo accepted the narrow file and test
+boundary before implementation. The provider-free implementation then passed
+the focused interface, touched regression, complete pump-station, Ruff, and
+MyPy gates. Exact actor retries do not create a second world transition;
+conflicting request identities, stale or cross-scope bindings, unknown actions,
+unknown controls, and unauthorised control calls fail closed. The installed
+JSON interface and local Harbor controller use the task-owned actor path.
+
+The checkpoint authorizes ASW-6A local evidence-health design, implementation,
+and falsification only. It does not authorize ASW-6A-R, temporal retrieval,
+ASW-6B, ASW-7, shared extraction, a model study, or a physical treatment.
+
+[The ASW-5I research artifact](asw-5i-actor-control-interfaces/ara/PAPER.md)
+records the rule freeze, implementation boundary, tests, and retained limits.
+
 ### ASW-6 — Partial observability and evidence health
 
 ASW-6 uses explicit parent-owned substage labels so the parent and companion
 roadmaps cannot silently diverge. ASW-6A local evidence health is authorized by
-the ASW-5 checkpoint. ASW-6A-R, the temporal-evidence contribution, and ASW-6B
-remain conditional.
+the ASW-5 checkpoint and activated by the accepted ASW-5I interface gate.
+ASW-6A-R, the temporal-evidence contribution, and ASW-6B remain conditional.
 
 #### ASW-6A — Local evidence health
 
@@ -1611,6 +1682,29 @@ remain conditional.
 - contradictory reports;
 - changed post-maintenance baselines; and
 - deterministic observation-quality treatments.
+
+**Control API extension:**
+
+- add allowlisted host operations to declare and schedule one deterministic
+  observation or evidence-quality treatment, inspect its status, and recover its
+  immutable result;
+- bind every request to the exact world, branch, base snapshot, sequence,
+  treatment class and version, target observation source, effective decision
+  point, visibility policy, and idempotent request identity;
+- accept only task-owned treatment models for calibration state, delay,
+  staleness, contradiction, observation loss, or changed baseline, and reject
+  arbitrary evidence insertion or direct state fields;
+- publish a host-private treatment manifest and control receipt, plus only the
+  resulting permitted observation or evidence through the actor projection;
+- make retry, resume, and replay recover the same treatment and result without
+  duplicate evidence, clock movement, or state effect; and
+- keep treatment selection, latent truth, unaffected controls, and future
+  observations unavailable through the actor API.
+
+**Control API gate:** direct, machine-readable local, and local-Harbor E2Es must
+prove typed success, unavailable-capability failure, wrong-branch and
+stale-sequence rejection, idempotent retry, exact replay, public/private
+separation, and actor projection parity before ASW-6A can pass.
 
 The optional temporal-evidence companion may contribute its nested
 `ASW-6A-TE0` through `ASW-6A-TE4` slices only after a later parent checkpoint
@@ -1649,6 +1743,31 @@ abstract dump of world state.
 - keep the planted issue, expected impact map, latent truth, and verifier target
   private from the reviewer.
 
+**Control API extension:**
+
+- add host operations to derive one review case from a committed, verified
+  snapshot, assemble its named closeout pack, apply one allowlisted review-issue
+  treatment, inspect preparation status, and open the resulting actor tenure;
+- bind preparation to the source world, branch, snapshot, sequence, asset,
+  maintenance case, pack policy, review-issue class and version, target record,
+  reviewer role, visibility policy, and idempotent request identity;
+- preserve the source history and authoritative physical state unchanged by
+  publishing the treated review pack as a derived, content-addressed case;
+- publish the actor-visible case-pack identity separately from the host-private
+  issue specification, expected impact map, unaffected control set, and
+  verifier target;
+- emit immutable preparation and issue-treatment receipts that let the verifier
+  reconstruct the exact source records, derivation, planted issue, and review
+  boundary without exposing them to the reviewer; and
+- reject raw record replacement, unregistered issue classes, physical mutation,
+  and any attempt to open the reviewer session before the case is complete.
+
+**Control API gate:** repeated preparation with the same request must return the
+same case; a new request must create a new derived case without changing its
+source; direct, machine-readable local, and local-Harbor E2Es must prove actor
+redaction, private verifier reconstruction, negative access, replay, and exact
+finding evaluation.
+
 ASW-6A-R starts only after the local evidence-health contract can represent the
 age, quality, provenance, operating regime, and contradictions used by the
 review. Its mechanism design and provider-free falsification do not authorize a
@@ -1681,6 +1800,38 @@ ASW-6B implementation and pilot work exist only if the companion's local determi
 - keep all children from one origin together during training, development, and evaluation splitting; and
 - keep start-point selection host-owned so later outcomes or hidden future state are not exposed to the agent.
 
+**Control API extension:**
+
+- add host operations to validate a rollout origin, create one child branch,
+  create a declared rollout group of isolated children, enumerate group status,
+  and open an actor session on a selected child;
+- bind every request to the verified parent snapshot and sequence, parent branch,
+  world and rule versions, event schedule, information boundary, agent
+  condition, rollout-group identity, child identities, rollout seeds, and
+  idempotent request identity;
+- publish immutable branch-creation receipts and one lineage manifest that names
+  the parent, all children, fixed-condition policy, declared treatment identity
+  where present, and split-group identity;
+- leave the parent unchanged, prevent writes across siblings, and reject
+  duplicate child identities, unverified origins, mutable origins, unsupported
+  treatment capabilities, and later-outcome-based origin selection;
+- expose to each actor only its own child session and permitted history, without
+  sibling identities, private origin-selection evidence, or hidden future
+  conditions; and
+- let retry, resume, and reconstruction recover the same child branches and
+  lineage without creating extra children or moving any branch head.
+
+ASW-7A supplies branch and rollout-group control only. It may bind an already
+implemented treatment capability to a child, but it does not define new
+physical variation semantics.
+
+**Control API gate:** direct, machine-readable local, and local-Harbor E2Es must
+create at least two fixed-condition children from one verified origin, open
+independent actor sessions, prove parent and sibling isolation, recover an
+interrupted group idempotently, replay every child, and reject hidden-future
+and lineage leakage. Any model rollout still requires the separate study
+authority below.
+
 ASW-7A mechanism design and provider-free falsification do not authorize model
 rollouts. Any agent data-generation study requires its own frozen design, small
 shakedown, provider authority, budgets, and confirmatory gate.
@@ -1701,6 +1852,31 @@ hidden future state leaks through origin selection or public identities.
 - maintenance-induced defects;
 - common-cause failures; and
 - asset-specific intervention alternatives and controlled future-world variations beyond the minimal ASW-3 containment primitive.
+
+**Control API extension:**
+
+- add host operations to declare, schedule, inspect, and recover one governed
+  physical or intervention-outcome treatment on an eligible child branch;
+- bind every request to the child branch, base snapshot and sequence, parent
+  lineage, treatment class and version, affected entities, activation event or
+  clock condition, mechanism parameters, fixed or common-random stream,
+  visibility policy, decision-right record, and idempotent request identity;
+- accept only task-owned treatment models inside the certified or separately
+  approved envelope, and reject direct latent-state assignment, unbounded
+  parameters, undeclared affected entities, or mutation of the parent branch;
+- publish a host-private treatment manifest, schedule receipt, activation
+  receipt, affected and unaffected sets, and resulting snapshot references;
+- reveal consequences to the actor only through the normal clocks, observations,
+  evidence, events, and institutional records declared by the task world; and
+- preserve enough private lineage for independent replay and verifier
+  reconstruction without exposing the treatment label, counterfactual result,
+  or future event schedule to the actor.
+
+**Control API gate:** fixed-control and treated children must share their exact
+declared origin and diverge only at the treatment boundary; retry must not apply
+the treatment twice; parent and sibling branches must remain unchanged; and
+direct, machine-readable local, local-Harbor, replay, verifier, and negative-
+leakage E2Es must pass before any treatment is used for model rollouts.
 
 **Exit gate:** recurrence types remain distinguishable, controlled world alternatives retain their ASW-7A parent lineage, and counterfactual replay is reproducible without model leakage.
 
@@ -1897,6 +2073,7 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | R-27 | Research artifacts or licensed source material become runtime contracts | Promote only manifest-listed derived outputs; test with research paths absent; prohibit cite-only, excluded, raw solver, and sealed material from the runtime package |
 | R-28 | Synthetic evidence is reported as empirical or operational authority | Bind every report to profile, generation, V-level, envelope, evidence classes, and explicit non-claims |
 | R-29 | Current-view treatment is made artificially unsafe | Require all actor-visible current restrictions, due obligations, resources, processes, and institutional status in every carrier |
+| R-30 | Actor and control rights collapse into one surface, exposing hidden state or host mutation to the agent | Use separate capability catalogues and authorisation paths; expose only task-owned actor views and actions to the actor; reject raw state mutation; prove negative access in direct and Harbor E2Es |
 
 ## 22. Decision register
 
@@ -1915,9 +2092,10 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | OD-12 | Define evaluation-window treatments and terminal-liability vector. | Resolved for the first study | [ASW-0C research charter](asw-0c-research-charter.md#12-budgets-and-evaluation-window) |
 | OD-13 | Define exact behavior for a physical terminal event, or defer the general terminal surface. | Resolved by deferral | The first charter contains no physical terminal event |
 | OD-14 | Approve model-provider identity, token limits, and financial budget. | Resolved for ASW-4 only | Phase-bound ASW-4B and ASW-4C approvals; no provider authority carries into ASW-5 or ASW-6A |
-| OD-15 | Define the evidence threshold for each conditional expansion. | Resolved through ASW-6A local evidence health; later stages remain conditional | [ASW-5 programme checkpoint](asw-5-programme-checkpoint/ara/PAPER.md) |
+| OD-15 | Define the evidence threshold for each conditional expansion. | Resolved through the ASW-6A entry gate; later stages remain conditional | [ASW-5 programme checkpoint](asw-5-programme-checkpoint/ara/PAPER.md) and [ASW-5I research artifact](asw-5i-actor-control-interfaces/ara/PAPER.md) |
 | OD-16 | Select generator/oracle and independent-certification software roles. | Resolved | ASW-0B3 through ASW-0B5 |
 | OD-17 | Define evidence/rights classification and research-to-runtime promotion shape. | Resolved | ASW-0B2 through ASW-0B5 |
+| OD-18 | Promote distinct actor and host-control APIs without creating a shared world state machine or moving task-owned actions into the harness. | Resolved for the ASW-5I boundary; later controls remain stage-owned | [ASW-5I research artifact](asw-5i-actor-control-interfaces/ara/PAPER.md) |
 
 ## 23. Decision log
 
@@ -1959,11 +2137,13 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | 2026-08-01 | Place state-addressable rollout fan-out in conditional ASW-7A, before imperfect-repair and environment-variation work in ASW-7B. | Reusing one verified start for many agent continuations is a data-generation primitive distinct from changing world conditions; it needs rich durable state and lineage but must not expand provider-free ASW-5. |
 | 2026-08-01 | Add a human-grounded Pump A maintenance closeout and return-to-service review as ASW-6A-R. | A credible asset review reconciles a named case pack of condition, work, test, control, obligation, and handover records against the maintenance basis. The planted issue belongs in a fallible record, claim, decision, or omission rather than corrupting authoritative world state. |
 | 2026-08-01 | Accept the ASW-5 programme checkpoint and authorize ASW-6A local evidence health only. | ASW-5 passed its provider-free replay, handover, compatibility, and conservation gates. Evidence age, quality, provenance, operating regime, and contradictions are the next required semantics before a closeout review or temporal-retrieval study. |
+| 2026-08-01 | Add ASW-5I as the interface gate between ASW-5 and ASW-6A, with separate actor and host-control APIs. | The task-specific Python session already supplied actor actions and Harbor already consumed them. A supported actor contract now gives direct and Harbor clients one action path, while a separate control contract manages the run without giving host rights to the actor. |
+| 2026-08-01 | Accept the ASW-5I provider-free gate and activate the existing ASW-6A authority. | Exact-bound actor calls, control separation, installed JSON execution, local Harbor use, durable replay, negative access, and cumulative compatibility passed. Later evidence, review, rollout, and physical-treatment controls remain unavailable. |
 
 ## 24. Immediate next action
 
 Complete **ASW-6A — local evidence health** as one bounded, provider-free
-stage.
+stage on the accepted ASW-5I actor and control interfaces.
 
 Freeze the evidence record, sensor, calibration, delay, staleness,
 contradiction, supersession, and operating-regime rules before implementation.
@@ -1972,6 +2152,13 @@ Pump A and Pump B histories. The exit gate must prove that latent truth remains
 concealed and that every actor-visible evidence item has explicit age, quality,
 provenance, component scope, and applicable operating regime through views,
 handover, replay, resume, and Harbor import.
+
+Add only the ASW-6A control operations for declared evidence-quality
+treatments. Bind each treatment to the exact branch, snapshot, sequence,
+source, treatment version, decision point, visibility policy, and request
+identity. Keep its private manifest outside the actor view. Prove retry,
+resume, replay, wrong-branch rejection, stale-sequence rejection, and
+direct/local/Harbor projection parity.
 
 ASW-6A does not authorize ASW-6A-R, temporal retrieval, an external archive,
 a model study, shared extraction, imperfect repair, rollout fan-out, or coupled

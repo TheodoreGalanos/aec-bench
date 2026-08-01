@@ -1,0 +1,5 @@
+Command:
+uv run pytest tests/task_world_templates/stewardship/wastewater_pump_station -q
+
+Result:
+165 passed in 137.20s (0:02:17)
