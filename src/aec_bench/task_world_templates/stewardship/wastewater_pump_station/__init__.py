@@ -1,6 +1,10 @@
 # ABOUTME: Exposes the certified package and physical wastewater pump-station boundary.
 # ABOUTME: Keeps package validation, state, and deterministic physics local to the task.
 
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
+    PUMP_STATION_ACTOR_ACTION_NAMES,
+    PUMP_STATION_ACTOR_INTERFACE_VERSION,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_kernel import (
     advance_pump_station,
     apply_pump_intervention,
@@ -125,6 +129,11 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     create_structured_handover,
     project_actor_view,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_control import (
+    PUMP_STATION_CONTROL_INTERFACE_VERSION,
+    PUMP_STATION_CONTROL_OPERATIONS,
+    PumpStationWorldControl,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import (
     PumpStationWorldRun,
 )
@@ -237,11 +246,16 @@ __all__ = [
     "PumpStationWorldRunManifest",
     "PumpStationWorldRunMigration",
     "PumpStationWorldRunRepository",
+    "PumpStationWorldControl",
     "PumpStationWorldSession",
     "PumpStationWorldSessionFactory",
+    "PUMP_STATION_ACTOR_ACTION_NAMES",
+    "PUMP_STATION_ACTOR_INTERFACE_VERSION",
     "PUMP_STATION_AUTHORITY_POLICY_VERSION",
     "PUMP_STATION_AUTHORITY_POLICY_VERSION_V1",
     "PUMP_STATION_AUTHORITY_POLICY_VERSION_V2",
+    "PUMP_STATION_CONTROL_INTERFACE_VERSION",
+    "PUMP_STATION_CONTROL_OPERATIONS",
     "PUMP_STATION_MIGRATION_VERSION",
     "PUMP_STATION_RECORD_VERSIONS_V1",
     "PUMP_STATION_RECORD_VERSIONS_V2",

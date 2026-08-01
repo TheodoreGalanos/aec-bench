@@ -1,0 +1,24 @@
+observations:
+  - id: O001
+    summary: A later plan inserted ASW-5I after the ASW-5 checkpoint had already authorized ASW-6A.
+    status: resolved
+    source: Parent plan review and Theo decision on 2026-08-01
+    next_action: Preserve the accepted checkpoint as history and require the later ASW-5I gate before ASW-6A.
+    domain:
+      resolved_by: N002
+  - id: O002
+    summary: Later stages need host controls for evidence treatments, review cases, rollout branches, and physical treatments.
+    status: open
+    source: Revised parent roadmap on 2026-08-01
+    next_action: Add each control only in its named stage with a task-owned producer, consumer, verifier, and negative-access gate.
+    domain:
+      current_stage_capability: unavailable
+      planned_stages: [ASW-6A, ASW-6A-R, ASW-7A, ASW-7B]
+  - id: O003
+    summary: The ASW-5I host identity is an allowlisted local principal, not a remote authentication system.
+    status: open
+    source: ASW-5I scope freeze
+    next_action: Reassess authentication only if a later stage adds a remote transport.
+    domain:
+      http_service_present: false
+      current_transport: local_python_and_installed_json

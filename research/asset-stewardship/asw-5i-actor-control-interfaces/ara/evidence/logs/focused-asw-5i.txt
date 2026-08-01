@@ -1,0 +1,6 @@
+Command:
+uv run pytest tests/contracts/test_world_interface.py tests/harness/test_world_interface.py tests/task_world_templates/stewardship/wastewater_pump_station/test_asw_5i_interfaces_e2e.py -q
+
+Result:
+.........                                                                [100%]
+9 passed in 47.70s

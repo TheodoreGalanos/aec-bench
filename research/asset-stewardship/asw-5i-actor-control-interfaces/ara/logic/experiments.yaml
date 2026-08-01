@@ -1,0 +1,93 @@
+experiments:
+  - id: E001
+    verifies: [C002, C003]
+    purpose: Check strict shared actor and control models before runtime use.
+    setup: New contract tests over frozen Pydantic models and content identities.
+    procedure:
+      - Construct exact actor capabilities, bindings, and requests.
+      - Attempt duplicate actions, negative sequence, wrong session mode, actor-side run creation, and raw state.
+      - Confirm validation fails at the contract boundary.
+    metrics:
+      - Contract tests passed.
+      - Rejected invalid contract classes.
+    evidence: [EV001]
+    exploratory: false
+    domain:
+      test_layer: unit
+  - id: E002
+    verifies: [C001, C002, C003]
+    purpose: Exercise actor and control envelopes against the real durable pump-station repository.
+    setup: Direct Python session and host controller with the bundled approved station data.
+    procedure:
+      - Observe the actor binding and invoke one real action.
+      - Retry the exact request and attempt conflicting, stale, cross-scope, and unknown calls.
+      - Create, open, resume, inspect, snapshot, and verify through the host controller.
+      - Attempt unauthorised and unavailable controls.
+    metrics:
+      - Durable transition count.
+      - Rejected call classes.
+      - Verification validity.
+    evidence: [EV001]
+    exploratory: false
+    domain:
+      test_layer: integration
+  - id: E003
+    verifies: [C001, C003, C004]
+    purpose: Prove installed JSON and local Harbor use the supported actor boundary.
+    setup: Installed aec-bench command, real filesystem run, exported local Harbor task, and provider-free reference controller.
+    procedure:
+      - Create a run through the host-control JSON surface.
+      - Discover actor and control capabilities through separate requests.
+      - Resume, observe, and invoke one actor action through JSON.
+      - Verify the durable run through the control surface.
+      - Record every actor request made by the local Harbor reference controller.
+    metrics:
+      - Installed-interface exit status.
+      - Harbor actor request count and sequence.
+      - Independent verification validity.
+    evidence: [EV001]
+    exploratory: false
+    domain:
+      test_layer: end_to_end
+  - id: E004
+    verifies: [C005]
+    purpose: Check the existing shared session, direct session, pump session, and Harbor tests touched by ASW-5I.
+    setup: Existing production tests plus the ASW-5I tests.
+    procedure:
+      - Run only the touched contract, harness, session, and Harbor files.
+      - Require pristine output.
+    metrics:
+      - Touched regression tests passed.
+    evidence: [EV002]
+    exploratory: false
+    domain:
+      test_layer: regression
+  - id: E005
+    verifies: [C005]
+    purpose: Check cumulative compatibility across the complete pump-station test folder.
+    setup: All pump-station tests with the production deterministic runtime.
+    procedure:
+      - Run the complete pump-station test folder.
+      - Require pristine output.
+    metrics:
+      - Cumulative tests passed.
+    evidence: [EV003]
+    exploratory: false
+    domain:
+      test_layer: cumulative
+  - id: E006
+    verifies: [C005]
+    purpose: Check style, formatting, and static types on the changed Python surface.
+    setup: Project Ruff and MyPy configuration.
+    procedure:
+      - Run Ruff lint on changed Python files.
+      - Run Ruff format check on changed Python files.
+      - Run MyPy on changed source files.
+    metrics:
+      - Ruff lint issues.
+      - Ruff format differences.
+      - MyPy issues.
+    evidence: [EV004]
+    exploratory: false
+    domain:
+      test_layer: static_quality

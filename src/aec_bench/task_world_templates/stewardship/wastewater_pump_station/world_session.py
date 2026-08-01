@@ -9,12 +9,24 @@ from pathlib import Path
 from typing import Any
 
 from aec_bench.contracts.task_definition import ToolSpec
+from aec_bench.contracts.world_interface import (
+    WorldActorActionRequest,
+    WorldActorActionResult,
+    WorldActorBinding,
+    WorldActorCapabilityCatalogue,
+    WorldActorObservation,
+    WorldInterfaceError,
+)
 from aec_bench.contracts.world_session import (
     STEWARDSHIP_STATE_SNAPSHOT_SCHEMA_VERSION,
     StewardshipStateSnapshotRef,
     WorldSessionOpenMode,
     WorldSessionRequest,
     WorldSessionResult,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
+    pump_station_actor_capabilities,
+    pump_station_proposal_from_actor_request,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_kernel import (
     advance_pump_station,
@@ -29,20 +41,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
     load_reference_package,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    CancelProcess,
-    ContinueOperation,
-    ProposalContext,
     PumpStationProposal,
     PumpStationSchedule,
-    RequestConditionalDeferral,
-    RequestDependencyWaiver,
-    RequestInspection,
-    RequestObstructionClearance,
-    RequestProvisionalClosure,
-    RequestProvisionalReturn,
-    RequestVerification,
-    ResumeProcess,
-    TransferDuty,
+    PumpStationTransition,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
     create_rich_work_reference_state,
@@ -157,6 +158,11 @@ class PumpStationWorldSession:
             if run.manifest.snapshot_version.endswith(".v2")
             else PUMP_STATION_TOOL_NAMES
         )
+        self._rich_work_processes = run.manifest.snapshot_version.endswith(".v2")
+        self._actor_results: dict[
+            str,
+            tuple[WorldActorActionRequest, WorldActorActionResult],
+        ] = {}
         state = run.state
         initial_state = run.repository.load_state(run.manifest.initial_state_id)
         episode_started_at_seconds = initial_state.physical.calendar_seconds
@@ -220,6 +226,75 @@ class PumpStationWorldSession:
         )
 
     @property
+    def actor_capabilities(self) -> WorldActorCapabilityCatalogue:
+        """Return task-owned actions without host-control capabilities."""
+
+        return pump_station_actor_capabilities(
+            task_world_id=self._request.task_world_id,
+            rich_work_processes=self._rich_work_processes,
+        )
+
+    @property
+    def current_actor_binding(self) -> WorldActorBinding:
+        """Return the exact public binding required by the next actor action."""
+
+        result = self.result
+        return WorldActorBinding(
+            task_world_id=result.task_world_id,
+            session_id=result.session_id,
+            run_id=result.snapshot.run_id,
+            episode_id=result.snapshot.episode_id,
+            world_branch_id=result.snapshot.world_branch_id,
+            sequence=result.snapshot.sequence,
+            state_id=result.snapshot.state_id,
+            commit_id=result.snapshot.commit_id,
+            agent_tenure_id=result.agent_tenure_id,
+            actor_view_id=result.actor_view_id,
+            information_set_id=result.information_set_id,
+        )
+
+    def observe_actor(self) -> WorldActorObservation:
+        """Return the current actor view with no latent or future world state."""
+
+        return WorldActorObservation(
+            binding=self.current_actor_binding,
+            view=_artifact_payload(self._view),
+        )
+
+    def invoke_actor_action(
+        self,
+        request: WorldActorActionRequest,
+    ) -> WorldActorActionResult:
+        """Validate and apply one exact-bound task-owned actor action."""
+
+        cached = self._actor_results.get(request.request_id)
+        if cached is not None:
+            cached_request, cached_result = cached
+            if cached_request != request:
+                raise WorldInterfaceError(
+                    "actor-request-id-conflict",
+                    f"{request.request_id} is already bound to different content",
+                )
+            return cached_result
+        self._validate_actor_binding(request.binding)
+        if request.action_name not in {item.name for item in self.actor_capabilities.actions}:
+            raise WorldInterfaceError("actor-action-unavailable", request.action_name)
+        proposal = pump_station_proposal_from_actor_request(request)
+        transition = self._apply_proposal(proposal)
+        observation = self.observe_actor()
+        result = WorldActorActionResult(
+            request_content_sha256=request.content_sha256,
+            action_name=request.action_name,
+            status=transition.receipt.execution.value,
+            pre_binding=request.binding,
+            post_binding=observation.binding,
+            task_receipt=_artifact_payload(transition.receipt),
+            next_observation=observation,
+        )
+        self._actor_results[request.request_id] = (request, result)
+        return result
+
+    @property
     def actor_view(self) -> PumpStationActorView:
         """Return the exact host-side actor view used by this tenure."""
 
@@ -277,40 +352,42 @@ class PumpStationWorldSession:
 
     def observe_pump_station(self) -> str:
         """Read the complete current actor view without latent or future state."""
-        return pump_station_artifact_bytes(self._view).decode("utf-8")
+        return json.dumps(
+            self.observe_actor().view,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
 
     def continue_operation(self, proposal_id: str, reason: str) -> str:
         """Continue the permitted operating mode to the next declared decision event."""
-        return self._apply(
-            ContinueOperation(
-                context=self._proposal_context(proposal_id, reason),
-            )
+        return self._invoke_actor_tool(
+            proposal_id,
+            "continue_operation",
+            {"reason": reason},
         )
 
     def transfer_duty(self, proposal_id: str, reason: str) -> str:
         """Request the one permitted transfer from duty to standby pump."""
-        return self._apply(
-            TransferDuty(
-                context=self._proposal_context(proposal_id, reason),
-            )
+        return self._invoke_actor_tool(
+            proposal_id,
+            "transfer_duty",
+            {"reason": reason},
         )
 
     def request_inspection(self, proposal_id: str, reason: str, pump_id: str) -> str:
         """Request a scheduled inspection of one named pump."""
-        return self._apply(
-            RequestInspection(
-                context=self._proposal_context(proposal_id, reason),
-                pump_id=pump_id,
-            )
+        return self._invoke_actor_tool(
+            proposal_id,
+            "request_inspection",
+            {"reason": reason, "pump_id": pump_id},
         )
 
     def request_conditional_deferral(self, proposal_id: str, reason: str, pump_id: str) -> str:
         """Request the fixed transfer-then-isolate conditional deferral."""
-        return self._apply(
-            RequestConditionalDeferral(
-                context=self._proposal_context(proposal_id, reason),
-                pump_id=pump_id,
-            )
+        return self._invoke_actor_tool(
+            proposal_id,
+            "request_conditional_deferral",
+            {"reason": reason, "pump_id": pump_id},
         )
 
     def request_obstruction_clearance(
@@ -321,12 +398,14 @@ class PumpStationWorldSession:
         inspection_evidence_id: str,
     ) -> str:
         """Request obstruction clearance against named inspection evidence."""
-        return self._apply(
-            RequestObstructionClearance(
-                context=self._proposal_context(proposal_id, reason),
-                pump_id=pump_id,
-                inspection_evidence_id=inspection_evidence_id,
-            )
+        return self._invoke_actor_tool(
+            proposal_id,
+            "request_obstruction_clearance",
+            {
+                "reason": reason,
+                "pump_id": pump_id,
+                "inspection_evidence_id": inspection_evidence_id,
+            },
         )
 
     def request_provisional_return(
@@ -337,12 +416,14 @@ class PumpStationWorldSession:
         functional_check_evidence_id: str,
     ) -> str:
         """Request provisional return against accepted functional-check evidence."""
-        return self._apply(
-            RequestProvisionalReturn(
-                context=self._proposal_context(proposal_id, reason),
-                pump_id=pump_id,
-                functional_check_evidence_id=functional_check_evidence_id,
-            )
+        return self._invoke_actor_tool(
+            proposal_id,
+            "request_provisional_return",
+            {
+                "reason": reason,
+                "pump_id": pump_id,
+                "functional_check_evidence_id": functional_check_evidence_id,
+            },
         )
 
     def request_provisional_closure(
@@ -352,11 +433,10 @@ class PumpStationWorldSession:
         work_order_id: str,
     ) -> str:
         """Request administrative closure while verification duties remain open."""
-        return self._apply(
-            RequestProvisionalClosure(
-                context=self._proposal_context(proposal_id, reason),
-                work_order_id=work_order_id,
-            )
+        return self._invoke_actor_tool(
+            proposal_id,
+            "request_provisional_closure",
+            {"reason": reason, "work_order_id": work_order_id},
         )
 
     def request_post_maintenance_verification(
@@ -366,11 +446,10 @@ class PumpStationWorldSession:
         pump_id: str,
     ) -> str:
         """Request independent post-maintenance verification for one pump."""
-        return self._apply(
-            RequestVerification(
-                context=self._proposal_context(proposal_id, reason),
-                pump_id=pump_id,
-            )
+        return self._invoke_actor_tool(
+            proposal_id,
+            "request_post_maintenance_verification",
+            {"reason": reason, "pump_id": pump_id},
         )
 
     def resume_process(
@@ -380,11 +459,10 @@ class PumpStationWorldSession:
         process_id: str,
     ) -> str:
         """Resume blocked or suspended work after dependency and resource checks."""
-        return self._apply(
-            ResumeProcess(
-                context=self._proposal_context(proposal_id, reason),
-                process_id=process_id,
-            )
+        return self._invoke_actor_tool(
+            proposal_id,
+            "resume_process",
+            {"reason": reason, "process_id": process_id},
         )
 
     def cancel_process(
@@ -394,11 +472,10 @@ class PumpStationWorldSession:
         process_id: str,
     ) -> str:
         """Cancel live work and release its unused reservations."""
-        return self._apply(
-            CancelProcess(
-                context=self._proposal_context(proposal_id, reason),
-                process_id=process_id,
-            )
+        return self._invoke_actor_tool(
+            proposal_id,
+            "cancel_process",
+            {"reason": reason, "process_id": process_id},
         )
 
     def request_dependency_waiver(
@@ -410,13 +487,15 @@ class PumpStationWorldSession:
         evidence_id: str,
     ) -> str:
         """Request a narrow administrative closeout waiver with named evidence."""
-        return self._apply(
-            RequestDependencyWaiver(
-                context=self._proposal_context(proposal_id, reason),
-                process_id=process_id,
-                dependency_id=dependency_id,
-                evidence_id=evidence_id,
-            )
+        return self._invoke_actor_tool(
+            proposal_id,
+            "request_dependency_waiver",
+            {
+                "reason": reason,
+                "process_id": process_id,
+                "dependency_id": dependency_id,
+                "evidence_id": evidence_id,
+            },
         )
 
     def snapshot_pump_station(self) -> str:
@@ -434,32 +513,83 @@ class PumpStationWorldSession:
             self._run.steps(),
         )
 
-    def _proposal_context(self, proposal_id: str, reason: str) -> ProposalContext:
-        return ProposalContext(
-            proposal_id=proposal_id,
-            agent_tenure_id=self._request.agent_tenure_id,
-            based_on_sequence=self._run.state.sequence,
-            base_view_id=self._view.view_id,
-            information_set_id=self._information_set.information_set_id,
-            reason=reason,
+    def _validate_actor_binding(self, binding: WorldActorBinding) -> None:
+        current = self.current_actor_binding
+        if (
+            binding.task_world_id,
+            binding.session_id,
+            binding.run_id,
+            binding.episode_id,
+            binding.world_branch_id,
+        ) != (
+            current.task_world_id,
+            current.session_id,
+            current.run_id,
+            current.episode_id,
+            current.world_branch_id,
+        ):
+            raise WorldInterfaceError(
+                "actor-wrong-world",
+                "actor request belongs to another session or world",
+            )
+        if binding.agent_tenure_id != current.agent_tenure_id:
+            raise WorldInterfaceError(
+                "actor-wrong-tenure",
+                "actor request belongs to another tenure",
+            )
+        if binding.sequence != current.sequence:
+            raise WorldInterfaceError(
+                "actor-stale-sequence",
+                "actor request does not use the current sequence",
+            )
+        if binding.information_set_id != current.information_set_id:
+            raise WorldInterfaceError(
+                "actor-wrong-information-set",
+                "actor request uses another information set",
+            )
+        if binding.actor_view_id != current.actor_view_id:
+            raise WorldInterfaceError(
+                "actor-stale-view",
+                "actor request does not use the current view",
+            )
+        if (binding.state_id, binding.commit_id) != (current.state_id, current.commit_id):
+            raise WorldInterfaceError(
+                "actor-stale-snapshot",
+                "actor request does not use the current snapshot",
+            )
+
+    def _invoke_actor_tool(
+        self,
+        request_id: str,
+        action_name: str,
+        arguments: dict[str, Any],
+    ) -> str:
+        result = self.invoke_actor_action(
+            WorldActorActionRequest(
+                request_id=request_id,
+                action_name=action_name,
+                binding=self.current_actor_binding,
+                arguments=arguments,
+            )
+        )
+        return json.dumps(
+            {
+                "status": result.status,
+                "snapshot": self.result.snapshot.model_dump(mode="json"),
+                "receipt": result.task_receipt,
+                "view": result.next_observation.view,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
         )
 
-    def _apply(self, proposal: PumpStationProposal) -> str:
+    def _apply_proposal(self, proposal: PumpStationProposal) -> PumpStationTransition:
         transition = self._run.apply(
             proposal,
             information_set=self._information_set,
         )
         self._refresh_projection()
-        return json.dumps(
-            {
-                "status": transition.receipt.execution.value,
-                "snapshot": self.result.snapshot.model_dump(mode="json"),
-                "receipt": _artifact_payload(transition.receipt),
-                "view": _artifact_payload(self._view),
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+        return transition
 
     def _project(self) -> PumpStationActorView:
         return project_actor_view(

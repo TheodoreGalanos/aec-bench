@@ -1,0 +1,215 @@
+# ABOUTME: Defines pump-station actor action schemas and converts exact requests to proposals.
+# ABOUTME: Keeps task action names, fields, and proposal semantics outside the shared host contract.
+
+from __future__ import annotations
+
+from typing import cast
+
+from pydantic import JsonValue, ValidationError
+
+from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
+from aec_bench.contracts.world_interface import (
+    WorldActorActionCapability,
+    WorldActorActionRequest,
+    WorldActorCapabilityCatalogue,
+    WorldInterfaceError,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    CancelProcess,
+    ContinueOperation,
+    ProposalContext,
+    PumpStationProposal,
+    RequestConditionalDeferral,
+    RequestDependencyWaiver,
+    RequestInspection,
+    RequestObstructionClearance,
+    RequestProvisionalClosure,
+    RequestProvisionalReturn,
+    RequestVerification,
+    ResumeProcess,
+    TransferDuty,
+)
+
+PUMP_STATION_ACTOR_INTERFACE_VERSION = "pump-station.actor.v1"
+PUMP_STATION_ACTOR_ACTION_NAMES = (
+    "continue_operation",
+    "transfer_duty",
+    "request_inspection",
+    "request_conditional_deferral",
+    "request_obstruction_clearance",
+    "request_provisional_return",
+    "request_provisional_closure",
+    "request_post_maintenance_verification",
+    "resume_process",
+    "cancel_process",
+    "request_dependency_waiver",
+)
+
+
+class _ReasonArguments(FrozenStrictModel):
+    reason: NonEmptyStr
+
+
+class _PumpArguments(_ReasonArguments):
+    pump_id: NonEmptyStr
+
+
+class _ObstructionClearanceArguments(_PumpArguments):
+    inspection_evidence_id: NonEmptyStr
+
+
+class _ProvisionalReturnArguments(_PumpArguments):
+    functional_check_evidence_id: NonEmptyStr
+
+
+class _WorkOrderArguments(_ReasonArguments):
+    work_order_id: NonEmptyStr
+
+
+class _ProcessArguments(_ReasonArguments):
+    process_id: NonEmptyStr
+
+
+class _DependencyWaiverArguments(_ProcessArguments):
+    dependency_id: NonEmptyStr
+    evidence_id: NonEmptyStr
+
+
+type ActorArguments = (
+    _ReasonArguments
+    | _PumpArguments
+    | _ObstructionClearanceArguments
+    | _ProvisionalReturnArguments
+    | _WorkOrderArguments
+    | _ProcessArguments
+    | _DependencyWaiverArguments
+)
+
+_ARGUMENT_MODELS: dict[str, type[ActorArguments]] = {
+    "continue_operation": _ReasonArguments,
+    "transfer_duty": _ReasonArguments,
+    "request_inspection": _PumpArguments,
+    "request_conditional_deferral": _PumpArguments,
+    "request_obstruction_clearance": _ObstructionClearanceArguments,
+    "request_provisional_return": _ProvisionalReturnArguments,
+    "request_provisional_closure": _WorkOrderArguments,
+    "request_post_maintenance_verification": _PumpArguments,
+    "resume_process": _ProcessArguments,
+    "cancel_process": _ProcessArguments,
+    "request_dependency_waiver": _DependencyWaiverArguments,
+}
+
+_ACTION_DESCRIPTIONS = {
+    "continue_operation": "Continue the permitted mode to the next declared decision event.",
+    "transfer_duty": "Request the permitted transfer from duty to standby pump.",
+    "request_inspection": "Request a scheduled inspection of one named pump.",
+    "request_conditional_deferral": "Request the fixed transfer-then-isolate deferral.",
+    "request_obstruction_clearance": "Request clearance against named inspection evidence.",
+    "request_provisional_return": "Request return against accepted functional-check evidence.",
+    "request_provisional_closure": "Request administrative closure while duties remain open.",
+    "request_post_maintenance_verification": "Request independent post-maintenance verification.",
+    "resume_process": "Resume blocked or suspended work after dependency checks.",
+    "cancel_process": "Cancel live work and release unused reservations.",
+    "request_dependency_waiver": "Request one narrow dependency waiver with named evidence.",
+}
+
+
+def pump_station_actor_capabilities(
+    *,
+    task_world_id: str,
+    rich_work_processes: bool,
+) -> WorldActorCapabilityCatalogue:
+    """Return the closed task-owned action catalogue for the selected world version."""
+
+    names = PUMP_STATION_ACTOR_ACTION_NAMES if rich_work_processes else PUMP_STATION_ACTOR_ACTION_NAMES[:8]
+    actions = tuple(
+        WorldActorActionCapability(
+            name=name,
+            description=_ACTION_DESCRIPTIONS[name],
+            input_schema=cast(dict[str, JsonValue], _ARGUMENT_MODELS[name].model_json_schema()),
+        )
+        for name in names
+    )
+    return WorldActorCapabilityCatalogue(
+        task_world_id=task_world_id,
+        interface_version=PUMP_STATION_ACTOR_INTERFACE_VERSION,
+        observation_schema_ref=("pump-station.actor-view.v2" if rich_work_processes else "pump-station.actor-view.v1"),
+        actions=actions,
+    )
+
+
+def pump_station_proposal_from_actor_request(
+    request: WorldActorActionRequest,
+) -> PumpStationProposal:
+    """Validate task-owned fields and create the one requested typed proposal."""
+
+    model_type = _ARGUMENT_MODELS.get(request.action_name)
+    if model_type is None:
+        raise WorldInterfaceError("actor-action-unavailable", request.action_name)
+    try:
+        arguments = model_type.model_validate(request.arguments)
+    except ValidationError as exc:
+        raise WorldInterfaceError(
+            "actor-action-arguments-invalid",
+            str(exc),
+        ) from exc
+    context = ProposalContext(
+        proposal_id=request.request_id,
+        agent_tenure_id=request.binding.agent_tenure_id,
+        based_on_sequence=request.binding.sequence,
+        base_view_id=request.binding.actor_view_id,
+        information_set_id=request.binding.information_set_id,
+        reason=arguments.reason,
+    )
+    if request.action_name == "continue_operation":
+        return ContinueOperation(context=context)
+    if request.action_name == "transfer_duty":
+        return TransferDuty(context=context)
+    if request.action_name == "request_inspection":
+        return RequestInspection(context=context, pump_id=cast(_PumpArguments, arguments).pump_id)
+    if request.action_name == "request_conditional_deferral":
+        return RequestConditionalDeferral(
+            context=context,
+            pump_id=cast(_PumpArguments, arguments).pump_id,
+        )
+    if request.action_name == "request_obstruction_clearance":
+        obstruction = cast(_ObstructionClearanceArguments, arguments)
+        return RequestObstructionClearance(
+            context=context,
+            pump_id=obstruction.pump_id,
+            inspection_evidence_id=obstruction.inspection_evidence_id,
+        )
+    if request.action_name == "request_provisional_return":
+        provisional_return = cast(_ProvisionalReturnArguments, arguments)
+        return RequestProvisionalReturn(
+            context=context,
+            pump_id=provisional_return.pump_id,
+            functional_check_evidence_id=provisional_return.functional_check_evidence_id,
+        )
+    if request.action_name == "request_provisional_closure":
+        return RequestProvisionalClosure(
+            context=context,
+            work_order_id=cast(_WorkOrderArguments, arguments).work_order_id,
+        )
+    if request.action_name == "request_post_maintenance_verification":
+        return RequestVerification(
+            context=context,
+            pump_id=cast(_PumpArguments, arguments).pump_id,
+        )
+    if request.action_name == "resume_process":
+        return ResumeProcess(
+            context=context,
+            process_id=cast(_ProcessArguments, arguments).process_id,
+        )
+    if request.action_name == "cancel_process":
+        return CancelProcess(
+            context=context,
+            process_id=cast(_ProcessArguments, arguments).process_id,
+        )
+    dependency_waiver = cast(_DependencyWaiverArguments, arguments)
+    return RequestDependencyWaiver(
+        context=context,
+        process_id=dependency_waiver.process_id,
+        dependency_id=dependency_waiver.dependency_id,
+        evidence_id=dependency_waiver.evidence_id,
+    )
