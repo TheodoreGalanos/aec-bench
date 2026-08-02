@@ -239,6 +239,105 @@ def _obligation_events(
     )
 
 
+def _runtime_due_events(
+    state: PumpStationStewardshipState,
+) -> tuple[PumpStationScheduledEvent, ...]:
+    """Return due events reachable through the current duty-pump runtime."""
+    duty_pump = state.physical.pump(state.physical.duty_pump_id)
+    now = state.physical.calendar_seconds
+    events = tuple(
+        _event(
+            sequence=obligation.created_sequence,
+            suffix=f"{obligation.obligation_id}-runtime-due",
+            event_type=PumpStationEventType.OBLIGATION_DUE,
+            scheduled_seconds=(
+                now
+                + max(
+                    0,
+                    obligation.due_runtime_seconds - duty_pump.exposure.runtime_seconds,
+                )
+            ),
+            obligation_id=obligation.obligation_id,
+        )
+        for obligation in state.obligations
+        if obligation.status is PumpStationObligationStatus.ACTIVE and obligation.pump_id == duty_pump.pump_id
+    )
+    return _sorted_events(events)
+
+
+def _runtime_obligation_follow_up_events(
+    model: PumpStationModel,
+    obligation: PumpStationObligation,
+    due_seconds: int,
+) -> tuple[PumpStationScheduledEvent, ...]:
+    """Schedule overdue and breach events from a runtime-triggered due boundary."""
+    return (
+        _event(
+            sequence=obligation.created_sequence,
+            suffix=f"{obligation.obligation_id}-runtime-overdue",
+            event_type=PumpStationEventType.OBLIGATION_OVERDUE,
+            scheduled_seconds=due_seconds + 1,
+            obligation_id=obligation.obligation_id,
+        ),
+        _event(
+            sequence=obligation.created_sequence,
+            suffix=f"{obligation.obligation_id}-runtime-breach",
+            event_type=PumpStationEventType.OBLIGATION_BREACH,
+            scheduled_seconds=due_seconds + model.inflow.diagnostic_period_seconds,
+            obligation_id=obligation.obligation_id,
+        ),
+    )
+
+
+def _next_event_group(
+    model: PumpStationModel,
+    state: PumpStationStewardshipState,
+) -> (
+    tuple[
+        int,
+        tuple[PumpStationScheduledEvent, ...],
+        tuple[PumpStationScheduledEvent, ...],
+    ]
+    | None
+):
+    """Select the first calendar or running-pump obligation boundary."""
+    runtime_events = _runtime_due_events(state)
+    next_calendar = state.scheduled_events[0].scheduled_seconds if state.scheduled_events else None
+    next_runtime = runtime_events[0].scheduled_seconds if runtime_events else None
+    candidates = tuple(value for value in (next_calendar, next_runtime) if value is not None)
+    if not candidates:
+        return None
+    scheduled_seconds = min(candidates)
+    events = tuple(event for event in state.scheduled_events if event.scheduled_seconds == scheduled_seconds)
+    pending = tuple(event for event in state.scheduled_events if event.scheduled_seconds != scheduled_seconds)
+    calendar_due_ids = {
+        event.obligation_id for event in events if event.event_type is PumpStationEventType.OBLIGATION_DUE
+    }
+    activated_runtime_events = tuple(
+        event
+        for event in runtime_events
+        if event.scheduled_seconds == scheduled_seconds and event.obligation_id not in calendar_due_ids
+    )
+    for runtime_event in activated_runtime_events:
+        obligation = next(item for item in state.obligations if item.obligation_id == runtime_event.obligation_id)
+        pending = tuple(event for event in pending if event.obligation_id != obligation.obligation_id)
+        pending = _sorted_events(
+            (
+                *pending,
+                *_runtime_obligation_follow_up_events(
+                    model,
+                    obligation,
+                    scheduled_seconds,
+                ),
+            )
+        )
+    return (
+        scheduled_seconds,
+        tuple(sorted((*events, *activated_runtime_events), key=_event_sort_key)),
+        pending,
+    )
+
+
 def create_stewardship_state(
     model: PumpStationModel,
     physical: PumpStationState,
@@ -1365,7 +1464,8 @@ def _advance_to_next_decision_point(
     proposal_id: str | None,
     authority: PumpStationAuthorityDecision | None,
 ) -> PumpStationTransition:
-    if not state.scheduled_events:
+    event_group = _next_event_group(model, state)
+    if event_group is None:
         return _finish_transition(
             state,
             state,
@@ -1384,14 +1484,12 @@ def _advance_to_next_decision_point(
             "restricted-duty",
             "the deferred duty pump must transfer before time advances",
         )
-    scheduled_seconds = state.scheduled_events[0].scheduled_seconds
+    scheduled_seconds, events, pending_events = event_group
     if scheduled_seconds < state.physical.calendar_seconds:
         raise PumpStationProposalError(
             "scheduled-event",
             "event schedule moved behind the current calendar",
         )
-    events = tuple(event for event in state.scheduled_events if event.scheduled_seconds == scheduled_seconds)
-    pending_events = tuple(event for event in state.scheduled_events if event.scheduled_seconds != scheduled_seconds)
     elapsed = scheduled_seconds - state.physical.calendar_seconds
     physical = state.physical
     physical_change: PumpStationChangeKind | None = None

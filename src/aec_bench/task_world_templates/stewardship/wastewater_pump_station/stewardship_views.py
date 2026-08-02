@@ -54,6 +54,11 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     ResumeProcess,
     TransferDuty,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.time_presentation import (
+    PUMP_STATION_TIME_PROJECTION_POLICY_ID,
+    PumpStationTimeContext,
+    pump_station_time_context,
+)
 
 
 class PumpStationContinuityCarrier(StrEnum):
@@ -197,6 +202,7 @@ class PumpStationActorView:
     tenure_elapsed_seconds: int
     source_artifact_ids: tuple[str, ...]
     current_state: PumpStationCurrentStateView
+    time_context: PumpStationTimeContext | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -495,7 +501,16 @@ def project_actor_view(
         raise ValueError("actor tenure starts after the current station time")
     current_state = _current_state_view(model, state)
     creation_transition_id = None if state.sequence == 0 else f"transition-{state.sequence:04d}"
-    identity_payload = {
+    time_context = (
+        pump_station_time_context(
+            state,
+            episode_elapsed_seconds=now - context.episode_started_at_seconds,
+            tenure_elapsed_seconds=now - context.tenure_started_at_seconds,
+        )
+        if context.projection_policy_id == PUMP_STATION_TIME_PROJECTION_POLICY_ID
+        else None
+    )
+    identity_payload: dict[str, object] = {
         "episode_id": context.episode_id,
         "world_branch_id": context.world_branch_id,
         "actor_id": context.actor_id,
@@ -507,12 +522,21 @@ def project_actor_view(
         "source_artifact_ids": context.source_artifact_ids,
         "current_state": current_state,
     }
+    if time_context is not None:
+        identity_payload["time_context"] = time_context
+    record_profile = (
+        "v4"
+        if time_context is not None
+        else "v3"
+        if state.state_version.endswith(".v3")
+        else "v2"
+        if state.state_version.endswith(".v2")
+        else "v1"
+    )
     return PumpStationActorView(
         view_id=stewardship_content_id(
             identity_payload,
-            record_profile=(
-                "v3" if state.state_version.endswith(".v3") else "v2" if state.state_version.endswith(".v2") else "v1"
-            ),
+            record_profile=record_profile,
         ),
         episode_id=context.episode_id,
         world_branch_id=context.world_branch_id,
@@ -524,6 +548,7 @@ def project_actor_view(
         tenure_elapsed_seconds=now - context.tenure_started_at_seconds,
         source_artifact_ids=context.source_artifact_ids,
         current_state=current_state,
+        time_context=time_context,
     )
 
 
