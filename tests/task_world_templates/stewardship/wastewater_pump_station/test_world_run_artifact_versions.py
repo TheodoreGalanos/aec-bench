@@ -1,4 +1,4 @@
-# ABOUTME: Defines the ASW-3B snapshot, serializer, rule, and receipt version contract.
+# ABOUTME: Defines snapshot, serializer, rule, and receipt version contracts for durable world runs.
 # ABOUTME: Proves every unsupported durable version fails before it can become authority.
 
 from __future__ import annotations

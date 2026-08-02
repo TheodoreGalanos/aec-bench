@@ -1,4 +1,4 @@
-# ABOUTME: Tests the exact ASW-4B authority, price ceiling, and H2 handover history.
+# ABOUTME: Tests the exact shakedown authority, price ceiling, and H2 handover history.
 # ABOUTME: Uses the real pump-station state machine without making a provider call.
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from aec_bench.experiments.stewardship_continuity import (
 )
 
 
-def test_asw4b_manifest_matches_theo_approved_authority() -> None:
+def test_shakedown_manifest_matches_approved_authority() -> None:
     manifest = build_asw4b_shakedown_manifest()
     authority = manifest.provider_authorization
 
@@ -48,7 +48,7 @@ def test_asw4b_manifest_matches_theo_approved_authority() -> None:
     assert not manifest.task_reward_mutation_allowed
 
 
-def test_asw4b_price_ceiling_stays_inside_approved_spend() -> None:
+def test_shakedown_price_ceiling_stays_inside_approved_spend() -> None:
     assert maximum_asw4b_spend_microunits() == 2_082_538
     assert maximum_asw4b_spend_microunits() < 2_500_000
     assert (

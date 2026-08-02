@@ -1,4 +1,4 @@
-# ABOUTME: Tests durable ASW-6A treatment scheduling, restart retry, and replay.
+# ABOUTME: Tests durable evidence-treatment scheduling, restart retry, and replay.
 # ABOUTME: Covers exact binding, immutable recovery, staged crash recovery, and conflicts.
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# ABOUTME: Defines the frozen ASW-6A-R maintenance closeout review contracts through tests.
+# ABOUTME: Defines the frozen maintenance closeout-review contracts through tests.
 # ABOUTME: Checks exact issue scope, source binding, strict review fields, and public-private separation.
 
 from __future__ import annotations

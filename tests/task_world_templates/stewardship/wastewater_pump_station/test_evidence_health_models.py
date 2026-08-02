@@ -1,4 +1,4 @@
-# ABOUTME: Defines the frozen ASW-6A evidence-health and treatment contracts through tests.
+# ABOUTME: Defines the frozen evidence-health and treatment contracts through tests.
 # ABOUTME: Checks exact time limits, quality rules, provenance fields, and host-private bindings.
 
 from __future__ import annotations

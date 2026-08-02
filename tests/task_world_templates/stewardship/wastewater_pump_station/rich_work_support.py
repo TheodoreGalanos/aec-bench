@@ -1,4 +1,4 @@
-# ABOUTME: Builds bound proposals and deterministic schedules for ASW-5 tests.
+# ABOUTME: Builds bound proposals and deterministic schedules for rich-work tests.
 # ABOUTME: Uses real pump-station projections, evidence binding, and state transitions.
 
 from __future__ import annotations

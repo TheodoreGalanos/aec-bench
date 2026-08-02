@@ -74,7 +74,7 @@ def _start_request() -> WorldSessionRequest:
 
 
 def _run_to_verification_process(session) -> dict[str, object]:
-    reason = "Exercise durable ASW-3A continuity."
+    reason = "Exercise durable world-run continuity."
     session.request_conditional_deferral("proposal-01", reason, "pump-a")
     session.transfer_duty("proposal-02", reason)
     session.request_inspection("proposal-03", reason, "pump-a")

@@ -1,4 +1,4 @@
-# ABOUTME: Tests durable ASW-6A-R case publication, idempotence, and crash recovery.
+# ABOUTME: Tests durable closeout-review case publication, idempotence, and crash recovery.
 # ABOUTME: Proves derived review cases remain separate from their immutable source world.
 
 from __future__ import annotations
@@ -7,8 +7,8 @@ import stat
 from pathlib import Path
 
 import pytest
-from test_asw_5_rich_work_e2e import _execute_direct
-from test_asw_6a_r_case_derivation import _request
+from test_closeout_review_case_derivation import _request
+from test_rich_work_harbor_parity_e2e import _execute_direct
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review import (
     PreparedPumpStationReviewCase,

@@ -1,4 +1,4 @@
-# ABOUTME: Runs the complete ASW-4B path with a test-only scripted model adapter.
+# ABOUTME: Runs the complete shakedown path with a test-only scripted model adapter.
 # ABOUTME: Proves real tools, budgets, immutable evidence, and reload without network use.
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ class _ScriptedRegistry:
         return _ScriptedStewardAdapter(kwargs["native_tools"])
 
 
-def test_asw4b_shakedown_e2e_publishes_ineligible_verified_evidence(
+def test_shakedown_publishes_ineligible_verified_evidence(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "asw-4b"

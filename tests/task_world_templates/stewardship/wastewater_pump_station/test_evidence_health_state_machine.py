@@ -1,4 +1,4 @@
-# ABOUTME: Exercises ASW-6A sensor evidence and physical-inspection separation.
+# ABOUTME: Exercises sensor-evidence and physical-inspection separation.
 # ABOUTME: Proves version 3 projections expose health facts without private treatment state.
 
 from __future__ import annotations

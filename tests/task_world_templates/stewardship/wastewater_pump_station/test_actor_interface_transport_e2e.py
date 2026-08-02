@@ -1,4 +1,4 @@
-# ABOUTME: Runs ASW-5I through the installed JSON interface and local Harbor controller.
+# ABOUTME: Runs pump-station actor actions through the installed JSON interface and local Harbor controller.
 # ABOUTME: Proves machine-readable calls and Harbor use the same task-owned actor contract.
 
 from __future__ import annotations

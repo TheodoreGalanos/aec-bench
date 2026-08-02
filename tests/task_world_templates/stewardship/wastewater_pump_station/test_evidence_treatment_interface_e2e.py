@@ -1,4 +1,4 @@
-# ABOUTME: Runs ASW-6A treatment control and condition checks through installed JSON.
+# ABOUTME: Runs evidence-treatment control and condition checks through installed JSON.
 # ABOUTME: Proves restart retry, public privacy, activation, actor use, and replay verification.
 
 from __future__ import annotations
@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from test_asw_5i_interfaces_e2e import (
+from test_actor_interface_transport_e2e import (
     _invoke_installed_action,
     _resume_request,
     _run_interface,

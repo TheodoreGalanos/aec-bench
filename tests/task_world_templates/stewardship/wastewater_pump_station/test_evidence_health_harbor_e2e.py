@@ -1,4 +1,4 @@
-# ABOUTME: Runs the ASW-6A evidence-health journey through direct and local Harbor paths.
+# ABOUTME: Runs the evidence-health journey through direct and local Harbor paths.
 # ABOUTME: Proves public-state parity, handover privacy, tool binding, and independent replay.
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Any, cast
 import pytest
 from harbor.models.trial.config import TrialConfig  # type: ignore[import-untyped]
 from harbor.trial.trial import Trial  # type: ignore[import-untyped]
-from test_asw_5_rich_work_e2e import _execute_direct
+from test_rich_work_harbor_parity_e2e import _execute_direct
 
 from aec_bench.contracts.world_session import (
     WorldSessionExecutionKind,

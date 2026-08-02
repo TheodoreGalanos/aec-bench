@@ -242,18 +242,18 @@ No parallel file is removed before its behaviour is proven on the target path.
 | Current path group | Owner | Disposition |
 | --- | --- | --- |
 | Retired `test_asw_8_agent_session.py` | Actor-session contract | Shared registered-session tests own this coverage. |
-| `test_asw_8_coupled_physics.py` | Pump physics | Rename by behaviour and keep task-local. |
+| `test_coupled_asset_physics.py` | Pump physics | Behaviour-named and task-local. |
 | Retired `test_asw_8_harbor.py` | Harbor parity | `test_registered_world_harbor.py` uses the canonical Harbor path. |
 | Retired `test_asw_8_installed_interface.py` | Actor/control transport | Registered session and controller tests own the runtime coverage; Step 9 owns catalogue transport. |
 | Retired `test_asw_8_operational_boundaries.py` | Pump policy and authority | Behaviour moved to the pump work-system and reference-journey tests. |
 | Retired `test_asw_8_persistence_and_evaluation.py` | Runtime durability and pump verification | Behaviour moved to registered run, repository, controller, and evaluation tests. |
-| `test_asw_8_reference_journey.py` | RS1 end-to-end journey | Rename by behaviour and retain as the final task E2E gate. |
-| `test_asw_8_reference_package.py` | Package boundary | Rename by behaviour and keep task-local. |
-| `test_asw_8_reference_system.py` | Profile binding | Rename by behaviour and keep task-local. |
+| `test_reference_system_journey.py` | RS1 end-to-end journey | Behaviour-named final task E2E gate. |
+| `test_reference_system_package.py` | Package boundary | Behaviour-named and task-local. |
+| `test_reference_system_definition.py` | Profile binding | Behaviour-named and task-local. |
 | `test_asw_8_rollout.py` | Branch lineage and task inheritance | Split into shared branch tests and pump temporal-treatment tests. |
 | `test_asw_8_rollout_interface.py` | Rollout transport | Rename by behaviour and run through the existing versioned rollout interface. |
-| `test_asw_8_temporal_evidence.py` | Pump temporal evidence | Rename by behaviour and keep task-local. |
-| `test_asw_8_work_system.py` | Work generation and outage admission | Rename by behaviour and keep task-local. |
+| `test_reference_system_temporal_evidence.py` | Pump temporal evidence | Behaviour-named and task-local. |
+| `test_coupled_work_system.py` | Work generation and outage admission | Behaviour-named and task-local. |
 
 Useful coverage is moved before any old test is removed. Permanent test names
 describe behaviour, contracts, boundaries, or failure modes, not delivery

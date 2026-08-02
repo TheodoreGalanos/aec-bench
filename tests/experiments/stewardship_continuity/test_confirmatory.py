@@ -1,4 +1,4 @@
-# ABOUTME: Tests the real matched histories and hidden endpoints for ASW-4C.
+# ABOUTME: Tests the real matched histories and hidden endpoints for the confirmatory study.
 # ABOUTME: Uses the durable pump-station world without making provider calls.
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ def _current(prepared: PreparedAsw4cHistory) -> dict[str, Any]:
     return cast(dict[str, Any], payload["current_state"])
 
 
-def test_confirmatory_manifest_binds_the_exact_proposed_phase_limits() -> None:
+def test_confirmatory_manifest_binds_the_approved_execution_limits() -> None:
     manifest = build_asw4c_confirmatory_manifest(
         authorization_id="asw-4c-test-approval",
         approved_by="Theo",
