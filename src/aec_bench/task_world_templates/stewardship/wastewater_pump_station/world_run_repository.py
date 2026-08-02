@@ -21,6 +21,12 @@ from aec_bench.task_world_templates.continual.durability import (
     mkdir_durable,
     replace_file_bytes_durable,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
+    PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
+    project_coupled_information_set,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
     PumpStationEvidenceTreatmentRequest,
 )
@@ -34,12 +40,15 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PUMP_STATION_STATE_VERSION_V4,
     CancelProcess,
     ContinueOperation,
+    PumpStationCoupledStewardshipState,
     PumpStationLegacyStewardshipState,
     PumpStationProposal,
     PumpStationStewardshipState,
     PumpStationStewardshipStateRecord,
     PumpStationTransition,
     PumpStationTransitionReceipt,
+    PumpStationTransitionReceiptV4,
+    PumpStationTransitionV4,
     RequestConditionalDeferral,
     RequestConditionCheck,
     RequestDependencyWaiver,
@@ -55,17 +64,26 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationRunStep,
+    PumpStationRunStepV4,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
+    PumpStationActorView,
     PumpStationInformationSet,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_commands import (
+    decode_pump_station_v4_command,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
     PUMP_STATION_SERIALIZATION_VERSION,
     PumpStationAppliedEventBatch,
+    PumpStationCommandV4,
     PumpStationCurrentRunPointer,
     PumpStationStagedTransition,
+    PumpStationStagedTransitionV4,
     PumpStationStateSnapshotRef,
     PumpStationWorldRunCommit,
+    PumpStationWorldRunCommitRecord,
+    PumpStationWorldRunCommitV2,
     PumpStationWorldRunError,
     PumpStationWorldRunManifest,
     PumpStationWorldRunManifestRecord,
@@ -256,11 +274,14 @@ class PumpStationWorldRunRepository:
             _fail("record-versions", "legacy state access selected a V4 state")
         return cast(PumpStationLegacyStewardshipState, state)
 
-    def load_commit(self, commit_id: str) -> PumpStationWorldRunCommit:
+    def load_commit(self, commit_id: str) -> PumpStationWorldRunCommitRecord:
         """Reload one immutable commit by content identity."""
-        commit = load_pump_station_artifact(
-            self._read_content("commits", commit_id),
-            PumpStationWorldRunCommit,
+        commit = cast(
+            PumpStationWorldRunCommitRecord,
+            load_pump_station_artifact(
+                self._read_content("commits", commit_id),
+                PumpStationWorldRunCommit | PumpStationWorldRunCommitV2,
+            ),
         )
         if pump_station_artifact_id(commit) != commit_id:
             _fail("artifact-integrity", f"commit identity differs for {commit_id}")
@@ -268,7 +289,7 @@ class PumpStationWorldRunRepository:
 
     def snapshot_for_commit(
         self,
-        commit: PumpStationWorldRunCommit,
+        commit: PumpStationWorldRunCommitRecord,
     ) -> PumpStationStateSnapshotRef:
         """Return the exact snapshot selected by one commit on the live chain."""
         commit_id = pump_station_artifact_id(commit)
@@ -439,6 +460,143 @@ class PumpStationWorldRunRepository:
             control_request=control_request,
         )
 
+    def stage_v4_transition(
+        self,
+        *,
+        manifest: PumpStationWorldRunManifestV2,
+        prior_snapshot: PumpStationStateSnapshotRef,
+        command: PumpStationCommandV4,
+        transition: PumpStationTransitionV4,
+        proposal: PumpStationProposal | None = None,
+        information_set: PumpStationInformationSet | None = None,
+    ) -> PumpStationStagedTransitionV4:
+        """Publish complete V4 command evidence without selecting its state."""
+        stored_manifest = self.load_manifest()
+        if not isinstance(stored_manifest, PumpStationWorldRunManifestV2) or stored_manifest != manifest:
+            _fail("world-run-identity", "V4 caller manifest differs from the stored run")
+        self._require_v4_command_scope(command, stored_manifest)
+        decode_pump_station_v4_command(command)
+        receipt = transition.receipt
+        actor_step = command.kind == "actor"
+        if (
+            command.task_world_id != manifest.task_world_id
+            or command.run_id != manifest.run_id
+            or command.episode_id != manifest.episode_id
+            or command.world_branch_id != manifest.world_branch_id
+            or command.based_on_sequence != prior_snapshot.sequence
+            or command.base_state_id != prior_snapshot.state_id
+            or command.base_commit_id != prior_snapshot.commit_id
+            or receipt.sequence != prior_snapshot.sequence + 1
+            or receipt.before_state_id != prior_snapshot.state_id
+            or receipt.after_state_id != stewardship_state_id(transition.state)
+            or receipt.request_id != command.request_id
+            or receipt.action_or_control_kind != command.action_name
+            or receipt.actor_action != actor_step
+            or receipt.receipt_version != manifest.receipt_version
+            or receipt.authority_policy_version != manifest.authority_policy_version
+            or receipt.transition_rule_version != manifest.transition_rule_version
+            or actor_step != (proposal is not None and information_set is not None)
+        ):
+            _fail("transition-integrity", "V4 transition does not extend the selected state")
+        if actor_step:
+            assert proposal is not None
+            assert information_set is not None
+            parent_state = self._load_v4_state(prior_snapshot.state_id)
+            expected_information_set = self._project_v4_information_set(
+                stored_manifest,
+                parent_state,
+                command,
+            )
+            if (
+                proposal.context.proposal_id != command.request_id
+                or proposal.context.agent_tenure_id != command.agent_tenure_id
+                or proposal.context.based_on_sequence != command.based_on_sequence
+                or proposal.context.base_view_id != command.actor_view_id
+                or proposal.context.information_set_id != command.information_set_id
+                or information_set.information_set_id != command.information_set_id
+                or information_set != expected_information_set
+            ):
+                _fail("transition-integrity", "V4 actor evidence bindings differ")
+        self._reject_v4_command_collision(
+            command,
+            parent_commit_id=prior_snapshot.commit_id,
+        )
+        state_id = self._publish_state(transition.state)
+        command_content_id = pump_station_artifact_id(command, record_profile="v4")
+        receipt_content_id = pump_station_artifact_id(receipt, record_profile="v4")
+        proposal_content_id: str | None = None
+        information_set_content_id: str | None = None
+        self._publish_content(
+            "commands",
+            command_content_id,
+            command,
+            record_profile="v4",
+        )
+        if proposal is not None and information_set is not None:
+            proposal_content_id = pump_station_artifact_id(
+                proposal,
+                record_profile="v4",
+            )
+            information_set_content_id = pump_station_artifact_id(
+                information_set,
+                record_profile="v4",
+            )
+            self._publish_content(
+                "proposals",
+                proposal_content_id,
+                proposal,
+                record_profile="v4",
+            )
+            self._publish_content(
+                "information-sets",
+                information_set_content_id,
+                information_set,
+                record_profile="v4",
+            )
+        self._publish_content(
+            "receipts",
+            receipt_content_id,
+            receipt,
+            record_profile="v4",
+        )
+        commit = PumpStationWorldRunCommitV2(
+            serialization_version=manifest.serialization_version,
+            run_id=manifest.run_id,
+            sequence=receipt.sequence,
+            parent_commit_id=prior_snapshot.commit_id,
+            state_id=state_id,
+            request_id=command.request_id,
+            command_content_id=command_content_id,
+            proposal_content_id=proposal_content_id,
+            information_set_content_id=information_set_content_id,
+            receipt_content_id=receipt_content_id,
+        )
+        commit_id = pump_station_artifact_id(commit, record_profile="v4")
+        self._publish_content(
+            "commits",
+            commit_id,
+            commit,
+            record_profile="v4",
+        )
+        snapshot = PumpStationStateSnapshotRef(
+            snapshot_version=manifest.snapshot_version,
+            run_id=manifest.run_id,
+            episode_id=manifest.episode_id,
+            world_branch_id=manifest.world_branch_id,
+            sequence=receipt.sequence,
+            state_id=state_id,
+            commit_id=commit_id,
+        )
+        return PumpStationStagedTransitionV4(
+            prior_snapshot=prior_snapshot,
+            snapshot=snapshot,
+            command=command,
+            transition=transition,
+            commit=commit,
+            proposal=proposal,
+            information_set=information_set,
+        )
+
     def publish_staged_transition(
         self,
         staged: PumpStationStagedTransition,
@@ -446,6 +604,36 @@ class PumpStationWorldRunRepository:
         """Lock and select a fully staged transition with one pointer replacement."""
         with self.locked():
             return self._publish_staged_transition_under_lock(staged)
+
+    def publish_staged_v4_transition(
+        self,
+        staged: PumpStationStagedTransitionV4,
+    ) -> PumpStationTransitionV4:
+        """Lock and select one fully staged V4 transition."""
+        with self.locked():
+            return self._publish_staged_v4_transition_under_lock(staged)
+
+    def _publish_staged_v4_transition_under_lock(
+        self,
+        staged: PumpStationStagedTransitionV4,
+    ) -> PumpStationTransitionV4:
+        """Select one staged V4 transition while the caller owns the run lock."""
+        transition = self._require_staged_v4_identity(staged)
+        current = self.current_snapshot()
+        if current == staged.snapshot:
+            return transition
+        if current != staged.prior_snapshot:
+            _fail("stale-publication", "world run advanced after V4 transition preparation")
+        self._replace_current(
+            PumpStationCurrentRunPointer(
+                serialization_version=PUMP_STATION_SERIALIZATION_VERSION,
+                run_id=staged.snapshot.run_id,
+                sequence=staged.snapshot.sequence,
+                state_id=staged.snapshot.state_id,
+                commit_id=staged.snapshot.commit_id,
+            )
+        )
+        return transition
 
     def _publish_staged_transition_under_lock(
         self,
@@ -490,9 +678,12 @@ class PumpStationWorldRunRepository:
             or snapshot.sequence != prior.sequence + 1
         ):
             _fail("transition-integrity", "staged snapshot and commit chain differ")
-        if self.load_commit(snapshot.commit_id) != commit:
+        stored_commit = self.load_commit(snapshot.commit_id)
+        if not isinstance(stored_commit, PumpStationWorldRunCommit) or stored_commit != commit:
             _fail("transition-integrity", "stored staged commit differs")
         parent = self.load_commit(prior.commit_id)
+        if not isinstance(parent, PumpStationWorldRunCommit):
+            _fail("transition-integrity", "legacy transition has a V4 parent")
         if parent.run_id != prior.run_id or parent.sequence != prior.sequence or parent.state_id != prior.state_id:
             _fail("transition-integrity", "staged prior snapshot and commit differ")
         durable_input, information_set, transition = self._load_step(commit)
@@ -505,6 +696,65 @@ class PumpStationWorldRunRepository:
         ):
             _fail("transition-integrity", "staged transition does not extend its parent")
         return transition
+
+    def _require_staged_v4_identity(
+        self,
+        staged: PumpStationStagedTransitionV4,
+    ) -> PumpStationTransitionV4:
+        """Require one durable V4 parent, commit, command, and next snapshot."""
+        prior = staged.prior_snapshot
+        snapshot = staged.snapshot
+        commit = staged.commit
+        if (
+            pump_station_artifact_id(commit, record_profile="v4") != snapshot.commit_id
+            or commit.run_id != snapshot.run_id
+            or commit.sequence != snapshot.sequence
+            or commit.parent_commit_id != prior.commit_id
+            or commit.state_id != snapshot.state_id
+            or snapshot.snapshot_version != prior.snapshot_version
+            or snapshot.run_id != prior.run_id
+            or snapshot.episode_id != prior.episode_id
+            or snapshot.world_branch_id != prior.world_branch_id
+            or snapshot.sequence != prior.sequence + 1
+        ):
+            _fail("transition-integrity", "staged V4 snapshot and commit chain differ")
+        if self.load_commit(snapshot.commit_id) != commit:
+            _fail("transition-integrity", "stored staged V4 commit differs")
+        parent = self.load_commit(prior.commit_id)
+        if parent.run_id != prior.run_id or parent.sequence != prior.sequence or parent.state_id != prior.state_id:
+            _fail("transition-integrity", "staged V4 prior snapshot and commit differ")
+        command, proposal, information_set, transition = self._load_v4_step(commit)
+        if (
+            command != staged.command
+            or proposal != staged.proposal
+            or information_set != staged.information_set
+            or transition != staged.transition
+            or not self._v4_step_extends_parent(parent, commit, command, transition)
+        ):
+            _fail("transition-integrity", "staged V4 evidence does not extend its parent")
+        return transition
+
+    @staticmethod
+    def _v4_step_extends_parent(
+        parent: PumpStationWorldRunCommitRecord,
+        commit: PumpStationWorldRunCommitV2,
+        command: PumpStationCommandV4,
+        transition: PumpStationTransitionV4,
+    ) -> bool:
+        """Return whether one V4 command and receipt bind their exact parent."""
+        parent_content_id = pump_station_artifact_id(parent)
+        return (
+            commit.sequence == parent.sequence + 1
+            and commit.parent_commit_id == parent_content_id
+            and command.based_on_sequence == parent.sequence
+            and command.base_state_id == parent.state_id
+            and command.base_commit_id == parent_content_id
+            and transition.receipt.sequence == commit.sequence
+            and transition.receipt.before_state_id == parent.state_id
+            and transition.receipt.after_state_id == commit.state_id
+            and transition.receipt.request_id == command.request_id
+            and transition.receipt.action_or_control_kind == command.action_name
+        )
 
     @staticmethod
     def _step_extends_parent(
@@ -532,6 +782,7 @@ class PumpStationWorldRunRepository:
         proposal = cast(PumpStationProposal, durable_input)
         return (
             information_set is not None
+            and isinstance(information_set.base_view, PumpStationActorView)
             and proposal.context.based_on_sequence == parent.sequence
             and information_set.base_view.current_state.state_sequence == parent.sequence
         )
@@ -542,7 +793,11 @@ class PumpStationWorldRunRepository:
     ) -> PumpStationWorldRunCommit | None:
         """Return a proposal commit only when it is on the selected chain."""
         for commit in reversed(self.commits()):
-            if commit.proposal_id == proposal_id and commit.information_set_content_id is not None:
+            if (
+                isinstance(commit, PumpStationWorldRunCommit)
+                and commit.proposal_id == proposal_id
+                and commit.information_set_content_id is not None
+            ):
                 return commit
         return None
 
@@ -553,17 +808,135 @@ class PumpStationWorldRunRepository:
         """Return one selected host-control commit by idempotent request identity."""
         for commit in reversed(self.commits()):
             if (
-                commit.proposal_id == request_id
+                isinstance(commit, PumpStationWorldRunCommit)
+                and commit.proposal_id == request_id
                 and commit.information_set_content_id is None
                 and commit.proposal_content_id is not None
             ):
                 return commit
         return None
 
-    def commits(self) -> tuple[PumpStationWorldRunCommit, ...]:
+    def find_committed_v4_command(
+        self,
+        request_id: str,
+    ) -> PumpStationWorldRunCommitV2 | None:
+        """Return one selected V4 commit by its cross-surface request identity."""
+        for commit in reversed(self.commits()):
+            if isinstance(commit, PumpStationWorldRunCommitV2) and commit.request_id == request_id:
+                return commit
+        return None
+
+    def recover_staged_v4_command(
+        self,
+        command: PumpStationCommandV4,
+    ) -> PumpStationTransitionV4 | None:
+        """Select one exact complete V4 command left durable before selection."""
+        with self.locked():
+            return self._recover_staged_v4_command_under_lock(command)
+
+    def _recover_staged_v4_command_under_lock(
+        self,
+        command: PumpStationCommandV4,
+    ) -> PumpStationTransitionV4 | None:
+        """Recover one unselected V4 commit while the caller owns the run lock."""
+        manifest = self.load_manifest()
+        if not isinstance(manifest, PumpStationWorldRunManifestV2):
+            _fail("record-versions", "legacy manifest cannot recover a V4 command")
+        self._require_v4_command_scope(command, manifest)
+        decode_pump_station_v4_command(command)
+        matches: list[
+            tuple[
+                PumpStationWorldRunCommitV2,
+                PumpStationProposal | None,
+                PumpStationInformationSet | None,
+                PumpStationTransitionV4,
+            ]
+        ] = []
+        commits_root = self._root / "commits"
+        if not commits_root.exists():
+            return None
+        for path in sorted(commits_root.glob("*.json")):
+            commit = self.load_commit(path.stem)
+            if isinstance(commit, PumpStationWorldRunCommit):
+                if commit.proposal_id == command.request_id:
+                    _fail(
+                        "v4-command-id-conflict",
+                        f"{command.request_id} is already used by a legacy transition",
+                    )
+                continue
+            if commit.request_id != command.request_id:
+                continue
+            stored_command, proposal, information_set, transition = self._load_v4_step(commit)
+            if stored_command != command or commit.parent_commit_id != command.base_commit_id:
+                _fail(
+                    "v4-command-id-conflict",
+                    f"{command.request_id} has different staged content",
+                )
+            matches.append((commit, proposal, information_set, transition))
+        if not matches:
+            return None
+        if len(matches) != 1:
+            _fail(
+                "v4-command-id-conflict",
+                f"{command.request_id} has more than one durable outcome",
+            )
+        commit, proposal, information_set, transition = matches[0]
+        parent = self.load_commit(commit.parent_commit_id)
+        if not self._v4_step_extends_parent(
+            parent,
+            commit,
+            command,
+            transition,
+        ):
+            _fail("transition-integrity", "staged V4 recovery does not extend its parent")
+        prior_snapshot = PumpStationStateSnapshotRef(
+            snapshot_version=manifest.snapshot_version,
+            run_id=manifest.run_id,
+            episode_id=manifest.episode_id,
+            world_branch_id=manifest.world_branch_id,
+            sequence=parent.sequence,
+            state_id=parent.state_id,
+            commit_id=commit.parent_commit_id,
+        )
+        commit_id = pump_station_artifact_id(commit, record_profile="v4")
+        snapshot = PumpStationStateSnapshotRef(
+            snapshot_version=manifest.snapshot_version,
+            run_id=manifest.run_id,
+            episode_id=manifest.episode_id,
+            world_branch_id=manifest.world_branch_id,
+            sequence=commit.sequence,
+            state_id=commit.state_id,
+            commit_id=commit_id,
+        )
+        staged = PumpStationStagedTransitionV4(
+            prior_snapshot=prior_snapshot,
+            snapshot=snapshot,
+            command=command,
+            transition=transition,
+            commit=commit,
+            proposal=proposal,
+            information_set=information_set,
+        )
+        return self._publish_staged_v4_transition_under_lock(staged)
+
+    def validate_repeated_v4_command(
+        self,
+        commit: PumpStationWorldRunCommitV2,
+        command: PumpStationCommandV4,
+    ) -> PumpStationTransitionV4:
+        """Return a selected V4 retry only when the complete command is identical."""
+        stored_command, _, _, transition = self._load_v4_step(commit)
+        if stored_command != command:
+            _fail(
+                "v4-command-id-conflict",
+                f"{command.request_id} is already bound to different content",
+            )
+        return transition
+
+    def commits(self) -> tuple[PumpStationWorldRunCommitRecord, ...]:
         """Reload the exact selected commit chain from initial state to current."""
         pointer = self._load_current()
-        chain: list[PumpStationWorldRunCommit] = []
+        chain: list[PumpStationWorldRunCommitRecord] = []
         seen: set[str] = set()
         commit_id: str | None = pointer.commit_id
         while commit_id is not None:
@@ -581,6 +954,8 @@ class PumpStationWorldRunRepository:
         """Reload every committed proposal, information set, receipt, event batch, and state."""
         steps: list[PumpStationRunStep] = []
         for commit in self.commits()[1:]:
+            if not isinstance(commit, PumpStationWorldRunCommit):
+                _fail("record-versions", "legacy step access selected a V4 commit")
             durable_input, information_set, transition = self._load_step(commit)
             if _is_control_input(durable_input):
                 steps.append(
@@ -605,6 +980,25 @@ class PumpStationWorldRunRepository:
                         transition=transition,
                     )
                 )
+        return tuple(steps)
+
+    def v4_steps(
+        self,
+    ) -> tuple[PumpStationRunStepV4, ...]:
+        """Reload every selected V4 command and its complete transition evidence."""
+        steps: list[PumpStationRunStepV4] = []
+        for commit in self.commits()[1:]:
+            if not isinstance(commit, PumpStationWorldRunCommitV2):
+                _fail("record-versions", "V4 step access selected a legacy commit")
+            command, proposal, information_set, transition = self._load_v4_step(commit)
+            steps.append(
+                PumpStationRunStepV4(
+                    command=command,
+                    proposal=proposal,
+                    information_set=information_set,
+                    transition=transition,
+                )
+            )
         return tuple(steps)
 
     def load_transition(
@@ -770,7 +1164,148 @@ class PumpStationWorldRunRepository:
             ),
         )
 
-    def _load_proposal(self, content_id: str) -> PumpStationProposal:
+    def _load_v4_step(
+        self,
+        commit: PumpStationWorldRunCommitV2,
+    ) -> tuple[
+        PumpStationCommandV4,
+        PumpStationProposal | None,
+        PumpStationInformationSet | None,
+        PumpStationTransitionV4,
+    ]:
+        """Reload and reconcile one strict V4 command, state, and receipt."""
+        command = load_pump_station_artifact(
+            self._read_content("commands", commit.command_content_id),
+            PumpStationCommandV4,
+            record_profile="v4",
+        )
+        manifest = self.load_manifest()
+        if not isinstance(manifest, PumpStationWorldRunManifestV2):
+            _fail("record-versions", "legacy manifest selected a V4 command")
+        self._require_v4_command_scope(command, manifest)
+        decode_pump_station_v4_command(command)
+        proposal: PumpStationProposal | None = None
+        information_set: PumpStationInformationSet | None = None
+        if commit.proposal_content_id is not None:
+            if commit.information_set_content_id is None:
+                _fail("artifact-integrity", "V4 actor commit lacks an information set")
+            proposal = self._load_proposal(
+                commit.proposal_content_id,
+                record_profile="v4",
+            )
+            information_set = load_pump_station_artifact(
+                self._read_content(
+                    "information-sets",
+                    commit.information_set_content_id,
+                ),
+                PumpStationInformationSet,
+                record_profile="v4",
+            )
+        receipt = load_pump_station_artifact(
+            self._read_content("receipts", commit.receipt_content_id),
+            PumpStationTransitionReceiptV4,
+            record_profile="v4",
+        )
+        state = self.load_state(commit.state_id)
+        if state.state_version != PUMP_STATION_STATE_VERSION_V4:
+            _fail("record-versions", "V4 transition evidence selects a legacy state")
+        coupled_state = cast(PumpStationCoupledStewardshipState, state)
+        transition = PumpStationTransitionV4(
+            state=coupled_state,
+            receipt=receipt,
+        )
+        if (
+            pump_station_artifact_id(command, record_profile="v4") != commit.command_content_id
+            or pump_station_artifact_id(receipt, record_profile="v4") != commit.receipt_content_id
+            or command.request_id != commit.request_id
+            or receipt.request_id != commit.request_id
+            or receipt.sequence != commit.sequence
+            or receipt.after_state_id != commit.state_id
+            or receipt.actor_action != (command.kind == "actor")
+        ):
+            _fail("artifact-integrity", "V4 commit evidence does not reconcile")
+        if command.kind == "actor":
+            if proposal is None or information_set is None:
+                _fail("artifact-integrity", "V4 actor command lacks bound proposal evidence")
+            parent = self.load_commit(commit.parent_commit_id)
+            parent_state = self._load_v4_state(parent.state_id)
+            expected_information_set = self._project_v4_information_set(
+                manifest,
+                parent_state,
+                command,
+            )
+            if (
+                pump_station_artifact_id(proposal, record_profile="v4") != commit.proposal_content_id
+                or pump_station_artifact_id(information_set, record_profile="v4") != commit.information_set_content_id
+                or proposal.context.proposal_id != command.request_id
+                or proposal.context.information_set_id != information_set.information_set_id
+                or information_set != expected_information_set
+            ):
+                _fail("artifact-integrity", "V4 actor evidence does not reconcile")
+        elif proposal is not None or information_set is not None:
+            _fail("artifact-integrity", "V4 host control contains actor evidence")
+        return command, proposal, information_set, transition
+
+    @staticmethod
+    def _require_v4_command_scope(
+        command: PumpStationCommandV4,
+        manifest: PumpStationWorldRunManifestV2,
+    ) -> None:
+        """Require one V4 command to use the immutable stored world scope."""
+        observed = (
+            command.task_world_id,
+            command.run_id,
+            command.episode_id,
+            command.world_branch_id,
+        )
+        expected = (
+            manifest.task_world_id,
+            manifest.run_id,
+            manifest.episode_id,
+            manifest.world_branch_id,
+        )
+        if observed != expected:
+            _fail("world-run-identity", "V4 command scope differs from the stored run")
+
+    def _load_v4_state(
+        self,
+        state_id: str,
+    ) -> PumpStationCoupledStewardshipState:
+        """Reload one state only when it uses the registered V4 profile."""
+        state = self.load_state(state_id)
+        if state.state_version != PUMP_STATION_STATE_VERSION_V4:
+            _fail("record-versions", "V4 command selected a legacy state")
+        return cast(PumpStationCoupledStewardshipState, state)
+
+    @staticmethod
+    def _project_v4_information_set(
+        manifest: PumpStationWorldRunManifestV2,
+        state: PumpStationCoupledStewardshipState,
+        command: PumpStationCommandV4,
+    ) -> PumpStationInformationSet:
+        """Rebuild the only actor information set valid for one V4 parent."""
+        if command.agent_tenure_id is None:
+            _fail("command-content", "V4 actor command lacks its tenure")
+        return project_coupled_information_set(
+            state,
+            episode_id=manifest.episode_id,
+            world_branch_id=manifest.world_branch_id,
+            actor_id="pump-station-actor",
+            agent_tenure_id=command.agent_tenure_id,
+            source_artifact_ids=(
+                manifest.reference_system_content_id,
+                manifest.package_content_id,
+                manifest.temporal_bundle_content_id,
+            ),
+            workspace_tool_ids=(PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,),
+        )
+
+    def _load_proposal(
+        self,
+        content_id: str,
+        *,
+        record_profile: str | None = None,
+    ) -> PumpStationProposal:
         payload = self._read_content("proposals", content_id)
         try:
             document = json.loads(payload)
@@ -782,7 +1317,11 @@ class PumpStationWorldRunRepository:
             _fail("artifact-type", f"unknown stored proposal type {type_name!r}")
         return cast(
             PumpStationProposal,
-            load_pump_station_artifact(payload, proposal_type),
+            load_pump_station_artifact(
+                payload,
+                proposal_type,
+                record_profile=record_profile,
+            ),
         )
 
     def _reject_proposal_collision(
@@ -797,6 +1336,13 @@ class PumpStationWorldRunRepository:
             return
         for path in commits_root.glob("*.json"):
             commit = self.load_commit(path.stem)
+            if isinstance(commit, PumpStationWorldRunCommitV2):
+                if commit.request_id == proposal.context.proposal_id:
+                    _fail(
+                        "proposal-id-conflict",
+                        f"{proposal.context.proposal_id} is already used by a V4 transition",
+                    )
+                continue
             if commit.proposal_id != proposal.context.proposal_id:
                 continue
             stored_input, stored_information_set, _ = self._load_step(commit)
@@ -821,6 +1367,13 @@ class PumpStationWorldRunRepository:
             return
         for path in commits_root.glob("*.json"):
             commit = self.load_commit(path.stem)
+            if isinstance(commit, PumpStationWorldRunCommitV2):
+                if commit.request_id == request.request_id:
+                    _fail(
+                        "control-request-id-conflict",
+                        f"{request.request_id} is already used by a V4 transition",
+                    )
+                continue
             if commit.proposal_id != request.request_id:
                 continue
             stored_input, information_set, _ = self._load_step(commit)
@@ -830,9 +1383,42 @@ class PumpStationWorldRunRepository:
                     f"{request.request_id} has different staged content",
                 )
 
+    def _reject_v4_command_collision(
+        self,
+        command: PumpStationCommandV4,
+        *,
+        parent_commit_id: str,
+    ) -> None:
+        """Reject reuse of one V4 request identity for changed staged content."""
+        commits_root = self._root / "commits"
+        if not commits_root.exists():
+            return
+        for path in commits_root.glob("*.json"):
+            commit = self.load_commit(path.stem)
+            if isinstance(commit, PumpStationWorldRunCommit):
+                if commit.proposal_id == command.request_id:
+                    _fail(
+                        "v4-command-id-conflict",
+                        f"{command.request_id} is already used by a legacy transition",
+                    )
+                continue
+            if commit.request_id != command.request_id:
+                continue
+            stored, _, _, _ = self._load_v4_step(commit)
+            if stored == command and commit.parent_commit_id == parent_commit_id:
+                _fail(
+                    "v4-command-already-staged",
+                    f"{command.request_id} already has one durable staged outcome",
+                )
+            else:
+                _fail(
+                    "v4-command-id-conflict",
+                    f"{command.request_id} has different staged content",
+                )
+
     def _validate_chain(
         self,
-        chain: tuple[PumpStationWorldRunCommit, ...],
+        chain: tuple[PumpStationWorldRunCommitRecord, ...],
         pointer: PumpStationCurrentRunPointer,
     ) -> None:
         if (
@@ -844,16 +1430,29 @@ class PumpStationWorldRunRepository:
         manifest = self.load_manifest()
         if chain[0].state_id != manifest.initial_state_id:
             _fail("artifact-integrity", "initial commit differs from manifest")
-        previous = chain[0]
+        previous: PumpStationWorldRunCommitRecord = chain[0]
         for commit in chain[1:]:
-            durable_input, information_set, transition = self._load_step(commit)
-            if not self._step_extends_parent(
-                previous,
-                commit,
-                durable_input,
-                information_set,
-                transition,
-            ):
+            valid = False
+            if isinstance(commit, PumpStationWorldRunCommitV2):
+                if not isinstance(manifest, PumpStationWorldRunManifestV2):
+                    _fail("record-versions", "legacy manifest selected a V4 commit")
+                command, _, _, transition_v4 = self._load_v4_step(commit)
+                valid = self._v4_step_extends_parent(
+                    previous,
+                    commit,
+                    command,
+                    transition_v4,
+                )
+            elif isinstance(previous, PumpStationWorldRunCommit):
+                durable_input, information_set, transition = self._load_step(commit)
+                valid = self._step_extends_parent(
+                    previous,
+                    commit,
+                    durable_input,
+                    information_set,
+                    transition,
+                )
+            if not valid:
                 _fail("artifact-integrity", "commit does not extend its parent")
             previous = commit
         if (
@@ -868,8 +1467,18 @@ class PumpStationWorldRunRepository:
         self._publish_content("states", state_id, state)
         return state_id
 
-    def _publish_content(self, collection: str, content_id: str, value: object) -> None:
-        payload = pump_station_artifact_bytes(value)
+    def _publish_content(
+        self,
+        collection: str,
+        content_id: str,
+        value: object,
+        *,
+        record_profile: str | None = None,
+    ) -> None:
+        payload = pump_station_artifact_bytes(
+            value,
+            record_profile=record_profile,
+        )
         if collection != "states" and hashlib.sha256(payload).hexdigest() != content_id:
             _fail("artifact-integrity", f"{collection} content identity differs")
         path = self._root / collection / f"{content_id}.json"

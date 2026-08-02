@@ -555,6 +555,67 @@ and hashes remain unchanged. The parallel coupled run remains only as a
 behaviour oracle until V4 transitions, replay, sessions, and verification have
 parity on the existing path.
 
+### 6.15 V4 transitions and replay on the existing pump run
+
+Step 5 moves the V4 actor actions and the three root host controls onto the
+existing pump commit chain. It does not add a second live pointer, a `HEAD`
+file, or a generation store. The selected state remains the commit named by
+`current.json`.
+
+| Path | Owner | Compatibility and migration rule |
+| --- | --- | --- |
+| `wastewater_pump_station/world_run.py` | Pump run coordinator | Accept the shared actor request or the pump-bound root-control request. Bind each change to the selected run, episode, branch, sequence, state, and commit. Evaluate it with the model pinned in the run manifest. |
+| `wastewater_pump_station/world_run_repository.py` | Pump durability adapter | Stage and select the V4 command, actor evidence when present, receipt, state, and commit under the existing run lock. Use the existing immutable stores, commit chain, and `current.json` pointer. |
+| `wastewater_pump_station/world_run_models.py` | Pump durable records | Add separate V4 command and commit-v2 records. Do not change the V1-V3 command, commit, state, receipt, or inventory bytes. |
+| `wastewater_pump_station/world_run_commands.py` | Pump command codec | Rebuild the shared actor request or typed root control from one strict command. Verify its content identity before selection and replay. |
+| `wastewater_pump_station/stewardship_state_machine.py` | Pump task semantics | Convert a validated actor action to a typed proposal before mutation. Apply the operations review, process outcome, and common boundary as typed root controls. |
+| `wastewater_pump_station/stewardship_verifier.py` | Pump replay verifier | Reload every selected V4 step and replay it from the registered opening state with the exact manifest-bound model. Compare the complete transition and final state. |
+
+An actor action uses `WorldActorActionRequest`. Its binding names the exact
+public view and information set for the selected commit. The run validates the
+task, run, episode, branch, sequence, state, commit, actor, and view identities
+before it applies the typed proposal. A root control uses
+`PumpStationBoundControlRequest`. This separate envelope binds the control to
+the same selected world identities without giving the actor access to the
+host-control surface. The repository reloads the stored manifest and rejects a
+caller manifest or command scope that differs from it. It also rebuilds the
+command input and checks its content identity before it can select a state.
+
+The V4 actor view identity covers every public view field. Staging and replay
+rebuild the complete view and information set from the parent state, manifest
+scope, actor tenure, and manifest-bound source artifacts. A command and a view
+cannot define their own matching but foreign episode, branch, or evidence
+scope.
+
+Request identity is global across the legacy and V4 pump transition records.
+An exact retry is found before the run checks whether the old base snapshot is
+still current. The retry is accepted only when its complete command and parent
+binding match the selected committed evidence. Reuse of the same request ID
+with changed action, control, arguments, authority, or parent identity is a
+conflict. Two real processes use the same run lock, so only one task effect can
+be selected. If a complete immutable commit exists after a process stops
+before pointer selection, an exact retry selects that stored transition. It
+does not evaluate a new outcome for the same command.
+
+Replay does not trust the live Python objects used during the first
+transition. It reloads the durable command, proposal and information set when
+present, receipt, state, and commit. It then rebuilds the transition from the
+registered opening state. The replay uses the coupled model named by the
+manifest. It does not load a default model that can drift from the run.
+Replay captures the selected steps and final pointer under one run lock, then
+performs the deterministic calculation after it releases the lock.
+
+The V4 backlog bindings on inspection, obstruction clearance, and verification
+do not enter V1-V3 storage. A legacy run rejects these fields before retry
+lookup or transition evaluation. Accepted legacy proposals keep their exact
+bytes and exact-retry meaning.
+
+This slice keeps the existing coupled run only as a behaviour oracle. It is
+not the live source of V4 state or selection. Session ownership and handover
+remain for Step 6. Child physical treatment and rollout branches remain for
+Step 7. Temporal search and fetch remain read-only evidence operations; they
+do not create world-transition commits.
+
 ## 7. Implementation sequence
 
 The correction uses small pull requests against the unmerged ASW-8 branch.

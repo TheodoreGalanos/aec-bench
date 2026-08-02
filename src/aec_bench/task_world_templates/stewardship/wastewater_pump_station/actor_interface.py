@@ -35,6 +35,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 
 PUMP_STATION_ACTOR_INTERFACE_VERSION = "pump-station.actor.v1"
 PUMP_STATION_ACTOR_INTERFACE_VERSION_V2 = "pump-station.actor.v2"
+PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2 = "pump-station-actor-interface.v2"
 PUMP_STATION_ACTOR_ACTION_NAMES = (
     "continue_operation",
     "transfer_duty",
@@ -276,9 +277,11 @@ def pump_station_proposal_from_validated_arguments_v2(
             source_backlog_item_id=duty.source_backlog_item_id,
         )
     if action_name == "request_inspection":
+        inspection = cast(_BacklogPumpArguments, validated)
         return RequestInspection(
             context=context,
-            pump_id=cast(_BacklogPumpArguments, validated).pump_id,
+            pump_id=inspection.pump_id,
+            backlog_item_id=inspection.backlog_item_id,
         )
     if action_name == "request_obstruction_clearance":
         clearance = cast(_BacklogClearanceArguments, validated)
@@ -286,6 +289,7 @@ def pump_station_proposal_from_validated_arguments_v2(
             context=context,
             pump_id=clearance.pump_id,
             inspection_evidence_id=clearance.inspection_evidence_id,
+            backlog_item_id=clearance.backlog_item_id,
         )
     if action_name == "request_functional_check":
         functional = cast(_BacklogPumpArguments, validated)
@@ -307,9 +311,11 @@ def pump_station_proposal_from_validated_arguments_v2(
             work_order_id=cast(_WorkOrderArguments, validated).work_order_id,
         )
     if action_name == "request_post_maintenance_verification":
+        verification = cast(_BacklogPumpArguments, validated)
         return RequestVerification(
             context=context,
-            pump_id=cast(_BacklogPumpArguments, validated).pump_id,
+            pump_id=verification.pump_id,
+            backlog_item_id=verification.backlog_item_id,
         )
     if action_name == "resume_process":
         return ResumeProcess(

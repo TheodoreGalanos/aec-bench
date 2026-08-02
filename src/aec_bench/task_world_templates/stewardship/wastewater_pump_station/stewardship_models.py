@@ -50,6 +50,10 @@ PUMP_STATION_TRANSITION_RULE_VERSION_V1 = "pump-station-transition-rules.v1"
 PUMP_STATION_TRANSITION_RULE_VERSION_V2 = "pump-station-transition-rules.v2"
 PUMP_STATION_TRANSITION_RULE_VERSION_V3 = "pump-station-transition-rules.v3"
 PUMP_STATION_TRANSITION_RULE_VERSION_V4 = "pump-station-transition-rules.v4"
+PUMP_STATION_OPERATIONS_REVIEW_VERSION = "pump-station.operations-boundary-review.v1"
+PUMP_STATION_PROCESS_OUTCOME_VERSION = "pump-station.process-outcome.v1"
+PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION = "pump-station.common-boundary-control.v1"
+PUMP_STATION_BOUND_CONTROL_VERSION = "pump-station.bound-control.v1"
 
 PUMP_STATION_RECEIPT_VERSION = PUMP_STATION_RECEIPT_VERSION_V1
 PUMP_STATION_AUTHORITY_POLICY_VERSION = PUMP_STATION_AUTHORITY_POLICY_VERSION_V1
@@ -305,9 +309,12 @@ class RequestInspection:
 
     context: ProposalContext
     pump_id: str
+    backlog_item_id: str | None = None
 
     def __post_init__(self) -> None:
         _require_text(self.pump_id, "pump_id")
+        if self.backlog_item_id is not None:
+            _require_text(self.backlog_item_id, "backlog_item_id")
 
 
 @dataclass(frozen=True, slots=True)
@@ -339,10 +346,13 @@ class RequestObstructionClearance:
     context: ProposalContext
     pump_id: str
     inspection_evidence_id: str
+    backlog_item_id: str | None = None
 
     def __post_init__(self) -> None:
         _require_text(self.pump_id, "pump_id")
         _require_text(self.inspection_evidence_id, "inspection_evidence_id")
+        if self.backlog_item_id is not None:
+            _require_text(self.backlog_item_id, "backlog_item_id")
 
 
 @dataclass(frozen=True, slots=True)
@@ -394,9 +404,12 @@ class RequestVerification:
 
     context: ProposalContext
     pump_id: str
+    backlog_item_id: str | None = None
 
     def __post_init__(self) -> None:
         _require_text(self.pump_id, "pump_id")
+        if self.backlog_item_id is not None:
+            _require_text(self.backlog_item_id, "backlog_item_id")
 
 
 @dataclass(frozen=True, slots=True)
@@ -969,6 +982,194 @@ type PumpStationCoupledStewardshipState = PumpStationStewardshipState[
     PumpStationPoolReservation,
 ]
 type PumpStationStewardshipStateRecord = PumpStationLegacyStewardshipState | PumpStationCoupledStewardshipState
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationOperationsBoundaryReviewRequest:
+    """Host-only review that can release one exact V4 pump boundary."""
+
+    version: str
+    review_id: str
+    review_kind: str
+    pump_id: str
+    restriction_or_isolation_permit_id: str
+    accepted_evidence_id: str
+    requested_outcome: str
+    base_state_id: str
+    operations_authority_id: str
+    reason: str
+
+    @property
+    def content_id(self) -> str:
+        """Return the exact task-semantic review identity."""
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
+            stewardship_content_id,
+        )
+
+        return stewardship_content_id(self, record_profile="v4")
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationProcessOutcomeRequest:
+    """Host-owned evidence for one failed active V4 process attempt."""
+
+    version: str
+    request_id: str
+    authority_id: str
+    process_id: str
+    outcome: str
+    evidence_id: str
+    base_state_id: str
+
+    @property
+    def content_id(self) -> str:
+        """Return the exact task-semantic process-outcome identity."""
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
+            stewardship_content_id,
+        )
+
+        return stewardship_content_id(self, record_profile="v4")
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationCommonBoundaryRequest:
+    """Host-owned change to one declared station-wide operating boundary."""
+
+    version: str
+    request_id: str
+    authority_id: str
+    boundary_kind: str
+    available: bool
+    base_state_id: str
+
+    @property
+    def content_id(self) -> str:
+        """Return the exact task-semantic common-boundary identity."""
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
+            stewardship_content_id,
+        )
+
+        return stewardship_content_id(self, record_profile="v4")
+
+
+type PumpStationRootControl = (
+    PumpStationOperationsBoundaryReviewRequest | PumpStationProcessOutcomeRequest | PumpStationCommonBoundaryRequest
+)
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationBoundControlRequest:
+    """One root host control bound to an exact durable V4 parent snapshot."""
+
+    control_envelope_version: str
+    request_id: str
+    run_id: str
+    episode_id: str
+    world_branch_id: str
+    base_state_id: str
+    base_commit_id: str
+    based_on_sequence: int
+    control: PumpStationRootControl
+
+    def __post_init__(self) -> None:
+        if self.control_envelope_version != PUMP_STATION_BOUND_CONTROL_VERSION:
+            _fail("control-envelope-version", self.control_envelope_version)
+        for field_name in (
+            "request_id",
+            "run_id",
+            "episode_id",
+            "world_branch_id",
+            "base_state_id",
+            "base_commit_id",
+        ):
+            _require_text(cast(str, getattr(self, field_name)), field_name)
+        if self.based_on_sequence < 0:
+            _fail("control-envelope-shape", "based_on_sequence must be non-negative")
+        inner_request_id = (
+            self.control.review_id
+            if isinstance(self.control, PumpStationOperationsBoundaryReviewRequest)
+            else self.control.request_id
+        )
+        if self.request_id != inner_request_id:
+            _fail("control-envelope-shape", "outer and inner request identities differ")
+        if self.base_state_id != self.control.base_state_id:
+            _fail("control-envelope-shape", "outer and inner state bindings differ")
+
+    @property
+    def authority_id(self) -> str:
+        """Return the task authority carried by the semantic control."""
+        if isinstance(self.control, PumpStationOperationsBoundaryReviewRequest):
+            return self.control.operations_authority_id
+        return self.control.authority_id
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationTransitionReceiptV4:
+    """Complete V4 receipt for one actor action or host-control transition."""
+
+    receipt_version: str
+    authority_policy_version: str
+    transition_rule_version: str
+    sequence: int
+    transition_id: str
+    request_id: str
+    action_or_control_kind: str
+    actor_action: bool
+    authority_outcome: str
+    required_authorities: tuple[str, ...]
+    authority_decision_detail: str
+    permit_ids: tuple[str, ...]
+    execution_status: str
+    before_state_id: str
+    after_state_id: str
+    start_calendar_seconds: int
+    end_calendar_seconds: int
+    target_id: str | None
+    backlog_item_id: str | None
+    reason: str
+    changed_record_ids: tuple[str, ...]
+    changed_pool_ids: tuple[str, ...]
+    changed_reservation_ids: tuple[str, ...]
+    changed_backlog_item_ids: tuple[str, ...]
+    generation_record_ids: tuple[str, ...]
+    changed_liability_owner_ids: tuple[str, ...]
+    operating_interval_id: str | None
+
+    def __post_init__(self) -> None:
+        if self.receipt_version != PUMP_STATION_RECEIPT_VERSION_V4:
+            _fail("receipt-version", self.receipt_version)
+        if self.authority_policy_version != PUMP_STATION_AUTHORITY_POLICY_VERSION_V4:
+            _fail("authority-policy-version", self.authority_policy_version)
+        if self.transition_rule_version != PUMP_STATION_TRANSITION_RULE_VERSION_V4:
+            _fail("transition-rule-version", self.transition_rule_version)
+        if self.sequence < 1:
+            _fail("receipt-shape", "V4 receipt sequence must be positive")
+        if self.start_calendar_seconds < 0 or self.end_calendar_seconds < self.start_calendar_seconds:
+            _fail("receipt-shape", "V4 receipt time range is invalid")
+        for field_name in (
+            "transition_id",
+            "request_id",
+            "action_or_control_kind",
+            "authority_outcome",
+            "authority_decision_detail",
+            "execution_status",
+            "before_state_id",
+            "after_state_id",
+            "reason",
+        ):
+            _require_text(cast(str, getattr(self, field_name)), field_name)
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationTransitionV4:
+    """One complete V4 state transition and its exact durable receipt."""
+
+    state: PumpStationCoupledStewardshipState
+    receipt: PumpStationTransitionReceiptV4
+
+    def __post_init__(self) -> None:
+        if self.state.sequence != self.receipt.sequence or self.state.state_id != self.receipt.after_state_id:
+            _fail("transition-integrity", "V4 state and receipt differ")
 
 
 @dataclass(frozen=True, slots=True)

@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from typing import NoReturn
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
     PumpStationEvidenceTreatmentRequest,
@@ -27,6 +29,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationEventType,
     PumpStationProposal,
     PumpStationTransition,
+    PumpStationTransitionV4,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
     PumpStationInformationSet,
@@ -40,6 +43,7 @@ PUMP_STATION_SNAPSHOT_VERSION_V3 = "pump-station-state-snapshot.v3"
 PUMP_STATION_SNAPSHOT_VERSION_V4 = "pump-station-state-snapshot.v4"
 PUMP_STATION_SNAPSHOT_VERSION = PUMP_STATION_SNAPSHOT_VERSION_V1
 PUMP_STATION_MIGRATION_VERSION = "pump-station-world-run-migration.v1"
+PUMP_STATION_COMMAND_VERSION_V4 = "pump-station-world-command.v4"
 
 
 @dataclass(frozen=True, slots=True)
@@ -452,6 +456,121 @@ class PumpStationAppliedEventBatch:
     event_types: tuple[PumpStationEventType, ...]
 
 
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, child in pairs:
+        if key in value:
+            raise PumpStationWorldRunError("canonical-json", f"duplicate field {key}")
+        value[key] = child
+    return value
+
+
+def _reject_nonstandard_json_constant(value: str) -> NoReturn:
+    raise PumpStationWorldRunError(
+        "canonical-json",
+        f"non-standard JSON constant {value}",
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationCommandV4:
+    """Exact actor or host-control command bound to one selected V4 parent."""
+
+    command_version: str
+    kind: str
+    request_id: str
+    request_content_id: str
+    action_name: str
+    arguments_json: str
+    task_world_id: str
+    run_id: str
+    episode_id: str
+    world_branch_id: str
+    based_on_sequence: int
+    base_state_id: str
+    base_commit_id: str
+    session_id: str | None = None
+    agent_tenure_id: str | None = None
+    actor_view_id: str | None = None
+    information_set_id: str | None = None
+    authority_id: str | None = None
+
+    def __post_init__(self) -> None:
+        require_world_run_version(
+            self.command_version,
+            PUMP_STATION_COMMAND_VERSION_V4,
+            "command-version",
+        )
+        expected_actions = {
+            "operations_review": "operations_boundary_review",
+            "process_outcome": "process_outcome",
+            "common_boundary": "common_boundary_control",
+        }
+        if self.kind != "actor" and self.kind not in expected_actions:
+            raise PumpStationWorldRunError("command-kind", self.kind)
+        if self.kind in expected_actions and self.action_name != expected_actions[self.kind]:
+            raise PumpStationWorldRunError("command-kind", self.action_name)
+        for field_name in (
+            "request_id",
+            "request_content_id",
+            "action_name",
+            "task_world_id",
+            "run_id",
+            "episode_id",
+            "world_branch_id",
+            "base_state_id",
+            "base_commit_id",
+        ):
+            require_world_run_text(getattr(self, field_name), field_name)
+        if self.based_on_sequence < 0:
+            raise PumpStationWorldRunError(
+                "command-shape",
+                "based_on_sequence must be non-negative",
+            )
+        actor_fields = (
+            ("session_id", self.session_id),
+            ("agent_tenure_id", self.agent_tenure_id),
+            ("actor_view_id", self.actor_view_id),
+            ("information_set_id", self.information_set_id),
+        )
+        if self.kind == "actor":
+            if any(value is None for _, value in actor_fields) or self.authority_id is not None:
+                raise PumpStationWorldRunError(
+                    "command-shape",
+                    "actor command lacks its actor binding",
+                )
+            for field_name, value in actor_fields:
+                require_world_run_text(value, field_name)
+        else:
+            if any(value is not None for _, value in actor_fields) or self.authority_id is None:
+                raise PumpStationWorldRunError(
+                    "command-shape",
+                    "host-control command has an actor binding or lacks authority",
+                )
+            require_world_run_text(self.authority_id, "authority_id")
+        try:
+            arguments = json.loads(
+                self.arguments_json,
+                object_pairs_hook=_unique_json_object,
+                parse_constant=_reject_nonstandard_json_constant,
+            )
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise PumpStationWorldRunError("canonical-json", str(error)) from error
+        if not isinstance(arguments, dict):
+            raise PumpStationWorldRunError("command-shape", "arguments must be an object")
+        canonical = json.dumps(
+            arguments,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        if canonical != self.arguments_json:
+            raise PumpStationWorldRunError(
+                "canonical-json",
+                "command arguments are not canonical",
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class PumpStationWorldRunCommit:
     """Immutable link from one committed state to its complete transition evidence."""
@@ -473,6 +592,57 @@ class PumpStationWorldRunCommit:
             PUMP_STATION_SERIALIZATION_VERSION,
             "serialization-version",
         )
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationWorldRunCommitV2:
+    """Immutable V4 link from one parent commit to complete command evidence."""
+
+    serialization_version: str
+    run_id: str
+    sequence: int
+    parent_commit_id: str
+    state_id: str
+    request_id: str
+    command_content_id: str
+    proposal_content_id: str | None
+    information_set_content_id: str | None
+    receipt_content_id: str
+
+    def __post_init__(self) -> None:
+        require_world_run_version(
+            self.serialization_version,
+            PUMP_STATION_WORLD_MANIFEST_VERSION_V2,
+            "serialization-version",
+        )
+        for field_name in (
+            "run_id",
+            "parent_commit_id",
+            "state_id",
+            "request_id",
+            "command_content_id",
+            "receipt_content_id",
+        ):
+            require_world_run_text(getattr(self, field_name), field_name)
+        if self.sequence < 1:
+            raise PumpStationWorldRunError(
+                "world-run-shape",
+                "V4 transition commit sequence must be positive",
+            )
+        if (self.proposal_content_id is None) != (self.information_set_content_id is None):
+            raise PumpStationWorldRunError(
+                "world-run-shape",
+                "V4 actor proposal and information set must appear together",
+            )
+        if self.proposal_content_id is not None:
+            require_world_run_text(self.proposal_content_id, "proposal_content_id")
+            require_world_run_text(
+                self.information_set_content_id,
+                "information_set_content_id",
+            )
+
+
+type PumpStationWorldRunCommitRecord = PumpStationWorldRunCommit | PumpStationWorldRunCommitV2
 
 
 @dataclass(frozen=True, slots=True)
@@ -504,3 +674,24 @@ class PumpStationStagedTransition:
     transition: PumpStationTransition
     commit: PumpStationWorldRunCommit
     control_request: PumpStationEvidenceTreatmentRequest | PumpStationPhysicalTreatmentActivationRequest | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationStagedTransitionV4:
+    """Immutable V4 evidence prepared before current-state selection."""
+
+    prior_snapshot: PumpStationStateSnapshotRef
+    snapshot: PumpStationStateSnapshotRef
+    command: PumpStationCommandV4
+    transition: PumpStationTransitionV4
+    commit: PumpStationWorldRunCommitV2
+    proposal: PumpStationProposal | None = None
+    information_set: PumpStationInformationSet | None = None
+
+    def __post_init__(self) -> None:
+        actor_step = self.command.kind == "actor"
+        if actor_step != (self.proposal is not None and self.information_set is not None):
+            raise PumpStationWorldRunError(
+                "transition-integrity",
+                "V4 actor evidence requires one proposal and information set",
+            )

@@ -86,6 +86,9 @@ _V4_FIELD_EXCLUSIONS = {
         "event_effect_ids",
     },
     "PumpStationActorView": {"time_context"},
+    "RequestInspection": {"backlog_item_id"},
+    "RequestObstructionClearance": {"backlog_item_id"},
+    "RequestVerification": {"backlog_item_id"},
 }
 
 
@@ -104,6 +107,14 @@ def _fail(code: str, detail: str) -> NoReturn:
 
 def _record_profile(value: object) -> str:
     type_name = type(value).__name__
+    if type_name in {
+        "PumpStationCommandV4",
+        "PumpStationTransitionReceiptV4",
+        "PumpStationTransitionV4",
+        "PumpStationWorldRunCommitV2",
+        "PumpStationStagedTransitionV4",
+    }:
+        return _V4
     if type_name == "PumpStationWorldRunManifest":
         return _MANIFEST_V1
     if type_name == "PumpStationWorldRunManifestV2":
@@ -120,6 +131,8 @@ def _record_profile(value: object) -> str:
         if version.endswith(".v3"):
             return _V3
         return _V2 if version.endswith(".v2") else _V1
+    if type_name == "PumpStationCoupledActorView":
+        return _V4
     if type_name in {"PumpStationActorView", "PumpStationStructuredHandover"}:
         actor_view = value if type_name == "PumpStationActorView" else getattr(value, "current_actor_view", None)
         if str(getattr(actor_view, "projection_policy_id", "")).endswith(".v4"):
@@ -142,11 +155,21 @@ def _record_profile(value: object) -> str:
 def _document_profile(value: object) -> str:
     if isinstance(value, dict):
         type_name = value.get("$type")
+        if type_name in {
+            "PumpStationCommandV4",
+            "PumpStationTransitionReceiptV4",
+            "PumpStationTransitionV4",
+            "PumpStationWorldRunCommitV2",
+            "PumpStationStagedTransitionV4",
+        }:
+            return _V4
         if type_name == "PumpStationWorldRunManifest":
             return _MANIFEST_V1
         if type_name == "PumpStationWorldRunManifestV2":
             return _MANIFEST_V2
         if type_name == "PumpStationActorView" and str(value.get("projection_policy_id", "")).endswith(".v4"):
+            return _V4
+        if type_name == "PumpStationCoupledActorView":
             return _V4
         if type_name in {"PumpStationStewardshipState", "PumpStationCurrentStateView"}:
             version = str(value.get("state_version", ""))
