@@ -5,7 +5,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted detailed design; implementation and test results are not claimed |
+| Status | Accepted task-world design; implementation acceptance is withheld pending the continual-world boundary correction in draft PR 74 |
 | Design record | `ASW-8-RS1` |
 | Reference-system profile | `pump-station-reference-system.asw-8-rs1.v1` |
 | Opening-state specification | `pump-station-asw-8-rs1-initial-state.v1` |
@@ -13,7 +13,23 @@
 | Station-data profile | `AU-NSW-LH-SYN-SPS-v2` |
 | Parent plan | [Asset Stewardship Worlds PRD](asset-stewardship-worlds-prd.md#asw-8--coupled-assets-and-endogenous-backlog) |
 | Date | 2026-08-02 |
+| Boundary amendment | 2026-08-03 |
 | Owner | Pump-station task world |
+
+This design remains the authority for pump-station semantics. It does not
+approve the parallel runtime structure in draft PR 74. The correction must
+preserve the useful ASW-8 domain work while it routes that work through one
+continual-world runtime and the existing pump-station run lineage.
+
+| Layer | Owns |
+| --- | --- |
+| Continual-world runtime | Durable commands, commits, snapshots, replay, recovery, idempotence, sessions, branches, rollout groups, and transport ports |
+| Stewardship capability | Obligations, work lifecycle, authority, evidence continuity, review, and governed intervention semantics |
+| Pump-station task world | Pump physics, SCU rules, task actions and controls, events, work generation, views, and verifier logic |
+| RS1 profile | Opening state, event schedule, station package, temporal documents, and reference-controller objective |
+
+The normative correction plan and complete PR 74 disposition are in
+[Continual-World Runtime Boundary](../../docs/CONTINUAL_WORLD_RUNTIME.md).
 
 ## 1. Decision
 
@@ -173,9 +189,9 @@ an instruction to move pump-station types into shared contracts.
 | Events | `stewardship_events.py` and the state machine already order scheduled events and same-time groups | Add declared service, common-boundary, stock-arrival, and backlog events |
 | Actor view | `stewardship_views.py` projects one duty pump, one standby pump, singleton resources, obligations, work orders, and processes | Add service demand, assignment, service-running and test-running sets, assured capacity, pools, backlog, and exposure |
 | Time display | `time_presentation.py` already owns `pump-station-current-state.v4` | Keep temporal v4 unchanged; use actor projection v5 for ASW-8 |
-| Durable history | `world_run.py` and `world_run_repository.py` publish immutable states, receipts, commits, and a current head | Reuse publication, recovery, and request idempotence; add v4 record support |
+| Durable history | `world_run.py` and `world_run_repository.py` publish immutable states, receipts, commits, and a current head | Migrate their mature publication and recovery mechanics behind the continual-runtime port; add v4 to the same pump run; do not add a coupled repository or second head |
 | Replay | `stewardship_verifier.py` replays v1-v3 records and compares the complete transition | Add v4 replay and derive conservation reports from the immutable chain |
-| Branches | `rollout_control.py` creates isolated ASW-7 world-run children from a verified origin but does not initialise their temporal-evidence repositories | Reuse the branch system after v2/v4 support and add typed child temporal-corpus initialisation |
+| Branches | `rollout_control.py` creates isolated ASW-7 world-run children from a verified origin but does not initialise their temporal-evidence repositories | Extend the same branch system after v2/v4 support; move only task-neutral lineage mechanics behind the continual-runtime port; do not add a second rollout control |
 | Evaluation | `evaluation/stewardship.py` recomputes existing metrics and terminal items | Add a task-local evaluation v2 and a derived conservation-report identity |
 | Trial evidence | Shared `TrialRecord` already carries world execution, provenance, evaluation evidence, and artifact hashes | Reuse it; do not add pump-station ledger rows to the shared contract |
 
@@ -280,6 +296,10 @@ field becomes `PumpStationEnvironment | PumpStationCoupledEnvironment`.
 State and reference-system profile versions select both unions before decode.
 ASW-8 fields are v4-only and are excluded from historical profiles. A separate
 top-level repository or second world-run state type is not added.
+
+Coupled pump state and SCU semantics remain task-local. A separate coupled run,
+repository, snapshot, session, combined actor/control interface, rollout
+runtime, Harbor bridge, evaluator, or replay path is not permitted.
 
 V4 evidence-health regime identity includes the named target pump, ordered
 assignment, normalized service-running set, and normalized test-running set.
@@ -1593,6 +1613,20 @@ cause v4 to lose evidence-health behaviour.
 
 ## 14. Ownership and implementation map
 
+The correction uses these owners:
+
+| Layer | Current source and target rule |
+| --- | --- |
+| Continual-world runtime | Extract only task-neutral lifetime mechanics after pump and SSC-03 pass the same contract tests |
+| Stewardship capability | Keep obligations, work lifecycle, authority, evidence continuity, and review semantics separate from storage and transport |
+| Pump-station task world | Keep pump state, SCU, action, event, work, view, and verifier meaning in the existing task package |
+| RS1 profile | Keep descriptor, opening state, schedule, promoted package, temporal corpus, and reference controller declarative and task-local |
+
+The final shared package path, public runtime type, registry version, and
+migration API remain pending until the two-consumer contract tests select the
+smallest real boundary. The file map below remains authoritative for ASW-8 task
+semantics, but it must be read with this correction rule.
+
 ### 14.1 Station data and physical world
 
 | Path | Planned work |
@@ -1651,8 +1685,27 @@ lose v3 evidence features. ASW-8 must not add another Boolean combination.
 
 ## 15. Implementation order
 
-This is one ASW-8 plan. The numbered items are implementation dependencies,
-not new freeze or approval stages.
+The boundary correction runs first:
+
+1. Keep PR 74 draft and record the complete file ownership map.
+2. Write the common runtime contract tests against the pump station and
+   SSC-03.
+3. Extract the mature existing durable engine without changing legacy pump
+   bytes.
+4. Route ASW-8 through the existing pump run, session, state machine, and
+   verifier.
+5. Reuse the separate actor and host-control envelopes.
+6. Extend the existing rollout path and extract only task-neutral branch
+   mechanics.
+7. Add registry-driven CLI, Harbor, agent, and evaluation dispatch.
+8. Route verification and evaluation through registered task-owned ports.
+9. Retire duplicate paths only after parity evidence passes.
+10. Apply the separate research and behaviour-based test cleanup changes.
+11. Run the final requirement-by-requirement merge audit.
+
+The original task-semantic implementation order follows. It remains useful for
+coverage and migration, but it is not architecture acceptance. The numbered
+items are implementation dependencies, not new freeze or approval stages.
 
 1. Write failing focused tests for v1 byte preservation, v2 identity, three
    pumps, and v4/v5 version routing.
@@ -1771,30 +1824,42 @@ ASW-8 does not add:
 - common-header maintenance;
 - a provider study;
 - a new top-level repository domain;
-- shared runtime extraction; or
+- promotion of pump, SCU, outage, backlog, resource, or verifier semantics into
+  the shared runtime; or
 - broad cleanup of phase-specific names and tests.
 
-The later cleanup must first classify general library contracts, pump-station
-task-template rules, and research-only support. ASW-8 records stay task-owned
-until a second consumer and a stable cross-task contract justify promotion.
+The boundary correction may extract only task-neutral lifetime mechanics. That
+extraction requires a written ownership and migration plan and the same
+contract suite passing for the pump-station world and a real SSC-03
+hydraulic-interaction adapter. The later cleanup must first classify general
+library contracts, pump-station task-template rules, and research-only support.
 
 ## 18. Exit gate
 
 ASW-8 is complete only when all of these statements are supported by focused
 evidence:
 
-1. the v2 package is independently promoted and loads without changing v1;
-2. one or two pumps can serve declared demand while per-pump physics and
+1. one versioned pump run and repository path supports v1 through v4;
+2. the shared runtime imports no pump-station or SSC-03 task type;
+3. the pump-station world and a real SSC-03 adapter pass the same runtime
+   contract suite;
+4. actor and host-control requests remain separate;
+5. CLI, Harbor, agent, and evaluation execution resolve a registered world
+   definition without an ASW-8 branch;
+6. no duplicate coupled run, interface, rollout, agent, Harbor, replay, or
+   evaluation path remains;
+7. the v2 package is independently promoted and loads without changing v1;
+8. one or two pumps can serve declared demand while per-pump physics and
    exposure remain attributable;
-3. outage admission uses assured capacity and only actor-visible schedules;
-4. shared people, equipment, access, and stock cannot be over-allocated;
-5. every generated work item has one durable source and one stable identity;
-6. backlog and liabilities continue through time, handover, suspension,
+9. outage admission uses assured capacity and only actor-visible schedules;
+10. shared people, equipment, access, and stock cannot be over-allocated;
+11. every generated work item has one durable source and one stable identity;
+12. backlog and liabilities continue through time, handover, suspension,
    cancellation, resume, and ASW-7 branching;
-7. independent replay reconstructs the v4 state and v5 actor boundary;
-8. direct execution, local Harbor, evaluation, and TrialRecord import agree;
-9. old package, state, view, and replay bytes remain unchanged; and
-10. duty, resources, work, and liabilities balance without an unexplained
+13. independent replay reconstructs the v4 state and v5 actor boundary;
+14. direct execution, local Harbor, evaluation, and TrialRecord import agree;
+15. old package, state, view, and replay bytes remain unchanged; and
+16. duty, resources, work, and liabilities balance without an unexplained
     residual.
 
 The compact target remains:

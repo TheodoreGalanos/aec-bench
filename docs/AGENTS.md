@@ -194,6 +194,28 @@ Tool errors are surfaced back to the model (not swallowed), logged via `logger.w
 - `TaskRegistry.reload()` is failure-tolerant — malformed tasks are logged and tracked in `load_errors`.
 - Trial completeness is `PARTIAL` unless all provenance fields (adapter_revision, tool_versions, input_files) are present.
 
+## Continual-World Boundary Rules
+
+- Read [CONTINUAL_WORLD_RUNTIME.md](CONTINUAL_WORLD_RUNTIME.md) before changing
+  a persistent, replayable, branchable, or controllable task world.
+- Do not add a profile-specific run, repository, session, rollout, Harbor,
+  replay, or evaluation stack when the world type already has one.
+- Keep actor actions and host controls in separate validated envelopes.
+- Keep state, action semantics, events, projections, and verifier rules with
+  the task world. The runtime may store and route them but must not interpret
+  their task fields.
+- Do not add task-stage branches to agents, adapters, CLI dispatch, Harbor, or
+  evaluation. Register the world definition at the composition boundary.
+- Do not promote code to the shared runtime from one apparent use. First record
+  ownership and migration, then prove one stable contract with two real task
+  consumers.
+- A mock, duplicate wrapper, or second profile does not count as the second
+  consumer.
+- Stop for architecture review if a change needs a second durable repository,
+  run type, replay path, combined actor/control interface, or transport bridge.
+- Move useful coverage before retiring an old path. Preserve accepted artifact
+  bytes and replay results throughout the migration.
+
 ---
 
 ## Ledger Rules
@@ -246,6 +268,8 @@ environment's native skill/prompt mechanism.
 | 8 | Provider isolation | Can this code be described without naming a vendor? |
 | 9 | Human judgment is structured | Is expert feedback captured as machine-readable data? |
 | 10 | Continuous quality | Does this reduce drift instead of adding to it? |
+| 11 | Staged evidence is host-controlled | Does the host own evidence release and immutable submissions? |
+| 12 | Continual-world runtime ownership | Are lifetime mechanics separate from task meaning and profile data? |
 
 ## Objective Stack
 

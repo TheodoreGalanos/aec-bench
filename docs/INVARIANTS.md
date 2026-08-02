@@ -123,6 +123,10 @@ Architectural drift should be corrected continuously through small fixes and aut
 Python enforcement direction:
 - linting, typing, and tests in normal workflow,
 - domain-specific checks added over time,
+- define the source owner, target owner, compatibility rule, consumer cutover,
+  and retirement evidence before shared extraction,
+- require the same boundary contract to pass for at least two real consumers
+  before a shared implementation becomes authoritative,
 - tracked debt with owners, not vague TODO accumulation.
 
 ---
@@ -183,6 +187,33 @@ Python enforcement direction:
 
 ---
 
+## 12. Continual-World Runtime Ownership
+
+A continual-world runtime owns how a world lives. A task definition owns what
+happens in that world. A profile selects one concrete opening situation.
+
+Python enforcement direction:
+
+- keep durable commands, commits, snapshots, replay, recovery, idempotence,
+  sessions, branches, rollout groups, and transport ports in one reusable
+  runtime path;
+- keep task state, action and control semantics, event meaning, projections,
+  and verifier logic in the registered task world;
+- keep profile data declarative and immutable;
+- dispatch CLI, Harbor, agent, and evaluation calls through a registered world
+  definition, not a task-stage branch;
+- preserve separate actor and host-control envelopes;
+- require a stable contract and two real task consumers before shared
+  extraction; and
+- record ownership, migration, compatibility, and retirement before moving or
+  deleting code.
+
+A profile-specific second repository, run type, session, rollout control,
+transport, replay path, or evaluator for an existing world type is an
+architecture defect.
+
+---
+
 ## Adapter Reserved Keys
 
 Adapter-internal extraction metadata must use explicit reserved keys and must not leak into benchmark-semantic fields.
@@ -202,6 +233,8 @@ Adapter-internal extraction metadata must use explicit reserved keys and must no
 | Contract conformance | Boundary payloads satisfy required shapes |
 | Trial completeness | TrialRecord has enough provenance to replay outcomes |
 | Code quality | Formatter, linter, typing, and tests pass |
+| Continual-world ownership | Changed paths have one declared runtime, task, profile, or transport owner |
+| Shared extraction | Ownership, migration, retirement, and two-real-consumer evidence exist |
 
 ### Build Next
 
@@ -212,6 +245,8 @@ Adapter-internal extraction metadata must use explicit reserved keys and must no
 | Leakage guard | Holdout content never appears in public artefacts | #6 |
 | Smoke gate | Smoke run passes before full experiment | #7 |
 | Report parity | Communication outputs compile from evaluation artefacts only | #5 |
+| Registered world dispatch | CLI, Harbor, agents, and evaluation resolve world behaviour through the catalogue | #12 |
+| Runtime task independence | The shared continual runtime imports no concrete task-world package | #12 |
 
 ---
 

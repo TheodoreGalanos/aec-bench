@@ -94,6 +94,33 @@ These are provider-shaped capabilities, not separate domains:
 
 The Python implementation should expose each through a narrow boundary, not through ad hoc imports across the codebase.
 
+## Continual Task Worlds
+
+Continual task worlds combine task-owned state and transition semantics with a
+reusable durable execution boundary. Their ownership rule is:
+
+- the continual-world runtime owns how a world lives: publication, commits,
+  snapshots, replay, recovery, sessions, branches, rollout groups, and
+  transport ports;
+- the task-world definition owns what happens: state types, action and control
+  semantics, projections, event meaning, and verification; and
+- a registered profile owns one concrete opening state, event schedule, source
+  package, and reference objective.
+
+The shared runtime must not import a concrete task world. Catalogue assembly is
+the composition boundary that registers task definitions. CLI, Harbor, agent,
+and evaluation dispatch resolve a registered definition instead of branching
+on task stage or profile names.
+
+Shared extraction requires a stable contract and two real task consumers.
+Before extraction, the change must record ownership, migration, compatibility,
+and retirement for every affected path. A new profile must not create a second
+run, repository, session, rollout, or transport stack for the same world type.
+
+The normative boundary, ASW-8 correction inventory, implementation sequence,
+and merge gates are in
+[CONTINUAL_WORLD_RUNTIME.md](CONTINUAL_WORLD_RUNTIME.md).
+
 ---
 
 ## Dependency Rule
