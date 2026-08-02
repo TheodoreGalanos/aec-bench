@@ -280,6 +280,46 @@ retained offline tools receive focused maintenance tests without becoming
 runtime or agent dependencies. Otherwise, the promoted immutable package is
 the required production input.
 
+### 6.8 Step 2 definition and catalogue ownership
+
+The Step 2 correction adds only the registration boundary. It does not add or
+replace execution machinery.
+
+| Path | Owner | Compatibility and migration rule |
+| --- | --- | --- |
+| `src/aec_bench/contracts/continual_world.py` | Shared boundary contracts | Keep content-pinned world, implementation, and profile references task-neutral. Do not add task state, action names, controls, clocks, paths, or verifier fields. |
+| `src/aec_bench/task_world_templates/continual/definition.py` | Shared definition boundary | Load only an exact declared profile, pin each registered Python port, and leave its value task-owned and opaque. |
+| `src/aec_bench/task_world_templates/continual/catalogue.py` | Shared catalogue | Resolve new work by exact world ID and recovery work by exact definition content. Import no concrete task world. |
+| `src/aec_bench/task_world_templates/continual_catalogue.py` | Composition root | Register the pump and SSC-03 definitions. Concrete imports are allowed only at this boundary. |
+| `wastewater_pump_station/continual_definition.py` | Pump-station task world | Validate the exact RS1 descriptor, certified station package, opening state, and loader source. Do not start a coupled or stable run here. |
+| `lifecycles/ssc03_hydraulic_continual_definition.py` | SSC-03 task world | Register all four real variants and the existing lifecycle adapter. Pin the complete template, variant, baseline source, revised source, and adapter identity. Do not add another lifecycle run or repository. |
+
+This change is additive. It does not change a run manifest, snapshot, command,
+receipt, replay result, accepted artifact byte, CLI route, Harbor route, agent
+route, or evaluation route. Existing pump and SSC-03 execution remains on its
+current path. Later steps will store and resolve these references when the
+durable engine and dispatch paths move behind the catalogue.
+
+The pump registration includes RS1 and its v2 station package because Step 2
+validates profile content only. It does not claim that the current stable pump
+session can execute v4. That cutover belongs to Step 4. The SSC-03 registration
+proves the same definition and profile boundary through its real materializer,
+resolver, smoke environment, and verifier. It does not claim autonomous time,
+named snapshot creation, arbitrary rewind, or rollout groups.
+
+The loaded SSC-03 port exposes no mutable template, variant, or adapter object.
+Each operation rechecks the exact definition implementation, profile content,
+and supplied package variant before it delegates to the existing lifecycle
+adapter.
+
+Stable profile identity and compiled runtime-package identity are separate.
+For SSC-03, the profile reference hashes the complete runtime-independent task
+inputs. A compiled hydraulic package also records its Python runtime identity,
+so its package hash must stay with the compiled run and must not become the
+portable profile ID. The definition reference separately hashes the registered
+adapter and loader sources. Recovery must later check all three identities:
+profile, definition implementation, and compiled run package.
+
 ## 7. Implementation sequence
 
 The correction uses small pull requests against the unmerged ASW-8 branch.
