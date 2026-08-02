@@ -68,3 +68,20 @@ claims:
       in_window_proposals: 1
       material_evidence_acquired: 0
       material_evidence_used: 0
+  - id: C005
+    statement: The corrected scenario starts the incoming tenure at the open decision point, makes the delayed report material to the required station action, and resumes only from complete verified trial evidence.
+    status: supported
+    falsification_criteria:
+      - The incoming tenure starts before the material evidence availability event.
+      - A general verification request or a condition check without explicit material-report reliance satisfies the endpoint.
+      - Resume accepts an incomplete delivery, observation, and trial-execution join.
+      - Resume silently repeats an interrupted provider trial.
+    proof:
+      experiments: [E005]
+      evidence: [EV004]
+    dependencies: [C004]
+    provenance: ai_executed
+    tags: [design-correction, decision-point, verified-resume]
+    domain:
+      provider_calls: 0
+      study_outcomes: 0

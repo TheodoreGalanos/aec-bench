@@ -88,3 +88,27 @@ from the model's ability to wait for that event.
 - `research/asset-stewardship/retrieval-state-continuity-study/results/model-shakedown-v2`
 - `research/asset-stewardship/retrieval-state-continuity-study/results/model-shakedown-v3`
 - `research/asset-stewardship/retrieval-state-continuity-study/results/confirmatory-v2`
+
+## Provider-free follow-up evidence
+
+The follow-up implementation does not change the frozen model result above. It
+starts the incoming tenure at the open decision point, requires a fetched
+delayed report and explicit reliance for the Pump A condition-check endpoint,
+and adds verified resume from complete immutable trial evidence.
+
+Resume verifies manifest, plan, block, trial, treatment, delivery, phase,
+endpoint, retrieval, token, and spend identities before it skips a completed
+trial. It stops on an incomplete published join or an interrupted run directory
+so it cannot silently repeat a provider call.
+
+Focused provider-free validation used this command:
+
+```text
+uv run pytest -q \
+  tests/experiments/retrieval_state_continuity/test_model_execution.py \
+  tests/experiments/retrieval_state_continuity/test_contracts.py \
+  tests/experiments/retrieval_state_continuity/test_retrievability.py \
+  tests/task_world_templates/stewardship/wastewater_pump_station/test_temporal_retrieval.py
+```
+
+The result was `16 passed`. Provider calls and new study outcomes were zero.

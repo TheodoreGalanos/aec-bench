@@ -86,6 +86,27 @@ conservative request before the scored window. A later study should separate
 temporal waiting from retrieval continuity and make the delayed record material
 to the action choice.
 
+## Implemented follow-ups
+
+The follow-up design now gives the incoming tenure the live world at the open
+decision point. The outgoing tenure advances the real event sequence before it
+creates the structured handover and retrieval carrier. This removes agent
+waiting from the treatment comparison.
+
+The delayed condition report now records an unresolved obstruction indicator
+that requires a current Pump A condition check. The endpoint requires that
+specific action and explicit reliance on the fetched material report. A general
+post-maintenance verification request does not satisfy the corrected endpoint.
+
+Long model-study runs can now resume from an existing output root. Resume
+reloads the exact manifest and plan, joins each completed delivery,
+observation, and trial execution, and skips only complete verified trials. It
+stops on incomplete published evidence or an interrupted trial directory so it
+cannot silently repeat a provider call.
+
+These changes have focused provider-free test evidence only. They do not amend
+the frozen 64-run result and they are not a new model-study result.
+
 ## Boundary
 
 The study code stays in
@@ -103,4 +124,4 @@ Artifact layers:
 - `logic/experiments.yaml` records provider-free and real-model checks.
 - `evidence/index.yaml` points to the frozen values and validation evidence.
 - `trace/exploration_tree.yaml` records the failures, repairs, and result.
-- `staging/observations.yaml` retains the open follow-up design questions.
+- `staging/observations.yaml` records the resolved follow-up design questions.

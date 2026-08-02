@@ -122,12 +122,27 @@ nodes:
   - id: N010
     type: observation
     summary: The next study should isolate retrieval continuity from temporal waiting and remove the obvious pre-existing conservative answer.
-    children: []
+    children: [N011]
     also_depends_on: [N009]
     claims_touched: [C004]
     provenance: ai_suggested
     payload:
-      status: open
+      status: resolved_by_N011
       evidence: EV003
     domain:
       follow_up_required: true
+  - id: N011
+    type: experiment
+    summary: Correct the decision boundary and add verified resume without running another provider study.
+    children: []
+    also_depends_on: [N010]
+    claims_touched: [C005]
+    provenance: ai_executed
+    payload:
+      experiment_id: E005
+      result: passed
+      evidence: EV004
+      provider_calls: 0
+      study_outcomes: 0
+    domain:
+      model_result_changed: false

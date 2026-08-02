@@ -59,7 +59,7 @@ def build_provider_free_manifest() -> StudyManifest:
             "budget": budget.model_dump(mode="json"),
             "available_at_seconds": material.available_at_seconds,
             "decision_deadline_seconds": material.available_at_seconds + 3_600,
-            "decision_rule_id": "pump-a-obstruction-evidence-decision-rule.v1",
+            "decision_rule_id": "pump-a-obstruction-evidence-decision-rule.v3",
         }
     )
     base_carrier_audit_sha256 = canonical_content_sha256(
@@ -93,7 +93,7 @@ def build_provider_free_manifest() -> StudyManifest:
         material_evidence_version_id=material.version_id,
         acceptable_evidence_version_ids=(material.version_id,),
         development_query_routes=_DEVELOPMENT_QUERY_ROUTES,
-        decision_rule_id="pump-a-obstruction-evidence-decision-rule.v1",
+        decision_rule_id="pump-a-obstruction-evidence-decision-rule.v3",
         retrievability_certificate_sha256=retrievability_certificate_sha256,
         base_carrier_audit_sha256=base_carrier_audit_sha256,
         current_actor_view_policy_id="pump-station-current-state.v1",
@@ -120,9 +120,9 @@ def build_model_manifest(phase: StudyPhase) -> StudyManifest:
     payload.update(
         {
             "study_generation_id": (
-                "retrieval-state-continuity-model-shakedown.v3"
+                "retrieval-state-continuity-model-shakedown.v4"
                 if phase is StudyPhase.SHAKEDOWN
-                else "retrieval-state-continuity-confirmatory.v2"
+                else "retrieval-state-continuity-confirmatory.v3"
             ),
             "phase": phase,
             "decision_rule_id": model_execution.decision_rule_id,
@@ -131,7 +131,7 @@ def build_model_manifest(phase: StudyPhase) -> StudyManifest:
                     "prior_retrievability_certificate_sha256": (provider_free.retrievability_certificate_sha256),
                     "decision_rule_id": model_execution.decision_rule_id,
                     "admissible_conservative_actions": (model_execution.admissible_conservative_actions),
-                    "shakedown_amendment": "permitted-conservative-action-coverage.v1",
+                    "design_correction": "open-decision-point-and-material-action.v1",
                 }
             ),
             "model_execution": model_execution,

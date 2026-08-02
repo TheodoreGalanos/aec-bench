@@ -9,9 +9,9 @@ observations:
       provider_authorization_present: true
   - id: O002
     summary: Sixty-three safe station proposals occurred before the scored window, while no run acquired or used the delayed report.
-    status: open
+    status: resolved
     source: evidence/model-study-result.md
-    next_action: In a separate follow-up, start model action at the open decision point and make the delayed record change the correct station action.
+    next_action: Keep the frozen result separate. Use the corrected boundary only in a later, separately identified study if needed.
     domain:
       interpretation_limit: true
       pre_window_proposals: 63
@@ -19,8 +19,8 @@ observations:
       material_evidence_acquired: 0
   - id: O003
     summary: The long provider study publishes every completed trial but cannot resume into an existing output directory after interruption.
-    status: open
+    status: resolved
     source: src/aec_bench/experiments/retrieval_state_continuity/execution.py
-    next_action: Add verified resume support before another long or expensive provider study.
+    next_action: Keep incomplete trial directories as explicit recovery stops so provider calls are not repeated silently.
     domain:
       engineering_follow_up: true
