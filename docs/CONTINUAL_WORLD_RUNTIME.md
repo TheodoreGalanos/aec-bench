@@ -341,6 +341,9 @@ directory, not a symbolic link. System path aliases above that root are valid.
 Callers that used a symbolic link as the run root must supply its real target or
 put the alias above the run root. Symbolic links and non-directory components
 inside the root are not valid. The lock paths and mode `0600` stay unchanged.
+Concurrent first callers must also serialize safely while the lock file is
+created. One caller can create the file, and another must reopen and lock that
+same regular file instead of failing startup.
 Errors from work done while the lock is held keep their original type and
 identity. No task artifact path or byte changes in this extraction.
 
@@ -502,6 +505,55 @@ transition once.
 This correction does not promote `current.json`, commit-chain meaning, replay,
 or recovery into the shared continual-world layer. It only closes the pump
 adapter path that Step 4 will reuse.
+
+### 6.14 V4 registered opening state on the existing pump run
+
+The first Step 4 slice moves only root creation and exact resume. It does not
+move a V4 actor or host-control transition. The registered pump profile now
+supplies the V2 station package, coupled model, and complete V4 stewardship
+opening state. The profile still starts no run by itself.
+
+| Path | Owner | Compatibility and migration rule |
+| --- | --- | --- |
+| `wastewater_pump_station/continual_definition.py` | Registered pump definition | Load the full specification-checked V4 opening state and coupled model. Pin both factories in the definition identity. |
+| `wastewater_pump_station/world_run_models.py` | Pump durable records | Keep the manifest-v1 record exact. Add a separate required manifest-v2 record and the closed root-or-rollout initial-state source. Permit the coherent V4 record set only with manifest v2. |
+| `wastewater_pump_station/world_run_serialization.py` | Pump task codec | Select manifest v1 and v2 through manifest-only codec profiles. Do not reuse a state or actor-projection profile. |
+| `wastewater_pump_station/world_run.py` | Pump run coordinator | Create RS1 only through its content-pinned definition and profile. Resume it from those immutable references without a caller package, model, opening state, schedule, or feature override. Keep V4 mutations closed until the next slice routes the task-owned transitions. |
+| `wastewater_pump_station/world_run_repository.py` | Pump durability adapter | Publish the normal immutable manifest, state, and initial commit. While the same pump run lock is held, complete required temporal setup before selecting `current.json`. Keep the commit and pointer formats unchanged. |
+
+Manifest v2 binds the exact continual-world definition and profile, RS1
+descriptor, opening-state specification, event schedule, temporal template,
+V2 package, coupled model, realised temporal bundle, corpus, capability, and
+initial-state source. Start resolves the current definition by task-world ID
+through the composition catalogue. Resume resolves the content-pinned
+definition and profile through the same catalogue and compares the complete
+reconstructed manifest. A task-local definition factory alone is not a runtime
+registration. Resume also reloads and independently verifies the stored
+temporal repository. It never rebuilds a replacement corpus under an existing
+selected run.
+
+Manifest version, stewardship-state version, and actor-projection version are
+independent axes. The codec must select each from its own record type. It must
+not use one generic V4 profile to identify all three.
+
+The run container keeps the physical model and complete state profile related
+in its type. Bare legacy callers retain the V1-V3 model and state types. The
+repository can decode either stored state profile, but a legacy consumer must
+use its checked legacy-state accessor. That accessor rejects V4 before a state
+can enter a legacy view, verifier, session, control, or rollout path.
+
+Startup publishes the immutable pump records first, then publishes and
+verifies the required temporal repository, and only then replaces
+`current.json`. All three actions occur under one pump run lock. A process
+failure before selection can leave exact immutable staged records, but it
+cannot expose an actor-ready current snapshot. An exact retry reuses those
+bytes, completes temporal verification, and selects one initial commit.
+
+The free-form legacy `create()` path does not accept V4 inputs, and the legacy
+caller-supplied `resume()` path rejects manifest v2. V1-V3 inventory lengths
+and hashes remain unchanged. The parallel coupled run remains only as a
+behaviour oracle until V4 transitions, replay, sessions, and verification have
+parity on the existing path.
 
 ## 7. Implementation sequence
 

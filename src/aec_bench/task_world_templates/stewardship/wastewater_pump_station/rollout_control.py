@@ -156,7 +156,7 @@ class PumpStationRolloutControl:
                 "origin-snapshot",
                 "rollout origin must be the current immutable parent snapshot",
             )
-        initial_state = parent.repository.load_state(parent.manifest.initial_state_id)
+        initial_state = parent.repository.load_legacy_state(parent.manifest.initial_state_id)
         verification = verify_stewardship_run(
             parent.model,
             initial_state,

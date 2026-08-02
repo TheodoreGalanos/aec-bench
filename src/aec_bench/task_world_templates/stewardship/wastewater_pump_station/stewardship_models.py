@@ -954,6 +954,23 @@ class PumpStationStewardshipState(
         raise LookupError(f"missing {kind.value} evidence for {pump_id}")
 
 
+type PumpStationLegacyStewardshipState = PumpStationStewardshipState[
+    PumpStationState,
+    PumpStationEnvironment,
+    PumpStationWorkResources,
+    PumpStationProcess,
+    PumpStationResourceReservation,
+]
+type PumpStationCoupledStewardshipState = PumpStationStewardshipState[
+    PumpStationCoupledPhysicalState,
+    PumpStationCoupledEnvironment,
+    PumpStationResourceState,
+    PumpStationCoupledProcess,
+    PumpStationPoolReservation,
+]
+type PumpStationStewardshipStateRecord = PumpStationLegacyStewardshipState | PumpStationCoupledStewardshipState
+
+
 @dataclass(frozen=True, slots=True)
 class PumpStationTransitionReceipt:
     """Immutable in-memory record of one applied state-machine transition."""

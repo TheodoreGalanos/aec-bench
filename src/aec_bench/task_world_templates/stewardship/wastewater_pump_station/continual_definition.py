@@ -14,8 +14,15 @@ from aec_bench.task_world_templates.continual.definition import (
     LoadedContinualWorldProfile,
     python_source_sha256,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
+    PumpStationCoupledWorldState,
+    create_asw_8_world_state,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_kernel import (
+    coupled_pump_station_model_from_package,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
-    PumpStationCoupledPhysicalState,
+    PumpStationCoupledModel,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_models import (
     ReferencePackage,
@@ -29,7 +36,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_system import (
     PUMP_STATION_REFERENCE_SYSTEM_ID,
     PumpStationReferenceSystem,
-    create_asw_8_opening_physical_state,
     load_reference_system,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
@@ -46,7 +52,8 @@ class PumpStationContinualProfile:
 
     reference_system: PumpStationReferenceSystem
     station_package: ReferencePackage
-    opening_state: PumpStationCoupledPhysicalState
+    model: PumpStationCoupledModel
+    opening_state: PumpStationCoupledWorldState
 
 
 def _validated_profile_data() -> tuple[PumpStationReferenceSystem, ReferencePackage]:
@@ -75,7 +82,8 @@ def _load_pump_station_profile(reference: ContinualWorldProfileRef) -> LoadedCon
         value=PumpStationContinualProfile(
             reference_system=system,
             station_package=package,
-            opening_state=create_asw_8_opening_physical_state(),
+            model=coupled_pump_station_model_from_package(package),
+            opening_state=create_asw_8_world_state(),
         ),
     )
 
@@ -89,7 +97,8 @@ def _implementation_content_sha256() -> str:
             "reference_system_loader": python_source_sha256(load_reference_system),
             "reference_package_loader": python_source_sha256(load_reference_package),
             "v2_reference_package_loader": python_source_sha256(load_v2_reference_package),
-            "opening_state_factory": python_source_sha256(create_asw_8_opening_physical_state),
+            "model_factory": python_source_sha256(coupled_pump_station_model_from_package),
+            "opening_state_factory": python_source_sha256(create_asw_8_world_state),
         }
     )
 

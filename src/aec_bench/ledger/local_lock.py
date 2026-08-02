@@ -145,10 +145,27 @@ def _open_or_create_child_directory(parent_descriptor: int, name: str) -> int:
 
 
 def _open_private_regular_file(parent_descriptor: int, name: str) -> int:
-    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0)
+    flags = os.O_RDWR | getattr(os, "O_CLOEXEC", 0)
     flags |= getattr(os, "O_NOFOLLOW", 0)
     try:
-        descriptor = os.open(name, flags, 0o600, dir_fd=parent_descriptor)
+        descriptor = os.open(name, flags, dir_fd=parent_descriptor)
+    except FileNotFoundError:
+        try:
+            descriptor = os.open(
+                name,
+                flags | os.O_CREAT | os.O_EXCL,
+                0o600,
+                dir_fd=parent_descriptor,
+            )
+        except FileExistsError:
+            try:
+                descriptor = os.open(name, flags, dir_fd=parent_descriptor)
+            except OSError as cause:
+                raise LocalFileLockConfinementError(
+                    f"local lock file is unsafe: {cause}",
+                ) from cause
+        except OSError as cause:
+            raise LocalFileLockConfinementError(f"local lock file is unsafe: {cause}") from cause
     except OSError as cause:
         raise LocalFileLockConfinementError(f"local lock file is unsafe: {cause}") from cause
     try:

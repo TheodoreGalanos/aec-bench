@@ -27,6 +27,8 @@ _V1 = "v1"
 _V2 = "v2"
 _V3 = "v3"
 _V4 = "v4"
+_MANIFEST_V1 = "manifest-v1"
+_MANIFEST_V2 = "manifest-v2"
 _V1_FIELD_EXCLUSIONS = {
     "PumpStationStewardshipState": {
         "state_version",
@@ -102,6 +104,10 @@ def _fail(code: str, detail: str) -> NoReturn:
 
 def _record_profile(value: object) -> str:
     type_name = type(value).__name__
+    if type_name == "PumpStationWorldRunManifest":
+        return _MANIFEST_V1
+    if type_name == "PumpStationWorldRunManifestV2":
+        return _MANIFEST_V2
     if type_name == "PumpStationStewardshipState":
         version = str(getattr(value, "state_version", ""))
         if version.endswith(".v4"):
@@ -136,6 +142,10 @@ def _record_profile(value: object) -> str:
 def _document_profile(value: object) -> str:
     if isinstance(value, dict):
         type_name = value.get("$type")
+        if type_name == "PumpStationWorldRunManifest":
+            return _MANIFEST_V1
+        if type_name == "PumpStationWorldRunManifestV2":
+            return _MANIFEST_V2
         if type_name == "PumpStationActorView" and str(value.get("projection_policy_id", "")).endswith(".v4"):
             return _V4
         if type_name in {"PumpStationStewardshipState", "PumpStationCurrentStateView"}:

@@ -27,10 +27,14 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continua
     pump_station_continual_world_definition,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
+    PumpStationCoupledModel,
     PumpStationCoupledPhysicalState,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_system import (
     PUMP_STATION_REFERENCE_SYSTEM_ID,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PumpStationStewardshipState,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
     PUMP_STATION_TASK_WORLD_ID,
@@ -172,7 +176,10 @@ def test_pump_definition_loads_the_exact_rs1_profile() -> None:
     assert isinstance(loaded.value, PumpStationContinualProfile)
     station_binding = loaded.value.reference_system.descriptor["station_data"]
     assert loaded.value.station_package.package_content_id == station_binding["package_content_id"]
-    assert isinstance(loaded.value.opening_state, PumpStationCoupledPhysicalState)
+    assert isinstance(loaded.value.model, PumpStationCoupledModel)
+    assert isinstance(loaded.value.opening_state, PumpStationStewardshipState)
+    assert isinstance(loaded.value.opening_state.physical, PumpStationCoupledPhysicalState)
+    assert loaded.value.opening_state.state_version == "pump-station-stewardship-state.v4"
     assert (
         loaded.value.opening_state.calendar_seconds == loaded.value.reference_system.opening_state["calendar_seconds"]
     )

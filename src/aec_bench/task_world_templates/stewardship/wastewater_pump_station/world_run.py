@@ -3,13 +3,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
-from typing import NoReturn
+from typing import TYPE_CHECKING, Generic, NoReturn, TypeVar, cast
 
+from aec_bench.contracts.continual_world import (
+    ContinualWorldDefinitionRef,
+    ContinualWorldProfileRef,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
     PumpStationEvidenceTreatmentRequest,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
+    PumpStationCoupledModel,
     PumpStationModel,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_treatments import (
@@ -26,8 +32,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PUMP_STATION_STATE_VERSION_V1,
     PUMP_STATION_STATE_VERSION_V2,
     PUMP_STATION_STATE_VERSION_V3,
+    PumpStationCoupledStewardshipState,
+    PumpStationLegacyStewardshipState,
     PumpStationProposal,
-    PumpStationStewardshipState,
     PumpStationTransition,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
@@ -47,16 +54,42 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     PUMP_STATION_RECORD_VERSIONS_V1,
     PUMP_STATION_RECORD_VERSIONS_V2,
     PUMP_STATION_RECORD_VERSIONS_V3,
+    PUMP_STATION_RECORD_VERSIONS_V4,
     PUMP_STATION_SERIALIZATION_VERSION,
+    PUMP_STATION_WORLD_MANIFEST_VERSION_V2,
+    PumpStationInitialStateSource,
     PumpStationRecordVersions,
     PumpStationStagedTransition,
     PumpStationStateSnapshotRef,
     PumpStationWorldRunError,
     PumpStationWorldRunManifest,
+    PumpStationWorldRunManifestRecord,
+    PumpStationWorldRunManifestV2,
     PumpStationWorldRunMigration,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
+)
+
+if TYPE_CHECKING:
+    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
+        PumpStationContinualProfile,
+    )
+    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.models import (
+        TemporalEvidenceBundle,
+    )
+
+_RunModelT = TypeVar(
+    "_RunModelT",
+    PumpStationModel,
+    PumpStationCoupledModel,
+    default=PumpStationModel,
+)
+_RunStateT = TypeVar(
+    "_RunStateT",
+    PumpStationLegacyStewardshipState,
+    PumpStationCoupledStewardshipState,
+    default=PumpStationLegacyStewardshipState,
 )
 
 
@@ -64,7 +97,7 @@ def _fail(code: str, detail: str) -> NoReturn:
     raise PumpStationWorldRunError(code, detail)
 
 
-class PumpStationWorldRun:
+class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
     """One continuing pump-station branch backed by immutable filesystem evidence."""
 
     def __init__(
@@ -72,13 +105,18 @@ class PumpStationWorldRun:
         *,
         repository: PumpStationWorldRunRepository,
         package: ReferencePackage,
-        model: PumpStationModel,
-        manifest: PumpStationWorldRunManifest,
+        model: _RunModelT,
+        manifest: PumpStationWorldRunManifestRecord,
     ) -> None:
+        if isinstance(manifest, PumpStationWorldRunManifestV2):
+            if not isinstance(model, PumpStationCoupledModel):
+                _fail("world-run-identity", "manifest v2 requires the coupled model")
+        elif not isinstance(model, PumpStationModel):
+            _fail("world-run-identity", "manifest v1 requires the two-pump model")
         self._repository = repository
         self._package = package
-        self._model = model
-        self._manifest = manifest
+        self._model: _RunModelT = model
+        self._manifest: PumpStationWorldRunManifestRecord = manifest
 
     @classmethod
     def create(
@@ -87,12 +125,12 @@ class PumpStationWorldRun:
         repository: PumpStationWorldRunRepository,
         package: ReferencePackage,
         model: PumpStationModel,
-        initial_state: PumpStationStewardshipState,
+        initial_state: PumpStationLegacyStewardshipState,
         run_id: str,
         episode_id: str,
         world_branch_id: str,
         record_versions: PumpStationRecordVersions = PUMP_STATION_RECORD_VERSIONS_V1,
-    ) -> PumpStationWorldRun:
+    ) -> PumpStationWorldRun[PumpStationModel, PumpStationLegacyStewardshipState]:
         """Create and atomically select one durable initial state."""
         expected_state_version = {
             PUMP_STATION_RECORD_VERSIONS_V1: PUMP_STATION_STATE_VERSION_V1,
@@ -101,6 +139,8 @@ class PumpStationWorldRun:
         }.get(record_versions)
         if expected_state_version is None:
             _fail("record-versions", str(record_versions))
+        if not isinstance(model, PumpStationModel):
+            _fail("world-run-identity", "free-form creation requires the two-pump model")
         if initial_state.state_version != expected_state_version:
             _fail(
                 "state-version",
@@ -125,10 +165,129 @@ class PumpStationWorldRun:
             initial_state_id=stewardship_state_id(initial_state),
         )
         repository.initialize(manifest, initial_state)
-        return cls(
+        return PumpStationWorldRun[PumpStationModel, PumpStationLegacyStewardshipState](
             repository=repository,
             package=package,
             model=model,
+            manifest=manifest,
+        )
+
+    @classmethod
+    def create_reference_system(
+        cls,
+        *,
+        repository: PumpStationWorldRunRepository,
+        run_id: str,
+        episode_id: str,
+        world_branch_id: str,
+    ) -> PumpStationWorldRun[PumpStationCoupledModel, PumpStationCoupledStewardshipState]:
+        """Create one registered RS1 root through the existing durable run."""
+        definition_ref, profile_ref, profile = cls._load_registered_reference_profile()
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.corpus import (
+            build_asw_8_reference_temporal_evidence_bundle,
+        )
+
+        bundle = build_asw_8_reference_temporal_evidence_bundle(
+            profile.station_package,
+            world_branch_id=world_branch_id,
+        )
+        manifest = cls._reference_system_manifest(
+            definition_ref=definition_ref,
+            profile_ref=profile_ref,
+            profile=profile,
+            bundle=bundle,
+            run_id=run_id,
+            episode_id=episode_id,
+            world_branch_id=world_branch_id,
+        )
+
+        def initialize_temporal_evidence() -> None:
+            cls._initialize_reference_temporal_evidence(
+                repository=repository,
+                package=profile.station_package,
+                bundle=bundle,
+            )
+
+        repository.initialize(
+            manifest,
+            profile.opening_state,
+            before_select=initialize_temporal_evidence,
+        )
+        cls._verify_reference_temporal_evidence(
+            repository=repository,
+            package=profile.station_package,
+            manifest=manifest,
+            expected=bundle,
+        )
+        return PumpStationWorldRun[PumpStationCoupledModel, PumpStationCoupledStewardshipState](
+            repository=repository,
+            package=profile.station_package,
+            model=profile.model,
+            manifest=manifest,
+        )
+
+    @classmethod
+    def resume_reference_system(
+        cls,
+        *,
+        repository: PumpStationWorldRunRepository,
+        snapshot: PumpStationStateSnapshotRef,
+    ) -> PumpStationWorldRun[PumpStationCoupledModel, PumpStationCoupledStewardshipState]:
+        """Resume one manifest-bound RS1 run without caller-supplied profile data."""
+        manifest = repository.load_manifest()
+        if not isinstance(manifest, PumpStationWorldRunManifestV2):
+            _fail(
+                "reference-system-manifest-required",
+                "registered profile resume requires manifest v2",
+            )
+        definition_ref = cls._definition_ref(manifest)
+        profile_ref = cls._profile_ref(manifest)
+        from aec_bench.task_world_templates.continual_catalogue import (
+            default_continual_world_catalogue,
+        )
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
+            PumpStationContinualProfile,
+        )
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.corpus import (
+            build_asw_8_reference_temporal_evidence_bundle,
+        )
+
+        try:
+            definition = default_continual_world_catalogue().resolve(definition_ref)
+            loaded = definition.load_profile(profile_ref)
+        except (KeyError, ValueError) as error:
+            _fail("world-run-identity", f"registered profile differs: {error}")
+        if not isinstance(loaded.value, PumpStationContinualProfile):
+            _fail("world-run-identity", "registered profile has another task-owned value")
+        profile = loaded.value
+        bundle = build_asw_8_reference_temporal_evidence_bundle(
+            profile.station_package,
+            world_branch_id=manifest.world_branch_id,
+        )
+        expected_manifest = cls._reference_system_manifest(
+            definition_ref=definition_ref,
+            profile_ref=profile_ref,
+            profile=profile,
+            bundle=bundle,
+            run_id=manifest.run_id,
+            episode_id=manifest.episode_id,
+            world_branch_id=manifest.world_branch_id,
+        )
+        if manifest != expected_manifest:
+            _fail("world-run-identity", "registered reference-system manifest differs")
+        cls._verify_reference_temporal_evidence(
+            repository=repository,
+            package=profile.station_package,
+            manifest=manifest,
+            expected=bundle,
+        )
+        current = repository.current_snapshot()
+        if current != snapshot:
+            _fail("snapshot-drift", "requested snapshot is not the selected world state")
+        return PumpStationWorldRun[PumpStationCoupledModel, PumpStationCoupledStewardshipState](
+            repository=repository,
+            package=profile.station_package,
+            model=profile.model,
             manifest=manifest,
         )
 
@@ -138,13 +297,14 @@ class PumpStationWorldRun:
         repository: PumpStationWorldRunRepository,
         run_id: str,
         world_branch_id: str,
-    ) -> PumpStationWorldRun:
+    ) -> PumpStationWorldRun[PumpStationModel, PumpStationLegacyStewardshipState]:
         """Continue one version-1 state as a new version-2 run with lineage."""
         if self._manifest.record_versions != PUMP_STATION_RECORD_VERSIONS_V1:
             _fail("migration-source-version", str(self._manifest.record_versions))
+        model = self._legacy_model()
         source_snapshot = self.snapshot()
         migrated_state = replace(
-            self.state,
+            self._legacy_state(),
             state_version=PUMP_STATION_STATE_VERSION_V2,
             dependencies=(),
             dependency_waivers=(),
@@ -153,7 +313,7 @@ class PumpStationWorldRun:
         migrated = PumpStationWorldRun.create(
             repository=repository,
             package=self._package,
-            model=self._model,
+            model=model,
             initial_state=migrated_state,
             run_id=run_id,
             episode_id=self._manifest.episode_id,
@@ -188,19 +348,20 @@ class PumpStationWorldRun:
         repository: PumpStationWorldRunRepository,
         run_id: str,
         world_branch_id: str,
-    ) -> PumpStationWorldRun:
+    ) -> PumpStationWorldRun[PumpStationModel, PumpStationLegacyStewardshipState]:
         """Continue one version-2 state as a new version-3 evidence-health run."""
         if self._manifest.record_versions != PUMP_STATION_RECORD_VERSIONS_V2:
             _fail("migration-source-version", str(self._manifest.record_versions))
+        model = self._legacy_model()
         source_snapshot = self.snapshot()
         migrated_state = materialize_evidence_health_state(
-            self._model,
-            self.state,
+            model,
+            self._legacy_state(),
         )
         migrated = PumpStationWorldRun.create(
             repository=repository,
             package=self._package,
-            model=self._model,
+            model=model,
             initial_state=migrated_state,
             run_id=run_id,
             episode_id=self._manifest.episode_id,
@@ -237,14 +398,19 @@ class PumpStationWorldRun:
         package: ReferencePackage,
         model: PumpStationModel,
         snapshot: PumpStationStateSnapshotRef,
-    ) -> PumpStationWorldRun:
+    ) -> PumpStationWorldRun[PumpStationModel, PumpStationLegacyStewardshipState]:
         """Resume only the exact state currently selected by the repository."""
         manifest = repository.load_manifest()
+        if isinstance(manifest, PumpStationWorldRunManifestV2):
+            _fail(
+                "reference-system-resume-required",
+                "manifest v2 must resolve its registered profile from durable identity",
+            )
         cls._validate_identity(manifest, package=package, model=model)
         current = repository.current_snapshot()
         if current != snapshot:
             _fail("snapshot-drift", "requested snapshot is not the selected world state")
-        return cls(
+        return PumpStationWorldRun[PumpStationModel, PumpStationLegacyStewardshipState](
             repository=repository,
             package=package,
             model=model,
@@ -262,20 +428,30 @@ class PumpStationWorldRun:
         return self._package
 
     @property
-    def model(self) -> PumpStationModel:
+    def model(self) -> _RunModelT:
         """Return the physical model bound to this run."""
         return self._model
 
     @property
-    def manifest(self) -> PumpStationWorldRunManifest:
+    def manifest(self) -> PumpStationWorldRunManifestRecord:
         """Return the immutable run identity."""
         return self._manifest
 
     @property
-    def state(self) -> PumpStationStewardshipState:
+    def continual_definition_ref(self) -> ContinualWorldDefinitionRef:
+        """Return the exact registered implementation bound by manifest v2."""
+        return self._definition_ref(self._reference_manifest())
+
+    @property
+    def continual_profile_ref(self) -> ContinualWorldProfileRef:
+        """Return the exact registered profile bound by manifest v2."""
+        return self._profile_ref(self._reference_manifest())
+
+    @property
+    def state(self) -> _RunStateT:
         """Reload the current complete state through the repository."""
         snapshot = self._repository.current_snapshot()
-        return self._repository.load_state(snapshot.state_id)
+        return cast(_RunStateT, self._repository.load_state(snapshot.state_id))
 
     def snapshot(self) -> PumpStationStateSnapshotRef:
         """Return the exact currently selected dynamic state."""
@@ -288,6 +464,7 @@ class PumpStationWorldRun:
         information_set: PumpStationInformationSet,
     ) -> PumpStationStagedTransition:
         """Write immutable transition evidence without selecting its state."""
+        model = self._legacy_model()
         with self._repository.locked():
             prior = self._repository.current_snapshot()
             committed = self._repository.find_committed_proposal(
@@ -298,9 +475,9 @@ class PumpStationWorldRun:
                     "proposal-already-committed",
                     proposal.context.proposal_id,
                 )
-            state = self._repository.load_state(prior.state_id)
+            state = self._legacy_state(prior.state_id)
             transition = apply_stewardship_proposal(
-                self._model,
+                model,
                 state,
                 proposal,
                 information_set=information_set,
@@ -320,6 +497,7 @@ class PumpStationWorldRun:
         information_set: PumpStationInformationSet,
     ) -> PumpStationTransition:
         """Apply or idempotently replay one exact bound proposal."""
+        model = self._legacy_model()
         with self._repository.locked():
             prior = self._repository.current_snapshot()
             committed = self._repository.find_committed_proposal(
@@ -331,9 +509,9 @@ class PumpStationWorldRun:
                     proposal,
                     information_set,
                 )
-            state = self._repository.load_state(prior.state_id)
+            state = self._legacy_state(prior.state_id)
             transition = apply_stewardship_proposal(
-                self._model,
+                model,
                 state,
                 proposal,
                 information_set=information_set,
@@ -352,6 +530,7 @@ class PumpStationWorldRun:
         request: PumpStationEvidenceTreatmentRequest,
     ) -> PumpStationStagedTransition:
         """Write immutable host-control evidence without selecting its state."""
+        self._require_legacy_transitions()
         with self._repository.locked():
             prior = self._repository.current_snapshot()
             committed = self._repository.find_committed_control_request(
@@ -360,7 +539,7 @@ class PumpStationWorldRun:
             if committed is not None:
                 _fail("control-request-already-committed", request.request_id)
             self._validate_control_scope(request, prior)
-            state = self._repository.load_state(prior.state_id)
+            state = self._legacy_state(prior.state_id)
             transition = apply_evidence_treatment_schedule(state, request)
             return self._repository.stage_control_transition(
                 manifest=self._manifest,
@@ -374,6 +553,7 @@ class PumpStationWorldRun:
         request: PumpStationEvidenceTreatmentRequest,
     ) -> PumpStationTransition:
         """Schedule or exactly recover one durable evidence treatment."""
+        self._require_legacy_transitions()
         with self._repository.locked():
             committed = self._repository.find_committed_control_request(
                 request.request_id,
@@ -385,7 +565,7 @@ class PumpStationWorldRun:
                 )
             prior = self._repository.current_snapshot()
             self._validate_control_scope(request, prior)
-            state = self._repository.load_state(prior.state_id)
+            state = self._legacy_state(prior.state_id)
             transition = apply_evidence_treatment_schedule(state, request)
             staged = self._repository.stage_control_transition(
                 manifest=self._manifest,
@@ -413,7 +593,7 @@ class PumpStationWorldRun:
         request: PumpStationPhysicalTreatmentActivationRequest,
     ) -> PumpStationTransition:
         """Apply or exactly recover one governed physical treatment."""
-
+        self._require_legacy_transitions()
         with self._repository.locked():
             committed = self._repository.find_committed_control_request(
                 request.request_id,
@@ -425,7 +605,7 @@ class PumpStationWorldRun:
                 )
             prior = self._repository.current_snapshot()
             self._validate_control_scope(request, prior)
-            state = self._repository.load_state(prior.state_id)
+            state = self._legacy_state(prior.state_id)
             transition = apply_physical_treatment_activation(state, request)
             staged = self._repository.stage_control_transition(
                 manifest=self._manifest,
@@ -438,6 +618,280 @@ class PumpStationWorldRun:
     def steps(self) -> tuple[PumpStationRunStep, ...]:
         """Reload all selected run steps for independent replay."""
         return self._repository.steps()
+
+    @staticmethod
+    def _load_registered_reference_profile() -> tuple[
+        ContinualWorldDefinitionRef,
+        ContinualWorldProfileRef,
+        PumpStationContinualProfile,
+    ]:
+        """Load the one registered RS1 profile through its task definition."""
+        from aec_bench.task_world_templates.continual_catalogue import (
+            default_continual_world_catalogue,
+        )
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
+            PUMP_STATION_RS1_PROFILE_VERSION,
+            PumpStationContinualProfile,
+        )
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_system import (
+            PUMP_STATION_REFERENCE_SYSTEM_ID,
+        )
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
+            PUMP_STATION_TASK_WORLD_ID,
+        )
+
+        try:
+            definition = default_continual_world_catalogue().get(
+                PUMP_STATION_TASK_WORLD_ID,
+            )
+            profile_ref = definition.profile_ref(
+                PUMP_STATION_REFERENCE_SYSTEM_ID,
+                PUMP_STATION_RS1_PROFILE_VERSION,
+            )
+            loaded = definition.load_profile(profile_ref)
+        except (KeyError, ValueError) as error:
+            _fail("world-run-identity", f"registered profile differs: {error}")
+        if not isinstance(loaded.value, PumpStationContinualProfile):
+            _fail("world-run-identity", "registered pump profile has another value")
+        return definition.ref, profile_ref, loaded.value
+
+    @staticmethod
+    def _reference_system_manifest(
+        *,
+        definition_ref: ContinualWorldDefinitionRef,
+        profile_ref: ContinualWorldProfileRef,
+        profile: PumpStationContinualProfile,
+        bundle: TemporalEvidenceBundle,
+        run_id: str,
+        episode_id: str,
+        world_branch_id: str,
+    ) -> PumpStationWorldRunManifestV2:
+        """Build the exact manifest-v2 root from registered task-owned values."""
+        system = profile.reference_system
+        package = profile.station_package
+        model = profile.model
+        opening_id, opening_sha256 = PumpStationWorldRun._descriptor_binding(
+            system.descriptor,
+            "opening_state",
+        )
+        event_schedule_id, event_schedule_sha256 = PumpStationWorldRun._descriptor_binding(
+            system.descriptor,
+            "event_schedule",
+        )
+        temporal_template_id, temporal_template_sha256 = PumpStationWorldRun._descriptor_binding(
+            system.descriptor,
+            "temporal_template",
+        )
+        return PumpStationWorldRunManifestV2(
+            serialization_version=PUMP_STATION_WORLD_MANIFEST_VERSION_V2,
+            snapshot_version=PUMP_STATION_RECORD_VERSIONS_V4.snapshot_version,
+            receipt_version=PUMP_STATION_RECORD_VERSIONS_V4.receipt_version,
+            authority_policy_version=PUMP_STATION_RECORD_VERSIONS_V4.authority_policy_version,
+            transition_rule_version=PUMP_STATION_RECORD_VERSIONS_V4.transition_rule_version,
+            run_id=run_id,
+            episode_id=episode_id,
+            world_branch_id=world_branch_id,
+            profile_id=package.profile_id,
+            generation_id=package.generation_id,
+            package_content_id=package.package_content_id,
+            manifest_content_id=package.manifest_content_id,
+            asset_id=model.asset_id,
+            model_id=stewardship_content_id(model, record_profile="v4"),
+            initial_sequence=profile.opening_state.sequence,
+            initial_state_id=stewardship_state_id(profile.opening_state),
+            task_world_id=definition_ref.task_world_id,
+            definition_version=definition_ref.definition_version,
+            definition_content_sha256=definition_ref.content_sha256,
+            continual_profile_id=profile_ref.profile_id,
+            continual_profile_version=profile_ref.profile_version,
+            continual_profile_content_sha256=profile_ref.profile_content_sha256,
+            reference_system_id=system.descriptor_id,
+            reference_system_content_id=system.descriptor_content_id,
+            opening_state_specification_id=opening_id,
+            opening_state_specification_sha256=opening_sha256,
+            event_schedule_id=event_schedule_id,
+            event_schedule_sha256=event_schedule_sha256,
+            temporal_template_id=temporal_template_id,
+            temporal_template_sha256=temporal_template_sha256,
+            temporal_bundle_content_id=bundle.content_sha256,
+            temporal_corpus_content_id=bundle.corpus_manifest.content_sha256,
+            temporal_capability_content_id=bundle.capability.content_sha256,
+            initial_state_source=PumpStationInitialStateSource(
+                kind="reference_system_specification",
+                opening_specification_id=opening_id,
+                opening_specification_sha256=opening_sha256,
+            ),
+        )
+
+    @staticmethod
+    def _descriptor_binding(
+        descriptor: Mapping[str, object],
+        name: str,
+    ) -> tuple[str, str]:
+        """Return one exact ID and content hash from the registered descriptor."""
+        value = descriptor.get(name)
+        if not isinstance(value, Mapping):
+            _fail("world-run-identity", f"descriptor lacks {name}")
+        identity = value.get("id")
+        content_sha256 = value.get("content_sha256")
+        if not isinstance(identity, str) or not identity.strip():
+            _fail("world-run-identity", f"descriptor {name} identity differs")
+        if not isinstance(content_sha256, str) or not content_sha256.strip():
+            _fail("world-run-identity", f"descriptor {name} content differs")
+        return identity, content_sha256
+
+    @staticmethod
+    def _initialize_reference_temporal_evidence(
+        *,
+        repository: PumpStationWorldRunRepository,
+        package: ReferencePackage,
+        bundle: TemporalEvidenceBundle,
+    ) -> None:
+        """Publish and verify required RS1 temporal evidence before run selection."""
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.models import (
+            TemporalEvidenceIntegrityError,
+        )
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.repository import (
+            TemporalEvidenceRepository,
+        )
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.verification import (
+            verify_temporal_evidence_repository,
+        )
+
+        temporal_repository = TemporalEvidenceRepository(repository.root / "temporal-evidence")
+        try:
+            loaded = temporal_repository.initialize(bundle, package=package)
+            report = verify_temporal_evidence_repository(
+                temporal_repository,
+                package=package,
+            )
+        except (OSError, ValueError, TemporalEvidenceIntegrityError) as error:
+            _fail("temporal-evidence", f"RS1 temporal initialization failed: {error}")
+        if loaded != bundle or not report.valid:
+            _fail("temporal-evidence", "RS1 temporal initialization differs")
+
+    @staticmethod
+    def _verify_reference_temporal_evidence(
+        *,
+        repository: PumpStationWorldRunRepository,
+        package: ReferencePackage,
+        manifest: PumpStationWorldRunManifestV2,
+        expected: TemporalEvidenceBundle,
+    ) -> None:
+        """Require stored RS1 temporal evidence to match immutable run metadata."""
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.models import (
+            TemporalEvidenceIntegrityError,
+        )
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.repository import (
+            TemporalEvidenceRepository,
+        )
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.verification import (
+            verify_temporal_evidence_repository,
+        )
+
+        temporal_repository = TemporalEvidenceRepository(repository.root / "temporal-evidence")
+        try:
+            loaded = temporal_repository.load_bundle(package=package)
+            report = verify_temporal_evidence_repository(
+                temporal_repository,
+                package=package,
+            )
+        except (OSError, ValueError, TemporalEvidenceIntegrityError) as error:
+            _fail("temporal-evidence", f"RS1 temporal evidence is invalid: {error}")
+        observed = (
+            loaded.content_sha256,
+            loaded.corpus_manifest.content_sha256,
+            loaded.capability.content_sha256,
+        )
+        bound = (
+            manifest.temporal_bundle_content_id,
+            manifest.temporal_corpus_content_id,
+            manifest.temporal_capability_content_id,
+        )
+        if loaded != expected or observed != bound or not report.valid:
+            _fail("temporal-evidence", "RS1 temporal evidence differs from the run manifest")
+
+    @staticmethod
+    def _definition_ref(
+        manifest: PumpStationWorldRunManifestV2,
+    ) -> ContinualWorldDefinitionRef:
+        """Rebuild the exact registered definition reference from manifest v2."""
+        try:
+            return ContinualWorldDefinitionRef(
+                task_world_id=PumpStationWorldRun._manifest_text(manifest, "task_world_id"),
+                definition_version=PumpStationWorldRun._manifest_text(
+                    manifest,
+                    "definition_version",
+                ),
+                content_sha256=PumpStationWorldRun._manifest_text(
+                    manifest,
+                    "definition_content_sha256",
+                ),
+            )
+        except ValueError as error:
+            _fail("world-run-identity", f"definition reference differs: {error}")
+
+    @staticmethod
+    def _profile_ref(
+        manifest: PumpStationWorldRunManifestV2,
+    ) -> ContinualWorldProfileRef:
+        """Rebuild the exact registered profile reference from manifest v2."""
+        try:
+            return ContinualWorldProfileRef(
+                task_world_id=PumpStationWorldRun._manifest_text(manifest, "task_world_id"),
+                profile_id=PumpStationWorldRun._manifest_text(
+                    manifest,
+                    "continual_profile_id",
+                ),
+                profile_version=PumpStationWorldRun._manifest_text(
+                    manifest,
+                    "continual_profile_version",
+                ),
+                profile_content_sha256=PumpStationWorldRun._manifest_text(
+                    manifest,
+                    "continual_profile_content_sha256",
+                ),
+            )
+        except ValueError as error:
+            _fail("world-run-identity", f"profile reference differs: {error}")
+
+    @staticmethod
+    def _manifest_text(
+        manifest: PumpStationWorldRunManifestV2,
+        field_name: str,
+    ) -> str:
+        """Require one manifest-v2 text binding."""
+        value = getattr(manifest, field_name)
+        if not isinstance(value, str) or not value.strip():
+            _fail("world-run-identity", f"manifest lacks {field_name}")
+        return value
+
+    def _reference_manifest(self) -> PumpStationWorldRunManifestV2:
+        """Return the required registered-profile manifest for reference access."""
+        if not isinstance(self._manifest, PumpStationWorldRunManifestV2):
+            _fail("reference-system-manifest-required", "run uses the legacy manifest")
+        return self._manifest
+
+    def _require_legacy_transitions(self) -> None:
+        """Keep V4 closed until its task-owned transition port uses this run."""
+        if self._manifest.record_versions == PUMP_STATION_RECORD_VERSIONS_V4:
+            _fail(
+                "v4-transition-not-routed",
+                "registered V4 transitions are not yet integrated",
+            )
+
+    def _legacy_model(self) -> PumpStationModel:
+        """Return the two-pump model selected by legacy transition paths."""
+        self._require_legacy_transitions()
+        if not isinstance(self._model, PumpStationModel):
+            _fail("world-run-identity", "legacy run has another physical model")
+        return self._model
+
+    def _legacy_state(self, state_id: str | None = None) -> PumpStationLegacyStewardshipState:
+        """Reload one state after the durable version guard selects the legacy profile."""
+        self._require_legacy_transitions()
+        selected = self.state if state_id is None else self._repository.load_state(state_id)
+        return cast(PumpStationLegacyStewardshipState, selected)
 
     def _validate_control_scope(
         self,
@@ -475,6 +929,8 @@ class PumpStationWorldRun:
     ) -> None:
         if manifest.serialization_version != PUMP_STATION_SERIALIZATION_VERSION:
             _fail("serialization-version", manifest.serialization_version)
+        if not isinstance(model, PumpStationModel):
+            _fail("world-run-identity", "legacy manifest requires the two-pump model")
         expected = (
             package.profile_id,
             package.generation_id,
