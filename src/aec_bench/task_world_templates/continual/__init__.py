@@ -20,6 +20,7 @@ from aec_bench.task_world_templates.continual.durability import (
     ImmutableArtifactStoreError,
     ImmutableByteStore,
     exclusive_local_file_lock,
+    mkdir_durable,
     replace_file_bytes_durable,
 )
 
@@ -39,6 +40,7 @@ __all__ = [
     "ImmutableByteStore",
     "LoadedContinualWorldProfile",
     "exclusive_local_file_lock",
+    "mkdir_durable",
     "python_source_sha256",
     "replace_file_bytes_durable",
 ]

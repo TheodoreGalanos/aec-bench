@@ -422,17 +422,29 @@ def _unlink_owned_temporary(
         ) from cause
 
 
-def mkdir_durable(path: Path) -> None:
-    """Create a directory tree and fsync every parent whose child entry changed."""
+def mkdir_durable(
+    path: Path,
+    *,
+    created_mode: int | None = None,
+) -> None:
+    """Create a directory tree, set new modes, and flush changed parent entries."""
     target = Path(path)
     missing: list[Path] = []
     cursor = target
     while not cursor.exists():
         missing.append(cursor)
         cursor = cursor.parent
-    target.mkdir(parents=True, exist_ok=True)
     for directory in reversed(missing):
+        try:
+            directory.mkdir()
+        except FileExistsError:
+            if not directory.is_dir():
+                raise
+            continue
+        if created_mode is not None:
+            directory.chmod(created_mode)
         fsync_directory(directory.parent)
+    target.mkdir(parents=True, exist_ok=True)
 
 
 def fsync_tree(root: Path) -> None:

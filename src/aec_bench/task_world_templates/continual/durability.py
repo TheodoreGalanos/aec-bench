@@ -5,6 +5,7 @@ from aec_bench.ledger.durability import (
     DurableFileReplaceConfinementError,
     DurableFileReplaceError,
     DurableFileReplaceIntegrityError,
+    mkdir_durable,
     replace_file_bytes_durable,
 )
 from aec_bench.ledger.immutable_artifact_store import (
@@ -34,5 +35,6 @@ __all__ = [
     "ImmutableArtifactStoreError",
     "ImmutableByteStore",
     "exclusive_local_file_lock",
+    "mkdir_durable",
     "replace_file_bytes_durable",
 ]
