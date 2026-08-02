@@ -1,5 +1,0 @@
-# ABOUTME: Keeps host-private runtime branches out of the research evidence commit.
-# ABOUTME: Retains only bounded agent, verification, privacy, and summary artifacts.
-
-/parent-world/
-/rollouts/

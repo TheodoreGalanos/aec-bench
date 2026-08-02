@@ -1,8 +1,0 @@
-Ruff lint:
-All checks passed!
-
-Ruff format:
-12 files already formatted
-
-MyPy:
-Success: no issues found in 9 source files
