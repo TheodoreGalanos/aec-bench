@@ -69,6 +69,9 @@ _V4_FIELD_EXCLUSIONS = {
         "pending_start_pump_ids",
         "event_effect_ids",
     },
+    "RequestInspection": {"backlog_item_id"},
+    "RequestObstructionClearance": {"backlog_item_id"},
+    "RequestVerification": {"backlog_item_id"},
 }
 
 
@@ -83,6 +86,14 @@ def _field_exclusions(type_name: str, profile: str) -> set[str]:
 
 def _record_profile(value: object) -> str:
     type_name = type(value).__name__
+    if type_name in {
+        "PumpStationCommandV4",
+        "PumpStationTransitionReceiptV4",
+        "PumpStationTransitionV4",
+        "PumpStationWorldRunCommitV2",
+        "PumpStationStagedTransitionV4",
+    }:
+        return "v4"
     if type_name in {"PumpStationStewardshipState", "PumpStationCurrentStateView"}:
         version = str(getattr(value, "state_version", ""))
         if version.endswith(".v4"):
@@ -92,6 +103,8 @@ def _record_profile(value: object) -> str:
         return "v2" if version.endswith(".v2") else "v1"
     if type_name == "PumpStationActorView":
         return _record_profile(cast(Any, value).current_state)
+    if type_name == "PumpStationCoupledActorView":
+        return "v4"
     if type_name == "PumpStationStructuredHandover":
         return _record_profile(cast(Any, value).current_actor_view)
     if type_name == "PumpStationInformationSet":

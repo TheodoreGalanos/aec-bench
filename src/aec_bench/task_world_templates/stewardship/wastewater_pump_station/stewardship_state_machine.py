@@ -25,6 +25,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     OperatingInterval,
     PumpStationChangeKind,
+    PumpStationCoupledModel,
     PumpStationEnvironment,
     PumpStationModel,
     PumpStationState,
@@ -81,6 +82,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationAuthority,
     PumpStationAuthorityDecision,
     PumpStationAuthorityOutcome,
+    PumpStationCommonBoundaryRequest,
+    PumpStationCoupledStewardshipState,
     PumpStationEventType,
     PumpStationEvidence,
     PumpStationEvidenceKind,
@@ -88,25 +91,32 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationObligation,
     PumpStationObligationKind,
     PumpStationObligationStatus,
+    PumpStationOperationsBoundaryReviewRequest,
     PumpStationPendingEvidence,
     PumpStationProcess,
     PumpStationProcessKind,
+    PumpStationProcessOutcomeRequest,
     PumpStationProcessStatus,
+    PumpStationProposal,
     PumpStationProposalError,
     PumpStationRestriction,
     PumpStationRestrictionKind,
     PumpStationRestrictionStatus,
+    PumpStationRootControl,
     PumpStationSchedule,
     PumpStationScheduledEvent,
     PumpStationStewardshipState,
     PumpStationTransition,
     PumpStationTransitionReceipt,
+    PumpStationTransitionV4,
     PumpStationWorkOrder,
     PumpStationWorkOrderStatus,
     PumpStationWorkResources,
     RequestConditionalDeferral,
     RequestConditionCheck,
     RequestDependencyWaiver,
+    RequestDutyAssignment,
+    RequestFunctionalCheck,
     RequestInspection,
     RequestObstructionClearance,
     RequestProvisionalClosure,
@@ -131,7 +141,10 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     work_order_for_pump as _work_order_for_pump,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
+    PumpStationCoupledActorView,
     PumpStationInformationSet,
+    bind_information_set,
+    coupled_actor_view_id,
     proposal_binding_error,
 )
 
@@ -1450,6 +1463,181 @@ def apply_stewardship_proposal(
         state,
         typed_proposal,
         authority,
+    )
+
+
+def apply_stewardship_proposal_v4(
+    model: PumpStationCoupledModel,
+    state: PumpStationCoupledStewardshipState,
+    proposal: object,
+    *,
+    information_set: PumpStationInformationSet,
+) -> PumpStationTransitionV4:
+    """Apply one typed V4 proposal through the task-owned transition rules."""
+    view = information_set.base_view
+    context = getattr(proposal, "context", None)
+    if not isinstance(view, PumpStationCoupledActorView) or context is None:
+        raise PumpStationProposalError(
+            "proposal-type",
+            "V4 proposal requires a V4 actor view and typed context",
+        )
+    if view.view_id != coupled_actor_view_id(view):
+        raise PumpStationProposalError(
+            "proposal-binding",
+            "V4 actor view identity differs from its complete content",
+        )
+    if (
+        bind_information_set(
+            view,
+            information_set.observation_history,
+            information_set.current_context,
+        )
+        != information_set
+    ):
+        raise PumpStationProposalError(
+            "proposal-binding",
+            "V4 information set identity differs from its content",
+        )
+    expected = (
+        context.agent_tenure_id,
+        context.based_on_sequence,
+        context.base_view_id,
+        context.information_set_id,
+    )
+    observed = (
+        view.agent_tenure_id,
+        state.sequence,
+        view.view_id,
+        information_set.information_set_id,
+    )
+    if expected != observed or view.state_id != state.state_id or view.sequence != state.sequence:
+        raise PumpStationProposalError(
+            "proposal-binding",
+            "V4 proposal does not bind the selected state and information set",
+        )
+    action_name, arguments = _v4_proposal_arguments(proposal)
+    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
+        apply_coupled_actor_action,
+    )
+
+    return apply_coupled_actor_action(
+        state,
+        request_id=context.proposal_id,
+        action_name=action_name,
+        arguments={"reason": context.reason, **arguments},
+        model=model,
+    )
+
+
+def validate_legacy_proposal_profile(proposal: PumpStationProposal) -> None:
+    """Reject V4-only proposal bindings before legacy serialization can lose them."""
+    if (
+        isinstance(
+            proposal,
+            RequestInspection | RequestObstructionClearance | RequestVerification,
+        )
+        and proposal.backlog_item_id is not None
+    ):
+        raise PumpStationProposalError(
+            "proposal-profile",
+            "V4 backlog binding cannot enter a V1-V3 proposal record",
+        )
+
+
+def _v4_proposal_arguments(proposal: object) -> tuple[str, dict[str, object]]:
+    """Return the closed V2 actor operation and exact typed proposal fields."""
+    if isinstance(proposal, ContinueOperation):
+        return "continue_operation", {}
+    if isinstance(proposal, RequestDutyAssignment):
+        return (
+            "request_duty_assignment",
+            {
+                "ordered_pump_ids": proposal.ordered_pump_ids,
+                "source_outage_id": proposal.source_outage_id,
+                "source_backlog_item_id": proposal.source_backlog_item_id,
+            },
+        )
+    if isinstance(proposal, RequestInspection):
+        if proposal.backlog_item_id is None:
+            raise PumpStationProposalError("proposal-binding", "inspection lacks backlog binding")
+        return (
+            "request_inspection",
+            {"pump_id": proposal.pump_id, "backlog_item_id": proposal.backlog_item_id},
+        )
+    if isinstance(proposal, RequestObstructionClearance):
+        if proposal.backlog_item_id is None:
+            raise PumpStationProposalError("proposal-binding", "clearance lacks backlog binding")
+        return (
+            "request_obstruction_clearance",
+            {
+                "pump_id": proposal.pump_id,
+                "backlog_item_id": proposal.backlog_item_id,
+                "inspection_evidence_id": proposal.inspection_evidence_id,
+            },
+        )
+    if isinstance(proposal, RequestFunctionalCheck):
+        return (
+            "request_functional_check",
+            {"pump_id": proposal.pump_id, "backlog_item_id": proposal.backlog_item_id},
+        )
+    if isinstance(proposal, RequestProvisionalReturn):
+        return (
+            "request_provisional_return",
+            {
+                "pump_id": proposal.pump_id,
+                "functional_check_evidence_id": proposal.functional_check_evidence_id,
+            },
+        )
+    if isinstance(proposal, RequestProvisionalClosure):
+        return "request_provisional_closure", {"work_order_id": proposal.work_order_id}
+    if isinstance(proposal, RequestVerification):
+        if proposal.backlog_item_id is None:
+            raise PumpStationProposalError("proposal-binding", "verification lacks backlog binding")
+        return (
+            "request_post_maintenance_verification",
+            {"pump_id": proposal.pump_id, "backlog_item_id": proposal.backlog_item_id},
+        )
+    if isinstance(proposal, ResumeProcess):
+        return "resume_process", {"process_id": proposal.process_id}
+    if isinstance(proposal, CancelProcess):
+        return "cancel_process", {"process_id": proposal.process_id}
+    if isinstance(proposal, RequestConditionCheck):
+        return "request_condition_check", {"pump_id": proposal.pump_id}
+    if isinstance(proposal, RequestDependencyWaiver):
+        return (
+            "request_dependency_waiver",
+            {
+                "process_id": proposal.process_id,
+                "dependency_id": proposal.dependency_id,
+                "evidence_id": proposal.evidence_id,
+            },
+        )
+    raise PumpStationProposalError(
+        "proposal-type",
+        f"unsupported V4 proposal type {type(proposal).__name__}",
+    )
+
+
+def apply_stewardship_control_v4(
+    state: PumpStationCoupledStewardshipState,
+    control: PumpStationRootControl,
+) -> PumpStationTransitionV4:
+    """Apply one closed root host control through the task-owned V4 rules."""
+    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
+        apply_common_boundary_control,
+        apply_operations_boundary_review,
+        apply_process_outcome,
+    )
+
+    if isinstance(control, PumpStationOperationsBoundaryReviewRequest):
+        return apply_operations_boundary_review(state, control)
+    if isinstance(control, PumpStationProcessOutcomeRequest):
+        return apply_process_outcome(state, control)
+    if isinstance(control, PumpStationCommonBoundaryRequest):
+        return apply_common_boundary_control(state, control)
+    raise PumpStationProposalError(
+        "control-type",
+        f"unsupported V4 control type {type(control).__name__}",
     )
 
 

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path
 
@@ -54,7 +55,7 @@ def create_world_run(root: Path) -> PumpStationWorldRun:
 
 def bind_proposal(
     run: PumpStationWorldRun,
-    proposal_type: type[PumpStationProposal],
+    proposal_type: Callable[..., PumpStationProposal],
     proposal_id: str,
     **parameters: str,
 ) -> tuple[PumpStationProposal, PumpStationInformationSet]:

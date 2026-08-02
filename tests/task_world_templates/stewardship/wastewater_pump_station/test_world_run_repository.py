@@ -23,6 +23,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station import (
     PumpStationWorldRunError,
     RequestConditionalDeferral,
     RequestInspection,
+    RequestObstructionClearance,
+    RequestVerification,
     TransferDuty,
     pump_station_artifact_bytes,
     verify_stewardship_run,
@@ -105,6 +107,64 @@ def test_filesystem_run_reloads_complete_state_and_verifier_steps(tmp_path) -> N
     }
     for directory, expected_count in expected_counts.items():
         assert len(tuple((run.repository.root / directory).glob("*.json"))) == expected_count
+
+
+@pytest.mark.parametrize(
+    ("proposal_type", "parameters"),
+    (
+        (
+            RequestInspection,
+            {"pump_id": "pump-a", "backlog_item_id": "v4-inspection-binding"},
+        ),
+        (
+            RequestObstructionClearance,
+            {
+                "pump_id": "pump-a",
+                "inspection_evidence_id": "v4-inspection-evidence",
+                "backlog_item_id": "v4-clearance-binding",
+            },
+        ),
+        (
+            RequestVerification,
+            {"pump_id": "pump-a", "backlog_item_id": "v4-verification-binding"},
+        ),
+    ),
+)
+def test_legacy_run_rejects_v4_only_backlog_bindings_before_transition(
+    tmp_path: Path,
+    proposal_type: type,
+    parameters: dict[str, str],
+) -> None:
+    run = create_world_run(tmp_path / proposal_type.__name__)
+    proposal, information_set = bind_proposal(
+        run,
+        proposal_type,
+        f"legacy-rejects-{proposal_type.__name__}",
+        **parameters,
+    )
+    opening = run.snapshot()
+
+    with pytest.raises(PumpStationWorldRunError) as raised:
+        run.apply(proposal, information_set=information_set)
+
+    assert raised.value.code == "proposal-profile"
+    assert run.snapshot() == opening
+
+
+def test_legacy_inspection_without_v4_binding_retries_exactly(tmp_path: Path) -> None:
+    run = create_world_run(tmp_path / "run")
+    proposal, information_set = bind_proposal(
+        run,
+        RequestInspection,
+        "legacy-inspection-retry",
+        pump_id="pump-a",
+    )
+
+    applied = run.apply(proposal, information_set=information_set)
+    repeated = run.apply(proposal, information_set=information_set)
+
+    assert repeated == applied
+    assert len(run.steps()) == 1
 
 
 def test_repository_rejects_content_moved_under_the_wrong_identity(tmp_path) -> None:

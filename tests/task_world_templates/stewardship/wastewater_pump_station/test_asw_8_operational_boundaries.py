@@ -15,11 +15,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_
     create_coupled_run,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
-    PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
-    PUMP_STATION_PROCESS_OUTCOME_VERSION,
-    PumpStationCommonBoundaryRequest,
     PumpStationCoupledWorldError,
-    PumpStationProcessOutcomeRequest,
     project_coupled_actor_view,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
@@ -32,6 +28,12 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_
     PumpStationReusablePool,
     PumpStationWorkGenerationRecord,
     apply_declared_work_generation,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
+    PUMP_STATION_PROCESS_OUTCOME_VERSION,
+    PumpStationCommonBoundaryRequest,
+    PumpStationProcessOutcomeRequest,
 )
 
 
@@ -352,6 +354,7 @@ def test_failed_functional_check_retains_wg03_and_failed_verification_creates_on
         )
     )
     retained = functional.state.backlog_item(wg03.item_id)
+    assert functional.receipts[-1].required_authorities == ("maintenance",)
     assert retained.status is PumpStationBacklogStatus.PLANNED
     assert retained.closure_evidence_ids == ("evidence-b-functional-failed-001",)
     assert len([item for item in functional.state.backlog if item.generation_rule_id == "WG-03"]) == 1

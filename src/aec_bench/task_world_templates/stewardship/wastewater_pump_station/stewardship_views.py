@@ -3,9 +3,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from enum import StrEnum
 
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
+    PumpStationBacklogItem,
+    PumpStationCoupledProcess,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
     PumpStationEvidenceQuality,
     evidence_quality_at,
@@ -18,6 +22,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
     PumpStationEnvironment,
     PumpStationModel,
     PumpStationObservation,
+    PumpStationPumpAvailability,
+    PumpStationPumpBoundary,
+    PumpStationServiceRequirement,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
     stewardship_content_id,
@@ -206,6 +213,65 @@ class PumpStationActorView:
 
 
 @dataclass(frozen=True, slots=True)
+class PumpStationCoupledActorView:
+    """V4 actor view with exact world, tenure, and public planning identity."""
+
+    view_id: str
+    episode_id: str
+    world_branch_id: str
+    actor_id: str
+    agent_tenure_id: str
+    source_artifact_ids: tuple[str, ...]
+    projection_policy_id: str
+    observation_schema_id: str
+    information_boundary_id: str
+    state_id: str
+    sequence: int
+    time_zone: str
+    current_datetime: str
+    calendar_seconds: int
+    service_schedule: tuple[PumpStationServiceRequirement, ...]
+    disclosed_through_calendar_seconds: int
+    service_schedule_disclosed_through_datetime: str
+    resource_schedule_disclosed_through_datetime: str
+    service_schedule_local: tuple[tuple[str, str, int], ...]
+    resource_availability_local: tuple[tuple[str, tuple[tuple[str, str], ...]], ...]
+    assignment_pump_ids: tuple[str, ...]
+    service_running_pump_ids: tuple[str, ...]
+    test_running_pump_ids: tuple[str, ...]
+    required_service_scu: int
+    available_assured_scu: int
+    assigned_operating_scu: int
+    served_scu: int
+    unserved_scu: int
+    surplus_scu: int
+    pump_clocks: tuple[tuple[str, int, int], ...]
+    pump_runtime_display: tuple[tuple[str, str], ...]
+    pump_boundaries: tuple[PumpStationPumpBoundary, ...]
+    pump_availability: tuple[PumpStationPumpAvailability, ...]
+    resource_quantities: tuple[tuple[str, int, int], ...]
+    ranked_backlog: tuple[PumpStationBacklogItem, ...]
+    processes: tuple[PumpStationCoupledProcess, ...]
+    active_restriction_ids: tuple[str, ...]
+    active_liability_ids: tuple[str, ...]
+    accepted_evidence_ids: tuple[str, ...]
+    evidence_health: tuple[tuple[str, str, str, bool], ...]
+
+    def __post_init__(self) -> None:
+        expected_view_id = coupled_actor_view_id(self)
+        if self.view_id == "pending":
+            object.__setattr__(self, "view_id", expected_view_id)
+        elif self.view_id != expected_view_id:
+            raise ValueError("V4 actor view identity differs from its complete content")
+
+
+def coupled_actor_view_id(view: PumpStationCoupledActorView) -> str:
+    """Return the V4 identity of every actor-visible view field."""
+    identity_payload = {field.name: getattr(view, field.name) for field in fields(view) if field.name != "view_id"}
+    return stewardship_content_id(identity_payload, record_profile="v4")
+
+
+@dataclass(frozen=True, slots=True)
 class PumpStationActorHistoryEntry:
     """Bounded actor-visible account of one realised transition."""
 
@@ -281,7 +347,7 @@ class PumpStationInformationSet:
     """Content identity of a base view and exact actor-visible commitment context."""
 
     information_set_id: str
-    base_view: PumpStationActorView
+    base_view: PumpStationActorView | PumpStationCoupledActorView
     observation_history: PumpStationObservationHistory
     current_context: PumpStationCurrentContext
 
@@ -609,7 +675,7 @@ def create_structured_handover(
 
 
 def _information_set_id(
-    base_view: PumpStationActorView,
+    base_view: PumpStationActorView | PumpStationCoupledActorView,
     observation_history: PumpStationObservationHistory,
     current_context: PumpStationCurrentContext,
 ) -> str:
@@ -620,7 +686,9 @@ def _information_set_id(
             "current_context": current_context,
         },
         record_profile=(
-            "v3"
+            "v4"
+            if isinstance(base_view, PumpStationCoupledActorView)
+            else "v3"
             if base_view.current_state.state_version.endswith(".v3")
             else "v2"
             if base_view.current_state.state_version.endswith(".v2")
@@ -630,7 +698,7 @@ def _information_set_id(
 
 
 def bind_information_set(
-    base_view: PumpStationActorView,
+    base_view: PumpStationActorView | PumpStationCoupledActorView,
     observation_history: PumpStationObservationHistory,
     current_context: PumpStationCurrentContext,
 ) -> PumpStationInformationSet:
@@ -659,6 +727,8 @@ def proposal_binding_error(
 ) -> str | None:
     """Return the first fail-closed proposal binding error, if present."""
     view = information_set.base_view
+    if isinstance(view, PumpStationCoupledActorView):
+        return "legacy proposal cannot use a V4 actor view"
     if context.agent_tenure_id != view.agent_tenure_id:
         return "proposal and base view use different actor tenures"
     if context.base_view_id != view.view_id:

@@ -52,7 +52,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
     PumpStationOperatingDelta,
     PumpStationOutageEpisode,
     PumpStationPumpAvailability,
-    PumpStationPumpBoundary,
     PumpStationPumpMode,
     PumpStationServiceRequirement,
 )
@@ -70,18 +69,38 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     stewardship_content_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PUMP_STATION_AUTHORITY_POLICY_VERSION_V4,
+    PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
+    PUMP_STATION_OPERATIONS_REVIEW_VERSION,
+    PUMP_STATION_PROCESS_OUTCOME_VERSION,
+    PUMP_STATION_RECEIPT_VERSION_V4,
+    PUMP_STATION_STATE_VERSION_V4,
+    PUMP_STATION_TRANSITION_RULE_VERSION_V4,
     PumpStationAuthority,
+    PumpStationCommonBoundaryRequest,
     PumpStationEvidence,
     PumpStationEvidenceKind,
     PumpStationObligation,
     PumpStationObligationKind,
     PumpStationObligationStatus,
+    PumpStationOperationsBoundaryReviewRequest,
+    PumpStationProcessOutcomeRequest,
     PumpStationRestriction,
     PumpStationRestrictionKind,
     PumpStationRestrictionStatus,
     PumpStationStewardshipState,
+    PumpStationTransitionReceiptV4,
+    PumpStationTransitionV4,
     PumpStationWorkOrder,
     PumpStationWorkOrderStatus,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
+    PumpStationContinuityCarrier,
+    PumpStationCoupledActorView,
+    PumpStationCurrentContext,
+    PumpStationInformationSet,
+    PumpStationObservationHistory,
+    bind_information_set,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.time_presentation import (
     PUMP_STATION_TIME_ZONE,
@@ -92,18 +111,11 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     PUMP_STATION_WORLD_MANIFEST_VERSION_V2 as PUMP_STATION_WORLD_MANIFEST_VERSION_V2,
 )
 
-PUMP_STATION_STATE_VERSION_V4 = "pump-station-stewardship-state.v4"
 PUMP_STATION_SNAPSHOT_VERSION_V4 = "pump-station-state-snapshot.v4"
-PUMP_STATION_RECEIPT_VERSION_V4 = "pump-station-transition-receipt.v4"
-PUMP_STATION_AUTHORITY_POLICY_VERSION_V4 = "pump-station-authority-policy.v4"
-PUMP_STATION_TRANSITION_RULE_VERSION_V4 = "pump-station-transition-rules.v4"
 PUMP_STATION_ACTOR_PROJECTION_VERSION_V5 = "pump-station-current-state.v5"
 PUMP_STATION_ACTOR_VIEW_SCHEMA_V4 = "pump-station.actor-view.v4"
 PUMP_STATION_INFORMATION_BOUNDARY_V4 = "pump-station-actor-view.v4"
-PUMP_STATION_OPERATIONS_REVIEW_VERSION = "pump-station.operations-boundary-review.v1"
 PUMP_STATION_COUPLED_TREATMENT_VERSION = "pump-station.coupled-treatment.v1"
-PUMP_STATION_PROCESS_OUTCOME_VERSION = "pump-station.process-outcome.v1"
-PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION = "pump-station.common-boundary-control.v1"
 if TYPE_CHECKING:
     type PumpStationCoupledWorldState = PumpStationStewardshipState[
         PumpStationCoupledPhysicalState,
@@ -130,58 +142,6 @@ def _fail(code: str, detail: str) -> NoReturn:
 
 
 @dataclass(frozen=True, slots=True)
-class PumpStationCoupledTransitionReceipt:
-    """Complete v4 receipt for one actor action or host-control transition."""
-
-    receipt_version: str
-    sequence: int
-    transition_id: str
-    request_id: str
-    action_or_control_kind: str
-    actor_action: bool
-    authority_outcome: str
-    required_authorities: tuple[str, ...]
-    authority_decision_detail: str
-    permit_ids: tuple[str, ...]
-    execution_status: str
-    before_state_id: str
-    after_state_id: str
-    start_calendar_seconds: int
-    end_calendar_seconds: int
-    target_id: str | None
-    backlog_item_id: str | None
-    reason: str
-    changed_record_ids: tuple[str, ...]
-    changed_pool_ids: tuple[str, ...]
-    changed_reservation_ids: tuple[str, ...]
-    changed_backlog_item_ids: tuple[str, ...]
-    generation_record_ids: tuple[str, ...]
-    changed_liability_owner_ids: tuple[str, ...]
-    operating_interval_id: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class PumpStationOperationsBoundaryReviewRequest:
-    """Host-only content-addressed review that can release one v4 pump boundary."""
-
-    version: str
-    review_id: str
-    review_kind: str
-    pump_id: str
-    restriction_or_isolation_permit_id: str
-    accepted_evidence_id: str
-    requested_outcome: str
-    base_state_id: str
-    operations_authority_id: str
-    reason: str
-
-    @property
-    def content_id(self) -> str:
-        """Return the exact review-input identity."""
-        return stewardship_content_id(self, record_profile="v4")
-
-
-@dataclass(frozen=True, slots=True)
 class PumpStationCoupledTreatmentRequest:
     """Host-private common-cause treatment for one isolated v4 child."""
 
@@ -200,87 +160,8 @@ class PumpStationCoupledTreatmentRequest:
         return stewardship_content_id(self, record_profile="v4")
 
 
-@dataclass(frozen=True, slots=True)
-class PumpStationProcessOutcomeRequest:
-    """Host-owned evidence for one failed active v4 process attempt."""
-
-    version: str
-    request_id: str
-    authority_id: str
-    process_id: str
-    outcome: str
-    evidence_id: str
-    base_state_id: str
-
-    @property
-    def content_id(self) -> str:
-        """Return the exact process-outcome input identity."""
-        return stewardship_content_id(self, record_profile="v4")
-
-
-@dataclass(frozen=True, slots=True)
-class PumpStationCommonBoundaryRequest:
-    """Host-owned change to one declared station-wide operating boundary."""
-
-    version: str
-    request_id: str
-    authority_id: str
-    boundary_kind: str
-    available: bool
-    base_state_id: str
-
-    @property
-    def content_id(self) -> str:
-        """Return the exact common-boundary input identity."""
-        return stewardship_content_id(self, record_profile="v4")
-
-
-@dataclass(frozen=True, slots=True)
-class PumpStationCoupledActorView:
-    """Projection v5 with planning data and no latent condition."""
-
-    projection_policy_id: str
-    observation_schema_id: str
-    information_boundary_id: str
-    state_id: str
-    sequence: int
-    time_zone: str
-    current_datetime: str
-    calendar_seconds: int
-    service_schedule: tuple[PumpStationServiceRequirement, ...]
-    disclosed_through_calendar_seconds: int
-    service_schedule_disclosed_through_datetime: str
-    resource_schedule_disclosed_through_datetime: str
-    service_schedule_local: tuple[tuple[str, str, int], ...]
-    resource_availability_local: tuple[tuple[str, tuple[tuple[str, str], ...]], ...]
-    assignment_pump_ids: tuple[str, ...]
-    service_running_pump_ids: tuple[str, ...]
-    test_running_pump_ids: tuple[str, ...]
-    required_service_scu: int
-    available_assured_scu: int
-    assigned_operating_scu: int
-    served_scu: int
-    unserved_scu: int
-    surplus_scu: int
-    pump_clocks: tuple[tuple[str, int, int], ...]
-    pump_runtime_display: tuple[tuple[str, str], ...]
-    pump_boundaries: tuple[PumpStationPumpBoundary, ...]
-    pump_availability: tuple[PumpStationPumpAvailability, ...]
-    resource_quantities: tuple[tuple[str, int, int], ...]
-    ranked_backlog: tuple[PumpStationBacklogItem, ...]
-    processes: tuple[PumpStationCoupledProcess, ...]
-    active_restriction_ids: tuple[str, ...]
-    active_liability_ids: tuple[str, ...]
-    accepted_evidence_ids: tuple[str, ...]
-    evidence_health: tuple[tuple[str, str, str, bool], ...]
-
-
-@dataclass(frozen=True, slots=True)
-class PumpStationCoupledTransition:
-    """One applied transition with immutable before, after, and receipt evidence."""
-
-    state: PumpStationCoupledWorldState
-    receipt: PumpStationCoupledTransitionReceipt
+PumpStationCoupledTransitionReceipt = PumpStationTransitionReceiptV4
+PumpStationCoupledTransition = PumpStationTransitionV4
 
 
 def _opening_backlog() -> tuple[PumpStationBacklogItem, PumpStationBacklogItem]:
@@ -1001,6 +882,7 @@ def _runtime_boundary_effect_ids(
 
 
 def _advance_physical(
+    model: PumpStationCoupledModel,
     state: PumpStationCoupledWorldState,
     end_seconds: int,
     transition_id: str,
@@ -1045,7 +927,7 @@ def _advance_physical(
             tuple(deltas),
         ),
     )
-    result = advance_coupled_pump_station(_model(), state.physical, interval)
+    result = advance_coupled_pump_station(model, state.physical, interval)
     collateral = list(state.collateral_runtime)
     for delta in result.operating_interval.pump_deltas:
         if delta.attributed_outage_episode_id is None:
@@ -1431,13 +1313,16 @@ def _finish_transition(
     reason: str,
     changed_record_ids: tuple[str, ...],
     operating_interval_id: str | None = None,
+    authority_requirements: tuple[str, ...] | None = None,
 ) -> PumpStationCoupledTransition:
     sequenced = replace(after, sequence=before.sequence + 1)
     transition_id = f"transition-{sequenced.sequence}-{request_id}"
-    required_authorities = _required_authorities(action_kind)
+    required_authorities = authority_requirements or _required_authorities(action_kind)
     permit_ids = (f"controlled-test-permit-{request_id}",) if action_kind == "request_functional_check" else ()
     receipt = PumpStationCoupledTransitionReceipt(
         receipt_version=PUMP_STATION_RECEIPT_VERSION_V4,
+        authority_policy_version=PUMP_STATION_AUTHORITY_POLICY_VERSION_V4,
+        transition_rule_version=PUMP_STATION_TRANSITION_RULE_VERSION_V4,
         sequence=sequenced.sequence,
         transition_id=transition_id,
         request_id=request_id,
@@ -1513,6 +1398,7 @@ def _required_authorities(action_kind: str) -> tuple[str, ...]:
 
 
 def _continue_operation(
+    model: PumpStationCoupledModel,
     state: PumpStationCoupledWorldState,
     *,
     request_id: str,
@@ -1520,7 +1406,7 @@ def _continue_operation(
 ) -> PumpStationCoupledTransition:
     event_time = _next_event_time(state)
     transition_id = f"transition-{state.sequence + 1}-{request_id}"
-    advanced = _advance_physical(state, event_time, transition_id)
+    advanced = _advance_physical(model, state, event_time, transition_id)
     interval = advanced.operating_intervals[-1]
     updated = _apply_event_effects(
         advanced,
@@ -1547,6 +1433,7 @@ def apply_coupled_actor_action(
     request_id: str,
     action_name: str,
     arguments: dict[str, Any],
+    model: PumpStationCoupledModel | None = None,
 ) -> PumpStationCoupledTransition:
     """Apply one exact actor-interface-v2 action without accepting private overrides."""
     reason_value = arguments.get("reason")
@@ -1554,7 +1441,12 @@ def apply_coupled_actor_action(
         _fail("actor-action-arguments", "a non-empty natural-language reason is required")
     reason = reason_value.strip()
     if action_name == "continue_operation":
-        return _continue_operation(state, request_id=request_id, reason=reason)
+        return _continue_operation(
+            model or _model(),
+            state,
+            request_id=request_id,
+            reason=reason,
+        )
     if action_name in {"search_evidence", "fetch_evidence"}:
         _fail("temporal-action-route", "search and fetch use the verified temporal gateway")
 
@@ -2268,6 +2160,7 @@ def apply_process_outcome(
         backlog_item_id=process.backlog_item_id,
         reason="Record the authority-owned failed process evidence.",
         changed_record_ids=tuple(changed),
+        authority_requirements=(("maintenance",) if process.kind == "functional_check" else ("verification",)),
     )
 
 
@@ -2380,7 +2273,15 @@ def _project_pump_availability(
     )
 
 
-def project_coupled_actor_view(state: PumpStationCoupledWorldState) -> PumpStationCoupledActorView:
+def project_coupled_actor_view(
+    state: PumpStationCoupledWorldState,
+    *,
+    episode_id: str = "oracle-episode",
+    world_branch_id: str = "oracle-branch",
+    actor_id: str = "reference-controller",
+    agent_tenure_id: str = "reference-controller",
+    source_artifact_ids: tuple[str, ...] = (),
+) -> PumpStationCoupledActorView:
     """Project current v5 planning state without latent conditions or private events."""
     quantities: list[tuple[str, int, int]] = []
     for pool in state.resources.pools:
@@ -2399,7 +2300,13 @@ def project_coupled_actor_view(state: PumpStationCoupledWorldState) -> PumpStati
     )
     assigned_operating_scu = len(state.physical.service_running_pump_ids)
     served_scu = min(required_service_scu, assigned_operating_scu)
-    return PumpStationCoupledActorView(
+    view = PumpStationCoupledActorView(
+        view_id="pending",
+        episode_id=episode_id,
+        world_branch_id=world_branch_id,
+        actor_id=actor_id,
+        agent_tenure_id=agent_tenure_id,
+        source_artifact_ids=source_artifact_ids,
         projection_policy_id=PUMP_STATION_ACTOR_PROJECTION_VERSION_V5,
         observation_schema_id=PUMP_STATION_ACTOR_VIEW_SCHEMA_V4,
         information_boundary_id=PUMP_STATION_INFORMATION_BOUNDARY_V4,
@@ -2484,5 +2391,40 @@ def project_coupled_actor_view(state: PumpStationCoupledWorldState) -> PumpStati
             )
             for item in state.evidence
             if item.health is not None
+        ),
+    )
+    return view
+
+
+def project_coupled_information_set(
+    state: PumpStationCoupledWorldState,
+    *,
+    episode_id: str,
+    world_branch_id: str,
+    actor_id: str,
+    agent_tenure_id: str,
+    source_artifact_ids: tuple[str, ...],
+    workspace_tool_ids: tuple[str, ...],
+) -> PumpStationInformationSet:
+    """Project the complete V4 actor view and its exact visible context."""
+    view = project_coupled_actor_view(
+        state,
+        episode_id=episode_id,
+        world_branch_id=world_branch_id,
+        actor_id=actor_id,
+        agent_tenure_id=agent_tenure_id,
+        source_artifact_ids=source_artifact_ids,
+    )
+    return bind_information_set(
+        view,
+        PumpStationObservationHistory(
+            agent_tenure_id=agent_tenure_id,
+            view_ids=(view.view_id,),
+        ),
+        PumpStationCurrentContext(
+            continuity_carrier=PumpStationContinuityCarrier.CURRENT_ACTOR_VIEW,
+            conversation_prefix_id=None,
+            workspace_tool_ids=workspace_tool_ids,
+            visible_material_ids=source_artifact_ids,
         ),
     )

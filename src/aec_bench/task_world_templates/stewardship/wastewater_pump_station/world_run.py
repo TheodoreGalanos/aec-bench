@@ -3,13 +3,31 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import replace
 from typing import TYPE_CHECKING, Generic, NoReturn, TypeVar, cast
 
+from pydantic import JsonValue
+
 from aec_bench.contracts.continual_world import (
     ContinualWorldDefinitionRef,
     ContinualWorldProfileRef,
+)
+from aec_bench.contracts.world_interface import (
+    WorldActorActionRequest,
+    WorldActorBinding,
+    WorldActorObservation,
+    WorldInterfaceError,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
+    PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,
+    pump_station_proposal_from_validated_arguments_v2,
+    validate_pump_station_actor_arguments_v2,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
+    PumpStationCoupledWorldError,
+    project_coupled_information_set,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
     PumpStationEvidenceTreatmentRequest,
@@ -25,6 +43,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
     ReferencePackage,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
+    canonical_stewardship_value,
     stewardship_content_id,
     stewardship_state_id,
 )
@@ -32,24 +51,37 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PUMP_STATION_STATE_VERSION_V1,
     PUMP_STATION_STATE_VERSION_V2,
     PUMP_STATION_STATE_VERSION_V3,
+    ProposalContext,
+    PumpStationBoundControlRequest,
+    PumpStationCommonBoundaryRequest,
     PumpStationCoupledStewardshipState,
     PumpStationLegacyStewardshipState,
+    PumpStationOperationsBoundaryReviewRequest,
+    PumpStationProcessOutcomeRequest,
     PumpStationProposal,
+    PumpStationProposalError,
     PumpStationTransition,
+    PumpStationTransitionV4,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
     apply_evidence_treatment_schedule,
     apply_physical_treatment_activation,
+    apply_stewardship_control_v4,
     apply_stewardship_proposal,
+    apply_stewardship_proposal_v4,
     materialize_evidence_health_state,
+    validate_legacy_proposal_profile,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationRunStep,
+    PumpStationVerificationReportV4,
+    verify_stewardship_run_v4,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
     PumpStationInformationSet,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+    PUMP_STATION_COMMAND_VERSION_V4,
     PUMP_STATION_MIGRATION_VERSION,
     PUMP_STATION_RECORD_VERSIONS_V1,
     PUMP_STATION_RECORD_VERSIONS_V2,
@@ -57,6 +89,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     PUMP_STATION_RECORD_VERSIONS_V4,
     PUMP_STATION_SERIALIZATION_VERSION,
     PUMP_STATION_WORLD_MANIFEST_VERSION_V2,
+    PumpStationCommandV4,
     PumpStationInitialStateSource,
     PumpStationRecordVersions,
     PumpStationStagedTransition,
@@ -457,6 +490,185 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
         """Return the exact currently selected dynamic state."""
         return self._repository.current_snapshot()
 
+    def observe_v4_actor(
+        self,
+        *,
+        session_id: str,
+        agent_tenure_id: str,
+    ) -> WorldActorObservation:
+        """Return one V4 actor view bound to the exact selected commit."""
+        manifest = self._reference_manifest()
+        with self._repository.locked():
+            snapshot = self._repository.current_snapshot()
+            information_set = self._v4_information_set(
+                snapshot,
+                agent_tenure_id=agent_tenure_id,
+            )
+            view = information_set.base_view
+            binding = WorldActorBinding(
+                task_world_id=manifest.task_world_id,
+                session_id=session_id,
+                run_id=manifest.run_id,
+                episode_id=manifest.episode_id,
+                world_branch_id=manifest.world_branch_id,
+                sequence=snapshot.sequence,
+                state_id=snapshot.state_id,
+                commit_id=snapshot.commit_id,
+                agent_tenure_id=agent_tenure_id,
+                actor_view_id=view.view_id,
+                information_set_id=information_set.information_set_id,
+            )
+            return WorldActorObservation(
+                binding=binding,
+                view=cast(
+                    dict[str, JsonValue],
+                    canonical_stewardship_value(view, record_profile="v4"),
+                ),
+            )
+
+    def apply_v4_actor_action(
+        self,
+        request: WorldActorActionRequest,
+    ) -> PumpStationTransitionV4:
+        """Apply or exactly recover one shared actor request on the V4 run."""
+        manifest = self._reference_manifest()
+        if not isinstance(self._model, PumpStationCoupledModel):
+            _fail("world-run-identity", "V4 actor action requires the coupled model")
+        command = self._v4_actor_command(request)
+        with self._repository.locked():
+            committed = self._repository.find_committed_v4_command(request.request_id)
+            if committed is not None:
+                return self._repository.validate_repeated_v4_command(
+                    committed,
+                    command,
+                )
+            recovered = self._repository._recover_staged_v4_command_under_lock(
+                command,
+            )
+            if recovered is not None:
+                return recovered
+            prior = self._repository.current_snapshot()
+            self._validate_v4_actor_scope(request.binding, prior)
+            information_set = self._v4_information_set(
+                prior,
+                agent_tenure_id=request.binding.agent_tenure_id,
+            )
+            if (
+                information_set.base_view.view_id != request.binding.actor_view_id
+                or information_set.information_set_id != request.binding.information_set_id
+            ):
+                _fail(
+                    "actor-request-binding",
+                    "actor view or information set differs from the selected state",
+                )
+            try:
+                arguments = validate_pump_station_actor_arguments_v2(
+                    request.action_name,
+                    cast(dict[str, object], request.arguments),
+                )
+            except WorldInterfaceError as error:
+                _fail(error.code, error.detail)
+            reason = arguments.get("reason")
+            if not isinstance(reason, str) or reason != reason.strip():
+                _fail(
+                    "actor-action-arguments",
+                    "reason must be non-empty and must not have surrounding whitespace",
+                )
+            proposal = pump_station_proposal_from_validated_arguments_v2(
+                action_name=request.action_name,
+                arguments=arguments,
+                context=ProposalContext(
+                    proposal_id=request.request_id,
+                    agent_tenure_id=request.binding.agent_tenure_id,
+                    based_on_sequence=request.binding.sequence,
+                    base_view_id=request.binding.actor_view_id,
+                    information_set_id=request.binding.information_set_id,
+                    reason=reason,
+                ),
+            )
+            state = cast(
+                PumpStationCoupledStewardshipState,
+                self._repository.load_state(prior.state_id),
+            )
+            try:
+                transition = apply_stewardship_proposal_v4(
+                    self._model,
+                    state,
+                    proposal,
+                    information_set=information_set,
+                )
+            except (PumpStationProposalError, PumpStationCoupledWorldError) as error:
+                _fail(error.code, str(error))
+            staged = self._repository.stage_v4_transition(
+                manifest=manifest,
+                prior_snapshot=prior,
+                command=command,
+                proposal=proposal,
+                information_set=information_set,
+                transition=transition,
+            )
+            return self._repository._publish_staged_v4_transition_under_lock(staged)
+
+    def apply_v4_control(
+        self,
+        request: PumpStationBoundControlRequest,
+    ) -> PumpStationTransitionV4:
+        """Apply or exactly recover one bound root host-control request."""
+        manifest = self._reference_manifest()
+        command = self._v4_control_command(request)
+        with self._repository.locked():
+            committed = self._repository.find_committed_v4_command(request.request_id)
+            if committed is not None:
+                return self._repository.validate_repeated_v4_command(
+                    committed,
+                    command,
+                )
+            recovered = self._repository._recover_staged_v4_command_under_lock(
+                command,
+            )
+            if recovered is not None:
+                return recovered
+            prior = self._repository.current_snapshot()
+            observed = (
+                request.run_id,
+                request.episode_id,
+                request.world_branch_id,
+                request.based_on_sequence,
+                request.base_state_id,
+                request.base_commit_id,
+            )
+            expected = (
+                manifest.run_id,
+                manifest.episode_id,
+                manifest.world_branch_id,
+                prior.sequence,
+                prior.state_id,
+                prior.commit_id,
+            )
+            if observed != expected:
+                _fail(
+                    "control-request-scope",
+                    "V4 control does not bind the selected world snapshot",
+                )
+            state = cast(
+                PumpStationCoupledStewardshipState,
+                self._repository.load_state(prior.state_id),
+            )
+            try:
+                transition = apply_stewardship_control_v4(
+                    state,
+                    request.control,
+                )
+            except PumpStationCoupledWorldError as error:
+                _fail(error.code, str(error))
+            staged = self._repository.stage_v4_transition(
+                manifest=manifest,
+                prior_snapshot=prior,
+                command=command,
+                transition=transition,
+            )
+            return self._repository._publish_staged_v4_transition_under_lock(staged)
+
     def stage(
         self,
         proposal: PumpStationProposal,
@@ -465,6 +677,7 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
     ) -> PumpStationStagedTransition:
         """Write immutable transition evidence without selecting its state."""
         model = self._legacy_model()
+        self._require_legacy_proposal_profile(proposal)
         with self._repository.locked():
             prior = self._repository.current_snapshot()
             committed = self._repository.find_committed_proposal(
@@ -498,6 +711,7 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
     ) -> PumpStationTransition:
         """Apply or idempotently replay one exact bound proposal."""
         model = self._legacy_model()
+        self._require_legacy_proposal_profile(proposal)
         with self._repository.locked():
             prior = self._repository.current_snapshot()
             committed = self._repository.find_committed_proposal(
@@ -618,6 +832,35 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
     def steps(self) -> tuple[PumpStationRunStep, ...]:
         """Reload all selected run steps for independent replay."""
         return self._repository.steps()
+
+    def verify_v4(self) -> PumpStationVerificationReportV4:
+        """Independently replay the selected V4 command chain."""
+        manifest = self._reference_manifest()
+        if not isinstance(self._model, PumpStationCoupledModel):
+            _fail("world-run-identity", "V4 verification requires the coupled model")
+        initial_state = cast(
+            PumpStationCoupledStewardshipState,
+            self._repository.load_state(manifest.initial_state_id),
+        )
+        with self._repository.locked():
+            steps = self._repository.v4_steps()
+            expected_final_state_id = self._repository.current_snapshot().state_id
+        return verify_stewardship_run_v4(
+            self._model,
+            initial_state,
+            steps,
+            expected_final_state_id=expected_final_state_id,
+            expected_task_world_id=manifest.task_world_id,
+            expected_run_id=manifest.run_id,
+            expected_episode_id=manifest.episode_id,
+            expected_world_branch_id=manifest.world_branch_id,
+            expected_actor_id="pump-station-actor",
+            expected_source_artifact_ids=(
+                manifest.reference_system_content_id,
+                manifest.package_content_id,
+                manifest.temporal_bundle_content_id,
+            ),
+        )
 
     @staticmethod
     def _load_registered_reference_profile() -> tuple[
@@ -872,6 +1115,135 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
             _fail("reference-system-manifest-required", "run uses the legacy manifest")
         return self._manifest
 
+    def _v4_information_set(
+        self,
+        snapshot: PumpStationStateSnapshotRef,
+        *,
+        agent_tenure_id: str,
+    ) -> PumpStationInformationSet:
+        """Build the exact V4 view, history, and visible commitment context."""
+        manifest = self._reference_manifest()
+        state = cast(
+            PumpStationCoupledStewardshipState,
+            self._repository.load_state(snapshot.state_id),
+        )
+        source_artifact_ids = (
+            manifest.reference_system_content_id,
+            manifest.package_content_id,
+            manifest.temporal_bundle_content_id,
+        )
+        return project_coupled_information_set(
+            state,
+            episode_id=manifest.episode_id,
+            world_branch_id=manifest.world_branch_id,
+            actor_id="pump-station-actor",
+            agent_tenure_id=agent_tenure_id,
+            source_artifact_ids=source_artifact_ids,
+            workspace_tool_ids=(PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,),
+        )
+
+    @staticmethod
+    def _v4_actor_command(request: WorldActorActionRequest) -> PumpStationCommandV4:
+        """Convert one shared actor request to the strict durable V4 command."""
+        binding = request.binding
+        return PumpStationCommandV4(
+            command_version=PUMP_STATION_COMMAND_VERSION_V4,
+            kind="actor",
+            request_id=request.request_id,
+            request_content_id=request.content_sha256,
+            action_name=request.action_name,
+            arguments_json=json.dumps(
+                request.arguments,
+                allow_nan=False,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+            task_world_id=binding.task_world_id,
+            run_id=binding.run_id,
+            episode_id=binding.episode_id,
+            world_branch_id=binding.world_branch_id,
+            based_on_sequence=binding.sequence,
+            base_state_id=binding.state_id,
+            base_commit_id=binding.commit_id,
+            session_id=binding.session_id,
+            agent_tenure_id=binding.agent_tenure_id,
+            actor_view_id=binding.actor_view_id,
+            information_set_id=binding.information_set_id,
+        )
+
+    def _v4_control_command(
+        self,
+        request: PumpStationBoundControlRequest,
+    ) -> PumpStationCommandV4:
+        """Convert one bound root control to the strict durable V4 command."""
+        control = request.control
+        if isinstance(control, PumpStationOperationsBoundaryReviewRequest):
+            kind = "operations_review"
+            action_name = "operations_boundary_review"
+        elif isinstance(control, PumpStationProcessOutcomeRequest):
+            kind = "process_outcome"
+            action_name = "process_outcome"
+        elif isinstance(control, PumpStationCommonBoundaryRequest):
+            kind = "common_boundary"
+            action_name = "common_boundary_control"
+        else:
+            _fail("control-type", f"unsupported V4 control {type(control).__name__}")
+        manifest = self._reference_manifest()
+        return PumpStationCommandV4(
+            command_version=PUMP_STATION_COMMAND_VERSION_V4,
+            kind=kind,
+            request_id=request.request_id,
+            request_content_id=control.content_id,
+            action_name=action_name,
+            arguments_json=json.dumps(
+                canonical_stewardship_value(control, record_profile="v4"),
+                allow_nan=False,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+            task_world_id=manifest.task_world_id,
+            run_id=request.run_id,
+            episode_id=request.episode_id,
+            world_branch_id=request.world_branch_id,
+            based_on_sequence=request.based_on_sequence,
+            base_state_id=request.base_state_id,
+            base_commit_id=request.base_commit_id,
+            authority_id=request.authority_id,
+        )
+
+    def _validate_v4_actor_scope(
+        self,
+        binding: WorldActorBinding,
+        snapshot: PumpStationStateSnapshotRef,
+    ) -> None:
+        """Require one actor request to name the selected run and parent commit."""
+        manifest = self._reference_manifest()
+        observed = (
+            binding.task_world_id,
+            binding.run_id,
+            binding.episode_id,
+            binding.world_branch_id,
+            binding.sequence,
+            binding.state_id,
+            binding.commit_id,
+        )
+        expected = (
+            manifest.task_world_id,
+            manifest.run_id,
+            manifest.episode_id,
+            manifest.world_branch_id,
+            snapshot.sequence,
+            snapshot.state_id,
+            snapshot.commit_id,
+        )
+        if observed != expected:
+            _fail(
+                "actor-request-binding",
+                "actor request does not bind the selected world snapshot",
+            )
+
     def _require_legacy_transitions(self) -> None:
         """Keep V4 closed until its task-owned transition port uses this run."""
         if self._manifest.record_versions == PUMP_STATION_RECORD_VERSIONS_V4:
@@ -879,6 +1251,14 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
                 "v4-transition-not-routed",
                 "registered V4 transitions are not yet integrated",
             )
+
+    @staticmethod
+    def _require_legacy_proposal_profile(proposal: PumpStationProposal) -> None:
+        """Reject V4-only fields before a legacy request can be retried or stored."""
+        try:
+            validate_legacy_proposal_profile(proposal)
+        except PumpStationProposalError as error:
+            _fail(error.code, str(error))
 
     def _legacy_model(self) -> PumpStationModel:
         """Return the two-pump model selected by legacy transition paths."""
