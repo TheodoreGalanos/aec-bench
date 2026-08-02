@@ -36,6 +36,11 @@ from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_interaction_varia
     TEMPLATE_ID,
     get_ssc03_hydraulic_interaction_variant,
 )
+from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_rollout_adapter import (
+    Ssc03HydraulicContinualBranchPort,
+    ssc03_hydraulic_continual_branch_port,
+    ssc03_hydraulic_rollout_source_sha256,
+)
 
 SSC03_HYDRAULIC_CONTINUAL_WORLD_ID = "aec.task_world.composite.hydraulic-interaction-lifecycle-review"
 SSC03_HYDRAULIC_CONTINUAL_DEFINITION_VERSION = "1"
@@ -174,6 +179,8 @@ def _implementation_content_sha256(adapter: LifecycleWorldAdapter) -> str:
             "loaded_profile": python_source_sha256(Ssc03HydraulicContinualProfile),
             "profile_loader": python_source_sha256(_load_ssc03_hydraulic_profile),
             "profile_reference": python_source_sha256(_profile_ref),
+            "rollout_branch_port": python_source_sha256(Ssc03HydraulicContinualBranchPort),
+            "rollout_branch_source": ssc03_hydraulic_rollout_source_sha256(),
         }
     )
 
@@ -197,4 +204,5 @@ def ssc03_hydraulic_continual_world_definition() -> ContinualWorldDefinition:
     return ContinualWorldDefinition(
         spec=_ssc03_definition_spec(),
         profile_loader=_load_ssc03_hydraulic_profile,
+        branch_port=ssc03_hydraulic_continual_branch_port(),
     )

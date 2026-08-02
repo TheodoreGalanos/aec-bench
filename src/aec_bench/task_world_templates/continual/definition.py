@@ -14,6 +14,7 @@ from aec_bench.contracts.continual_world import (
     ContinualWorldDefinitionSpec,
     ContinualWorldProfileRef,
 )
+from aec_bench.task_world_templates.continual.branch_port import ContinualWorldBranchPort
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class ContinualWorldDefinition:
 
     spec: ContinualWorldDefinitionSpec
     profile_loader: Callable[[ContinualWorldProfileRef], LoadedContinualWorldProfile]
+    branch_port: ContinualWorldBranchPort | None = None
 
     @property
     def ref(self) -> ContinualWorldDefinitionRef:

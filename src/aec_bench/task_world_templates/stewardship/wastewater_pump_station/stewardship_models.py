@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Generic, NoReturn, TypeVar, cast
 
@@ -53,6 +54,7 @@ PUMP_STATION_TRANSITION_RULE_VERSION_V4 = "pump-station-transition-rules.v4"
 PUMP_STATION_OPERATIONS_REVIEW_VERSION = "pump-station.operations-boundary-review.v1"
 PUMP_STATION_PROCESS_OUTCOME_VERSION = "pump-station.process-outcome.v1"
 PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION = "pump-station.common-boundary-control.v1"
+PUMP_STATION_COUPLED_TREATMENT_VERSION = "pump-station.coupled-treatment.v1"
 PUMP_STATION_BOUND_CONTROL_VERSION = "pump-station.bound-control.v1"
 
 PUMP_STATION_RECEIPT_VERSION = PUMP_STATION_RECEIPT_VERSION_V1
@@ -1052,8 +1054,34 @@ class PumpStationCommonBoundaryRequest:
         return stewardship_content_id(self, record_profile="v4")
 
 
+@dataclass(frozen=True, slots=True)
+class PumpStationCoupledTreatmentRequest:
+    """Host-private physical treatment for one isolated V4 rollout child."""
+
+    version: str
+    request_id: str
+    authority_id: str
+    treatment_label: str
+    affected_pump_ids: tuple[str, ...]
+    obstruction_delta: Decimal
+    clearance_loss_delta: Decimal
+    base_state_id: str
+
+    @property
+    def content_id(self) -> str:
+        """Return the exact private treatment identity."""
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
+            stewardship_content_id,
+        )
+
+        return stewardship_content_id(self, record_profile="v4")
+
+
 type PumpStationRootControl = (
-    PumpStationOperationsBoundaryReviewRequest | PumpStationProcessOutcomeRequest | PumpStationCommonBoundaryRequest
+    PumpStationOperationsBoundaryReviewRequest
+    | PumpStationProcessOutcomeRequest
+    | PumpStationCommonBoundaryRequest
+    | PumpStationCoupledTreatmentRequest
 )
 
 

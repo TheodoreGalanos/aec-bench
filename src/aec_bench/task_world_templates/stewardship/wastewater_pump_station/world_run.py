@@ -57,6 +57,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationBoundControlRequest,
     PumpStationCommonBoundaryRequest,
     PumpStationCoupledStewardshipState,
+    PumpStationCoupledTreatmentRequest,
     PumpStationLegacyStewardshipState,
     PumpStationOperationsBoundaryReviewRequest,
     PumpStationProcessOutcomeRequest,
@@ -117,6 +118,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_se
 if TYPE_CHECKING:
     from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
         PumpStationContinualProfile,
+    )
+    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.access_models import (
+        TemporalSessionInformationSetManifestV2,
     )
     from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.models import (
         TemporalEvidenceBundle,
@@ -276,7 +280,64 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
         repository: PumpStationWorldRunRepository,
         snapshot: PumpStationStateSnapshotRef,
     ) -> PumpStationWorldRun[PumpStationCoupledModel, PumpStationCoupledStewardshipState]:
-        """Resume one manifest-bound RS1 run without caller-supplied profile data."""
+        """Resume one RS1 run after full world and temporal-ledger validation."""
+
+        manifest, profile, bundle = cls._load_reference_system_identity(
+            repository=repository,
+            snapshot=snapshot,
+        )
+        cls._verify_reference_temporal_evidence(
+            repository=repository,
+            package=profile.station_package,
+            manifest=manifest,
+            expected=bundle,
+        )
+        return PumpStationWorldRun[PumpStationCoupledModel, PumpStationCoupledStewardshipState](
+            repository=repository,
+            package=profile.station_package,
+            model=profile.model,
+            manifest=manifest,
+        )
+
+    @classmethod
+    def _resume_reference_system_for_historical_prefix(
+        cls,
+        *,
+        repository: PumpStationWorldRunRepository,
+        snapshot: PumpStationStateSnapshotRef,
+    ) -> PumpStationWorldRun[PumpStationCoupledModel, PumpStationCoupledStewardshipState]:
+        """Construct one RS1 run for a separate selected-prefix verification."""
+
+        manifest, profile, bundle = cls._load_reference_system_identity(
+            repository=repository,
+            snapshot=snapshot,
+        )
+        cls._verify_reference_temporal_evidence_identity(
+            repository=repository,
+            package=profile.station_package,
+            manifest=manifest,
+            expected=bundle,
+        )
+        return PumpStationWorldRun[PumpStationCoupledModel, PumpStationCoupledStewardshipState](
+            repository=repository,
+            package=profile.station_package,
+            model=profile.model,
+            manifest=manifest,
+        )
+
+    @classmethod
+    def _load_reference_system_identity(
+        cls,
+        *,
+        repository: PumpStationWorldRunRepository,
+        snapshot: PumpStationStateSnapshotRef,
+    ) -> tuple[
+        PumpStationWorldRunManifestV2,
+        PumpStationContinualProfile,
+        TemporalEvidenceBundle,
+    ]:
+        """Load and validate immutable RS1 identity without checking mutable history."""
+
         manifest = repository.load_manifest()
         if not isinstance(manifest, PumpStationWorldRunManifestV2):
             _fail(
@@ -294,6 +355,9 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
         from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.corpus import (
             build_asw_8_reference_temporal_evidence_bundle,
         )
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.repository import (
+            TemporalEvidenceRepository,
+        )
 
         try:
             definition = default_continual_world_catalogue().resolve(definition_ref)
@@ -303,10 +367,15 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
         if not isinstance(loaded.value, PumpStationContinualProfile):
             _fail("world-run-identity", "registered profile has another task-owned value")
         profile = loaded.value
-        bundle = build_asw_8_reference_temporal_evidence_bundle(
-            profile.station_package,
-            world_branch_id=manifest.world_branch_id,
-        )
+        if manifest.initial_state_source.kind == "reference_system_specification":
+            bundle = build_asw_8_reference_temporal_evidence_bundle(
+                profile.station_package,
+                world_branch_id=manifest.world_branch_id,
+            )
+        else:
+            bundle = TemporalEvidenceRepository(
+                repository.root / "temporal-evidence",
+            ).load_bundle(package=profile.station_package)
         expected_manifest = cls._reference_system_manifest(
             definition_ref=definition_ref,
             profile_ref=profile_ref,
@@ -316,23 +385,29 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
             episode_id=manifest.episode_id,
             world_branch_id=manifest.world_branch_id,
         )
+        if manifest.initial_state_source.kind == "rollout_parent_snapshot":
+            source = manifest.initial_state_source
+            if (
+                source.parent_state_id != manifest.initial_state_id
+                or source.parent_branch_id != source.ancestor_branch_ids[-1]
+                or manifest.world_branch_id in source.ancestor_branch_ids
+            ):
+                _fail(
+                    "world-run-identity",
+                    "registered rollout-child provenance differs",
+                )
+            expected_manifest = replace(
+                expected_manifest,
+                initial_sequence=manifest.initial_sequence,
+                initial_state_id=manifest.initial_state_id,
+                initial_state_source=source,
+            )
         if manifest != expected_manifest:
             _fail("world-run-identity", "registered reference-system manifest differs")
-        cls._verify_reference_temporal_evidence(
-            repository=repository,
-            package=profile.station_package,
-            manifest=manifest,
-            expected=bundle,
-        )
         current = repository.current_snapshot()
         if current != snapshot:
             _fail("snapshot-drift", "requested snapshot is not the selected world state")
-        return PumpStationWorldRun[PumpStationCoupledModel, PumpStationCoupledStewardshipState](
-            repository=repository,
-            package=profile.station_package,
-            model=profile.model,
-            manifest=manifest,
-        )
+        return manifest, profile, bundle
 
     def migrate_to_v2(
         self,
@@ -719,6 +794,14 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
     ) -> PumpStationTransitionV4:
         """Apply or exactly recover one bound root host-control request."""
         manifest = self._reference_manifest()
+        if (
+            isinstance(request.control, PumpStationCoupledTreatmentRequest)
+            and manifest.initial_state_source.kind != "rollout_parent_snapshot"
+        ):
+            _fail(
+                "control-wrong-profile",
+                "coupled treatment requires a registered rollout child",
+            )
         command = self._v4_control_command(request)
         with self._repository.locked():
             committed = self._repository.find_committed_v4_command(request.request_id)
@@ -763,7 +846,7 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
                     state,
                     request.control,
                 )
-            except PumpStationCoupledWorldError as error:
+            except (PumpStationProposalError, PumpStationCoupledWorldError) as error:
                 _fail(error.code, str(error))
             staged = self._repository.stage_v4_transition(
                 manifest=manifest,
@@ -937,8 +1020,74 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
         """Reload all selected run steps for independent replay."""
         return self._repository.steps()
 
-    def verify_v4(self) -> PumpStationVerificationReportV4:
-        """Independently replay the selected V4 command chain."""
+    def _v4_verification_session_bindings(
+        self,
+        manifest: PumpStationWorldRunManifestV2,
+        *,
+        root_binding_ids: tuple[str, ...] | None,
+    ) -> dict[str, PumpStationSessionActivationBinding]:
+        """Load the current session chain or only command-referenced prefixes."""
+
+        roots: tuple[PumpStationSessionActivationBinding, ...]
+        if root_binding_ids is None:
+            selected = self._repository._selected_session_activation_if_present(
+                manifest,
+            )
+            roots = () if selected is None else (selected[1],)
+        else:
+            roots = tuple(
+                self._repository._load_session_binding(binding_id, manifest) for binding_id in root_binding_ids
+            )
+        bindings_by_id: dict[str, PumpStationSessionActivationBinding] = {}
+        for root in roots:
+            binding = root
+            expected_event_sequence = binding.session_event_sequence
+            expected_host_authority = binding.host_authority_id
+            seen: set[str] = set()
+            while True:
+                if binding.binding_id in seen:
+                    raise ValueError("session binding chain contains a cycle")
+                seen.add(binding.binding_id)
+                if (
+                    binding.session_event_sequence != expected_event_sequence
+                    or binding.host_authority_id != expected_host_authority
+                ):
+                    raise ValueError("session binding chain position differs")
+                claim = self._repository._load_session_activation_claim(
+                    binding.active_activation_id,
+                )
+                if claim.binding_id != binding.binding_id:
+                    raise ValueError("session activation claim differs")
+                prior = bindings_by_id.get(binding.binding_id)
+                if prior is not None and prior != binding:
+                    raise ValueError("session binding identity differs")
+                bindings_by_id[binding.binding_id] = binding
+                if binding.prior_binding_id is None:
+                    if binding.session_event_sequence != 0:
+                        raise ValueError("session binding chain has no origin")
+                    break
+                expected_event_sequence -= 1
+                binding = self._repository._load_session_binding(
+                    binding.prior_binding_id,
+                    manifest,
+                )
+        return bindings_by_id
+
+    def verify_v4(
+        self,
+        snapshot: PumpStationStateSnapshotRef | None = None,
+    ) -> PumpStationVerificationReportV4:
+        """Independently replay the selected V4 history or one exact prefix."""
+
+        with self._repository.locked():
+            return self._verify_v4_under_lock(snapshot)
+
+    def _verify_v4_under_lock(
+        self,
+        snapshot: PumpStationStateSnapshotRef | None = None,
+    ) -> PumpStationVerificationReportV4:
+        """Replay one V4 history while the caller holds the world-run lock."""
+
         from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence import (
             TemporalEvidenceIntegrityError,
             TemporalEvidenceRepository,
@@ -953,43 +1102,29 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
             self._repository.load_state(manifest.initial_state_id),
         )
         session_issues: list[str] = []
-        bindings_by_id: dict[str, PumpStationSessionActivationBinding] = {}
         try:
-            with self._repository.locked():
-                steps = self._repository.v4_steps()
-                expected_final_state_id = self._repository.current_snapshot().state_id
-                selected = self._repository._selected_session_activation_if_present(
-                    manifest,
+            selected_snapshot = snapshot or self._repository.current_snapshot()
+            steps = (
+                self._repository.v4_steps_through(selected_snapshot)
+                if snapshot is not None
+                else self._repository.v4_steps()
+            )
+            expected_final_state_id = selected_snapshot.state_id
+            root_binding_ids = (
+                None
+                if snapshot is None
+                else tuple(
+                    dict.fromkeys(
+                        step.command.session_binding_id
+                        for step in steps
+                        if step.command.kind == "actor" and step.command.session_binding_id is not None
+                    )
                 )
-                if selected is not None:
-                    _, binding = selected
-                    expected_event_sequence = binding.session_event_sequence
-                    expected_host_authority = binding.host_authority_id
-                    seen: set[str] = set()
-                    while True:
-                        if binding.binding_id in seen:
-                            raise ValueError("session binding chain contains a cycle")
-                        seen.add(binding.binding_id)
-                        if (
-                            binding.session_event_sequence != expected_event_sequence
-                            or binding.host_authority_id != expected_host_authority
-                        ):
-                            raise ValueError("session binding chain position differs")
-                        claim = self._repository._load_session_activation_claim(
-                            binding.active_activation_id,
-                        )
-                        if claim.binding_id != binding.binding_id:
-                            raise ValueError("session activation claim differs")
-                        bindings_by_id[binding.binding_id] = binding
-                        if binding.prior_binding_id is None:
-                            if binding.session_event_sequence != 0:
-                                raise ValueError("session binding chain has no origin")
-                            break
-                        expected_event_sequence -= 1
-                        binding = self._repository._load_session_binding(
-                            binding.prior_binding_id,
-                            manifest,
-                        )
+            )
+            bindings_by_id = self._v4_verification_session_bindings(
+                manifest,
+                root_binding_ids=root_binding_ids,
+            )
         except (OSError, PumpStationWorldRunError, TypeError, ValueError) as error:
             return PumpStationVerificationReportV4(
                 valid=False,
@@ -1015,10 +1150,14 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
                 or historical_binding.session_event_sequence > active_at_position.session_event_sequence
             ):
                 active_bindings_by_world_position[world_position] = historical_binding
+        temporal_repository = TemporalEvidenceRepository(
+            self._repository.root / "temporal-evidence",
+        )
         information_sets_by_binding_id: dict[str, PumpStationInformationSet] = {}
+        selected_temporal_information_sets: list[TemporalSessionInformationSetManifestV2] = []
         for historical_binding_id, historical_binding in bindings_by_id.items():
             try:
-                snapshot = PumpStationStateSnapshotRef(
+                binding_snapshot = PumpStationStateSnapshotRef(
                     snapshot_version=manifest.snapshot_version,
                     run_id=manifest.run_id,
                     episode_id=manifest.episode_id,
@@ -1027,10 +1166,18 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
                     state_id=historical_binding.state_id,
                     commit_id=historical_binding.commit_id,
                 )
-                information_sets_by_binding_id[historical_binding_id] = self._v4_session_information_set(
-                    snapshot,
-                    session_binding=historical_binding,
+                temporal_manifest = temporal_repository.load_session_information_set(
+                    historical_binding.information_set_manifest_content_id,
+                    run_id=manifest.run_id,
+                    session_id=historical_binding.session_id,
+                    agent_tenure_id=historical_binding.agent_tenure_id,
                 )
+                information_sets_by_binding_id[historical_binding_id] = self._v4_session_information_set(
+                    binding_snapshot,
+                    session_binding=historical_binding,
+                    temporal_manifest=temporal_manifest,
+                )
+                selected_temporal_information_sets.append(temporal_manifest)
             except (
                 OSError,
                 PumpStationWorldRunError,
@@ -1089,9 +1236,6 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
                 manifest.temporal_bundle_content_id,
             ),
         )
-        temporal_repository = TemporalEvidenceRepository(
-            self._repository.root / "temporal-evidence",
-        )
         proposal_bindings = {
             step.command.request_id: (
                 step.command.information_set_id or "",
@@ -1104,6 +1248,7 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
             temporal_repository,
             package=self._package,
             proposal_bindings=proposal_bindings,
+            selected_session_information_sets=(None if snapshot is None else tuple(selected_temporal_information_sets)),
         )
         temporal_issues: tuple[str, ...] = tuple(
             f"temporal-evidence-invalid:{issue.code}:{issue.artifact_id or '-'}" for issue in temporal_report.issues
@@ -1275,7 +1420,14 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
         manifest: PumpStationWorldRunManifestV2,
         expected: TemporalEvidenceBundle,
     ) -> None:
-        """Require stored RS1 temporal evidence to match immutable run metadata."""
+        """Require the static corpus and complete temporal ledger to be valid."""
+
+        PumpStationWorldRun._verify_reference_temporal_evidence_identity(
+            repository=repository,
+            package=package,
+            manifest=manifest,
+            expected=expected,
+        )
         from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.models import (
             TemporalEvidenceIntegrityError,
         )
@@ -1288,11 +1440,44 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
 
         temporal_repository = TemporalEvidenceRepository(repository.root / "temporal-evidence")
         try:
-            loaded = temporal_repository.load_bundle(package=package)
+            steps = repository.v4_steps()
+            proposal_bindings = {
+                step.command.request_id: (
+                    step.command.information_set_id or "",
+                    step.command.actor_view_id or "",
+                )
+                for step in steps
+                if step.command.kind == "actor"
+            }
             report = verify_temporal_evidence_repository(
                 temporal_repository,
                 package=package,
+                proposal_bindings=proposal_bindings,
             )
+        except (OSError, ValueError, PumpStationWorldRunError, TemporalEvidenceIntegrityError) as error:
+            _fail("temporal-evidence", f"RS1 temporal evidence ledger is invalid: {error}")
+        if not report.valid:
+            _fail("temporal-evidence", "RS1 temporal evidence ledger differs")
+
+    @staticmethod
+    def _verify_reference_temporal_evidence_identity(
+        *,
+        repository: PumpStationWorldRunRepository,
+        package: ReferencePackage,
+        manifest: PumpStationWorldRunManifestV2,
+        expected: TemporalEvidenceBundle,
+    ) -> None:
+        """Require the stored RS1 temporal corpus to match immutable run metadata."""
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.models import (
+            TemporalEvidenceIntegrityError,
+        )
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.repository import (
+            TemporalEvidenceRepository,
+        )
+
+        temporal_repository = TemporalEvidenceRepository(repository.root / "temporal-evidence")
+        try:
+            loaded = temporal_repository.load_bundle(package=package)
         except (OSError, ValueError, TemporalEvidenceIntegrityError) as error:
             _fail("temporal-evidence", f"RS1 temporal evidence is invalid: {error}")
         observed = (
@@ -1305,7 +1490,7 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
             manifest.temporal_corpus_content_id,
             manifest.temporal_capability_content_id,
         )
-        if loaded != expected or observed != bound or not report.valid:
+        if loaded != expected or observed != bound:
             _fail("temporal-evidence", "RS1 temporal evidence differs from the run manifest")
 
     @staticmethod
@@ -1401,6 +1586,7 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
         snapshot: PumpStationStateSnapshotRef,
         *,
         session_binding: PumpStationSessionActivationBinding,
+        temporal_manifest: TemporalSessionInformationSetManifestV2 | None = None,
     ) -> PumpStationInformationSet:
         """Rebuild one complete V4 information set from durable session evidence."""
         from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence import (
@@ -1411,7 +1597,7 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
         temporal_repository = TemporalEvidenceRepository(
             self._repository.root / "temporal-evidence",
         )
-        temporal = temporal_repository.load_session_information_set(
+        temporal = temporal_manifest or temporal_repository.load_session_information_set(
             session_binding.information_set_manifest_content_id,
             run_id=manifest.run_id,
             session_id=session_binding.session_id,
@@ -1479,7 +1665,10 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
             temporal.workspace_tool_ids,
             temporal.tool_contract_id,
         )
-        if observed_scope != expected_scope or temporal.branch_ancestor_ids:
+        if (
+            observed_scope != expected_scope
+            or temporal.branch_ancestor_ids != manifest.initial_state_source.ancestor_branch_ids
+        ):
             _fail(
                 "actor-session-binding",
                 "temporal session manifest differs from the selected world",
@@ -1588,6 +1777,9 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
         elif isinstance(control, PumpStationCommonBoundaryRequest):
             kind = "common_boundary"
             action_name = "common_boundary_control"
+        elif isinstance(control, PumpStationCoupledTreatmentRequest):
+            kind = "coupled_treatment"
+            action_name = "coupled_physical_treatment"
         else:
             _fail("control-type", f"unsupported V4 control {type(control).__name__}")
         manifest = self._reference_manifest()

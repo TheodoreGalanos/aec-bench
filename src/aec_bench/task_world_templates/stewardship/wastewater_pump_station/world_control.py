@@ -43,6 +43,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PumpStationBoundControlRequest,
     PumpStationCommonBoundaryRequest,
+    PumpStationCoupledTreatmentRequest,
     PumpStationOperationsBoundaryReviewRequest,
     PumpStationProcessOutcomeRequest,
     PumpStationSchedule,
@@ -91,6 +92,7 @@ PUMP_STATION_ROOT_CONTROL_OPERATIONS = (
     "operations_review",
     "process_outcome",
     "common_boundary",
+    "coupled_treatment",
 )
 
 
@@ -212,7 +214,8 @@ class PumpStationWorldControl:
         operations: tuple[str, ...] = PUMP_STATION_CONTROL_OPERATIONS
         registered_v4 = self._registered_v4_selected()
         if registered_v4:
-            state = self._resume_run().state if (self._repository_root / "current.json").is_file() else None
+            run = self._resume_run() if (self._repository_root / "current.json").is_file() else None
+            state = run.state if run is not None else None
             operations = (
                 *operations,
                 *pump_station_root_control_operations(
@@ -220,6 +223,13 @@ class PumpStationWorldControl:
                     authority_id=authority_id,
                 ),
             )
+            if (
+                authority_id == "rollout-host"
+                and run is not None
+                and isinstance(run.manifest, PumpStationWorldRunManifestV2)
+                and run.manifest.initial_state_source.kind == "rollout_parent_snapshot"
+            ):
+                operations = (*operations, "coupled_treatment")
         elif self._evidence_health:
             operations = (*operations, *PUMP_STATION_EVIDENCE_CONTROL_OPERATIONS)
         return WorldControlCapabilityCatalogue(
@@ -359,6 +369,8 @@ class PumpStationWorldControl:
             if isinstance(request.control, PumpStationProcessOutcomeRequest)
             else "common_boundary"
             if isinstance(request.control, PumpStationCommonBoundaryRequest)
+            else "coupled_treatment"
+            if isinstance(request.control, PumpStationCoupledTreatmentRequest)
             else ""
         )
         if operation not in PUMP_STATION_ROOT_CONTROL_OPERATIONS:

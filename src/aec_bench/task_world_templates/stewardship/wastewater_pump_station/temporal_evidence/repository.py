@@ -287,6 +287,11 @@ class TemporalEvidenceRepository:
             "evidence reliance record",
         )
 
+    def has_evidence_reliance(self, action_request_id: str) -> bool:
+        """Return whether one action names a durable reliance record."""
+
+        return self._path(_reliance_path(action_request_id)).is_file()
+
     def access_commits(self) -> tuple[TemporalAccessCommit, ...]:
         """Reload every immutable access commit in stable request order."""
 
@@ -299,6 +304,236 @@ class TemporalEvidenceRepository:
                 ),
                 key=lambda item: (item.session_key, item.request_id),
             )
+        )
+
+    def select_verification_evidence(
+        self,
+        session_information_sets: tuple[TemporalSessionInformationSetManifestV2, ...],
+    ) -> tuple[
+        tuple[TemporalAccessCommit, ...],
+        tuple[TemporalRetrievalStateCarrier, ...],
+        tuple[TemporalRetrievalHandoverReceipt, ...],
+        tuple[TemporalRetrievalHandoverInstallReceipt, ...],
+    ]:
+        """Select only immutable retrieval evidence named by session bindings."""
+
+        commits: dict[tuple[str, str], TemporalAccessCommit] = {}
+        carriers: dict[str, TemporalRetrievalStateCarrier] = {}
+        handover_receipts: dict[str, TemporalRetrievalHandoverReceipt] = {}
+        install_receipts: dict[str, TemporalRetrievalHandoverInstallReceipt] = {}
+        verified_states: set[tuple[str, str]] = set()
+        selected_state_ids_by_session: dict[tuple[str, str, str, str, str], set[str]] = {}
+        for information_set in session_information_sets:
+            identity = (
+                information_set.run_id,
+                information_set.episode_id,
+                information_set.world_branch_id,
+                information_set.agent_tenure_id,
+                information_set.session_id,
+            )
+            selected_state_ids_by_session.setdefault(identity, set()).add(
+                information_set.retrieval_state_content_id,
+            )
+        for information_set in session_information_sets:
+            session_key = _session_identity_key(
+                run_id=information_set.run_id,
+                session_id=information_set.session_id,
+                agent_tenure_id=information_set.agent_tenure_id,
+            )
+            root = f"private/sessions/{session_key}"
+            session = self._load_model(
+                f"{root}/manifest.json",
+                TemporalRetrievalSessionManifest,
+                "retrieval session manifest",
+            )
+            if (
+                session.session_key,
+                session.run_id,
+                session.episode_id,
+                session.world_branch_id,
+                session.actor_id,
+                session.agent_tenure_id,
+                session.session_id,
+            ) != (
+                session_key,
+                information_set.run_id,
+                information_set.episode_id,
+                information_set.world_branch_id,
+                information_set.actor_id,
+                information_set.agent_tenure_id,
+                information_set.session_id,
+            ):
+                raise TemporalEvidenceIntegrityError("retrieval session context differs")
+            state_id = information_set.retrieval_state_content_id
+            selected_states: set[tuple[str, str]] = set()
+            while (session_key, state_id) not in verified_states:
+                state_marker = (session_key, state_id)
+                if state_marker in selected_states:
+                    raise TemporalEvidenceIntegrityError("retrieval state chain contains a cycle")
+                selected_states.add(state_marker)
+                state = self.load_retrieval_state_artifact(
+                    session_key=session_key,
+                    state_id=state_id,
+                )
+                prior_state_id = state.previous_state_id
+                if prior_state_id is None:
+                    if state.state_sequence != 0 or state_id != session.initial_state_id:
+                        raise TemporalEvidenceIntegrityError("retrieval state chain has no valid origin")
+                    break
+                prior = self.load_retrieval_state_artifact(
+                    session_key=session_key,
+                    state_id=prior_state_id,
+                )
+                if state.state_sequence != prior.state_sequence + 1:
+                    raise TemporalEvidenceIntegrityError("retrieval state sequence is not contiguous")
+                if state.installed_carrier_id != prior.installed_carrier_id:
+                    carrier_id = state.installed_carrier_id
+                    if prior.installed_carrier_id is not None or carrier_id is None:
+                        raise TemporalEvidenceIntegrityError("retrieval carrier state is not append-only")
+                    carrier = self._load_model(
+                        f"public/carriers/{carrier_id}.json",
+                        TemporalRetrievalStateCarrier,
+                        "retrieval carrier",
+                    )
+                    if (
+                        carrier.content_sha256 != carrier_id
+                        or carrier.run_id != information_set.run_id
+                        or carrier.episode_id != information_set.episode_id
+                        or carrier.world_branch_id != information_set.world_branch_id
+                        or carrier.to_agent_tenure_id != information_set.agent_tenure_id
+                        or carrier.to_session_id != information_set.session_id
+                        or prior.state_sequence != 0
+                        or prior.access_result_ids
+                        or state.access_result_ids != tuple(item.content_sha256 for item in carrier.access_results)
+                        or state.remaining_budget != carrier.remaining_budget
+                    ):
+                        raise TemporalEvidenceIntegrityError("retrieval carrier differs from selected state")
+                    carriers[carrier_id] = carrier
+                    source_identity = (
+                        carrier.run_id,
+                        carrier.episode_id,
+                        carrier.world_branch_id,
+                        carrier.from_agent_tenure_id,
+                        carrier.from_session_id,
+                    )
+                    source_session_key = _session_identity_key(
+                        run_id=carrier.run_id,
+                        session_id=carrier.from_session_id,
+                        agent_tenure_id=carrier.from_agent_tenure_id,
+                    )
+                    expected_handover_receipts: list[TemporalRetrievalHandoverReceipt] = []
+                    carrier_result_ids = tuple(item.content_sha256 for item in carrier.access_results)
+                    carried_references = {
+                        reference.opaque_reference
+                        for result in carrier.access_results
+                        for reference in result.references
+                    }
+                    for source_state_id in sorted(
+                        selected_state_ids_by_session.get(source_identity, ()),
+                    ):
+                        source_state = self.load_retrieval_state_artifact(
+                            session_key=source_session_key,
+                            state_id=source_state_id,
+                        )
+                        source_results = tuple(
+                            self.load_access_result(result_id) for result_id in source_state.access_result_ids
+                        )
+                        projected_results = tuple(
+                            result
+                            for result in source_results
+                            if carrier.include_fetched_content or result.operation is TemporalEvidenceAccessKind.SEARCH
+                        )
+                        projected_result_ids = tuple(result.content_sha256 for result in projected_results)
+                        if (
+                            projected_result_ids != carrier_result_ids
+                            or source_state.remaining_budget != carrier.remaining_budget
+                            or tuple(
+                                result_id
+                                for result_id in source_state.unresolved_search_ids
+                                if result_id in projected_result_ids
+                            )
+                            != carrier.unresolved_search_ids
+                        ):
+                            continue
+                        expected = TemporalRetrievalHandoverReceipt(
+                            carrier_id=carrier_id,
+                            source_state_id=source_state_id,
+                            from_agent_tenure_id=carrier.from_agent_tenure_id,
+                            from_session_id=carrier.from_session_id,
+                            to_agent_tenure_id=carrier.to_agent_tenure_id,
+                            to_session_id=carrier.to_session_id,
+                            carried_result_ids=carrier_result_ids,
+                            carried_reference_count=len(carried_references),
+                            remaining_budget=carrier.remaining_budget,
+                        )
+                        if self._path(
+                            f"private/handover-receipts/{expected.content_sha256}.json",
+                        ).is_file():
+                            expected_handover_receipts.append(expected)
+                    if len(expected_handover_receipts) != 1:
+                        raise TemporalEvidenceIntegrityError(
+                            "selected retrieval carrier has no unique projection receipt",
+                        )
+                    expected_handover = expected_handover_receipts[0]
+                    handover_receipt = self._load_model(
+                        f"private/handover-receipts/{expected_handover.content_sha256}.json",
+                        TemporalRetrievalHandoverReceipt,
+                        "selected retrieval handover receipt",
+                    )
+                    if handover_receipt != expected_handover:
+                        raise TemporalEvidenceIntegrityError(
+                            "selected retrieval handover receipt differs",
+                        )
+                    handover_receipts[handover_receipt.content_sha256] = handover_receipt
+                    expected_install = TemporalRetrievalHandoverInstallReceipt(
+                        carrier_id=carrier_id,
+                        target_session_key=session_key,
+                        prior_state_id=prior_state_id,
+                        next_state_id=state_id,
+                        to_agent_tenure_id=information_set.agent_tenure_id,
+                        to_session_id=information_set.session_id,
+                    )
+                    install_receipt = self._load_model(
+                        f"private/handover-install-receipts/{expected_install.content_sha256}.json",
+                        TemporalRetrievalHandoverInstallReceipt,
+                        "selected retrieval handover install receipt",
+                    )
+                    if install_receipt != expected_install:
+                        raise TemporalEvidenceIntegrityError(
+                            "selected retrieval handover install receipt differs",
+                        )
+                    install_receipts[install_receipt.content_sha256] = install_receipt
+                else:
+                    if (
+                        len(state.access_result_ids) != len(prior.access_result_ids) + 1
+                        or state.access_result_ids[:-1] != prior.access_result_ids
+                    ):
+                        raise TemporalEvidenceIntegrityError("retrieval access state is not append-only")
+                    result = self.load_access_result(state.access_result_ids[-1])
+                    commit = self._load_model(
+                        _transaction_path(result.request_id),
+                        TemporalAccessCommit,
+                        "temporal access commit",
+                    )
+                    if (
+                        commit.session_key != session_key
+                        or commit.prior_state_id != prior_state_id
+                        or commit.next_state_id != state_id
+                        or commit.result_id != result.content_sha256
+                    ):
+                        raise TemporalEvidenceIntegrityError("temporal access commit differs from selected state")
+                    commit_key = (session_key, commit.request_id)
+                    prior_commit = commits.get(commit_key)
+                    if prior_commit is not None and prior_commit != commit:
+                        raise TemporalEvidenceIntegrityError("temporal access request identity conflict")
+                    commits[commit_key] = commit
+                state_id = prior_state_id
+            verified_states.update(selected_states)
+        return (
+            tuple(sorted(commits.values(), key=lambda item: (item.session_key, item.request_id))),
+            tuple(sorted(carriers.values(), key=lambda item: item.content_sha256)),
+            tuple(sorted(handover_receipts.values(), key=lambda item: item.content_sha256)),
+            tuple(sorted(install_receipts.values(), key=lambda item: item.content_sha256)),
         )
 
     def load_access_publication(

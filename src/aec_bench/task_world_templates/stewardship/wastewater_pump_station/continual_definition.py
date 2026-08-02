@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import inspect
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
@@ -89,6 +91,13 @@ def _load_pump_station_profile(reference: ContinualWorldProfileRef) -> LoadedCon
 
 
 def _implementation_content_sha256() -> str:
+    from aec_bench.task_world_templates.stewardship.wastewater_pump_station import (
+        continual_rollout_adapter,
+    )
+
+    adapter_source_sha256 = hashlib.sha256(
+        inspect.getsource(continual_rollout_adapter).encode("utf-8"),
+    ).hexdigest()
     return canonical_content_sha256(
         {
             "loaded_profile": python_source_sha256(PumpStationContinualProfile),
@@ -99,6 +108,7 @@ def _implementation_content_sha256() -> str:
             "v2_reference_package_loader": python_source_sha256(load_v2_reference_package),
             "model_factory": python_source_sha256(coupled_pump_station_model_from_package),
             "opening_state_factory": python_source_sha256(create_asw_8_world_state),
+            "branch_adapter_module": adapter_source_sha256,
         }
     )
 
@@ -106,6 +116,10 @@ def _implementation_content_sha256() -> str:
 @cache
 def pump_station_continual_world_definition() -> ContinualWorldDefinition:
     """Return the content-pinned pump definition without starting a world run."""
+    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_rollout_adapter import (
+        PumpStationContinualWorldBranchPort,
+    )
+
     system, _ = _validated_profile_data()
     task_world_id = str(system.descriptor.get("task_world_id"))
     profile = ContinualWorldProfileRef(
@@ -122,4 +136,5 @@ def pump_station_continual_world_definition() -> ContinualWorldDefinition:
             profiles=(profile,),
         ),
         profile_loader=_load_pump_station_profile,
+        branch_port=PumpStationContinualWorldBranchPort(),
     )

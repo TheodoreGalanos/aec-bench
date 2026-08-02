@@ -262,6 +262,39 @@ class ImmutableByteStore:
         payload = self.load_bytes(relative_path)
         return self._artifact(parts, payload)
 
+    def prepare_directory_destination(
+        self,
+        parent_relative_path: str,
+        directory_name: str,
+    ) -> Path:
+        """Prepare a confined parent and require its optional directory leaf to be safe."""
+        parent_parts = _relative_parts(parent_relative_path)
+        leaf_parts = _relative_parts(directory_name)
+        if len(leaf_parts) != 1:
+            raise ImmutableArtifactConfinementError(
+                "immutable directory destination leaf must be one name",
+            )
+        with self._open_parent((*parent_parts, ".directory-destination"), create=True) as parent_descriptor:
+            leaf_descriptor: int | None = None
+            try:
+                leaf_descriptor = self._open_child_directory(
+                    parent_descriptor,
+                    leaf_parts[0],
+                    create=False,
+                )
+            except _ImmutableArtifactMissingError:
+                pass
+            finally:
+                if leaf_descriptor is not None:
+                    try:
+                        os.close(leaf_descriptor)
+                    except OSError as cause:
+                        raise ImmutableArtifactStoreError(
+                            f"immutable directory destination cannot be closed: {cause}",
+                        ) from cause
+        self._assert_root_binding()
+        return self._root.joinpath(*parent_parts, leaf_parts[0])
+
     def _path(self, relative_path: str) -> Path:
         """Return one validated logical path for compatibility-layer policies."""
 

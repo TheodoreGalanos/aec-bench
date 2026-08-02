@@ -676,13 +676,97 @@ the snapshot or progress operation when it needs the current world position.
 Step 6 session-evidence verification is an admission and deterministic replay
 integrity check. It proves that each selected actor transition used the durable
 session evidence bound to that transition. It does not score task outcomes or
-prove transport parity. Step 9 integrates the completed task verifier with
+prove transport parity. Step 10 integrates the completed task verifier with
 evaluation import, checks direct and transported outcomes, retires duplicate
 paths, and runs the final merge audit.
 
 This step does not change or certify CLI, Harbor, rollout, semantic evaluation,
 duplicate retirement, or coupled-path deletion. Those changes remain in their
 later sequence items.
+
+### 6.17 Chosen-point branches and rollout groups on the existing path
+
+Step 7 extends the existing rollout path. It does not repair or promote the
+parallel coupled rollout control. A rollout group creates one or more isolated
+child runs from one exact, verified parent snapshot. Several groups can use the
+same snapshot. Each child has its own run, episode, and branch identity.
+
+The parent is not rewound. A caller can select any immutable snapshot on the
+parent's selected commit history, including a snapshot that is no longer
+current. The runtime verifies the commit prefix through that snapshot and uses
+the stored state at that point. A staged, foreign, detached, or changed commit
+is not a valid origin. The parent can continue after the origin is selected
+without changing the child opening state or an exact retry.
+
+| Path | Owner | Compatibility and migration rule |
+| --- | --- | --- |
+| `contracts/continual_world.py` | Shared records | Define task-neutral snapshot, child, group, receipt, status, and lineage records. Keep task state and treatment fields out. |
+| `task_world_templates/continual/` | Shared rollout orchestration | Own safe group and child paths, per-group finalization locks, per-child materialization locks, immutable request and receipt publication, exact retry, partial recovery, ordered lineage, and child confinement. Import no pump or hydraulic task module. |
+| Registered task branch port | Task adapter | Verify one exact branchable snapshot, materialize the child, inherit permitted task evidence, reset private session state, and verify the completed child. |
+| `wastewater_pump_station/world_run_repository.py` | Pump durable history | Prove that the selected origin is on the parent commit chain and expose the exact replay prefix without changing `current.json`. |
+| `wastewater_pump_station/world_run.py` | Pump branch adapter | Build and resume a registered V4 child through the existing run and repository. Keep definition, profile, package, model, schedule, and temporal bindings exact. |
+| `wastewater_pump_station/temporal_evidence/` | Pump evidence adapter | Preserve the public evidence available at the origin. Start a fresh child-private retrieval and session history. |
+| `wastewater_pump_station/rollout_models.py`, `rollout_repository.py`, and `rollout_control.py` | Existing pump rollout path | Keep V1 records and bytes exact. Accept the shared continual request and lineage directly for registered runs. Keep only pump-owned branch evidence in pump models. Do not add actor execution to rollout control. |
+| `wastewater_pump_station/rollout_interface.py` | Installed V1 transport | Keep the V1 request, result, and dispatch exact in Step 7. Step 9 adds a separate V2 transport route; it must not widen the V1 schema. |
+| SSC-03 lifecycle branch adapter | Second real consumer | Treat a submitted checkpoint as its branchable snapshot unit. Preserve task-owned evidence, action, and budget rules while using the same group and lineage contract. |
+
+The shared rollout control has four operations: create a group, inspect a
+complete group, inspect group status, and resolve one child run reference. It
+does not open an actor session, execute an actor action, apply a task treatment,
+or select an agent provider or model. An actor enters a child through the
+existing session and action interfaces. A defect or other pump treatment uses
+the existing V4 host-control boundary. The legacy scheduled-treatment route
+remains an exact V1 route and rejects children made through the shared continual
+request. Step 9 binds child runs to agent and Harbor execution and can add
+agent-condition and sampling data to an exploration run.
+
+When the selected origin is historical, verification reads only the actor
+session and temporal evidence named by that immutable prefix. Later private
+session or retrieval records are outside that prefix and cannot change its
+validity. Full current-state verification still checks the complete current
+evidence set.
+
+Every group request binds the registered definition and profile, parent
+manifest, exact parent snapshot, host authority, ordered child identities, and
+a reason. Every child receipt binds its request, initial snapshot, child
+manifest, task-owned branch evidence, and ordered ancestor branches. The group
+becomes ready only after all child receipts are durable and independently
+verified. An exact retry returns the same lineage. Reuse of an identity with
+changed content fails closed.
+
+Every public read reloads the stored request against the registered definition
+and profile. A ready lineage must equal the ordered durable child requests and
+receipts. A child run reference is not available before the complete lineage is
+ready. Child destinations use descriptor-confined, host-private paths and
+reject symbolic links before a task adapter can read or write the child.
+
+For SSC-03, the branch-point reader is current-schema and read-only. The exact
+origin binds the complete ordered submitted-checkpoint prefix, the inherited
+action state, and the ordered branch ancestry. Parent run and checkpoint
+identities come from the verified host run and selected checkpoint; a caller
+cannot supply unverified labels. Nested ancestry is read from immutable branch
+evidence and does not follow a stored parent path into another host run.
+
+For a registered pump child, the initial state ID and sequence equal the chosen
+parent snapshot. The initial-state source records the complete parent and group
+provenance. Public temporal evidence is available in the child, but parent
+private retrieval records, active session authority, and handover selection are
+not inherited. A child of a child appends its direct parent branch to the
+existing ordered ancestor list.
+
+The coupled rollout files remain only as temporary migration evidence until
+the stable path proves V2 parity. The footprint gate moves the useful tests to
+behavior names and retires the duplicate rollout control and interface before
+transport work starts.
+
+The footprint gate uses `origin/main` as its fixed baseline. Net production
+growth must be no more than 16,500 lines before Step 9 starts. Delete the
+replaced coupled agent, Harbor, interface, rollout, run, and temporal paths
+after their callers use the canonical interfaces. Move only behavior that has
+no canonical owner from the remaining coupled runtime, work, evaluation, and
+execution modules. Then delete those old owners. Do not meet the limit by
+moving the same implementation to another file or by removing required
+verification.
 
 ## 7. Implementation sequence
 
@@ -697,10 +781,11 @@ merged.
 5. V4 pump transitions and replay through the existing run, state machine, and verifier.
 6. V4 session ownership through the existing session and separate actor and host-control interfaces.
 7. Existing rollout path extension and generic branch orchestration.
-8. Catalogue-driven CLI, Harbor, and agent execution.
-9. Verification and evaluation integration, duplicate retirement, research and test cleanup, and the requirement-by-requirement final merge audit.
+8. Footprint gate: classify every production addition, remove replaced coupled and parallel runtime paths, consolidate duplicate coverage, and measure the net production change against `origin/main`. Do not start transport work while two run, session, rollout, replay, or treatment paths remain, or while net production growth is above 16,500 lines.
+9. Catalogue-driven CLI, Harbor, and agent execution.
+10. Verification and evaluation integration, final research and test cleanup, and the requirement-by-requirement final merge audit.
 
-The ASW-8 pull request remains draft until item 9 passes.
+The ASW-8 pull request remains draft until item 10 passes.
 
 ## 8. Final gates
 
