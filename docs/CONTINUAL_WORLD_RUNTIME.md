@@ -429,10 +429,8 @@ same-account process. The existing `ledger/durability.py` source was already in
 the default kernel executor inventory, so this step adds no new executor source
 path or operation-specific identity.
 
-The raw function does not acquire a lock. Normal pump transitions use the
-existing run lock, but `publish_staged_transition()` does not enforce that lock
-when called directly. Closing this pre-existing adapter gap remains pointer
-policy work; it must happen before the pointer contract can move downwards.
+The raw function does not acquire a lock. The pump adapter owns its existing
+run lock and the pump-specific selection policy described in Section 6.13.
 
 An error after the descriptor-relative replacement has an unknown commit
 result: the new bytes can already be visible even when later verification,
@@ -443,9 +441,10 @@ has no scavenger. Process-death tests prove old-or-new atomic visibility. A real
 power-loss guarantee also depends on the filesystem and storage honoring
 `fsync`.
 
-Step 3 remains incomplete after Step 3C. Shared pointer policy, transaction publication,
-replay, recovery, sessions, branches, rollouts, CLI, and Harbor behavior remain
-deferred until two real consumers prove the same task-neutral contract.
+Step 3 remains incomplete after Step 3C. Shared pointer policy, transaction
+publication, replay, recovery, sessions, branches, rollouts, CLI, and Harbor
+behavior remain deferred until two real consumers prove the same task-neutral
+contract.
 
 ### 6.12 Step 3D durable directory-tree creation
 
@@ -475,6 +474,34 @@ repair its commit marker. Pump replay follows parent commit identities from the
 selected pointer, while SSC-03 replay follows state-owned actions through its
 resolver. These are different task and lifecycle policies. Combining them now
 would create a new abstraction without two proven consumers.
+
+### 6.13 Pump staged publication lock ownership
+
+Before V4 uses the existing pump repository, every path that selects a staged
+transition must own the pump run lock. This is pump pointer policy. It is not a
+shared pointer or transaction contract.
+
+| Path | Owner | Compatibility and migration rule |
+| --- | --- | --- |
+| `wastewater_pump_station/world_run_repository.py` | Pump durability adapter | Make public `publish_staged_transition()` acquire `.world-run.lock` before it reads `current.json`, checks idempotence or staleness, validates immutable evidence, and replaces the pointer. Keep one private lock-required selection helper for callers that already own that lock. |
+| `wastewater_pump_station/world_run.py` | Pump run coordinator | Keep one continuous lock across current-state read, request retry checks, transition evaluation, immutable staging, and pointer selection. Call the private lock-required helper to avoid a nested non-reentrant lock. |
+| `src/aec_bench/ledger/` and `task_world_templates/continual/` | Lower durability | Make no change. Raw immutable publication and mutable byte replacement remain lock-free caller-owned mechanics. |
+
+Two direct publishers prepared from one prior snapshot are serialized. The
+first selected transition wins; the second receives `stale-publication`. An
+exact retry is accepted only when the durable parent commit, staged commit, and
+next snapshot form one consistent chain and both commit files are present with
+their declared content identities. The receipt's pre-state and the actor or
+control input's parent binding must pass the same rule used by full chain
+replay. The returned transition is reloaded from that durable commit, not
+trusted from the caller's staged object. A valid retry creates no new commit or
+task effect. Process death before or after the pointer replacement releases the
+operating-system lock. Reload and exact retry then select or recover the same
+transition once.
+
+This correction does not promote `current.json`, commit-chain meaning, replay,
+or recovery into the shared continual-world layer. It only closes the pump
+adapter path that Step 4 will reuse.
 
 ## 7. Implementation sequence
 

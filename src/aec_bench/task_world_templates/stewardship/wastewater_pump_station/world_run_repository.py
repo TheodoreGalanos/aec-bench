@@ -423,15 +423,21 @@ class PumpStationWorldRunRepository:
         self,
         staged: PumpStationStagedTransition,
     ) -> PumpStationTransition:
-        """Select a fully staged transition with one atomic pointer replacement."""
+        """Lock and select a fully staged transition with one pointer replacement."""
+        with self.locked():
+            return self._publish_staged_transition_under_lock(staged)
+
+    def _publish_staged_transition_under_lock(
+        self,
+        staged: PumpStationStagedTransition,
+    ) -> PumpStationTransition:
+        """Select one staged transition while the caller owns the run lock."""
+        transition = self._require_staged_transition_identity(staged)
         current = self.current_snapshot()
         if current == staged.snapshot:
-            return self.load_transition(staged.commit)
+            return transition
         if current != staged.prior_snapshot:
             _fail("stale-publication", "world run advanced after transition preparation")
-        if pump_station_artifact_id(staged.commit) != staged.snapshot.commit_id:
-            _fail("transition-integrity", "staged commit identity differs")
-        self.load_transition(staged.commit)
         self._replace_current(
             PumpStationCurrentRunPointer(
                 serialization_version=PUMP_STATION_SERIALIZATION_VERSION,
@@ -441,7 +447,74 @@ class PumpStationWorldRunRepository:
                 commit_id=staged.snapshot.commit_id,
             )
         )
-        return staged.transition
+        return transition
+
+    def _require_staged_transition_identity(
+        self,
+        staged: PumpStationStagedTransition,
+    ) -> PumpStationTransition:
+        """Require one durable parent, commit, and next-snapshot identity chain."""
+        prior = staged.prior_snapshot
+        snapshot = staged.snapshot
+        commit = staged.commit
+        if (
+            pump_station_artifact_id(commit) != snapshot.commit_id
+            or commit.run_id != snapshot.run_id
+            or commit.sequence != snapshot.sequence
+            or commit.parent_commit_id != prior.commit_id
+            or commit.state_id != snapshot.state_id
+            or snapshot.snapshot_version != prior.snapshot_version
+            or snapshot.run_id != prior.run_id
+            or snapshot.episode_id != prior.episode_id
+            or snapshot.world_branch_id != prior.world_branch_id
+            or snapshot.sequence != prior.sequence + 1
+        ):
+            _fail("transition-integrity", "staged snapshot and commit chain differ")
+        if self.load_commit(snapshot.commit_id) != commit:
+            _fail("transition-integrity", "stored staged commit differs")
+        parent = self.load_commit(prior.commit_id)
+        if parent.run_id != prior.run_id or parent.sequence != prior.sequence or parent.state_id != prior.state_id:
+            _fail("transition-integrity", "staged prior snapshot and commit differ")
+        durable_input, information_set, transition = self._load_step(commit)
+        if not self._step_extends_parent(
+            parent,
+            commit,
+            durable_input,
+            information_set,
+            transition,
+        ):
+            _fail("transition-integrity", "staged transition does not extend its parent")
+        return transition
+
+    @staticmethod
+    def _step_extends_parent(
+        parent: PumpStationWorldRunCommit,
+        commit: PumpStationWorldRunCommit,
+        durable_input: PumpStationDurableInput,
+        information_set: PumpStationInformationSet | None,
+        transition: PumpStationTransition,
+    ) -> bool:
+        """Return whether one durable step is bound to its exact parent commit."""
+        parent_content_id = pump_station_artifact_id(parent)
+        if (
+            commit.sequence != parent.sequence + 1
+            or commit.parent_commit_id != parent_content_id
+            or transition.receipt.pre_state_id != parent.state_id
+        ):
+            return False
+        if _is_control_input(durable_input):
+            return (
+                information_set is None
+                and durable_input.based_on_sequence == parent.sequence
+                and durable_input.base_state_id == parent.state_id
+                and durable_input.base_commit_id == parent_content_id
+            )
+        proposal = cast(PumpStationProposal, durable_input)
+        return (
+            information_set is not None
+            and proposal.context.based_on_sequence == parent.sequence
+            and information_set.base_view.current_state.state_sequence == parent.sequence
+        )
 
     def find_committed_proposal(
         self,
@@ -750,28 +823,14 @@ class PumpStationWorldRunRepository:
             _fail("artifact-integrity", "initial commit differs from manifest")
         previous = chain[0]
         for commit in chain[1:]:
-            if commit.sequence != previous.sequence + 1:
-                _fail("artifact-integrity", "commit sequence is not contiguous")
             durable_input, information_set, transition = self._load_step(commit)
-            extends_parent = (
-                commit.parent_commit_id == pump_station_artifact_id(previous)
-                and transition.receipt.pre_state_id == previous.state_id
-            )
-            if _is_control_input(durable_input):
-                input_matches_parent = (
-                    information_set is None
-                    and durable_input.based_on_sequence == previous.sequence
-                    and durable_input.base_state_id == previous.state_id
-                    and durable_input.base_commit_id == pump_station_artifact_id(previous)
-                )
-            else:
-                proposal = cast(PumpStationProposal, durable_input)
-                input_matches_parent = (
-                    information_set is not None
-                    and proposal.context.based_on_sequence == previous.sequence
-                    and information_set.base_view.current_state.state_sequence == previous.sequence
-                )
-            if not extends_parent or not input_matches_parent:
+            if not self._step_extends_parent(
+                previous,
+                commit,
+                durable_input,
+                information_set,
+                transition,
+            ):
                 _fail("artifact-integrity", "commit does not extend its parent")
             previous = commit
         if (
