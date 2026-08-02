@@ -1,0 +1,15 @@
+{
+  "active_restriction_ids": [
+    "restriction-0000-pump-a-run-in",
+    "restriction-0000-pump-b-work"
+  ],
+  "final_state_id": "498bf767eeb6e66ace0aa0eda3a812703c0e6b07408cae13917a1cb040bcbc39",
+  "issues": [],
+  "open_obligation_ids": [
+    "obligation-0000-pump-a-verification"
+  ],
+  "replayed_transition_ids": [
+    "transition-0001"
+  ],
+  "valid": true
+}

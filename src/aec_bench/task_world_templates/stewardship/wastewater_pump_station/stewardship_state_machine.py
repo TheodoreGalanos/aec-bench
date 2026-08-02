@@ -29,6 +29,13 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
     PumpStationModel,
     PumpStationState,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_treatments import (
+    PUMP_STATION_PHYSICAL_TREATMENT_DECISION_RIGHT,
+    PUMP_STATION_PHYSICAL_TREATMENT_VERSION,
+    PUMP_STATION_PHYSICAL_TREATMENT_VISIBILITY,
+    PumpStationPhysicalTreatmentActivationRequest,
+    apply_physical_treatment_effect,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_events import (
     apply_scheduled_event as _apply_scheduled_event,
 )
@@ -612,6 +619,49 @@ def apply_evidence_treatment_schedule(
         authority=None,
         execution=PumpStationExecutionOutcome.SCHEDULED,
         evidence_treatments_changed=(treatment.treatment_id,),
+    )
+
+
+def apply_physical_treatment_activation(
+    state: PumpStationStewardshipState,
+    request: PumpStationPhysicalTreatmentActivationRequest,
+) -> PumpStationTransition:
+    """Realise one private governed treatment at its declared child clock."""
+
+    if (
+        request.treatment_version != PUMP_STATION_PHYSICAL_TREATMENT_VERSION
+        or request.visibility_policy != PUMP_STATION_PHYSICAL_TREATMENT_VISIBILITY
+        or request.decision_right_id != PUMP_STATION_PHYSICAL_TREATMENT_DECISION_RIGHT
+    ):
+        raise PumpStationProposalError(
+            "physical-treatment-policy",
+            "treatment version, visibility, or decision right is unsupported",
+        )
+    if request.based_on_sequence != state.sequence or request.base_state_id != _state_id(state):
+        raise PumpStationProposalError(
+            "physical-treatment-binding",
+            "activation request is not bound to the selected child state",
+        )
+    if state.physical.calendar_seconds < request.activation_calendar_seconds:
+        raise PumpStationProposalError(
+            "physical-treatment-clock",
+            "the child has not reached the declared activation clock",
+        )
+    available_pumps = {pump.pump_id for pump in state.physical.pumps}
+    if not request.affected_pump_ids or not set(request.affected_pump_ids) <= available_pumps:
+        raise PumpStationProposalError(
+            "physical-treatment-scope",
+            "affected pumps are not present in the child state",
+        )
+    candidate, change = apply_physical_treatment_effect(state, request)
+    return _finish_transition(
+        state,
+        candidate,
+        trigger="host-control:physical-treatment-activation",
+        proposal_id=None,
+        authority=None,
+        execution=PumpStationExecutionOutcome.COMPLETED,
+        physical_change=change,
     )
 
 

@@ -420,6 +420,7 @@ class PumpStationChangeKind(StrEnum):
     DUTY_TRANSFER = "duty-transfer"
     CLEAR_OBSTRUCTION = "clear-obstruction"
     REPAIR_CLEARANCE = "repair-clearance"
+    GOVERNED_TREATMENT = "governed-treatment"
 
 
 @dataclass(frozen=True, slots=True)

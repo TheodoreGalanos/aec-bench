@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -28,6 +28,23 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_e
     PUMP_STATION_HARBOR_EXECUTION_KIND,
     PumpStationHarborBridge,
     is_pump_station_harbor_inventory_artifact,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_treatments import (
+    PUMP_STATION_PHYSICAL_TREATMENT_DECISION_RIGHT,
+    PUMP_STATION_PHYSICAL_TREATMENT_VERSION,
+    PUMP_STATION_PHYSICAL_TREATMENT_VISIBILITY,
+    PumpStationPhysicalTreatmentClass,
+    PumpStationPhysicalTreatmentRequest,
+    PumpStationTreatmentSeverity,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rollout_control import (
+    PumpStationRolloutControl,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rollout_models import (
+    PumpStationPhysicalTreatmentActivationReceipt,
+    PumpStationRolloutChildRequest,
+    PumpStationRolloutGroupRequest,
+    PumpStationRolloutLineage,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationVerificationReport,
@@ -80,6 +97,258 @@ class CompletedPumpStationModelSession:
     verification: PumpStationVerificationReport
     adapter_result: AdapterResult
     output_dir: Path
+
+
+@dataclass(frozen=True)
+class CompletedPumpStationRolloutSession:
+    """Local Harbor result for paired control and treated rollout children."""
+
+    lineage: PumpStationRolloutLineage
+    treatment_activation: PumpStationPhysicalTreatmentActivationReceipt
+    control_verification: PumpStationVerificationReport
+    treated_verification: PumpStationVerificationReport
+    output_dir: Path
+
+
+@dataclass(frozen=True)
+class CompletedPumpStationRolloutModelSession:
+    """Bounded model check over one existing isolated rollout child."""
+
+    result: WorldSessionResult
+    verification: PumpStationVerificationReport
+    adapter_result: AdapterResult
+    output_dir: Path
+
+
+def run_pump_station_rollout_model_session(
+    *,
+    control: PumpStationRolloutControl,
+    group_id: str,
+    child_id: str,
+    output_dir: Path,
+    session_identity: str,
+    model: str,
+    forbidden_private_tokens: tuple[str, ...],
+    max_turns: int = 4,
+    registry: Any | None = None,
+) -> CompletedPumpStationRolloutModelSession:
+    """Let one model inspect and act on a child without private rollout metadata."""
+
+    identity = session_identity.strip()
+    model_name = model.strip()
+    if not identity or not model_name:
+        raise ValueError("rollout model session requires identity and model")
+    if max_turns < 1:
+        raise ValueError("rollout model session max turns must be positive")
+    destination = Path(output_dir)
+    if destination.exists():
+        raise FileExistsError(f"rollout model output already exists: {destination}")
+    destination.mkdir(parents=True)
+    session = control.open_actor_session(
+        group_id=group_id,
+        child_id=child_id,
+        session_id=f"session.{identity}",
+        agent_tenure_id=f"tenure.{identity}",
+    )
+    trajectory = TrajectoryWriter(path=str(destination / "trajectory.jsonl"))
+    try:
+        resolved_registry = registry or _local_adapter_registry()
+        adapter = resolved_registry.build(
+            adapter_kind="tool_loop",
+            model_name=model_name,
+            workspace=str(destination),
+            trajectory_writer=trajectory,
+            native_tools=session.native_tools,
+            enable_bash=False,
+        )
+        adapter_result = adapter.execute(
+            AdapterRequest(
+                instruction=(
+                    "Observe the station. Use the closed tools to make one supported "
+                    "condition assessment. If current evidence is not sufficient, request "
+                    "one condition check or inspection. Do not infer a hidden cause. Stop "
+                    "after the diagnostic action and give a short factual summary."
+                ),
+                system_prompt=(
+                    "You are the accountable wastewater pump-station steward. Use only "
+                    "the current actor view and declared tools. Never invent hidden state, "
+                    "future events, other runs, or treatment causes."
+                ),
+                tools=list(session.tool_specs),
+                configuration={"max_turns": max_turns},
+                output_path=str(destination / "output.md"),
+                output_format="markdown",
+            )
+        )
+    finally:
+        trajectory.close()
+    private_surface = "\n".join(
+        (
+            adapter_result.raw_output_text or "",
+            *(entry.content or "" for entry in adapter_result.transcript),
+        )
+    )
+    leaked = tuple(token for token in forbidden_private_tokens if token and token in private_surface)
+    if leaked:
+        raise ValueError(f"rollout model output exposed private tokens: {leaked}")
+    verification = session.verify()
+    _write_model_evidence(
+        destination=destination,
+        adapter_result=adapter_result,
+        model=model_name,
+        max_turns=max_turns,
+    )
+    _write_json(
+        destination / "world-session-result.json",
+        session.result.model_dump(mode="json"),
+    )
+    _write_json(
+        destination / "verification-report.json",
+        _verification_payload(verification),
+    )
+    _write_json(
+        destination / "privacy-check.json",
+        {
+            "forbidden_token_count": len(forbidden_private_tokens),
+            "leaked_tokens": list(leaked),
+            "passed": not leaked,
+        },
+    )
+    return CompletedPumpStationRolloutModelSession(
+        result=session.result,
+        verification=verification,
+        adapter_result=adapter_result,
+        output_dir=destination,
+    )
+
+
+def run_pump_station_rollout_reference_session(
+    *,
+    bridge: PumpStationHarborBridge,
+    output_dir: Path,
+    session_identity: str,
+) -> CompletedPumpStationRolloutSession:
+    """Run paired isolated rollout children and one governed treatment through Harbor."""
+
+    if not bridge.evidence_health:
+        raise ValueError("pump-station Harbor bridge does not enable evidence health")
+    identity = session_identity.strip()
+    if not identity:
+        raise ValueError("pump-station Harbor rollout identity is required")
+    destination = Path(output_dir)
+    if destination.exists():
+        raise FileExistsError(f"world-session output already exists: {destination}")
+    destination.mkdir(parents=True)
+    parent_root = destination / "parent-world"
+    parent = PumpStationWorldSessionFactory(
+        parent_root,
+        package_root=bridge.package_root,
+        evidence_health=True,
+    ).open(_world_session_request(f"{identity}.parent"))
+    parent_snapshot = parent.run.snapshot()
+    request = PumpStationRolloutGroupRequest(
+        request_id=f"rollout.{identity}",
+        group_id=f"group.{identity}",
+        task_world_id=PUMP_STATION_TASK_WORLD_ID,
+        authority_id="harbor-rollout-control",
+        parent_snapshot=parent_snapshot,
+        origin_verification_id="harbor-verified-current-world-state",
+        information_boundary_id="pump-station-actor-view.v3",
+        event_schedule_id="harbor-fixed-future-schedule.v1",
+        fixed_future_condition_id="harbor-fixed-future.v1",
+        future_condition_seed=41,
+        split_group_id=f"split.{identity}",
+        children=(
+            PumpStationRolloutChildRequest(
+                child_id="control",
+                run_id=f"run.{identity}.control",
+                world_branch_id=f"branch.{identity}.control",
+                agent_condition_id="reference-controller.control",
+                agent_seed=101,
+            ),
+            PumpStationRolloutChildRequest(
+                child_id="treated",
+                run_id=f"run.{identity}.treated",
+                world_branch_id=f"branch.{identity}.treated",
+                agent_condition_id="reference-controller.treated",
+                agent_seed=202,
+            ),
+        ),
+    )
+    control = PumpStationRolloutControl(
+        parent_repository_root=parent_root,
+        rollout_repository_root=destination / "rollouts",
+        authorised_principal_ids=("harbor-rollout-control",),
+        package_root=bridge.package_root,
+        evidence_health=True,
+    )
+    lineage = control.create_group(request)
+    control_child = control.open_actor_session(
+        group_id=request.group_id,
+        child_id="control",
+        session_id=f"session.{identity}.control",
+        agent_tenure_id=f"tenure.{identity}.control",
+    )
+    treated_child = control.open_actor_session(
+        group_id=request.group_id,
+        child_id="treated",
+        session_id=f"session.{identity}.treated",
+        agent_tenure_id=f"tenure.{identity}.treated",
+    )
+    treated_snapshot = treated_child.run.snapshot()
+    treatment = PumpStationPhysicalTreatmentRequest(
+        request_id=f"treatment.{identity}.recurrence",
+        task_world_id=PUMP_STATION_TASK_WORLD_ID,
+        authority_id="harbor-rollout-control",
+        group_id=request.group_id,
+        child_id="treated",
+        child_run_id=treated_snapshot.run_id,
+        child_episode_id=treated_snapshot.episode_id,
+        child_world_branch_id=treated_snapshot.world_branch_id,
+        base_state_id=treated_snapshot.state_id,
+        base_commit_id=treated_snapshot.commit_id,
+        based_on_sequence=treated_snapshot.sequence,
+        parent_state_id=parent_snapshot.state_id,
+        treatment_class=PumpStationPhysicalTreatmentClass.RECURRENT_OBSTRUCTION,
+        treatment_version=PUMP_STATION_PHYSICAL_TREATMENT_VERSION,
+        affected_pump_ids=("pump-a",),
+        activation_calendar_seconds=treated_child.run.state.physical.calendar_seconds,
+        severity=PumpStationTreatmentSeverity.MODERATE,
+        random_stream_id=f"harbor-stream.{identity}",
+        random_seed=41,
+        visibility_policy=PUMP_STATION_PHYSICAL_TREATMENT_VISIBILITY,
+        decision_right_id=PUMP_STATION_PHYSICAL_TREATMENT_DECISION_RIGHT,
+    )
+    control.schedule_treatment(treatment)
+    treatment_activation = control.recover_treatment(
+        group_id=request.group_id,
+        child_id="treated",
+        treatment_request_id=treatment.request_id,
+    )
+    control_verification = control_child.verify()
+    treated_verification = treated_child.verify()
+    if not control_verification.valid or not treated_verification.valid:
+        raise ValueError("local Harbor rollout children did not replay")
+    _write_json(destination / "rollout-lineage.json", asdict(lineage))
+    _write_json(
+        destination / "treatment-activation.json",
+        asdict(treatment_activation),
+    )
+    _write_json(
+        destination / "control-verification.json",
+        _verification_payload(control_verification),
+    )
+    _write_json(
+        destination / "treated-verification.json",
+        _verification_payload(treated_verification),
+    )
+    return CompletedPumpStationRolloutSession(
+        lineage=lineage,
+        treatment_activation=treatment_activation,
+        control_verification=control_verification,
+        treated_verification=treated_verification,
+        output_dir=destination,
+    )
 
 
 def run_pump_station_reference_session(
@@ -661,9 +930,7 @@ def run_pump_station_model_session(
             start_snapshot=start_snapshot.model_dump(mode="json"),
             end_snapshot=session.result.snapshot.model_dump(mode="json"),
             tool_names=(
-                PUMP_STATION_TEMPORAL_EVIDENCE_TOOL_NAMES
-                if bridge.temporal_evidence
-                else session.result.tool_names
+                PUMP_STATION_TEMPORAL_EVIDENCE_TOOL_NAMES if bridge.temporal_evidence else session.result.tool_names
             ),
         ),
     )
@@ -767,12 +1034,7 @@ def _artifact_inventory(
     }
     if bridge.temporal_evidence:
         capability = TemporalEvidenceCapability.model_validate(
-            _read_json(
-                output_dir
-                / "world-run"
-                / "temporal-evidence"
-                / "capability.json"
-            )
+            _read_json(output_dir / "world-run" / "temporal-evidence" / "capability.json")
         )
         temporal_report = TemporalEvidenceVerificationReport.model_validate(
             _read_json(output_dir / "temporal-verification-report.json")
@@ -852,8 +1114,7 @@ def _model_system_prompt(
             "Recheck dependencies and resources before resume or cancellation. "
             "Never invent evidence or hidden state. Stop only when Pump A has "
             "passed post-maintenance verification, Pump B has passed functional "
-            "checks, and no live work or follow-up remains."
-            + temporal_direction
+            "checks, and no live work or follow-up remains." + temporal_direction
         )
     return (
         "You are the accountable wastewater pump-station steward. "
@@ -890,8 +1151,7 @@ def _model_instruction(
             "Pump A verification, resume and complete Pump B inspection, then request "
             "obstruction clearance with the live inspection evidence. If work is "
             "suspended, wait for access and resume it. Continue through clearance and "
-            "functional checks. Use a unique proposal identifier for every action."
-            + temporal_direction
+            "functional checks. Use a unique proposal identifier for every action." + temporal_direction
         )
     return (
         "Start by observing the pump station. Follow this order exactly and use "
@@ -1006,6 +1266,8 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 __all__ = (
+    "CompletedPumpStationRolloutModelSession",
+    "CompletedPumpStationRolloutSession",
     "CompletedPumpStationReferenceSession",
     "CompletedPumpStationModelSession",
     "PUMP_STATION_HARBOR_RUN_SCHEMA_VERSION",
@@ -1016,4 +1278,6 @@ __all__ = (
     "run_pump_station_model_session",
     "run_pump_station_rich_work_reference_session",
     "run_pump_station_reference_session",
+    "run_pump_station_rollout_reference_session",
+    "run_pump_station_rollout_model_session",
 )

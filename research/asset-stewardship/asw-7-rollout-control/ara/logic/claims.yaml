@@ -1,0 +1,73 @@
+claims:
+  - id: C001
+    statement: A verified current world snapshot can create two or more isolated children without changing the parent.
+    status: supported
+    falsification_criteria:
+      - Any child starts from a different state, the parent head moves, or one child write changes a sibling.
+    proof:
+      experiments: [E001]
+      evidence: [EV001, EV002]
+    dependencies: []
+    provenance: ai_executed
+    tags: [rollout, isolation, lineage]
+    domain: {}
+  - id: C002
+    statement: Interrupted rollout creation recovers the same declared children and complete lineage without duplicates.
+    status: supported
+    falsification_criteria:
+      - Retry creates an extra child, changes an existing branch, or publishes different lineage.
+    proof:
+      experiments: [E001]
+      evidence: [EV001, EV002]
+    dependencies: [C001]
+    provenance: ai_executed
+    tags: [recovery, idempotency]
+    domain: {}
+  - id: C003
+    statement: A closed governed treatment changes only its eligible child at the declared clock and replays without exposing private treatment facts.
+    status: supported
+    falsification_criteria:
+      - A treatment mutates the parent or sibling, applies twice, cannot replay, or exposes its label or schedule in the actor view.
+    proof:
+      experiments: [E001]
+      evidence: [EV001, EV002]
+    dependencies: [C001]
+    provenance: ai_executed
+    tags: [treatment, replay, privacy]
+    domain: {}
+  - id: C004
+    statement: Direct Python, installed JSON, and local Harbor use the same rollout and treatment semantics.
+    status: supported
+    falsification_criteria:
+      - Any transport cannot create the group, activate the treatment, or verify both children.
+    proof:
+      experiments: [E001]
+      evidence: [EV001, EV002]
+    dependencies: [C001, C003]
+    provenance: ai_executed
+    tags: [interface, harbor]
+    domain: {}
+  - id: C005
+    statement: The approved Bedrock model completes a bounded agent check on the treated child.
+    status: rejected
+    falsification_criteria:
+      - The provider rejects the call before model inference or the agent receives private rollout facts.
+    proof:
+      experiments: [E002]
+      evidence: [EV003, EV004, EV005]
+    dependencies: [C003]
+    provenance: ai_executed
+    tags: [agent, bedrock, provider-failure]
+    domain: {}
+  - id: C006
+    statement: Native agent tools remove transport-only evidence fields before task proposal validation.
+    status: supported
+    falsification_criteria:
+      - A non-temporal native tool rejects an empty evidence-reliance list or temporal evidence reliance stops recording.
+    proof:
+      experiments: [E003]
+      evidence: [EV001]
+    dependencies: []
+    provenance: ai_executed
+    tags: [agent-tools, temporal-evidence]
+    domain: {}

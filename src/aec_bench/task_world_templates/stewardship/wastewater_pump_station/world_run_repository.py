@@ -12,10 +12,13 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import NoReturn, cast
+from typing import NoReturn, TypeGuard, cast
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
     PumpStationEvidenceTreatmentRequest,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_treatments import (
+    PumpStationPhysicalTreatmentActivationRequest,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
     stewardship_state_id,
@@ -79,7 +82,23 @@ _PROPOSAL_TYPES: dict[str, type[object]] = {
     )
 }
 
-type PumpStationDurableInput = PumpStationProposal | PumpStationEvidenceTreatmentRequest
+type PumpStationControlInput = PumpStationEvidenceTreatmentRequest | PumpStationPhysicalTreatmentActivationRequest
+type PumpStationDurableInput = PumpStationProposal | PumpStationControlInput
+
+_CONTROL_TYPES: dict[str, type[PumpStationControlInput]] = {
+    item.__name__: item
+    for item in (
+        PumpStationEvidenceTreatmentRequest,
+        PumpStationPhysicalTreatmentActivationRequest,
+    )
+}
+
+
+def _is_control_input(value: object) -> TypeGuard[PumpStationControlInput]:
+    return isinstance(
+        value,
+        PumpStationEvidenceTreatmentRequest | PumpStationPhysicalTreatmentActivationRequest,
+    )
 
 
 def _fail(code: str, detail: str) -> NoReturn:
@@ -349,7 +368,7 @@ class PumpStationWorldRunRepository:
         *,
         manifest: PumpStationWorldRunManifest,
         prior_snapshot: PumpStationStateSnapshotRef,
-        control_request: PumpStationEvidenceTreatmentRequest,
+        control_request: PumpStationControlInput,
         transition: PumpStationTransition,
     ) -> PumpStationStagedTransition:
         """Publish one host-control transition without an actor information set."""
@@ -491,7 +510,7 @@ class PumpStationWorldRunRepository:
         steps: list[PumpStationRunStep] = []
         for commit in self.commits()[1:]:
             durable_input, information_set, transition = self._load_step(commit)
-            if isinstance(durable_input, PumpStationEvidenceTreatmentRequest):
+            if _is_control_input(durable_input):
                 steps.append(
                     PumpStationRunStep(
                         proposal=None,
@@ -506,9 +525,10 @@ class PumpStationWorldRunRepository:
                         "artifact-integrity",
                         "proposal commit lacks an information set",
                     )
+                proposal = cast(PumpStationProposal, durable_input)
                 steps.append(
                     PumpStationRunStep(
-                        proposal=durable_input,
+                        proposal=proposal,
                         information_set=information_set,
                         transition=transition,
                     )
@@ -531,11 +551,7 @@ class PumpStationWorldRunRepository:
     ) -> PumpStationTransition:
         """Return a committed retry only when its complete input is identical."""
         stored_input, stored_information_set, transition = self._load_step(commit)
-        if (
-            isinstance(stored_input, PumpStationEvidenceTreatmentRequest)
-            or stored_input != proposal
-            or stored_information_set != information_set
-        ):
+        if _is_control_input(stored_input) or stored_input != proposal or stored_information_set != information_set:
             _fail(
                 "proposal-id-conflict",
                 f"{proposal.context.proposal_id} was already bound to different content",
@@ -545,7 +561,7 @@ class PumpStationWorldRunRepository:
     def validate_repeated_control_request(
         self,
         commit: PumpStationWorldRunCommit,
-        request: PumpStationEvidenceTreatmentRequest,
+        request: PumpStationControlInput,
     ) -> PumpStationTransition:
         """Return one committed control retry only when its input is identical."""
         stored_input, information_set, transition = self._load_step(commit)
@@ -559,10 +575,10 @@ class PumpStationWorldRunRepository:
     def recover_control_request(
         self,
         commit: PumpStationWorldRunCommit,
-    ) -> tuple[PumpStationEvidenceTreatmentRequest, PumpStationTransition]:
+    ) -> tuple[PumpStationControlInput, PumpStationTransition]:
         """Reload one immutable host-control input and its transition."""
         stored_input, information_set, transition = self._load_step(commit)
-        if not isinstance(stored_input, PumpStationEvidenceTreatmentRequest) or information_set is not None:
+        if not _is_control_input(stored_input) or information_set is not None:
             _fail("artifact-integrity", "commit is not a host-control transition")
         return stored_input, transition
 
@@ -604,14 +620,20 @@ class PumpStationWorldRunRepository:
         }:
             _fail("artifact-integrity", "transition commit lacks evidence references")
         control_step = commit.information_set_content_id is None
+        durable_input: PumpStationDurableInput
         if control_step:
-            durable_input: PumpStationDurableInput = load_pump_station_artifact(
-                self._read_content(
-                    "control-requests",
-                    cast(str, commit.proposal_content_id),
-                ),
-                PumpStationEvidenceTreatmentRequest,
+            payload = self._read_content(
+                "control-requests",
+                cast(str, commit.proposal_content_id),
             )
+            try:
+                type_name = json.loads(payload)["$type"]
+            except (json.JSONDecodeError, KeyError, TypeError) as error:
+                _fail("artifact-type", f"stored control input has no valid type: {error}")
+            control_type = _CONTROL_TYPES.get(type_name)
+            if control_type is None:
+                _fail("artifact-type", f"unknown stored control type {type_name!r}")
+            durable_input = load_pump_station_artifact(payload, control_type)
             information_set = None
         else:
             durable_input = self._load_proposal(cast(str, commit.proposal_content_id))
@@ -646,7 +668,7 @@ class PumpStationWorldRunRepository:
             or event_batch.event_types != receipt.applied_event_types
         ):
             _fail("artifact-integrity", "commit evidence does not reconcile")
-        if isinstance(durable_input, PumpStationEvidenceTreatmentRequest):
+        if _is_control_input(durable_input):
             if (
                 information_set is not None
                 or durable_input.request_id != commit.proposal_id
@@ -654,14 +676,16 @@ class PumpStationWorldRunRepository:
                 or not receipt.trigger.startswith("host-control:")
             ):
                 _fail("artifact-integrity", "control commit evidence does not reconcile")
-        elif (
-            information_set is None
-            or pump_station_artifact_id(information_set) != commit.information_set_content_id
-            or durable_input.context.proposal_id != commit.proposal_id
-            or durable_input.context.information_set_id != information_set.information_set_id
-            or receipt.proposal_id != commit.proposal_id
-        ):
-            _fail("artifact-integrity", "proposal commit evidence does not reconcile")
+        else:
+            proposal = cast(PumpStationProposal, durable_input)
+            if (
+                information_set is None
+                or pump_station_artifact_id(information_set) != commit.information_set_content_id
+                or proposal.context.proposal_id != commit.proposal_id
+                or proposal.context.information_set_id != information_set.information_set_id
+                or receipt.proposal_id != commit.proposal_id
+            ):
+                _fail("artifact-integrity", "proposal commit evidence does not reconcile")
         return (
             durable_input,
             information_set,
@@ -713,7 +737,7 @@ class PumpStationWorldRunRepository:
 
     def _reject_control_collision(
         self,
-        request: PumpStationEvidenceTreatmentRequest,
+        request: PumpStationControlInput,
         *,
         parent_commit_id: str,
     ) -> None:
@@ -754,7 +778,7 @@ class PumpStationWorldRunRepository:
                 commit.parent_commit_id == pump_station_artifact_id(previous)
                 and transition.receipt.pre_state_id == previous.state_id
             )
-            if isinstance(durable_input, PumpStationEvidenceTreatmentRequest):
+            if _is_control_input(durable_input):
                 input_matches_parent = (
                     information_set is None
                     and durable_input.based_on_sequence == previous.sequence
@@ -762,9 +786,10 @@ class PumpStationWorldRunRepository:
                     and durable_input.base_commit_id == pump_station_artifact_id(previous)
                 )
             else:
+                proposal = cast(PumpStationProposal, durable_input)
                 input_matches_parent = (
                     information_set is not None
-                    and durable_input.context.based_on_sequence == previous.sequence
+                    and proposal.context.based_on_sequence == previous.sequence
                     and information_set.base_view.current_state.state_sequence == previous.sequence
                 )
             if not extends_parent or not input_matches_parent:

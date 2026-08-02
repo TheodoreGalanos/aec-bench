@@ -1941,6 +1941,35 @@ leakage E2Es must pass before any treatment is used for model rollouts.
 
 **Exit gate:** recurrence types remain distinguishable, controlled world alternatives retain their ASW-7A parent lineage, and counterfactual replay is reproducible without model leakage.
 
+**Implementation trace, 2026-08-02:** ASW-7A and ASW-7B were implemented
+together through distinct task-local contracts. The host can validate the
+current verified origin, create one child or a complete group, inspect partial
+or ready group status, open one isolated actor session, and recover interrupted
+creation without duplicates. Immutable lineage binds the parent and child
+snapshots, package and model identities, record versions, event-schedule hash,
+information boundary, fixed-condition policy and seed, agent condition and
+seed, and split group.
+
+The physical-treatment control contains six closed classes for continuation,
+recurrence, restoration shortfall, maintenance-induced clearance loss,
+common-cause obstruction, and a clearance-repair alternative. Schedule and
+activation receipts bind the parent lineage, child state, activation clock,
+affected and unaffected pumps, severity band, common-random stream, visibility,
+and decision right. A realised treatment is one private durable child-control
+transition. It adds no public latent-state editor and no new world-state
+version.
+
+The final focused provider-free gate passed 26 direct, recovery, replay,
+privacy, installed-JSON, local-Harbor, durable-run, and temporal-session tests.
+The four rollout-control tests passed again after a final repair bound the
+event-schedule digest to the complete parent record profile. One separately
+approved four-turn Bedrock check was attempted before that final repair.
+Bedrock rejected the first call because the local security token was invalid;
+no inference occurred and token use was zero. The captured failed attempt keeps
+its earlier tuple digest and was not regenerated. This provider failure does
+not support an agent claim and does not weaken the provider-free ASW-7
+acceptance evidence. The complete trace is in `asw-7-rollout-control/ara/`.
+
 ### ASW-8 — Coupled assets and endogenous backlog
 
 **Conditional scope:**

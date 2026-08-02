@@ -8,6 +8,9 @@ from dataclasses import dataclass
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
     PumpStationEvidenceTreatmentRequest,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_treatments import (
+    PumpStationPhysicalTreatmentActivationRequest,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PUMP_STATION_AUTHORITY_POLICY_VERSION_V1,
     PUMP_STATION_AUTHORITY_POLICY_VERSION_V2,
@@ -336,4 +339,4 @@ class PumpStationStagedTransition:
     information_set: PumpStationInformationSet | None
     transition: PumpStationTransition
     commit: PumpStationWorldRunCommit
-    control_request: PumpStationEvidenceTreatmentRequest | None = None
+    control_request: PumpStationEvidenceTreatmentRequest | PumpStationPhysicalTreatmentActivationRequest | None = None

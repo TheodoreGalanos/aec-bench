@@ -13,6 +13,9 @@ from aec_bench.contracts.world_interface import (
     WorldControlRequest,
 )
 from aec_bench.contracts.world_session import WorldSessionOpenMode, WorldSessionRequest
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rollout_interface import (
+    PumpStationRolloutControlRequest,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_control import (
     PumpStationEvidenceControlRequest,
 )
@@ -28,7 +31,9 @@ class PumpStationLocalInterfaceRequest(FrozenStrictModel):
     operation: NonEmptyStr
     session_request: WorldSessionRequest | None = None
     action_request: WorldActorActionRequest | None = None
-    control_request: WorldControlRequest | PumpStationEvidenceControlRequest | None = None
+    control_request: (
+        WorldControlRequest | PumpStationEvidenceControlRequest | PumpStationRolloutControlRequest | None
+    ) = None
     authority_id: NonEmptyStr | None = None
     evidence_health: bool = False
 

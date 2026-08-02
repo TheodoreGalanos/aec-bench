@@ -41,6 +41,13 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintena
     PumpStationReviewLocalInterfaceRequest,
     execute_pump_station_review_local_request,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rollout_control import (
+    PumpStationRolloutControl,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rollout_interface import (
+    PumpStationRolloutControlRequest,
+    execute_pump_station_rollout_request,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_control import (
     PumpStationWorldControl,
 )
@@ -120,6 +127,11 @@ def interface_command(
         "--host-authority-id",
         help="Host-only control authority identity",
     ),
+    rollout_dir: Path | None = typer.Option(
+        None,
+        "--rollout-dir",
+        help="Host-private rollout repository directory",
+    ),
 ) -> None:
     """Execute one strict machine-readable actor or host-control request."""
 
@@ -144,26 +156,43 @@ def interface_command(
                 "host control requires --host-authority-id",
                 param_hint="--host-authority-id",
             )
-        control = PumpStationWorldControl(
-            run_dir,
-            authorised_principal_ids=(host_authority_id,),
-            evidence_health=(
-                request.evidence_health
-                or request.control_request is not None
-                and request.control_request.operation
-                in {
-                    "schedule_evidence_treatment",
-                    "inspect_evidence_treatment",
-                    "recover_evidence_treatment",
-                }
-            ),
-        )
-        if request.operation == "capabilities":
-            assert request.authority_id is not None
-            payload = control.capabilities(request.authority_id).model_dump(mode="json")
+        if isinstance(request.control_request, PumpStationRolloutControlRequest):
+            if rollout_dir is None:
+                raise typer.BadParameter(
+                    "rollout control requires --rollout-dir",
+                    param_hint="--rollout-dir",
+                )
+            rollout_control = PumpStationRolloutControl(
+                parent_repository_root=run_dir,
+                rollout_repository_root=rollout_dir,
+                authorised_principal_ids=(host_authority_id,),
+                evidence_health=request.evidence_health,
+            )
+            payload = execute_pump_station_rollout_request(
+                rollout_control,
+                request.control_request,
+            ).model_dump(mode="json")
         else:
-            assert request.control_request is not None
-            payload = control.execute(request.control_request).model_dump(mode="json")
+            control = PumpStationWorldControl(
+                run_dir,
+                authorised_principal_ids=(host_authority_id,),
+                evidence_health=(
+                    request.evidence_health
+                    or request.control_request is not None
+                    and request.control_request.operation
+                    in {
+                        "schedule_evidence_treatment",
+                        "inspect_evidence_treatment",
+                        "recover_evidence_treatment",
+                    }
+                ),
+            )
+            if request.operation == "capabilities":
+                assert request.authority_id is not None
+                payload = control.capabilities(request.authority_id).model_dump(mode="json")
+            else:
+                assert request.control_request is not None
+                payload = control.execute(request.control_request).model_dump(mode="json")
     emit(
         "task pump-station-world interface",
         payload,
