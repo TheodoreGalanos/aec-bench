@@ -88,6 +88,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.time_pre
     format_operating_duration,
     pump_station_datetime,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+    PUMP_STATION_WORLD_MANIFEST_VERSION_V2 as PUMP_STATION_WORLD_MANIFEST_VERSION_V2,
+)
 
 PUMP_STATION_STATE_VERSION_V4 = "pump-station-stewardship-state.v4"
 PUMP_STATION_SNAPSHOT_VERSION_V4 = "pump-station-state-snapshot.v4"
@@ -97,7 +100,6 @@ PUMP_STATION_TRANSITION_RULE_VERSION_V4 = "pump-station-transition-rules.v4"
 PUMP_STATION_ACTOR_PROJECTION_VERSION_V5 = "pump-station-current-state.v5"
 PUMP_STATION_ACTOR_VIEW_SCHEMA_V4 = "pump-station.actor-view.v4"
 PUMP_STATION_INFORMATION_BOUNDARY_V4 = "pump-station-actor-view.v4"
-PUMP_STATION_WORLD_MANIFEST_VERSION_V2 = "pump-station-world-run.v2"
 PUMP_STATION_OPERATIONS_REVIEW_VERSION = "pump-station.operations-boundary-review.v1"
 PUMP_STATION_COUPLED_TREATMENT_VERSION = "pump-station.coupled-treatment.v1"
 PUMP_STATION_PROCESS_OUTCOME_VERSION = "pump-station.process-outcome.v1"

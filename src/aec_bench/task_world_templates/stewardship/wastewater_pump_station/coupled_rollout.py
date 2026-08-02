@@ -17,7 +17,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_run import (
     PumpStationCoupledRun,
     PumpStationCoupledRunRepository,
-    PumpStationInitialStateSource,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
     PumpStationCoupledTreatmentRequest,
@@ -28,6 +27,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
     canonical_stewardship_value,
     stewardship_content_id,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+    PumpStationInitialStateSource,
 )
 
 PUMP_STATION_COUPLED_ROLLOUT_REQUEST_VERSION = "pump-station.rollout-request.v2"

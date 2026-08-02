@@ -15,7 +15,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_in
     pump_station_proposal_from_validated_arguments_v2,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
-    PUMP_STATION_WORLD_MANIFEST_VERSION_V2,
     PumpStationCommonBoundaryRequest,
     PumpStationCoupledTransitionReceipt,
     PumpStationCoupledTreatmentRequest,
@@ -55,6 +54,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
     PUMP_STATION_RECORD_VERSIONS_V4,
+    PUMP_STATION_WORLD_MANIFEST_VERSION_V2,
+    PumpStationInitialStateSource,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
@@ -71,26 +72,6 @@ class PumpStationCoupledRunError(RuntimeError):
     def __init__(self, code: str, detail: str) -> None:
         self.code = code
         super().__init__(f"{code}: {detail}")
-
-
-@dataclass(frozen=True, slots=True)
-class PumpStationInitialStateSource:
-    """Closed root or rollout-parent source for one v2 world manifest."""
-
-    kind: str
-    opening_specification_id: str
-    opening_specification_sha256: str
-    parent_run_id: str | None = None
-    parent_branch_id: str | None = None
-    parent_state_id: str | None = None
-    parent_commit_id: str | None = None
-    rollout_group_request_id: str | None = None
-    child_request_content_id: str | None = None
-    rollout_group_request_content_id: str | None = None
-    parent_manifest_content_id: str | None = None
-    origin_verification_content_id: str | None = None
-    parent_origin_remaining_schedule_sha256: str | None = None
-    ancestor_branch_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

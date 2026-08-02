@@ -454,13 +454,13 @@ def derive_pump_station_review_case(
         raise ValueError("review asset differs from the source package")
     report = verify_stewardship_run(
         model,
-        repository.load_state(source_manifest.initial_state_id),
+        repository.load_legacy_state(source_manifest.initial_state_id),
         repository.steps(),
         record_versions=source_manifest.record_versions,
     )
     if not report.valid or report.final_state_id != snapshot_before.state_id:
         raise ValueError("review source is not replay-valid")
-    state = repository.load_state(snapshot_before.state_id)
+    state = repository.load_legacy_state(snapshot_before.state_id)
     _validate_complete_source(state)
     steps = repository.steps()
     untreated_pack = PumpStationReviewPack(

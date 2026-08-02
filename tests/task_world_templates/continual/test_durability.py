@@ -41,6 +41,14 @@ class _ProcessSignal(Protocol):
     def wait(self, timeout: float | None = None) -> bool: ...
 
 
+class _ProcessBarrier(Protocol):
+    def wait(self, timeout: float | None = None) -> int: ...
+
+
+class _ProcessResultQueue(Protocol):
+    def put(self, value: str) -> None: ...
+
+
 def _acquire_in_child(
     root: Path,
     ready: _ProcessSignal,
@@ -54,6 +62,21 @@ def _acquire_in_child(
     attempting.set()
     with exclusive_local_file_lock(root, "world.lock"):
         acquired.set()
+
+
+def _create_lock_in_child(
+    root: Path,
+    barrier: _ProcessBarrier,
+    results: _ProcessResultQueue,
+) -> None:
+    barrier.wait(5)
+    try:
+        with exclusive_local_file_lock(root, "world.lock"):
+            pass
+    except BaseException as error:
+        results.put(f"{type(error).__name__}: {error}")
+    else:
+        results.put("acquired")
 
 
 def _imported_modules(path: Path) -> set[str]:
@@ -111,6 +134,36 @@ def test_exclusive_local_file_lock_serializes_real_processes(tmp_path: Path) -> 
             process.join()
 
     assert stat.S_IMODE(lock_path.stat().st_mode) == 0o600
+
+
+def test_exclusive_local_file_lock_allows_concurrent_first_acquisition(tmp_path: Path) -> None:
+    root = tmp_path / "run"
+    root.mkdir()
+    context = multiprocessing.get_context("spawn")
+    barrier = context.Barrier(3)
+    results = context.Queue()
+    processes = tuple(
+        context.Process(
+            target=_create_lock_in_child,
+            args=(root, barrier, results),
+        )
+        for _ in range(2)
+    )
+
+    try:
+        for process in processes:
+            process.start()
+        barrier.wait(5)
+        observed = tuple(results.get(timeout=5) for _ in processes)
+        for process in processes:
+            process.join(5)
+        assert observed == ("acquired", "acquired")
+        assert all(process.exitcode == 0 for process in processes)
+    finally:
+        for process in processes:
+            if process.is_alive():
+                process.kill()
+            process.join()
 
 
 @pytest.mark.parametrize("unsafe_kind", ("symbolic-link", "directory"))

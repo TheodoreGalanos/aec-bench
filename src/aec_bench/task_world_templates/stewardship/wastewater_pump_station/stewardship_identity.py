@@ -12,7 +12,7 @@ from enum import Enum
 from typing import Any, cast
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PumpStationStewardshipState,
+    PumpStationStewardshipStateRecord,
 )
 
 _V1_FIELD_EXCLUSIONS = {
@@ -158,6 +158,6 @@ def stewardship_content_id(
     return hashlib.sha256(payload).hexdigest()
 
 
-def stewardship_state_id(state: PumpStationStewardshipState) -> str:
+def stewardship_state_id(state: PumpStationStewardshipStateRecord) -> str:
     """Return the computed identity of one complete stewardship state."""
     return stewardship_content_id(state)

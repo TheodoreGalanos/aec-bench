@@ -230,7 +230,7 @@ class PumpStationWorldSession:
             else None
         )
         state = run.state
-        initial_state = run.repository.load_state(run.manifest.initial_state_id)
+        initial_state = run.repository.load_legacy_state(run.manifest.initial_state_id)
         episode_started_at_seconds = initial_state.physical.calendar_seconds
         tenure_started_at_seconds = (
             stored_information_set.tenure_started_at_seconds
@@ -810,7 +810,7 @@ class PumpStationWorldSession:
 
     def verify(self) -> PumpStationVerificationReport:
         """Replay the durable transition chain through the independent task verifier."""
-        initial_state = self._run.repository.load_state(
+        initial_state = self._run.repository.load_legacy_state(
             self._run.manifest.initial_state_id,
         )
         return verify_stewardship_run(

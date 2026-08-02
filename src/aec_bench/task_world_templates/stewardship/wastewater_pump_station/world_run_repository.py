@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import NoReturn, TypeGuard, cast
@@ -31,10 +31,13 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     stewardship_state_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PUMP_STATION_STATE_VERSION_V4,
     CancelProcess,
     ContinueOperation,
+    PumpStationLegacyStewardshipState,
     PumpStationProposal,
     PumpStationStewardshipState,
+    PumpStationStewardshipStateRecord,
     PumpStationTransition,
     PumpStationTransitionReceipt,
     RequestConditionalDeferral,
@@ -65,6 +68,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     PumpStationWorldRunCommit,
     PumpStationWorldRunError,
     PumpStationWorldRunManifest,
+    PumpStationWorldRunManifestRecord,
+    PumpStationWorldRunManifestV2,
     PumpStationWorldRunMigration,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_serialization import (
@@ -154,10 +159,12 @@ class PumpStationWorldRunRepository:
 
     def initialize(
         self,
-        manifest: PumpStationWorldRunManifest,
-        initial_state: PumpStationStewardshipState,
+        manifest: PumpStationWorldRunManifestRecord,
+        initial_state: PumpStationStewardshipStateRecord,
+        *,
+        before_select: Callable[[], None] | None = None,
     ) -> PumpStationStateSnapshotRef:
-        """Publish an immutable initial state and select it atomically."""
+        """Publish initial evidence, complete required setup, and select it atomically."""
         with self.locked():
             if stewardship_state_id(initial_state) != manifest.initial_state_id:
                 _fail("world-run-identity", "initial state differs from manifest")
@@ -165,6 +172,7 @@ class PumpStationWorldRunRepository:
                 "pump-station-state-snapshot.v1": "pump-station-stewardship-state.v1",
                 "pump-station-state-snapshot.v2": "pump-station-stewardship-state.v2",
                 "pump-station-state-snapshot.v3": "pump-station-stewardship-state.v3",
+                "pump-station-state-snapshot.v4": "pump-station-stewardship-state.v4",
             }[manifest.snapshot_version]
             if initial_state.state_version != expected_state_version:
                 _fail("state-version", "state and snapshot versions differ")
@@ -193,6 +201,8 @@ class PumpStationWorldRunRepository:
             )
             commit_id = pump_station_artifact_id(commit)
             self._publish_content("commits", commit_id, commit)
+            if before_select is not None:
+                before_select()
             pointer = PumpStationCurrentRunPointer(
                 serialization_version=PUMP_STATION_SERIALIZATION_VERSION,
                 run_id=manifest.run_id,
@@ -203,11 +213,14 @@ class PumpStationWorldRunRepository:
             self._replace_current(pointer)
             return self._snapshot(manifest, pointer)
 
-    def load_manifest(self) -> PumpStationWorldRunManifest:
+    def load_manifest(self) -> PumpStationWorldRunManifestRecord:
         """Reload the immutable run identity."""
-        return load_pump_station_artifact(
-            self._read(self._root / "manifest.json", "world-run manifest"),
-            PumpStationWorldRunManifest,
+        return cast(
+            PumpStationWorldRunManifestRecord,
+            load_pump_station_artifact(
+                self._read(self._root / "manifest.json", "world-run manifest"),
+                PumpStationWorldRunManifest | PumpStationWorldRunManifestV2,
+            ),
         )
 
     def current_snapshot(self) -> PumpStationStateSnapshotRef:
@@ -226,7 +239,7 @@ class PumpStationWorldRunRepository:
         self.load_state(pointer.state_id)
         return self._snapshot(manifest, pointer)
 
-    def load_state(self, state_id: str) -> PumpStationStewardshipState:
+    def load_state(self, state_id: str) -> PumpStationStewardshipStateRecord:
         """Reload a complete state and verify its semantic identity."""
         state = load_pump_station_artifact(
             self._read_content("states", state_id),
@@ -235,6 +248,13 @@ class PumpStationWorldRunRepository:
         if stewardship_state_id(state) != state_id:
             _fail("artifact-integrity", f"state identity differs for {state_id}")
         return state
+
+    def load_legacy_state(self, state_id: str) -> PumpStationLegacyStewardshipState:
+        """Reload one state only when its record profile is legacy V1 to V3."""
+        state = self.load_state(state_id)
+        if state.state_version == PUMP_STATION_STATE_VERSION_V4:
+            _fail("record-versions", "legacy state access selected a V4 state")
+        return cast(PumpStationLegacyStewardshipState, state)
 
     def load_commit(self, commit_id: str) -> PumpStationWorldRunCommit:
         """Reload one immutable commit by content identity."""
@@ -268,7 +288,7 @@ class PumpStationWorldRunRepository:
     def stage_transition(
         self,
         *,
-        manifest: PumpStationWorldRunManifest,
+        manifest: PumpStationWorldRunManifestRecord,
         prior_snapshot: PumpStationStateSnapshotRef,
         proposal: PumpStationProposal,
         information_set: PumpStationInformationSet,
@@ -345,7 +365,7 @@ class PumpStationWorldRunRepository:
     def stage_control_transition(
         self,
         *,
-        manifest: PumpStationWorldRunManifest,
+        manifest: PumpStationWorldRunManifestRecord,
         prior_snapshot: PumpStationStateSnapshotRef,
         control_request: PumpStationControlInput,
         transition: PumpStationTransition,
@@ -708,6 +728,9 @@ class PumpStationWorldRunRepository:
             PumpStationAppliedEventBatch,
         )
         state = self.load_state(commit.state_id)
+        if state.state_version == PUMP_STATION_STATE_VERSION_V4:
+            _fail("record-versions", "legacy transition evidence selects a V4 state")
+        legacy_state = cast(PumpStationLegacyStewardshipState, state)
         if (
             pump_station_artifact_id(durable_input) != commit.proposal_content_id
             or pump_station_artifact_id(receipt) != commit.receipt_content_id
@@ -742,7 +765,7 @@ class PumpStationWorldRunRepository:
             durable_input,
             information_set,
             PumpStationTransition(
-                state=state,
+                state=legacy_state,
                 receipt=receipt,
             ),
         )
@@ -840,7 +863,7 @@ class PumpStationWorldRunRepository:
         ):
             _fail("artifact-integrity", "commit chain does not reach current pointer")
 
-    def _publish_state(self, state: PumpStationStewardshipState) -> str:
+    def _publish_state(self, state: PumpStationStewardshipStateRecord) -> str:
         state_id = stewardship_state_id(state)
         self._publish_content("states", state_id, state)
         return state_id
@@ -904,7 +927,7 @@ class PumpStationWorldRunRepository:
 
     @staticmethod
     def _snapshot(
-        manifest: PumpStationWorldRunManifest,
+        manifest: PumpStationWorldRunManifestRecord,
         pointer: PumpStationCurrentRunPointer,
     ) -> PumpStationStateSnapshotRef:
         return PumpStationStateSnapshotRef(

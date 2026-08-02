@@ -438,7 +438,7 @@ class PumpStationWorldControl:
 
     def _verification_report(self) -> PumpStationVerificationReport:
         run = self._resume_run()
-        initial_state = run.repository.load_state(run.manifest.initial_state_id)
+        initial_state = run.repository.load_legacy_state(run.manifest.initial_state_id)
         return verify_stewardship_run(
             run.model,
             initial_state,
