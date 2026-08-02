@@ -26,6 +26,7 @@ ArtifactT = TypeVar("ArtifactT")
 _V1 = "v1"
 _V2 = "v2"
 _V3 = "v3"
+_V4 = "v4"
 _V1_FIELD_EXCLUSIONS = {
     "PumpStationStewardshipState": {
         "state_version",
@@ -63,10 +64,15 @@ _V3_FIELD_EXCLUSIONS = {
         "observation_source",
     },
 }
+_V4_FIELD_EXCLUSIONS = {
+    "PumpStationActorView": {"time_context"},
+}
 
 
 def _field_exclusions(type_name: str, profile: str) -> set[str]:
-    exclusions = set(_V3_FIELD_EXCLUSIONS.get(type_name, set())) if profile != _V3 else set()
+    exclusions = set(_V3_FIELD_EXCLUSIONS.get(type_name, set())) if profile not in {_V3, _V4} else set()
+    if profile != _V4:
+        exclusions.update(_V4_FIELD_EXCLUSIONS.get(type_name, set()))
     if profile == _V1:
         exclusions.update(_V1_FIELD_EXCLUSIONS.get(type_name, set()))
     return exclusions
@@ -89,9 +95,10 @@ def _record_profile(value: object) -> str:
             return _V3
         return _V2 if version.endswith(".v2") else _V1
     if type_name in {"PumpStationActorView", "PumpStationStructuredHandover"}:
-        current = getattr(value, "current_state", None) or getattr(
-            getattr(value, "current_actor_view", None), "current_state", None
-        )
+        actor_view = value if type_name == "PumpStationActorView" else getattr(value, "current_actor_view", None)
+        if str(getattr(actor_view, "projection_policy_id", "")).endswith(".v4"):
+            return _V4
+        current = getattr(actor_view, "current_state", None)
         if current is not None:
             return _record_profile(current)
     if type_name == "PumpStationInformationSet":
@@ -109,6 +116,8 @@ def _record_profile(value: object) -> str:
 def _document_profile(value: object) -> str:
     if isinstance(value, dict):
         type_name = value.get("$type")
+        if type_name == "PumpStationActorView" and str(value.get("projection_policy_id", "")).endswith(".v4"):
+            return _V4
         if type_name in {"PumpStationStewardshipState", "PumpStationCurrentStateView"}:
             version = str(value.get("state_version", ""))
             if version.endswith(".v3"):
@@ -126,12 +135,16 @@ def _document_profile(value: object) -> str:
             return _V1
         if _V2 in profiles:
             return _V2
+        if _V4 in profiles:
+            return _V4
     if isinstance(value, list):
         profiles = tuple(_document_profile(child) for child in value)
         if _V1 in profiles:
             return _V1
         if _V2 in profiles:
             return _V2
+        if _V4 in profiles:
+            return _V4
     return _V3
 
 

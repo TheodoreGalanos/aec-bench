@@ -92,6 +92,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal
     temporal_actor_event_id,
     verify_temporal_evidence_repository,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.time_presentation import (
+    PUMP_STATION_TIME_PROJECTION_POLICY_ID,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import (
     PumpStationWorldRun,
 )
@@ -246,7 +249,7 @@ class PumpStationWorldSession:
             episode_started_at_seconds=episode_started_at_seconds,
             tenure_started_at_seconds=tenure_started_at_seconds,
             projection_policy_id=(
-                "pump-station-current-state.v3"
+                PUMP_STATION_TIME_PROJECTION_POLICY_ID
                 if self._evidence_health
                 else "pump-station-current-state.v2"
                 if self._rich_work_processes

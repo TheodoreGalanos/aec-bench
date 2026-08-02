@@ -273,6 +273,15 @@ The harness owns session execution, Harbor dispatch/import, and trial persistenc
 
 Calendar time, operating hours, starts, cycles, and expiry counters are typed clocks. Agent turns and host wall-clock time are not substitutes for physical time.
 
+Canonical replay clocks remain integer seconds. The pump-station actor
+projection anchors its fictional calendar at `2026-01-01T00:00:00+11:00` in
+`Australia/Sydney` and adds local ISO dates and readable durations. Raw seconds
+remain available as machine evidence but are not the primary time
+communication. Pump runtime remains an operating duration because it advances
+only while that pump runs. An obligation becomes due at its calendar deadline
+or its pump-runtime limit, whichever occurs first; overdue and breach timing
+starts from the boundary that occurred first.
+
 ### ASW-I03 — State planes remain distinct
 
 The implementation must distinguish:
