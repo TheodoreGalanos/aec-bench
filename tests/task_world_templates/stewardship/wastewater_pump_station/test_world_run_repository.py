@@ -107,6 +107,7 @@ def test_repository_rejects_content_moved_under_the_wrong_identity(tmp_path) -> 
         ("symbolic-link", "artifact-confinement"),
         ("directory", "artifact-integrity"),
         ("public-permissions", "artifact-confinement"),
+        ("unreadable", "artifact-integrity"),
     ),
 )
 def test_repository_rejects_unsafe_manifest_files(
@@ -124,11 +125,17 @@ def test_repository_rejects_unsafe_manifest_files(
     elif unsafe_kind == "directory":
         manifest.unlink()
         manifest.mkdir()
+    elif unsafe_kind == "unreadable":
+        manifest.chmod(0o000)
     else:
         manifest.chmod(0o644)
 
-    with pytest.raises(PumpStationWorldRunError) as raised:
-        run.repository.load_manifest()
+    try:
+        with pytest.raises(PumpStationWorldRunError) as raised:
+            run.repository.load_manifest()
+    finally:
+        if unsafe_kind == "unreadable":
+            manifest.chmod(0o600)
 
     assert raised.value.code == expected_code
 

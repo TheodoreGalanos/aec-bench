@@ -10,6 +10,12 @@ from aec_bench.task_world_templates.continual.definition import (
 from aec_bench.task_world_templates.continual.durability import (
     ContinualWorldLockConfinementError,
     ContinualWorldLockError,
+    ImmutableArtifact,
+    ImmutableArtifactCollisionError,
+    ImmutableArtifactConfinementError,
+    ImmutableArtifactIntegrityError,
+    ImmutableArtifactStoreError,
+    ImmutableByteStore,
     exclusive_local_file_lock,
 )
 
@@ -18,6 +24,12 @@ __all__ = [
     "ContinualWorldDefinition",
     "ContinualWorldLockConfinementError",
     "ContinualWorldLockError",
+    "ImmutableArtifact",
+    "ImmutableArtifactCollisionError",
+    "ImmutableArtifactConfinementError",
+    "ImmutableArtifactIntegrityError",
+    "ImmutableArtifactStoreError",
+    "ImmutableByteStore",
     "LoadedContinualWorldProfile",
     "exclusive_local_file_lock",
     "python_source_sha256",

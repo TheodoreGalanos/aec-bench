@@ -345,6 +345,7 @@ def test_harbor_execution_operations_have_phase_neutral_kernel_definitions() -> 
             "handler_key": KernelOperationHandlerKey.RUN_STAGE,
             "effect": KernelOperationEffect.UNSCORED_EXECUTION,
             "implementation_paths": (
+                "aec_bench/ledger/immutable_artifact_store.py",
                 *_COMPILATION_SOURCE_PATHS,
                 "aec_bench/meta_harness/declared_stage_runtime.py",
                 "aec_bench/meta_harness/governed_attempt_engine/__init__.py",
@@ -821,6 +822,9 @@ def test_default_kernel_identity_owns_only_the_explicit_executor_surface() -> No
     assert "aec_bench/meta_harness/kernel_catalogue.py" in executor_paths
     assert "aec_bench/meta_harness/run_bundle_runtime.py" in executor_paths
     assert "aec_bench/harness/execution_entrypoint.py" in executor_paths
+    assert "aec_bench/contracts/world_session.py" in executor_paths
+    assert "aec_bench/ledger/immutable_artifact_store.py" in executor_paths
+    assert "aec_bench/ledger/local_lock.py" in executor_paths
     assert set(_COMPILATION_SOURCE_PATHS).issubset(executor_paths)
     assert set(_PROPOSAL_SESSION_RUNTIME_SOURCE_PATHS).issubset(executor_paths)
     assert set(_HARBOR_PROPOSAL_IMPORT_SOURCE_PATHS).issubset(executor_paths)

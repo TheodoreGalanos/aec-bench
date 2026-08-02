@@ -351,6 +351,44 @@ and reuse it rather than create a third byte store. Atomic current selection,
 transaction publication, replay, and crash recovery remain on their existing
 pump and SSC-03 paths until their shared raw-byte boundary is proved.
 
+### 6.10 Step 3B immutable byte ownership
+
+Step 3B extracts only exact immutable byte publication and reads. It proves
+that this raw contract has two real consumers without moving task or lifecycle
+policy into the lower layer.
+
+| Path | Owner | Compatibility and migration rule |
+| --- | --- | --- |
+| `src/aec_bench/ledger/immutable_artifact_store.py` | Lower filesystem durability | Own trusted-root validation, descriptor-confined traversal, atomic first-writer publication, exact-byte reads, digests, private modes, and raw collision, confinement, and integrity errors. Import no meta-harness, task, or Pydantic module. |
+| `src/aec_bench/task_world_templates/continual/durability.py` | Shared continual-world durability | Re-export the lower byte store and errors for task-world adapters. Keep the lower implementation as the single owner. |
+| `src/aec_bench/meta_harness/immutable_artifact_store.py` | Meta-harness policy facade | Keep the public import path, Pydantic encoding, canonical model bytes, logical and content-addressed evidence rules, and `EvidenceRepository`. Delegate raw byte storage to the lower owner. |
+| `wastewater_pump_station/world_run_repository.py` | Pump durability adapter | Use the continual-world byte interface and translate lower errors to the pump boundary. Keep pump codecs, state and content IDs, collection layout, `current.json` replacement, replay, and recovery in the pump adapter. |
+| `src/aec_bench/meta_harness/evidence_lifecycle.py` | Shared evidence-lifecycle kernel and second consumer | Publish exact request and result bytes through the lower store and translate lower failures to the existing lifecycle conflict message. Keep lifecycle state, transactions, checkpoints, projections, replay, and recovery unchanged. SSC-03 uses this path through its real evidence lifecycle. |
+
+The pump compatibility inventory records byte length and SHA-256 for the
+artifacts produced before extraction. The v1 and v2 inventories keep the
+`accepted-existing` status. The v3 inventory has the explicit
+`pre-extraction-compatibility-baseline` status. It proves that Step 3B does not
+change those bytes, but it does not give v3 a retroactive acceptance or
+certification claim.
+
+The raw store accepts only normalized relative paths. Each path component is
+opened relative to a trusted directory descriptor, and each final artifact
+must be a regular file. The current implementation requires a local POSIX
+filesystem that supports directory-relative descriptor operations and
+hard-link publication. This is a host-local filesystem contract. It is not an
+object-store or cross-host durability claim.
+
+The trusted root must not be changed by a malicious process that uses the same
+operating-system account. The store supports cooperative local publishers. It
+does not provide isolation from another process with the same account.
+
+This extraction does not move mutable pointers, transaction publication,
+replay, rewind, or crash recovery into the shared runtime. It also does not
+change a task codec or define task-specific artifact collections. Those
+boundaries stay with the pump and evidence-lifecycle owners until later Step 3
+work proves a shared contract for each one.
+
 ## 7. Implementation sequence
 
 The correction uses small pull requests against the unmerged ASW-8 branch.

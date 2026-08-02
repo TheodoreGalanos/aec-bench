@@ -6,7 +6,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import stat
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -14,6 +13,10 @@ from pathlib import Path
 from typing import NoReturn, TypeGuard, cast
 
 from aec_bench.task_world_templates.continual.durability import (
+    ImmutableArtifactCollisionError,
+    ImmutableArtifactConfinementError,
+    ImmutableArtifactStoreError,
+    ImmutableByteStore,
     exclusive_local_file_lock,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
@@ -131,19 +134,6 @@ def _mkdir_durable(path: Path) -> None:
         _fsync_directory(directory.parent)
 
 
-def _require_regular_file(path: Path, label: str) -> None:
-    if path.is_symlink():
-        _fail("artifact-confinement", f"{label} is a symbolic link")
-    try:
-        details = path.stat(follow_symlinks=False)
-    except OSError as error:
-        _fail("artifact-integrity", f"{label} is unavailable: {error}")
-    if not stat.S_ISREG(details.st_mode):
-        _fail("artifact-integrity", f"{label} is not a regular file")
-    if stat.S_IMODE(details.st_mode) & 0o077:
-        _fail("artifact-confinement", f"{label} must be host-private")
-
-
 class PumpStationWorldRunRepository:
     """A confined durable repository for exactly one pump-station world run."""
 
@@ -155,6 +145,12 @@ class PumpStationWorldRunRepository:
         selected.chmod(0o700)
         self._root = selected.resolve(strict=True)
         self._lock_path = self._root / ".world-run.lock"
+        try:
+            self._artifacts = ImmutableByteStore(self._root, host_private=True)
+        except ImmutableArtifactConfinementError as error:
+            _fail("artifact-confinement", f"world-run root is unsafe: {error}")
+        except ImmutableArtifactStoreError as error:
+            _fail("artifact-integrity", f"world-run byte store is unavailable: {error}")
 
     @property
     def root(self) -> Path:
@@ -819,31 +815,15 @@ class PumpStationWorldRunRepository:
         self._publish_immutable(self._root / name, pump_station_artifact_bytes(value))
 
     def _publish_immutable(self, path: Path, payload: bytes) -> None:
-        if path.exists():
-            observed = self._read(path, str(path.relative_to(self._root)))
-            if observed != payload:
-                _fail("artifact-collision", str(path.relative_to(self._root)))
-            return
-        _mkdir_durable(path.parent)
-        temporary = path.parent / f".{path.name}.{uuid.uuid4().hex}.tmp"
-        descriptor = os.open(
-            temporary,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-            0o600,
-        )
+        relative_path = path.relative_to(self._root).as_posix()
         try:
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(payload)
-                handle.flush()
-                os.fsync(handle.fileno())
-            try:
-                os.link(temporary, path)
-            except FileExistsError:
-                if self._read(path, str(path.relative_to(self._root))) != payload:
-                    _fail("artifact-collision", str(path.relative_to(self._root)))
-            _fsync_directory(path.parent)
-        finally:
-            temporary.unlink(missing_ok=True)
+            self._artifacts.publish_bytes(relative_path, payload)
+        except ImmutableArtifactCollisionError:
+            _fail("artifact-collision", relative_path)
+        except ImmutableArtifactConfinementError as error:
+            _fail("artifact-confinement", f"{relative_path} is unsafe: {error}")
+        except ImmutableArtifactStoreError as error:
+            _fail("artifact-integrity", f"{relative_path} cannot be published: {error}")
 
     def _replace_current(self, pointer: PumpStationCurrentRunPointer) -> None:
         payload = pump_station_artifact_bytes(pointer)
@@ -876,10 +856,12 @@ class PumpStationWorldRunRepository:
         )
 
     def _read(self, path: Path, label: str) -> bytes:
-        _require_regular_file(path, label)
+        relative_path = path.relative_to(self._root).as_posix()
         try:
-            return path.read_bytes()
-        except OSError as error:
+            return self._artifacts.load_bytes(relative_path)
+        except ImmutableArtifactConfinementError as error:
+            _fail("artifact-confinement", f"{label} is unsafe: {error}")
+        except ImmutableArtifactStoreError as error:
             _fail("artifact-integrity", f"{label} cannot be read: {error}")
         raise AssertionError("unreachable")
 

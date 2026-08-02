@@ -130,6 +130,18 @@ def _baselines() -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))["baselines"]
 
 
+def test_compatibility_fixture_declares_exact_version_and_baseline_statuses() -> None:
+    path = Path(__file__).parent / "fixtures" / "world_run_byte_inventories.v1.json"
+    fixture = json.loads(path.read_text(encoding="utf-8"))
+
+    assert fixture["fixture_version"] == "pump-station-world-run-byte-inventories.v1"
+    assert {version: baseline["status"] for version, baseline in fixture["baselines"].items()} == {
+        "v1": "accepted-existing",
+        "v2": "accepted-existing",
+        "v3": "pre-extraction-compatibility-baseline",
+    }
+
+
 @pytest.mark.parametrize(
     ("version", "builder"),
     (

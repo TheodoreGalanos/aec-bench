@@ -6,7 +6,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import os
 import shutil
 import tempfile
 from collections.abc import Callable, Iterator
@@ -17,6 +16,10 @@ from typing import Any
 from pydantic import ValidationError
 
 from aec_bench.ledger.durability import fsync_directory, fsync_tree, mkdir_durable
+from aec_bench.ledger.immutable_artifact_store import (
+    ImmutableArtifactStoreError,
+    ImmutableByteStore,
+)
 from aec_bench.ledger.local_lock import exclusive_local_file_lock
 from aec_bench.meta_harness.evidence_lifecycle_episode import (
     LifecycleEpisodeContext,
@@ -1392,31 +1395,11 @@ def _persist_episode_result(
 
 def _persist_host_json(path: Path, payload: str, *, conflict_message: str) -> Path:
     """Publish one deterministic host JSON artifact with conflict detection."""
-    mkdir_durable(path.parent)
-    if path.exists():
-        if not path.is_file() or path.read_text(encoding="utf-8") != payload:
-            raise EvidenceLifecycleError(conflict_message)
-        return path
-
-    temporary_path: Path | None = None
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.stem}-",
-            suffix=".tmp",
-            delete=False,
-        ) as handle:
-            temporary_path = Path(handle.name)
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        temporary_path.replace(path)
-        fsync_directory(path.parent)
-    finally:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
+        store = ImmutableByteStore(path.parent)
+        store.publish_bytes(path.name, payload.encode("utf-8"))
+    except ImmutableArtifactStoreError as exc:
+        raise EvidenceLifecycleError(conflict_message) from exc
     return path
 
 
