@@ -5,10 +5,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 from pydantic import JsonValue, model_validator
 
+from aec_bench.contracts.continual_world import ContinualWorldProfileRef
 from aec_bench.contracts.harness_kernel import ContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.contracts.world_interface import (
@@ -26,6 +27,9 @@ from aec_bench.contracts.world_session import (
     StewardshipStateSnapshotRef,
     WorldSessionOpenMode,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
+    pump_station_root_control_operations,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
     PumpStationEvidenceTreatment,
     PumpStationEvidenceTreatmentRequest,
@@ -37,10 +41,15 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
     load_reference_package,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PumpStationBoundControlRequest,
+    PumpStationCommonBoundaryRequest,
+    PumpStationOperationsBoundaryReviewRequest,
+    PumpStationProcessOutcomeRequest,
     PumpStationSchedule,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationVerificationReport,
+    PumpStationVerificationReportV4,
     verify_stewardship_run,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import (
@@ -48,12 +57,14 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
     PumpStationStateSnapshotRef,
+    PumpStationWorldRunManifestV2,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_serialization import (
     pump_station_artifact_bytes,
+    pump_station_artifact_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
     PUMP_STATION_TASK_WORLD_ID,
@@ -62,6 +73,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_se
 
 PUMP_STATION_CONTROL_INTERFACE_VERSION = "pump-station.control.v1"
 PUMP_STATION_CONTROL_INTERFACE_VERSION_V2 = "pump-station.control.v2"
+PUMP_STATION_CONTROL_INTERFACE_VERSION_V3 = "pump-station.control.v3"
 PUMP_STATION_CONTROL_OPERATIONS = (
     "create_session",
     "open_session",
@@ -74,6 +86,11 @@ PUMP_STATION_EVIDENCE_CONTROL_OPERATIONS = (
     "schedule_evidence_treatment",
     "inspect_evidence_treatment",
     "recover_evidence_treatment",
+)
+PUMP_STATION_ROOT_CONTROL_OPERATIONS = (
+    "operations_review",
+    "process_outcome",
+    "common_boundary",
 )
 
 
@@ -125,6 +142,23 @@ class PumpStationEvidenceControlResult(ContentAddressedModel):
         return self
 
 
+class PumpStationRootControlResult(ContentAddressedModel):
+    """Host-private result for one durable registered root control."""
+
+    schema_version: str = "pump-station.root-control.v1"
+    request_content_sha256: NonEmptyStr
+    receipt: WorldControlReceipt
+    transition_receipt: dict[str, JsonValue]
+
+    @model_validator(mode="after")
+    def validate_result(self) -> Self:
+        if self.schema_version != "pump-station.root-control.v1":
+            raise ValueError("unsupported pump-station root-control version")
+        if self.receipt.request_content_sha256 != self.request_content_sha256:
+            raise ValueError("root control result and receipt identities differ")
+        return self
+
+
 def _shared_snapshot(snapshot: PumpStationStateSnapshotRef) -> StewardshipStateSnapshotRef:
     return StewardshipStateSnapshotRef(
         schema_version=STEWARDSHIP_STATE_SNAPSHOT_SCHEMA_VERSION,
@@ -152,6 +186,7 @@ class PumpStationWorldControl:
         repository_root: Path,
         *,
         authorised_principal_ids: tuple[str, ...],
+        profile_ref: ContinualWorldProfileRef | None = None,
         package_root: Path | None = None,
         schedule: PumpStationSchedule | None = None,
         rich_work_processes: bool = False,
@@ -163,6 +198,7 @@ class PumpStationWorldControl:
             raise ValueError("world control host principals must be distinct")
         self._repository_root = Path(repository_root)
         self._authorised_principal_ids = frozenset(authorised_principal_ids)
+        self._profile_ref = profile_ref
         self._package_root = package_root
         self._schedule = schedule
         self._evidence_health = evidence_health
@@ -174,12 +210,24 @@ class PumpStationWorldControl:
 
         self._require_authority(authority_id)
         operations: tuple[str, ...] = PUMP_STATION_CONTROL_OPERATIONS
-        if self._evidence_health:
+        registered_v4 = self._registered_v4_selected()
+        if registered_v4:
+            state = self._resume_run().state if (self._repository_root / "current.json").is_file() else None
+            operations = (
+                *operations,
+                *pump_station_root_control_operations(
+                    state,
+                    authority_id=authority_id,
+                ),
+            )
+        elif self._evidence_health:
             operations = (*operations, *PUMP_STATION_EVIDENCE_CONTROL_OPERATIONS)
         return WorldControlCapabilityCatalogue(
             task_world_id=PUMP_STATION_TASK_WORLD_ID,
             interface_version=(
-                PUMP_STATION_CONTROL_INTERFACE_VERSION_V2
+                PUMP_STATION_CONTROL_INTERFACE_VERSION_V3
+                if registered_v4
+                else PUMP_STATION_CONTROL_INTERFACE_VERSION_V2
                 if self._evidence_health
                 else PUMP_STATION_CONTROL_INTERFACE_VERSION
             ),
@@ -192,6 +240,7 @@ class PumpStationWorldControl:
                         "create_session",
                         "open_session",
                         "schedule_evidence_treatment",
+                        *PUMP_STATION_ROOT_CONTROL_OPERATIONS,
                     },
                 )
                 for operation in operations
@@ -200,15 +249,22 @@ class PumpStationWorldControl:
 
     def execute(
         self,
-        request: WorldControlRequest | PumpStationEvidenceControlRequest,
-    ) -> WorldControlResult | PumpStationEvidenceControlResult:
+        request: (WorldControlRequest | PumpStationEvidenceControlRequest | PumpStationBoundControlRequest),
+    ) -> WorldControlResult | PumpStationEvidenceControlResult | PumpStationRootControlResult:
         """Execute one declared host operation without exposing a raw state editor."""
 
         self._require_authority(request.authority_id)
+        if isinstance(request, PumpStationBoundControlRequest):
+            return self._execute_root_control(request)
         if request.task_world_id != PUMP_STATION_TASK_WORLD_ID:
             raise WorldInterfaceError(
                 "control-wrong-task-world",
                 request.task_world_id,
+            )
+        if request.operation in PUMP_STATION_ROOT_CONTROL_OPERATIONS:
+            raise WorldInterfaceError(
+                "control-request-invalid",
+                f"{request.operation} requires a typed bound root-control request",
             )
         operations = {item.operation for item in self.capabilities(request.authority_id).operations}
         if request.operation not in operations:
@@ -245,7 +301,7 @@ class PumpStationWorldControl:
                     "control-request-invalid",
                     f"{request.operation} requires a session request",
                 )
-            session = self._factory().open(session_request)
+            session = self._factory(request.authority_id).open(session_request)
             session_result = session.result
             result_snapshot = session.result.snapshot
             state_changed = prior_snapshot is None and session_request.open_mode is WorldSessionOpenMode.START
@@ -290,6 +346,91 @@ class PumpStationWorldControl:
         )
         self._results[request.request_id] = (request, result)
         return result
+
+    def _execute_root_control(
+        self,
+        request: PumpStationBoundControlRequest,
+    ) -> PumpStationRootControlResult:
+        """Apply or recover one registered V4 root control through the run."""
+        operation = (
+            "operations_review"
+            if isinstance(request.control, PumpStationOperationsBoundaryReviewRequest)
+            else "process_outcome"
+            if isinstance(request.control, PumpStationProcessOutcomeRequest)
+            else "common_boundary"
+            if isinstance(request.control, PumpStationCommonBoundaryRequest)
+            else ""
+        )
+        if operation not in PUMP_STATION_ROOT_CONTROL_OPERATIONS:
+            raise WorldInterfaceError(
+                "control-capability-unavailable",
+                type(request.control).__name__,
+            )
+        run = self._resume_run()
+        committed = run.repository.find_committed_v4_command(request.request_id)
+        if committed is None and operation not in {
+            item.operation for item in self.capabilities(request.authority_id).operations
+        }:
+            raise WorldInterfaceError("control-capability-unavailable", operation)
+        transition = run.apply_v4_control(request)
+        commit = committed or run.repository.find_committed_v4_command(
+            request.request_id,
+        )
+        if commit is None:
+            raise WorldInterfaceError(
+                "control-publication-missing",
+                request.request_id,
+            )
+        manifest = run.manifest
+        if not isinstance(manifest, PumpStationWorldRunManifestV2):
+            raise WorldInterfaceError(
+                "control-wrong-profile",
+                "root control requires a registered V4 run",
+            )
+        parent = run.repository.load_commit(commit.parent_commit_id)
+        prior = _shared_snapshot(
+            PumpStationStateSnapshotRef(
+                snapshot_version=manifest.snapshot_version,
+                run_id=manifest.run_id,
+                episode_id=manifest.episode_id,
+                world_branch_id=manifest.world_branch_id,
+                sequence=parent.sequence,
+                state_id=parent.state_id,
+                commit_id=commit.parent_commit_id,
+            )
+        )
+        result_snapshot = _shared_snapshot(
+            PumpStationStateSnapshotRef(
+                snapshot_version=manifest.snapshot_version,
+                run_id=manifest.run_id,
+                episode_id=manifest.episode_id,
+                world_branch_id=manifest.world_branch_id,
+                sequence=commit.sequence,
+                state_id=commit.state_id,
+                commit_id=pump_station_artifact_id(
+                    commit,
+                    record_profile="v4",
+                ),
+            )
+        )
+        request_content_id = pump_station_artifact_id(
+            request,
+            record_profile="v4",
+        )
+        receipt = WorldControlReceipt(
+            request_content_sha256=request_content_id,
+            operation=operation,
+            authority_id=request.authority_id,
+            status="completed",
+            state_changed=True,
+            prior_snapshot=prior,
+            result_snapshot=result_snapshot,
+        )
+        return PumpStationRootControlResult(
+            request_content_sha256=request_content_id,
+            receipt=receipt,
+            transition_receipt=_artifact_payload(transition.receipt),
+        )
 
     def _execute_evidence_control(
         self,
@@ -419,13 +560,15 @@ class PumpStationWorldControl:
         self._results[request.request_id] = (request, result)
         return result
 
-    def _factory(self) -> PumpStationWorldSessionFactory:
+    def _factory(self, authority_id: str) -> PumpStationWorldSessionFactory:
         return PumpStationWorldSessionFactory(
             self._repository_root,
+            profile_ref=self._profile_ref,
             package_root=self._package_root,
             schedule=self._schedule,
             rich_work_processes=self._rich_work_processes,
             evidence_health=self._evidence_health,
+            host_authority_id=authority_id,
         )
 
     def _repository(self) -> PumpStationWorldRunRepository:
@@ -436,8 +579,12 @@ class PumpStationWorldControl:
             return None
         return _shared_snapshot(self._repository().current_snapshot())
 
-    def _verification_report(self) -> PumpStationVerificationReport:
+    def _verification_report(
+        self,
+    ) -> PumpStationVerificationReport | PumpStationVerificationReportV4:
         run = self._resume_run()
+        if isinstance(run.manifest, PumpStationWorldRunManifestV2):
+            return run.verify_v4()
         initial_state = run.repository.load_legacy_state(run.manifest.initial_state_id)
         return verify_stewardship_run(
             run.model,
@@ -446,10 +593,23 @@ class PumpStationWorldControl:
             record_versions=run.manifest.record_versions,
         )
 
-    def _resume_run(self) -> PumpStationWorldRun:
+    def _resume_run(self) -> PumpStationWorldRun[Any, Any]:
         repository = self._repository()
         manifest = repository.load_manifest()
         snapshot = repository.current_snapshot()
+        if isinstance(manifest, PumpStationWorldRunManifestV2):
+            return PumpStationWorldRun.resume_reference_system(
+                repository=repository,
+                snapshot=PumpStationStateSnapshotRef(
+                    snapshot_version=manifest.snapshot_version,
+                    run_id=snapshot.run_id,
+                    episode_id=snapshot.episode_id,
+                    world_branch_id=snapshot.world_branch_id,
+                    sequence=snapshot.sequence,
+                    state_id=snapshot.state_id,
+                    commit_id=snapshot.commit_id,
+                ),
+            )
         package = load_reference_package(self._package_root)
         model = pump_station_model_from_package(package)
         return PumpStationWorldRun.resume(
@@ -466,6 +626,14 @@ class PumpStationWorldControl:
                 commit_id=snapshot.commit_id,
             ),
         )
+
+    def _registered_v4_selected(self) -> bool:
+        """Return whether configuration or durable identity selects registered V4."""
+        if self._profile_ref is not None:
+            return True
+        if not (self._repository_root / "manifest.json").is_file():
+            return False
+        return isinstance(self._repository().load_manifest(), PumpStationWorldRunManifestV2)
 
     def _require_authority(self, authority_id: str) -> None:
         if authority_id not in self._authorised_principal_ids:

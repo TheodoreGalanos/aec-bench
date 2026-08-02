@@ -14,6 +14,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal
     TemporalRetrievalHandoverReceipt,
     TemporalRetrievalState,
     TemporalRetrievalStateCarrier,
+    TemporalSessionInformationSetManifestV2,
     temporal_actor_event_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.corpus import (
@@ -60,6 +61,7 @@ __all__ = (
     "TemporalEvidenceVerificationIssue",
     "TemporalEvidenceVerificationReport",
     "TemporalInformationSetManifest",
+    "TemporalSessionInformationSetManifestV2",
     "TemporalRetrievalHandoverInstallReceipt",
     "TemporalRetrievalHandoverReceipt",
     "TemporalRetrievalState",

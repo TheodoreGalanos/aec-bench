@@ -616,6 +616,74 @@ remain for Step 6. Child physical treatment and rollout branches remain for
 Step 7. Temporal search and fetch remain read-only evidence operations; they
 do not create world-transition commits.
 
+### 6.16 V4 session ownership on the existing separate interfaces
+
+Step 6 reuses `PumpStationWorldSession`, `PumpStationWorldControl`, and
+`PumpStationLocalInterfaceRequest`. It does not add another V4 session, a
+combined actor/control request, or another live run pointer.
+
+| Path | Owner | Compatibility and migration rule |
+| --- | --- | --- |
+| `wastewater_pump_station/world_session_activation.py` | Pump session adapter | Define immutable activation, claim, and active-pointer records for one exact run, branch, session, tenure, snapshot, view, information set, retrieval head, and host authority. |
+| `wastewater_pump_station/world_run_repository.py` | Pump durability adapter | Publish session records and select one active binding under the existing run lock. An exact repeat returns the same binding. A changed or stale repeat fails closed. |
+| `wastewater_pump_station/world_run.py` | Pump run coordinator and V4 verification orchestrator | Admit a V4 actor change only when its request, active session binding, and current session information set agree. Keep exact committed command validation idempotent after the originating session closes, while the actor session still requires active authority for a continuation view. Traverse the selected session chain, reconstruct each dynamic information set, and combine session, temporal, and task replay findings. |
+| `wastewater_pump_station/world_session.py` | Existing pump actor session | Resume a registered V4 run from its stored manifest. Route V2 actor changes through the existing run and route temporal search and fetch through the existing temporal repository. |
+| `wastewater_pump_station/temporal_evidence/` | Pump temporal evidence | Keep V1 records unchanged. Add an immutable V2 session information-set chain that binds each visible context to its activation, world snapshot, retrieval head, tools, sources, and prior binding. |
+| `wastewater_pump_station/world_control.py` | Existing pump host control | Validate the configured host principal before session or root-control execution. Route the three typed V4 root controls through the existing run. |
+| `wastewater_pump_station/local_interface.py` | Task-local request boundary | Accept `PumpStationBoundControlRequest` only in the existing control union. Do not add any root control to the actor catalogue or actor request surface. |
+| `wastewater_pump_station/stewardship_views.py` | Pump projection and evidence models | Define the session-bound information set, dynamic visible context, actor-history entry, and structured handover content. Keep pump projection fields and handover meaning task-local. |
+| `wastewater_pump_station/stewardship_verifier.py` | Pure pump transition replay verifier | Replay the V4 steps supplied by the run coordinator and compare each deterministic transition and final state. Do not load or reconstruct session evidence, select an active session, or perform evaluation import. |
+
+One run branch has one active actor session binding. A session identifier and
+tenure bind to one activation. Opening the same active binding is an exact
+reattachment. A fresh session or tenure requires a host-authorised activation.
+The host can install one durable structured handover before the recipient acts.
+Selecting the new binding closes the old actor authority at the same world
+snapshot. Activation and handover do not change world state, commit, sequence,
+or time.
+
+Each actor observation is published as an immutable session information-set
+binding before it is returned. The binding names the exact world snapshot,
+view, information set, temporal retrieval state, tools, sources, and prior
+binding. Search, fetch, and handover can change this visible context without a
+world transition. They therefore advance the session information-set chain but
+do not create a world-transition commit.
+
+Session publication can stop after the temporal binding is durable but before
+the world session selector changes. Resume completes this exact staged binding
+only when it is not present in the selected session history and its complete
+context matches the recovered world, retrieval state, session, tenure, and host
+authority. A binding already present in selected history belongs to a closed
+session and cannot be selected again.
+
+An actor world change is accepted only when its public binding matches the
+selected session activation and current information-set binding. Actor action
+and handover admission use the same run lock, with the temporal lock taken
+inside it when required. An exact retry through the active session returns the
+stored effect with the current continuation view. After replacement, the
+closed actor session cannot make another interface call. The host run can
+still validate the exact committed command without selecting another task
+effect.
+
+The actor and control authorities stay separate. The actor catalogue contains
+only the V2 actor actions. The host-control surface contains session controls
+and the operations review, process outcome, and common boundary controls. The
+configured host principal must match the task authority carried by a root
+control until a separate durable delegation contract exists. An exact root
+control retry returns its original immutable transition result. A caller uses
+the snapshot or progress operation when it needs the current world position.
+
+Step 6 session-evidence verification is an admission and deterministic replay
+integrity check. It proves that each selected actor transition used the durable
+session evidence bound to that transition. It does not score task outcomes or
+prove transport parity. Step 9 integrates the completed task verifier with
+evaluation import, checks direct and transported outcomes, retires duplicate
+paths, and runs the final merge audit.
+
+This step does not change or certify CLI, Harbor, rollout, semantic evaluation,
+duplicate retirement, or coupled-path deletion. Those changes remain in their
+later sequence items.
+
 ## 7. Implementation sequence
 
 The correction uses small pull requests against the unmerged ASW-8 branch.
@@ -625,12 +693,12 @@ merged.
 1. Boundary amendment and complete ownership map.
 2. Continual-world contracts and catalogue, proved by pump and SSC-03 consumers.
 3. Mature durable engine extraction with legacy pump byte preservation.
-4. V4 pump integration through the existing run, session, state machine, and verifier.
-5. Separate actor and host-control interface integration.
-6. Existing rollout path extension and generic branch orchestration.
-7. Catalogue-driven CLI, Harbor, and agent execution.
-8. Verification and evaluation integration, duplicate retirement, and research and test cleanup.
-9. Requirement-by-requirement final merge audit.
+4. Registered V4 pump opening and exact resume through the existing run.
+5. V4 pump transitions and replay through the existing run, state machine, and verifier.
+6. V4 session ownership through the existing session and separate actor and host-control interfaces.
+7. Existing rollout path extension and generic branch orchestration.
+8. Catalogue-driven CLI, Harbor, and agent execution.
+9. Verification and evaluation integration, duplicate retirement, research and test cleanup, and the requirement-by-requirement final merge audit.
 
 The ASW-8 pull request remains draft until item 9 passes.
 

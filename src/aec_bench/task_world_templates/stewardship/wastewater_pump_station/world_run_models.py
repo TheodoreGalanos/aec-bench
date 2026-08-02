@@ -493,6 +493,7 @@ class PumpStationCommandV4:
     agent_tenure_id: str | None = None
     actor_view_id: str | None = None
     information_set_id: str | None = None
+    session_binding_id: str | None = None
     authority_id: str | None = None
 
     def __post_init__(self) -> None:
@@ -532,6 +533,7 @@ class PumpStationCommandV4:
             ("agent_tenure_id", self.agent_tenure_id),
             ("actor_view_id", self.actor_view_id),
             ("information_set_id", self.information_set_id),
+            ("session_binding_id", self.session_binding_id),
         )
         if self.kind == "actor":
             if any(value is None for _, value in actor_fields) or self.authority_id is not None:

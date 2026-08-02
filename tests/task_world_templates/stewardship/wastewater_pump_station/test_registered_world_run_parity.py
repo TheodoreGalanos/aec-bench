@@ -10,6 +10,12 @@ from pathlib import Path
 import pytest
 
 from aec_bench.contracts.world_interface import WorldActorActionRequest
+from aec_bench.contracts.world_session import (
+    StewardshipStateSnapshotRef,
+    WorldSessionExecutionKind,
+    WorldSessionOpenMode,
+    WorldSessionRequest,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_execution import (
     execute_asw_8_reference_controller,
 )
@@ -44,6 +50,41 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
+    PumpStationWorldSession,
+    PumpStationWorldSessionFactory,
+)
+
+
+def _open_registered_session(
+    run: PumpStationWorldRun,
+    *,
+    session_id: str,
+    agent_tenure_id: str,
+) -> PumpStationWorldSession:
+    manifest = run.manifest
+    snapshot = run.snapshot()
+    assert isinstance(manifest, PumpStationWorldRunManifestV2)
+    return PumpStationWorldSessionFactory(run.repository.root).open(
+        WorldSessionRequest(
+            execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
+            open_mode=WorldSessionOpenMode.RESUME,
+            session_id=session_id,
+            task_world_id=manifest.task_world_id,
+            agent_tenure_id=agent_tenure_id,
+            run_id=manifest.run_id,
+            episode_id=manifest.episode_id,
+            world_branch_id=manifest.world_branch_id,
+            start_snapshot=StewardshipStateSnapshotRef(
+                run_id=snapshot.run_id,
+                episode_id=snapshot.episode_id,
+                world_branch_id=snapshot.world_branch_id,
+                sequence=snapshot.sequence,
+                state_id=snapshot.state_id,
+                commit_id=snapshot.commit_id,
+            ),
+        )
+    )
 
 
 def test_registered_run_matches_each_reference_journey_transition(
@@ -62,6 +103,11 @@ def test_registered_run_matches_each_reference_journey_transition(
         run_id="registered-reference-journey",
         episode_id="registered-reference-episode",
         world_branch_id="registered-reference-branch",
+    )
+    registered_session = _open_registered_session(
+        registered,
+        session_id="registered-reference-session",
+        agent_tenure_id="reference-controller",
     )
     compared_transition_ids: list[str] = []
 
@@ -93,18 +139,15 @@ def test_registered_run_matches_each_reference_journey_transition(
                 action_name=command.action_name,
                 arguments=arguments,
             )
-            observation = registered.observe_v4_actor(
-                session_id="registered-reference-session",
-                agent_tenure_id="reference-controller",
+            observation = registered_session.observe_actor()
+            request = WorldActorActionRequest(
+                request_id=command.request_id,
+                action_name=command.action_name,
+                binding=observation.binding,
+                arguments=arguments,
             )
-            transition = registered.apply_v4_actor_action(
-                WorldActorActionRequest(
-                    request_id=command.request_id,
-                    action_name=command.action_name,
-                    binding=observation.binding,
-                    arguments=arguments,
-                )
-            )
+            registered_session.invoke_actor_action(request)
+            transition = registered.repository.v4_steps()[-1].transition
         else:
             assert command.kind == "operations_review"
             arguments = {
@@ -151,11 +194,13 @@ def test_v4_task_semantics_reject_pending_actor_view_identity(
         world_branch_id="pending-view-branch",
     )
     initial_state = run.state
-    observation = run.observe_v4_actor(
+    session = _open_registered_session(
+        run,
         session_id="pending-view-session",
         agent_tenure_id="pending-view-tenure",
     )
-    run.apply_v4_actor_action(
+    observation = session.observe_actor()
+    session.invoke_actor_action(
         WorldActorActionRequest(
             request_id="pending-view-request",
             action_name="request_post_maintenance_verification",
