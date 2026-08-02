@@ -5,21 +5,47 @@
 
 | Field | Value |
 | --- | --- |
-| Status | ASW-0 through ASW-8 complete on the ASW-8 implementation branch |
-| Date | 2026-08-02 |
-| Revision | `ASW-PRD-R-2026-08-02` |
+| Status | ASW-0 through ASW-7 accepted; ASW-8 task evidence exists on draft PR 74, but architecture acceptance is withheld pending the continual-world boundary correction |
+| Date | 2026-08-03 |
+| Revision | `ASW-PRD-R-2026-08-03` |
 | Design revision | Semantic decisions change through reviewed document revisions; this PRD does not require a self-referential or hand-authored content hash |
 | Target repository | `aec-bench` |
-| Current production basis | ASW-8 implementation branch from `main` after the ASW-7 merge and time-presentation follow-up |
-| Live implementation status | The certified duplex world and coupled three-pump successor, production runtime, direct and Harbor execution, immutable evaluation, first confirmatory study, rich work processes, separate actor and host-control interfaces, local evidence health, maintenance closeout review, temporal retrieval, state-addressable rollout control, and ASW-8 conservation checks are complete |
+| Current production basis | Merged `main` after ASW-7 and the time-presentation follow-up; draft PR 74 remains unmerged reference work |
+| Live implementation status | PR 74 contains useful ASW-8 task semantics and evidence, but its parallel run, interface, rollout, Harbor, replay, and evaluation paths are not accepted as the continual-world implementation |
 | Initial programme boundary | ASW-0 through ASW-4 |
-| Implementation status | ASW-8 passed its focused provider-free mechanism gate and its separately approved bounded Bedrock behaviour check; publication through its pull request remains |
+| Implementation status | PR 74 remains draft and must not merge until the continual-world boundary-correction gate passes |
 | Working programme name | Asset Stewardship Worlds |
 | First study | Obligation continuity under time and handover |
 
+## Boundary correction amendment — 2026-08-03
+
+This amendment takes precedence over earlier statements that ASW-8 is complete
+or ready to publish. The provider-free and bounded-agent evidence remains useful
+evidence for the pump-station task semantics. It does not accept the parallel
+runtime structure in draft PR 74.
+
+The corrected ownership boundary has four layers:
+
+| Layer | Owns |
+| --- | --- |
+| Continual-world runtime | Durable commands, commits, snapshots, replay, recovery, idempotence, sessions, branches, rollout groups, and transport ports |
+| Stewardship capability | Obligations, work lifecycle, authority, evidence continuity, review, and governed intervention semantics |
+| Pump-station task world | Pump physics, SCU rules, pump actions, event meaning, work generation, projections, and verifier logic |
+| RS1 profile | Opening state, event schedule, certified station package, temporal documents, and reference-controller objective |
+
+The runtime manages how a world lives. The task world defines what happens in
+that world. The profile selects one concrete starting situation. Actor actions
+and host controls remain separate.
+
+The normative boundary, full PR 74 ownership map, correction order, and merge
+gates are in
+[Continual-World Runtime Boundary](../../docs/CONTINUAL_WORLD_RUNTIME.md).
+
 ## Executive decision
 
-Introduce an asset-specific persistent stewardship-world engine behind a small shared host-execution envelope.
+Introduce task-owned asset and stewardship semantics behind one reusable,
+task-neutral continual-world lifetime boundary and the shared host-execution
+envelope.
 
 Reuse the adaptive meta-harness and common execution infrastructure for agent/model execution, content addressing, experiment identity, Harbor dispatch, immutable evidence, and `TrialRecord` persistence. Reuse lifecycle transaction, recovery, and evaluation patterns without extending their checkpoint-specific models into stewardship state. Do not reinterpret SSC-03's `COMPLETE` status as continuing physical-world state.
 
@@ -265,9 +291,14 @@ validity > reproducibility > coverage > cost > throughput
 
 The stewardship-world implementation adds the following domain invariants.
 
-### ASW-I01 — Harness-owned execution, separate world semantics
+### ASW-I01 — Layered execution authority
 
-The harness owns session execution, Harbor dispatch/import, and trial persistence. The meta-harness may compile and compare approved experiments. The stewardship runtime owns persistent maintenance semantics. Neither runtime moves task-specific logic into adapters, and the stewardship runtime does not import the meta-harness.
+The harness owns outer trial execution and `TrialRecord` persistence. The
+continual-world runtime owns task-neutral lifetime mechanics. The registered
+task world owns state and transition meaning. The selected profile owns one
+starting situation. No layer may take the authority of another. The
+meta-harness may compile and compare approved experiments, but task-specific
+logic must not move into adapters or the continual runtime.
 
 ### ASW-I02 — Time is simulated state
 
@@ -378,20 +409,29 @@ flowchart TD
     E --> T["TrialRecord plus immutable world-run artifacts"]
 ```
 
-### 7.1 Minimal host-execution seam
+### 7.1 Continual-world execution seam
 
-The shared seam is deliberately smaller than a common world-semantic API. It standardises how the host:
+The shared seam standardises how the host and continual-world runtime:
 
-- identifies and validates a content-addressed world package;
-- creates or resumes an execution;
-- publishes a declared model interaction surface;
-- binds session and agent-tenure identity;
-- accepts only typed host-mediated commands;
-- persists execution evidence;
-- invokes an independent verifier; and
-- produces artifacts suitable for `TrialRecord` finalisation.
+- identify and validate a content-addressed world package and profile;
+- create, open, resume, and inspect an execution;
+- publish durable commands, receipts, states, commits, and snapshots;
+- replay and recover one immutable history;
+- bind session, branch, snapshot, view, information-set, and agent-tenure
+  identity;
+- expose separate typed actor-action and host-control boundaries;
+- create isolated branches and rollout groups from a verified snapshot;
+- connect direct Python, installed JSON, Harbor, and evaluation transport
+  ports;
+- invoke the registered task verifier; and
+- produce artifacts suitable for `TrialRecord` finalisation.
 
-It does not standardise task action types, action fields, clocks, state, schedulers, obligations, transition semantics, or projections. Those remain stewardship-owned. ASW-5I standardises only the task-neutral actor invocation and host-control envelopes after the direct and Harbor consumers proved that stable boundary.
+The seam does not define or interpret task action names, action fields, clocks,
+state, schedulers, obligations, transition meaning, projections, or verifier
+targets. These remain task-owned. Its wider runtime contract is promoted only
+after the pump-station world and a real SSC-03 hydraulic-interaction adapter
+pass the same contract tests. A mock, duplicate wrapper, or second pump profile
+does not satisfy this gate.
 
 SSC-03 may continue to interpret its interaction as finite checkpoints. The stewardship engine interprets its interaction as views, proposed actions, scheduled processes, events, and resumable state.
 
@@ -472,7 +512,14 @@ The reference-profile payload owns:
 
 Later asset-domain versions may add repair-quality and recurrence semantics when ASW-7 exercises them.
 
-This is not a repository-wide `contracts` model during ASW-1. ASW-3C may record that part of it has become a promotion candidate across stewardship assets or at a stable harness boundary, but that review does not authorize extraction. Any shared implementation waits until the ASW-4 programme checkpoint and a separate compatibility-gated promotion stage. The envelope must not acquire unused "future-proof" fields. Each field added during ASW-2 must be exercised by the committed reference profile or required for replay, authority, or evaluation.
+This is not a repository-wide `contracts` model during ASW-1. ASW-3C may
+record that part of it has become a promotion candidate, but that review does
+not authorize extraction. A shared implementation requires a separate
+compatibility-gated promotion stage and the same contract tests passing for the
+pump-station world and the real SSC-03 hydraulic-interaction world. The envelope
+must not acquire unused "future-proof" fields. Each field added during ASW-2
+must be exercised by the committed reference profile or required for replay,
+authority, or evaluation.
 
 ### 8.2 Identity model
 
@@ -1208,7 +1255,12 @@ Subject to ASW-1, the default ownership is:
 - top-level `tasks/` and `src/aec_bench/tasks/` remain declarative task data and registry/lifecycle logic; executable asset physics is not placed there;
 - `src/aec_bench/task_world_templates/stewardship/<reference_asset>/` for the first complete implementation of asset state, clocks, scheduler, events, actions, domain authority, obligations, restrictions, processes, transitions, projections, FMECA/schedule, package materialization, and task verifier;
 - a persistence-agnostic asset kernel that returns typed state and transition values; harness/composition code supplies the owned artifact repository and publication transaction rather than the kernel importing `meta_harness`;
-- `src/aec_bench/task_world_templates/stewardship/runtime/` only after the ASW-4 programme checkpoint and a separate compatibility-gated promotion stage, if ASW-3C recorded the mechanics as candidates and a second demonstrated consumer or unavoidable stable boundary proves they are genuinely task-world-generic and do not import harness, evaluation, adapter, CLI, or study code;
+- a shared continual-world runtime package only after a separate
+  compatibility-gated promotion stage and the same contract suite passes for
+  the pump-station world and a real SSC-03 hydraulic-interaction adapter; the
+  contract tests select the final package boundary, and the shared package must
+  not import pump, hydraulic-task, harness, evaluation, adapter, CLI, or study
+  code;
 - `src/aec_bench/harness/world_session.py` for provider-neutral session orchestration over strict boundary types, with no asset physics, task-verifier logic, experimental treatment assignment, or evaluation policy;
 - `agents/entrypoint_agent.py` and the Harbor execution payload for selecting that bridge while retaining the provider-neutral `tool_loop` adapter;
 - `src/aec_bench/task_world_templates/stewardship/harbor_export.py` for the sibling exporter using existing stable-I/O and verifier-wheel utilities;
@@ -1291,6 +1343,7 @@ Every proposed contract must have a short register entry before implementation:
 | Persistence | Is it transient, run-local, ledger-persisted, or public? |
 | Visibility | Is it agent-visible, host-private, public, or holdout-sensitive? |
 | Compatibility | What historical bytes must still load, and what is the migration or retirement rule? |
+| Migration | What is the source owner, target owner, compatibility period, consumer cutover order, and duplicate-path retirement rule? |
 | Evidence | Which unit, integration, and end-to-end tests prove the boundary? |
 | Promotion state | Conceptual, asset-local, boundary candidate, or repository contract? |
 
@@ -1303,8 +1356,9 @@ Each implementation stage must begin with:
 1. an exact clean commit or content-pinned source inventory;
 2. an approved file and package allowlist;
 3. a boundary/authority delta showing every contract-bearing surface that may change;
-4. failing tests for that stage's behavior; and
-5. an explicit list of deferred surfaces.
+4. an ownership and migration plan for every moved, replaced, or retired path;
+5. failing tests for that stage's behavior; and
+6. an explicit list of deferred surfaces.
 
 Each stage must end with:
 
@@ -1318,7 +1372,11 @@ Each stage must end with:
 
 One stage may discover a boundary or freeze it, but it must not use a speculative boundary to justify a broad refactor in the same slice. A later stage that changes an earlier persisted schema must version it, preserve historical reload, and rerun every downstream compatibility gate.
 
-ASW-1 may draft the exact deltas required in normative repository documents. A normative document is amended only in the later substage that implements and tests the corresponding ownership, package, contract, CLI, Entrypoint, Harbor, persistence, or evaluation boundary. Design intent alone does not rewrite current architectural truth.
+ASW-1 may draft the exact deltas required in normative repository documents. A
+normative document may state an accepted requirement or promotion guard before
+implementation when it clearly says that implementation evidence is pending.
+It must not claim that a boundary exists until the implementation and its tests
+pass.
 
 ### 16.5 Mandatory agent stop conditions
 
@@ -1327,6 +1385,12 @@ An implementing agent stops the current change and requests an architecture deci
 - creating a new top-level package or domain;
 - placing a model in global `contracts` without its completed boundary-register entry and same-stage producer/consumer;
 - adding a `contracts/__init__.py` export, CLI command, registry ID, Entrypoint discriminator, Harbor key, persisted file layout, `TrialRecord` field, or runnable example earlier than its named promotion stage;
+- extracting shared runtime code before two real task worlds pass the same
+  contract suite;
+- adding a second durable run, repository, snapshot, replay, session,
+  actor/control, rollout, or Harbor path instead of extending the accepted
+  versioned path;
+- adding a task- or profile-specific branch to a generic host dispatcher;
 - importing `meta_harness`, harness, evaluation, adapters, CLI, study, or vendor code from the asset kernel;
 - importing production code from a temporary, run, staging, artifact, or generated directory;
 - reading research dossiers, source documents, raw solver outputs, cite-only material, or engine installations from the production runtime;
@@ -1512,7 +1576,10 @@ condition indication
 
 - Do not implement a snapshot migration until a real second schema exists. Unknown versions fail closed. A later migration creates a new content-addressed snapshot with source lineage and preserves historical reload.
 - Keep the minimum private branch identity and containment primitive required by AC-19; do not freeze a generic public counterfactual API.
-- Shared extraction requires either a second demonstrated task-world consumer or an unavoidable stable harness boundary. Similar names are not reuse evidence.
+- Shared extraction requires the pump-station world and a real SSC-03
+  hydraulic-interaction adapter to pass the same contract suite. A mock, test
+  double, duplicate wrapper, second profile, similar name, or claimed stable
+  seam is not second-consumer evidence.
 - ASW-3C records evidence and a recommendation only. Any shared extraction is a separately reviewed implementation stage after the ASW-4 programme checkpoint, with its own file allowlist, compatibility matrix, historical reload gates, and rollback boundary.
 
 **Exit gate:** ASW-3A through ASW-3C pass, and the ASW-4 input remains the accepted ASW-2E implementation without an intervening generic extraction. Failure triggers architecture repair or stage rollback, not scope expansion.
@@ -2014,7 +2081,7 @@ closed task-local descriptor registry owns these scenario artifacts and rejects
 caller overrides. Legacy manifest, corpus builder, and temporal-interface
 identities stay unchanged.
 
-**Implemented capability:**
+**Candidate task-world capability on draft PR 74:**
 
 - assign one or two eligible pumps through one typed actor request while
   `continue_operation` remains the only actor time-advance action;
@@ -2059,25 +2126,25 @@ latent health, private ASW-7 treatment facts, sibling branches, hidden future
 events, verifier-only expected balances, or counterfactual outcomes. Planned
 outage admission must not leak a hidden future event through its decision.
 
-**Implementation result:** ASW-8 was completed as one dependency-ordered plan,
-with focused unit, integration, and end-to-end tests. The cumulative
-provider-free case executes the complete Day 0 to Day 2 reference journey
-through installed actor tools and local Harbor. The separately approved
-four-turn Bedrock check completed in three turns and submitted one valid,
-view-bound actor proposal. It remains behaviour evidence only and does not
-replace the provider-free mechanism gate.
+**Implementation result:** focused evidence supports useful ASW-8 task
+semantics, including the Day 0 to Day 2 reference journey and one bounded
+Bedrock behaviour check. It does not close the continual-world boundary gate.
+PR 74 remains draft and unmerged.
 
 **Exclusions:** no second station, network, fleet, combined pump hydraulics,
 economic dispatch, extra crew, individual roster, supplier or warehouse,
 probabilistic failures, adaptive policy, FMECA change, common-header
-maintenance, new top-level domain, shared extraction, or phase-name cleanup.
+maintenance, new top-level domain, promotion of pump-specific semantics into
+the shared runtime, or phase-name cleanup.
 
-**Exit gate:** the independently promoted v2 station data, v4 durable history,
-v5 actor boundary, required temporal capability, direct and Harbor execution,
-evaluation, normalized semantic parity, rollout-control v2, and TrialRecord
-import pass their focused cases; ASW-7 parent and sibling isolation remains
-valid; old bytes still reload and replay; and duty, resources, generated work,
-and liabilities balance without an unexplained residual.
+**Exit gate:** in addition to the task-semantic checks, one pump-station run,
+repository, snapshot, replay, session, and rollout path serves v1 through v4;
+the pump-station world and a real SSC-03 hydraulic-interaction adapter pass the
+same continual-runtime contract suite; actor and host-control requests remain
+separate; generic dispatch resolves a registered world definition without an
+ASW-8 branch; duplicate coupled runtime paths are retired only after parity
+evidence passes; old bytes still reload and replay; and duty, resources,
+generated work, and liabilities balance without an unexplained residual.
 
 ### ASW-9 — Governed institutional adaptation
 
@@ -2282,7 +2349,7 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | OD-16 | Select generator/oracle and independent-certification software roles. | Resolved | ASW-0B3 through ASW-0B5 |
 | OD-17 | Define evidence/rights classification and research-to-runtime promotion shape. | Resolved | ASW-0B2 through ASW-0B5 |
 | OD-18 | Promote distinct actor and host-control APIs without creating a shared world state machine or moving task-owned actions into the harness. | Resolved for the ASW-5I boundary; later controls remain stage-owned | [ASW-5I research artifact](asw-5i-actor-control-interfaces/ara/PAPER.md) |
-| OD-19 | Define the smallest coupled-asset reference system, its profile and record versions, resource pools, generated work, conservation rules, and complete journey. | Resolved for ASW-8 design; implementation evidence remains open | [ASW-8 reference-system design](asw-8-reference-system-design.md) |
+| OD-19 | Define the smallest coupled-asset reference system, its profile and record versions, resource pools, generated work, conservation rules, and complete journey. | Resolved for task-world semantics; implementation acceptance is pending the continual-world boundary correction | [ASW-8 reference-system design](asw-8-reference-system-design.md) |
 
 ## 23. Decision log
 
@@ -2332,16 +2399,19 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | 2026-08-02 | Accept the ASW-6A-R mechanism and retain its negative real-agent result. | Provider-free execution, persistence, redaction, Harbor parity, and independent verification passed. The agent found the planted issue but failed three exact report fields. No retry or verifier change is permitted after this observed result. |
 | 2026-08-02 | Approve and accept the ASW-6A-R hybrid version 2 review contract. | Process-required work now uses public action codes, while expert rationale, related-record context, and additional recommendations remain written language. Direct impact stays strict, decisive sources are required, extra visible sources are permitted, version 1 evidence remains readable, and no provider call was made. |
 | 2026-08-02 | Accept `ASW-8-RS1` as the detailed coupled-asset reference design. | One three-pump station is sufficient to exercise general duty assignment, shared resources, outage capacity, collateral exposure, generated work, and four conservation reports without adding a network, shared runtime, or combined hydraulic claim. |
-| 2026-08-02 | Accept the ASW-8 implementation result on its feature branch. | The promoted v2 station, coupled v4 world, projection v5, durable actor proposals, host controls, temporal evidence, rollout isolation, direct and Harbor parity, TrialRecord import, and four conservation reports passed focused checks; the approved one-action Bedrock run also completed without private leakage. |
+| 2026-08-02 | Accept the ASW-8 implementation result on its feature branch. Superseded on 2026-08-03. | The promoted v2 station, coupled v4 world, projection v5, durable actor proposals, host controls, temporal evidence, rollout isolation, direct and Harbor parity, TrialRecord import, and four conservation reports passed focused checks; the approved one-action Bedrock run also completed without private leakage. |
+| 2026-08-03 | Withdraw ASW-8 architecture acceptance and keep PR 74 draft as reference evidence. | The task semantics remain useful, but the parallel runtime paths do not satisfy the accepted reusable continual-world boundary. |
 
 ## 24. Immediate next action
 
-Publish the completed ASW-8 implementation through its pull request. The next
-conditional stage is ASW-9, governed institutional adaptation. Before
-implementation, define the smallest authorised change case, its evidence and
-authority boundary, future-only effect, selective propagation, and regression
-checks against controlled failure modes.
+Complete the continual-world boundary correction in small pull requests against
+draft PR 74. First freeze the ownership map. Then prove one task-neutral runtime
+contract with the pump-station world and SSC-03, extract the mature durable
+engine, route pump v4 through the existing run lineage, reuse the separate actor
+and control interfaces and rollout path, add registered dispatch, integrate
+verification and evaluation, and retire duplicate paths after parity evidence.
 
-Do not start the post-development shared extraction, phase-name cleanup, or
-phase-specific test cleanup as part of ASW-9 without a separate classification
-of general contracts, task templates, and research-only support.
+Apply the separately reviewed research and behaviour-based test cleanup only
+after their target paths are stable. ASW-9 remains closed until the corrected
+ASW-8 implementation passes the final requirement-by-requirement audit and PR
+74 is accepted.
