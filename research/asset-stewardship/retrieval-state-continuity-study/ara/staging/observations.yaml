@@ -1,0 +1,9 @@
+observations:
+  - id: O001
+    summary: A real model-agent shakedown remains separately authorized and cannot use the generated analysis records as outcomes.
+    status: open
+    source: retrieval-state continuity study specification
+    next_action: Obtain exact approval for provider, model, route, adapter, calls, turns, input tokens, output tokens, reported analysis tokens, total tokens, currency, and spend before execution.
+    domain:
+      confirmatory_eligibility: false
+      provider_authorization_present: false

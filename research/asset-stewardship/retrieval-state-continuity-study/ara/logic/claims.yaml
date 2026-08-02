@@ -1,0 +1,35 @@
+claims:
+  - id: C001
+    statement: The retrieval-state continuity study has one complete provider-independent specification with fixed treatment, scenario, schedule, budget, endpoint, analysis, coverage, and exclusion rules.
+    status: supported
+    falsification_criteria:
+      - The plan does not contain exactly 8 world histories, 32 matched pairs, and 64 planned runs.
+      - Treatment order is not balanced within each world history or paired runs are not adjacent.
+      - A paired arm differs in any actor-visible input other than the declared retrieval-state projection.
+      - A development query route exposes the material record before availability or cannot retrieve and fetch it after availability within budget.
+      - The endpoint, interval, coverage, or exclusion rule can change without a new manifest identity.
+    proof:
+      experiments: [E001]
+      evidence: [EV001, EV002]
+    dependencies: []
+    provenance: ai_executed
+    tags: [study-design, temporal-evidence, pairing]
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+  - id: C002
+    statement: Generated provider-free records can exercise clustered analysis, immutable publication, and independent reload without producing a model result or permitting promotion.
+    status: supported
+    falsification_criteria:
+      - The provider-free path makes a provider call or records model tokens or spend.
+      - A generated record enters the confirmatory estimate or changes task reward.
+      - The known generated paired difference is not 0.5 with interval [0.5, 0.5].
+      - Independent reload trusts the stored report without recomputation.
+      - The report permits promotion or makes a confirmatory conclusion.
+    proof:
+      experiments: [E002]
+      evidence: [EV002]
+    dependencies: [C001]
+    provenance: ai_executed
+    tags: [provider-free, immutable-evidence, analysis]
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1

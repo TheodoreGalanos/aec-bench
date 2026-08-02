@@ -1,0 +1,22 @@
+evidence:
+  - id: EV001
+    kind: note
+    path: evidence/frozen-study-specification.md
+    description: Exact treatment, scenario, plan, budget, endpoint, analysis, exclusion, and conclusion rules.
+    source: research/asset-stewardship/temporal-evidence-frontier-prd.md section 24
+    supports: [C001]
+    produced_by: null
+    exact_values_required: true
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+  - id: EV002
+    kind: command_output
+    path: evidence/provider-free-validation.md
+    description: Focused contract, gateway, analysis, immutable reload, lint, and type evidence with exact artifact identities.
+    source: feat/wastewater-pump-station-temporal-study-specification on 2026-08-02
+    supports: [C001, C002]
+    produced_by: E001
+    exact_values_required: true
+    domain:
+      provider_calls: 0
+      study_outcomes: 0
