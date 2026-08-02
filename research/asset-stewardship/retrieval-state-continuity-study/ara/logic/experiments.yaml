@@ -79,3 +79,24 @@ experiments:
     domain:
       phase: confirmatory
       study_outcomes: 64
+  - id: E005
+    verifies: [C005]
+    purpose: Verify the corrected decision boundary and safe model-study resume path without another provider study.
+    setup: Use real durable pump-station sessions, the local temporal corpus, and temporary immutable evidence repositories with no provider registry.
+    procedure:
+      - Advance the outgoing tenure through the real availability event before handover.
+      - Confirm both treatment arms give the incoming tenure the same open decision-point world state.
+      - Fetch the delayed report and prove only a report-backed Pump A condition check satisfies the endpoint.
+      - Prove a general verification request and a condition check without report reliance fail the endpoint.
+      - Publish a complete delivery, observation, and trial-execution join and reload it as resumable progress.
+      - Publish an incomplete join and confirm resume rejects it.
+    metrics:
+      - The incoming world time equals the material evidence availability time.
+      - The outgoing continue-operation event is present in structured handover history.
+      - Complete joined trial evidence is reusable and incomplete evidence is rejected.
+      - Provider calls and new study outcomes remain zero.
+    evidence: [EV004]
+    exploratory: false
+    domain:
+      provider_calls: 0
+      study_outcomes: 0

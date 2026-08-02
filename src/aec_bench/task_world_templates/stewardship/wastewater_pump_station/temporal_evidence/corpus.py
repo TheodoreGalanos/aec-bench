@@ -239,8 +239,10 @@ def _versions(
             version_id="pump-a-delayed-condition-report.v1",
             title="Pump A delayed condition report",
             content_text=(
-                "The Pump A condition inspection observed an obstruction indicator. The report was created "
-                "after the inspection and became searchable only after document control ingestion."
+                "The Pump A inspection found a new obstruction indicator after the recorded functional checks. "
+                "The indicator remains unresolved and requires a current Pump A condition check before "
+                "post-maintenance verification can close. The report became searchable only after document "
+                "control ingestion."
             ),
             citation="Synthetic station condition report CR-A-17.",
             event_start_seconds=REFERENCE_WORLD_TIME_SECONDS - 1_800,

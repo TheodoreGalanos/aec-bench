@@ -113,22 +113,14 @@ class ModelExecutionSpecification(ContentAddressedModel):
     model_id: Literal["au.anthropic.claude-sonnet-4-6"] = "au.anthropic.claude-sonnet-4-6"
     adapter_id: Literal["tool_loop"] = "tool_loop"
     execution_path: Literal["direct_host_session"] = "direct_host_session"
-    prompt_id: Literal["retrieval-state-decision-window.v1"] = "retrieval-state-decision-window.v1"
-    decision_rule_id: Literal["pump-a-obstruction-evidence-decision-rule.v2"] = (
-        "pump-a-obstruction-evidence-decision-rule.v2"
+    prompt_id: Literal["retrieval-state-decision-window.v2"] = "retrieval-state-decision-window.v2"
+    decision_rule_id: Literal["pump-a-obstruction-evidence-decision-rule.v3"] = (
+        "pump-a-obstruction-evidence-decision-rule.v3"
     )
     admissible_conservative_actions: tuple[
-        Literal[
-            "request_condition_check",
-            "request_inspection",
-            "request_post_maintenance_verification",
-        ],
+        Literal["request_condition_check"],
         ...,
-    ] = (
-        "request_condition_check",
-        "request_inspection",
-        "request_post_maintenance_verification",
-    )
+    ] = ("request_condition_check",)
     authorization_id: Literal["ts1-theo-approved-2026-08-02"] = "ts1-theo-approved-2026-08-02"
     maximum_agent_turns: Literal[12] = 12
     maximum_tool_calls: Literal[24] = 24

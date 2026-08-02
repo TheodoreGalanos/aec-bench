@@ -32,3 +32,14 @@ evidence:
       provider_calls: 260
       study_outcomes: 64
       conclusion: refuted
+  - id: EV004
+    kind: command_output
+    path: evidence/model-study-result.md
+    description: Focused provider-free checks for decision-point handover, action-relevant delayed evidence, and verified resume.
+    source: feat/wastewater-pump-station-temporal-study-followups on 2026-08-02
+    supports: [C005]
+    produced_by: E005
+    exact_values_required: true
+    domain:
+      provider_calls: 0
+      study_outcomes: 0
