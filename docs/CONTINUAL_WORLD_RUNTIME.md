@@ -389,6 +389,64 @@ change a task codec or define task-specific artifact collections. Those
 boundaries stay with the pump and evidence-lifecycle owners until later Step 3
 work proves a shared contract for each one.
 
+### 6.11 Step 3C durable mutable byte replacement
+
+Step 3C extracts only the atomic replacement of one mutable file with exact
+bytes. It does not make a mutable file into a shared pointer or transaction
+contract. The caller still owns what the file means and when it can change.
+
+| Path | Owner | Compatibility and migration rule |
+| --- | --- | --- |
+| `src/aec_bench/ledger/durability.py` | Lower filesystem durability | Own unique sibling temporary creation, exact-byte writes, file flush, descriptor-relative replacement, final-byte verification, parent-directory flush, private mode, and raw confinement and integrity errors. Import no meta-harness or task module. |
+| `src/aec_bench/task_world_templates/continual/durability.py` | Shared continual-world durability | Re-export the lower replacement function and errors for task-world adapters. Keep the lower implementation as the single owner. |
+| `wastewater_pump_station/world_run_repository.py` | Pump durability adapter | Encode the existing canonical `current.json` bytes, request mode `0600`, and translate lower failures to pump errors. Keep the run lock, pointer schema, stale checks, commit selection, replay, and recovery in the pump adapter. |
+| `src/aec_bench/meta_harness/evidence_request_store.py` | Evidence-lifecycle policy facade and second consumer | Keep sorted, indented JSON encoding with no final newline, then call the lower function directly and translate failures to `EvidenceLifecycleError`. Keep lifecycle transactions, commit-marker meaning, projections, ledger repair, replay, and recovery unchanged. SSC-03 uses this path through its real lifecycle run. |
+
+The lower function accepts one existing trusted directory and one normalized
+file name. It creates a unique sibling temporary file with exclusive creation,
+keeps its descriptor and device and inode identity, writes and flushes all
+bytes, rejects symbolic-link or non-regular destinations, replaces by directory
+descriptor, verifies the final regular file and exact bytes, and then flushes
+the parent directory. Cleanup removes a temporary name only when it still has
+the identity created by that call. Host-private callers get mode `0600` even
+under a restrictive process mask.
+
+The final directory component must be a real directory. Trusted path aliases
+above that component are allowed and select their physical directory. The
+caller must therefore trust every supplied ancestor. When `host_private` is
+false, the new file starts with mode `0666` filtered by the current process
+mask. Replacement does not preserve the former destination's metadata.
+
+The pump byte inventory remains unchanged. The lifecycle compatibility
+inventory also fixes the pre-extraction length and SHA-256 of `state.json` and
+the operation `committed.json` marker. JSON layout, whitespace, and final-newline
+rules remain caller policy.
+
+This is a local POSIX filesystem contract for cooperative processes that use
+the same account and caller-owned lock. It is not a distributed transaction,
+compare-and-swap pointer, rollback mechanism, or protection from a malicious
+same-account process. The existing `ledger/durability.py` source was already in
+the default kernel executor inventory, so this step adds no new executor source
+path or operation-specific identity.
+
+The raw function does not acquire a lock. Normal pump transitions use the
+existing run lock, but `publish_staged_transition()` does not enforce that lock
+when called directly. Closing this pre-existing adapter gap remains pointer
+policy work; it must happen before the pointer contract can move downwards.
+
+An error after the descriptor-relative replacement has an unknown commit
+result: the new bytes can already be visible even when later verification,
+directory flush, or descriptor close fails. A caller must reload and reconcile
+before retry. Process death before replacement can leave a unique hidden
+temporary file. It is not authoritative, later writes ignore it, and Step 3C
+has no scavenger. Process-death tests prove old-or-new atomic visibility. A real
+power-loss guarantee also depends on the filesystem and storage honoring
+`fsync`.
+
+Step 3 remains incomplete. Shared pointer policy, transaction publication,
+replay, recovery, sessions, branches, rollouts, CLI, and Harbor behavior remain
+deferred until two real consumers prove the same task-neutral contract.
+
 ## 7. Implementation sequence
 
 The correction uses small pull requests against the unmerged ASW-8 branch.

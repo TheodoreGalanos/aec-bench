@@ -12,6 +12,9 @@ from typing import Protocol
 
 import pytest
 
+import aec_bench.ledger.durability as lower_durability
+import aec_bench.meta_harness.evidence_request_store as lifecycle_store
+import aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository as pump_repository
 from aec_bench.ledger.immutable_artifact_store import (
     ImmutableByteStore as LowerImmutableByteStore,
 )
@@ -22,6 +25,7 @@ from aec_bench.task_world_templates.continual.durability import (
     ContinualWorldLockError,
     ImmutableByteStore,
     exclusive_local_file_lock,
+    replace_file_bytes_durable,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station import (
     PumpStationWorldRunError,
@@ -59,6 +63,14 @@ def _imported_modules(path: Path) -> set[str]:
         elif isinstance(node, ast.ImportFrom) and node.module is not None:
             modules.add(node.module)
     return modules
+
+
+def _function_body(path: Path, name: str) -> str:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == name:
+            return ast.unparse(node)
+    raise AssertionError(f"function not found: {name}")
 
 
 def test_exclusive_local_file_lock_serializes_real_processes(tmp_path: Path) -> None:
@@ -239,6 +251,27 @@ def test_continual_lock_is_the_lower_shared_ledger_primitive() -> None:
 
 def test_continual_immutable_byte_store_is_the_lower_shared_ledger_primitive() -> None:
     assert ImmutableByteStore is LowerImmutableByteStore
+
+
+def test_real_consumers_use_the_same_durable_file_replacement_owner() -> None:
+    assert replace_file_bytes_durable is lower_durability.replace_file_bytes_durable
+    assert vars(pump_repository)["replace_file_bytes_durable"] is replace_file_bytes_durable
+    assert vars(lifecycle_store)["replace_file_bytes_durable"] is lower_durability.replace_file_bytes_durable
+
+    source_root = Path(__file__).parents[3] / "src" / "aec_bench"
+    pump_body = _function_body(
+        source_root / "task_world_templates" / "stewardship" / "wastewater_pump_station" / "world_run_repository.py",
+        "_replace_current",
+    )
+    lifecycle_body = _function_body(
+        source_root / "meta_harness" / "evidence_request_store.py",
+        "_write_json_atomic_durable",
+    )
+
+    for body in (pump_body, lifecycle_body):
+        assert "replace_file_bytes_durable" in body
+        assert "os.replace" not in body
+        assert "os.fsync" not in body
 
 
 def test_real_consumers_do_not_own_parallel_local_lock_implementations() -> None:

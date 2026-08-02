@@ -126,7 +126,7 @@ def _install_publication_crash(root: Path, boundary: str) -> None:
         src_dir_fd: int | None = None,
         dst_dir_fd: int | None = None,
     ) -> None:
-        if Path(os.fsdecode(dst)) == root / "current.json":
+        if _path_from_directory_descriptor(root, dst, dst_dir_fd) == root / "current.json":
             if boundary == "current-before-replace":
                 _crash()
             _ORIGINAL_REPLACE(

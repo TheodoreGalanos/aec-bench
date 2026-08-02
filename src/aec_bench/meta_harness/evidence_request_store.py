@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shutil
 import tempfile
 from pathlib import Path, PurePosixPath
@@ -13,7 +12,13 @@ from typing import Any, Literal
 
 from pydantic import ValidationError
 
-from aec_bench.ledger.durability import fsync_directory, fsync_tree, mkdir_durable
+from aec_bench.ledger.durability import (
+    DurableFileReplaceError,
+    fsync_directory,
+    fsync_tree,
+    mkdir_durable,
+    replace_file_bytes_durable,
+)
 from aec_bench.meta_harness.evidence_lifecycle_state import (
     CheckpointRunRecord,
     CheckpointRunStatus,
@@ -624,15 +629,16 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _write_json_atomic_durable(path: Path, payload: dict[str, Any]) -> None:
     mkdir_durable(path.parent)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    _write_json(temporary, payload)
-    descriptor = os.open(temporary, os.O_RDONLY)
     try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-    temporary.replace(path)
-    fsync_directory(path.parent)
+        replace_file_bytes_durable(
+            path.parent,
+            path.name,
+            json.dumps(payload, indent=2, sort_keys=True).encode("utf-8"),
+        )
+    except DurableFileReplaceError as error:
+        raise EvidenceLifecycleError(
+            f"durable JSON replacement failed: {path}",
+        ) from error
 
 
 def _sha256(path: Path) -> str:

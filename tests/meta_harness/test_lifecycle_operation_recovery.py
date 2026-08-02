@@ -12,6 +12,8 @@ from typing import Any, cast
 
 import pytest
 
+from aec_bench.ledger.durability import DurableFileReplaceIntegrityError
+from aec_bench.meta_harness import evidence_request_store as evidence_request_store_runtime
 from aec_bench.meta_harness import lifecycle_operation_store
 from aec_bench.meta_harness.evidence_lifecycle import (
     EvidenceLifecycleError,
@@ -110,6 +112,26 @@ def test_lifecycle_state_and_commit_marker_match_pre_extraction_bytes(
         payload = (run / relative_path).read_bytes()
         assert len(payload) == expected["length"]
         assert hashlib.sha256(payload).hexdigest() == expected["sha256"]
+
+
+def test_lifecycle_maps_shared_atomic_replacement_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_replacement(*_args: object, **_kwargs: object) -> None:
+        raise DurableFileReplaceIntegrityError("replacement drift")
+
+    monkeypatch.setattr(
+        evidence_request_store_runtime,
+        "replace_file_bytes_durable",
+        fail_replacement,
+    )
+
+    with pytest.raises(EvidenceLifecycleError, match="durable JSON replacement failed"):
+        evidence_request_store_runtime._write_json_atomic_durable(
+            tmp_path / "run" / "state.json",
+            {"status": "active"},
+        )
 
 
 def _crash_after_transaction_publish(
