@@ -1,7 +1,0 @@
-Command:
-uv run pytest -q tests/task_world_templates/stewardship/wastewater_pump_station
-
-Result:
-192 passed in 175.62s (0:02:55)
-
-No full repository test suite was run.

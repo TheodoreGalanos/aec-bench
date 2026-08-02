@@ -1,6 +1,0 @@
-sessions:
-  - id: S001
-    date: 2026-08-01
-    summary: Reviewed the later plan, resolved the ASW-5 checkpoint conflict, accepted ASW-5I first, implemented it with TDD, and ran its provider-free gate.
-    trace_nodes: [N001, N002, N003, N004, N005, N006]
-    evidence: [EV001, EV002, EV003, EV004]

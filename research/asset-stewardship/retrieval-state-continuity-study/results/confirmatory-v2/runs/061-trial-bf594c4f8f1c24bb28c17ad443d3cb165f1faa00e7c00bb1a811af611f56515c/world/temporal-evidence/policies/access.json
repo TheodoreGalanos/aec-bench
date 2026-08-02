@@ -1,1 +1,0 @@
-{"actor_roles":["station-steward"],"allowed_scopes":["all","condition","maintenance","operations","procedures"],"content_sha256":"1ba7098c782bed935321a6f1277a821407c59efc2ec285339a8e75b5c54e68f0","policy_id":"pump-station-temporal-access.v1","schema_version":"pump-station.temporal-evidence.v1"}
