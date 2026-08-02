@@ -396,10 +396,9 @@ class PumpStationWorldSession:
             self._actor_results[request.request_id] = (request, result)
             return result
         reliance: TemporalEvidenceRelianceRecord | None = None
-        proposal_request = request
+        relied_on_evidence_refs = pump_station_evidence_reliance_refs(request)
+        proposal_request = pump_station_request_without_evidence_reliance(request)
         if self._temporal_repository is not None:
-            relied_on_evidence_refs = pump_station_evidence_reliance_refs(request)
-            proposal_request = pump_station_request_without_evidence_reliance(request)
             if relied_on_evidence_refs:
                 try:
                     reliance = self._temporal_repository.record_evidence_reliance(

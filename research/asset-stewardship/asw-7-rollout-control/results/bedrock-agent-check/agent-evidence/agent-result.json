@@ -1,0 +1,19 @@
+{
+  "adapter": "tool_loop",
+  "adapter_name": "tool_loop",
+  "cache_read_tokens": 0,
+  "cache_write_tokens": 0,
+  "configuration_record": {
+    "max_turns": 4,
+    "model": "au.anthropic.claude-sonnet-4-6"
+  },
+  "failure_kind": "provider_error",
+  "input_tokens": 0,
+  "max_turns": 4,
+  "model": "au.anthropic.claude-sonnet-4-6",
+  "output_tokens": 0,
+  "provider_error": "status_code: 403, model_name: au.anthropic.claude-sonnet-4-6, body: {'Error': {'Message': 'The security token included in the request is invalid', 'Code': 'UnrecognizedClientException'}, 'ResponseMetadata': {'RequestId': 'b14cee3f-918e-4a54-be4c-60a668df5d3e', 'HTTPStatusCode': 403, 'HTTPHeaders': {'date': 'Sun, 02 Aug 2026 07:31:52 GMT', 'content-type': 'application/json', 'content-length': '67', 'connection': 'keep-alive', 'x-amzn-requestid': 'b14cee3f-918e-4a54-be4c-60a668df5d3e', 'x-amzn-errortype': 'UnrecognizedClientException:http://internal.amazon.com/coral/com.amazon.coral.service/'}, 'RetryAttempts': 0}}",
+  "resolved_model": "au.anthropic.claude-sonnet-4-6",
+  "status": "failed",
+  "turns_used": null
+}

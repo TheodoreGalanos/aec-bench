@@ -1,0 +1,47 @@
+experiments:
+  - id: E001
+    verifies: [C001, C002, C003, C004]
+    purpose: Prove rollout, treatment, recovery, privacy, transport, and replay semantics without a provider.
+    setup: Certified pump-station package, version 3 evidence-health world, local filesystem, installed CLI, and local Harbor export.
+    procedure:
+      - Start one real parent world and verify its current snapshot.
+      - Create two children from that exact snapshot and compare their initial states.
+      - Interrupt group creation after one child and retry from a new controller.
+      - Apply each closed treatment class to one child and inspect parent, sibling, actor view, and verifier output.
+      - Repeat group and treatment operations through installed JSON and local Harbor.
+    metrics:
+      - Focused test pass count.
+      - Parent and sibling snapshot equality.
+      - Replay validity and public privacy assertions.
+    evidence: [EV001, EV002]
+    exploratory: false
+    domain: {}
+  - id: E002
+    verifies: [C005]
+    purpose: Run one bounded real model against only the treated child actor surface.
+    setup: Amazon Bedrock Claude Sonnet 4.6, tool-loop adapter, four-turn limit, and five forbidden private tokens.
+    procedure:
+      - Create and treat one isolated child.
+      - Open a fresh actor tenure with no private lineage input.
+      - Request one supported diagnostic action and factual summary.
+      - Record provider result, token use, replay verification, and privacy scan.
+    metrics:
+      - Provider status and failure kind.
+      - Input, output, and cache token counts.
+      - Replay validity and leaked private token count.
+    evidence: [EV003, EV004, EV005]
+    exploratory: true
+    domain: {}
+  - id: E003
+    verifies: [C006]
+    purpose: Prove native tool compatibility while preserving temporal evidence reliance.
+    setup: One evidence-health rollout child and the existing temporal world-session tests.
+    procedure:
+      - Invoke continue operation through the native agent tool with no evidence references.
+      - Run the focused temporal world-session tests.
+    metrics:
+      - Native tool result and replay validity.
+      - Temporal focused test pass count.
+    evidence: [EV001]
+    exploratory: false
+    domain: {}

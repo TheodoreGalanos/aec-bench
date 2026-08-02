@@ -12,6 +12,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpStationModel,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_treatments import (
+    PumpStationPhysicalTreatmentActivationRequest,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_models import (
     ReferencePackage,
 )
@@ -29,6 +32,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
     apply_evidence_treatment_schedule,
+    apply_physical_treatment_activation,
     apply_stewardship_proposal,
     materialize_evidence_health_state,
 )
@@ -399,7 +403,37 @@ class PumpStationWorldRun:
         commit = self._repository.find_committed_control_request(request_id)
         if commit is None:
             _fail("control-request-not-found", request_id)
-        return self._repository.recover_control_request(commit)
+        request, transition = self._repository.recover_control_request(commit)
+        if not isinstance(request, PumpStationEvidenceTreatmentRequest):
+            _fail("control-request-type", request_id)
+        return request, transition
+
+    def apply_physical_treatment(
+        self,
+        request: PumpStationPhysicalTreatmentActivationRequest,
+    ) -> PumpStationTransition:
+        """Apply or exactly recover one governed physical treatment."""
+
+        with self._repository.locked():
+            committed = self._repository.find_committed_control_request(
+                request.request_id,
+            )
+            if committed is not None:
+                return self._repository.validate_repeated_control_request(
+                    committed,
+                    request,
+                )
+            prior = self._repository.current_snapshot()
+            self._validate_control_scope(request, prior)
+            state = self._repository.load_state(prior.state_id)
+            transition = apply_physical_treatment_activation(state, request)
+            staged = self._repository.stage_control_transition(
+                manifest=self._manifest,
+                prior_snapshot=prior,
+                control_request=request,
+                transition=transition,
+            )
+            return self._repository.publish_staged_transition(staged)
 
     def steps(self) -> tuple[PumpStationRunStep, ...]:
         """Reload all selected run steps for independent replay."""
@@ -407,7 +441,7 @@ class PumpStationWorldRun:
 
     def _validate_control_scope(
         self,
-        request: PumpStationEvidenceTreatmentRequest,
+        request: (PumpStationEvidenceTreatmentRequest | PumpStationPhysicalTreatmentActivationRequest),
         snapshot: PumpStationStateSnapshotRef,
     ) -> None:
         observed = (

@@ -11,6 +11,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpStationModel,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_treatments import (
+    PumpStationPhysicalTreatmentActivationRequest,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
     stewardship_state_id,
 )
@@ -24,6 +27,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
     apply_evidence_treatment_schedule,
+    apply_physical_treatment_activation,
     apply_stewardship_proposal,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
@@ -44,7 +48,7 @@ class PumpStationRunStep:
     proposal: PumpStationProposal | None
     information_set: PumpStationInformationSet | None
     transition: PumpStationTransition
-    control_request: PumpStationEvidenceTreatmentRequest | None = None
+    control_request: PumpStationEvidenceTreatmentRequest | PumpStationPhysicalTreatmentActivationRequest | None = None
 
     def __post_init__(self) -> None:
         actor_step = self.proposal is not None and self.information_set is not None
@@ -97,10 +101,19 @@ def verify_stewardship_run(
         transition_id = step.transition.receipt.transition_id
         try:
             if step.control_request is not None:
-                replayed = apply_evidence_treatment_schedule(
-                    state,
+                if isinstance(
                     step.control_request,
-                )
+                    PumpStationPhysicalTreatmentActivationRequest,
+                ):
+                    replayed = apply_physical_treatment_activation(
+                        state,
+                        step.control_request,
+                    )
+                else:
+                    replayed = apply_evidence_treatment_schedule(
+                        state,
+                        step.control_request,
+                    )
             else:
                 if step.proposal is None or step.information_set is None:
                     issues.append(f"transition-replay-error:{transition_id}:run-step-shape")

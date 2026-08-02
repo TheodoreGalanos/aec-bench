@@ -1,0 +1,55 @@
+evidence:
+  - id: EV001
+    kind: command_output
+    path: evidence/provider-free-gate.md
+    description: Focused rollout, treatment, installed JSON, Harbor, native tool, and temporal regression results.
+    source: Local focused test and quality commands on 2026-08-02.
+    supports: [C001, C002, C003, C004, C006]
+    produced_by: E001
+    exact_values_required: true
+    domain: {}
+  - id: EV002
+    kind: note
+    path: evidence/requirement-trace.md
+    description: Requirement-by-requirement ASW-7 implementation trace.
+    source: Production code and focused tests.
+    supports: [C001, C002, C003, C004]
+    produced_by: E001
+    exact_values_required: false
+    domain: {}
+  - id: EV003
+    kind: note
+    path: evidence/bedrock-agent-attempt.md
+    description: Approved Bedrock attempt, credential failure, zero token use, and interpretation.
+    source: Bounded provider attempt on 2026-08-02.
+    supports: [C005]
+    produced_by: E002
+    exact_values_required: true
+    domain: {}
+  - id: EV004
+    kind: log
+    path: ../results/bedrock-agent-check/agent-evidence/agent-result.json
+    description: Machine-readable adapter and provider result with token counts.
+    source: Tool-loop adapter.
+    supports: [C005]
+    produced_by: E002
+    exact_values_required: true
+    domain: {}
+  - id: EV005
+    kind: log
+    path: ../results/bedrock-agent-check/agent-evidence/privacy-check.json
+    description: Negative scan for five host-private rollout and treatment tokens.
+    source: Rollout model-session host check.
+    supports: [C005]
+    produced_by: E002
+    exact_values_required: true
+    domain: {}
+  - id: EV006
+    kind: note
+    path: evidence/contract-register.md
+    description: Ownership, persistence, visibility, compatibility, and evidence for new task-local contracts.
+    source: ASW-7 architecture audit.
+    supports: [C001, C003, C004]
+    produced_by: E001
+    exact_values_required: false
+    domain: {}
