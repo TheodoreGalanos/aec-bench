@@ -1,5 +1,5 @@
-# ABOUTME: Exposes the task-neutral continual-world definition and catalogue boundary.
-# ABOUTME: Does not import any concrete task world or execution transport.
+# ABOUTME: Exposes task-neutral continual-world definition, catalogue, and local durability boundaries.
+# ABOUTME: Imports no concrete task world or execution transport.
 
 from aec_bench.task_world_templates.continual.catalogue import ContinualWorldCatalogue
 from aec_bench.task_world_templates.continual.definition import (
@@ -7,10 +7,18 @@ from aec_bench.task_world_templates.continual.definition import (
     LoadedContinualWorldProfile,
     python_source_sha256,
 )
+from aec_bench.task_world_templates.continual.durability import (
+    ContinualWorldLockConfinementError,
+    ContinualWorldLockError,
+    exclusive_local_file_lock,
+)
 
 __all__ = [
     "ContinualWorldCatalogue",
     "ContinualWorldDefinition",
+    "ContinualWorldLockConfinementError",
+    "ContinualWorldLockError",
     "LoadedContinualWorldProfile",
+    "exclusive_local_file_lock",
     "python_source_sha256",
 ]

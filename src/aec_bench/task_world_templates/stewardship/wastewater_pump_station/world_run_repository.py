@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -14,6 +13,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import NoReturn, TypeGuard, cast
 
+from aec_bench.task_world_templates.continual.durability import (
+    exclusive_local_file_lock,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
     PumpStationEvidenceTreatmentRequest,
 )
@@ -162,20 +164,15 @@ class PumpStationWorldRunRepository:
     @contextmanager
     def locked(self) -> Iterator[None]:
         """Serialize state selection across local processes."""
-        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0)
-        flags |= getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(self._lock_path, flags, 0o600)
-        try:
-            details = os.fstat(descriptor)
-            if not stat.S_ISREG(details.st_mode):
-                _fail("artifact-confinement", "world-run lock is not a regular file")
-            fcntl.flock(descriptor, fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                fcntl.flock(descriptor, fcntl.LOCK_UN)
-        finally:
-            os.close(descriptor)
+        with exclusive_local_file_lock(
+            self._root,
+            ".world-run.lock",
+            error_factory=lambda error: PumpStationWorldRunError(
+                "artifact-confinement",
+                f"world-run lock is unsafe: {error}",
+            ),
+        ):
+            yield
 
     def initialize(
         self,

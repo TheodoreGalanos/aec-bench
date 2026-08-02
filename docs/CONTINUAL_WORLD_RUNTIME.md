@@ -320,6 +320,37 @@ portable profile ID. The definition reference separately hashes the registered
 adapter and loader sources. Recovery must later check all three identities:
 profile, definition implementation, and compiled run package.
 
+### 6.9 Step 3A local lock ownership
+
+The first durable-engine extraction moves only the host-local inter-process
+lock. It is the smallest proven lifetime mechanic already used by both real
+world implementations.
+
+| Path | Owner | Compatibility and migration rule |
+| --- | --- | --- |
+| `src/aec_bench/ledger/local_lock.py` | Lower filesystem durability | Own trusted-root anchoring, confined relative-path traversal, a private regular lock file, and exclusive POSIX `flock`. Import no task or harness module. |
+| `src/aec_bench/task_world_templates/continual/durability.py` | Shared continual-world durability | Re-export the lower lock primitive as part of the continual-world runtime boundary. Import no concrete task or harness module. |
+| `wastewater_pump_station/world_run_repository.py` | Pump durability adapter | Keep `.world-run.lock`, translate shared lock failures to the existing pump error boundary, and keep every pump artifact, codec, commit, pointer, replay, and recovery rule task-local. |
+| `meta_harness/evidence_lifecycle.py` | Shared evidence-lifecycle kernel | Use the lower primitive directly to keep the dependency direction downwards. Keep `.locks/lifecycle-state.lock`, translate lock failures to `EvidenceLifecycleError`, and keep lifecycle state, transaction, ledger, and recovery rules unchanged. SSC-03 remains one real consumer of this kernel. |
+
+The shared lock is local to one POSIX host. It is not a distributed lock and
+does not provide cross-host coordination. Each caller supplies a trusted run
+root and a confined relative lock path. A relative root, including `.`, is
+anchored once as an absolute path. The root's final component must be a real
+directory, not a symbolic link. System path aliases above that root are valid.
+Callers that used a symbolic link as the run root must supply its real target or
+put the alias above the run root. Symbolic links and non-directory components
+inside the root are not valid. The lock paths and mode `0600` stay unchanged.
+Errors from work done while the lock is held keep their original type and
+identity. No task artifact path or byte changes in this extraction.
+
+Step 3 is not complete at this point. Immutable publication and confined reads
+already have a generic implementation in `meta_harness/immutable_artifact_store.py`.
+The next correction must resolve that implementation's lower-layer ownership
+and reuse it rather than create a third byte store. Atomic current selection,
+transaction publication, replay, and crash recovery remain on their existing
+pump and SSC-03 paths until their shared raw-byte boundary is proved.
+
 ## 7. Implementation sequence
 
 The correction uses small pull requests against the unmerged ASW-8 branch.
