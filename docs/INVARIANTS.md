@@ -215,6 +215,22 @@ architecture defect.
 
 ---
 
+## 13. Maintained Code Has a Permanent Owner
+
+Every artifact needed to build, run, verify, generate, certify, migrate, or test the product must live in a permanent, tracked repository surface with an explicit architectural owner.
+
+The pull request is the delivery boundary. Research, planning, output, and phase directories are work areas, not delivery surfaces. Maintained code must not import, execute, package, or read required files from them.
+
+A change is incomplete if required behaviour remains in an ignored, temporary, or phase-specific location. How often code runs does not change its ownership: a generator or certifier is maintained code when it is required to reproduce or certify the current system.
+
+Python enforcement direction:
+- classify each delivered artifact as shared library code, task-template code, a maintenance command, test support, normative documentation, or local research/output;
+- place maintained artifacts in the repository surface that owns their behaviour;
+- keep the product, build, package, and permanent test dependency graphs free of research and phase paths;
+- confirm that the feature can build, package, test, and run without local research or phase directories.
+
+---
+
 ## Adapter Reserved Keys
 
 Adapter-internal extraction metadata must use explicit reserved keys and must not leak into benchmark-semantic fields.
@@ -237,6 +253,7 @@ Adapter-internal extraction metadata must use explicit reserved keys and must no
 | Continual-world ownership | Changed paths have one declared runtime, task, profile, or transport owner |
 | Shared extraction | Ownership, migration, retirement, and two-real-consumer evidence exist |
 | Test naming | Permanent test names describe stable behaviour, contracts, boundaries, or failure modes |
+| Repository ownership | Maintained artifacts have permanent owners and no research or phase dependency |
 
 ### Build Next
 

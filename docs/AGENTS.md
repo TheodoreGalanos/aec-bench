@@ -175,6 +175,25 @@ These live in established locations. Use them instead of writing local copies.
 
 ---
 
+## Delivery Ownership
+
+Before completing a pull request, classify every delivered artifact and place it under its permanent owner:
+
+| Artifact | Permanent owner |
+|---|---|
+| Shared library or runtime behaviour | `src/aec_bench/` |
+| Task-template-specific behaviour or data | `src/aec_bench/task_world_templates/<family>/` |
+| Maintained repository command | `scripts/` when it is not part of the installed API; otherwise `src/aec_bench/` |
+| Permanent tests and test support | `tests/` |
+| Normative architecture and operating guidance | `docs/` |
+| Notes, experiments, generated evidence, and temporary outputs | Local ignored research or output storage |
+
+Do not deliver maintained code from a research, planning, output, or phase directory. A rarely run generator or certifier is still maintained code when the current system needs it.
+
+Final check: would the feature still build, package, test, and run if local research and phase directories were absent?
+
+---
+
 ## Adapter Rules
 
 Adapters translate protocol only. They do NOT:
@@ -271,6 +290,7 @@ environment's native skill/prompt mechanism.
 | 10 | Continuous quality | Does this reduce drift instead of adding to it? |
 | 11 | Staged evidence is host-controlled | Does the host own evidence release and immutable submissions? |
 | 12 | Continual-world runtime ownership | Are lifetime mechanics separate from task meaning and profile data? |
+| 13 | Maintained code has a permanent owner | Would this work without local research and phase directories? |
 
 ## Objective Stack
 
