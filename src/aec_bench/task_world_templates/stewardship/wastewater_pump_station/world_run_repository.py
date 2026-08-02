@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -19,6 +18,7 @@ from aec_bench.task_world_templates.continual.durability import (
     ImmutableArtifactStoreError,
     ImmutableByteStore,
     exclusive_local_file_lock,
+    mkdir_durable,
     replace_file_bytes_durable,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
@@ -116,26 +116,6 @@ def _fail(code: str, detail: str) -> NoReturn:
     raise PumpStationWorldRunError(code, detail)
 
 
-def _fsync_directory(path: Path) -> None:
-    descriptor = os.open(path, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
-def _mkdir_durable(path: Path) -> None:
-    missing: list[Path] = []
-    cursor = path
-    while not cursor.exists():
-        missing.append(cursor)
-        cursor = cursor.parent
-    path.mkdir(parents=True, exist_ok=True)
-    for directory in reversed(missing):
-        directory.chmod(0o700)
-        _fsync_directory(directory.parent)
-
-
 class PumpStationWorldRunRepository:
     """A confined durable repository for exactly one pump-station world run."""
 
@@ -143,7 +123,7 @@ class PumpStationWorldRunRepository:
         selected = Path(root)
         if selected.exists() and (selected.is_symlink() or not selected.is_dir()):
             _fail("artifact-confinement", "world-run root must be a plain directory")
-        _mkdir_durable(selected)
+        mkdir_durable(selected, created_mode=0o700)
         selected.chmod(0o700)
         self._root = selected.resolve(strict=True)
         self._lock_path = self._root / ".world-run.lock"

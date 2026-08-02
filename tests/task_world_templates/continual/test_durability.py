@@ -14,6 +14,7 @@ import pytest
 
 import aec_bench.ledger.durability as lower_durability
 import aec_bench.meta_harness.evidence_request_store as lifecycle_store
+import aec_bench.meta_harness.lifecycle_operation_store as lifecycle_operation_store
 import aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository as pump_repository
 from aec_bench.ledger.immutable_artifact_store import (
     ImmutableByteStore as LowerImmutableByteStore,
@@ -25,6 +26,7 @@ from aec_bench.task_world_templates.continual.durability import (
     ContinualWorldLockError,
     ImmutableByteStore,
     exclusive_local_file_lock,
+    mkdir_durable,
     replace_file_bytes_durable,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station import (
@@ -251,6 +253,21 @@ def test_continual_lock_is_the_lower_shared_ledger_primitive() -> None:
 
 def test_continual_immutable_byte_store_is_the_lower_shared_ledger_primitive() -> None:
     assert ImmutableByteStore is LowerImmutableByteStore
+
+
+def test_real_consumers_use_the_same_durable_directory_creation_owner() -> None:
+    assert mkdir_durable is lower_durability.mkdir_durable
+    assert vars(pump_repository)["mkdir_durable"] is mkdir_durable
+    assert vars(lifecycle_operation_store)["mkdir_durable"] is lower_durability.mkdir_durable
+
+    source_root = Path(__file__).parents[3] / "src" / "aec_bench"
+    repository_path = (
+        source_root / "task_world_templates" / "stewardship" / "wastewater_pump_station" / "world_run_repository.py"
+    )
+    source = repository_path.read_text(encoding="utf-8")
+
+    assert "def _mkdir_durable" not in source
+    assert "def _fsync_directory" not in source
 
 
 def test_real_consumers_use_the_same_durable_file_replacement_owner() -> None:

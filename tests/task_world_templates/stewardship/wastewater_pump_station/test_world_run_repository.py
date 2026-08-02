@@ -134,6 +134,37 @@ def test_repository_rejects_content_moved_under_the_wrong_identity(tmp_path) -> 
         run.steps()
 
 
+def test_repository_keeps_each_new_root_directory_private(tmp_path: Path) -> None:
+    private_parent = tmp_path / "private" / "worlds"
+
+    run = create_world_run(private_parent / "run")
+
+    assert [
+        stat.S_IMODE(path.stat().st_mode)
+        for path in (
+            tmp_path / "private",
+            private_parent,
+            run.repository.root,
+        )
+    ] == [0o700, 0o700, 0o700]
+
+
+def test_repository_keeps_existing_ancestor_mode_and_privatises_existing_root(
+    tmp_path: Path,
+) -> None:
+    existing_parent = tmp_path / "existing"
+    existing_parent.mkdir()
+    existing_parent.chmod(0o750)
+    existing_root = existing_parent / "run"
+    existing_root.mkdir()
+    existing_root.chmod(0o750)
+
+    repository = repository_runtime.PumpStationWorldRunRepository(existing_root)
+
+    assert stat.S_IMODE(existing_parent.stat().st_mode) == 0o750
+    assert stat.S_IMODE(repository.root.stat().st_mode) == 0o700
+
+
 @pytest.mark.parametrize(
     ("unsafe_kind", "expected_code"),
     (

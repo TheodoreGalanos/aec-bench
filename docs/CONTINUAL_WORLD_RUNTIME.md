@@ -443,9 +443,38 @@ has no scavenger. Process-death tests prove old-or-new atomic visibility. A real
 power-loss guarantee also depends on the filesystem and storage honoring
 `fsync`.
 
-Step 3 remains incomplete. Shared pointer policy, transaction publication,
+Step 3 remains incomplete after Step 3C. Shared pointer policy, transaction publication,
 replay, recovery, sessions, branches, rollouts, CLI, and Harbor behavior remain
 deferred until two real consumers prove the same task-neutral contract.
+
+### 6.12 Step 3D durable directory-tree creation
+
+Step 3D extracts the last proven duplicate raw filesystem mechanic. It creates
+each missing directory component, can apply an exact mode to each component
+created by that call, and flushes every parent whose child entry changed. It
+does not decide what a directory stores or how any stored record becomes
+authoritative.
+
+| Path | Owner | Compatibility and migration rule |
+| --- | --- | --- |
+| `src/aec_bench/ledger/durability.py` | Lower filesystem durability | Own missing-component discovery, optional mode application to newly created components, and parent-directory flushes. Preserve the default mode behavior for existing callers. |
+| `src/aec_bench/task_world_templates/continual/durability.py` | Shared continual-world durability | Re-export the lower directory function for task-world adapters. Keep the lower implementation as the single owner. |
+| `wastewater_pump_station/world_run_repository.py` | Pump durability adapter | Request mode `0700` for every newly created run-root component. Keep final-root validation, the existing-root mode policy, repository layout, and artifact meaning task-local. |
+| SSC-03 lifecycle stores | Existing real lower-layer consumers | Continue to call the lower function with its default mode behavior. Keep lifecycle transaction paths, state, markers, adoption, and recovery unchanged. |
+
+The optional created-directory mode does not change an existing ancestor. The
+pump repository still applies its existing `0700` policy to the selected final
+root, including when that root already exists. The extraction changes no pump
+artifact path or byte and no SSC-03 transaction record.
+
+This completes the controlled Step 3 extraction. No shared pointer,
+transaction, replay, or recovery policy is promoted. The pump run selects a
+commit through `current.json`; an unselected immutable commit has no live
+effect. SSC-03 can adopt a valid lifecycle transaction into state and then
+repair its commit marker. Pump replay follows parent commit identities from the
+selected pointer, while SSC-03 replay follows state-owned actions through its
+resolver. These are different task and lifecycle policies. Combining them now
+would create a new abstraction without two proven consumers.
 
 ## 7. Implementation sequence
 
