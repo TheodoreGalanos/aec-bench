@@ -1,4 +1,4 @@
-# ABOUTME: Tests the host-only ASW-6A-R case-preparation and session-open controls.
+# ABOUTME: Tests the host-only closeout case-preparation and session-open controls.
 # ABOUTME: Covers exact retry, inspection, recovery, stale binding, and authority separation.
 
 from __future__ import annotations
@@ -7,8 +7,8 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from test_asw_5_rich_work_e2e import _execute_direct
-from test_asw_6a_r_case_derivation import _request
+from test_closeout_review_case_derivation import _request
+from test_rich_work_harbor_parity_e2e import _execute_direct
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review_control import (
     PUMP_STATION_REVIEW_CONTROL_OPERATIONS,

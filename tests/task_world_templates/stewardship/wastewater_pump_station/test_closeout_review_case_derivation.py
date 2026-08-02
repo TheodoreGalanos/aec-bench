@@ -1,4 +1,4 @@
-# ABOUTME: Tests ASW-6A-R case derivation from one real replay-valid rich-work history.
+# ABOUTME: Tests closeout case derivation from one real replay-valid rich-work history.
 # ABOUTME: Proves the treated closeout changes no source world state and leaks no verifier target.
 
 from __future__ import annotations
@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
-from test_asw_5_rich_work_e2e import _execute_direct
+from test_rich_work_harbor_parity_e2e import _execute_direct
 
 from aec_bench.contracts.world_session import (
     WorldSessionExecutionKind,

@@ -1,4 +1,4 @@
-# ABOUTME: Tests the provider authority and evidence contract for the ASW-6A-R agent run.
+# ABOUTME: Tests the provider authority and evidence contract for a closeout-review agent run.
 # ABOUTME: Keeps model limits, token accounting, and spend calculation provider-free.
 
 from __future__ import annotations

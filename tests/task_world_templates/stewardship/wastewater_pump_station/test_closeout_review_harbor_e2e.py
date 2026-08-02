@@ -1,4 +1,4 @@
-# ABOUTME: Runs the ASW-6A-R closeout review through exported local Harbor.
+# ABOUTME: Runs the closeout review through exported local Harbor.
 # ABOUTME: Proves reference-controller dispatch, hidden verification, and artifact parity.
 
 from __future__ import annotations

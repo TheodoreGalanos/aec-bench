@@ -1,4 +1,4 @@
-# ABOUTME: Runs ASW-6A-R preparation and review through the installed JSON command.
+# ABOUTME: Runs closeout preparation and review through the installed JSON command.
 # ABOUTME: Proves transport parity, exact retry, reviewer redaction, and strict evaluation.
 
 from __future__ import annotations
@@ -9,8 +9,8 @@ import sys
 from pathlib import Path
 from typing import Any, cast
 
-from test_asw_5_rich_work_e2e import _execute_direct
-from test_asw_6a_r_case_derivation import _request
+from test_closeout_review_case_derivation import _request
+from test_rich_work_harbor_parity_e2e import _execute_direct
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review import (
     PumpStationReviewPublicCase,

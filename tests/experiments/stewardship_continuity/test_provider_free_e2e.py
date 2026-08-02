@@ -1,4 +1,4 @@
-# ABOUTME: Runs the complete ASW-4A provider-free fixture and reload journey.
+# ABOUTME: Runs the complete provider-free stewardship fixture and reload journey.
 # ABOUTME: Proves analysis readiness without provider calls, study outcomes, or reward changes.
 
 from __future__ import annotations

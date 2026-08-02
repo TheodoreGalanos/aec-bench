@@ -147,7 +147,7 @@ def _bound(
             based_on_sequence=state.sequence,
             base_view_id=view.view_id,
             information_set_id=information_set.information_set_id,
-            reason="Execute one bounded ASW-3A semantic attack.",
+            reason="Execute one bounded world-run semantic attack.",
         ),
         **parameters,
     )

@@ -123,6 +123,7 @@ Architectural drift should be corrected continuously through small fixes and aut
 Python enforcement direction:
 - linting, typing, and tests in normal workflow,
 - domain-specific checks added over time,
+- test modules, classes, and functions named for stable behaviour, contracts, boundaries, or failure modes rather than delivery sequence, milestones, or temporary work items,
 - tracked debt with owners, not vague TODO accumulation.
 
 ---
@@ -202,6 +203,7 @@ Adapter-internal extraction metadata must use explicit reserved keys and must no
 | Contract conformance | Boundary payloads satisfy required shapes |
 | Trial completeness | TrialRecord has enough provenance to replay outcomes |
 | Code quality | Formatter, linter, typing, and tests pass |
+| Test naming | Permanent test names describe stable behaviour, contracts, boundaries, or failure modes |
 
 ### Build Next
 

@@ -1,4 +1,4 @@
-# ABOUTME: Attacks the ASW-5 view, evidence, event-order, and reservation boundaries.
+# ABOUTME: Attacks rich-work view, evidence, event-order, and reservation boundaries.
 # ABOUTME: Proves invalid rich-work actions fail closed without hidden-state leakage.
 
 from __future__ import annotations
