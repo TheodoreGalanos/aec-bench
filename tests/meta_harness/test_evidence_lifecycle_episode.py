@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,6 +13,7 @@ import pytest
 from pydantic import ValidationError
 
 import aec_bench.meta_harness.evidence_lifecycle as lifecycle_runtime
+from aec_bench.ledger.immutable_artifact_store import ImmutableByteStore
 from aec_bench.meta_harness.evidence_lifecycle import (
     EvidenceLifecycleError,
     LifecycleEpisodeExecutionError,
@@ -39,6 +41,74 @@ from aec_bench.task_world_templates.contracts import (
 from aec_bench.task_world_templates.lifecycles import materialize_lifecycle_template
 
 HYDRAULIC_TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
+
+
+def test_host_json_publication_replays_exact_bytes_and_preserves_first_writer(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "episodes" / "episode_request.json"
+    payload = '{\n  "message": "world state",\n  "revision": 3\n}\n'
+    conflict_message = "episode request conflicts with durable attempt: review.attempt-001"
+
+    assert (
+        lifecycle_runtime._persist_host_json(
+            path,
+            payload,
+            conflict_message=conflict_message,
+        )
+        == path
+    )
+    first_bytes = path.read_bytes()
+    assert first_bytes == payload.encode("utf-8")
+
+    assert (
+        lifecycle_runtime._persist_host_json(
+            path,
+            payload,
+            conflict_message=conflict_message,
+        )
+        == path
+    )
+    assert path.read_bytes() == first_bytes
+
+    with pytest.raises(EvidenceLifecycleError) as raised:
+        lifecycle_runtime._persist_host_json(
+            path,
+            '{\n  "message": "changed world state"\n}\n',
+            conflict_message=conflict_message,
+        )
+
+    assert str(raised.value) == conflict_message
+    assert path.read_bytes() == first_bytes
+
+
+def test_host_json_publication_maps_unsafe_storage_to_the_task_conflict(
+    tmp_path: Path,
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    alias = tmp_path / "episode-alias"
+    alias.symlink_to(outside, target_is_directory=True)
+    path = alias / "episode_result.json"
+    conflict_message = "episode result conflicts with durable attempt: review.attempt-001"
+
+    with pytest.raises(EvidenceLifecycleError) as raised:
+        lifecycle_runtime._persist_host_json(
+            path,
+            "{}\n",
+            conflict_message=conflict_message,
+        )
+
+    assert str(raised.value) == conflict_message
+    assert not (outside / path.name).exists()
+
+
+def test_host_json_publication_uses_the_shared_immutable_byte_store() -> None:
+    source = inspect.getsource(lifecycle_runtime._persist_host_json)
+
+    assert lifecycle_runtime._persist_host_json.__globals__["ImmutableByteStore"] is ImmutableByteStore
+    assert "ImmutableByteStore" in source
+    assert "NamedTemporaryFile" not in source
 
 
 def test_episode_result_rejects_verifier_owned_fields() -> None:
@@ -122,7 +192,7 @@ def test_episode_request_versions_reject_later_visibility_fields() -> None:
     assert LifecycleEpisodeRequest.model_validate(v2).schema_version == "2"
 
 
-def test_v3_episode_request_binds_public_operation_state_and_visible_artifacts(tmp_path: Path) -> None:
+def test_v3_episode_request_binds_and_persists_public_operation_state(tmp_path: Path) -> None:
     package = materialize_lifecycle_template(
         get_template(HYDRAULIC_TEMPLATE_ID),
         tmp_path / "package",
@@ -171,6 +241,20 @@ def test_v3_episode_request_binds_public_operation_state_and_visible_artifacts(t
     assert {artifact.workspace_path for artifact in request.visible_operation_artifacts} == {
         artifact["workspace_path"] for artifact in action["artifacts"] if artifact["workspace_path"] is not None
     }
+
+    request_path = lifecycle_runtime._persist_episode_request(request)
+    assert request_path.read_bytes() == lifecycle_runtime._episode_request_json(request).encode("utf-8")
+
+    result = _completed_result(request)
+    result_path = lifecycle_runtime._persist_episode_result(request, result)
+    expected_result = (json.dumps(result.model_dump(mode="json"), indent=2, sort_keys=True) + "\n").encode("utf-8")
+    assert result_path.read_bytes() == expected_result
+
+    with pytest.raises(EvidenceLifecycleError) as raised:
+        lifecycle_runtime._persist_episode_request(
+            request.model_copy(update={"requested_model": "conflicting-model"}),
+        )
+    assert str(raised.value) == f"episode request conflicts with durable attempt: {request.attempt_id}"
 
 
 def test_v3_closeout_binds_prior_operation_evidence_without_offering_operations(tmp_path: Path) -> None:

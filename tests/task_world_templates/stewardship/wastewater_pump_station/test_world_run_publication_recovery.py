@@ -60,8 +60,31 @@ def _crash() -> Never:
     os._exit(_CRASH_EXIT_CODE)
 
 
-def _artifact_for_path(root: Path, path: _PathArgument) -> str | None:
-    relative = Path(os.fsdecode(path)).relative_to(root)
+def _path_from_directory_descriptor(
+    root: Path,
+    path: _PathArgument,
+    directory_descriptor: int | None,
+) -> Path:
+    selected = Path(os.fsdecode(path))
+    if selected.is_absolute() or directory_descriptor is None:
+        return selected
+
+    target = os.fstat(directory_descriptor)
+    candidates = (root, *(item for item in root.iterdir() if item.is_dir()))
+    for candidate in candidates:
+        details = candidate.stat()
+        if (details.st_dev, details.st_ino) == (target.st_dev, target.st_ino):
+            return candidate / selected
+    raise AssertionError("publication directory descriptor is outside the pump run")
+
+
+def _artifact_for_path(
+    root: Path,
+    path: _PathArgument,
+    directory_descriptor: int | None = None,
+) -> str | None:
+    absolute = _path_from_directory_descriptor(root, path, directory_descriptor)
+    relative = absolute.relative_to(root)
     key = relative.name if len(relative.parts) == 1 else relative.parts[0]
     return {
         "manifest.json": "manifest",
@@ -83,7 +106,7 @@ def _install_publication_crash(root: Path, boundary: str) -> None:
         dst_dir_fd: int | None = None,
         follow_symlinks: bool = True,
     ) -> None:
-        artifact = _artifact_for_path(root, dst)
+        artifact = _artifact_for_path(root, dst, dst_dir_fd)
         if boundary == f"{artifact}-before-link":
             _crash()
         _ORIGINAL_LINK(

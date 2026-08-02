@@ -7,7 +7,6 @@ import hashlib
 import json
 import os
 import stat
-import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -16,33 +15,23 @@ from typing import Generic, TypeVar
 from pydantic import JsonValue, TypeAdapter
 
 from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
-from aec_bench.ledger.durability import fsync_directory, mkdir_durable
-
-
-class ImmutableArtifactStoreError(RuntimeError):
-    """Base error for confined immutable artifact storage."""
-
-
-class ImmutableArtifactConfinementError(ImmutableArtifactStoreError):
-    """Reject an unsafe root, relative path, or symbolic-link component."""
-
-
-class ImmutableArtifactCollisionError(ImmutableArtifactStoreError):
-    """Reject reuse of one logical path with different immutable bytes."""
-
-
-class ImmutableArtifactIntegrityError(ImmutableArtifactStoreError):
-    """Reject missing, non-regular, or invalid persisted content."""
-
-
-@dataclass(frozen=True, slots=True)
-class ImmutableArtifact:
-    """Exact physical reference returned after durable publication."""
-
-    path: Path
-    sha256: str
-    size_bytes: int
-
+from aec_bench.ledger.immutable_artifact_store import ImmutableArtifact as ImmutableArtifact
+from aec_bench.ledger.immutable_artifact_store import (
+    ImmutableArtifactCollisionError as ImmutableArtifactCollisionError,
+)
+from aec_bench.ledger.immutable_artifact_store import (
+    ImmutableArtifactConfinementError as ImmutableArtifactConfinementError,
+)
+from aec_bench.ledger.immutable_artifact_store import (
+    ImmutableArtifactIntegrityError as ImmutableArtifactIntegrityError,
+)
+from aec_bench.ledger.immutable_artifact_store import (
+    ImmutableArtifactStoreError as ImmutableArtifactStoreError,
+)
+from aec_bench.ledger.immutable_artifact_store import (
+    ImmutableByteStore,
+    validate_immutable_artifact_root,
+)
 
 ModelT = TypeVar("ModelT")
 ContentModelT = TypeVar("ContentModelT", bound=ContentAddressedModel)
@@ -57,7 +46,7 @@ class StoredEvidenceModel(Generic[ModelT]):
     artifact: ImmutableArtifact
 
 
-class ImmutableArtifactStore:
+class ImmutableArtifactStore(ImmutableByteStore):
     """Narrow immutable store for canonical bytes and Pydantic-supported models."""
 
     def __init__(
@@ -67,117 +56,16 @@ class ImmutableArtifactStore:
         disjoint_roots: Iterable[Path] = (),
         host_private: bool = False,
     ) -> None:
+        protected_roots = tuple(disjoint_roots)
         selected = validate_evidence_root(
             root,
-            disjoint_roots=disjoint_roots,
+            disjoint_roots=protected_roots,
         )
-        _mkdir_storage_path(
+        super().__init__(
             selected,
+            disjoint_roots=protected_roots,
             host_private=host_private,
         )
-        self._root = selected.resolve(strict=True)
-        self._host_private = host_private
-        if self._host_private:
-            _require_private_directory(self._root)
-
-    @property
-    def root(self) -> Path:
-        """Return the exact confined storage root."""
-
-        return self._root
-
-    def publish_bytes(
-        self,
-        relative_path: str,
-        payload: bytes,
-    ) -> ImmutableArtifact:
-        """Publish exact bytes once, replaying equality and rejecting collisions."""
-
-        path = self._path(relative_path)
-        content = bytes(payload)
-        if os.path.lexists(path):
-            observed = self.load_bytes(relative_path)
-            if observed != content:
-                raise ImmutableArtifactCollisionError(
-                    f"immutable artifact collision at {relative_path}",
-                )
-            return _artifact(path, observed)
-
-        _mkdir_storage_path(
-            path.parent,
-            host_private=self._host_private,
-        )
-        _reject_symlinks(path.parent, label="immutable artifact parent")
-        temporary = path.parent / f".{path.name}.{uuid.uuid4().hex}.tmp"
-        descriptor = os.open(
-            temporary,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-            0o600,
-        )
-        try:
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(content)
-                handle.flush()
-                os.fsync(handle.fileno())
-            try:
-                os.link(temporary, path)
-            except FileExistsError:
-                observed = self.load_bytes(relative_path)
-                if observed != content:
-                    raise ImmutableArtifactCollisionError(
-                        f"immutable artifact collision at {relative_path}",
-                    ) from None
-            fsync_directory(path.parent)
-        finally:
-            temporary.unlink(missing_ok=True)
-        observed = self.load_bytes(relative_path)
-        if observed != content:
-            raise ImmutableArtifactIntegrityError(
-                f"immutable artifact drifted during publication at {relative_path}",
-            )
-        return _artifact(path, observed)
-
-    def load_bytes(
-        self,
-        relative_path: str,
-        *,
-        expected_sha256: str | None = None,
-    ) -> bytes:
-        """Load exact regular-file bytes from one confined logical path."""
-
-        path = self._path(relative_path)
-        if path.is_symlink():
-            raise ImmutableArtifactConfinementError(
-                f"immutable artifact is a symbolic link: {relative_path}",
-            )
-        try:
-            inspected = path.stat(follow_symlinks=False)
-        except OSError as error:
-            raise ImmutableArtifactIntegrityError(
-                f"immutable artifact is missing: {relative_path}",
-            ) from error
-        if not stat.S_ISREG(inspected.st_mode):
-            raise ImmutableArtifactIntegrityError(
-                f"immutable artifact is not a regular file: {relative_path}",
-            )
-        if self._host_private and stat.S_IMODE(inspected.st_mode) & 0o077:
-            raise ImmutableArtifactConfinementError(
-                f"immutable artifact must retain host-only permissions: {relative_path}",
-            )
-        payload = path.read_bytes()
-        if expected_sha256 is not None:
-            validate_sha256(expected_sha256)
-            observed_sha256 = hashlib.sha256(payload).hexdigest()
-            if observed_sha256 != expected_sha256:
-                raise ImmutableArtifactIntegrityError(
-                    f"immutable artifact digest mismatch at {relative_path}",
-                )
-        return payload
-
-    def exists(self, relative_path: str) -> bool:
-        """Return whether a confined logical path has any filesystem entry."""
-
-        return os.path.lexists(self._path(relative_path))
 
     def publish_model(
         self,
@@ -220,26 +108,6 @@ class ImmutableArtifactStore:
         if not self.exists(relative_path):
             return None
         return self.load_model(relative_path, adapter)
-
-    def reference(self, relative_path: str) -> ImmutableArtifact:
-        """Return a digest and size for one exact persisted artifact."""
-
-        path = self._path(relative_path)
-        return _artifact(path, self.load_bytes(relative_path))
-
-    def _path(self, relative_path: str) -> Path:
-        logical = PurePosixPath(relative_path)
-        if logical.is_absolute() or not logical.parts or any(part in {"", ".", ".."} for part in logical.parts):
-            raise ImmutableArtifactConfinementError(
-                "immutable artifact path must be contained and relative",
-            )
-        path = self._root.joinpath(*logical.parts)
-        _reject_symlinks(path, label="immutable artifact path")
-        if not path.resolve(strict=False).is_relative_to(self._root):
-            raise ImmutableArtifactConfinementError(
-                "immutable artifact path escapes its root",
-            )
-        return path
 
 
 class EvidenceRepository(ImmutableArtifactStore):
@@ -480,55 +348,6 @@ def _canonical_model_bytes(
     ).encode("utf-8")
 
 
-def _artifact(path: Path, payload: bytes) -> ImmutableArtifact:
-    return ImmutableArtifact(
-        path=path.resolve(strict=True),
-        sha256=hashlib.sha256(payload).hexdigest(),
-        size_bytes=len(payload),
-    )
-
-
-def _mkdir_storage_path(
-    path: Path,
-    *,
-    host_private: bool,
-) -> None:
-    target = Path(path)
-    missing: list[Path] = []
-    cursor = target
-    while not os.path.lexists(cursor):
-        missing.append(cursor)
-        cursor = cursor.parent
-    mkdir_durable(target)
-    if not host_private:
-        return
-    for directory in reversed(missing):
-        directory.chmod(0o700)
-        fsync_directory(directory.parent)
-
-
-def _reject_symlinks(path: Path, *, label: str) -> None:
-    current = Path(path.anchor)
-    for part in path.parts[1:]:
-        current /= part
-        if current.is_symlink():
-            raise ImmutableArtifactConfinementError(
-                f"{label} contains a symbolic-link component: {current}",
-            )
-
-
-def _require_private_directory(path: Path) -> None:
-    inspected = path.stat(follow_symlinks=False)
-    if not stat.S_ISDIR(inspected.st_mode):
-        raise ImmutableArtifactConfinementError(
-            "host-private immutable artifact root must be a directory",
-        )
-    if stat.S_IMODE(inspected.st_mode) & 0o077:
-        raise ImmutableArtifactConfinementError(
-            "host-private immutable artifact root must retain host-only permissions",
-        )
-
-
 def _logical_identity_bytes(logical_identity: LogicalIdentity) -> bytes:
     if isinstance(logical_identity, str):
         if not logical_identity:
@@ -561,40 +380,8 @@ def validate_evidence_root(
 ) -> Path:
     """Resolve one canonical non-symlink root disjoint from protected roots."""
 
-    selected = Path(root).expanduser()
-    if not selected.is_absolute():
-        raise ImmutableArtifactConfinementError(
-            "immutable artifact root must be absolute",
-        )
-    absolute = selected.absolute()
-    _reject_symlinks(absolute, label="immutable artifact root")
-    resolved = absolute.resolve(strict=must_exist)
-    if resolved != absolute:
-        raise ImmutableArtifactConfinementError(
-            "immutable artifact root contains a symbolic-link or non-canonical component",
-        )
-    for disjoint_root in disjoint_roots:
-        protected = Path(disjoint_root).expanduser()
-        if not protected.is_absolute():
-            raise ImmutableArtifactConfinementError(
-                "immutable artifact disjoint roots must be absolute",
-            )
-        protected_absolute = protected.absolute()
-        _reject_symlinks(
-            protected_absolute,
-            label="immutable artifact disjoint root",
-        )
-        protected_resolved = protected_absolute.resolve(strict=False)
-        if protected_resolved != protected_absolute:
-            raise ImmutableArtifactConfinementError(
-                "immutable artifact disjoint root contains a symbolic-link or non-canonical component",
-            )
-        if _paths_overlap(resolved, protected_resolved):
-            raise ImmutableArtifactConfinementError(
-                "immutable artifact root must not overlap a disjoint root",
-            )
-    return resolved
-
-
-def _paths_overlap(left: Path, right: Path) -> bool:
-    return left == right or left.is_relative_to(right) or right.is_relative_to(left)
+    return validate_immutable_artifact_root(
+        root,
+        disjoint_roots=disjoint_roots,
+        must_exist=must_exist,
+    )

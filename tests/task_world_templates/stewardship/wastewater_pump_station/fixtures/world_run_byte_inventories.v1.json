@@ -1,0 +1,136 @@
+{
+  "fixture_version": "pump-station-world-run-byte-inventories.v1",
+  "baselines": {
+    "v1": {
+      "status": "accepted-existing",
+      "artifacts": {
+        "commits/1ec4d40db6cca8457e70751e55f5d006a4f94643eb6a731c7943b4010d6b0deb.json": [
+          698,
+          "1ec4d40db6cca8457e70751e55f5d006a4f94643eb6a731c7943b4010d6b0deb"
+        ],
+        "commits/c200b1c7ef76c2965128a39ac141e61e0dfb204c278bc38645aa9ee55cb9d349.json": [
+          366,
+          "c200b1c7ef76c2965128a39ac141e61e0dfb204c278bc38645aa9ee55cb9d349"
+        ],
+        "current.json": [
+          288,
+          "1e10368e0dd9d0c95ea8da3b90363732b7ac376418496f5a856a781164ed7bfd"
+        ],
+        "events/577427decaebca3e63167f390421c4a3d6481498393b2febe33974d8d79609c5.json": [
+          120,
+          "577427decaebca3e63167f390421c4a3d6481498393b2febe33974d8d79609c5"
+        ],
+        "information-sets/10effd206c74b95db611ff0980888c8911ea6eb457b5ecf85637120b0c7d80be.json": [
+          2130,
+          "10effd206c74b95db611ff0980888c8911ea6eb457b5ecf85637120b0c7d80be"
+        ],
+        "manifest.json": [
+          945,
+          "0095248686ff7c4c79fe27025d6c307aa66b8028794aab8a8b6c8cbe2fe3c10d"
+        ],
+        "proposals/6bbfad044ec2e46a2103e3b636dc12a1360bcbc98a3f52f8dc7fe97c7ca5819e.json": [
+          409,
+          "6bbfad044ec2e46a2103e3b636dc12a1360bcbc98a3f52f8dc7fe97c7ca5819e"
+        ],
+        "receipts/0b1fc0930d2dc3190e62a2a22dc23fca7815863bd135d4a70fcba3742ca9c939.json": [
+          1028,
+          "0b1fc0930d2dc3190e62a2a22dc23fca7815863bd135d4a70fcba3742ca9c939"
+        ],
+        "states/42b3d784e5dce3a37f296491835cefc90c3d80aded40ffc6cf4863dc374306ff.json": [
+          1307,
+          "02d23448e3a3dc3448ee28a27131d155b8354d09678f4311f61bb63b9902a815"
+        ],
+        "states/4eda04726fa12af73ffdebc6ecb578a51849f5b197721fd312dc18a81d3ae835.json": [
+          2668,
+          "637feca5a257868765be0d2134ce10e23999763c2ffe07aa28e0e11cc989a494"
+        ]
+      }
+    },
+    "v2": {
+      "status": "accepted-existing",
+      "artifacts": {
+        "commits/7b0c250aeb89a00cf208f732bb53b7483dbd1ec8846e03573ce4ead0014aa08d.json": [
+          692,
+          "7b0c250aeb89a00cf208f732bb53b7483dbd1ec8846e03573ce4ead0014aa08d"
+        ],
+        "commits/8d805438c317b446d0f371588dc4316aaca951cce9cbb36c0a817c1ef46f30de.json": [
+          359,
+          "8d805438c317b446d0f371588dc4316aaca951cce9cbb36c0a817c1ef46f30de"
+        ],
+        "current.json": [
+          281,
+          "e63b51fe5c4c3154d191b4524a7bdab841f19a53d60b1403bf1f4b72694a1248"
+        ],
+        "events/78e901413a4730ae0318b7a4b71b2dc1aee9b7cd261f1abb610cff7400fa20bc.json": [
+          224,
+          "78e901413a4730ae0318b7a4b71b2dc1aee9b7cd261f1abb610cff7400fa20bc"
+        ],
+        "information-sets/1fecd675ac8ccbcd463f93ba94130fe320a247ea0e3930f56c0fb35920ef6633.json": [
+          4629,
+          "1fecd675ac8ccbcd463f93ba94130fe320a247ea0e3930f56c0fb35920ef6633"
+        ],
+        "manifest.json": [
+          924,
+          "28b9157ba5c702185e4be208422ecb338a70c856fc6d3a6877b2713c30ad4198"
+        ],
+        "proposals/a978aac0b99cf85b6f56f18758df07b8cc5bf36919206e08f1ca445036fa2713.json": [
+          382,
+          "a978aac0b99cf85b6f56f18758df07b8cc5bf36919206e08f1ca445036fa2713"
+        ],
+        "receipts/68b0fef3aa23d54558103295837119334184b0a212e981a4476767366a836854.json": [
+          1088,
+          "68b0fef3aa23d54558103295837119334184b0a212e981a4476767366a836854"
+        ],
+        "states/526dd66b26a1313aacb40a12034800a8a66d3d538f8793db0aa7f3102ffeec00.json": [
+          4935,
+          "0e95b0253c48409da4ee5b7b17f83f6422780b6dbae5ab827154aff5d04d57a2"
+        ],
+        "states/b8dcbf4ec526907d87d33677cdc5995ade020e3d8fa049605d980b5674e9d97a.json": [
+          4521,
+          "1b147fb107bd4243cf0b4bcadcc6f05995c94e94aeffff3cc66c27e9772a184d"
+        ]
+      }
+    },
+    "v3": {
+      "status": "pre-extraction-compatibility-baseline",
+      "artifacts": {
+        "commits/363b6e1add6d2690e0e6c3f3e772958ee85c9b093eb0587588e1482022d3c423.json": [
+          639,
+          "363b6e1add6d2690e0e6c3f3e772958ee85c9b093eb0587588e1482022d3c423"
+        ],
+        "commits/e1e6c1e502a873a79f0b850eff3c61111ddc622e1d68bae1ba83676a10403d10.json": [
+          372,
+          "e1e6c1e502a873a79f0b850eff3c61111ddc622e1d68bae1ba83676a10403d10"
+        ],
+        "control-requests/1022776ccd8487486108a6792a90c33416214d93184cd68c90f1e7499b8fcb75.json": [
+          614,
+          "1022776ccd8487486108a6792a90c33416214d93184cd68c90f1e7499b8fcb75"
+        ],
+        "current.json": [
+          294,
+          "d2f4b85dac82fe8a1f5406a5b2e782ef580720aca1422779a5d25d13f235a4d8"
+        ],
+        "events/577427decaebca3e63167f390421c4a3d6481498393b2febe33974d8d79609c5.json": [
+          120,
+          "577427decaebca3e63167f390421c4a3d6481498393b2febe33974d8d79609c5"
+        ],
+        "manifest.json": [
+          963,
+          "631657b1d231c3efb9962aae16d0c020cc2b8b33d9aac467da603ce508e573e1"
+        ],
+        "receipts/9f5a8b9aaba19115b99dde9e118c5c281ececb4af4f9b486ae2550b9fa61e238.json": [
+          846,
+          "9f5a8b9aaba19115b99dde9e118c5c281ececb4af4f9b486ae2550b9fa61e238"
+        ],
+        "states/0761549171a5ffdc7ea914f088a6edd5762e80bddebed76b97eeabdc5f2190cf.json": [
+          6137,
+          "7ce5615f9d0a30362e2f585a918ec33b26135369b9202ff1111a7f7ef3347e2c"
+        ],
+        "states/d8f49dc33f3da9ad0e5a88abb2da2c6f1833542ea7c0fd86eacf237fb5ce1ddd.json": [
+          7199,
+          "634acfec4d05183eaa1da6a1349652ba7ed7fc05df828440cf23e2a9500c96c4"
+        ]
+      }
+    }
+  }
+}

@@ -12,11 +12,15 @@ from typing import Protocol
 
 import pytest
 
+from aec_bench.ledger.immutable_artifact_store import (
+    ImmutableByteStore as LowerImmutableByteStore,
+)
 from aec_bench.ledger.local_lock import exclusive_local_file_lock as lower_exclusive_local_file_lock
 from aec_bench.meta_harness.evidence_lifecycle import EvidenceLifecycleError, _lifecycle_state_lock
 from aec_bench.task_world_templates.continual.durability import (
     ContinualWorldLockConfinementError,
     ContinualWorldLockError,
+    ImmutableByteStore,
     exclusive_local_file_lock,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station import (
@@ -233,6 +237,10 @@ def test_continual_lock_is_the_lower_shared_ledger_primitive() -> None:
     assert exclusive_local_file_lock is lower_exclusive_local_file_lock
 
 
+def test_continual_immutable_byte_store_is_the_lower_shared_ledger_primitive() -> None:
+    assert ImmutableByteStore is LowerImmutableByteStore
+
+
 def test_real_consumers_do_not_own_parallel_local_lock_implementations() -> None:
     source_root = Path(__file__).parents[3] / "src" / "aec_bench"
     consumer_paths = (
@@ -248,3 +256,14 @@ def test_real_consumers_do_not_own_parallel_local_lock_implementations() -> None
         imported = _imported_modules(path)
         assert "fcntl" not in imported
         assert expected_module in imported
+
+
+def test_pump_repository_does_not_own_parallel_immutable_byte_mechanics() -> None:
+    source_root = Path(__file__).parents[3] / "src" / "aec_bench"
+    repository_path = (
+        source_root / "task_world_templates" / "stewardship" / "wastewater_pump_station" / "world_run_repository.py"
+    )
+    source = repository_path.read_text(encoding="utf-8")
+
+    assert "os.link(" not in source
+    assert "def _require_regular_file" not in source

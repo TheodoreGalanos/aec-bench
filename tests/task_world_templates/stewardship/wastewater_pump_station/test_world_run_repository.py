@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import stat
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from world_run_support import bind_proposal, create_world_run
@@ -98,6 +99,45 @@ def test_repository_rejects_content_moved_under_the_wrong_identity(tmp_path) -> 
 
     with pytest.raises(PumpStationWorldRunError, match="artifact-integrity"):
         run.steps()
+
+
+@pytest.mark.parametrize(
+    ("unsafe_kind", "expected_code"),
+    (
+        ("symbolic-link", "artifact-confinement"),
+        ("directory", "artifact-integrity"),
+        ("public-permissions", "artifact-confinement"),
+        ("unreadable", "artifact-integrity"),
+    ),
+)
+def test_repository_rejects_unsafe_manifest_files(
+    tmp_path: Path,
+    unsafe_kind: str,
+    expected_code: str,
+) -> None:
+    run = create_world_run(tmp_path / "run")
+    manifest = run.repository.root / "manifest.json"
+    if unsafe_kind == "symbolic-link":
+        outside = tmp_path / "outside.json"
+        outside.write_bytes(manifest.read_bytes())
+        manifest.unlink()
+        manifest.symlink_to(outside)
+    elif unsafe_kind == "directory":
+        manifest.unlink()
+        manifest.mkdir()
+    elif unsafe_kind == "unreadable":
+        manifest.chmod(0o000)
+    else:
+        manifest.chmod(0o644)
+
+    try:
+        with pytest.raises(PumpStationWorldRunError) as raised:
+            run.repository.load_manifest()
+    finally:
+        if unsafe_kind == "unreadable":
+            manifest.chmod(0o600)
+
+    assert raised.value.code == expected_code
 
 
 def test_snapshot_preserves_elapsed_time_and_applied_event_identity(tmp_path) -> None:
