@@ -351,6 +351,29 @@ class WorldExecutionRecord(StrictModel):
         return self
 
 
+class WorldTemporalEvidenceExecution(StrictModel):
+    """Typed deterministic temporal-evidence facts for one enabled world window."""
+
+    profile: Literal["deterministic_snapshot"]
+    capability_id: NonEmptyStr
+    corpus_snapshot_id: NonEmptyStr
+    retrieval_policy_id: NonEmptyStr
+    access_policy_id: NonEmptyStr
+    availability_schedule_id: NonEmptyStr
+    branch_namespace_policy_id: NonEmptyStr
+    cost_policy_id: NonEmptyStr
+    access_count: NonNegativeInt
+    reliance_count: NonNegativeInt
+    carrier_count: NonNegativeInt
+    verification_report_id: NonEmptyStr
+
+
+class TemporalWorldExecutionRecord(WorldExecutionRecord):
+    """World execution subtype used only when temporal evidence is present."""
+
+    temporal_evidence: WorldTemporalEvidenceExecution
+
+
 class WorldTrialProvenance(StrictModel):
     """Immutable evidence references needed to reload one world execution."""
 
@@ -373,6 +396,61 @@ class WorldTrialProvenance(StrictModel):
             self.package_manifest,
             self.verification_report,
         )
+
+
+class WorldTemporalEvidenceProvenance(StrictModel):
+    """Typed immutable references required to reload temporal world evidence."""
+
+    capability: ArtifactReference
+    corpus_manifest: ArtifactReference
+    lineage_manifest: ArtifactReference
+    availability_schedule: ArtifactReference
+    retrieval_policy: ArtifactReference
+    access_policy: ArtifactReference
+    branch_policy: ArtifactReference
+    cost_policy: ArtifactReference
+    verification_report: ArtifactReference
+    ledger_artifacts: tuple[ArtifactReference, ...]
+
+    @model_validator(mode="after")
+    def validate_temporal_artifacts(self) -> "WorldTemporalEvidenceProvenance":
+        if not self.ledger_artifacts:
+            raise ValueError("temporal evidence provenance requires ledger artifacts")
+        identities = tuple(
+            (item.path, item.sha256) for item in self.bound_artifacts
+        )
+        if len(identities) != len(set(identities)):
+            raise ValueError("temporal evidence provenance artifacts must be distinct")
+        return self
+
+    @property
+    def bound_artifacts(self) -> tuple[ArtifactReference, ...]:
+        """Return every temporal artifact required on the enclosing record."""
+
+        return (
+            self.capability,
+            self.corpus_manifest,
+            self.lineage_manifest,
+            self.availability_schedule,
+            self.retrieval_policy,
+            self.access_policy,
+            self.branch_policy,
+            self.cost_policy,
+            self.verification_report,
+            *self.ledger_artifacts,
+        )
+
+
+class TemporalWorldTrialProvenance(WorldTrialProvenance):
+    """World provenance subtype used only when temporal evidence is present."""
+
+    temporal_evidence: WorldTemporalEvidenceProvenance
+
+    @property
+    def bound_artifacts(self) -> tuple[ArtifactReference, ...]:
+        """Return ordinary world evidence followed by temporal evidence."""
+
+        return (*super().bound_artifacts, *self.temporal_evidence.bound_artifacts)
 
 
 class MetaHarnessTrialProvenance(StrictModel):
@@ -458,8 +536,8 @@ class TrialRecord(StrictModel):
     adaptation: AdaptationProvenance | None = None
     lifecycle_execution: LifecycleExecutionRecord | None = None
     lifecycle_provenance: LifecycleTrialProvenance | None = None
-    world_execution: WorldExecutionRecord | None = None
-    world_provenance: WorldTrialProvenance | None = None
+    world_execution: WorldExecutionRecord | TemporalWorldExecutionRecord | None = None
+    world_provenance: WorldTrialProvenance | TemporalWorldTrialProvenance | None = None
     meta_harness_provenance: MetaHarnessTrialProvenance | None = None
     completeness: Completeness
 

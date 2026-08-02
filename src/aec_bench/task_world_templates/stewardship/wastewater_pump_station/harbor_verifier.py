@@ -40,6 +40,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_se
     PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES,
     PUMP_STATION_RICH_WORK_TOOL_NAMES,
     PUMP_STATION_TASK_WORLD_ID,
+    PUMP_STATION_TEMPORAL_EVIDENCE_TOOL_NAMES,
     PUMP_STATION_TOOL_NAMES,
     PumpStationWorldSessionFactory,
 )
@@ -77,8 +78,11 @@ def verify_pump_station_harbor_run(
     package_payload = _mapping(manifest.get("package"), "package")
     rich_work_processes = bool(bridge_payload.get("rich_work_processes", False))
     evidence_health = bool(bridge_payload.get("evidence_health", False))
+    temporal_evidence = bool(bridge_payload.get("temporal_evidence", False))
     expected_tools = (
-        PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES
+        PUMP_STATION_TEMPORAL_EVIDENCE_TOOL_NAMES
+        if temporal_evidence
+        else PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES
         if evidence_health
         else PUMP_STATION_RICH_WORK_TOOL_NAMES
         if rich_work_processes
@@ -138,6 +142,7 @@ def verify_pump_station_harbor_run(
         package_root=Path(package_dir),
         rich_work_processes=rich_work_processes,
         evidence_health=evidence_health,
+        temporal_evidence=temporal_evidence,
     ).open(
         WorldSessionRequest(
             execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
@@ -156,6 +161,31 @@ def verify_pump_station_harbor_run(
     expected_report = _verification_payload(report)
     if not report.valid or stored_report != expected_report:
         raise ValueError("pump-station Harbor verification evidence differs")
+    temporal_report: dict[str, Any] | None = None
+    if temporal_evidence:
+        recomputed_temporal = resumed.verify_temporal_evidence()
+        temporal_report = recomputed_temporal.model_dump(mode="json")
+        if (
+            not recomputed_temporal.valid
+            or _read_json(root / "temporal-verification-report.json")
+            != temporal_report
+        ):
+            raise ValueError("pump-station temporal verification evidence differs")
+        temporal_inventory = _mapping(
+            inventory.get("temporal_evidence"),
+            "temporal evidence inventory",
+        )
+        if (
+            temporal_inventory.get("verification_report_id")
+            != recomputed_temporal.content_sha256
+            or temporal_inventory.get("access_count")
+            != recomputed_temporal.access_count
+            or temporal_inventory.get("reliance_count")
+            != recomputed_temporal.reliance_count
+            or temporal_inventory.get("carrier_count")
+            != recomputed_temporal.carrier_count
+        ):
+            raise ValueError("pump-station temporal inventory differs")
     transition_count = end_snapshot.sequence - start_snapshot.sequence
     _verify_controller_completion(root, inventory)
     _verify_stewardship_objective(
@@ -165,7 +195,7 @@ def verify_pump_station_harbor_run(
         rich_work_processes=rich_work_processes,
         evidence_health=evidence_health,
     )
-    return {
+    details = {
         "valid": True,
         "objective_complete": True,
         "reward_owner": "harbor_verifier",
@@ -176,6 +206,9 @@ def verify_pump_station_harbor_run(
         "replayed_transition_ids": list(report.replayed_transition_ids),
         "final_state_id": report.final_state_id,
     }
+    if temporal_report is not None:
+        details["temporal_evidence"] = temporal_report
+    return details
 
 
 def _verify_controller_completion(

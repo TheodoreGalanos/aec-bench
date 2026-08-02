@@ -98,3 +98,69 @@ def test_installed_cli_starts_advances_resumes_and_verifies_world(tmp_path: Path
     assert evaluated["data"]["metrics"]["handover_count"] == 1
     assert evaluated["data"]["metrics"]["handover_omission_count"] == 0
     assert evaluated["data"]["metrics"]["terminal_liability"]["review_required_physical_state"] is True
+
+
+def test_installed_cli_searches_fetches_and_verifies_temporal_evidence(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "temporal-run"
+    started = _run_cli(
+        "start",
+        "--run-dir",
+        str(run_dir),
+        "--run-id",
+        "run-temporal-cli",
+        "--episode-id",
+        "episode-temporal-cli",
+        "--world-branch-id",
+        "branch-temporal-cli",
+        "--session-id",
+        "session-temporal-cli",
+        "--agent-tenure-id",
+        "tenure-temporal-cli",
+        "--temporal-evidence",
+        cwd=tmp_path,
+    )
+    searched = _run_cli(
+        "search-evidence",
+        "--run-dir",
+        str(run_dir),
+        "--session-id",
+        "session-temporal-cli",
+        "--agent-tenure-id",
+        "tenure-temporal-cli",
+        "--request-id",
+        "search-temporal-cli",
+        "--query",
+        "pump obstruction procedure",
+        "--scope",
+        "procedures",
+        cwd=tmp_path,
+    )
+    reference = searched["data"]["receipt"]["references"][0]["opaque_reference"]
+    fetched = _run_cli(
+        "fetch-evidence",
+        "--run-dir",
+        str(run_dir),
+        "--session-id",
+        "session-temporal-cli",
+        "--agent-tenure-id",
+        "tenure-temporal-cli",
+        "--request-id",
+        "fetch-temporal-cli",
+        "--reference",
+        reference,
+        cwd=tmp_path,
+    )
+    verified = _run_cli(
+        "verify-temporal-evidence",
+        "--run-dir",
+        str(run_dir),
+        cwd=tmp_path,
+    )
+
+    assert "search_evidence" in started["data"]["tool_names"]
+    assert searched["data"]["receipt"]["public_status"] == "OK"
+    assert fetched["data"]["receipt"]["public_status"] == "OK"
+    assert verified["data"]["valid"] is True
+    assert verified["data"]["access_count"] == 2

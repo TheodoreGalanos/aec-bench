@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
+from aec_bench.contracts.world_interface import WorldActorActionRequest
 from aec_bench.contracts.world_session import (
     WorldSessionExecutionKind,
     WorldSessionOpenMode,
@@ -34,6 +35,10 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
     create_structured_handover,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence import (
+    TemporalEvidenceCapability,
+    TemporalEvidenceVerificationReport,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_control import (
     PumpStationEvidenceControlRequest,
     PumpStationEvidenceControlResult,
@@ -43,6 +48,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_se
     PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES,
     PUMP_STATION_RICH_WORK_TOOL_NAMES,
     PUMP_STATION_TASK_WORLD_ID,
+    PUMP_STATION_TEMPORAL_EVIDENCE_TOOL_NAMES,
     PUMP_STATION_TOOL_NAMES,
     PumpStationWorldSession,
     PumpStationWorldSessionFactory,
@@ -248,6 +254,7 @@ def run_pump_station_evidence_health_reference_session(
         repository_root,
         package_root=bridge.package_root,
         evidence_health=True,
+        temporal_evidence=bridge.temporal_evidence,
     )
     first = cast(
         PumpStationWorldSession,
@@ -335,11 +342,38 @@ def run_pump_station_evidence_health_reference_session(
             maximum_history_entries=8,
         )
     )
-    recipient.request_condition_check(
-        "proposal-reference-condition-check",
-        "Record the visible sensor condition after handover.",
-        "pump-a",
-    )
+    if bridge.temporal_evidence:
+        search = json.loads(
+            recipient.search_evidence(
+                "search-reference-maintenance",
+                "pump obstruction procedure",
+                "procedures",
+                5,
+            )
+        )["receipt"]
+        references = search.get("references")
+        if not isinstance(references, list) or not references:
+            raise ValueError("temporal reference session returned no documentary evidence")
+        reference = str(references[0]["opaque_reference"])
+        recipient.fetch_evidence("fetch-reference-maintenance", reference)
+        recipient.invoke_actor_action(
+            WorldActorActionRequest(
+                request_id="proposal-reference-condition-check",
+                action_name="request_condition_check",
+                binding=recipient.current_actor_binding,
+                arguments={
+                    "reason": "Record the visible sensor condition after documentary review.",
+                    "pump_id": "pump-a",
+                    "relied_on_evidence_refs": [reference],
+                },
+            )
+        )
+    else:
+        recipient.request_condition_check(
+            "proposal-reference-condition-check",
+            "Record the visible sensor condition after handover.",
+            "pump-a",
+        )
     recipient.request_inspection(
         "proposal-reference-physical-inspection",
         "Request the separate physical inspection after the sensor check.",
@@ -354,6 +388,14 @@ def run_pump_station_evidence_health_reference_session(
         result=recipient.result,
         verification=verification,
     )
+    if bridge.temporal_evidence:
+        temporal_verification = recipient.verify_temporal_evidence()
+        if not temporal_verification.valid:
+            raise ValueError("temporal-evidence reference session did not verify")
+        _write_json(
+            destination / "temporal-verification-report.json",
+            temporal_verification.model_dump(mode="json"),
+        )
     _write_json(
         destination / "artifact-inventory.json",
         _artifact_inventory(
@@ -361,7 +403,11 @@ def run_pump_station_evidence_health_reference_session(
             output_dir=destination,
             start_snapshot=start_snapshot.model_dump(mode="json"),
             end_snapshot=recipient.result.snapshot.model_dump(mode="json"),
-            tool_names=PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES,
+            tool_names=(
+                PUMP_STATION_TEMPORAL_EVIDENCE_TOOL_NAMES
+                if bridge.temporal_evidence
+                else PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES
+            ),
         ),
     )
     return CompletedPumpStationReferenceSession(
@@ -573,9 +619,11 @@ def run_pump_station_model_session(
             AdapterRequest(
                 instruction=_model_instruction(
                     rich_work_processes=bridge.rich_work_processes,
+                    temporal_evidence=bridge.temporal_evidence,
                 ),
                 system_prompt=_model_system_prompt(
                     rich_work_processes=bridge.rich_work_processes,
+                    temporal_evidence=bridge.temporal_evidence,
                 ),
                 tools=list(session.tool_specs),
                 configuration={"max_turns": max_turns},
@@ -598,6 +646,12 @@ def run_pump_station_model_session(
         result=session.result,
         verification=verification,
     )
+    if bridge.temporal_evidence:
+        temporal_verification = session.verify_temporal_evidence()
+        _write_json(
+            destination / "temporal-verification-report.json",
+            temporal_verification.model_dump(mode="json"),
+        )
     _write_json(
         destination / "artifact-inventory.json",
         _artifact_inventory(
@@ -606,6 +660,11 @@ def run_pump_station_model_session(
             controller_id=model_name,
             start_snapshot=start_snapshot.model_dump(mode="json"),
             end_snapshot=session.result.snapshot.model_dump(mode="json"),
+            tool_names=(
+                PUMP_STATION_TEMPORAL_EVIDENCE_TOOL_NAMES
+                if bridge.temporal_evidence
+                else session.result.tool_names
+            ),
         ),
     )
     return CompletedPumpStationModelSession(
@@ -691,7 +750,7 @@ def _artifact_inventory(
                 "size_bytes": len(payload),
             }
         )
-    return {
+    inventory = {
         "schema_version": PUMP_STATION_HARBOR_RUN_SCHEMA_VERSION,
         "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
         "task_world_id": PUMP_STATION_TASK_WORLD_ID,
@@ -706,6 +765,33 @@ def _artifact_inventory(
         "transition_count": end_snapshot["sequence"] - start_snapshot["sequence"],
         "artifacts": artifacts,
     }
+    if bridge.temporal_evidence:
+        capability = TemporalEvidenceCapability.model_validate(
+            _read_json(
+                output_dir
+                / "world-run"
+                / "temporal-evidence"
+                / "capability.json"
+            )
+        )
+        temporal_report = TemporalEvidenceVerificationReport.model_validate(
+            _read_json(output_dir / "temporal-verification-report.json")
+        )
+        inventory["temporal_evidence"] = {
+            "profile": capability.profile,
+            "capability_id": capability.content_sha256,
+            "corpus_snapshot_id": capability.corpus_snapshot_id,
+            "retrieval_policy_id": capability.retrieval_policy_id,
+            "access_policy_id": capability.access_policy_id,
+            "availability_schedule_id": capability.availability_schedule_id,
+            "branch_namespace_policy_id": capability.branch_namespace_policy_id,
+            "cost_policy_id": capability.simulated_cost_policy_id,
+            "access_count": temporal_report.access_count,
+            "reliance_count": temporal_report.reliance_count,
+            "carrier_count": temporal_report.carrier_count,
+            "verification_report_id": temporal_report.content_sha256,
+        }
+    return inventory
 
 
 def _world_session_request(identity: str) -> WorldSessionRequest:
@@ -736,6 +822,7 @@ def _open_pump_station_session(
                 package_root=bridge.package_root,
                 rich_work_processes=bridge.rich_work_processes,
                 evidence_health=bridge.evidence_health,
+                temporal_evidence=bridge.temporal_evidence,
             ),
         ),
     )
@@ -747,8 +834,17 @@ def _local_adapter_registry() -> Any:
     return LocalAdapterRegistry()
 
 
-def _model_system_prompt(*, rich_work_processes: bool = False) -> str:
+def _model_system_prompt(
+    *,
+    rich_work_processes: bool = False,
+    temporal_evidence: bool = False,
+) -> str:
     if rich_work_processes:
+        temporal_direction = (
+            " Search and fetch relevant documentary evidence before the first consequential action."
+            if temporal_evidence
+            else ""
+        )
         return (
             "You are the accountable wastewater pump-station steward. Use only "
             "the declared pump-station tools and live identifiers from the current "
@@ -757,6 +853,7 @@ def _model_system_prompt(*, rich_work_processes: bool = False) -> str:
             "Never invent evidence or hidden state. Stop only when Pump A has "
             "passed post-maintenance verification, Pump B has passed functional "
             "checks, and no live work or follow-up remains."
+            + temporal_direction
         )
     return (
         "You are the accountable wastewater pump-station steward. "
@@ -771,8 +868,17 @@ def _model_system_prompt(*, rich_work_processes: bool = False) -> str:
     )
 
 
-def _model_instruction(*, rich_work_processes: bool = False) -> str:
+def _model_instruction(
+    *,
+    rich_work_processes: bool = False,
+    temporal_evidence: bool = False,
+) -> str:
     if rich_work_processes:
+        temporal_direction = (
+            " First search for the pump obstruction procedure and fetch one supplied reference."
+            if temporal_evidence
+            else ""
+        )
         return (
             "Observe the pump station. Request post-maintenance verification for "
             "pump-a and inspection for pump-b, then transfer duty away from pump-b. "
@@ -785,6 +891,7 @@ def _model_instruction(*, rich_work_processes: bool = False) -> str:
             "obstruction clearance with the live inspection evidence. If work is "
             "suspended, wait for access and resume it. Continue through clearance and "
             "functional checks. Use a unique proposal identifier for every action."
+            + temporal_direction
         )
     return (
         "Start by observing the pump station. Follow this order exactly and use "
@@ -889,6 +996,13 @@ def _write_json(path: Path, payload: object) -> None:
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"expected JSON object: {path}")
+    return cast(dict[str, Any], payload)
 
 
 __all__ = (

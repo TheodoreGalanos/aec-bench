@@ -40,6 +40,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_se
     PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES,
     PUMP_STATION_RICH_WORK_TOOL_NAMES,
     PUMP_STATION_TASK_WORLD_ID,
+    PUMP_STATION_TEMPORAL_EVIDENCE_TOOL_NAMES,
     PUMP_STATION_TOOL_NAMES,
 )
 
@@ -64,6 +65,7 @@ _NON_AUTHORITY_ARTIFACT_NAMES = frozenset(
         ".world-run.lock",
         "artifact-inventory.json",
         "current.json",
+        "current-information-set.json",
     }
 )
 
@@ -104,6 +106,7 @@ class PumpStationHarborBridge:
     output_path: str
     rich_work_processes: bool
     evidence_health: bool
+    temporal_evidence: bool
     maintenance_review: bool
     execution_kind: str
     task_world_id: str
@@ -116,6 +119,7 @@ def export_pump_station_harbor_task(
     project_root: Path,
     rich_work_processes: bool = False,
     evidence_health: bool = False,
+    temporal_evidence: bool = False,
     maintenance_review: bool = False,
 ) -> ExportedPumpStationHarborTask:
     """Materialize one immutable task package for provider-free Harbor execution."""
@@ -135,8 +139,14 @@ def export_pump_station_harbor_task(
             task_dir=staging,
             project_root=root,
             package=package,
-            rich_work_processes=(rich_work_processes or evidence_health or maintenance_review),
-            evidence_health=(evidence_health or maintenance_review),
+            rich_work_processes=(
+                rich_work_processes
+                or evidence_health
+                or temporal_evidence
+                or maintenance_review
+            ),
+            evidence_health=(evidence_health or temporal_evidence or maintenance_review),
+            temporal_evidence=temporal_evidence,
             maintenance_review=maintenance_review,
         )
         staging.rename(destination)
@@ -212,18 +222,24 @@ def load_pump_station_harbor_bridge(
         PUMP_STATION_TOOL_NAMES,
         PUMP_STATION_RICH_WORK_TOOL_NAMES,
         PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES,
+        PUMP_STATION_TEMPORAL_EVIDENCE_TOOL_NAMES,
         PUMP_STATION_REVIEW_TOOL_NAMES,
     }:
         raise ValueError("pump-station Harbor tool catalogue differs")
     rich_work_processes = bool(bridge_payload.get("rich_work_processes", False))
     evidence_health = bool(bridge_payload.get("evidence_health", False))
+    temporal_evidence = bool(bridge_payload.get("temporal_evidence", False))
     if maintenance_review and not (rich_work_processes and evidence_health):
         raise ValueError("pump-station review requires version 3 rich work")
     if evidence_health and not rich_work_processes:
         raise ValueError("pump-station evidence health requires rich work")
+    if temporal_evidence and not evidence_health:
+        raise ValueError("pump-station temporal evidence requires evidence health")
     expected_tools = (
         PUMP_STATION_REVIEW_TOOL_NAMES
         if maintenance_review
+        else PUMP_STATION_TEMPORAL_EVIDENCE_TOOL_NAMES
+        if temporal_evidence
         else PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES
         if evidence_health
         else PUMP_STATION_RICH_WORK_TOOL_NAMES
@@ -257,6 +273,7 @@ def load_pump_station_harbor_bridge(
         output_path=PUMP_STATION_HARBOR_OUTPUT_PATH,
         rich_work_processes=rich_work_processes,
         evidence_health=evidence_health,
+        temporal_evidence=temporal_evidence,
         maintenance_review=maintenance_review,
         execution_kind=expected_execution_kind,
         task_world_id=expected_task_world_id,
@@ -271,6 +288,7 @@ def _write_export(
     package: ReferencePackage,
     rich_work_processes: bool,
     evidence_health: bool,
+    temporal_evidence: bool,
     maintenance_review: bool,
 ) -> ExportedPumpStationHarborTask:
     task_dir.mkdir()
@@ -316,6 +334,7 @@ def _write_export(
         runtime=runtime,
         rich_work_processes=rich_work_processes,
         evidence_health=evidence_health,
+        temporal_evidence=temporal_evidence,
         maintenance_review=maintenance_review,
     )
     manifest_path = task_dir / _MANIFEST_NAME
@@ -337,6 +356,7 @@ def _export_manifest(
     runtime: RuntimeWheel,
     rich_work_processes: bool,
     evidence_health: bool,
+    temporal_evidence: bool,
     maintenance_review: bool,
 ) -> dict[str, Any]:
     instruction = task_dir / "instruction.md"
@@ -348,6 +368,8 @@ def _export_manifest(
         "allowed_tools": list(
             PUMP_STATION_REVIEW_TOOL_NAMES
             if maintenance_review
+            else PUMP_STATION_TEMPORAL_EVIDENCE_TOOL_NAMES
+            if temporal_evidence
             else PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES
             if evidence_health
             else PUMP_STATION_RICH_WORK_TOOL_NAMES
@@ -356,6 +378,7 @@ def _export_manifest(
         ),
         "rich_work_processes": rich_work_processes,
         "evidence_health": evidence_health,
+        "temporal_evidence": temporal_evidence,
         "output_path": PUMP_STATION_HARBOR_OUTPUT_PATH,
         "controller_modes": list(
             PUMP_STATION_REVIEW_CONTROLLER_MODES if maintenance_review else PUMP_STATION_CONTROLLER_MODES
