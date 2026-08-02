@@ -345,7 +345,7 @@ class PumpStationWorldRun:
                 information_set=information_set,
                 transition=transition,
             )
-            return self._repository.publish_staged_transition(staged)
+            return self._repository._publish_staged_transition_under_lock(staged)
 
     def stage_evidence_treatment(
         self,
@@ -393,7 +393,7 @@ class PumpStationWorldRun:
                 control_request=request,
                 transition=transition,
             )
-            return self._repository.publish_staged_transition(staged)
+            return self._repository._publish_staged_transition_under_lock(staged)
 
     def recover_evidence_treatment(
         self,
@@ -433,7 +433,7 @@ class PumpStationWorldRun:
                 control_request=request,
                 transition=transition,
             )
-            return self._repository.publish_staged_transition(staged)
+            return self._repository._publish_staged_transition_under_lock(staged)
 
     def steps(self) -> tuple[PumpStationRunStep, ...]:
         """Reload all selected run steps for independent replay."""
