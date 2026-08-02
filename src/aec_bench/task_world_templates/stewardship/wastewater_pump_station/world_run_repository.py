@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import NoReturn, TypeGuard, cast
 
+from aec_bench.contracts.harness_kernel import validate_sha256
 from aec_bench.task_world_templates.continual.durability import (
     DurableFileReplaceConfinementError,
     DurableFileReplaceError,
@@ -68,7 +69,11 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
     PumpStationActorView,
+    PumpStationCoupledActorView,
     PumpStationInformationSet,
+    PumpStationStructuredHandoverV4,
+    actor_history_entry_v4,
+    bind_information_set,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_commands import (
     decode_pump_station_v4_command,
@@ -95,6 +100,19 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     pump_station_artifact_bytes,
     pump_station_artifact_id,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session_activation import (
+    PUMP_STATION_ACTIVE_SESSION_POINTER_VERSION,
+    PUMP_STATION_SESSION_ACTIVATION_CLAIM_VERSION,
+    PumpStationActiveSessionPointer,
+    PumpStationSessionActivationBinding,
+    PumpStationSessionActivationClaim,
+)
+
+_SESSION_AUTHORITY_ROOT = "session-authority"
+_SESSION_BINDING_COLLECTION = f"{_SESSION_AUTHORITY_ROOT}/bindings"
+_SESSION_ACTIVATION_CLAIM_COLLECTION = f"{_SESSION_AUTHORITY_ROOT}/activation-claims"
+_SESSION_HANDOVER_COLLECTION = f"{_SESSION_AUTHORITY_ROOT}/handovers"
+_ACTIVE_SESSION_POINTER_NAME = "active.json"
 
 _PROPOSAL_TYPES: dict[str, type[object]] = {
     proposal_type.__name__: proposal_type
@@ -256,6 +274,190 @@ class PumpStationWorldRunRepository:
             _fail("artifact-integrity", "current pointer and commit differ")
         self.load_state(pointer.state_id)
         return self._snapshot(manifest, pointer)
+
+    def publish_session_activation(
+        self,
+        binding: PumpStationSessionActivationBinding,
+    ) -> PumpStationSessionActivationBinding:
+        """Publish and select one exact host-approved V4 session binding."""
+
+        with self.locked():
+            return self._publish_session_activation_under_lock(binding)
+
+    def _publish_session_activation_under_lock(
+        self,
+        binding: PumpStationSessionActivationBinding,
+    ) -> PumpStationSessionActivationBinding:
+        """Publish and select a session binding while the caller owns the run lock."""
+
+        manifest = self._require_v4_session_manifest()
+        self._require_session_activation_scope(binding, manifest)
+        self._require_current_session_snapshot(binding)
+        active = self._selected_session_activation_if_present(manifest)
+        if active is not None:
+            pointer, current_binding = active
+            if binding.binding_id == pointer.active_binding_id:
+                if binding != current_binding:
+                    _fail(
+                        "artifact-integrity",
+                        "active session binding content differs from its identity",
+                    )
+                return current_binding
+            if binding.active_activation_id == pointer.active_activation_id:
+                _fail(
+                    "session-activation-conflict",
+                    f"{binding.active_activation_id} already selects another binding",
+                )
+            if (
+                binding.prior_binding_id != pointer.active_binding_id
+                or binding.session_event_sequence != pointer.session_event_sequence + 1
+            ):
+                _fail(
+                    "session-activation-stale",
+                    "replacement does not extend the active session binding",
+                )
+            if binding.host_authority_id != current_binding.host_authority_id:
+                _fail(
+                    "session-activation-authority",
+                    "replacement session binding uses another host authority",
+                )
+        elif binding.prior_binding_id is not None or binding.session_event_sequence != 0:
+            _fail(
+                "session-activation-stale",
+                "initial session binding must start a new activation chain",
+            )
+
+        claim = PumpStationSessionActivationClaim(
+            claim_version=PUMP_STATION_SESSION_ACTIVATION_CLAIM_VERSION,
+            active_activation_id=binding.active_activation_id,
+            binding_id=binding.binding_id,
+        )
+        self._require_session_activation_claim(claim)
+        self._publish_session_binding(binding)
+        self._publish_session_activation_claim(claim)
+        self._replace_active_session_pointer(
+            PumpStationActiveSessionPointer(
+                pointer_version=PUMP_STATION_ACTIVE_SESSION_POINTER_VERSION,
+                run_id=binding.run_id,
+                episode_id=binding.episode_id,
+                world_branch_id=binding.world_branch_id,
+                active_activation_id=binding.active_activation_id,
+                active_binding_id=binding.binding_id,
+                session_event_sequence=binding.session_event_sequence,
+            )
+        )
+        return binding
+
+    def load_session_activation(
+        self,
+        binding_id: str,
+    ) -> PumpStationSessionActivationBinding:
+        """Reload one immutable V4 session binding by exact content identity."""
+
+        with self.locked():
+            manifest = self._require_v4_session_manifest()
+            return self._load_session_binding(binding_id, manifest)
+
+    def load_active_session_activation(self) -> PumpStationSessionActivationBinding:
+        """Reload the active V4 session binding only at its selected world position."""
+
+        with self.locked():
+            manifest = self._require_v4_session_manifest()
+            active = self._selected_session_activation_if_present(manifest)
+            if active is None:
+                _fail("session-activation-missing", "run has no active session binding")
+            _, binding = active
+            self._require_current_session_snapshot(binding)
+            return binding
+
+    def load_selected_session_activation(self) -> PumpStationSessionActivationBinding:
+        """Reload the pointer-selected V4 session even when the world has advanced."""
+
+        with self.locked():
+            manifest = self._require_v4_session_manifest()
+            active = self._selected_session_activation_if_present(manifest)
+            if active is None:
+                _fail("session-activation-missing", "run has no active session binding")
+            _, binding = active
+            return binding
+
+    def publish_structured_handover(
+        self,
+        handover: PumpStationStructuredHandoverV4,
+    ) -> PumpStationStructuredHandoverV4:
+        """Publish one full immutable V4 handover without selecting world state."""
+
+        with self.locked():
+            return self._publish_structured_handover_under_lock(handover)
+
+    def _publish_structured_handover_under_lock(
+        self,
+        handover: PumpStationStructuredHandoverV4,
+    ) -> PumpStationStructuredHandoverV4:
+        """Publish one V4 handover while the session coordinator owns the run lock."""
+
+        manifest = self._require_v4_session_manifest()
+        path = self._structured_handover_path(handover.handover_id)
+        if path.exists() or path.is_symlink():
+            observed = self._load_structured_handover(
+                handover.handover_id,
+                manifest,
+            )
+            if observed != handover:
+                _fail(
+                    "artifact-integrity",
+                    "structured handover content differs from its identity",
+                )
+            return observed
+        self._require_structured_handover_scope(handover, manifest)
+        self._require_current_structured_handover_snapshot(handover)
+        self._require_selected_structured_handover_session(handover, manifest)
+        self._require_structured_handover_record(handover, manifest)
+        self._publish_content(
+            _SESSION_HANDOVER_COLLECTION,
+            handover.handover_id,
+            handover,
+            record_profile="v4",
+        )
+        return handover
+
+    def load_structured_handover(
+        self,
+        handover_id: str,
+    ) -> PumpStationStructuredHandoverV4:
+        """Reload one complete immutable V4 handover by content identity."""
+
+        with self.locked():
+            manifest = self._require_v4_session_manifest()
+            return self._load_structured_handover(handover_id, manifest)
+
+    def has_structured_handover(self, handover_id: str) -> bool:
+        """Return whether one valid content identity selects a durable handover file."""
+
+        try:
+            validate_sha256(handover_id)
+        except ValueError:
+            return False
+        return self._structured_handover_path(handover_id).is_file()
+
+    def _require_active_session_activation_under_lock(
+        self,
+        binding_id: str,
+    ) -> PumpStationSessionActivationBinding:
+        """Require one current active binding while the caller owns the run lock."""
+
+        manifest = self._require_v4_session_manifest()
+        active = self._selected_session_activation_if_present(manifest)
+        if active is None:
+            _fail("session-activation-missing", "run has no active session binding")
+        pointer, binding = active
+        if pointer.active_binding_id != binding_id:
+            _fail(
+                "actor-session-revoked",
+                "actor command does not use the active session binding",
+            )
+        self._require_current_session_snapshot(binding)
+        return binding
 
     def load_state(self, state_id: str) -> PumpStationStewardshipStateRecord:
         """Reload a complete state and verify its semantic identity."""
@@ -502,10 +704,11 @@ class PumpStationWorldRunRepository:
             assert proposal is not None
             assert information_set is not None
             parent_state = self._load_v4_state(prior_snapshot.state_id)
-            expected_information_set = self._project_v4_information_set(
+            self._require_v4_actor_information_set(
                 stored_manifest,
                 parent_state,
                 command,
+                information_set,
             )
             if (
                 proposal.context.proposal_id != command.request_id
@@ -514,7 +717,6 @@ class PumpStationWorldRunRepository:
                 or proposal.context.base_view_id != command.actor_view_id
                 or proposal.context.information_set_id != command.information_set_id
                 or information_set.information_set_id != command.information_set_id
-                or information_set != expected_information_set
             ):
                 _fail("transition-integrity", "V4 actor evidence bindings differ")
         self._reject_v4_command_collision(
@@ -1229,17 +1431,17 @@ class PumpStationWorldRunRepository:
                 _fail("artifact-integrity", "V4 actor command lacks bound proposal evidence")
             parent = self.load_commit(commit.parent_commit_id)
             parent_state = self._load_v4_state(parent.state_id)
-            expected_information_set = self._project_v4_information_set(
+            self._require_v4_actor_information_set(
                 manifest,
                 parent_state,
                 command,
+                information_set,
             )
             if (
                 pump_station_artifact_id(proposal, record_profile="v4") != commit.proposal_content_id
                 or pump_station_artifact_id(information_set, record_profile="v4") != commit.information_set_content_id
                 or proposal.context.proposal_id != command.request_id
                 or proposal.context.information_set_id != information_set.information_set_id
-                or information_set != expected_information_set
             ):
                 _fail("artifact-integrity", "V4 actor evidence does not reconcile")
         elif proposal is not None or information_set is not None:
@@ -1299,6 +1501,49 @@ class PumpStationWorldRunRepository:
             ),
             workspace_tool_ids=(PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,),
         )
+
+    def _require_v4_actor_information_set(
+        self,
+        manifest: PumpStationWorldRunManifestV2,
+        state: PumpStationCoupledStewardshipState,
+        command: PumpStationCommandV4,
+        information_set: PumpStationInformationSet,
+    ) -> None:
+        """Reconcile dynamic session context with one deterministic V4 view."""
+        if command.session_binding_id is None:
+            _fail("artifact-integrity", "V4 actor command lacks a session binding")
+        session_binding = self._load_session_binding(
+            command.session_binding_id,
+            manifest,
+        )
+        expected = self._project_v4_information_set(manifest, state, command)
+        view = information_set.base_view
+        if not isinstance(view, PumpStationCoupledActorView):
+            _fail("artifact-integrity", "V4 actor information set has a legacy view")
+        if (
+            session_binding.session_id != command.session_id
+            or session_binding.agent_tenure_id != command.agent_tenure_id
+            or session_binding.sequence != command.based_on_sequence
+            or session_binding.state_id != command.base_state_id
+            or session_binding.commit_id != command.base_commit_id
+            or session_binding.actor_view_id != command.actor_view_id
+            or view != expected.base_view
+            or information_set.information_set_id != command.information_set_id
+            or bind_information_set(
+                view,
+                information_set.observation_history,
+                information_set.current_context,
+            )
+            != information_set
+            or information_set.current_context.workspace_tool_ids != (PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,)
+            or not set(view.source_artifact_ids).issubset(
+                information_set.current_context.visible_material_ids,
+            )
+        ):
+            _fail(
+                "artifact-integrity",
+                "V4 actor session, view, or information-set evidence differs",
+            )
 
     def _load_proposal(
         self,
@@ -1461,6 +1706,357 @@ class PumpStationWorldRunRepository:
             or pump_station_artifact_id(previous) != pointer.commit_id
         ):
             _fail("artifact-integrity", "commit chain does not reach current pointer")
+
+    def _require_v4_session_manifest(self) -> PumpStationWorldRunManifestV2:
+        manifest = self.load_manifest()
+        if not isinstance(manifest, PumpStationWorldRunManifestV2):
+            _fail("record-versions", "session activation requires a registered V4 run")
+        return manifest
+
+    @staticmethod
+    def _require_session_activation_scope(
+        binding: PumpStationSessionActivationBinding,
+        manifest: PumpStationWorldRunManifestV2,
+    ) -> None:
+        observed = (
+            binding.run_id,
+            binding.episode_id,
+            binding.world_branch_id,
+        )
+        expected = (
+            manifest.run_id,
+            manifest.episode_id,
+            manifest.world_branch_id,
+        )
+        if observed != expected:
+            _fail(
+                "session-activation-scope",
+                "session binding belongs to another world run",
+            )
+
+    def _require_current_session_snapshot(
+        self,
+        binding: PumpStationSessionActivationBinding,
+    ) -> None:
+        current = self.current_snapshot()
+        observed = (
+            binding.sequence,
+            binding.state_id,
+            binding.commit_id,
+        )
+        expected = (
+            current.sequence,
+            current.state_id,
+            current.commit_id,
+        )
+        if observed != expected:
+            _fail(
+                "session-activation-stale",
+                "session binding does not use the selected world snapshot",
+            )
+
+    def _selected_session_activation_if_present(
+        self,
+        manifest: PumpStationWorldRunManifestV2,
+    ) -> tuple[PumpStationActiveSessionPointer, PumpStationSessionActivationBinding] | None:
+        pointer_path = self._root / _SESSION_AUTHORITY_ROOT / _ACTIVE_SESSION_POINTER_NAME
+        if not pointer_path.exists() and not pointer_path.is_symlink():
+            return None
+        pointer = load_pump_station_artifact(
+            self._read(pointer_path, "active session pointer"),
+            PumpStationActiveSessionPointer,
+            record_profile="v4",
+        )
+        if (
+            pointer.run_id,
+            pointer.episode_id,
+            pointer.world_branch_id,
+        ) != (
+            manifest.run_id,
+            manifest.episode_id,
+            manifest.world_branch_id,
+        ):
+            _fail(
+                "session-activation-scope",
+                "active session pointer belongs to another world run",
+            )
+        binding = self._load_session_binding(pointer.active_binding_id, manifest)
+        if (
+            pointer.active_activation_id != binding.active_activation_id
+            or pointer.session_event_sequence != binding.session_event_sequence
+        ):
+            _fail(
+                "artifact-integrity",
+                "active session pointer and binding differ",
+            )
+        claim = self._load_session_activation_claim(binding.active_activation_id)
+        if claim.binding_id != binding.binding_id:
+            _fail(
+                "artifact-integrity",
+                "active session claim and binding differ",
+            )
+        return pointer, binding
+
+    def _load_session_binding(
+        self,
+        binding_id: str,
+        manifest: PumpStationWorldRunManifestV2,
+    ) -> PumpStationSessionActivationBinding:
+        try:
+            validate_sha256(binding_id)
+        except ValueError as error:
+            _fail("artifact-type", f"invalid session binding identity: {error}")
+        binding = load_pump_station_artifact(
+            self._read(
+                self._root / _SESSION_BINDING_COLLECTION / f"{binding_id}.json",
+                f"session binding {binding_id}",
+            ),
+            PumpStationSessionActivationBinding,
+            record_profile="v4",
+        )
+        if binding.binding_id != binding_id:
+            _fail(
+                "artifact-integrity",
+                f"session binding identity differs for {binding_id}",
+            )
+        self._require_session_activation_scope(binding, manifest)
+        return binding
+
+    @staticmethod
+    def _session_activation_claim_key(active_activation_id: str) -> str:
+        return hashlib.sha256(active_activation_id.encode("utf-8")).hexdigest()
+
+    def _session_activation_claim_path(self, active_activation_id: str) -> Path:
+        claim_key = self._session_activation_claim_key(active_activation_id)
+        return self._root / _SESSION_ACTIVATION_CLAIM_COLLECTION / f"{claim_key}.json"
+
+    def _load_session_activation_claim(
+        self,
+        active_activation_id: str,
+    ) -> PumpStationSessionActivationClaim:
+        claim = load_pump_station_artifact(
+            self._read(
+                self._session_activation_claim_path(active_activation_id),
+                f"session activation claim {active_activation_id}",
+            ),
+            PumpStationSessionActivationClaim,
+            record_profile="v4",
+        )
+        if claim.active_activation_id != active_activation_id:
+            _fail(
+                "artifact-integrity",
+                "session activation claim identity differs",
+            )
+        return claim
+
+    def _require_session_activation_claim(
+        self,
+        expected: PumpStationSessionActivationClaim,
+    ) -> None:
+        path = self._session_activation_claim_path(expected.active_activation_id)
+        if not path.exists() and not path.is_symlink():
+            return
+        observed = self._load_session_activation_claim(expected.active_activation_id)
+        if observed != expected:
+            _fail(
+                "session-activation-conflict",
+                f"{expected.active_activation_id} already selects another binding",
+            )
+
+    def _publish_session_binding(
+        self,
+        binding: PumpStationSessionActivationBinding,
+    ) -> None:
+        payload = pump_station_artifact_bytes(binding, record_profile="v4")
+        if hashlib.sha256(payload).hexdigest() != binding.binding_id:
+            _fail("artifact-integrity", "session binding content identity differs")
+        self._publish_immutable(
+            self._root / _SESSION_BINDING_COLLECTION / f"{binding.binding_id}.json",
+            payload,
+        )
+
+    def _publish_session_activation_claim(
+        self,
+        claim: PumpStationSessionActivationClaim,
+    ) -> None:
+        self._publish_immutable(
+            self._session_activation_claim_path(claim.active_activation_id),
+            pump_station_artifact_bytes(claim, record_profile="v4"),
+        )
+
+    def _replace_active_session_pointer(
+        self,
+        pointer: PumpStationActiveSessionPointer,
+    ) -> None:
+        try:
+            replace_file_bytes_durable(
+                self._root / _SESSION_AUTHORITY_ROOT,
+                _ACTIVE_SESSION_POINTER_NAME,
+                pump_station_artifact_bytes(pointer, record_profile="v4"),
+                host_private=True,
+            )
+        except DurableFileReplaceConfinementError as error:
+            _fail("artifact-confinement", f"active session pointer is unsafe: {error}")
+        except DurableFileReplaceError as error:
+            _fail(
+                "artifact-integrity",
+                f"active session pointer cannot be replaced: {error}",
+            )
+
+    def _structured_handover_path(self, handover_id: str) -> Path:
+        return self._root / _SESSION_HANDOVER_COLLECTION / f"{handover_id}.json"
+
+    def _load_structured_handover(
+        self,
+        handover_id: str,
+        manifest: PumpStationWorldRunManifestV2,
+    ) -> PumpStationStructuredHandoverV4:
+        try:
+            validate_sha256(handover_id)
+        except ValueError as error:
+            _fail("artifact-type", f"invalid structured handover identity: {error}")
+        handover = load_pump_station_artifact(
+            self._read(
+                self._structured_handover_path(handover_id),
+                f"structured handover {handover_id}",
+            ),
+            PumpStationStructuredHandoverV4,
+            record_profile="v4",
+        )
+        if handover.handover_id != handover_id:
+            _fail(
+                "artifact-integrity",
+                f"structured handover identity differs for {handover_id}",
+            )
+        self._require_structured_handover_record(handover, manifest)
+        return handover
+
+    def _require_structured_handover_record(
+        self,
+        handover: PumpStationStructuredHandoverV4,
+        manifest: PumpStationWorldRunManifestV2,
+    ) -> None:
+        self._require_structured_handover_scope(handover, manifest)
+        commit = self.load_commit(handover.commit_id)
+        if (
+            commit.run_id != handover.run_id
+            or commit.sequence != handover.sequence
+            or commit.state_id != handover.state_id
+        ):
+            _fail(
+                "artifact-integrity",
+                "structured handover commit and world position differ",
+            )
+        state = self._load_v4_state(handover.state_id)
+        expected_view = project_coupled_information_set(
+            state,
+            episode_id=manifest.episode_id,
+            world_branch_id=manifest.world_branch_id,
+            actor_id="pump-station-actor",
+            agent_tenure_id=handover.to_tenure_id,
+            source_artifact_ids=(
+                manifest.reference_system_content_id,
+                manifest.package_content_id,
+                manifest.temporal_bundle_content_id,
+            ),
+            workspace_tool_ids=(PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,),
+        ).base_view
+        if handover.current_actor_view != expected_view:
+            _fail(
+                "artifact-integrity",
+                "structured handover view differs from the deterministic projection",
+            )
+        expected_history = tuple(
+            actor_history_entry_v4(step.transition, step.proposal)
+            for step in self.v4_steps()
+            if step.proposal is not None and step.transition.receipt.sequence <= handover.sequence
+        )[-handover.maximum_history_entries :]
+        if handover.history != expected_history:
+            _fail(
+                "artifact-integrity",
+                "structured handover history differs from selected actor transitions",
+            )
+        source = self._load_session_binding(
+            handover.from_session_binding_id,
+            manifest,
+        )
+        recipient = self._load_session_binding(
+            handover.to_session_binding_id,
+            manifest,
+        )
+        if (
+            source.session_id != handover.from_session_id
+            or source.agent_tenure_id != handover.from_tenure_id
+            or recipient.session_id != handover.to_session_id
+            or recipient.agent_tenure_id != handover.to_tenure_id
+            or recipient.actor_view_id != handover.current_actor_view.view_id
+            or recipient.state_id != handover.state_id
+            or recipient.commit_id != handover.commit_id
+            or recipient.sequence != handover.sequence
+            or recipient.prior_binding_id != source.binding_id
+            or recipient.session_event_sequence != source.session_event_sequence + 1
+            or recipient.host_authority_id != source.host_authority_id
+        ):
+            _fail(
+                "structured-handover-session",
+                "structured handover session bindings differ from its content",
+            )
+
+    @staticmethod
+    def _require_structured_handover_scope(
+        handover: PumpStationStructuredHandoverV4,
+        manifest: PumpStationWorldRunManifestV2,
+    ) -> None:
+        if (
+            handover.run_id,
+            handover.episode_id,
+            handover.world_branch_id,
+        ) != (
+            manifest.run_id,
+            manifest.episode_id,
+            manifest.world_branch_id,
+        ):
+            _fail(
+                "structured-handover-scope",
+                "structured handover belongs to another world run",
+            )
+
+    def _require_current_structured_handover_snapshot(
+        self,
+        handover: PumpStationStructuredHandoverV4,
+    ) -> None:
+        current = self.current_snapshot()
+        if (
+            handover.sequence,
+            handover.state_id,
+            handover.commit_id,
+        ) != (
+            current.sequence,
+            current.state_id,
+            current.commit_id,
+        ):
+            _fail(
+                "structured-handover-stale",
+                "structured handover does not use the selected world snapshot",
+            )
+
+    def _require_selected_structured_handover_session(
+        self,
+        handover: PumpStationStructuredHandoverV4,
+        manifest: PumpStationWorldRunManifestV2,
+    ) -> None:
+        active = self._selected_session_activation_if_present(manifest)
+        if active is None:
+            _fail(
+                "structured-handover-session",
+                "structured handover has no selected recipient session",
+            )
+        _, recipient = active
+        if recipient.binding_id != handover.to_session_binding_id:
+            _fail(
+                "structured-handover-session",
+                "structured handover recipient session is not selected",
+            )
 
     def _publish_state(self, state: PumpStationStewardshipStateRecord) -> str:
         state_id = stewardship_state_id(state)

@@ -12,6 +12,12 @@ import pytest
 from pydantic import JsonValue
 
 from aec_bench.contracts.world_interface import WorldActorActionRequest
+from aec_bench.contracts.world_session import (
+    StewardshipStateSnapshotRef,
+    WorldSessionExecutionKind,
+    WorldSessionOpenMode,
+    WorldSessionRequest,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpStationCoupledModel,
 )
@@ -54,6 +60,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_serialization import (
     pump_station_artifact_id,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
+    PumpStationWorldSessionFactory,
+)
 
 type PumpStationReferenceRun = PumpStationWorldRun[
     PumpStationCoupledModel,
@@ -74,12 +83,21 @@ def _apply_registered_actor_in_child(
         snapshot=snapshot,
     )
     request = WorldActorActionRequest.model_validate(request_value)
+    session_binding = _active_session_binding(run)
+    information_set = run._v4_session_information_set(
+        run.snapshot(),
+        session_binding=session_binding,
+    )
     ready.set()
     if not start.wait(10):
         results.put(("error", "start-timeout"))
         return
     try:
-        transition = run.apply_v4_actor_action(request)
+        transition = run.apply_v4_actor_action(
+            request,
+            information_set=information_set,
+            session_binding_id=session_binding.binding_id,
+        )
     except PumpStationWorldRunError as error:
         results.put(("error", error.code))
         return
@@ -102,6 +120,65 @@ def _start_reference_run(root: Path) -> PumpStationReferenceRun:
     )
 
 
+def _shared_snapshot(run: PumpStationReferenceRun) -> StewardshipStateSnapshotRef:
+    snapshot = run.snapshot()
+    return StewardshipStateSnapshotRef(
+        run_id=snapshot.run_id,
+        episode_id=snapshot.episode_id,
+        world_branch_id=snapshot.world_branch_id,
+        sequence=snapshot.sequence,
+        state_id=snapshot.state_id,
+        commit_id=snapshot.commit_id,
+    )
+
+
+def _open_reference_session(run: PumpStationReferenceRun):
+    manifest = run.manifest
+    assert isinstance(manifest, PumpStationWorldRunManifestV2)
+    return PumpStationWorldSessionFactory(run.repository.root).open(
+        WorldSessionRequest(
+            execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
+            open_mode=WorldSessionOpenMode.RESUME,
+            session_id="session-v4-transitions",
+            task_world_id=manifest.task_world_id,
+            agent_tenure_id="reference-controller",
+            run_id=manifest.run_id,
+            episode_id=manifest.episode_id,
+            world_branch_id=manifest.world_branch_id,
+            start_snapshot=_shared_snapshot(run),
+        )
+    )
+
+
+def _active_session_binding(run: PumpStationReferenceRun):
+    try:
+        return run.repository.load_active_session_activation()
+    except PumpStationWorldRunError as error:
+        if error.code not in {
+            "session-activation-missing",
+            "session-activation-stale",
+        }:
+            raise
+    _open_reference_session(run)
+    return run.repository.load_active_session_activation()
+
+
+def _apply_registered_actor_action(
+    run: PumpStationReferenceRun,
+    request: WorldActorActionRequest,
+):
+    session_binding = _active_session_binding(run)
+    information_set = run._v4_session_information_set(
+        run.snapshot(),
+        session_binding=session_binding,
+    )
+    return run.apply_v4_actor_action(
+        request,
+        information_set=information_set,
+        session_binding_id=session_binding.binding_id,
+    )
+
+
 def _actor_request(
     run: PumpStationReferenceRun,
     *,
@@ -110,10 +187,7 @@ def _actor_request(
     arguments: dict[str, JsonValue] | None = None,
     reason: str,
 ) -> WorldActorActionRequest:
-    observation = run.observe_v4_actor(
-        session_id="session-v4-transitions",
-        agent_tenure_id="reference-controller",
-    )
+    observation = _open_reference_session(run).observe_actor()
     return WorldActorActionRequest(
         request_id=request_id,
         action_name=action_name,
@@ -195,7 +269,7 @@ def _record_one_v4_actor_step(
         request_id="recorded-v4-actor-step",
         reason="Record one actor step for integrity checks.",
     )
-    run.apply_v4_actor_action(request)
+    _apply_registered_actor_action(run, request)
     return run, initial_state, request, run.repository.v4_steps()[0]
 
 
@@ -217,7 +291,7 @@ def _stage_unselected_v4_actor_outcome(
             interrupt_after_staging,
         )
         with pytest.raises(OSError, match="after immutable V4 staging"):
-            run.apply_v4_actor_action(request)
+            _apply_registered_actor_action(run, request)
     assert len(captured) == 1
     return captured[0]
 
@@ -272,7 +346,7 @@ def test_registered_actor_action_selects_one_existing_world_run_commit(
     assert request.binding.commit_id == opening.commit_id
     assert request.binding.commit_id != request.binding.state_id
 
-    transition = run.apply_v4_actor_action(request)
+    transition = _apply_registered_actor_action(run, request)
     selected = run.snapshot()
     commits = run.repository.commits()
 
@@ -286,7 +360,7 @@ def test_registered_actor_action_selects_one_existing_world_run_commit(
     assert not (root / "HEAD").exists()
     assert not (root / "generations").exists()
 
-    repeated = run.apply_v4_actor_action(request)
+    repeated = _apply_registered_actor_action(run, request)
 
     assert repeated == transition
     assert run.snapshot() == selected
@@ -302,7 +376,7 @@ def test_registered_actor_request_id_rejects_changed_content(
         request_id="verify-a-conflict",
         reason="Start the required independent Pump A verification.",
     )
-    run.apply_v4_actor_action(original)
+    _apply_registered_actor_action(run, original)
     changed = WorldActorActionRequest(
         request_id=original.request_id,
         action_name=original.action_name,
@@ -314,7 +388,7 @@ def test_registered_actor_request_id_rejects_changed_content(
     )
 
     with pytest.raises(PumpStationWorldRunError) as raised:
-        run.apply_v4_actor_action(changed)
+        _apply_registered_actor_action(run, changed)
 
     assert raised.value.code == "v4-command-id-conflict"
     assert run.snapshot().sequence == 1
@@ -348,7 +422,7 @@ def test_legacy_request_identity_cannot_be_reused_by_a_registered_action(
     )
 
     with pytest.raises(PumpStationWorldRunError) as raised:
-        run.apply_v4_actor_action(request)
+        _apply_registered_actor_action(run, request)
 
     assert raised.value.code == "v4-command-id-conflict"
     assert run.snapshot() == opening
@@ -365,7 +439,7 @@ def test_registered_request_identity_cannot_enter_the_legacy_proposal_path(
         request_id="cross-profile-v4-to-legacy",
         reason="Create one registered request identity.",
     )
-    run.apply_v4_actor_action(request)
+    _apply_registered_actor_action(run, request)
     step = run.repository.v4_steps()[0]
     assert step.proposal is not None
     assert step.information_set is not None
@@ -574,11 +648,11 @@ def test_stale_actor_binding_fails_before_a_second_transition(
             "reason": "Try another check from the stale parent binding.",
         },
     )
-    run.apply_v4_actor_action(first)
+    _apply_registered_actor_action(run, first)
     selected = run.snapshot()
 
     with pytest.raises(PumpStationWorldRunError) as raised:
-        run.apply_v4_actor_action(stale)
+        _apply_registered_actor_action(run, stale)
 
     assert raised.value.code == "actor-request-binding"
     assert run.snapshot() == selected
@@ -662,7 +736,7 @@ def test_root_host_controls_use_the_same_commit_chain_and_exact_retry(
         request_id="verify-a-for-review",
         reason="Start the required independent Pump A verification.",
     )
-    run.apply_v4_actor_action(verification)
+    _apply_registered_actor_action(run, verification)
     continuation = _actor_request(
         run,
         request_id="continue-to-verification",
@@ -670,7 +744,7 @@ def test_root_host_controls_use_the_same_commit_chain_and_exact_retry(
         arguments={},
         reason="Continue to the verification completion event.",
     )
-    run.apply_v4_actor_action(continuation)
+    _apply_registered_actor_action(run, continuation)
     state = run.state
     review = _bound_control(
         run,
@@ -709,12 +783,13 @@ def test_process_outcome_and_common_boundary_controls_are_durable_root_transitio
     tmp_path: Path,
 ) -> None:
     process_run = _start_reference_run(tmp_path / "process-run")
-    process_run.apply_v4_actor_action(
+    _apply_registered_actor_action(
+        process_run,
         _actor_request(
             process_run,
             request_id="verify-a-for-failure",
             reason="Start the verification before recording its failed outcome.",
-        )
+        ),
     )
     active = process_run.state.processes[-1]
     process_control = _bound_control(
@@ -761,14 +836,15 @@ def test_registered_run_reopens_and_independently_replays_mixed_v4_history(
 ) -> None:
     root = tmp_path / "run"
     run = _start_reference_run(root)
-    actor_transition = run.apply_v4_actor_action(
+    actor_transition = _apply_registered_actor_action(
+        run,
         _actor_request(
             run,
             request_id="condition-check-a-001",
             action_name="request_condition_check",
             arguments={"pump_id": "pump-a"},
             reason="Record a current Pump A condition check.",
-        )
+        ),
     )
     control = _bound_control(
         run,
@@ -819,12 +895,12 @@ def test_interrupted_v4_publication_recovers_one_exact_actor_effect(
 
     monkeypatch.setattr(run.repository, "_replace_current", interrupt_before_pointer)
     with pytest.raises(OSError, match="before current pointer"):
-        run.apply_v4_actor_action(request)
+        _apply_registered_actor_action(run, request)
 
     assert run.snapshot().sequence == 0
     monkeypatch.setattr(run.repository, "_replace_current", original_replace)
 
-    recovered = run.apply_v4_actor_action(request)
+    recovered = _apply_registered_actor_action(run, request)
 
     assert run.snapshot().sequence == 1
     assert len(run.repository.v4_steps()) == 1
@@ -844,7 +920,11 @@ def test_unselected_exact_command_recovers_its_durable_transition(
         arguments={"pump_id": "pump-a"},
         reason="Recover the staged Pump A condition check.",
     )
-    command = run._v4_actor_command(request)
+    session_binding = _active_session_binding(run)
+    command = run._v4_actor_command(
+        request,
+        session_binding_id=session_binding.binding_id,
+    )
     original_replace = run.repository._replace_current
 
     def interrupt_before_pointer(_pointer: object) -> None:
@@ -856,7 +936,7 @@ def test_unselected_exact_command_recovers_its_durable_transition(
         interrupt_before_pointer,
     )
     with pytest.raises(OSError, match="before current pointer"):
-        run.apply_v4_actor_action(request)
+        _apply_registered_actor_action(run, request)
     monkeypatch.setattr(run.repository, "_replace_current", original_replace)
 
     recovered = run.repository.recover_staged_v4_command(command)
@@ -893,7 +973,7 @@ def test_staged_v4_recovery_cannot_reselect_an_old_parent(
         arguments={"pump_id": "pump-b"},
         reason="Select a different Pump B condition check from the opening parent.",
     )
-    run.apply_v4_actor_action(competing_request)
+    _apply_registered_actor_action(run, competing_request)
     selected = run.snapshot()
 
     with pytest.raises(PumpStationWorldRunError) as raised:
@@ -963,7 +1043,7 @@ def test_restart_retry_after_pointer_selection_returns_the_selected_transition(
         interrupt_after_pointer,
     )
     with pytest.raises(OSError, match="after current pointer"):
-        run.apply_v4_actor_action(request)
+        _apply_registered_actor_action(run, request)
 
     selected = run.snapshot()
     assert selected.sequence == 1
@@ -972,7 +1052,7 @@ def test_restart_retry_after_pointer_selection_returns_the_selected_transition(
         repository=PumpStationWorldRunRepository(root),
         snapshot=selected,
     )
-    recovered = reopened.apply_v4_actor_action(request)
+    recovered = _apply_registered_actor_action(reopened, request)
 
     assert recovered.state.state_id == selected.state_id
     assert reopened.snapshot() == selected
@@ -1093,6 +1173,6 @@ def test_two_processes_select_only_one_of_two_effects_from_the_same_parent(
 
     outcomes = tuple(results.get(timeout=5) for _ in processes)
     assert sum(outcome[0] == "applied" for outcome in outcomes) == 1
-    assert sum(outcome == ("error", "actor-request-binding") for outcome in outcomes) == 1
+    assert sum(outcome == ("error", "session-activation-stale") for outcome in outcomes) == 1
     assert run.snapshot().sequence == 1
     assert len(run.repository.v4_steps()) == 1

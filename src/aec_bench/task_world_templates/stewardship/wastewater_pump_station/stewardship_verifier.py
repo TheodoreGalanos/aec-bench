@@ -50,7 +50,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     apply_stewardship_proposal_v4,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
+    PumpStationCoupledActorView,
     PumpStationInformationSet,
+    bind_information_set,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_commands import (
     decode_pump_station_v4_command,
@@ -251,7 +253,22 @@ def verify_stewardship_run_v4(
                     source_artifact_ids=expected_source_artifact_ids,
                     workspace_tool_ids=(PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,),
                 )
-                if step.information_set != expected_information_set:
+                view = step.information_set.base_view
+                if (
+                    not isinstance(view, PumpStationCoupledActorView)
+                    or view != expected_information_set.base_view
+                    or bind_information_set(
+                        view,
+                        step.information_set.observation_history,
+                        step.information_set.current_context,
+                    )
+                    != step.information_set
+                    or step.information_set.current_context.workspace_tool_ids
+                    != (PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,)
+                    or not set(view.source_artifact_ids).issubset(
+                        step.information_set.current_context.visible_material_ids,
+                    )
+                ):
                     raise ValueError("actor-view or information-set content differs")
                 arguments = validate_pump_station_actor_arguments_v2(
                     command.action_name,

@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, NoReturn, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Literal, NoReturn, TypeVar, cast
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
     D_RUNTIME_SECONDS,
@@ -1397,6 +1397,32 @@ def _required_authorities(action_kind: str) -> tuple[str, ...]:
     return ("host",)
 
 
+def pump_station_root_control_operations(
+    state: PumpStationCoupledWorldState | None,
+    *,
+    authority_id: str,
+    process_id: str | None = None,
+) -> tuple[Literal["operations_review", "process_outcome", "common_boundary"], ...]:
+    """Return root controls permitted by current pump-task authority semantics."""
+    operations: list[Literal["operations_review", "process_outcome", "common_boundary"]] = []
+    if authority_id == "operations-controller":
+        operations.extend(("operations_review", "common_boundary"))
+    if state is None:
+        return tuple(operations)
+    process_authorities = {
+        "functional_check": "maintenance-controller",
+        "post_maintenance_verification": "verification-engineer-01",
+    }
+    if any(
+        process.status is PumpStationCoupledProcessStatus.ACTIVE
+        and (process_id is None or process.process_id == process_id)
+        and process_authorities.get(process.kind) == authority_id
+        for process in state.processes
+    ):
+        operations.append("process_outcome")
+    return tuple(operations)
+
+
 def _continue_operation(
     model: PumpStationCoupledModel,
     state: PumpStationCoupledWorldState,
@@ -1852,7 +1878,10 @@ def apply_operations_boundary_review(
     """Apply one exact host-only Operations review after matching accepted evidence."""
     if request.version != PUMP_STATION_OPERATIONS_REVIEW_VERSION:
         _fail("operations-review-version", request.version)
-    if request.operations_authority_id != "operations-controller":
+    if "operations_review" not in pump_station_root_control_operations(
+        state,
+        authority_id=request.operations_authority_id,
+    ):
         _fail("operations-review-authority", request.operations_authority_id)
     if request.base_state_id != state.state_id:
         _fail("stale-operations-review", request.review_id)
@@ -2059,14 +2088,11 @@ def apply_process_outcome(
     if len(matching) != 1:
         _fail("process-outcome-process", request.process_id)
     process = matching[0]
-    expected_authority = (
-        "maintenance-controller"
-        if process.kind == "functional_check"
-        else "verification-engineer-01"
-        if process.kind == "post_maintenance_verification"
-        else None
-    )
-    if expected_authority is None or request.authority_id != expected_authority:
+    if "process_outcome" not in pump_station_root_control_operations(
+        state,
+        authority_id=request.authority_id,
+        process_id=request.process_id,
+    ):
         _fail("process-outcome-authority", request.authority_id)
     resources, reservations = release_reservations(
         state.resources,
@@ -2171,7 +2197,10 @@ def apply_common_boundary_control(
     """Apply a station-wide hard stop or restoration before later decisions."""
     if request.version != PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION:
         _fail("common-boundary-version", request.version)
-    if request.authority_id != "operations-controller":
+    if "common_boundary" not in pump_station_root_control_operations(
+        state,
+        authority_id=request.authority_id,
+    ):
         _fail("common-boundary-authority", request.authority_id)
     if request.base_state_id != state.state_id:
         _fail("stale-common-boundary", request.request_id)

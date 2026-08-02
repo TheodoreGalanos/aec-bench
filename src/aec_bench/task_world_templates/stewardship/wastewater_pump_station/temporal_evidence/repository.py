@@ -15,7 +15,10 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import (
+    canonical_content_sha256,
+    validate_sha256,
+)
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_models import (
     ReferencePackage,
@@ -39,6 +42,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal
     TemporalRetrievalState,
     TemporalRetrievalStateCarrier,
     TemporalRetrievalStatePointer,
+    TemporalSessionInformationSetManifestV2,
+    TemporalSessionInformationSetPointerV2,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.models import (
     TemporalAccessPolicy,
@@ -213,19 +218,10 @@ class TemporalEvidenceRepository:
 
         with self.locked():
             state = self._load_retrieval_state_unlocked(context)
-            issued = {
-                item.opaque_reference: item.evidence_version_id
-                for item in state.issued_references
-            }
-            missing = tuple(
-                reference
-                for reference in relied_on_evidence_refs
-                if reference not in issued
-            )
+            issued = {item.opaque_reference: item.evidence_version_id for item in state.issued_references}
+            missing = tuple(reference for reference in relied_on_evidence_refs if reference not in issued)
             if missing:
-                raise TemporalEvidenceIntegrityError(
-                    "relied-on evidence was not supplied to this tenure"
-                )
+                raise TemporalEvidenceIntegrityError("relied-on evidence was not supplied to this tenure")
             results = tuple(
                 self._load_model(
                     f"public/results/{result_id}.json",
@@ -240,21 +236,13 @@ class TemporalEvidenceRepository:
                     (
                         item
                         for item in results
-                        if any(
-                            visible.opaque_reference == reference
-                            for visible in item.references
-                        )
-                        or (
-                            item.fetched_content is not None
-                            and item.fetched_content.opaque_reference == reference
-                        )
+                        if any(visible.opaque_reference == reference for visible in item.references)
+                        or (item.fetched_content is not None and item.fetched_content.opaque_reference == reference)
                     ),
                     None,
                 )
                 if result is None:
-                    raise TemporalEvidenceIntegrityError(
-                        "relied-on evidence lacks an actor-visible result"
-                    )
+                    raise TemporalEvidenceIntegrityError("relied-on evidence lacks an actor-visible result")
                 if result.content_sha256 not in observed_result_ids:
                     observed_result_ids.append(result.content_sha256)
             record = TemporalEvidenceRelianceRecord(
@@ -277,9 +265,7 @@ class TemporalEvidenceRepository:
                 tool_contract_id=context.tool_contract_id,
                 information_set_id=context.prior_information_set_id,
                 relied_on_evidence_refs=relied_on_evidence_refs,
-                evidence_version_ids=tuple(
-                    issued[reference] for reference in relied_on_evidence_refs
-                ),
+                evidence_version_ids=tuple(issued[reference] for reference in relied_on_evidence_refs),
                 observed_access_result_ids=tuple(observed_result_ids),
                 available_access_result_ids=state.access_result_ids,
             )
@@ -325,6 +311,46 @@ class TemporalEvidenceRepository:
         if publication.decision.result.content_sha256 != commit.result_id:
             raise TemporalEvidenceIntegrityError("access publication result identity differs")
         return publication
+
+    def load_access_publication_for_request(
+        self,
+        request_id: str,
+    ) -> TemporalAccessPublication:
+        """Load one committed access result without changing its session pointer."""
+
+        with self.locked():
+            commit = self._load_model(
+                _transaction_path(request_id),
+                TemporalAccessCommit,
+                "temporal access commit",
+            )
+            if commit.request_id != request_id:
+                raise TemporalEvidenceIntegrityError("temporal access request identity differs")
+            publication = self._load_publication(commit)
+            receipt = publication.decision.receipt
+            self._validate_commit_matches(
+                commit,
+                publication,
+                context=TemporalAccessContext(
+                    run_id=receipt.run_id,
+                    episode_id=receipt.episode_id,
+                    world_instance_id=receipt.world_instance_id,
+                    world_branch_id=receipt.world_branch_id,
+                    world_state_id=receipt.world_state_id,
+                    world_commit_id=receipt.world_commit_id,
+                    world_sequence=receipt.world_sequence,
+                    world_time_seconds=receipt.world_time_seconds,
+                    actor_id=receipt.actor_id,
+                    actor_role=receipt.actor_role,
+                    agent_tenure_id=receipt.agent_tenure_id,
+                    session_id=receipt.session_id,
+                    base_view_id=receipt.base_view_id,
+                    prior_information_set_id=receipt.prior_information_set_id,
+                    tool_contract_id=receipt.tool_contract_id,
+                    branch_ancestor_ids=receipt.branch_ancestor_ids,
+                ),
+            )
+            return publication
 
     def load_retrieval_state_artifact(
         self,
@@ -376,11 +402,7 @@ class TemporalEvidenceRepository:
         """Return the latest committed actor-visible context for one session."""
 
         session_key = _session_key(context)
-        candidates = tuple(
-            commit
-            for commit in self.access_commits()
-            if commit.session_key == session_key
-        )
+        candidates = tuple(commit for commit in self.access_commits() if commit.session_key == session_key)
         if not candidates:
             return None
         latest = max(
@@ -403,9 +425,7 @@ class TemporalEvidenceRepository:
             information_set.agent_tenure_id != context.agent_tenure_id
             or information_set.base_view_id != context.base_view_id
         ):
-            raise TemporalEvidenceIntegrityError(
-                "current temporal information set belongs to another actor context"
-            )
+            raise TemporalEvidenceIntegrityError("current temporal information set belongs to another actor context")
         session_key = _session_key(context)
         with self.locked():
             self._publish_model(
@@ -446,9 +466,7 @@ class TemporalEvidenceRepository:
             or pointer.information_set_id != information_set.information_set_id
             or pointer.information_set_content_id != information_set.content_sha256
         ):
-            raise TemporalEvidenceIntegrityError(
-                "current temporal information-set pointer differs"
-            )
+            raise TemporalEvidenceIntegrityError("current temporal information-set pointer differs")
         return information_set
 
     def load_current_information_set_for_session(
@@ -483,10 +501,152 @@ class TemporalEvidenceRepository:
             or pointer.information_set_id != information_set.information_set_id
             or pointer.information_set_content_id != information_set.content_sha256
         ):
-            raise TemporalEvidenceIntegrityError(
-                "current temporal information-set pointer differs"
-            )
+            raise TemporalEvidenceIntegrityError("current temporal information-set pointer differs")
         return information_set
+
+    def publish_current_session_information_set(
+        self,
+        manifest: TemporalSessionInformationSetManifestV2,
+    ) -> None:
+        """Publish and select one immutable V4 session information-set binding."""
+
+        session_key = _session_identity_key(
+            run_id=manifest.run_id,
+            session_id=manifest.session_id,
+            agent_tenure_id=manifest.agent_tenure_id,
+        )
+        pointer_path = f"private/sessions/{session_key}/current-session-information-set-v2.json"
+        with self.locked():
+            current = self._load_current_session_information_set_unlocked(
+                session_key=session_key,
+            )
+            if current is None:
+                if manifest.session_binding_sequence != 0 or manifest.prior_session_binding_content_id is not None:
+                    raise TemporalEvidenceIntegrityError("first session information set must start at sequence zero")
+            else:
+                if current.content_sha256 == manifest.content_sha256:
+                    return
+                if manifest.session_binding_sequence != current.session_binding_sequence + 1:
+                    raise TemporalEvidenceIntegrityError("session information-set sequence does not extend current")
+                if manifest.prior_session_binding_content_id != current.content_sha256:
+                    raise TemporalEvidenceIntegrityError("session information-set prior binding differs")
+                if _session_information_set_fixed_scope(manifest) != (_session_information_set_fixed_scope(current)):
+                    raise TemporalEvidenceIntegrityError("session information-set fixed scope differs")
+                if manifest.world_sequence < current.world_sequence:
+                    raise TemporalEvidenceIntegrityError("session information-set world sequence moved backwards")
+                if manifest.world_time_seconds < current.world_time_seconds:
+                    raise TemporalEvidenceIntegrityError("session information-set world time moved backwards")
+                if manifest.world_sequence == current.world_sequence and (
+                    manifest.world_state_id,
+                    manifest.world_commit_id,
+                ) != (
+                    current.world_state_id,
+                    current.world_commit_id,
+                ):
+                    raise TemporalEvidenceIntegrityError("session information-set selected world identity differs")
+                history_length = len(current.observation_history_view_ids)
+                if manifest.observation_history_view_ids[:history_length] != current.observation_history_view_ids:
+                    raise TemporalEvidenceIntegrityError(
+                        "session information-set observation history is not append-only"
+                    )
+            self._publish_model(
+                f"private/session-information-sets-v2/{manifest.content_sha256}.json",
+                manifest,
+            )
+            self._replace_model(
+                pointer_path,
+                TemporalSessionInformationSetPointerV2(
+                    session_key=session_key,
+                    session_binding_sequence=manifest.session_binding_sequence,
+                    information_set_id=manifest.information_set_id,
+                    manifest_content_id=manifest.content_sha256,
+                ),
+            )
+
+    def load_current_session_information_set(
+        self,
+        *,
+        run_id: str,
+        session_id: str,
+        agent_tenure_id: str,
+    ) -> TemporalSessionInformationSetManifestV2 | None:
+        """Reload the selected immutable V4 binding for one exact session."""
+
+        session_key = _session_identity_key(
+            run_id=run_id,
+            session_id=session_id,
+            agent_tenure_id=agent_tenure_id,
+        )
+        with self.locked():
+            return self._load_current_session_information_set_unlocked(
+                session_key=session_key,
+            )
+
+    def load_session_information_set(
+        self,
+        manifest_content_id: str,
+        *,
+        run_id: str,
+        session_id: str,
+        agent_tenure_id: str,
+    ) -> TemporalSessionInformationSetManifestV2:
+        """Reload one historical V4 session binding by immutable content identity."""
+
+        try:
+            validate_sha256(manifest_content_id)
+        except ValueError as error:
+            raise TemporalEvidenceIntegrityError("session information-set content identity is invalid") from error
+        manifest = self._load_model(
+            f"private/session-information-sets-v2/{manifest_content_id}.json",
+            TemporalSessionInformationSetManifestV2,
+            "temporal session information set",
+        )
+        if manifest.content_sha256 != manifest_content_id:
+            raise TemporalEvidenceIntegrityError("session information-set content identity differs")
+        observed = (
+            manifest.run_id,
+            manifest.session_id,
+            manifest.agent_tenure_id,
+        )
+        expected = (run_id, session_id, agent_tenure_id)
+        if observed != expected:
+            raise TemporalEvidenceIntegrityError("session information set belongs to another session")
+        return manifest
+
+    def _load_current_session_information_set_unlocked(
+        self,
+        *,
+        session_key: str,
+    ) -> TemporalSessionInformationSetManifestV2 | None:
+        """Reload and cross-check one V4 current pointer while already locked."""
+
+        path = f"private/sessions/{session_key}/current-session-information-set-v2.json"
+        if not self._path(path).exists():
+            return None
+        pointer = self._load_model(
+            path,
+            TemporalSessionInformationSetPointerV2,
+            "current temporal session information-set pointer",
+        )
+        manifest = self._load_model(
+            f"private/session-information-sets-v2/{pointer.manifest_content_id}.json",
+            TemporalSessionInformationSetManifestV2,
+            "current temporal session information set",
+        )
+        expected_session_key = _session_identity_key(
+            run_id=manifest.run_id,
+            session_id=manifest.session_id,
+            agent_tenure_id=manifest.agent_tenure_id,
+        )
+        if (
+            pointer.session_key != session_key
+            or expected_session_key != session_key
+            or pointer.session_binding_sequence != manifest.session_binding_sequence
+            or pointer.information_set_id != manifest.information_set_id
+            or pointer.manifest_content_id != manifest.content_sha256
+        ):
+            raise TemporalEvidenceIntegrityError("current temporal session information-set pointer differs")
+        return manifest
 
     def retrieval_carriers(self) -> tuple[TemporalRetrievalStateCarrier, ...]:
         """Reload every actor-visible retrieval carrier."""
@@ -540,8 +700,7 @@ class TemporalEvidenceRepository:
             results = tuple(
                 item
                 for item in all_results
-                if include_fetched_content
-                or item.operation is TemporalEvidenceAccessKind.SEARCH
+                if include_fetched_content or item.operation is TemporalEvidenceAccessKind.SEARCH
             )
             result_ids = tuple(item.content_sha256 for item in results)
             carrier = TemporalRetrievalStateCarrier(
@@ -555,16 +714,10 @@ class TemporalEvidenceRepository:
                 created_at_seconds=context.world_time_seconds,
                 include_fetched_content=include_fetched_content,
                 access_results=results,
-                unresolved_search_ids=tuple(
-                    item for item in state.unresolved_search_ids if item in result_ids
-                ),
+                unresolved_search_ids=tuple(item for item in state.unresolved_search_ids if item in result_ids),
                 remaining_budget=state.remaining_budget,
             )
-            references = {
-                reference.opaque_reference
-                for result in results
-                for reference in result.references
-            }
+            references = {reference.opaque_reference for result in results for reference in result.references}
             self._publish_model(
                 f"public/carriers/{carrier.content_sha256}.json",
                 carrier,
@@ -610,16 +763,12 @@ class TemporalEvidenceRepository:
                 carrier.to_session_id,
             )
             if observed != expected:
-                raise TemporalEvidenceIntegrityError(
-                    "retrieval carrier belongs to another world or recipient"
-                )
+                raise TemporalEvidenceIntegrityError("retrieval carrier belongs to another world or recipient")
             current = self._load_retrieval_state_unlocked(context)
             if current.installed_carrier_id == carrier.content_sha256:
                 return current
             if current.state_sequence != 0 or current.access_result_ids:
-                raise TemporalEvidenceIntegrityError(
-                    "retrieval carrier requires an unused fresh-tenure state"
-                )
+                raise TemporalEvidenceIntegrityError("retrieval carrier requires an unused fresh-tenure state")
             references: dict[str, IssuedTemporalReference] = {}
             fetched_content_ids: list[str] = []
             for result in carrier.access_results:
@@ -648,12 +797,8 @@ class TemporalEvidenceRepository:
                 previous_state_id=current.content_sha256,
                 reference_namespace_id=current.reference_namespace_id,
                 remaining_budget=carrier.remaining_budget,
-                issued_references=tuple(
-                    references[key] for key in sorted(references)
-                ),
-                access_result_ids=tuple(
-                    item.content_sha256 for item in carrier.access_results
-                ),
+                issued_references=tuple(references[key] for key in sorted(references)),
+                access_result_ids=tuple(item.content_sha256 for item in carrier.access_results),
                 actor_event_ids=(),
                 fetched_content_ids=tuple(fetched_content_ids),
                 unresolved_search_ids=carrier.unresolved_search_ids,
@@ -931,12 +1076,9 @@ class TemporalEvidenceRepository:
             source = source_by_id.get(version.source_id)
             if source is None:
                 raise TemporalEvidenceIntegrityError("temporal evidence source is absent from lineage")
-            if (
-                version.content_text is not None
-                and (
-                    source.rights_class is not TemporalEvidenceRightsClass.REDISTRIBUTABLE
-                    or not source.redistribution_permitted
-                )
+            if version.content_text is not None and (
+                source.rights_class is not TemporalEvidenceRightsClass.REDISTRIBUTABLE
+                or not source.redistribution_permitted
             ):
                 raise TemporalEvidenceIntegrityError("prohibited source bytes enter redistributable corpus")
             if (
@@ -1229,6 +1371,30 @@ def _session_identity_key(
             "session_id": session_id,
             "agent_tenure_id": agent_tenure_id,
         }
+    )
+
+
+def _session_information_set_fixed_scope(
+    manifest: TemporalSessionInformationSetManifestV2,
+) -> tuple[object, ...]:
+    """Return identities that cannot change during one active actor session."""
+
+    return (
+        manifest.session_activation_content_id,
+        manifest.task_world_id,
+        manifest.run_id,
+        manifest.episode_id,
+        manifest.world_instance_id,
+        manifest.world_branch_id,
+        manifest.branch_ancestor_ids,
+        manifest.actor_id,
+        manifest.actor_role,
+        manifest.agent_tenure_id,
+        manifest.session_id,
+        manifest.tenure_started_at_seconds,
+        manifest.tool_contract_id,
+        manifest.workspace_tool_ids,
+        manifest.source_artifact_ids,
     )
 
 

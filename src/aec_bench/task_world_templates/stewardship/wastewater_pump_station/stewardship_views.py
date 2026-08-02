@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from enum import StrEnum
 
+from aec_bench.contracts.harness_kernel import validate_sha256
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
     PumpStationBacklogItem,
     PumpStationCoupledProcess,
@@ -48,11 +49,14 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationRestrictionStatus,
     PumpStationStewardshipState,
     PumpStationTransition,
+    PumpStationTransitionV4,
     PumpStationWorkOrder,
     PumpStationWorkResources,
     RequestConditionalDeferral,
     RequestConditionCheck,
     RequestDependencyWaiver,
+    RequestDutyAssignment,
+    RequestFunctionalCheck,
     RequestInspection,
     RequestObstructionClearance,
     RequestProvisionalClosure,
@@ -66,6 +70,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.time_pre
     PumpStationTimeContext,
     pump_station_time_context,
 )
+
+PUMP_STATION_ACTOR_HISTORY_ENTRY_VERSION_V4 = "pump-station.actor-history-entry.v4"
+PUMP_STATION_STRUCTURED_HANDOVER_VERSION_V4 = "pump-station.structured-handover.v4"
 
 
 class PumpStationContinuityCarrier(StrEnum):
@@ -297,8 +304,159 @@ class PumpStationStructuredHandover:
     from_tenure_id: str
     to_tenure_id: str
     created_at_seconds: int
-    current_actor_view: PumpStationActorView
+    current_actor_view: PumpStationActorView | PumpStationCoupledActorView
     history: tuple[PumpStationActorHistoryEntry, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationActorHistoryEntryV4:
+    """Actor-visible account of one realised V4 actor transition."""
+
+    entry_version: str
+    transition_id: str
+    sequence: int
+    occurred_at_seconds: int
+    agent_tenure_id: str
+    proposal_id: str
+    action_type: str
+    reason: str
+    authority_outcome: str
+    execution: str
+    permit_ids: tuple[str, ...]
+    target_id: str | None
+    backlog_item_id: str | None
+    changed_record_ids: tuple[str, ...]
+    changed_pool_ids: tuple[str, ...]
+    changed_reservation_ids: tuple[str, ...]
+    changed_backlog_item_ids: tuple[str, ...]
+    generation_record_ids: tuple[str, ...]
+    changed_liability_owner_ids: tuple[str, ...]
+    operating_interval_id: str | None
+
+    def __post_init__(self) -> None:
+        if self.entry_version != PUMP_STATION_ACTOR_HISTORY_ENTRY_VERSION_V4:
+            raise ValueError("unsupported pump-station actor history entry version")
+        for field_name in (
+            "transition_id",
+            "agent_tenure_id",
+            "proposal_id",
+            "action_type",
+            "reason",
+            "authority_outcome",
+            "execution",
+        ):
+            _require_text(getattr(self, field_name), field_name)
+        if self.sequence < 1:
+            raise ValueError("actor history sequence must be positive")
+        _require_non_negative(self.occurred_at_seconds, "occurred_at_seconds")
+        for field_name in (
+            "permit_ids",
+            "changed_record_ids",
+            "changed_pool_ids",
+            "changed_reservation_ids",
+            "changed_backlog_item_ids",
+            "generation_record_ids",
+            "changed_liability_owner_ids",
+        ):
+            _require_distinct_text(
+                getattr(self, field_name),
+                field_name,
+                allow_empty=True,
+            )
+        for field_name in (
+            "target_id",
+            "backlog_item_id",
+            "operating_interval_id",
+        ):
+            value = getattr(self, field_name)
+            if value is not None:
+                _require_text(value, field_name)
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationStructuredHandoverV4:
+    """Full content-addressed V4 handover for one fresh actor tenure."""
+
+    handover_version: str
+    run_id: str
+    episode_id: str
+    world_branch_id: str
+    state_id: str
+    commit_id: str
+    sequence: int
+    from_session_id: str
+    from_tenure_id: str
+    from_session_binding_id: str
+    to_session_id: str
+    to_tenure_id: str
+    to_session_binding_id: str
+    created_at_seconds: int
+    maximum_history_entries: int
+    current_actor_view: PumpStationCoupledActorView
+    history: tuple[PumpStationActorHistoryEntryV4, ...]
+
+    def __post_init__(self) -> None:
+        if self.handover_version != PUMP_STATION_STRUCTURED_HANDOVER_VERSION_V4:
+            raise ValueError("unsupported pump-station structured handover version")
+        for field_name in (
+            "run_id",
+            "episode_id",
+            "world_branch_id",
+            "from_session_id",
+            "from_tenure_id",
+            "to_session_id",
+            "to_tenure_id",
+        ):
+            _require_text(getattr(self, field_name), field_name)
+        for field_name in (
+            "state_id",
+            "commit_id",
+            "from_session_binding_id",
+            "to_session_binding_id",
+        ):
+            _require_sha256(getattr(self, field_name), field_name)
+        if self.from_tenure_id == self.to_tenure_id:
+            raise ValueError("handover requires a fresh recipient tenure")
+        if self.from_session_binding_id == self.to_session_binding_id:
+            raise ValueError("handover requires distinct session bindings")
+        _require_non_negative(self.sequence, "sequence")
+        _require_non_negative(self.created_at_seconds, "created_at_seconds")
+        if self.maximum_history_entries <= 0:
+            raise ValueError("maximum_history_entries must be positive")
+        if len(self.history) > self.maximum_history_entries:
+            raise ValueError("handover history exceeds its declared bound")
+        if (
+            self.current_actor_view.episode_id != self.episode_id
+            or self.current_actor_view.world_branch_id != self.world_branch_id
+            or self.current_actor_view.state_id != self.state_id
+            or self.current_actor_view.sequence != self.sequence
+            or self.current_actor_view.agent_tenure_id != self.to_tenure_id
+            or self.current_actor_view.calendar_seconds != self.created_at_seconds
+        ):
+            raise ValueError("handover current view differs from its world binding")
+        sequences = tuple(item.sequence for item in self.history)
+        if sequences != tuple(sorted(sequences)) or len(set(sequences)) != len(sequences):
+            raise ValueError("handover history must have a strict sequence order")
+        transition_ids = tuple(item.transition_id for item in self.history)
+        if len(set(transition_ids)) != len(transition_ids):
+            raise ValueError("handover history must not repeat transitions")
+        if any(
+            item.sequence > self.sequence
+            or item.occurred_at_seconds > self.created_at_seconds
+            or item.agent_tenure_id == self.to_tenure_id
+            for item in self.history
+        ):
+            raise ValueError("handover history is outside the recipient world boundary")
+
+    @property
+    def handover_id(self) -> str:
+        """Return the canonical identity of every durable handover field."""
+
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_serialization import (
+            pump_station_artifact_id,
+        )
+
+        return pump_station_artifact_id(self, record_profile="v4")
 
 
 @dataclass(frozen=True, slots=True)
@@ -366,6 +524,11 @@ _ACTION_TYPES: dict[type[object], str] = {
     CancelProcess: "cancel_process",
     RequestDependencyWaiver: "request_dependency_waiver",
 }
+_ACTION_TYPES_V4 = {
+    **_ACTION_TYPES,
+    RequestDutyAssignment: "request_duty_assignment",
+    RequestFunctionalCheck: "request_functional_check",
+}
 
 
 def _require_text(value: str, field_name: str) -> None:
@@ -376,6 +539,13 @@ def _require_text(value: str, field_name: str) -> None:
 def _require_non_negative(value: int, field_name: str) -> None:
     if value < 0:
         raise ValueError(f"{field_name} must be non-negative")
+
+
+def _require_sha256(value: str, field_name: str) -> None:
+    try:
+        validate_sha256(value)
+    except ValueError as error:
+        raise ValueError(f"{field_name} must be a SHA-256 digest") from error
 
 
 def _require_distinct_text(
@@ -643,8 +813,49 @@ def actor_history_entry(
     )
 
 
+def actor_history_entry_v4(
+    transition: PumpStationTransitionV4,
+    proposal: PumpStationProposal,
+) -> PumpStationActorHistoryEntryV4:
+    """Project one V4 actor transition without host-control material."""
+    receipt = transition.receipt
+    if not receipt.actor_action:
+        raise ValueError("actor history requires an actor transition")
+    action_type = _ACTION_TYPES_V4.get(type(proposal))
+    if action_type is None:
+        raise ValueError(f"unsupported proposal type {type(proposal).__name__}")
+    if (
+        receipt.request_id != proposal.context.proposal_id
+        or receipt.action_or_control_kind != action_type
+        or receipt.reason != proposal.context.reason
+    ):
+        raise ValueError("actor proposal and V4 transition receipt differ")
+    return PumpStationActorHistoryEntryV4(
+        entry_version=PUMP_STATION_ACTOR_HISTORY_ENTRY_VERSION_V4,
+        transition_id=receipt.transition_id,
+        sequence=receipt.sequence,
+        occurred_at_seconds=receipt.end_calendar_seconds,
+        agent_tenure_id=proposal.context.agent_tenure_id,
+        proposal_id=proposal.context.proposal_id,
+        action_type=action_type,
+        reason=proposal.context.reason,
+        authority_outcome=receipt.authority_outcome,
+        execution=receipt.execution_status,
+        permit_ids=receipt.permit_ids,
+        target_id=receipt.target_id,
+        backlog_item_id=receipt.backlog_item_id,
+        changed_record_ids=receipt.changed_record_ids,
+        changed_pool_ids=receipt.changed_pool_ids,
+        changed_reservation_ids=receipt.changed_reservation_ids,
+        changed_backlog_item_ids=receipt.changed_backlog_item_ids,
+        generation_record_ids=receipt.generation_record_ids,
+        changed_liability_owner_ids=receipt.changed_liability_owner_ids,
+        operating_interval_id=receipt.operating_interval_id,
+    )
+
+
 def create_structured_handover(
-    current_actor_view: PumpStationActorView,
+    current_actor_view: PumpStationActorView | PumpStationCoupledActorView,
     *,
     from_tenure_id: str,
     history: tuple[PumpStationActorHistoryEntry, ...],
@@ -657,20 +868,65 @@ def create_structured_handover(
     if maximum_history_entries <= 0:
         raise ValueError("maximum_history_entries must be positive")
     bounded_history = history[-maximum_history_entries:]
+    created_at_seconds = (
+        current_actor_view.calendar_seconds
+        if isinstance(current_actor_view, PumpStationCoupledActorView)
+        else current_actor_view.current_state.calendar_seconds
+    )
     identity_payload = {
         "from_tenure_id": from_tenure_id,
         "to_tenure_id": current_actor_view.agent_tenure_id,
-        "created_at_seconds": current_actor_view.current_state.calendar_seconds,
+        "created_at_seconds": created_at_seconds,
         "current_view_id": current_actor_view.view_id,
         "history": bounded_history,
     }
     return PumpStationStructuredHandover(
-        handover_id=stewardship_content_id(identity_payload),
+        handover_id=stewardship_content_id(
+            identity_payload,
+            record_profile=("v4" if isinstance(current_actor_view, PumpStationCoupledActorView) else None),
+        ),
         from_tenure_id=from_tenure_id,
         to_tenure_id=current_actor_view.agent_tenure_id,
-        created_at_seconds=current_actor_view.current_state.calendar_seconds,
+        created_at_seconds=created_at_seconds,
         current_actor_view=current_actor_view,
         history=bounded_history,
+    )
+
+
+def create_structured_handover_v4(
+    current_actor_view: PumpStationCoupledActorView,
+    *,
+    run_id: str,
+    commit_id: str,
+    from_session_id: str,
+    from_tenure_id: str,
+    from_session_binding_id: str,
+    to_session_id: str,
+    to_session_binding_id: str,
+    history: tuple[PumpStationActorHistoryEntryV4, ...],
+    maximum_history_entries: int,
+) -> PumpStationStructuredHandoverV4:
+    """Create a full bounded V4 handover without changing world state."""
+    if maximum_history_entries <= 0:
+        raise ValueError("maximum_history_entries must be positive")
+    return PumpStationStructuredHandoverV4(
+        handover_version=PUMP_STATION_STRUCTURED_HANDOVER_VERSION_V4,
+        run_id=run_id,
+        episode_id=current_actor_view.episode_id,
+        world_branch_id=current_actor_view.world_branch_id,
+        state_id=current_actor_view.state_id,
+        commit_id=commit_id,
+        sequence=current_actor_view.sequence,
+        from_session_id=from_session_id,
+        from_tenure_id=from_tenure_id,
+        from_session_binding_id=from_session_binding_id,
+        to_session_id=to_session_id,
+        to_tenure_id=current_actor_view.agent_tenure_id,
+        to_session_binding_id=to_session_binding_id,
+        created_at_seconds=current_actor_view.calendar_seconds,
+        maximum_history_entries=maximum_history_entries,
+        current_actor_view=current_actor_view,
+        history=history[-maximum_history_entries:],
     )
 
 

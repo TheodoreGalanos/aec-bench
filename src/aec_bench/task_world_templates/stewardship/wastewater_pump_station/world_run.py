@@ -14,6 +14,7 @@ from aec_bench.contracts.continual_world import (
     ContinualWorldDefinitionRef,
     ContinualWorldProfileRef,
 )
+from aec_bench.contracts.harness_kernel import canonical_content_sha256
 from aec_bench.contracts.world_interface import (
     WorldActorActionRequest,
     WorldActorBinding,
@@ -22,6 +23,7 @@ from aec_bench.contracts.world_interface import (
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
     PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,
+    pump_station_actor_capabilities_v2,
     pump_station_proposal_from_validated_arguments_v2,
     validate_pump_station_actor_arguments_v2,
 )
@@ -78,7 +80,12 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     verify_stewardship_run_v4,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
+    PumpStationContinuityCarrier,
+    PumpStationCoupledActorView,
+    PumpStationCurrentContext,
     PumpStationInformationSet,
+    PumpStationObservationHistory,
+    bind_information_set,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
     PUMP_STATION_COMMAND_VERSION_V4,
@@ -102,6 +109,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session_activation import (
+    PumpStationSessionActivationBinding,
 )
 
 if TYPE_CHECKING:
@@ -500,9 +510,24 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
         manifest = self._reference_manifest()
         with self._repository.locked():
             snapshot = self._repository.current_snapshot()
-            information_set = self._v4_information_set(
+            selected = self._repository._selected_session_activation_if_present(
+                manifest,
+            )
+            if selected is None:
+                _fail(
+                    "session-activation-missing",
+                    "run has no active actor session",
+                )
+            _, session_binding = selected
+            self._repository._require_current_session_snapshot(session_binding)
+            if session_binding.session_id != session_id or session_binding.agent_tenure_id != agent_tenure_id:
+                _fail(
+                    "actor-session-revoked",
+                    "requested actor identity is not the active session",
+                )
+            information_set = self._v4_session_information_set(
                 snapshot,
-                agent_tenure_id=agent_tenure_id,
+                session_binding=session_binding,
             )
             view = information_set.base_view
             binding = WorldActorBinding(
@@ -529,85 +554,164 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
     def apply_v4_actor_action(
         self,
         request: WorldActorActionRequest,
+        *,
+        information_set: PumpStationInformationSet | None = None,
+        session_binding_id: str | None = None,
     ) -> PumpStationTransitionV4:
         """Apply or exactly recover one shared actor request on the V4 run."""
+        with self._repository.locked():
+            return self._apply_v4_actor_action_under_lock(
+                request,
+                information_set=information_set,
+                session_binding_id=session_binding_id,
+            )
+
+    def _apply_v4_actor_action_under_lock(
+        self,
+        request: WorldActorActionRequest,
+        *,
+        information_set: PumpStationInformationSet | None,
+        session_binding_id: str | None,
+    ) -> PumpStationTransitionV4:
+        """Apply one actor request while the session coordinator owns the run lock."""
         manifest = self._reference_manifest()
         if not isinstance(self._model, PumpStationCoupledModel):
             _fail("world-run-identity", "V4 actor action requires the coupled model")
-        command = self._v4_actor_command(request)
-        with self._repository.locked():
-            committed = self._repository.find_committed_v4_command(request.request_id)
-            if committed is not None:
-                return self._repository.validate_repeated_v4_command(
-                    committed,
-                    command,
-                )
-            recovered = self._repository._recover_staged_v4_command_under_lock(
-                command,
+        committed = self._repository.find_committed_v4_command(request.request_id)
+        if committed is not None:
+            stored_command, _, _, transition = self._repository._load_v4_step(
+                committed,
             )
-            if recovered is not None:
-                return recovered
-            prior = self._repository.current_snapshot()
-            self._validate_v4_actor_scope(request.binding, prior)
-            information_set = self._v4_information_set(
-                prior,
+            if stored_command.request_content_id != request.content_sha256:
+                _fail(
+                    "v4-command-id-conflict",
+                    f"{request.request_id} is already bound to different content",
+                )
+            return transition
+        if information_set is None or session_binding_id is None:
+            _fail(
+                "actor-session-binding-required",
+                "V4 actor action requires one host-issued session binding",
+            )
+        prior = self._repository.current_snapshot()
+        active = self._repository._require_active_session_activation_under_lock(
+            session_binding_id,
+        )
+        self._validate_v4_actor_scope(request.binding, prior)
+        if (
+            active.session_id != request.binding.session_id
+            or active.agent_tenure_id != request.binding.agent_tenure_id
+            or active.actor_view_id != request.binding.actor_view_id
+            or active.sequence != request.binding.sequence
+            or active.state_id != request.binding.state_id
+            or active.commit_id != request.binding.commit_id
+        ):
+            _fail(
+                "actor-session-binding",
+                "actor request differs from the active host session binding",
+            )
+        self._validate_v4_actor_information_set(
+            prior,
+            request=request,
+            information_set=information_set,
+        )
+        durable_information_set = self._v4_session_information_set(
+            prior,
+            session_binding=active,
+        )
+        if durable_information_set != information_set:
+            _fail(
+                "actor-session-binding",
+                "actor information set differs from durable session evidence",
+            )
+        command = self._v4_actor_command(
+            request,
+            session_binding_id=session_binding_id,
+        )
+        recovered = self._repository._recover_staged_v4_command_under_lock(
+            command,
+        )
+        if recovered is not None:
+            return recovered
+        try:
+            arguments = validate_pump_station_actor_arguments_v2(
+                request.action_name,
+                cast(dict[str, object], request.arguments),
+            )
+        except WorldInterfaceError as error:
+            _fail(error.code, error.detail)
+        reason = arguments.get("reason")
+        if not isinstance(reason, str) or reason != reason.strip():
+            _fail(
+                "actor-action-arguments",
+                "reason must be non-empty and must not have surrounding whitespace",
+            )
+        proposal = pump_station_proposal_from_validated_arguments_v2(
+            action_name=request.action_name,
+            arguments=arguments,
+            context=ProposalContext(
+                proposal_id=request.request_id,
                 agent_tenure_id=request.binding.agent_tenure_id,
-            )
-            if (
-                information_set.base_view.view_id != request.binding.actor_view_id
-                or information_set.information_set_id != request.binding.information_set_id
-            ):
-                _fail(
-                    "actor-request-binding",
-                    "actor view or information set differs from the selected state",
-                )
-            try:
-                arguments = validate_pump_station_actor_arguments_v2(
-                    request.action_name,
-                    cast(dict[str, object], request.arguments),
-                )
-            except WorldInterfaceError as error:
-                _fail(error.code, error.detail)
-            reason = arguments.get("reason")
-            if not isinstance(reason, str) or reason != reason.strip():
-                _fail(
-                    "actor-action-arguments",
-                    "reason must be non-empty and must not have surrounding whitespace",
-                )
-            proposal = pump_station_proposal_from_validated_arguments_v2(
-                action_name=request.action_name,
-                arguments=arguments,
-                context=ProposalContext(
-                    proposal_id=request.request_id,
-                    agent_tenure_id=request.binding.agent_tenure_id,
-                    based_on_sequence=request.binding.sequence,
-                    base_view_id=request.binding.actor_view_id,
-                    information_set_id=request.binding.information_set_id,
-                    reason=reason,
-                ),
-            )
-            state = cast(
-                PumpStationCoupledStewardshipState,
-                self._repository.load_state(prior.state_id),
-            )
-            try:
-                transition = apply_stewardship_proposal_v4(
-                    self._model,
-                    state,
-                    proposal,
-                    information_set=information_set,
-                )
-            except (PumpStationProposalError, PumpStationCoupledWorldError) as error:
-                _fail(error.code, str(error))
-            staged = self._repository.stage_v4_transition(
-                manifest=manifest,
-                prior_snapshot=prior,
-                command=command,
-                proposal=proposal,
+                based_on_sequence=request.binding.sequence,
+                base_view_id=request.binding.actor_view_id,
+                information_set_id=request.binding.information_set_id,
+                reason=reason,
+            ),
+        )
+        state = cast(
+            PumpStationCoupledStewardshipState,
+            self._repository.load_state(prior.state_id),
+        )
+        try:
+            transition = apply_stewardship_proposal_v4(
+                self._model,
+                state,
+                proposal,
                 information_set=information_set,
-                transition=transition,
             )
-            return self._repository._publish_staged_v4_transition_under_lock(staged)
+        except (PumpStationProposalError, PumpStationCoupledWorldError) as error:
+            _fail(error.code, str(error))
+        staged = self._repository.stage_v4_transition(
+            manifest=manifest,
+            prior_snapshot=prior,
+            command=command,
+            proposal=proposal,
+            information_set=information_set,
+            transition=transition,
+        )
+        return self._repository._publish_staged_v4_transition_under_lock(staged)
+
+    def _validate_v4_actor_information_set(
+        self,
+        snapshot: PumpStationStateSnapshotRef,
+        *,
+        request: WorldActorActionRequest,
+        information_set: PumpStationInformationSet,
+    ) -> None:
+        """Validate dynamic session context over one deterministic V4 base view."""
+        expected = self._v4_information_set(
+            snapshot,
+            agent_tenure_id=request.binding.agent_tenure_id,
+        )
+        view = information_set.base_view
+        if not isinstance(view, PumpStationCoupledActorView):
+            _fail("actor-request-binding", "V4 actor information set has a legacy view")
+        rebuilt = bind_information_set(
+            view,
+            information_set.observation_history,
+            information_set.current_context,
+        )
+        if (
+            view != expected.base_view
+            or view.view_id != request.binding.actor_view_id
+            or information_set.information_set_id != request.binding.information_set_id
+            or rebuilt != information_set
+            or information_set.current_context.workspace_tool_ids != (PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,)
+        ):
+            _fail(
+                "actor-request-binding",
+                "actor view or information set differs from the active session context",
+            )
 
     def apply_v4_control(
         self,
@@ -835,6 +939,12 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
 
     def verify_v4(self) -> PumpStationVerificationReportV4:
         """Independently replay the selected V4 command chain."""
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence import (
+            TemporalEvidenceIntegrityError,
+            TemporalEvidenceRepository,
+            verify_temporal_evidence_repository,
+        )
+
         manifest = self._reference_manifest()
         if not isinstance(self._model, PumpStationCoupledModel):
             _fail("world-run-identity", "V4 verification requires the coupled model")
@@ -842,10 +952,128 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
             PumpStationCoupledStewardshipState,
             self._repository.load_state(manifest.initial_state_id),
         )
-        with self._repository.locked():
-            steps = self._repository.v4_steps()
-            expected_final_state_id = self._repository.current_snapshot().state_id
-        return verify_stewardship_run_v4(
+        session_issues: list[str] = []
+        bindings_by_id: dict[str, PumpStationSessionActivationBinding] = {}
+        try:
+            with self._repository.locked():
+                steps = self._repository.v4_steps()
+                expected_final_state_id = self._repository.current_snapshot().state_id
+                selected = self._repository._selected_session_activation_if_present(
+                    manifest,
+                )
+                if selected is not None:
+                    _, binding = selected
+                    expected_event_sequence = binding.session_event_sequence
+                    expected_host_authority = binding.host_authority_id
+                    seen: set[str] = set()
+                    while True:
+                        if binding.binding_id in seen:
+                            raise ValueError("session binding chain contains a cycle")
+                        seen.add(binding.binding_id)
+                        if (
+                            binding.session_event_sequence != expected_event_sequence
+                            or binding.host_authority_id != expected_host_authority
+                        ):
+                            raise ValueError("session binding chain position differs")
+                        claim = self._repository._load_session_activation_claim(
+                            binding.active_activation_id,
+                        )
+                        if claim.binding_id != binding.binding_id:
+                            raise ValueError("session activation claim differs")
+                        bindings_by_id[binding.binding_id] = binding
+                        if binding.prior_binding_id is None:
+                            if binding.session_event_sequence != 0:
+                                raise ValueError("session binding chain has no origin")
+                            break
+                        expected_event_sequence -= 1
+                        binding = self._repository._load_session_binding(
+                            binding.prior_binding_id,
+                            manifest,
+                        )
+        except (OSError, PumpStationWorldRunError, TypeError, ValueError) as error:
+            return PumpStationVerificationReportV4(
+                valid=False,
+                issues=(f"session-evidence-invalid:repository:{error}",),
+                replayed_transition_ids=(),
+                final_state_id=stewardship_state_id(initial_state),
+            )
+        active_bindings_by_world_position: dict[
+            tuple[int, str, str],
+            PumpStationSessionActivationBinding,
+        ] = {}
+        for historical_binding in bindings_by_id.values():
+            world_position = (
+                historical_binding.sequence,
+                historical_binding.state_id,
+                historical_binding.commit_id,
+            )
+            active_at_position = active_bindings_by_world_position.get(
+                world_position,
+            )
+            if (
+                active_at_position is None
+                or historical_binding.session_event_sequence > active_at_position.session_event_sequence
+            ):
+                active_bindings_by_world_position[world_position] = historical_binding
+        information_sets_by_binding_id: dict[str, PumpStationInformationSet] = {}
+        for historical_binding_id, historical_binding in bindings_by_id.items():
+            try:
+                snapshot = PumpStationStateSnapshotRef(
+                    snapshot_version=manifest.snapshot_version,
+                    run_id=manifest.run_id,
+                    episode_id=manifest.episode_id,
+                    world_branch_id=manifest.world_branch_id,
+                    sequence=historical_binding.sequence,
+                    state_id=historical_binding.state_id,
+                    commit_id=historical_binding.commit_id,
+                )
+                information_sets_by_binding_id[historical_binding_id] = self._v4_session_information_set(
+                    snapshot,
+                    session_binding=historical_binding,
+                )
+            except (
+                OSError,
+                PumpStationWorldRunError,
+                TemporalEvidenceIntegrityError,
+                TypeError,
+                ValueError,
+            ) as error:
+                session_issues.append(
+                    f"session-evidence-invalid:{historical_binding_id}:{error}",
+                )
+        for step in steps:
+            command = step.command
+            if command.kind != "actor":
+                continue
+            command_binding_id = command.session_binding_id
+            command_binding = bindings_by_id.get(command_binding_id or "")
+            if command_binding is None:
+                session_issues.append(
+                    f"session-evidence-invalid:{command.request_id}:binding-not-selected",
+                )
+                continue
+            active_at_parent = active_bindings_by_world_position.get(
+                (
+                    command.based_on_sequence,
+                    command.base_state_id,
+                    command.base_commit_id,
+                )
+            )
+            if active_at_parent is None or command_binding.binding_id != active_at_parent.binding_id:
+                session_issues.append(
+                    f"session-evidence-invalid:{command.request_id}:binding-not-active-at-parent",
+                )
+                continue
+            information_set = information_sets_by_binding_id.get(
+                command_binding.binding_id,
+            )
+            if information_set is None:
+                continue
+            if information_set != step.information_set:
+                session_issues.append(
+                    f"session-evidence-invalid:{command.request_id}:world and temporal information sets differ",
+                )
+        replay: PumpStationVerificationReportV4 = verify_stewardship_run_v4(
             self._model,
             initial_state,
             steps,
@@ -860,6 +1088,32 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
                 manifest.package_content_id,
                 manifest.temporal_bundle_content_id,
             ),
+        )
+        temporal_repository = TemporalEvidenceRepository(
+            self._repository.root / "temporal-evidence",
+        )
+        proposal_bindings = {
+            step.command.request_id: (
+                step.command.information_set_id or "",
+                step.command.actor_view_id or "",
+            )
+            for step in steps
+            if step.command.kind == "actor"
+        }
+        temporal_report = verify_temporal_evidence_repository(
+            temporal_repository,
+            package=self._package,
+            proposal_bindings=proposal_bindings,
+        )
+        temporal_issues: tuple[str, ...] = tuple(
+            f"temporal-evidence-invalid:{issue.code}:{issue.artifact_id or '-'}" for issue in temporal_report.issues
+        )
+        issues = (*session_issues, *temporal_issues, *replay.issues)
+        return PumpStationVerificationReportV4(
+            valid=not issues and replay.valid,
+            issues=issues,
+            replayed_transition_ids=replay.replayed_transition_ids,
+            final_state_id=replay.final_state_id,
         )
 
     @staticmethod
@@ -1142,8 +1396,154 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
             workspace_tool_ids=(PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,),
         )
 
+    def _v4_session_information_set(
+        self,
+        snapshot: PumpStationStateSnapshotRef,
+        *,
+        session_binding: PumpStationSessionActivationBinding,
+    ) -> PumpStationInformationSet:
+        """Rebuild one complete V4 information set from durable session evidence."""
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence import (
+            TemporalEvidenceRepository,
+        )
+
+        manifest = self._reference_manifest()
+        temporal_repository = TemporalEvidenceRepository(
+            self._repository.root / "temporal-evidence",
+        )
+        temporal = temporal_repository.load_session_information_set(
+            session_binding.information_set_manifest_content_id,
+            run_id=manifest.run_id,
+            session_id=session_binding.session_id,
+            agent_tenure_id=session_binding.agent_tenure_id,
+        )
+        expected_activation_id = canonical_content_sha256(
+            {
+                "schema_version": "pump-station.session-activation.v1",
+                "task_world_id": manifest.task_world_id,
+                "run_id": manifest.run_id,
+                "episode_id": manifest.episode_id,
+                "world_branch_id": manifest.world_branch_id,
+                "session_id": session_binding.session_id,
+                "agent_tenure_id": session_binding.agent_tenure_id,
+                "host_authority_id": session_binding.host_authority_id,
+            }
+        )
+        expected = self._v4_information_set(
+            snapshot,
+            agent_tenure_id=session_binding.agent_tenure_id,
+        )
+        view = expected.base_view
+        if not isinstance(view, PumpStationCoupledActorView):
+            _fail("actor-session-binding", "registered session projected a legacy view")
+        expected_scope = (
+            manifest.task_world_id,
+            manifest.run_id,
+            manifest.episode_id,
+            manifest.run_id,
+            manifest.world_branch_id,
+            snapshot.state_id,
+            snapshot.commit_id,
+            snapshot.sequence,
+            session_binding.session_id,
+            session_binding.agent_tenure_id,
+            view.actor_id,
+            view.view_id,
+            view.calendar_seconds,
+            expected_activation_id,
+            session_binding.retrieval_state_head,
+            view.source_artifact_ids,
+            (PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,),
+            pump_station_actor_capabilities_v2(
+                task_world_id=manifest.task_world_id,
+                temporal_repository_verified=True,
+            ).content_sha256,
+        )
+        observed_scope = (
+            temporal.task_world_id,
+            temporal.run_id,
+            temporal.episode_id,
+            temporal.world_instance_id,
+            temporal.world_branch_id,
+            temporal.world_state_id,
+            temporal.world_commit_id,
+            temporal.world_sequence,
+            temporal.session_id,
+            temporal.agent_tenure_id,
+            temporal.actor_id,
+            temporal.base_view_id,
+            temporal.world_time_seconds,
+            temporal.session_activation_content_id,
+            temporal.retrieval_state_content_id,
+            temporal.source_artifact_ids,
+            temporal.workspace_tool_ids,
+            temporal.tool_contract_id,
+        )
+        if observed_scope != expected_scope or temporal.branch_ancestor_ids:
+            _fail(
+                "actor-session-binding",
+                "temporal session manifest differs from the selected world",
+            )
+        try:
+            information_set = bind_information_set(
+                view,
+                PumpStationObservationHistory(
+                    agent_tenure_id=session_binding.agent_tenure_id,
+                    view_ids=temporal.observation_history_view_ids,
+                ),
+                PumpStationCurrentContext(
+                    continuity_carrier=PumpStationContinuityCarrier(
+                        temporal.continuity_carrier,
+                    ),
+                    conversation_prefix_id=temporal.conversation_prefix_id,
+                    workspace_tool_ids=temporal.workspace_tool_ids,
+                    visible_material_ids=temporal.visible_material_ids,
+                ),
+            )
+        except ValueError as error:
+            _fail("actor-session-binding", str(error))
+        if information_set.current_context.continuity_carrier is PumpStationContinuityCarrier.STRUCTURED_HANDOVER:
+            handover_ids = tuple(
+                material_id
+                for material_id in temporal.visible_material_ids
+                if self._repository.has_structured_handover(material_id)
+            )
+            if len(handover_ids) != 1:
+                _fail(
+                    "actor-session-binding",
+                    "structured handover context does not select one durable handover",
+                )
+            handover = self._repository._load_structured_handover(
+                handover_ids[0],
+                manifest,
+            )
+            if (
+                handover.to_session_id != session_binding.session_id
+                or handover.to_tenure_id != session_binding.agent_tenure_id
+            ):
+                _fail(
+                    "actor-session-binding",
+                    "structured handover belongs to another recipient session",
+                )
+        if (
+            information_set.information_set_id != temporal.information_set_id
+            or session_binding.actor_view_id != temporal.base_view_id
+            or not set(temporal.source_artifact_ids).issubset(
+                temporal.visible_material_ids,
+            )
+        ):
+            _fail(
+                "actor-session-binding",
+                "session information-set identity differs from its content",
+            )
+        return information_set
+
     @staticmethod
-    def _v4_actor_command(request: WorldActorActionRequest) -> PumpStationCommandV4:
+    def _v4_actor_command(
+        request: WorldActorActionRequest,
+        *,
+        session_binding_id: str,
+    ) -> PumpStationCommandV4:
         """Convert one shared actor request to the strict durable V4 command."""
         binding = request.binding
         return PumpStationCommandV4(
@@ -1170,6 +1570,7 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
             agent_tenure_id=binding.agent_tenure_id,
             actor_view_id=binding.actor_view_id,
             information_set_id=binding.information_set_id,
+            session_binding_id=session_binding_id,
         )
 
     def _v4_control_command(
