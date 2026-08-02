@@ -677,7 +677,7 @@ class PumpStationWorldSession:
             episode_id=self._request.episode_id,
             world_instance_id=self._run.manifest.run_id,
             world_branch_id=self._request.world_branch_id,
-            branch_ancestor_ids=(),
+            branch_ancestor_ids=self._branch_ancestor_ids(),
             world_state_id=snapshot.state_id,
             world_commit_id=snapshot.commit_id,
             world_sequence=snapshot.sequence,
@@ -1984,8 +1984,16 @@ class PumpStationWorldSession:
             base_view_id=self._view.view_id,
             prior_information_set_id=self._information_set.information_set_id,
             tool_contract_id=self.actor_capabilities.content_sha256,
-            branch_ancestor_ids=(),
+            branch_ancestor_ids=self._branch_ancestor_ids(),
         )
+
+    def _branch_ancestor_ids(self) -> tuple[str, ...]:
+        """Return the ordered branch ancestry bound by the durable manifest."""
+
+        manifest = self._run.manifest
+        if isinstance(manifest, PumpStationWorldRunManifestV2):
+            return manifest.initial_state_source.ancestor_branch_ids
+        return ()
 
     def _temporal_information_set_manifest(self) -> TemporalInformationSetManifest:
         return TemporalInformationSetManifest(

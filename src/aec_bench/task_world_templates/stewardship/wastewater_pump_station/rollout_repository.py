@@ -113,6 +113,14 @@ class PumpStationRolloutRepository:
             PumpStationRolloutGroupRequest,
         )
 
+    def group_request_payload_if_present(self, group_id: str) -> bytes | None:
+        """Load confined request bytes without selecting a rollout schema."""
+
+        path = self.group_root(group_id) / "request.json"
+        if not path.exists():
+            return None
+        return self._read(path)
+
     def publish_child_receipt(self, receipt: PumpStationRolloutChildReceipt) -> None:
         """Publish one child creation receipt."""
 

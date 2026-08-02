@@ -10,8 +10,9 @@ import shutil
 import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import ValidationError
 
@@ -101,6 +102,16 @@ from aec_bench.meta_harness.lifecycle_operation_store import (
 from aec_bench.task_world_templates.contracts import EvidenceCheckpointSpec, EvidenceLifecycleSpec
 
 LifecycleVerifier = Callable[[Path, Path], dict[str, Any] | LifecycleVerificationResult]
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceLifecycleBranchSnapshot:
+    """Detached current-schema state and action identity for one branch checkpoint."""
+
+    state: EvidenceLifecycleRunState
+    checkpoint_id: str
+    checkpoint_index: int
+    branch_action_state_sha256: str
 
 
 class LifecycleEpisodeExecutionError(EvidenceLifecycleError):
@@ -553,6 +564,9 @@ def branch_evidence_lifecycle(
     checkpoint_id: str,
     branch_id: str,
     reason: str,
+    submission_validation_scope: Literal["complete-run", "selected-checkpoint-prefix"] = "complete-run",
+    expected_parent_submission_sha256: str | None = None,
+    expected_parent_action_state_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Create an isolated derived run that reopens one submitted checkpoint."""
     package = Path(package_dir)
@@ -566,6 +580,9 @@ def branch_evidence_lifecycle(
             checkpoint_id=checkpoint_id,
             branch_id=branch_id,
             reason=reason,
+            submission_validation_scope=submission_validation_scope,
+            expected_parent_submission_sha256=expected_parent_submission_sha256,
+            expected_parent_action_state_sha256=expected_parent_action_state_sha256,
         )
 
 
@@ -577,17 +594,41 @@ def _branch_evidence_lifecycle_locked(
     checkpoint_id: str,
     branch_id: str,
     reason: str,
+    submission_validation_scope: Literal["complete-run", "selected-checkpoint-prefix"],
+    expected_parent_submission_sha256: str | None,
+    expected_parent_action_state_sha256: str | None,
 ) -> dict[str, Any]:
     """Create a branch from a stable parent state held under its mutation lock."""
     spec = load_evidence_lifecycle_spec(package)
-    parent_state = _load_state(package, parent_run, spec, lock_held=True)
-    _assert_prior_submissions_unchanged(parent_run, parent_state)
     try:
         branch_index = next(
             index for index, checkpoint in enumerate(spec.checkpoints) if checkpoint.checkpoint_id == checkpoint_id
         )
     except StopIteration as exc:
         raise EvidenceLifecycleError(f"unknown checkpoint: {checkpoint_id}") from exc
+    if submission_validation_scope == "selected-checkpoint-prefix":
+        if expected_parent_submission_sha256 is None or expected_parent_action_state_sha256 is None:
+            raise EvidenceLifecycleError("selected checkpoint prefix validation requires the expected parent state")
+        branch_snapshot = _read_evidence_lifecycle_branch_snapshot_locked(
+            package,
+            parent_run,
+            spec,
+            checkpoint_id=checkpoint_id,
+        )
+        parent_state = branch_snapshot.state
+        parent_action_state_sha256 = branch_snapshot.branch_action_state_sha256
+    elif submission_validation_scope == "complete-run":
+        if expected_parent_submission_sha256 is not None or expected_parent_action_state_sha256 is not None:
+            raise EvidenceLifecycleError("expected parent state requires selected checkpoint prefix validation")
+        parent_state = _load_state(package, parent_run, spec, lock_held=True)
+        _assert_prior_submissions_unchanged(parent_run, parent_state)
+        parent_action_state_sha256 = _branch_action_state_sha256(
+            parent_state,
+            branch_index=branch_index,
+            inherited_only=False,
+        )
+    else:
+        raise EvidenceLifecycleError(f"unknown branch submission validation scope: {submission_validation_scope}")
     parent_checkpoint = parent_state.checkpoint(checkpoint_id)
     if parent_checkpoint.status != CheckpointRunStatus.SUBMITTED:
         raise EvidenceLifecycleError(f"checkpoint is not available for branching: {checkpoint_id}")
@@ -595,6 +636,11 @@ def _branch_evidence_lifecycle_locked(
         raise EvidenceLifecycleError(f"branch run directory already exists: {branch_run}")
     if parent_checkpoint.submission_sha256 is None:
         raise EvidenceLifecycleError(f"submitted checkpoint is missing its sha256: {checkpoint_id}")
+    if submission_validation_scope == "selected-checkpoint-prefix" and (
+        parent_checkpoint.submission_sha256 != expected_parent_submission_sha256
+        or parent_action_state_sha256 != expected_parent_action_state_sha256
+    ):
+        raise EvidenceLifecycleError("selected checkpoint parent state changed before branching")
 
     checkpoint_runs: list[CheckpointRunRecord] = []
     for index, checkpoint in enumerate(spec.checkpoints):
@@ -688,11 +734,7 @@ def _branch_evidence_lifecycle_locked(
             parent_run_dir=str(parent_run),
             branched_from_checkpoint_id=checkpoint_id,
             parent_submission_sha256=parent_checkpoint.submission_sha256,
-            parent_action_state_sha256=_branch_action_state_sha256(
-                parent_state,
-                branch_index=branch_index,
-                inherited_only=False,
-            ),
+            parent_action_state_sha256=parent_action_state_sha256,
             reason=reason,
         ),
     )
@@ -1711,6 +1753,75 @@ def read_evidence_lifecycle_state(package_dir: Path, run_dir: Path) -> dict[str,
     return _result_context(run, state)
 
 
+def read_evidence_lifecycle_branch_snapshot(
+    package_dir: Path,
+    run_dir: Path,
+    *,
+    checkpoint_id: str,
+) -> EvidenceLifecycleBranchSnapshot:
+    """Read one current-schema branch point without migration, recovery, or ledger writes."""
+    package = Path(package_dir)
+    run = Path(run_dir)
+    spec = load_evidence_lifecycle_spec(package)
+    with _lifecycle_state_lock(run):
+        return _read_evidence_lifecycle_branch_snapshot_locked(
+            package,
+            run,
+            spec,
+            checkpoint_id=checkpoint_id,
+        )
+
+
+def _read_evidence_lifecycle_branch_snapshot_locked(
+    package: Path,
+    run: Path,
+    spec: EvidenceLifecycleSpec,
+    *,
+    checkpoint_id: str,
+) -> EvidenceLifecycleBranchSnapshot:
+    """Read one selected checkpoint prefix while holding its parent run lock."""
+    path = _state_path(run)
+    if not path.is_file() or path.is_symlink():
+        raise EvidenceLifecycleError(f"lifecycle state not found or unsafe: {path}")
+    payload = _read_json(path)
+    if payload.get("schema_version") != "5":
+        raise EvidenceLifecycleError("branch snapshot requires current lifecycle state schema version 5")
+    try:
+        state = EvidenceLifecycleRunState.model_validate(payload)
+    except ValidationError as exc:
+        raise EvidenceLifecycleError(f"invalid lifecycle state: {path}") from exc
+    expected_ids = [checkpoint.checkpoint_id for checkpoint in spec.checkpoints]
+    actual_ids = [checkpoint.checkpoint_id for checkpoint in state.checkpoint_runs]
+    if state.lifecycle_id != spec.lifecycle_id or state.world_id != spec.world_id or actual_ids != expected_ids:
+        raise EvidenceLifecycleError("run state does not match the lifecycle package")
+    if state.lifecycle_spec_sha256 != _spec_sha256(spec):
+        raise EvidenceLifecycleError("lifecycle contract does not match lifecycle run")
+    if state.package_sha256 != _package_sha256(package):
+        raise EvidenceLifecycleError("package does not match lifecycle run")
+    _validate_evidence_request_state_contract(state, spec)
+    validate_lifecycle_operation_run_state(state, spec)
+    try:
+        checkpoint_index = expected_ids.index(checkpoint_id)
+    except ValueError as exc:
+        raise EvidenceLifecycleError(f"unknown checkpoint: {checkpoint_id}") from exc
+    _assert_prior_submissions_unchanged(
+        run,
+        state,
+        through_checkpoint_index=checkpoint_index,
+    )
+    action_state_sha256 = _branch_action_state_sha256(
+        state,
+        branch_index=checkpoint_index,
+        inherited_only=False,
+    )
+    return EvidenceLifecycleBranchSnapshot(
+        state=state.model_copy(deep=True),
+        checkpoint_id=checkpoint_id,
+        checkpoint_index=checkpoint_index,
+        branch_action_state_sha256=action_state_sha256,
+    )
+
+
 def load_validated_lifecycle_submissions(
     package_dir: Path,
     run_dir: Path,
@@ -1851,7 +1962,12 @@ def _load_state(
     return state
 
 
-def _assert_prior_submissions_unchanged(run_dir: Path, state: EvidenceLifecycleRunState) -> None:
+def _assert_prior_submissions_unchanged(
+    run_dir: Path,
+    state: EvidenceLifecycleRunState,
+    *,
+    through_checkpoint_index: int | None = None,
+) -> None:
     if state.branch is not None:
         checkpoint_id = state.branch.branched_from_checkpoint_id
         branch_origin = _workspace(run_dir) / "branch_origin" / f"{checkpoint_id}.json"
@@ -1867,7 +1983,13 @@ def _assert_prior_submissions_unchanged(run_dir: Path, state: EvidenceLifecycleR
         )
         if action_state_sha256 != state.branch.parent_action_state_sha256:
             raise EvidenceLifecycleError(f"branch origin action state changed: {checkpoint_id}")
-    for completed in state.checkpoint_runs:
+    if through_checkpoint_index is None:
+        submitted_scope = state.checkpoint_runs
+    elif 0 <= through_checkpoint_index < len(state.checkpoint_runs):
+        submitted_scope = state.checkpoint_runs[: through_checkpoint_index + 1]
+    else:
+        raise EvidenceLifecycleError("submission validation checkpoint index is out of range")
+    for completed in submitted_scope:
         if completed.status != CheckpointRunStatus.SUBMITTED:
             continue
         if completed.submission_path is None or completed.submission_sha256 is None:

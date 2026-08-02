@@ -1152,6 +1152,39 @@ class PumpStationWorldRunRepository:
         self._validate_chain(tuple(chain), pointer)
         return tuple(chain)
 
+    def commits_through(
+        self,
+        snapshot: PumpStationStateSnapshotRef,
+    ) -> tuple[PumpStationWorldRunCommitRecord, ...]:
+        """Return the selected commit prefix that ends at one exact snapshot."""
+
+        manifest = self.load_manifest()
+        if (
+            snapshot.snapshot_version,
+            snapshot.run_id,
+            snapshot.episode_id,
+            snapshot.world_branch_id,
+        ) != (
+            manifest.snapshot_version,
+            manifest.run_id,
+            manifest.episode_id,
+            manifest.world_branch_id,
+        ):
+            _fail("snapshot-drift", "requested snapshot belongs to another world run")
+        chain = self.commits()
+        for index, commit in enumerate(chain):
+            commit_id = pump_station_artifact_id(commit)
+            if commit_id != snapshot.commit_id:
+                continue
+            if (commit.sequence, commit.state_id) != (
+                snapshot.sequence,
+                snapshot.state_id,
+            ):
+                _fail("snapshot-drift", "requested snapshot and commit differ")
+            self.load_state(snapshot.state_id)
+            return chain[: index + 1]
+        _fail("snapshot-drift", "requested snapshot is not on the selected history")
+
     def steps(self) -> tuple[PumpStationRunStep, ...]:
         """Reload every committed proposal, information set, receipt, event batch, and state."""
         steps: list[PumpStationRunStep] = []
@@ -1190,6 +1223,27 @@ class PumpStationWorldRunRepository:
         """Reload every selected V4 command and its complete transition evidence."""
         steps: list[PumpStationRunStepV4] = []
         for commit in self.commits()[1:]:
+            if not isinstance(commit, PumpStationWorldRunCommitV2):
+                _fail("record-versions", "V4 step access selected a legacy commit")
+            command, proposal, information_set, transition = self._load_v4_step(commit)
+            steps.append(
+                PumpStationRunStepV4(
+                    command=command,
+                    proposal=proposal,
+                    information_set=information_set,
+                    transition=transition,
+                )
+            )
+        return tuple(steps)
+
+    def v4_steps_through(
+        self,
+        snapshot: PumpStationStateSnapshotRef,
+    ) -> tuple[PumpStationRunStepV4, ...]:
+        """Reload the selected V4 step prefix through one exact snapshot."""
+
+        steps: list[PumpStationRunStepV4] = []
+        for commit in self.commits_through(snapshot)[1:]:
             if not isinstance(commit, PumpStationWorldRunCommitV2):
                 _fail("record-versions", "V4 step access selected a legacy commit")
             command, proposal, information_set, transition = self._load_v4_step(commit)

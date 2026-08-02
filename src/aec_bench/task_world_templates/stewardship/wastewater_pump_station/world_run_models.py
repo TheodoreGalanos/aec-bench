@@ -506,6 +506,7 @@ class PumpStationCommandV4:
             "operations_review": "operations_boundary_review",
             "process_outcome": "process_outcome",
             "common_boundary": "common_boundary_control",
+            "coupled_treatment": "coupled_physical_treatment",
         }
         if self.kind != "actor" and self.kind not in expected_actions:
             raise PumpStationWorldRunError("command-kind", self.kind)

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal, InvalidOperation
 from typing import NoReturn, cast
 
 from pydantic import JsonValue
@@ -14,6 +15,7 @@ from aec_bench.contracts.world_interface import (
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PumpStationCommonBoundaryRequest,
+    PumpStationCoupledTreatmentRequest,
     PumpStationOperationsBoundaryReviewRequest,
     PumpStationProcessOutcomeRequest,
     PumpStationRootControl,
@@ -58,6 +60,18 @@ _ROOT_CONTROL_ARGUMENT_FIELDS = {
             "authority_id",
             "boundary_kind",
             "available",
+            "base_state_id",
+        }
+    ),
+    "coupled_treatment": frozenset(
+        {
+            "version",
+            "request_id",
+            "authority_id",
+            "treatment_label",
+            "affected_pump_ids",
+            "obstruction_delta",
+            "clearance_loss_delta",
             "base_state_id",
         }
     ),
@@ -182,6 +196,17 @@ def _root_control_from_command(
             available=_bool_argument(arguments, "available"),
             base_state_id=_text_argument(arguments, "base_state_id"),
         )
+    if command.kind == "coupled_treatment":
+        return PumpStationCoupledTreatmentRequest(
+            version=_text_argument(arguments, "version"),
+            request_id=_text_argument(arguments, "request_id"),
+            authority_id=_text_argument(arguments, "authority_id"),
+            treatment_label=_text_argument(arguments, "treatment_label"),
+            affected_pump_ids=_text_tuple_argument(arguments, "affected_pump_ids"),
+            obstruction_delta=_decimal_argument(arguments, "obstruction_delta"),
+            clearance_loss_delta=_decimal_argument(arguments, "clearance_loss_delta"),
+            base_state_id=_text_argument(arguments, "base_state_id"),
+        )
     _fail("command-content", f"unsupported V4 control kind {command.kind}")
 
 
@@ -197,3 +222,26 @@ def _bool_argument(arguments: dict[str, object], field_name: str) -> bool:
     if not isinstance(value, bool):
         _fail("command-content", f"control field {field_name} must be Boolean")
     return value
+
+
+def _text_tuple_argument(
+    arguments: dict[str, object],
+    field_name: str,
+) -> tuple[str, ...]:
+    value = arguments.get(field_name)
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item.strip() for item in value):
+        _fail("command-content", f"control field {field_name} must be a text list")
+    return tuple(value)
+
+
+def _decimal_argument(arguments: dict[str, object], field_name: str) -> Decimal:
+    value = arguments.get(field_name)
+    if isinstance(value, bool) or not isinstance(value, str | int | float):
+        _fail("command-content", f"control field {field_name} must be decimal content")
+    try:
+        return Decimal(str(value))
+    except InvalidOperation as error:
+        raise PumpStationWorldRunError(
+            "command-content",
+            f"control field {field_name} must be decimal content",
+        ) from error

@@ -4,14 +4,31 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
+from typing import Any, Never, overload
 
+from aec_bench.contracts.continual_world import (
+    CONTINUAL_ROLLOUT_GROUP_REQUEST_SCHEMA_VERSION,
+    ContinualRolloutGroupRequest,
+    ContinualRolloutLineage,
+)
 from aec_bench.contracts.world_session import (
     STEWARDSHIP_STATE_SNAPSHOT_SCHEMA_VERSION,
     StewardshipStateSnapshotRef,
     WorldSessionExecutionKind,
     WorldSessionOpenMode,
     WorldSessionRequest,
+)
+from aec_bench.task_world_templates.continual.rollout_control import (
+    ContinualRolloutControl,
+    ContinualRolloutError,
+)
+from aec_bench.task_world_templates.continual.rollout_repository import (
+    ContinualRolloutRepository,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
+    pump_station_continual_world_definition,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_kernel import (
     pump_station_model_from_package,
@@ -56,6 +73,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
     PumpStationStateSnapshotRef,
+    PumpStationWorldRunManifestV2,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
@@ -91,17 +109,39 @@ class PumpStationRolloutControl:
         if len(set(authorised_principal_ids)) != len(authorised_principal_ids):
             raise ValueError("rollout control host principals must be distinct")
         self._parent_repository_root = Path(parent_repository_root)
-        self._repository = PumpStationRolloutRepository(rollout_repository_root)
+        self._rollout_repository_root = Path(rollout_repository_root)
+        self._repository = PumpStationRolloutRepository(self._rollout_repository_root)
         self._authorised_principal_ids = frozenset(authorised_principal_ids)
+        self._authorised_principal_sequence = authorised_principal_ids
         self._package_root = package_root
         self._rich_work_processes = rich_work_processes or evidence_health
         self._evidence_health = evidence_health
 
+    @overload
     def create_group(
         self,
         request: PumpStationRolloutGroupRequest,
-    ) -> PumpStationRolloutLineage:
+    ) -> PumpStationRolloutLineage: ...
+
+    @overload
+    def create_group(self, request: ContinualRolloutGroupRequest) -> ContinualRolloutLineage: ...
+
+    def create_group(
+        self,
+        request: PumpStationRolloutGroupRequest | ContinualRolloutGroupRequest,
+    ) -> PumpStationRolloutLineage | ContinualRolloutLineage:
         """Create or exactly recover all requested children from the live parent origin."""
+
+        if isinstance(request, ContinualRolloutGroupRequest):
+            if len(request.children) < 2:
+                raise PumpStationRolloutError(
+                    "rollout-children",
+                    "a pump rollout group requires at least two children",
+                )
+            try:
+                return self._continual_rollout_control().create_group(request)
+            except ContinualRolloutError as error:
+                self._raise_continual_error(error)
 
         verification = self.validate_origin(request)
         parent = self._resume_run(self._parent_repository_root)
@@ -172,10 +212,16 @@ class PumpStationRolloutControl:
 
     def create_child(
         self,
-        request: PumpStationRolloutGroupRequest,
+        request: PumpStationRolloutGroupRequest | ContinualRolloutGroupRequest,
         child_id: str,
     ) -> PumpStationRolloutChildReceipt:
         """Create or recover one declared child without completing its sibling group."""
+
+        if isinstance(request, ContinualRolloutGroupRequest):
+            raise PumpStationRolloutError(
+                "rollout-operation",
+                "registered rollouts create complete groups only",
+            )
 
         self.validate_origin(request)
         child = next((item for item in request.children if item.child_id == child_id), None)
@@ -197,14 +243,54 @@ class PumpStationRolloutControl:
                 event_schedule_sha256,
             )
 
-    def inspect_group(self, group_id: str) -> PumpStationRolloutLineage:
+    def inspect_group(
+        self,
+        group_id: str,
+    ) -> PumpStationRolloutLineage | ContinualRolloutLineage:
         """Load the complete private lineage for one rollout group."""
 
+        if self._group_uses_continual_rollout(group_id):
+            try:
+                return self._continual_rollout_control().inspect_group(group_id)
+            except ContinualRolloutError as error:
+                self._raise_continual_error(error)
         return self._repository.load_lineage(group_id)
+
+    def require_group_request_version(
+        self,
+        group_id: str,
+        expected_version: str,
+    ) -> None:
+        """Reject an existing group that belongs to another transport version."""
+
+        if expected_version != PUMP_STATION_ROLLOUT_REQUEST_VERSION:
+            raise PumpStationRolloutError("rollout-version", expected_version)
+        actual_version = (
+            CONTINUAL_ROLLOUT_GROUP_REQUEST_SCHEMA_VERSION
+            if self._group_uses_continual_rollout(group_id)
+            else PUMP_STATION_ROLLOUT_REQUEST_VERSION
+        )
+        if actual_version != expected_version:
+            raise PumpStationRolloutError(
+                "rollout-version",
+                f"group {group_id} uses {actual_version}",
+            )
 
     def group_status(self, group_id: str) -> PumpStationRolloutGroupStatus:
         """Enumerate complete or interrupted child creation progress."""
 
+        if self._group_uses_continual_rollout(group_id):
+            try:
+                status = self._continual_rollout_control().group_status(group_id)
+            except ContinualRolloutError as error:
+                self._raise_continual_error(error)
+            return PumpStationRolloutGroupStatus(
+                group_id=status.group_id,
+                request_id=status.request_id,
+                state=PumpStationRolloutGroupState(status.state.value),
+                requested_child_ids=tuple(status.requested_child_ids),
+                created_child_ids=tuple(status.created_child_ids),
+            )
         request = self._repository.load_group_request(group_id)
         requested = tuple(child.child_id for child in request.children)
         created = tuple(child_id for child_id in requested if self._repository.child_receipt_exists(group_id, child_id))
@@ -236,10 +322,47 @@ class PumpStationRolloutControl:
     ) -> PumpStationWorldSession:
         """Open only the selected child with no sibling or selection metadata."""
 
-        lineage = self.inspect_group(group_id)
-        receipt = self._child_receipt(lineage, child_id)
-        child_root = self._repository.child_world_root(group_id, child_id)
-        snapshot = PumpStationWorldRunRepository(child_root).current_snapshot()
+        if self._group_uses_continual_rollout(group_id):
+            try:
+                child_ref = self._continual_rollout_control().child_run_ref(
+                    group_id,
+                    child_id,
+                )
+            except ContinualRolloutError as error:
+                self._raise_continual_error(error)
+            child_root = self._continual_child_world_root(group_id, child_id)
+            snapshot = PumpStationWorldRunRepository(child_root).current_snapshot()
+            if (
+                child_ref.group_id,
+                child_ref.child_id,
+                child_ref.task_world_id,
+                snapshot.run_id,
+                snapshot.episode_id,
+                snapshot.world_branch_id,
+            ) != (
+                group_id,
+                child_id,
+                PUMP_STATION_TASK_WORLD_ID,
+                child_ref.run_id,
+                child_ref.episode_id,
+                child_ref.world_branch_id,
+            ):
+                raise PumpStationRolloutError(
+                    "rollout-child-run-ref",
+                    "registered child identity differs from its verified run reference",
+                )
+            world_branch_id = child_ref.world_branch_id
+        else:
+            lineage = self.inspect_group(group_id)
+            if not isinstance(lineage, PumpStationRolloutLineage):
+                raise PumpStationRolloutError(
+                    "rollout-version",
+                    CONTINUAL_ROLLOUT_GROUP_REQUEST_SCHEMA_VERSION,
+                )
+            receipt = self._child_receipt(lineage, child_id)
+            child_root = self._repository.child_world_root(group_id, child_id)
+            snapshot = PumpStationWorldRunRepository(child_root).current_snapshot()
+            world_branch_id = receipt.initial_snapshot.world_branch_id
         request = WorldSessionRequest(
             execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
             open_mode=WorldSessionOpenMode.RESUME,
@@ -248,7 +371,7 @@ class PumpStationRolloutControl:
             agent_tenure_id=agent_tenure_id,
             run_id=snapshot.run_id,
             episode_id=snapshot.episode_id,
-            world_branch_id=receipt.initial_snapshot.world_branch_id,
+            world_branch_id=world_branch_id,
             start_snapshot=_shared_snapshot(snapshot),
         )
         return PumpStationWorldSessionFactory(
@@ -270,8 +393,15 @@ class PumpStationRolloutControl:
         if request.task_world_id != PUMP_STATION_TASK_WORLD_ID:
             raise PumpStationRolloutError("treatment-task-world", request.task_world_id)
         lineage = self.inspect_group(request.group_id)
+        if isinstance(lineage, ContinualRolloutLineage):
+            raise PumpStationRolloutError(
+                "rollout-operation",
+                "legacy scheduled treatments do not accept registered children",
+            )
         child = self._child_receipt(lineage, request.child_id)
-        run = self._resume_run(self._repository.child_world_root(request.group_id, request.child_id))
+        run = self._resume_run(
+            self._repository.child_world_root(request.group_id, request.child_id),
+        )
         current = run.snapshot()
         observed_scope = (
             request.child_run_id,
@@ -369,6 +499,13 @@ class PumpStationRolloutControl:
             )
             request = scheduled.request
             self._require_authority(request.authority_id)
+            lineage = self.inspect_group(group_id)
+            if isinstance(lineage, ContinualRolloutLineage):
+                raise PumpStationRolloutError(
+                    "rollout-operation",
+                    "legacy scheduled treatments do not accept registered children",
+                )
+            self._child_receipt(lineage, child_id)
             child_root = self._repository.child_world_root(group_id, child_id)
             run = self._resume_run(child_root)
             if self._repository.activation_request_exists(
@@ -444,6 +581,38 @@ class PumpStationRolloutControl:
                 treatment_request_id,
             )
 
+    def _continual_child_world_root(self, group_id: str, child_id: str) -> Path:
+        disjoint_roots = (self._parent_repository_root,) + (
+            (Path(self._package_root),) if self._package_root is not None else ()
+        )
+        return ContinualRolloutRepository(
+            self._rollout_repository_root,
+            disjoint_roots=disjoint_roots,
+        ).child_world_root(
+            group_id,
+            child_id,
+        )
+
+    def _continual_rollout_control(self) -> ContinualRolloutControl:
+        return ContinualRolloutControl(
+            pump_station_continual_world_definition(),
+            parent_run_root=self._parent_repository_root,
+            rollout_repository_root=self._rollout_repository_root,
+            authorised_principal_ids=self._authorised_principal_sequence,
+            package_root=self._package_root,
+        )
+
+    @staticmethod
+    def _raise_continual_error(error: ContinualRolloutError) -> Never:
+        code = {
+            "request-conflict": "request-id-conflict",
+            "child-request-conflict": "child-id-conflict",
+            "child-receipt-conflict": "child-id-conflict",
+            "lineage-conflict": "lineage-conflict",
+            "authority": "rollout-unauthorised",
+        }.get(error.code, error.code)
+        raise PumpStationRolloutError(code, error.detail) from error
+
     def _create_child(
         self,
         request: PumpStationRolloutGroupRequest,
@@ -484,9 +653,14 @@ class PumpStationRolloutControl:
         self._repository.publish_child_receipt(receipt)
         return self._repository.load_child_receipt(request.group_id, child.child_id)
 
-    def _resume_run(self, root: Path) -> PumpStationWorldRun:
+    def _resume_run(self, root: Path) -> PumpStationWorldRun[Any, Any]:
         repository = PumpStationWorldRunRepository(root)
         snapshot = repository.current_snapshot()
+        if isinstance(repository.load_manifest(), PumpStationWorldRunManifestV2):
+            return PumpStationWorldRun.resume_reference_system(
+                repository=repository,
+                snapshot=snapshot,
+            )
         package = load_reference_package(self._package_root)
         model = pump_station_model_from_package(package)
         return PumpStationWorldRun.resume(
@@ -572,6 +746,33 @@ class PumpStationRolloutControl:
             if child.child_id == child_id:
                 return child
         raise PumpStationRolloutError("rollout-child-not-found", child_id)
+
+    def _group_uses_continual_rollout(self, group_id: str) -> bool:
+        payload = self._repository.group_request_payload_if_present(group_id)
+        if payload is None:
+            return False
+        try:
+            value = json.loads(payload)
+        except (TypeError, ValueError) as error:
+            raise PumpStationRolloutError(
+                "rollout-artifact",
+                "group request is not strict JSON",
+            ) from error
+        if not isinstance(value, dict) or "schema_version" not in value:
+            return False
+        if value.get("schema_version") != CONTINUAL_ROLLOUT_GROUP_REQUEST_SCHEMA_VERSION:
+            raise PumpStationRolloutError(
+                "rollout-version",
+                str(value.get("schema_version")),
+            )
+        try:
+            ContinualRolloutGroupRequest.model_validate_json(payload)
+        except ValueError as error:
+            raise PumpStationRolloutError(
+                "rollout-artifact",
+                "continual rollout request is invalid",
+            ) from error
+        return True
 
     def _require_authority(self, authority_id: str) -> None:
         if authority_id not in self._authorised_principal_ids:

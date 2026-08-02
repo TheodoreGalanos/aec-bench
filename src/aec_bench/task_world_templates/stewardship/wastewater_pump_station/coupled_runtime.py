@@ -3,10 +3,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Literal, NoReturn, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Literal, NoReturn, cast
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
     D_RUNTIME_SECONDS,
@@ -69,15 +68,13 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     stewardship_content_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PUMP_STATION_AUTHORITY_POLICY_VERSION_V4,
     PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
     PUMP_STATION_OPERATIONS_REVIEW_VERSION,
     PUMP_STATION_PROCESS_OUTCOME_VERSION,
-    PUMP_STATION_RECEIPT_VERSION_V4,
     PUMP_STATION_STATE_VERSION_V4,
-    PUMP_STATION_TRANSITION_RULE_VERSION_V4,
     PumpStationAuthority,
     PumpStationCommonBoundaryRequest,
+    PumpStationCoupledTreatmentRequest,
     PumpStationEvidence,
     PumpStationEvidenceKind,
     PumpStationObligation,
@@ -93,6 +90,15 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationTransitionV4,
     PumpStationWorkOrder,
     PumpStationWorkOrderStatus,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PUMP_STATION_COUPLED_TREATMENT_VERSION as PUMP_STATION_COUPLED_TREATMENT_VERSION,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
+    apply_coupled_treatment as _apply_stable_coupled_treatment,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
+    finish_coupled_transition as _finish_transition,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
     PumpStationContinuityCarrier,
@@ -115,7 +121,6 @@ PUMP_STATION_SNAPSHOT_VERSION_V4 = "pump-station-state-snapshot.v4"
 PUMP_STATION_ACTOR_PROJECTION_VERSION_V5 = "pump-station-current-state.v5"
 PUMP_STATION_ACTOR_VIEW_SCHEMA_V4 = "pump-station.actor-view.v4"
 PUMP_STATION_INFORMATION_BOUNDARY_V4 = "pump-station-actor-view.v4"
-PUMP_STATION_COUPLED_TREATMENT_VERSION = "pump-station.coupled-treatment.v1"
 if TYPE_CHECKING:
     type PumpStationCoupledWorldState = PumpStationStewardshipState[
         PumpStationCoupledPhysicalState,
@@ -139,25 +144,6 @@ class PumpStationCoupledWorldError(ValueError):
 
 def _fail(code: str, detail: str) -> NoReturn:
     raise PumpStationCoupledWorldError(code, detail)
-
-
-@dataclass(frozen=True, slots=True)
-class PumpStationCoupledTreatmentRequest:
-    """Host-private common-cause treatment for one isolated v4 child."""
-
-    version: str
-    request_id: str
-    authority_id: str
-    treatment_label: str
-    affected_pump_ids: tuple[str, ...]
-    obstruction_delta: Decimal
-    clearance_loss_delta: Decimal
-    base_state_id: str
-
-    @property
-    def content_id(self) -> str:
-        """Return the exact private treatment identity."""
-        return stewardship_content_id(self, record_profile="v4")
 
 
 PumpStationCoupledTransitionReceipt = PumpStationTransitionReceiptV4
@@ -1256,147 +1242,6 @@ def _apply_event_effects(
     return updated
 
 
-_RecordT = TypeVar("_RecordT")
-
-
-def _changed_owner_ids(
-    before: tuple[_RecordT, ...],
-    after: tuple[_RecordT, ...],
-    identity: Callable[[_RecordT], str],
-) -> tuple[str, ...]:
-    """Return stable identities whose canonical owner record changed."""
-    before_by_id = {identity(item): item for item in before}
-    after_by_id = {identity(item): item for item in after}
-    return tuple(
-        sorted(
-            record_id
-            for record_id in before_by_id.keys() | after_by_id.keys()
-            if before_by_id.get(record_id) != after_by_id.get(record_id)
-        )
-    )
-
-
-def _liability_owner_records(
-    state: PumpStationCoupledWorldState,
-) -> dict[str, object]:
-    """Return canonical liability owners without a separate mutable ledger."""
-    owners: dict[str, object] = {item.obligation_id: item for item in state.obligations}
-    owners.update({item.episode_id: item for item in state.outage_episodes})
-    owners.update({item.item_id: item for item in state.backlog if item.generation_rule_id in {"WG-06", "WG-07"}})
-    return owners
-
-
-def _changed_liability_owner_ids(
-    before: PumpStationCoupledWorldState,
-    after: PumpStationCoupledWorldState,
-) -> tuple[str, ...]:
-    before_owners = _liability_owner_records(before)
-    after_owners = _liability_owner_records(after)
-    return tuple(
-        sorted(
-            owner_id
-            for owner_id in before_owners.keys() | after_owners.keys()
-            if before_owners.get(owner_id) != after_owners.get(owner_id)
-        )
-    )
-
-
-def _finish_transition(
-    before: PumpStationCoupledWorldState,
-    after: PumpStationCoupledWorldState,
-    *,
-    request_id: str,
-    action_kind: str,
-    actor_action: bool,
-    target_id: str | None,
-    backlog_item_id: str | None,
-    reason: str,
-    changed_record_ids: tuple[str, ...],
-    operating_interval_id: str | None = None,
-    authority_requirements: tuple[str, ...] | None = None,
-) -> PumpStationCoupledTransition:
-    sequenced = replace(after, sequence=before.sequence + 1)
-    transition_id = f"transition-{sequenced.sequence}-{request_id}"
-    required_authorities = authority_requirements or _required_authorities(action_kind)
-    permit_ids = (f"controlled-test-permit-{request_id}",) if action_kind == "request_functional_check" else ()
-    receipt = PumpStationCoupledTransitionReceipt(
-        receipt_version=PUMP_STATION_RECEIPT_VERSION_V4,
-        authority_policy_version=PUMP_STATION_AUTHORITY_POLICY_VERSION_V4,
-        transition_rule_version=PUMP_STATION_TRANSITION_RULE_VERSION_V4,
-        sequence=sequenced.sequence,
-        transition_id=transition_id,
-        request_id=request_id,
-        action_or_control_kind=action_kind,
-        actor_action=actor_action,
-        authority_outcome="permitted",
-        required_authorities=required_authorities,
-        authority_decision_detail=("All required task authorities accepted the bound request."),
-        permit_ids=permit_ids,
-        execution_status="applied",
-        before_state_id=before.state_id,
-        after_state_id=sequenced.state_id,
-        start_calendar_seconds=before.calendar_seconds,
-        end_calendar_seconds=sequenced.calendar_seconds,
-        target_id=target_id,
-        backlog_item_id=backlog_item_id,
-        reason=reason,
-        changed_record_ids=changed_record_ids,
-        changed_pool_ids=_changed_owner_ids(
-            before.resources.pools,
-            sequenced.resources.pools,
-            lambda item: item.pool_id,
-        ),
-        changed_reservation_ids=_changed_owner_ids(
-            before.resource_reservations,
-            sequenced.resource_reservations,
-            lambda item: item.reservation_id,
-        ),
-        changed_backlog_item_ids=_changed_owner_ids(
-            before.backlog,
-            sequenced.backlog,
-            lambda item: item.item_id,
-        ),
-        generation_record_ids=_changed_owner_ids(
-            before.generation_records,
-            sequenced.generation_records,
-            lambda item: item.backlog_item_id,
-        ),
-        changed_liability_owner_ids=_changed_liability_owner_ids(
-            before,
-            sequenced,
-        ),
-        operating_interval_id=operating_interval_id,
-    )
-    return PumpStationCoupledTransition(state=sequenced, receipt=receipt)
-
-
-def _required_authorities(action_kind: str) -> tuple[str, ...]:
-    if action_kind == "request_functional_check":
-        return ("maintenance", "operations")
-    if action_kind in {
-        "continue_operation",
-        "request_duty_assignment",
-        "request_provisional_return",
-        "operations_boundary_review",
-        "common_boundary_control",
-    }:
-        return ("operations",)
-    if action_kind in {
-        "request_inspection",
-        "request_obstruction_clearance",
-        "resume_process",
-        "cancel_process",
-    }:
-        return ("maintenance",)
-    if action_kind in {"request_post_maintenance_verification", "process_outcome"}:
-        return ("verification",)
-    if action_kind in {"request_provisional_closure", "request_dependency_waiver"}:
-        return ("work_management",)
-    if action_kind == "request_condition_check":
-        return ("engineering",)
-    return ("host",)
-
-
 def pump_station_root_control_operations(
     state: PumpStationCoupledWorldState | None,
     *,
@@ -2008,65 +1853,8 @@ def apply_coupled_treatment(
     state: PumpStationCoupledWorldState,
     request: PumpStationCoupledTreatmentRequest,
 ) -> PumpStationCoupledTransition:
-    """Apply one private treatment without adding its label to projection v5."""
-    if request.version != PUMP_STATION_COUPLED_TREATMENT_VERSION:
-        _fail("coupled-treatment-version", request.version)
-    if request.authority_id != "rollout-host":
-        _fail("coupled-treatment-authority", request.authority_id)
-    if request.base_state_id != state.state_id:
-        _fail("stale-coupled-treatment", request.request_id)
-    if not request.treatment_label.strip():
-        _fail("coupled-treatment-label", request.request_id)
-    pump_ids = tuple(pump.pump_id for pump in state.physical.pumps)
-    if (
-        not request.affected_pump_ids
-        or len(set(request.affected_pump_ids)) != len(request.affected_pump_ids)
-        or not set(request.affected_pump_ids) <= set(pump_ids)
-    ):
-        _fail("coupled-treatment-targets", request.request_id)
-    if request.obstruction_delta < 0 or request.clearance_loss_delta < 0:
-        _fail("coupled-treatment-delta", request.request_id)
-    updated_pumps = []
-    for pump in state.physical.pumps:
-        if pump.pump_id not in request.affected_pump_ids:
-            updated_pumps.append(pump)
-            continue
-        obstruction = pump.condition.obstruction + request.obstruction_delta
-        clearance_loss = pump.condition.clearance_loss + request.clearance_loss_delta
-        if obstruction > 1 or clearance_loss > 1:
-            _fail("coupled-treatment-range", pump.pump_id)
-        updated_pumps.append(
-            replace(
-                pump,
-                condition=PumpCondition(
-                    obstruction=obstruction,
-                    clearance_loss=clearance_loss,
-                ),
-            )
-        )
-    physical = replace(
-        state.physical,
-        pumps=cast(
-            tuple[Any, Any, Any],
-            tuple(updated_pumps),
-        ),
-    )
-    updated = replace(
-        state,
-        physical=physical,
-        event_effect_ids=(*state.event_effect_ids, request.content_id),
-    )
-    return _finish_transition(
-        state,
-        updated,
-        request_id=request.request_id,
-        action_kind="coupled_physical_treatment",
-        actor_action=False,
-        target_id=None,
-        backlog_item_id=None,
-        reason="Apply the authorised child-only common-cause treatment.",
-        changed_record_ids=(request.content_id, *request.affected_pump_ids),
-    )
+    """Call the stable task-owned private treatment transition."""
+    return _apply_stable_coupled_treatment(state, request)
 
 
 def apply_process_outcome(
