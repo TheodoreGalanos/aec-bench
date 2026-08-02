@@ -1,0 +1,40 @@
+experiments:
+  - id: E001
+    verifies: [C001]
+    purpose: Prove that the content-addressed specification expands into the exact paired plan and binds feasible delayed-evidence retrieval routes.
+    setup: Use the certified pump-station package, local temporal corpus, deterministic gateway, and study-local contracts without provider credentials.
+    procedure:
+      - Build the provider-free manifest and exact paired plan.
+      - Check the history, pair, run, schedule, treatment-order, time, budget, and analysis values.
+      - Search each frozen development route before material evidence availability.
+      - Search and fetch the material record after availability with the same common budget.
+      - Remove a planned run and confirm strict plan validation rejects the drift.
+    metrics:
+      - Eight histories, 32 pairs, and 64 opaque planned run identities exist.
+      - Each history has four pairs and balanced first-arm treatment assignment.
+      - Every pre-availability search returns no accessible result.
+      - Every post-availability route returns and fetches the material evidence.
+      - Provider calls and observed study outcomes remain zero.
+    evidence: [EV001, EV002]
+    exploratory: false
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
+  - id: E002
+    verifies: [C002]
+    purpose: Prove the provider-free reducer, immutable publication, and independent reload path with known generated input.
+    setup: Use generated analysis records that are explicitly ineligible as model study outcomes.
+    procedure:
+      - Generate both treatment deliveries and observations for every planned pair.
+      - Apply integrity, validity, and endpoint gates in that order.
+      - Compute the paired estimate and world-history-clustered interval.
+      - Publish all records by content identity.
+      - Independently reload all inputs and recompute the report.
+    metrics:
+      - The known paired difference is 0.5 with interval [0.5, 0.5].
+      - Provider calls, tokens, spend, study outcomes, and reward changes are zero.
+      - The report conclusion is analysis_fixture and promotion is not permitted.
+      - Reloaded and original reports are equal.
+    evidence: [EV002]
+    exploratory: false
+    domain:
+      profile: AU-NSW-LH-SYN-SPS-v1
