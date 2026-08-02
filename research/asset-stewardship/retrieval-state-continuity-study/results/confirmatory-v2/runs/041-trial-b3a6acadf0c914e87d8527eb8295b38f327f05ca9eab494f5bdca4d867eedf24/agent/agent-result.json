@@ -1,0 +1,28 @@
+{
+  "adapter_name": "tool_loop",
+  "advisor_calls": null,
+  "analysis_token_reporting": "not_reported_separately_by_adapter",
+  "analysis_tokens_included_in": "output_tokens",
+  "cache_read_tokens": 0,
+  "cache_write_tokens": 0,
+  "configuration_record": {
+    "advisor_enabled": false,
+    "bash_enabled": false,
+    "cache_enabled": false,
+    "count_tokens_before_request": false,
+    "max_output_tokens_per_call": 2048,
+    "max_tool_calls": 24,
+    "max_turns": 12,
+    "model": "au.anthropic.claude-sonnet-4-6"
+  },
+  "failure_kind": null,
+  "input_tokens": 31469,
+  "maximum_input_tokens_in_one_call": 11136,
+  "maximum_output_tokens_in_one_call": 773,
+  "output_tokens": 1938,
+  "provider_calls": 4,
+  "reported_analysis_tokens": null,
+  "resolved_model": "au.anthropic.claude-sonnet-4-6",
+  "status": "completed",
+  "turns_used": 4
+}

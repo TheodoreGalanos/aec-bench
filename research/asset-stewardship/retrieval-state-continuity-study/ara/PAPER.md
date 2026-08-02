@@ -1,13 +1,13 @@
 ---
 ara_schema_version: "0.1"
-title: Retrieval-state continuity study specification
+title: Retrieval-state continuity study
 ---
 
 # Research continuation summary
 
-This artifact freezes the first study of retrieval-state continuity in the
-synthetic wastewater pump-station world. It does not use a model or an external
-evidence service.
+This artifact records the first study of retrieval-state continuity in the
+synthetic wastewater pump-station world. It contains the provider-free design,
+real-model shakedown, frozen confirmation, and independent reload evidence.
 
 The research question is:
 
@@ -52,6 +52,40 @@ The path made zero provider calls, used zero model tokens and spend, created
 zero study outcomes, changed no task reward, and retained
 `promotion_permitted=false`.
 
+## Real-model result
+
+The authorized runtime used Amazon Bedrock model
+`au.anthropic.claude-sonnet-4-6` through the direct host tool loop. The
+confirmation completed all 64 planned runs, all 32 matched pairs, and all eight
+world histories. Integrity and validity passed. Independent reload reproduced
+execution identity
+`d6b674214e345de75c9190c1e41f101f99036365c2739b6725376c76c6322def`
+and report identity
+`e69328a71e314e3b18ed1683f606cf24aa862a489493804cc3a7399f3a6f439f`.
+
+The paired risk difference was `0.03125`, with a 95% interval from `0.0` to
+`0.09375`. The frozen decision rule therefore returned `refuted`: the result
+did not reach the minimum meaningful effect of `0.25`.
+
+The result used 260 provider calls, 2,293,157 input tokens, and 125,187 output
+tokens, for total recorded spend of USD 9.633005. The adapter did not report
+analysis tokens separately; they are included in output tokens.
+
+## Interpretation limit
+
+All 64 agents made a station proposal. Sixty-three proposals occurred at the
+pre-window time of 7,200,000 seconds. One preserved-state proposal occurred at
+the decision point of 7,203,600 seconds. No run fetched or relied on the delayed
+condition report.
+
+The frozen result is valid for its declared task and endpoint. It does not show
+whether retrieval state helps when the host places the agent at the open
+decision point. It also does not measure the quality of safe early action: the
+agents saw an open verification requirement and made the reasonable
+conservative request before the scored window. A later study should separate
+temporal waiting from retrieval continuity and make the delayed record material
+to the action choice.
+
 ## Boundary
 
 The study code stays in
@@ -59,16 +93,14 @@ The study code stays in
 gateway, access process, and verifier stay in the wastewater pump-station task
 template. No shared contract or provider adapter is added.
 
-A real model-agent shakedown needs separate approval. It can test model,
-harness, tool, carrier, cost, cleanup, attrition, and token instrumentation. Its
-records cannot enter the confirmatory estimate. It must capture input, output,
-reported analysis, and total tokens, including a clear marker when the provider
-does not report analysis tokens separately.
+The shakedown records remain excluded from the confirmatory estimate. The
+provider route kept credentials host-side, and the retained study evidence
+contains no credential values or real client data.
 
 Artifact layers:
 
-- `logic/claims.yaml` records the supported design and analysis claims.
-- `logic/experiments.yaml` records the provider-free checks.
+- `logic/claims.yaml` records the supported design and result claims.
+- `logic/experiments.yaml` records provider-free and real-model checks.
 - `evidence/index.yaml` points to the frozen values and validation evidence.
-- `trace/exploration_tree.yaml` records the decision and next approval gate.
-- `staging/observations.yaml` retains the open shakedown authority.
+- `trace/exploration_tree.yaml` records the failures, repairs, and result.
+- `staging/observations.yaml` retains the open follow-up design questions.

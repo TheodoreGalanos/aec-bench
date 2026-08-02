@@ -33,3 +33,38 @@ claims:
     tags: [provider-free, immutable-evidence, analysis]
     domain:
       profile: AU-NSW-LH-SYN-SPS-v1
+  - id: C003
+    statement: Under the frozen model condition, preserved unresolved retrieval state did not achieve the minimum meaningful reduction in epistemic decision failure.
+    status: supported
+    falsification_criteria:
+      - The exact 64-run report does not pass integrity and validity with 32 analyzable pairs across 8 world histories.
+      - The paired risk difference is not 0.03125 or its 95 percent interval is not [0.0, 0.09375].
+      - Independent reload does not reproduce the stored report and execution identities.
+      - The frozen decision rule does not return refuted for the recorded estimate and interval.
+    proof:
+      experiments: [E004]
+      evidence: [EV003]
+    dependencies: [C001]
+    provenance: ai_executed
+    tags: [model-study, confirmatory, refuted]
+    domain:
+      model: au.anthropic.claude-sonnet-4-6
+      provider: amazon-bedrock-au-geographic
+  - id: C004
+    statement: The confirmatory endpoint was dominated by proposal timing, and no run acquired or used the delayed material record.
+    status: supported
+    falsification_criteria:
+      - Fewer than 63 proposals occurred at 7200000 seconds or more than one proposal occurred at the 7203600-second decision point.
+      - Any trial execution records material evidence as acquired or used.
+      - Any run lacks a durable station proposal.
+    proof:
+      experiments: [E004]
+      evidence: [EV003]
+    dependencies: [C003]
+    provenance: ai_executed
+    tags: [interpretation, temporal-action, endpoint]
+    domain:
+      pre_window_proposals: 63
+      in_window_proposals: 1
+      material_evidence_acquired: 0
+      material_evidence_used: 0

@@ -8,6 +8,7 @@ import random
 
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
 from aec_bench.experiments.retrieval_state_continuity.contracts import (
+    ModelExecutionSpecification,
     PlannedTrial,
     RetrievalStudyBudget,
     StudyAnalysisSpecification,
@@ -106,6 +107,39 @@ def build_provider_free_manifest() -> StudyManifest:
         budget=budget,
         analysis=analysis,
     )
+
+
+def build_model_manifest(phase: StudyPhase) -> StudyManifest:
+    """Derive one real-model generation without changing the frozen design."""
+
+    if phase not in {StudyPhase.SHAKEDOWN, StudyPhase.CONFIRMATORY}:
+        raise ValueError("model manifest phase must be shakedown or confirmatory")
+    provider_free = build_provider_free_manifest()
+    payload = provider_free.model_dump(mode="json", exclude={"content_sha256"})
+    model_execution = ModelExecutionSpecification()
+    payload.update(
+        {
+            "study_generation_id": (
+                "retrieval-state-continuity-model-shakedown.v3"
+                if phase is StudyPhase.SHAKEDOWN
+                else "retrieval-state-continuity-confirmatory.v2"
+            ),
+            "phase": phase,
+            "decision_rule_id": model_execution.decision_rule_id,
+            "retrievability_certificate_sha256": canonical_content_sha256(
+                {
+                    "prior_retrievability_certificate_sha256": (provider_free.retrievability_certificate_sha256),
+                    "decision_rule_id": model_execution.decision_rule_id,
+                    "admissible_conservative_actions": (model_execution.admissible_conservative_actions),
+                    "shakedown_amendment": "permitted-conservative-action-coverage.v1",
+                }
+            ),
+            "model_execution": model_execution,
+            "provider_calls_allowed": 24 if phase is StudyPhase.SHAKEDOWN else 768,
+            "study_outcomes_allowed": phase is StudyPhase.CONFIRMATORY,
+        }
+    )
+    return StudyManifest.model_validate(payload)
 
 
 def build_study_plan(manifest: StudyManifest) -> StudyPlan:

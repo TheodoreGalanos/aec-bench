@@ -52,13 +52,82 @@ nodes:
       report_authority: analysis_fixture
   - id: N005
     type: decision
-    summary: Stop before a real model shakedown until Theo approves its exact provider, model, route, call, token, and spend limits.
-    children: []
+    summary: Theo approved the exact Bedrock provider, model, route, shakedown pair, and 64-run confirmation.
+    children: [N006]
     also_depends_on: [N004]
     claims_touched: []
     provenance: user
     payload:
-      status: open
+      status: completed
       confirmatory_eligibility: false
+      model: au.anthropic.claude-sonnet-4-6
+      synthetic_data_only: true
     domain:
       next_stage: model-agent-shakedown
+  - id: N006
+    type: dead_end
+    summary: The first shakedown route used an invalid default AWS credential context and stopped before inference.
+    children: [N007]
+    also_depends_on: [N005]
+    claims_touched: []
+    provenance: ai_executed
+    payload:
+      hypothesis: The default AWS credential chain would resolve the approved Bedrock access.
+      failure_mode: Bedrock returned 403 before inference, with zero provider calls, tokens, or spend recorded by the adapter.
+      lesson: Bind the approved named credential profile at the host boundary and verify its identity before model execution.
+    domain:
+      result_generation: model-shakedown-v1
+  - id: N007
+    type: dead_end
+    summary: The second shakedown treated a normal typed-tool rejection as a fatal adapter failure.
+    children: [N008]
+    also_depends_on: [N006]
+    claims_touched: []
+    provenance: ai_executed
+    payload:
+      hypothesis: A typed station tool rejection would be returned to the model for correction.
+      failure_mode: The direct tool loop surfaced the rejection as a fatal output-contract failure.
+      lesson: Return bounded contract rejection details as typed tool results so the agent can correct its request.
+    domain:
+      result_generation: model-shakedown-v2
+  - id: N008
+    type: experiment
+    summary: Complete the repaired two-run model shakedown with durable usage and verifier evidence.
+    children: [N009]
+    also_depends_on: [N007]
+    claims_touched: []
+    provenance: ai_executed
+    payload:
+      experiment_id: E003
+      result: passed_runtime
+      confirmatory_eligibility: false
+    domain:
+      result_generation: model-shakedown-v3
+  - id: N009
+    type: experiment
+    summary: Execute all frozen confirmation runs and independently reload the refuted result.
+    children: [N010]
+    also_depends_on: [N008]
+    claims_touched: [C003, C004]
+    provenance: ai_executed
+    payload:
+      experiment_id: E004
+      result: refuted
+      paired_risk_difference: 0.03125
+      confidence_interval: [0.0, 0.09375]
+      integrity_passed: true
+      validity_passed: true
+    domain:
+      result_generation: confirmatory-v2
+  - id: N010
+    type: observation
+    summary: The next study should isolate retrieval continuity from temporal waiting and remove the obvious pre-existing conservative answer.
+    children: []
+    also_depends_on: [N009]
+    claims_touched: [C004]
+    provenance: ai_suggested
+    payload:
+      status: open
+      evidence: EV003
+    domain:
+      follow_up_required: true

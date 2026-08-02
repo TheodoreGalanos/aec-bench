@@ -20,3 +20,15 @@ evidence:
     domain:
       provider_calls: 0
       study_outcomes: 0
+  - id: EV003
+    kind: note
+    path: evidence/model-study-result.md
+    description: Exact model shakedown history, confirmatory estimate, usage, independent reload identities, and proposal-time audit.
+    source: research/asset-stewardship/retrieval-state-continuity-study/results
+    supports: [C003, C004]
+    produced_by: E004
+    exact_values_required: true
+    domain:
+      provider_calls: 260
+      study_outcomes: 64
+      conclusion: refuted
