@@ -1,0 +1,152 @@
+nodes:
+  - id: N001
+    type: decision
+    summary: Use one small three-pump reference station for all ASW-8 concerns.
+    children: [N002]
+    also_depends_on: []
+    claims_touched: [C002]
+    provenance: user
+    payload:
+      decision: Adopt the supplied ASW-8 reference-system analysis as the basis of the detailed plan.
+    domain: {}
+  - id: N002
+    type: observation
+    summary: The accepted v1 profile and current implementation enforce two pumps, one running pump, and singleton resources.
+    children: [N003]
+    also_depends_on: []
+    claims_touched: [C001, C004]
+    provenance: ai_executed
+    payload:
+      evidence_id: EV001
+    domain: {}
+  - id: N003
+    type: decision
+    summary: Preserve v1 and add a separate v2 profile, v4 durable record set, and v5 actor projection.
+    children: [N004]
+    also_depends_on: []
+    claims_touched: [C001, C004]
+    provenance: ai_executed
+    payload:
+      decision: Keep historical bytes stable and prevent the existing temporal actor projection v4 from colliding with the ASW-8 state version.
+    domain: {}
+  - id: N004
+    type: decision
+    summary: Derive cover exposure from a declared baseline duty schedule.
+    children: [N007]
+    also_depends_on: [N001]
+    claims_touched: [C002, C003]
+    provenance: ai_executed
+    payload:
+      decision: Treat Pump C operation before the peak as baseline duty, only its replacement of Pump B during the peak as collateral runtime, and Pump A as the normal baseline after the peak.
+    domain: {}
+  - id: N007
+    type: decision
+    summary: Keep one actor time-advance path.
+    children: [N008]
+    also_depends_on: []
+    claims_touched: [C002, C004]
+    provenance: ai_executed
+    payload:
+      decision: Make duty assignment immediate and persistent; use continue_operation for every later event.
+    domain: {}
+  - id: N008
+    type: decision
+    summary: Extend W3 to preserve accepted same-time safety ordering.
+    children: [N005]
+    also_depends_on: []
+    claims_touched: [C002, C003]
+    provenance: ai_executed
+    payload:
+      decision: End W3 at Day 2 15:00 so the eight-hour inspection completes at 14:00 before resource withdrawal.
+    domain: {}
+  - id: N005
+    type: observation
+    summary: ASW-5 process rules, durable publication, replay, Harbor, and ASW-7 branches are reusable, but their task-local records need versioned ASW-8 support.
+    children: [N009]
+    also_depends_on: []
+    claims_touched: [C003, C004, C005]
+    provenance: ai_executed
+    payload:
+      evidence_id: EV001
+    domain: {}
+  - id: N009
+    type: decision
+    summary: Separate service-running and functional-check test-running exposure.
+    children: [N013]
+    also_depends_on: [N004]
+    claims_touched: [C002, C003]
+    provenance: ai_executed
+    payload:
+      decision: Test operation adds target runtime, starts, and degradation but adds no served, assured, surplus, or collateral SCU.
+    domain: {}
+  - id: N013
+    type: decision
+    summary: Put a durable test-only permission boundary between clearance and service return.
+    children: [N010]
+    also_depends_on: [N005]
+    claims_touched: [C002, C003]
+    provenance: ai_executed
+    payload:
+      decision: Move a maintained pump through isolated_for_work, test_only, run_in_service, and service_available; keep a failed functional check on the same planned WG-03 item.
+    domain: {}
+  - id: N010
+    type: decision
+    summary: Bind the exact RS1 descriptor, opening state, and event schedule through world-run manifest v2.
+    children: [N014]
+    also_depends_on: [N003]
+    claims_touched: [C004]
+    provenance: ai_executed
+    payload:
+      decision: Preserve task-world and manifest v1 identities, select pump-station-reference-system.asw-8-rs1.v1 through a closed descriptor registry, bind the opening-state and event-schedule IDs and hashes before state creation, reject caller overrides, and use the existing TrialRecord provenance reference for the task-local v2 verification report.
+    domain: {}
+  - id: N014
+    type: decision
+    summary: Add an in-window branch-neutral RS1 temporal template and bind each realised corpus to its own branch.
+    children: [N011]
+    also_depends_on: [N003]
+    claims_touched: [C004, C006]
+    provenance: ai_executed
+    payload:
+      decision: Preserve the current v1 corpus builder, add exact v2 and Pump C document applicability, require temporal tools for RS1, bind independent root realizations separately, and make each child inherit the parent's exact public bundle with fresh private state.
+    domain: {}
+  - id: N011
+    type: decision
+    summary: Disclose complete planning schedules and initialise confined temporal evidence for every ASW-7 child.
+    children: [N012]
+    also_depends_on: [N005]
+    claims_touched: [C004, C005]
+    provenance: ai_executed
+    payload:
+      decision: Project every disclosed service and resource interval through explicit horizons, give each rollout child an immutable corpus plus fresh child-private retrieval state without parent-private records, and use rollout-control v2 without changing the v1 installed schema.
+    domain: {}
+  - id: N012
+    type: decision
+    summary: Keep deterministic work ranking visible without removing actor choice.
+    children: [N015]
+    also_depends_on: [N001]
+    claims_touched: [C002, C003]
+    provenance: ai_executed
+    payload:
+      decision: Permit a lower-ranked eligible request when hard admission rules pass and record its reason and higher-ranked alternatives.
+    domain: {}
+  - id: N015
+    type: decision
+    summary: Compare direct and Harbor outcomes by task meaning, not artifact identity.
+    children: [N006]
+    also_depends_on: [N014]
+    claims_touched: [C004, C006]
+    provenance: ai_executed
+    payload:
+      decision: Normalize action and generated-work keys, state, conservation, gates, metrics, and liabilities; omit StewardshipEvaluationEvidence and all run-specific content identities.
+    domain: {}
+  - id: N006
+    type: experiment
+    summary: Implement and run the focused ASW-8 acceptance plan.
+    children: []
+    also_depends_on: []
+    claims_touched: [C002, C003, C004, C005, C006]
+    provenance: proposed
+    payload:
+      experiment_ids: [E002, E003, E004, E005]
+      status: planned
+    domain: {}
