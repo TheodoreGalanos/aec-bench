@@ -56,8 +56,15 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_se
 app = typer.Typer(help="Run the synthetic wastewater pump-station stewardship world.")
 
 
-def _factory(run_dir: Path) -> PumpStationWorldSessionFactory:
-    return PumpStationWorldSessionFactory(run_dir)
+def _factory(
+    run_dir: Path,
+    *,
+    temporal_evidence: bool = False,
+) -> PumpStationWorldSessionFactory:
+    return PumpStationWorldSessionFactory(
+        run_dir,
+        temporal_evidence=temporal_evidence,
+    )
 
 
 def _resume_request(
@@ -92,10 +99,15 @@ def _resume_request(
 def _open(
     run_dir: Path,
     request: WorldSessionRequest,
+    *,
+    temporal_evidence: bool = False,
 ) -> PumpStationWorldSession:
     return cast(
         PumpStationWorldSession,
-        open_world_session(request, _factory(run_dir)),
+        open_world_session(
+            request,
+            _factory(run_dir, temporal_evidence=temporal_evidence),
+        ),
     )
 
 
@@ -206,6 +218,11 @@ def start_command(
     world_branch_id: str = typer.Option(..., "--world-branch-id", help="Stable continuing branch identity"),
     session_id: str = typer.Option(..., "--session-id", help="Direct host-session identity"),
     agent_tenure_id: str = typer.Option(..., "--agent-tenure-id", help="Current actor-tenure identity"),
+    temporal_evidence: bool = typer.Option(
+        False,
+        "--temporal-evidence",
+        help="Enable the local temporal documentary-evidence capability",
+    ),
 ) -> None:
     """Start one direct session over a new durable pump-station run."""
     started = time.monotonic()
@@ -219,7 +236,11 @@ def start_command(
         episode_id=episode_id,
         world_branch_id=world_branch_id,
     )
-    session = _open(run_dir, request)
+    session = _open(
+        run_dir,
+        request,
+        temporal_evidence=temporal_evidence,
+    )
     emit(
         "task pump-station-world start",
         session.result.model_dump(mode="json"),
@@ -281,6 +302,72 @@ def continue_operation_command(
     )
 
 
+@app.command("search-evidence")
+def search_evidence_command(
+    run_dir: Path = typer.Option(..., "--run-dir", help="Existing durable world-run directory"),
+    session_id: str = typer.Option(..., "--session-id", help="Direct host-session identity"),
+    agent_tenure_id: str = typer.Option(..., "--agent-tenure-id", help="Current actor-tenure identity"),
+    request_id: str = typer.Option(..., "--request-id", help="Stable access request identity"),
+    query: str = typer.Option(..., "--query", help="Actor-visible documentary search query"),
+    scope: str = typer.Option("all", "--scope", help="Allowlisted documentary scope"),
+    limit: int = typer.Option(5, "--limit", min=1, max=5, help="Maximum visible references"),
+) -> None:
+    """Search evidence available at the current world time."""
+
+    started = time.monotonic()
+    session = _open(
+        run_dir,
+        _resume_request(
+            run_dir,
+            session_id=session_id,
+            agent_tenure_id=agent_tenure_id,
+        ),
+    )
+    emit(
+        "task pump-station-world search-evidence",
+        json.loads(
+            session.search_evidence(
+                request_id=request_id,
+                query=query,
+                scope=scope,
+                limit=limit,
+            )
+        ),
+        start_time=started,
+    )
+
+
+@app.command("fetch-evidence")
+def fetch_evidence_command(
+    run_dir: Path = typer.Option(..., "--run-dir", help="Existing durable world-run directory"),
+    session_id: str = typer.Option(..., "--session-id", help="Direct host-session identity"),
+    agent_tenure_id: str = typer.Option(..., "--agent-tenure-id", help="Current actor-tenure identity"),
+    request_id: str = typer.Option(..., "--request-id", help="Stable access request identity"),
+    reference: str = typer.Option(..., "--reference", help="Opaque reference from an earlier search"),
+) -> None:
+    """Fetch documentary content through one issued opaque reference."""
+
+    started = time.monotonic()
+    session = _open(
+        run_dir,
+        _resume_request(
+            run_dir,
+            session_id=session_id,
+            agent_tenure_id=agent_tenure_id,
+        ),
+    )
+    emit(
+        "task pump-station-world fetch-evidence",
+        json.loads(
+            session.fetch_evidence(
+                request_id=request_id,
+                reference=reference,
+            )
+        ),
+        start_time=started,
+    )
+
+
 @app.command("verify")
 def verify_command(
     run_dir: Path = typer.Option(..., "--run-dir", help="Existing durable world-run directory"),
@@ -306,6 +393,30 @@ def verify_command(
             "active_restriction_ids": list(report.active_restriction_ids),
             "open_obligation_ids": list(report.open_obligation_ids),
         },
+        start_time=started,
+    )
+
+
+@app.command("verify-temporal-evidence")
+def verify_temporal_evidence_command(
+    run_dir: Path = typer.Option(..., "--run-dir", help="Existing temporal world-run directory"),
+) -> None:
+    """Reload and independently replay the temporal-evidence ledger."""
+
+    started = time.monotonic()
+    session = _open(
+        run_dir,
+        _resume_request(
+            run_dir,
+            session_id="temporal-verification-session",
+            agent_tenure_id="temporal-verification-tenure",
+        ),
+    )
+    report = session.verify_temporal_evidence()
+    emit(
+        "task pump-station-world verify-temporal-evidence",
+        report.model_dump(mode="json"),
+        errors=[item.detail for item in report.issues],
         start_time=started,
     )
 
@@ -344,6 +455,11 @@ def export_harbor_command(
         "--project-root",
         help="AEC-Bench source root used to build the verifier runtime",
     ),
+    temporal_evidence: bool = typer.Option(
+        False,
+        "--temporal-evidence",
+        help="Export the local temporal documentary-evidence profile",
+    ),
 ) -> None:
     """Export one provider-free wastewater pump-station Harbor task."""
 
@@ -351,6 +467,7 @@ def export_harbor_command(
     exported = export_pump_station_harbor_task(
         task_dir,
         project_root=project_root,
+        temporal_evidence=temporal_evidence,
     )
     emit(
         "task pump-station-world export-harbor",

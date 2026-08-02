@@ -1,0 +1,13 @@
+observations:
+  - id: O001
+    statement: The companion PRD already defines the complete local temporal capability and its falsification map.
+    status: confirmed_by_implementation
+    next_action: Use EV001 and the promotion review as the accepted local evidence record.
+  - id: O002
+    statement: Temporal Study 1 and the external archive adapter remain outside this provider-free implementation stage.
+    status: scope_boundary
+    next_action: Keep provider, model-study, and opaque-profile code absent.
+  - id: O003
+    statement: The production capability passed its approved focused technical gate without a provider or model call.
+    status: confirmed_by_test
+    next_action: Merge the capability before freezing the provider-free study design.

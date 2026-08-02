@@ -46,6 +46,10 @@ PUMP_STATION_ACTOR_ACTION_NAMES = (
     "request_dependency_waiver",
     "request_condition_check",
 )
+PUMP_STATION_TEMPORAL_EVIDENCE_ACTION_NAMES = (
+    "search_evidence",
+    "fetch_evidence",
+)
 
 
 class _ReasonArguments(FrozenStrictModel):
@@ -77,17 +81,25 @@ class _DependencyWaiverArguments(_ProcessArguments):
     evidence_id: NonEmptyStr
 
 
-type ActorArguments = (
-    _ReasonArguments
-    | _PumpArguments
-    | _ObstructionClearanceArguments
-    | _ProvisionalReturnArguments
-    | _WorkOrderArguments
-    | _ProcessArguments
-    | _DependencyWaiverArguments
-)
+class TemporalEvidenceSearchArguments(FrozenStrictModel):
+    """Actor-visible arguments for one bounded documentary search."""
 
-_ARGUMENT_MODELS: dict[str, type[ActorArguments]] = {
+    query: NonEmptyStr
+    scope: NonEmptyStr = "all"
+    limit: int = 5
+
+
+class TemporalEvidenceFetchArguments(FrozenStrictModel):
+    """Actor-visible arguments for one opaque-reference fetch."""
+
+    reference: NonEmptyStr
+
+
+class _EvidenceRelianceArguments(FrozenStrictModel):
+    relied_on_evidence_refs: tuple[NonEmptyStr, ...]
+
+
+_PROPOSAL_ARGUMENT_MODELS: dict[str, type[_ReasonArguments]] = {
     "continue_operation": _ReasonArguments,
     "transfer_duty": _ReasonArguments,
     "request_inspection": _PumpArguments,
@@ -100,6 +112,11 @@ _ARGUMENT_MODELS: dict[str, type[ActorArguments]] = {
     "cancel_process": _ProcessArguments,
     "request_dependency_waiver": _DependencyWaiverArguments,
     "request_condition_check": _PumpArguments,
+}
+_ARGUMENT_MODELS: dict[str, type[FrozenStrictModel]] = {
+    **_PROPOSAL_ARGUMENT_MODELS,
+    "search_evidence": TemporalEvidenceSearchArguments,
+    "fetch_evidence": TemporalEvidenceFetchArguments,
 }
 
 _ACTION_DESCRIPTIONS = {
@@ -115,6 +132,8 @@ _ACTION_DESCRIPTIONS = {
     "cancel_process": "Cancel live work and release unused reservations.",
     "request_dependency_waiver": "Request one narrow dependency waiver with named evidence.",
     "request_condition_check": "Request one sensor-based condition check for a named pump.",
+    "search_evidence": "Search the documentary evidence available to this tenure now.",
+    "fetch_evidence": "Fetch content through an opaque reference from an earlier search.",
 }
 
 
@@ -123,11 +142,17 @@ def pump_station_actor_capabilities(
     task_world_id: str,
     rich_work_processes: bool,
     evidence_health: bool = False,
+    temporal_evidence: bool = False,
 ) -> WorldActorCapabilityCatalogue:
     """Return the closed task-owned action catalogue for the selected world version."""
 
     names: tuple[str, ...]
-    if evidence_health:
+    if temporal_evidence:
+        names = (
+            *PUMP_STATION_ACTOR_ACTION_NAMES,
+            *PUMP_STATION_TEMPORAL_EVIDENCE_ACTION_NAMES,
+        )
+    elif evidence_health:
         names = PUMP_STATION_ACTOR_ACTION_NAMES
     elif rich_work_processes:
         names = PUMP_STATION_ACTOR_ACTION_NAMES[:11]
@@ -137,13 +162,20 @@ def pump_station_actor_capabilities(
         WorldActorActionCapability(
             name=name,
             description=_ACTION_DESCRIPTIONS[name],
-            input_schema=cast(dict[str, JsonValue], _ARGUMENT_MODELS[name].model_json_schema()),
+            input_schema=_actor_input_schema(
+                name,
+                temporal_evidence=temporal_evidence,
+            ),
         )
         for name in names
     )
     return WorldActorCapabilityCatalogue(
         task_world_id=task_world_id,
-        interface_version=PUMP_STATION_ACTOR_INTERFACE_VERSION,
+        interface_version=(
+            "pump-station.actor.temporal-evidence.v1"
+            if temporal_evidence
+            else PUMP_STATION_ACTOR_INTERFACE_VERSION
+        ),
         observation_schema_ref=(
             "pump-station.actor-view.v3"
             if evidence_health
@@ -155,12 +187,95 @@ def pump_station_actor_capabilities(
     )
 
 
+def pump_station_evidence_reliance_refs(
+    request: WorldActorActionRequest,
+) -> tuple[str, ...]:
+    """Return validated explicit evidence reliance from one temporal world action."""
+
+    raw = request.arguments.get("relied_on_evidence_refs")
+    if raw is None:
+        return ()
+    try:
+        reliance = _EvidenceRelianceArguments.model_validate(
+            {"relied_on_evidence_refs": raw}
+        )
+    except ValidationError as exc:
+        raise WorldInterfaceError(
+            "actor-action-arguments-invalid",
+            str(exc),
+        ) from exc
+    if len(reliance.relied_on_evidence_refs) != len(
+        set(reliance.relied_on_evidence_refs)
+    ):
+        raise WorldInterfaceError(
+            "actor-action-arguments-invalid",
+            "relied-on evidence references must be distinct",
+        )
+    return tuple(reliance.relied_on_evidence_refs)
+
+
+def pump_station_request_without_evidence_reliance(
+    request: WorldActorActionRequest,
+) -> WorldActorActionRequest:
+    """Return the unchanged world-proposal fields without temporal reliance metadata."""
+
+    return WorldActorActionRequest(
+        request_id=request.request_id,
+        action_name=request.action_name,
+        binding=request.binding,
+        arguments={
+            key: value
+            for key, value in request.arguments.items()
+            if key != "relied_on_evidence_refs"
+        },
+    )
+
+
+def _actor_input_schema(
+    name: str,
+    *,
+    temporal_evidence: bool,
+) -> dict[str, JsonValue]:
+    schema = cast(dict[str, JsonValue], _ARGUMENT_MODELS[name].model_json_schema())
+    if not temporal_evidence or name in PUMP_STATION_TEMPORAL_EVIDENCE_ACTION_NAMES:
+        return schema
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        raise TypeError("actor argument schema lacks properties")
+    properties["relied_on_evidence_refs"] = {
+        "default": [],
+        "items": {"type": "string"},
+        "title": "Relied On Evidence Refs",
+        "type": "array",
+        "uniqueItems": True,
+    }
+    return schema
+
+
+def pump_station_temporal_access_arguments(
+    request: WorldActorActionRequest,
+) -> TemporalEvidenceSearchArguments | TemporalEvidenceFetchArguments:
+    """Validate one temporal access request without creating a world proposal."""
+
+    try:
+        if request.action_name == "search_evidence":
+            return TemporalEvidenceSearchArguments.model_validate(request.arguments)
+        if request.action_name == "fetch_evidence":
+            return TemporalEvidenceFetchArguments.model_validate(request.arguments)
+        raise WorldInterfaceError("actor-action-unavailable", request.action_name)
+    except ValidationError as exc:
+        raise WorldInterfaceError(
+            "actor-action-arguments-invalid",
+            str(exc),
+        ) from exc
+
+
 def pump_station_proposal_from_actor_request(
     request: WorldActorActionRequest,
 ) -> PumpStationProposal:
     """Validate task-owned fields and create the one requested typed proposal."""
 
-    model_type = _ARGUMENT_MODELS.get(request.action_name)
+    model_type = _PROPOSAL_ARGUMENT_MODELS.get(request.action_name)
     if model_type is None:
         raise WorldInterfaceError("actor-action-unavailable", request.action_name)
     try:

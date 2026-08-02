@@ -14,7 +14,11 @@ from aec_bench.contracts.evaluation_result import (
 )
 from aec_bench.contracts.trial_record import (
     ArtifactReference,
+    TemporalWorldExecutionRecord,
+    TemporalWorldTrialProvenance,
     WorldExecutionRecord,
+    WorldTemporalEvidenceExecution,
+    WorldTemporalEvidenceProvenance,
     WorldTrialProvenance,
 )
 from aec_bench.contracts.world_session import (
@@ -49,6 +53,7 @@ _REQUEST_NAME = "world-session-request.json"
 _RESULT_NAME = "world-session-result.json"
 _INVENTORY_NAME = "artifact-inventory.json"
 _VERIFICATION_NAME = "verification-report.json"
+_TEMPORAL_VERIFICATION_NAME = "temporal-verification-report.json"
 
 
 @dataclass(frozen=True)
@@ -184,27 +189,41 @@ def _load_stewardship_evidence(
         package_root=bridge.package_root,
         imported_artifact_sha256=tuple(sorted({artifact.sha256 for artifact in artifacts})),
     )
-    execution = WorldExecutionRecord(
-        execution_kind=PUMP_STATION_HARBOR_EXECUTION_KIND,
-        session_id=request.session_id,
-        task_world_id=result.task_world_id,
-        agent_tenure_id=request.agent_tenure_id,
-        adapter="tool_loop",
-        resolved_model=model,
-        status="completed",
-        start_snapshot=start_snapshot,
-        end_snapshot=end_snapshot,
-        transition_count=transition_count,
-        tool_names=bridge.allowed_tools,
-    )
-    provenance = WorldTrialProvenance(
-        world_session_request=references[_REQUEST_NAME],
-        world_session_result=references[_RESULT_NAME],
-        artifact_inventory=references[_INVENTORY_NAME],
-        export_manifest=references["export_manifest"],
-        package_manifest=references["package_manifest"],
-        verification_report=references[_VERIFICATION_NAME],
-    )
+    execution_fields = {
+        "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
+        "session_id": request.session_id,
+        "task_world_id": result.task_world_id,
+        "agent_tenure_id": request.agent_tenure_id,
+        "adapter": "tool_loop",
+        "resolved_model": model,
+        "status": "completed",
+        "start_snapshot": start_snapshot,
+        "end_snapshot": end_snapshot,
+        "transition_count": transition_count,
+        "tool_names": bridge.allowed_tools,
+    }
+    provenance_fields = {
+        "world_session_request": references[_REQUEST_NAME],
+        "world_session_result": references[_RESULT_NAME],
+        "artifact_inventory": references[_INVENTORY_NAME],
+        "export_manifest": references["export_manifest"],
+        "package_manifest": references["package_manifest"],
+        "verification_report": references[_VERIFICATION_NAME],
+    }
+    if bridge.temporal_evidence:
+        temporal_execution, temporal_provenance = _temporal_trial_evidence(
+            inventory=inventory,
+            references=references,
+        )
+        execution: WorldExecutionRecord = TemporalWorldExecutionRecord.model_validate(
+            {**execution_fields, "temporal_evidence": temporal_execution}
+        )
+        provenance: WorldTrialProvenance = TemporalWorldTrialProvenance.model_validate(
+            {**provenance_fields, "temporal_evidence": temporal_provenance}
+        )
+    else:
+        execution = WorldExecutionRecord.model_validate(execution_fields)
+        provenance = WorldTrialProvenance.model_validate(provenance_fields)
     return StewardshipHarborImportEvidence(
         world_execution=execution,
         world_provenance=provenance,
@@ -251,6 +270,7 @@ def _artifact_evidence(
         _REQUEST_NAME: "world-session-request",
         _RESULT_NAME: "world-session-result",
         _VERIFICATION_NAME: "world-session-verification",
+        _TEMPORAL_VERIFICATION_NAME: "world-temporal-evidence-verification",
     }
     references: dict[str, ArtifactReference] = {}
     artifacts: list[ArtifactReference] = []
@@ -276,6 +296,8 @@ def _artifact_evidence(
     for required_name in (_REQUEST_NAME, _RESULT_NAME, _VERIFICATION_NAME):
         if required_name not in references:
             raise HarborImportError(f"world-session artifact inventory lacks {required_name}")
+    if bridge.temporal_evidence and _TEMPORAL_VERIFICATION_NAME not in references:
+        raise HarborImportError("world-session artifact inventory lacks temporal verification")
 
     inventory_reference = artifact_reference(
         kind="world-session-inventory",
@@ -309,6 +331,46 @@ def _artifact_evidence(
     references["export_manifest"] = export_reference
     references["package_manifest"] = package_reference
     return tuple(artifacts), references
+
+
+def _temporal_trial_evidence(
+    *,
+    inventory: dict[str, Any],
+    references: dict[str, ArtifactReference],
+) -> tuple[WorldTemporalEvidenceExecution, WorldTemporalEvidenceProvenance]:
+    temporal = _mapping(
+        inventory.get("temporal_evidence"),
+        "temporal evidence inventory",
+    )
+    execution = WorldTemporalEvidenceExecution.model_validate(temporal)
+    fixed_paths = {
+        "capability": "world-run/temporal-evidence/capability.json",
+        "corpus_manifest": "world-run/temporal-evidence/corpus/manifest.json",
+        "lineage_manifest": "world-run/temporal-evidence/corpus/lineage.json",
+        "availability_schedule": "world-run/temporal-evidence/corpus/availability.json",
+        "retrieval_policy": "world-run/temporal-evidence/policies/retrieval.json",
+        "access_policy": "world-run/temporal-evidence/policies/access.json",
+        "branch_policy": "world-run/temporal-evidence/policies/branch.json",
+        "cost_policy": "world-run/temporal-evidence/policies/cost.json",
+    }
+    missing = tuple(path for path in fixed_paths.values() if path not in references)
+    if missing:
+        raise HarborImportError(
+            "temporal evidence inventory lacks required authority artifacts"
+        )
+    fixed_references = {name: references[path] for name, path in fixed_paths.items()}
+    excluded = {*fixed_paths.values(), _TEMPORAL_VERIFICATION_NAME}
+    ledger_artifacts = tuple(
+        references[path]
+        for path in sorted(references)
+        if path.startswith("world-run/temporal-evidence/") and path not in excluded
+    )
+    provenance = WorldTemporalEvidenceProvenance(
+        **fixed_references,
+        verification_report=references[_TEMPORAL_VERIFICATION_NAME],
+        ledger_artifacts=ledger_artifacts,
+    )
+    return execution, provenance
 
 
 def _read_trial_json(

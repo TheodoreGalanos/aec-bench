@@ -1,0 +1,77 @@
+experiments:
+  - id: E001
+    verifies: [C001]
+    purpose: Falsify corpus identity, rights, lineage, and immutable reload rules.
+    setup: The certified pump-station package and a real filesystem corpus repository.
+    procedure:
+      - Publish and reload one valid corpus.
+      - Attempt publication with missing, drifted, cite-only, excluded, and sealed content cases.
+      - Compare canonical identities and persisted bytes.
+    metrics:
+      - Valid publication and exact reload.
+      - Closed rejection for every prohibited case.
+    evidence: [EV001]
+    exploratory: false
+    domain: {}
+  - id: E002
+    verifies: [C002]
+    purpose: Falsify future leakage, branch contamination, negative-result leakage, replay, ranking, and opaque-reference safety.
+    setup: The production deterministic corpus and gateway with declared actor, branch, time, policy, and budget context.
+    procedure:
+      - Search before and after evidence availability.
+      - Add hidden evidence and compare visible results.
+      - Search from sibling branches and fetch issued and unissued references.
+      - Repeat an identical declared access.
+    metrics:
+      - Canonical visible result identity.
+      - No hidden-frontier effect.
+      - Closed reference enforcement.
+    evidence: [EV001]
+    exploratory: false
+    domain: {}
+  - id: E003
+    verifies: [C003]
+    purpose: Falsify atomic publication, retry, recovery, budget conservation, resume, and handover.
+    setup: A durable enabled pump-station session with injected publication interruptions.
+    procedure:
+      - Interrupt each publication boundary.
+      - Resume and repeat the same access request.
+      - Snapshot, resume, and hand over actor-visible retrieval state.
+      - Compare terminal artifacts and budget vectors.
+    metrics:
+      - One terminal access per request identity.
+      - Exact before, consumed, and after budget conservation.
+      - No private data in handover.
+    evidence: [EV001]
+    exploratory: false
+    domain: {}
+  - id: E004
+    verifies: [C004]
+    purpose: Falsify information-set and evidence-reliance verification.
+    setup: A production session that searches, fetches, and then commits a real task action.
+    procedure:
+      - Bind visible access events into the current information set.
+      - Commit actions with valid, missing, stale, and unobserved evidence references.
+      - Reconstruct evidence sets from immutable artifacts.
+    metrics:
+      - Exact information-set identity.
+      - Correct accessible, observed, relied-on, recorded, and accepted sets.
+    evidence: [EV001]
+    exploratory: false
+    domain: {}
+  - id: E005
+    verifies: [C005]
+    purpose: Falsify direct, installed-interface, Harbor, TrialRecord, and capability-disabled parity.
+    setup: Production local execution surfaces and the deterministic temporal corpus.
+    procedure:
+      - Run the complete direct journey.
+      - Run the installed interface and local Harbor journey.
+      - Import and strictly reload TrialRecord evidence.
+      - Run capability-disabled stewardship regression.
+    metrics:
+      - Equivalent semantic results across enabled paths.
+      - No temporal surface in disabled paths.
+      - Offline verification and strict reload succeed.
+    evidence: [EV001]
+    exploratory: false
+    domain: {}
