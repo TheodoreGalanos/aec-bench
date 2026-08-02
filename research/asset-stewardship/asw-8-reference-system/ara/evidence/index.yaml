@@ -1,0 +1,19 @@
+evidence:
+  - id: EV001
+    kind: note
+    path: evidence/code-grounding.md
+    description: Source audit of the current v1 profile, physical records, work rules, views, persistence, replay, Harbor, evaluation, and rollout boundaries.
+    source: Commit f73c692e606c2319d143bcd27cb4aafdd8d38571, tree a960c51fb12621be88aaa368880f0aba8bdd773c, after ASW-7 and the time-presentation follow-up.
+    supports: [C001, C004]
+    produced_by: E001
+    exact_values_required: false
+    domain: {}
+  - id: EV002
+    kind: note
+    path: evidence/acceptance-plan.md
+    description: Planned focused tests for v2 identity, coupled operation, resources, work generation, conservation, compatibility, transport, and the complete journey.
+    source: ASW-8-RS1 detailed design.
+    supports: [C002, C003, C004, C005]
+    produced_by: null
+    exact_values_required: false
+    domain: {}
