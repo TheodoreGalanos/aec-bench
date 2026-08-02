@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import copy
-import fcntl
 import hashlib
 import json
 import os
@@ -18,6 +17,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from aec_bench.ledger.durability import fsync_directory, fsync_tree, mkdir_durable
+from aec_bench.ledger.local_lock import exclusive_local_file_lock
 from aec_bench.meta_harness.evidence_lifecycle_episode import (
     LifecycleEpisodeContext,
     LifecycleEpisodeEnvironment,
@@ -2175,16 +2175,14 @@ def _migrate_legacy_state(
 
 @contextmanager
 def _lifecycle_state_lock(run_dir: Path) -> Iterator[None]:
-    lock_dir = run_dir / ".locks"
-    mkdir_durable(lock_dir)
-    lock_path = lock_dir / "lifecycle-state.lock"
-    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
-    try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+    with exclusive_local_file_lock(
+        run_dir,
+        ".locks/lifecycle-state.lock",
+        error_factory=lambda error: EvidenceLifecycleError(
+            f"lifecycle state lock is unsafe: {error}",
+        ),
+    ):
         yield
-    finally:
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
-        os.close(descriptor)
 
 
 def _spec_sha256(spec: EvidenceLifecycleSpec) -> str:
