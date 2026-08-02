@@ -392,6 +392,13 @@ _EXPORTS_BY_MODULE: dict[str, tuple[str, ...]] = {
         "WorldSessionRequest",
         "WorldSessionResult",
     ),
+    "aec_bench.contracts.continual_world": (
+        "CONTINUAL_WORLD_DEFINITION_SCHEMA_VERSION",
+        "CONTINUAL_WORLD_PROFILE_SCHEMA_VERSION",
+        "ContinualWorldDefinitionRef",
+        "ContinualWorldDefinitionSpec",
+        "ContinualWorldProfileRef",
+    ),
     "aec_bench.contracts.world_interface": (
         "WORLD_ACTOR_INTERFACE_SCHEMA_VERSION",
         "WORLD_CONTROL_INTERFACE_SCHEMA_VERSION",
