@@ -16,6 +16,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
 
 EXPECTED_PACKAGE_CONTENT_ID = "642da8bdfad63d7324e0c5886f1f8f3866c9a6bd25f165fa2a5937d68e8a5e16"
 EXPECTED_MANIFEST_CONTENT_ID = "ab9a6b91afb0aff6229fafd10b6d748e873904cf8f43c3d195f56f57775209b8"
+REFERENCE_PROFILE_V1 = "AU-NSW-LH-SYN-SPS-v1"
+REFERENCE_PROFILE_V2 = "AU-NSW-LH-SYN-SPS-v2"
 REFERENCE_PACKAGE_FILE_NAMES = (
     "physical-member.json",
     "physical-reference-checks.json",
@@ -23,7 +25,7 @@ REFERENCE_PACKAGE_FILE_NAMES = (
     "public-profile.json",
 )
 
-_PROFILE_ID = "AU-NSW-LH-SYN-SPS-v1"
+_PROFILE_ID = REFERENCE_PROFILE_V1
 _GENERATION_ID = "738bc2b31f40ae7ea7831a54826c10c7e1f8084e64a6c0e0883bc6290aa84c8e"
 _MEMBER_CONTENT_ID = "55c1c11746ec59bac6632a96de1c2c97eb26b9b6642908ba23c187f0a8509133"
 _MANIFEST_SPECIFICATION_ID = "asw-0b5.promotion-manifest-specification.v1"
@@ -146,9 +148,13 @@ def _fail(code: str, detail: str) -> NoReturn:
     raise ReferencePackageError(code, detail)
 
 
-def bundled_reference_package_root() -> Path:
-    """Return the production-owned four-file package directory."""
-    return Path(__file__).with_name("reference_package")
+def bundled_reference_package_root(*, profile_id: str = REFERENCE_PROFILE_V1) -> Path:
+    """Return the production-owned package directory for one registered profile."""
+    if profile_id == REFERENCE_PROFILE_V1:
+        return Path(__file__).with_name("reference_package")
+    if profile_id == REFERENCE_PROFILE_V2:
+        return Path(__file__).with_name("reference_packages") / "au-nsw-lh-syn-sps-v2"
+    _fail("unknown-reference-profile", profile_id)
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -404,8 +410,24 @@ def _validate_exact_file_identities(raw_files: dict[str, bytes]) -> None:
         _fail("manifest-identity", "manifest content identity differs")
 
 
-def load_reference_package(package_root: Path | None = None) -> ReferencePackage:
-    """Load the exact certified package or fail closed on any drift."""
+def load_reference_package(
+    package_root: Path | None = None,
+    *,
+    profile_id: str = REFERENCE_PROFILE_V1,
+) -> ReferencePackage:
+    """Load one exact certified registered package or fail closed on any drift."""
+    if profile_id == REFERENCE_PROFILE_V2:
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_reader_v2 import (
+            load_v2_reference_package,
+        )
+
+        return load_v2_reference_package(
+            package_root
+            if package_root is not None
+            else bundled_reference_package_root(profile_id=REFERENCE_PROFILE_V2)
+        )
+    if profile_id != REFERENCE_PROFILE_V1:
+        _fail("unknown-reference-profile", profile_id)
     root = package_root if package_root is not None else bundled_reference_package_root()
     files = _safe_package_files(Path(root))
     documents: dict[str, MutableJsonObject] = {}

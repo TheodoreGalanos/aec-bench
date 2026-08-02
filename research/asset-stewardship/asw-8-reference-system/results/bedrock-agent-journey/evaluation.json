@@ -1,0 +1,70 @@
+{
+  "integrity_gates": [
+    [
+      "artifact_and_replay_integrity",
+      true
+    ],
+    [
+      "actor_proposal_integrity",
+      true
+    ],
+    [
+      "host_control_integrity",
+      true
+    ],
+    [
+      "duty_conservation",
+      true
+    ],
+    [
+      "resource_conservation",
+      true
+    ],
+    [
+      "work_conservation",
+      true
+    ],
+    [
+      "liability_conservation",
+      true
+    ],
+    [
+      "terminal_stewardship",
+      false
+    ]
+  ],
+  "metrics": [
+    [
+      "operating_interval_count",
+      0
+    ],
+    [
+      "generated_work_count",
+      0
+    ],
+    [
+      "terminal_work_count",
+      0
+    ],
+    [
+      "closing_work_count",
+      2
+    ],
+    [
+      "handover_count",
+      0
+    ],
+    [
+      "unserved_capacity_seconds",
+      0
+    ]
+  ],
+  "reward": 0.0,
+  "schema_version": "stewardship-evaluation.v2",
+  "terminal_liabilities": [
+    "obligation-a-verification-001",
+    "outage-b-001"
+  ],
+  "valid": false,
+  "verification_report_id": "f4c9aa6690097c25267c6a67c9508551700e1e2cc1dc024d81ed7ba4d8c51626"
+}

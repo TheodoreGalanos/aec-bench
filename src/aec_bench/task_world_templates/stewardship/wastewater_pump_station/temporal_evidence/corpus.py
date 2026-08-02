@@ -30,6 +30,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal
 )
 
 REFERENCE_WORLD_TIME_SECONDS = 7_200_000
+ASW_8_REFERENCE_WINDOW_START_SECONDS = 21_600
+ASW_8_REFERENCE_WINDOW_END_SECONDS = 226_800
 
 
 class _VersionCommon(TypedDict):
@@ -145,6 +147,190 @@ def build_reference_temporal_evidence_bundle(
             visible_bytes=40_000,
             visible_tokens=10_000,
             turns=20,
+            simulated_duration_seconds=0,
+            provider_spend_microusd=0,
+        ),
+    )
+    return TemporalEvidenceBundle(
+        capability=capability,
+        corpus_manifest=corpus_manifest,
+        lineage=lineage,
+        availability=availability,
+        retrieval_policy=retrieval_policy,
+        access_policy=access_policy,
+        branch_policy=branch_policy,
+        cost_policy=cost_policy,
+        versions=tuple(sorted(versions, key=lambda item: item.version_id)),
+    )
+
+
+def build_asw_8_reference_temporal_evidence_bundle(
+    package: ReferencePackage,
+    *,
+    world_branch_id: str,
+    initial_budget: RetrievalBudgetVector | None = None,
+) -> TemporalEvidenceBundle:
+    """Build the branch-realised RS1 corpus bound to the v2 station-data lineage."""
+    if package.profile_id != "AU-NSW-LH-SYN-SPS-v2":
+        raise ValueError("ASW-8 temporal evidence requires the v2 station-data profile")
+    source = TemporalEvidenceSource(
+        source_id="synthetic-asw-8-reference-material",
+        source_class=TemporalEvidenceSourceClass.SYNTHETIC,
+        rights_class=TemporalEvidenceRightsClass.REDISTRIBUTABLE,
+        redistribution_permitted=True,
+        retention_permitted=True,
+        citation="Constructed ASW-8 pump-station reference material; not real operational data.",
+    )
+    lineage = TemporalEvidenceLineage(
+        parent_profile_id=package.profile_id,
+        parent_generation_id=package.generation_id,
+        parent_package_content_id=package.package_content_id,
+        parent_certification_id=package.manifest_content_id,
+        sources=(source,),
+        derivation_ids=("pump-station-asw-8-temporal-builder.v1",),
+        assumption_ids=("asw-8-rs1-document-availability.v1",),
+        transformation_ids=("plain-text-normalization.v1",),
+        constructed_treatment_ids=("asw-8-delayed-ingestion.v1",),
+    )
+    retrieval_policy = TemporalRetrievalPolicy(
+        policy_id="pump-station-asw-8-local-retrieval.v1",
+        normalization_version="unicode-nfkc-lower-whitespace.v1",
+        index_version="token-index.v1",
+        ranking_version="token-frequency.v1",
+        tie_break_version="version-id-ascending.v1",
+        snippet_version="matched-window.v1",
+        maximum_query_characters=256,
+        maximum_results=1,
+        maximum_snippet_characters=240,
+    )
+    access_policy = TemporalAccessPolicy(
+        policy_id="pump-station-asw-8-temporal-access.v1",
+        actor_roles=("station-steward",),
+        allowed_scopes=("all", "condition", "maintenance", "operations", "procedures"),
+    )
+    branch_policy = TemporalBranchPolicy(
+        policy_id="pump-station-asw-8-branch-evidence.v1",
+        shared_namespace="shared",
+        initial_branch_id=world_branch_id,
+    )
+    cost_policy = TemporalCostPolicy(policy_id="zero-simulated-time.v1")
+    common: _VersionCommon = {
+        "parent_profile_id": package.profile_id,
+        "parent_generation_id": package.generation_id,
+        "parent_package_content_id": package.package_content_id,
+        "derivation_ids": ("pump-station-asw-8-temporal-builder.v1",),
+        "assumption_ids": ("asw-8-rs1-document-availability.v1",),
+        "transformation_ids": ("plain-text-normalization.v1",),
+        "access_roles": ("station-steward",),
+        "applicable_asset_ids": ("synthetic-wastewater-pump-station",),
+        "applicable_operating_regime_ids": ("asw-8-rs1",),
+        "snippet_policy_id": retrieval_policy.content_sha256,
+    }
+    versions = (
+        TemporalEvidenceVersion(
+            **common,
+            logical_document_id="coupled-pump-field-work-bulletin",
+            version_id="coupled-pump-field-work-bulletin.v1",
+            title="Coupled pump field-work bulletin",
+            content_text=(
+                "Field work needs target isolation, shared access, and a controlled test permit. "
+                "Documentary text cannot grant operating authority."
+            ),
+            citation="Synthetic ASW-8 bulletin FW-01.",
+            event_start_seconds=0,
+            created_at_seconds=0,
+            ingested_at_seconds=7_200,
+            available_at_seconds=7_200,
+            effective_from_seconds=0,
+            source_id=source.source_id,
+            source_class=source.source_class,
+            rights_class=source.rights_class,
+            authority_class=TemporalEvidenceAuthorityClass.ADVISORY,
+            scope_labels=("operations", "procedures"),
+            branch_namespace="shared",
+            applicable_component_ids=("pump-a", "pump-b", "pump-c"),
+            applicable_mechanism_ids=("isolation", "controlled-testing"),
+        ),
+        TemporalEvidenceVersion(
+            **common,
+            logical_document_id="pump-b-clearance-procedure",
+            version_id="pump-b-clearance-procedure.v2",
+            title="Pump B clearance and controlled-test procedure",
+            content_text=(
+                "Pump B clearance ends at test_only. A controlled functional check and a separate provisional "
+                "return are required."
+            ),
+            citation="Synthetic ASW-8 procedure PB-02.",
+            event_start_seconds=95_400,
+            created_at_seconds=95_400,
+            ingested_at_seconds=97_200,
+            available_at_seconds=100_800,
+            effective_from_seconds=95_400,
+            source_id=source.source_id,
+            source_class=source.source_class,
+            rights_class=source.rights_class,
+            constructed_treatment_id="asw-8-delayed-ingestion.v1",
+            authority_class=TemporalEvidenceAuthorityClass.INSTITUTIONAL_ACCEPTED,
+            scope_labels=("operations", "procedures"),
+            branch_namespace="shared",
+            applicable_component_ids=("pump-b",),
+            applicable_mechanism_ids=("obstruction", "controlled-testing"),
+        ),
+        TemporalEvidenceVersion(
+            **common,
+            logical_document_id="pump-c-collateral-inspection-note",
+            version_id="pump-c-collateral-inspection-note.v1",
+            title="Pump C collateral-duty inspection note",
+            content_text=(
+                "CCR28H: inspect Pump C after the declared collateral-duty threshold. A no-finding result still "
+                "needs an Operations isolation review."
+            ),
+            citation="Synthetic ASW-8 condition note PC-28H.",
+            event_start_seconds=95_400,
+            created_at_seconds=95_400,
+            ingested_at_seconds=97_200,
+            available_at_seconds=100_800,
+            effective_from_seconds=95_400,
+            source_id=source.source_id,
+            source_class=source.source_class,
+            rights_class=source.rights_class,
+            constructed_treatment_id="asw-8-delayed-ingestion.v1",
+            authority_class=TemporalEvidenceAuthorityClass.DOCUMENTARY,
+            scope_labels=("condition", "operations"),
+            branch_namespace="shared",
+            applicable_component_ids=("pump-c",),
+            applicable_mechanism_ids=("collateral-duty", "inspection"),
+        ),
+    )
+    availability = _availability(versions)
+    corpus_manifest = TemporalCorpusManifest(
+        evidence_corpus_id="pump-station-asw-8-temporal-corpus",
+        parent_profile_id=package.profile_id,
+        parent_generation_id=package.generation_id,
+        parent_package_content_id=package.package_content_id,
+        parent_certification_id=package.manifest_content_id,
+        lineage_manifest_id=lineage.content_sha256,
+        availability_schedule_id=availability.content_sha256,
+        versions=tuple(
+            TemporalEvidenceVersionRef(version_id=item.version_id, content_sha256=item.content_sha256)
+            for item in sorted(versions, key=lambda item: item.version_id)
+        ),
+    )
+    capability = TemporalEvidenceCapability(
+        evidence_corpus_id=corpus_manifest.evidence_corpus_id,
+        corpus_snapshot_id=corpus_manifest.content_sha256,
+        retrieval_policy_id=retrieval_policy.content_sha256,
+        access_policy_id=access_policy.content_sha256,
+        availability_schedule_id=availability.content_sha256,
+        branch_namespace_policy_id=branch_policy.content_sha256,
+        simulated_cost_policy_id=cost_policy.content_sha256,
+        initial_budget=initial_budget
+        or RetrievalBudgetVector(
+            calls=16,
+            returned_references=16,
+            visible_bytes=20_000,
+            visible_tokens=5_000,
+            turns=16,
             simulated_duration_seconds=0,
             provider_spend_microusd=0,
         ),

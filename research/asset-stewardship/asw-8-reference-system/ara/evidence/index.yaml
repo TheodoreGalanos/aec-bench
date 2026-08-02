@@ -17,3 +17,21 @@ evidence:
     produced_by: null
     exact_values_required: false
     domain: {}
+  - id: EV003
+    kind: test-result
+    path: evidence/implementation-evidence.md
+    description: Focused provider-free ASW-8 implementation, certification, compatibility, quality, and exit-gate evidence.
+    source: ASW-8 implementation branch, verified 2026-08-02 before the separately authorised model journey.
+    supports: [C002, C003, C004, C005, C006]
+    produced_by: E005
+    exact_values_required: true
+    domain: {}
+  - id: EV004
+    kind: model-result
+    path: evidence/agent-journey-evidence.md
+    description: Authorised one-action Bedrock journey through projection v5 with token, binding, replay, evaluation, and leakage evidence.
+    source: ASW-8 Bedrock agent journey completed 2026-08-02.
+    supports: [C007]
+    produced_by: E006
+    exact_values_required: true
+    domain: {}

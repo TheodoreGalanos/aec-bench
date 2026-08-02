@@ -5,15 +5,15 @@
 
 | Field | Value |
 | --- | --- |
-| Status | ASW-0 through ASW-7 complete; the ASW-8 detailed design is accepted and implementation has not started |
+| Status | ASW-0 through ASW-8 complete on the ASW-8 implementation branch |
 | Date | 2026-08-02 |
-| Revision | `ASW-PRD-Q-2026-08-02` |
+| Revision | `ASW-PRD-R-2026-08-02` |
 | Design revision | Semantic decisions change through reviewed document revisions; this PRD does not require a self-referential or hand-authored content hash |
 | Target repository | `aec-bench` |
-| Current production basis | `main` after the ASW-7 merge and time-presentation follow-up, `f73c692e606c2319d143bcd27cb4aafdd8d38571` |
-| Live implementation status | The certified world, production runtime, falsification stages, direct and Harbor execution, immutable evaluation, first confirmatory study, rich work processes, separate actor and host-control interfaces, local evidence health, maintenance closeout review, temporal retrieval, and state-addressable rollout control are complete |
+| Current production basis | ASW-8 implementation branch from `main` after the ASW-7 merge and time-presentation follow-up |
+| Live implementation status | The certified duplex world and coupled three-pump successor, production runtime, direct and Harbor execution, immutable evaluation, first confirmatory study, rich work processes, separate actor and host-control interfaces, local evidence health, maintenance closeout review, temporal retrieval, state-addressable rollout control, and ASW-8 conservation checks are complete |
 | Initial programme boundary | ASW-0 through ASW-4 |
-| Implementation status | ASW-7 passed its focused provider-free gate. ASW-8 now has an accepted code-grounded reference-system design, but no ASW-8 implementation or result is claimed |
+| Implementation status | ASW-8 passed its focused provider-free mechanism gate and its separately approved bounded Bedrock behaviour check; publication through its pull request remains |
 | Working programme name | Asset Stewardship Worlds |
 | First study | Obligation continuity under time and handover |
 
@@ -2014,7 +2014,7 @@ closed task-local descriptor registry owns these scenario artifacts and rejects
 caller overrides. Legacy manifest, corpus builder, and temporal-interface
 identities stay unchanged.
 
-**Planned capability:**
+**Implemented capability:**
 
 - assign one or two eligible pumps through one typed actor request while
   `continue_operation` remains the only actor time-advance action;
@@ -2059,13 +2059,13 @@ latent health, private ASW-7 treatment facts, sibling branches, hidden future
 events, verifier-only expected balances, or counterfactual outcomes. Planned
 outage admission must not leak a hidden future event through its decision.
 
-**Implementation rule:** complete ASW-8 as one dependency-ordered plan, not as
-new freeze stages. Use focused unit, integration, and end-to-end tests for each
-affected path. The cumulative provider-free case is the complete Day 0 to Day
-2 reference journey through installed actor tools and local Harbor. One later
-bounded real-agent journey checks behaviour against the same closed tools; it
-does not replace the provider-free mechanism gate or become a new provider
-study.
+**Implementation result:** ASW-8 was completed as one dependency-ordered plan,
+with focused unit, integration, and end-to-end tests. The cumulative
+provider-free case executes the complete Day 0 to Day 2 reference journey
+through installed actor tools and local Harbor. The separately approved
+four-turn Bedrock check completed in three turns and submitted one valid,
+view-bound actor proposal. It remains behaviour evidence only and does not
+replace the provider-free mechanism gate.
 
 **Exclusions:** no second station, network, fleet, combined pump hydraulics,
 economic dispatch, extra crew, individual roster, supplier or warehouse,
@@ -2332,18 +2332,16 @@ An external engine-research lane may run beside ASW-0A, but it converges only at
 | 2026-08-02 | Accept the ASW-6A-R mechanism and retain its negative real-agent result. | Provider-free execution, persistence, redaction, Harbor parity, and independent verification passed. The agent found the planted issue but failed three exact report fields. No retry or verifier change is permitted after this observed result. |
 | 2026-08-02 | Approve and accept the ASW-6A-R hybrid version 2 review contract. | Process-required work now uses public action codes, while expert rationale, related-record context, and additional recommendations remain written language. Direct impact stays strict, decisive sources are required, extra visible sources are permitted, version 1 evidence remains readable, and no provider call was made. |
 | 2026-08-02 | Accept `ASW-8-RS1` as the detailed coupled-asset reference design. | One three-pump station is sufficient to exercise general duty assignment, shared resources, outage capacity, collateral exposure, generated work, and four conservation reports without adding a network, shared runtime, or combined hydraulic claim. |
+| 2026-08-02 | Accept the ASW-8 implementation result on its feature branch. | The promoted v2 station, coupled v4 world, projection v5, durable actor proposals, host controls, temporal evidence, rollout isolation, direct and Harbor parity, TrialRecord import, and four conservation reports passed focused checks; the approved one-action Bedrock run also completed without private leakage. |
 
 ## 24. Immediate next action
 
-The next planned stage is to implement the accepted
-[ASW-8 reference-system design](asw-8-reference-system-design.md) as one
-dependency-ordered stage. Begin with focused failing tests for v1 byte
-preservation, strict v2 station-data identity, three-pump topology, and the
-separate v4 durable-state and v5 actor-view routes. Then follow the design's
-implementation order through the complete provider-free reference journey.
+Publish the completed ASW-8 implementation through its pull request. The next
+conditional stage is ASW-9, governed institutional adaptation. Before
+implementation, define the smallest authorised change case, its evidence and
+authority boundary, future-only effect, selective propagation, and regression
+checks against controlled failure modes.
 
-Do not split this work into repeated freezes. Do not run the full repository
-suite after each step. Do not begin shared extraction or broad phase-name and
-test cleanup during ASW-8. One later real-agent journey needs a separate bounded
-provider authority, but it is a behaviour check and is not required to prove
-the provider-free mechanism.
+Do not start the post-development shared extraction, phase-name cleanup, or
+phase-specific test cleanup as part of ASW-9 without a separate classification
+of general contracts, task templates, and research-only support.

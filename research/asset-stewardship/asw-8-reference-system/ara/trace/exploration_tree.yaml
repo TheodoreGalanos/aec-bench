@@ -142,11 +142,28 @@ nodes:
   - id: N006
     type: experiment
     summary: Implement and run the focused ASW-8 acceptance plan.
-    children: []
+    children: [N016]
     also_depends_on: []
     claims_touched: [C002, C003, C004, C005, C006]
-    provenance: proposed
+    provenance: ai_executed
     payload:
       experiment_ids: [E002, E003, E004, E005]
-      status: planned
+      status: provider_free_passed
+      evidence_id: EV003
+    domain: {}
+  - id: N016
+    type: experiment
+    summary: Run one separately authorised model against projection v5 and the closed tools.
+    children: []
+    also_depends_on: [N006]
+    claims_touched: [C007]
+    provenance: ai_executed
+    payload:
+      status: completed
+      maximum_model_turns: 4
+      turns_used: 3
+      input_tokens: 14154
+      output_tokens: 1464
+      evidence_id: EV004
+      purpose: Behaviour and usability check only.
     domain: {}

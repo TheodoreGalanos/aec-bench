@@ -65,6 +65,24 @@ _V3_FIELD_EXCLUSIONS = {
     },
 }
 _V4_FIELD_EXCLUSIONS = {
+    "PumpStationStewardshipState": {
+        "assignment",
+        "service_schedule",
+        "baseline_schedule",
+        "disclosed_through_calendar_seconds",
+        "backlog",
+        "generation_records",
+        "outage_episodes",
+        "operating_intervals",
+        "collateral_runtime",
+        "accepted_evidence_ids",
+        "active_restriction_ids",
+        "active_liability_ids",
+        "created_liability_ids",
+        "discharged_liability_ids",
+        "pending_start_pump_ids",
+        "event_effect_ids",
+    },
     "PumpStationActorView": {"time_context"},
 }
 
@@ -86,6 +104,8 @@ def _record_profile(value: object) -> str:
     type_name = type(value).__name__
     if type_name == "PumpStationStewardshipState":
         version = str(getattr(value, "state_version", ""))
+        if version.endswith(".v4"):
+            return _V4
         if version.endswith(".v3"):
             return _V3
         return _V2 if version.endswith(".v2") else _V1
@@ -120,6 +140,8 @@ def _document_profile(value: object) -> str:
             return _V4
         if type_name in {"PumpStationStewardshipState", "PumpStationCurrentStateView"}:
             version = str(value.get("state_version", ""))
+            if version.endswith(".v4"):
+                return _V4
             if version.endswith(".v3"):
                 return _V3
             return _V2 if version.endswith(".v2") else _V1
@@ -239,6 +261,51 @@ def _decode_union(value: object, expected: object, profile: str) -> object:
     raise AssertionError("unreachable")
 
 
+def _profile_selected_type_hints(expected: type[Any], profile: str) -> dict[str, object]:
+    """Resolve generic state fields to the record types selected by its profile."""
+    type_hints = cast(dict[str, object], get_type_hints(expected))
+    if expected.__name__ != "PumpStationStewardshipState":
+        return type_hints
+    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
+        PumpStationCoupledProcess,
+        PumpStationPoolReservation,
+        PumpStationResourceState,
+    )
+    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
+        PumpStationCoupledEnvironment,
+        PumpStationCoupledPhysicalState,
+        PumpStationEnvironment,
+        PumpStationState,
+    )
+    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+        PumpStationProcess,
+        PumpStationResourceReservation,
+        PumpStationWorkResources,
+    )
+
+    if profile == _V4:
+        type_hints.update(
+            {
+                "physical": PumpStationCoupledPhysicalState,
+                "environment": PumpStationCoupledEnvironment,
+                "resources": PumpStationResourceState,
+                "processes": tuple[PumpStationCoupledProcess, ...],
+                "resource_reservations": tuple[PumpStationPoolReservation, ...],
+            }
+        )
+    else:
+        type_hints.update(
+            {
+                "physical": PumpStationState,
+                "environment": PumpStationEnvironment,
+                "resources": PumpStationWorkResources,
+                "processes": tuple[PumpStationProcess, ...],
+                "resource_reservations": tuple[PumpStationResourceReservation, ...],
+            }
+        )
+    return type_hints
+
+
 def _decode_dataclass(value: object, expected: type[Any], profile: str) -> object:
     if not isinstance(value, dict):
         _fail("artifact-shape", f"{expected.__name__} must be an object")
@@ -255,7 +322,7 @@ def _decode_dataclass(value: object, expected: type[Any], profile: str) -> objec
     }
     if set(value) != expected_keys:
         _fail("artifact-shape", f"{expected.__name__} fields differ")
-    type_hints = get_type_hints(expected)
+    type_hints = _profile_selected_type_hints(expected, profile)
     decoded: dict[str, object] = {}
     for field in declared_fields:
         if field.name in value:

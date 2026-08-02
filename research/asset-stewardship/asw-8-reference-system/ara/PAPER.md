@@ -87,19 +87,35 @@ identity.
 
 The code-grounding claim is supported by commit
 `f73c692e606c2319d143bcd27cb4aafdd8d38571`, tree
-`a960c51fb12621be88aaa368880f0aba8bdd773c`. The design's
-mechanism, compatibility, conservation, and actor-fairness claims remain
-provisional until implementation and focused tests exist. This artifact does
-not report an ASW-8 test result or model result.
+`a960c51fb12621be88aaa368880f0aba8bdd773c`.
+
+The provider-free implementation gate now supports the mechanism,
+compatibility, conservation, and actor-fairness claims. The ASW-8-only gate
+passed 58 tests. Six narrow historical checks passed, and three affected v4
+persistence and transport checks passed after the version-selected decoder
+change. Ruff and MyPy also passed for the changed implementation surface.
+
+The separately authorised real-model journey also completed. In three of four
+allowed turns, the model read the named projection-v5 pump records and started
+the valid Pump A verification path with an exact backlog identity and a clear
+reason. The stored proposal retained the observed view and information-set
+binding. Independent replay, separate actor-proposal and host-control checks,
+and all four conservation sections passed. This is behaviour and usability
+evidence only; the one-action stop leaves open liabilities and does not claim a
+terminally complete run.
 
 ## Artifact map
 
-- `logic/claims.yaml` separates supported audit findings from planned claims.
-- `logic/experiments.yaml` records the completed audit and planned acceptance
+- `logic/claims.yaml` records the supported audit and implementation claims.
+- `logic/experiments.yaml` records the completed audit and focused acceptance
   work.
 - `evidence/code-grounding.md` maps the design to current source files and
   symbols.
 - `evidence/acceptance-plan.md` records the provider-free and later bounded
   agent gates.
+- `evidence/implementation-evidence.md` records the provider-free test,
+  compatibility, certification, and quality results.
+- `evidence/agent-journey-evidence.md` records the approved bounded Bedrock
+  journey and its token, leakage, replay, and evaluation evidence.
 - `trace/exploration_tree.yaml` records the source decision, audit corrections,
-  and open implementation path.
+  implementation result, and completed bounded model journey.

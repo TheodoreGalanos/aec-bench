@@ -3,10 +3,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import NoReturn
+from typing import Any, Generic, NoReturn, TypeVar, cast
 
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
+    PumpStationBacklogItem,
+    PumpStationBacklogStatus,
+    PumpStationCoupledProcess,
+    PumpStationPoolReservation,
+    PumpStationResourceState,
+    PumpStationWorkGenerationRecord,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
     PumpStationEvidenceHealth,
     PumpStationEvidenceTreatment,
@@ -15,23 +23,33 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpInspectionObservation,
     PumpStationChangeKind,
+    PumpStationCoupledEnvironment,
+    PumpStationCoupledOperatingInterval,
+    PumpStationCoupledPhysicalState,
+    PumpStationDutyAssignment,
     PumpStationEnvironment,
     PumpStationObservation,
+    PumpStationOutageEpisode,
+    PumpStationServiceRequirement,
     PumpStationState,
 )
 
 PUMP_STATION_STATE_VERSION_V1 = "pump-station-stewardship-state.v1"
 PUMP_STATION_STATE_VERSION_V2 = "pump-station-stewardship-state.v2"
 PUMP_STATION_STATE_VERSION_V3 = "pump-station-stewardship-state.v3"
+PUMP_STATION_STATE_VERSION_V4 = "pump-station-stewardship-state.v4"
 PUMP_STATION_RECEIPT_VERSION_V1 = "pump-station-transition-receipt.v1"
 PUMP_STATION_RECEIPT_VERSION_V2 = "pump-station-transition-receipt.v2"
 PUMP_STATION_RECEIPT_VERSION_V3 = "pump-station-transition-receipt.v3"
+PUMP_STATION_RECEIPT_VERSION_V4 = "pump-station-transition-receipt.v4"
 PUMP_STATION_AUTHORITY_POLICY_VERSION_V1 = "pump-station-authority-policy.v1"
 PUMP_STATION_AUTHORITY_POLICY_VERSION_V2 = "pump-station-authority-policy.v2"
 PUMP_STATION_AUTHORITY_POLICY_VERSION_V3 = "pump-station-authority-policy.v3"
+PUMP_STATION_AUTHORITY_POLICY_VERSION_V4 = "pump-station-authority-policy.v4"
 PUMP_STATION_TRANSITION_RULE_VERSION_V1 = "pump-station-transition-rules.v1"
 PUMP_STATION_TRANSITION_RULE_VERSION_V2 = "pump-station-transition-rules.v2"
 PUMP_STATION_TRANSITION_RULE_VERSION_V3 = "pump-station-transition-rules.v3"
+PUMP_STATION_TRANSITION_RULE_VERSION_V4 = "pump-station-transition-rules.v4"
 
 PUMP_STATION_RECEIPT_VERSION = PUMP_STATION_RECEIPT_VERSION_V1
 PUMP_STATION_AUTHORITY_POLICY_VERSION = PUMP_STATION_AUTHORITY_POLICY_VERSION_V1
@@ -56,6 +74,7 @@ _SUPPORTED_STATE_VERSIONS = {
     PUMP_STATION_STATE_VERSION_V1,
     PUMP_STATION_STATE_VERSION_V2,
     PUMP_STATION_STATE_VERSION_V3,
+    PUMP_STATION_STATE_VERSION_V4,
 }
 
 
@@ -256,6 +275,31 @@ class TransferDuty:
 
 
 @dataclass(frozen=True, slots=True)
+class RequestDutyAssignment:
+    """Request one ordered ASW-8 service assignment through Operations."""
+
+    context: ProposalContext
+    ordered_pump_ids: tuple[str, ...]
+    source_outage_id: str | None = None
+    source_backlog_item_id: str | None = None
+    proposal_version: str = "request_duty_assignment.v1"
+
+    def __post_init__(self) -> None:
+        if self.proposal_version != "request_duty_assignment.v1":
+            raise ValueError("unsupported duty-assignment proposal version")
+        if not self.ordered_pump_ids or len(self.ordered_pump_ids) > 2:
+            raise ValueError("ordered_pump_ids must contain one or two pumps")
+        if len(set(self.ordered_pump_ids)) != len(self.ordered_pump_ids):
+            raise ValueError("ordered_pump_ids must not contain duplicates")
+        for pump_id in self.ordered_pump_ids:
+            _require_text(pump_id, "ordered_pump_ids")
+        if self.source_outage_id is not None:
+            _require_text(self.source_outage_id, "source_outage_id")
+        if self.source_backlog_item_id is not None:
+            _require_text(self.source_backlog_item_id, "source_backlog_item_id")
+
+
+@dataclass(frozen=True, slots=True)
 class RequestInspection:
     """Request a scheduled inspection of one named pump."""
 
@@ -299,6 +343,22 @@ class RequestObstructionClearance:
     def __post_init__(self) -> None:
         _require_text(self.pump_id, "pump_id")
         _require_text(self.inspection_evidence_id, "inspection_evidence_id")
+
+
+@dataclass(frozen=True, slots=True)
+class RequestFunctionalCheck:
+    """Request one controlled ASW-8 test against exact current work demand."""
+
+    context: ProposalContext
+    pump_id: str
+    backlog_item_id: str
+    proposal_version: str = "request_functional_check.v1"
+
+    def __post_init__(self) -> None:
+        if self.proposal_version != "request_functional_check.v1":
+            raise ValueError("unsupported functional-check proposal version")
+        _require_text(self.pump_id, "pump_id")
+        _require_text(self.backlog_item_id, "backlog_item_id")
 
 
 @dataclass(frozen=True, slots=True)
@@ -379,10 +439,12 @@ class RequestDependencyWaiver:
 type PumpStationProposal = (
     ContinueOperation
     | TransferDuty
+    | RequestDutyAssignment
     | RequestInspection
     | RequestConditionCheck
     | RequestConditionalDeferral
     | RequestObstructionClearance
+    | RequestFunctionalCheck
     | RequestProvisionalReturn
     | RequestProvisionalClosure
     | RequestVerification
@@ -620,42 +682,209 @@ class PumpStationScheduledEvent:
     evidence_id: str | None = None
 
 
+_PhysicalStateT = TypeVar(
+    "_PhysicalStateT",
+    PumpStationState,
+    PumpStationCoupledPhysicalState,
+    default=PumpStationState,
+)
+_EnvironmentT = TypeVar(
+    "_EnvironmentT",
+    PumpStationEnvironment,
+    PumpStationCoupledEnvironment,
+    default=PumpStationEnvironment,
+)
+_ResourceStateT = TypeVar(
+    "_ResourceStateT",
+    PumpStationWorkResources,
+    PumpStationResourceState,
+    default=PumpStationWorkResources,
+)
+_ProcessT = TypeVar(
+    "_ProcessT",
+    PumpStationProcess,
+    PumpStationCoupledProcess,
+    default=PumpStationProcess,
+)
+_ReservationT = TypeVar(
+    "_ReservationT",
+    PumpStationResourceReservation,
+    PumpStationPoolReservation,
+    default=PumpStationResourceReservation,
+)
+
+
 @dataclass(frozen=True, slots=True)
-class PumpStationStewardshipState:
+class PumpStationStewardshipState(
+    Generic[_PhysicalStateT, _EnvironmentT, _ResourceStateT, _ProcessT, _ReservationT],
+):
     """Complete in-memory ASW-2A2 state over the pure physical kernel."""
 
-    physical: PumpStationState
-    environment: PumpStationEnvironment
+    physical: _PhysicalStateT
+    environment: _EnvironmentT
     sequence: int
-    resources: PumpStationWorkResources
+    resources: _ResourceStateT
     restrictions: tuple[PumpStationRestriction, ...]
     obligations: tuple[PumpStationObligation, ...]
     work_orders: tuple[PumpStationWorkOrder, ...]
-    processes: tuple[PumpStationProcess, ...]
+    processes: tuple[_ProcessT, ...]
     evidence: tuple[PumpStationEvidence, ...]
     scheduled_events: tuple[PumpStationScheduledEvent, ...]
     state_version: str = PUMP_STATION_STATE_VERSION_V1
     dependencies: tuple[PumpStationProcessDependency, ...] = ()
     dependency_waivers: tuple[PumpStationDependencyWaiver, ...] = ()
-    resource_reservations: tuple[PumpStationResourceReservation, ...] = ()
+    resource_reservations: tuple[_ReservationT, ...] = ()
     evidence_sources: tuple[PumpStationObservationSource, ...] = ()
     evidence_treatments: tuple[PumpStationEvidenceTreatment, ...] = ()
     pending_evidence: tuple[PumpStationPendingEvidence, ...] = ()
+    assignment: PumpStationDutyAssignment = field(default=cast(PumpStationDutyAssignment, None))
+    service_schedule: tuple[PumpStationServiceRequirement, ...] = ()
+    baseline_schedule: tuple[tuple[int, int, tuple[str, ...]], ...] = ()
+    disclosed_through_calendar_seconds: int = 0
+    backlog: tuple[PumpStationBacklogItem, ...] = ()
+    generation_records: tuple[PumpStationWorkGenerationRecord, ...] = ()
+    outage_episodes: tuple[PumpStationOutageEpisode, ...] = ()
+    operating_intervals: tuple[PumpStationCoupledOperatingInterval, ...] = ()
+    collateral_runtime: tuple[tuple[str, str, int], ...] = ()
+    pending_start_pump_ids: tuple[str, ...] = ()
+    event_effect_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.state_version not in _SUPPORTED_STATE_VERSIONS:
             _fail("state-version", self.state_version)
-        reservation_kinds = tuple(item.kind for item in self.resource_reservations)
+        if self.state_version == PUMP_STATION_STATE_VERSION_V4:
+            if not isinstance(self.physical, PumpStationCoupledPhysicalState) or not isinstance(
+                self.environment,
+                PumpStationCoupledEnvironment,
+            ):
+                _fail("state-version", "version 4 requires coupled physical records")
+            if not isinstance(self.resources, PumpStationResourceState):
+                _fail("state-version", "version 4 requires resource pools")
+            if self.assignment is None:
+                _fail("state-version", "version 4 requires a duty assignment")
+            if any(not isinstance(process, PumpStationCoupledProcess) for process in self.processes) or any(
+                not isinstance(reservation, PumpStationPoolReservation) for reservation in self.resource_reservations
+            ):
+                _fail("state-version", "version 4 process or reservation profile differs")
+            if len({item.item_id for item in self.backlog}) != len(self.backlog):
+                _fail("backlog-identity", "backlog item IDs must be distinct")
+            return
+        if (
+            not isinstance(self.physical, PumpStationState)
+            or not isinstance(self.environment, PumpStationEnvironment)
+            or not isinstance(self.resources, PumpStationWorkResources)
+            or any(isinstance(process, PumpStationCoupledProcess) for process in self.processes)
+            or any(isinstance(reservation, PumpStationPoolReservation) for reservation in self.resource_reservations)
+        ):
+            _fail("state-version", "version 1 to 3 requires legacy state records")
+        reservation_kinds: list[PumpStationResourceKind] = []
+        for reservation in self.resource_reservations:
+            if not isinstance(reservation, PumpStationResourceReservation):
+                _fail("state-version", "version 1 to 3 requires legacy reservations")
+            reservation_kinds.append(reservation.kind)
         if len(set(reservation_kinds)) != len(reservation_kinds):
             _fail("resource-reservation", "a resource has more than one reservation")
         if self.state_version == PUMP_STATION_STATE_VERSION_V1 and (
             self.dependencies or self.dependency_waivers or self.resource_reservations
         ):
             _fail("state-version", "version 1 cannot contain rich-work records")
-        if self.state_version != PUMP_STATION_STATE_VERSION_V3 and (
-            self.evidence_sources or self.evidence_treatments or self.pending_evidence
-        ):
+        if self.state_version not in {
+            PUMP_STATION_STATE_VERSION_V3,
+            PUMP_STATION_STATE_VERSION_V4,
+        } and (self.evidence_sources or self.evidence_treatments or self.pending_evidence):
             _fail("state-version", "only version 3 can contain evidence-health records")
+
+    @property
+    def state_id(self) -> str:
+        """Return the complete canonical state identity for the selected profile."""
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
+            stewardship_state_id,
+        )
+
+        return stewardship_state_id(cast(Any, self))
+
+    @property
+    def calendar_seconds(self) -> int:
+        """Return the current physical calendar time."""
+        return self.physical.calendar_seconds
+
+    @property
+    def accepted_evidence_ids(self) -> tuple[str, ...]:
+        """Derive accepted evidence identities from canonical evidence records."""
+        return tuple(
+            item.evidence_id
+            for item in self.evidence
+            if item.accepted_by is not None and (item.health is None or item.health.accepted)
+        )
+
+    @property
+    def active_restriction_ids(self) -> tuple[str, ...]:
+        """Derive active restriction identities from their owner records."""
+        return tuple(
+            item.restriction_id for item in self.restrictions if item.status is PumpStationRestrictionStatus.ACTIVE
+        )
+
+    @property
+    def active_liability_ids(self) -> tuple[str, ...]:
+        """Derive current liabilities from obligations, outages, and durable work."""
+        obligation_ids: tuple[str, ...] = tuple(
+            item.obligation_id for item in self.obligations if item.status is not PumpStationObligationStatus.FULFILLED
+        )
+        outage_ids: tuple[str, ...] = tuple(item.episode_id for item in self.outage_episodes if item.status == "open")
+        work_ids: tuple[str, ...] = tuple(
+            item.item_id
+            for item in self.backlog
+            if item.generation_rule_id in {"WG-06", "WG-07"}
+            and item.status
+            not in {
+                PumpStationBacklogStatus.CLOSED,
+                PumpStationBacklogStatus.CANCELLED,
+                PumpStationBacklogStatus.SUPERSEDED,
+            }
+        )
+        return (*obligation_ids, *outage_ids, *work_ids)
+
+    @property
+    def created_liability_ids(self) -> tuple[str, ...]:
+        """Derive non-opening liability identities from canonical owner records."""
+        obligation_ids: tuple[str, ...] = tuple(
+            item.obligation_id for item in self.obligations if item.created_sequence > 0
+        )
+        work_ids: tuple[str, ...] = tuple(
+            item.item_id for item in self.backlog if item.generation_rule_id in {"WG-06", "WG-07"}
+        )
+        return (*obligation_ids, *work_ids)
+
+    @property
+    def discharged_liability_ids(self) -> tuple[str, ...]:
+        """Derive discharged liabilities without a second mutable ledger."""
+        obligation_ids: tuple[str, ...] = tuple(
+            item.obligation_id for item in self.obligations if item.status is PumpStationObligationStatus.FULFILLED
+        )
+        outage_ids: tuple[str, ...] = tuple(item.episode_id for item in self.outage_episodes if item.status == "closed")
+        work_ids: tuple[str, ...] = tuple(
+            item.item_id
+            for item in self.backlog
+            if item.generation_rule_id in {"WG-06", "WG-07"} and item.status is PumpStationBacklogStatus.CLOSED
+        )
+        return (*obligation_ids, *outage_ids, *work_ids)
+
+    @property
+    def terminal_work_item_ids(self) -> tuple[str, ...]:
+        """Derive terminal work identities from the canonical backlog records."""
+        terminal_statuses = {
+            PumpStationBacklogStatus.CLOSED,
+            PumpStationBacklogStatus.CANCELLED,
+            PumpStationBacklogStatus.SUPERSEDED,
+        }
+        return tuple(item.item_id for item in self.backlog if item.status in terminal_statuses)
+
+    def backlog_item(self, item_id: str) -> PumpStationBacklogItem:
+        """Return one current v4 backlog item by actor-visible identity."""
+        for item in self.backlog:
+            if item.item_id == item_id:
+                return item
+        _fail("unknown-backlog-item", item_id)
 
     def restriction(
         self,
@@ -686,7 +915,10 @@ class PumpStationStewardshipState:
                 return work_order
         raise LookupError(f"missing work order for {pump_id}")
 
-    def process(self, process_id: str) -> PumpStationProcess:
+    def process(
+        self,
+        process_id: str,
+    ) -> _ProcessT:
         """Return one process by identity."""
         for process in self.processes:
             if process.process_id == process_id:

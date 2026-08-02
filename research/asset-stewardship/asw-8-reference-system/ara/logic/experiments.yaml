@@ -26,7 +26,7 @@ experiments:
     metrics:
       - Focused package and version test results.
       - Exact historical byte comparisons.
-    evidence: [EV002]
+    evidence: [EV002, EV003]
     exploratory: false
     domain: {}
   - id: E003
@@ -42,7 +42,7 @@ experiments:
     metrics:
       - Focused unit and integration test results.
       - Unique generation identities and valid conservation sections.
-    evidence: [EV002]
+    evidence: [EV002, EV003]
     exploratory: false
     domain: {}
   - id: E004
@@ -62,7 +62,7 @@ experiments:
     metrics:
       - State, receipt, report, and evaluation parity.
       - Parent and sibling snapshot equality.
-    evidence: [EV002]
+    evidence: [EV002, EV003]
     exploratory: false
     domain: {}
   - id: E005
@@ -83,6 +83,25 @@ experiments:
       - Work identity equation 2 plus 4 equals 5 plus 1.
       - Liability identity equation 2 plus 3 equals 4 plus 1.
       - Zero unexplained resource or service residual.
-    evidence: [EV002]
+    evidence: [EV002, EV003]
     exploratory: false
+    domain: {}
+  - id: E006
+    verifies: [C007]
+    purpose: Check whether one authorised model can use projection v5 and the closed actor tools without private leakage.
+    setup: The exact ASW-8-RS1 opening state, model au.anthropic.claude-sonnet-4-6, four-turn maximum, and a one-action instruction.
+    procedure:
+      - Observe the named pump boundaries, availability predicates, service schedule, resource windows, and ranked backlog.
+      - Permit documentary search only through the closed temporal tools.
+      - Allow at most one supported stewardship action with exact required identifiers and a natural-language reason.
+      - Reload and replay the durable run, typed proposal, and actor request.
+      - Recompute actor-proposal, host-control, and conservation checks.
+      - Scan the model-visible trajectory for credentials and latent condition fields.
+    metrics:
+      - Adapter status and model turns.
+      - Input, output, cache-read, and cache-write tokens.
+      - Action validity, replay validity, and separate step-type integrity.
+      - Model-visible leakage scan.
+    evidence: [EV004]
+    exploratory: true
     domain: {}

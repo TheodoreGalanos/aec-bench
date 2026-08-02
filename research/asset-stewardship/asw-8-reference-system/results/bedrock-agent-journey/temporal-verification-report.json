@@ -1,0 +1,11 @@
+{
+  "access_count": 0,
+  "action_evidence_sets": [],
+  "carrier_count": 0,
+  "content_sha256": "79e183c2a1eeceec0aa673dbb9b78e9fdc7b4e8d6ec10fa2d5e3641e988c32cb",
+  "issues": [],
+  "reliance_count": 0,
+  "schema_version": "pump-station.temporal-evidence-verification.v1",
+  "valid": true,
+  "verified_access_result_ids": []
+}
