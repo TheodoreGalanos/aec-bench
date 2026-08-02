@@ -49,6 +49,7 @@ def build_reference_temporal_evidence_bundle(
     package: ReferencePackage,
     *,
     world_branch_id: str,
+    initial_budget: RetrievalBudgetVector | None = None,
 ) -> TemporalEvidenceBundle:
     """Build the rights-cleared deterministic corpus bound to the certified package."""
 
@@ -137,7 +138,8 @@ def build_reference_temporal_evidence_bundle(
         availability_schedule_id=availability.content_sha256,
         branch_namespace_policy_id=branch_policy.content_sha256,
         simulated_cost_policy_id=cost_policy.content_sha256,
-        initial_budget=RetrievalBudgetVector(
+        initial_budget=initial_budget
+        or RetrievalBudgetVector(
             calls=20,
             returned_references=50,
             visible_bytes=40_000,

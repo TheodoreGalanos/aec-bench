@@ -1,9 +1,26 @@
 observations:
   - id: O001
-    summary: A real model-agent shakedown remains separately authorized and cannot use the generated analysis records as outcomes.
-    status: open
-    source: retrieval-state continuity study specification
-    next_action: Obtain exact approval for provider, model, route, adapter, calls, turns, input tokens, output tokens, reported analysis tokens, total tokens, currency, and spend before execution.
+    summary: The real model shakedown and confirmation used separate generations, and no shakedown record entered the confirmatory estimate.
+    status: resolved
+    source: model study execution evidence
+    next_action: Preserve the generation and phase separation in later studies.
     domain:
-      confirmatory_eligibility: false
-      provider_authorization_present: false
+      confirmatory_eligibility: true
+      provider_authorization_present: true
+  - id: O002
+    summary: Sixty-three safe station proposals occurred before the scored window, while no run acquired or used the delayed report.
+    status: open
+    source: evidence/model-study-result.md
+    next_action: In a separate follow-up, start model action at the open decision point and make the delayed record change the correct station action.
+    domain:
+      interpretation_limit: true
+      pre_window_proposals: 63
+      in_window_proposals: 1
+      material_evidence_acquired: 0
+  - id: O003
+    summary: The long provider study publishes every completed trial but cannot resume into an existing output directory after interruption.
+    status: open
+    source: src/aec_bench/experiments/retrieval_state_continuity/execution.py
+    next_action: Add verified resume support before another long or expensive provider study.
+    domain:
+      engineering_follow_up: true

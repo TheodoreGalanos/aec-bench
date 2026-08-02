@@ -38,3 +38,44 @@ experiments:
     exploratory: false
     domain:
       profile: AU-NSW-LH-SYN-SPS-v1
+  - id: E003
+    verifies: []
+    purpose: Exercise the real model, direct tool loop, host credential boundary, typed station tools, token capture, and retained execution evidence before confirmation.
+    setup: Use the approved Amazon Bedrock profile and au.anthropic.claude-sonnet-4-6 with one adjacent treatment pair that cannot enter the confirmatory estimate.
+    procedure:
+      - Attempt the real provider route and retain pre-inference credential failure evidence.
+      - Exercise invalid typed-tool arguments and retain the adapter failure evidence.
+      - Return typed tool rejections to the agent so it can correct its request.
+      - Run one clean two-trial shakedown and retain usage, world verification, and temporal verification evidence.
+    metrics:
+      - Credentials remain host-side and no credential values enter retained evidence.
+      - Tool contract rejections do not terminate an otherwise correct model run.
+      - The clean shakedown completes both treatment arms without an adapter or verifier failure.
+      - Input, output, total token, and spend fields are present, with the analysis-token reporting boundary explicit.
+    evidence: [EV003]
+    exploratory: true
+    domain:
+      model: au.anthropic.claude-sonnet-4-6
+      confirmatory_eligibility: false
+  - id: E004
+    verifies: [C003, C004]
+    purpose: Execute and independently verify the exact frozen 64-run matched-pair model study.
+    setup: Use the content-addressed confirmatory manifest, fixed adjacent-pair schedule, approved Bedrock model condition, and direct closed-tool station sessions.
+    procedure:
+      - Execute every planned run and publish each delivery, observation, trial execution, and world history.
+      - Apply integrity, validity, and endpoint gates in the frozen order.
+      - Compute the paired risk difference and clustered 95 percent interval.
+      - Publish the report and aggregate execution by content identity.
+      - Independently reload all retained records and recompute aggregate identities.
+      - Audit proposal times and material-evidence acquisition from durable run records.
+    metrics:
+      - All 64 trials, 32 pairs, and 8 histories are valid and analyzable.
+      - Paired risk difference is 0.03125 with interval [0.0, 0.09375].
+      - Report conclusion is refuted under the minimum meaningful effect of 0.25.
+      - Sixty-three proposals are pre-window, one is in-window, and material acquisition and use are zero.
+      - Independent reload reproduces report and execution identities.
+    evidence: [EV003]
+    exploratory: false
+    domain:
+      phase: confirmatory
+      study_outcomes: 64

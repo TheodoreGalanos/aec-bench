@@ -104,6 +104,55 @@ class RetrievalStudyBudget(FrozenStrictModel):
     budget_conserved_at_handover: Literal[True] = True
 
 
+class ModelExecutionSpecification(ContentAddressedModel):
+    """Fixed public-model and direct-host execution condition for real runs."""
+
+    provider_id: Literal["amazon-bedrock-au-geographic"] = "amazon-bedrock-au-geographic"
+    provider_route: Literal["aws-standard-credential-chain-host-side"] = "aws-standard-credential-chain-host-side"
+    credential_profile_id: Literal["BedrockViewer-831926582066"] = "BedrockViewer-831926582066"
+    model_id: Literal["au.anthropic.claude-sonnet-4-6"] = "au.anthropic.claude-sonnet-4-6"
+    adapter_id: Literal["tool_loop"] = "tool_loop"
+    execution_path: Literal["direct_host_session"] = "direct_host_session"
+    prompt_id: Literal["retrieval-state-decision-window.v1"] = "retrieval-state-decision-window.v1"
+    decision_rule_id: Literal["pump-a-obstruction-evidence-decision-rule.v2"] = (
+        "pump-a-obstruction-evidence-decision-rule.v2"
+    )
+    admissible_conservative_actions: tuple[
+        Literal[
+            "request_condition_check",
+            "request_inspection",
+            "request_post_maintenance_verification",
+        ],
+        ...,
+    ] = (
+        "request_condition_check",
+        "request_inspection",
+        "request_post_maintenance_verification",
+    )
+    authorization_id: Literal["ts1-theo-approved-2026-08-02"] = "ts1-theo-approved-2026-08-02"
+    maximum_agent_turns: Literal[12] = 12
+    maximum_tool_calls: Literal[24] = 24
+    maximum_output_tokens_per_call: Literal[2_048] = 2_048
+    input_usd_per_million_tokens: float = 3.3
+    output_usd_per_million_tokens: float = 16.5
+    count_tokens_before_request: Literal[False] = False
+    cache_enabled: Literal[False] = False
+    bash_enabled: Literal[False] = False
+    advisor_enabled: Literal[False] = False
+    analysis_token_reporting: Literal["not_reported_separately_by_adapter"] = "not_reported_separately_by_adapter"
+    analysis_tokens_included_in: Literal["output_tokens"] = "output_tokens"
+
+    @model_validator(mode="after")
+    def validate_fixed_prices(self) -> Self:
+        """Keep approved model prices fixed without unsupported float literals."""
+
+        if self.input_usd_per_million_tokens != 3.3:
+            raise ValueError("input model price differs from the approved value")
+        if self.output_usd_per_million_tokens != 16.5:
+            raise ValueError("output model price differs from the approved value")
+        return self
+
+
 class StudyAnalysisSpecification(FrozenStrictModel):
     """Frozen endpoint, estimand, interval, coverage, and decision rules."""
 
@@ -189,8 +238,9 @@ class StudyManifest(ContentAddressedModel):
     treatment: TreatmentSpecification
     budget: RetrievalStudyBudget
     analysis: StudyAnalysisSpecification
-    provider_calls_allowed: Literal[0] = 0
-    study_outcomes_allowed: Literal[False] = False
+    model_execution: ModelExecutionSpecification | None = None
+    provider_calls_allowed: NonNegativeInt = 0
+    study_outcomes_allowed: bool = False
     task_reward_mutation_allowed: Literal[False] = False
     promotion_permitted: Literal[False] = False
 
@@ -213,8 +263,22 @@ class StudyManifest(ContentAddressedModel):
 
     @model_validator(mode="after")
     def validate_design(self) -> Self:
-        if self.phase is not StudyPhase.ANALYSIS_FIXTURE:
-            raise ValueError("provider-free specification must use analysis_fixture authority")
+        if self.phase is StudyPhase.ANALYSIS_FIXTURE:
+            if self.model_execution is not None or self.provider_calls_allowed != 0:
+                raise ValueError("provider-free specification cannot contain model authority")
+            if self.study_outcomes_allowed:
+                raise ValueError("provider-free specification cannot allow study outcomes")
+        else:
+            if self.model_execution is None or self.provider_calls_allowed < 1:
+                raise ValueError("real-model phases require exact model authority")
+            if self.model_execution.maximum_agent_turns != self.budget.maximum_agent_turns:
+                raise ValueError("model and study turn limits differ")
+            if self.model_execution.decision_rule_id != self.decision_rule_id:
+                raise ValueError("model and study decision rules differ")
+            if self.phase is StudyPhase.SHAKEDOWN and self.study_outcomes_allowed:
+                raise ValueError("shakedown records cannot enter the confirmatory estimand")
+            if self.phase is StudyPhase.CONFIRMATORY and not self.study_outcomes_allowed:
+                raise ValueError("confirmatory authority must allow retained study outcomes")
         if self.treatments != tuple(Treatment):
             raise ValueError("study manifest must contain the two canonical treatments")
         if len(self.world_history_seeds) != self.analysis.independent_world_history_count:

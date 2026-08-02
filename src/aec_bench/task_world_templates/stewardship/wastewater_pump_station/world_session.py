@@ -75,6 +75,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     project_actor_view,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence import (
+    RetrievalBudgetVector,
     TemporalAccessContext,
     TemporalAccessPublication,
     TemporalActorVisibleEvent,
@@ -273,20 +274,14 @@ class PumpStationWorldSession:
             conversation_prefix_id = self._current_context.conversation_prefix_id
             visible_material_ids: tuple[str, ...] = ()
             if stored is not None:
-                continuity_carrier = PumpStationContinuityCarrier(
-                    stored.continuity_carrier
-                )
+                continuity_carrier = PumpStationContinuityCarrier(stored.continuity_carrier)
                 self._view_ids = stored.observation_history_view_ids
                 if stored.base_view_id != self._view.view_id:
                     self._view_ids = (*self._view_ids, self._view.view_id)
                 visible_material_ids = stored.visible_material_ids
             for material_id in (
                 *retrieval_state.actor_event_ids,
-                *(
-                    (retrieval_state.installed_carrier_id,)
-                    if retrieval_state.installed_carrier_id
-                    else ()
-                ),
+                *((retrieval_state.installed_carrier_id,) if retrieval_state.installed_carrier_id else ()),
             ):
                 if material_id not in visible_material_ids:
                     visible_material_ids = (*visible_material_ids, material_id)
@@ -453,9 +448,7 @@ class PumpStationWorldSession:
 
         if self._temporal_repository is None:
             raise ValueError("temporal documentary evidence is not enabled")
-        return self._temporal_repository.load_retrieval_state(
-            self._temporal_access_context()
-        )
+        return self._temporal_repository.load_retrieval_state(self._temporal_access_context())
 
     def load_evidence_reliance(
         self,
@@ -571,28 +564,48 @@ class PumpStationWorldSession:
             separators=(",", ":"),
         )
 
-    def continue_operation(self, proposal_id: str, reason: str) -> str:
+    def continue_operation(
+        self,
+        proposal_id: str,
+        reason: str,
+        relied_on_evidence_refs: tuple[str, ...] = (),
+    ) -> str:
         """Continue the permitted operating mode to the next declared decision event."""
         return self._invoke_actor_tool(
             proposal_id,
             "continue_operation",
-            {"reason": reason},
+            {"reason": reason, "relied_on_evidence_refs": relied_on_evidence_refs},
         )
 
-    def transfer_duty(self, proposal_id: str, reason: str) -> str:
+    def transfer_duty(
+        self,
+        proposal_id: str,
+        reason: str,
+        relied_on_evidence_refs: tuple[str, ...] = (),
+    ) -> str:
         """Request the one permitted transfer from duty to standby pump."""
         return self._invoke_actor_tool(
             proposal_id,
             "transfer_duty",
-            {"reason": reason},
+            {"reason": reason, "relied_on_evidence_refs": relied_on_evidence_refs},
         )
 
-    def request_inspection(self, proposal_id: str, reason: str, pump_id: str) -> str:
+    def request_inspection(
+        self,
+        proposal_id: str,
+        reason: str,
+        pump_id: str,
+        relied_on_evidence_refs: tuple[str, ...] = (),
+    ) -> str:
         """Request a scheduled inspection of one named pump."""
         return self._invoke_actor_tool(
             proposal_id,
             "request_inspection",
-            {"reason": reason, "pump_id": pump_id},
+            {
+                "reason": reason,
+                "pump_id": pump_id,
+                "relied_on_evidence_refs": relied_on_evidence_refs,
+            },
         )
 
     def request_condition_check(
@@ -600,20 +613,35 @@ class PumpStationWorldSession:
         proposal_id: str,
         reason: str,
         pump_id: str,
+        relied_on_evidence_refs: tuple[str, ...] = (),
     ) -> str:
         """Request one sensor-based condition check for a named pump."""
         return self._invoke_actor_tool(
             proposal_id,
             "request_condition_check",
-            {"reason": reason, "pump_id": pump_id},
+            {
+                "reason": reason,
+                "pump_id": pump_id,
+                "relied_on_evidence_refs": relied_on_evidence_refs,
+            },
         )
 
-    def request_conditional_deferral(self, proposal_id: str, reason: str, pump_id: str) -> str:
+    def request_conditional_deferral(
+        self,
+        proposal_id: str,
+        reason: str,
+        pump_id: str,
+        relied_on_evidence_refs: tuple[str, ...] = (),
+    ) -> str:
         """Request the fixed transfer-then-isolate conditional deferral."""
         return self._invoke_actor_tool(
             proposal_id,
             "request_conditional_deferral",
-            {"reason": reason, "pump_id": pump_id},
+            {
+                "reason": reason,
+                "pump_id": pump_id,
+                "relied_on_evidence_refs": relied_on_evidence_refs,
+            },
         )
 
     def request_obstruction_clearance(
@@ -622,6 +650,7 @@ class PumpStationWorldSession:
         reason: str,
         pump_id: str,
         inspection_evidence_id: str,
+        relied_on_evidence_refs: tuple[str, ...] = (),
     ) -> str:
         """Request obstruction clearance against named inspection evidence."""
         return self._invoke_actor_tool(
@@ -631,6 +660,7 @@ class PumpStationWorldSession:
                 "reason": reason,
                 "pump_id": pump_id,
                 "inspection_evidence_id": inspection_evidence_id,
+                "relied_on_evidence_refs": relied_on_evidence_refs,
             },
         )
 
@@ -640,6 +670,7 @@ class PumpStationWorldSession:
         reason: str,
         pump_id: str,
         functional_check_evidence_id: str,
+        relied_on_evidence_refs: tuple[str, ...] = (),
     ) -> str:
         """Request provisional return against accepted functional-check evidence."""
         return self._invoke_actor_tool(
@@ -649,6 +680,7 @@ class PumpStationWorldSession:
                 "reason": reason,
                 "pump_id": pump_id,
                 "functional_check_evidence_id": functional_check_evidence_id,
+                "relied_on_evidence_refs": relied_on_evidence_refs,
             },
         )
 
@@ -657,12 +689,17 @@ class PumpStationWorldSession:
         proposal_id: str,
         reason: str,
         work_order_id: str,
+        relied_on_evidence_refs: tuple[str, ...] = (),
     ) -> str:
         """Request administrative closure while verification duties remain open."""
         return self._invoke_actor_tool(
             proposal_id,
             "request_provisional_closure",
-            {"reason": reason, "work_order_id": work_order_id},
+            {
+                "reason": reason,
+                "work_order_id": work_order_id,
+                "relied_on_evidence_refs": relied_on_evidence_refs,
+            },
         )
 
     def request_post_maintenance_verification(
@@ -670,12 +707,17 @@ class PumpStationWorldSession:
         proposal_id: str,
         reason: str,
         pump_id: str,
+        relied_on_evidence_refs: tuple[str, ...] = (),
     ) -> str:
         """Request independent post-maintenance verification for one pump."""
         return self._invoke_actor_tool(
             proposal_id,
             "request_post_maintenance_verification",
-            {"reason": reason, "pump_id": pump_id},
+            {
+                "reason": reason,
+                "pump_id": pump_id,
+                "relied_on_evidence_refs": relied_on_evidence_refs,
+            },
         )
 
     def resume_process(
@@ -683,12 +725,17 @@ class PumpStationWorldSession:
         proposal_id: str,
         reason: str,
         process_id: str,
+        relied_on_evidence_refs: tuple[str, ...] = (),
     ) -> str:
         """Resume blocked or suspended work after dependency and resource checks."""
         return self._invoke_actor_tool(
             proposal_id,
             "resume_process",
-            {"reason": reason, "process_id": process_id},
+            {
+                "reason": reason,
+                "process_id": process_id,
+                "relied_on_evidence_refs": relied_on_evidence_refs,
+            },
         )
 
     def cancel_process(
@@ -696,12 +743,17 @@ class PumpStationWorldSession:
         proposal_id: str,
         reason: str,
         process_id: str,
+        relied_on_evidence_refs: tuple[str, ...] = (),
     ) -> str:
         """Cancel live work and release its unused reservations."""
         return self._invoke_actor_tool(
             proposal_id,
             "cancel_process",
-            {"reason": reason, "process_id": process_id},
+            {
+                "reason": reason,
+                "process_id": process_id,
+                "relied_on_evidence_refs": relied_on_evidence_refs,
+            },
         )
 
     def request_dependency_waiver(
@@ -711,6 +763,7 @@ class PumpStationWorldSession:
         process_id: str,
         dependency_id: str,
         evidence_id: str,
+        relied_on_evidence_refs: tuple[str, ...] = (),
     ) -> str:
         """Request a narrow administrative closeout waiver with named evidence."""
         return self._invoke_actor_tool(
@@ -721,6 +774,7 @@ class PumpStationWorldSession:
                 "process_id": process_id,
                 "dependency_id": dependency_id,
                 "evidence_id": evidence_id,
+                "relied_on_evidence_refs": relied_on_evidence_refs,
             },
         )
 
@@ -833,12 +887,13 @@ class PumpStationWorldSession:
         action_name: str,
         arguments: dict[str, Any],
     ) -> str:
+        json_arguments = {key: list(value) if isinstance(value, tuple) else value for key, value in arguments.items()}
         result = self.invoke_actor_action(
             WorldActorActionRequest(
                 request_id=request_id,
                 action_name=action_name,
                 binding=self.current_actor_binding,
-                arguments=arguments,
+                arguments=json_arguments,
             )
         )
         return json.dumps(
@@ -1059,11 +1114,13 @@ class PumpStationWorldSessionFactory:
         rich_work_processes: bool = False,
         evidence_health: bool = False,
         temporal_evidence: bool = False,
+        temporal_budget: RetrievalBudgetVector | None = None,
     ) -> None:
         self._repository = PumpStationWorldRunRepository(repository_root)
         self._package_root = package_root
         self._schedule = schedule
         self._temporal_evidence = temporal_evidence
+        self._temporal_budget = temporal_budget
         self._evidence_health = evidence_health or temporal_evidence
         self._rich_work_processes = rich_work_processes or self._evidence_health
 
@@ -1142,14 +1199,13 @@ class PumpStationWorldSessionFactory:
             else TemporalEvidenceRepository.is_enabled(self._repository.root)
         )
         if temporal_enabled:
-            temporal_repository = TemporalEvidenceRepository(
-                self._repository.root / "temporal-evidence"
-            )
+            temporal_repository = TemporalEvidenceRepository(self._repository.root / "temporal-evidence")
             if request.open_mode is WorldSessionOpenMode.START:
                 bundle = temporal_repository.initialize(
                     build_reference_temporal_evidence_bundle(
                         package,
                         world_branch_id=request.world_branch_id,
+                        initial_budget=self._temporal_budget,
                     ),
                     package=package,
                 )
