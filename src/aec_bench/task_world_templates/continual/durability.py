@@ -1,6 +1,12 @@
 # ABOUTME: Exposes shared local durability primitives through the continual-world runtime boundary.
 # ABOUTME: Keeps continual-world consumers independent from lower ledger implementation details.
 
+from aec_bench.ledger.durability import (
+    DurableFileReplaceConfinementError,
+    DurableFileReplaceError,
+    DurableFileReplaceIntegrityError,
+    replace_file_bytes_durable,
+)
 from aec_bench.ledger.immutable_artifact_store import (
     ImmutableArtifact,
     ImmutableArtifactCollisionError,
@@ -18,6 +24,9 @@ from aec_bench.ledger.local_lock import exclusive_local_file_lock as exclusive_l
 __all__ = [
     "ContinualWorldLockConfinementError",
     "ContinualWorldLockError",
+    "DurableFileReplaceConfinementError",
+    "DurableFileReplaceError",
+    "DurableFileReplaceIntegrityError",
     "ImmutableArtifact",
     "ImmutableArtifactCollisionError",
     "ImmutableArtifactConfinementError",
@@ -25,4 +34,5 @@ __all__ = [
     "ImmutableArtifactStoreError",
     "ImmutableByteStore",
     "exclusive_local_file_lock",
+    "replace_file_bytes_durable",
 ]

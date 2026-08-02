@@ -6,18 +6,20 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import NoReturn, TypeGuard, cast
 
 from aec_bench.task_world_templates.continual.durability import (
+    DurableFileReplaceConfinementError,
+    DurableFileReplaceError,
     ImmutableArtifactCollisionError,
     ImmutableArtifactConfinementError,
     ImmutableArtifactStoreError,
     ImmutableByteStore,
     exclusive_local_file_lock,
+    replace_file_bytes_durable,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
     PumpStationEvidenceTreatmentRequest,
@@ -827,21 +829,17 @@ class PumpStationWorldRunRepository:
 
     def _replace_current(self, pointer: PumpStationCurrentRunPointer) -> None:
         payload = pump_station_artifact_bytes(pointer)
-        temporary = self._root / f".current.{uuid.uuid4().hex}.tmp"
-        descriptor = os.open(
-            temporary,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-            0o600,
-        )
         try:
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(payload)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, self._root / "current.json")
-            _fsync_directory(self._root)
-        finally:
-            temporary.unlink(missing_ok=True)
+            replace_file_bytes_durable(
+                self._root,
+                "current.json",
+                payload,
+                host_private=True,
+            )
+        except DurableFileReplaceConfinementError as error:
+            _fail("artifact-confinement", f"current pointer is unsafe: {error}")
+        except DurableFileReplaceError as error:
+            _fail("artifact-integrity", f"current pointer cannot be replaced: {error}")
 
     def _load_current(self) -> PumpStationCurrentRunPointer:
         return load_pump_station_artifact(

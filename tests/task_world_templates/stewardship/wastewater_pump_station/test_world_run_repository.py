@@ -10,6 +10,11 @@ from pathlib import Path
 import pytest
 from world_run_support import bind_proposal, create_world_run
 
+import aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository as repository_runtime
+from aec_bench.ledger.durability import (
+    DurableFileReplaceConfinementError,
+    DurableFileReplaceIntegrityError,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station import (
     ContinueOperation,
     PumpStationExecutionOutcome,
@@ -22,6 +27,34 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station import (
     pump_station_artifact_bytes,
     verify_stewardship_run,
 )
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_code"),
+    (
+        (DurableFileReplaceConfinementError("unsafe destination"), "artifact-confinement"),
+        (DurableFileReplaceIntegrityError("replacement drift"), "artifact-integrity"),
+    ),
+)
+def test_repository_maps_shared_pointer_replacement_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: Exception,
+    expected_code: str,
+) -> None:
+    def fail_replacement(*_args: object, **_kwargs: object) -> None:
+        raise failure
+
+    monkeypatch.setattr(
+        repository_runtime,
+        "replace_file_bytes_durable",
+        fail_replacement,
+    )
+
+    with pytest.raises(PumpStationWorldRunError) as raised:
+        create_world_run(tmp_path / "run")
+
+    assert raised.value.code == expected_code
 
 
 def test_filesystem_run_reloads_complete_state_and_verifier_steps(tmp_path) -> None:
