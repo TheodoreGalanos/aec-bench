@@ -58,17 +58,6 @@ from aec_bench.task_world_templates.harbor_export import (
     load_harbor_lifecycle_bridge,
     write_harbor_lifecycle_attestation,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_execution import (
-    PUMP_STATION_ASW_8_REFERENCE_CONTROLLER_ID,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_harbor import (
-    PUMP_STATION_ASW_8_HARBOR_BRIDGE_MODE,
-    PUMP_STATION_ASW_8_HARBOR_EXECUTION_KIND,
-    PumpStationAsw8HarborBridge,
-    load_asw_8_harbor_bridge,
-    run_asw_8_harbor_model_session,
-    run_asw_8_harbor_reference_session,
-)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
     PUMP_STATION_HARBOR_EXECUTION_KIND,
@@ -88,6 +77,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_s
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review_harbor import (
     run_pump_station_review_reference_session,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+    PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -205,7 +197,7 @@ class EntrypointAgent(BaseAgent):
         self._params: dict[str, Any] = kwargs
         self._lifecycle_bridge: HarborLifecycleBridge | None = None
         self._proposal_inputs: LoadedProposalSessionHostInputs | None = None
-        self._world_session_bridge: PumpStationHarborBridge | PumpStationAsw8HarborBridge | None = None
+        self._world_session_bridge: PumpStationHarborBridge | None = None
 
     @staticmethod
     def name() -> str:
@@ -217,12 +209,7 @@ class EntrypointAgent(BaseAgent):
     async def setup(self, environment: Any) -> None:
         if "world_session" in self._params:
             self._validate_world_session_configuration()
-            bridge_mode = self._params["world_session"].get("bridge_mode")
-            self._world_session_bridge = (
-                load_asw_8_harbor_bridge(Path(environment.environment_dir))
-                if bridge_mode == PUMP_STATION_ASW_8_HARBOR_BRIDGE_MODE
-                else load_pump_station_harbor_bridge(Path(environment.environment_dir))
-            )
+            self._world_session_bridge = load_pump_station_harbor_bridge(Path(environment.environment_dir))
             return
         if "lifecycle_bridge" in self._params:
             self._validate_lifecycle_configuration()
@@ -686,20 +673,14 @@ class EntrypointAgent(BaseAgent):
             raise ValueError("pump-station world session bridge configuration differs")
         bridge_mode = session.get("bridge_mode")
         maintenance_review = bridge_mode == PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE
-        asw_8_reference = bridge_mode == PUMP_STATION_ASW_8_HARBOR_BRIDGE_MODE
         expected_execution_kind = (
-            PUMP_STATION_ASW_8_HARBOR_EXECUTION_KIND
-            if asw_8_reference
-            else PUMP_STATION_REVIEW_HARBOR_EXECUTION_KIND
-            if maintenance_review
-            else PUMP_STATION_HARBOR_EXECUTION_KIND
+            PUMP_STATION_REVIEW_HARBOR_EXECUTION_KIND if maintenance_review else PUMP_STATION_HARBOR_EXECUTION_KIND
         )
         if self._params.get("execution_kind") != expected_execution_kind:
             raise ValueError("pump-station world session requires its exact execution kind")
         if bridge_mode not in {
             PUMP_STATION_HARBOR_BRIDGE_MODE,
             PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE,
-            PUMP_STATION_ASW_8_HARBOR_BRIDGE_MODE,
         }:
             raise ValueError("pump-station world session bridge configuration differs")
         if self._params.get("adapter") != "tool_loop":
@@ -707,9 +688,10 @@ class EntrypointAgent(BaseAgent):
         if self._params.get("extra_env") not in (None, {}):
             raise ValueError("pump-station world session does not accept environment variables")
         controller = session.get("controller")
-        reference_controller = self.model_name == (
-            PUMP_STATION_ASW_8_REFERENCE_CONTROLLER_ID if asw_8_reference else PUMP_STATION_REFERENCE_CONTROLLER_ID
-        )
+        reference_controller = self.model_name in {
+            PUMP_STATION_REFERENCE_CONTROLLER_ID,
+            PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
+        }
         if maintenance_review and not reference_controller:
             raise ValueError("pump-station review model runs require the separately approved direct host runner")
         expected_session = {"bridge_mode": bridge_mode}
@@ -755,11 +737,7 @@ class EntrypointAgent(BaseAgent):
         configured_bridge = self._world_session_bridge
         if configured_bridge is None:
             raise RuntimeError("pump-station world session setup has not completed")
-        current_bridge = (
-            load_asw_8_harbor_bridge(Path(environment.environment_dir))
-            if configured_bridge.bridge_mode == PUMP_STATION_ASW_8_HARBOR_BRIDGE_MODE
-            else load_pump_station_harbor_bridge(Path(environment.environment_dir))
-        )
+        current_bridge = load_pump_station_harbor_bridge(Path(environment.environment_dir))
         if current_bridge != configured_bridge:
             raise ValueError("pump-station Harbor task changed after agent setup")
         if (
@@ -774,44 +752,47 @@ class EntrypointAgent(BaseAgent):
         with tempfile.TemporaryDirectory(prefix="aec-bench-pump-station-harbor-") as raw_run:
             staging = Path(raw_run)
             run_dir = staging / "world-session"
-            asw_8_reference = current_bridge.bridge_mode == PUMP_STATION_ASW_8_HARBOR_BRIDGE_MODE
-            reference_controller = self.model_name == (
-                PUMP_STATION_ASW_8_REFERENCE_CONTROLLER_ID if asw_8_reference else PUMP_STATION_REFERENCE_CONTROLLER_ID
+            expected_reference_controller = (
+                PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
+                if current_bridge.profile_ref is not None
+                else PUMP_STATION_REFERENCE_CONTROLLER_ID
             )
+            reference_controller = self.model_name == expected_reference_controller
+            if (
+                self.model_name
+                in {
+                    PUMP_STATION_REFERENCE_CONTROLLER_ID,
+                    PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
+                }
+                and not reference_controller
+            ):
+                raise ValueError("pump-station reference controller differs from the exported profile")
             if reference_controller:
-                if asw_8_reference:
-                    asw_8_session = await asyncio.to_thread(
-                        run_asw_8_harbor_reference_session,
-                        bridge=cast(PumpStationAsw8HarborBridge, current_bridge),
+                if current_bridge.maintenance_review:
+                    review_session = await asyncio.to_thread(
+                        run_pump_station_review_reference_session,
+                        bridge=current_bridge,
                         output_dir=run_dir,
                         session_identity=session_identity,
                     )
-                    world_session_id = asw_8_session.run.manifest.run_id
+                    world_session_id = review_session.observation.session_id
                 else:
-                    legacy_bridge = cast(PumpStationHarborBridge, current_bridge)
-                    if legacy_bridge.maintenance_review:
-                        review_session = await asyncio.to_thread(
-                            run_pump_station_review_reference_session,
-                            bridge=legacy_bridge,
-                            output_dir=run_dir,
-                            session_identity=session_identity,
-                        )
-                        world_session_id = review_session.observation.session_id
-                    else:
-                        reference_runner = (
-                            run_pump_station_evidence_health_reference_session
-                            if legacy_bridge.evidence_health
-                            else run_pump_station_rich_work_reference_session
-                            if legacy_bridge.rich_work_processes
-                            else run_pump_station_reference_session
-                        )
-                        world_session = await asyncio.to_thread(
-                            reference_runner,
-                            bridge=legacy_bridge,
-                            output_dir=run_dir,
-                            session_identity=session_identity,
-                        )
-                        world_session_id = world_session.request.session_id
+                    reference_runner = (
+                        run_pump_station_reference_session
+                        if current_bridge.profile_ref is not None
+                        else run_pump_station_evidence_health_reference_session
+                        if current_bridge.evidence_health
+                        else run_pump_station_rich_work_reference_session
+                        if current_bridge.rich_work_processes
+                        else run_pump_station_reference_session
+                    )
+                    world_session = await asyncio.to_thread(
+                        reference_runner,
+                        bridge=current_bridge,
+                        output_dir=run_dir,
+                        session_identity=session_identity,
+                    )
+                    world_session_id = world_session.request.session_id
                 output_path = staging / "output.md"
                 output_path.write_text(
                     (
@@ -823,11 +804,7 @@ class EntrypointAgent(BaseAgent):
                 )
                 input_tokens = 0
                 output_tokens = 0
-                resolved_model = (
-                    PUMP_STATION_ASW_8_REFERENCE_CONTROLLER_ID
-                    if asw_8_reference
-                    else PUMP_STATION_REFERENCE_CONTROLLER_ID
-                )
+                resolved_model = expected_reference_controller
                 session_status = "completed"
             else:
                 model = str(self.model_name or "")
@@ -836,32 +813,18 @@ class EntrypointAgent(BaseAgent):
                 )
                 max_turns = configured_positive_int(self._params, "max_turns") or PUMP_STATION_MODEL_MAX_TURNS
                 try:
-                    if asw_8_reference:
-                        asw_8_model_session = await asyncio.to_thread(
-                            run_asw_8_harbor_model_session,
-                            bridge=cast(PumpStationAsw8HarborBridge, current_bridge),
-                            output_dir=run_dir,
-                            session_identity=session_identity,
-                            model=model,
-                            max_turns=max_turns,
-                            registry=self._lifecycle_registry(),
-                        )
-                        adapter_result = asw_8_model_session.adapter_result
-                        verification_valid = asw_8_model_session.verification.valid
-                        world_session_id = asw_8_model_session.session_id
-                    else:
-                        legacy_model_session = await asyncio.to_thread(
-                            run_pump_station_model_session,
-                            bridge=cast(PumpStationHarborBridge, current_bridge),
-                            output_dir=run_dir,
-                            session_identity=session_identity,
-                            model=model,
-                            max_turns=max_turns,
-                            registry=self._lifecycle_registry(),
-                        )
-                        adapter_result = legacy_model_session.adapter_result
-                        verification_valid = legacy_model_session.verification.valid
-                        world_session_id = legacy_model_session.request.session_id
+                    model_session = await asyncio.to_thread(
+                        run_pump_station_model_session,
+                        bridge=current_bridge,
+                        output_dir=run_dir,
+                        session_identity=session_identity,
+                        model=model,
+                        max_turns=max_turns,
+                        registry=self._lifecycle_registry(),
+                    )
+                    adapter_result = model_session.adapter_result
+                    verification_valid = model_session.verification.valid
+                    world_session_id = model_session.request.session_id
                 except Exception as exc:
                     context.metadata = {
                         "adapter_name": "tool_loop",

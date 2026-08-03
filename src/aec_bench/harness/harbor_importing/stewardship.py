@@ -27,6 +27,7 @@ from aec_bench.contracts.world_session import (
     WorldSessionResult,
 )
 from aec_bench.evaluation.stewardship import (
+    evaluate_pump_station_reference_run,
     evaluate_pump_station_stewardship_run,
 )
 from aec_bench.harness.harbor_importing.artifact_io import (
@@ -40,17 +41,6 @@ from aec_bench.harness.harbor_importing.contracts import (
     ImportEvidenceContext,
     ImportEvidenceIntent,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_evaluation import (
-    shared_stewardship_evaluation,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_harbor import (
-    PUMP_STATION_ASW_8_HARBOR_EXPORT_VERSION,
-    load_asw_8_harbor_bridge,
-    verify_asw_8_harbor_session,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_run import (
-    PumpStationCoupledRunRepository,
-)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     PUMP_STATION_HARBOR_EXECUTION_KIND,
     load_pump_station_harbor_bridge,
@@ -58,9 +48,11 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_e
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_verifier import (
     verify_pump_station_harbor_run,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_reader import (
-    REFERENCE_PROFILE_V2,
-    load_reference_package,
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import (
+    PumpStationWorldRun,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
+    PumpStationWorldRunRepository,
 )
 
 _RUN_DIRECTORY_NAME = "world-session"
@@ -148,16 +140,6 @@ class StewardshipImportEvidenceExtension:
 def _load_stewardship_evidence(
     context: ImportEvidenceContext,
 ) -> StewardshipHarborImportEvidence:
-    export_manifest_path = context.task_instance_dir / "world-session-export.json"
-    try:
-        export_manifest = json.loads(export_manifest_path.read_bytes())
-    except (OSError, json.JSONDecodeError) as error:
-        raise HarborImportError(f"stewardship export manifest is invalid: {error}") from error
-    if (
-        isinstance(export_manifest, dict)
-        and export_manifest.get("schema_version") == PUMP_STATION_ASW_8_HARBOR_EXPORT_VERSION
-    ):
-        return _load_asw_8_stewardship_evidence(context)
     run_dir = _world_run_directory(context)
     read_regular_trial_tree(
         run_dir,
@@ -170,6 +152,7 @@ def _load_stewardship_evidence(
             run_dir=run_dir,
             export_manifest_path=bridge.export_manifest_path,
             package_dir=bridge.package_root,
+            reference_system_dir=bridge.reference_system_root,
             verifier_runtime_path=bridge.verifier_runtime_path,
         )
     except (OSError, TypeError, ValueError) as error:
@@ -209,11 +192,23 @@ def _load_stewardship_evidence(
         inventory=inventory,
         bridge=bridge,
     )
-    evaluation = evaluate_pump_station_stewardship_run(
-        run_dir=run_dir / "world-run",
-        package_root=bridge.package_root,
-        imported_artifact_sha256=tuple(sorted({artifact.sha256 for artifact in artifacts})),
-    )
+    imported_artifact_sha256 = tuple(sorted({artifact.sha256 for artifact in artifacts}))
+    if bridge.profile_ref is None:
+        evaluation = evaluate_pump_station_stewardship_run(
+            run_dir=run_dir / "world-run",
+            package_root=bridge.package_root,
+            imported_artifact_sha256=imported_artifact_sha256,
+        )
+    else:
+        repository = PumpStationWorldRunRepository(run_dir / "world-run")
+        run = PumpStationWorldRun.resume_reference_system(
+            repository=repository,
+            snapshot=repository.current_snapshot(),
+        )
+        evaluation = evaluate_pump_station_reference_run(
+            run,
+            imported_artifact_sha256=imported_artifact_sha256,
+        )
     execution_fields = {
         "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
         "session_id": request.session_id,
@@ -254,107 +249,6 @@ def _load_stewardship_evidence(
         world_provenance=provenance,
         artifacts=artifacts,
         package_content_id=bridge.package.package_content_id,
-        evaluation=evaluation,
-    )
-
-
-def _load_asw_8_stewardship_evidence(
-    context: ImportEvidenceContext,
-) -> StewardshipHarborImportEvidence:
-    """Load one ASW-8 Harbor v2 session through independent replay."""
-    run_dir = _world_run_directory(context)
-    read_regular_trial_tree(
-        run_dir,
-        trial_dir=context.trial_dir,
-        label="ASW-8 world-session evidence",
-    )
-    try:
-        bridge = load_asw_8_harbor_bridge(context.task_instance_dir / "environment")
-        verify_asw_8_harbor_session(
-            run_dir=run_dir,
-            export_manifest=bridge.export_manifest_path,
-            package_dir=bridge.package_root,
-            reference_system_dir=bridge.reference_system_root,
-        )
-    except (OSError, TypeError, ValueError) as error:
-        raise HarborImportError(f"ASW-8 world-session verification failed: {error}") from error
-
-    request = _read_trial_json(
-        run_dir / _REQUEST_NAME,
-        context=context,
-        label="ASW-8 world-session request",
-    )
-    result = _read_trial_json(
-        run_dir / _RESULT_NAME,
-        context=context,
-        label="ASW-8 world-session result",
-    )
-    inventory = _read_trial_json(
-        run_dir / _INVENTORY_NAME,
-        context=context,
-        label="ASW-8 world-session artifact inventory",
-    )
-    start_snapshot = StewardshipStateSnapshotRef.model_validate(
-        _mapping(request.get("start_snapshot"), "ASW-8 start snapshot")
-    )
-    end_snapshot = StewardshipStateSnapshotRef.model_validate(
-        _mapping(result.get("end_snapshot"), "ASW-8 end snapshot")
-    )
-    transition_count = _required_non_negative_int(
-        result.get("transition_count"),
-        "ASW-8 transition count",
-    )
-    if end_snapshot.sequence - start_snapshot.sequence != transition_count:
-        raise HarborImportError("ASW-8 transition count differs from its snapshots")
-    artifacts, references = _artifact_evidence(
-        context=context,
-        run_dir=run_dir,
-        inventory=inventory,
-        bridge=bridge,
-    )
-    run = PumpStationCoupledRunRepository(run_dir / "world-run").open()
-    evaluation = shared_stewardship_evaluation(
-        run,
-        imported_artifact_sha256=tuple(sorted({artifact.sha256 for artifact in artifacts})),
-    )
-    model = _verified_model(context)
-    temporal_execution, temporal_provenance = _asw_8_temporal_trial_evidence(
-        run_dir=run_dir,
-        context=context,
-        references=references,
-    )
-    execution = TemporalWorldExecutionRecord(
-        execution_kind=PUMP_STATION_HARBOR_EXECUTION_KIND,
-        session_id=str(request.get("session_id", "")),
-        task_world_id=bridge.task_world_id,
-        agent_tenure_id="asw-8-reference-controller-tenure",
-        adapter="tool_loop",
-        resolved_model=model,
-        status="completed",
-        start_snapshot=start_snapshot,
-        end_snapshot=end_snapshot,
-        transition_count=transition_count,
-        tool_names=tuple(str(value) for value in result.get("tool_names", ())),
-        temporal_evidence=temporal_execution,
-    )
-    provenance = TemporalWorldTrialProvenance(
-        world_session_request=references[_REQUEST_NAME],
-        world_session_result=references[_RESULT_NAME],
-        artifact_inventory=references[_INVENTORY_NAME],
-        export_manifest=references["export_manifest"],
-        package_manifest=references["package_manifest"],
-        verification_report=references[_VERIFICATION_NAME],
-        temporal_evidence=temporal_provenance,
-    )
-    package = load_reference_package(
-        bridge.package_root,
-        profile_id=REFERENCE_PROFILE_V2,
-    )
-    return StewardshipHarborImportEvidence(
-        world_execution=execution,
-        world_provenance=provenance,
-        artifacts=artifacts,
-        package_content_id=package.package_content_id,
         evaluation=evaluation,
     )
 
@@ -493,79 +387,6 @@ def _temporal_trial_evidence(
         **fixed_references,
         verification_report=references[_TEMPORAL_VERIFICATION_NAME],
         ledger_artifacts=ledger_artifacts,
-    )
-    return execution, provenance
-
-
-def _asw_8_temporal_trial_evidence(
-    *,
-    run_dir: Path,
-    context: ImportEvidenceContext,
-    references: dict[str, ArtifactReference],
-) -> tuple[WorldTemporalEvidenceExecution, WorldTemporalEvidenceProvenance]:
-    """Build shared temporal records from the ASW-8 v2 artifact layout."""
-    fixed_paths = {
-        "capability": "temporal-evidence/capability.json",
-        "corpus_manifest": "temporal-evidence/corpus-manifest.json",
-        "lineage_manifest": "temporal-evidence/lineage.json",
-        "availability_schedule": "temporal-evidence/availability.json",
-        "retrieval_policy": "temporal-evidence/retrieval-policy.json",
-        "access_policy": "temporal-evidence/access-policy.json",
-        "branch_policy": "temporal-evidence/branch-policy.json",
-        "cost_policy": "temporal-evidence/cost-policy.json",
-    }
-    missing = tuple(path for path in fixed_paths.values() if path not in references)
-    if missing:
-        raise HarborImportError("ASW-8 temporal evidence lacks required authority artifacts")
-    capability = _read_trial_json(
-        run_dir / fixed_paths["capability"],
-        context=context,
-        label="ASW-8 temporal capability",
-    )
-    temporal_verification = _read_trial_json(
-        run_dir / _TEMPORAL_VERIFICATION_NAME,
-        context=context,
-        label="ASW-8 temporal verification",
-    )
-    ledger_path = "temporal-evidence/access-ledger.json"
-    if ledger_path not in references:
-        raise HarborImportError("ASW-8 temporal evidence lacks its access ledger")
-    try:
-        access_rows = json.loads(
-            read_required_trial_file(
-                run_dir / ledger_path,
-                trial_dir=context.trial_dir,
-                label="ASW-8 temporal access ledger",
-            )
-        )
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise HarborImportError("ASW-8 temporal access ledger is invalid") from error
-    if not isinstance(access_rows, list):
-        raise HarborImportError("ASW-8 temporal access ledger must be a list")
-    access_count = _required_non_negative_int(
-        temporal_verification.get("access_count"),
-        "ASW-8 temporal access count",
-    )
-    if access_count != len(access_rows):
-        raise HarborImportError("ASW-8 temporal access count differs from its ledger")
-    execution = WorldTemporalEvidenceExecution(
-        profile="deterministic_snapshot",
-        capability_id=str(capability.get("content_sha256", "")),
-        corpus_snapshot_id=str(capability.get("corpus_snapshot_id", "")),
-        retrieval_policy_id=str(capability.get("retrieval_policy_id", "")),
-        access_policy_id=str(capability.get("access_policy_id", "")),
-        availability_schedule_id=str(capability.get("availability_schedule_id", "")),
-        branch_namespace_policy_id=str(capability.get("branch_namespace_policy_id", "")),
-        cost_policy_id=str(capability.get("simulated_cost_policy_id", "")),
-        access_count=access_count,
-        reliance_count=sum(isinstance(row, list) and bool(row) and row[0] == "fetch_evidence" for row in access_rows),
-        carrier_count=0,
-        verification_report_id=references[_TEMPORAL_VERIFICATION_NAME].sha256,
-    )
-    provenance = WorldTemporalEvidenceProvenance(
-        **{name: references[path] for name, path in fixed_paths.items()},
-        verification_report=references[_TEMPORAL_VERIFICATION_NAME],
-        ledger_artifacts=(references[ledger_path],),
     )
     return execution, provenance
 

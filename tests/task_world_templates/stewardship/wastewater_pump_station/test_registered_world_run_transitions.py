@@ -367,6 +367,59 @@ def test_registered_actor_action_selects_one_existing_world_run_commit(
     assert run.repository.commits() == commits
 
 
+def test_registered_receipts_name_each_changed_durable_owner(
+    tmp_path: Path,
+) -> None:
+    run = _start_reference_run(tmp_path / "run")
+    started = _apply_registered_actor_action(
+        run,
+        _actor_request(
+            run,
+            request_id="receipt-clearance-001",
+            action_name="request_obstruction_clearance",
+            arguments={
+                "pump_id": "pump-b",
+                "backlog_item_id": "backlog-b-clearance-001",
+                "inspection_evidence_id": "initial-b-inspection-accepted",
+            },
+            reason="Start the named Pump B clearance work.",
+        ),
+    )
+    receipt = started.receipt
+
+    assert receipt.changed_pool_ids == (
+        "field-access-slot",
+        "lifting-isolation-set-01",
+        "maintenance-crew-01",
+        "obstruction-clearance-kit",
+    )
+    assert receipt.changed_reservation_ids == tuple(
+        reservation.reservation_id for reservation in started.state.resource_reservations
+    )
+    assert receipt.changed_backlog_item_ids == ("backlog-b-clearance-001",)
+    assert receipt.generation_record_ids == ()
+    assert receipt.changed_liability_owner_ids == ()
+
+    completed = _apply_registered_actor_action(
+        run,
+        _actor_request(
+            run,
+            request_id="receipt-clearance-complete-001",
+            action_name="continue_operation",
+            arguments={},
+            reason="Advance to the clearance completion event.",
+        ),
+    )
+    completion_receipt = completed.receipt
+
+    assert "backlog-b-clearance-001" in completion_receipt.changed_backlog_item_ids
+    assert len(completion_receipt.generation_record_ids) == 2
+    assert any(
+        item_id in completion_receipt.changed_liability_owner_ids for item_id in completed.state.active_liability_ids
+    )
+    assert completion_receipt.operating_interval_id is not None
+
+
 def test_registered_actor_request_id_rejects_changed_content(
     tmp_path: Path,
 ) -> None:

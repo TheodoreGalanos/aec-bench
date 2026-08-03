@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 from dataclasses import dataclass
@@ -13,13 +12,6 @@ from typing import Any
 import yaml
 from harbor.models.job.config import JobConfig  # type: ignore[import-untyped]
 
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_execution import (
-    PUMP_STATION_ASW_8_REFERENCE_CONTROLLER_ID,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_harbor import (
-    PUMP_STATION_ASW_8_HARBOR_EXPORT_VERSION,
-    load_asw_8_harbor_bridge,
-)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     load_pump_station_harbor_bridge,
 )
@@ -27,6 +19,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_s
     PUMP_STATION_MODEL_CONTROLLER_MODE,
     PUMP_STATION_MODEL_MAX_TURNS,
     PUMP_STATION_REFERENCE_CONTROLLER_ID,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+    PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
 
 _ENTRYPOINT_IMPORT_PATH = "agents.entrypoint_agent:EntrypointAgent"
@@ -54,15 +49,7 @@ def build_pump_station_harbor_job_config(
     """Build one validated local Harbor configuration for the exported task."""
 
     task_root = Path(task_dir).resolve(strict=True)
-    manifest = json.loads((task_root / "world-session-export.json").read_bytes())
-    asw_8_reference = (
-        isinstance(manifest, dict) and manifest.get("schema_version") == PUMP_STATION_ASW_8_HARBOR_EXPORT_VERSION
-    )
-    bridge = (
-        load_asw_8_harbor_bridge(task_root / "environment")
-        if asw_8_reference
-        else load_pump_station_harbor_bridge(task_root / "environment")
-    )
+    bridge = load_pump_station_harbor_bridge(task_root / "environment")
     environment = _harbor_environment(backend)
     model = model_name.strip()
     if not model:
@@ -70,7 +57,9 @@ def build_pump_station_harbor_job_config(
     if max_turns < 1:
         raise ValueError("pump-station Harbor max turns must be positive")
     reference_controller_id = (
-        PUMP_STATION_ASW_8_REFERENCE_CONTROLLER_ID if asw_8_reference else PUMP_STATION_REFERENCE_CONTROLLER_ID
+        PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
+        if bridge.profile_ref is not None
+        else PUMP_STATION_REFERENCE_CONTROLLER_ID
     )
     reference_controller = model == reference_controller_id
     if bridge.maintenance_review and not reference_controller:
@@ -81,7 +70,7 @@ def build_pump_station_harbor_job_config(
         "execution_kind": bridge.execution_kind,
         "world_session": world_session,
     }
-    agent_name = "pump-station-asw-8-reference-controller" if asw_8_reference else "pump-station-reference-controller"
+    agent_name = "pump-station-reference-controller"
     if not reference_controller:
         agent_name = "pump-station-model-controller"
         agent_kwargs["max_turns"] = max_turns

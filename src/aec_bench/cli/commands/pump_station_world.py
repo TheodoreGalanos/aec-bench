@@ -24,16 +24,6 @@ from aec_bench.evaluation.stewardship import (
 from aec_bench.harness.harbor_importing.core import import_harbor_trial
 from aec_bench.harness.world_interface import invoke_world_actor, observe_world_actor
 from aec_bench.harness.world_session import open_world_session
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_execution import (
-    execute_asw_8_reference_controller_through_interface,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_harbor import (
-    export_asw_8_harbor_task,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_interface import (
-    PumpStationCoupledLocalRequest,
-    execute_coupled_local_request,
-)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     export_pump_station_harbor_task,
 )
@@ -58,9 +48,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rollout_
     PumpStationRolloutControlRequest,
     execute_pump_station_rollout_request,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
-    canonical_stewardship_value,
-)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_control import (
     PumpStationWorldControl,
 )
@@ -74,82 +61,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_se
 )
 
 app = typer.Typer(help="Run the synthetic wastewater pump-station stewardship world.")
-
-
-@app.command("asw-8-interface")
-def asw_8_interface_command(
-    run_dir: Path = typer.Option(..., "--run-dir", help="ASW-8 durable world-run directory"),
-    request_path: Path = typer.Option(..., "--request-path", help="Strict ASW-8 JSON request"),
-    host_authority_id: str | None = typer.Option(
-        None,
-        "--host-authority-id",
-        help="Host-only authority identity for control operations",
-    ),
-) -> None:
-    """Execute one strict ASW-8 actor or host-control request."""
-    started = time.monotonic()
-    request = PumpStationCoupledLocalRequest.model_validate_json(request_path.read_text(encoding="utf-8"))
-    payload = execute_coupled_local_request(
-        run_root=run_dir,
-        request=request,
-        host_authority_id=host_authority_id,
-    )
-    emit(
-        "task pump-station-world asw-8-interface",
-        payload,
-        start_time=started,
-    )
-
-
-@app.command("asw-8-reference-journey")
-def asw_8_reference_journey_command(
-    run_dir: Path = typer.Option(..., "--run-dir", help="New ASW-8 durable run directory"),
-    run_id: str = typer.Option(..., "--run-id", help="Stable ASW-8 run identity"),
-    world_branch_id: str = typer.Option(..., "--world-branch-id", help="Stable ASW-8 branch identity"),
-) -> None:
-    """Execute and persist the complete closed Day 0 to Day 2 journey."""
-    started = time.monotonic()
-    result = execute_asw_8_reference_controller_through_interface(
-        run_root=run_dir,
-        run_id=run_id,
-        world_branch_id=world_branch_id,
-    )
-    emit(
-        "task pump-station-world asw-8-reference-journey",
-        {
-            "run_id": result.run.manifest.run_id,
-            "world_branch_id": result.run.manifest.world_branch_id,
-            "sequence": result.run.state.sequence,
-            "state_id": result.run.state.state_id,
-            "calendar_seconds": result.run.state.calendar_seconds,
-            "semantic_outcome": canonical_stewardship_value(
-                result.semantic_outcome,
-                record_profile="v4",
-            ),
-        },
-        start_time=started,
-    )
-
-
-@app.command("export-asw-8-harbor")
-def export_asw_8_harbor_command(
-    task_dir: Path = typer.Option(..., "--task-dir", help="New ASW-8 Harbor task directory"),
-    project_root: Path = typer.Option(..., "--project-root", help="AEC-Bench source root"),
-) -> None:
-    """Export the exact ASW-8 reference system for Harbor."""
-    started = time.monotonic()
-    exported = export_asw_8_harbor_task(task_dir, project_root=project_root)
-    emit(
-        "task pump-station-world export-asw-8-harbor",
-        {
-            "task_dir": str(exported.task_dir),
-            "manifest_path": str(exported.manifest_path),
-            "package_dir": str(exported.package_dir),
-            "reference_system_dir": str(exported.reference_system_dir),
-            "verifier_runtime_path": str(exported.verifier_runtime_wheel_path),
-        },
-        start_time=started,
-    )
 
 
 def _factory(

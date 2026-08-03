@@ -185,7 +185,7 @@ The audit accounts for all 97 changed files:
 | `coupled_runtime.py` | Pump-station task world | Preserve its task semantics. Integrate them into stable policy, event, state-machine, and view modules. Do not promote pump records to the shared runtime. |
 | `coupled_work.py` | Stewardship capability and pump task | Preserve work, pool, backlog, and generation rules. Integrate shared stewardship behaviour only after the second-consumer guard; keep pump rules task-local. |
 | `coupled_world.py` | Pump-station policy | Move the outage-admission rule to the stable pump policy boundary and keep the real action-path call. |
-| `coupled_temporal.py` | Pump-station temporal evidence | Integrate RS1 access into the existing temporal-evidence gateway and repository. |
+| Retired `coupled_temporal.py` | Pump-station temporal evidence | RS1 access now uses the existing temporal-evidence gateway, repository, and world session. |
 | `stewardship_models.py` | Pump-station task world | Keep v4 task records and proposal types. Preserve v1-v3 decoding. |
 | `stewardship_identity.py` | Pump-station task world | Keep profile-aware task content identity. Preserve historical hashes. |
 | `temporal_evidence/corpus.py` | Pump-station task world | Keep the descriptor-selected RS1 builder and child public-corpus inheritance rules. |
@@ -214,16 +214,16 @@ The accepted design also requires changes to existing `world_run.py`,
 
 | Current path | Preserve | Final disposition |
 | --- | --- | --- |
-| `coupled_run.py` | V4 manifest bindings, command meaning, replay assertions, and durability tests | Route v4 through the existing run and shared durable engine, then retire the second run and generation store. |
-| `coupled_interface.py` | Operation validation and negative cases | Express calls through separate shared actor and control envelopes, then retire the combined request. |
+| Retired `coupled_run.py` | V4 manifest bindings, command meaning, replay assertions, and durability tests | V4 uses the existing run and shared durable engine. |
+| Retired `coupled_interface.py` | Operation validation and negative cases | Calls use separate shared actor and control envelopes. |
 | `coupled_rollout.py` | V2 lineage, ancestor binding, temporal inheritance, and isolation checks | Retired in Step 8 after these behaviours moved to the shared coordinator and pump branch adapter. |
 | `coupled_rollout_interface.py` | Strict v2 request and result validation | Retired with its unpublished transport. Keep installed V1 exact; Step 9 can transport the shared registered request through catalogue dispatch. |
-| `coupled_agent.py` | Pump tool descriptions and session behaviour | Supply them through the registered pump definition and shared session, then retire the second session. |
-| `coupled_harbor.py` | RS1 controller, model tool loop, semantic evidence, and negative transport tests | Integrate task controller and verifier ports into the existing Harbor path, then retire the second bridge. |
-| `coupled_evaluation.py` | Conservation derivation and semantic result checks | Integrate them into the task verifier and stewardship evaluation route, then retire the parallel evaluator. |
-| `coupled_execution.py` | Deterministic RS1 reference journey | Keep as a task-owned reference controller under a behaviour-based name and invoke it through the registered world. |
+| Retired `coupled_agent.py` | Pump tool descriptions and session behaviour | The registered pump definition supplies them through the shared session. |
+| Retired `coupled_harbor.py` | RS1 controller, model tool loop, semantic evidence, and negative transport tests | The task controller and verifier use the existing Harbor path. |
+| Retired `coupled_evaluation.py` | Conservation derivation and semantic result checks | The task verifier and stewardship evaluator own these checks. |
+| Retired `coupled_execution.py` | Deterministic RS1 reference journey | `reference_controller.py` invokes the journey through the registered world. |
 | `coupled_runtime.py` | V4 task transitions, event ordering, and state projections | Split task rules across the existing pump policy, event, state-machine, and view modules, then retire the parallel runtime. |
-| `coupled_temporal.py` | RS1 temporal setup, child inheritance, and action routing | Reuse the existing session, temporal repository, and gateway, then retire the duplicate temporal route. |
+| Retired `coupled_temporal.py` | RS1 temporal setup, child inheritance, and action routing | The existing session, temporal repository, gateway, and branch port own this behaviour. |
 | `coupled_work.py` | Resource, backlog, work-generation, and priority rules | Move records and task rules to their stable pump and stewardship owners, then retire the parallel work module. |
 | `coupled_world.py` | Planned-outage admission rule | Move the rule to the stable pump policy module, retain coverage through the real field-work action, then retire this file. |
 
@@ -241,12 +241,12 @@ No parallel file is removed before its behaviour is proven on the target path.
 
 | Current path group | Owner | Disposition |
 | --- | --- | --- |
-| `test_asw_8_agent_session.py` | Actor-session contract | Rename by behaviour and run against the shared session. |
+| Retired `test_asw_8_agent_session.py` | Actor-session contract | Shared registered-session tests own this coverage. |
 | `test_asw_8_coupled_physics.py` | Pump physics | Rename by behaviour and keep task-local. |
-| `test_asw_8_harbor.py` | Harbor parity | Rename by behaviour and run through catalogue dispatch. |
-| `test_asw_8_installed_interface.py` | Actor/control transport | Rename by behaviour and require separate envelopes. |
-| `test_asw_8_operational_boundaries.py` | Pump policy and authority | Split only where ownership differs; keep real outage-path coverage. |
-| `test_asw_8_persistence_and_evaluation.py` | Runtime durability and pump verification | Split into shared runtime contract tests and task verifier tests after both target paths exist. |
+| Retired `test_asw_8_harbor.py` | Harbor parity | `test_registered_world_harbor.py` uses the canonical Harbor path. |
+| Retired `test_asw_8_installed_interface.py` | Actor/control transport | Registered session and controller tests own the runtime coverage; Step 9 owns catalogue transport. |
+| Retired `test_asw_8_operational_boundaries.py` | Pump policy and authority | Behaviour moved to the pump work-system and reference-journey tests. |
+| Retired `test_asw_8_persistence_and_evaluation.py` | Runtime durability and pump verification | Behaviour moved to registered run, repository, controller, and evaluation tests. |
 | `test_asw_8_reference_journey.py` | RS1 end-to-end journey | Rename by behaviour and retain as the final task E2E gate. |
 | `test_asw_8_reference_package.py` | Package boundary | Rename by behaviour and keep task-local. |
 | `test_asw_8_reference_system.py` | Profile binding | Rename by behaviour and keep task-local. |
@@ -759,14 +759,13 @@ behaviour-named tests on the shared coordinator and pump adapter. Their
 unpublished transport is not copied into the stable V1 interface. Registered
 transport remains Step 9 work.
 
-The footprint gate uses `origin/main` as its fixed baseline. Net production
-growth must be no more than 16,500 lines before Step 9 starts. Delete the
-replaced coupled agent, Harbor, interface, rollout, run, and temporal paths
-after their callers use the canonical interfaces. Move only behavior that has
-no canonical owner from the remaining coupled runtime, work, evaluation, and
-execution modules. Then delete those old owners. Do not meet the limit by
-moving the same implementation to another file or by removing required
-verification.
+The footprint review uses `origin/main` as its fixed baseline and treats net
+production growth as a diagnostic, not a target. The completion gate is one
+canonical owner for each run, session, rollout, replay, treatment, evaluation,
+and transport concern. Delete replaced coupled paths after their callers use
+the canonical interfaces. Move only behaviour that has no canonical owner,
+then delete the old owner. Do not claim consolidation by moving the same
+implementation to another file or by removing required verification.
 
 ## 7. Implementation sequence
 
@@ -781,7 +780,7 @@ merged.
 5. V4 pump transitions and replay through the existing run, state machine, and verifier.
 6. V4 session ownership through the existing session and separate actor and host-control interfaces.
 7. Existing rollout path extension and generic branch orchestration.
-8. Footprint gate: classify every production addition, remove replaced coupled and parallel runtime paths, consolidate duplicate coverage, and measure the net production change against `origin/main`. Do not start transport work while two run, session, rollout, replay, or treatment paths remain, or while net production growth is above 16,500 lines.
+8. Footprint gate: classify every production addition, remove replaced coupled and parallel runtime paths, consolidate duplicate coverage, and measure the net production change against `origin/main` as a diagnostic. Do not complete this step while two run, session, rollout, replay, treatment, evaluation, or transport paths remain.
 9. Catalogue-driven CLI, Harbor, and agent execution.
 10. Verification and evaluation integration, final research and test cleanup, and the requirement-by-requirement final merge audit.
 

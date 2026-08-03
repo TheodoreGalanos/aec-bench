@@ -187,6 +187,29 @@ def test_reference_system_resume_resolves_the_profile_from_the_manifest(
     assert caller_override.value.code == "reference-system-resume-required"
 
 
+def test_reference_system_resume_rejects_changed_stored_state(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "run"
+    started = _start_reference_system(root)
+    snapshot = started.snapshot()
+    state_path = root / "states" / f"{snapshot.state_id}.json"
+    state_path.write_bytes(
+        state_path.read_bytes().replace(
+            b'"calendar_seconds":21600',
+            b'"calendar_seconds":21601',
+        )
+    )
+
+    with pytest.raises(PumpStationWorldRunError) as raised:
+        PumpStationWorldRun.resume_reference_system(
+            repository=PumpStationWorldRunRepository(root),
+            snapshot=snapshot,
+        )
+
+    assert raised.value.code == "artifact-integrity"
+
+
 def test_reference_system_start_requires_a_catalogue_registration(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
