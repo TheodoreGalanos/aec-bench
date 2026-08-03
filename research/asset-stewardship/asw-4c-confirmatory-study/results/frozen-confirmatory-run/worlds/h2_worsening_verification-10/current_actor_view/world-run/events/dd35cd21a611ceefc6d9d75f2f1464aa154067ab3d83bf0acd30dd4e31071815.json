@@ -1,1 +1,0 @@
-{"$type":"PumpStationAppliedEventBatch","event_ids":["event-0012-post_maintenance_verification-completion"],"event_types":["process_completion"],"sequence":13,"transition_id":"transition-0013"}

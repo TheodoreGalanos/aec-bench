@@ -18,6 +18,7 @@ from aec_bench.contracts.continual_world import (
     ContinualRolloutGroupRequest,
     ContinualWorldSnapshotRef,
 )
+from aec_bench.contracts.evaluation_result import StewardshipEvaluation
 from aec_bench.contracts.world_interface import WorldActorActionRequest
 from aec_bench.contracts.world_session import (
     StewardshipStateSnapshotRef,
@@ -26,6 +27,7 @@ from aec_bench.contracts.world_session import (
     WorldSessionRequest,
     WorldSessionResult,
 )
+from aec_bench.harness.harbor_importing.core import import_harbor_trial
 from aec_bench.harness.world_interface import invoke_world_actor, observe_world_actor
 from aec_bench.task_world_templates.continual.rollout_control import ContinualRolloutControl
 from aec_bench.task_world_templates.continual.rollout_repository import ContinualRolloutRepository
@@ -275,8 +277,9 @@ def test_local_harbor_trial_resumes_one_rollout_child_for_one_bounded_actor_acti
     selected_before = _tree_bytes(selected_root)
     sibling_before = _tree_bytes(sibling_root)
     profile_ref = pump_station_continual_world_definition().spec.profiles[0]
+    repo_root = tmp_path / "repo"
     exported = export_pump_station_harbor_task(
-        tmp_path / "task",
+        repo_root / "tasks" / "stewardship" / "wastewater-pump-station",
         project_root=PROJECT_ROOT,
         profile_ref=profile_ref,
         initial_run_root=selected_root,
@@ -380,6 +383,24 @@ def test_local_harbor_trial_resumes_one_rollout_child_for_one_bounded_actor_acti
     assert _tree_bytes(selected_root) == selected_before
     assert _tree_bytes(sibling_root) == sibling_before
     assert sibling_ref.initial_snapshot.sequence == selected_ref.initial_snapshot.sequence
+
+    record = import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
+    assert record.evaluation.stewardship is not None
+    assert record.evaluation.stewardship.evaluation_scope == "bounded_continuation"
+    assert record.evaluation.stewardship.valid is True
+    assert record.evaluation.reward == 1.0
+    assert record.world_execution is not None
+    assert record.world_execution.transition_count == 1
+    imported_hashes = tuple(sorted({artifact.sha256 for artifact in record.outputs.artifacts or ()}))
+    definition = pump_station_continual_world_definition()
+    assert definition.evaluation_port is not None
+    direct_evaluation = definition.evaluation_port.evaluate_run(
+        profile=definition.load_profile(profile_ref),
+        run_root=world_session_dir / "world-run",
+        imported_artifact_sha256=imported_hashes,
+        evaluation_scope="bounded_continuation",
+    )
+    assert record.evaluation.stewardship == StewardshipEvaluation.model_validate(direct_evaluation)
 
     request_path = world_session_dir / "world-session-request.json"
     result_path = world_session_dir / "world-session-result.json"

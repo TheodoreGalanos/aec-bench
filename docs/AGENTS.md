@@ -232,6 +232,7 @@ Tool errors are surfaced back to the model (not swallowed), logged via `logger.w
 - Real Harbor data tests use `_archive/jobs/2026-03-04__17-57-43` (60 trials, skipped on fresh clones).
 - Adapter tests use replay clients (`ReplayDirectClient`, `ReplayToolLoopClient`).
 - Property-based tests (Hypothesis) are used for validators and stats primitives.
+- Test modules, classes, and functions describe stable behaviour, contracts, boundaries, or failure modes. Do not name them after delivery sequence, milestones, or temporary work items.
 - Run the full suite: `uv run pytest tests/ -q`
 - Lint: `uv run ruff check src/ tests/`
 - Type check: `uv run mypy src/aec_bench/contracts/`

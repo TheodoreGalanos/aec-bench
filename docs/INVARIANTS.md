@@ -127,6 +127,7 @@ Python enforcement direction:
   and retirement evidence before shared extraction,
 - require the same boundary contract to pass for at least two real consumers
   before a shared implementation becomes authoritative,
+- test modules, classes, and functions named for stable behaviour, contracts, boundaries, or failure modes rather than delivery sequence, milestones, or temporary work items,
 - tracked debt with owners, not vague TODO accumulation.
 
 ---
@@ -235,6 +236,7 @@ Adapter-internal extraction metadata must use explicit reserved keys and must no
 | Code quality | Formatter, linter, typing, and tests pass |
 | Continual-world ownership | Changed paths have one declared runtime, task, profile, or transport owner |
 | Shared extraction | Ownership, migration, retirement, and two-real-consumer evidence exist |
+| Test naming | Permanent test names describe stable behaviour, contracts, boundaries, or failure modes |
 
 ### Build Next
 

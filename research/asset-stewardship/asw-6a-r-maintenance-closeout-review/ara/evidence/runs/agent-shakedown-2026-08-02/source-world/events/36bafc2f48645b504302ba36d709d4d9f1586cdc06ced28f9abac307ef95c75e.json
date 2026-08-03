@@ -1,1 +1,0 @@
-{"$type":"PumpStationAppliedEventBatch","event_ids":["event-0000-post_maintenance_verification-due"],"event_types":["obligation_due"],"sequence":5,"transition_id":"transition-0005"}

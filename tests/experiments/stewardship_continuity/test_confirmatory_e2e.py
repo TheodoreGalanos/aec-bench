@@ -1,4 +1,4 @@
-# ABOUTME: Runs the complete ASW-4C path with the real world and scripted adapter.
+# ABOUTME: Runs the complete confirmatory-study path with the real world and scripted adapter.
 # ABOUTME: Proves ordered resume, hidden endpoints, immutable evidence, and reload.
 
 from __future__ import annotations
@@ -111,7 +111,7 @@ class _ScriptedRegistry:
         )
 
 
-def test_token_measurement_spend_guard_fits_remaining_phase_authority() -> None:
+def test_token_measurement_spend_guard_fits_remaining_approved_authority() -> None:
     remaining_spend_microunits = 26_274_635
 
     maximum_input_tokens = confirmatory_execution._spend_guard_input_token_limit(
@@ -409,7 +409,7 @@ class _ConcurrencyProbeSession:
         return self._mutate()
 
 
-def test_asw4c_executes_all_frozen_trials_once_and_resumes_in_order(
+def test_confirmatory_run_executes_all_frozen_trials_once_and_resumes_in_order(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "asw-4c"
@@ -460,7 +460,7 @@ def test_asw4c_executes_all_frozen_trials_once_and_resumes_in_order(
     assert all(execution.secret_scan_passed for execution in completed.executions)
 
 
-def test_asw4c_tool_budget_serializes_parallel_station_mutations() -> None:
+def test_confirmatory_tool_budget_serializes_parallel_station_mutations() -> None:
     session = _ConcurrencyProbeSession()
     budget = confirmatory_execution._Asw4cToolBudget(session)
 
@@ -484,7 +484,7 @@ def test_asw4c_tool_budget_serializes_parallel_station_mutations() -> None:
     assert budget.agent_proposal_count == 2
 
 
-def test_asw4c_recovers_expired_host_credentials_without_repeating_the_trial(
+def test_confirmatory_run_recovers_expired_host_credentials_without_repeating_the_trial(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "asw-4c"
@@ -526,7 +526,7 @@ def test_asw4c_recovers_expired_host_credentials_without_repeating_the_trial(
     assert recovered.observations[0].spend_microunits == 0
 
 
-def test_asw4c_recovers_count_tokens_permission_without_model_inference(
+def test_confirmatory_run_recovers_count_tokens_permission_without_model_inference(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "asw-4c"
@@ -553,7 +553,7 @@ def test_asw4c_recovers_count_tokens_permission_without_model_inference(
     assert recovered.observations[0].spend_microunits == 0
 
 
-def test_asw4c_measures_tokens_and_recovers_the_initial_token_guard(
+def test_confirmatory_run_measures_tokens_and_recovers_the_initial_token_guard(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "asw-4c"
@@ -608,7 +608,7 @@ def test_asw4c_measures_tokens_and_recovers_the_initial_token_guard(
     )
 
 
-def test_asw4c_recovers_a_world_owned_early_terminal_without_repeating(
+def test_confirmatory_run_recovers_a_world_owned_early_terminal_without_repeating(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -661,7 +661,7 @@ def test_asw4c_recovers_a_world_owned_early_terminal_without_repeating(
     assert execution.endpoint_host_advancement_count == 1
 
 
-def test_asw4c_recovers_exact_prefix_after_agent_passes_endpoint(
+def test_confirmatory_run_recovers_exact_prefix_after_agent_passes_endpoint(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "asw-4c"

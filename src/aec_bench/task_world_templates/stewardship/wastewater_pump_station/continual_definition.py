@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from pydantic import TypeAdapter
 
@@ -146,6 +146,39 @@ class PumpStationContinualExecutionPort:
             profile_ref=profile_ref,
             package_root=package_root,
         ).execute(request)
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationContinualEvaluationPort:
+    """Evaluate registered pump runs through the task-owned evaluator."""
+
+    def evaluate_run(
+        self,
+        *,
+        profile: LoadedContinualWorldProfile,
+        run_root: Path,
+        imported_artifact_sha256: tuple[str, ...],
+        evaluation_scope: Literal["complete_journey", "bounded_continuation"],
+    ) -> object:
+        from aec_bench.evaluation.stewardship import evaluate_pump_station_reference_run
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import (
+            PumpStationWorldRun,
+        )
+        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
+            PumpStationWorldRunRepository,
+        )
+
+        _execution_profile_ref(profile)
+        repository = PumpStationWorldRunRepository(run_root)
+        run = PumpStationWorldRun.resume_reference_system(
+            repository=repository,
+            snapshot=repository.current_snapshot(),
+        )
+        return evaluate_pump_station_reference_run(
+            run,
+            imported_artifact_sha256=imported_artifact_sha256,
+            evaluation_scope=evaluation_scope,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -446,6 +479,7 @@ def _implementation_content_sha256() -> str:
             "branch_adapter_module": adapter_source_sha256,
             "execution_port": python_source_sha256(PumpStationContinualExecutionPort),
             "harbor_port": python_source_sha256(PumpStationContinualHarborPort),
+            "evaluation_port": python_source_sha256(PumpStationContinualEvaluationPort),
         }
     )
 
@@ -476,4 +510,5 @@ def pump_station_continual_world_definition() -> ContinualWorldDefinition:
         branch_port=PumpStationContinualWorldBranchPort(),
         execution_port=PumpStationContinualExecutionPort(),
         harbor_port=PumpStationContinualHarborPort(),
+        evaluation_port=PumpStationContinualEvaluationPort(),
     )
