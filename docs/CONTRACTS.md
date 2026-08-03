@@ -146,6 +146,25 @@ Key rule:
 
 Fresh-context requests own exactly one checkpoint. Persistent execution remains a separate one-session orchestration and must not be represented as repeated fresh episode calls.
 
+### WorldSession / WorldActorAction / WorldControl
+
+**Boundary:** Harness -> Task-world session -> Harness
+
+`WorldSessionRequest` and `WorldSessionResult` bind session, task-world, run,
+branch, tenure, and dynamic snapshot identity.
+
+`WorldActorActionRequest` and `WorldActorActionResult` form the actor-visible
+action boundary. Each request binds one exact visible state and information
+set. Action names, arguments, effects, and receipts remain task-owned.
+
+`WorldControlRequest` and `WorldControlResult` form a separate host-authorised
+boundary. They do not accept raw state mutation.
+
+These existing envelopes do not define task state, clocks, transitions,
+projections, or verifier meaning. A wider continual-runtime registration or
+persistence contract requires two real task-world consumers and its own
+compatibility tests.
+
 ### EvidenceCheckpointSpec submission fields
 
 **Boundary:** Public lifecycle package -> Model-facing submission tool -> Host checkpoint archive
@@ -342,3 +361,12 @@ Should include:
 - Distinguish missing data from empty data.
 - Preserve append-only semantics for TrialRecord.
 - Keep task-family payload specificity in verifiers and task definitions, not in global adapter logic.
+- Keep continual-world actor, host-control, session, snapshot, and runtime
+  envelopes task-neutral. Task action names, state fields, transition rules,
+  projections, and verifier targets remain with the registered task definition.
+- Promote a continual-world runtime contract only after two real task worlds
+  use the same boundary without concrete cross-imports.
+- Version a shared envelope when its shape must change. Do not replace it with
+  a profile-specific parallel interface.
+- Record source ownership, target ownership, migration, compatibility,
+  consumer cutover, and retirement before shared extraction.

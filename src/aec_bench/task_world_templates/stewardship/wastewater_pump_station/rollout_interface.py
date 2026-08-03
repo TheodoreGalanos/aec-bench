@@ -15,8 +15,10 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rollout_control import (
     PumpStationRolloutControl,
+    PumpStationRolloutError,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rollout_models import (
+    PUMP_STATION_ROLLOUT_REQUEST_VERSION,
     PumpStationPhysicalTreatmentActivationReceipt,
     PumpStationPhysicalTreatmentScheduleReceipt,
     PumpStationRolloutChildReceipt,
@@ -192,14 +194,28 @@ def execute_pump_station_rollout_request(
         lineage = control.create_group(request.group_request)
     elif request.operation == "inspect_rollout_group":
         assert request.group_id is not None
+        control.require_group_request_version(
+            request.group_id,
+            PUMP_STATION_ROLLOUT_REQUEST_VERSION,
+        )
         group_status = control.group_status(request.group_id)
         if group_status.state.value == "ready":
-            lineage = control.inspect_group(request.group_id)
+            inspected_lineage = control.inspect_group(request.group_id)
+            if not isinstance(inspected_lineage, PumpStationRolloutLineage):
+                raise PumpStationRolloutError(
+                    "rollout-version",
+                    f"group {request.group_id} does not contain V1 lineage",
+                )
+            lineage = inspected_lineage
     elif request.operation == "open_rollout_actor_session":
         assert request.group_id is not None
         assert request.child_id is not None
         assert request.session_id is not None
         assert request.agent_tenure_id is not None
+        control.require_group_request_version(
+            request.group_id,
+            PUMP_STATION_ROLLOUT_REQUEST_VERSION,
+        )
         session_result = control.open_actor_session(
             group_id=request.group_id,
             child_id=request.child_id,
@@ -208,11 +224,19 @@ def execute_pump_station_rollout_request(
         ).result
     elif request.operation == "schedule_physical_treatment":
         assert request.treatment_request is not None
+        control.require_group_request_version(
+            request.treatment_request.group_id,
+            PUMP_STATION_ROLLOUT_REQUEST_VERSION,
+        )
         treatment_schedule = control.schedule_treatment(request.treatment_request)
     elif request.operation == "inspect_physical_treatment":
         assert request.group_id is not None
         assert request.child_id is not None
         assert request.treatment_request_id is not None
+        control.require_group_request_version(
+            request.group_id,
+            PUMP_STATION_ROLLOUT_REQUEST_VERSION,
+        )
         treatment = control.inspect_treatment(
             group_id=request.group_id,
             child_id=request.child_id,
@@ -226,6 +250,10 @@ def execute_pump_station_rollout_request(
         assert request.group_id is not None
         assert request.child_id is not None
         assert request.treatment_request_id is not None
+        control.require_group_request_version(
+            request.group_id,
+            PUMP_STATION_ROLLOUT_REQUEST_VERSION,
+        )
         treatment_activation = control.recover_treatment(
             group_id=request.group_id,
             child_id=request.child_id,

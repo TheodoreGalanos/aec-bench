@@ -20,6 +20,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_s
     PUMP_STATION_MODEL_MAX_TURNS,
     PUMP_STATION_REFERENCE_CONTROLLER_ID,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+    PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
+)
 
 _ENTRYPOINT_IMPORT_PATH = "agents.entrypoint_agent:EntrypointAgent"
 _MORPH_ENVIRONMENT_IMPORT_PATH = "aec_bench.providers.morph_harbor:MorphHarborEnvironment"
@@ -53,7 +56,12 @@ def build_pump_station_harbor_job_config(
         raise ValueError("pump-station Harbor model name is required")
     if max_turns < 1:
         raise ValueError("pump-station Harbor max turns must be positive")
-    reference_controller = model == PUMP_STATION_REFERENCE_CONTROLLER_ID
+    reference_controller_id = (
+        PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
+        if bridge.profile_ref is not None
+        else PUMP_STATION_REFERENCE_CONTROLLER_ID
+    )
+    reference_controller = model == reference_controller_id
     if bridge.maintenance_review and not reference_controller:
         raise ValueError("pump-station review model runs require the separately approved direct host runner")
     world_session = {"bridge_mode": bridge.bridge_mode}

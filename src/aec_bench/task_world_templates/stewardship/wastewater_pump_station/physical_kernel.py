@@ -28,12 +28,19 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
     PumpIntervention,
     PumpInterventionKind,
     PumpState,
+    PumpStationCapacityInterval,
     PumpStationChangeKind,
+    PumpStationCoupledModel,
+    PumpStationCoupledObservation,
+    PumpStationCoupledOperatingInterval,
+    PumpStationCoupledPhysicalState,
+    PumpStationCoupledResult,
     PumpStationEnvironment,
     PumpStationHydraulicBalance,
     PumpStationInputError,
     PumpStationModel,
     PumpStationObservation,
+    PumpStationOperatingDelta,
     PumpStationResourceRequirements,
     PumpStationResources,
     PumpStationResult,
@@ -686,4 +693,165 @@ def apply_pump_intervention(
         updated_state,
         environment,
         change_kind,
+    )
+
+
+def coupled_pump_station_model_from_package(package: ReferencePackage) -> PumpStationCoupledModel:
+    """Compile the strict ASW-8 coupled topology and copied degradation values."""
+    if package.profile_id != "AU-NSW-LH-SYN-SPS-v2":
+        _fail("reference-package-profile", "the coupled model requires the v2 station-data profile")
+    member = package.physical_member
+    asset = _mapping(member.get("asset"), "asset")
+    raw_pump_ids = _sequence(asset.get("component_ids"), "asset.component_ids")
+    if len(raw_pump_ids) != 3:
+        _fail("reference-package-data", "the coupled asset must contain three pumps")
+    pump_ids = cast(
+        tuple[str, str, str],
+        tuple(_text(value, "asset.component_ids") for value in raw_pump_ids),
+    )
+    values = _parameter_values(member)
+
+    def decimal_parameter(identity: str) -> Decimal:
+        try:
+            value = values[identity]
+        except KeyError:
+            _fail("reference-package-data", f"missing parameter {identity}")
+        return _decimal(value, identity)
+
+    return PumpStationCoupledModel(
+        profile_id=package.profile_id,
+        asset_id=_text(asset.get("asset_id"), "asset.asset_id"),
+        pump_ids=pump_ids,
+        maximum_running_pumps=_integer(asset.get("maximum_running_pumps"), "maximum_running_pumps"),
+        service_capacity_units_per_running_pump=_integer(
+            asset.get("service_capacity_units_per_running_pump"),
+            "service_capacity_units_per_running_pump",
+        ),
+        test_running_service_capacity_units=_integer(
+            asset.get("test_running_service_capacity_units"),
+            "test_running_service_capacity_units",
+        ),
+        degradation=DegradationParameters(
+            obstruction_runtime_rate=decimal_parameter("mechanism.r_o_runtime"),
+            obstruction_start_rate=decimal_parameter("mechanism.r_o_start"),
+            clearance_runtime_rate=decimal_parameter("mechanism.r_c_runtime"),
+        ),
+    )
+
+
+def _progress_coupled_condition(
+    model: PumpStationCoupledModel,
+    condition: PumpCondition,
+    runtime_seconds: int,
+    starts: int,
+) -> PumpCondition:
+    degradation = model.degradation
+    return PumpCondition(
+        obstruction=min(
+            Decimal(1),
+            condition.obstruction
+            + degradation.obstruction_runtime_rate * runtime_seconds
+            + degradation.obstruction_start_rate * starts,
+        ),
+        clearance_loss=min(
+            Decimal(1),
+            condition.clearance_loss + degradation.clearance_runtime_rate * runtime_seconds,
+        ),
+    )
+
+
+def advance_coupled_pump_station(
+    model: PumpStationCoupledModel,
+    state: PumpStationCoupledPhysicalState,
+    interval: PumpStationCoupledOperatingInterval,
+) -> PumpStationCoupledResult:
+    """Advance all physical running pumps and derive separate SCU capacity-time."""
+    if tuple(pump.pump_id for pump in state.pumps) != model.pump_ids:
+        _fail("coupled-state", "pump identities or order differ from the model")
+    if state.calendar_seconds != interval.start_calendar_seconds:
+        _fail("coupled-operating-interval", "interval must start at current world time")
+    if not set(interval.service_running_pump_ids) <= set(interval.actual_assignment_pump_ids):
+        _fail("coupled-operating-interval", "service-running pumps must be assigned")
+    for pump_id in interval.service_running_pump_ids:
+        if not state.availability(pump_id).run_eligible:
+            _fail("coupled-operating-interval", f"{pump_id} is not service-run eligible")
+    for pump_id in interval.test_running_pump_ids:
+        if not state.availability(pump_id).test_eligible:
+            _fail("coupled-operating-interval", f"{pump_id} is not test eligible")
+
+    prior_running = set(state.service_running_pump_ids) | set(state.test_running_pump_ids)
+    next_running = set(interval.service_running_pump_ids) | set(interval.test_running_pump_ids)
+    updated_pumps: list[PumpState] = []
+    updated_deltas: list[PumpStationOperatingDelta] = []
+    for pump in state.pumps:
+        requested = interval.pump_delta(pump.pump_id)
+        starts = requested.start_added or int(pump.pump_id in next_running and pump.pump_id not in prior_running)
+        runtime = requested.total_runtime_seconds
+        closing_exposure = PumpExposure(
+            runtime_seconds=pump.exposure.runtime_seconds + runtime,
+            completed_starts=pump.exposure.completed_starts + starts,
+        )
+        closing_condition = _progress_coupled_condition(model, pump.condition, runtime, starts)
+        updated_pumps.append(
+            replace(
+                pump,
+                exposure=closing_exposure,
+                condition=closing_condition,
+            )
+        )
+        updated_deltas.append(
+            replace(
+                requested,
+                start_added=starts,
+                opening_exposure=pump.exposure,
+                closing_exposure=closing_exposure,
+                opening_condition=pump.condition,
+                closing_condition=closing_condition,
+            )
+        )
+    updated_interval = replace(
+        interval,
+        pump_deltas=cast(
+            tuple[PumpStationOperatingDelta, PumpStationOperatingDelta, PumpStationOperatingDelta],
+            tuple(updated_deltas),
+        ),
+    )
+    updated_state = PumpStationCoupledPhysicalState(
+        calendar_seconds=interval.end_calendar_seconds,
+        pumps=cast(tuple[PumpState, PumpState, PumpState], tuple(updated_pumps)),
+        pump_boundaries=state.pump_boundaries,
+        common_boundary=state.common_boundary,
+        service_running_pump_ids=interval.service_running_pump_ids,
+        test_running_pump_ids=interval.test_running_pump_ids,
+    )
+    elapsed = interval.elapsed_seconds
+    assigned_scu = len(interval.service_running_pump_ids) * model.service_capacity_units_per_running_pump
+    served_scu = min(interval.required_service_scu, assigned_scu)
+    capacity = PumpStationCapacityInterval(
+        start_calendar_seconds=interval.start_calendar_seconds,
+        end_calendar_seconds=interval.end_calendar_seconds,
+        required_service_scu=interval.required_service_scu,
+        assigned_operating_scu=assigned_scu,
+        available_assured_scu=sum(
+            state.availability(pump_id).assured_for_outage_planning for pump_id in model.pump_ids
+        ),
+        required_capacity_seconds=interval.required_service_scu * elapsed,
+        served_capacity_seconds=served_scu * elapsed,
+        unserved_capacity_seconds=(interval.required_service_scu - served_scu) * elapsed,
+        surplus_capacity_seconds=max(0, assigned_scu - interval.required_service_scu) * elapsed,
+    )
+    observation = PumpStationCoupledObservation(
+        sample_time_seconds=updated_state.calendar_seconds,
+        pump_exposures=tuple((pump.pump_id, pump.exposure) for pump in updated_state.pumps),
+        availabilities=tuple(updated_state.availability(pump_id) for pump_id in model.pump_ids),
+        assignment_pump_ids=interval.actual_assignment_pump_ids,
+        service_running_pump_ids=interval.service_running_pump_ids,
+        test_running_pump_ids=interval.test_running_pump_ids,
+    )
+    return PumpStationCoupledResult(
+        previous_state=state,
+        state=updated_state,
+        operating_interval=updated_interval,
+        capacity=capacity,
+        observation=observation,
     )

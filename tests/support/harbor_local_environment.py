@@ -154,6 +154,7 @@ class LocalFilesystemHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
                     "AEC_BENCH_WORLD_SESSION_DIR": str(self._root / "workspace" / "world-session"),
                     "AEC_BENCH_EXPORT_MANIFEST": str(pump_station_manifest),
                     "AEC_BENCH_REFERENCE_PACKAGE_DIR": str(tests / "reference-package"),
+                    "AEC_BENCH_REFERENCE_SYSTEM_DIR": str(tests / "reference-system"),
                 }
             )
         if runtime_candidates:

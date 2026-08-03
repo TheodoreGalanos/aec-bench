@@ -1,6 +1,7 @@
 # ABOUTME: Tests for append-only TrialRecord persistence in the Python ledger package.
 # ABOUTME: Verifies deterministic paths, duplicate rejection, and round-trip reads.
 
+import stat
 from pathlib import Path
 
 import pytest
@@ -41,3 +42,61 @@ def test_mkdir_durable_fsyncs_each_new_parent_entry(
 
     assert target.is_dir()
     assert flushed == [tmp_path, tmp_path / "ledger", tmp_path / "ledger" / "experiment"]
+
+
+def test_mkdir_durable_applies_mode_only_to_created_directories(
+    tmp_path: Path,
+) -> None:
+    existing = tmp_path / "existing"
+    existing.mkdir(mode=0o750)
+    existing.chmod(0o750)
+    target = existing / "run" / "state"
+
+    mkdir_durable(target, created_mode=0o700)
+
+    assert stat.S_IMODE(existing.stat().st_mode) == 0o750
+    assert stat.S_IMODE((existing / "run").stat().st_mode) == 0o700
+    assert stat.S_IMODE(target.stat().st_mode) == 0o700
+
+
+def test_mkdir_durable_does_not_change_a_directory_created_concurrently(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    concurrent = tmp_path / "concurrent"
+    target = concurrent / "owned"
+    original_mkdir = Path.mkdir
+    intervened = False
+
+    def mkdir_with_concurrent_creator(
+        path: Path,
+        mode: int = 0o777,
+        parents: bool = False,
+        exist_ok: bool = False,
+    ) -> None:
+        nonlocal intervened
+        if path == concurrent and not intervened:
+            intervened = True
+            original_mkdir(path)
+            path.chmod(0o755)
+        original_mkdir(
+            path,
+            mode=mode,
+            parents=parents,
+            exist_ok=exist_ok,
+        )
+
+    monkeypatch.setattr(Path, "mkdir", mkdir_with_concurrent_creator)
+
+    mkdir_durable(target, created_mode=0o700)
+
+    assert stat.S_IMODE(concurrent.stat().st_mode) == 0o755
+    assert stat.S_IMODE(target.stat().st_mode) == 0o700
+
+
+def test_mkdir_durable_rejects_an_existing_non_directory(tmp_path: Path) -> None:
+    target = tmp_path / "not-a-directory"
+    target.write_bytes(b"file")
+
+    with pytest.raises(FileExistsError):
+        mkdir_durable(target)

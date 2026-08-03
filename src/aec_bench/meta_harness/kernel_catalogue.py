@@ -352,6 +352,7 @@ DEFAULT_KERNEL_EXECUTOR_SOURCE_PATHS: tuple[str, ...] = tuple(
             "aec_bench/contracts/trajectory.py",
             "aec_bench/contracts/trial_record.py",
             "aec_bench/contracts/validators.py",
+            "aec_bench/contracts/world_session.py",
             "aec_bench/dataset/storage.py",
             "aec_bench/evaluation/task_world.py",
             "aec_bench/harness/execution_entrypoint.py",
@@ -385,6 +386,8 @@ DEFAULT_KERNEL_EXECUTOR_SOURCE_PATHS: tuple[str, ...] = tuple(
             "aec_bench/harness/trial_record_builder.py",
             "aec_bench/harness/verifier_artifacts.py",
             "aec_bench/ledger/durability.py",
+            "aec_bench/ledger/immutable_artifact_store.py",
+            "aec_bench/ledger/local_lock.py",
             "aec_bench/ledger/writer.py",
             "aec_bench/meta_harness/applicability.py",
             "aec_bench/meta_harness/authority_ledger.py",
@@ -1189,6 +1192,7 @@ def _default_operation_definitions(
             implementation=_operation_implementation_identity(
                 executor_sources,
                 paths=(
+                    "aec_bench/ledger/immutable_artifact_store.py",
                     *_COMPILATION_SOURCE_PATHS,
                     "aec_bench/meta_harness/declared_stage_runtime.py",
                     "aec_bench/meta_harness/governed_attempt_engine/__init__.py",

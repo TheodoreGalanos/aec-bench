@@ -1,4 +1,4 @@
-# ABOUTME: Tests provider-free ASW-4C study preparation and independent reload.
+# ABOUTME: Tests provider-free confirmatory-study preparation and independent reload.
 # ABOUTME: Proves all 32 real pairs are fixed before any model trajectory starts.
 
 from __future__ import annotations

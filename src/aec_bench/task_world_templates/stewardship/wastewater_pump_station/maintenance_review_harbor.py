@@ -78,6 +78,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
     load_reference_package,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
+    PumpStationActorHistoryEntry,
     create_structured_handover,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
@@ -164,11 +165,17 @@ def _complete_source_history(
         start_snapshot=suspended_snapshot,
     )
     second = factory.open(resume_request)
+    source_history = first.actor_history
+    if not all(isinstance(item, PumpStationActorHistoryEntry) for item in source_history):
+        raise TypeError("review source requires legacy actor history")
     second.install_structured_handover(
         create_structured_handover(
             second.actor_view,
             from_tenure_id=start_request.agent_tenure_id,
-            history=first.actor_history,
+            history=cast(
+                tuple[PumpStationActorHistoryEntry, ...],
+                source_history,
+            ),
             maximum_history_entries=32,
         )
     )

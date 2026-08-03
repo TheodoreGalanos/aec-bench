@@ -26,9 +26,7 @@ from aec_bench.contracts.world_session import (
     WorldSessionRequest,
     WorldSessionResult,
 )
-from aec_bench.evaluation.stewardship import (
-    evaluate_pump_station_stewardship_run,
-)
+from aec_bench.evaluation.stewardship import evaluate_pump_station_stewardship_run
 from aec_bench.harness.harbor_importing.artifact_io import (
     artifact_reference,
     read_regular_trial_tree,
@@ -40,6 +38,7 @@ from aec_bench.harness.harbor_importing.contracts import (
     ImportEvidenceContext,
     ImportEvidenceIntent,
 )
+from aec_bench.task_world_templates.continual_catalogue import default_continual_world_catalogue
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     PUMP_STATION_HARBOR_EXECUTION_KIND,
     load_pump_station_harbor_bridge,
@@ -145,6 +144,8 @@ def _load_stewardship_evidence(
             run_dir=run_dir,
             export_manifest_path=bridge.export_manifest_path,
             package_dir=bridge.package_root,
+            reference_system_dir=bridge.reference_system_root,
+            initial_run_dir=bridge.initial_run_root,
             verifier_runtime_path=bridge.verifier_runtime_path,
         )
     except (OSError, TypeError, ValueError) as error:
@@ -184,11 +185,30 @@ def _load_stewardship_evidence(
         inventory=inventory,
         bridge=bridge,
     )
-    evaluation = evaluate_pump_station_stewardship_run(
-        run_dir=run_dir / "world-run",
-        package_root=bridge.package_root,
-        imported_artifact_sha256=tuple(sorted({artifact.sha256 for artifact in artifacts})),
-    )
+    imported_artifact_sha256 = tuple(sorted({artifact.sha256 for artifact in artifacts}))
+    if bridge.profile_ref is None:
+        evaluation = evaluate_pump_station_stewardship_run(
+            run_dir=run_dir / "world-run",
+            package_root=bridge.package_root,
+            imported_artifact_sha256=imported_artifact_sha256,
+        )
+    else:
+        if bridge.definition_ref is None or bridge.profile_ref is None:
+            raise HarborImportError("registered stewardship evaluation authority is incomplete")
+        definition = default_continual_world_catalogue().resolve(bridge.definition_ref)
+        evaluation_port = definition.evaluation_port
+        if evaluation_port is None:
+            raise HarborImportError("registered stewardship definition has no evaluation port")
+        evaluation = StewardshipEvaluation.model_validate(
+            evaluation_port.evaluate_run(
+                profile=definition.load_profile(bridge.profile_ref),
+                run_root=run_dir / "world-run",
+                imported_artifact_sha256=imported_artifact_sha256,
+                evaluation_scope=(
+                    "bounded_continuation" if bridge.rollout_child_ref is not None else "complete_journey"
+                ),
+            )
+        )
     execution_fields = {
         "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
         "session_id": request.session_id,
@@ -355,9 +375,7 @@ def _temporal_trial_evidence(
     }
     missing = tuple(path for path in fixed_paths.values() if path not in references)
     if missing:
-        raise HarborImportError(
-            "temporal evidence inventory lacks required authority artifacts"
-        )
+        raise HarborImportError("temporal evidence inventory lacks required authority artifacts")
     fixed_references = {name: references[path] for name, path in fixed_paths.items()}
     excluded = {*fixed_paths.values(), _TEMPORAL_VERIFICATION_NAME}
     ledger_artifacts = tuple(

@@ -11,6 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal, cast
 
+from aec_bench.contracts.continual_world import (
+    ContinualRolloutChildRunRef,
+    ContinualWorldDefinitionRef,
+    ContinualWorldProfileRef,
+)
 from aec_bench.task_world_templates.harbor_exporting.constants import (
     BASE_IMAGE,
     RUNTIME_DEPENDENCIES,
@@ -22,6 +27,16 @@ from aec_bench.task_world_templates.harbor_exporting.runtime_wheel import (
 from aec_bench.task_world_templates.harbor_exporting.stable_io import (
     directory_sha256,
     file_sha256,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
+    PUMP_STATION_ACTOR_ACTION_NAMES_V2,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
+    PumpStationContinualProfile,
+    pump_station_continual_world_definition,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_rollout_adapter import (
+    validate_pump_station_rollout_child_run,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review_control import (
     PUMP_STATION_REVIEW_TASK_ID,
@@ -35,6 +50,11 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_reader import (
     bundled_reference_package_root,
     load_reference_package,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_system import (
+    PumpStationReferenceSystem,
+    bundled_reference_system_root,
+    load_reference_system,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
     PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES,
@@ -50,6 +70,7 @@ PUMP_STATION_REVIEW_HARBOR_EXECUTION_KIND: Final[Literal["stewardship_review_ses
 PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE = "wastewater_pump_station_closeout_review"
 PUMP_STATION_HARBOR_OUTPUT_PATH = "/workspace/world-session"
 PUMP_STATION_HARBOR_EXPORT_SCHEMA_VERSION = "aecbench.pump-station-harbor-export.v1"
+PUMP_STATION_REGISTERED_HARBOR_EXPORT_SCHEMA_VERSION = "aecbench.pump-station-harbor-export.v2"
 PUMP_STATION_CONTROLLER_MODES = (
     "deterministic_reference",
     "model_tool_loop",
@@ -58,6 +79,7 @@ PUMP_STATION_REVIEW_CONTROLLER_MODES = ("deterministic_reference",)
 
 _MANIFEST_NAME = "world-session-export.json"
 _PACKAGE_PATH = "tests/reference-package"
+_INITIAL_RUN_PATH = "tests/initial-world-run"
 _MAX_MANIFEST_BYTES = 1024 * 1024
 _NON_AUTHORITY_ARTIFACT_NAMES = frozenset(
     {
@@ -111,6 +133,25 @@ class PumpStationHarborBridge:
     execution_kind: str
     task_world_id: str
     bridge_mode: str
+    definition_ref: ContinualWorldDefinitionRef | None
+    profile_ref: ContinualWorldProfileRef | None
+    reference_system_root: Path | None
+    initial_run_root: Path | None
+    rollout_child_ref: ContinualRolloutChildRunRef | None
+
+
+def _export_authority(
+    profile_ref: ContinualWorldProfileRef | None,
+) -> tuple[ReferencePackage, PumpStationReferenceSystem | None]:
+    if profile_ref is None:
+        return load_reference_package(), None
+    definition = pump_station_continual_world_definition()
+    if profile_ref not in definition.spec.profiles:
+        raise ValueError("pump-station Harbor profile is not registered")
+    loaded = definition.load_profile(profile_ref).value
+    if not isinstance(loaded, PumpStationContinualProfile):
+        raise TypeError("registered pump-station profile has the wrong value type")
+    return loaded.station_package, loaded.reference_system
 
 
 def export_pump_station_harbor_task(
@@ -121,14 +162,22 @@ def export_pump_station_harbor_task(
     evidence_health: bool = False,
     temporal_evidence: bool = False,
     maintenance_review: bool = False,
+    profile_ref: ContinualWorldProfileRef | None = None,
+    initial_run_root: Path | None = None,
+    rollout_child_ref: ContinualRolloutChildRunRef | None = None,
 ) -> ExportedPumpStationHarborTask:
     """Materialize one immutable task package for provider-free Harbor execution."""
 
+    if (initial_run_root is None) != (rollout_child_ref is None):
+        raise ValueError("pump-station Harbor initial run binding is incomplete")
+    if initial_run_root is not None and profile_ref is None:
+        raise ValueError("pump-station Harbor initial run requires a registered profile")
     destination = Path(task_dir)
     if destination.exists():
         raise FileExistsError(f"Harbor task output already exists: {destination}")
     root = _validated_project_root(project_root)
-    package = load_reference_package()
+    package, reference_system = _export_authority(profile_ref)
+    registered_profile = profile_ref is not None
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(
         prefix=f".{destination.name}-",
@@ -139,14 +188,15 @@ def export_pump_station_harbor_task(
             task_dir=staging,
             project_root=root,
             package=package,
+            profile_ref=profile_ref,
+            reference_system=reference_system,
+            initial_run_root=initial_run_root,
+            rollout_child_ref=rollout_child_ref,
             rich_work_processes=(
-                rich_work_processes
-                or evidence_health
-                or temporal_evidence
-                or maintenance_review
+                registered_profile or rich_work_processes or evidence_health or temporal_evidence or maintenance_review
             ),
-            evidence_health=(evidence_health or temporal_evidence or maintenance_review),
-            temporal_evidence=temporal_evidence,
+            evidence_health=(registered_profile or evidence_health or temporal_evidence or maintenance_review),
+            temporal_evidence=(registered_profile or temporal_evidence),
             maintenance_review=maintenance_review,
         )
         staging.rename(destination)
@@ -169,24 +219,97 @@ def load_pump_station_harbor_bridge(
     task_root = environment.parent.resolve(strict=True)
     manifest_path = task_root / _MANIFEST_NAME
     manifest = _read_json(manifest_path)
+    base_fields = {
+        "agent_surface",
+        "bridge",
+        "execution_kind",
+        "harbor",
+        "package",
+        "schema_version",
+        "task_world_id",
+        "verifier",
+    }
+    schema_version = manifest.get("schema_version")
+    registered_profile = schema_version == PUMP_STATION_REGISTERED_HARBOR_EXPORT_SCHEMA_VERSION
+    if schema_version not in {
+        PUMP_STATION_HARBOR_EXPORT_SCHEMA_VERSION,
+        PUMP_STATION_REGISTERED_HARBOR_EXPORT_SCHEMA_VERSION,
+    }:
+        raise ValueError("unsupported pump-station Harbor export version")
+    initial_run_present = "initial_run" in manifest
+    if initial_run_present and not registered_profile:
+        raise ValueError("pump-station Harbor initial run requires a registered profile")
     _require_exact_keys(
         manifest,
-        {
-            "agent_surface",
-            "bridge",
-            "execution_kind",
-            "harbor",
-            "package",
-            "schema_version",
-            "task_world_id",
-            "verifier",
-        },
+        base_fields
+        | (
+            {
+                "continual_definition",
+                "continual_profile",
+                "reference_system",
+            }
+            if registered_profile
+            else set()
+        )
+        | ({"initial_run"} if initial_run_present else set()),
         label="pump-station Harbor export manifest",
     )
-    if manifest["schema_version"] != PUMP_STATION_HARBOR_EXPORT_SCHEMA_VERSION:
-        raise ValueError("unsupported pump-station Harbor export version")
+    definition_ref: ContinualWorldDefinitionRef | None = None
+    profile_ref: ContinualWorldProfileRef | None = None
+    reference_system_root: Path | None = None
+    initial_run_root: Path | None = None
+    rollout_child_ref: ContinualRolloutChildRunRef | None = None
+    if registered_profile:
+        definition = pump_station_continual_world_definition()
+        definition_ref = ContinualWorldDefinitionRef.model_validate(manifest["continual_definition"])
+        if definition_ref != definition.ref:
+            raise ValueError("pump-station Harbor definition is not registered")
+        profile_ref = ContinualWorldProfileRef.model_validate(manifest["continual_profile"])
+        if profile_ref not in definition.spec.profiles:
+            raise ValueError("pump-station Harbor profile is not registered")
+        reference_payload = _mapping(manifest["reference_system"], "reference_system")
+        _require_exact_keys(
+            reference_payload,
+            {"descriptor_content_id", "descriptor_id", "directory_sha256", "path"},
+            label="pump-station Harbor reference system",
+        )
+        reference_system_root = task_root / str(reference_payload["path"])
+        reference_system = load_reference_system(root=reference_system_root)
+        if (
+            reference_system.descriptor_id != reference_payload["descriptor_id"]
+            or reference_system.descriptor_content_id != reference_payload["descriptor_content_id"]
+            or directory_sha256(reference_system_root) != reference_payload["directory_sha256"]
+            or reference_system.descriptor_content_id != profile_ref.profile_content_sha256
+        ):
+            raise ValueError("pump-station Harbor reference system differs from the export")
+        if initial_run_present:
+            initial_run_payload = _mapping(manifest["initial_run"], "initial run")
+            _require_exact_keys(
+                initial_run_payload,
+                {"directory_sha256", "path", "rollout_child_ref"},
+                label="pump-station Harbor initial run",
+            )
+            if initial_run_payload["path"] != _INITIAL_RUN_PATH:
+                raise ValueError("pump-station Harbor initial run path differs")
+            initial_run_root = task_root / _INITIAL_RUN_PATH
+            if directory_sha256(initial_run_root) != initial_run_payload["directory_sha256"]:
+                raise ValueError("pump-station Harbor initial run differs from the export")
+            rollout_child_ref = ContinualRolloutChildRunRef.model_validate(
+                initial_run_payload["rollout_child_ref"],
+            )
+            try:
+                validate_pump_station_rollout_child_run(
+                    initial_run_root,
+                    rollout_child_ref,
+                    definition_ref=definition_ref,
+                    profile_ref=profile_ref,
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                raise ValueError("pump-station Harbor initial run identity differs") from exc
     bridge_payload = _mapping(manifest["bridge"], "bridge")
     maintenance_review = bool(bridge_payload.get("maintenance_review", False))
+    if registered_profile and maintenance_review:
+        raise ValueError("registered pump-station Harbor profile cannot be a review task")
     expected_execution_kind = (
         PUMP_STATION_REVIEW_HARBOR_EXECUTION_KIND if maintenance_review else PUMP_STATION_HARBOR_EXECUTION_KIND
     )
@@ -210,7 +333,7 @@ def load_pump_station_harbor_bridge(
     harbor_payload = _mapping(manifest["harbor"], "harbor")
     verifier_payload = _mapping(manifest["verifier"], "verifier")
     package_root = task_root / str(package_payload["path"])
-    package = load_reference_package(package_root)
+    package = load_reference_package(package_root, profile_id=str(package_payload["profile_id"]))
     if (
         package.package_content_id != package_payload["package_content_id"]
         or package.manifest_content_id != package_payload["manifest_content_id"]
@@ -224,6 +347,7 @@ def load_pump_station_harbor_bridge(
         PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES,
         PUMP_STATION_TEMPORAL_EVIDENCE_TOOL_NAMES,
         PUMP_STATION_REVIEW_TOOL_NAMES,
+        PUMP_STATION_ACTOR_ACTION_NAMES_V2,
     }:
         raise ValueError("pump-station Harbor tool catalogue differs")
     rich_work_processes = bool(bridge_payload.get("rich_work_processes", False))
@@ -236,7 +360,9 @@ def load_pump_station_harbor_bridge(
     if temporal_evidence and not evidence_health:
         raise ValueError("pump-station temporal evidence requires evidence health")
     expected_tools = (
-        PUMP_STATION_REVIEW_TOOL_NAMES
+        PUMP_STATION_ACTOR_ACTION_NAMES_V2
+        if registered_profile
+        else PUMP_STATION_REVIEW_TOOL_NAMES
         if maintenance_review
         else PUMP_STATION_TEMPORAL_EVIDENCE_TOOL_NAMES
         if temporal_evidence
@@ -278,6 +404,11 @@ def load_pump_station_harbor_bridge(
         execution_kind=expected_execution_kind,
         task_world_id=expected_task_world_id,
         bridge_mode=expected_bridge_mode,
+        definition_ref=definition_ref,
+        profile_ref=profile_ref,
+        reference_system_root=reference_system_root,
+        initial_run_root=initial_run_root,
+        rollout_child_ref=rollout_child_ref,
     )
 
 
@@ -286,6 +417,10 @@ def _write_export(
     task_dir: Path,
     project_root: Path,
     package: ReferencePackage,
+    profile_ref: ContinualWorldProfileRef | None,
+    reference_system: PumpStationReferenceSystem | None,
+    initial_run_root: Path | None,
+    rollout_child_ref: ContinualRolloutChildRunRef | None,
     rich_work_processes: bool,
     evidence_health: bool,
     temporal_evidence: bool,
@@ -298,10 +433,42 @@ def _write_export(
     package_dir = task_dir / _PACKAGE_PATH
     runtime_dir.mkdir(parents=True)
     environment_dir.mkdir()
-    shutil.copytree(bundled_reference_package_root(), package_dir)
-    loaded = load_reference_package(package_dir)
+    shutil.copytree(
+        bundled_reference_package_root(profile_id=package.profile_id),
+        package_dir,
+    )
+    loaded = load_reference_package(package_dir, profile_id=package.profile_id)
     if loaded != package:
         raise ValueError("staged pump-station package differs from the bundled package")
+    reference_system_dir: Path | None = None
+    if reference_system is not None:
+        reference_system_dir = tests_dir / "reference-system"
+        shutil.copytree(bundled_reference_system_root(), reference_system_dir)
+        if load_reference_system(root=reference_system_dir) != reference_system:
+            raise ValueError("staged pump-station reference system differs from the registered profile")
+    initial_run_dir: Path | None = None
+    initial_run_sha256: str | None = None
+    if initial_run_root is not None and rollout_child_ref is not None:
+        if profile_ref is None:
+            raise ValueError("pump-station Harbor rollout child requires one exact profile")
+        definition_ref = pump_station_continual_world_definition().ref
+        validate_pump_station_rollout_child_run(
+            initial_run_root,
+            rollout_child_ref,
+            definition_ref=definition_ref,
+            profile_ref=profile_ref,
+        )
+        initial_run_dir = task_dir / _INITIAL_RUN_PATH
+        initial_run_sha256 = _copy_content_addressed_directory(
+            initial_run_root,
+            initial_run_dir,
+        )
+        validate_pump_station_rollout_child_run(
+            initial_run_dir,
+            rollout_child_ref,
+            definition_ref=definition_ref,
+            profile_ref=profile_ref,
+        )
     runtime = build_verifier_runtime_wheel(
         project_root=project_root,
         output_dir=runtime_dir,
@@ -323,7 +490,11 @@ def _write_export(
         encoding="utf-8",
     )
     test_script_path.write_text(
-        _test_script_text(runtime.path.name),
+        _test_script_text(
+            runtime.path.name,
+            registered_profile=profile_ref is not None,
+            initial_run=initial_run_dir is not None,
+        ),
         encoding="utf-8",
     )
     test_script_path.chmod(0o755)
@@ -331,6 +502,12 @@ def _write_export(
         task_dir=task_dir,
         package=package,
         package_dir=package_dir,
+        profile_ref=profile_ref,
+        reference_system=reference_system,
+        reference_system_dir=reference_system_dir,
+        initial_run_dir=initial_run_dir,
+        initial_run_sha256=initial_run_sha256,
+        rollout_child_ref=rollout_child_ref,
         runtime=runtime,
         rich_work_processes=rich_work_processes,
         evidence_health=evidence_health,
@@ -353,6 +530,12 @@ def _export_manifest(
     task_dir: Path,
     package: ReferencePackage,
     package_dir: Path,
+    profile_ref: ContinualWorldProfileRef | None,
+    reference_system: PumpStationReferenceSystem | None,
+    reference_system_dir: Path | None,
+    initial_run_dir: Path | None,
+    initial_run_sha256: str | None,
+    rollout_child_ref: ContinualRolloutChildRunRef | None,
     runtime: RuntimeWheel,
     rich_work_processes: bool,
     evidence_health: bool,
@@ -363,10 +546,19 @@ def _export_manifest(
     dockerfile = task_dir / "environment" / "Dockerfile"
     task_toml = task_dir / "task.toml"
     test_script = task_dir / "tests" / "test.sh"
+    registered_profile = profile_ref is not None
+    if registered_profile != (reference_system is not None and reference_system_dir is not None):
+        raise ValueError("registered Harbor profile authority is incomplete")
+    if (initial_run_dir is None) != (initial_run_sha256 is None) or (initial_run_dir is None) != (
+        rollout_child_ref is None
+    ):
+        raise ValueError("registered Harbor initial run authority is incomplete")
     bridge = {
         "mode": (PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE if maintenance_review else PUMP_STATION_HARBOR_BRIDGE_MODE),
         "allowed_tools": list(
-            PUMP_STATION_REVIEW_TOOL_NAMES
+            PUMP_STATION_ACTOR_ACTION_NAMES_V2
+            if registered_profile
+            else PUMP_STATION_REVIEW_TOOL_NAMES
             if maintenance_review
             else PUMP_STATION_TEMPORAL_EVIDENCE_TOOL_NAMES
             if temporal_evidence
@@ -386,8 +578,12 @@ def _export_manifest(
     }
     if maintenance_review:
         bridge["maintenance_review"] = True
-    return {
-        "schema_version": PUMP_STATION_HARBOR_EXPORT_SCHEMA_VERSION,
+    manifest: dict[str, Any] = {
+        "schema_version": (
+            PUMP_STATION_REGISTERED_HARBOR_EXPORT_SCHEMA_VERSION
+            if registered_profile
+            else PUMP_STATION_HARBOR_EXPORT_SCHEMA_VERSION
+        ),
         "execution_kind": (
             PUMP_STATION_REVIEW_HARBOR_EXECUTION_KIND if maintenance_review else PUMP_STATION_HARBOR_EXECUTION_KIND
         ),
@@ -422,6 +618,22 @@ def _export_manifest(
             "source_tree_sha256": runtime.source_tree_sha256,
         },
     }
+    if profile_ref is not None and reference_system is not None and reference_system_dir is not None:
+        manifest["continual_definition"] = pump_station_continual_world_definition().ref.model_dump(mode="json")
+        manifest["continual_profile"] = profile_ref.model_dump(mode="json")
+        manifest["reference_system"] = {
+            "path": "tests/reference-system",
+            "descriptor_id": reference_system.descriptor_id,
+            "descriptor_content_id": reference_system.descriptor_content_id,
+            "directory_sha256": directory_sha256(reference_system_dir),
+        }
+    if initial_run_dir is not None and initial_run_sha256 is not None and rollout_child_ref is not None:
+        manifest["initial_run"] = {
+            "path": _INITIAL_RUN_PATH,
+            "directory_sha256": initial_run_sha256,
+            "rollout_child_ref": rollout_child_ref.model_dump(mode="json"),
+        }
+    return manifest
 
 
 def _validate_surface(*, task_root: Path, manifest: dict[str, Any]) -> None:
@@ -435,6 +647,17 @@ def _validate_surface(*, task_root: Path, manifest: dict[str, Any]) -> None:
         raise ValueError("pump-station Harbor task metadata differs from the export")
     if file_sha256(task_root / str(harbor["test_script"])) != harbor["test_script_sha256"]:
         raise ValueError("pump-station Harbor verifier script differs from the export")
+
+
+def _copy_content_addressed_directory(source: Path, destination: Path) -> str:
+    """Copy one plain directory and prove that its bytes stayed unchanged."""
+
+    expected_sha256 = directory_sha256(source)
+    shutil.copytree(source, destination, symlinks=True)
+    copied_sha256 = directory_sha256(destination)
+    if directory_sha256(source) != expected_sha256 or copied_sha256 != expected_sha256:
+        raise ValueError("pump-station Harbor initial run changed while it was copied")
+    return copied_sha256
 
 
 def _validated_project_root(project_root: Path) -> Path:
@@ -515,7 +738,24 @@ def _task_toml_text(
     )
 
 
-def _test_script_text(wheel_name: str) -> str:
+def _test_script_text(
+    wheel_name: str,
+    *,
+    registered_profile: bool = False,
+    initial_run: bool = False,
+) -> str:
+    reference_system_variable = (
+        'REFERENCE_SYSTEM_DIR="${AEC_BENCH_REFERENCE_SYSTEM_DIR:-/tests/reference-system}"\n'
+        if registered_profile
+        else ""
+    )
+    reference_system_argument = '  --reference-system-dir "$REFERENCE_SYSTEM_DIR" \\\n' if registered_profile else ""
+    initial_run_variable = (
+        'INITIAL_RUN_DIR="${AEC_BENCH_INITIAL_RUN_DIR:-${EXPORT_MANIFEST%/*}/initial-world-run}"\n'
+        if initial_run
+        else ""
+    )
+    initial_run_argument = '  --initial-run-dir "$INITIAL_RUN_DIR" \\\n' if initial_run else ""
     return f"""#!/bin/sh
 # ABOUTME: Runs the hidden pump-station verifier after Harbor ends the agent phase.
 # ABOUTME: Reloads the exact exported package and immutable world-session evidence.
@@ -524,7 +764,7 @@ set -eu
 RUN_DIR="${{AEC_BENCH_WORLD_SESSION_DIR:-{PUMP_STATION_HARBOR_OUTPUT_PATH}}}"
 EXPORT_MANIFEST="${{AEC_BENCH_EXPORT_MANIFEST:-/tests/{_MANIFEST_NAME}}}"
 PACKAGE_DIR="${{AEC_BENCH_REFERENCE_PACKAGE_DIR:-/tests/reference-package}}"
-VERIFIER_RUNTIME="${{AEC_BENCH_VERIFIER_RUNTIME:-/tests/runtime/{wheel_name}}}"
+{reference_system_variable}{initial_run_variable}VERIFIER_RUNTIME="${{AEC_BENCH_VERIFIER_RUNTIME:-/tests/runtime/{wheel_name}}}"
 REWARD_PATH="${{AEC_BENCH_REWARD_PATH:-/logs/verifier/reward.json}}"
 DETAILS_PATH="${{AEC_BENCH_DETAILS_PATH:-/logs/verifier/details.json}}"
 PYTHON_BIN="${{AEC_BENCH_PYTHON:-python3}}"
@@ -536,7 +776,7 @@ PYTHONPATH="$RUNTIME_DIR${{PYTHONPATH:+:$PYTHONPATH}}" "$PYTHON_BIN" \\
   --run-dir "$RUN_DIR" \\
   --export-manifest "$EXPORT_MANIFEST" \\
   --package-dir "$PACKAGE_DIR" \\
-  --verifier-runtime "$VERIFIER_RUNTIME" \\
+{reference_system_argument}{initial_run_argument}  --verifier-runtime "$VERIFIER_RUNTIME" \\
   --reward-path "$REWARD_PATH" \\
   --details-path "$DETAILS_PATH"
 """
@@ -580,6 +820,7 @@ __all__ = (
     "PUMP_STATION_HARBOR_BRIDGE_MODE",
     "PUMP_STATION_HARBOR_EXECUTION_KIND",
     "PUMP_STATION_HARBOR_OUTPUT_PATH",
+    "PUMP_STATION_REGISTERED_HARBOR_EXPORT_SCHEMA_VERSION",
     "PumpStationHarborBridge",
     "export_pump_station_harbor_task",
     "is_pump_station_harbor_inventory_artifact",

@@ -13,9 +13,24 @@ from threading import Barrier
 import pytest
 from pydantic import TypeAdapter
 
+import aec_bench.meta_harness.immutable_artifact_store as store_runtime
 from aec_bench.contracts.harness_kernel import ContentAddressedModel
+from aec_bench.ledger.immutable_artifact_store import (
+    ImmutableArtifact as LowerImmutableArtifact,
+)
+from aec_bench.ledger.immutable_artifact_store import (
+    ImmutableArtifactCollisionError as LowerImmutableArtifactCollisionError,
+)
+from aec_bench.ledger.immutable_artifact_store import (
+    ImmutableArtifactConfinementError as LowerImmutableArtifactConfinementError,
+)
+from aec_bench.ledger.immutable_artifact_store import (
+    ImmutableArtifactIntegrityError as LowerImmutableArtifactIntegrityError,
+)
+from aec_bench.ledger.immutable_artifact_store import ImmutableByteStore
 from aec_bench.meta_harness.immutable_artifact_store import (
     EvidenceRepository,
+    ImmutableArtifact,
     ImmutableArtifactCollisionError,
     ImmutableArtifactConfinementError,
     ImmutableArtifactIntegrityError,
@@ -31,6 +46,14 @@ class _Artifact(ContentAddressedModel):
 class _ArtifactClaim(ContentAddressedModel):
     schema_version: str = "test.immutable-artifact-claim.v1"
     target_content_sha256: str
+
+
+def test_meta_harness_store_is_a_compatible_policy_facade_over_lower_bytes() -> None:
+    assert issubclass(ImmutableArtifactStore, ImmutableByteStore)
+    assert ImmutableArtifact is LowerImmutableArtifact
+    assert ImmutableArtifactCollisionError is LowerImmutableArtifactCollisionError
+    assert ImmutableArtifactConfinementError is LowerImmutableArtifactConfinementError
+    assert ImmutableArtifactIntegrityError is LowerImmutableArtifactIntegrityError
 
 
 def test_publishes_and_reloads_exact_model_and_bytes(tmp_path: Path) -> None:
@@ -129,6 +152,44 @@ def test_evidence_repository_publishes_content_models_and_logical_claims(
             model=_ArtifactClaim(target_content_sha256="a" * 64),
             adapter=claim_adapter,
         )
+
+
+def test_meta_facade_rechecks_disjoint_roots_during_descriptor_bound_creation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    safe_parent = tmp_path / "safe"
+    safe_parent.mkdir()
+    original_parent = tmp_path / "original-safe"
+    protected = tmp_path / "protected"
+    protected.mkdir()
+    selected = safe_parent / "evidence"
+    original_validate = store_runtime.validate_evidence_root
+
+    def validate_and_swap(
+        root: Path,
+        *,
+        disjoint_roots: tuple[Path, ...] = (),
+        must_exist: bool = False,
+    ) -> Path:
+        validated = original_validate(
+            root,
+            disjoint_roots=disjoint_roots,
+            must_exist=must_exist,
+        )
+        safe_parent.rename(original_parent)
+        safe_parent.symlink_to(protected, target_is_directory=True)
+        return validated
+
+    monkeypatch.setattr(store_runtime, "validate_evidence_root", validate_and_swap)
+
+    with pytest.raises(ImmutableArtifactConfinementError, match="overlap"):
+        ImmutableArtifactStore(
+            selected,
+            disjoint_roots=(protected,),
+        )
+
+    assert not (protected / "evidence").exists()
 
 
 def test_evidence_repository_revalidates_digests_and_disjoint_roots(

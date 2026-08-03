@@ -12,7 +12,7 @@ from enum import Enum
 from typing import Any, cast
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PumpStationStewardshipState,
+    PumpStationStewardshipStateRecord,
 )
 
 _V1_FIELD_EXCLUSIONS = {
@@ -50,10 +50,35 @@ _V3_FIELD_EXCLUSIONS = {
     },
     "PumpStationCurrentStateView": {"observation_source"},
 }
+_V4_FIELD_EXCLUSIONS = {
+    "PumpStationStewardshipState": {
+        "assignment",
+        "service_schedule",
+        "baseline_schedule",
+        "disclosed_through_calendar_seconds",
+        "backlog",
+        "generation_records",
+        "outage_episodes",
+        "operating_intervals",
+        "collateral_runtime",
+        "accepted_evidence_ids",
+        "active_restriction_ids",
+        "active_liability_ids",
+        "created_liability_ids",
+        "discharged_liability_ids",
+        "pending_start_pump_ids",
+        "event_effect_ids",
+    },
+    "RequestInspection": {"backlog_item_id"},
+    "RequestObstructionClearance": {"backlog_item_id"},
+    "RequestVerification": {"backlog_item_id"},
+}
 
 
 def _field_exclusions(type_name: str, profile: str) -> set[str]:
-    exclusions = set(_V3_FIELD_EXCLUSIONS.get(type_name, set())) if profile != "v3" else set()
+    exclusions = set(_V3_FIELD_EXCLUSIONS.get(type_name, set())) if profile not in {"v3", "v4"} else set()
+    if profile != "v4":
+        exclusions.update(_V4_FIELD_EXCLUSIONS.get(type_name, set()))
     if profile == "v1":
         exclusions.update(_V1_FIELD_EXCLUSIONS.get(type_name, set()))
     return exclusions
@@ -61,13 +86,25 @@ def _field_exclusions(type_name: str, profile: str) -> set[str]:
 
 def _record_profile(value: object) -> str:
     type_name = type(value).__name__
+    if type_name in {
+        "PumpStationCommandV4",
+        "PumpStationTransitionReceiptV4",
+        "PumpStationTransitionV4",
+        "PumpStationWorldRunCommitV2",
+        "PumpStationStagedTransitionV4",
+    }:
+        return "v4"
     if type_name in {"PumpStationStewardshipState", "PumpStationCurrentStateView"}:
         version = str(getattr(value, "state_version", ""))
+        if version.endswith(".v4"):
+            return "v4"
         if version.endswith(".v3"):
             return "v3"
         return "v2" if version.endswith(".v2") else "v1"
     if type_name == "PumpStationActorView":
         return _record_profile(cast(Any, value).current_state)
+    if type_name == "PumpStationCoupledActorView":
+        return "v4"
     if type_name == "PumpStationStructuredHandover":
         return _record_profile(cast(Any, value).current_actor_view)
     if type_name == "PumpStationInformationSet":
@@ -76,6 +113,8 @@ def _record_profile(value: object) -> str:
         return _record_profile(cast(Any, value).state)
     if type_name == "PumpStationTransitionReceipt":
         version = str(getattr(value, "receipt_version", ""))
+        if version.endswith(".v4"):
+            return "v4"
         if version.endswith(".v3"):
             return "v3"
         return "v2" if version.endswith(".v2") else "v1"
@@ -132,6 +171,6 @@ def stewardship_content_id(
     return hashlib.sha256(payload).hexdigest()
 
 
-def stewardship_state_id(state: PumpStationStewardshipState) -> str:
+def stewardship_state_id(state: PumpStationStewardshipStateRecord) -> str:
     """Return the computed identity of one complete stewardship state."""
     return stewardship_content_id(state)

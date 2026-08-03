@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 
@@ -28,3 +29,21 @@ def test_readme_uses_current_public_commands() -> None:
     assert "research/" not in readme
     assert "aec-bench meta-harness recipe" in readme
     assert "/meta-harness" in readme
+
+
+def test_research_tree_is_local_only() -> None:
+    ignore_rules = {
+        line.strip()
+        for line in Path(".gitignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    tracked_research = subprocess.run(
+        ["git", "ls-files", "research"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "/research/" in ignore_rules
+    assert not any(rule.startswith("!") and "research/" in rule for rule in ignore_rules)
+    assert tracked_research.stdout == ""

@@ -19,6 +19,7 @@ PUMP_STATION_ROLLOUT_LINEAGE_VERSION = "pump-station.rollout-lineage.v1"
 PUMP_STATION_ROLLOUT_CHILD_RECEIPT_VERSION = "pump-station.rollout-child-receipt.v1"
 PUMP_STATION_TREATMENT_RECEIPT_VERSION = "pump-station.treatment-receipt.v1"
 PUMP_STATION_FIXED_CONDITION_POLICY = "fixed-future-conditions.v1"
+PUMP_STATION_ROLLOUT_BRANCH_RECEIPT_VERSION_V2 = "pump-station.rollout-branch-receipt.v2"
 
 
 class PumpStationRolloutGroupState(StrEnum):
@@ -64,6 +65,23 @@ class PumpStationRolloutGroupRequest:
     children: tuple[PumpStationRolloutChildRequest, ...]
     request_version: str = PUMP_STATION_ROLLOUT_REQUEST_VERSION
     fixed_condition_policy: str = PUMP_STATION_FIXED_CONDITION_POLICY
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationRolloutBranchReceiptV2:
+    """Task-owned evidence for one materialized registered branch."""
+
+    receipt_version: str
+    group_id: str
+    child_id: str
+    shared_group_request_content_sha256: str
+    shared_child_request_content_sha256: str
+    parent_snapshot: PumpStationStateSnapshotRef
+    initial_snapshot: PumpStationStateSnapshotRef
+    child_manifest_content_id: str
+    temporal_bundle_content_id: str
+    parent_origin_remaining_schedule_sha256: str
+    ancestor_branch_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)

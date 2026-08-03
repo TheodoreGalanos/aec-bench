@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -737,7 +738,7 @@ def test_evidence_request_repairs_action_ledger_after_state_commit(
     assert (run_dir / "evidence_requests/evidence-request-000001/committed.json").is_file()
 
 
-def test_evidence_request_recovers_torn_atomic_commit_marker_publish(
+def test_evidence_request_recovers_interrupted_atomic_commit_marker_publish(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -753,12 +754,21 @@ def test_evidence_request_recovers_torn_atomic_commit_marker_publish(
     original_write_atomic = evidence_request_store_runtime._write_json_atomic_durable
     interrupted = False
 
+    def stop_replace(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("simulated commit marker replacement interruption")
+
     def interrupt_commit_marker(path: Path, payload: dict[str, Any]) -> None:
         nonlocal interrupted
         if path.name == "committed.json" and not interrupted:
             interrupted = True
-            path.with_suffix(".json.tmp").write_text("{", encoding="utf-8")
-            raise RuntimeError("simulated commit marker publication death")
+            with monkeypatch.context() as patcher:
+                patcher.setattr(
+                    os,
+                    "replace",
+                    stop_replace,
+                )
+                original_write_atomic(path, payload)
+            raise AssertionError("interrupted replacement must not return")
         original_write_atomic(path, payload)
 
     monkeypatch.setattr(
@@ -766,7 +776,7 @@ def test_evidence_request_recovers_torn_atomic_commit_marker_publish(
         "_write_json_atomic_durable",
         interrupt_commit_marker,
     )
-    with pytest.raises(RuntimeError, match="simulated commit marker publication death"):
+    with pytest.raises(RuntimeError, match="simulated commit marker replacement interruption"):
         lifecycle_runtime.request_evidence_checkpoint(
             package,
             run_dir,
@@ -789,7 +799,7 @@ def test_evidence_request_recovers_torn_atomic_commit_marker_publish(
         "action_id": "evidence-request-000001",
         "status": "committed",
     }
-    assert not (transaction / "committed.json.tmp").exists()
+    assert not tuple(transaction.glob(".committed.json.*.tmp"))
 
 
 def test_concurrent_evidence_requests_preserve_sequence_and_budget(tmp_path: Path) -> None:
