@@ -1,0 +1,109 @@
+# ABOUTME: Runs stable Linux, world-conformance, and canonical hydraulic evidence gates.
+# ABOUTME: Keeps each gate tied to an owned directory instead of a hand-maintained file inventory.
+
+name: Python CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-smoke:
+    name: Linux smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --frozen
+
+      - name: Check public CLI startup
+        run: uv run aec-bench --help
+
+      - name: Check repository lint
+        run: uv run ruff check src/ tests/
+
+  world-kernel-conformance:
+    name: World kernel and conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --frozen
+
+      - name: Run world kernel and conformance tests
+        run: uv run pytest -q tests/task_world_templates/continual/
+
+      - name: Check owned formatting
+        run: >-
+          uv run ruff format --check
+          src/aec_bench/task_world_templates/continual/
+          tests/task_world_templates/continual/
+
+      - name: Check owned strict types
+        run: uv run mypy src/aec_bench/task_world_templates/continual/
+
+  canonical-hydraulic-evidence:
+    name: Canonical hydraulic evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --frozen
+
+      - name: Run canonical hydraulic evidence tests
+        run: uv run pytest -q tests/task_world_templates/hydraulics/
+
+      - name: Check owned formatting
+        run: >-
+          uv run ruff format --check
+          src/aec_bench/task_world_templates/hydraulics/
+          src/aec_bench/task_world_templates/lifecycles/
+          tests/task_world_templates/hydraulics/
+
+      - name: Check owned strict types
+        run: >-
+          uv run mypy
+          src/aec_bench/task_world_templates/hydraulics/
+          src/aec_bench/task_world_templates/lifecycles/
