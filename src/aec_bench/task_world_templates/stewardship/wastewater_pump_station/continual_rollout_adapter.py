@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import cast
@@ -10,7 +11,10 @@ from typing import cast
 from aec_bench.contracts.continual_world import (
     ContinualRolloutChildReceipt,
     ContinualRolloutChildRequest,
+    ContinualRolloutChildRunRef,
     ContinualRolloutGroupRequest,
+    ContinualWorldDefinitionRef,
+    ContinualWorldProfileRef,
     ContinualWorldSnapshotRef,
 )
 from aec_bench.task_world_templates.continual.branch_port import (
@@ -55,6 +59,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     pump_station_artifact_id,
 )
 
+_TASK_RECEIPT_PATH = "rollout-branch-receipt.json"
+
 
 @dataclass(frozen=True, slots=True)
 class _PumpStationVerifiedRolloutOrigin:
@@ -67,10 +73,166 @@ class _PumpStationVerifiedRolloutOrigin:
     remaining_schedule_sha256: str
 
 
+def validate_pump_station_rollout_child_run(
+    child_run_root: Path,
+    rollout_child_ref: ContinualRolloutChildRunRef,
+    *,
+    definition_ref: ContinualWorldDefinitionRef,
+    profile_ref: ContinualWorldProfileRef,
+    request: ContinualRolloutGroupRequest | None = None,
+    child: ContinualRolloutChildRequest | None = None,
+    shared_receipt: ContinualRolloutChildReceipt | None = None,
+) -> PumpStationRolloutBranchReceiptV2:
+    """Verify one task-owned child tree against exact registered authority."""
+
+    root = Path(child_run_root)
+    _validate_plain_directory_tree(root)
+    if (root / "session-authority").exists():
+        raise ValueError("pump-station rollout child contains active session authority")
+    if (
+        rollout_child_ref.task_world_id != definition_ref.task_world_id
+        or rollout_child_ref.task_world_id != profile_ref.task_world_id
+    ):
+        raise ValueError("pump-station rollout child belongs to another task world")
+    repository = PumpStationWorldRunRepository(root)
+    manifest = repository.load_manifest()
+    if (
+        not isinstance(manifest, PumpStationWorldRunManifestV2)
+        or PumpStationWorldRun._definition_ref(manifest) != definition_ref
+        or PumpStationWorldRun._profile_ref(manifest) != profile_ref
+        or manifest.initial_state_source.kind != "rollout_parent_snapshot"
+    ):
+        raise ValueError("pump-station rollout child manifest authority differs")
+    snapshot = repository.current_snapshot()
+    run = PumpStationWorldRun.resume_reference_system(
+        repository=repository,
+        snapshot=snapshot,
+    )
+    receipt_payload = (root / _TASK_RECEIPT_PATH).read_bytes()
+    task_receipt = load_pump_station_artifact(
+        receipt_payload,
+        PumpStationRolloutBranchReceiptV2,
+        record_profile="v4",
+    )
+    initial_state = repository.load_state(manifest.initial_state_id)
+    if initial_state.state_version != PUMP_STATION_STATE_VERSION_V4:
+        raise ValueError("registered pump child initial state is not V4")
+    remaining_schedule_sha256 = _remaining_schedule_sha256(
+        cast(PumpStationCoupledStewardshipState, initial_state),
+    )
+    expected_snapshot = (
+        rollout_child_ref.run_id,
+        rollout_child_ref.episode_id,
+        rollout_child_ref.world_branch_id,
+        rollout_child_ref.initial_snapshot.sequence,
+        rollout_child_ref.initial_snapshot.state_id,
+        rollout_child_ref.initial_snapshot.commit_id,
+    )
+    current_snapshot = (
+        snapshot.run_id,
+        snapshot.episode_id,
+        snapshot.world_branch_id,
+        snapshot.sequence,
+        snapshot.state_id,
+        snapshot.commit_id,
+    )
+    receipt_snapshot = (
+        task_receipt.initial_snapshot.run_id,
+        task_receipt.initial_snapshot.episode_id,
+        task_receipt.initial_snapshot.world_branch_id,
+        task_receipt.initial_snapshot.sequence,
+        task_receipt.initial_snapshot.state_id,
+        task_receipt.initial_snapshot.commit_id,
+    )
+    source = manifest.initial_state_source
+    receipt_provenance = (
+        task_receipt.shared_group_request_content_sha256,
+        task_receipt.shared_child_request_content_sha256,
+        task_receipt.parent_snapshot.run_id,
+        task_receipt.parent_snapshot.world_branch_id,
+        task_receipt.parent_snapshot.state_id,
+        task_receipt.parent_snapshot.commit_id,
+        task_receipt.parent_origin_remaining_schedule_sha256,
+        task_receipt.ancestor_branch_ids,
+        task_receipt.temporal_bundle_content_id,
+    )
+    manifest_provenance = (
+        source.rollout_group_request_content_id,
+        source.child_request_content_id,
+        source.parent_run_id,
+        source.parent_branch_id,
+        source.parent_state_id,
+        source.parent_commit_id,
+        source.parent_origin_remaining_schedule_sha256,
+        source.ancestor_branch_ids,
+        manifest.temporal_bundle_content_id,
+    )
+    if (
+        current_snapshot != expected_snapshot
+        or receipt_snapshot != expected_snapshot
+        or task_receipt.receipt_version != PUMP_STATION_ROLLOUT_BRANCH_RECEIPT_VERSION_V2
+        or task_receipt.group_id != rollout_child_ref.group_id
+        or task_receipt.child_id != rollout_child_ref.child_id
+        or task_receipt.child_manifest_content_id != rollout_child_ref.child_manifest_content_sha256
+        or receipt_provenance != manifest_provenance
+        or task_receipt.parent_origin_remaining_schedule_sha256 != remaining_schedule_sha256
+        or (manifest.initial_sequence, manifest.initial_state_id)
+        != (task_receipt.parent_snapshot.sequence, task_receipt.parent_snapshot.state_id)
+        or (manifest.run_id, manifest.episode_id, manifest.world_branch_id)
+        != (rollout_child_ref.run_id, rollout_child_ref.episode_id, rollout_child_ref.world_branch_id)
+        or pump_station_artifact_id(manifest, record_profile="manifest-v2")
+        != rollout_child_ref.child_manifest_content_sha256
+        or not run.verify_v4().valid
+    ):
+        raise ValueError("pump-station rollout child run identity differs")
+
+    supplied_shared_authority = (request, child, shared_receipt)
+    if any(value is not None for value in supplied_shared_authority):
+        if request is None or child is None or shared_receipt is None:
+            raise ValueError("registered pump child shared authority is incomplete")
+        expected_parent_snapshot = _pump_snapshot(
+            request.parent_snapshot,
+            snapshot_version=manifest.snapshot_version,
+        )
+        if (
+            request.definition_ref != definition_ref
+            or request.profile_ref != profile_ref
+            or request.task_world_id != rollout_child_ref.task_world_id
+            or request.group_id != rollout_child_ref.group_id
+            or child.child_id != rollout_child_ref.child_id
+            or (child.run_id, child.episode_id, child.world_branch_id)
+            != (rollout_child_ref.run_id, rollout_child_ref.episode_id, rollout_child_ref.world_branch_id)
+            or shared_receipt.group_id != request.group_id
+            or shared_receipt.child_id != child.child_id
+            or shared_receipt.child_request_content_sha256 != child.content_sha256
+            or shared_receipt.parent_snapshot != request.parent_snapshot
+            or shared_receipt.initial_snapshot != rollout_child_ref.initial_snapshot
+            or shared_receipt.child_manifest_content_sha256 != rollout_child_ref.child_manifest_content_sha256
+            or shared_receipt.ancestor_world_branch_ids != task_receipt.ancestor_branch_ids
+            or hashlib.sha256(receipt_payload).hexdigest() != shared_receipt.task_branch_receipt_content_sha256
+            or task_receipt.shared_group_request_content_sha256 != request.content_sha256
+            or task_receipt.shared_child_request_content_sha256 != child.content_sha256
+            or task_receipt.parent_snapshot != expected_parent_snapshot
+            or source.rollout_group_request_id != request.request_id
+            or source.parent_manifest_content_id != request.parent_manifest_content_sha256
+            or source.origin_verification_content_id != request.origin_verification_content_sha256
+        ):
+            raise ValueError("registered pump child rollout provenance differs")
+    return task_receipt
+
+
+def _validate_plain_directory_tree(root: Path) -> None:
+    """Reject links and special members from one child authority tree."""
+
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("pump-station rollout child must be a plain directory")
+    for candidate in root.rglob("*"):
+        if candidate.is_symlink() or not (candidate.is_file() or candidate.is_dir()):
+            raise ValueError("pump-station rollout child contains an unsafe filesystem member")
+
+
 class PumpStationContinualWorldBranchPort:
     """Materialize registered pump children through the durable V4 world run."""
-
-    _TASK_RECEIPT_PATH = "rollout-branch-receipt.json"
 
     def verify_origin(
         self,
@@ -230,7 +392,7 @@ class PumpStationContinualWorldBranchPort:
             repository.root,
             parent_run_root=parent_run_root,
         ).publish_bytes(
-            self._TASK_RECEIPT_PATH,
+            _TASK_RECEIPT_PATH,
             pump_station_artifact_bytes(task_receipt, record_profile="v4"),
         )
         return ContinualWorldBranchMaterialization(
@@ -253,113 +415,26 @@ class PumpStationContinualWorldBranchPort:
     ) -> None:
         """Verify the child, complete source provenance, and task receipt."""
 
-        del package_root
+        del package_root, parent_run_root
         self._profile(profile_value)
-        repository = PumpStationWorldRunRepository(child_run_root)
-        manifest = repository.load_manifest()
-        if not isinstance(manifest, PumpStationWorldRunManifestV2):
-            raise ValueError("registered pump child requires manifest v2")
-        run = PumpStationWorldRun.resume_reference_system(
-            repository=repository,
-            snapshot=repository.current_snapshot(),
+        validate_pump_station_rollout_child_run(
+            child_run_root,
+            ContinualRolloutChildRunRef(
+                group_id=request.group_id,
+                child_id=child.child_id,
+                task_world_id=request.task_world_id,
+                run_id=child.run_id,
+                episode_id=child.episode_id,
+                world_branch_id=child.world_branch_id,
+                initial_snapshot=receipt.initial_snapshot,
+                child_manifest_content_sha256=receipt.child_manifest_content_sha256,
+            ),
+            definition_ref=request.definition_ref,
+            profile_ref=request.profile_ref,
+            request=request,
+            child=child,
+            shared_receipt=receipt,
         )
-        if not run.verify_v4().valid:
-            raise ValueError("registered pump child replay differs")
-        initial_snapshot = _initial_snapshot(repository, manifest)
-        manifest_content_id = pump_station_artifact_id(
-            manifest,
-            record_profile="manifest-v2",
-        )
-        if (
-            receipt.initial_snapshot != _shared_snapshot(initial_snapshot)
-            or receipt.child_manifest_content_sha256 != manifest_content_id
-        ):
-            raise ValueError("registered pump shared child receipt differs")
-        payload = _task_store(
-            repository.root,
-            parent_run_root=parent_run_root,
-        ).load_bytes(
-            self._TASK_RECEIPT_PATH,
-            expected_sha256=receipt.task_branch_receipt_content_sha256,
-        )
-        task_receipt = load_pump_station_artifact(
-            payload,
-            PumpStationRolloutBranchReceiptV2,
-        )
-        parent_snapshot = _pump_snapshot(
-            request.parent_snapshot,
-            snapshot_version=manifest.snapshot_version,
-        )
-        initial_state = repository.load_state(manifest.initial_state_id)
-        if initial_state.state_version != PUMP_STATION_STATE_VERSION_V4:
-            raise ValueError("registered pump child initial state is not V4")
-        remaining_schedule_sha256 = _remaining_schedule_sha256(
-            cast(PumpStationCoupledStewardshipState, initial_state),
-        )
-        source = manifest.initial_state_source
-        expected_source_scope = (
-            "rollout_parent_snapshot",
-            request.parent_snapshot.run_id,
-            request.parent_snapshot.world_branch_id,
-            request.parent_snapshot.state_id,
-            request.parent_snapshot.commit_id,
-            request.request_id,
-            child.content_sha256,
-            request.content_sha256,
-            request.parent_manifest_content_sha256,
-            request.origin_verification_content_sha256,
-            remaining_schedule_sha256,
-            receipt.ancestor_world_branch_ids,
-        )
-        observed_source_scope = (
-            source.kind,
-            source.parent_run_id,
-            source.parent_branch_id,
-            source.parent_state_id,
-            source.parent_commit_id,
-            source.rollout_group_request_id,
-            source.child_request_content_id,
-            source.rollout_group_request_content_id,
-            source.parent_manifest_content_id,
-            source.origin_verification_content_id,
-            source.parent_origin_remaining_schedule_sha256,
-            source.ancestor_branch_ids,
-        )
-        expected_task_scope = (
-            PUMP_STATION_ROLLOUT_BRANCH_RECEIPT_VERSION_V2,
-            request.group_id,
-            child.child_id,
-            request.content_sha256,
-            child.content_sha256,
-            parent_snapshot,
-            initial_snapshot,
-            manifest_content_id,
-            manifest.temporal_bundle_content_id,
-            remaining_schedule_sha256,
-            receipt.ancestor_world_branch_ids,
-        )
-        observed_task_scope = (
-            task_receipt.receipt_version,
-            task_receipt.group_id,
-            task_receipt.child_id,
-            task_receipt.shared_group_request_content_sha256,
-            task_receipt.shared_child_request_content_sha256,
-            task_receipt.parent_snapshot,
-            task_receipt.initial_snapshot,
-            task_receipt.child_manifest_content_id,
-            task_receipt.temporal_bundle_content_id,
-            task_receipt.parent_origin_remaining_schedule_sha256,
-            task_receipt.ancestor_branch_ids,
-        )
-        if (
-            observed_source_scope != expected_source_scope
-            or observed_task_scope != expected_task_scope
-            or (manifest.initial_sequence, manifest.initial_state_id)
-            != (parent_snapshot.sequence, parent_snapshot.state_id)
-            or (manifest.run_id, manifest.episode_id, manifest.world_branch_id)
-            != (child.run_id, child.episode_id, child.world_branch_id)
-        ):
-            raise ValueError("registered pump child rollout provenance differs")
 
     @staticmethod
     def _profile(value: object) -> PumpStationContinualProfile:
@@ -451,4 +526,7 @@ def _task_store(
     )
 
 
-__all__ = ["PumpStationContinualWorldBranchPort"]
+__all__ = [
+    "PumpStationContinualWorldBranchPort",
+    "validate_pump_station_rollout_child_run",
+]

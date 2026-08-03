@@ -26,7 +26,6 @@ from aec_bench.adapters.rlm.providers import (
 )
 from aec_bench.adapters.runtime_limits import configured_positive_int, validate_runtime_limit_contract
 from aec_bench.agents.tools import inject_trajectory_writer
-from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.harness_instance import AgentBindingConfig
 from aec_bench.contracts.proposal_execution import (
     ProposalSessionExecutionRef,
@@ -52,34 +51,15 @@ from aec_bench.harness.proposal_session_output import (
 from aec_bench.harness.runtime_dependencies import PYDANTIC_AI_RUNTIME_VERSION, RUNTIME_PYTHON_PACKAGES
 from aec_bench.meta_harness.evidence_lifecycle_episode import LifecycleVisibilityPolicy
 from aec_bench.meta_harness.evidence_lifecycle_local import run_local_evidence_lifecycle_session
+from aec_bench.task_world_templates.continual.definition import (
+    ContinualWorldHarborPort,
+)
+from aec_bench.task_world_templates.continual_catalogue import default_continual_world_catalogue
 from aec_bench.task_world_templates.harbor_export import (
     HARBOR_LIFECYCLE_BRIDGE_MODE,
     HarborLifecycleBridge,
     load_harbor_lifecycle_bridge,
     write_harbor_lifecycle_attestation,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
-    PUMP_STATION_HARBOR_BRIDGE_MODE,
-    PUMP_STATION_HARBOR_EXECUTION_KIND,
-    PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE,
-    PUMP_STATION_REVIEW_HARBOR_EXECUTION_KIND,
-    PumpStationHarborBridge,
-    load_pump_station_harbor_bridge,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
-    PUMP_STATION_MODEL_CONTROLLER_MODE,
-    PUMP_STATION_MODEL_MAX_TURNS,
-    PUMP_STATION_REFERENCE_CONTROLLER_ID,
-    run_pump_station_evidence_health_reference_session,
-    run_pump_station_model_session,
-    run_pump_station_reference_session,
-    run_pump_station_rich_work_reference_session,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review_harbor import (
-    run_pump_station_review_reference_session,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
-    PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -197,7 +177,8 @@ class EntrypointAgent(BaseAgent):
         self._params: dict[str, Any] = kwargs
         self._lifecycle_bridge: HarborLifecycleBridge | None = None
         self._proposal_inputs: LoadedProposalSessionHostInputs | None = None
-        self._world_session_bridge: PumpStationHarborBridge | None = None
+        self._world_session_port: ContinualWorldHarborPort | None = None
+        self._world_session_bridge: object | None = None
 
     @staticmethod
     def name() -> str:
@@ -209,7 +190,14 @@ class EntrypointAgent(BaseAgent):
     async def setup(self, environment: Any) -> None:
         if "world_session" in self._params:
             self._validate_world_session_configuration()
-            self._world_session_bridge = load_pump_station_harbor_bridge(Path(environment.environment_dir))
+            port = self._world_session_port
+            if port is None:
+                raise RuntimeError("continual-world Harbor port resolution failed")
+            bridge = port.load_bridge(Path(environment.environment_dir))
+            identity = port.bridge_identity(bridge)
+            if identity.execution_kind != self._params.get("execution_kind"):
+                raise ValueError("continual-world Harbor bridge execution kind differs")
+            self._world_session_bridge = bridge
             return
         if "lifecycle_bridge" in self._params:
             self._validate_lifecycle_configuration()
@@ -668,47 +656,23 @@ class EntrypointAgent(BaseAgent):
             }
 
     def _validate_world_session_configuration(self) -> None:
-        session = self._params.get("world_session")
-        if not isinstance(session, dict):
-            raise ValueError("pump-station world session bridge configuration differs")
-        bridge_mode = session.get("bridge_mode")
-        maintenance_review = bridge_mode == PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE
-        expected_execution_kind = (
-            PUMP_STATION_REVIEW_HARBOR_EXECUTION_KIND if maintenance_review else PUMP_STATION_HARBOR_EXECUTION_KIND
-        )
-        if self._params.get("execution_kind") != expected_execution_kind:
-            raise ValueError("pump-station world session requires its exact execution kind")
-        if bridge_mode not in {
-            PUMP_STATION_HARBOR_BRIDGE_MODE,
-            PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE,
-        }:
-            raise ValueError("pump-station world session bridge configuration differs")
+        execution_kind = str(self._params.get("execution_kind") or "").strip()
+        if not execution_kind:
+            raise ValueError("continual-world session requires an execution kind")
+        try:
+            _, port = default_continual_world_catalogue().resolve_harbor(execution_kind)
+        except KeyError as exc:
+            raise ValueError(str(exc)) from exc
         if self._params.get("adapter") != "tool_loop":
-            raise ValueError("pump-station world session requires the tool_loop adapter")
+            raise ValueError("continual-world session requires the tool_loop adapter")
         if self._params.get("extra_env") not in (None, {}):
-            raise ValueError("pump-station world session does not accept environment variables")
-        controller = session.get("controller")
-        reference_controller = self.model_name in {
-            PUMP_STATION_REFERENCE_CONTROLLER_ID,
-            PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
-        }
-        if maintenance_review and not reference_controller:
-            raise ValueError("pump-station review model runs require the separately approved direct host runner")
-        expected_session = {"bridge_mode": bridge_mode}
-        if not reference_controller:
-            expected_session["controller"] = PUMP_STATION_MODEL_CONTROLLER_MODE
-        if session != expected_session:
-            raise ValueError("pump-station world session bridge configuration differs")
-        if reference_controller and controller is not None:
-            raise ValueError("pump-station reference controller cannot use model mode")
-        if not reference_controller and not str(self.model_name or "").strip():
-            raise ValueError("pump-station model controller requires a model")
+            raise ValueError("continual-world session does not accept environment variables")
         if "client" in self._params:
-            raise ValueError("pump-station world session does not accept serialized clients")
+            raise ValueError("continual-world session does not accept serialized clients")
         if "tools" in self._params:
-            raise ValueError("pump-station world session owns its exact tool allowlist")
+            raise ValueError("continual-world session owns its exact tool allowlist")
         if "system_prompt" in self._params:
-            raise ValueError("pump-station world session owns its system prompt")
+            raise ValueError("continual-world session owns its system prompt")
         allowed = {
             "adapter",
             "execution_kind",
@@ -718,12 +682,17 @@ class EntrypointAgent(BaseAgent):
         }
         unknown = sorted(set(self._params) - allowed)
         if unknown:
-            raise ValueError("unsupported pump-station world session configuration: " + ", ".join(unknown))
+            raise ValueError("unsupported continual-world session configuration: " + ", ".join(unknown))
         validate_runtime_limit_contract(
             adapter_kind="tool_loop",
             configuration=self._params,
         )
         _reject_serialized_provider_secrets(self._params)
+        port.validate_configuration(
+            configuration=self._params,
+            model_name=str(self.model_name or ""),
+        )
+        self._world_session_port = port
 
     async def _run_world_session(
         self,
@@ -734,152 +703,91 @@ class EntrypointAgent(BaseAgent):
     ) -> None:
         del instruction
         self._validate_world_session_configuration()
+        port = self._world_session_port
         configured_bridge = self._world_session_bridge
-        if configured_bridge is None:
-            raise RuntimeError("pump-station world session setup has not completed")
-        current_bridge = load_pump_station_harbor_bridge(Path(environment.environment_dir))
+        if port is None or configured_bridge is None:
+            raise RuntimeError("continual-world session setup has not completed")
+        current_bridge = port.load_bridge(Path(environment.environment_dir))
         if current_bridge != configured_bridge:
-            raise ValueError("pump-station Harbor task changed after agent setup")
+            raise ValueError("continual-world Harbor task changed after agent setup")
+        bridge_identity = port.bridge_identity(current_bridge)
+        session_configuration = cast(dict[str, Any], self._params["world_session"])
         if (
-            self._params.get("execution_kind") != current_bridge.execution_kind
-            or self._params["world_session"].get("bridge_mode") != current_bridge.bridge_mode
+            self._params.get("execution_kind") != bridge_identity.execution_kind
+            or session_configuration.get("bridge_mode") != bridge_identity.bridge_mode
         ):
-            raise ValueError("pump-station Harbor bridge identity changed after setup")
+            raise ValueError("continual-world Harbor bridge identity changed after setup")
         session_identity = str(getattr(environment, "session_id", "")).strip()
         if not session_identity:
-            raise RuntimeError("pump-station Harbor environment has no session identity")
+            raise RuntimeError("continual-world Harbor environment has no session identity")
 
-        with tempfile.TemporaryDirectory(prefix="aec-bench-pump-station-harbor-") as raw_run:
+        model = str(self.model_name or "")
+        uses_provider = port.uses_model_controller(
+            bridge=current_bridge,
+            model_name=model,
+        )
+        provider_environment = _host_model_provider_environment(model) if uses_provider else {}
+        max_turns = configured_positive_int(self._params, "max_turns") or port.default_max_turns
+        with tempfile.TemporaryDirectory(prefix="aec-bench-continual-world-harbor-") as raw_run:
             staging = Path(raw_run)
-            run_dir = staging / "world-session"
-            expected_reference_controller = (
-                PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
-                if current_bridge.profile_ref is not None
-                else PUMP_STATION_REFERENCE_CONTROLLER_ID
-            )
-            reference_controller = self.model_name == expected_reference_controller
-            if (
-                self.model_name
-                in {
-                    PUMP_STATION_REFERENCE_CONTROLLER_ID,
-                    PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
-                }
-                and not reference_controller
-            ):
-                raise ValueError("pump-station reference controller differs from the exported profile")
-            if reference_controller:
-                if current_bridge.maintenance_review:
-                    review_session = await asyncio.to_thread(
-                        run_pump_station_review_reference_session,
-                        bridge=current_bridge,
-                        output_dir=run_dir,
-                        session_identity=session_identity,
-                    )
-                    world_session_id = review_session.observation.session_id
-                else:
-                    reference_runner = (
-                        run_pump_station_reference_session
-                        if current_bridge.profile_ref is not None
-                        else run_pump_station_evidence_health_reference_session
-                        if current_bridge.evidence_health
-                        else run_pump_station_rich_work_reference_session
-                        if current_bridge.rich_work_processes
-                        else run_pump_station_reference_session
-                    )
-                    world_session = await asyncio.to_thread(
-                        reference_runner,
-                        bridge=current_bridge,
-                        output_dir=run_dir,
-                        session_identity=session_identity,
-                    )
-                    world_session_id = world_session.request.session_id
-                output_path = staging / "output.md"
-                output_path.write_text(
-                    (
-                        "The deterministic wastewater pump-station closeout review completed.\n"
-                        if current_bridge.maintenance_review
-                        else "The deterministic wastewater pump-station session completed.\n"
+            try:
+                completed = await asyncio.to_thread(
+                    port.run_session,
+                    bridge=current_bridge,
+                    staging_dir=staging,
+                    session_identity=session_identity,
+                    model_name=model,
+                    max_turns=max_turns,
+                    registry=self._lifecycle_registry(),
+                )
+            except Exception as exc:
+                if not uses_provider:
+                    raise
+                context.metadata = {
+                    "adapter_name": "tool_loop",
+                    "bridge_mode": bridge_identity.bridge_mode,
+                    "bridge_manifest_sha256": bridge_identity.manifest_sha256,
+                    "error": _redact_environment_values(
+                        str(exc),
+                        provider_environment,
                     ),
-                    encoding="utf-8",
-                )
-                input_tokens = 0
-                output_tokens = 0
-                resolved_model = expected_reference_controller
-                session_status = "completed"
-            else:
-                model = str(self.model_name or "")
-                provider_environment = _host_model_provider_environment(
-                    model,
-                )
-                max_turns = configured_positive_int(self._params, "max_turns") or PUMP_STATION_MODEL_MAX_TURNS
-                try:
-                    model_session = await asyncio.to_thread(
-                        run_pump_station_model_session,
-                        bridge=current_bridge,
-                        output_dir=run_dir,
-                        session_identity=session_identity,
-                        model=model,
-                        max_turns=max_turns,
-                        registry=self._lifecycle_registry(),
-                    )
-                    adapter_result = model_session.adapter_result
-                    verification_valid = model_session.verification.valid
-                    world_session_id = model_session.request.session_id
-                except Exception as exc:
-                    context.metadata = {
-                        "adapter_name": "tool_loop",
-                        "bridge_mode": current_bridge.bridge_mode,
-                        "bridge_manifest_sha256": (current_bridge.export_manifest_sha256),
-                        "error": _redact_environment_values(
-                            str(exc),
-                            provider_environment,
-                        ),
-                        "execution_kind": current_bridge.execution_kind,
-                        "model": model,
-                        "resolved_model": model,
-                        "reward_owner": "harbor_verifier",
-                        "world_session_status": "failed",
-                    }
-                    return
-                output_path = run_dir / "output.md"
-                input_tokens = adapter_result.usage_input_tokens or 0
-                output_tokens = adapter_result.usage_output_tokens or 0
-                resolved_model = adapter_result.resolved_model
-                session_status = (
-                    "completed"
-                    if (adapter_result.agent_output.status is AgentOutputStatus.COMPLETED and verification_valid)
-                    else "incomplete"
-                )
+                    "execution_kind": bridge_identity.execution_kind,
+                    "model": model,
+                    "resolved_model": model,
+                    "reward_owner": "harbor_verifier",
+                    "world_session_status": "failed",
+                }
+                return
             await environment.upload_dir(
-                str(run_dir),
-                current_bridge.output_path,
+                str(completed.output_dir),
+                bridge_identity.output_path,
             )
             permissions = await environment.exec(
-                f"chmod -R go-rwx {current_bridge.output_path}",
+                f"chmod -R go-rwx {bridge_identity.output_path}",
             )
             if permissions.return_code != 0:
                 raise RuntimeError(
-                    "pump-station Harbor could not make uploaded evidence host-private.\n"
+                    "continual-world Harbor could not make uploaded evidence host-private.\n"
                     f"stdout: {permissions.stdout}\n"
                     f"stderr: {permissions.stderr}",
                 )
             await environment.upload_file(
-                str(output_path),
+                str(completed.output_file),
                 "/workspace/output.md",
             )
 
-        context.n_input_tokens = input_tokens
-        context.n_output_tokens = output_tokens
+        context.n_input_tokens = completed.input_tokens
+        context.n_output_tokens = completed.output_tokens
         context.metadata = {
             "adapter_name": "tool_loop",
-            "bridge_mode": current_bridge.bridge_mode,
-            "bridge_manifest_sha256": (current_bridge.export_manifest_sha256),
-            "execution_kind": current_bridge.execution_kind,
-            "model": resolved_model,
-            "resolved_model": resolved_model,
+            "bridge_mode": bridge_identity.bridge_mode,
+            "bridge_manifest_sha256": bridge_identity.manifest_sha256,
+            "execution_kind": bridge_identity.execution_kind,
+            "model": completed.resolved_model,
+            "resolved_model": completed.resolved_model,
             "reward_owner": "harbor_verifier",
-            "world_session_id": world_session_id,
-            "world_session_status": session_status,
+            "world_session_id": completed.session_id,
+            "world_session_status": completed.status,
         }
 
 

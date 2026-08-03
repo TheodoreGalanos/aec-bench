@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import ast
 import json
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 
 import pytest
@@ -25,6 +25,9 @@ from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_continual_definit
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
     PumpStationContinualProfile,
     pump_station_continual_world_definition,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
+    PUMP_STATION_HARBOR_EXECUTION_KIND,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpStationCoupledModel,
@@ -48,6 +51,30 @@ def test_catalogue_rejects_duplicate_world_id() -> None:
 
     with pytest.raises(ValueError, match="task world ids must be unique"):
         ContinualWorldCatalogue(definitions=(definition, definition))
+
+
+def test_catalogue_resolves_unique_harbor_execution_kind() -> None:
+    catalogue = default_continual_world_catalogue()
+
+    definition, port = catalogue.resolve_harbor(PUMP_STATION_HARBOR_EXECUTION_KIND)
+
+    assert definition is catalogue.get(PUMP_STATION_TASK_WORLD_ID)
+    assert port is definition.harbor_port
+    assert PUMP_STATION_HARBOR_EXECUTION_KIND in port.execution_kinds
+
+
+def test_catalogue_rejects_duplicate_harbor_execution_kind() -> None:
+    pump_definition = pump_station_continual_world_definition()
+    assert pump_definition.harbor_port is not None
+    hydraulic_with_pump_port = replace(
+        ssc03_hydraulic_continual_world_definition(),
+        harbor_port=pump_definition.harbor_port,
+    )
+
+    with pytest.raises(ValueError, match="Harbor execution kinds must be unique"):
+        ContinualWorldCatalogue(
+            definitions=(pump_definition, hydraulic_with_pump_port),
+        )
 
 
 def test_catalogue_resolves_exact_content_pinned_definition() -> None:

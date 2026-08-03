@@ -11,7 +11,11 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, cast
 
-from aec_bench.contracts.continual_world import ContinualWorldProfileRef
+from aec_bench.contracts.continual_world import (
+    ContinualRolloutChildRunRef,
+    ContinualWorldDefinitionRef,
+    ContinualWorldProfileRef,
+)
 from aec_bench.contracts.world_session import (
     StewardshipStateSnapshotRef,
     WorldSessionExecutionKind,
@@ -29,6 +33,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_in
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
     pump_station_continual_world_definition,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_rollout_adapter import (
+    validate_pump_station_rollout_child_run,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     PUMP_STATION_HARBOR_EXECUTION_KIND,
@@ -63,6 +70,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_serialization import (
+    pump_station_artifact_id,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
     PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES,
     PUMP_STATION_RICH_WORK_TOOL_NAMES,
@@ -79,6 +89,7 @@ def verify_pump_station_harbor_run(
     export_manifest_path: Path,
     package_dir: Path,
     reference_system_dir: Path | None = None,
+    initial_run_dir: Path | None = None,
     verifier_runtime_path: Path | None = None,
 ) -> dict[str, Any]:
     """Verify one completed Harbor world session without trusting agent claims."""
@@ -110,9 +121,14 @@ def verify_pump_station_harbor_run(
     ):
         raise ValueError("pump-station Harbor export identity differs")
     profile_ref: ContinualWorldProfileRef | None = None
+    rollout_child_ref: ContinualRolloutChildRunRef | None = None
     if registered_profile:
+        definition = pump_station_continual_world_definition()
+        definition_ref = ContinualWorldDefinitionRef.model_validate(manifest.get("continual_definition"))
+        if definition_ref != definition.ref:
+            raise ValueError("pump-station Harbor definition is not registered")
         profile_ref = ContinualWorldProfileRef.model_validate(manifest.get("continual_profile"))
-        if profile_ref not in pump_station_continual_world_definition().spec.profiles:
+        if profile_ref not in definition.spec.profiles:
             raise ValueError("pump-station Harbor profile is not registered")
         if reference_system_dir is None:
             raise ValueError("registered pump-station Harbor verifier lacks its reference system")
@@ -125,6 +141,31 @@ def verify_pump_station_harbor_run(
             or reference_system.descriptor_content_id != profile_ref.profile_content_sha256
         ):
             raise ValueError("pump-station Harbor reference system evidence differs")
+        if "initial_run" in manifest:
+            initial_run_payload = _mapping(manifest.get("initial_run"), "initial run")
+            if (
+                set(initial_run_payload)
+                != {
+                    "directory_sha256",
+                    "path",
+                    "rollout_child_ref",
+                }
+                or initial_run_payload.get("path") != "tests/initial-world-run"
+            ):
+                raise ValueError("pump-station Harbor initial run fields differ")
+            if initial_run_dir is None:
+                raise ValueError("pump-station Harbor verifier lacks its initial run")
+            if directory_sha256(initial_run_dir) != initial_run_payload.get("directory_sha256"):
+                raise ValueError("pump-station Harbor initial run evidence differs")
+            rollout_child_ref = ContinualRolloutChildRunRef.model_validate(
+                initial_run_payload.get("rollout_child_ref"),
+            )
+            validate_pump_station_rollout_child_run(
+                initial_run_dir,
+                rollout_child_ref,
+                definition_ref=definition_ref,
+                profile_ref=profile_ref,
+            )
     package_payload = _mapping(manifest.get("package"), "package")
     rich_work_processes = bool(bridge_payload.get("rich_work_processes", False))
     evidence_health = bool(bridge_payload.get("evidence_health", False))
@@ -216,9 +257,19 @@ def verify_pump_station_harbor_run(
             snapshot=current_snapshot,
         )
         report = registered_run.verify_v4()
-        registered_evaluation = evaluate_pump_station_reference_run(registered_run)
-        if not registered_evaluation.valid:
-            raise ValueError("registered pump-station Harbor evaluation failed")
+        if rollout_child_ref is not None:
+            _verify_rollout_child_execution(
+                repository=repository,
+                request=request,
+                result=result,
+                child_ref=rollout_child_ref,
+                controller_id=inventory.get("controller_id"),
+                inventory_start=start_snapshot,
+            )
+        else:
+            registered_evaluation = evaluate_pump_station_reference_run(registered_run)
+            if not registered_evaluation.valid:
+                raise ValueError("registered pump-station Harbor evaluation failed")
     else:
         resumed = PumpStationWorldSessionFactory(
             root / "world-run",
@@ -305,6 +356,88 @@ def verify_pump_station_harbor_run(
     if registered_evaluation is not None:
         details["evaluation"] = registered_evaluation.model_dump(mode="json")
     return details
+
+
+def _verify_rollout_child_execution(
+    *,
+    repository: PumpStationWorldRunRepository,
+    request: WorldSessionRequest,
+    result: WorldSessionResult,
+    child_ref: ContinualRolloutChildRunRef,
+    controller_id: object,
+    inventory_start: StewardshipStateSnapshotRef,
+) -> None:
+    """Prove one completed session is a one-action continuation of the bound child."""
+
+    start_snapshot = request.start_snapshot
+    if start_snapshot is None:
+        raise ValueError("pump-station Harbor rollout child has no start snapshot")
+    expected_identity = (
+        child_ref.run_id,
+        child_ref.episode_id,
+        child_ref.world_branch_id,
+        child_ref.initial_snapshot.sequence,
+        child_ref.initial_snapshot.state_id,
+        child_ref.initial_snapshot.commit_id,
+    )
+    request_identity = (
+        request.run_id,
+        request.episode_id,
+        request.world_branch_id,
+        start_snapshot.sequence,
+        start_snapshot.state_id,
+        start_snapshot.commit_id,
+    )
+    inventory_identity = (
+        inventory_start.run_id,
+        inventory_start.episode_id,
+        inventory_start.world_branch_id,
+        inventory_start.sequence,
+        inventory_start.state_id,
+        inventory_start.commit_id,
+    )
+    result_identity = (
+        result.snapshot.run_id,
+        result.snapshot.episode_id,
+        result.snapshot.world_branch_id,
+    )
+    manifest = repository.load_manifest()
+    manifest_identity = (
+        manifest.run_id,
+        manifest.episode_id,
+        manifest.world_branch_id,
+    )
+    steps = repository.v4_steps()
+    command = steps[0].command if len(steps) == 1 else None
+    action_name = getattr(command, "action_name", None)
+    command_base = (
+        getattr(command, "run_id", None),
+        getattr(command, "episode_id", None),
+        getattr(command, "world_branch_id", None),
+        getattr(command, "based_on_sequence", None),
+        getattr(command, "base_state_id", None),
+        getattr(command, "base_commit_id", None),
+    )
+    expected_action = (
+        "request_condition_check" if controller_id == PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID else None
+    )
+    if (
+        request.open_mode is not WorldSessionOpenMode.RESUME
+        or request_identity != expected_identity
+        or inventory_identity != expected_identity
+        or result_identity != expected_identity[:3]
+        or manifest_identity != expected_identity[:3]
+        or pump_station_artifact_id(manifest, record_profile="manifest-v2") != child_ref.child_manifest_content_sha256
+        or result.snapshot.sequence != child_ref.initial_snapshot.sequence + 1
+        or len(steps) != 1
+        or getattr(command, "kind", None) != "actor"
+        or getattr(command, "session_id", None) != request.session_id
+        or getattr(command, "agent_tenure_id", None) != request.agent_tenure_id
+        or command_base != expected_identity
+        or action_name not in PUMP_STATION_ACTOR_ACTION_NAMES_V2
+        or (expected_action is not None and action_name != expected_action)
+    ):
+        raise ValueError("pump-station Harbor rollout child execution differs")
 
 
 def _verify_controller_completion(
@@ -443,6 +576,7 @@ def _main(argv: list[str] | None = None) -> int:
     parser.add_argument("--export-manifest", type=Path, required=True)
     parser.add_argument("--package-dir", type=Path, required=True)
     parser.add_argument("--reference-system-dir", type=Path)
+    parser.add_argument("--initial-run-dir", type=Path)
     parser.add_argument("--verifier-runtime", type=Path, required=True)
     parser.add_argument("--reward-path", type=Path, required=True)
     parser.add_argument("--details-path", type=Path, required=True)
@@ -453,6 +587,7 @@ def _main(argv: list[str] | None = None) -> int:
             export_manifest_path=args.export_manifest,
             package_dir=args.package_dir,
             reference_system_dir=args.reference_system_dir,
+            initial_run_dir=args.initial_run_dir,
             verifier_runtime_path=args.verifier_runtime,
         )
     except Exception as error:
