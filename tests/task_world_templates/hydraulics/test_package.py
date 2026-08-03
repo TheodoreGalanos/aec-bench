@@ -41,20 +41,20 @@ CANONICAL_RUNTIME_DEPENDENCIES = {
 EXPECTED_MAJOR_PACKAGE_MANIFEST = {
     "artifact_sha256": {
         "README.md": "2ba094a3f6de26e168023e910705fc089dcfaaefdeec1fdd8079e7e3432210dc",
-        "engine/identity.json": "974abdde0550cd2c5cf8e58cc774caa5a9750a1475e331f921800a5240999665",
+        "engine/identity.json": "acc960f15c8152746e38df61026395fdde1ccf0d3484976756606cebf73f77ab",
         "source/source-state.json": "7e361a26f66854e79bfcc9ddeb4cee023b6f2edeacce1ba9a38bdf953253f4c4",
     },
-    "package_sha256": "10517924e6250ac9d0f3e84d94e817aefc7f1e1a206ffc790eba777ef29626df",
+    "package_sha256": "115c5efaf30458799b2836859d7da49bca83b5d3f8724d1fcd5979dbe99d675c",
     "schema_version": "1",
     "world_id": WORLD_ID,
 }
 EXPECTED_MAJOR_RUN_ARTIFACTS = {
-    "report.md": "53d1c3820ed53510b789a3f7e66018327797efef5c82a23553048924d0712997",
-    "request.json": "37fcedf3c6cff689072f3e3d679f23cbd7b25f0a0f2619c47cdc07ae9155432f",
-    "results.json": "d4498f017b88e5fe0519add6dc0ca70e2f841504e45e80f529e949ff93cd81d0",
-    "timeseries.json": "72b7d0272f5c9592d370cc2634f52b2dfb4d01a204497ad7dfc063c2af74c734",
+    "report.md": "366f149ca4a4a631c4c10e71915895fdba118062ea6ade8b42f2f208cae77c91",
+    "request.json": "28ad0d85386c13a186ae7b66be8921e6b4c29d52a631694a33d48468a2093078",
+    "results.json": "a608a7daa38d41072ea426d6c1384aa71fe09e813144ff8132d8e85193ef2152",
+    "timeseries.json": "d3e6538e8ffbce6e1317d85da79be945dddc8839cbc507b6928ec00eb284a611",
 }
-EXPECTED_MAJOR_RUN_ID = "hydraulic-accf99ad186cdb1276c1a464695995d6f72dfef22dd0d3055b72b5f6cc9829a4"
+EXPECTED_MAJOR_RUN_ID = "hydraulic-a13fde0a31ca0cbe6e324a0fc5ceb4d3e555828d2f6ff9ba0cfd341e363cc8f7"
 
 
 def _tree_bytes(root: Path) -> dict[str, bytes]:
@@ -116,6 +116,7 @@ def test_engine_identity_binds_source_inventory_and_runtime_dependencies(tmp_pat
 
     assert set(identity["source_inventory_sha256"]) == {
         "contracts.py",
+        "continual/world_logic.py",
         "identity.py",
         "kernel.py",
         "package.py",

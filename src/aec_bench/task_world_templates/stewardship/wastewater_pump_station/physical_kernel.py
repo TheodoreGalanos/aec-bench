@@ -9,6 +9,11 @@ from dataclasses import replace
 from decimal import ROUND_HALF_UP, Decimal
 from typing import NoReturn, cast
 
+from aec_bench.task_world_templates.continual.world_logic import (
+    ActionRejected,
+    Transition,
+    TransitionResult,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     ClearanceFinding,
     DegradationParameters,
@@ -28,13 +33,10 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
     PumpIntervention,
     PumpInterventionKind,
     PumpState,
-    PumpStationCapacityInterval,
     PumpStationChangeKind,
     PumpStationCoupledModel,
-    PumpStationCoupledObservation,
     PumpStationCoupledOperatingInterval,
     PumpStationCoupledPhysicalState,
-    PumpStationCoupledResult,
     PumpStationEnvironment,
     PumpStationHydraulicBalance,
     PumpStationInputError,
@@ -760,62 +762,53 @@ def _progress_coupled_condition(
     )
 
 
-def advance_coupled_pump_station(
+def transition_coupled_pump_station(
     model: PumpStationCoupledModel,
     state: PumpStationCoupledPhysicalState,
     interval: PumpStationCoupledOperatingInterval,
-) -> PumpStationCoupledResult:
-    """Advance all physical running pumps and derive separate SCU capacity-time."""
-    if tuple(pump.pump_id for pump in state.pumps) != model.pump_ids:
-        _fail("coupled-state", "pump identities or order differ from the model")
-    if state.calendar_seconds != interval.start_calendar_seconds:
-        _fail("coupled-operating-interval", "interval must start at current world time")
-    if not set(interval.service_running_pump_ids) <= set(interval.actual_assignment_pump_ids):
-        _fail("coupled-operating-interval", "service-running pumps must be assigned")
-    for pump_id in interval.service_running_pump_ids:
-        if not state.availability(pump_id).run_eligible:
-            _fail("coupled-operating-interval", f"{pump_id} is not service-run eligible")
-    for pump_id in interval.test_running_pump_ids:
-        if not state.availability(pump_id).test_eligible:
-            _fail("coupled-operating-interval", f"{pump_id} is not test eligible")
+) -> TransitionResult[PumpStationCoupledPhysicalState, PumpStationCoupledOperatingInterval]:
+    """Apply one coupled physical interval without persistence or authority logic."""
+    try:
+        if tuple(pump.pump_id for pump in state.pumps) != model.pump_ids:
+            _fail("coupled-state", "pump identities or order differ from the model")
+        if state.calendar_seconds != interval.start_calendar_seconds:
+            _fail("coupled-operating-interval", "interval must start at current world time")
+        if not set(interval.service_running_pump_ids) <= set(interval.actual_assignment_pump_ids):
+            _fail("coupled-operating-interval", "service-running pumps must be assigned")
+        for pump_id in interval.service_running_pump_ids:
+            if not state.availability(pump_id).run_eligible:
+                _fail("coupled-operating-interval", f"{pump_id} is not service-run eligible")
+        for pump_id in interval.test_running_pump_ids:
+            if not state.availability(pump_id).test_eligible:
+                _fail("coupled-operating-interval", f"{pump_id} is not test eligible")
 
-    prior_running = set(state.service_running_pump_ids) | set(state.test_running_pump_ids)
-    next_running = set(interval.service_running_pump_ids) | set(interval.test_running_pump_ids)
-    updated_pumps: list[PumpState] = []
-    updated_deltas: list[PumpStationOperatingDelta] = []
-    for pump in state.pumps:
-        requested = interval.pump_delta(pump.pump_id)
-        starts = requested.start_added or int(pump.pump_id in next_running and pump.pump_id not in prior_running)
-        runtime = requested.total_runtime_seconds
-        closing_exposure = PumpExposure(
-            runtime_seconds=pump.exposure.runtime_seconds + runtime,
-            completed_starts=pump.exposure.completed_starts + starts,
-        )
-        closing_condition = _progress_coupled_condition(model, pump.condition, runtime, starts)
-        updated_pumps.append(
-            replace(
-                pump,
-                exposure=closing_exposure,
-                condition=closing_condition,
+        prior_running = set(state.service_running_pump_ids) | set(state.test_running_pump_ids)
+        next_running = set(interval.service_running_pump_ids) | set(interval.test_running_pump_ids)
+        updated_pumps: list[PumpState] = []
+        updated_deltas: list[PumpStationOperatingDelta] = []
+        for pump in state.pumps:
+            requested = interval.pump_delta(pump.pump_id)
+            starts = requested.start_added or int(pump.pump_id in next_running and pump.pump_id not in prior_running)
+            runtime = requested.total_runtime_seconds
+            closing_exposure = PumpExposure(
+                runtime_seconds=pump.exposure.runtime_seconds + runtime,
+                completed_starts=pump.exposure.completed_starts + starts,
             )
-        )
-        updated_deltas.append(
-            replace(
-                requested,
-                start_added=starts,
-                opening_exposure=pump.exposure,
-                closing_exposure=closing_exposure,
-                opening_condition=pump.condition,
-                closing_condition=closing_condition,
+            closing_condition = _progress_coupled_condition(model, pump.condition, runtime, starts)
+            updated_pumps.append(replace(pump, exposure=closing_exposure, condition=closing_condition))
+            updated_deltas.append(
+                replace(
+                    requested,
+                    start_added=starts,
+                    opening_exposure=pump.exposure,
+                    closing_exposure=closing_exposure,
+                    opening_condition=pump.condition,
+                    closing_condition=closing_condition,
+                )
             )
-        )
-    updated_interval = replace(
-        interval,
-        pump_deltas=cast(
-            tuple[PumpStationOperatingDelta, PumpStationOperatingDelta, PumpStationOperatingDelta],
-            tuple(updated_deltas),
-        ),
-    )
+    except PumpStationInputError as error:
+        _code, _separator, detail = str(error).partition(": ")
+        return ActionRejected(error.code, detail or str(error))
     updated_state = PumpStationCoupledPhysicalState(
         calendar_seconds=interval.end_calendar_seconds,
         pumps=cast(tuple[PumpState, PumpState, PumpState], tuple(updated_pumps)),
@@ -824,34 +817,14 @@ def advance_coupled_pump_station(
         service_running_pump_ids=interval.service_running_pump_ids,
         test_running_pump_ids=interval.test_running_pump_ids,
     )
-    elapsed = interval.elapsed_seconds
-    assigned_scu = len(interval.service_running_pump_ids) * model.service_capacity_units_per_running_pump
-    served_scu = min(interval.required_service_scu, assigned_scu)
-    capacity = PumpStationCapacityInterval(
-        start_calendar_seconds=interval.start_calendar_seconds,
-        end_calendar_seconds=interval.end_calendar_seconds,
-        required_service_scu=interval.required_service_scu,
-        assigned_operating_scu=assigned_scu,
-        available_assured_scu=sum(
-            state.availability(pump_id).assured_for_outage_planning for pump_id in model.pump_ids
+    updated_interval = replace(
+        interval,
+        pump_deltas=cast(
+            tuple[PumpStationOperatingDelta, PumpStationOperatingDelta, PumpStationOperatingDelta],
+            tuple(updated_deltas),
         ),
-        required_capacity_seconds=interval.required_service_scu * elapsed,
-        served_capacity_seconds=served_scu * elapsed,
-        unserved_capacity_seconds=(interval.required_service_scu - served_scu) * elapsed,
-        surplus_capacity_seconds=max(0, assigned_scu - interval.required_service_scu) * elapsed,
     )
-    observation = PumpStationCoupledObservation(
-        sample_time_seconds=updated_state.calendar_seconds,
-        pump_exposures=tuple((pump.pump_id, pump.exposure) for pump in updated_state.pumps),
-        availabilities=tuple(updated_state.availability(pump_id) for pump_id in model.pump_ids),
-        assignment_pump_ids=interval.actual_assignment_pump_ids,
-        service_running_pump_ids=interval.service_running_pump_ids,
-        test_running_pump_ids=interval.test_running_pump_ids,
-    )
-    return PumpStationCoupledResult(
-        previous_state=state,
+    return Transition(
         state=updated_state,
-        operating_interval=updated_interval,
-        capacity=capacity,
-        observation=observation,
+        output=updated_interval,
     )
