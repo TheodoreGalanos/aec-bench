@@ -123,6 +123,20 @@ and merge gates are in
 
 ---
 
+## Repository Ownership Boundary
+
+A working location does not define architectural ownership. Before delivery, every maintained artifact must move to the permanent repository surface that owns its behaviour.
+
+- `src/aec_bench/` owns installed library and runtime behaviour.
+- `src/aec_bench/task_world_templates/<family>/` owns task-template-specific behaviour and data.
+- `scripts/` owns maintained repository commands that are not part of the installed API.
+- `tests/` owns permanent test coverage and support code.
+- `docs/` owns normative architecture, contracts, invariants, and operating guidance.
+
+Research, planning, output, and phase directories are work areas, not delivery surfaces. Maintained code, build steps, tests, and packaged data must not depend on them.
+
+---
+
 ## Dependency Rule
 
 Dependencies flow downward through the stack:
