@@ -11,6 +11,7 @@ import pytest
 from harbor.models.trial.config import TrialConfig  # type: ignore[import-untyped]
 from harbor.trial.trial import Trial  # type: ignore[import-untyped]
 
+from aec_bench.task_world_templates.continual_catalogue import default_continual_world_catalogue
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
     PUMP_STATION_ACTOR_ACTION_NAMES_V2,
 )
@@ -36,6 +37,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_v
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
+    PUMP_STATION_TASK_WORLD_ID,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
@@ -43,7 +47,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 def test_registered_profile_export_uses_the_canonical_harbor_bridge(
     tmp_path: Path,
 ) -> None:
-    profile_ref = pump_station_continual_world_definition().spec.profiles[0]
+    definition = pump_station_continual_world_definition()
+    profile_ref = definition.spec.profiles[0]
     exported = export_pump_station_harbor_task(
         tmp_path / "task",
         project_root=PROJECT_ROOT,
@@ -60,6 +65,8 @@ def test_registered_profile_export_uses_the_canonical_harbor_bridge(
     )
 
     assert manifest["schema_version"] == PUMP_STATION_REGISTERED_HARBOR_EXPORT_SCHEMA_VERSION
+    assert manifest["continual_definition"] == definition.ref.model_dump(mode="json")
+    assert manifest["continual_profile"] == profile_ref.model_dump(mode="json")
     assert bridge.profile_ref == profile_ref
     assert bridge.reference_system_root == exported.task_dir / "tests" / "reference-system"
     assert bridge.allowed_tools == PUMP_STATION_ACTOR_ACTION_NAMES_V2
@@ -125,7 +132,11 @@ def test_registered_reference_session_uses_standard_evidence_and_replays_offline
 def test_registered_profile_runs_through_the_real_local_harbor_entrypoint(
     tmp_path: Path,
 ) -> None:
-    profile_ref = pump_station_continual_world_definition().spec.profiles[0]
+    catalogue = default_continual_world_catalogue()
+    definition, harbor_port = catalogue.resolve_harbor(PUMP_STATION_HARBOR_EXECUTION_KIND)
+    assert definition is catalogue.get(PUMP_STATION_TASK_WORLD_ID)
+    assert PUMP_STATION_HARBOR_EXECUTION_KIND in harbor_port.execution_kinds
+    profile_ref = definition.spec.profiles[0]
     exported = export_pump_station_harbor_task(
         tmp_path / "task",
         project_root=PROJECT_ROOT,

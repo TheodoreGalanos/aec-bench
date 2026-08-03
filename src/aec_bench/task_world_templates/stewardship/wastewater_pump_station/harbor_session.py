@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
+
+from pydantic import JsonValue
 
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
 from aec_bench.contracts.world_interface import WorldActorActionRequest
@@ -19,6 +22,10 @@ from aec_bench.contracts.world_session import (
     WorldSessionResult,
 )
 from aec_bench.harness.world_session import open_world_session
+from aec_bench.task_world_templates.harbor_exporting.stable_io import directory_sha256
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_rollout_adapter import (
+    validate_pump_station_rollout_child_run,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
     PUMP_STATION_EVIDENCE_TREATMENT_VERSION_V1,
     PUMP_STATION_EVIDENCE_VISIBILITY_POLICY_V1,
@@ -40,7 +47,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
-    PumpStationReferenceControllerResult,
     run_pump_station_reference_controller,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rollout_control import (
@@ -70,6 +76,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_co
     PumpStationEvidenceControlRequest,
     PumpStationEvidenceControlResult,
     PumpStationWorldControl,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import (
+    PumpStationWorldRun,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
     PumpStationStateSnapshotRef,
@@ -456,6 +465,12 @@ def _run_registered_reference_session(
     profile_ref = bridge.profile_ref
     if profile_ref is None or bridge.reference_system_root is None:
         raise ValueError("registered Harbor bridge authority is incomplete")
+    if bridge.rollout_child_ref is not None:
+        return _run_registered_rollout_child_reference_session(
+            bridge=bridge,
+            output_dir=output_dir,
+            session_identity=session_identity,
+        )
     identity = session_identity.strip()
     if not identity:
         raise ValueError("pump-station Harbor session identity is required")
@@ -496,7 +511,7 @@ def _run_registered_reference_session(
     verification = terminal.verify()
     if not verification.valid:
         raise ValueError("registered pump-station reference session did not verify")
-    temporal_verification = _verify_registered_temporal_evidence(controller)
+    temporal_verification = _verify_registered_temporal_evidence(controller.run)
     if not temporal_verification.valid:
         raise ValueError("registered pump-station temporal evidence did not verify")
     _write_session_evidence(
@@ -528,6 +543,83 @@ def _run_registered_reference_session(
     )
 
 
+def _run_registered_rollout_child_reference_session(
+    *,
+    bridge: PumpStationHarborBridge,
+    output_dir: Path,
+    session_identity: str,
+) -> CompletedPumpStationReferenceSession:
+    """Resume one bound rollout child and perform one deterministic actor action."""
+
+    identity = session_identity.strip()
+    if not identity:
+        raise ValueError("pump-station Harbor session identity is required")
+    destination = Path(output_dir)
+    if destination.exists():
+        raise FileExistsError(f"world-session output already exists: {destination}")
+    destination.mkdir(parents=True)
+    repository_root = destination / "world-run"
+    _copy_rollout_child_for_execution(
+        bridge=bridge,
+        repository_root=repository_root,
+    )
+    request = _rollout_child_session_request(bridge, identity)
+    session = _open_pump_station_session(
+        request=request,
+        repository_root=repository_root,
+        bridge=bridge,
+    )
+    start_snapshot = session.result.snapshot
+    observation = session.observe_actor()
+    session.invoke_actor_action(
+        WorldActorActionRequest(
+            request_id=f"rollout-child-condition-check.{identity}",
+            action_name="request_condition_check",
+            binding=observation.binding,
+            arguments=cast(
+                dict[str, JsonValue],
+                {
+                    "reason": "Record one bounded condition check from the selected rollout point.",
+                    "pump_id": "pump-a",
+                },
+            ),
+        )
+    )
+    verification = session.verify()
+    if not verification.valid:
+        raise ValueError("registered pump-station rollout child did not verify")
+    temporal_verification = _verify_registered_temporal_evidence(session.run)
+    if not temporal_verification.valid:
+        raise ValueError("registered pump-station rollout child temporal evidence did not verify")
+    _write_session_evidence(
+        destination=destination,
+        request=request,
+        result=session.result,
+        verification=verification,
+    )
+    _write_json(
+        destination / "temporal-verification-report.json",
+        temporal_verification.model_dump(mode="json"),
+    )
+    _write_json(
+        destination / "artifact-inventory.json",
+        _artifact_inventory(
+            bridge=bridge,
+            output_dir=destination,
+            controller_id=PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
+            start_snapshot=start_snapshot.model_dump(mode="json"),
+            end_snapshot=session.result.snapshot.model_dump(mode="json"),
+            tool_names=session.result.tool_names,
+        ),
+    )
+    return CompletedPumpStationReferenceSession(
+        request=request,
+        result=session.result,
+        verification=verification,
+        output_dir=destination,
+    )
+
+
 def _session_window_start(
     repository: PumpStationWorldRunRepository,
     selected: PumpStationSessionActivationBinding,
@@ -542,19 +634,19 @@ def _session_window_start(
 
 
 def _verify_registered_temporal_evidence(
-    controller: PumpStationReferenceControllerResult,
+    run: PumpStationWorldRun[Any, Any],
 ) -> TemporalEvidenceVerificationReport:
     proposal_bindings = {
         step.proposal.context.proposal_id: (
             step.proposal.context.information_set_id,
             step.proposal.context.base_view_id,
         )
-        for step in controller.run.repository.v4_steps()
+        for step in run.repository.v4_steps()
         if step.proposal is not None
     }
     return verify_temporal_evidence_repository(
-        TemporalEvidenceRepository(controller.run.repository.root / "temporal-evidence"),
-        package=controller.run.package,
+        TemporalEvidenceRepository(run.repository.root / "temporal-evidence"),
+        package=run.package,
         proposal_bindings=proposal_bindings,
     )
 
@@ -1032,7 +1124,14 @@ def run_pump_station_model_session(
     if destination.exists():
         raise FileExistsError(f"world-session output already exists: {destination}")
     destination.mkdir(parents=True)
-    request = _world_session_request(identity)
+    if bridge.rollout_child_ref is not None:
+        _copy_rollout_child_for_execution(
+            bridge=bridge,
+            repository_root=destination / "world-run",
+        )
+        request = _rollout_child_session_request(bridge, identity)
+    else:
+        request = _world_session_request(identity)
     session = _open_pump_station_session(
         request=request,
         repository_root=destination / "world-run",
@@ -1232,6 +1331,62 @@ def _world_session_request(identity: str) -> WorldSessionRequest:
         run_id=f"run.{identity}",
         episode_id=f"episode.{identity}",
         world_branch_id=f"branch.{identity}",
+    )
+
+
+def _rollout_child_session_request(
+    bridge: PumpStationHarborBridge,
+    identity: str,
+) -> WorldSessionRequest:
+    child_ref = bridge.rollout_child_ref
+    if child_ref is None or bridge.initial_run_root is None:
+        raise ValueError("pump-station Harbor rollout child authority is incomplete")
+    return WorldSessionRequest(
+        execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
+        open_mode=WorldSessionOpenMode.RESUME,
+        session_id=f"session.{identity}",
+        task_world_id=PUMP_STATION_TASK_WORLD_ID,
+        agent_tenure_id=f"tenure.{identity}",
+        run_id=child_ref.run_id,
+        episode_id=child_ref.episode_id,
+        world_branch_id=child_ref.world_branch_id,
+        start_snapshot=StewardshipStateSnapshotRef(
+            run_id=child_ref.initial_snapshot.run_id,
+            episode_id=child_ref.initial_snapshot.episode_id,
+            world_branch_id=child_ref.initial_snapshot.world_branch_id,
+            sequence=child_ref.initial_snapshot.sequence,
+            state_id=child_ref.initial_snapshot.state_id,
+            commit_id=child_ref.initial_snapshot.commit_id,
+        ),
+    )
+
+
+def _copy_rollout_child_for_execution(
+    *,
+    bridge: PumpStationHarborBridge,
+    repository_root: Path,
+) -> None:
+    source = bridge.initial_run_root
+    child_ref = bridge.rollout_child_ref
+    definition_ref = bridge.definition_ref
+    profile_ref = bridge.profile_ref
+    if source is None or child_ref is None or definition_ref is None or profile_ref is None:
+        raise ValueError("pump-station Harbor rollout child authority is incomplete")
+    validate_pump_station_rollout_child_run(
+        source,
+        child_ref,
+        definition_ref=definition_ref,
+        profile_ref=profile_ref,
+    )
+    expected_sha256 = directory_sha256(source)
+    shutil.copytree(source, repository_root, symlinks=True)
+    if directory_sha256(source) != expected_sha256 or directory_sha256(repository_root) != expected_sha256:
+        raise ValueError("pump-station Harbor rollout child changed while it was copied")
+    validate_pump_station_rollout_child_run(
+        repository_root,
+        child_ref,
+        definition_ref=definition_ref,
+        profile_ref=profile_ref,
     )
 
 

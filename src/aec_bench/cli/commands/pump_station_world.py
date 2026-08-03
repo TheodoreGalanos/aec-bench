@@ -5,12 +5,18 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import asdict
 from pathlib import Path
 from typing import cast
 
 import typer
+from pydantic import BaseModel
 
 from aec_bench.cli.output import emit
+from aec_bench.contracts.continual_world import (
+    ContinualWorldActorRequest,
+    ContinualWorldControlRequest,
+)
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.contracts.world_session import (
     StewardshipStateSnapshotRef,
@@ -24,6 +30,12 @@ from aec_bench.evaluation.stewardship import (
 from aec_bench.harness.harbor_importing.core import import_harbor_trial
 from aec_bench.harness.world_interface import invoke_world_actor, observe_world_actor
 from aec_bench.harness.world_session import open_world_session
+from aec_bench.task_world_templates.continual.interface import (
+    ContinualWorldInterfaceContext,
+    dispatch_continual_actor,
+    dispatch_continual_control,
+)
+from aec_bench.task_world_templates.continual_catalogue import default_continual_world_catalogue
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     export_pump_station_harbor_task,
 )
@@ -48,8 +60,16 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rollout_
     PumpStationRolloutControlRequest,
     execute_pump_station_rollout_request,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
+    PumpStationVerificationReport,
+    PumpStationVerificationReportV4,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_control import (
+    PumpStationEvidenceControlRequest,
     PumpStationWorldControl,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+    PumpStationWorldRunManifestV2,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
@@ -61,6 +81,42 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_se
 )
 
 app = typer.Typer(help="Run the synthetic wastewater pump-station stewardship world.")
+
+
+def _model_payload(value: object) -> dict[str, object]:
+    if not isinstance(value, BaseModel):
+        raise TypeError("continual-world interface result must be a validated model")
+    return cast(dict[str, object], value.model_dump(mode="json"))
+
+
+def _verification_payload(
+    report: PumpStationVerificationReport | PumpStationVerificationReportV4,
+) -> dict[str, object]:
+    if isinstance(report, PumpStationVerificationReportV4):
+        return {
+            "valid": report.valid,
+            "replay_valid": report.replay_valid,
+            "actor_proposals_valid": report.actor_proposals_valid,
+            "host_controls_valid": report.host_controls_valid,
+            "issues": list(report.issues),
+            "replayed_transition_ids": list(report.replayed_transition_ids),
+            "final_state_id": report.final_state_id,
+            "conservation": {
+                "valid": report.conservation.valid,
+                "duty": asdict(report.conservation.duty),
+                "resources": asdict(report.conservation.resources),
+                "work": asdict(report.conservation.work),
+                "liabilities": asdict(report.conservation.liabilities),
+            },
+        }
+    return {
+        "valid": report.valid,
+        "issues": list(report.issues),
+        "replayed_transition_ids": list(report.replayed_transition_ids),
+        "final_state_id": report.final_state_id,
+        "active_restriction_ids": list(report.active_restriction_ids),
+        "open_obligation_ids": list(report.open_obligation_ids),
+    }
 
 
 def _factory(
@@ -137,6 +193,11 @@ def interface_command(
 
     started = time.monotonic()
     request = PumpStationLocalInterfaceRequest.model_validate_json(request_path.read_text(encoding="utf-8"))
+    if isinstance(PumpStationWorldRunRepository(run_dir).load_manifest(), PumpStationWorldRunManifestV2):
+        raise typer.BadParameter(
+            "registered V4 runs require actor-interface or control-interface",
+            param_hint="--run-dir",
+        )
     if request.surface == "actor":
         assert request.session_request is not None
         session = _open(run_dir, request.session_request)
@@ -178,7 +239,10 @@ def interface_command(
                 authorised_principal_ids=(host_authority_id,),
                 evidence_health=(
                     request.evidence_health
-                    or request.control_request is not None
+                    or isinstance(
+                        request.control_request,
+                        PumpStationEvidenceControlRequest,
+                    )
                     and request.control_request.operation
                     in {
                         "schedule_evidence_treatment",
@@ -196,6 +260,66 @@ def interface_command(
     emit(
         "task pump-station-world interface",
         payload,
+        start_time=started,
+    )
+
+
+@app.command("actor-interface")
+def actor_interface_command(
+    run_dir: Path = typer.Option(..., "--run-dir", help="Durable world-run directory"),
+    request_path: Path = typer.Option(..., "--request-path", help="Registered actor JSON request"),
+) -> None:
+    """Execute one separate actor request through the continual-world catalogue."""
+
+    started = time.monotonic()
+    request = ContinualWorldActorRequest.model_validate_json(request_path.read_text(encoding="utf-8"))
+    result = dispatch_continual_actor(
+        context=ContinualWorldInterfaceContext(
+            catalogue=default_continual_world_catalogue(),
+            run_root=run_dir,
+            rollout_repository_root=None,
+            authorised_principal_ids=(),
+        ),
+        request=request,
+    )
+    emit(
+        "task pump-station-world actor-interface",
+        _model_payload(result),
+        start_time=started,
+    )
+
+
+@app.command("control-interface")
+def control_interface_command(
+    run_dir: Path = typer.Option(..., "--run-dir", help="Durable world-run directory"),
+    request_path: Path = typer.Option(..., "--request-path", help="Registered host-control JSON request"),
+    host_authority_id: str = typer.Option(
+        ...,
+        "--host-authority-id",
+        help="Host-only control authority identity",
+    ),
+    rollout_dir: Path | None = typer.Option(
+        None,
+        "--rollout-dir",
+        help="Host-private rollout repository directory",
+    ),
+) -> None:
+    """Execute one separate host-control request through the continual-world catalogue."""
+
+    started = time.monotonic()
+    request = ContinualWorldControlRequest.model_validate_json(request_path.read_text(encoding="utf-8"))
+    result = dispatch_continual_control(
+        context=ContinualWorldInterfaceContext(
+            catalogue=default_continual_world_catalogue(),
+            run_root=run_dir,
+            rollout_repository_root=rollout_dir,
+            authorised_principal_ids=(host_authority_id,),
+        ),
+        request=request,
+    )
+    emit(
+        "task pump-station-world control-interface",
+        _model_payload(result),
         start_time=started,
     )
 
@@ -414,14 +538,7 @@ def verify_command(
     report = session.verify()
     emit(
         "task pump-station-world verify",
-        {
-            "valid": report.valid,
-            "issues": list(report.issues),
-            "replayed_transition_ids": list(report.replayed_transition_ids),
-            "final_state_id": report.final_state_id,
-            "active_restriction_ids": list(report.active_restriction_ids),
-            "open_obligation_ids": list(report.open_obligation_ids),
-        },
+        _verification_payload(report),
         start_time=started,
     )
 

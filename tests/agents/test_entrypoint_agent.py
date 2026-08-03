@@ -1,6 +1,7 @@
 # ABOUTME: Tests for EntrypointAgent — the universal Harbor agent
 # ABOUTME: that dispatches to library adapters via execution_entrypoint.
 
+import ast
 import asyncio
 import hashlib
 import json
@@ -34,6 +35,8 @@ from agents.entrypoint_agent import (
     _host_model_provider_environment,
 )
 from tests.support.output_completion import make_output_commit_attestation
+
+ENTRYPOINT_AGENT_PATH = Path(__file__).resolve().parents[2] / "agents" / "entrypoint_agent.py"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -75,6 +78,70 @@ def test_entrypoint_agent_version() -> None:
 
 def test_entrypoint_result_path_matches_harbor_artifact_contract() -> None:
     assert _RESULT_REMOTE_PATH == "/workspace/agent_result.json"
+
+
+def test_entrypoint_agent_does_not_import_a_concrete_continual_task() -> None:
+    tree = ast.parse(
+        ENTRYPOINT_AGENT_PATH.read_text(encoding="utf-8"),
+        filename=str(ENTRYPOINT_AGENT_PATH),
+    )
+    imported_modules: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported_modules.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+            imported_modules.append(node.module)
+
+    pump_imports = tuple(
+        module
+        for module in imported_modules
+        if module.startswith(
+            "aec_bench.task_world_templates.stewardship.wastewater_pump_station",
+        )
+    )
+
+    assert pump_imports == ()
+
+
+def test_entrypoint_agent_does_not_branch_on_continual_task_stage_profile_or_controller() -> None:
+    tree = ast.parse(
+        ENTRYPOINT_AGENT_PATH.read_text(encoding="utf-8"),
+        filename=str(ENTRYPOINT_AGENT_PATH),
+    )
+    forbidden_branch_tokens = {
+        "controller",
+        "evidence_health",
+        "expected_reference_controller",
+        "maintenance_review",
+        "profile_ref",
+        "reference_controller",
+        "reference_runner",
+        "rich_work_processes",
+        "temporal_evidence",
+    }
+    violations: list[tuple[int, tuple[str, ...]]] = []
+    for node in ast.walk(tree):
+        branch_expressions: tuple[ast.AST, ...] = ()
+        if isinstance(node, ast.If | ast.IfExp):
+            branch_expressions = (node.test,)
+        elif isinstance(node, ast.Match):
+            branch_expressions = (node.subject, *(case.pattern for case in node.cases))
+        for expression in branch_expressions:
+            tokens = {
+                child.id
+                if isinstance(child, ast.Name)
+                else child.attr
+                if isinstance(child, ast.Attribute)
+                else child.value
+                for child in ast.walk(expression)
+                if isinstance(child, ast.Name | ast.Attribute)
+                or (isinstance(child, ast.Constant) and isinstance(child.value, str))
+            }
+            forbidden = tuple(sorted(tokens & forbidden_branch_tokens))
+            if forbidden:
+                violations.append((node.lineno, forbidden))
+
+    assert violations == []
 
 
 # ---------------------------------------------------------------------------

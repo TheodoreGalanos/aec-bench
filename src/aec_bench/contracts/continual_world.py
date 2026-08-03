@@ -6,10 +6,12 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Final, Literal, Self
 
-from pydantic import field_validator, model_validator
+from pydantic import JsonValue, field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
+from aec_bench.contracts.world_interface import WorldActorActionRequest
+from aec_bench.contracts.world_session import WorldSessionOpenMode, WorldSessionRequest
 
 CONTINUAL_WORLD_DEFINITION_SCHEMA_VERSION: Final[Literal["aecbench.continual-world-definition.v1"]] = (
     "aecbench.continual-world-definition.v1"
@@ -37,6 +39,12 @@ CONTINUAL_ROLLOUT_GROUP_STATUS_SCHEMA_VERSION: Final[Literal["aecbench.continual
 )
 CONTINUAL_ROLLOUT_CHILD_RUN_REF_SCHEMA_VERSION: Final[Literal["aecbench.continual-rollout-child-run-ref.v1"]] = (
     "aecbench.continual-rollout-child-run-ref.v1"
+)
+CONTINUAL_WORLD_ACTOR_REQUEST_SCHEMA_VERSION: Final[Literal["aecbench.continual-world-actor-request.v1"]] = (
+    "aecbench.continual-world-actor-request.v1"
+)
+CONTINUAL_WORLD_CONTROL_REQUEST_SCHEMA_VERSION: Final[Literal["aecbench.continual-world-control-request.v1"]] = (
+    "aecbench.continual-world-control-request.v1"
 )
 
 
@@ -103,6 +111,144 @@ class ContinualWorldDefinitionSpec(ContentAddressedModel):
             definition_version=self.definition_version,
             content_sha256=self.content_sha256,
         )
+
+
+class ContinualWorldActorRequest(ContentAddressedModel):
+    """One exact actor call routed through a registered continual world."""
+
+    schema_version: Literal["aecbench.continual-world-actor-request.v1"] = CONTINUAL_WORLD_ACTOR_REQUEST_SCHEMA_VERSION
+    definition_ref: ContinualWorldDefinitionRef
+    profile_ref: ContinualWorldProfileRef
+    operation: Literal["capabilities", "observe", "invoke"]
+    session_request: WorldSessionRequest
+    action_request: WorldActorActionRequest | None = None
+
+    @model_validator(mode="after")
+    def validate_actor_request(self) -> Self:
+        task_world_id = self.definition_ref.task_world_id
+        if self.profile_ref.task_world_id != task_world_id:
+            raise ValueError("continual actor profile belongs to another task world")
+        if self.session_request.task_world_id != task_world_id:
+            raise ValueError("continual actor session belongs to another task world")
+        if self.session_request.open_mode is not WorldSessionOpenMode.RESUME:
+            raise ValueError("continual actor request must resume an existing session")
+        if (self.operation == "invoke") != (self.action_request is not None):
+            raise ValueError("continual actor invoke requires exactly one action request")
+        if self.action_request is None:
+            return self
+        binding = self.action_request.binding
+        start_snapshot = self.session_request.start_snapshot
+        if start_snapshot is None:
+            raise ValueError("continual actor session requires an exact start snapshot")
+        if (
+            binding.task_world_id,
+            binding.session_id,
+            binding.run_id,
+            binding.episode_id,
+            binding.world_branch_id,
+            binding.agent_tenure_id,
+            binding.sequence,
+            binding.state_id,
+            binding.commit_id,
+        ) != (
+            task_world_id,
+            self.session_request.session_id,
+            self.session_request.run_id,
+            self.session_request.episode_id,
+            self.session_request.world_branch_id,
+            self.session_request.agent_tenure_id,
+            start_snapshot.sequence,
+            start_snapshot.state_id,
+            start_snapshot.commit_id,
+        ):
+            raise ValueError("continual actor action binding differs from the resumed session")
+        return self
+
+
+class ContinualWorldControlRequest(ContentAddressedModel):
+    """One exact host-control call routed through a registered continual world."""
+
+    schema_version: Literal["aecbench.continual-world-control-request.v1"] = (
+        CONTINUAL_WORLD_CONTROL_REQUEST_SCHEMA_VERSION
+    )
+    definition_ref: ContinualWorldDefinitionRef
+    profile_ref: ContinualWorldProfileRef
+    operation: Literal[
+        "capabilities",
+        "execute",
+        "create_rollout_group",
+        "rollout_group_status",
+        "inspect_rollout_group",
+        "rollout_child_run_ref",
+    ]
+    authority_id: NonEmptyStr
+    control_request: dict[str, JsonValue] | None = None
+    rollout_group_request: ContinualRolloutGroupRequest | None = None
+    group_id: NonEmptyStr | None = None
+    child_id: NonEmptyStr | None = None
+
+    @model_validator(mode="after")
+    def validate_control_request(self) -> Self:
+        task_world_id = self.definition_ref.task_world_id
+        if self.profile_ref.task_world_id != task_world_id:
+            raise ValueError("continual control profile belongs to another task world")
+        if self.operation == "capabilities":
+            if any(
+                item is not None
+                for item in (
+                    self.control_request,
+                    self.rollout_group_request,
+                    self.group_id,
+                    self.child_id,
+                )
+            ):
+                raise ValueError("continual control capabilities accepts no operation payload")
+            return self
+        if self.operation == "execute":
+            if self.control_request is None or any(
+                item is not None
+                for item in (
+                    self.rollout_group_request,
+                    self.group_id,
+                    self.child_id,
+                )
+            ):
+                raise ValueError("continual control execute requires exactly one task control request")
+            if (
+                self.control_request.get("task_world_id") != task_world_id
+                or self.control_request.get("authority_id") != self.authority_id
+            ):
+                raise ValueError("continual task control request differs from its control envelope")
+            return self
+        if self.operation == "create_rollout_group":
+            rollout = self.rollout_group_request
+            if rollout is None or any(
+                item is not None
+                for item in (
+                    self.control_request,
+                    self.group_id,
+                    self.child_id,
+                )
+            ):
+                raise ValueError("continual rollout creation requires exactly one group request")
+            if (
+                rollout.task_world_id,
+                rollout.definition_ref,
+                rollout.profile_ref,
+                rollout.authority_id,
+            ) != (
+                task_world_id,
+                self.definition_ref,
+                self.profile_ref,
+                self.authority_id,
+            ):
+                raise ValueError("continual rollout group request differs from its control envelope")
+            return self
+        if self.rollout_group_request is not None or self.control_request is not None or self.group_id is None:
+            raise ValueError("continual rollout inspection requires exactly one group identity")
+        if (self.operation == "rollout_child_run_ref") != (self.child_id is not None):
+            raise ValueError("continual rollout child resolution requires exactly one child identity")
+        return self
 
 
 class ContinualWorldSnapshotRef(ContentAddressedModel):
