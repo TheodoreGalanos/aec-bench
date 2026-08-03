@@ -416,23 +416,23 @@ docs/                   # Repository-owned architecture, contracts, and invarian
 
 ## Architecture
 
-Dependencies flow downward. Nothing imports upward.
-
-```
-Contracts (foundation — Pydantic models)
-  ├── Tasks, Templates, Adapters, Agents
-  ├── Generation (templates → instances)
-  └── Harness (orchestration)
-        └── Evaluation (scoring, traces)
-              ├── Communication (reports, exports)
-              └── Feedback (human review)
-```
+AEC-Bench supports two execution families. Artifact/workspace tasks run a
+bounded job and evaluate the resulting files and evidence. Interactive worlds
+run validated actions against durable state and can optionally support host
+controls, branching, rollouts, and transport ports. They share benchmark
+identity, execution evidence, evaluation ownership, and provider boundaries;
+they do not share one low-level lifecycle.
 
 Key design rules:
+
 - `validity > reproducibility > coverage > cost > throughput`
 - `StrictModel` at internal boundaries, `LenientModel` for external data
 - `@dataclass(frozen=True)` for non-boundary data structures
 - Adapters translate protocol only — no task logic, no scoring
+
+See the [repository documentation index](docs/README.md) for authority and
+routing, and [Architecture](docs/ARCHITECTURE.md) for current ownership and
+dependency direction.
 
 ## Development
 
@@ -452,10 +452,12 @@ uv run ruff format src/ tests/
 
 ## Further Reading
 
-- `docs/ARCHITECTURE.md` — Domain boundaries and dependency rules
-- `docs/INVARIANTS.md` — 10 non-negotiable architectural rules
-- `docs/CONTRACTS.md` — Data shapes at every boundary
-- `docs/AGENTS.md` — Agent guide with conventions and shared utilities
+- [Repository documentation](docs/README.md) — Authority, taxonomy, status, and ownership
+- [Architecture](docs/ARCHITECTURE.md) — Current execution flows, ownership, and dependency direction
+- [Invariants](docs/INVARIANTS.md) — Stable benchmark-validity and reproducibility guarantees
+- [Contracts](docs/CONTRACTS.md) — Boundary contract index and compatibility policy
+- [Interactive-world runtime](docs/protocols/interactive-world-runtime.md) — Registered persistent-world protocol
+- [Documentation agent guide](docs/AGENTS.md) — Rules for maintaining repository-owned documentation
 - [Public documentation](https://aecbench.com/docs) — Installation, usage, integrations, and reference guides
 
 ## License

@@ -1,191 +1,222 @@
-# ABOUTME: High-level architecture for the Python aec-bench platform.
-# ABOUTME: Defines domains, boundaries, contracts, and dependency rules without changing the core architecture.
+# ABOUTME: Describes current AEC-Bench product flows, ownership boundaries, and dependency direction.
+# ABOUTME: Separates implemented architecture from the proposed direction for future world-runtime simplification.
 
-# AEC-Bench Python Architecture
+# AEC-Bench Architecture
 
-This document defines the architecture for the Python implementation of aec-bench. The domain model and dependency rules are unchanged from the main architecture; this version only adjusts implementation assumptions for Python.
+| Field | Value |
+| --- | --- |
+| Class | Architecture |
+| Status | Current |
 
-Parent documents: [TECHNOLOGY_CHOICE.md](TECHNOLOGY_CHOICE.md), [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md).
+AEC-Bench creates, runs, evaluates, and publishes evidence about Architecture,
+Engineering, and Construction benchmark tasks. The architecture protects this
+objective order:
 
----
-
-## Objective Stack
-
-All design decisions resolve against this hierarchy. When objectives conflict, higher-priority objectives win.
-
-```
+```text
 validity > reproducibility > coverage > cost > throughput
 ```
 
-- **Validity**: Results reflect real agent capability, not benchmark artefacts.
-- **Reproducibility**: Any result can be reconstructed from its recorded inputs.
-- **Coverage**: The benchmark spans meaningful AEC domain breadth and depth.
-- **Cost**: Experiments are affordable enough to run frequently.
-- **Throughput**: New tasks, agents, and models can be onboarded quickly.
+When two designs protect those objectives equally, prefer the simpler final
+system.
 
----
+## Product flow
 
-## Domains
+The product has two execution families. They share task selection, experiment
+identity, agent and provider configuration, resource limits, evaluation,
+provenance, and reporting. They do not share one forced low-level lifecycle.
 
-The system is divided into seven domains with strict dependency rules: one foundational layer and six operational domains. Dependencies flow downward. Nothing flows upward except through the explicit feedback loop.
-
-Data adaptation is still not a separate eighth domain. It is a cross-domain workflow built from Contracts, Tasks, Harness, Evaluation, and Feedback.
-
+```text
+task sources and world profiles
+            |
+            v
+authoring, validation, compilation, and deterministic generation
+            |
+            v
+experiment, trial, or episode orchestration
+            |
+            +-------------------------+
+            |                         |
+            v                         v
+artifact/workspace execution    interactive-world execution
+            |                         |
+            +------------+------------+
+                         v
+               task-owned verification
+                         v
+                    evaluation
+                         v
+        trial, evidence, and dataset artifacts
+                         v
+          CLI, TUI, web, reports, and research
 ```
-            Contracts
-         /              \
-      Tasks          Adapters
-         \              /
-              Harness
-                 |
-             Evaluation
-             /        \
-   Communication    Feedback
-```
 
-### 1. Contracts
+### Artifact and workspace tasks
 
-The foundation that everything else depends on. Python implements these as Pydantic models and explicit validation helpers.
+An artifact task gives an agent an instruction and an execution environment.
+The agent changes files or submits an artifact, and the task verifier evaluates
+the resulting workspace. A task can include declarative metadata, executable
+environment setup, tools, fixtures, and verifier code.
 
-Key contracts:
+The current path is:
 
-- `TaskDefinition`
-- `AgentOutput`
-- `TrialRecord`
-- `EvaluationResult`
-- `ExperimentManifest`
+1. Author or generate a task and validate its `TaskDefinition`.
+2. Resolve one runnable task instance and stage its workspace.
+3. Run a provider-neutral adapter through a local or hosted compute backend.
+4. Collect output, transcript, trajectory, and verifier artifacts.
+5. Build an `EvaluationResult` and persist a `TrialRecord`.
 
-### 2. Tasks
+Deterministic templates and suite generation live with authoring and generation.
+Generated instances remain derived artifacts; the template, parameters, seed,
+and implementation identity needed to reproduce them belong in provenance.
 
-Task definitions, lifecycle state, visibility classification, and registry/query logic. Tasks remain data, not code.
+### Interactive worlds
 
-### 3. Adapters
+An interactive world repeatedly exposes an actor-visible observation and
+accepts an action that changes task-owned state. Host controls use a separate
+authority surface. World state, action meaning, clocks, projections, events,
+and verifier logic remain with the task world.
 
-Provider-neutral agent integration points. Adapters translate protocol only. They do not hold task logic or benchmark policy.
+The current registered continual-world path provides:
 
-### 4. Harness
+- content-pinned world definitions and profiles;
+- exact catalogue resolution for new work and recovery;
+- separate actor and host-control envelopes;
+- task-owned execution, branch, Harbor, and evaluation ports when supported;
+- shared chosen-point rollout orchestration through an optional branch port;
+- task-neutral local durability primitives; and
+- evaluation registration for complete journeys and bounded continuations.
 
-Execution orchestration, container lifecycle, staging, scheduling, and trial persistence.
+The public composition root currently registers two real consumers: the
+wastewater pump-station stewardship world and the SSC-03 hydraulic interaction
+world. The task-neutral continual package imports neither concrete world. See
+the current [interactive-world runtime protocol](protocols/interactive-world-runtime.md).
 
-### 5. Evaluation
+Interactive worlds and artifact tasks meet at the experiment and evidence
+layers. An interactive world does not need to pretend that each action is a
+workspace submission, and an artifact task does not need a world-session API.
 
-Everything that happens after trial execution: verifier result ingestion, trace extraction, behavioral analysis, aggregation, and confidence metadata.
+## Capability ownership
 
-### 6. Communication
+### Task authoring and compilation
 
-Dashboards, reports, exports, and trace views rendered from evaluation outputs and joined trial data.
+Task contracts define runnable metadata and visibility. Task loaders,
+templates, generators, and task-world compilers turn repository sources into
+validated runnable material. Task-family semantics stay with their task or
+template owner.
 
-### 7. Feedback
+### Experiment, trial, and episode orchestration
 
-Structured expert review, calibration, adjudication, and anti-contamination-aware annotation flows.
+The harness owns ordinary trial staging, backend execution, collection, and
+cleanup. Evidence-lifecycle and interactive-world paths own their additional
+episode or session coordination. Orchestration applies limits and records
+identity; it does not score task outcomes or interpret task-specific state.
 
----
+### Evaluation
 
-## Cross-Cutting Concerns
+Evaluation owns validity interpretation, reward, score breakdowns, behavioural
+analysis, error taxonomy, confidence, and task-specific evaluation extensions.
+Verifiers provide task-owned evidence. Reports, the TUI, and the web UI consume
+evaluation results; they do not define competing metrics.
 
-These are provider-shaped capabilities, not separate domains:
+### Durable artifacts
 
-- **Storage**
-- **Compute**
-- **Credentials**
-- **Observability**
-- **Immutable ledger**
-- **Configuration**
+The ledger and artifact stores own persistence mechanics, integrity checks, and
+queries. `TrialRecord` is the durable trial provenance envelope. Dataset
+manifests identify immutable benchmark snapshots. Evidence-lifecycle and world
+records add content-addressed artifacts where replay, recovery, or isolation
+requires them.
 
-The Python implementation should expose each through a narrow boundary, not through ad hoc imports across the codebase.
+Immutability is a property of accepted evidence, published datasets, and other
+named records. It is not a requirement that every internal object, service, or
+source file become a ledger event.
 
-## Continual Task Worlds
+### Provider integrations
 
-Continual task worlds combine task-owned state and transition semantics with a
-reusable durable execution boundary. Their ownership rule is:
+Adapters translate between the harness and agent execution. Compute backends
+translate local or hosted execution. Provider modules and Harbor integration
+sit outside task semantics. They may depend on task-neutral runtime surfaces;
+task worlds and core contracts do not depend on provider SDKs, CLI, web, or TUI
+modules.
 
-- the continual-world runtime owns how a world lives: publication, commits,
-  snapshots, replay, recovery, sessions, branches, rollout groups, and
-  transport ports;
-- the task-world definition owns what happens: state types, action and control
-  semantics, projections, event meaning, and verification; and
-- a registered profile owns one concrete opening state, event schedule, source
-  package, and reference objective.
+Provider errors, timeouts, missing output, and incomplete execution remain
+explicit failures. A transport cannot turn them into successful trials.
 
-The shared runtime must not import a concrete task world. Catalogue assembly is
-the composition boundary that registers task definitions. CLI, Harbor, agent,
-and evaluation dispatch resolve a registered definition instead of branching
-on task stage or profile names.
+### Contributor and presentation surfaces
 
-Shared extraction requires a stable contract and two real task consumers.
-Before extraction, the change must record ownership, migration, compatibility,
-and retirement for every affected path. A new profile must not create a second
-run, repository, session, rollout, or transport stack for the same world type.
+The CLI is the installed automation surface. The TUI and web UI present
+catalogues, runs, evaluations, and review workflows. Public guides live on the
+documentation site. Repository research may use the maintained APIs and
+artifacts, but ignored research paths are not runtime dependencies.
 
-The normative boundary, ASW-8 correction inventory, implementation sequence,
-and merge gates are in
-[CONTINUAL_WORLD_RUNTIME.md](CONTINUAL_WORLD_RUNTIME.md).
+## Dependency direction
 
----
+Dependencies follow ownership, not a permanent numbered hierarchy:
 
-## Repository Ownership Boundary
+- Boundary contracts depend only on foundational validation and value
+  utilities needed to define that boundary.
+- Task definitions and task worlds do not import adapters or providers.
+- Shared continual-world code does not import a concrete world.
+- Adapters, providers, and compute backends translate outward-facing protocols.
+- Orchestration depends on task and execution boundaries without taking over
+  task semantics.
+- Evaluation consumes verifier and trial evidence; persistence does not import
+  evaluation policy.
+- CLI, TUI, web, reports, and research compose lower-level capabilities.
+- A composition root may import concrete implementations to register them. The
+  registered core must remain independent of those implementations.
 
-A working location does not define architectural ownership. Before delivery, every maintained artifact must move to the permanent repository surface that owns its behaviour.
+Pydantic models belong at untrusted, external, persisted, or cross-process
+boundaries. Normal Python values are sufficient inside one owner. The
+`contracts/` package is a boundary library, not a requirement that every
+package or intermediate value depend on a universal schema.
 
-- `src/aec_bench/` owns installed library and runtime behaviour.
-- `src/aec_bench/task_world_templates/<family>/` owns task-template-specific behaviour and data.
-- `scripts/` owns maintained repository commands that are not part of the installed API.
-- `tests/` owns permanent test coverage and support code.
-- `docs/` owns normative architecture, contracts, invariants, and operating guidance.
+## Repository ownership
 
-Research, planning, output, and phase directories are work areas, not delivery surfaces. Maintained code, build steps, tests, and packaged data must not depend on them.
+A working directory does not determine ownership. Maintained artifacts belong
+to these stable surfaces:
 
----
+| Concern | Owner |
+| --- | --- |
+| Installed library and runtime behaviour | `src/aec_bench/` |
+| Task-template semantics and packaged task data | `src/aec_bench/task_world_templates/` |
+| Runnable benchmark task packages | `tasks/` |
+| Expert-authored task sources | `seeds/` |
+| Ready-to-use Harbor agents | `agents/` |
+| Maintained repository commands outside the installed API | `scripts/` |
+| Permanent tests and test support | `tests/` |
+| Current architecture, contracts, invariants, protocols, and guides | `docs/` |
 
-## Dependency Rule
+Research, planning, generated output, and local workspaces are not delivery
+surfaces. If the product needs a generator, certifier, migration command, or
+fixture, move it to its permanent owner before delivery.
 
-Dependencies flow downward through the stack:
+## Proposed direction
 
-1. Contracts depend on nothing.
-2. Tasks and Adapters both depend on Contracts and remain independent of each other.
-3. Harness depends on Tasks, Adapters, and ledger primitives.
-4. Evaluation depends on harness outputs and trial records.
-5. Communication and Feedback depend on evaluation outputs.
-6. Nothing flows upward except through explicit, structured feedback.
+**Status: Proposed.** This section describes a direction for later PRDs. It is
+not a claim about interfaces or packages that exist now.
 
----
+Future world-runtime work may simplify the current implementation around:
 
-## Python Interpretation
+- a functional world core that calculates a transition from explicit state,
+  action, and deterministic inputs;
+- an imperative episode shell that owns limits, retries, provider calls, and
+  session coordination;
+- lossless episode recording that preserves observations, actions, tool calls,
+  state references, failures, and timing needed for replay and audit;
+- evaluation as a separate interpretation of recorded evidence;
+- versioned training projections derived from canonical records rather than
+  embedded in them; and
+- provider integrations outside world logic.
 
-The architecture stays the same; the Python translation changes only the implementation substrate:
+This direction does not require snapshots, branching, rollout groups, Harbor,
+cloud execution, event sourcing, or durable sessions in the base interactive
+world boundary. Add those capabilities only where a real world and execution
+path need them.
 
-- Pydantic replaces Elixir contract constructors.
-- `asyncio` and explicit orchestration replace OTP supervision semantics.
-- FastAPI, Jinja2, and HTMX replace Phoenix/LiveView.
-- SQLAlchemy and Alembic replace Ecto where structured persistence is needed.
-- JSON/JSONL trial artefacts remain the earliest ledger implementation.
+## Related documents
 
-The key question is not whether Python matches BEAM semantics. The key question is whether Python can preserve the architectural guarantees. This plan assumes yes, so long as those guarantees are made explicit in contracts, tests, and provenance rules.
-
----
-
-## Current Translation State
-
-The following Python planning docs exist now:
-
-- [TECHNOLOGY_CHOICE.md](TECHNOLOGY_CHOICE.md)
-- [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
-- [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
-- [IMPLEMENTATION_WORK_ITEMS.md](IMPLEMENTATION_WORK_ITEMS.md)
-- [INVARIANTS.md](INVARIANTS.md)
-- [CONTRACTS.md](CONTRACTS.md)
-- [tasks-guide.md](tasks-guide.md)
-- [adapters-guide.md](adapters-guide.md)
-- [harness-guide.md](harness-guide.md)
-- [evaluation-guide.md](evaluation-guide.md)
-- [communication-guide.md](communication-guide.md)
-- [feedback-guide.md](feedback-guide.md)
-- [implementation/contracts.md](implementation/contracts.md)
-- [implementation/tasks.md](implementation/tasks.md)
-- [implementation/adapters.md](implementation/adapters.md)
-- [implementation/harness.md](implementation/harness.md)
-- [implementation/evaluation.md](implementation/evaluation.md)
-- [implementation/communication.md](implementation/communication.md)
-- [implementation/feedback.md](implementation/feedback.md)
-
-The top-level domain guides and per-domain implementation docs have now been translated into the Python planning surface. The sibling [aec-bench/docs](../../aec-bench/docs) tree remains the original source architecture, but the Python planning tree is now self-contained for implementation planning.
+- [Documentation index](README.md)
+- [Boundary contract index](CONTRACTS.md)
+- [Benchmark invariants](INVARIANTS.md)
+- [Stable project navigation](PROJECT_STRUCTURE.md)
+- [Interactive-world runtime protocol](protocols/interactive-world-runtime.md)

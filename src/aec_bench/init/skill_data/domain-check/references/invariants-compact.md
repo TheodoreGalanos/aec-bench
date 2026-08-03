@@ -1,81 +1,45 @@
-# ABOUTME: Compact invariant reference for the domain-check skill.
-# ABOUTME: All 10 invariants with one-line tests, affected domains, and enforcement details.
+# ABOUTME: Gives domain-check users concise tests for the current stable AEC-Bench guarantees.
+# ABOUTME: Defers lifecycle and storage mechanics to their owning protocols.
 
-# Invariants (Compact Reference)
+# Invariants: Compact Reference
 
-Source of truth: `docs/INVARIANTS.md`
+Source of truth: `docs/INVARIANTS.md`. Read that file when a check is ambiguous
+or a change could alter a benchmark guarantee.
 
-## Quick Reference
+| Guarantee | One-line check |
+| --- | --- |
+| Benchmark validity | Does the result measure the declared task, condition, limits, and verifier without contamination or identity drift? |
+| Reproducible identity and provenance | Is every outcome-affecting input and implementation identity recorded directly or by durable content reference? |
+| Controlled actor-visible information | Can the actor see only the observation, files, tools, and history allowed by the visibility policy? |
+| Provider-neutral task semantics | Could the task or world keep the same meaning under another conforming provider, backend, or transport? |
+| Evaluation authority | Do reward, validity, diagnostics, and confidence come from evaluation rather than persistence or presentation? |
+| Public and holdout separation | Can sealed or holdout content enter a public catalogue, prompt, example, export, report, or generated document? |
+| Explicit failures | Can an error, timeout, interruption, malformed result, or incomplete recovery be mistaken for success? |
+| Structured human judgment | Is result-affecting expert judgment attributable and bound to its evidence and method? |
+| Permanent ownership | Does every required build, run, generation, verification, certification, migration, or test artifact have a tracked owner? |
+| Deterministic replay | Does replay use recorded identity, inputs, order, and lineage and reproduce the declared result or tolerance? |
+| Boundary validation | Is untrusted, persisted, external, or cross-process data validated when admitted? |
+| Declared evidence integrity | Does accepted or published evidence follow the immutability or append-only semantics its contract declares? |
 
-| # | Name | One-Line Test | Affected Domains |
-|---|---|---|---|
-| 1 | Single source of truth | Can this trial be reproduced from its TrialRecord alone? | Harness, Contracts, Adapters |
-| 2 | Contracts at boundaries | Does every cross-domain call validate against a contract? | All cross-domain |
-| 3 | No hidden state | Is every input that affects outcomes persisted in the run record? | Adapters, Harness, Agents |
-| 4 | Task-adapter independence | Does this task work with ANY adapter? Does this adapter work with ANY task? | Tasks, Adapters, Agents |
-| 5 | Evaluation is a pipeline | Does this metric compile from evaluation outputs, not invented data? | Evaluation, Communication |
-| 6 | Public/holdout separation | Could holdout content leak through this change? | Communication, Feedback, Tasks |
-| 7 | Validate before commit | Has this been smoke-tested on a representative subset? | Any new feature |
-| 8 | Provider isolation | Can you describe what this code does without naming a vendor? | Providers, Harness, Agents |
-| 9 | Human judgment is structured | Is expert feedback captured as machine-readable, provenanced data? | Feedback |
-| 10 | Continuous quality | Does this change pay down drift or add to it? | All |
+## Objective order
 
-## Detailed Checks Per Invariant
+Resolve conflicts in this order:
 
-### 1. Single Source of Truth
-- TrialRecord must contain: task revision, verifier revision, adapter revision, model ID, prompt inputs, tool config, runtime image, seed
-- Any result that cannot be replayed from its record is invalid
-- Check: does the change add any trial input/parameter NOT captured in TrialRecord?
-
-### 2. Contracts at Boundaries
-- All domain boundaries are schema-defined (Pydantic `StrictModel` for internal, `LenientModel` for external)
-- No component exchanges untyped payloads across domains
-- Check: does the change pass raw dicts/strings across domain boundaries instead of validated models?
-
-### 3. No Hidden State
-- All state affecting outcomes must be explicit and persisted
-- No dependency on local machine quirks, unstored prompts, undocumented defaults
-- Check: does the change introduce any default value, retry logic, or timeout not captured in config?
-
-### 4. Task-Adapter Independence
-- Tasks must not encode model/SDK/tooling assumptions
-- Adapters must not contain task-specific logic
-- Agents receive `ToolSpec` from Contracts, not from Tasks directly
-- Check: does any adapter reference a specific task? Does any task reference a specific model?
-
-### 5. Evaluation Is a Pipeline
-- Reward is necessary but insufficient
-- Communication layers cannot invent metrics absent from evaluation outputs
-- Check: does the change create any metric/chart/export that doesn't trace back to EvaluationResult fields?
-
-### 6. Public/Holdout Separation
-- Holdout task briefs, findings, and verifier logic never shared outside evaluation team
-- Aggregate statistics are OK, specific findings are not
-- Check: could this code path expose holdout task details to public-facing outputs?
-
-### 7. Validate Before Commit
-- New model/adapter/tool changes validated on representative subset before full benchmark
-- Check: does the change include a smoke test or validation path?
-
-### 8. Provider Isolation
-- Cross-cutting concerns accessed only via provider interfaces
-- Domain code cannot directly couple to vendor APIs
-- Check: does the change import vendor-specific libraries (Modal, anthropic, openai, etc.) outside of `providers/` or `agents/`?
-
-### 9. Human Judgment Is Structured
-- Expert feedback in machine-readable form with provenance
-- Free-text without structured tags is advisory only
-- Check: does the change capture expert input with reviewer ID, timestamp, and category?
-
-### 10. Continuous Quality
-- Drift corrected continuously, not periodically
-- Technical debt tracked with owner and deadline
-- Check: does this change leave TODO comments without tracking? Does it copy a pattern that should be abstracted?
-
-## Objective Stack (Conflict Resolution)
-
-When invariants conflict:
-
-```
+```text
 validity > reproducibility > coverage > cost > throughput
 ```
+
+## Review notes
+
+- A content-addressed artifact reference can provide provenance without copying
+  every byte into one record.
+- Ordinary implementation details do not become persisted evidence unless they
+  can affect the benchmark outcome.
+- Strict boundary validation does not require a Pydantic model for every local
+  intermediate value.
+- Domain evidence can be immutable while source code and internal APIs remain
+  replaceable.
+- An internal test or caller is evidence of current behaviour, not by itself a
+  public compatibility promise.
+- Protocols own detailed locking, transaction, recovery, and publication
+  mechanics.

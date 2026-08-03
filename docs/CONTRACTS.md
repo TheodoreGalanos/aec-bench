@@ -1,372 +1,160 @@
-# ABOUTME: Logical data contracts for Python aec-bench domain boundaries.
-# ABOUTME: Defines shapes, constraints, and relationships without binding to a storage or transport format.
+# ABOUTME: Indexes the major protected, persisted, external, and cross-domain contracts in AEC-Bench.
+# ABOUTME: Routes readers to authoritative models and protocols without copying implementation field lists.
 
-# Contracts
+# Boundary Contract Index
 
-These contracts define the data shapes exchanged at domain boundaries in the Python implementation. They are logical schemas, not storage choices. Python will likely implement them with Pydantic models, but the rules here are architectural, not library-specific.
+| Field | Value |
+| --- | --- |
+| Class | Normative |
+| Status | Current |
 
-Parent document: [ARCHITECTURE.md](ARCHITECTURE.md).
-Related: [INVARIANTS.md](INVARIANTS.md), [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+This index explains who owns each major record family, where trust changes,
+and which implementation is authoritative. The source model or generated
+schema defines the exact fields. Protocol documents define multi-step behavior.
 
----
+## Compatibility terms
 
-## Core Contracts
+| Term | Meaning |
+| --- | --- |
+| Protected | A documented public, external, persisted, or published boundary. Change it only through an approved compatibility decision. |
+| Versioned | Persisted or external documents carry an explicit version or content identity. Readers validate that identity before use. |
+| Internal | A pre-1.0 implementation boundary used inside this repository. Update all callers directly when it changes. |
 
-### TaskDefinition
+A Pydantic model is not protected merely because it exists. Protection comes
+from documented use outside its owner or from persisted data that must remain
+readable.
 
-**Boundary:** Tasks -> Harness
+## Contract families
 
-Describes one runnable task instance.
+| Family | Owner | Trust boundary | Compatibility | Authority | Surface |
+| --- | --- | --- | --- | --- | --- |
+| Task specification | Task authoring and loading | Repository or imported task material becomes runnable input | Protected where task packages are published; otherwise internal | [`TaskDefinition`](../src/aec_bench/contracts/task_definition.py) and task loaders | Persisted task package |
+| Task instance and revision identity | Generation and harness | Selected task bytes become one exact execution identity | Protected when recorded in a dataset or trial | [`ResolvedTaskInstance`](../src/aec_bench/tasks/instance.py), `TaskReference`, and `DatasetTaskEntry` | Internal resolution; persisted references |
+| Experiment manifest | Experiment orchestration | User configuration becomes an executable plan | Internal, except documented CLI/config behavior | [`ExperimentManifest`](../src/aec_bench/contracts/experiment_manifest.py) | Persisted configuration |
+| Trial and episode record | Harness and ledger | Execution, verifier, and artifact evidence becomes reportable benchmark evidence | Protected persisted record | [`TrialRecord`](../src/aec_bench/contracts/trial_record.py) plus the owning episode or world protocol | Persisted and exportable |
+| Evaluation result | Evaluation | Verifier output and review evidence become reward, validity, and diagnostics | Protected as part of a persisted trial or published result | [`EvaluationResult`](../src/aec_bench/contracts/evaluation_result.py) | Persisted and externally reported |
+| Dataset manifest and identity | Dataset generation and storage | A set of task bytes becomes a named benchmark snapshot | Protected when published; content identity is authoritative | [`DatasetManifest`](../src/aec_bench/contracts/dataset.py) and dataset hashing/storage | Persisted and publishable |
+| Adapter and backend request/result | Adapters and harness | Harness input crosses into model or compute execution and returns untrusted output | Internal request/result; external provider documents are lenient ingestion boundaries | [`AdapterRequest` and `AdapterResult`](../src/aec_bench/adapters/base.py), [`BackendExecutionRequest` and `BackendExecutionResult`](../src/aec_bench/harness/backend.py), and [Harbor ingestion models](../src/aec_bench/harness/harbor_contract.py) | Internal, cross-process, and external |
+| Artifact and evidence reference | Harness, ledger, and the producing domain | Filesystem or provider output becomes content-bound evidence | Protected when stored in a trial, dataset, freeze, or published record | `ArtifactReference` in [`trial_record.py`](../src/aec_bench/contracts/trial_record.py) and narrower owner-specific references | Persisted reference |
+| Visibility classification | Task ownership and evaluation policy | Material enters public, calibration, or holdout handling | Protected | `Visibility` in [`task_definition.py`](../src/aec_bench/contracts/task_definition.py) and visibility checks in persisted records | Persisted and policy-bearing |
+| Interactive-world registration and calls | Continual runtime and registered task worlds | A content-pinned world/profile is resolved and an actor or host request reaches task-owned behavior | Versioned internal and persisted boundary | [`continual_world.py`](../src/aec_bench/contracts/continual_world.py), [`world_interface.py`](../src/aec_bench/contracts/world_interface.py), and the [runtime protocol](protocols/interactive-world-runtime.md) | Internal, persisted, and installed JSON |
 
-Required fields:
+## Task specification
 
-- `task_id`: globally unique identifier.
-- `task_type`: task family identifier.
-- `domain`: engineering domain.
-- `category`: benchmark category.
-- `difficulty`: `easy | medium | hard`.
-- `lifecycle`: `proposed | active | deprecated | retired`.
-- `visibility`: `public | holdout`.
-- `instruction`: fully resolved prompt text.
-- `environment`: environment specification.
-- `verifier`: verifier specification.
-- `timeout_seconds`: execution wall-clock limit.
+`TaskDefinition` is the validated runnable description of an artifact or
+workspace task. It owns task identity, lifecycle, visibility, instruction,
+environment, verifier, limits, tools, and task metadata. Task-family payloads
+remain task-owned; the global contract does not attempt to model every output.
 
-Optional fields:
+Executable interactive worlds use their registered world definition and
+profile instead of pretending to be a static `TaskDefinition`. Both families
+can still enter the same experiment, trial, evaluation, and reporting layers.
 
-- `tags`
-- `metadata`
+## Task instance and revision identity
 
-Environment fields:
+`ResolvedTaskInstance` joins a validated task definition to the paths used by
+one harness invocation. It is an internal path bundle, not durable identity.
 
-- `dockerfile`
-- `compose_file`
-- `manifest`
-- `build_args`
-- `tools`
+Durable identity is recorded as content or source revision:
 
-Verifier fields:
+- `TaskReference.task_revision` binds a trial to the task revision observed by
+  its execution/import path;
+- `DatasetTaskEntry.content_hash` binds a dataset entry to task-directory
+  content; and
+- world definitions, profiles, packages, and snapshots use their own
+  content-pinned references.
 
-- `script`
-- `expected_output_path`
-- `reward_path`
-- `details_path`
+Do not infer a revision from a mutable directory name.
 
-Constraints:
+## Trial and episode records
 
-- `task_id` is globally unique.
-- `instruction` is self-contained.
-- retired tasks are not runnable.
-- holdout tasks do not appear in public-facing outputs.
-- `lifecycle` and `visibility` remain independent axes.
+`TrialRecord` is the canonical reportable trial envelope. It binds task, agent,
+environment, inputs, outputs, evaluation, timing, completeness, and optional
+execution-family provenance. A complete record must satisfy the provenance
+requirements for the execution family it carries.
 
-### AgentOutput
+Lifecycle episode requests/results and world-session records are operational
+protocol records. They do not replace `TrialRecord`. Finalization validates and
+references their durable artifacts from the canonical trial evidence.
 
-**Boundary:** Adapters -> Evaluation
+Trial records are append-only evidence once accepted. Internal builders and
+temporary run directories remain replaceable implementation.
 
-Minimal output envelope produced by an adapter.
+## Evaluation results
 
-Required fields:
+`EvaluationResult` owns reward, mechanical validity, breakdowns, error
+taxonomy, confidence, attributable annotations, and registered task-specific
+evaluation extensions. Invalid or unparseable output cannot carry positive
+reward. Presentation code consumes this record and does not recalculate a
+competing result.
 
-- `status`: `completed | partial | failed | empty`
-- `output_path`
-- `output_format`
+Task-specific verifier details can remain in their owning evidence artifact
+while the common evaluation envelope reports the normalized result.
 
-Optional field:
+## Dataset manifests and immutable identity
 
-- `error_message`
+`DatasetManifest` binds a name and version to ordered task entries, source
+provenance, and a manifest content hash. Each task entry carries its own content
+hash. Validation recomputes those identities against task bytes.
 
-The payload itself is task-specific. Python contract code should validate the envelope, not pretend every task family shares one payload shape.
-
-Well-known payloads:
-
-- `AuditFinding`
-- `CalculationResult`
-
-### TaskGenomeManifest
-
-**Boundary:** Tasks -> Evolution / Research tooling
-
-Sidecar description of one task as decomposed selective pressures. This is
-descriptive metadata over an existing task directory; it does not replace
-`TaskDefinition`, `task.toml`, verifier scripts, or runtime task loading.
-
-Required fields:
-
-- `task_id`
-- `source_task_path`
-- `status`: `extracted | needs_review`
-- `domain_frame`
-- `scenario`
-- `input_bundle`
-- `reasoning_moves`
-- `pressure_points`
-- `output_contract`
-- `verifier_contract`
-- `difficulty_controls`
-- `trajectory_affordances`
-- `extraction`
-
-Key rule:
-
-- task genome manifests must include provenance and review metadata for inferred
-  pressure points so recombination experiments can distinguish deterministic
-  extraction from fields that need lightweight reasoning review.
-
-### TaskGenomeEvidencePacket
-
-**Boundary:** Tasks -> Evolution / LLM decomposition
-
-Bounded evidence packet used to ask a lightweight model to produce or refine a
-`TaskGenomeManifest`.
-
-Required fields:
-
-- `task_id`
-- `source_task_path`
-- `deterministic_manifest`
-- `task_toml`
-- `instruction_sections`
-- `verifier_files`
-- `artifact_paths`
-
-Key rule:
-
-- LLM-driven decomposition should consume this bounded packet rather than
-  roaming the filesystem, so every semantic claim in the generated manifest can
-  trace back to task evidence.
-
-### LifecycleEpisodeRequest / LifecycleEpisodeResult
-
-**Boundary:** Evidence-lifecycle host -> Episode environment -> Evidence-lifecycle host
-
-`LifecycleEpisodeRequest` is content-bound to the lifecycle and package hashes and carries host-allocated episode, attempt, and session identity; ordered checkpoint ownership; execution mode; visibility policy; requested adapter/model identity; the per-session turn limit; model-visible instruction; confined workspace and submission paths; completed-checkpoint lineage; the public conditional-evidence catalogue; and hashes of conditional evidence acquired by prior attempts. The host asks the environment to durably prepare its empty attempt artifacts, publishes the request, records its SHA-256 in the active attempt, then executes. Recovery and TrialRecord finalization reject request bytes or stable identity that disagree with attempt state, package state, or the declared execution condition.
-
-`LifecycleEpisodeResult` returns only execution-owned state: exact request identity, checkpoint ownership, requested and resolved adapter/model identity, per-session turn limit, configuration, status, failures, and token usage. Strict validation rejects undeclared fields, including verifier gates, pass/fail, expected answers, and reward. The host publishes a validated per-attempt result, preserves failed candidate submissions under their owning sessions, and alone validates and archives successful checkpoint submissions, releases later evidence, and invokes the task-owned verifier after lifecycle execution.
-
-Fresh-context requests own exactly one checkpoint. Persistent execution remains a separate one-session orchestration and must not be represented as repeated fresh episode calls.
-
-### WorldSession / WorldActorAction / WorldControl
-
-**Boundary:** Harness -> Task-world session -> Harness
-
-`WorldSessionRequest` and `WorldSessionResult` bind session, task-world, run,
-branch, tenure, and dynamic snapshot identity.
-
-`WorldActorActionRequest` and `WorldActorActionResult` form the actor-visible
-action boundary. Each request binds one exact visible state and information
-set. Action names, arguments, effects, and receipts remain task-owned.
-
-`WorldControlRequest` and `WorldControlResult` form a separate host-authorised
-boundary. They do not accept raw state mutation.
-
-These existing envelopes do not define task state, clocks, transitions,
-projections, or verifier meaning. A wider continual-runtime registration or
-persistence contract requires two real task-world consumers and its own
-compatibility tests.
-
-### EvidenceCheckpointSpec submission fields
-
-**Boundary:** Public lifecycle package -> Model-facing submission tool -> Host checkpoint archive
-
-`required_submission_fields` declares the public top-level fields that must be present. Checkpoints normally remain extensible for compatibility. A checkpoint may instead set `allow_additional_submission_fields: false`, making that declared list the exact public top-level shape. The model-facing write tool and the host submission gate both reject missing or undeclared fields before archival; neither strips or repairs model output. Nested semantic correctness and reward remain the task verifier's responsibility.
-
-### ConditionalEvidenceSpec / EvidenceRequestActionRecord
-
-**Boundary:** Public lifecycle package -> Evidence-lifecycle host -> Model-visible workspace
-
-`ConditionalEvidenceSpec` is an optional checkpoint contract containing a positive request budget and one or more public `EvidenceRequestSpec` records. Each request carries a safe ID, title, description, and same-checkpoint prerequisite IDs. IDs are unique, prerequisites must exist, the graph is acyclic, and every request's transitive prerequisite closure plus the request itself must fit within the checkpoint budget. Public request records cannot contain source paths.
-
-The task-owned hidden resolution manifest has exact `(checkpoint_id, request_id)` correspondence with the public catalogue and confines every source to `hidden/evidence_requests/<checkpoint-id>/<request-id>/`. The model-visible projection is fixed at `workspace/inbox/<checkpoint-id>/requests/<request-id>/`; ordinary checkpoint releases cannot occupy the reserved `requests/` namespace.
-
-`EvidenceRequestActionRecord` binds globally contiguous action identity, owning and requested checkpoint identity, request ID and reason, host-bound session/attempt ownership, typed outcome/rejection, pre/post observable-state hashes, canonical and workspace artifact paths and SHA-256 values, budget arithmetic, and branch inheritance. Successful first releases consume one unit; repeated successful requests and typed rejections consume zero. Malformed or blank model-facing arguments are bounded host-call validation failures and do not create lifecycle request actions. Package corruption and session-boundary mismatches are also host failures, not scored model rejections.
-
-Canonical action transactions are published under `run/evidence_requests/<action-id>/` before workspace projection and state commit. Recovery must adopt matching bytes exactly once, reject conflicts, repair missing transition/action ledger entries, and never restore consumed budget on retry or branch.
-
-### SealedLifecycleProvider / SealedLifecycleMount
-
-**Boundary:** External private task authority -> Evidence-lifecycle host
-
-`SealedLifecycleProvider` is an explicitly supplied, non-discoverable task-authority seam for one already-selected holdout target. It materializes one package, validates that package, builds its lifecycle-operation resolver, and supplies its task verifier. It has no listing, lookup, target-selection, environment-discovery, or public-registration method.
-
-`SealedLifecycleMount` binds that provider to one canonical package path, regular-file content hash, and file-and-directory tree hash inside one execution context. Package-aware resolver and verifier dispatch may consult the exact active mount; template-ID-only registry APIs remain public-only. A copied, changed, unmounted, or public-template-colliding package fails closed.
-
-The host writes an exact allowlisted receipt containing only schema version, `visibility=holdout`, the public provider-protocol hash, and fixed public-registry/export prohibitions. The receipt takes precedence over public variant validation. Prime export and normal experiment/`TrialRecord` recording reject it before reading or copying private content. Provider exceptions cross the boundary only as stable redacted error codes.
-
-The provider does not enter `LifecycleEpisodeRequest`, model tools, or environment results. The host still owns session/attempt identity, checkpoint state, verifier invocation, typed verifier-result validation, and reward.
-
-### TrialRecord
-
-**Boundary:** Harness -> Ledger
-
-Immutable, append-only record of one trial.
-
-`task.visibility` carries the task's explicit `public | holdout` classification when known. The field is optional so historical records still parse, but evaluation code must treat a missing value as unknown rather than inferring visibility from task names, paths, experiment IDs, or variant IDs.
-
-Required fields:
-
-- `trial_id`
-- `experiment_id`
-- `timestamp`
-- `task`
-- `agent`
-- `environment`
-- `inputs`
-- `outputs`
-- `evaluation`
-- `timing`
-- `completeness`: `complete | partial`
-
-Optional field:
-
-- `cost`
-- `adaptation`
-- `lifecycle_execution`
-- `lifecycle_provenance`
-
-Lifecycle records use typed session and provenance contracts. `lifecycle_execution` preserves mode, visibility policy, the per-session turn limit, requested and actual adapter identity, resolved model identity, usage, failures, checkpoint coverage, and hashed per-session artifacts. An actual adapter that differs from the requested condition is an unscored failed execution, never evidence for the requested adapter. Interrupted sessions whose provider-resolved model was never durably observed use the explicit `unresolved` value and force `completeness=partial`; the requested alias is never substituted as resolved provenance. `lifecycle_provenance` binds lifecycle/world identity, package/spec hashes, repository or installed-source content identity, runtime provider and realized dependency-byte identity, the registered task scorer and dispatcher chain, the canonical invocation manifest and sealed index entry, and the snapshotted ablation manifest and expanded plan.
-
-Lifecycle calibration manifests and plans carry a strict `study_design`: `descriptive_calibration`, per-session turn budgets, deterministic sequential plan order, no randomization, no counterbalancing, and `causal_effects_supported=false`. Evaluation artifacts must repeat this contract and expose the resource envelope beside outcomes. They must not promote group differences to causal effects while those controls remain absent.
-
-Key rule:
-
-- a `complete` record must contain enough provenance to support reproducibility claims.
-- a complete lifecycle record must reference hashed immutable output artifacts; paths back into a mutable working run are not sufficient.
-- lifecycle finalization must reconcile every session, token total, task revision, verification result, and artifact hash against the canonical invocation and its immutable snapshot before publication.
-- action-capable lifecycle snapshots must contain every canonical evidence-request action, commit marker, released artifact, public catalogue, and model-visible projection; state, metrics, protocol hash, and tool-schema hash must reconcile without using model prose.
-- the planned runtime provider, sorted dependency distributions, and realized dependency-byte fingerprint must exactly match the canonical invocation before publication.
-- every submitted lifecycle checkpoint must resolve to exactly one final submitted attempt and a durable session owner.
-- every fresh-context session must own exactly one checkpoint; retries use distinct attempt-specific sessions.
-- attempt mode, session mode, visibility policy, actual adapter, and per-session turn limit must reconcile with the planned condition before reward attribution.
-- the per-invocation index seal is authoritative for crash recovery; the shared discovery index may be reconstructed from valid seals without changing invocation identity.
-- immutable snapshot recovery has authority over mutable source package/run aliases once the snapshot exists.
-- ledger publication is exclusive, fsync-durable through newly created ancestors, and atomic; an artifact snapshot left before record publication is recoverable without another model call.
-- session-result publication is atomic and fsync-durable; a torn result from a terminal persistent session is quarantined and replaced by an unresolved zero-reward failure only when its submitted ownership and complete trajectory validate.
-- malformed trajectory history is a conflict and is never truncated or inferred during recovery.
-
-### LifecycleCalibrationSelectionPolicy / LifecycleCalibrationFreeze
-
-**Boundary:** Immutable public calibration ledger -> Frozen holdout execution condition
-
-`LifecycleCalibrationSelectionPolicy` is optional for legacy descriptive sweeps and mandatory for a selectable campaign. It captures the exact public variant IDs, requires equality with the current public registry at fresh planning time, and preregisters full repetition coverage, maximum mean verifier reward, incomplete-candidate ineligibility, canonical identity tie-breaking, the required lifecycle-operation protocol, public repetitions, holdout repetitions, and a positive finite estimated spend envelope. The policy enters manifest, plan, and trial identity before execution. Historical parsing uses the captured IDs rather than consulting a later registry. Selectable execution rejects injected adapter registries and validates the normally routed provider configuration before a fresh campaign writes execution state.
-
-`LifecycleCalibrationFreeze` is a deterministic write-once artifact built only after every planned public record exists at its canonical path and validates against the historical manifest, plan, and interaction contract captured in its immutable snapshot. It parses and hashes the same record and artifact bytes, binds every record by SHA-256, reports all candidate conditions and ineligibility reasons, and freezes requested/resolved model and adapter, runtime provider and realized dependency bytes, execution mode, visibility policy, per-session turn limit, lifecycle-operation protocol hash, and full tool-schema hash. The typed artifact independently recomputes the maximum-reward/canonical-tie-break winner and requires candidate references to partition the public evidence exactly.
-
-Selection refuses to run while a sealed holdout mount is active. Incorrect but complete public outcomes remain scored evidence; missing cells, partial records, unfinished verifier calls, unresolved identity, adapter mismatch, or protocol/tool drift make a candidate ineligible. Atomic publication accepts identical bytes on retry and never replaces a different freeze.
-
-### LifecycleTransferEvaluationSpec / LifecycleTransferSummary
-
-**Boundary:** Immutable lifecycle ledger evidence -> Descriptive holdout evaluation
-
-`LifecycleTransferEvaluationSpec` freezes one selected execution condition and two disjoint sets of content-addressed record references: public calibration support and holdout targets. Each reference binds the experiment ID, trial ID, canonical ledger path, and TrialRecord SHA-256. The selected condition binds model, adapter, runtime-dependency fingerprint, execution mode, model-visible memory policy, and per-session turn limit.
-
-The build-only evaluator validates record bytes and every referenced immutable snapshot artifact before considering eligibility. It reconciles task visibility and package identity with snapshotted variant metadata, condition and runtime provenance with the invocation manifest, and canonical reward and validity with the verification artifact. Public calibration records and holdout targets must carry explicit task visibility, `completeness=complete`, and completed verifier evidence. Targets must match the selected condition exactly and use a package hash distinct from every integrity-valid calibration input.
-
-`LifecycleTransferSummary` reports support counts, per-target eligibility and reasons, canonical verifier reward and validity, optional semantic diagnostics, and mean eligible target reward. Its study design is fixed to `descriptive_holdout_generalization`, selected from `public_calibration`, with causal effects and cross-run learning unsupported. Zero eligible targets produce `mean_target_reward=null`.
-
-Key rule:
-
-- this contract describes holdout generalization under a frozen condition; it does not estimate a transfer effect, select a winner, or demonstrate learner transfer.
-- the evaluator never changes the verifier-owned `TrialRecord.evaluation`.
-- the first contract is intentionally build-only: generic evaluation persistence and CLI publication remain deferred until holdout/internal visibility is enforced there.
-
-### EvaluationResult
-
-**Boundary:** Evaluation -> Communication, Evaluation -> Feedback
-
-Structured scored result for one trial.
-
-Required content categories:
-
-- reward
-- validity status
-- score breakdown
-- error taxonomy or explicit absence
-- confidence metadata or explicit absence
-
-Evaluation note:
-
-- Behavioral analysis can contribute structured entries inside the score breakdown when present, for example bond-type classifications, transition matrices, or structural similarity scores derived from persisted trial transcripts.
-- Those behavioral artefacts remain evaluation-owned data: they should be derived from `TrialRecord` provenance, not scraped ad hoc from external job directories after the fact.
-
-### TrajectoryEntry
-
-**Boundary:** Agents → Evaluation, Agents → Communication
-
-Structured record of one event within an agent's execution. Events are grouped into logical steps by the `step` field. Persisted as `trajectory.jsonl` (JSONL format, one entry per line, version header as first line).
-
-Required fields:
-
-- `step`: non-decreasing integer grouping related events (0 = initialisation, 1+ = agent turns)
-- `role`: `assistant | tool_call | tool_result | system | user`
-
-Conditional fields (by role):
-
-- `content`: reasoning or prompt text (assistant, system, user)
-- `tool_name`: tool identifier (tool_call, tool_result)
-- `command`: shell-level invocation string (tool_call)
-- `arguments`: structured parameters (tool_call)
-- `stdout`: captured output (tool_result)
-- `stderr`: captured errors (tool_result)
-- `exit_code`: process return code (tool_result)
-- `duration_ms`: wall-clock execution time (tool_result)
-- `media`: paths to produced artifacts, relative to trial artifacts dir (tool_result)
-- `timestamp`: ISO 8601 UTC with Z suffix (all roles, best-effort)
-
-Constraints:
-
-- First line of the file is a version header: `{"version": 1, "format": "aec-bench-trajectory"}`
-- `step` values are non-decreasing within a trajectory (multiple entries may share a step)
-- Within a step, entries appear in write order: assistant, then (tool_call, tool_result) pairs
-- `role` determines which conditional fields are populated
-- `exit_code` of 0 indicates success
-- Entries are append-only (no retroactive modification)
-- File is flushed after each write for crash resilience
-- Consumers must tolerate incomplete final steps (tool_call without tool_result = crash/timeout)
-
-Relationship to existing contracts:
-
-- `TrialRecord.outputs.trajectory_path` points to the trajectory artifact
-- `TranscriptEntry` (adapters/transcript.py) remains for backward compatibility
-- Consumers prefer trajectory when available, fall back to conversation.jsonl
-- Role values merge the previous TranscriptRole + TranscriptEvent axes into a single discriminator
-
-### ExperimentManifest
-
-**Boundary:** Experiment configuration -> Harness
-
-Validated description of what to run.
-
-Should include:
-
-- task selection
-- adapter selection
-- model/configuration
-- compute target
-- experiment metadata
-
----
-
-## Python Design Implications
-
-- Boundary models should be explicit Pydantic models.
-- Internal helpers can use normal Python types, but cross-domain boundaries should not rely on loose dict conventions.
-- JSONL helpers belong in the contract layer only if they preserve contract semantics, not as ad hoc serialization utilities scattered through the codebase.
-
----
-
-## Contract Rules
-
-- Validate at boundaries, not after persistence.
-- Distinguish missing data from empty data.
-- Preserve append-only semantics for TrialRecord.
-- Keep task-family payload specificity in verifiers and task definitions, not in global adapter logic.
-- Keep continual-world actor, host-control, session, snapshot, and runtime
-  envelopes task-neutral. Task action names, state fields, transition rules,
-  projections, and verifier targets remain with the registered task definition.
-- Promote a continual-world runtime contract only after two real task worlds
-  use the same boundary without concrete cross-imports.
-- Version a shared envelope when its shape must change. Do not replace it with
-  a profile-specific parallel interface.
-- Record source ownership, target ownership, migration, compatibility,
-  consumer cutover, and retirement before shared extraction.
+A local manifest can be deliberately regenerated or overwritten through an
+explicit maintenance command. That creates different content identity. A
+published benchmark claim must cite the content hash, not rely on a mutable
+`name@version` label alone.
+
+## Provider request and result envelopes
+
+The harness-facing adapter contract is `AdapterRequest` to `AdapterResult`.
+Compute backends wrap that execution in `BackendExecutionRequest` and return
+`BackendExecutionResult`. Harbor documents are external input and therefore use
+lenient ingestion models before repository-owned validation and normalization.
+
+These are related boundaries, not one universal provider schema. Provider
+configuration, resolved model identity, usage, stop reason, failure kind, raw
+output, and collected artifacts must survive normalization when they can affect
+validity or cost.
+
+Adapter-only extraction metadata must not become task-semantic output. The
+lambda-RLM `__confidence__` key is reserved for extraction confidence and is
+removed before semantic payloads reach generation, persistence, or review.
+
+## Artifact and evidence references
+
+`ArtifactReference` binds kind, path, media type, and SHA-256 for evidence
+attached to a trial. Other domains use narrower references when they need extra
+identity, lineage, visibility, or authority fields.
+
+A reference is valid only when the owning protocol verifies the referenced
+bytes and their relationship to the parent record. A path string alone is not
+artifact integrity. Do not collapse task evidence, provider output, world
+snapshots, and dataset entries into one global evidence model merely because
+they all contain hashes.
+
+Detailed lifecycle rules live in:
+
+- [Staged evidence and publication](protocols/staged-evidence-and-publication.md)
+- [Sealed holdout and verifier isolation](protocols/sealed-holdout-and-verifier-isolation.md)
+
+## Visibility classification
+
+`Visibility.PUBLIC` and `Visibility.HOLDOUT` are independent of lifecycle,
+difficulty, task name, and storage path. Importers and evaluators preserve the
+explicit value. Historical records that omit visibility remain unknown and are
+ineligible for operations that require a public or holdout classification.
+
+Public exports reject sealed provenance. Holdout execution and evaluation use
+their explicit provider, mount, audit, recording, and redaction boundaries.
+
+## Contract design rules
+
+- Validate untrusted, external, persisted, and cross-process data before use.
+- Use strict models for repository-owned boundary documents and lenient models
+  only where an external producer may add fields.
+- Keep task-specific payload meaning with the task owner.
+- Version a document family only when its persisted or external shape requires
+  independent evolution.
+- Add a hash only when it protects a named integrity claim.
+- Add an ID only for durable identity, correlation, replay, stale-action
+  detection, or external reference.
+- Update all repository callers when an internal pre-1.0 contract changes.
+- Do not preserve an obsolete internal envelope with a compatibility adapter.

@@ -1,26 +1,115 @@
-# ABOUTME: Enforces the narrow repository-owned documentation boundary.
-# ABOUTME: Keeps public guides, examples, and research records with their actual owners.
+# ABOUTME: Enforces the repository documentation taxonomy, routing, and relative-link integrity.
+# ABOUTME: Keeps current authorities separate from history, public guides, fixtures, and stale guidance.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCS_ROOT = REPO_ROOT / "docs"
+DOMAIN_CHECK_ROOT = REPO_ROOT / "src" / "aec_bench" / "init" / "skill_data" / "domain-check"
 EXPECTED_REPOSITORY_DOCS = {
     "AGENTS.md",
     "ARCHITECTURE.md",
     "CONTRACTS.md",
-    "CONTINUAL_WORLD_RUNTIME.md",
     "INVARIANTS.md",
     "PROJECT_STRUCTURE.md",
+    "README.md",
+    "history/asw8-runtime-consolidation.md",
+    "protocols/interactive-world-runtime.md",
+    "protocols/sealed-holdout-and-verifier-isolation.md",
+    "protocols/staged-evidence-and-publication.md",
 }
+MAINTAINED_INDEX_TARGETS = {
+    "AGENTS.md",
+    "ARCHITECTURE.md",
+    "CONTRACTS.md",
+    "INVARIANTS.md",
+    "PROJECT_STRUCTURE.md",
+    "README.md",
+    "history/asw8-runtime-consolidation.md",
+    "protocols/interactive-world-runtime.md",
+    "protocols/sealed-holdout-and-verifier-isolation.md",
+    "protocols/staged-evidence-and-publication.md",
+}
+MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\((?P<target>[^)]+)\)")
+FIXED_TEST_COUNT = re.compile(r"\b\d[\d,]*\s+(?:tests?|test cases)\b", re.IGNORECASE)
+RETIRED_CONTINUAL_WORLD_DOC = "docs/CONTINUAL_WORLD_RUNTIME.md"
 
 
-def test_docs_contains_only_repository_authoritative_markdown() -> None:
+def test_docs_contains_only_maintained_repository_markdown() -> None:
     actual = {path.relative_to(DOCS_ROOT).as_posix() for path in DOCS_ROOT.rglob("*") if path.is_file()}
 
     assert actual == EXPECTED_REPOSITORY_DOCS
+
+
+def test_documentation_index_lists_every_maintained_document() -> None:
+    indexed_targets = set(_relative_markdown_targets(DOCS_ROOT / "README.md")) & MAINTAINED_INDEX_TARGETS
+
+    assert indexed_targets == MAINTAINED_INDEX_TARGETS
+
+
+def test_repository_markdown_relative_links_resolve() -> None:
+    markdown_files = [
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "AGENTS.md",
+        *sorted(DOCS_ROOT.rglob("*.md")),
+        DOMAIN_CHECK_ROOT / "SKILL.md",
+        *sorted((DOMAIN_CHECK_ROOT / "references").glob("*.md")),
+    ]
+    missing: list[str] = []
+    for source in markdown_files:
+        for target in _relative_markdown_targets(source):
+            destination = (source.parent / unquote(target)).resolve()
+            if not destination.exists():
+                missing.append(f"{source.relative_to(REPO_ROOT)} -> {target}")
+
+    assert missing == []
+
+
+def test_retired_continual_world_document_is_not_referenced() -> None:
+    current_guidance = [
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "AGENTS.md",
+        *sorted(DOCS_ROOT.rglob("*.md")),
+        DOMAIN_CHECK_ROOT / "SKILL.md",
+        *sorted((DOMAIN_CHECK_ROOT / "references").glob("*.md")),
+    ]
+
+    assert not (DOCS_ROOT / "CONTINUAL_WORLD_RUNTIME.md").exists()
+    assert all(RETIRED_CONTINUAL_WORLD_DOC not in path.read_text(encoding="utf-8") for path in current_guidance)
+
+
+def test_asw8_history_is_explicitly_non_normative() -> None:
+    history = (DOCS_ROOT / "history" / "asw8-runtime-consolidation.md").read_text(encoding="utf-8")
+
+    assert "| Class | Historical |" in history
+    assert "| Status | Historical |" in history
+    assert "non-normative" in history
+
+
+def test_agent_guides_do_not_freeze_test_counts() -> None:
+    guides = (REPO_ROOT / "AGENTS.md", DOCS_ROOT / "AGENTS.md")
+
+    assert all(FIXED_TEST_COUNT.search(path.read_text(encoding="utf-8")) is None for path in guides)
+
+
+def test_installed_domain_check_guidance_uses_current_authorities() -> None:
+    guidance = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            DOMAIN_CHECK_ROOT / "SKILL.md",
+            DOMAIN_CHECK_ROOT / "references" / "domain-routing.md",
+            DOMAIN_CHECK_ROOT / "references" / "invariants-compact.md",
+        )
+    )
+
+    assert "docs/README.md" in guidance
+    assert "docs/protocols/interactive-world-runtime.md" in guidance
+    assert "10 invariants" not in guidance
+    assert "original 7" not in guidance
 
 
 def test_meta_harness_fixtures_live_outside_docs() -> None:
@@ -39,3 +128,18 @@ def test_readme_routes_public_guides_to_the_documentation_site() -> None:
     assert "https://aecbench.com/docs/advanced/prime-lab" in readme
     assert "docs/meta-harness-guide.md" not in readme
     assert "docs/prime-lab-guide.md" not in readme
+
+
+def _relative_markdown_targets(source: Path) -> tuple[str, ...]:
+    targets: list[str] = []
+    for match in MARKDOWN_LINK.finditer(source.read_text(encoding="utf-8")):
+        raw_target = match.group("target").strip()
+        if raw_target.startswith("<") and raw_target.endswith(">"):
+            raw_target = raw_target[1:-1]
+        else:
+            raw_target = raw_target.split(maxsplit=1)[0]
+        target = raw_target.split("#", maxsplit=1)[0]
+        if not target or target.startswith("/") or urlsplit(target).scheme:
+            continue
+        targets.append(target)
+    return tuple(targets)

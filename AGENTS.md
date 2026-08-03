@@ -21,6 +21,7 @@ Do not preserve obsolete code, package structure, or documentation only because 
 
 Read the implementation and tests for the area you will change. Then read only the documents that govern that change:
 
+- `docs/README.md`: documentation taxonomy, status, ownership, and routing.
 - `docs/INVARIANTS.md`: non-negotiable benchmark-validity and reproducibility rules.
 - `docs/CONTRACTS.md`: logical data contracts at real domain boundaries.
 - `docs/ARCHITECTURE.md`: domain ownership and dependency direction.
@@ -148,7 +149,7 @@ These rules protect domain ownership. They do not require one class, service, or
 
 ### Continual-world changes
 
-- Read `docs/CONTINUAL_WORLD_RUNTIME.md` before changing a persistent, replayable, branchable, or controllable task world.
+- Read `docs/protocols/interactive-world-runtime.md` before changing a persistent, replayable, branchable, or controllable task world.
 - Do not add a task-specific run, repository, session, rollout, Harbor, replay, or evaluation stack when the world type already has one.
 - Keep actor actions and host controls in separate validated envelopes.
 - Keep state, action semantics, events, projections, and verifier rules with the task world. The runtime may store and route them, but it must not interpret task fields.
