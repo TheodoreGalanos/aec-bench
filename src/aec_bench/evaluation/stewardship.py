@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 from aec_bench.contracts.evaluation_result import (
     StewardshipEvaluation,
@@ -142,6 +142,7 @@ def evaluate_pump_station_reference_run(
     run: PumpStationReferenceRun,
     *,
     imported_artifact_sha256: tuple[str, ...] = (),
+    evaluation_scope: Literal["complete_journey", "bounded_continuation"] = "complete_journey",
 ) -> StewardshipEvaluation:
     """Map one canonical V4 run into the shared stewardship contract."""
     report = run.verify_v4()
@@ -169,7 +170,7 @@ def evaluate_pump_station_reference_run(
         )
         + restriction_breaches
     )
-    terminal_stewardship_available = not state.active_restriction_ids
+    terminal_stewardship_available = evaluation_scope == "bounded_continuation" or not state.active_restriction_ids
     errors = list(report.issues)
     if not terminal_stewardship_available:
         errors.append("terminal-stewardship")
@@ -222,6 +223,7 @@ def evaluate_pump_station_reference_run(
     )
     return StewardshipEvaluation(
         schema_version=STEWARDSHIP_EVALUATION_SCHEMA_VERSION_V2,
+        evaluation_scope=evaluation_scope,
         valid=gates.passed,
         gates=gates,
         metrics=metrics,

@@ -8,7 +8,7 @@ import inspect
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from aec_bench.contracts.continual_world import (
     ContinualWorldDefinitionRef,
@@ -65,6 +65,20 @@ class ContinualWorldExecutionPort(Protocol):
         request_payload: Mapping[str, object],
     ) -> object:
         """Validate and execute one task-owned control request."""
+
+
+class ContinualWorldEvaluationPort(Protocol):
+    """Task-owned evaluator selected through one registered definition."""
+
+    def evaluate_run(
+        self,
+        *,
+        profile: LoadedContinualWorldProfile,
+        run_root: Path,
+        imported_artifact_sha256: tuple[str, ...],
+        evaluation_scope: Literal["complete_journey", "bounded_continuation"],
+    ) -> object:
+        """Evaluate one complete journey or verified bounded continuation."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,6 +152,7 @@ class ContinualWorldDefinition:
     branch_port: ContinualWorldBranchPort | None = None
     execution_port: ContinualWorldExecutionPort | None = None
     harbor_port: ContinualWorldHarborPort | None = None
+    evaluation_port: ContinualWorldEvaluationPort | None = None
 
     @property
     def ref(self) -> ContinualWorldDefinitionRef:
