@@ -16,6 +16,9 @@ from aec_bench.task_world_templates.continual.definition import (
     LoadedContinualWorldProfile,
     python_source_sha256,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station import (
+    reference_package_reader,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
     PumpStationCoupledWorldState,
     create_asw_8_world_state,
@@ -28,12 +31,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_models import (
     ReferencePackage,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_reader import (
-    load_reference_package,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_reader_v2 import (
-    load_v2_reference_package,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_system import (
     PUMP_STATION_REFERENCE_SYSTEM_ID,
@@ -66,7 +63,7 @@ def _validated_profile_data() -> tuple[PumpStationReferenceSystem, ReferencePack
     station_binding = system.descriptor.get("station_data")
     if not isinstance(station_binding, Mapping):
         raise ValueError("pump reference system station-data binding is missing")
-    package = load_reference_package(profile_id=system.station_data_profile_id)
+    package = reference_package_reader.load_reference_package(profile_id=system.station_data_profile_id)
     if package.package_content_id != station_binding.get("package_content_id"):
         raise ValueError("pump reference system station-data binding differs")
     return system, package
@@ -98,14 +95,16 @@ def _implementation_content_sha256() -> str:
     adapter_source_sha256 = hashlib.sha256(
         inspect.getsource(continual_rollout_adapter).encode("utf-8"),
     ).hexdigest()
+    reference_reader_source_sha256 = hashlib.sha256(
+        inspect.getsource(reference_package_reader).encode("utf-8"),
+    ).hexdigest()
     return canonical_content_sha256(
         {
             "loaded_profile": python_source_sha256(PumpStationContinualProfile),
             "profile_loader": python_source_sha256(_load_pump_station_profile),
             "profile_validator": python_source_sha256(_validated_profile_data),
             "reference_system_loader": python_source_sha256(load_reference_system),
-            "reference_package_loader": python_source_sha256(load_reference_package),
-            "v2_reference_package_loader": python_source_sha256(load_v2_reference_package),
+            "reference_package_reader_module": reference_reader_source_sha256,
             "model_factory": python_source_sha256(coupled_pump_station_model_from_package),
             "opening_state_factory": python_source_sha256(create_asw_8_world_state),
             "branch_adapter_module": adapter_source_sha256,

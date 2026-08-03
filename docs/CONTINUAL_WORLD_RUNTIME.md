@@ -199,7 +199,7 @@ The audit accounts for all 97 changed files:
 | `world_run_serialization.py` | Pump-station codec | Keep strict v1-v4 task codecs. Remove the state/projection profile collision. |
 | `harbor_job.py` | Pump transport wrapper | Reduce to catalogue-driven Harbor dispatch after parity. |
 | `reference_package_reader.py` | Pump-station package boundary | Extend the existing closed profile registry for v2. |
-| `reference_package_reader_v2.py` | Duplicate package reader | Integrate required validation into `reference_package_reader.py`, then retire this file. |
+| `reference_package_reader_v2.py` | Retired duplicate package reader | V2 validation now uses the closed profile dispatch in `reference_package_reader.py`. Keep one package-reader owner. |
 
 The accepted design also requires changes to existing `world_run.py`,
 `world_session.py`, `world_control.py`, `rollout_models.py`,
@@ -216,8 +216,8 @@ The accepted design also requires changes to existing `world_run.py`,
 | --- | --- | --- |
 | `coupled_run.py` | V4 manifest bindings, command meaning, replay assertions, and durability tests | Route v4 through the existing run and shared durable engine, then retire the second run and generation store. |
 | `coupled_interface.py` | Operation validation and negative cases | Express calls through separate shared actor and control envelopes, then retire the combined request. |
-| `coupled_rollout.py` | V2 lineage, ancestor binding, temporal inheritance, and isolation checks | Move generic branch mechanics to the continual runtime and task treatment rules to the pump adapter, then retire the duplicate control. |
-| `coupled_rollout_interface.py` | Strict v2 request and result validation | Add versioned records to the existing rollout interface, then retire this file. |
+| `coupled_rollout.py` | V2 lineage, ancestor binding, temporal inheritance, and isolation checks | Retired in Step 8 after these behaviours moved to the shared coordinator and pump branch adapter. |
+| `coupled_rollout_interface.py` | Strict v2 request and result validation | Retired with its unpublished transport. Keep installed V1 exact; Step 9 can transport the shared registered request through catalogue dispatch. |
 | `coupled_agent.py` | Pump tool descriptions and session behaviour | Supply them through the registered pump definition and shared session, then retire the second session. |
 | `coupled_harbor.py` | RS1 controller, model tool loop, semantic evidence, and negative transport tests | Integrate task controller and verifier ports into the existing Harbor path, then retire the second bridge. |
 | `coupled_evaluation.py` | Conservation derivation and semantic result checks | Integrate them into the task verifier and stewardship evaluation route, then retire the parallel evaluator. |
@@ -707,7 +707,7 @@ without changing the child opening state or an exact retry.
 | `wastewater_pump_station/world_run.py` | Pump branch adapter | Build and resume a registered V4 child through the existing run and repository. Keep definition, profile, package, model, schedule, and temporal bindings exact. |
 | `wastewater_pump_station/temporal_evidence/` | Pump evidence adapter | Preserve the public evidence available at the origin. Start a fresh child-private retrieval and session history. |
 | `wastewater_pump_station/rollout_models.py`, `rollout_repository.py`, and `rollout_control.py` | Existing pump rollout path | Keep V1 records and bytes exact. Accept the shared continual request and lineage directly for registered runs. Keep only pump-owned branch evidence in pump models. Do not add actor execution to rollout control. |
-| `wastewater_pump_station/rollout_interface.py` | Installed V1 transport | Keep the V1 request, result, and dispatch exact in Step 7. Step 9 adds a separate V2 transport route; it must not widen the V1 schema. |
+| `wastewater_pump_station/rollout_interface.py` | Installed V1 transport | Keep the V1 request, result, and dispatch exact. Step 9 can add catalogue dispatch for the shared registered request; it must not widen the V1 schema. |
 | SSC-03 lifecycle branch adapter | Second real consumer | Treat a submitted checkpoint as its branchable snapshot unit. Preserve task-owned evidence, action, and budget rules while using the same group and lineage contract. |
 
 The shared rollout control has four operations: create a group, inspect a
@@ -754,10 +754,10 @@ private retrieval records, active session authority, and handover selection are
 not inherited. A child of a child appends its direct parent branch to the
 existing ordered ancestor list.
 
-The coupled rollout files remain only as temporary migration evidence until
-the stable path proves V2 parity. The footprint gate moves the useful tests to
-behavior names and retires the duplicate rollout control and interface before
-transport work starts.
+The coupled rollout files are retired after their useful checks move to
+behaviour-named tests on the shared coordinator and pump adapter. Their
+unpublished transport is not copied into the stable V1 interface. Registered
+transport remains Step 9 work.
 
 The footprint gate uses `origin/main` as its fixed baseline. Net production
 growth must be no more than 16,500 lines before Step 9 starts. Delete the
