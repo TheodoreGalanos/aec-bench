@@ -5,188 +5,153 @@ description: Verify that code changes respect aec-bench architectural invariants
 
 # Domain Check
 
-Verify that a set of changes respects aec-bench's architectural invariants and domain boundaries before they land.
+Check a changeset against the current AEC-Bench architecture, protected
+contracts, and benchmark invariants. Judge ownership and behaviour from the
+live repository; package paths are signals, not a fixed dependency diagram.
 
-This skill exists because aec-bench has strict dependency rules between domains and 10 non-negotiable invariants. A change that looks correct in isolation can violate cross-domain contracts, import in the wrong direction, or leak holdout data. This check catches those problems before they become entrenched.
+## When to use
 
-## When to Use
-
-- Before committing changes that touch `src/aec_bench/` code
-- After implementing a feature that spans multiple domains
-- When reviewing someone else's changes to the platform
-- When you're unsure whether a change respects the architecture
-- Proactively, as a sanity check during development
+- Before a requested commit that changes `src/aec_bench/`
+- After a change crosses task, execution, evaluation, persistence, or
+  presentation boundaries
+- When reviewing a contract or persisted data change
+- When the user asks for an architecture, domain, or invariant check
 
 ## Process
 
-### Step 1: Identify the Changeset
+### 1. Identify the changeset
 
-Determine what has changed. Use one of these approaches depending on context:
+Choose the relevant view:
 
-- **Staged changes**: Run `git diff --cached --name-only` to see what's about to be committed
-- **Unstaged changes**: Run `git diff --name-only` plus `git ls-files --others --exclude-standard` for new files
-- **Specific files**: The user may point you to specific files or a PR
-- **Working session**: If you've been making changes during this session, you already know what changed
+- staged: `git diff --cached --name-only`
+- unstaged: `git diff --name-only` plus
+  `git ls-files --others --exclude-standard`
+- branch or pull request: compare with its accepted base
+- named files: use the scope supplied by the user
 
-List every changed file. You need the complete set to detect cross-domain issues.
+List every changed file. Preserve unrelated working-tree changes.
 
-### Step 2: Map Changes to Domains
+### 2. Identify ownership and execution family
 
-For each changed file, determine which domain it belongs to using this mapping:
+Use `references/domain-routing.md` to identify the owner of each changed
+behaviour. Decide whether the change concerns:
 
-| Path pattern | Domain |
-|---|---|
-| `src/aec_bench/contracts/` | Contracts |
-| `src/aec_bench/tasks/` | Tasks |
-| `src/aec_bench/templates/` | Templates |
-| `src/aec_bench/generation/` | Generation |
-| `src/aec_bench/agents/` | Agents |
-| `src/aec_bench/adapters/` | Adapters |
-| `src/aec_bench/harness/` | Harness |
-| `src/aec_bench/evaluation/` | Evaluation |
-| `src/aec_bench/communication/` | Communication |
-| `src/aec_bench/feedback/` | Feedback |
-| `src/aec_bench/ledger/` | Cross-cutting (Ledger) |
-| `src/aec_bench/providers/` | Cross-cutting (Providers) |
-| `src/aec_bench/cli/` | CLI (depends on generation, evaluation, tasks) |
-| `src/aec_bench/tui/` | TUI (depends on tasks, evaluation, communication) |
-| `src/aec_bench/web/` | Web (depends on communication, feedback) |
-| `docs/` | Documentation (check for doc-code drift) |
-| `tests/` | Tests (check they mirror source package structure) |
-| `tasks/` | Task definitions (check task-adapter independence) |
-| `seeds/` | Seed files (skill-to-skill interface, no library dependency) |
+- an artifact or workspace task;
+- an interactive world;
+- shared identity, orchestration, evaluation, artifact, provider, or
+  presentation machinery; or
+- a composition root that deliberately connects several owners.
 
-If a change touches files in multiple domains, that's a signal to check dependency directions carefully.
+Do not infer a boundary solely from a directory name. Read the changed code,
+its callers, its tests, and the current owner document.
 
-### Step 3: Read the Relevant Domain Docs
+### 3. Read the applicable authority
 
-For each domain touched, read the corresponding guide from `references/domain-routing.md`. This step is important — you need the design intent to judge whether the changes are correct, not just whether they run.
+Start with `docs/README.md`. Then read only the authorities relevant to the
+change:
 
-Read the **guide** for each affected domain.
+- `docs/INVARIANTS.md` for stable benchmark guarantees;
+- `docs/CONTRACTS.md` for protected boundary families and compatibility;
+- `docs/ARCHITECTURE.md` for current ownership and dependency direction;
+- the owning protocol for detailed lifecycle, persistence, or transport rules;
+- public documentation for documented commands or supported behaviour.
 
-### Step 4: Run Invariant Checks
+Proposals and history are context, not current authority.
 
-Check each of the 10 invariants that could be affected by the changeset. Not all invariants apply to every change — focus on the ones relevant to the domains touched.
+### 4. Check applicable invariants
 
-Read the full invariant details from `references/invariants-compact.md`.
+Read `references/invariants-compact.md`, then inspect each applicable guarantee.
+Do not mark an invariant as passed merely because no file with a familiar
+domain name changed. Trace outcome-affecting data across the real call path.
 
-For each applicable invariant, answer the one-line test:
+At minimum, ask:
 
-| # | One-line test | Check if domain touched... |
-|---|---|---|
-| 1 | Can this trial be reproduced from its TrialRecord alone? | Harness, Contracts |
-| 2 | Does every cross-domain call validate against a contract? | Any cross-domain change |
-| 3 | Is every input that affects outcomes persisted in the run record? | Adapters, Harness, Agents |
-| 4 | Does this task work with ANY adapter? Does this adapter work with ANY task? | Tasks, Adapters, Agents |
-| 5 | Does this metric compile from evaluation outputs, not invented data? | Evaluation, Communication |
-| 6 | Could holdout content leak through this change? | Communication, Feedback |
-| 7 | Has this been smoke-tested on a representative subset? | Any new feature |
-| 8 | Can you describe what this code does without naming a vendor? | Providers, Harness, Agents |
-| 9 | Is expert feedback captured as machine-readable, provenanced data? | Feedback |
-| 10 | Does this change pay down drift or add to it? | Any change |
+- Is the declared task, condition, execution, and verifier still what the
+  result measures?
+- Is outcome-affecting identity and provenance recorded?
+- Can hidden or holdout material enter actor-visible or public output?
+- Do tasks remain provider-neutral and adapters free of task policy?
+- Does evaluation remain the scoring and invalidity authority?
+- Do errors and incomplete work remain explicit failures?
+- Is durable or published evidence handled according to its declared integrity
+  contract?
 
-### Step 5: Check Dependency Directions
+### 5. Check dependency direction
 
-This is the most common source of architectural violations. Verify that no changed file imports "upward" in the dependency graph:
+Use imports, construction sites, and runtime calls as evidence. Confirm that:
 
-```
-Contracts (depends on nothing)
-  |
-  +-- Tasks (depends on Contracts only)
-  +-- Templates (depends on nothing — pure computation)
-  +-- Adapters (depends on Contracts only)
-  +-- Agents (depends on Contracts only)
-  |
-  +-- Generation (depends on Contracts, Templates)
-  |
-  +-- Harness (depends on Tasks, Adapters, Contracts, Ledger)
-        |
-        +-- Evaluation (depends on Harness outputs, Contracts)
-              |
-              +-- Communication (depends on Evaluation, Contracts, Ledger, Tasks)
-              +-- Feedback (depends on Contracts, Ledger, Tasks)
+- foundational contracts do not import orchestration or presentation code;
+- task definitions and worlds do not import provider SDKs, adapters, or
+  presentation policy;
+- adapters translate provider or execution protocols without task-specific
+  transitions or scoring;
+- evaluation consumes execution evidence and does not depend on reporting to
+  define metrics;
+- ledger and artifact stores persist/query evidence without owning evaluation
+  policy;
+- CLI, web, TUI, and other composition roots connect existing owners instead
+  of reimplementing their policy;
+- an interactive-world change uses the registered definition and ports instead
+  of adding another repository, run, replay, rollout, or transport stack.
 
-Cross-cutting:
-  Ledger (depends on Contracts only)
-  Providers (no internal dependencies)
-  CLI (depends on Generation, Evaluation, Tasks)
-  TUI (depends on Tasks, Evaluation, Communication)
-  Web (depends on Communication, Feedback)
-```
+A composition root importing several domains is not automatically a violation.
+The violation is ownership or policy moving in the wrong direction.
 
-Specifically check for these known violation patterns:
+### 6. Check contracts and compatibility
 
-- Does any adapter `import` or `from ... import` anything from `aec_bench.tasks`?
-- Does any task module reference `aec_bench.adapters`?
-- Does Evaluation import from Communication or Feedback?
-- Does Harness import from Evaluation?
-- Does anything outside `providers/` import directly from a vendor SDK?
-- Does Feedback import from Communication? (Use `tasks.loader.load_task_catalog` instead)
-- Does Ledger import from Evaluation? (Compose at the script layer)
-- Do Adapters import from Tasks? (They receive `ToolSpec` from Contracts)
+For every changed boundary or persisted shape:
 
-For Python code, look for `import` and `from X import Y` statements that cross boundaries. Use grep or AST-based search to find violations.
+1. Identify its owner, trust boundary, compatibility promise, and source of
+   truth in `docs/CONTRACTS.md`.
+2. Use `StrictModel` for validated internal boundaries and `LenientModel` only
+   where an external upstream may add fields.
+3. Validate external, persisted, and cross-process data when it enters the
+   system.
+4. Confirm all outcome-affecting fields are typed and represented in evidence.
+5. Preserve documented public APIs, external protocols, published formats, and
+   real persisted data unless the user approved a breaking change.
+6. For internal or unreleased behaviour, update repository callers directly;
+   do not add a compatibility shim by default.
+7. Update the owning contract or protocol when its semantics change.
 
-### Step 6: Check Contract Compliance
+### 7. Verify and report
 
-If the change modifies any contract model or adds a new data shape:
+Run the lowest checks that prove the affected boundary, followed by the
+broader configured checks appropriate to the changed files. Never claim a
+check passed unless it was run and observed passing.
 
-1. Does it use `StrictModel` (from `contracts/validators.py`) for internal boundary models?
-2. Does it use `LenientModel` for external data ingestion (e.g., Harbor results)?
-3. Does it use `@dataclass(frozen=True)` for non-boundary data structures?
-4. Are all fields typed?
-5. Does the change maintain backward compatibility with existing consumers?
-6. Is the contract documented in `docs/CONTRACTS.md`?
+Report:
 
-If the change uses a contract (as a consumer):
-
-1. Does it construct models through the validated constructor, not raw dict unpacking?
-2. Does it handle validation errors explicitly?
-3. Does it use the shared validators from `contracts/validators.py` (e.g., `ensure_non_empty_string`, `ensure_relative_path`)?
-
-### Step 7: Produce the Report
-
-Output a structured findings report. Be specific — name the file, the line, the invariant, and the fix.
-
-**Format:**
-
-```
+```markdown
 ## Domain Check Report
 
-### Domains Touched
-- [list domains]
+### Scope and owners
+- Changed files and affected owners
+- Execution family or composition boundary
 
-### Invariant Results
+### Invariant results
+| Invariant | Status | Evidence |
+| --- | --- | --- |
+| Applicable guarantee | PASS / FAIL / N/A | File, test, or observed behaviour |
 
-| # | Invariant | Status | Notes |
-|---|---|---|---|
-| 1 | Single source of truth | PASS / FAIL / N/A | detail |
-| ... | ... | ... | ... |
-
-### Dependency Check
-- [list any upward imports found, or "All dependencies flow downward"]
-
-### Contract Check
-- [list any contract violations, or "All contracts properly used"]
+### Dependency and contract checks
+- Ownership or import findings
+- Protected-boundary and compatibility findings
 
 ### Findings
+**[FINDING-1] severity**
+- File: `path:line`
+- Authority: invariant, contract, architecture, or protocol
+- Issue: concrete mismatch
+- Fix: smallest coherent correction
 
-**[FINDING-1]** severity: high/medium/low
-- File: `path/to/file.py:line`
-- Invariant: #N
-- Issue: [what's wrong]
-- Fix: [what to do]
-
-### Summary
-- X invariants checked, Y passed, Z failed
-- N findings (H high, M medium, L low)
+### Verification
+- Command and observed result
 ```
 
-If there are zero findings, say so clearly — a clean check is valuable information.
+If there are no findings, say so directly and still identify the evidence used.
 
-## Reference Files
+## References
 
-Read these as needed during the check:
-
-- `references/domain-routing.md` — Which docs to read for each domain
-- `references/invariants-compact.md` — All 10 invariants with their one-line tests and enforcement details
+- `references/domain-routing.md` — routes concerns to current owners and docs
+- `references/invariants-compact.md` — compact checks for the stable guarantees

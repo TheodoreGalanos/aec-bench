@@ -1,53 +1,42 @@
-# ABOUTME: Domain routing table for the domain-check skill.
-# ABOUTME: Maps domains to their design guide docs and Python package paths.
+# ABOUTME: Routes domain-check reviews to current AEC-Bench owners and authoritative documents.
+# ABOUTME: Uses package paths as navigation signals without freezing a complete dependency inventory.
 
 # Domain Routing
 
-## Domain → Guide Mapping
+Start with `docs/README.md`. It defines the authority order, document classes,
+status, audience, and owner for maintained repository documentation.
 
-| Domain | Design Guide | Package Path |
-|---|---|---|
-| Contracts | `docs/CONTRACTS.md` | `src/aec_bench/contracts/` |
-| Tasks | `https://aecbench.com/docs/core/tasks` | `src/aec_bench/tasks/` |
-| Templates | `https://aecbench.com/docs/core/templates` | `src/aec_bench/templates/` |
-| Generation | `https://aecbench.com/docs/core/templates` | `src/aec_bench/generation/` |
-| Agents | `docs/AGENTS.md` (agent contract section) | `src/aec_bench/agents/` |
-| Adapters | `https://aecbench.com/docs/agents/harnesses` | `src/aec_bench/adapters/` |
-| Harness | `https://aecbench.com/docs/advanced/backends` | `src/aec_bench/harness/` |
-| Evaluation | `https://aecbench.com/docs/evaluation/scoring` | `src/aec_bench/evaluation/` |
-| Communication | `https://aecbench.com/docs/evaluation/reviewing` | `src/aec_bench/communication/` |
-| Feedback | `https://aecbench.com/docs/evaluation/reviewing` | `src/aec_bench/feedback/` |
+## Concern routing
 
-## Cross-Cutting
+| Concern | Common paths | Read first | Ownership question |
+| --- | --- | --- | --- |
+| Boundary models and compatibility | `src/aec_bench/contracts/` | `docs/CONTRACTS.md` | Which owner admits and validates this data? |
+| Task definitions and revisions | `tasks/`, `src/aec_bench/tasks/` | `docs/CONTRACTS.md`, `docs/ARCHITECTURE.md` | Is task meaning provider-neutral and revision identity explicit? |
+| Templates and generation | `src/aec_bench/templates/`, `src/aec_bench/generation/` | `docs/ARCHITECTURE.md` | Is compilation separate from execution and evaluation policy? |
+| Agents, adapters, and backends | `agents/`, `src/aec_bench/agents/`, `src/aec_bench/adapters/`, `src/aec_bench/harness/` | `docs/ARCHITECTURE.md`, `docs/CONTRACTS.md` | Does the code translate or orchestrate without taking task or scoring ownership? |
+| Interactive worlds | `src/aec_bench/continual/`, `src/aec_bench/task_worlds/` | `docs/protocols/interactive-world-runtime.md` | Does the registered world own semantics while the runtime owns generic machinery? |
+| Evidence lifecycles and publication | `src/aec_bench/meta_harness/` | `docs/protocols/staged-evidence-and-publication.md` | Are checkpoint authority, recovery, and publication preserved? |
+| Sealed holdout execution | lifecycle provider and holdout modules | `docs/protocols/sealed-holdout-and-verifier-isolation.md` | Can private authority leak or bypass its one-shot mounted path? |
+| Evaluation | `src/aec_bench/evaluation/` and registered evaluators | `docs/ARCHITECTURE.md`, `docs/INVARIANTS.md` | Does evaluation remain the only scoring and invalidity authority? |
+| Ledger and artifacts | `src/aec_bench/ledger/` and artifact stores | `docs/CONTRACTS.md`, owning protocol | Does persistence preserve evidence without inventing policy? |
+| Reports and review | `src/aec_bench/communication/`, `src/aec_bench/feedback/` | `docs/ARCHITECTURE.md`, `docs/INVARIANTS.md` | Does presentation report established results and structured judgment? |
+| CLI, TUI, and web | `src/aec_bench/cli/`, `src/aec_bench/tui/`, `src/aec_bench/web/` | `README.md`, `docs/ARCHITECTURE.md` | Is this composition and presentation, or a duplicate implementation path? |
+| Repository layout | top-level directories and package moves | `docs/PROJECT_STRUCTURE.md` | Is the stable map still accurate without copying a volatile inventory? |
 
-| Concern | Location | Notes |
-|---|---|---|
-| Architecture overview | `docs/ARCHITECTURE.md` | 7 domains, dependency rules, objective stack |
-| Invariants | `docs/INVARIANTS.md` | 10 non-negotiable rules |
-| Contracts (logical) | `docs/CONTRACTS.md` | 5 data shapes at every boundary |
-| Project structure | `docs/PROJECT_STRUCTURE.md` | Module layout |
-| Agent guide | `docs/AGENTS.md` | Package overview, dependency rule, shared utilities, conventions |
+Public installation, CLI, integration, and user guides live at
+`https://aecbench.com/docs`. Use them when a change affects documented public
+behaviour.
 
-## Additional Domains (not in the original 7)
+## Changes crossing concerns
 
-These were added during the generation framework and agent contract phases:
+When a change crosses ownership boundaries:
 
-| Domain | Depends On | Purpose |
-|---|---|---|
-| Templates | Nothing | Pure computation templates for task generation |
-| Generation | Contracts, Templates | Template engine, scaffolder, dataset composer |
-| Agents | Contracts | Agent protocol, ScriptAgent, ToolLoopAgent, provider routing |
-| CLI | Generation, Evaluation, Tasks | Typer CLI commands |
-| TUI | Tasks, Evaluation, Communication | Textual TUI screens |
-| Web | Communication, Feedback | FastAPI routes and templates |
-| Ledger | Contracts | Append-only trial persistence (cross-cutting) |
-| Providers | Nothing | Vendor integrations (no internal dependencies) |
+1. Trace the live call path and persisted artifacts.
+2. Identify the producer and consumer of each boundary value.
+3. Confirm validation occurs where the consumer admits the value.
+4. Check that policy remains with its owner.
+5. Read every applicable protocol, not every repository document.
+6. Verify the complete affected path with the lowest sufficient tests.
 
-## When Multiple Domains Are Touched
-
-If a change touches files in 2+ domains:
-1. Read ALL relevant domain guides
-2. Pay special attention to the boundary between those domains
-3. Check that data crosses boundaries only through contract-defined shapes
-4. Verify dependency direction is downward (never import upward)
-5. Check the known violation patterns listed in the SKILL.md Step 5
+History under `docs/history/` can explain why a boundary exists. It does not
+override the current architecture, contract, invariant, protocol, or code.

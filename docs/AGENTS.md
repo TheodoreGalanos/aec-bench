@@ -7,13 +7,14 @@ The root `AGENTS.md` also applies. This file adds rules only for work inside `do
 
 ## Document authority
 
+- `README.md` indexes every maintained repository document and defines its class, status, audience, and owner.
 - `INVARIANTS.md` defines non-negotiable benchmark guarantees.
 - `CONTRACTS.md` defines logical shapes and semantics at real domain boundaries.
 - `ARCHITECTURE.md` defines durable domain ownership and dependency direction.
 - `PROJECT_STRUCTURE.md` gives stable navigation and layout guidance. It is not an inventory of every package.
 - Files marked draft, plan, work item, research, or historical do not become implementation requirements unless the task explicitly selects them.
 
-State the status of a new design document near its title: `Normative`, `Draft`, `Research`, or `Historical`.
+Use the classes and statuses defined in `README.md`, and state both near the title of every maintained design document.
 
 ## Editing policy
 
@@ -28,6 +29,7 @@ State the status of a new design document near its title: `Normative`, `Draft`, 
 
 ## Update routing
 
+- Documentation taxonomy, status, ownership, protocols, and history: update `README.md`.
 - Public installation, commands, and user-visible behaviour: update `../README.md` and the public documentation source when it is part of the task.
 - Boundary semantics: update `CONTRACTS.md`.
 - Benchmark guarantees: update `INVARIANTS.md` only with deliberate approval.
