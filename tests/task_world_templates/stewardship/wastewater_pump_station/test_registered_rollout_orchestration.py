@@ -79,6 +79,12 @@ type RegisteredRun = PumpStationWorldRun[
 ]
 
 
+def _file_tree_snapshot(root: Path) -> tuple[tuple[str, bytes], ...]:
+    return tuple(
+        sorted((path.relative_to(root).as_posix(), path.read_bytes()) for path in root.rglob("*") if path.is_file())
+    )
+
+
 def _shared_snapshot(snapshot: PumpStationStateSnapshotRef) -> StewardshipStateSnapshotRef:
     return StewardshipStateSnapshotRef(
         run_id=snapshot.run_id,
@@ -206,6 +212,27 @@ def _advance_session(
             },
         ),
     )
+
+
+def _continue_session_to(
+    session: PumpStationWorldSession,
+    *,
+    target_calendar_seconds: int,
+    request_prefix: str,
+) -> None:
+    while session.run.state.calendar_seconds < target_calendar_seconds:
+        invoke_world_actor(
+            session,
+            WorldActorActionRequest(
+                request_id=f"{request_prefix}-{session.run.state.sequence + 1}",
+                action_name="continue_operation",
+                binding=observe_world_actor(session).binding,
+                arguments={
+                    "reason": "Continue this branch to its next declared event.",
+                },
+            ),
+        )
+    assert session.run.state.calendar_seconds == target_calendar_seconds
 
 
 def _bound_treatment(
@@ -411,6 +438,118 @@ def test_registered_rollout_group_creates_two_isolated_children_from_one_selecte
     assert parent.snapshot() == origin
     assert candidate_child.verify().valid is True
     assert control_child.verify().valid is True
+
+
+def test_registered_rollout_child_rejects_changed_inherited_event_schedule(
+    tmp_path: Path,
+) -> None:
+    parent_root = tmp_path / "parent"
+    parent = _start_registered_parent(parent_root)
+    rollout_root = tmp_path / "rollouts"
+    control = PumpStationRolloutControl(
+        parent_repository_root=parent_root,
+        rollout_repository_root=rollout_root,
+        authorised_principal_ids=("rollout-host",),
+    )
+    request = _group_request(
+        parent,
+        group_id="event-schedule-tamper-group",
+        child_prefix="event-schedule-tamper",
+    )
+    control.create_group(request)
+    manifest_path = rollout_root / "groups" / request.group_id / "children" / "candidate" / "world" / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    manifest["event_schedule_sha256"] = "0" * 64
+    manifest_path.write_text(
+        json.dumps(manifest, separators=(",", ":"), sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(PumpStationRolloutError, match="child-verification.*world-run-identity"):
+        _child_session(
+            control,
+            group_id=request.group_id,
+            child_id="candidate",
+        )
+
+
+def test_registered_child_created_at_peak_end_gets_review_evidence_only_when_available(
+    tmp_path: Path,
+) -> None:
+    parent_root = tmp_path / "parent"
+    parent = _start_registered_parent(parent_root)
+    parent_session = _open_registered_session(
+        parent_root,
+        parent,
+        session_id="peak-end-parent-session",
+        agent_tenure_id="peak-end-parent-tenure",
+    )
+    _continue_session_to(
+        parent_session,
+        target_calendar_seconds=93_600,
+        request_prefix="peak-end-parent-continue",
+    )
+    parent_private_root = parent_root / "temporal-evidence" / "private"
+    parent_private_before = _file_tree_snapshot(parent_private_root)
+    rollout_root = tmp_path / "rollouts"
+    control = PumpStationRolloutControl(
+        parent_repository_root=parent_root,
+        rollout_repository_root=rollout_root,
+        authorised_principal_ids=("rollout-host",),
+    )
+    request = _group_request(
+        parent,
+        group_id="peak-end-review-group",
+        child_prefix="peak-end-review",
+    )
+    control.create_group(request)
+    child = _child_session(
+        control,
+        group_id=request.group_id,
+        child_id="candidate",
+    )
+
+    before = invoke_world_actor(
+        child,
+        WorldActorActionRequest(
+            request_id="peak-end-child-search-before",
+            action_name="search_evidence",
+            binding=observe_world_actor(child).binding,
+            arguments={"query": "CCR28H", "scope": "operations", "limit": 1},
+        ),
+    )
+    assert before.task_receipt["references"] == []
+
+    _continue_session_to(
+        child,
+        target_calendar_seconds=100_800,
+        request_prefix="peak-end-child-continue",
+    )
+    after = invoke_world_actor(
+        child,
+        WorldActorActionRequest(
+            request_id="peak-end-child-search-after",
+            action_name="search_evidence",
+            binding=observe_world_actor(child).binding,
+            arguments={"query": "CCR28H", "scope": "operations", "limit": 1},
+        ),
+    )
+    references = after.task_receipt["references"]
+    assert isinstance(references, list)
+    assert tuple(item["version_id"] for item in references if isinstance(item, dict)) == (
+        "pump-c-collateral-inspection-note.v1",
+    )
+    assert _file_tree_snapshot(parent_private_root) == parent_private_before
+    assert (
+        rollout_root
+        / "groups"
+        / request.group_id
+        / "children"
+        / "candidate"
+        / "world"
+        / "temporal-evidence"
+        / "private"
+    ).is_dir()
 
 
 def test_two_registered_rollout_groups_start_independently_from_the_same_selected_snapshot(

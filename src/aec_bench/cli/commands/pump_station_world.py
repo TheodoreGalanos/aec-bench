@@ -34,13 +34,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_
     PumpStationCoupledLocalRequest,
     execute_coupled_local_request,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_rollout import (
-    PumpStationCoupledRolloutControl,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_rollout_interface import (
-    PumpStationCoupledRolloutControlRequest,
-    execute_coupled_rollout_request,
-)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     export_pump_station_harbor_task,
 )
@@ -104,46 +97,6 @@ def asw_8_interface_command(
     emit(
         "task pump-station-world asw-8-interface",
         payload,
-        start_time=started,
-    )
-
-
-@app.command("asw-8-rollout-interface")
-def asw_8_rollout_interface_command(
-    parent_run_dir: Path = typer.Option(
-        ...,
-        "--parent-run-dir",
-        help="Verified ASW-8 parent world-run directory",
-    ),
-    rollout_dir: Path = typer.Option(
-        ...,
-        "--rollout-dir",
-        help="Host-private ASW-8 rollout repository directory",
-    ),
-    request_path: Path = typer.Option(..., "--request-path", help="Strict rollout v2 JSON request"),
-    host_authority_id: str = typer.Option(
-        ...,
-        "--host-authority-id",
-        help="Host-only rollout authority identity",
-    ),
-) -> None:
-    """Execute one strict ASW-8 rollout-control v2 request."""
-    started = time.monotonic()
-    request = PumpStationCoupledRolloutControlRequest.model_validate_json(request_path.read_text(encoding="utf-8"))
-    if request.authority_id != host_authority_id:
-        raise typer.BadParameter(
-            "host authority differs from the rollout request",
-            param_hint="--host-authority-id",
-        )
-    control = PumpStationCoupledRolloutControl(
-        parent_repository_root=parent_run_dir,
-        rollout_repository_root=rollout_dir,
-        authorised_principal_ids=(host_authority_id,),
-    )
-    result = execute_coupled_rollout_request(control, request)
-    emit(
-        "task pump-station-world asw-8-rollout-interface",
-        result.model_dump(mode="json"),
         start_time=started,
     )
 
