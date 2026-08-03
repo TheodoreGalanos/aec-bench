@@ -16,6 +16,7 @@ from typing import Any, cast
 
 from aec_bench.contracts import validators as validators_module
 from aec_bench.ledger.durability import fsync_directory, fsync_tree
+from aec_bench.task_world_templates.continual import world_logic as world_logic_module
 from aec_bench.task_world_templates.hydraulics import contracts as contracts_module
 from aec_bench.task_world_templates.hydraulics import identity as identity_module
 from aec_bench.task_world_templates.hydraulics import kernel
@@ -62,6 +63,7 @@ def _engine_identity() -> HydraulicEngineIdentity:
         "package.py": _sha256(Path(__file__)),
         "report.py": _sha256(Path(report_module.__file__)),
         "validators.py": _sha256(Path(validators_module.__file__)),
+        "continual/world_logic.py": _sha256(Path(world_logic_module.__file__)),
     }
     runtime_dependencies = {
         "pydantic": importlib.metadata.version("pydantic"),
@@ -256,14 +258,13 @@ def execute_hydraulic_world(
     expected_request = build_hydraulic_run_request(package, scenario_id=request.scenario_id)
     if request != expected_request:
         raise HydraulicWorldIntegrityError("run request does not match current package identity")
-    result, time_series = kernel.simulate_hydraulic_world(
-        source=source,
-        scenario_id=request.scenario_id,
-        run_id=request.run_id,
-        engine=engine,
-        source_state_sha256=request.source_state_sha256,
-        calculation_input_sha256=request.calculation_input_sha256,
-    )
+    initial = kernel.initial_hydraulic_world_state(source, seed=0)
+    transition = kernel.transition_hydraulic_world(initial, request)
+    if isinstance(transition, world_logic_module.ActionRejected):
+        raise HydraulicWorldIntegrityError(f"{transition.code}: {transition.message}")
+    assert isinstance(transition.state, tuple)
+    result = kernel.evaluate_hydraulic_world(transition.state)
+    time_series = transition.state[1]
     staging = _staging_directory(destination)
     try:
         _write_json(staging / "request.json", request.model_dump(mode="json"))

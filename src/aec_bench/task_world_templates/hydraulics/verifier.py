@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from aec_bench.contracts import validators as validators_module
+from aec_bench.task_world_templates.continual.world_logic import ActionRejected
 from aec_bench.task_world_templates.hydraulics import contracts as contracts_module
 from aec_bench.task_world_templates.hydraulics import identity as identity_module
 from aec_bench.task_world_templates.hydraulics import kernel
@@ -150,14 +151,13 @@ def verify_hydraulic_world(package_dir: Path, run_dir: Path) -> HydraulicVerific
     if run_manifest != expected_manifest:
         raise HydraulicWorldIntegrityError("run manifest does not match request and artifact identities")
 
-    expected_result, expected_time_series = kernel.simulate_hydraulic_world(
-        source=source,
-        scenario_id=request.scenario_id,
-        run_id=request.run_id,
-        engine=engine,
-        source_state_sha256=request.source_state_sha256,
-        calculation_input_sha256=request.calculation_input_sha256,
-    )
+    initial = kernel.initial_hydraulic_world_state(source, seed=0)
+    transition = kernel.transition_hydraulic_world(initial, request)
+    if isinstance(transition, ActionRejected):
+        raise HydraulicWorldIntegrityError(f"{transition.code}: {transition.message}")
+    assert isinstance(transition.state, tuple)
+    expected_result = kernel.evaluate_hydraulic_world(transition.state)
+    expected_time_series = transition.state[1]
     actual_result = HydraulicRunResult.model_validate(_read_json(files["results.json"]))
     actual_time_series = HydraulicTimeSeries.model_validate(_read_json(files["timeseries.json"]))
     if actual_result != expected_result:

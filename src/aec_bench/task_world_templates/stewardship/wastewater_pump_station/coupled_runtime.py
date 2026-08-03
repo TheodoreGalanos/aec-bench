@@ -7,6 +7,7 @@ from dataclasses import replace
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Literal, NoReturn, cast
 
+from aec_bench.task_world_templates.continual.world_logic import ActionRejected
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
     D_RUNTIME_SECONDS,
     PumpStationBacklogItem,
@@ -38,8 +39,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence
     evidence_quality_at,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_kernel import (
-    advance_coupled_pump_station,
     coupled_pump_station_model_from_package,
+    transition_coupled_pump_station,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpCondition,
@@ -913,9 +914,12 @@ def _advance_physical(
             tuple(deltas),
         ),
     )
-    result = advance_coupled_pump_station(model, state.physical, interval)
+    transition = transition_coupled_pump_station(model, state.physical, interval)
+    if isinstance(transition, ActionRejected):
+        _fail(transition.code, transition.message)
+    operating_interval = transition.output
     collateral = list(state.collateral_runtime)
-    for delta in result.operating_interval.pump_deltas:
+    for delta in operating_interval.pump_deltas:
         if delta.attributed_outage_episode_id is None:
             continue
         key = (delta.attributed_outage_episode_id, delta.pump_id)
@@ -924,8 +928,8 @@ def _advance_physical(
         collateral.append((*key, prior + delta.collateral_runtime_seconds))
     updated = replace(
         state,
-        physical=result.state,
-        operating_intervals=(*state.operating_intervals, result.operating_interval),
+        physical=transition.state,
+        operating_intervals=(*state.operating_intervals, operating_interval),
         collateral_runtime=tuple(sorted(collateral)),
         pending_start_pump_ids=(),
     )

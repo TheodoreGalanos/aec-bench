@@ -91,6 +91,12 @@ wastewater pump-station stewardship world and the SSC-03 hydraulic interaction
 world. The task-neutral continual package imports neither concrete world. See
 the current [interactive-world runtime protocol](protocols/interactive-world-runtime.md).
 
+Beneath those different orchestration paths, the continual runtime owns only
+the small accepted-transition and action-rejection values shared by both real
+consumers. Initial state, actor observation, transition functions, outputs, and
+evaluation remain task-owned because the hydraulic and pump behaviors do not
+honestly share one structural protocol.
+
 Interactive worlds and artifact tasks meet at the experiment and evidence
 layers. An interactive world does not need to pretend that each action is a
 workspace submission, and an artifact task does not need a world-session API.
@@ -195,10 +201,14 @@ fixture, move it to its permanent owner before delivery.
 **Status: Proposed.** This section describes a direction for later PRDs. It is
 not a claim about interfaces or packages that exist now.
 
-Future world-runtime work may simplify the current implementation around:
+The first functional-core step is implemented in
+`src/aec_bench/task_world_templates/continual/world_logic.py`. It does not
+replace the registered session, lifecycle, persistence, rollout, Harbor, or
+evaluation paths.
 
-- a functional world core that calculates a transition from explicit state,
-  action, and deterministic inputs;
+Future world-runtime work may continue simplifying the current implementation
+around:
+
 - an imperative episode shell that owns limits, retries, provider calls, and
   session coordination;
 - lossless episode recording that preserves observations, actions, tool calls,

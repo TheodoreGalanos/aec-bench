@@ -6,8 +6,13 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from aec_bench.task_world_templates.continual.world_logic import (
+    ActionRejected,
+    Transition,
+    TransitionResult,
+)
 from aec_bench.task_world_templates.hydraulics.contracts import (
-    HydraulicEngineIdentity,
+    HydraulicRunRequest,
     HydraulicRunResult,
     HydraulicSourceState,
     HydraulicTimeSeries,
@@ -91,7 +96,7 @@ def depth_from_storage_volume(
     if area_gradient == 0.0:
         return volume_m3 / bottom_area_m2
     discriminant = bottom_area_m2**2 + 2.0 * area_gradient * volume_m3
-    return (-bottom_area_m2 + math.sqrt(discriminant)) / area_gradient
+    return 2.0 * volume_m3 / (bottom_area_m2 + math.sqrt(discriminant))
 
 
 def orifice_discharge(
@@ -226,22 +231,45 @@ def _rounded(value: float, digits: int = 6) -> float:
     return 0.0 if rounded == -0.0 else rounded
 
 
-def simulate_hydraulic_world(
-    *,
-    source: HydraulicSourceState,
-    scenario_id: str,
-    run_id: str,
-    engine: HydraulicEngineIdentity,
-    source_state_sha256: str,
-    calculation_input_sha256: str,
-) -> tuple[HydraulicRunResult, HydraulicTimeSeries]:
-    """Run one fixed-step level-pool scenario and return canonical evidence models."""
+type HydraulicWorldState = HydraulicSourceState | tuple[HydraulicRunResult, HydraulicTimeSeries]
+
+
+def initial_hydraulic_world_state(source: HydraulicSourceState, *, seed: int) -> HydraulicWorldState:
+    return source
+
+
+def observe_hydraulic_world(state: HydraulicWorldState, *, actor_id: str) -> HydraulicTimeStep | None:
+    """Project bounded progress without source criteria or the complete result."""
+    if not actor_id.strip():
+        raise ValueError("hydraulic actor id must not be blank")
+    if isinstance(state, HydraulicSourceState):
+        return None
+    steps = state[1].steps
+    return steps[-1] if steps else None
+
+
+def evaluate_hydraulic_world(state: HydraulicWorldState) -> HydraulicRunResult:
+    if isinstance(state, HydraulicSourceState):
+        raise ValueError("hydraulic world is not complete")
+    return state[0]
+
+
+def transition_hydraulic_world(
+    state: HydraulicWorldState,
+    action: HydraulicRunRequest,
+) -> TransitionResult[HydraulicWorldState, HydraulicRunResult]:
+    """Apply one source-bound hydraulic action without persistence or evaluation."""
+    if not isinstance(state, HydraulicSourceState):
+        return ActionRejected("world-terminated", "the hydraulic scenario is already complete")
+    source = state
+    if action.world_id != source.world_id:
+        return ActionRejected("source-mismatch", "hydraulic action belongs to another source state")
+    scenario_id = action.scenario_id
     try:
         scenario = next(item for item in source.payload.scenarios if item.scenario_id == scenario_id)
-    except StopIteration as exc:
+    except StopIteration:
         known = ", ".join(item.scenario_id for item in source.payload.scenarios)
-        raise ValueError(f"unknown hydraulic scenario {scenario_id!r}; expected one of: {known}") from exc
-
+        return ActionRejected("scenario-unknown", f"expected one of: {known}")
     payload = source.payload
     basin = payload.basin
     criteria = payload.criteria
@@ -417,12 +445,12 @@ def simulate_hydraulic_world(
         warnings.append("uncontrolled_spill_occurred")
 
     run_result = HydraulicRunResult(
-        run_id=run_id,
+        run_id=action.run_id,
         world_id=source.world_id,
         scenario_id=scenario.scenario_id,
-        engine=engine,
-        source_state_sha256=source_state_sha256,
-        calculation_input_sha256=calculation_input_sha256,
+        engine=action.engine,
+        source_state_sha256=action.source_state_sha256,
+        calculation_input_sha256=action.calculation_input_sha256,
         catchment_peak_flows_m3_s={key: _rounded(value) for key, value in sorted(catchment_peaks.items())},
         peak_total_inflow_m3_s=canonical_peak_total_inflow,
         peak_orifice_flow_m3_s=canonical_peak_orifice,
@@ -441,4 +469,9 @@ def simulate_hydraulic_world(
         criteria=dict(sorted(criteria_results.items())),
         warnings=tuple(warnings),
     )
-    return run_result, HydraulicTimeSeries(run_id=run_id, steps=tuple(steps))
+    time_series = HydraulicTimeSeries(run_id=action.run_id, steps=tuple(steps))
+    return Transition(
+        state=(run_result, time_series),
+        output=run_result,
+        termination_reason="scenario-complete",
+    )

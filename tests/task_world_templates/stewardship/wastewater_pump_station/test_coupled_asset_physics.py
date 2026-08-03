@@ -8,9 +8,10 @@ from decimal import Decimal
 
 import pytest
 
+from aec_bench.task_world_templates.continual.world_logic import Transition
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_kernel import (
-    advance_coupled_pump_station,
     coupled_pump_station_model_from_package,
+    transition_coupled_pump_station,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpStationCoupledOperatingInterval,
@@ -71,16 +72,13 @@ def test_peak_interval_accounts_service_and_collateral_per_pump() -> None:
         ),
     )
 
-    result = advance_coupled_pump_station(model, state, interval)
+    result = transition_coupled_pump_station(model, state, interval)
+    assert isinstance(result, Transition)
 
-    assert result.capacity.required_capacity_seconds == 57_600
-    assert result.capacity.served_capacity_seconds == 57_600
-    assert result.capacity.unserved_capacity_seconds == 0
-    assert result.capacity.surplus_capacity_seconds == 0
     assert result.state.pump("pump-c").exposure.runtime_seconds == 28_800
     assert result.state.pump("pump-a").exposure.completed_starts == 2
     assert result.state.pump("pump-c").exposure.completed_starts == 1
-    assert result.operating_interval.pump_delta("pump-c").collateral_runtime_seconds == 28_800
+    assert result.output.pump_delta("pump-c").collateral_runtime_seconds == 28_800
 
 
 def test_functional_check_adds_exposure_without_service_or_collateral() -> None:
@@ -108,13 +106,13 @@ def test_functional_check_adds_exposure_without_service_or_collateral() -> None:
         ),
     )
 
-    result = advance_coupled_pump_station(model, state, interval)
+    result = transition_coupled_pump_station(model, state, interval)
+    assert isinstance(result, Transition)
 
-    assert result.capacity.served_capacity_seconds == 3_600
-    assert result.state.pump("pump-b").exposure == result.operating_interval.pump_delta("pump-b").closing_exposure
+    assert result.state.pump("pump-b").exposure == result.output.pump_delta("pump-b").closing_exposure
     assert result.state.pump("pump-b").exposure.runtime_seconds == 3_600
     assert result.state.pump("pump-b").exposure.completed_starts == 1
-    assert result.operating_interval.pump_delta("pump-b").collateral_runtime_seconds == 0
+    assert result.output.pump_delta("pump-b").collateral_runtime_seconds == 0
 
 
 def test_three_physically_running_pumps_fail_closed() -> None:

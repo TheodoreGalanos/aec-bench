@@ -56,6 +56,7 @@ Concrete imports exist in the composition root. The task-neutral package under
 | Owner | Owns | Does not own |
 | --- | --- | --- |
 | Shared contracts | Definition/profile references, actor/control envelopes, snapshot references, and rollout records | Task fields, action names, verifier targets, or provider credentials |
+| World kernel | Accepted-transition and action-rejection values | Task actions, state, observation, evaluation, persistence, limits, or provider transport |
 | Continual runtime | Catalogue resolution, common envelope validation, actor dispatch, host-authority checks, optional rollout coordination, and shared local durability surfaces | Pump or hydraulic transition semantics |
 | Registered execution port | Opening or resuming the task's canonical actor session and invoking task-owned controls | Generic provider selection or evaluation policy |
 | Task world | State, clocks, observations, actions, controls, events, projections, transition rules, task persistence meaning, and verification | Main-agent dispatch or generic rollout storage |
@@ -65,6 +66,44 @@ Concrete imports exist in the composition root. The task-neutral package under
 
 Task state remains opaque at the shared boundary. The runtime can validate and
 route an opaque task payload without interpreting its fields.
+
+## Functional world kernel
+
+`src/aec_bench/task_world_templates/continual/world_logic.py` defines the
+smallest shared in-process behavior:
+
+- `Transition` returns the accepted next state and any world-defined terminal
+  output, plus an optional terminal reason; and
+- `ActionRejected` reports an invalid action without returning a replacement
+  state.
+
+These are internal Python values and structural protocols, not persisted
+schemas or a public plugin API. They contain no session, filesystem, ledger,
+snapshot, rollout, provider, model, cost, or training fields.
+
+The two real consumers did not fit one structural protocol without artificial
+adapters, so initial state, observation, transition functions, codecs, and
+evaluation remain concrete task-owned functions. The reusable conformance
+helper accepts those functions directly. Evaluation stays separate from
+transition and persistence.
+
+Two real task-owned behaviors currently establish the shared shape:
+
+- SSC-03 executes one deterministic hydraulic scenario through the kernel,
+  exposes a bounded progress observation, terminates after the scenario, and
+  selects the canonical hydraulic result through a separate evaluator. The
+  existing lifecycle operation and package execution paths call this behavior.
+- The pump station advances one coupled physical operating interval through
+  the shared result values. Its existing actor projection exposes pump clocks,
+  availability, assignment, and running sets without latent pump condition.
+  The registered actor path reaches this behavior when `continue_operation`
+  advances physical time.
+
+The pump transition receipt, durable commit, information-set binding, and
+complete actor view remain outside the kernel because they belong to task
+orchestration, recording, and the richer task projection. SSC-03 still uses its
+evidence-lifecycle and rollout adapter rather than claiming a pump-style actor
+session.
 
 ## Actor authority
 
@@ -114,6 +153,8 @@ For the registered pump world:
   a world transition;
 - actor and control transitions publish task-owned commands, receipts, state,
   and commits through the existing pump repository;
+- physical time advancement calls the task-owned world kernel before the
+  resulting domain receipt is staged;
 - an exact retry returns the stored effect when its complete identity matches;
   and
 - replay reloads durable inputs and uses the manifest-bound task model.
@@ -184,6 +225,10 @@ Task errors retain their task-owned error boundary. Transport and provider
 failures remain failures; dispatch does not manufacture a successful world
 transition or evaluation.
 
+At the in-process behavior boundary, a rejected action does not return a new
+state. A valid transition can terminate a world. Runtime limits and external
+interruptions are not world termination.
+
 ## Proof
 
 The following focused tests define the current boundary:
@@ -193,6 +238,8 @@ The following focused tests define the current boundary:
 - [shared durability behavior](../../tests/task_world_templates/continual/test_durability.py)
 - [rollout record contracts](../../tests/task_world_templates/continual/test_rollout_contract.py)
 - [SSC-03 rollout use](../../tests/task_world_templates/continual/test_ssc03_rollout_control.py)
+- [SSC-03 world-kernel conformance](../../tests/task_world_templates/continual/test_hydraulic_world_conformance.py)
+- [pump physical world-kernel conformance](../../tests/task_world_templates/continual/test_pump_station_world_conformance.py)
 - [registered pump session interfaces](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_registered_world_session_interfaces.py)
 - [registered Harbor routing](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_registered_world_harbor.py)
 - [registered rollout orchestration](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_registered_rollout_orchestration.py)

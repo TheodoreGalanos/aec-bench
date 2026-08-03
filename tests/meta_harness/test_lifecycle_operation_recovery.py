@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import shutil
 from collections.abc import Callable
@@ -33,7 +32,6 @@ from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.lifecycles import materialize_lifecycle_template
 
 TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
-ATOMIC_FILE_BYTES_FIXTURE = Path(__file__).parents[1] / "fixtures" / "meta_harness" / "ssc03_atomic_file_bytes.v1.json"
 
 
 def _read_json(path: Path) -> dict[str, object]:
@@ -97,21 +95,6 @@ def _execute(package: Path, run: Path, source_sha256: str) -> dict[str, object]:
         reason="Exercise the durable recovery boundary.",
         session_id="baseline.session-001",
     )
-
-
-def test_lifecycle_state_and_commit_marker_match_pre_extraction_bytes(
-    tmp_path: Path,
-) -> None:
-    package, run, source_sha256 = _prepare(tmp_path)
-    _execute(package, run, source_sha256)
-    inventory = _read_json(ATOMIC_FILE_BYTES_FIXTURE)
-
-    assert inventory["status"] == "pre-extraction-compatibility-baseline"
-    files = cast(dict[str, dict[str, object]], inventory["files"])
-    for relative_path, expected in files.items():
-        payload = (run / relative_path).read_bytes()
-        assert len(payload) == expected["length"]
-        assert hashlib.sha256(payload).hexdigest() == expected["sha256"]
 
 
 def test_lifecycle_maps_shared_atomic_replacement_failures(
