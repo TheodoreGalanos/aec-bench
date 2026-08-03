@@ -743,7 +743,7 @@ class TemporalEvidenceRepository:
         self,
         manifest: TemporalSessionInformationSetManifestV2,
     ) -> None:
-        """Publish and select one immutable V4 session information-set binding."""
+        """Publish and select one immutable session information-set binding."""
 
         session_key = _session_identity_key(
             run_id=manifest.run_id,
@@ -805,7 +805,7 @@ class TemporalEvidenceRepository:
         session_id: str,
         agent_tenure_id: str,
     ) -> TemporalSessionInformationSetManifestV2 | None:
-        """Reload the selected immutable V4 binding for one exact session."""
+        """Reload the selected immutable binding for one exact session."""
 
         session_key = _session_identity_key(
             run_id=run_id,
@@ -825,7 +825,7 @@ class TemporalEvidenceRepository:
         session_id: str,
         agent_tenure_id: str,
     ) -> TemporalSessionInformationSetManifestV2:
-        """Reload one historical V4 session binding by immutable content identity."""
+        """Reload one session binding by immutable content identity."""
 
         try:
             validate_sha256(manifest_content_id)
@@ -853,7 +853,7 @@ class TemporalEvidenceRepository:
         *,
         session_key: str,
     ) -> TemporalSessionInformationSetManifestV2 | None:
-        """Reload and cross-check one V4 current pointer while already locked."""
+        """Reload and cross-check one current pointer while already locked."""
 
         path = f"private/sessions/{session_key}/current-session-information-set-v2.json"
         if not self._path(path).exists():

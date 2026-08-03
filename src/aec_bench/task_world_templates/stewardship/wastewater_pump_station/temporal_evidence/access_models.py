@@ -326,7 +326,7 @@ TEMPORAL_SESSION_INFORMATION_SET_SCHEMA_VERSION_V2 = "pump-station.temporal-sess
 
 
 class TemporalSessionInformationSetManifestV2(ContentAddressedModel):
-    """Immutable host binding for one exact V4 session information set."""
+    """Immutable host binding for one exact session information set."""
 
     schema_version: str = TEMPORAL_SESSION_INFORMATION_SET_SCHEMA_VERSION_V2
     session_binding_sequence: int
@@ -628,7 +628,7 @@ class TemporalInformationSetPointer(FrozenStrictModel):
 
 
 class TemporalSessionInformationSetPointerV2(FrozenStrictModel):
-    """Mutable selector for the latest immutable V4 session binding."""
+    """Mutable selector for the latest immutable session binding."""
 
     schema_version: str = TEMPORAL_SESSION_INFORMATION_SET_SCHEMA_VERSION_V2
     session_key: NonEmptyStr

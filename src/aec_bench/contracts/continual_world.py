@@ -10,8 +10,6 @@ from pydantic import JsonValue, field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
-from aec_bench.contracts.world_interface import WorldActorActionRequest
-from aec_bench.contracts.world_session import WorldSessionOpenMode, WorldSessionRequest
 
 CONTINUAL_WORLD_DEFINITION_SCHEMA_VERSION: Final[Literal["aecbench.continual-world-definition.v1"]] = (
     "aecbench.continual-world-definition.v1"
@@ -39,9 +37,6 @@ CONTINUAL_ROLLOUT_GROUP_STATUS_SCHEMA_VERSION: Final[Literal["aecbench.continual
 )
 CONTINUAL_ROLLOUT_CHILD_RUN_REF_SCHEMA_VERSION: Final[Literal["aecbench.continual-rollout-child-run-ref.v1"]] = (
     "aecbench.continual-rollout-child-run-ref.v1"
-)
-CONTINUAL_WORLD_ACTOR_REQUEST_SCHEMA_VERSION: Final[Literal["aecbench.continual-world-actor-request.v1"]] = (
-    "aecbench.continual-world-actor-request.v1"
 )
 CONTINUAL_WORLD_CONTROL_REQUEST_SCHEMA_VERSION: Final[Literal["aecbench.continual-world-control-request.v1"]] = (
     "aecbench.continual-world-control-request.v1"
@@ -113,55 +108,29 @@ class ContinualWorldDefinitionSpec(ContentAddressedModel):
         )
 
 
-class ContinualWorldActorRequest(ContentAddressedModel):
-    """One exact actor call routed through a registered continual world."""
+class ContinualWorldActorRequest(FrozenStrictModel):
+    """One current actor call using only an opaque host-owned decision reference."""
 
-    schema_version: Literal["aecbench.continual-world-actor-request.v1"] = CONTINUAL_WORLD_ACTOR_REQUEST_SCHEMA_VERSION
-    definition_ref: ContinualWorldDefinitionRef
-    profile_ref: ContinualWorldProfileRef
     operation: Literal["capabilities", "observe", "invoke"]
-    session_request: WorldSessionRequest
-    action_request: WorldActorActionRequest | None = None
+    request_id: NonEmptyStr | None = None
+    decision_id: NonEmptyStr | None = None
+    action_name: NonEmptyStr | None = None
+    arguments: dict[str, JsonValue] | None = None
 
     @model_validator(mode="after")
     def validate_actor_request(self) -> Self:
-        task_world_id = self.definition_ref.task_world_id
-        if self.profile_ref.task_world_id != task_world_id:
-            raise ValueError("continual actor profile belongs to another task world")
-        if self.session_request.task_world_id != task_world_id:
-            raise ValueError("continual actor session belongs to another task world")
-        if self.session_request.open_mode is not WorldSessionOpenMode.RESUME:
-            raise ValueError("continual actor request must resume an existing session")
-        if (self.operation == "invoke") != (self.action_request is not None):
-            raise ValueError("continual actor invoke requires exactly one action request")
-        if self.action_request is None:
+        action_fields = (
+            self.request_id,
+            self.decision_id,
+            self.action_name,
+            self.arguments,
+        )
+        if self.operation != "invoke":
+            if any(value is not None for value in action_fields):
+                raise ValueError(f"continual actor {self.operation} accepts no action payload")
             return self
-        binding = self.action_request.binding
-        start_snapshot = self.session_request.start_snapshot
-        if start_snapshot is None:
-            raise ValueError("continual actor session requires an exact start snapshot")
-        if (
-            binding.task_world_id,
-            binding.session_id,
-            binding.run_id,
-            binding.episode_id,
-            binding.world_branch_id,
-            binding.agent_tenure_id,
-            binding.sequence,
-            binding.state_id,
-            binding.commit_id,
-        ) != (
-            task_world_id,
-            self.session_request.session_id,
-            self.session_request.run_id,
-            self.session_request.episode_id,
-            self.session_request.world_branch_id,
-            self.session_request.agent_tenure_id,
-            start_snapshot.sequence,
-            start_snapshot.state_id,
-            start_snapshot.commit_id,
-        ):
-            raise ValueError("continual actor action binding differs from the resumed session")
+        if any(value is None for value in action_fields):
+            raise ValueError("continual actor invoke requires request_id, decision_id, action_name, and arguments")
         return self
 
 

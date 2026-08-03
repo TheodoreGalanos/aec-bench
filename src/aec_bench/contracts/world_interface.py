@@ -1,5 +1,5 @@
-# ABOUTME: Defines task-neutral actor invocation and separate host-control envelopes.
-# ABOUTME: Binds calls to exact public world identities without owning task action semantics.
+# ABOUTME: Defines the opaque actor-decision boundary and the separate host-control protocol.
+# ABOUTME: Keeps exact world bindings private while leaving task action payloads task-owned.
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ from aec_bench.contracts.world_session import (
     WorldSessionResult,
 )
 
-WORLD_ACTOR_INTERFACE_SCHEMA_VERSION = "aecbench.world-actor-interface.v1"
 WORLD_CONTROL_INTERFACE_SCHEMA_VERSION = "aecbench.world-control-interface.v1"
 
 
@@ -37,19 +36,14 @@ class WorldActorActionCapability(FrozenStrictModel):
     input_schema: dict[str, JsonValue]
 
 
-class WorldActorCapabilityCatalogue(ContentAddressedModel):
-    """Closed actor surface without host-only controls or private world data."""
+class WorldActorCapabilityCatalogue(FrozenStrictModel):
+    """Current actor surface without host-only controls or durable identities."""
 
-    schema_version: str = WORLD_ACTOR_INTERFACE_SCHEMA_VERSION
     task_world_id: NonEmptyStr
-    interface_version: NonEmptyStr
-    observation_schema_ref: NonEmptyStr
     actions: tuple[WorldActorActionCapability, ...]
 
     @model_validator(mode="after")
     def validate_catalogue(self) -> Self:
-        if self.schema_version != WORLD_ACTOR_INTERFACE_SCHEMA_VERSION:
-            raise ValueError("unsupported world actor interface schema version")
         names = tuple(action.name for action in self.actions)
         if not names:
             raise ValueError("actor capability catalogue must contain an action")
@@ -58,80 +52,33 @@ class WorldActorCapabilityCatalogue(ContentAddressedModel):
         return self
 
 
-class WorldActorBinding(FrozenStrictModel):
-    """Exact public session, state, view, and information binding for one call."""
+class WorldActorObservation(FrozenStrictModel):
+    """One actor-visible view correlated by an opaque host-owned decision ID."""
 
-    schema_version: str = WORLD_ACTOR_INTERFACE_SCHEMA_VERSION
-    task_world_id: NonEmptyStr
-    session_id: NonEmptyStr
-    run_id: NonEmptyStr
-    episode_id: NonEmptyStr
-    world_branch_id: NonEmptyStr
-    sequence: int
-    state_id: NonEmptyStr
-    commit_id: NonEmptyStr
-    agent_tenure_id: NonEmptyStr
-    actor_view_id: NonEmptyStr
-    information_set_id: NonEmptyStr
-
-    @model_validator(mode="after")
-    def validate_binding(self) -> Self:
-        if self.schema_version != WORLD_ACTOR_INTERFACE_SCHEMA_VERSION:
-            raise ValueError("unsupported world actor interface schema version")
-        if self.sequence < 0:
-            raise ValueError("actor binding sequence must be non-negative")
-        return self
-
-
-class WorldActorObservation(ContentAddressedModel):
-    """One content-addressed actor view and its exact invocation binding."""
-
-    schema_version: str = WORLD_ACTOR_INTERFACE_SCHEMA_VERSION
-    binding: WorldActorBinding
+    decision_id: NonEmptyStr
     view: dict[str, JsonValue]
 
-    @model_validator(mode="after")
-    def validate_observation(self) -> Self:
-        if self.schema_version != WORLD_ACTOR_INTERFACE_SCHEMA_VERSION:
-            raise ValueError("unsupported world actor interface schema version")
-        return self
 
+class WorldActorActionRequest(FrozenStrictModel):
+    """One task-owned action correlated to an opaque current decision."""
 
-class WorldActorActionRequest(ContentAddressedModel):
-    """One idempotent actor request bound to an exact visible information set."""
-
-    schema_version: str = WORLD_ACTOR_INTERFACE_SCHEMA_VERSION
     request_id: NonEmptyStr
+    decision_id: NonEmptyStr
     action_name: NonEmptyStr
-    binding: WorldActorBinding
     arguments: dict[str, JsonValue]
 
-    @model_validator(mode="after")
-    def validate_request(self) -> Self:
-        if self.schema_version != WORLD_ACTOR_INTERFACE_SCHEMA_VERSION:
-            raise ValueError("unsupported world actor interface schema version")
-        return self
 
+class WorldActorActionResult(FrozenStrictModel):
+    """Current result of one task-owned actor action."""
 
-class WorldActorActionResult(ContentAddressedModel):
-    """Immutable public result of one task-owned actor action."""
-
-    schema_version: str = WORLD_ACTOR_INTERFACE_SCHEMA_VERSION
-    request_content_sha256: NonEmptyStr
+    request_id: NonEmptyStr
     action_name: NonEmptyStr
     status: NonEmptyStr
-    pre_binding: WorldActorBinding
-    post_binding: WorldActorBinding
     task_receipt: dict[str, JsonValue]
-    next_observation: WorldActorObservation
-
-    @model_validator(mode="after")
-    def validate_result(self) -> Self:
-        if self.schema_version != WORLD_ACTOR_INTERFACE_SCHEMA_VERSION:
-            raise ValueError("unsupported world actor interface schema version")
-        if self.request_content_sha256 == self.content_sha256:
-            raise ValueError("actor result identity must differ from its request identity")
-        return self
+    next_observation: WorldActorObservation | None
+    terminated: bool = False
+    truncated: bool = False
+    reason: str | None = None
 
 
 class WorldControlOperationCapability(FrozenStrictModel):

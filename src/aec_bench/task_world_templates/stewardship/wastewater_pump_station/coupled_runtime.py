@@ -1,4 +1,4 @@
-# ABOUTME: Runs the complete ASW-8 v4 coupled world through closed actor and host-control transitions.
+# ABOUTME: Runs the current ASW-8 coupled world through closed actor and host-control transitions.
 # ABOUTME: Persists service, resources, work, evidence, and per-pump exposure as immutable state.
 
 from __future__ import annotations
@@ -15,9 +15,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_
     PumpStationConsumablePool,
     PumpStationCoupledProcess,
     PumpStationCoupledProcessStatus,
-    PumpStationPoolReservation,
     PumpStationPriority,
-    PumpStationResourceState,
     PumpStationReusablePool,
     PumpStationWorkGenerationRecord,
     cancel_process_reservations,
@@ -47,7 +45,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
     PumpStationCoupledEnvironment,
     PumpStationCoupledModel,
     PumpStationCoupledOperatingInterval,
-    PumpStationCoupledPhysicalState,
     PumpStationDutyAssignment,
     PumpStationOperatingDelta,
     PumpStationOutageEpisode,
@@ -72,9 +69,10 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
     PUMP_STATION_OPERATIONS_REVIEW_VERSION,
     PUMP_STATION_PROCESS_OUTCOME_VERSION,
-    PUMP_STATION_STATE_VERSION_V4,
     PumpStationAuthority,
     PumpStationCommonBoundaryRequest,
+    PumpStationCoupledTransition,
+    PumpStationCoupledTransitionReceipt,
     PumpStationCoupledTreatmentRequest,
     PumpStationEvidence,
     PumpStationEvidenceKind,
@@ -87,8 +85,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationRestrictionKind,
     PumpStationRestrictionStatus,
     PumpStationStewardshipState,
-    PumpStationTransitionReceiptV4,
-    PumpStationTransitionV4,
     PumpStationWorkOrder,
     PumpStationWorkOrderStatus,
 )
@@ -114,23 +110,12 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.time_pre
     format_operating_duration,
     pump_station_datetime,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
-    PUMP_STATION_WORLD_MANIFEST_VERSION_V2 as PUMP_STATION_WORLD_MANIFEST_VERSION_V2,
-)
 
-PUMP_STATION_SNAPSHOT_VERSION_V4 = "pump-station-state-snapshot.v4"
-PUMP_STATION_ACTOR_PROJECTION_VERSION_V5 = "pump-station-current-state.v5"
-PUMP_STATION_ACTOR_VIEW_SCHEMA_V4 = "pump-station.actor-view.v4"
-PUMP_STATION_INFORMATION_BOUNDARY_V4 = "pump-station-actor-view.v4"
+PUMP_STATION_ACTOR_PROJECTION_POLICY_ID = "pump-station.current-state"
+PUMP_STATION_ACTOR_VIEW_SCHEMA_ID = "pump-station.actor-view"
+PUMP_STATION_INFORMATION_BOUNDARY_ID = "pump-station.actor-view"
 if TYPE_CHECKING:
-    type PumpStationCoupledWorldState = PumpStationStewardshipState[
-        PumpStationCoupledPhysicalState,
-        PumpStationCoupledEnvironment,
-        PumpStationResourceState,
-        PumpStationCoupledProcess,
-        PumpStationPoolReservation,
-    ]
-
+    type PumpStationCoupledWorldState = PumpStationStewardshipState
 else:
     PumpStationCoupledWorldState = PumpStationStewardshipState
 
@@ -147,8 +132,8 @@ def _fail(code: str, detail: str) -> NoReturn:
     raise PumpStationCoupledWorldError(code, detail)
 
 
-PumpStationCoupledTransitionReceipt = PumpStationTransitionReceiptV4
-PumpStationCoupledTransition = PumpStationTransitionV4
+PumpStationCoupledTransitionReceipt = PumpStationCoupledTransitionReceipt
+PumpStationCoupledTransition = PumpStationCoupledTransition
 
 
 def _opening_backlog() -> tuple[PumpStationBacklogItem, PumpStationBacklogItem]:
@@ -247,125 +232,120 @@ def _accepted_evidence_record(
 def create_asw_8_world_state() -> PumpStationCoupledWorldState:
     """Construct the exact descriptor-bound ASW-8 opening state."""
     system = load_reference_system()
-    state = cast(
-        PumpStationCoupledWorldState,
-        PumpStationStewardshipState(
-            physical=create_asw_8_opening_physical_state(),
-            environment=PumpStationCoupledEnvironment(
-                inflow_m3_s=Decimal("0.0155"),
-                wet_well_level_m=Decimal("1.65"),
-            ),
-            sequence=0,
-            resources=create_asw_8_resource_state(),
-            restrictions=(
-                PumpStationRestriction(
-                    restriction_id="restriction-a-run-in-001",
-                    kind=PumpStationRestrictionKind.POST_MAINTENANCE_RUN_IN,
-                    pump_id="pump-a",
-                    status=PumpStationRestrictionStatus.ACTIVE,
-                    created_sequence=0,
-                ),
-                PumpStationRestriction(
-                    restriction_id="restriction-b-isolated-001",
-                    kind=PumpStationRestrictionKind.NO_INTERVENTION,
-                    pump_id="pump-b",
-                    status=PumpStationRestrictionStatus.ACTIVE,
-                    created_sequence=0,
-                    evidence_id="initial-b-inspection-accepted",
-                ),
-            ),
-            obligations=(
-                PumpStationObligation(
-                    obligation_id="obligation-a-verification-001",
-                    kind=PumpStationObligationKind.POST_MAINTENANCE_VERIFICATION,
-                    pump_id="pump-a",
-                    status=PumpStationObligationStatus.ACTIVE,
-                    originating_proposal_id="initial-a-provisional-return",
-                    responsible_authority=PumpStationAuthority.VERIFICATION,
-                    linked_restriction_id="restriction-a-run-in-001",
-                    due_calendar_seconds=64_800,
-                    due_runtime_seconds=32_400,
-                    created_sequence=0,
-                ),
-            ),
-            work_orders=(
-                PumpStationWorkOrder(
-                    work_order_id="work-order-a-001",
-                    pump_id="pump-a",
-                    status=PumpStationWorkOrderStatus.OPEN,
-                    created_sequence=0,
-                ),
-                PumpStationWorkOrder(
-                    work_order_id="work-order-b-001",
-                    pump_id="pump-b",
-                    status=PumpStationWorkOrderStatus.OPEN,
-                    created_sequence=0,
-                ),
-            ),
-            processes=(),
-            evidence=(
-                _accepted_evidence_record(
-                    evidence_id="initial-b-inspection-accepted",
-                    kind=PumpStationEvidenceKind.INSPECTION,
-                    pump_id="pump-b",
-                    created_at_seconds=21_600,
-                    produced_by=PumpStationAuthority.MAINTENANCE,
-                    accepted_by=PumpStationAuthority.MAINTENANCE,
-                ),
-                _accepted_evidence_record(
-                    evidence_id="initial-c-assurance-accepted",
-                    kind=PumpStationEvidenceKind.CONDITION_CHECK,
-                    pump_id="pump-c",
-                    created_at_seconds=21_600,
-                    produced_by=PumpStationAuthority.ENGINEERING,
-                    accepted_by=PumpStationAuthority.OPERATIONS,
-                    passed=True,
-                ),
-            ),
-            scheduled_events=(),
-            state_version=PUMP_STATION_STATE_VERSION_V4,
-            assignment=PumpStationDutyAssignment(
-                assignment_id="assignment-opening-c",
-                ordered_pump_ids=("pump-c",),
-                active=True,
-                source_need_id="opening-normal-service",
-                effective_transition_id="initial-state",
-                required_service_scu=1,
-                assigned_service_scu=1,
-                unserved_service_scu=0,
-                decision_detail="accepted initial assignment",
-            ),
-            service_schedule=(
-                PumpStationServiceRequirement(21_600, 64_800, 1),
-                PumpStationServiceRequirement(64_800, 93_600, 2),
-                PumpStationServiceRequirement(93_600, 226_800, 1),
-            ),
-            baseline_schedule=(
-                (21_600, 64_800, ("pump-c",)),
-                (64_800, 93_600, ("pump-a", "pump-b")),
-                (93_600, 226_800, ("pump-a",)),
-            ),
-            disclosed_through_calendar_seconds=226_800,
-            resource_reservations=(),
-            backlog=_opening_backlog(),
-            generation_records=(),
-            outage_episodes=(
-                PumpStationOutageEpisode(
-                    episode_id="outage-b-001",
-                    unavailable_baseline_pump_id="pump-b",
-                    source_record_id="initial-b-inspection-accepted",
-                    opening_transition_id="initial-state",
-                    closing_transition_id=None,
-                    status="open",
-                ),
-            ),
-            operating_intervals=(),
-            collateral_runtime=(("outage-b-001", "pump-c", 0),),
-            pending_start_pump_ids=(),
-            event_effect_ids=(),
+    state = PumpStationStewardshipState(
+        physical=create_asw_8_opening_physical_state(),
+        environment=PumpStationCoupledEnvironment(
+            inflow_m3_s=Decimal("0.0155"),
+            wet_well_level_m=Decimal("1.65"),
         ),
+        sequence=0,
+        resources=create_asw_8_resource_state(),
+        restrictions=(
+            PumpStationRestriction(
+                restriction_id="restriction-a-run-in-001",
+                kind=PumpStationRestrictionKind.POST_MAINTENANCE_RUN_IN,
+                pump_id="pump-a",
+                status=PumpStationRestrictionStatus.ACTIVE,
+                created_sequence=0,
+            ),
+            PumpStationRestriction(
+                restriction_id="restriction-b-isolated-001",
+                kind=PumpStationRestrictionKind.NO_INTERVENTION,
+                pump_id="pump-b",
+                status=PumpStationRestrictionStatus.ACTIVE,
+                created_sequence=0,
+                evidence_id="initial-b-inspection-accepted",
+            ),
+        ),
+        obligations=(
+            PumpStationObligation(
+                obligation_id="obligation-a-verification-001",
+                kind=PumpStationObligationKind.POST_MAINTENANCE_VERIFICATION,
+                pump_id="pump-a",
+                status=PumpStationObligationStatus.ACTIVE,
+                originating_proposal_id="initial-a-provisional-return",
+                responsible_authority=PumpStationAuthority.VERIFICATION,
+                linked_restriction_id="restriction-a-run-in-001",
+                due_calendar_seconds=64_800,
+                due_runtime_seconds=32_400,
+                created_sequence=0,
+            ),
+        ),
+        work_orders=(
+            PumpStationWorkOrder(
+                work_order_id="work-order-a-001",
+                pump_id="pump-a",
+                status=PumpStationWorkOrderStatus.OPEN,
+                created_sequence=0,
+            ),
+            PumpStationWorkOrder(
+                work_order_id="work-order-b-001",
+                pump_id="pump-b",
+                status=PumpStationWorkOrderStatus.OPEN,
+                created_sequence=0,
+            ),
+        ),
+        processes=(),
+        evidence=(
+            _accepted_evidence_record(
+                evidence_id="initial-b-inspection-accepted",
+                kind=PumpStationEvidenceKind.INSPECTION,
+                pump_id="pump-b",
+                created_at_seconds=21_600,
+                produced_by=PumpStationAuthority.MAINTENANCE,
+                accepted_by=PumpStationAuthority.MAINTENANCE,
+            ),
+            _accepted_evidence_record(
+                evidence_id="initial-c-assurance-accepted",
+                kind=PumpStationEvidenceKind.CONDITION_CHECK,
+                pump_id="pump-c",
+                created_at_seconds=21_600,
+                produced_by=PumpStationAuthority.ENGINEERING,
+                accepted_by=PumpStationAuthority.OPERATIONS,
+                passed=True,
+            ),
+        ),
+        assignment=PumpStationDutyAssignment(
+            assignment_id="assignment-opening-c",
+            ordered_pump_ids=("pump-c",),
+            active=True,
+            source_need_id="opening-normal-service",
+            effective_transition_id="initial-state",
+            required_service_scu=1,
+            assigned_service_scu=1,
+            unserved_service_scu=0,
+            decision_detail="accepted initial assignment",
+        ),
+        service_schedule=(
+            PumpStationServiceRequirement(21_600, 64_800, 1),
+            PumpStationServiceRequirement(64_800, 93_600, 2),
+            PumpStationServiceRequirement(93_600, 226_800, 1),
+        ),
+        baseline_schedule=(
+            (21_600, 64_800, ("pump-c",)),
+            (64_800, 93_600, ("pump-a", "pump-b")),
+            (93_600, 226_800, ("pump-a",)),
+        ),
+        disclosed_through_calendar_seconds=226_800,
+        resource_reservations=(),
+        backlog=_opening_backlog(),
+        generation_records=(),
+        outage_episodes=(
+            PumpStationOutageEpisode(
+                episode_id="outage-b-001",
+                unavailable_baseline_pump_id="pump-b",
+                source_record_id="initial-b-inspection-accepted",
+                opening_transition_id="initial-state",
+                closing_transition_id=None,
+                status="open",
+            ),
+        ),
+        operating_intervals=(),
+        collateral_runtime=(("outage-b-001", "pump-c", 0),),
+        pending_start_pump_ids=(),
+        event_effect_ids=(),
     )
-    expected = canonical_stewardship_value(system.opening_state, record_profile="v4")
+    expected = canonical_stewardship_value(system.opening_state)
     if _opening_state_specification_value(state) != expected:
         _fail("opening-state-binding", "constructed state differs from its specification")
     return state
@@ -685,10 +665,7 @@ def _generated_item(
     restriction_ids: tuple[str, ...] = (),
     closure_rule: str,
 ) -> tuple[PumpStationWorkGenerationRecord, PumpStationBacklogItem]:
-    stable = stewardship_content_id(
-        (rule_id, source_transition_id, target_kind, target_id, ordinal),
-        record_profile="v4",
-    )[:16]
+    stable = stewardship_content_id((rule_id, source_transition_id, target_kind, target_id, ordinal))[:16]
     item_id = f"backlog-{rule_id.lower()}-{target_id}-{ordinal}-{stable}"
     return (
         PumpStationWorkGenerationRecord(
@@ -1298,7 +1275,7 @@ def _continue_operation(
         backlog_item_id=None,
         reason=reason,
         changed_record_ids=tuple(updated.event_effect_ids[len(state.event_effect_ids) :]),
-        operating_interval_id=stewardship_content_id(interval, record_profile="v4"),
+        operating_interval_id=stewardship_content_id(interval),
     )
 
 
@@ -1310,7 +1287,7 @@ def apply_coupled_actor_action(
     arguments: dict[str, Any],
     model: PumpStationCoupledModel | None = None,
 ) -> PumpStationCoupledTransition:
-    """Apply one exact actor-interface-v2 action without accepting private overrides."""
+    """Apply one exact actor action without accepting private overrides."""
     reason_value = arguments.get("reason")
     if not isinstance(reason_value, str) or not reason_value.strip():
         _fail("actor-action-arguments", "a non-empty natural-language reason is required")
@@ -2049,29 +2026,6 @@ def apply_common_boundary_control(
     )
 
 
-def apply_coupled_handover(
-    state: PumpStationCoupledWorldState,
-    *,
-    handover_id: str,
-    from_tenure_id: str,
-    to_tenure_id: str,
-) -> PumpStationCoupledTransition:
-    """Publish one state-preserving tenure handover as a separate v4 control receipt."""
-    if not from_tenure_id or not to_tenure_id or from_tenure_id == to_tenure_id:
-        _fail("handover", "handover requires two distinct non-empty tenures")
-    return _finish_transition(
-        state,
-        state,
-        request_id=handover_id,
-        action_kind="structured_handover",
-        actor_action=False,
-        target_id=None,
-        backlog_item_id=None,
-        reason="Carry the same verified live world to a fresh agent tenure.",
-        changed_record_ids=(from_tenure_id, to_tenure_id),
-    )
-
-
 def _project_pump_availability(
     state: PumpStationCoupledWorldState,
     pump_id: str,
@@ -2128,9 +2082,9 @@ def project_coupled_actor_view(
         actor_id=actor_id,
         agent_tenure_id=agent_tenure_id,
         source_artifact_ids=source_artifact_ids,
-        projection_policy_id=PUMP_STATION_ACTOR_PROJECTION_VERSION_V5,
-        observation_schema_id=PUMP_STATION_ACTOR_VIEW_SCHEMA_V4,
-        information_boundary_id=PUMP_STATION_INFORMATION_BOUNDARY_V4,
+        projection_policy_id=PUMP_STATION_ACTOR_PROJECTION_POLICY_ID,
+        observation_schema_id=PUMP_STATION_ACTOR_VIEW_SCHEMA_ID,
+        information_boundary_id=PUMP_STATION_INFORMATION_BOUNDARY_ID,
         state_id=state.state_id,
         sequence=state.sequence,
         time_zone=PUMP_STATION_TIME_ZONE,
@@ -2227,7 +2181,7 @@ def project_coupled_information_set(
     source_artifact_ids: tuple[str, ...],
     workspace_tool_ids: tuple[str, ...],
 ) -> PumpStationInformationSet:
-    """Project the complete V4 actor view and its exact visible context."""
+    """Project the complete current actor view and its exact visible context."""
     view = project_coupled_actor_view(
         state,
         episode_id=episode_id,

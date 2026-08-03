@@ -26,7 +26,6 @@ from aec_bench.contracts.world_session import (
     WorldSessionRequest,
     WorldSessionResult,
 )
-from aec_bench.evaluation.stewardship import evaluate_pump_station_stewardship_run
 from aec_bench.harness.harbor_importing.artifact_io import (
     artifact_reference,
     read_regular_trial_tree,
@@ -186,29 +185,20 @@ def _load_stewardship_evidence(
         bridge=bridge,
     )
     imported_artifact_sha256 = tuple(sorted({artifact.sha256 for artifact in artifacts}))
-    if bridge.profile_ref is None:
-        evaluation = evaluate_pump_station_stewardship_run(
-            run_dir=run_dir / "world-run",
-            package_root=bridge.package_root,
+    if bridge.definition_ref is None or bridge.profile_ref is None:
+        raise HarborImportError("registered stewardship evaluation authority is incomplete")
+    definition = default_continual_world_catalogue().resolve(bridge.definition_ref)
+    evaluation_port = definition.evaluation_port
+    if evaluation_port is None:
+        raise HarborImportError("registered stewardship definition has no evaluation port")
+    evaluation = StewardshipEvaluation.model_validate(
+        evaluation_port.evaluate_run(
+            profile=definition.load_profile(bridge.profile_ref),
+            run_root=run_dir / "world-run",
             imported_artifact_sha256=imported_artifact_sha256,
+            evaluation_scope=("bounded_continuation" if bridge.rollout_child_ref is not None else "complete_journey"),
         )
-    else:
-        if bridge.definition_ref is None or bridge.profile_ref is None:
-            raise HarborImportError("registered stewardship evaluation authority is incomplete")
-        definition = default_continual_world_catalogue().resolve(bridge.definition_ref)
-        evaluation_port = definition.evaluation_port
-        if evaluation_port is None:
-            raise HarborImportError("registered stewardship definition has no evaluation port")
-        evaluation = StewardshipEvaluation.model_validate(
-            evaluation_port.evaluate_run(
-                profile=definition.load_profile(bridge.profile_ref),
-                run_root=run_dir / "world-run",
-                imported_artifact_sha256=imported_artifact_sha256,
-                evaluation_scope=(
-                    "bounded_continuation" if bridge.rollout_child_ref is not None else "complete_journey"
-                ),
-            )
-        )
+    )
     execution_fields = {
         "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
         "session_id": request.session_id,

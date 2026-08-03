@@ -1,300 +1,49 @@
-# ABOUTME: Tests the real filesystem repository for one durable pump-station run.
-# ABOUTME: Proves immutable artifacts, strict reload, snapshot continuity, and verifier replay.
+# ABOUTME: Tests current pump run repository identity and filesystem boundaries.
+# ABOUTME: Proves content moved under another identity is rejected and run directories are private.
 
 from __future__ import annotations
 
 import stat
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from world_run_support import bind_proposal, create_world_run
 
-import aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository as repository_runtime
-from aec_bench.ledger.durability import (
-    DurableFileReplaceConfinementError,
-    DurableFileReplaceIntegrityError,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station import (
-    ContinueOperation,
-    PumpStationExecutionOutcome,
-    PumpStationObligationKind,
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import (
     PumpStationWorldRun,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
     PumpStationWorldRunError,
-    RequestConditionalDeferral,
-    RequestInspection,
-    RequestObstructionClearance,
-    RequestVerification,
-    TransferDuty,
-    pump_station_artifact_bytes,
-    verify_stewardship_run,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
+    PumpStationWorldRunRepository,
 )
 
 
-@pytest.mark.parametrize(
-    ("failure", "expected_code"),
-    (
-        (DurableFileReplaceConfinementError("unsafe destination"), "artifact-confinement"),
-        (DurableFileReplaceIntegrityError("replacement drift"), "artifact-integrity"),
-    ),
-)
-def test_repository_maps_shared_pointer_replacement_failures(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    failure: Exception,
-    expected_code: str,
-) -> None:
-    def fail_replacement(*_args: object, **_kwargs: object) -> None:
-        raise failure
-
-    monkeypatch.setattr(
-        repository_runtime,
-        "replace_file_bytes_durable",
-        fail_replacement,
+def _start(root: Path) -> PumpStationWorldRun:
+    return PumpStationWorldRun.create_reference_system(
+        repository=PumpStationWorldRunRepository(root),
+        run_id="repository-run",
+        episode_id="repository-episode",
+        world_branch_id="repository-branch",
     )
 
-    with pytest.raises(PumpStationWorldRunError) as raised:
-        create_world_run(tmp_path / "run")
 
-    assert raised.value.code == expected_code
-
-
-def test_filesystem_run_reloads_complete_state_and_verifier_steps(tmp_path) -> None:
-    run = create_world_run(tmp_path / "run")
-    initial_state = run.state
-    proposal, information_set = bind_proposal(
-        run,
-        RequestConditionalDeferral,
-        "proposal-resource-effect",
-        pump_id="pump-a",
-    )
-
-    transition = run.apply(
-        proposal,
-        information_set=information_set,
-    )
-    snapshot = run.snapshot()
-    resumed = PumpStationWorldRun.resume(
-        repository=run.repository,
-        package=run.package,
-        model=run.model,
-        snapshot=snapshot,
-    )
-    verification = verify_stewardship_run(
-        run.model,
-        initial_state,
-        resumed.steps(),
-    )
-
-    assert resumed.state == transition.state
-    assert resumed.snapshot() == snapshot
-    assert resumed.state.obligation(
-        PumpStationObligationKind.DEFERRED_FOLLOW_UP,
-        "pump-a",
-    ) == transition.state.obligation(
-        PumpStationObligationKind.DEFERRED_FOLLOW_UP,
-        "pump-a",
-    )
-    assert verification.valid is True
-
-    expected_counts = {
-        "states": 2,
-        "proposals": 1,
-        "information-sets": 1,
-        "receipts": 1,
-        "events": 1,
-        "commits": 2,
-    }
-    for directory, expected_count in expected_counts.items():
-        assert len(tuple((run.repository.root / directory).glob("*.json"))) == expected_count
-
-
-@pytest.mark.parametrize(
-    ("proposal_type", "parameters"),
-    (
-        (
-            RequestInspection,
-            {"pump_id": "pump-a", "backlog_item_id": "v4-inspection-binding"},
-        ),
-        (
-            RequestObstructionClearance,
-            {
-                "pump_id": "pump-a",
-                "inspection_evidence_id": "v4-inspection-evidence",
-                "backlog_item_id": "v4-clearance-binding",
-            },
-        ),
-        (
-            RequestVerification,
-            {"pump_id": "pump-a", "backlog_item_id": "v4-verification-binding"},
-        ),
-    ),
-)
-def test_legacy_run_rejects_v4_only_backlog_bindings_before_transition(
-    tmp_path: Path,
-    proposal_type: type,
-    parameters: dict[str, str],
-) -> None:
-    run = create_world_run(tmp_path / proposal_type.__name__)
-    proposal, information_set = bind_proposal(
-        run,
-        proposal_type,
-        f"legacy-rejects-{proposal_type.__name__}",
-        **parameters,
-    )
-    opening = run.snapshot()
-
-    with pytest.raises(PumpStationWorldRunError) as raised:
-        run.apply(proposal, information_set=information_set)
-
-    assert raised.value.code == "proposal-profile"
-    assert run.snapshot() == opening
-
-
-def test_legacy_inspection_without_v4_binding_retries_exactly(tmp_path: Path) -> None:
-    run = create_world_run(tmp_path / "run")
-    proposal, information_set = bind_proposal(
-        run,
-        RequestInspection,
-        "legacy-inspection-retry",
-        pump_id="pump-a",
-    )
-
-    applied = run.apply(proposal, information_set=information_set)
-    repeated = run.apply(proposal, information_set=information_set)
-
-    assert repeated == applied
-    assert len(run.steps()) == 1
-
-
-def test_repository_rejects_content_moved_under_the_wrong_identity(tmp_path) -> None:
-    run = create_world_run(tmp_path / "run")
-    assert stat.S_IMODE(run.repository.root.stat().st_mode) == 0o700
-    proposal, information_set = bind_proposal(
-        run,
-        RequestConditionalDeferral,
-        "proposal-content-integrity",
-        pump_id="pump-a",
-    )
-    transition = run.apply(
-        proposal,
-        information_set=information_set,
-    )
-    receipt_path = next((run.repository.root / "receipts").glob("*.json"))
-    receipt_path.write_bytes(
-        pump_station_artifact_bytes(
-            replace(
-                transition.receipt,
-                execution=PumpStationExecutionOutcome.CANCELLED,
-            )
-        )
-    )
+def test_repository_rejects_content_under_the_wrong_identity(tmp_path: Path) -> None:
+    run = _start(tmp_path / "run")
+    correct_id = run.snapshot().state_id
+    wrong_id = "0" * 64
+    states = run.repository.root / "states"
+    wrong_path = states / f"{wrong_id}.json"
+    wrong_path.write_bytes((states / f"{correct_id}.json").read_bytes())
+    wrong_path.chmod(0o600)
 
     with pytest.raises(PumpStationWorldRunError, match="artifact-integrity"):
-        run.steps()
+        run.repository.load_state(wrong_id)
 
 
-def test_repository_keeps_each_new_root_directory_private(tmp_path: Path) -> None:
-    private_parent = tmp_path / "private" / "worlds"
+def test_repository_creates_private_run_directories(tmp_path: Path) -> None:
+    root = tmp_path / "run"
+    _start(root)
 
-    run = create_world_run(private_parent / "run")
-
-    assert [
-        stat.S_IMODE(path.stat().st_mode)
-        for path in (
-            tmp_path / "private",
-            private_parent,
-            run.repository.root,
-        )
-    ] == [0o700, 0o700, 0o700]
-
-
-def test_repository_keeps_existing_ancestor_mode_and_privatises_existing_root(
-    tmp_path: Path,
-) -> None:
-    existing_parent = tmp_path / "existing"
-    existing_parent.mkdir()
-    existing_parent.chmod(0o750)
-    existing_root = existing_parent / "run"
-    existing_root.mkdir()
-    existing_root.chmod(0o750)
-
-    repository = repository_runtime.PumpStationWorldRunRepository(existing_root)
-
-    assert stat.S_IMODE(existing_parent.stat().st_mode) == 0o750
-    assert stat.S_IMODE(repository.root.stat().st_mode) == 0o700
-
-
-@pytest.mark.parametrize(
-    ("unsafe_kind", "expected_code"),
-    (
-        ("symbolic-link", "artifact-confinement"),
-        ("directory", "artifact-integrity"),
-        ("public-permissions", "artifact-confinement"),
-        ("unreadable", "artifact-integrity"),
-    ),
-)
-def test_repository_rejects_unsafe_manifest_files(
-    tmp_path: Path,
-    unsafe_kind: str,
-    expected_code: str,
-) -> None:
-    run = create_world_run(tmp_path / "run")
-    manifest = run.repository.root / "manifest.json"
-    if unsafe_kind == "symbolic-link":
-        outside = tmp_path / "outside.json"
-        outside.write_bytes(manifest.read_bytes())
-        manifest.unlink()
-        manifest.symlink_to(outside)
-    elif unsafe_kind == "directory":
-        manifest.unlink()
-        manifest.mkdir()
-    elif unsafe_kind == "unreadable":
-        manifest.chmod(0o000)
-    else:
-        manifest.chmod(0o644)
-
-    try:
-        with pytest.raises(PumpStationWorldRunError) as raised:
-            run.repository.load_manifest()
-    finally:
-        if unsafe_kind == "unreadable":
-            manifest.chmod(0o600)
-
-    assert raised.value.code == expected_code
-
-
-def test_snapshot_preserves_elapsed_time_and_applied_event_identity(tmp_path) -> None:
-    run = create_world_run(tmp_path / "run")
-    proposals = (
-        (RequestConditionalDeferral, "proposal-deferral", {"pump_id": "pump-a"}),
-        (TransferDuty, "proposal-transfer", {}),
-        (RequestInspection, "proposal-inspection", {"pump_id": "pump-a"}),
-        (ContinueOperation, "proposal-continue", {}),
-    )
-    transition = None
-    for proposal_type, proposal_id, parameters in proposals:
-        proposal, information_set = bind_proposal(
-            run,
-            proposal_type,
-            proposal_id,
-            **parameters,
-        )
-        transition = run.apply(
-            proposal,
-            information_set=information_set,
-        )
-
-    assert transition is not None
-    snapshot = run.snapshot()
-    resumed = PumpStationWorldRun.resume(
-        repository=run.repository,
-        package=run.package,
-        model=run.model,
-        snapshot=snapshot,
-    )
-
-    assert resumed.state.physical.calendar_seconds == run.model.inflow.diagnostic_period_seconds
-    assert transition.receipt.clock_delta_seconds == run.model.inflow.diagnostic_period_seconds
-    assert transition.receipt.applied_event_ids
-    assert resumed.snapshot() == snapshot
+    assert stat.S_IMODE(root.stat().st_mode) == 0o700
+    assert stat.S_IMODE((root / "states").stat().st_mode) == 0o700

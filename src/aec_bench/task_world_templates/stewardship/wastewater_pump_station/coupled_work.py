@@ -1,5 +1,5 @@
 # ABOUTME: Implements ASW-8 resource pools, durable backlog, priority, and exact work generation.
-# ABOUTME: Keeps task-owned work semantics separate from shared library contracts and legacy records.
+# ABOUTME: Keeps task-owned work semantics separate from shared library contracts and persistence records.
 
 from __future__ import annotations
 
@@ -142,7 +142,7 @@ PumpStationResourcePool = PumpStationReusablePool | PumpStationConsumablePool
 
 @dataclass(frozen=True, slots=True)
 class PumpStationResourceState:
-    """Complete v4 pool state selected instead of the legacy singleton record."""
+    """Complete current resource-pool state."""
 
     pools: tuple[PumpStationResourcePool, ...]
 

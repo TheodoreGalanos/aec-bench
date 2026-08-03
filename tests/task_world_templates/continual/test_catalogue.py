@@ -26,6 +26,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continua
     PumpStationContinualProfile,
     pump_station_continual_world_definition,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
+    PUMP_STATION_TASK_WORLD_ID,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     PUMP_STATION_HARBOR_EXECUTION_KIND,
 )
@@ -38,9 +41,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PumpStationStewardshipState,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
-    PUMP_STATION_TASK_WORLD_ID,
 )
 
 SSC03_GOLDEN_PATH = Path(__file__).parents[1] / "fixtures" / "ssc03_hydraulic_continual_profiles.v1.json"
@@ -206,7 +206,7 @@ def test_pump_definition_loads_the_exact_rs1_profile() -> None:
     assert isinstance(loaded.value.model, PumpStationCoupledModel)
     assert isinstance(loaded.value.opening_state, PumpStationStewardshipState)
     assert isinstance(loaded.value.opening_state.physical, PumpStationCoupledPhysicalState)
-    assert loaded.value.opening_state.state_version == "pump-station-stewardship-state.v4"
+    assert not hasattr(loaded.value.opening_state, "state_version")
     assert (
         loaded.value.opening_state.calendar_seconds == loaded.value.reference_system.opening_state["calendar_seconds"]
     )

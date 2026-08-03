@@ -38,7 +38,7 @@ def _context(world_time_seconds: int, branch: str = "branch-root") -> TemporalAc
         session_id="session-1",
         base_view_id="view-1",
         prior_information_set_id="information-1",
-        tool_contract_id="pump-station.actor.v2",
+        tool_contract_id="pump-station.actor",
         branch_ancestor_ids=(),
     )
 

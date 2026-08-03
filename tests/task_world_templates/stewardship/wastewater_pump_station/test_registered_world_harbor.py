@@ -1,5 +1,5 @@
-# ABOUTME: Proves registered pump worlds use the canonical Harbor export, session, and verifier.
-# ABOUTME: Covers exact profile authority, bounded session evidence, and the real local entrypoint.
+# ABOUTME: Proves registered pump worlds use the canonical Harbor export, episode host, and verifier.
+# ABOUTME: Covers exact profile authority, durable episode evidence, and the real local entrypoint.
 
 from __future__ import annotations
 
@@ -13,10 +13,13 @@ from harbor.trial.trial import Trial  # type: ignore[import-untyped]
 
 from aec_bench.task_world_templates.continual_catalogue import default_continual_world_catalogue
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
-    PUMP_STATION_ACTOR_ACTION_NAMES_V2,
+    PUMP_STATION_ACTOR_ACTION_NAMES,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
     pump_station_continual_world_definition,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
+    PUMP_STATION_TASK_WORLD_ID,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
@@ -36,9 +39,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_v
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
-    PUMP_STATION_TASK_WORLD_ID,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -69,7 +69,7 @@ def test_registered_profile_export_uses_the_canonical_harbor_bridge(
     assert manifest["continual_profile"] == profile_ref.model_dump(mode="json")
     assert bridge.profile_ref == profile_ref
     assert bridge.reference_system_root == exported.task_dir / "tests" / "reference-system"
-    assert bridge.allowed_tools == PUMP_STATION_ACTOR_ACTION_NAMES_V2
+    assert bridge.allowed_tools == PUMP_STATION_ACTOR_ACTION_NAMES
     assert config["agents"][0]["name"] == "pump-station-model-controller"
     assert config["agents"][0]["kwargs"]["world_session"] == {
         "bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE,
@@ -102,14 +102,14 @@ def test_registered_reference_session_uses_standard_evidence_and_replays_offline
         verifier_runtime_path=bridge.verifier_runtime_path,
     )
 
-    assert completed.request.session_id == "reference-controller-session-day-1"
-    assert completed.request.agent_tenure_id == "reference-controller-tenure-day-1"
+    assert completed.request.session_id == "episode.registered-reference"
+    assert completed.request.agent_tenure_id == "actor.registered-reference"
     assert completed.request.start_snapshot is not None
-    assert completed.request.start_snapshot.sequence == 7
+    assert completed.request.start_snapshot.sequence == 0
     assert completed.result.snapshot.sequence == 25
     assert completed.verification.valid
     assert verified["valid"] is True
-    assert verified["transition_count"] == 18
+    assert verified["transition_count"] == 25
     assert (output_dir / "world-run" / "temporal-evidence" / "capability.json").is_file()
     assert not (output_dir / "temporal-evidence").exists()
     assert not (output_dir / "evaluation.json").exists()
@@ -182,6 +182,6 @@ def test_registered_profile_runs_through_the_real_local_harbor_entrypoint(
     assert result.exception_info is None
     assert result.agent_result is not None
     assert result.agent_result.metadata["world_session_status"] == "completed"
-    assert result.agent_result.metadata["world_session_id"] == "reference-controller-session-day-1"
+    assert result.agent_result.metadata["world_session_id"] == "episode.registered-pump-world"
     assert result.verifier_result is not None
     assert result.verifier_result.rewards == {"reward": 1.0}

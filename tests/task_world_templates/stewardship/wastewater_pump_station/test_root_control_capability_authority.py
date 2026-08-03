@@ -5,19 +5,17 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pytest
+from pydantic import JsonValue
 
 from aec_bench.contracts.world_interface import WorldActorActionRequest
-from aec_bench.contracts.world_session import (
-    StewardshipStateSnapshotRef,
-    WorldSessionExecutionKind,
-    WorldSessionOpenMode,
-    WorldSessionRequest,
-)
-from aec_bench.harness.world_interface import invoke_world_actor, observe_world_actor
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
     PumpStationCoupledProcessStatus,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
+    PumpStationEpisodeHost,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpStationCoupledModel,
@@ -41,11 +39,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
-    PUMP_STATION_TASK_WORLD_ID,
-    PumpStationWorldSession,
-    PumpStationWorldSessionFactory,
 )
 
 type RegisteredRun = PumpStationWorldRun[
@@ -72,51 +65,26 @@ def _create_run(root: Path) -> RegisteredRun:
     )
 
 
-def _shared_snapshot(run: RegisteredRun) -> StewardshipStateSnapshotRef:
-    snapshot = run.snapshot()
-    return StewardshipStateSnapshotRef(
-        run_id=snapshot.run_id,
-        episode_id=snapshot.episode_id,
-        world_branch_id=snapshot.world_branch_id,
-        sequence=snapshot.sequence,
-        state_id=snapshot.state_id,
-        commit_id=snapshot.commit_id,
-    )
-
-
-def _open_session(root: Path, run: RegisteredRun) -> PumpStationWorldSession:
-    return PumpStationWorldSessionFactory(root).open(
-        WorldSessionRequest(
-            execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
-            open_mode=WorldSessionOpenMode.RESUME,
-            session_id="root-control-authority-session",
-            task_world_id=PUMP_STATION_TASK_WORLD_ID,
-            agent_tenure_id="root-control-authority-tenure",
-            run_id=run.manifest.run_id,
-            episode_id=run.manifest.episode_id,
-            world_branch_id=run.manifest.world_branch_id,
-            start_snapshot=_shared_snapshot(run),
-        )
-    )
-
-
 def _invoke(
-    session: PumpStationWorldSession,
+    host: PumpStationEpisodeHost,
     *,
     request_id: str,
     action_name: str,
     arguments: dict[str, object] | None = None,
 ) -> None:
-    invoke_world_actor(
-        session,
+    observation = host.observe()
+    host.invoke(
         WorldActorActionRequest(
             request_id=request_id,
+            decision_id=observation.decision_id,
             action_name=action_name,
-            binding=observe_world_actor(session).binding,
-            arguments={
-                **(arguments or {}),
-                "reason": f"Exercise {action_name} for root-control authority checks.",
-            },
+            arguments=cast(
+                dict[str, JsonValue],
+                {
+                    **(arguments or {}),
+                    "reason": f"Exercise {action_name} for root-control authority checks.",
+                },
+            ),
         ),
     )
 
@@ -186,11 +154,11 @@ def test_process_outcome_capability_follows_active_verification_authority(
 ) -> None:
     root = tmp_path / "run"
     run = _create_run(root)
-    session = _open_session(root, run)
+    host = PumpStationEpisodeHost(root)
     control = _control(root)
 
     _invoke(
-        session,
+        host,
         request_id="start-authority-verification",
         action_name="request_post_maintenance_verification",
         arguments={
@@ -209,7 +177,7 @@ def test_process_outcome_capability_follows_active_verification_authority(
     )
 
     _invoke(
-        session,
+        host,
         request_id="finish-authority-verification",
         action_name="continue_operation",
     )
@@ -225,9 +193,9 @@ def test_committed_process_outcome_retry_survives_dynamic_capability_removal(
 ) -> None:
     root = tmp_path / "run"
     run = _create_run(root)
-    session = _open_session(root, run)
+    host = PumpStationEpisodeHost(root)
     _invoke(
-        session,
+        host,
         request_id="start-retry-verification",
         action_name="request_post_maintenance_verification",
         arguments={
@@ -254,6 +222,7 @@ def test_committed_process_outcome_retry_survives_dynamic_capability_removal(
     repeated = _control(root).execute(request)
     assert repeated == first
 
+    assert isinstance(request.control, PumpStationProcessOutcomeRequest)
     changed = replace(
         request,
         control=replace(
@@ -264,7 +233,7 @@ def test_committed_process_outcome_retry_survives_dynamic_capability_removal(
     with pytest.raises(PumpStationWorldRunError) as raised:
         _control(root).execute(changed)
 
-    assert raised.value.code == "v4-command-id-conflict"
+    assert raised.value.code == "command-id-conflict"
 
 
 def test_process_outcome_capability_follows_active_functional_check_authority(
@@ -272,11 +241,11 @@ def test_process_outcome_capability_follows_active_functional_check_authority(
 ) -> None:
     root = tmp_path / "run"
     run = _create_run(root)
-    session = _open_session(root, run)
+    host = PumpStationEpisodeHost(root)
     control = _control(root)
 
     _invoke(
-        session,
+        host,
         request_id="start-authority-clearance",
         action_name="request_obstruction_clearance",
         arguments={
@@ -286,13 +255,13 @@ def test_process_outcome_capability_follows_active_functional_check_authority(
         },
     )
     _invoke(
-        session,
+        host,
         request_id="finish-authority-clearance",
         action_name="continue_operation",
     )
     functional_item = next(item for item in run.state.backlog if item.generation_rule_id == "WG-03")
     _invoke(
-        session,
+        host,
         request_id="start-authority-functional-check",
         action_name="request_functional_check",
         arguments={
@@ -311,7 +280,7 @@ def test_process_outcome_capability_follows_active_functional_check_authority(
     )
 
     _invoke(
-        session,
+        host,
         request_id="finish-authority-functional-check",
         action_name="continue_operation",
     )

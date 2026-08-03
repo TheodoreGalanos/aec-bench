@@ -9,20 +9,21 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from pydantic import TypeAdapter
 
 from aec_bench.contracts.agent_output import AgentOutputStatus
-from aec_bench.contracts.continual_world import ContinualWorldDefinitionSpec, ContinualWorldProfileRef
+from aec_bench.contracts.continual_world import (
+    ContinualWorldActorRequest,
+    ContinualWorldDefinitionSpec,
+    ContinualWorldProfileRef,
+)
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
 from aec_bench.contracts.world_interface import (
     WorldControlCapabilityCatalogue,
     WorldControlRequest,
 )
-from aec_bench.contracts.world_session import WorldSessionRequest
-from aec_bench.harness.world_session import open_world_session
-from aec_bench.task_world_templates.continual.actor_session import ActorWorldSession
 from aec_bench.task_world_templates.continual.definition import (
     ContinualWorldDefinition,
     ContinualWorldHarborBridgeIdentity,
@@ -37,6 +38,10 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_
     PumpStationCoupledWorldState,
     create_asw_8_world_state,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
+    PUMP_STATION_TASK_WORLD_ID,
+    PumpStationEpisodeHost,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_kernel import (
     coupled_pump_station_model_from_package,
 )
@@ -50,9 +55,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
     PUMP_STATION_REFERENCE_SYSTEM_ID,
     PumpStationReferenceSystem,
     load_reference_system,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
-    PUMP_STATION_TASK_WORLD_ID,
 )
 
 PUMP_STATION_CONTINUAL_DEFINITION_VERSION = "1"
@@ -73,29 +75,34 @@ class PumpStationContinualProfile:
 class PumpStationContinualExecutionPort:
     """Bind registered actor and host-control calls to the canonical pump owners."""
 
-    def open_actor_session(
+    def actor_call(
         self,
         *,
         profile: LoadedContinualWorldProfile,
         run_root: Path,
         package_root: Path | None,
-        request: WorldSessionRequest,
-    ) -> ActorWorldSession:
-        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
-            PumpStationWorldSessionFactory,
-        )
+        request: ContinualWorldActorRequest,
+    ) -> object:
+        del package_root
+        _execution_profile_ref(profile)
+        host = PumpStationEpisodeHost(run_root)
+        if request.operation == "capabilities":
+            return host.capabilities()
+        if request.operation == "observe":
+            return host.observe()
+        assert request.request_id is not None
+        assert request.decision_id is not None
+        assert request.action_name is not None
+        assert request.arguments is not None
+        from aec_bench.contracts.world_interface import WorldActorActionRequest
 
-        profile_ref = _execution_profile_ref(profile)
-        return cast(
-            ActorWorldSession,
-            open_world_session(
-                request,
-                PumpStationWorldSessionFactory(
-                    run_root,
-                    profile_ref=profile_ref,
-                    package_root=package_root,
-                ),
-            ),
+        return host.invoke(
+            WorldActorActionRequest(
+                request_id=request.request_id,
+                decision_id=request.decision_id,
+                action_name=request.action_name,
+                arguments=request.arguments,
+            )
         )
 
     def control_capabilities(
@@ -132,13 +139,12 @@ class PumpStationContinualExecutionPort:
             PumpStationBoundControlRequest,
         )
         from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_control import (
-            PumpStationEvidenceControlRequest,
             PumpStationWorldControl,
         )
 
         profile_ref = _execution_profile_ref(profile)
-        request: WorldControlRequest | PumpStationEvidenceControlRequest | PumpStationBoundControlRequest = TypeAdapter(
-            WorldControlRequest | PumpStationEvidenceControlRequest | PumpStationBoundControlRequest
+        request: WorldControlRequest | PumpStationBoundControlRequest = TypeAdapter(
+            WorldControlRequest | PumpStationBoundControlRequest
         ).validate_python(dict(request_payload))
         return PumpStationWorldControl(
             run_root,
@@ -183,12 +189,9 @@ class PumpStationContinualEvaluationPort:
 
 @dataclass(frozen=True, slots=True)
 class PumpStationContinualHarborPort:
-    """Keep every pump Harbor stage and controller choice inside the task port."""
+    """Keep registered pump Harbor composition inside the task port."""
 
-    execution_kinds: tuple[str, ...] = (
-        "stewardship_world_session",
-        "stewardship_review_session",
-    )
+    execution_kinds: tuple[str, ...] = ("stewardship_world_session",)
 
     @property
     def default_max_turns(self) -> int:
@@ -209,12 +212,9 @@ class PumpStationContinualHarborPort:
         from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
             PUMP_STATION_HARBOR_BRIDGE_MODE,
             PUMP_STATION_HARBOR_EXECUTION_KIND,
-            PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE,
-            PUMP_STATION_REVIEW_HARBOR_EXECUTION_KIND,
         )
         from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
             PUMP_STATION_MODEL_CONTROLLER_MODE,
-            PUMP_STATION_REFERENCE_CONTROLLER_ID,
         )
         from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
             PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
@@ -224,24 +224,12 @@ class PumpStationContinualHarborPort:
         if not isinstance(session, dict):
             raise ValueError("pump-station world session bridge configuration differs")
         bridge_mode = session.get("bridge_mode")
-        maintenance_review = bridge_mode == PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE
-        expected_execution_kind = (
-            PUMP_STATION_REVIEW_HARBOR_EXECUTION_KIND if maintenance_review else PUMP_STATION_HARBOR_EXECUTION_KIND
-        )
-        if configuration.get("execution_kind") != expected_execution_kind:
+        if configuration.get("execution_kind") != PUMP_STATION_HARBOR_EXECUTION_KIND:
             raise ValueError("pump-station world session requires its exact execution kind")
-        if bridge_mode not in {
-            PUMP_STATION_HARBOR_BRIDGE_MODE,
-            PUMP_STATION_REVIEW_HARBOR_BRIDGE_MODE,
-        }:
+        if bridge_mode != PUMP_STATION_HARBOR_BRIDGE_MODE:
             raise ValueError("pump-station world session bridge configuration differs")
         controller = session.get("controller")
-        reference_controller = model_name in {
-            PUMP_STATION_REFERENCE_CONTROLLER_ID,
-            PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
-        }
-        if maintenance_review and not reference_controller:
-            raise ValueError("pump-station review model runs require the separately approved direct host runner")
+        reference_controller = model_name == PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
         expected_session = {"bridge_mode": bridge_mode}
         if not reference_controller:
             expected_session["controller"] = PUMP_STATION_MODEL_CONTROLLER_MODE
@@ -277,30 +265,13 @@ class PumpStationContinualHarborPort:
         from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
             PumpStationHarborBridge,
         )
-        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
-            PUMP_STATION_REFERENCE_CONTROLLER_ID,
-        )
         from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
             PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
         )
 
         if not isinstance(bridge, PumpStationHarborBridge):
             raise TypeError("pump-station Harbor port received another task bridge")
-        expected_reference_controller = (
-            PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
-            if bridge.profile_ref is not None
-            else PUMP_STATION_REFERENCE_CONTROLLER_ID
-        )
-        if (
-            model_name
-            in {
-                PUMP_STATION_REFERENCE_CONTROLLER_ID,
-                PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
-            }
-            and model_name != expected_reference_controller
-        ):
-            raise ValueError("pump-station reference controller differs from the exported profile")
-        return model_name != expected_reference_controller
+        return model_name != PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
 
     def run_session(
         self,
@@ -316,14 +287,8 @@ class PumpStationContinualHarborPort:
             PumpStationHarborBridge,
         )
         from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
-            PUMP_STATION_REFERENCE_CONTROLLER_ID,
-            run_pump_station_evidence_health_reference_session,
             run_pump_station_model_session,
             run_pump_station_reference_session,
-            run_pump_station_rich_work_reference_session,
-        )
-        from aec_bench.task_world_templates.stewardship.wastewater_pump_station.maintenance_review_harbor import (
-            run_pump_station_review_reference_session,
         )
         from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
             PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
@@ -332,46 +297,20 @@ class PumpStationContinualHarborPort:
         if not isinstance(bridge, PumpStationHarborBridge):
             raise TypeError("pump-station Harbor port received another task bridge")
         run_dir = staging_dir / "world-session"
-        expected_reference_controller = (
-            PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
-            if bridge.profile_ref is not None
-            else PUMP_STATION_REFERENCE_CONTROLLER_ID
-        )
         model_controller = self.uses_model_controller(
             bridge=bridge,
             model_name=model_name,
         )
         if not model_controller:
-            if bridge.maintenance_review:
-                review_session = run_pump_station_review_reference_session(
-                    bridge=bridge,
-                    output_dir=run_dir,
-                    session_identity=session_identity,
-                )
-                world_session_id = review_session.observation.session_id
-            else:
-                reference_runner = (
-                    run_pump_station_reference_session
-                    if bridge.profile_ref is not None
-                    else run_pump_station_evidence_health_reference_session
-                    if bridge.evidence_health
-                    else run_pump_station_rich_work_reference_session
-                    if bridge.rich_work_processes
-                    else run_pump_station_reference_session
-                )
-                world_session = reference_runner(
-                    bridge=bridge,
-                    output_dir=run_dir,
-                    session_identity=session_identity,
-                )
-                world_session_id = world_session.request.session_id
+            world_session = run_pump_station_reference_session(
+                bridge=bridge,
+                output_dir=run_dir,
+                session_identity=session_identity,
+            )
+            world_session_id = world_session.request.session_id
             output_file = staging_dir / "output.md"
             output_file.write_text(
-                (
-                    "The deterministic wastewater pump-station closeout review completed.\n"
-                    if bridge.maintenance_review
-                    else "The deterministic wastewater pump-station session completed.\n"
-                ),
+                "The deterministic wastewater pump-station episode completed.\n",
                 encoding="utf-8",
             )
             return ContinualWorldHarborSessionResult(
@@ -379,7 +318,7 @@ class PumpStationContinualHarborPort:
                 output_file=output_file,
                 input_tokens=0,
                 output_tokens=0,
-                resolved_model=expected_reference_controller,
+                resolved_model=PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
                 session_id=world_session_id,
                 status="completed",
             )

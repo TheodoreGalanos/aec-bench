@@ -7,8 +7,9 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 import pytest
 from pydantic import ValidationError
@@ -54,11 +55,14 @@ from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_continual_definit
 from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_rollout_adapter import (
     ssc03_hydraulic_rollout_origin,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
+    PUMP_STATION_TASK_WORLD_ID,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import (
     PumpStationWorldRun,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
-    PumpStationWorldRunManifestV2,
+    PumpStationRegisteredWorldRunManifest,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
@@ -66,14 +70,11 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_serialization import (
     pump_station_artifact_id,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
-    PUMP_STATION_TASK_WORLD_ID,
-)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
-def _registered_run(root: Path, *, identity: str) -> PumpStationWorldRun[Any, Any]:
+def _registered_run(root: Path, *, identity: str) -> PumpStationWorldRun:
     return PumpStationWorldRun.create_reference_system(
         repository=PumpStationWorldRunRepository(root),
         run_id=f"{identity}-run",
@@ -82,7 +83,7 @@ def _registered_run(root: Path, *, identity: str) -> PumpStationWorldRun[Any, An
     )
 
 
-def _shared_snapshot(run: PumpStationWorldRun[Any, Any]) -> StewardshipStateSnapshotRef:
+def _shared_snapshot(run: PumpStationWorldRun) -> StewardshipStateSnapshotRef:
     snapshot = run.snapshot()
     return StewardshipStateSnapshotRef(
         run_id=snapshot.run_id,
@@ -94,7 +95,7 @@ def _shared_snapshot(run: PumpStationWorldRun[Any, Any]) -> StewardshipStateSnap
     )
 
 
-def _continual_snapshot(run: PumpStationWorldRun[Any, Any]) -> ContinualWorldSnapshotRef:
+def _continual_snapshot(run: PumpStationWorldRun) -> ContinualWorldSnapshotRef:
     snapshot = run.snapshot()
     return ContinualWorldSnapshotRef(
         run_id=snapshot.run_id,
@@ -106,7 +107,7 @@ def _continual_snapshot(run: PumpStationWorldRun[Any, Any]) -> ContinualWorldSna
     )
 
 
-def _resume_request(run: PumpStationWorldRun[Any, Any]) -> WorldSessionRequest:
+def _resume_request(run: PumpStationWorldRun) -> WorldSessionRequest:
     snapshot = _shared_snapshot(run)
     return WorldSessionRequest(
         execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
@@ -122,11 +123,14 @@ def _resume_request(run: PumpStationWorldRun[Any, Any]) -> WorldSessionRequest:
 
 
 def _context(tmp_path: Path, *, run_root: Path) -> ContinualWorldInterfaceContext:
+    definition_ref, profile_ref = _exact_refs()
     return ContinualWorldInterfaceContext(
         catalogue=default_continual_world_catalogue(),
         run_root=run_root,
         rollout_repository_root=tmp_path / "rollouts",
         authorised_principal_ids=("catalogue-interface-host",),
+        actor_definition_ref=definition_ref,
+        actor_profile_ref=profile_ref,
     )
 
 
@@ -136,23 +140,20 @@ def _exact_refs() -> tuple[ContinualWorldDefinitionRef, ContinualWorldProfileRef
 
 
 def _actor_request(
-    run: PumpStationWorldRun[Any, Any],
+    run: PumpStationWorldRun,
     *,
     definition_ref: ContinualWorldDefinitionRef,
     profile_ref: ContinualWorldProfileRef,
-    operation: str = "observe",
+    operation: Literal["capabilities", "observe", "invoke"] = "observe",
     action_request: WorldActorActionRequest | None = None,
 ) -> ContinualWorldActorRequest:
-    return ContinualWorldActorRequest.model_validate_json(
-        json.dumps(
-            {
-                "definition_ref": definition_ref.model_dump(mode="json"),
-                "profile_ref": profile_ref.model_dump(mode="json"),
-                "operation": operation,
-                "session_request": _resume_request(run).model_dump(mode="json"),
-                "action_request": action_request.model_dump(mode="json") if action_request is not None else None,
-            }
-        )
+    del run, definition_ref, profile_ref
+    return ContinualWorldActorRequest(
+        operation=operation,
+        request_id=None if action_request is None else action_request.request_id,
+        decision_id=None if action_request is None else action_request.decision_id,
+        action_name=None if action_request is None else action_request.action_name,
+        arguments=None if action_request is None else action_request.arguments,
     )
 
 
@@ -185,10 +186,10 @@ def _control_request(
     )
 
 
-def _group_request(run: PumpStationWorldRun[Any, Any]) -> ContinualRolloutGroupRequest:
+def _group_request(run: PumpStationWorldRun) -> ContinualRolloutGroupRequest:
     definition_ref, profile_ref = _exact_refs()
     manifest = run.manifest
-    assert isinstance(manifest, PumpStationWorldRunManifestV2)
+    assert isinstance(manifest, PumpStationRegisteredWorldRunManifest)
     return ContinualRolloutGroupRequest(
         request_id="catalogue-rollout-request",
         group_id="catalogue-rollout-group",
@@ -196,15 +197,9 @@ def _group_request(run: PumpStationWorldRun[Any, Any]) -> ContinualRolloutGroupR
         authority_id="catalogue-interface-host",
         definition_ref=definition_ref,
         profile_ref=profile_ref,
-        parent_manifest_content_sha256=pump_station_artifact_id(
-            manifest,
-            record_profile="manifest-v2",
-        ),
+        parent_manifest_content_sha256=pump_station_artifact_id(manifest),
         parent_snapshot=_continual_snapshot(run),
-        origin_verification_content_sha256=pump_station_artifact_id(
-            run.verify_v4(),
-            record_profile="v4",
-        ),
+        origin_verification_content_sha256=pump_station_artifact_id(run.verify()),
         reason="Create two isolated continuations through the registered world port.",
         children=tuple(
             ContinualRolloutChildRequest(
@@ -316,7 +311,7 @@ def _run_installed_interface(
         env=environment,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-    return json.loads(completed.stdout)["data"]
+    return cast(dict[str, Any], json.loads(completed.stdout)["data"])
 
 
 def test_actor_and_control_json_requests_are_separate_exact_envelopes(tmp_path: Path) -> None:
@@ -339,9 +334,10 @@ def test_actor_and_control_json_requests_are_separate_exact_envelopes(tmp_path: 
         ),
     )
 
-    assert type(actor) is not type(control)
-    assert actor.definition_ref == control.definition_ref == definition_ref
-    assert actor.profile_ref == control.profile_ref == profile_ref
+    assert actor.__class__ is ContinualWorldActorRequest
+    assert control.__class__ is ContinualWorldControlRequest
+    assert "definition_ref" not in type(actor).model_fields
+    assert "profile_ref" not in type(actor).model_fields
     assert "surface" not in type(actor).model_fields
     assert "surface" not in type(control).model_fields
     assert "control_request" not in type(actor).model_fields
@@ -423,7 +419,7 @@ def test_catalogue_dispatch_resolves_exact_profile_for_actor_and_generic_verify(
 
     with pytest.raises(ValueError, match="content-pinned definition does not match"):
         dispatch_continual_actor(
-            context=context,
+            context=replace(context, actor_definition_ref=stale_definition),
             request=_actor_request(
                 run,
                 definition_ref=stale_definition,
@@ -432,7 +428,7 @@ def test_catalogue_dispatch_resolves_exact_profile_for_actor_and_generic_verify(
         )
     with pytest.raises(ValueError, match="content-pinned profile does not match"):
         dispatch_continual_actor(
-            context=context,
+            context=replace(context, actor_profile_ref=stale_profile),
             request=_actor_request(
                 run,
                 definition_ref=definition_ref,
@@ -451,8 +447,8 @@ def test_catalogue_dispatch_resolves_exact_profile_for_actor_and_generic_verify(
     assert isinstance(observed, WorldActorObservation)
     action = WorldActorActionRequest(
         request_id="catalogue-condition-check",
+        decision_id=observed.decision_id,
         action_name="request_condition_check",
-        binding=observed.binding,
         arguments={
             "pump_id": "pump-a",
             "reason": "Record the current condition through the registered actor port.",
@@ -485,12 +481,13 @@ def test_catalogue_dispatch_resolves_exact_profile_for_actor_and_generic_verify(
     )
 
     assert isinstance(invoked, WorldActorActionResult)
-    assert invoked.request_content_sha256 == action.content_sha256
-    assert invoked.post_binding.sequence == observed.binding.sequence + 1
+    assert invoked.request_id == action.request_id
+    assert invoked.next_observation is not None
+    assert invoked.next_observation.decision_id != observed.decision_id
     assert isinstance(verified, WorldControlResult)
     assert verified.verification is not None
     assert verified.verification.valid is True
-    assert verified.verification.final_state_id == invoked.post_binding.state_id
+    assert verified.verification.final_state_id == run.snapshot().state_id
 
 
 def test_installed_json_uses_the_catalogue_actor_and_control_routes(tmp_path: Path) -> None:
@@ -529,7 +526,8 @@ def test_installed_json_uses_the_catalogue_actor_and_control_routes(tmp_path: Pa
         host_authority_id="catalogue-interface-host",
     )
 
-    assert observed["binding"]["state_id"] == run.snapshot().state_id
+    assert isinstance(observed["decision_id"], str)
+    assert observed["view"]["state_id"] == run.snapshot().state_id
     assert verified["verification"]["valid"] is True
     assert verified["verification"]["final_state_id"] == run.snapshot().state_id
 

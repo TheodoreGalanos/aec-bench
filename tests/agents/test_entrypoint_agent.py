@@ -15,16 +15,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from aec_bench.contracts.stage_execution import KernelInstructionOverride
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
+    pump_station_continual_world_definition,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
     export_pump_station_harbor_task,
+    load_pump_station_harbor_bridge,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
     PUMP_STATION_MODEL_CONTROLLER_MODE,
-    PUMP_STATION_REFERENCE_CONTROLLER_ID,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_verifier import (
     verify_pump_station_harbor_run,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+    PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
 from agents.entrypoint_agent import (
     _BUNDLE_REMOTE_PATH,
@@ -127,19 +133,17 @@ def test_entrypoint_agent_does_not_branch_on_continual_task_stage_profile_or_con
         elif isinstance(node, ast.Match):
             branch_expressions = (node.subject, *(case.pattern for case in node.cases))
         for expression in branch_expressions:
-            tokens = {
-                child.id
-                if isinstance(child, ast.Name)
-                else child.attr
-                if isinstance(child, ast.Attribute)
-                else child.value
-                for child in ast.walk(expression)
-                if isinstance(child, ast.Name | ast.Attribute)
-                or (isinstance(child, ast.Constant) and isinstance(child.value, str))
-            }
+            tokens: set[str] = set()
+            for child in ast.walk(expression):
+                if isinstance(child, ast.Name):
+                    tokens.add(child.id)
+                elif isinstance(child, ast.Attribute):
+                    tokens.add(child.attr)
+                elif isinstance(child, ast.Constant) and isinstance(child.value, str):
+                    tokens.add(child.value)
             forbidden = tuple(sorted(tokens & forbidden_branch_tokens))
             if forbidden:
-                violations.append((node.lineno, forbidden))
+                violations.append((getattr(node, "lineno", 0), forbidden))
 
     assert violations == []
 
@@ -318,10 +322,12 @@ def test_world_session_entrypoint_normalizes_remote_evidence_permissions(
     exported = export_pump_station_harbor_task(
         task_dir,
         project_root=Path(__file__).resolve().parents[2],
+        profile_ref=pump_station_continual_world_definition().spec.profiles[0],
     )
+    bridge = load_pump_station_harbor_bridge(task_dir / "environment")
     agent = EntrypointAgent(
         logs_dir=tmp_path / "logs",
-        model_name=PUMP_STATION_REFERENCE_CONTROLLER_ID,
+        model_name=PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
         adapter="tool_loop",
         execution_kind="stewardship_world_session",
         extra_env={},
@@ -361,13 +367,14 @@ def test_world_session_entrypoint_normalizes_remote_evidence_permissions(
         run_dir=captured_run,
         export_manifest_path=exported.manifest_path,
         package_dir=exported.package_dir,
-        verifier_runtime_path=exported.verifier_runtime_wheel_path,
+        reference_system_dir=bridge.reference_system_root,
+        verifier_runtime_path=bridge.verifier_runtime_path,
     )
 
     environment.exec.assert_awaited_once_with(
         "chmod -R go-rwx /workspace/world-session",
     )
-    assert captured_output == ["The deterministic wastewater pump-station session completed.\n"]
+    assert captured_output == ["The deterministic wastewater pump-station episode completed.\n"]
     assert verified["valid"] is True
     assert context.n_input_tokens == 0
     assert context.n_output_tokens == 0
