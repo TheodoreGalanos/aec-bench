@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from aec_bench.contracts.evaluation_result import (
     StewardshipEvaluation,
@@ -18,12 +20,14 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpStationChangeKind,
+    PumpStationCoupledModel,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_reader import (
     load_reference_package,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PumpStationAuthorityOutcome,
+    PumpStationCoupledStewardshipState,
     PumpStationObligationKind,
     PumpStationObligationStatus,
     PumpStationProcessStatus,
@@ -31,8 +35,13 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationStewardshipState,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
+    PumpStationConservationReport,
     PumpStationRunStep,
+    PumpStationRunStepV4,
     verify_stewardship_run,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
+    PumpStationActorView,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import (
     PumpStationWorldRun,
@@ -45,6 +54,12 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 )
 
 STEWARDSHIP_EVALUATION_SCHEMA_VERSION = "stewardship-evaluation.v1"
+STEWARDSHIP_EVALUATION_SCHEMA_VERSION_V2 = "stewardship-evaluation.v2"
+
+type PumpStationReferenceRun = PumpStationWorldRun[
+    PumpStationCoupledModel,
+    PumpStationCoupledStewardshipState,
+]
 
 _MAINTENANCE_CHANGES = {
     PumpStationChangeKind.CLEAR_OBSTRUCTION,
@@ -60,6 +75,239 @@ _LIVE_PROCESS_STATUSES = {
     PumpStationProcessStatus.ACTIVE,
     PumpStationProcessStatus.SUSPENDED,
 }
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationSemanticActionOutcome:
+    """Transport-neutral meaning of one actor or host-control step."""
+
+    kind: str
+    target_id: str | None
+    backlog_semantic_key: tuple[str, str, str, int] | None
+    authority_outcome: str
+    execution_status: str
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationSemanticTerminalState:
+    """Transport-neutral terminal coupled-world meaning."""
+
+    calendar_seconds: int
+    pump_exposure: tuple[tuple[str, int, int], ...]
+    pump_modes: tuple[tuple[str, str], ...]
+    assignment_pump_ids: tuple[str, ...]
+    service_running_pump_ids: tuple[str, ...]
+    test_running_pump_ids: tuple[str, ...]
+    resource_quantities: tuple[tuple[str, int, int], ...]
+    work_meanings: tuple[tuple[tuple[str, str, str, int], str], ...]
+    active_liability_meanings: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationSemanticEvaluation:
+    """Transport-neutral projection of the shared stewardship evaluation."""
+
+    reward: float
+    trial_valid: bool
+    artifact_valid: bool
+    policy_valid: bool
+    evaluation_valid: bool
+    integrity_gates: tuple[tuple[str, bool], ...]
+    metrics: tuple[tuple[str, int], ...]
+    terminal_liabilities: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PumpStationSemanticOutcome:
+    """Run meanings that must be equal across execution transports."""
+
+    ordered_actions: tuple[PumpStationSemanticActionOutcome, ...]
+    terminal_state: PumpStationSemanticTerminalState
+    conservation: PumpStationConservationReport
+    evaluation: PumpStationSemanticEvaluation
+    temporal_access: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
+
+
+def _v4_handover_count(steps: tuple[PumpStationRunStepV4, ...]) -> int:
+    """Count verified actor-tenure changes without inventing a world transition."""
+    tenure_ids = tuple(
+        step.proposal.context.agent_tenure_id
+        for step in steps
+        if step.command.kind == "actor" and step.proposal is not None
+    )
+    return sum(previous != current for previous, current in zip(tenure_ids, tenure_ids[1:], strict=False))
+
+
+def evaluate_pump_station_reference_run(
+    run: PumpStationReferenceRun,
+    *,
+    imported_artifact_sha256: tuple[str, ...] = (),
+) -> StewardshipEvaluation:
+    """Map one canonical V4 run into the shared stewardship contract."""
+    report = run.verify_v4()
+    state = run.state
+    steps = run.repository.v4_steps()
+    receipts = tuple(step.transition.receipt for step in steps)
+    closing_work = report.conservation.work.closing_ids
+    consumed_resources = sum(int(getattr(pool, "consumed", 0)) for pool in state.resources.pools)
+    unavailable_pumps = sum(
+        not state.physical.availability(pump.pump_id).run_eligible
+        and not state.physical.availability(pump.pump_id).test_eligible
+        for pump in state.physical.pumps
+    )
+    breached_obligations = sum(
+        obligation.status is PumpStationObligationStatus.BREACHED for obligation in state.obligations
+    )
+    restriction_breaches = sum(
+        restriction.status is PumpStationRestrictionStatus.LIFTED and restriction.evidence_id is None
+        for restriction in state.restrictions
+    )
+    evidence_gaps = (
+        sum(
+            obligation.status is PumpStationObligationStatus.FULFILLED and obligation.evidence_id is None
+            for obligation in state.obligations
+        )
+        + restriction_breaches
+    )
+    terminal_stewardship_available = not state.active_restriction_ids
+    errors = list(report.issues)
+    if not terminal_stewardship_available:
+        errors.append("terminal-stewardship")
+    gates = StewardshipIntegrityGates(
+        artifact_and_replay_integrity=report.replay_valid,
+        output_and_action_contract_validity=report.actor_proposals_valid,
+        authority_and_execution_consistency=report.host_controls_valid,
+        decision_time_validity=report.actor_proposals_valid,
+        obligation_and_restriction_integrity=report.conservation.liabilities.valid,
+        physical_and_service_outcomes_available=report.conservation.duty.valid,
+        resource_stewardship_available=report.conservation.resources.valid,
+        evidence_and_record_integrity=report.valid,
+        handover_continuity_integrity=report.replay_valid,
+        terminal_stewardship_available=terminal_stewardship_available,
+        errors=tuple(dict.fromkeys(errors)),
+    )
+    terminal = StewardshipTerminalLiability(
+        review_required_physical_state=False,
+        active_restriction_count=len(state.active_restriction_ids),
+        overdue_calendar_seconds=0,
+        overdue_affected_pump_runtime_seconds=0,
+        breached_obligation_count=breached_obligations,
+        unresolved_verification_count=sum(
+            "verification" in item.work_type and item.item_id in closing_work for item in state.backlog
+        ),
+        deferred_work_count=len(closing_work),
+        unavailable_pump_count=unavailable_pumps,
+        consumed_maintenance_resource_count=consumed_resources,
+        unresolved_evidence=evidence_gaps > 0,
+    )
+    metrics = StewardshipMetricVector(
+        decision_time_invalid_count=0 if report.actor_proposals_valid else 1,
+        physical_service_review_required=False,
+        maintenance_intervention_count=sum(
+            receipt.action_or_control_kind
+            in {
+                "request_inspection",
+                "request_obstruction_clearance",
+                "request_functional_check",
+            }
+            for receipt in receipts
+        ),
+        obligation_breach_count=breached_obligations,
+        restriction_breach_count=restriction_breaches,
+        evidence_integrity_gap_count=evidence_gaps,
+        consumed_maintenance_resource_count=consumed_resources,
+        handover_count=_v4_handover_count(steps),
+        handover_omission_count=0,
+        terminal_liability=terminal,
+    )
+    return StewardshipEvaluation(
+        schema_version=STEWARDSHIP_EVALUATION_SCHEMA_VERSION_V2,
+        valid=gates.passed,
+        gates=gates,
+        metrics=metrics,
+        evidence=StewardshipEvaluationEvidence(
+            world_run_manifest_content_id=pump_station_artifact_id(run.manifest),
+            initial_state_id=run.manifest.initial_state_id,
+            terminal_state_id=state.state_id,
+            replayed_transition_ids=report.replayed_transition_ids,
+            imported_artifact_sha256=tuple(sorted(set(imported_artifact_sha256))),
+        ),
+    )
+
+
+def pump_station_semantic_outcome(
+    run: PumpStationReferenceRun,
+    *,
+    temporal_access: tuple[tuple[str, str, tuple[str, ...]], ...] = (),
+) -> PumpStationSemanticOutcome:
+    """Project only meanings that must match across execution transports."""
+    report = run.verify_v4()
+    evaluation = evaluate_pump_station_reference_run(run)
+    state = run.state
+    receipts = tuple(step.transition.receipt for step in run.repository.v4_steps())
+    items = {item.item_id: item for item in state.backlog}
+    actions = tuple(
+        PumpStationSemanticActionOutcome(
+            kind=receipt.action_or_control_kind,
+            target_id=receipt.target_id,
+            backlog_semantic_key=(
+                items[receipt.backlog_item_id].semantic_key if receipt.backlog_item_id in items else None
+            ),
+            authority_outcome=receipt.authority_outcome,
+            execution_status=receipt.execution_status,
+        )
+        for receipt in receipts
+    )
+    terminal = PumpStationSemanticTerminalState(
+        calendar_seconds=state.calendar_seconds,
+        pump_exposure=tuple(
+            (pump.pump_id, pump.exposure.runtime_seconds, pump.exposure.completed_starts)
+            for pump in state.physical.pumps
+        ),
+        pump_modes=tuple(
+            (pump.pump_id, state.physical.boundary(pump.pump_id).mode.value) for pump in state.physical.pumps
+        ),
+        assignment_pump_ids=state.assignment.ordered_pump_ids,
+        service_running_pump_ids=state.physical.service_running_pump_ids,
+        test_running_pump_ids=state.physical.test_running_pump_ids,
+        resource_quantities=tuple((pool.pool_id, int(pool.free), int(pool.reserved)) for pool in state.resources.pools),
+        work_meanings=tuple(sorted((item.semantic_key, item.status.value) for item in state.backlog)),
+        active_liability_meanings=tuple(sorted(state.active_liability_ids)),
+    )
+    gate_values = evaluation.gates
+    semantic_evaluation = PumpStationSemanticEvaluation(
+        reward=1.0 if evaluation.valid else 0.0,
+        trial_valid=report.replay_valid,
+        artifact_valid=report.replay_valid,
+        policy_valid=report.actor_proposals_valid and report.host_controls_valid,
+        evaluation_valid=evaluation.valid,
+        integrity_gates=(
+            ("artifact_and_replay_integrity", gate_values.artifact_and_replay_integrity),
+            ("actor_proposal_integrity", report.actor_proposals_valid),
+            ("host_control_integrity", report.host_controls_valid),
+            ("duty_conservation", report.conservation.duty.valid),
+            ("resource_conservation", report.conservation.resources.valid),
+            ("work_conservation", report.conservation.work.valid),
+            ("liability_conservation", report.conservation.liabilities.valid),
+            ("terminal_stewardship", gate_values.terminal_stewardship_available),
+        ),
+        metrics=(
+            ("operating_interval_count", len(state.operating_intervals)),
+            ("generated_work_count", len(state.generation_records)),
+            ("terminal_work_count", len(state.terminal_work_item_ids)),
+            ("closing_work_count", len(report.conservation.work.closing_ids)),
+            ("handover_count", evaluation.metrics.handover_count),
+            ("unserved_capacity_seconds", report.conservation.duty.unserved_capacity_seconds),
+        ),
+        terminal_liabilities=tuple(sorted(state.active_liability_ids)),
+    )
+    return PumpStationSemanticOutcome(
+        ordered_actions=actions,
+        terminal_state=terminal,
+        conservation=report.conservation,
+        evaluation=semantic_evaluation,
+        temporal_access=temporal_access,
+    )
 
 
 def evaluate_pump_station_stewardship_run(
@@ -81,10 +329,16 @@ def evaluate_pump_station_stewardship_run(
         model=model,
         snapshot=snapshot,
     )
-    initial_state = repository.load_state(manifest.initial_state_id)
+    initial_state = cast(
+        PumpStationStewardshipState,
+        repository.load_state(manifest.initial_state_id),
+    )
     steps = run.steps()
     report = verify_stewardship_run(model, initial_state, steps)
-    final_state = repository.load_state(snapshot.state_id)
+    final_state = cast(
+        PumpStationStewardshipState,
+        repository.load_state(snapshot.state_id),
+    )
 
     decision_time_invalid_count = _decision_time_invalid_count(steps)
     authority_consistent = _authority_and_execution_consistent(steps)
@@ -160,9 +414,15 @@ def _decision_time_invalid_count(
 ) -> int:
     invalid = 0
     for step in steps:
-        context = step.proposal.context
+        proposal = step.proposal
         information_set = step.information_set
+        if proposal is None or information_set is None:
+            continue
         view = information_set.base_view
+        if not isinstance(view, PumpStationActorView):
+            invalid += 1
+            continue
+        context = proposal.context
         if (
             context.based_on_sequence != view.current_state.state_sequence
             or context.base_view_id != view.view_id
@@ -228,27 +488,45 @@ def _handover_counts(
 ) -> tuple[int, int]:
     handovers = 0
     omissions = 0
-    for previous, current in zip(steps, steps[1:], strict=False):
-        previous_tenure = previous.proposal.context.agent_tenure_id
-        current_tenure = current.proposal.context.agent_tenure_id
+    previous_tenure: str | None = None
+    previous_state: PumpStationStewardshipState | None = None
+    for step in steps:
+        proposal = step.proposal
+        information_set = step.information_set
+        if proposal is None or information_set is None:
+            continue
+        view = information_set.base_view
+        if not isinstance(view, PumpStationActorView):
+            continue
+        current_tenure = proposal.context.agent_tenure_id
+        if previous_tenure is None or previous_state is None:
+            previous_tenure = current_tenure
+            previous_state = step.transition.state
+            continue
         if previous_tenure == current_tenure:
+            previous_state = step.transition.state
             continue
         handovers += 1
-        state = previous.transition.state
-        visible = current.information_set.base_view.current_state
         expected_restrictions = {
-            item.restriction_id for item in state.restrictions if item.status is PumpStationRestrictionStatus.ACTIVE
+            item.restriction_id
+            for item in previous_state.restrictions
+            if item.status is PumpStationRestrictionStatus.ACTIVE
         }
         expected_obligations = {
-            item.obligation_id for item in state.obligations if item.status is not PumpStationObligationStatus.FULFILLED
+            item.obligation_id
+            for item in previous_state.obligations
+            if item.status is not PumpStationObligationStatus.FULFILLED
         }
-        expected_processes = _live_process_ids(state)
+        expected_processes = _live_process_ids(previous_state)
+        visible = view.current_state
         visible_restrictions = {item.restriction_id for item in visible.restrictions}
         visible_obligations = {item.obligation_id for item in visible.obligations}
         visible_processes = {item.process_id for item in visible.processes}
         omissions += len(expected_restrictions - visible_restrictions)
         omissions += len(expected_obligations - visible_obligations)
         omissions += len(expected_processes - visible_processes)
+        previous_tenure = current_tenure
+        previous_state = step.transition.state
     return handovers, omissions
 
 

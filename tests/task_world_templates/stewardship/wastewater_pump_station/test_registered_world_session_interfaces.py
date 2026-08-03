@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
@@ -228,6 +229,10 @@ def test_registered_factory_exactly_reattaches_then_replaces_with_fresh_session(
     assert observation.binding.actor_view_id == started.result.actor_view_id
     assert observation.binding.information_set_id == started.result.information_set_id
     assert tuple(action.name for action in started.actor_capabilities.actions) == (PUMP_STATION_ACTOR_ACTION_NAMES_V2)
+    assert observation.view["projection_policy_id"] == "pump-station-current-state.v5"
+    serialized_view = json.dumps(observation.view, sort_keys=True)
+    assert '"obstruction":' not in serialized_view
+    assert '"clearance_loss":' not in serialized_view
     opening_activation = started.run.repository.load_selected_session_activation()
 
     reattached = PumpStationWorldSessionFactory(root).open(

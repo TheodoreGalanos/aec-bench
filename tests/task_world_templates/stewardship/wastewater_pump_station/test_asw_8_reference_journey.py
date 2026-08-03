@@ -9,18 +9,29 @@ from decimal import Decimal
 import pytest
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
+    PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
     PUMP_STATION_OPERATIONS_REVIEW_VERSION,
+    PUMP_STATION_PROCESS_OUTCOME_VERSION,
+    PumpStationCommonBoundaryRequest,
     PumpStationCoupledWorldError,
     PumpStationCoupledWorldState,
     PumpStationOperationsBoundaryReviewRequest,
+    PumpStationProcessOutcomeRequest,
+    apply_common_boundary_control,
     apply_coupled_actor_action,
     apply_operations_boundary_review,
+    apply_process_outcome,
     create_asw_8_world_state,
     project_coupled_actor_view,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
+    PumpStationAvailabilityInterval,
+    PumpStationBacklogItem,
     PumpStationBacklogStatus,
     PumpStationConsumablePool,
+    PumpStationCoupledProcessStatus,
+    PumpStationPriority,
+    PumpStationReusablePool,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpStationPumpMode,
@@ -88,6 +99,56 @@ def _review(
             reason="Release the matched boundary after accepted evidence.",
         ),
     ).state
+
+
+def _set_power_boundary(
+    state: PumpStationCoupledWorldState,
+    request_id: str,
+    *,
+    available: bool,
+) -> PumpStationCoupledWorldState:
+    return apply_common_boundary_control(
+        state,
+        PumpStationCommonBoundaryRequest(
+            version=PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
+            request_id=request_id,
+            authority_id="operations-controller",
+            boundary_kind="power",
+            available=available,
+            base_state_id=state.state_id,
+        ),
+    ).state
+
+
+def _runtime_backlog(item_id: str, pump_id: str, runtime_limit: int) -> PumpStationBacklogItem:
+    return PumpStationBacklogItem(
+        item_id=item_id,
+        work_type="post_maintenance_verification",
+        target_kind="asset",
+        target_id=pump_id,
+        generation_rule_id="WG-04" if pump_id == "pump-a" else "WG-07",
+        generation_ordinal=1,
+        originating_record_id=f"{item_id}-source",
+        linked_obligation_ids=(),
+        linked_restriction_ids=(),
+        linked_work_order_id=None,
+        linked_process_id=None,
+        generated_at_calendar_seconds=64_800,
+        base_priority=PumpStationPriority.P3,
+        effective_priority=PumpStationPriority.P3,
+        due_calendar_seconds=None,
+        due_runtime_clock_kind="pump_total",
+        due_runtime_clock_id=pump_id,
+        due_runtime_limit_seconds=runtime_limit,
+        status=PumpStationBacklogStatus.PLANNED,
+        blocked_from_status=None,
+        blocked_since_calendar_seconds=None,
+        accumulated_blocked_seconds=0,
+        closure_rule="accepted verification",
+        closure_evidence_ids=(),
+        supersedes_item_id=None,
+        superseded_by_item_id=None,
+    )
 
 
 def test_projection_v5_presents_dates_and_complete_planning_windows() -> None:
@@ -328,3 +389,295 @@ def test_operations_review_rejects_stale_or_mismatched_input() -> None:
         apply_operations_boundary_review(state, missing_evidence)
     assert missing_evidence_error.value.code == "operations-review-evidence"
     assert state.physical.boundary("pump-a").mode is PumpStationPumpMode.RUN_IN_SERVICE
+
+
+def test_power_stop_suspends_clearance_and_resume_uses_remaining_duration() -> None:
+    state = create_asw_8_world_state()
+    state = _act(
+        state,
+        "late-b-clearance",
+        "request_obstruction_clearance",
+        pump_id="pump-b",
+        backlog_item_id="backlog-b-clearance-001",
+        inspection_evidence_id="initial-b-inspection-accepted",
+    )
+    process_id = state.processes[-1].process_id
+
+    state = _set_power_boundary(state, "suspending-power-stop", available=False)
+    process = next(value for value in state.processes if value.process_id == process_id)
+
+    assert process.status is PumpStationCoupledProcessStatus.SUSPENDED
+    assert process.remaining_duration_seconds == 14_400
+
+    state = _set_power_boundary(state, "suspending-power-restore", available=True)
+    state = _act(state, "resume-b-clearance", "resume_process", process_id=process_id)
+    resumed = next(value for value in state.processes if value.process_id == process_id)
+    assert resumed.due_at_calendar_seconds == 36_000
+
+    state = _act(state, "complete-resumed-clearance", "continue_operation")
+    completed = next(value for value in state.processes if value.process_id == process_id)
+    assert state.calendar_seconds == 36_000
+    assert completed.status is PumpStationCoupledProcessStatus.COMPLETED
+
+
+def test_resource_withdrawal_wins_over_same_time_process_completion() -> None:
+    state = create_asw_8_world_state()
+    state = replace(
+        state,
+        physical=replace(state.physical, calendar_seconds=46_800),
+    )
+    opening_obstruction = state.physical.pump("pump-b").condition.obstruction
+    state = _act(
+        state,
+        "same-time-b-clearance",
+        "request_obstruction_clearance",
+        pump_id="pump-b",
+        backlog_item_id="backlog-b-clearance-001",
+        inspection_evidence_id="initial-b-inspection-accepted",
+    )
+
+    state = _act(state, "continue-to-withdrawal", "continue_operation")
+
+    process = state.processes[-1]
+    assert state.calendar_seconds == 61_200
+    assert process.status is PumpStationCoupledProcessStatus.SUSPENDED
+    assert state.backlog_item("backlog-b-clearance-001").status is PumpStationBacklogStatus.BLOCKED
+    assert state.physical.pump("pump-b").condition.obstruction == opening_obstruction
+
+
+def test_field_process_start_and_resume_recheck_visible_assured_capacity() -> None:
+    extended_window = (PumpStationAvailabilityInterval(21_600, 93_600),)
+
+    def at_capacity_boundary(state: PumpStationCoupledWorldState) -> PumpStationCoupledWorldState:
+        resources = replace(
+            state.resources,
+            pools=tuple(
+                replace(pool, availability_intervals=extended_window)
+                if isinstance(pool, PumpStationReusablePool)
+                else pool
+                for pool in state.resources.pools
+            ),
+        )
+        return replace(
+            state,
+            physical=replace(state.physical, calendar_seconds=60_000),
+            resources=resources,
+        )
+
+    start = at_capacity_boundary(create_asw_8_world_state())
+    with pytest.raises(PumpStationCoupledWorldError, match="planned-outage-capacity"):
+        _act(
+            start,
+            "capacity-blocked-start",
+            "request_obstruction_clearance",
+            pump_id="pump-b",
+            backlog_item_id="backlog-b-clearance-001",
+            inspection_evidence_id="initial-b-inspection-accepted",
+        )
+
+    resume = create_asw_8_world_state()
+    resume = _act(
+        resume,
+        "capacity-resume-clearance",
+        "request_obstruction_clearance",
+        pump_id="pump-b",
+        backlog_item_id="backlog-b-clearance-001",
+        inspection_evidence_id="initial-b-inspection-accepted",
+    )
+    process_id = resume.processes[-1].process_id
+    resume = _set_power_boundary(resume, "capacity-resume-stop", available=False)
+    resume = at_capacity_boundary(resume)
+    resume = replace(
+        resume,
+        physical=replace(
+            resume.physical,
+            common_boundary=replace(resume.physical.common_boundary, power_available=True),
+        ),
+    )
+
+    with pytest.raises(PumpStationCoupledWorldError, match="planned-outage-capacity"):
+        _act(resume, "capacity-blocked-resume", "resume_process", process_id=process_id)
+
+
+def test_cancel_after_suspension_replans_work_and_releases_the_consumable() -> None:
+    state = create_asw_8_world_state()
+    state = _act(
+        state,
+        "cancel-clearance-start",
+        "request_obstruction_clearance",
+        pump_id="pump-b",
+        backlog_item_id="backlog-b-clearance-001",
+        inspection_evidence_id="initial-b-inspection-accepted",
+    )
+    process_id = state.processes[-1].process_id
+    state = _set_power_boundary(state, "cancel-clearance-stop", available=False)
+    state = _act(state, "cancel-b-clearance", "cancel_process", process_id=process_id)
+
+    item = state.backlog_item("backlog-b-clearance-001")
+    kit = state.resources.pool("obstruction-clearance-kit")
+    assert item.status is PumpStationBacklogStatus.PLANNED
+    assert item.linked_process_id is None
+    assert kit.free == 1
+    assert kit.reserved == 0
+
+
+def test_failed_functional_check_retains_work_and_failed_verification_creates_rework() -> None:
+    functional = create_asw_8_world_state()
+    functional = _act(
+        functional,
+        "failed-functional-clearance",
+        "request_obstruction_clearance",
+        pump_id="pump-b",
+        backlog_item_id="backlog-b-clearance-001",
+        inspection_evidence_id="initial-b-inspection-accepted",
+    )
+    functional = _act(functional, "finish-failed-functional-clearance", "continue_operation")
+    wg03 = next(item for item in functional.backlog if item.generation_rule_id == "WG-03")
+    functional = _act(
+        functional,
+        "failed-functional-start",
+        "request_functional_check",
+        pump_id="pump-b",
+        backlog_item_id=wg03.item_id,
+    )
+    functional_transition = apply_process_outcome(
+        functional,
+        PumpStationProcessOutcomeRequest(
+            version=PUMP_STATION_PROCESS_OUTCOME_VERSION,
+            request_id="fail-b-functional",
+            authority_id="maintenance-controller",
+            process_id=functional.processes[-1].process_id,
+            outcome="failed",
+            evidence_id="evidence-b-functional-failed-001",
+            base_state_id=functional.state_id,
+        ),
+    )
+    functional = functional_transition.state
+    retained = functional.backlog_item(wg03.item_id)
+    assert functional_transition.receipt.required_authorities == ("maintenance",)
+    assert retained.status is PumpStationBacklogStatus.PLANNED
+    assert retained.closure_evidence_ids == ("evidence-b-functional-failed-001",)
+    assert len([item for item in functional.backlog if item.generation_rule_id == "WG-03"]) == 1
+
+    verification = create_asw_8_world_state()
+    verification = _act(
+        verification,
+        "failed-verification-start",
+        "request_post_maintenance_verification",
+        pump_id="pump-a",
+        backlog_item_id="backlog-a-verification-001",
+    )
+    verification = apply_process_outcome(
+        verification,
+        PumpStationProcessOutcomeRequest(
+            version=PUMP_STATION_PROCESS_OUTCOME_VERSION,
+            request_id="fail-a-verification",
+            authority_id="verification-engineer-01",
+            process_id=verification.processes[-1].process_id,
+            outcome="failed",
+            evidence_id="evidence-a-verification-failed-001",
+            base_state_id=verification.state_id,
+        ),
+    ).state
+    assert "restriction-a-run-in-001" in verification.active_restriction_ids
+    assert len([item for item in verification.backlog if item.generation_rule_id == "WG-05"]) == 1
+
+
+def test_common_hard_stop_requires_a_fresh_assignment_after_restore() -> None:
+    state = create_asw_8_world_state()
+    stopped = _set_power_boundary(state, "power-stop", available=False)
+
+    assert stopped.physical.service_running_pump_ids == ()
+    assert stopped.assignment.active is False
+    assert all(
+        not stopped.physical.availability(pump.pump_id).assured_for_outage_planning for pump in stopped.physical.pumps
+    )
+    with pytest.raises(PumpStationCoupledWorldError, match="assignment"):
+        _act(
+            stopped,
+            "assignment-during-stop",
+            "request_duty_assignment",
+            ordered_pump_ids=("pump-c",),
+        )
+
+    restored = _set_power_boundary(stopped, "power-restore", available=True)
+    assert restored.physical.service_running_pump_ids == ()
+    assert restored.assignment.active is False
+
+    reassigned = _act(
+        restored,
+        "assignment-after-restore",
+        "request_duty_assignment",
+        ordered_pump_ids=("pump-c",),
+    )
+    assert reassigned.physical.service_running_pump_ids == ("pump-c",)
+
+
+def test_continue_operation_stops_at_the_first_named_runtime_boundary() -> None:
+    state = create_asw_8_world_state()
+    state = replace(
+        state,
+        assignment=replace(state.assignment, ordered_pump_ids=("pump-a", "pump-c")),
+        physical=replace(
+            state.physical.with_boundary_mode(
+                "pump-a",
+                state.physical.boundary("pump-c").mode,
+                "runtime-clock-test",
+            ),
+            calendar_seconds=64_800,
+            service_running_pump_ids=("pump-a", "pump-c"),
+        ),
+        backlog=(
+            _runtime_backlog("pump-a-runtime-boundary", "pump-a", 5_400),
+            _runtime_backlog("pump-c-runtime-boundary", "pump-c", 3_600),
+        ),
+    )
+
+    advanced = _act(state, "continue-to-first-runtime-boundary", "continue_operation")
+
+    assert advanced.calendar_seconds == 66_600
+    assert advanced.physical.pump("pump-a").exposure.runtime_seconds == 5_400
+    assert advanced.physical.pump("pump-c").exposure.runtime_seconds == 1_800
+    assert advanced.event_effect_ids[-1] == "backlog-runtime-boundary-pump-a-runtime-boundary-due"
+
+
+def test_assignment_rejects_avoidable_deficit_and_records_unavoidable_deficit() -> None:
+    state = create_asw_8_world_state()
+    peak = replace(
+        state,
+        physical=replace(state.physical, calendar_seconds=64_800),
+    )
+    unavoidable = _act(
+        peak,
+        "unavoidable-single-pump-peak",
+        "request_duty_assignment",
+        ordered_pump_ids=("pump-c",),
+    )
+    view = project_coupled_actor_view(unavoidable)
+
+    assert unavoidable.assignment.required_service_scu == 2
+    assert unavoidable.assignment.assigned_service_scu == 1
+    assert unavoidable.assignment.unserved_service_scu == 1
+    assert unavoidable.assignment.decision_detail == "accepted unavoidable degraded operation"
+    assert view.required_service_scu == 2
+    assert view.available_assured_scu == 1
+    assert view.assigned_operating_scu == 1
+    assert view.served_scu == 1
+    assert view.unserved_scu == 1
+    assert view.surplus_scu == 0
+
+    avoidable_peak = replace(
+        peak,
+        physical=peak.physical.with_boundary_mode(
+            "pump-a",
+            peak.physical.boundary("pump-c").mode,
+            "accepted-a-assurance",
+        ),
+    )
+    with pytest.raises(PumpStationCoupledWorldError, match="avoidable-service-deficit"):
+        _act(
+            avoidable_peak,
+            "avoidable-single-pump-peak",
+            "request_duty_assignment",
+            ordered_pump_ids=("pump-c",),
+        )

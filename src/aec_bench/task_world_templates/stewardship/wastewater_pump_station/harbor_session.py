@@ -12,6 +12,7 @@ from typing import Any, cast
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
 from aec_bench.contracts.world_interface import WorldActorActionRequest
 from aec_bench.contracts.world_session import (
+    StewardshipStateSnapshotRef,
     WorldSessionExecutionKind,
     WorldSessionOpenMode,
     WorldSessionRequest,
@@ -37,6 +38,11 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
     PumpStationPhysicalTreatmentRequest,
     PumpStationTreatmentSeverity,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+    PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
+    PumpStationReferenceControllerResult,
+    run_pump_station_reference_controller,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rollout_control import (
     PumpStationRolloutControl,
 )
@@ -48,18 +54,28 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rollout_
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationVerificationReport,
+    PumpStationVerificationReportV4,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
+    PumpStationActorHistoryEntry,
     create_structured_handover,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence import (
     TemporalEvidenceCapability,
+    TemporalEvidenceRepository,
     TemporalEvidenceVerificationReport,
+    verify_temporal_evidence_repository,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_control import (
     PumpStationEvidenceControlRequest,
     PumpStationEvidenceControlResult,
     PumpStationWorldControl,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+    PumpStationStateSnapshotRef,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
+    PumpStationWorldRunRepository,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
     PUMP_STATION_EVIDENCE_HEALTH_TOOL_NAMES,
@@ -69,6 +85,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_se
     PUMP_STATION_TOOL_NAMES,
     PumpStationWorldSession,
     PumpStationWorldSessionFactory,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session_activation import (
+    PumpStationSessionActivationBinding,
 )
 from aec_bench.trajectory.writer import TrajectoryWriter
 
@@ -84,7 +103,7 @@ class CompletedPumpStationReferenceSession:
 
     request: WorldSessionRequest
     result: WorldSessionResult
-    verification: PumpStationVerificationReport
+    verification: PumpStationVerificationReport | PumpStationVerificationReportV4
     output_dir: Path
 
 
@@ -94,7 +113,7 @@ class CompletedPumpStationModelSession:
 
     request: WorldSessionRequest
     result: WorldSessionResult
-    verification: PumpStationVerificationReport
+    verification: PumpStationVerificationReport | PumpStationVerificationReportV4
     adapter_result: AdapterResult
     output_dir: Path
 
@@ -191,7 +210,7 @@ def run_pump_station_rollout_model_session(
     leaked = tuple(token for token in forbidden_private_tokens if token and token in private_surface)
     if leaked:
         raise ValueError(f"rollout model output exposed private tokens: {leaked}")
-    verification = session.verify()
+    verification = cast(PumpStationVerificationReport, session.verify())
     _write_model_evidence(
         destination=destination,
         adapter_result=adapter_result,
@@ -325,8 +344,8 @@ def run_pump_station_rollout_reference_session(
         child_id="treated",
         treatment_request_id=treatment.request_id,
     )
-    control_verification = control_child.verify()
-    treated_verification = treated_child.verify()
+    control_verification = cast(PumpStationVerificationReport, control_child.verify())
+    treated_verification = cast(PumpStationVerificationReport, treated_child.verify())
     if not control_verification.valid or not treated_verification.valid:
         raise ValueError("local Harbor rollout children did not replay")
     _write_json(destination / "rollout-lineage.json", asdict(lineage))
@@ -358,6 +377,13 @@ def run_pump_station_reference_session(
     session_identity: str,
 ) -> CompletedPumpStationReferenceSession:
     """Execute the complete reference trajectory without a model-provider call."""
+
+    if bridge.profile_ref is not None:
+        return _run_registered_reference_session(
+            bridge=bridge,
+            output_dir=output_dir,
+            session_identity=session_identity,
+        )
 
     identity = session_identity.strip()
     if not identity:
@@ -421,6 +447,140 @@ def run_pump_station_reference_session(
     )
 
 
+def _run_registered_reference_session(
+    *,
+    bridge: PumpStationHarborBridge,
+    output_dir: Path,
+    session_identity: str,
+) -> CompletedPumpStationReferenceSession:
+    profile_ref = bridge.profile_ref
+    if profile_ref is None or bridge.reference_system_root is None:
+        raise ValueError("registered Harbor bridge authority is incomplete")
+    identity = session_identity.strip()
+    if not identity:
+        raise ValueError("pump-station Harbor session identity is required")
+    destination = Path(output_dir)
+    if destination.exists():
+        raise FileExistsError(f"world-session output already exists: {destination}")
+    destination.mkdir(parents=True)
+    repository_root = destination / "world-run"
+    controller = run_pump_station_reference_controller(
+        repository_root=repository_root,
+        run_id=f"run.{identity}",
+        episode_id=f"episode.{identity}",
+        world_branch_id=f"branch.{identity}",
+    )
+    selected = controller.run.repository.load_selected_session_activation()
+    window_start = _session_window_start(controller.run.repository, selected)
+    request = WorldSessionRequest(
+        execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
+        open_mode=WorldSessionOpenMode.RESUME,
+        session_id=selected.session_id,
+        task_world_id=PUMP_STATION_TASK_WORLD_ID,
+        agent_tenure_id=selected.agent_tenure_id,
+        run_id=selected.run_id,
+        episode_id=selected.episode_id,
+        world_branch_id=selected.world_branch_id,
+        start_snapshot=_activation_snapshot(window_start),
+    )
+    terminal = cast(
+        PumpStationWorldSession,
+        open_world_session(
+            request.model_copy(update={"start_snapshot": _snapshot_ref(controller.end_snapshot)}),
+            PumpStationWorldSessionFactory(
+                repository_root,
+                profile_ref=profile_ref,
+            ),
+        ),
+    )
+    verification = terminal.verify()
+    if not verification.valid:
+        raise ValueError("registered pump-station reference session did not verify")
+    temporal_verification = _verify_registered_temporal_evidence(controller)
+    if not temporal_verification.valid:
+        raise ValueError("registered pump-station temporal evidence did not verify")
+    _write_session_evidence(
+        destination=destination,
+        request=request,
+        result=terminal.result,
+        verification=verification,
+    )
+    _write_json(
+        destination / "temporal-verification-report.json",
+        temporal_verification.model_dump(mode="json"),
+    )
+    _write_json(
+        destination / "artifact-inventory.json",
+        _artifact_inventory(
+            bridge=bridge,
+            output_dir=destination,
+            controller_id=PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
+            start_snapshot=_activation_snapshot(window_start).model_dump(mode="json"),
+            end_snapshot=terminal.result.snapshot.model_dump(mode="json"),
+            tool_names=terminal.result.tool_names,
+        ),
+    )
+    return CompletedPumpStationReferenceSession(
+        request=request,
+        result=terminal.result,
+        verification=verification,
+        output_dir=destination,
+    )
+
+
+def _session_window_start(
+    repository: PumpStationWorldRunRepository,
+    selected: PumpStationSessionActivationBinding,
+) -> PumpStationSessionActivationBinding:
+    start = selected
+    while start.prior_binding_id is not None:
+        prior = repository.load_session_activation(start.prior_binding_id)
+        if (prior.session_id, prior.agent_tenure_id) != (selected.session_id, selected.agent_tenure_id):
+            break
+        start = prior
+    return start
+
+
+def _verify_registered_temporal_evidence(
+    controller: PumpStationReferenceControllerResult,
+) -> TemporalEvidenceVerificationReport:
+    proposal_bindings = {
+        step.proposal.context.proposal_id: (
+            step.proposal.context.information_set_id,
+            step.proposal.context.base_view_id,
+        )
+        for step in controller.run.repository.v4_steps()
+        if step.proposal is not None
+    }
+    return verify_temporal_evidence_repository(
+        TemporalEvidenceRepository(controller.run.repository.root / "temporal-evidence"),
+        package=controller.run.package,
+        proposal_bindings=proposal_bindings,
+    )
+
+
+def _activation_snapshot(binding: PumpStationSessionActivationBinding) -> StewardshipStateSnapshotRef:
+    return StewardshipStateSnapshotRef(
+        run_id=binding.run_id,
+        episode_id=binding.episode_id,
+        world_branch_id=binding.world_branch_id,
+        sequence=binding.sequence,
+        state_id=binding.state_id,
+        commit_id=binding.commit_id,
+    )
+
+
+def _snapshot_ref(snapshot: PumpStationStateSnapshotRef) -> StewardshipStateSnapshotRef:
+    return StewardshipStateSnapshotRef(
+        run_id=snapshot.run_id,
+        episode_id=snapshot.episode_id,
+        world_branch_id=snapshot.world_branch_id,
+        sequence=snapshot.sequence,
+        state_id=snapshot.state_id,
+        commit_id=snapshot.commit_id,
+    )
+
+
 def run_pump_station_rich_work_reference_session(
     *,
     bridge: PumpStationHarborBridge,
@@ -469,7 +629,10 @@ def run_pump_station_rich_work_reference_session(
         create_structured_handover(
             second.actor_view,
             from_tenure_id=start_request.agent_tenure_id,
-            history=first.actor_history,
+            history=cast(
+                tuple[PumpStationActorHistoryEntry, ...],
+                first.actor_history,
+            ),
             maximum_history_entries=32,
         )
     )
@@ -607,7 +770,10 @@ def run_pump_station_evidence_health_reference_session(
         create_structured_handover(
             recipient.actor_view,
             from_tenure_id=start_request.agent_tenure_id,
-            history=activation_session.actor_history,
+            history=cast(
+                tuple[PumpStationActorHistoryEntry, ...],
+                activation_session.actor_history,
+            ),
             maximum_history_entries=8,
         )
     )
@@ -887,10 +1053,12 @@ def run_pump_station_model_session(
         adapter_result = adapter.execute(
             AdapterRequest(
                 instruction=_model_instruction(
+                    registered_profile=bridge.profile_ref is not None,
                     rich_work_processes=bridge.rich_work_processes,
                     temporal_evidence=bridge.temporal_evidence,
                 ),
                 system_prompt=_model_system_prompt(
+                    registered_profile=bridge.profile_ref is not None,
                     rich_work_processes=bridge.rich_work_processes,
                     temporal_evidence=bridge.temporal_evidence,
                 ),
@@ -929,9 +1097,7 @@ def run_pump_station_model_session(
             controller_id=model_name,
             start_snapshot=start_snapshot.model_dump(mode="json"),
             end_snapshot=session.result.snapshot.model_dump(mode="json"),
-            tool_names=(
-                PUMP_STATION_TEMPORAL_EVIDENCE_TOOL_NAMES if bridge.temporal_evidence else session.result.tool_names
-            ),
+            tool_names=session.result.tool_names,
         ),
     )
     return CompletedPumpStationModelSession(
@@ -1081,6 +1247,7 @@ def _open_pump_station_session(
             request,
             PumpStationWorldSessionFactory(
                 repository_root,
+                profile_ref=bridge.profile_ref,
                 package_root=bridge.package_root,
                 rich_work_processes=bridge.rich_work_processes,
                 evidence_health=bridge.evidence_health,
@@ -1098,9 +1265,17 @@ def _local_adapter_registry() -> Any:
 
 def _model_system_prompt(
     *,
+    registered_profile: bool = False,
     rich_work_processes: bool = False,
     temporal_evidence: bool = False,
 ) -> str:
+    if registered_profile:
+        return (
+            "You are the accountable wastewater pump-station steward. Use only "
+            "the current actor view and declared closed tools. Do not infer latent "
+            "pump health, hidden events, another branch, verifier expectations, or "
+            "a prescribed action sequence."
+        )
     if rich_work_processes:
         temporal_direction = (
             " Search and fetch relevant documentary evidence before the first consequential action."
@@ -1131,9 +1306,18 @@ def _model_system_prompt(
 
 def _model_instruction(
     *,
+    registered_profile: bool = False,
     rich_work_processes: bool = False,
     temporal_evidence: bool = False,
 ) -> str:
+    if registered_profile:
+        return (
+            "Observe the three-pump station and its visible dates, service plan, "
+            "shared resources, and work. Search documentary evidence only when it "
+            "helps the current decision. Take no more than one supported stewardship "
+            "action, give its reason in plain language, and use only identifiers from "
+            "the actor view. Then stop with a short factual summary."
+        )
     if rich_work_processes:
         temporal_direction = (
             " First search for the pump obstruction procedure and fetch one supplied reference."
@@ -1222,7 +1406,7 @@ def _write_session_evidence(
     destination: Path,
     request: WorldSessionRequest,
     result: WorldSessionResult,
-    verification: PumpStationVerificationReport,
+    verification: PumpStationVerificationReport | PumpStationVerificationReportV4,
 ) -> None:
     _write_json(
         destination / "world-session-request.json",
@@ -1239,16 +1423,9 @@ def _write_session_evidence(
 
 
 def _verification_payload(
-    report: PumpStationVerificationReport,
+    report: PumpStationVerificationReport | PumpStationVerificationReportV4,
 ) -> dict[str, Any]:
-    return {
-        "valid": report.valid,
-        "issues": list(report.issues),
-        "replayed_transition_ids": list(report.replayed_transition_ids),
-        "final_state_id": report.final_state_id,
-        "active_restriction_ids": list(report.active_restriction_ids),
-        "open_obligation_ids": list(report.open_obligation_ids),
-    }
+    return cast(dict[str, Any], json.loads(json.dumps(asdict(report))))
 
 
 def _write_json(path: Path, payload: object) -> None:

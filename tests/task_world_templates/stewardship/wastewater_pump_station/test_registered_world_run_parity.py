@@ -1,5 +1,5 @@
-# ABOUTME: Compares registered V4 world-run transitions with the retained coupled behaviour oracle.
-# ABOUTME: Runs the reference journey without treating a tenure handover as a world-state mutation.
+# ABOUTME: Verifies registered V4 reference transitions and task-semantic rejection paths.
+# ABOUTME: Replays the canonical journey without treating a tenure handover as a world transition.
 
 from __future__ import annotations
 
@@ -16,18 +16,14 @@ from aec_bench.contracts.world_session import (
     WorldSessionOpenMode,
     WorldSessionRequest,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_execution import (
-    execute_asw_8_reference_controller,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_run import (
-    create_coupled_run,
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+    run_pump_station_reference_controller,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PUMP_STATION_BOUND_CONTROL_VERSION,
     PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
     PumpStationBoundControlRequest,
     PumpStationCommonBoundaryRequest,
-    PumpStationOperationsBoundaryReviewRequest,
     PumpStationProposalError,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
@@ -87,99 +83,22 @@ def _open_registered_session(
     )
 
 
-def test_registered_run_matches_each_reference_journey_transition(
+def test_registered_reference_journey_replays_each_world_transition(
     tmp_path: Path,
 ) -> None:
-    source = execute_asw_8_reference_controller(
-        run_id="source-reference-journey",
-        world_branch_id="source-reference-branch",
-    ).run
-    oracle = create_coupled_run(
-        run_id="oracle-reference-journey",
-        world_branch_id="oracle-reference-branch",
-    )
-    registered = PumpStationWorldRun.create_reference_system(
-        repository=PumpStationWorldRunRepository(tmp_path / "run"),
+    result = run_pump_station_reference_controller(
+        repository_root=tmp_path / "run",
         run_id="registered-reference-journey",
         episode_id="registered-reference-episode",
         world_branch_id="registered-reference-branch",
     )
-    registered_session = _open_registered_session(
-        registered,
-        session_id="registered-reference-session",
-        agent_tenure_id="reference-controller",
-    )
-    compared_transition_ids: list[str] = []
+    steps = result.run.repository.v4_steps()
+    report = result.run.verify_v4()
 
-    for command in source.commands:
-        if command.kind == "handover":
-            continue
-        if command.kind == "actor":
-            arguments = command.arguments
-            backlog_item_id = arguments.get("backlog_item_id")
-            if isinstance(backlog_item_id, str) and not any(
-                item.item_id == backlog_item_id for item in oracle.state.backlog
-            ):
-                work_type = {
-                    "request_functional_check": "minimum_functional_check",
-                    "request_post_maintenance_verification": "post_maintenance_verification",
-                    "request_inspection": "collateral_duty_inspection",
-                }[command.action_name]
-                candidates = tuple(
-                    item.item_id
-                    for item in oracle.state.backlog
-                    if item.work_type == work_type
-                    and item.target_id == arguments.get("pump_id")
-                    and item.status.value in {"open", "planned"}
-                )
-                assert len(candidates) == 1
-                arguments["backlog_item_id"] = candidates[0]
-            oracle = oracle.apply_actor(
-                request_id=command.request_id,
-                action_name=command.action_name,
-                arguments=arguments,
-            )
-            observation = registered_session.observe_actor()
-            request = WorldActorActionRequest(
-                request_id=command.request_id,
-                action_name=command.action_name,
-                binding=observation.binding,
-                arguments=arguments,
-            )
-            registered_session.invoke_actor_action(request)
-            transition = registered.repository.v4_steps()[-1].transition
-        else:
-            assert command.kind == "operations_review"
-            arguments = {
-                **command.arguments,
-                "base_state_id": oracle.state.state_id,
-            }
-            review = PumpStationOperationsBoundaryReviewRequest(**arguments)
-            oracle = oracle.apply_review(review)
-            snapshot = registered.snapshot()
-            transition = registered.apply_v4_control(
-                PumpStationBoundControlRequest(
-                    control_envelope_version=PUMP_STATION_BOUND_CONTROL_VERSION,
-                    request_id=review.review_id,
-                    run_id=snapshot.run_id,
-                    episode_id=snapshot.episode_id,
-                    world_branch_id=snapshot.world_branch_id,
-                    base_state_id=snapshot.state_id,
-                    base_commit_id=snapshot.commit_id,
-                    based_on_sequence=snapshot.sequence,
-                    control=review,
-                )
-            )
-        assert transition.state == oracle.state
-        assert transition.receipt == oracle.receipts[-1]
-        compared_transition_ids.append(transition.receipt.transition_id)
-
-    report = registered.verify_v4()
-
-    assert len(compared_transition_ids) == len(source.commands) - 1
-    assert registered.state == oracle.state
+    assert len(steps) == 25
+    assert result.run.state == steps[-1].transition.state
     assert report.valid
-    assert report.replayed_transition_ids == tuple(compared_transition_ids)
+    assert report.replayed_transition_ids == tuple(step.transition.receipt.transition_id for step in steps)
     assert not (tmp_path / "run" / "HEAD").exists()
     assert not (tmp_path / "run" / "generations").exists()
 

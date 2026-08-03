@@ -13,11 +13,13 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_
     PumpStationBacklogItem,
     PumpStationBacklogStatus,
     PumpStationConsumablePool,
+    PumpStationDeclaredWorkTrigger,
     PumpStationPoolReservationStatus,
     PumpStationPriority,
     PumpStationResourceError,
     PumpStationWorkGenerationError,
     PumpStationWorkGenerationRecord,
+    apply_declared_work_generation,
     consume_reservation,
     create_asw_8_resource_state,
     effective_priority,
@@ -224,6 +226,80 @@ def test_generation_is_exactly_once_and_changed_content_fails() -> None:
             replace(item, due_calendar_seconds=151_201),
         )
     assert raised.value.code == "generation-content-mismatch"
+
+
+def test_declared_generation_rules_create_and_retain_their_exact_work() -> None:
+    records: tuple[PumpStationWorkGenerationRecord, ...] = ()
+    backlog: tuple[PumpStationBacklogItem, ...] = ()
+    for ordinal, rule_id in enumerate(
+        ("WG-01", "WG-02", "WG-03", "WG-04", "WG-05", "WG-06", "WG-07"),
+        start=1,
+    ):
+        result = apply_declared_work_generation(
+            records,
+            backlog,
+            PumpStationDeclaredWorkTrigger(
+                rule_id=rule_id,
+                source_transition_id=f"source-{rule_id}",
+                target_kind="resource_pool" if rule_id == "WG-06" else "asset",
+                target_id="obstruction-clearance-kit" if rule_id == "WG-06" else "pump-c",
+                generation_ordinal=ordinal,
+                generated_at_calendar_seconds=100_000,
+                current_runtime_seconds=20_000,
+                next_capacity_critical_calendar_seconds=120_000,
+                linked_clearance_due_calendar_seconds=130_000,
+                target_is_serving=rule_id == "WG-05",
+                blocks_urgent_work=rule_id == "WG-06",
+            ),
+        )
+        records, backlog = result.records, result.backlog
+
+    assert tuple(record.rule_id for record in records) == (
+        "WG-01",
+        "WG-02",
+        "WG-03",
+        "WG-04",
+        "WG-05",
+        "WG-06",
+        "WG-07",
+    )
+    assert next(item for item in backlog if item.generation_rule_id == "WG-05").base_priority is PumpStationPriority.P0
+    assert next(item for item in backlog if item.generation_rule_id == "WG-06").base_priority is PumpStationPriority.P1
+
+    selected = backlog[2]
+    suspended = apply_declared_work_generation(
+        records,
+        backlog,
+        PumpStationDeclaredWorkTrigger(
+            rule_id="WG-08",
+            source_transition_id="suspend-source",
+            target_kind=selected.target_kind,
+            target_id=selected.target_id,
+            generation_ordinal=1,
+            generated_at_calendar_seconds=110_000,
+            existing_item_id=selected.item_id,
+        ),
+    )
+    blocked = next(item for item in suspended.backlog if item.item_id == selected.item_id)
+    assert blocked.status is PumpStationBacklogStatus.BLOCKED
+
+    cancelled = apply_declared_work_generation(
+        suspended.records,
+        suspended.backlog,
+        PumpStationDeclaredWorkTrigger(
+            rule_id="WG-09",
+            source_transition_id="cancel-source",
+            target_kind=selected.target_kind,
+            target_id=selected.target_id,
+            generation_ordinal=1,
+            generated_at_calendar_seconds=120_000,
+            existing_item_id=selected.item_id,
+        ),
+    )
+    replanned = next(item for item in cancelled.backlog if item.item_id == selected.item_id)
+    assert replanned.status is PumpStationBacklogStatus.PLANNED
+    assert cancelled.records == records
+    assert len(cancelled.backlog) == 7
 
 
 def test_collateral_item_crosses_inclusive_priority_boundary_and_ranks_first() -> None:

@@ -78,6 +78,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationRunStep,
     PumpStationVerificationReportV4,
+    derive_pump_station_conservation_report,
     verify_stewardship_run_v4,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
@@ -1128,9 +1129,16 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
         except (OSError, PumpStationWorldRunError, TypeError, ValueError) as error:
             return PumpStationVerificationReportV4(
                 valid=False,
+                replay_valid=False,
+                actor_proposals_valid=False,
+                host_controls_valid=False,
                 issues=(f"session-evidence-invalid:repository:{error}",),
                 replayed_transition_ids=(),
                 final_state_id=stewardship_state_id(initial_state),
+                conservation=derive_pump_station_conservation_report(
+                    initial_state,
+                    initial_state,
+                ),
             )
         active_bindings_by_world_position: dict[
             tuple[int, str, str],
@@ -1256,9 +1264,13 @@ class PumpStationWorldRun(Generic[_RunModelT, _RunStateT]):
         issues = (*session_issues, *temporal_issues, *replay.issues)
         return PumpStationVerificationReportV4(
             valid=not issues and replay.valid,
+            replay_valid=replay.replay_valid,
+            actor_proposals_valid=replay.actor_proposals_valid,
+            host_controls_valid=replay.host_controls_valid,
             issues=issues,
             replayed_transition_ids=replay.replayed_transition_ids,
             final_state_id=replay.final_state_id,
+            conservation=replay.conservation,
         )
 
     @staticmethod
