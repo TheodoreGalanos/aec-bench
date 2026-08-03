@@ -7,16 +7,16 @@ import subprocess
 from pathlib import Path
 
 
-def test_root_does_not_publish_local_agent_or_node_scaffolding() -> None:
-    root_only_files = {
-        "AGENTS.md",
+def test_root_publishes_portable_agent_guidance_without_local_scaffolding() -> None:
+    prohibited_root_files = {
         "CLAUDE.md",
         "CONTEXT.md",
         "package.json",
         "package-lock.json",
     }
 
-    assert all(not Path(path).exists() for path in root_only_files)
+    assert all(not Path(path).exists() for path in prohibited_root_files)
+    assert Path("AGENTS.md").is_file()
     assert Path("src/aec_bench/web/frontend/package.json").is_file()
 
 
