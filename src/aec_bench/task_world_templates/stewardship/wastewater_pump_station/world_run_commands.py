@@ -1,4 +1,4 @@
-# ABOUTME: Rebuilds strict pump actor and root-control inputs from durable V4 commands.
+# ABOUTME: Rebuilds strict pump actor and root-control inputs from durable registered commands.
 # ABOUTME: Verifies command content identity before repository selection or replay.
 
 from __future__ import annotations
@@ -9,10 +9,8 @@ from typing import NoReturn, cast
 
 from pydantic import JsonValue
 
-from aec_bench.contracts.world_interface import (
-    WorldActorActionRequest,
-    WorldActorBinding,
-)
+from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.world_interface import WorldActorActionRequest
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PumpStationCommonBoundaryRequest,
     PumpStationCoupledTreatmentRequest,
@@ -21,7 +19,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationRootControl,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
-    PumpStationCommandV4,
+    PumpStationCommand,
     PumpStationWorldRunError,
 )
 
@@ -82,8 +80,8 @@ def _fail(code: str, detail: str) -> NoReturn:
     raise PumpStationWorldRunError(code, detail)
 
 
-def decode_pump_station_v4_command(
-    command: PumpStationCommandV4,
+def decode_pump_station_command(
+    command: PumpStationCommand,
 ) -> PumpStationDecodedCommand:
     """Rebuild and verify the exact public or task-semantic command input."""
     arguments = json.loads(command.arguments_json)
@@ -94,7 +92,17 @@ def decode_pump_station_v4_command(
             command,
             cast(dict[str, JsonValue], arguments),
         )
-        if request.content_sha256 != command.request_content_id:
+        if (
+            canonical_content_sha256(
+                {
+                    "request_id": request.request_id,
+                    "decision_id": request.decision_id,
+                    "action_name": request.action_name,
+                    "arguments": request.arguments,
+                }
+            )
+            != command.request_content_id
+        ):
             _fail("command-content", "actor request content identity differs")
         return request
     control = _root_control_from_command(command, arguments)
@@ -111,45 +119,33 @@ def decode_pump_station_v4_command(
 
 
 def _actor_request_from_command(
-    command: PumpStationCommandV4,
+    command: PumpStationCommand,
     arguments: dict[str, JsonValue],
 ) -> WorldActorActionRequest:
     actor_fields = (
-        command.session_id,
+        command.decision_id,
+        command.actor_id,
         command.agent_tenure_id,
         command.actor_view_id,
         command.information_set_id,
     )
     if any(value is None for value in actor_fields):
         _fail("command-content", "actor command lacks its binding")
-    binding = WorldActorBinding(
-        task_world_id=command.task_world_id,
-        session_id=cast(str, command.session_id),
-        run_id=command.run_id,
-        episode_id=command.episode_id,
-        world_branch_id=command.world_branch_id,
-        sequence=command.based_on_sequence,
-        state_id=command.base_state_id,
-        commit_id=command.base_commit_id,
-        agent_tenure_id=cast(str, command.agent_tenure_id),
-        actor_view_id=cast(str, command.actor_view_id),
-        information_set_id=cast(str, command.information_set_id),
-    )
     return WorldActorActionRequest(
         request_id=command.request_id,
+        decision_id=cast(str, command.decision_id),
         action_name=command.action_name,
-        binding=binding,
         arguments=arguments,
     )
 
 
 def _root_control_from_command(
-    command: PumpStationCommandV4,
+    command: PumpStationCommand,
     arguments: dict[str, object],
 ) -> PumpStationRootControl:
     expected_fields = _ROOT_CONTROL_ARGUMENT_FIELDS.get(command.kind)
     if expected_fields is None:
-        _fail("command-content", f"unsupported V4 control kind {command.kind}")
+        _fail("command-content", f"unsupported registered control kind {command.kind}")
     observed_fields = frozenset(arguments)
     if observed_fields != expected_fields:
         missing = sorted(expected_fields - observed_fields)
@@ -207,7 +203,7 @@ def _root_control_from_command(
             clearance_loss_delta=_decimal_argument(arguments, "clearance_loss_delta"),
             base_state_id=_text_argument(arguments, "base_state_id"),
         )
-    _fail("command-content", f"unsupported V4 control kind {command.kind}")
+    _fail("command-content", f"unsupported registered control kind {command.kind}")
 
 
 def _text_argument(arguments: dict[str, object], field_name: str) -> str:

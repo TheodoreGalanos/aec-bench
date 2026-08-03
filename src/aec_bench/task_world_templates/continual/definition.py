@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 
 from aec_bench.contracts.continual_world import (
+    ContinualWorldActorRequest,
     ContinualWorldDefinitionRef,
     ContinualWorldDefinitionSpec,
     ContinualWorldProfileRef,
@@ -18,8 +19,6 @@ from aec_bench.contracts.continual_world import (
 from aec_bench.contracts.world_interface import (
     WorldControlCapabilityCatalogue,
 )
-from aec_bench.contracts.world_session import WorldSessionRequest
-from aec_bench.task_world_templates.continual.actor_session import ActorWorldSession
 from aec_bench.task_world_templates.continual.branch_port import ContinualWorldBranchPort
 
 
@@ -34,15 +33,15 @@ class LoadedContinualWorldProfile:
 class ContinualWorldExecutionPort(Protocol):
     """Task-owned actor and host-control adapter selected by the catalogue."""
 
-    def open_actor_session(
+    def actor_call(
         self,
         *,
         profile: LoadedContinualWorldProfile,
         run_root: Path,
         package_root: Path | None,
-        request: WorldSessionRequest,
-    ) -> ActorWorldSession:
-        """Resume one actor session through the task's canonical session owner."""
+        request: ContinualWorldActorRequest,
+    ) -> object:
+        """Resolve and execute one call through the task's current episode owner."""
 
     def control_capabilities(
         self,

@@ -9,10 +9,8 @@ from pathlib import Path
 from aec_bench.contracts.continual_world import (
     ContinualWorldActorRequest,
     ContinualWorldControlRequest,
-)
-from aec_bench.task_world_templates.continual.actor_session import (
-    invoke_world_actor,
-    observe_world_actor,
+    ContinualWorldDefinitionRef,
+    ContinualWorldProfileRef,
 )
 from aec_bench.task_world_templates.continual.catalogue import ContinualWorldCatalogue
 from aec_bench.task_world_templates.continual.definition import (
@@ -31,6 +29,8 @@ class ContinualWorldInterfaceContext:
     rollout_repository_root: Path | None
     authorised_principal_ids: tuple[str, ...]
     package_root: Path | None = None
+    actor_definition_ref: ContinualWorldDefinitionRef | None = None
+    actor_profile_ref: ContinualWorldProfileRef | None = None
 
     def __post_init__(self) -> None:
         if any(not principal.strip() for principal in self.authorised_principal_ids):
@@ -41,11 +41,22 @@ class ContinualWorldInterfaceContext:
 
 def _resolve(
     context: ContinualWorldInterfaceContext,
-    request: ContinualWorldActorRequest | ContinualWorldControlRequest,
+    request: ContinualWorldControlRequest,
 ) -> tuple[ContinualWorldDefinition, LoadedContinualWorldProfile]:
     definition = context.catalogue.resolve(request.definition_ref)
     loaded = definition.load_profile(request.profile_ref)
     return definition, loaded
+
+
+def _resolve_actor(
+    context: ContinualWorldInterfaceContext,
+) -> tuple[ContinualWorldDefinition, LoadedContinualWorldProfile]:
+    definition_ref = context.actor_definition_ref
+    profile_ref = context.actor_profile_ref
+    if definition_ref is None or profile_ref is None:
+        raise ValueError("continual actor host context lacks its durable world and profile binding")
+    definition = context.catalogue.resolve(definition_ref)
+    return definition, definition.load_profile(profile_ref)
 
 
 def dispatch_continual_actor(
@@ -55,22 +66,16 @@ def dispatch_continual_actor(
 ) -> object:
     """Execute one actor call after exact definition and profile resolution."""
 
-    definition, loaded = _resolve(context, request)
+    definition, loaded = _resolve_actor(context)
     port = definition.execution_port
     if port is None:
         raise ValueError(f"continual world has no registered execution port: {definition.ref.task_world_id}")
-    session = port.open_actor_session(
+    return port.actor_call(
         profile=loaded,
         run_root=context.run_root,
         package_root=context.package_root,
-        request=request.session_request,
+        request=request,
     )
-    if request.operation == "capabilities":
-        return session.actor_capabilities
-    if request.operation == "observe":
-        return observe_world_actor(session)
-    assert request.action_request is not None
-    return invoke_world_actor(session, request.action_request)
 
 
 def dispatch_continual_control(

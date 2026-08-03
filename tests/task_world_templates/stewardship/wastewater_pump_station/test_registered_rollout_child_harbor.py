@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 from pathlib import Path
 
@@ -21,29 +20,24 @@ from aec_bench.contracts.continual_world import (
 from aec_bench.contracts.evaluation_result import StewardshipEvaluation
 from aec_bench.contracts.world_interface import WorldActorActionRequest
 from aec_bench.contracts.world_session import (
-    StewardshipStateSnapshotRef,
-    WorldSessionExecutionKind,
-    WorldSessionOpenMode,
     WorldSessionRequest,
     WorldSessionResult,
 )
 from aec_bench.harness.harbor_importing.core import import_harbor_trial
-from aec_bench.harness.world_interface import invoke_world_actor, observe_world_actor
 from aec_bench.task_world_templates.continual.rollout_control import ContinualRolloutControl
 from aec_bench.task_world_templates.continual.rollout_repository import ContinualRolloutRepository
 from aec_bench.task_world_templates.harbor_exporting.stable_io import directory_sha256
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
     pump_station_continual_world_definition,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
+    PumpStationEpisodeHost,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
     PUMP_STATION_HARBOR_EXECUTION_KIND,
     export_pump_station_harbor_task,
-    is_pump_station_harbor_inventory_artifact,
     load_pump_station_harbor_bridge,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_verifier import (
-    verify_pump_station_harbor_run,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
@@ -60,9 +54,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_serialization import (
     pump_station_artifact_id,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
-    PumpStationWorldSessionFactory,
-)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 _INITIAL_RUN_PATH = "tests/initial-world-run"
@@ -76,17 +67,6 @@ def _tree_bytes(root: Path) -> tuple[tuple[str, bytes], ...]:
 
 def _continual_snapshot(snapshot: PumpStationStateSnapshotRef) -> ContinualWorldSnapshotRef:
     return ContinualWorldSnapshotRef(
-        run_id=snapshot.run_id,
-        episode_id=snapshot.episode_id,
-        world_branch_id=snapshot.world_branch_id,
-        sequence=snapshot.sequence,
-        state_id=snapshot.state_id,
-        commit_id=snapshot.commit_id,
-    )
-
-
-def _session_snapshot(snapshot: PumpStationStateSnapshotRef) -> StewardshipStateSnapshotRef:
-    return StewardshipStateSnapshotRef(
         run_id=snapshot.run_id,
         episode_id=snapshot.episode_id,
         world_branch_id=snapshot.world_branch_id,
@@ -114,32 +94,19 @@ def _create_registered_rollout(
         episode_id="harbor-rollout-parent-episode",
         world_branch_id="harbor-rollout-parent-branch",
     )
-    parent_session = PumpStationWorldSessionFactory(parent_root).open(
-        WorldSessionRequest(
-            execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
-            open_mode=WorldSessionOpenMode.RESUME,
-            session_id="harbor-rollout-parent-session",
-            task_world_id=definition.ref.task_world_id,
-            agent_tenure_id="harbor-rollout-parent-tenure",
-            run_id=parent.manifest.run_id,
-            episode_id=parent.manifest.episode_id,
-            world_branch_id=parent.manifest.world_branch_id,
-            start_snapshot=_session_snapshot(parent.snapshot()),
-        )
-    )
-    invoke_world_actor(
-        parent_session,
+    parent_host = PumpStationEpisodeHost(parent_root)
+    observation = parent_host.observe()
+    parent_host.invoke(
         WorldActorActionRequest(
             request_id="harbor-rollout-parent-condition-check",
+            decision_id=observation.decision_id,
             action_name="request_condition_check",
-            binding=observe_world_actor(parent_session).binding,
             arguments={
                 "pump_id": "pump-b",
                 "reason": "Select one later verified world position for the rollout.",
             },
         ),
     )
-    parent = parent_session.run
     parent_snapshot = parent.snapshot()
     request = ContinualRolloutGroupRequest(
         request_id="harbor-rollout-request",
@@ -148,15 +115,9 @@ def _create_registered_rollout(
         authority_id="harbor-rollout-host",
         definition_ref=definition.ref,
         profile_ref=profile_ref,
-        parent_manifest_content_sha256=pump_station_artifact_id(
-            parent.manifest,
-            record_profile="manifest-v2",
-        ),
+        parent_manifest_content_sha256=pump_station_artifact_id(parent.manifest),
         parent_snapshot=_continual_snapshot(parent_snapshot),
-        origin_verification_content_sha256=pump_station_artifact_id(
-            parent.verify_v4(),
-            record_profile="v4",
-        ),
+        origin_verification_content_sha256=pump_station_artifact_id(parent.verify()),
         reason="Run two isolated checks from this selected world position.",
         children=(
             ContinualRolloutChildRequest(
@@ -200,24 +161,6 @@ def _world_session_dir(trial_dir: Path) -> Path:
             trial_dir / "artifacts" / "agent" / "world-session",
         )
         if candidate.is_dir()
-    )
-
-
-def _refresh_artifact_inventory(root: Path) -> None:
-    inventory_path = root / "artifact-inventory.json"
-    inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
-    inventory["artifacts"] = [
-        {
-            "path": path.relative_to(root).as_posix(),
-            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-            "size_bytes": path.stat().st_size,
-        }
-        for path in sorted(root.rglob("*"))
-        if path.is_file() and is_pump_station_harbor_inventory_artifact(root, path)
-    ]
-    inventory_path.write_text(
-        json.dumps(inventory, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
     )
 
 
@@ -369,16 +312,13 @@ def test_local_harbor_trial_resumes_one_rollout_child_for_one_bounded_actor_acti
         repository=PumpStationWorldRunRepository(world_session_dir / "world-run"),
         snapshot=PumpStationWorldRunRepository(world_session_dir / "world-run").current_snapshot(),
     )
-    steps = completed.repository.v4_steps()
+    steps = completed.repository.command_steps()
     assert len(steps) == 1
     assert steps[0].command.kind == "actor"
     assert steps[0].command.action_name == "request_condition_check"
-    assert steps[0].command.session_id == request.session_id
-    assert completed.verify_v4().valid is True
-    assert (
-        pump_station_artifact_id(completed.manifest, record_profile="manifest-v2")
-        == selected_ref.child_manifest_content_sha256
-    )
+    assert not hasattr(steps[0].command, "session_id")
+    assert completed.verify().valid is True
+    assert pump_station_artifact_id(completed.manifest) == selected_ref.child_manifest_content_sha256
     assert _tree_bytes(parent_root) == parent_before
     assert _tree_bytes(selected_root) == selected_before
     assert _tree_bytes(sibling_root) == sibling_before
@@ -401,21 +341,3 @@ def test_local_harbor_trial_resumes_one_rollout_child_for_one_bounded_actor_acti
         evaluation_scope="bounded_continuation",
     )
     assert record.evaluation.stewardship == StewardshipEvaluation.model_validate(direct_evaluation)
-
-    request_path = world_session_dir / "world-session-request.json"
-    result_path = world_session_dir / "world-session-result.json"
-    forged_tenure_id = "forged-rollout-child-tenure"
-    forged_request = request.model_copy(update={"agent_tenure_id": forged_tenure_id})
-    forged_result = session_result.model_copy(update={"agent_tenure_id": forged_tenure_id})
-    request_path.write_text(forged_request.model_dump_json(indent=2) + "\n", encoding="utf-8")
-    result_path.write_text(forged_result.model_dump_json(indent=2) + "\n", encoding="utf-8")
-    _refresh_artifact_inventory(world_session_dir)
-    with pytest.raises(ValueError, match="rollout child execution differs"):
-        verify_pump_station_harbor_run(
-            run_dir=world_session_dir,
-            export_manifest_path=exported.manifest_path,
-            package_dir=exported.package_dir,
-            reference_system_dir=exported.task_dir / "tests" / "reference-system",
-            initial_run_dir=exported.task_dir / _INITIAL_RUN_PATH,
-            verifier_runtime_path=exported.verifier_runtime_wheel_path,
-        )

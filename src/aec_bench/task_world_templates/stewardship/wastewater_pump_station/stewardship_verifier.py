@@ -11,9 +11,9 @@ from aec_bench.contracts.world_interface import (
     WorldInterfaceError,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
-    PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,
-    pump_station_proposal_from_validated_arguments_v2,
-    validate_pump_station_actor_arguments_v2,
+    PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID,
+    pump_station_proposal_from_validated_arguments,
+    validate_pump_station_actor_arguments,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
     project_coupled_information_set,
@@ -22,15 +22,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_
     PumpStationBacklogStatus,
     resource_conservation,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
-    PumpStationEvidenceTreatmentRequest,
-)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpStationCoupledModel,
-    PumpStationModel,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_treatments import (
-    PumpStationPhysicalTreatmentActivationRequest,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
     stewardship_content_id,
@@ -39,20 +32,13 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     ProposalContext,
     PumpStationCoupledStewardshipState,
-    PumpStationObligationStatus,
+    PumpStationCoupledTransition,
     PumpStationProposal,
     PumpStationProposalError,
-    PumpStationRestrictionStatus,
-    PumpStationStewardshipState,
-    PumpStationTransition,
-    PumpStationTransitionV4,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
-    apply_evidence_treatment_schedule,
-    apply_physical_treatment_activation,
-    apply_stewardship_control_v4,
-    apply_stewardship_proposal,
-    apply_stewardship_proposal_v4,
+    apply_coupled_stewardship_proposal,
+    apply_stewardship_control,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
     PumpStationCoupledActorView,
@@ -60,61 +46,27 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     bind_information_set,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_commands import (
-    decode_pump_station_v4_command,
+    decode_pump_station_command,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
-    PUMP_STATION_RECORD_VERSIONS_V1,
-    PUMP_STATION_RECORD_VERSIONS_V2,
-    PUMP_STATION_RECORD_VERSIONS_V3,
-    PumpStationCommandV4,
-    PumpStationRecordVersions,
+    PumpStationCommand,
     PumpStationWorldRunError,
 )
 
 
 @dataclass(frozen=True, slots=True)
-class PumpStationRunStep:
-    """One recorded bound proposal and its resulting transition."""
+class PumpStationCoupledRunStep:
+    """One recorded coupled command and its complete replay evidence."""
 
+    command: PumpStationCommand
     proposal: PumpStationProposal | None
     information_set: PumpStationInformationSet | None
-    transition: PumpStationTransition
-    control_request: PumpStationEvidenceTreatmentRequest | PumpStationPhysicalTreatmentActivationRequest | None = None
-
-    def __post_init__(self) -> None:
-        actor_step = self.proposal is not None and self.information_set is not None
-        control_step = self.control_request is not None
-        if actor_step == control_step:
-            raise ValueError("run step requires exactly one actor or control input")
-        if self.proposal is None and self.information_set is not None:
-            raise ValueError("control run step cannot contain an information set")
-
-
-@dataclass(frozen=True, slots=True)
-class PumpStationVerificationReport:
-    """Private host result of deterministic task replay and integrity checks."""
-
-    valid: bool
-    issues: tuple[str, ...]
-    replayed_transition_ids: tuple[str, ...]
-    final_state_id: str
-    active_restriction_ids: tuple[str, ...]
-    open_obligation_ids: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class PumpStationRunStepV4:
-    """One recorded V4 command and its complete replay evidence."""
-
-    command: PumpStationCommandV4
-    proposal: PumpStationProposal | None
-    information_set: PumpStationInformationSet | None
-    transition: PumpStationTransitionV4
+    transition: PumpStationCoupledTransition
 
     def __post_init__(self) -> None:
         actor_step = self.command.kind == "actor"
         if actor_step != (self.proposal is not None and self.information_set is not None):
-            raise ValueError("V4 actor step requires one proposal and information set")
+            raise ValueError("coupled actor step requires one proposal and information set")
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,7 +126,7 @@ class PumpStationLiabilityConservationReport:
 
 @dataclass(frozen=True, slots=True)
 class PumpStationConservationReport:
-    """Four independently derived V4 conservation sections."""
+    """Four independently derived coupled conservation sections."""
 
     duty: PumpStationDutyConservationReport
     resources: PumpStationResourceConservationReport
@@ -189,12 +141,12 @@ class PumpStationConservationReport:
     @property
     def content_id(self) -> str:
         """Return the canonical report identity."""
-        return stewardship_content_id(self, record_profile="v4")
+        return stewardship_content_id(self)
 
 
 @dataclass(frozen=True, slots=True)
-class PumpStationVerificationReportV4:
-    """Private result of independent V4 command and transition replay."""
+class PumpStationCoupledVerificationReport:
+    """Private result of independent coupled command and transition replay."""
 
     valid: bool
     replay_valid: bool
@@ -208,93 +160,14 @@ class PumpStationVerificationReportV4:
     @property
     def content_id(self) -> str:
         """Return the canonical verification-report identity."""
-        return stewardship_content_id(self, record_profile="v4")
-
-
-def verify_stewardship_run(
-    model: PumpStationModel,
-    initial_state: PumpStationStewardshipState,
-    steps: tuple[PumpStationRunStep, ...],
-    *,
-    record_versions: PumpStationRecordVersions | None = None,
-) -> PumpStationVerificationReport:
-    """Replay immutable run steps from the declared initial state."""
-    selected_versions = (
-        record_versions
-        or {
-            "pump-station-stewardship-state.v1": PUMP_STATION_RECORD_VERSIONS_V1,
-            "pump-station-stewardship-state.v2": PUMP_STATION_RECORD_VERSIONS_V2,
-            "pump-station-stewardship-state.v3": PUMP_STATION_RECORD_VERSIONS_V3,
-        }[initial_state.state_version]
-    )
-    expected_state_version = {
-        PUMP_STATION_RECORD_VERSIONS_V1: "pump-station-stewardship-state.v1",
-        PUMP_STATION_RECORD_VERSIONS_V2: "pump-station-stewardship-state.v2",
-        PUMP_STATION_RECORD_VERSIONS_V3: "pump-station-stewardship-state.v3",
-    }[selected_versions]
-    state = initial_state
-    issues: list[str] = []
-    if initial_state.state_version != expected_state_version:
-        issues.append("initial-state-version-mismatch")
-    replayed_transition_ids: list[str] = []
-    for step in steps:
-        transition_id = step.transition.receipt.transition_id
-        try:
-            if step.control_request is not None:
-                if isinstance(
-                    step.control_request,
-                    PumpStationPhysicalTreatmentActivationRequest,
-                ):
-                    replayed = apply_physical_treatment_activation(
-                        state,
-                        step.control_request,
-                    )
-                else:
-                    replayed = apply_evidence_treatment_schedule(
-                        state,
-                        step.control_request,
-                    )
-            else:
-                if step.proposal is None or step.information_set is None:
-                    issues.append(f"transition-replay-error:{transition_id}:run-step-shape")
-                    break
-                replayed = apply_stewardship_proposal(
-                    model,
-                    state,
-                    step.proposal,
-                    information_set=step.information_set,
-                )
-        except PumpStationProposalError as error:
-            issues.append(f"transition-replay-error:{transition_id}:{error.code}")
-            break
-        replayed_transition_ids.append(replayed.receipt.transition_id)
-        if replayed != step.transition:
-            issues.append(f"transition-replay-mismatch:{transition_id}")
-            break
-        state = replayed.state
-    return PumpStationVerificationReport(
-        valid=not issues and len(replayed_transition_ids) == len(steps),
-        issues=tuple(issues),
-        replayed_transition_ids=tuple(replayed_transition_ids),
-        final_state_id=stewardship_state_id(state),
-        active_restriction_ids=tuple(
-            restriction.restriction_id
-            for restriction in state.restrictions
-            if restriction.status is PumpStationRestrictionStatus.ACTIVE
-        ),
-        open_obligation_ids=tuple(
-            obligation.obligation_id
-            for obligation in state.obligations
-            if obligation.status is not PumpStationObligationStatus.FULFILLED
-        ),
-    )
+        return stewardship_content_id(self)
 
 
 def derive_pump_station_conservation_report(
     opening_state: PumpStationCoupledStewardshipState,
     terminal_state: PumpStationCoupledStewardshipState,
 ) -> PumpStationConservationReport:
-    """Derive four V4 balances from the declared opening and terminal states."""
+    """Derive four coupled balances from the declared opening and terminal states."""
     required = served = unserved = assigned = surplus = 0
     service_runtime = test_runtime = total_runtime_delta = collateral = 0
     for interval in terminal_state.operating_intervals:
@@ -397,10 +270,10 @@ def derive_pump_station_conservation_report(
     )
 
 
-def verify_stewardship_run_v4(
+def verify_coupled_stewardship_run(
     model: PumpStationCoupledModel,
     initial_state: PumpStationCoupledStewardshipState,
-    steps: tuple[PumpStationRunStepV4, ...],
+    steps: tuple[PumpStationCoupledRunStep, ...],
     *,
     expected_final_state_id: str,
     expected_task_world_id: str,
@@ -409,8 +282,8 @@ def verify_stewardship_run_v4(
     expected_world_branch_id: str,
     expected_actor_id: str,
     expected_source_artifact_ids: tuple[str, ...],
-) -> PumpStationVerificationReportV4:
-    """Replay each V4 command from the persisted opening state and exact model."""
+) -> PumpStationCoupledVerificationReport:
+    """Replay each coupled command from the persisted opening state and exact model."""
     state = initial_state
     actor_proposals_valid = all(
         step.proposal is not None
@@ -450,21 +323,27 @@ def verify_stewardship_run_v4(
                 raise ValueError("command-scope differs from the verified run")
             if command.based_on_sequence != state.sequence or command.base_state_id != state.state_id:
                 raise ValueError("command-parent differs from the replayed state")
-            decoded_command = decode_pump_station_v4_command(command)
+            decoded_command = decode_pump_station_command(command)
             if command.kind == "actor":
                 if step.proposal is None or step.information_set is None:
                     raise ValueError("actor step lacks proposal evidence")
                 if not isinstance(decoded_command, WorldActorActionRequest):
                     raise ValueError("actor command decoded as a root control")
                 request = decoded_command
+                if (
+                    command.agent_tenure_id is None
+                    or command.actor_view_id is None
+                    or command.information_set_id is None
+                ):
+                    raise ValueError("actor command lacks private decision context")
                 expected_information_set = project_coupled_information_set(
                     state,
                     episode_id=expected_episode_id,
                     world_branch_id=expected_world_branch_id,
                     actor_id=expected_actor_id,
-                    agent_tenure_id=request.binding.agent_tenure_id,
+                    agent_tenure_id=command.agent_tenure_id,
                     source_artifact_ids=expected_source_artifact_ids,
-                    workspace_tool_ids=(PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,),
+                    workspace_tool_ids=(PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID,),
                 )
                 view = step.information_set.base_view
                 if (
@@ -477,34 +356,34 @@ def verify_stewardship_run_v4(
                     )
                     != step.information_set
                     or step.information_set.current_context.workspace_tool_ids
-                    != (PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID_V2,)
+                    != (PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID,)
                     or not set(view.source_artifact_ids).issubset(
                         step.information_set.current_context.visible_material_ids,
                     )
                 ):
                     raise ValueError("actor-view or information-set content differs")
-                arguments = validate_pump_station_actor_arguments_v2(
+                arguments = validate_pump_station_actor_arguments(
                     command.action_name,
                     cast(dict[str, object], request.arguments),
                 )
                 reason = arguments.get("reason")
                 if not isinstance(reason, str):
                     raise ValueError("actor reason is missing")
-                expected_proposal = pump_station_proposal_from_validated_arguments_v2(
+                expected_proposal = pump_station_proposal_from_validated_arguments(
                     action_name=command.action_name,
                     arguments=arguments,
                     context=ProposalContext(
                         proposal_id=command.request_id,
-                        agent_tenure_id=request.binding.agent_tenure_id,
+                        agent_tenure_id=command.agent_tenure_id,
                         based_on_sequence=command.based_on_sequence,
-                        base_view_id=request.binding.actor_view_id,
-                        information_set_id=request.binding.information_set_id,
+                        base_view_id=command.actor_view_id,
+                        information_set_id=command.information_set_id,
                         reason=reason,
                     ),
                 )
                 if expected_proposal != step.proposal:
                     raise ValueError("stored actor proposal differs from its command")
-                replayed = apply_stewardship_proposal_v4(
+                replayed = apply_coupled_stewardship_proposal(
                     model,
                     state,
                     step.proposal,
@@ -513,7 +392,7 @@ def verify_stewardship_run_v4(
             else:
                 if isinstance(decoded_command, WorldActorActionRequest):
                     raise ValueError("root-control command decoded as an actor request")
-                replayed = apply_stewardship_control_v4(state, decoded_command)
+                replayed = apply_stewardship_control(state, decoded_command)
         except (
             PumpStationProposalError,
             PumpStationWorldRunError,
@@ -547,7 +426,7 @@ def verify_stewardship_run_v4(
         issues.append("work-conservation")
     if not conservation.liabilities.valid:
         issues.append("liability-conservation")
-    return PumpStationVerificationReportV4(
+    return PumpStationCoupledVerificationReport(
         valid=(replay_valid and actor_proposals_valid and host_controls_valid and conservation.valid),
         replay_valid=replay_valid,
         actor_proposals_valid=actor_proposals_valid,

@@ -400,12 +400,10 @@ _EXPORTS_BY_MODULE: dict[str, tuple[str, ...]] = {
         "ContinualWorldProfileRef",
     ),
     "aec_bench.contracts.world_interface": (
-        "WORLD_ACTOR_INTERFACE_SCHEMA_VERSION",
         "WORLD_CONTROL_INTERFACE_SCHEMA_VERSION",
         "WorldActorActionCapability",
         "WorldActorActionRequest",
         "WorldActorActionResult",
-        "WorldActorBinding",
         "WorldActorCapabilityCatalogue",
         "WorldActorObservation",
         "WorldInterfaceError",

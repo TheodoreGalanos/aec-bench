@@ -7,15 +7,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
+    PumpStationCoupledProcessStatus,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PumpStationObligationStatus,
-    PumpStationProcessStatus,
     PumpStationStewardshipState,
 )
 
 PUMP_STATION_TIME_ZONE = "Australia/Sydney"
 PUMP_STATION_CALENDAR_ORIGIN_DATETIME = "2026-01-01T00:00:00+11:00"
-PUMP_STATION_TIME_PROJECTION_POLICY_ID = "pump-station-current-state.v4"
 PUMP_STATION_OBLIGATION_DUE_RULE = "calendar deadline or pump runtime limit, whichever occurs first"
 
 _TIME_ZONE = ZoneInfo(PUMP_STATION_TIME_ZONE)
@@ -50,7 +51,7 @@ class PumpStationProcessTimeView:
     """Actor-readable completion time for one work process."""
 
     process_id: str
-    status: PumpStationProcessStatus
+    status: PumpStationCoupledProcessStatus
     completion_time: str
     time_remaining: str
 
@@ -183,15 +184,8 @@ def pump_station_time_context(
             PumpStationProcessTimeView(
                 process_id=process.process_id,
                 status=process.status,
-                completion_time=pump_station_datetime(process.completion_at_seconds),
-                time_remaining=format_calendar_duration(
-                    max(
-                        0,
-                        process.remaining_duration_seconds
-                        if process.remaining_duration_seconds is not None
-                        else process.completion_at_seconds - now,
-                    )
-                ),
+                completion_time=pump_station_datetime(process.due_at_calendar_seconds),
+                time_remaining=format_calendar_duration(max(0, process.remaining_duration_seconds)),
             )
             for process in state.processes
         ),

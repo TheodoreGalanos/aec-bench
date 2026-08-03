@@ -28,7 +28,7 @@ PUMP_STATION_ASW_8_EVENT_SCHEDULE_ID = "pump-station-asw-8-rs1-event-schedule.v1
 PUMP_STATION_ASW_8_TEMPORAL_TEMPLATE_ID = "pump-station-asw-8-rs1-temporal-template.v1"
 PUMP_STATION_ASW_8_TEMPORAL_BUILDER_ID = "pump-station-asw-8-temporal-builder.v1"
 _REFERENCE_SYSTEM_FILES = {
-    "descriptor.json": "6ad5471178737739fa9aeea64158971987ed576e7d3d0415a8979fea2735386f",
+    "descriptor.json": "0df5e78dd715019d0da71cd683872ad7a3d667914c017a95d1a68b386616ce49",
     "event-schedule.json": "3188afedbb8da98ad2a042dacb2a4094f2218cfd6482ae7cf98e16e74457af71",
     "initial-state.json": "1c3f82766c0dc03f31048aa5e12388f7e173bf907606c21f5b150914f874066a",
     "temporal-template.json": "daadc4183abd93b82f478c8af839a0590ed7ddd8dd941d5cce25a879582acd2d",

@@ -1,4 +1,4 @@
-# ABOUTME: Proves canonical V4 replay owns conservation and stewardship evaluation.
+# ABOUTME: Proves current replay owns conservation and stewardship evaluation.
 # ABOUTME: Checks actual opening identities, step-type integrity, and transport-neutral outcomes.
 
 from __future__ import annotations
@@ -7,14 +7,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from aec_bench.contracts.world_interface import WorldActorActionRequest
-from aec_bench.contracts.world_session import (
-    StewardshipStateSnapshotRef,
-    WorldSessionExecutionKind,
-    WorldSessionOpenMode,
-    WorldSessionRequest,
-)
 from aec_bench.evaluation.stewardship import (
-    STEWARDSHIP_EVALUATION_SCHEMA_VERSION_V2,
+    STEWARDSHIP_EVALUATION_SCHEMA_VERSION,
     evaluate_pump_station_reference_run,
     pump_station_semantic_outcome,
 )
@@ -23,8 +17,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_
     PumpStationPoolReservation,
     PumpStationPoolReservationStatus,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
-    PumpStationCoupledModel,
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
+    PumpStationEpisodeHost,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PUMP_STATION_BOUND_CONTROL_VERSION,
@@ -35,27 +29,22 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationObligationStatus,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
-    PumpStationRunStepV4,
+    PumpStationCoupledRunStep,
+    PumpStationCoupledVerificationReport,
     derive_pump_station_conservation_report,
-    verify_stewardship_run_v4,
+    verify_coupled_stewardship_run,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import (
     PumpStationWorldRun,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
-    PumpStationWorldRunManifestV2,
+    PumpStationRegisteredWorldRunManifest,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_session import (
-    PumpStationWorldSessionFactory,
-)
 
-type ReferenceRun = PumpStationWorldRun[
-    PumpStationCoupledModel,
-    PumpStationCoupledStewardshipState,
-]
+type ReferenceRun = PumpStationWorldRun
 
 
 def _create_run(root: Path, suffix: str) -> ReferenceRun:
@@ -67,29 +56,17 @@ def _create_run(root: Path, suffix: str) -> ReferenceRun:
     )
 
 
-def _shared_snapshot(run: ReferenceRun) -> StewardshipStateSnapshotRef:
-    snapshot = run.snapshot()
-    return StewardshipStateSnapshotRef(
-        run_id=snapshot.run_id,
-        episode_id=snapshot.episode_id,
-        world_branch_id=snapshot.world_branch_id,
-        sequence=snapshot.sequence,
-        state_id=snapshot.state_id,
-        commit_id=snapshot.commit_id,
-    )
-
-
 def _verify_steps(
     run: ReferenceRun,
     opening_state: PumpStationCoupledStewardshipState,
-    steps: tuple[PumpStationRunStepV4, ...] | None = None,
-):
+    steps: tuple[PumpStationCoupledRunStep, ...] | None = None,
+) -> PumpStationCoupledVerificationReport:
     manifest = run.manifest
-    assert isinstance(manifest, PumpStationWorldRunManifestV2)
-    return verify_stewardship_run_v4(
+    assert isinstance(manifest, PumpStationRegisteredWorldRunManifest)
+    return verify_coupled_stewardship_run(
         run.model,
         opening_state,
-        steps if steps is not None else run.repository.v4_steps(),
+        steps if steps is not None else run.repository.command_steps(),
         expected_final_state_id=run.state.state_id,
         expected_task_world_id=manifest.task_world_id,
         expected_run_id=manifest.run_id,
@@ -168,33 +145,19 @@ def test_conservation_uses_the_run_opening_state_and_detects_each_balance_mismat
     assert not derive_pump_station_conservation_report(opening, liability_state).liabilities.valid
 
 
-def test_v4_verification_reports_actor_proposals_and_host_controls_separately(
+def test_verification_reports_actor_proposals_and_host_controls_separately(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "mixed-run"
     run = _create_run(root, "mixed")
     opening = run.state
-    manifest = run.manifest
-    assert isinstance(manifest, PumpStationWorldRunManifestV2)
-    session = PumpStationWorldSessionFactory(root).open(
-        WorldSessionRequest(
-            execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
-            open_mode=WorldSessionOpenMode.RESUME,
-            session_id="evaluation-session",
-            task_world_id=manifest.task_world_id,
-            agent_tenure_id="evaluation-tenure",
-            run_id=manifest.run_id,
-            episode_id=manifest.episode_id,
-            world_branch_id=manifest.world_branch_id,
-            start_snapshot=_shared_snapshot(run),
-        )
-    )
-    observation = session.observe_actor()
-    session.invoke_actor_action(
+    host = PumpStationEpisodeHost(root)
+    observation = host.observe()
+    host.invoke(
         WorldActorActionRequest(
             request_id="evaluation-condition-check",
+            decision_id=observation.decision_id,
             action_name="request_condition_check",
-            binding=observation.binding,
             arguments={
                 "pump_id": "pump-a",
                 "reason": "Record one current condition check.",
@@ -210,7 +173,7 @@ def test_v4_verification_reports_actor_proposals_and_host_controls_separately(
         available=False,
         base_state_id=snapshot.state_id,
     )
-    run.apply_v4_control(
+    run.apply_control(
         PumpStationBoundControlRequest(
             control_envelope_version=PUMP_STATION_BOUND_CONTROL_VERSION,
             request_id=control.request_id,
@@ -225,7 +188,7 @@ def test_v4_verification_reports_actor_proposals_and_host_controls_separately(
     )
 
     report = _verify_steps(run, opening)
-    steps = run.repository.v4_steps()
+    steps = run.repository.command_steps()
     altered_actor = replace(
         steps[0],
         transition=replace(
@@ -264,7 +227,7 @@ def test_reference_evaluation_and_semantic_outcome_are_transport_neutral(
     first_outcome = pump_station_semantic_outcome(first)
     second_outcome = pump_station_semantic_outcome(second)
 
-    assert evaluation.schema_version == STEWARDSHIP_EVALUATION_SCHEMA_VERSION_V2
+    assert evaluation.schema_version == STEWARDSHIP_EVALUATION_SCHEMA_VERSION
     assert evaluation.evidence.initial_state_id == first.manifest.initial_state_id
     assert evaluation.evidence.terminal_state_id == first.state.state_id
     assert not evaluation.valid

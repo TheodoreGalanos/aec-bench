@@ -18,7 +18,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_e
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
     PUMP_STATION_MODEL_CONTROLLER_MODE,
     PUMP_STATION_MODEL_MAX_TURNS,
-    PUMP_STATION_REFERENCE_CONTROLLER_ID,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
@@ -43,7 +42,7 @@ def build_pump_station_harbor_job_config(
     task_dir: Path,
     jobs_dir: Path,
     backend: str = "docker",
-    model_name: str = PUMP_STATION_REFERENCE_CONTROLLER_ID,
+    model_name: str = PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
     max_turns: int = PUMP_STATION_MODEL_MAX_TURNS,
 ) -> dict[str, Any]:
     """Build one validated local Harbor configuration for the exported task."""
@@ -56,14 +55,7 @@ def build_pump_station_harbor_job_config(
         raise ValueError("pump-station Harbor model name is required")
     if max_turns < 1:
         raise ValueError("pump-station Harbor max turns must be positive")
-    reference_controller_id = (
-        PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
-        if bridge.profile_ref is not None
-        else PUMP_STATION_REFERENCE_CONTROLLER_ID
-    )
-    reference_controller = model == reference_controller_id
-    if bridge.maintenance_review and not reference_controller:
-        raise ValueError("pump-station review model runs require the separately approved direct host runner")
+    reference_controller = model == PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
     world_session = {"bridge_mode": bridge.bridge_mode}
     agent_kwargs: dict[str, Any] = {
         "adapter": "tool_loop",
@@ -118,7 +110,7 @@ def run_pump_station_harbor_job(
     jobs_dir: Path,
     config_path: Path,
     backend: str = "docker",
-    model_name: str = PUMP_STATION_REFERENCE_CONTROLLER_ID,
+    model_name: str = PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
     max_turns: int = PUMP_STATION_MODEL_MAX_TURNS,
     execute: bool = True,
 ) -> PumpStationHarborJobResult:

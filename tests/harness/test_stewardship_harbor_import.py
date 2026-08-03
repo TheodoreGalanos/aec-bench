@@ -22,7 +22,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_e
     load_pump_station_harbor_bridge,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
-    PUMP_STATION_REFERENCE_CONTROLLER_ID,
     CompletedPumpStationReferenceSession,
     run_pump_station_reference_session,
 )
@@ -125,6 +124,7 @@ def test_verified_world_session_imports_and_reloads_exact_trial_record(
     exported = export_pump_station_harbor_task(
         task_dir,
         project_root=PROJECT_ROOT,
+        profile_ref=pump_station_continual_world_definition().spec.profiles[0],
     )
     bridge = load_pump_station_harbor_bridge(task_dir / "environment")
     source_run_dir = tmp_path / "source-world-session"
@@ -137,7 +137,7 @@ def test_verified_world_session_imports_and_reloads_exact_trial_record(
         repo_root=repo_root,
         source_run_dir=source_run_dir,
         completed=completed,
-        model_name=PUMP_STATION_REFERENCE_CONTROLLER_ID,
+        model_name=PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
     )
 
     record = import_harbor_trial(
@@ -149,7 +149,7 @@ def test_verified_world_session_imports_and_reloads_exact_trial_record(
     assert reloaded == record
     assert record.agent.adapter == "tool_loop"
     assert record.world_execution is not None
-    assert record.world_execution.transition_count == 12
+    assert record.world_execution.transition_count == 25
     assert record.world_execution.end_snapshot == completed.result.snapshot
     assert record.world_provenance is not None
     assert record.outputs.artifacts is not None
@@ -159,7 +159,7 @@ def test_verified_world_session_imports_and_reloads_exact_trial_record(
     assert exported.manifest_path.exists()
 
 
-def test_registered_world_session_imports_through_the_canonical_v4_run(
+def test_registered_world_session_imports_through_the_current_run(
     tmp_path: Path,
 ) -> None:
     repo_root = tmp_path / "repo"
@@ -192,9 +192,9 @@ def test_registered_world_session_imports_through_the_canonical_v4_run(
 
     assert reloaded == record
     assert record.world_execution is not None
-    assert record.world_execution.start_snapshot.sequence == 7
+    assert record.world_execution.start_snapshot.sequence == 0
     assert record.world_execution.end_snapshot.sequence == 25
-    assert record.world_execution.transition_count == 18
+    assert record.world_execution.transition_count == 25
     assert record.world_execution.end_snapshot == completed.result.snapshot
     assert record.world_provenance is not None
     assert record.evaluation.stewardship is not None

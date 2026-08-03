@@ -9,14 +9,8 @@ from decimal import Decimal
 import pytest
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
-    PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
-    PUMP_STATION_OPERATIONS_REVIEW_VERSION,
-    PUMP_STATION_PROCESS_OUTCOME_VERSION,
-    PumpStationCommonBoundaryRequest,
     PumpStationCoupledWorldError,
     PumpStationCoupledWorldState,
-    PumpStationOperationsBoundaryReviewRequest,
-    PumpStationProcessOutcomeRequest,
     apply_common_boundary_control,
     apply_coupled_actor_action,
     apply_operations_boundary_review,
@@ -35,6 +29,14 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpStationPumpMode,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
+    PUMP_STATION_OPERATIONS_REVIEW_VERSION,
+    PUMP_STATION_PROCESS_OUTCOME_VERSION,
+    PumpStationCommonBoundaryRequest,
+    PumpStationOperationsBoundaryReviewRequest,
+    PumpStationProcessOutcomeRequest,
 )
 
 
@@ -151,7 +153,7 @@ def _runtime_backlog(item_id: str, pump_id: str, runtime_limit: int) -> PumpStat
     )
 
 
-def test_projection_v5_presents_dates_and_complete_planning_windows() -> None:
+def test_current_projection_presents_dates_and_complete_planning_windows() -> None:
     view = project_coupled_actor_view(create_asw_8_world_state())
 
     assert view.time_zone == "Australia/Sydney"
