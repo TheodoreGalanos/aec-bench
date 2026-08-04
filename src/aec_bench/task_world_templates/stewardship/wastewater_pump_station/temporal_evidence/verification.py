@@ -18,7 +18,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal
     TemporalActorVisibleEvent,
     TemporalEvidenceAccessKind,
     TemporalEvidenceRelianceRecord,
-    TemporalSessionInformationSetManifestV2,
     temporal_actor_event_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.gateway import (
@@ -55,7 +54,6 @@ class TemporalActionEvidenceSets(FrozenStrictModel):
 class TemporalEvidenceVerificationReport(ContentAddressedModel):
     """Independent result over one complete local temporal-evidence ledger."""
 
-    schema_version: str = "pump-station.temporal-evidence-verification.v1"
     valid: bool
     issues: tuple[TemporalEvidenceVerificationIssue, ...]
     access_count: int
@@ -78,7 +76,6 @@ def verify_temporal_evidence_repository(
     *,
     package: ReferencePackage,
     proposal_bindings: Mapping[str, tuple[str, str]] | None = None,
-    selected_session_information_sets: tuple[TemporalSessionInformationSetManifestV2, ...] | None = None,
 ) -> TemporalEvidenceVerificationReport:
     """Recompute every deterministic access and cross-check all continuing state."""
 
@@ -91,18 +88,7 @@ def verify_temporal_evidence_repository(
     try:
         bundle = repository.load_bundle(package=package)
         gateway = TemporalEvidenceGateway(bundle)
-        if selected_session_information_sets is None:
-            commits = repository.access_commits()
-            selected_carriers = None
-            selected_handover_receipts = None
-            selected_install_receipts = None
-        else:
-            (
-                commits,
-                selected_carriers,
-                selected_handover_receipts,
-                selected_install_receipts,
-            ) = repository.select_verification_evidence(selected_session_information_sets)
+        commits = repository.access_commits()
         access_count = len(commits)
         for commit in commits:
             try:
@@ -178,15 +164,7 @@ def verify_temporal_evidence_repository(
                     )
                 )
 
-        reliance_records = (
-            repository.evidence_reliance_records()
-            if selected_session_information_sets is None
-            else tuple(
-                repository.load_evidence_reliance(action_request_id)
-                for action_request_id in sorted(proposal_bindings or {})
-                if repository.has_evidence_reliance(action_request_id)
-            )
-        )
+        reliance_records = repository.evidence_reliance_records()
         reliance_count = len(reliance_records)
         for record in reliance_records:
             _verify_reliance(
@@ -198,14 +176,10 @@ def verify_temporal_evidence_repository(
                 action_sets=action_sets,
             )
 
-        carriers = repository.retrieval_carriers() if selected_carriers is None else selected_carriers
+        carriers = repository.retrieval_carriers()
         carrier_count = len(carriers)
         carriers_by_id = {item.content_sha256: item for item in carriers}
-        handover_receipts = (
-            repository.retrieval_handover_receipts()
-            if selected_handover_receipts is None
-            else selected_handover_receipts
-        )
+        handover_receipts = repository.retrieval_handover_receipts()
         for handover_receipt in handover_receipts:
             carrier = carriers_by_id.get(handover_receipt.carrier_id)
             if carrier is None or (
@@ -219,11 +193,7 @@ def verify_temporal_evidence_repository(
                         artifact_id=handover_receipt.carrier_id,
                     )
                 )
-        install_receipts = (
-            repository.retrieval_handover_install_receipts()
-            if selected_install_receipts is None
-            else selected_install_receipts
-        )
+        install_receipts = repository.retrieval_handover_install_receipts()
         for install_receipt in install_receipts:
             carrier = carriers_by_id.get(install_receipt.carrier_id)
             state = repository.load_retrieval_state_artifact(

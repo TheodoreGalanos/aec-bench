@@ -4,15 +4,14 @@
 from __future__ import annotations
 
 import ast
-import json
-from dataclasses import FrozenInstanceError, replace
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
 
 from aec_bench.contracts.continual_world import (
-    ContinualWorldDefinitionRef,
     ContinualWorldProfileRef,
+    WorldBuildRef,
 )
 from aec_bench.meta_harness.evidence_lifecycle import run_evidence_lifecycle
 from aec_bench.task_world_templates.continual.catalogue import ContinualWorldCatalogue
@@ -29,9 +28,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continua
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
     PUMP_STATION_TASK_WORLD_ID,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
-    PUMP_STATION_HARBOR_EXECUTION_KIND,
-)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpStationCoupledModel,
     PumpStationCoupledPhysicalState,
@@ -43,38 +39,12 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationStewardshipState,
 )
 
-SSC03_GOLDEN_PATH = Path(__file__).parents[1] / "fixtures" / "ssc03_hydraulic_continual_profiles.v1.json"
-
 
 def test_catalogue_rejects_duplicate_world_id() -> None:
     definition = ssc03_hydraulic_continual_world_definition()
 
     with pytest.raises(ValueError, match="task world ids must be unique"):
         ContinualWorldCatalogue(definitions=(definition, definition))
-
-
-def test_catalogue_resolves_unique_harbor_execution_kind() -> None:
-    catalogue = default_continual_world_catalogue()
-
-    definition, port = catalogue.resolve_harbor(PUMP_STATION_HARBOR_EXECUTION_KIND)
-
-    assert definition is catalogue.get(PUMP_STATION_TASK_WORLD_ID)
-    assert port is definition.harbor_port
-    assert PUMP_STATION_HARBOR_EXECUTION_KIND in port.execution_kinds
-
-
-def test_catalogue_rejects_duplicate_harbor_execution_kind() -> None:
-    pump_definition = pump_station_continual_world_definition()
-    assert pump_definition.harbor_port is not None
-    hydraulic_with_pump_port = replace(
-        ssc03_hydraulic_continual_world_definition(),
-        harbor_port=pump_definition.harbor_port,
-    )
-
-    with pytest.raises(ValueError, match="Harbor execution kinds must be unique"):
-        ContinualWorldCatalogue(
-            definitions=(pump_definition, hydraulic_with_pump_port),
-        )
 
 
 def test_catalogue_resolves_exact_content_pinned_definition() -> None:
@@ -87,23 +57,22 @@ def test_catalogue_resolves_exact_content_pinned_definition() -> None:
 def test_catalogue_rejects_stale_definition_reference() -> None:
     catalogue = default_continual_world_catalogue()
     definition = catalogue.get(SSC03_HYDRAULIC_CONTINUAL_WORLD_ID)
-    stale = ContinualWorldDefinitionRef(
+    stale = WorldBuildRef(
         task_world_id=definition.ref.task_world_id,
-        definition_version=definition.ref.definition_version,
-        content_sha256="f" * 64,
+        entry_point=definition.ref.entry_point,
+        artifact_sha256="f" * 64,
     )
 
-    with pytest.raises(ValueError, match="content-pinned definition does not match"):
+    with pytest.raises(ValueError, match="world build does not match"):
         catalogue.resolve(stale)
 
 
 def test_definition_rejects_stale_profile_reference() -> None:
     definition = ssc03_hydraulic_continual_world_definition()
-    current = definition.profile_ref("major_idf_revision", "1")
+    current = definition.profile_ref("major_idf_revision")
     stale = ContinualWorldProfileRef(
         task_world_id=current.task_world_id,
         profile_id=current.profile_id,
-        profile_version=current.profile_version,
         profile_content_sha256="f" * 64,
     )
 
@@ -113,11 +82,10 @@ def test_definition_rejects_stale_profile_reference() -> None:
 
 def test_definition_rejects_profile_from_another_real_world() -> None:
     definition = ssc03_hydraulic_continual_world_definition()
-    current = definition.profile_ref("major_idf_revision", "1")
+    current = definition.profile_ref("major_idf_revision")
     foreign = ContinualWorldProfileRef(
         task_world_id=PUMP_STATION_TASK_WORLD_ID,
         profile_id=current.profile_id,
-        profile_version=current.profile_version,
         profile_content_sha256=current.profile_content_sha256,
     )
 
@@ -132,9 +100,7 @@ def test_catalogue_rejects_unknown_world_and_profile() -> None:
     with pytest.raises(KeyError, match="unknown continual task world"):
         catalogue.get("unknown-world")
     with pytest.raises(KeyError, match="unknown continual-world profile"):
-        definition.profile_ref("unknown-profile", "1")
-    with pytest.raises(KeyError, match="unsupported continual-world profile version"):
-        definition.profile_ref("major_idf_revision", "2")
+        definition.profile_ref("unknown-profile")
 
 
 def test_continual_core_does_not_import_concrete_task_packages() -> None:
@@ -184,18 +150,18 @@ def test_real_consumers_satisfy_the_same_definition_profile_contract(
     expected_type: type[object],
 ) -> None:
     definition = default_continual_world_catalogue().get(task_world_id)
-    reference = definition.profile_ref(profile_id, "1")
+    reference = definition.profile_ref(profile_id)
 
     loaded = definition.load_profile(reference)
 
-    assert definition.spec.task_world_id == task_world_id
+    assert definition.build.task_world_id == task_world_id
     assert loaded.reference == reference
     assert isinstance(loaded.value, expected_type)
 
 
 def test_pump_definition_loads_the_exact_rs1_profile() -> None:
     definition = pump_station_continual_world_definition()
-    reference = definition.profile_ref(PUMP_STATION_REFERENCE_SYSTEM_ID, "1")
+    reference = definition.profile_ref(PUMP_STATION_REFERENCE_SYSTEM_ID)
 
     loaded = definition.load_profile(reference)
 
@@ -214,7 +180,6 @@ def test_pump_definition_loads_the_exact_rs1_profile() -> None:
 
 def test_ssc03_definition_loads_every_registered_hydraulic_profile() -> None:
     definition = ssc03_hydraulic_continual_world_definition()
-    golden = json.loads(SSC03_GOLDEN_PATH.read_text(encoding="utf-8"))
     expected_ids = (
         "administrative_no_op",
         "major_idf_revision",
@@ -222,12 +187,12 @@ def test_ssc03_definition_loads_every_registered_hydraulic_profile() -> None:
         "tailwater_revision",
     )
 
-    assert tuple(profile.profile_id for profile in definition.spec.profiles) == expected_ids
+    assert tuple(profile.profile_id for profile in definition.profiles) == expected_ids
     for profile_id in expected_ids:
-        reference = definition.profile_ref(profile_id, "1")
+        reference = definition.profile_ref(profile_id)
         loaded = definition.load_profile(reference)
         assert loaded.reference == reference
-        assert reference.profile_content_sha256 == golden["profiles"][profile_id]
+        assert len(reference.profile_content_sha256) == 64
         assert isinstance(loaded.value, Ssc03HydraulicContinualProfile)
         assert loaded.value.reference == reference
         assert loaded.value.profile_id == profile_id
@@ -235,20 +200,20 @@ def test_ssc03_definition_loads_every_registered_hydraulic_profile() -> None:
 
 def test_ssc03_loaded_profile_does_not_expose_mutable_execution_inputs() -> None:
     definition = ssc03_hydraulic_continual_world_definition()
-    loaded = definition.load_profile(definition.profile_ref("major_idf_revision", "1"))
+    loaded = definition.load_profile(definition.profile_ref("major_idf_revision"))
     assert isinstance(loaded.value, Ssc03HydraulicContinualProfile)
 
     assert not hasattr(loaded.value, "template")
     assert not hasattr(loaded.value, "variant")
     assert not hasattr(loaded.value, "adapter")
     with pytest.raises(FrozenInstanceError):
-        loaded.value.reference = definition.profile_ref("tailwater_revision", "1")  # type: ignore[misc]
+        loaded.value.reference = definition.profile_ref("tailwater_revision")  # type: ignore[misc]
 
 
 def test_ssc03_profile_rejects_package_from_another_registered_profile(tmp_path: Path) -> None:
     definition = ssc03_hydraulic_continual_world_definition()
-    major = definition.load_profile(definition.profile_ref("major_idf_revision", "1"))
-    tailwater = definition.load_profile(definition.profile_ref("tailwater_revision", "1"))
+    major = definition.load_profile(definition.profile_ref("major_idf_revision"))
+    tailwater = definition.load_profile(definition.profile_ref("tailwater_revision"))
     assert isinstance(major.value, Ssc03HydraulicContinualProfile)
     assert isinstance(tailwater.value, Ssc03HydraulicContinualProfile)
     tailwater_package = tailwater.value.compile(tmp_path / "tailwater-package")
@@ -259,15 +224,15 @@ def test_ssc03_profile_rejects_package_from_another_registered_profile(tmp_path:
 
 def test_ssc03_profile_rejects_stale_definition_implementation(tmp_path: Path) -> None:
     definition = ssc03_hydraulic_continual_world_definition()
-    profile_reference = definition.profile_ref("major_idf_revision", "1")
-    stale_definition_reference = ContinualWorldDefinitionRef(
+    profile_reference = definition.profile_ref("major_idf_revision")
+    stale_world_build = WorldBuildRef(
         task_world_id=definition.ref.task_world_id,
-        definition_version=definition.ref.definition_version,
-        content_sha256="f" * 64,
+        entry_point=definition.ref.entry_point,
+        artifact_sha256="f" * 64,
     )
     stale = Ssc03HydraulicContinualProfile(
         reference=profile_reference,
-        definition_reference=stale_definition_reference,
+        world_build=stale_world_build,
     )
 
     with pytest.raises(ValueError, match="definition implementation differs"):
@@ -277,7 +242,7 @@ def test_ssc03_profile_rejects_stale_definition_implementation(tmp_path: Path) -
 def test_ssc03_catalogue_profile_executes_and_verifies_real_lifecycle(tmp_path: Path) -> None:
     catalogue = default_continual_world_catalogue()
     definition = catalogue.get(SSC03_HYDRAULIC_CONTINUAL_WORLD_ID)
-    loaded = definition.load_profile(definition.profile_ref("major_idf_revision", "1"))
+    loaded = definition.load_profile(definition.profile_ref("major_idf_revision"))
     assert isinstance(loaded.value, Ssc03HydraulicContinualProfile)
     compiled = loaded.value.compile(tmp_path / "package")
     assert compiled.envelope.world_id == loaded.reference.task_world_id

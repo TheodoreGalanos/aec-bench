@@ -11,11 +11,9 @@ from pydantic import model_validator
 from aec_bench.contracts.harness_kernel import (
     ContentAddressedModel,
     canonical_content_sha256,
-    validate_sha256,
 )
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.models import (
-    TEMPORAL_EVIDENCE_SCHEMA_VERSION,
     RetrievalBudgetVector,
     TemporalEvidenceAuthorityClass,
     TemporalEvidenceSourceClass,
@@ -54,7 +52,6 @@ class TemporalEvidencePrivateReason(StrEnum):
 class TemporalAccessContext(ContentAddressedModel):
     """Complete host-owned context for one deterministic search or fetch."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     run_id: NonEmptyStr
     episode_id: NonEmptyStr
     world_instance_id: NonEmptyStr
@@ -86,7 +83,6 @@ class TemporalAccessContext(ContentAddressedModel):
 class TemporalEvidenceVisibleReference(ContentAddressedModel):
     """One actor-visible opaque reference and bounded documentary metadata."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     opaque_reference: NonEmptyStr
     version_id: NonEmptyStr
     title: NonEmptyStr
@@ -104,7 +100,6 @@ class TemporalEvidenceVisibleReference(ContentAddressedModel):
 class TemporalFetchedEvidence(ContentAddressedModel):
     """Actor-visible retained content returned only for an issued reference."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     opaque_reference: NonEmptyStr
     version_id: NonEmptyStr
     title: NonEmptyStr
@@ -119,7 +114,6 @@ class TemporalFetchedEvidence(ContentAddressedModel):
 class TemporalEvidenceAccessResult(ContentAddressedModel):
     """Exact actor-visible projection of one search or fetch."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     request_id: NonEmptyStr
     access_sequence: int
     operation: TemporalEvidenceAccessKind
@@ -169,7 +163,6 @@ class IssuedTemporalReference(FrozenStrictModel):
 class TemporalRetrievalState(ContentAddressedModel):
     """Durable per-tenure access state with exact remaining budget."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     state_sequence: int
     previous_state_id: str | None
     reference_namespace_id: NonEmptyStr
@@ -206,7 +199,6 @@ class TemporalRetrievalState(ContentAddressedModel):
 class TemporalEvidenceAccessReceipt(ContentAddressedModel):
     """Host-private receipt for one non-mutating evidence access."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     receipt_sequence: int
     request_id: NonEmptyStr
     request_content_id: NonEmptyStr
@@ -297,7 +289,6 @@ class TemporalAccessDecision(FrozenStrictModel):
 class TemporalInformationSetManifest(ContentAddressedModel):
     """Strict temporal projection of the parent-owned information-set content."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     information_set_id: NonEmptyStr
     base_view_id: NonEmptyStr
     agent_tenure_id: NonEmptyStr
@@ -322,81 +313,9 @@ class TemporalInformationSetManifest(ContentAddressedModel):
         return self
 
 
-TEMPORAL_SESSION_INFORMATION_SET_SCHEMA_VERSION_V2 = "pump-station.temporal-session-information-set.v2"
-
-
-class TemporalSessionInformationSetManifestV2(ContentAddressedModel):
-    """Immutable host binding for one exact session information set."""
-
-    schema_version: str = TEMPORAL_SESSION_INFORMATION_SET_SCHEMA_VERSION_V2
-    session_binding_sequence: int
-    session_activation_content_id: NonEmptyStr
-    prior_session_binding_content_id: str | None
-    task_world_id: NonEmptyStr
-    run_id: NonEmptyStr
-    episode_id: NonEmptyStr
-    world_instance_id: NonEmptyStr
-    world_branch_id: NonEmptyStr
-    branch_ancestor_ids: tuple[NonEmptyStr, ...]
-    world_state_id: NonEmptyStr
-    world_commit_id: NonEmptyStr
-    world_sequence: int
-    world_time_seconds: int
-    actor_id: NonEmptyStr
-    actor_role: NonEmptyStr
-    agent_tenure_id: NonEmptyStr
-    session_id: NonEmptyStr
-    base_view_id: NonEmptyStr
-    information_set_id: NonEmptyStr
-    tenure_started_at_seconds: int
-    observation_history_view_ids: tuple[NonEmptyStr, ...]
-    continuity_carrier: NonEmptyStr
-    conversation_prefix_id: NonEmptyStr | None
-    tool_contract_id: NonEmptyStr
-    workspace_tool_ids: tuple[NonEmptyStr, ...]
-    source_artifact_ids: tuple[NonEmptyStr, ...]
-    visible_material_ids: tuple[NonEmptyStr, ...]
-    retrieval_state_content_id: NonEmptyStr
-
-    @model_validator(mode="after")
-    def validate_manifest(self) -> Self:
-        if self.schema_version != TEMPORAL_SESSION_INFORMATION_SET_SCHEMA_VERSION_V2:
-            raise ValueError("unsupported temporal session information-set version")
-        if self.session_binding_sequence < 0:
-            raise ValueError("session information-set sequence must be non-negative")
-        if self.world_sequence < 0 or self.world_time_seconds < 0:
-            raise ValueError("session information-set world position must be non-negative")
-        if not 0 <= self.tenure_started_at_seconds <= self.world_time_seconds:
-            raise ValueError("session information-set tenure start is outside world time")
-        if (self.session_binding_sequence == 0) != (self.prior_session_binding_content_id is None):
-            raise ValueError("session information-set prior binding differs from its sequence")
-        validate_sha256(self.session_activation_content_id)
-        validate_sha256(self.retrieval_state_content_id)
-        if self.prior_session_binding_content_id is not None:
-            validate_sha256(self.prior_session_binding_content_id)
-        if not self.observation_history_view_ids:
-            raise ValueError("session information-set observation history must not be empty")
-        if self.observation_history_view_ids[-1] != self.base_view_id:
-            raise ValueError("session information-set base view must be the latest observation")
-        for label, values, allow_empty in (
-            ("branch ancestors", self.branch_ancestor_ids, True),
-            ("workspace tools", self.workspace_tool_ids, False),
-            ("source artifacts", self.source_artifact_ids, False),
-            ("visible material", self.visible_material_ids, True),
-        ):
-            if not allow_empty and not values:
-                raise ValueError(f"session information-set {label} must not be empty")
-            if len(values) != len(set(values)):
-                raise ValueError(f"session information-set {label} must be distinct")
-        if self.world_branch_id in self.branch_ancestor_ids:
-            raise ValueError("current branch cannot be its own ancestor")
-        return self
-
-
 class TemporalActorVisibleEvent(ContentAddressedModel):
     """One parent-valid actor-visible event projection for an access result."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     event_id: NonEmptyStr
     event_sequence: int
     actor_id: NonEmptyStr
@@ -468,7 +387,6 @@ class TemporalAccessPublication(FrozenStrictModel):
 class TemporalRetrievalStateCarrier(ContentAddressedModel):
     """Sanitized actor-visible retrieval state carried to one fresh tenure."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     carrier_policy_id: NonEmptyStr = "temporal-retrieval-carrier.v1"
     run_id: NonEmptyStr
     episode_id: NonEmptyStr
@@ -504,7 +422,6 @@ class TemporalRetrievalStateCarrier(ContentAddressedModel):
 class TemporalRetrievalHandoverReceipt(ContentAddressedModel):
     """Host-private proof of one sanitized retrieval-carrier projection."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     carrier_id: NonEmptyStr
     source_state_id: NonEmptyStr
     from_agent_tenure_id: NonEmptyStr
@@ -527,7 +444,6 @@ class TemporalRetrievalHandoverReceipt(ContentAddressedModel):
 class TemporalRetrievalHandoverInstallReceipt(ContentAddressedModel):
     """Host-private proof that one fresh tenure installed one exact carrier."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     carrier_id: NonEmptyStr
     target_session_key: NonEmptyStr
     prior_state_id: NonEmptyStr
@@ -539,7 +455,6 @@ class TemporalRetrievalHandoverInstallReceipt(ContentAddressedModel):
 class TemporalEvidenceRelianceRecord(ContentAddressedModel):
     """Explicit actor claim that one world action relied on supplied evidence."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     action_request_id: NonEmptyStr
     action_name: NonEmptyStr
     actor_id: NonEmptyStr
@@ -591,7 +506,6 @@ class TemporalEvidenceRelianceRecord(ContentAddressedModel):
 class TemporalRetrievalSessionManifest(ContentAddressedModel):
     """Immutable identity of one tenure-scoped retrieval-state chain."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     session_key: NonEmptyStr
     run_id: NonEmptyStr
     episode_id: NonEmptyStr
@@ -606,7 +520,6 @@ class TemporalRetrievalSessionManifest(ContentAddressedModel):
 class TemporalRetrievalStatePointer(FrozenStrictModel):
     """Mutable selector for one immutable tenure retrieval state."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     session_key: NonEmptyStr
     state_sequence: int
     state_id: NonEmptyStr
@@ -621,35 +534,14 @@ class TemporalRetrievalStatePointer(FrozenStrictModel):
 class TemporalInformationSetPointer(FrozenStrictModel):
     """Mutable selector for the latest immutable session information set."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     session_key: NonEmptyStr
     information_set_id: NonEmptyStr
     information_set_content_id: NonEmptyStr
 
 
-class TemporalSessionInformationSetPointerV2(FrozenStrictModel):
-    """Mutable selector for the latest immutable session binding."""
-
-    schema_version: str = TEMPORAL_SESSION_INFORMATION_SET_SCHEMA_VERSION_V2
-    session_key: NonEmptyStr
-    session_binding_sequence: int
-    information_set_id: NonEmptyStr
-    manifest_content_id: NonEmptyStr
-
-    @model_validator(mode="after")
-    def validate_pointer(self) -> Self:
-        if self.schema_version != TEMPORAL_SESSION_INFORMATION_SET_SCHEMA_VERSION_V2:
-            raise ValueError("unsupported temporal session information-set pointer version")
-        if self.session_binding_sequence < 0:
-            raise ValueError("session information-set pointer sequence must be non-negative")
-        validate_sha256(self.manifest_content_id)
-        return self
-
-
 class TemporalAccessCommit(ContentAddressedModel):
     """Immutable staged access commit selected by one tenure pointer."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     session_key: NonEmptyStr
     request_id: NonEmptyStr
     request_content_id: NonEmptyStr

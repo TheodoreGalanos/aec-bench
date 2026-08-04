@@ -10,9 +10,6 @@ from pydantic import model_validator
 
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 
-WORLD_SESSION_SCHEMA_VERSION = "aecbench.world-session.v1"
-STEWARDSHIP_STATE_SNAPSHOT_SCHEMA_VERSION = "aecbench.stewardship-state-snapshot.v1"
-
 
 class WorldSessionExecutionKind(StrEnum):
     """Host execution kind for a persistent stewardship interaction."""
@@ -30,7 +27,6 @@ class WorldSessionOpenMode(StrEnum):
 class StewardshipStateSnapshotRef(FrozenStrictModel):
     """Task-neutral identity of one selected dynamic stewardship state."""
 
-    schema_version: str = STEWARDSHIP_STATE_SNAPSHOT_SCHEMA_VERSION
     run_id: NonEmptyStr
     episode_id: NonEmptyStr
     world_branch_id: NonEmptyStr
@@ -40,8 +36,6 @@ class StewardshipStateSnapshotRef(FrozenStrictModel):
 
     @model_validator(mode="after")
     def validate_snapshot(self) -> Self:
-        if self.schema_version != STEWARDSHIP_STATE_SNAPSHOT_SCHEMA_VERSION:
-            raise ValueError("unsupported stewardship snapshot schema version")
         if self.sequence < 0:
             raise ValueError("snapshot sequence must be non-negative")
         return self
@@ -50,7 +44,6 @@ class StewardshipStateSnapshotRef(FrozenStrictModel):
 class WorldSessionRequest(FrozenStrictModel):
     """Minimum host request shared by a session controller and one task world."""
 
-    schema_version: str = WORLD_SESSION_SCHEMA_VERSION
     execution_kind: WorldSessionExecutionKind
     open_mode: WorldSessionOpenMode
     session_id: NonEmptyStr
@@ -63,8 +56,6 @@ class WorldSessionRequest(FrozenStrictModel):
 
     @model_validator(mode="after")
     def validate_open_mode(self) -> Self:
-        if self.schema_version != WORLD_SESSION_SCHEMA_VERSION:
-            raise ValueError("unsupported world-session schema version")
         if self.open_mode is WorldSessionOpenMode.START and self.start_snapshot is not None:
             raise ValueError("start request must not contain a prior snapshot")
         if self.open_mode is WorldSessionOpenMode.RESUME and self.start_snapshot is None:
@@ -85,7 +76,6 @@ class WorldSessionRequest(FrozenStrictModel):
 class WorldSessionResult(FrozenStrictModel):
     """Current public host result for one opened world session."""
 
-    schema_version: str = WORLD_SESSION_SCHEMA_VERSION
     execution_kind: WorldSessionExecutionKind
     open_mode: WorldSessionOpenMode
     session_id: NonEmptyStr
@@ -98,8 +88,6 @@ class WorldSessionResult(FrozenStrictModel):
 
     @model_validator(mode="after")
     def validate_result(self) -> Self:
-        if self.schema_version != WORLD_SESSION_SCHEMA_VERSION:
-            raise ValueError("unsupported world-session schema version")
         if not self.tool_names:
             raise ValueError("world session must declare at least one tool")
         if len(set(self.tool_names)) != len(self.tool_names):

@@ -7,7 +7,6 @@ from typing import Any, Self
 
 from pydantic import JsonValue, model_validator
 
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 from aec_bench.contracts.world_session import (
     StewardshipStateSnapshotRef,
@@ -15,8 +14,6 @@ from aec_bench.contracts.world_session import (
     WorldSessionRequest,
     WorldSessionResult,
 )
-
-WORLD_CONTROL_INTERFACE_SCHEMA_VERSION = "aecbench.world-control-interface.v1"
 
 
 class WorldInterfaceError(RuntimeError):
@@ -85,22 +82,17 @@ class WorldControlOperationCapability(FrozenStrictModel):
     """One declared host-only operation and its durable-state effect."""
 
     operation: NonEmptyStr
-    version: NonEmptyStr
     changes_durable_state: bool
 
 
-class WorldControlCapabilityCatalogue(ContentAddressedModel):
+class WorldControlCapabilityCatalogue(FrozenStrictModel):
     """Closed host-control surface for one task world."""
 
-    schema_version: str = WORLD_CONTROL_INTERFACE_SCHEMA_VERSION
     task_world_id: NonEmptyStr
-    interface_version: NonEmptyStr
     operations: tuple[WorldControlOperationCapability, ...]
 
     @model_validator(mode="after")
     def validate_catalogue(self) -> Self:
-        if self.schema_version != WORLD_CONTROL_INTERFACE_SCHEMA_VERSION:
-            raise ValueError("unsupported world control interface schema version")
         names = tuple(item.operation for item in self.operations)
         if not names:
             raise ValueError("world control catalogue must contain an operation")
@@ -109,10 +101,9 @@ class WorldControlCapabilityCatalogue(ContentAddressedModel):
         return self
 
 
-class WorldControlRequest(ContentAddressedModel):
+class WorldControlRequest(FrozenStrictModel):
     """One host-authorised request with no raw state mutation field."""
 
-    schema_version: str = WORLD_CONTROL_INTERFACE_SCHEMA_VERSION
     request_id: NonEmptyStr
     operation: NonEmptyStr
     task_world_id: NonEmptyStr
@@ -128,8 +119,6 @@ class WorldControlRequest(ContentAddressedModel):
 
     @model_validator(mode="after")
     def validate_request(self) -> Self:
-        if self.schema_version != WORLD_CONTROL_INTERFACE_SCHEMA_VERSION:
-            raise ValueError("unsupported world control interface schema version")
         session_operations = {"create_session", "open_session", "resume_session"}
         if self.operation in session_operations and self.session_request is None:
             raise ValueError(f"{self.operation} requires a session request")
@@ -150,11 +139,10 @@ class WorldControlRequest(ContentAddressedModel):
         return self
 
 
-class WorldControlReceipt(ContentAddressedModel):
+class WorldControlReceipt(FrozenStrictModel):
     """Immutable receipt for one host-control request."""
 
-    schema_version: str = WORLD_CONTROL_INTERFACE_SCHEMA_VERSION
-    request_content_sha256: NonEmptyStr
+    request_id: NonEmptyStr
     operation: NonEmptyStr
     authority_id: NonEmptyStr
     status: NonEmptyStr
@@ -187,11 +175,10 @@ class WorldControlVerification(FrozenStrictModel):
     final_state_id: NonEmptyStr
 
 
-class WorldControlResult(ContentAddressedModel):
+class WorldControlResult(FrozenStrictModel):
     """Typed machine-readable result from one host-only control operation."""
 
-    schema_version: str = WORLD_CONTROL_INTERFACE_SCHEMA_VERSION
-    request_content_sha256: NonEmptyStr
+    request_id: NonEmptyStr
     receipt: WorldControlReceipt
     session_result: WorldSessionResult | None = None
     progress: WorldControlProgress | None = None
@@ -200,8 +187,6 @@ class WorldControlResult(ContentAddressedModel):
 
     @model_validator(mode="after")
     def validate_result(self) -> Self:
-        if self.schema_version != WORLD_CONTROL_INTERFACE_SCHEMA_VERSION:
-            raise ValueError("unsupported world control interface schema version")
         payloads = (
             self.session_result,
             self.progress,
@@ -210,6 +195,6 @@ class WorldControlResult(ContentAddressedModel):
         )
         if sum(item is not None for item in payloads) != 1:
             raise ValueError("world control result must contain exactly one typed payload")
-        if self.receipt.request_content_sha256 != self.request_content_sha256:
+        if self.receipt.request_id != self.request_id:
             raise ValueError("world control result and receipt request identities differ")
         return self

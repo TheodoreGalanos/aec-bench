@@ -9,16 +9,11 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     PumpStationStateSnapshotRef,
 )
 
-# Persistence-edge name and value are retained so current branch receipts keep
-# their exact canonical bytes and content identity.
-PUMP_STATION_ROLLOUT_BRANCH_RECEIPT_VERSION_V2 = "pump-station.rollout-branch-receipt.v2"
-
 
 @dataclass(frozen=True, slots=True)
-class PumpStationRolloutBranchReceiptV2:
+class PumpStationRolloutBranchReceipt:
     """Private persisted evidence for one materialized registered branch."""
 
-    receipt_version: str
     group_id: str
     child_id: str
     shared_group_request_content_sha256: str

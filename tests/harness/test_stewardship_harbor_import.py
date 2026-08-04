@@ -124,7 +124,7 @@ def test_verified_world_session_imports_and_reloads_exact_trial_record(
     exported = export_pump_station_harbor_task(
         task_dir,
         project_root=PROJECT_ROOT,
-        profile_ref=pump_station_continual_world_definition().spec.profiles[0],
+        profile_ref=pump_station_continual_world_definition().profiles[0],
     )
     bridge = load_pump_station_harbor_bridge(task_dir / "environment")
     source_run_dir = tmp_path / "source-world-session"
@@ -164,7 +164,7 @@ def test_registered_world_session_imports_through_the_current_run(
 ) -> None:
     repo_root = tmp_path / "repo"
     task_dir = repo_root / "tasks" / "stewardship" / "wastewater-pump-station"
-    profile_ref = pump_station_continual_world_definition().spec.profiles[0]
+    profile_ref = pump_station_continual_world_definition().profiles[0]
     exported = export_pump_station_harbor_task(
         task_dir,
         project_root=PROJECT_ROOT,
@@ -198,7 +198,6 @@ def test_registered_world_session_imports_through_the_current_run(
     assert record.world_execution.end_snapshot == completed.result.snapshot
     assert record.world_provenance is not None
     assert record.evaluation.stewardship is not None
-    assert record.evaluation.stewardship.schema_version == "stewardship-evaluation.v2"
     assert record.evaluation.stewardship.valid
     assert exported.manifest_path.exists()
 

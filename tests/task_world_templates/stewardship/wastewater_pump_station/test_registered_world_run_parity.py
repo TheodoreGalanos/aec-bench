@@ -14,8 +14,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_
     PumpStationEpisodeHost,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PUMP_STATION_BOUND_CONTROL_VERSION,
-    PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
     PumpStationBoundControlRequest,
     PumpStationCommonBoundaryRequest,
     PumpStationProposalError,
@@ -95,7 +93,6 @@ def test_root_control_rejects_extra_persisted_command_arguments(tmp_path: Path) 
     opening = run.state
     snapshot = run.snapshot()
     control = PumpStationCommonBoundaryRequest(
-        version=PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
         request_id="control-request",
         authority_id="operations-controller",
         boundary_kind="power",
@@ -103,7 +100,6 @@ def test_root_control_rejects_extra_persisted_command_arguments(tmp_path: Path) 
         base_state_id=snapshot.state_id,
     )
     bound = PumpStationBoundControlRequest(
-        control_envelope_version=PUMP_STATION_BOUND_CONTROL_VERSION,
         request_id=control.request_id,
         run_id=snapshot.run_id,
         episode_id=snapshot.episode_id,

@@ -66,9 +66,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     stewardship_content_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
-    PUMP_STATION_OPERATIONS_REVIEW_VERSION,
-    PUMP_STATION_PROCESS_OUTCOME_VERSION,
     PumpStationAuthority,
     PumpStationCommonBoundaryRequest,
     PumpStationCoupledTransition,
@@ -87,9 +84,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationStewardshipState,
     PumpStationWorkOrder,
     PumpStationWorkOrderStatus,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PUMP_STATION_COUPLED_TREATMENT_VERSION as PUMP_STATION_COUPLED_TREATMENT_VERSION,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
     apply_coupled_treatment as _apply_stable_coupled_treatment,
@@ -1702,8 +1696,6 @@ def apply_operations_boundary_review(
     request: PumpStationOperationsBoundaryReviewRequest,
 ) -> PumpStationCoupledTransition:
     """Apply one exact host-only Operations review after matching accepted evidence."""
-    if request.version != PUMP_STATION_OPERATIONS_REVIEW_VERSION:
-        _fail("operations-review-version", request.version)
     if "operations_review" not in pump_station_root_control_operations(
         state,
         authority_id=request.operations_authority_id,
@@ -1843,8 +1835,6 @@ def apply_process_outcome(
     request: PumpStationProcessOutcomeRequest,
 ) -> PumpStationCoupledTransition:
     """Record a failed functional or verification attempt without false closure."""
-    if request.version != PUMP_STATION_PROCESS_OUTCOME_VERSION:
-        _fail("process-outcome-version", request.version)
     if request.base_state_id != state.state_id:
         _fail("stale-process-outcome", request.request_id)
     if request.outcome != "failed":
@@ -1964,8 +1954,6 @@ def apply_common_boundary_control(
     request: PumpStationCommonBoundaryRequest,
 ) -> PumpStationCoupledTransition:
     """Apply a station-wide hard stop or restoration before later decisions."""
-    if request.version != PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION:
-        _fail("common-boundary-version", request.version)
     if "common_boundary" not in pump_station_root_control_operations(
         state,
         authority_id=request.authority_id,

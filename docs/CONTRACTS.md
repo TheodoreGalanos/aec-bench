@@ -37,7 +37,7 @@ readable.
 | Adapter and backend request/result | Adapters and harness | Harness input crosses into model or compute execution and returns untrusted output | Internal request/result; external provider documents are lenient ingestion boundaries | [`AdapterRequest` and `AdapterResult`](../src/aec_bench/adapters/base.py), [`BackendExecutionRequest` and `BackendExecutionResult`](../src/aec_bench/harness/backend.py), and [Harbor ingestion models](../src/aec_bench/harness/harbor_contract.py) | Internal, cross-process, and external |
 | Artifact and evidence reference | Harness, ledger, and the producing domain | Filesystem or provider output becomes content-bound evidence | Protected when stored in a trial, dataset, freeze, or published record | `ArtifactReference` in [`trial_record.py`](../src/aec_bench/contracts/trial_record.py) and narrower owner-specific references | Persisted reference |
 | Visibility classification | Task ownership and evaluation policy | Material enters public, calibration, or holdout handling | Protected | `Visibility` in [`task_definition.py`](../src/aec_bench/contracts/task_definition.py) and visibility checks in persisted records | Persisted and policy-bearing |
-| Interactive-world registration and calls | Continual runtime and registered task worlds | A content-pinned world/profile is resolved and an actor or host request reaches task-owned behavior | Versioned internal and persisted boundary | [`continual_world.py`](../src/aec_bench/contracts/continual_world.py), [`world_interface.py`](../src/aec_bench/contracts/world_interface.py), and the [runtime protocol](protocols/interactive-world-runtime.md) | Internal, persisted, and installed JSON |
+| Interactive-world registration and calls | Continual runtime and registered task worlds | An exact executable build/profile is resolved and an actor or host request reaches task-owned behavior | Current unversioned installed calls; task-owned persisted run records | [`continual_world.py`](../src/aec_bench/contracts/continual_world.py), [`world_interface.py`](../src/aec_bench/contracts/world_interface.py), and the [runtime protocol](protocols/interactive-world-runtime.md) | Internal, persisted, and installed JSON |
 
 ## Task specification
 
@@ -61,8 +61,8 @@ Durable identity is recorded as content or source revision:
   its execution/import path;
 - `DatasetTaskEntry.content_hash` binds a dataset entry to task-directory
   content; and
-- world definitions, profiles, packages, and snapshots use their own
-  content-pinned references.
+- world builds identify exact executable source artifacts, profiles identify
+  exact task-owned data, and task-owned run records bind replay state.
 
 Do not infer a revision from a mutable directory name.
 

@@ -1,5 +1,5 @@
 # ABOUTME: Describes current AEC-Bench product flows, ownership boundaries, and dependency direction.
-# ABOUTME: Separates implemented architecture from the proposed direction for future world-runtime simplification.
+# ABOUTME: Separates task-owned semantics from current shared orchestration and provider boundaries.
 
 # AEC-Bench Architecture
 
@@ -78,24 +78,26 @@ and verifier logic remain with the task world.
 
 The current registered continual-world path provides:
 
-- content-pinned world definitions and profiles;
+- exact executable world builds and content-pinned profiles;
 - exact catalogue resolution for new work and recovery;
-- separate actor and host-control envelopes;
-- task-owned execution, branch, Harbor, and evaluation ports when supported;
-- shared chosen-point rollout orchestration through an optional branch port;
+- one unversioned opaque-decision actor boundary;
+- a separate strict host-control boundary;
+- private task-owned callable composition;
+- shared chosen-point rollout orchestration through an explicitly supplied
+  branch capability;
 - task-neutral local durability primitives; and
-- evaluation registration for complete journeys and bounded continuations.
+- task-owned Harbor and evaluation calls outside neutral world registration.
 
 The public composition root currently registers two real consumers: the
 wastewater pump-station stewardship world and the SSC-03 hydraulic interaction
 world. The task-neutral continual package imports neither concrete world. See
 the current [interactive-world runtime protocol](protocols/interactive-world-runtime.md).
 
-Beneath those different orchestration paths, the continual runtime owns only
-the small accepted-transition and action-rejection values shared by both real
-consumers. Initial state, actor observation, transition functions, outputs, and
-evaluation remain task-owned because the hydraulic and pump behaviors do not
-honestly share one structural protocol.
+Beneath those different orchestration paths, the continual runtime owns the
+small accepted-transition and action-rejection values plus the episode shell.
+Initial state, actor observation, transition functions, outputs, and evaluation
+remain task-owned because the hydraulic and pump behaviors do not honestly
+share one public structural protocol.
 
 Interactive worlds and artifact tasks meet at the experiment and evidence
 layers. An interactive world does not need to pretend that each action is a
@@ -195,33 +197,6 @@ to these stable surfaces:
 Research, planning, generated output, and local workspaces are not delivery
 surfaces. If the product needs a generator, certifier, migration command, or
 fixture, move it to its permanent owner before delivery.
-
-## Proposed direction
-
-**Status: Proposed.** This section describes a direction for later PRDs. It is
-not a claim about interfaces or packages that exist now.
-
-The first functional-core step is implemented in
-`src/aec_bench/task_world_templates/continual/world_logic.py`. It does not
-replace the registered session, lifecycle, persistence, rollout, Harbor, or
-evaluation paths.
-
-Future world-runtime work may continue simplifying the current implementation
-around:
-
-- an imperative episode shell that owns limits, retries, provider calls, and
-  session coordination;
-- lossless episode recording that preserves observations, actions, tool calls,
-  state references, failures, and timing needed for replay and audit;
-- evaluation as a separate interpretation of recorded evidence;
-- versioned training projections derived from canonical records rather than
-  embedded in them; and
-- provider integrations outside world logic.
-
-This direction does not require snapshots, branching, rollout groups, Harbor,
-cloud execution, event sourcing, or durable sessions in the base interactive
-world boundary. Add those capabilities only where a real world and execution
-path need them.
 
 ## Related documents
 

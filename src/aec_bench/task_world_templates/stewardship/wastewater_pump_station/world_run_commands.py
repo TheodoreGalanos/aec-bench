@@ -28,7 +28,6 @@ type PumpStationDecodedCommand = WorldActorActionRequest | PumpStationRootContro
 _ROOT_CONTROL_ARGUMENT_FIELDS = {
     "operations_review": frozenset(
         {
-            "version",
             "review_id",
             "review_kind",
             "pump_id",
@@ -42,7 +41,6 @@ _ROOT_CONTROL_ARGUMENT_FIELDS = {
     ),
     "process_outcome": frozenset(
         {
-            "version",
             "request_id",
             "authority_id",
             "process_id",
@@ -53,7 +51,6 @@ _ROOT_CONTROL_ARGUMENT_FIELDS = {
     ),
     "common_boundary": frozenset(
         {
-            "version",
             "request_id",
             "authority_id",
             "boundary_kind",
@@ -63,7 +60,6 @@ _ROOT_CONTROL_ARGUMENT_FIELDS = {
     ),
     "coupled_treatment": frozenset(
         {
-            "version",
             "request_id",
             "authority_id",
             "treatment_label",
@@ -156,7 +152,6 @@ def _root_control_from_command(
         )
     if command.kind == "operations_review":
         return PumpStationOperationsBoundaryReviewRequest(
-            version=_text_argument(arguments, "version"),
             review_id=_text_argument(arguments, "review_id"),
             review_kind=_text_argument(arguments, "review_kind"),
             pump_id=_text_argument(arguments, "pump_id"),
@@ -175,7 +170,6 @@ def _root_control_from_command(
         )
     if command.kind == "process_outcome":
         return PumpStationProcessOutcomeRequest(
-            version=_text_argument(arguments, "version"),
             request_id=_text_argument(arguments, "request_id"),
             authority_id=_text_argument(arguments, "authority_id"),
             process_id=_text_argument(arguments, "process_id"),
@@ -185,7 +179,6 @@ def _root_control_from_command(
         )
     if command.kind == "common_boundary":
         return PumpStationCommonBoundaryRequest(
-            version=_text_argument(arguments, "version"),
             request_id=_text_argument(arguments, "request_id"),
             authority_id=_text_argument(arguments, "authority_id"),
             boundary_kind=_text_argument(arguments, "boundary_kind"),
@@ -194,7 +187,6 @@ def _root_control_from_command(
         )
     if command.kind == "coupled_treatment":
         return PumpStationCoupledTreatmentRequest(
-            version=_text_argument(arguments, "version"),
             request_id=_text_argument(arguments, "request_id"),
             authority_id=_text_argument(arguments, "authority_id"),
             treatment_label=_text_argument(arguments, "treatment_label"),

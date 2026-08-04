@@ -419,7 +419,7 @@ docs/                   # Repository-owned architecture, contracts, and invarian
 AEC-Bench supports two execution families. Artifact/workspace tasks run a
 bounded job and evaluate the resulting files and evidence. Interactive worlds
 run validated actions against durable state and can optionally support host
-controls, branching, rollouts, and transport ports. They share benchmark
+controls, branching, rollouts, and provider integrations. They share benchmark
 identity, execution evidence, evaluation ownership, and provider boundaries;
 they do not share one low-level lifecycle.
 

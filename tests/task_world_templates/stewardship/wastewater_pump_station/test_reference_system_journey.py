@@ -31,9 +31,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
     PumpStationPumpMode,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
-    PUMP_STATION_OPERATIONS_REVIEW_VERSION,
-    PUMP_STATION_PROCESS_OUTCOME_VERSION,
     PumpStationCommonBoundaryRequest,
     PumpStationOperationsBoundaryReviewRequest,
     PumpStationProcessOutcomeRequest,
@@ -89,7 +86,6 @@ def _review(
     return apply_operations_boundary_review(
         state,
         PumpStationOperationsBoundaryReviewRequest(
-            version=PUMP_STATION_OPERATIONS_REVIEW_VERSION,
             review_id=review_id,
             review_kind=kind,
             pump_id=pump_id,
@@ -112,7 +108,6 @@ def _set_power_boundary(
     return apply_common_boundary_control(
         state,
         PumpStationCommonBoundaryRequest(
-            version=PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
             request_id=request_id,
             authority_id="operations-controller",
             boundary_kind="power",
@@ -330,7 +325,6 @@ def test_operations_review_rejects_stale_or_mismatched_input() -> None:
     )
     state = _continue_to(state, 50_400)
     bad = PumpStationOperationsBoundaryReviewRequest(
-        version=PUMP_STATION_OPERATIONS_REVIEW_VERSION,
         review_id="bad-review",
         review_kind="post_verification_restriction",
         pump_id="pump-b",
@@ -545,7 +539,6 @@ def test_failed_functional_check_retains_work_and_failed_verification_creates_re
     functional_transition = apply_process_outcome(
         functional,
         PumpStationProcessOutcomeRequest(
-            version=PUMP_STATION_PROCESS_OUTCOME_VERSION,
             request_id="fail-b-functional",
             authority_id="maintenance-controller",
             process_id=functional.processes[-1].process_id,
@@ -572,7 +565,6 @@ def test_failed_functional_check_retains_work_and_failed_verification_creates_re
     verification = apply_process_outcome(
         verification,
         PumpStationProcessOutcomeRequest(
-            version=PUMP_STATION_PROCESS_OUTCOME_VERSION,
             request_id="fail-a-verification",
             authority_id="verification-engineer-01",
             process_id=verification.processes[-1].process_id,

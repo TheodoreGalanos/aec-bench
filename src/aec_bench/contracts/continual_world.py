@@ -1,111 +1,44 @@
-# ABOUTME: Defines content-pinned continual-world definition and profile references.
-# ABOUTME: Keeps task state, actions, controls, paths, and verifier data outside the shared boundary.
+# ABOUTME: Defines the small current boundary for registered continual-world calls and rollout records.
+# ABOUTME: Keeps live values unversioned while preserving hashes only for exact executable or stored artifacts.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final, Literal, Self
+from typing import Annotated, Literal, Self
 
-from pydantic import JsonValue, field_validator, model_validator
+from pydantic import Field, JsonValue, field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 
-CONTINUAL_WORLD_DEFINITION_SCHEMA_VERSION: Final[Literal["aecbench.continual-world-definition.v1"]] = (
-    "aecbench.continual-world-definition.v1"
-)
-CONTINUAL_WORLD_PROFILE_SCHEMA_VERSION: Final[Literal["aecbench.continual-world-profile-ref.v1"]] = (
-    "aecbench.continual-world-profile-ref.v1"
-)
-CONTINUAL_WORLD_SNAPSHOT_SCHEMA_VERSION: Final[Literal["aecbench.continual-world-snapshot.v1"]] = (
-    "aecbench.continual-world-snapshot.v1"
-)
-CONTINUAL_ROLLOUT_CHILD_REQUEST_SCHEMA_VERSION: Final[Literal["aecbench.continual-rollout-child-request.v1"]] = (
-    "aecbench.continual-rollout-child-request.v1"
-)
-CONTINUAL_ROLLOUT_GROUP_REQUEST_SCHEMA_VERSION: Final[Literal["aecbench.continual-rollout-group-request.v1"]] = (
-    "aecbench.continual-rollout-group-request.v1"
-)
-CONTINUAL_ROLLOUT_CHILD_RECEIPT_SCHEMA_VERSION: Final[Literal["aecbench.continual-rollout-child-receipt.v1"]] = (
-    "aecbench.continual-rollout-child-receipt.v1"
-)
-CONTINUAL_ROLLOUT_LINEAGE_SCHEMA_VERSION: Final[Literal["aecbench.continual-rollout-lineage.v1"]] = (
-    "aecbench.continual-rollout-lineage.v1"
-)
-CONTINUAL_ROLLOUT_GROUP_STATUS_SCHEMA_VERSION: Final[Literal["aecbench.continual-rollout-group-status.v1"]] = (
-    "aecbench.continual-rollout-group-status.v1"
-)
-CONTINUAL_ROLLOUT_CHILD_RUN_REF_SCHEMA_VERSION: Final[Literal["aecbench.continual-rollout-child-run-ref.v1"]] = (
-    "aecbench.continual-rollout-child-run-ref.v1"
-)
-CONTINUAL_WORLD_CONTROL_REQUEST_SCHEMA_VERSION: Final[Literal["aecbench.continual-world-control-request.v1"]] = (
-    "aecbench.continual-world-control-request.v1"
-)
 
-
-class ContinualWorldProfileRef(FrozenStrictModel):
+@dataclass(frozen=True, slots=True)
+class ContinualWorldProfileRef:
     """Exact identity of one task-owned continual-world profile."""
 
-    schema_version: Literal["aecbench.continual-world-profile-ref.v1"] = CONTINUAL_WORLD_PROFILE_SCHEMA_VERSION
-    task_world_id: NonEmptyStr
-    profile_id: NonEmptyStr
-    profile_version: NonEmptyStr
+    task_world_id: str
+    profile_id: str
     profile_content_sha256: str
 
-    @field_validator("profile_content_sha256")
-    @classmethod
-    def validate_profile_content_sha256(cls, value: str) -> str:
-        return validate_sha256(value)
+    def __post_init__(self) -> None:
+        if not self.task_world_id.strip() or not self.profile_id.strip():
+            raise ValueError("continual-world profile identity values must be non-empty")
+        validate_sha256(self.profile_content_sha256)
 
 
-class ContinualWorldDefinitionRef(FrozenStrictModel):
-    """Content-pinned recovery reference for one registered world definition."""
+@dataclass(frozen=True, slots=True)
+class WorldBuildRef:
+    """Exact executable artifact selected for one registered world."""
 
-    task_world_id: NonEmptyStr
-    definition_version: NonEmptyStr
-    content_sha256: str
+    task_world_id: str
+    entry_point: str
+    artifact_sha256: str
 
-    @field_validator("content_sha256")
-    @classmethod
-    def validate_content_sha256(cls, value: str) -> str:
-        return validate_sha256(value)
-
-
-class ContinualWorldDefinitionSpec(ContentAddressedModel):
-    """Serializable identity and supported profiles for one task world."""
-
-    schema_version: Literal["aecbench.continual-world-definition.v1"] = CONTINUAL_WORLD_DEFINITION_SCHEMA_VERSION
-    task_world_id: NonEmptyStr
-    definition_version: NonEmptyStr
-    implementation_content_sha256: str
-    profiles: tuple[ContinualWorldProfileRef, ...]
-
-    @field_validator("implementation_content_sha256")
-    @classmethod
-    def validate_implementation_content_sha256(cls, value: str) -> str:
-        return validate_sha256(value)
-
-    @model_validator(mode="after")
-    def validate_profiles(self) -> Self:
-        if not self.profiles:
-            raise ValueError("continual-world definition requires at least one profile")
-        if any(profile.task_world_id != self.task_world_id for profile in self.profiles):
-            raise ValueError("continual-world profiles must belong to the same task world")
-        keys = tuple((profile.profile_id, profile.profile_version) for profile in self.profiles)
-        if len(keys) != len(set(keys)):
-            raise ValueError("continual-world profile identities must be distinct")
-        if keys != tuple(sorted(keys)):
-            raise ValueError("continual-world profiles must use stable order")
-        return self
-
-    @property
-    def ref(self) -> ContinualWorldDefinitionRef:
-        """Return the exact definition reference used by new runs and recovery."""
-        return ContinualWorldDefinitionRef(
-            task_world_id=self.task_world_id,
-            definition_version=self.definition_version,
-            content_sha256=self.content_sha256,
-        )
+    def __post_init__(self) -> None:
+        if not self.task_world_id.strip() or not self.entry_point.strip():
+            raise ValueError("world-build identity values must be non-empty")
+        validate_sha256(self.artifact_sha256)
 
 
 class ContinualWorldActorRequest(FrozenStrictModel):
@@ -134,96 +67,58 @@ class ContinualWorldActorRequest(FrozenStrictModel):
         return self
 
 
-class ContinualWorldControlRequest(ContentAddressedModel):
-    """One exact host-control call routed through a registered continual world."""
+class ContinualControlCapabilitiesRequest(FrozenStrictModel):
+    """Ask the selected run for its current host-control surface."""
 
-    schema_version: Literal["aecbench.continual-world-control-request.v1"] = (
-        CONTINUAL_WORLD_CONTROL_REQUEST_SCHEMA_VERSION
-    )
-    definition_ref: ContinualWorldDefinitionRef
-    profile_ref: ContinualWorldProfileRef
-    operation: Literal[
-        "capabilities",
-        "execute",
-        "create_rollout_group",
-        "rollout_group_status",
-        "inspect_rollout_group",
-        "rollout_child_run_ref",
-    ]
+    operation: Literal["capabilities"]
     authority_id: NonEmptyStr
-    control_request: dict[str, JsonValue] | None = None
-    rollout_group_request: ContinualRolloutGroupRequest | None = None
-    group_id: NonEmptyStr | None = None
-    child_id: NonEmptyStr | None = None
-
-    @model_validator(mode="after")
-    def validate_control_request(self) -> Self:
-        task_world_id = self.definition_ref.task_world_id
-        if self.profile_ref.task_world_id != task_world_id:
-            raise ValueError("continual control profile belongs to another task world")
-        if self.operation == "capabilities":
-            if any(
-                item is not None
-                for item in (
-                    self.control_request,
-                    self.rollout_group_request,
-                    self.group_id,
-                    self.child_id,
-                )
-            ):
-                raise ValueError("continual control capabilities accepts no operation payload")
-            return self
-        if self.operation == "execute":
-            if self.control_request is None or any(
-                item is not None
-                for item in (
-                    self.rollout_group_request,
-                    self.group_id,
-                    self.child_id,
-                )
-            ):
-                raise ValueError("continual control execute requires exactly one task control request")
-            if (
-                self.control_request.get("task_world_id") != task_world_id
-                or self.control_request.get("authority_id") != self.authority_id
-            ):
-                raise ValueError("continual task control request differs from its control envelope")
-            return self
-        if self.operation == "create_rollout_group":
-            rollout = self.rollout_group_request
-            if rollout is None or any(
-                item is not None
-                for item in (
-                    self.control_request,
-                    self.group_id,
-                    self.child_id,
-                )
-            ):
-                raise ValueError("continual rollout creation requires exactly one group request")
-            if (
-                rollout.task_world_id,
-                rollout.definition_ref,
-                rollout.profile_ref,
-                rollout.authority_id,
-            ) != (
-                task_world_id,
-                self.definition_ref,
-                self.profile_ref,
-                self.authority_id,
-            ):
-                raise ValueError("continual rollout group request differs from its control envelope")
-            return self
-        if self.rollout_group_request is not None or self.control_request is not None or self.group_id is None:
-            raise ValueError("continual rollout inspection requires exactly one group identity")
-        if (self.operation == "rollout_child_run_ref") != (self.child_id is not None):
-            raise ValueError("continual rollout child resolution requires exactly one child identity")
-        return self
 
 
-class ContinualWorldSnapshotRef(ContentAddressedModel):
+class ContinualControlExecuteRequest(FrozenStrictModel):
+    """Execute one task-owned control against the selected run."""
+
+    operation: Literal["execute"]
+    authority_id: NonEmptyStr
+    control_request: dict[str, JsonValue]
+
+
+class ContinualRolloutCreateRequest(FrozenStrictModel):
+    """Persist one complete rollout-group request."""
+
+    operation: Literal["create_rollout_group"]
+    rollout_group_request: ContinualRolloutGroupRequest
+
+
+class ContinualRolloutGroupQuery(FrozenStrictModel):
+    """Inspect one rollout group through host-owned repository identity."""
+
+    operation: Literal["rollout_group_status", "inspect_rollout_group"]
+    authority_id: NonEmptyStr
+    group_id: NonEmptyStr
+
+
+class ContinualRolloutChildQuery(FrozenStrictModel):
+    """Resolve one materialized rollout child through its host repository."""
+
+    operation: Literal["rollout_child_run_ref"]
+    authority_id: NonEmptyStr
+    group_id: NonEmptyStr
+    child_id: NonEmptyStr
+
+
+type ContinualWorldControlRequest = Annotated[
+    ContinualControlCapabilitiesRequest
+    | ContinualControlExecuteRequest
+    | ContinualRolloutCreateRequest
+    | ContinualRolloutGroupQuery
+    | ContinualRolloutChildQuery,
+    Field(discriminator="operation"),
+]
+
+
+class ContinualWorldSnapshotRef(FrozenStrictModel):
     """Task-neutral identity of one immutable point on a selected world history."""
 
-    schema_version: Literal["aecbench.continual-world-snapshot.v1"] = CONTINUAL_WORLD_SNAPSHOT_SCHEMA_VERSION
     run_id: NonEmptyStr
     episode_id: NonEmptyStr
     world_branch_id: NonEmptyStr
@@ -241,9 +136,6 @@ class ContinualWorldSnapshotRef(ContentAddressedModel):
 class ContinualRolloutChildRequest(ContentAddressedModel):
     """One isolated child identity without actor, session, or treatment settings."""
 
-    schema_version: Literal["aecbench.continual-rollout-child-request.v1"] = (
-        CONTINUAL_ROLLOUT_CHILD_REQUEST_SCHEMA_VERSION
-    )
     child_id: NonEmptyStr
     run_id: NonEmptyStr
     episode_id: NonEmptyStr
@@ -253,14 +145,11 @@ class ContinualRolloutChildRequest(ContentAddressedModel):
 class ContinualRolloutGroupRequest(ContentAddressedModel):
     """One exact host request for ordered children from a verified snapshot."""
 
-    schema_version: Literal["aecbench.continual-rollout-group-request.v1"] = (
-        CONTINUAL_ROLLOUT_GROUP_REQUEST_SCHEMA_VERSION
-    )
     request_id: NonEmptyStr
     group_id: NonEmptyStr
     task_world_id: NonEmptyStr
     authority_id: NonEmptyStr
-    definition_ref: ContinualWorldDefinitionRef
+    world_build: WorldBuildRef
     profile_ref: ContinualWorldProfileRef
     parent_manifest_content_sha256: str
     parent_snapshot: ContinualWorldSnapshotRef
@@ -275,7 +164,7 @@ class ContinualRolloutGroupRequest(ContentAddressedModel):
 
     @model_validator(mode="after")
     def validate_group(self) -> Self:
-        if self.definition_ref.task_world_id != self.task_world_id:
+        if self.world_build.task_world_id != self.task_world_id:
             raise ValueError("continual-world definition must belong to the requested task world")
         if self.profile_ref.task_world_id != self.task_world_id:
             raise ValueError("continual-world profile must belong to the requested task world")
@@ -299,9 +188,6 @@ class ContinualRolloutGroupRequest(ContentAddressedModel):
 class ContinualRolloutChildReceipt(ContentAddressedModel):
     """Immutable shared evidence for one verified child materialization."""
 
-    schema_version: Literal["aecbench.continual-rollout-child-receipt.v1"] = (
-        CONTINUAL_ROLLOUT_CHILD_RECEIPT_SCHEMA_VERSION
-    )
     group_id: NonEmptyStr
     child_id: NonEmptyStr
     child_request_content_sha256: str
@@ -344,11 +230,10 @@ class ContinualRolloutChildReceipt(ContentAddressedModel):
 class ContinualRolloutLineage(ContentAddressedModel):
     """Complete immutable lineage for one ready rollout group."""
 
-    schema_version: Literal["aecbench.continual-rollout-lineage.v1"] = CONTINUAL_ROLLOUT_LINEAGE_SCHEMA_VERSION
     request_id: NonEmptyStr
     group_id: NonEmptyStr
     task_world_id: NonEmptyStr
-    definition_ref: ContinualWorldDefinitionRef
+    world_build: WorldBuildRef
     profile_ref: ContinualWorldProfileRef
     request_content_sha256: str
     parent_manifest_content_sha256: str
@@ -367,7 +252,7 @@ class ContinualRolloutLineage(ContentAddressedModel):
 
     @model_validator(mode="after")
     def validate_lineage(self) -> Self:
-        if self.definition_ref.task_world_id != self.task_world_id:
+        if self.world_build.task_world_id != self.task_world_id:
             raise ValueError("continual rollout lineage definition belongs to another task world")
         if self.profile_ref.task_world_id != self.task_world_id:
             raise ValueError("continual rollout lineage profile belongs to another task world")
@@ -393,9 +278,6 @@ class ContinualRolloutGroupState(StrEnum):
 class ContinualRolloutGroupStatus(FrozenStrictModel):
     """Recoverable progress view for one rollout group."""
 
-    schema_version: Literal["aecbench.continual-rollout-group-status.v1"] = (
-        CONTINUAL_ROLLOUT_GROUP_STATUS_SCHEMA_VERSION
-    )
     group_id: NonEmptyStr
     request_id: NonEmptyStr
     state: ContinualRolloutGroupState
@@ -423,9 +305,6 @@ class ContinualRolloutGroupStatus(FrozenStrictModel):
 class ContinualRolloutChildRunRef(FrozenStrictModel):
     """Private host reference for one materialized child run."""
 
-    schema_version: Literal["aecbench.continual-rollout-child-run-ref.v1"] = (
-        CONTINUAL_ROLLOUT_CHILD_RUN_REF_SCHEMA_VERSION
-    )
     group_id: NonEmptyStr
     child_id: NonEmptyStr
     task_world_id: NonEmptyStr

@@ -8,7 +8,7 @@ import json
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import Literal, Protocol, Self, cast
+from typing import Self
 
 from pydantic import field_validator, model_validator
 
@@ -46,10 +46,6 @@ _ROOT_BRANCH_ID = "root"
 _TASK_RECEIPT_PATH = "rollout-branch-receipt.json"
 
 
-class _Ssc03ProfilePort(Protocol):
-    def validate_package(self, package_dir: Path) -> dict[str, object] | None: ...
-
-
 @dataclass(frozen=True, slots=True)
 class Ssc03HydraulicRolloutOrigin:
     """Public exact request inputs for one submitted SSC-03 checkpoint."""
@@ -74,9 +70,6 @@ class Ssc03HydraulicSubmittedCheckpointRef(ContentAddressedModel):
 class Ssc03HydraulicRolloutBranchReceipt(ContentAddressedModel):
     """Task-owned immutable evidence for one materialized SSC-03 child."""
 
-    schema_version: Literal["aecbench.ssc03-hydraulic-rollout-branch-receipt.v1"] = (
-        "aecbench.ssc03-hydraulic-rollout-branch-receipt.v1"
-    )
     group_id: NonEmptyStr
     child_id: NonEmptyStr
     task_world_id: NonEmptyStr
@@ -214,7 +207,7 @@ class Ssc03HydraulicContinualBranchPort:
         origin: VerifiedContinualWorldBranchOrigin,
     ) -> ContinualWorldBranchMaterialization:
         package = _validated_package(profile_value, package_root)
-        context = cast(_Ssc03OriginContext, origin.task_context)
+        context = origin.task_context
         if not isinstance(context, _Ssc03OriginContext):
             raise ValueError("SSC-03 rollout origin context is invalid")
         if child_run_root.is_symlink():
@@ -330,11 +323,6 @@ def ssc03_hydraulic_rollout_origin(
     )
 
 
-def ssc03_hydraulic_rollout_source_sha256() -> str:
-    """Return the exact source identity of the complete SSC-03 rollout adapter module."""
-    return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
-
-
 @cache
 def ssc03_hydraulic_continual_branch_port() -> ContinualWorldBranchPort:
     """Return the registered SSC-03 branch port singleton."""
@@ -342,13 +330,16 @@ def ssc03_hydraulic_continual_branch_port() -> ContinualWorldBranchPort:
 
 
 def _validated_package(profile_value: object, package_root: Path | None) -> Path:
+    from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_continual_definition import (
+        Ssc03HydraulicContinualProfile,
+    )
+
     if package_root is None:
         raise ValueError("SSC-03 rollout requires the materialized lifecycle package")
-    profile = cast(_Ssc03ProfilePort, profile_value)
-    if not callable(getattr(profile, "validate_package", None)):
-        raise ValueError("SSC-03 rollout profile does not expose package validation")
+    if not isinstance(profile_value, Ssc03HydraulicContinualProfile):
+        raise ValueError("SSC-03 rollout requires its registered profile")
     package = Path(package_root)
-    metadata = profile.validate_package(package)
+    metadata = profile_value.validate_package(package)
     if metadata is None:
         raise ValueError("SSC-03 rollout lifecycle package is not valid")
     return package
@@ -398,7 +389,6 @@ def _origin_from_state(
     submitted_prefix = _submitted_checkpoint_prefix(state, checkpoint_index)
     verification_sha256 = canonical_content_sha256(
         {
-            "schema_version": "aecbench.ssc03-rollout-origin-verification.v1",
             "lifecycle_id": state.lifecycle_id,
             "world_id": state.world_id,
             "lifecycle_spec_sha256": state.lifecycle_spec_sha256,
@@ -466,7 +456,6 @@ def _child_scope(
         state_id=request.parent_snapshot.state_id,
         commit_id=canonical_content_sha256(
             {
-                "schema_version": "aecbench.ssc03-rollout-child-commit.v1",
                 "child_request": child.model_dump(mode="json"),
                 "parent_commit_id": request.parent_snapshot.commit_id,
                 "branch": branch.model_dump(mode="json"),
@@ -477,7 +466,7 @@ def _child_scope(
         group_id=request.group_id,
         child_id=child.child_id,
         task_world_id=request.task_world_id,
-        definition_content_sha256=request.definition_ref.content_sha256,
+        definition_content_sha256=request.world_build.artifact_sha256,
         profile_content_sha256=request.profile_ref.profile_content_sha256,
         group_request_content_sha256=request.content_sha256,
         child_request_content_sha256=child.content_sha256,
@@ -600,5 +589,4 @@ __all__ = [
     "Ssc03HydraulicRolloutOrigin",
     "ssc03_hydraulic_continual_branch_port",
     "ssc03_hydraulic_rollout_origin",
-    "ssc03_hydraulic_rollout_source_sha256",
 ]

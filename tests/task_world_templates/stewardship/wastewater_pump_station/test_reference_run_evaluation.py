@@ -7,11 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from aec_bench.contracts.world_interface import WorldActorActionRequest
-from aec_bench.evaluation.stewardship import (
-    STEWARDSHIP_EVALUATION_SCHEMA_VERSION,
-    evaluate_pump_station_reference_run,
-    pump_station_semantic_outcome,
-)
+from aec_bench.evaluation.stewardship import evaluate_pump_station_reference_run, pump_station_semantic_outcome
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
     PumpStationBacklogStatus,
     PumpStationPoolReservation,
@@ -21,8 +17,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_
     PumpStationEpisodeHost,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PUMP_STATION_BOUND_CONTROL_VERSION,
-    PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
     PumpStationBoundControlRequest,
     PumpStationCommonBoundaryRequest,
     PumpStationCoupledStewardshipState,
@@ -166,7 +160,6 @@ def test_verification_reports_actor_proposals_and_host_controls_separately(
     )
     snapshot = run.snapshot()
     control = PumpStationCommonBoundaryRequest(
-        version=PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
         request_id="evaluation-power-boundary",
         authority_id="operations-controller",
         boundary_kind="power",
@@ -175,7 +168,6 @@ def test_verification_reports_actor_proposals_and_host_controls_separately(
     )
     run.apply_control(
         PumpStationBoundControlRequest(
-            control_envelope_version=PUMP_STATION_BOUND_CONTROL_VERSION,
             request_id=control.request_id,
             run_id=snapshot.run_id,
             episode_id=snapshot.episode_id,
@@ -227,7 +219,6 @@ def test_reference_evaluation_and_semantic_outcome_are_transport_neutral(
     first_outcome = pump_station_semantic_outcome(first)
     second_outcome = pump_station_semantic_outcome(second)
 
-    assert evaluation.schema_version == STEWARDSHIP_EVALUATION_SCHEMA_VERSION
     assert evaluation.evidence.initial_state_id == first.manifest.initial_state_id
     assert evaluation.evidence.terminal_state_id == first.state.state_id
     assert not evaluation.valid

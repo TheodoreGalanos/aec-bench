@@ -30,7 +30,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     PumpStationWorldRun,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
-    PUMP_STATION_RECORD_VERSIONS,
     PumpStationRegisteredWorldRunManifest,
     PumpStationWorldRunError,
 )
@@ -63,7 +62,6 @@ def test_current_reference_system_persists_exact_registered_identity(tmp_path: P
         world_branch_id=snapshot.world_branch_id,
     )
 
-    assert manifest.record_versions == PUMP_STATION_RECORD_VERSIONS
     assert manifest.reference_system_id == PUMP_STATION_REFERENCE_SYSTEM_ID
     assert manifest.reference_system_content_id == system.descriptor_content_id
     assert manifest.opening_state_specification_id == PUMP_STATION_ASW_8_INITIAL_STATE_SPECIFICATION_ID
@@ -71,7 +69,6 @@ def test_current_reference_system_persists_exact_registered_identity(tmp_path: P
     assert manifest.temporal_template_id == PUMP_STATION_ASW_8_TEMPORAL_TEMPLATE_ID
     assert manifest.temporal_bundle_content_id == bundle.content_sha256
     assert manifest.initial_state_source.kind == "reference_system_specification"
-    assert snapshot.snapshot_version == PUMP_STATION_RECORD_VERSIONS.snapshot_version
     assert snapshot.sequence == 0
     assert run.state == create_asw_8_world_state()
     assert TemporalEvidenceRepository(root / "temporal-evidence").load_bundle(package=run.package) == bundle
@@ -107,7 +104,7 @@ def test_reference_system_rejects_tampered_state_and_manifest(tmp_path: Path) ->
 
     manifest_root = tmp_path / "manifest"
     manifest_run = _start(manifest_root)
-    changed = replace(manifest_run.manifest, definition_content_sha256="0" * 64)
+    changed = replace(manifest_run.manifest, world_build_artifact_sha256="0" * 64)
     (manifest_root / "manifest.json").write_bytes(pump_station_artifact_bytes(changed))
     with pytest.raises(PumpStationWorldRunError, match="world-run-identity"):
         PumpStationWorldRun.resume_reference_system(

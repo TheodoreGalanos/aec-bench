@@ -14,8 +14,10 @@ from typing import Any, cast
 from aec_bench.meta_harness.evidence_lifecycle import validate_lifecycle_verification
 from aec_bench.meta_harness.evidence_lifecycle_episode import LifecycleEpisodeEnvironment
 from aec_bench.task_world_templates.compiled_world import (
-    CallableLifecycleWorldAdapter,
     LifecycleWorldAdapter,
+    OperationLifecycleFunctions,
+    VariantLifecycleFunctions,
+    source_tree_artifact_sha256,
 )
 from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate, EvidenceLifecycleSpec
 from aec_bench.task_world_templates.lifecycles.provider import (
@@ -122,45 +124,48 @@ def registered_lifecycle_adapter(template_id: str) -> LifecycleWorldAdapter:
     module = import_module(registration.module_name)
     variant_module = import_module(registration.variant_module_name or registration.module_name)
     smoke_module = import_module(registration.smoke_module_name or registration.module_name)
-    return CallableLifecycleWorldAdapter(
-        schema_version="1",
+    source_paths = {
+        Path(__file__),
+        Path(cast(str, module.__file__)),
+        Path(cast(str, variant_module.__file__)),
+        Path(cast(str, smoke_module.__file__)),
+    }
+    capabilities: list[VariantLifecycleFunctions | OperationLifecycleFunctions] = []
+    if registration.variant_metadata_name is not None:
+        if registration.variant_ids_name is None or registration.variant_get_name is None:
+            raise ValueError("lifecycle variant registration is incomplete")
+        capabilities.append(
+            VariantLifecycleFunctions(
+                package_validator=cast(
+                    Callable[[Path], dict[str, Any]],
+                    getattr(module, registration.variant_metadata_name),
+                ),
+                variant_ids=cast(Callable[[], tuple[str, ...]], getattr(variant_module, registration.variant_ids_name)),
+                variant_metadata=cast(Callable[[str], Any], getattr(variant_module, registration.variant_get_name)),
+            )
+        )
+    if registration.operation_resolver_name is not None:
+        if registration.smoke_environment_name is None:
+            raise ValueError("lifecycle operation registration is incomplete")
+        capabilities.append(
+            OperationLifecycleFunctions(
+                resolver=cast(Callable[[Path, Path], Any], getattr(module, registration.operation_resolver_name)),
+                smoke_environment=cast(
+                    Callable[[Path], LifecycleEpisodeEnvironment],
+                    getattr(smoke_module, registration.smoke_environment_name),
+                ),
+            )
+        )
+    return LifecycleWorldAdapter(
         template_id=registration.template_id,
+        entry_point=f"{registration.module_name}:{registration.materializer_name}",
+        artifact_sha256=source_tree_artifact_sha256(tuple(sorted(source_paths))),
         materializer_entrypoint=cast(Callable[..., Path], getattr(module, registration.materializer_name)),
         verifier_entrypoint=cast(
             Callable[[Path, Path], dict[str, Any]],
             getattr(module, registration.verifier_name),
         ),
-        package_validator=(
-            None
-            if registration.variant_metadata_name is None
-            else cast(Callable[[Path], dict[str, Any]], getattr(module, registration.variant_metadata_name))
-        ),
-        variant_ids_entrypoint=(
-            None
-            if registration.variant_ids_name is None
-            else cast(Callable[[], tuple[str, ...]], getattr(variant_module, registration.variant_ids_name))
-        ),
-        variant_metadata_entrypoint=(
-            None
-            if registration.variant_get_name is None
-            else cast(Callable[[str], Any], getattr(variant_module, registration.variant_get_name))
-        ),
-        operation_resolver_factory=(
-            None
-            if registration.operation_resolver_name is None
-            else cast(
-                Callable[[Path, Path], Any],
-                getattr(module, registration.operation_resolver_name),
-            )
-        ),
-        smoke_environment_factory=(
-            None
-            if registration.smoke_environment_name is None
-            else cast(
-                Callable[[Path], LifecycleEpisodeEnvironment],
-                getattr(smoke_module, registration.smoke_environment_name),
-            )
-        ),
+        capabilities=tuple(capabilities),
     )
 
 

@@ -10,8 +10,7 @@ from typing import Self
 from pydantic import JsonValue, model_validator
 
 from aec_bench.contracts.continual_world import ContinualWorldProfileRef
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
-from aec_bench.contracts.validators import NonEmptyStr
+from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 from aec_bench.contracts.world_interface import (
     WorldControlCapabilityCatalogue,
     WorldControlOperationCapability,
@@ -23,7 +22,6 @@ from aec_bench.contracts.world_interface import (
     WorldInterfaceError,
 )
 from aec_bench.contracts.world_session import (
-    STEWARDSHIP_STATE_SNAPSHOT_SCHEMA_VERSION,
     StewardshipStateSnapshotRef,
     WorldSessionOpenMode,
 )
@@ -59,7 +57,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     pump_station_artifact_id,
 )
 
-PUMP_STATION_CONTROL_INTERFACE_VERSION = "pump-station.control.v3"
 PUMP_STATION_CONTROL_OPERATIONS = (
     "create_session",
     "open_session",
@@ -76,26 +73,22 @@ PUMP_STATION_ROOT_CONTROL_OPERATIONS = (
 )
 
 
-class PumpStationRootControlResult(ContentAddressedModel):
+class PumpStationRootControlResult(FrozenStrictModel):
     """Host-private result for one durable registered root control."""
 
-    schema_version: str = "pump-station.root-control.v1"
-    request_content_sha256: NonEmptyStr
+    request_id: NonEmptyStr
     receipt: WorldControlReceipt
     transition_receipt: dict[str, JsonValue]
 
     @model_validator(mode="after")
     def validate_result(self) -> Self:
-        if self.schema_version != "pump-station.root-control.v1":
-            raise ValueError("unsupported pump-station root-control version")
-        if self.receipt.request_content_sha256 != self.request_content_sha256:
+        if self.receipt.request_id != self.request_id:
             raise ValueError("root control result and receipt identities differ")
         return self
 
 
 def _shared_snapshot(snapshot: PumpStationStateSnapshotRef) -> StewardshipStateSnapshotRef:
     return StewardshipStateSnapshotRef(
-        schema_version=STEWARDSHIP_STATE_SNAPSHOT_SCHEMA_VERSION,
         run_id=snapshot.run_id,
         episode_id=snapshot.episode_id,
         world_branch_id=snapshot.world_branch_id,
@@ -154,11 +147,9 @@ class PumpStationWorldControl:
             operations = (*operations, "coupled_treatment")
         return WorldControlCapabilityCatalogue(
             task_world_id=PUMP_STATION_TASK_WORLD_ID,
-            interface_version=PUMP_STATION_CONTROL_INTERFACE_VERSION,
             operations=tuple(
                 WorldControlOperationCapability(
                     operation=operation,
-                    version="v1",
                     changes_durable_state=operation
                     in {
                         "create_session",
@@ -248,7 +239,7 @@ class PumpStationWorldControl:
             )
             state_changed = False
         receipt = WorldControlReceipt(
-            request_content_sha256=request.content_sha256,
+            request_id=request.request_id,
             operation=request.operation,
             authority_id=request.authority_id,
             status="completed",
@@ -257,7 +248,7 @@ class PumpStationWorldControl:
             result_snapshot=result_snapshot,
         )
         result = WorldControlResult(
-            request_content_sha256=request.content_sha256,
+            request_id=request.request_id,
             receipt=receipt,
             session_result=session_result,
             progress=progress,
@@ -312,7 +303,6 @@ class PumpStationWorldControl:
         parent = run.repository.load_commit(commit.parent_commit_id)
         prior = _shared_snapshot(
             PumpStationStateSnapshotRef(
-                snapshot_version=manifest.snapshot_version,
                 run_id=manifest.run_id,
                 episode_id=manifest.episode_id,
                 world_branch_id=manifest.world_branch_id,
@@ -323,7 +313,6 @@ class PumpStationWorldControl:
         )
         result_snapshot = _shared_snapshot(
             PumpStationStateSnapshotRef(
-                snapshot_version=manifest.snapshot_version,
                 run_id=manifest.run_id,
                 episode_id=manifest.episode_id,
                 world_branch_id=manifest.world_branch_id,
@@ -332,9 +321,8 @@ class PumpStationWorldControl:
                 commit_id=pump_station_artifact_id(commit),
             )
         )
-        request_content_id = pump_station_artifact_id(request)
         receipt = WorldControlReceipt(
-            request_content_sha256=request_content_id,
+            request_id=request.request_id,
             operation=operation,
             authority_id=request.authority_id,
             status="completed",
@@ -343,7 +331,7 @@ class PumpStationWorldControl:
             result_snapshot=result_snapshot,
         )
         return PumpStationRootControlResult(
-            request_content_sha256=request_content_id,
+            request_id=request.request_id,
             receipt=receipt,
             transition_receipt=_artifact_payload(transition.receipt),
         )
@@ -382,7 +370,6 @@ class PumpStationWorldControl:
         return PumpStationWorldRun.resume_reference_system(
             repository=repository,
             snapshot=PumpStationStateSnapshotRef(
-                snapshot_version=manifest.snapshot_version,
                 run_id=snapshot.run_id,
                 episode_id=snapshot.episode_id,
                 world_branch_id=snapshot.world_branch_id,

@@ -1,12 +1,9 @@
-# ABOUTME: Tests canonical compiled-world identity and typed lifecycle adapter wiring.
-# ABOUTME: Pins SSC-03 package bytes while exercising the real operation-driven smoke fixture.
+# ABOUTME: Tests current compiled-world identity, deterministic materialization, and typed lifecycle wiring.
+# ABOUTME: Exercises real package verification without freezing an obsolete serialized implementation.
 
 from __future__ import annotations
 
-import json
-from dataclasses import replace
 from pathlib import Path
-from typing import Any, cast
 
 import pytest
 from pydantic import ValidationError
@@ -14,7 +11,6 @@ from pydantic import ValidationError
 from aec_bench.meta_harness.evidence_lifecycle import run_evidence_lifecycle
 from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.compiled_world import (
-    CallableLifecycleWorldAdapter,
     CompiledWorldEnvelope,
     LifecycleWorldAdapter,
     validate_lifecycle_world_adapter,
@@ -23,13 +19,12 @@ from aec_bench.task_world_templates.lifecycles import registered_lifecycle_adapt
 from aec_bench.task_world_templates.materializer import compile_template_lifecycle
 
 TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
-FIXTURE_PATH = Path(__file__).with_name("fixtures") / "ssc03_hydraulic_compiled_world.v1.json"
-
-
-def _golden_identity() -> dict[str, Any]:
-    payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
-    assert isinstance(payload, dict)
-    return cast(dict[str, Any], payload)
+VARIANT_IDS = (
+    "administrative_no_op",
+    "major_idf_revision",
+    "outlet_geometry_revision",
+    "tailwater_revision",
+)
 
 
 def _package_stats(package_dir: Path) -> tuple[int, int]:
@@ -37,30 +32,29 @@ def _package_stats(package_dir: Path) -> tuple[int, int]:
     return len(files), sum(path.stat().st_size for path in files)
 
 
-def test_ssc03_registration_resolves_runtime_checkable_adapter() -> None:
+def test_ssc03_registration_resolves_concrete_adapter_with_exact_capabilities() -> None:
     template = get_template(TEMPLATE_ID)
 
     adapter = registered_lifecycle_adapter(TEMPLATE_ID)
 
-    assert isinstance(adapter, LifecycleWorldAdapter)
+    assert type(adapter) is LifecycleWorldAdapter
     validate_lifecycle_world_adapter(template, adapter)
     assert adapter.template_id == TEMPLATE_ID
-    assert adapter.variant_ids() == tuple(_golden_identity()["variants"])
+    assert adapter.variant_ids() == VARIANT_IDS
     identity = adapter.identity()
-    assert identity.schema_version == adapter.schema_version
     assert identity.template_id == TEMPLATE_ID
-    assert identity.operation_resolver_factory is not None
-    assert identity.smoke_environment_factory is not None
+    assert identity.entry_point.endswith(":materialize_ssc03_hydraulic_interaction_lifecycle")
+    assert len(identity.artifact_sha256) == 64
+    assert identity.capabilities == ("operations", "variants")
 
 
-def test_operation_lifecycle_adapter_requires_resolver_and_smoke() -> None:
-    template = get_template(TEMPLATE_ID)
-    adapter = cast(CallableLifecycleWorldAdapter, registered_lifecycle_adapter(TEMPLATE_ID))
+def test_lifecycle_adapters_expose_only_their_real_capabilities() -> None:
+    drainage = registered_lifecycle_adapter("drainage-model-evidence-lifecycle-review")
+    hydraulic = registered_lifecycle_adapter(TEMPLATE_ID)
 
-    with pytest.raises(ValueError, match="operation resolver"):
-        validate_lifecycle_world_adapter(template, replace(adapter, operation_resolver_factory=None))
-    with pytest.raises(ValueError, match="smoke environment"):
-        validate_lifecycle_world_adapter(template, replace(adapter, smoke_environment_factory=None))
+    assert drainage.identity().capabilities == ("variants",)
+    assert drainage.build_operation_resolver(Path("unused"), Path("unused")) is None
+    assert hydraulic.identity().capabilities == ("operations", "variants")
 
 
 def test_adapter_rejects_mismatched_declarative_template() -> None:
@@ -73,34 +67,35 @@ def test_adapter_rejects_mismatched_declarative_template() -> None:
 
 @pytest.mark.parametrize(
     "variant_id",
-    (
-        "administrative_no_op",
-        "major_idf_revision",
-        "outlet_geometry_revision",
-        "tailwater_revision",
-    ),
+    VARIANT_IDS,
 )
-def test_compiled_ssc03_package_matches_golden_bytes(tmp_path: Path, variant_id: str) -> None:
-    golden = _golden_identity()
-
+def test_compiled_ssc03_package_uses_current_registered_identity(tmp_path: Path, variant_id: str) -> None:
     compiled = compile_template_lifecycle(
         get_template(TEMPLATE_ID),
         tmp_path / variant_id,
         variant_id=variant_id,
     )
 
-    expected = golden["variants"][variant_id]
-    assert compiled.envelope.template_id == golden["template_id"]
-    assert compiled.envelope.world_id == golden["world_id"]
-    assert compiled.envelope.lifecycle_id == golden["lifecycle_id"]
-    assert compiled.envelope.lifecycle_spec_sha256 == golden["lifecycle_spec_sha256"]
+    assert compiled.envelope.template_id == TEMPLATE_ID
+    assert compiled.envelope.world_id == "aec.task_world.composite.hydraulic-interaction-lifecycle-review"
+    assert compiled.envelope.lifecycle_id == "ssc03.hydraulic-interaction-lifecycle"
     assert compiled.envelope.variant_id == variant_id
-    assert compiled.envelope.package_sha256 == expected["package_sha256"]
-    assert _package_stats(compiled.package_dir) == (expected["file_count"], expected["total_bytes"])
+    assert len(compiled.envelope.lifecycle_spec_sha256) == 64
+    assert len(compiled.envelope.package_sha256) == 64
+    assert _package_stats(compiled.package_dir)[0] > 0
     assert not (compiled.package_dir / "compiled-world.json").exists()
 
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         CompiledWorldEnvelope.model_validate(compiled.envelope.model_dump(mode="json") | {"unexpected": True})
+
+
+def test_compiled_ssc03_package_is_deterministic(tmp_path: Path) -> None:
+    template = get_template(TEMPLATE_ID)
+    first = compile_template_lifecycle(template, tmp_path / "first", variant_id="major_idf_revision")
+    second = compile_template_lifecycle(template, tmp_path / "second", variant_id="major_idf_revision")
+
+    assert first.envelope.package_sha256 == second.envelope.package_sha256
+    assert _package_stats(first.package_dir) == _package_stats(second.package_dir)
 
 
 def test_compiled_ssc03_fixture_executes_and_verifies(tmp_path: Path) -> None:

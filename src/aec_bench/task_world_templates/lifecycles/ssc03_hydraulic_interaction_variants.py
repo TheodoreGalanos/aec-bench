@@ -24,7 +24,6 @@ HydraulicInteractionVariantId = Literal[
 
 
 class Ssc03HydraulicInteractionVariantSpec(StrictModel):
-    schema_version: Literal["1"] = "1"
     variant_id: HydraulicInteractionVariantId
     revision_id: HydraulicInteractionVariantId
     summary: NonEmptyStr

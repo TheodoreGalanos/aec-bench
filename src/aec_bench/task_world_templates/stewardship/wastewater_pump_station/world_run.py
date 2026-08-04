@@ -9,8 +9,8 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, NoReturn
 
 from aec_bench.contracts.continual_world import (
-    ContinualWorldDefinitionRef,
     ContinualWorldProfileRef,
+    WorldBuildRef,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
     PumpStationCoupledWorldError,
@@ -45,9 +45,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     verify_coupled_stewardship_run,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
-    PUMP_STATION_COMMAND_RECORD_VERSION,
-    PUMP_STATION_RECORD_VERSIONS,
-    PUMP_STATION_WORLD_RECORD_VERSION,
     PumpStationCommand,
     PumpStationInitialStateSource,
     PumpStationRegisteredWorldRunManifest,
@@ -97,7 +94,7 @@ class PumpStationWorldRun:
         world_branch_id: str,
     ) -> PumpStationWorldRun:
         """Create one registered root and its required temporal evidence."""
-        definition_ref, profile_ref, profile = cls._load_registered_reference_profile()
+        world_build, profile_ref, profile = cls._load_registered_reference_profile()
         from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.corpus import (
             build_asw_8_reference_temporal_evidence_bundle,
         )
@@ -107,7 +104,7 @@ class PumpStationWorldRun:
             world_branch_id=world_branch_id,
         )
         manifest = cls._reference_system_manifest(
-            definition_ref=definition_ref,
+            world_build=world_build,
             profile_ref=profile_ref,
             profile=profile,
             bundle=bundle,
@@ -204,7 +201,7 @@ class PumpStationWorldRun:
     ]:
         """Load immutable registered identity without checking mutable history."""
         manifest = repository.load_manifest()
-        definition_ref = cls._definition_ref(manifest)
+        world_build = cls._world_build(manifest)
         profile_ref = cls._profile_ref(manifest)
         from aec_bench.task_world_templates.continual_catalogue import (
             default_continual_world_catalogue,
@@ -220,7 +217,7 @@ class PumpStationWorldRun:
         )
 
         try:
-            definition = default_continual_world_catalogue().resolve(definition_ref)
+            definition = default_continual_world_catalogue().resolve(world_build)
             loaded = definition.load_profile(profile_ref)
         except (KeyError, ValueError) as error:
             _fail("world-run-identity", f"registered profile differs: {error}")
@@ -237,7 +234,7 @@ class PumpStationWorldRun:
                 repository.root / "temporal-evidence",
             ).load_bundle(package=profile.station_package)
         expected_manifest = cls._reference_system_manifest(
-            definition_ref=definition_ref,
+            world_build=world_build,
             profile_ref=profile_ref,
             profile=profile,
             bundle=bundle,
@@ -282,8 +279,8 @@ class PumpStationWorldRun:
         return self._manifest
 
     @property
-    def continual_definition_ref(self) -> ContinualWorldDefinitionRef:
-        return self._definition_ref(self._manifest)
+    def world_build(self) -> WorldBuildRef:
+        return self._world_build(self._manifest)
 
     @property
     def continual_profile_ref(self) -> ContinualWorldProfileRef:
@@ -420,7 +417,7 @@ class PumpStationWorldRun:
 
     @staticmethod
     def _load_registered_reference_profile() -> tuple[
-        ContinualWorldDefinitionRef,
+        WorldBuildRef,
         ContinualWorldProfileRef,
         PumpStationContinualProfile,
     ]:
@@ -428,7 +425,6 @@ class PumpStationWorldRun:
             default_continual_world_catalogue,
         )
         from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
-            PUMP_STATION_RS1_PROFILE_VERSION,
             PumpStationContinualProfile,
         )
         from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
@@ -440,10 +436,7 @@ class PumpStationWorldRun:
 
         try:
             definition = default_continual_world_catalogue().get(PUMP_STATION_TASK_WORLD_ID)
-            profile_ref = definition.profile_ref(
-                PUMP_STATION_REFERENCE_SYSTEM_ID,
-                PUMP_STATION_RS1_PROFILE_VERSION,
-            )
+            profile_ref = definition.profile_ref(PUMP_STATION_REFERENCE_SYSTEM_ID)
             loaded = definition.load_profile(profile_ref)
         except (KeyError, ValueError) as error:
             _fail("world-run-identity", f"registered profile differs: {error}")
@@ -454,7 +447,7 @@ class PumpStationWorldRun:
     @staticmethod
     def _reference_system_manifest(
         *,
-        definition_ref: ContinualWorldDefinitionRef,
+        world_build: WorldBuildRef,
         profile_ref: ContinualWorldProfileRef,
         profile: PumpStationContinualProfile,
         bundle: TemporalEvidenceBundle,
@@ -475,11 +468,6 @@ class PumpStationWorldRun:
             "temporal_template",
         )
         return PumpStationRegisteredWorldRunManifest(
-            serialization_version=PUMP_STATION_WORLD_RECORD_VERSION,
-            snapshot_version=PUMP_STATION_RECORD_VERSIONS.snapshot_version,
-            receipt_version=PUMP_STATION_RECORD_VERSIONS.receipt_version,
-            authority_policy_version=PUMP_STATION_RECORD_VERSIONS.authority_policy_version,
-            transition_rule_version=PUMP_STATION_RECORD_VERSIONS.transition_rule_version,
             run_id=run_id,
             episode_id=episode_id,
             world_branch_id=world_branch_id,
@@ -491,11 +479,10 @@ class PumpStationWorldRun:
             model_id=stewardship_content_id(model),
             initial_sequence=profile.opening_state.sequence,
             initial_state_id=stewardship_state_id(profile.opening_state),
-            task_world_id=definition_ref.task_world_id,
-            definition_version=definition_ref.definition_version,
-            definition_content_sha256=definition_ref.content_sha256,
+            task_world_id=world_build.task_world_id,
+            world_build_entry_point=world_build.entry_point,
+            world_build_artifact_sha256=world_build.artifact_sha256,
             continual_profile_id=profile_ref.profile_id,
-            continual_profile_version=profile_ref.profile_version,
             continual_profile_content_sha256=profile_ref.profile_content_sha256,
             reference_system_id=system.descriptor_id,
             reference_system_content_id=system.descriptor_content_id,
@@ -634,12 +621,12 @@ class PumpStationWorldRun:
             _fail("temporal-evidence", "registered temporal evidence differs from the manifest")
 
     @staticmethod
-    def _definition_ref(manifest: PumpStationRegisteredWorldRunManifest) -> ContinualWorldDefinitionRef:
+    def _world_build(manifest: PumpStationRegisteredWorldRunManifest) -> WorldBuildRef:
         try:
-            return ContinualWorldDefinitionRef(
+            return WorldBuildRef(
                 task_world_id=manifest.task_world_id,
-                definition_version=manifest.definition_version,
-                content_sha256=manifest.definition_content_sha256,
+                entry_point=manifest.world_build_entry_point,
+                artifact_sha256=manifest.world_build_artifact_sha256,
             )
         except ValueError as error:
             _fail("world-run-identity", f"definition reference differs: {error}")
@@ -650,7 +637,6 @@ class PumpStationWorldRun:
             return ContinualWorldProfileRef(
                 task_world_id=manifest.task_world_id,
                 profile_id=manifest.continual_profile_id,
-                profile_version=manifest.continual_profile_version,
                 profile_content_sha256=manifest.continual_profile_content_sha256,
             )
         except ValueError as error:
@@ -669,7 +655,6 @@ class PumpStationWorldRun:
         else:
             _fail("control-type", f"unsupported registered control {type(control).__name__}")
         return PumpStationCommand(
-            command_version=PUMP_STATION_COMMAND_RECORD_VERSION,
             kind=kind,
             request_id=request.request_id,
             request_content_id=control.content_id,

@@ -4,12 +4,11 @@
 from __future__ import annotations
 
 import hashlib
-import inspect
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Protocol, cast, runtime_checkable
+from typing import Any, Literal, cast
 
 from pydantic import field_validator, model_validator
 
@@ -27,36 +26,20 @@ from aec_bench.meta_harness.lifecycle_operation_protocol import (
 from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate, EvidenceLifecycleSpec
 
 
-class CallableSourceIdentity(StrictModel):
-    qualified_name: NonEmptyStr
-    source_sha256: NonEmptyStr
+@dataclass(frozen=True, slots=True)
+class LifecycleWorldAdapterIdentity:
+    template_id: str
+    entry_point: str
+    artifact_sha256: str
+    capabilities: tuple[Literal["operations", "variants"], ...] = ()
 
-    @field_validator("source_sha256")
-    @classmethod
-    def validate_hash(cls, value: str) -> str:
-        return ArtifactReference.validate_sha256(value)
-
-
-class LifecycleWorldAdapterIdentity(StrictModel):
-    schema_version: Literal["1"] = "1"
-    template_id: NonEmptyStr
-    materializer: CallableSourceIdentity
-    verifier: CallableSourceIdentity
-    package_validator: CallableSourceIdentity | None = None
-    variant_ids: CallableSourceIdentity | None = None
-    variant_metadata: CallableSourceIdentity | None = None
-    operation_resolver_factory: CallableSourceIdentity | None = None
-    smoke_environment_factory: CallableSourceIdentity | None = None
-
-    @model_validator(mode="after")
-    def validate_variant_entrypoints(self) -> LifecycleWorldAdapterIdentity:
-        if (self.variant_ids is None) != (self.variant_metadata is None):
-            raise ValueError("variant id and metadata entrypoints must be declared together")
-        return self
+    def __post_init__(self) -> None:
+        if not self.template_id.strip() or not self.entry_point.strip():
+            raise ValueError("lifecycle adapter identity values must be non-empty")
+        ArtifactReference.validate_sha256(self.artifact_sha256)
 
 
 class CompiledWorldEnvelope(StrictModel):
-    schema_version: Literal["1"] = "1"
     visibility: Literal["public", "holdout"]
     template_id: NonEmptyStr
     world_id: NonEmptyStr
@@ -97,75 +80,57 @@ class CompiledLifecycleWorld:
     envelope: CompiledWorldEnvelope
 
 
-@runtime_checkable
-class LifecycleWorldAdapter(Protocol):
-    @property
-    def schema_version(self) -> str: ...
+@dataclass(frozen=True)
+class VariantLifecycleFunctions:
+    """Callables present only for lifecycle templates with named variants."""
 
-    @property
-    def template_id(self) -> str: ...
-
-    def identity(self) -> LifecycleWorldAdapterIdentity: ...
-
-    def variant_ids(self) -> tuple[str, ...]: ...
-
-    def variant_metadata(self, variant_id: str) -> dict[str, Any]: ...
-
-    def materialize(
-        self,
-        output_dir: Path,
-        *,
-        template: CompositeTaskWorldTemplate,
-        variant_id: str | None,
-    ) -> Path: ...
-
-    def validate_package(self, package_dir: Path) -> dict[str, Any] | None: ...
-
-    def build_operation_resolver(
-        self,
-        package_dir: Path,
-        run_dir: Path,
-    ) -> LifecycleOperationResolver | None: ...
-
-    def verify(self, package_dir: Path, run_dir: Path) -> dict[str, Any]: ...
-
-    def build_smoke_environment(self, package_dir: Path) -> LifecycleEpisodeEnvironment | None: ...
+    package_validator: Callable[[Path], dict[str, Any]]
+    variant_ids: Callable[[], tuple[str, ...]]
+    variant_metadata: Callable[[str], Any]
 
 
 @dataclass(frozen=True)
-class CallableLifecycleWorldAdapter:
-    schema_version: Literal["1"]
+class OperationLifecycleFunctions:
+    """Callables present only for lifecycle templates with interactive operations."""
+
+    resolver: Callable[[Path, Path], LifecycleOperationResolver]
+    smoke_environment: Callable[[Path], LifecycleEpisodeEnvironment]
+
+
+@dataclass(frozen=True)
+class LifecycleWorldAdapter:
+    """Concrete task-owned lifecycle composition with only supported capabilities."""
+
     template_id: str
+    entry_point: str
+    artifact_sha256: str
     materializer_entrypoint: Callable[..., Path]
     verifier_entrypoint: Callable[[Path, Path], dict[str, Any]]
-    package_validator: Callable[[Path], dict[str, Any]] | None = None
-    variant_ids_entrypoint: Callable[[], tuple[str, ...]] | None = None
-    variant_metadata_entrypoint: Callable[[str], Any] | None = None
-    operation_resolver_factory: Callable[[Path, Path], LifecycleOperationResolver] | None = None
-    smoke_environment_factory: Callable[[Path], LifecycleEpisodeEnvironment] | None = None
+    capabilities: tuple[VariantLifecycleFunctions | OperationLifecycleFunctions, ...] = ()
 
     def identity(self) -> LifecycleWorldAdapterIdentity:
+        names = tuple(
+            sorted(
+                "variants" if isinstance(capability, VariantLifecycleFunctions) else "operations"
+                for capability in self.capabilities
+            )
+        )
         return LifecycleWorldAdapterIdentity(
-            schema_version=self.schema_version,
             template_id=self.template_id,
-            materializer=_callable_source_identity(self.materializer_entrypoint),
-            verifier=_callable_source_identity(self.verifier_entrypoint),
-            package_validator=_optional_callable_source_identity(self.package_validator),
-            variant_ids=_optional_callable_source_identity(self.variant_ids_entrypoint),
-            variant_metadata=_optional_callable_source_identity(self.variant_metadata_entrypoint),
-            operation_resolver_factory=_optional_callable_source_identity(self.operation_resolver_factory),
-            smoke_environment_factory=_optional_callable_source_identity(self.smoke_environment_factory),
+            entry_point=self.entry_point,
+            artifact_sha256=self.artifact_sha256,
+            capabilities=cast(tuple[Literal["operations", "variants"], ...], names),
         )
 
     def variant_ids(self) -> tuple[str, ...]:
-        if self.variant_ids_entrypoint is None:
-            return ()
-        return tuple(self.variant_ids_entrypoint())
+        variants = self._capability(VariantLifecycleFunctions)
+        return () if variants is None else tuple(variants.variant_ids())
 
     def variant_metadata(self, variant_id: str) -> dict[str, Any]:
-        if self.variant_metadata_entrypoint is None:
+        variants = self._capability(VariantLifecycleFunctions)
+        if variants is None:
             raise KeyError(f"lifecycle template {self.template_id!r} does not declare variant metadata")
-        return _mapping_payload(self.variant_metadata_entrypoint(variant_id), label="variant metadata")
+        return _mapping_payload(variants.variant_metadata(variant_id), label="variant metadata")
 
     def materialize(
         self,
@@ -176,7 +141,8 @@ class CallableLifecycleWorldAdapter:
     ) -> Path:
         if template.template_id != self.template_id:
             raise ValueError("lifecycle adapter template identity does not match the declarative template")
-        if self.variant_ids_entrypoint is None:
+        variants = self._capability(VariantLifecycleFunctions)
+        if variants is None:
             if variant_id is not None:
                 raise ValueError(f"lifecycle template {self.template_id!r} does not support variants")
             return Path(self.materializer_entrypoint(Path(output_dir), template=template))
@@ -186,26 +152,36 @@ class CallableLifecycleWorldAdapter:
         return Path(self.materializer_entrypoint(Path(output_dir), template=template, variant_id=variant_id))
 
     def validate_package(self, package_dir: Path) -> dict[str, Any] | None:
-        if self.package_validator is None:
-            return None
-        return _mapping_payload(self.package_validator(Path(package_dir)), label="package variant metadata")
+        variants = self._capability(VariantLifecycleFunctions)
+        return (
+            None
+            if variants is None
+            else _mapping_payload(variants.package_validator(Path(package_dir)), label="package variant metadata")
+        )
 
     def build_operation_resolver(
         self,
         package_dir: Path,
         run_dir: Path,
     ) -> LifecycleOperationResolver | None:
-        if self.operation_resolver_factory is None:
-            return None
-        return self.operation_resolver_factory(Path(package_dir), Path(run_dir))
+        operations = self._capability(OperationLifecycleFunctions)
+        return None if operations is None else operations.resolver(Path(package_dir), Path(run_dir))
 
     def verify(self, package_dir: Path, run_dir: Path) -> dict[str, Any]:
         return validate_lifecycle_verification(self.verifier_entrypoint(Path(package_dir), Path(run_dir)))
 
     def build_smoke_environment(self, package_dir: Path) -> LifecycleEpisodeEnvironment | None:
-        if self.smoke_environment_factory is None:
-            return None
-        return self.smoke_environment_factory(Path(package_dir))
+        operations = self._capability(OperationLifecycleFunctions)
+        return None if operations is None else operations.smoke_environment(Path(package_dir))
+
+    def _capability[CapabilityT: (VariantLifecycleFunctions, OperationLifecycleFunctions)](
+        self,
+        capability_type: type[CapabilityT],
+    ) -> CapabilityT | None:
+        matching = tuple(item for item in self.capabilities if isinstance(item, capability_type))
+        if len(matching) > 1:
+            raise ValueError(f"lifecycle adapter has repeated {capability_type.__name__}")
+        return matching[0] if matching else None
 
 
 def validate_lifecycle_world_adapter(
@@ -224,10 +200,8 @@ def validate_lifecycle_world_adapter(
         raise ValueError("lifecycle adapter variant ids must be sorted and unique")
     supports_operations = any(checkpoint.conditional_operations is not None for checkpoint in lifecycle.checkpoints)
     identity = adapter.identity()
-    if supports_operations and identity.operation_resolver_factory is None:
-        raise ValueError("operation lifecycle adapter requires an operation resolver")
-    if supports_operations and identity.smoke_environment_factory is None:
-        raise ValueError("operation lifecycle adapter requires a smoke environment")
+    if supports_operations != ("operations" in identity.capabilities):
+        raise ValueError("lifecycle operation capability differs from the declarative lifecycle")
 
 
 def build_compiled_world_envelope(
@@ -285,19 +259,20 @@ def build_compiled_world_envelope(
     )
 
 
-def _callable_source_identity(entrypoint: Callable[..., Any]) -> CallableSourceIdentity:
-    try:
-        source = inspect.getsource(entrypoint).encode("utf-8")
-    except (OSError, TypeError) as exc:
-        raise ValueError("lifecycle adapter entrypoint source identity is unavailable") from exc
-    return CallableSourceIdentity(
-        qualified_name=f"{entrypoint.__module__}.{entrypoint.__qualname__}",
-        source_sha256=hashlib.sha256(source).hexdigest(),
-    )
+def source_tree_artifact_sha256(paths: tuple[Path, ...]) -> str:
+    """Hash a stable manifest of exact Python source-file bytes."""
 
-
-def _optional_callable_source_identity(entrypoint: Callable[..., Any] | None) -> CallableSourceIdentity | None:
-    return None if entrypoint is None else _callable_source_identity(entrypoint)
+    source_root = Path(__file__).resolve().parents[1]
+    manifest: dict[str, str] = {}
+    for selected in paths:
+        path = Path(selected).resolve(strict=True)
+        candidates = (path,) if path.is_file() else tuple(sorted(path.rglob("*.py")))
+        for candidate in candidates:
+            relative = candidate.relative_to(source_root).as_posix()
+            manifest[relative] = hashlib.sha256(candidate.read_bytes()).hexdigest()
+    if not manifest:
+        raise ValueError("lifecycle executable artifact requires source files")
+    return _canonical_sha256(manifest)
 
 
 def _mapping_payload(value: Any, *, label: str) -> dict[str, Any]:

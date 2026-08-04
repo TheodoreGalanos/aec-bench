@@ -56,15 +56,23 @@ def _engine() -> HydraulicEngineIdentity:
 def _request(source: HydraulicSourceState, *, world_id: str | None = None) -> HydraulicRunRequest:
     selected_world_id = world_id or source.world_id
     engine = _engine()
-    fields = {
-        "world_id": selected_world_id,
-        "scenario_id": "design-10yr",
-        "package_sha256": "2" * 64,
-        "source_state_sha256": "3" * 64,
-        "calculation_input_sha256": "4" * 64,
-        "engine": engine,
-    }
-    return HydraulicRunRequest(run_id=hydraulic_run_id(**fields), **fields)
+    run_id = hydraulic_run_id(
+        world_id=selected_world_id,
+        scenario_id="design-10yr",
+        package_sha256="2" * 64,
+        source_state_sha256="3" * 64,
+        calculation_input_sha256="4" * 64,
+        engine=engine,
+    )
+    return HydraulicRunRequest(
+        run_id=run_id,
+        world_id=selected_world_id,
+        scenario_id="design-10yr",
+        package_sha256="2" * 64,
+        source_state_sha256="3" * 64,
+        calculation_input_sha256="4" * 64,
+        engine=engine,
+    )
 
 
 def _assert_actor_safe(observation: HydraulicTimeStep | None) -> None:
@@ -125,7 +133,7 @@ def test_registered_ssc03_lifecycle_operation_uses_hydraulic_transition(
 
     monkeypatch.setattr(kernel, "transition_hydraulic_world", record_transition)
     definition = ssc03_hydraulic_continual_world_definition()
-    loaded = definition.load_profile(definition.spec.profiles[0])
+    loaded = definition.load_profile(definition.profiles[0])
     assert isinstance(loaded.value, Ssc03HydraulicContinualProfile)
     compiled = loaded.value.compile(tmp_path / "package")
     run = tmp_path / "run"

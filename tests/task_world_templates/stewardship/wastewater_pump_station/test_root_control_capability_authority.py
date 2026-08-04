@@ -21,8 +21,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
     PumpStationCoupledModel,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PUMP_STATION_BOUND_CONTROL_VERSION,
-    PUMP_STATION_PROCESS_OUTCOME_VERSION,
     PumpStationBoundControlRequest,
     PumpStationCoupledStewardshipState,
     PumpStationProcessOutcomeRequest,
@@ -114,7 +112,6 @@ def _bound_process_outcome(
 ) -> PumpStationBoundControlRequest:
     snapshot = run.snapshot()
     return PumpStationBoundControlRequest(
-        control_envelope_version=PUMP_STATION_BOUND_CONTROL_VERSION,
         request_id=request_id,
         run_id=snapshot.run_id,
         episode_id=snapshot.episode_id,
@@ -123,7 +120,6 @@ def _bound_process_outcome(
         base_commit_id=snapshot.commit_id,
         based_on_sequence=snapshot.sequence,
         control=PumpStationProcessOutcomeRequest(
-            version=PUMP_STATION_PROCESS_OUTCOME_VERSION,
             request_id=request_id,
             authority_id=authority_id,
             process_id=process_id,

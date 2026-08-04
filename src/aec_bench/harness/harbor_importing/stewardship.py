@@ -26,6 +26,7 @@ from aec_bench.contracts.world_session import (
     WorldSessionRequest,
     WorldSessionResult,
 )
+from aec_bench.evaluation.stewardship import evaluate_pump_station_reference_run
 from aec_bench.harness.harbor_importing.artifact_io import (
     artifact_reference,
     read_regular_trial_tree,
@@ -44,6 +45,10 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_e
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_verifier import (
     verify_pump_station_harbor_run,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import PumpStationWorldRun
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
+    PumpStationWorldRunRepository,
 )
 
 _RUN_DIRECTORY_NAME = "world-session"
@@ -185,16 +190,13 @@ def _load_stewardship_evidence(
         bridge=bridge,
     )
     imported_artifact_sha256 = tuple(sorted({artifact.sha256 for artifact in artifacts}))
-    if bridge.definition_ref is None or bridge.profile_ref is None:
-        raise HarborImportError("registered stewardship evaluation authority is incomplete")
-    definition = default_continual_world_catalogue().resolve(bridge.definition_ref)
-    evaluation_port = definition.evaluation_port
-    if evaluation_port is None:
-        raise HarborImportError("registered stewardship definition has no evaluation port")
+    definition = default_continual_world_catalogue().resolve(bridge.world_build)
+    definition.load_profile(bridge.profile_ref)
+    repository = PumpStationWorldRunRepository(run_dir / "world-run")
+    run = PumpStationWorldRun.resume_reference_system(repository=repository, snapshot=repository.current_snapshot())
     evaluation = StewardshipEvaluation.model_validate(
-        evaluation_port.evaluate_run(
-            profile=definition.load_profile(bridge.profile_ref),
-            run_root=run_dir / "world-run",
+        evaluate_pump_station_reference_run(
+            run,
             imported_artifact_sha256=imported_artifact_sha256,
             evaluation_scope=("bounded_continuation" if bridge.rollout_child_ref is not None else "complete_journey"),
         )

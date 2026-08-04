@@ -32,8 +32,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     pump_station_artifact_id,
 )
 
-STEWARDSHIP_EVALUATION_SCHEMA_VERSION = "stewardship-evaluation.v2"
-
 type PumpStationReferenceRun = PumpStationWorldRun
 
 _MAINTENANCE_CHANGES = {
@@ -191,7 +189,6 @@ def evaluate_pump_station_reference_run(
         terminal_liability=terminal,
     )
     return StewardshipEvaluation(
-        schema_version=STEWARDSHIP_EVALUATION_SCHEMA_VERSION,
         evaluation_scope=evaluation_scope,
         valid=gates.passed,
         gates=gates,

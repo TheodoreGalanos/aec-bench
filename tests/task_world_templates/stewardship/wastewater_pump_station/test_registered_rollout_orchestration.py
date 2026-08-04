@@ -16,6 +16,9 @@ from aec_bench.task_world_templates.continual.rollout_repository import Continua
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
     pump_station_continual_world_definition,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_rollout_adapter import (
+    PumpStationContinualWorldBranchPort,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
     PumpStationEpisodeHost,
 )
@@ -46,7 +49,7 @@ def test_registered_rollout_children_share_origin_then_advance_independently(
     tmp_path: Path,
 ) -> None:
     definition = pump_station_continual_world_definition()
-    profile_ref = definition.spec.profiles[0]
+    profile_ref = definition.profiles[0]
     parent_root = tmp_path / "parent"
     parent = PumpStationWorldRun.create_reference_system(
         repository=PumpStationWorldRunRepository(parent_root),
@@ -61,7 +64,7 @@ def test_registered_rollout_children_share_origin_then_advance_independently(
         group_id="registered-rollout-group",
         task_world_id=definition.ref.task_world_id,
         authority_id="rollout-host",
-        definition_ref=definition.ref,
+        world_build=definition.build,
         profile_ref=profile_ref,
         parent_manifest_content_sha256=pump_station_artifact_id(parent.manifest),
         parent_snapshot=_snapshot(parent),
@@ -79,6 +82,7 @@ def test_registered_rollout_children_share_origin_then_advance_independently(
     )
     control = ContinualRolloutControl(
         definition,
+        PumpStationContinualWorldBranchPort(),
         parent_run_root=parent_root,
         rollout_repository_root=rollout_root,
         authorised_principal_ids=("rollout-host",),

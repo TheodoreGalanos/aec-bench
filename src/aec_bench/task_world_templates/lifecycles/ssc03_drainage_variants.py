@@ -42,7 +42,6 @@ class Ssc03CheckpointVariantSpec(StrictModel):
 
 
 class Ssc03LifecycleVariantSpec(StrictModel):
-    schema_version: Literal["1"] = "1"
     variant_id: NonEmptyStr
     summary: NonEmptyStr
     visibility: Literal["public"] = "public"

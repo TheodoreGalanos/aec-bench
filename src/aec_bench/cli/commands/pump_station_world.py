@@ -9,30 +9,38 @@ from pathlib import Path
 from typing import cast
 
 import typer
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 from aec_bench.cli.output import emit
 from aec_bench.contracts.continual_world import (
+    ContinualControlExecuteRequest,
+    ContinualRolloutCreateRequest,
+    ContinualRolloutGroupQuery,
     ContinualWorldActorRequest,
     ContinualWorldControlRequest,
 )
 from aec_bench.contracts.trial_record import TrialRecord
+from aec_bench.contracts.world_interface import WorldActorActionRequest, WorldControlRequest
 from aec_bench.evaluation.stewardship import (
     evaluate_pump_station_reference_run,
 )
 from aec_bench.harness.harbor_importing.core import import_harbor_trial
-from aec_bench.task_world_templates.continual.interface import (
-    ContinualWorldInterfaceContext,
-    dispatch_continual_actor,
-    dispatch_continual_control,
-)
+from aec_bench.task_world_templates.continual.rollout_control import ContinualRolloutControl
 from aec_bench.task_world_templates.continual_catalogue import default_continual_world_catalogue
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_rollout_adapter import (
+    PumpStationContinualWorldBranchPort,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import PumpStationEpisodeHost
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PumpStationBoundControlRequest,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationCoupledVerificationReport,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_control import PumpStationWorldControl
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import (
     PumpStationWorldRun,
 )
@@ -82,21 +90,29 @@ def actor_interface_command(
     started = time.monotonic()
     request = ContinualWorldActorRequest.model_validate_json(request_path.read_text(encoding="utf-8"))
     repository = PumpStationWorldRunRepository(run_dir)
-    run = PumpStationWorldRun.resume_reference_system(
+    PumpStationWorldRun.resume_reference_system(
         repository=repository,
         snapshot=repository.current_snapshot(),
     )
-    result = dispatch_continual_actor(
-        context=ContinualWorldInterfaceContext(
-            catalogue=default_continual_world_catalogue(),
-            run_root=run_dir,
-            rollout_repository_root=None,
-            authorised_principal_ids=(),
-            actor_definition_ref=run.continual_definition_ref,
-            actor_profile_ref=run.continual_profile_ref,
-        ),
-        request=request,
-    )
+    host = PumpStationEpisodeHost(run_dir)
+    result: object
+    if request.operation == "capabilities":
+        result = host.capabilities()
+    elif request.operation == "observe":
+        result = host.observe()
+    else:
+        assert request.request_id is not None
+        assert request.decision_id is not None
+        assert request.action_name is not None
+        assert request.arguments is not None
+        result = host.invoke(
+            WorldActorActionRequest(
+                request_id=request.request_id,
+                decision_id=request.decision_id,
+                action_name=request.action_name,
+                arguments=request.arguments,
+            )
+        )
     emit(
         "task pump-station-world actor-interface",
         _model_payload(result),
@@ -122,16 +138,57 @@ def control_interface_command(
     """Execute one separate host-control request through the continual-world catalogue."""
 
     started = time.monotonic()
-    request = ContinualWorldControlRequest.model_validate_json(request_path.read_text(encoding="utf-8"))
-    result = dispatch_continual_control(
-        context=ContinualWorldInterfaceContext(
-            catalogue=default_continual_world_catalogue(),
-            run_root=run_dir,
+    request_adapter: TypeAdapter[ContinualWorldControlRequest] = TypeAdapter(ContinualWorldControlRequest)
+    request = request_adapter.validate_json(request_path.read_text(encoding="utf-8"))
+    request_authority_id = (
+        request.rollout_group_request.authority_id
+        if isinstance(request, ContinualRolloutCreateRequest)
+        else request.authority_id
+    )
+    if request_authority_id != host_authority_id:
+        raise ValueError("control authority differs from the host authority")
+    catalogue = default_continual_world_catalogue()
+    repository = PumpStationWorldRunRepository(run_dir)
+    run = PumpStationWorldRun.resume_reference_system(repository=repository, snapshot=repository.current_snapshot())
+    definition = catalogue.resolve(run.world_build)
+    definition.load_profile(run.continual_profile_ref)
+    result: object
+    if request.operation in {"capabilities", "execute"}:
+        control = PumpStationWorldControl(
+            run_dir,
+            authorised_principal_ids=(host_authority_id,),
+            profile_ref=run.continual_profile_ref,
+        )
+        if request.operation == "capabilities":
+            result = control.capabilities(request_authority_id)
+        else:
+            assert isinstance(request, ContinualControlExecuteRequest)
+            parsed_control: WorldControlRequest | PumpStationBoundControlRequest = TypeAdapter(
+                WorldControlRequest | PumpStationBoundControlRequest
+            ).validate_python(request.control_request)
+            result = control.execute(parsed_control)
+    else:
+        if rollout_dir is None:
+            raise ValueError("rollout operations require --rollout-dir")
+        rollout = ContinualRolloutControl(
+            definition,
+            PumpStationContinualWorldBranchPort(),
+            parent_run_root=run_dir,
             rollout_repository_root=rollout_dir,
             authorised_principal_ids=(host_authority_id,),
-        ),
-        request=request,
-    )
+        )
+        if request.operation == "create_rollout_group":
+            assert isinstance(request, ContinualRolloutCreateRequest)
+            result = rollout.create_group(request.rollout_group_request)
+        else:
+            assert isinstance(request, ContinualRolloutGroupQuery) or request.operation == "rollout_child_run_ref"
+            if request.operation == "rollout_group_status":
+                result = rollout.group_status(request.group_id)
+            elif request.operation == "inspect_rollout_group":
+                result = rollout.inspect_group(request.group_id)
+            else:
+                assert request.child_id is not None
+                result = rollout.child_run_ref(request.group_id, request.child_id)
     emit(
         "task pump-station-world control-interface",
         _model_payload(result),
@@ -209,7 +266,7 @@ def export_harbor_command(
     exported = export_pump_station_harbor_task(
         task_dir,
         project_root=project_root,
-        profile_ref=pump_station_continual_world_definition().spec.profiles[0],
+        profile_ref=pump_station_continual_world_definition().profiles[0],
     )
     emit(
         "task pump-station-world export-harbor",

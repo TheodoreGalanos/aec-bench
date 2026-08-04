@@ -12,9 +12,9 @@ from aec_bench.contracts.continual_world import (
     ContinualRolloutChildRequest,
     ContinualRolloutChildRunRef,
     ContinualRolloutGroupRequest,
-    ContinualWorldDefinitionRef,
     ContinualWorldProfileRef,
     ContinualWorldSnapshotRef,
+    WorldBuildRef,
 )
 from aec_bench.task_world_templates.continual.branch_port import (
     ContinualWorldBranchMaterialization,
@@ -25,8 +25,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continua
     PumpStationContinualProfile,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.rollout_models import (
-    PUMP_STATION_ROLLOUT_BRANCH_RECEIPT_VERSION_V2,
-    PumpStationRolloutBranchReceiptV2,
+    PumpStationRolloutBranchReceipt,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
     stewardship_content_id,
@@ -75,12 +74,12 @@ def validate_pump_station_rollout_child_run(
     child_run_root: Path,
     rollout_child_ref: ContinualRolloutChildRunRef,
     *,
-    definition_ref: ContinualWorldDefinitionRef,
+    world_build: WorldBuildRef,
     profile_ref: ContinualWorldProfileRef,
     request: ContinualRolloutGroupRequest | None = None,
     child: ContinualRolloutChildRequest | None = None,
     shared_receipt: ContinualRolloutChildReceipt | None = None,
-) -> PumpStationRolloutBranchReceiptV2:
+) -> PumpStationRolloutBranchReceipt:
     """Verify one task-owned child tree against exact registered authority."""
 
     root = Path(child_run_root)
@@ -88,7 +87,7 @@ def validate_pump_station_rollout_child_run(
     if (root / "session-authority").exists():
         raise ValueError("pump-station rollout child contains active session authority")
     if (
-        rollout_child_ref.task_world_id != definition_ref.task_world_id
+        rollout_child_ref.task_world_id != world_build.task_world_id
         or rollout_child_ref.task_world_id != profile_ref.task_world_id
     ):
         raise ValueError("pump-station rollout child belongs to another task world")
@@ -96,7 +95,7 @@ def validate_pump_station_rollout_child_run(
     manifest = repository.load_manifest()
     if (
         not isinstance(manifest, PumpStationRegisteredWorldRunManifest)
-        or PumpStationWorldRun._definition_ref(manifest) != definition_ref
+        or PumpStationWorldRun._world_build(manifest) != world_build
         or PumpStationWorldRun._profile_ref(manifest) != profile_ref
         or manifest.initial_state_source.kind != "rollout_parent_snapshot"
     ):
@@ -109,7 +108,7 @@ def validate_pump_station_rollout_child_run(
     receipt_payload = (root / _TASK_RECEIPT_PATH).read_bytes()
     task_receipt = load_pump_station_artifact(
         receipt_payload,
-        PumpStationRolloutBranchReceiptV2,
+        PumpStationRolloutBranchReceipt,
     )
     initial_state = repository.load_state(manifest.initial_state_id)
     remaining_schedule_sha256 = _remaining_schedule_sha256(initial_state)
@@ -163,7 +162,6 @@ def validate_pump_station_rollout_child_run(
     if (
         current_snapshot != expected_snapshot
         or receipt_snapshot != expected_snapshot
-        or task_receipt.receipt_version != PUMP_STATION_ROLLOUT_BRANCH_RECEIPT_VERSION_V2
         or task_receipt.group_id != rollout_child_ref.group_id
         or task_receipt.child_id != rollout_child_ref.child_id
         or task_receipt.child_manifest_content_id != rollout_child_ref.child_manifest_content_sha256
@@ -182,12 +180,9 @@ def validate_pump_station_rollout_child_run(
     if any(value is not None for value in supplied_shared_authority):
         if request is None or child is None or shared_receipt is None:
             raise ValueError("registered pump child shared authority is incomplete")
-        expected_parent_snapshot = _pump_snapshot(
-            request.parent_snapshot,
-            snapshot_version=manifest.snapshot_version,
-        )
+        expected_parent_snapshot = _pump_snapshot(request.parent_snapshot)
         if (
-            request.definition_ref != definition_ref
+            request.world_build != world_build
             or request.profile_ref != profile_ref
             or request.task_world_id != rollout_child_ref.task_world_id
             or request.group_id != rollout_child_ref.group_id
@@ -241,9 +236,9 @@ class PumpStationContinualWorldBranchPort:
         repository = PumpStationWorldRunRepository(parent_run_root)
         manifest = repository.load_manifest()
         if not isinstance(manifest, PumpStationRegisteredWorldRunManifest):
-            raise ValueError("registered pump rollout requires manifest v2")
+            raise ValueError("registered pump rollout requires a current manifest")
         if (
-            PumpStationWorldRun._definition_ref(manifest) != request.definition_ref
+            PumpStationWorldRun._world_build(manifest) != request.world_build
             or PumpStationWorldRun._profile_ref(manifest) != request.profile_ref
         ):
             raise ValueError("registered pump rollout identity differs")
@@ -254,10 +249,7 @@ class PumpStationContinualWorldBranchPort:
             repository=repository,
             snapshot=repository.current_snapshot(),
         )
-        snapshot = _pump_snapshot(
-            request.parent_snapshot,
-            snapshot_version=manifest.snapshot_version,
-        )
+        snapshot = _pump_snapshot(request.parent_snapshot)
         with repository.locked():
             repository.commits_through(snapshot)
             report = run._verify_under_lock(snapshot)
@@ -355,8 +347,7 @@ class PumpStationContinualWorldBranchPort:
         if not run.verify().valid:
             raise ValueError("registered pump child replay differs")
         initial_snapshot = _initial_snapshot(repository, manifest)
-        task_receipt = PumpStationRolloutBranchReceiptV2(
-            receipt_version=PUMP_STATION_ROLLOUT_BRANCH_RECEIPT_VERSION_V2,
+        task_receipt = PumpStationRolloutBranchReceipt(
             group_id=request.group_id,
             child_id=child.child_id,
             shared_group_request_content_sha256=request.content_sha256,
@@ -409,7 +400,7 @@ class PumpStationContinualWorldBranchPort:
                 initial_snapshot=receipt.initial_snapshot,
                 child_manifest_content_sha256=receipt.child_manifest_content_sha256,
             ),
-            definition_ref=request.definition_ref,
+            world_build=request.world_build,
             profile_ref=request.profile_ref,
             request=request,
             child=child,
@@ -450,11 +441,8 @@ def _remaining_schedule_sha256(
 
 def _pump_snapshot(
     snapshot: ContinualWorldSnapshotRef,
-    *,
-    snapshot_version: str,
 ) -> PumpStationStateSnapshotRef:
     return PumpStationStateSnapshotRef(
-        snapshot_version=snapshot_version,
         run_id=snapshot.run_id,
         episode_id=snapshot.episode_id,
         world_branch_id=snapshot.world_branch_id,
@@ -483,7 +471,6 @@ def _initial_snapshot(
 ) -> PumpStationStateSnapshotRef:
     first = repository.commits()[0]
     return PumpStationStateSnapshotRef(
-        snapshot_version=manifest.snapshot_version,
         run_id=manifest.run_id,
         episode_id=manifest.episode_id,
         world_branch_id=manifest.world_branch_id,
