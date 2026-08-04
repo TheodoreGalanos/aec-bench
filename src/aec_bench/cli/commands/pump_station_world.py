@@ -396,8 +396,7 @@ def import_harbor_trial_command(
         {
             "record_path": str(record_path),
             "trial_id": record.trial_id,
-            "execution_kind": (None if record.world_execution is None else record.world_execution.execution_kind),
-            "transition_count": (None if record.world_execution is None else record.world_execution.transition_count),
+            "episode_artifact": None if record.episode_artifact is None else record.episode_artifact.path,
             "evaluation_valid": (None if stewardship is None else stewardship.valid),
             "active_terminal_restrictions": (
                 None if stewardship is None else stewardship.metrics.terminal_liability.active_restriction_count
@@ -425,8 +424,7 @@ def reload_trial_record_command(
         {
             "record_path": str(record_path),
             "trial_id": record.trial_id,
-            "execution_kind": (None if record.world_execution is None else record.world_execution.execution_kind),
-            "transition_count": (None if record.world_execution is None else record.world_execution.transition_count),
+            "episode_artifact": None if record.episode_artifact is None else record.episode_artifact.path,
             "evaluation_valid": (None if stewardship is None else stewardship.valid),
             "active_terminal_restrictions": (
                 None if stewardship is None else stewardship.metrics.terminal_liability.active_restriction_count

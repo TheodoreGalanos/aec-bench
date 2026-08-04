@@ -31,7 +31,7 @@ readable.
 | Task specification | Task authoring and loading | Repository or imported task material becomes runnable input | Protected where task packages are published; otherwise internal | [`TaskDefinition`](../src/aec_bench/contracts/task_definition.py) and task loaders | Persisted task package |
 | Task instance and revision identity | Generation and harness | Selected task bytes become one exact execution identity | Protected when recorded in a dataset or trial | [`ResolvedTaskInstance`](../src/aec_bench/tasks/instance.py), `TaskReference`, and `DatasetTaskEntry` | Internal resolution; persisted references |
 | Experiment manifest | Experiment orchestration | User configuration becomes an executable plan | Internal, except documented CLI/config behavior | [`ExperimentManifest`](../src/aec_bench/contracts/experiment_manifest.py) | Persisted configuration |
-| Trial and episode record | Harness and ledger | Execution, verifier, and artifact evidence becomes reportable benchmark evidence | Protected persisted record | [`TrialRecord`](../src/aec_bench/contracts/trial_record.py) plus the owning episode or world protocol | Persisted and exportable |
+| Trial and episode record | Harness and ledger | Execution, verifier, and artifact evidence becomes reportable benchmark evidence | Current persisted record; no retained historical reader | [`TrialRecord`](../src/aec_bench/contracts/trial_record.py) plus the owning episode or world protocol | Persisted and exportable |
 | Evaluation result | Evaluation | Verifier output and review evidence become reward, validity, and diagnostics | Protected as part of a persisted trial or published result | [`EvaluationResult`](../src/aec_bench/contracts/evaluation_result.py) | Persisted and externally reported |
 | Dataset manifest and identity | Dataset generation and storage | A set of task bytes becomes a named benchmark snapshot | Protected when published; content identity is authoritative | [`DatasetManifest`](../src/aec_bench/contracts/dataset.py) and dataset hashing/storage | Persisted and publishable |
 | Adapter and backend request/result | Adapters and harness | Harness input crosses into model or compute execution and returns untrusted output | Internal request/result; external provider documents are lenient ingestion boundaries | [`AdapterRequest` and `AdapterResult`](../src/aec_bench/adapters/base.py), [`BackendExecutionRequest` and `BackendExecutionResult`](../src/aec_bench/harness/backend.py), and [Harbor ingestion models](../src/aec_bench/harness/harbor_contract.py) | Internal, cross-process, and external |
@@ -70,16 +70,27 @@ Do not infer a revision from a mutable directory name.
 ## Trial and episode records
 
 `TrialRecord` is the canonical reportable trial envelope. It binds task, agent,
-environment, inputs, outputs, evaluation, timing, completeness, and optional
-execution-family provenance. A complete record must satisfy the provenance
-requirements for the execution family it carries.
+environment, inputs, outputs, evaluation, timing, cost, completeness, and
+optional execution-family provenance. `OutputRecord` distinguishes ordinary
+termination from host truncation and records the exact current completion,
+stop, or failure reason when one exists. `CostRecord` is the sole aggregate
+usage and cost authority.
 
 Lifecycle episode requests/results and world-session records are operational
 protocol records. They do not replace `TrialRecord`. Finalization validates and
-references their durable artifacts from the canonical trial evidence.
+references their durable artifacts from the canonical trial evidence. A
+task-owned episode is represented by one verified `episode_artifact` reference;
+the shared trial record does not copy its snapshots, transitions, temporal
+facts, or replay model.
 
 Trial records are append-only evidence once accepted. Internal builders and
 temporary run directories remain replaceable implementation.
+
+The current trajectory is entry-only JSONL. The writer does not emit a format
+header, and the reader does not select or decode historical versions. Ordinary
+adapter runs use it as the ordered interaction authority. Exact provider or
+sealed transcripts remain separate only when their producing boundary needs
+them.
 
 ## Evaluation results
 
@@ -111,9 +122,10 @@ Compute backends wrap that execution in `BackendExecutionRequest` and return
 lenient ingestion models before repository-owned validation and normalization.
 
 These are related boundaries, not one universal provider schema. Provider
-configuration, resolved model identity, usage, stop reason, failure kind, raw
-output, and collected artifacts must survive normalization when they can affect
-validity or cost.
+configuration, resolved model identity, stop reason, failure kind, raw output,
+and collected artifacts must survive normalization when they can affect
+validity. Aggregate usage normalizes into `CostRecord`; it is not duplicated in
+`OutputRecord.agent_result`.
 
 Adapter-only extraction metadata must not become task-semantic output. The
 lambda-RLM `__confidence__` key is reserved for extraction confidence and is

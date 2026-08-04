@@ -207,7 +207,6 @@ def test_load_behavioral_trace_requires_conversation_artifact() -> None:
 def test_load_behavioral_trace_from_trajectory(tmp_path: Path) -> None:
     trajectory_path = tmp_path / "trajectory.jsonl"
     trajectory_path.write_text(
-        '{"version": 1, "format": "aec-bench-trajectory"}\n'
         '{"step": 0, "role": "user", "content": "Calculate voltage drop"}\n'
         '{"step": 1, "role": "assistant", "content": "I will calculate using AS3008."}\n'
         '{"step": 1, "role": "tool_call", "tool_name": "bash", "command": "python3 calc.py"}\n'

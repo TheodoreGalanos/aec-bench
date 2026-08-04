@@ -6,13 +6,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.contracts.trial_record import (
-    AdaptationProvenance,
-    Completeness,
-    DerivationStepRecord,
-)
 from aec_bench.feedback.models import CalibrationStatus, ReviewerProfile, ReviewerWeighting
 from aec_bench.ledger.writer import write_trial_record
 from aec_bench.web.app import create_app
@@ -107,16 +101,6 @@ def test_internal_routes_allow_authorized_requests_and_include_holdout(tmp_path:
             trial_id="trial-alpha",
             experiment_id="experiment-001",
             task={"task_id": "mechanical/heat-load/public-task", "task_revision": "git"},
-            adaptation=_adaptation("heat-load-family", "jurisdiction=us"),
-            evaluation=EvaluationResult(
-                reward=0.98,
-                validity=ValidityCheck(
-                    output_parseable=True,
-                    schema_valid=True,
-                    verifier_completed=True,
-                ),
-            ),
-            completeness=Completeness.COMPLETE,
         ),
     )
     write_trial_record(
@@ -139,19 +123,11 @@ def test_internal_routes_allow_authorized_requests_and_include_holdout(tmp_path:
 
     leaderboard = client.get("/api/internal/leaderboard", headers=headers)
     experiment = client.get("/api/internal/experiments/experiment-001", headers=headers)
-    adaptation = client.get(
-        "/api/internal/adaptation/heat-load-family?experiment_id=experiment-001",
-        headers=headers,
-    )
-
     assert leaderboard.status_code == 200
     assert leaderboard.json()["visibility_scope"] == "internal"
     assert leaderboard.json()["leaderboard"]["entries"][0]["n_trials"] == 2
     assert experiment.status_code == 200
     assert len(experiment.json()["report"]["trials"]) == 2
-    assert adaptation.status_code == 200
-    assert adaptation.json()["artifact_type"] == "adaptation_family"
-    assert adaptation.json()["bundle"]["preserved_trial_count"] == 1
 
 
 def test_review_routes_enforce_reviewer_holdout_access_and_persist_annotations(
@@ -535,21 +511,4 @@ def _write_task_instance(*, tasks_root: Path, relative_path: str, visibility: Vi
     (instance_dir / "task.toml").write_text(
         f'[agent]\ntimeout_sec = 600\n\n[metadata]\nvisibility = "{visibility.value}"\n',
         encoding="utf-8",
-    )
-
-
-def _adaptation(family_id: str, variation_key: str) -> AdaptationProvenance:
-    variation_value = variation_key.split("=", maxsplit=1)[1]
-    return AdaptationProvenance(
-        family_id=family_id,
-        seed_task_id="mechanical/heat-load/au-office",
-        variation_key=variation_key,
-        variation={"jurisdiction": variation_value},
-        derivation_lineage=[
-            DerivationStepRecord(
-                axis="jurisdiction",
-                parent_value="au",
-                value=variation_value,
-            )
-        ],
     )

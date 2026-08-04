@@ -1,4 +1,4 @@
-# ABOUTME: Ledger-backed trace summary exports compatible with legacy trace review tooling.
+# ABOUTME: Ledger-backed trace summaries from current TrialRecord interaction evidence.
 # ABOUTME: Builds per-trial trace summaries from imported TrialRecords without raw Harbor scraping.
 
 from __future__ import annotations
@@ -53,10 +53,7 @@ def trace_summary_from_record(record: TrialRecord) -> TraceSummaryRecord:
         turns_used=coerce_int(agent_result.get("turns_used")),
         max_turns=coerce_int(agent_result.get("max_turns")),
         tokens_in=_token_input_total(record),
-        tokens_out=coerce_int(
-            agent_result.get("usage_output_tokens"),
-            fallback=_cost_tokens_out(record),
-        ),
+        tokens_out=_cost_tokens_out(record),
         duration_sec=record.timing.agent_seconds or record.timing.total_seconds,
         tool_calls=coerce_int(trace_signals.get("tool_call_count")),
         tool_errors=coerce_int(trace_signals.get("tool_errors")),
@@ -65,7 +62,7 @@ def trace_summary_from_record(record: TrialRecord) -> TraceSummaryRecord:
         fields_correct=fields_correct,
         fields_total=fields_total,
         first_error=_string_or_none(trace_signals.get("first_error")),
-        trace_path=record.outputs.conversation_path or "",
+        trace_path=record.outputs.trajectory_path or record.outputs.conversation_path or "",
     )
 
 
@@ -102,8 +99,7 @@ def _count_breakdown_fields(details: dict[str, object] | None) -> tuple[int, int
 def _token_input_total(record: TrialRecord) -> int:
     if record.cost is not None and record.cost.tokens_in is not None:
         return record.cost.tokens_in
-    agent_result = record.outputs.agent_result or {}
-    return coerce_int(agent_result.get("usage_input_tokens"))
+    return 0
 
 
 def _cost_tokens_out(record: TrialRecord) -> int:

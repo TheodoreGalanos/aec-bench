@@ -32,10 +32,8 @@ def _make_client_with_trial(tmp_path: Path) -> TestClient:
 
 
 def _write_trajectory_jsonl(path: Path, entries: list[dict[str, object]]) -> None:
-    """Write a trajectory JSONL file with version header and entry dicts."""
-    lines = [json.dumps({"format": "aec-bench-trajectory", "version": 1})]
-    for entry in entries:
-        lines.append(json.dumps(entry))
+    """Write current trajectory JSONL entries."""
+    lines = [json.dumps(entry) for entry in entries]
     path.write_text("\n".join(lines), encoding="utf-8")
 
 

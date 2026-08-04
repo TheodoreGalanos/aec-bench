@@ -1,10 +1,8 @@
 # ABOUTME: Standalone communication artefact builders for public and internal exports.
-# ABOUTME: Keeps visibility policy and adaptation-family reporting shared.
-# ABOUTME: The same builders support CLI exports now and web routes later.
+# ABOUTME: Keeps public and internal reporting visibility policy shared.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Literal
 
@@ -14,11 +12,6 @@ from aec_bench.communication.job_report import (
 )
 from aec_bench.communication.query import query_report_records
 from aec_bench.communication.report_builder import build_leaderboard, leaderboard_to_dict
-from aec_bench.evaluation.adaptation import (
-    AcceptanceThresholds,
-    build_adaptation_artifact_bundle,
-)
-from aec_bench.ledger.api import query_ledger
 
 VisibilityScope = Literal["public", "internal"]
 
@@ -77,31 +70,6 @@ def build_internal_experiment_artifact(
         experiment_id=experiment_id,
         scope="internal",
     )
-
-
-def build_adaptation_family_artifact(
-    *,
-    ledger_root: Path,
-    family_id: str,
-    experiment_id: str | None = None,
-    thresholds: AcceptanceThresholds | None = None,
-) -> dict[str, Any]:
-    records = query_ledger(ledger_root, experiment_id=experiment_id)
-    family_records = [
-        record for record in records if record.adaptation is not None and record.adaptation.family_id == family_id
-    ]
-    bundle = build_adaptation_artifact_bundle(family_records, thresholds=thresholds)
-    return {
-        "artifact_type": "adaptation_family",
-        "family_id": family_id,
-        "experiment_id": experiment_id,
-        "bundle": bundle.to_dict(),
-    }
-
-
-def export_standalone_artifact_json(payload: dict[str, Any], output_path: Path) -> Path:
-    output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    return output_path
 
 
 def build_leaderboard_artifact(

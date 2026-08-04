@@ -333,8 +333,8 @@ def test_local_harbor_trial_resumes_one_rollout_child_for_one_bounded_actor_acti
     assert record.evaluation.stewardship.evaluation_scope == "bounded_continuation"
     assert record.evaluation.stewardship.valid is True
     assert record.evaluation.reward == 1.0
-    assert record.world_execution is not None
-    assert record.world_execution.transition_count == 1
+    assert record.episode_artifact is not None
+    assert record.episode_artifact.path.endswith("world-session/artifact-inventory.json")
     imported_hashes = tuple(sorted({artifact.sha256 for artifact in record.outputs.artifacts or ()}))
     direct_evaluation = evaluate_pump_station_reference_run(
         completed,

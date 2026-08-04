@@ -57,7 +57,7 @@ def _create_run_dir(
         )
     )
     (run_dir / "output.md").write_text("# Test Output\n\nSome results here.")
-    (run_dir / "trajectory.jsonl").write_text(json.dumps({"version": 1, "format": "aec-bench-trajectory"}) + "\n")
+    (run_dir / "trajectory.jsonl").write_text("")
     (run_dir / "conversation.jsonl").write_text(json.dumps({"role": "user", "content": "hello"}) + "\n")
     return run_dir
 
@@ -320,12 +320,14 @@ class TestBuildTrialRecord:
 
         ar = record.outputs.agent_result
         assert ar is not None
-        assert ar["usage_input_tokens"] == 100_000
-        assert ar["usage_output_tokens"] == 5_000
+        assert "usage_input_tokens" not in ar
         assert ar["turns_used"] == 30
         assert ar["max_turns"] == 100
         assert ar["output_source"] == "direct_write"
         assert ar["compaction_count"] == 2
+        assert record.cost is not None
+        assert record.cost.tokens_in == 100_000
+        assert record.cost.tokens_out == 5_000
 
     def test_unknown_model_cost_is_none(self, tmp_path: Path) -> None:
         task_dir = _create_task_dir(tmp_path)

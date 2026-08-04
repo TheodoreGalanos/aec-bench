@@ -89,10 +89,14 @@ def test_build_trial_record_uses_adapter_configuration_record() -> None:
         "completion_commit": None,
         "failure_kind": None,
         "provider_error": None,
-        "usage_model_calls": 4,
-        "usage_input_tokens": 120,
-        "usage_output_tokens": 40,
     }
+    assert record.outputs.terminated is True
+    assert record.outputs.truncated is False
+    assert record.outputs.final_reason == "output_contract_satisfied"
+    assert record.cost is not None
+    assert record.cost.model_calls == 4
+    assert record.cost.tokens_in == 120
+    assert record.cost.tokens_out == 40
 
 
 def test_build_trial_record_preserves_output_commit_attestation() -> None:

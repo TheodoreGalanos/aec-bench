@@ -1,5 +1,5 @@
 # ABOUTME: Tests for TrajectoryWriter — structured JSONL trace recorder for agent execution.
-# ABOUTME: Covers header writing, step counting, all entry types, flush behaviour, and timestamps.
+# ABOUTME: Covers current entries, step counting, flush behaviour, and timestamps.
 
 from __future__ import annotations
 
@@ -16,20 +16,17 @@ def read_jsonl(path: Path) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Header
+# Empty writer
 # ---------------------------------------------------------------------------
 
 
-def test_constructor_writes_version_header(tmp_path: Path) -> None:
+def test_constructor_creates_empty_current_trajectory(tmp_path: Path) -> None:
     out = tmp_path / "trace.jsonl"
     writer = TrajectoryWriter(str(out))
     writer.close()
 
     entries = read_jsonl(out)
-    assert len(entries) >= 1
-    header = entries[0]
-    assert header["version"] == 1
-    assert header["format"] == "aec-bench-trajectory"
+    assert entries == []
 
 
 # ---------------------------------------------------------------------------
@@ -241,20 +238,14 @@ def test_full_turn_sequence_ordering(tmp_path: Path) -> None:
     entries = read_jsonl(out)
     roles = [e.get("role") for e in entries]
 
-    # header has no role; the rest should follow in order
-    assert entries[0]["format"] == "aec-bench-trajectory"
-    assert roles[1] == "system"
-    assert roles[2] == "user"
-    assert roles[3] == "assistant"
-    assert roles[4] == "tool_call"
-    assert roles[5] == "tool_result"
+    assert roles == ["system", "user", "assistant", "tool_call", "tool_result"]
 
     # step values
+    assert entries[0]["step"] == 0
     assert entries[1]["step"] == 0
-    assert entries[2]["step"] == 0
+    assert entries[2]["step"] == 1
     assert entries[3]["step"] == 1
     assert entries[4]["step"] == 1
-    assert entries[5]["step"] == 1
 
 
 # ---------------------------------------------------------------------------

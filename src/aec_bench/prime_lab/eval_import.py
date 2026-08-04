@@ -198,6 +198,9 @@ def _build_record(
                 conversation_path=str(conversation_path),
                 trajectory_path=None,
                 agent_result=agent_result,
+                terminated=status is AgentOutputStatus.COMPLETED,
+                truncated=status is not AgentOutputStatus.COMPLETED,
+                final_reason=None if status is AgentOutputStatus.COMPLETED else error_message,
             ),
             evaluation=EvaluationResult(
                 reward=reward,

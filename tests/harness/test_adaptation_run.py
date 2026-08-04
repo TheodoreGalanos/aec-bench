@@ -3,8 +3,8 @@
 
 import pytest
 
+from aec_bench.contracts.adaptation import AdaptationSpec, VariationAxis
 from aec_bench.contracts.experiment_manifest import AgentConfig
-from aec_bench.evaluation.adaptation import AdaptationSpec, VariationAxis
 from aec_bench.harness.adaptation_run import (
     AdaptationCoordinationError,
     build_adaptation_trial_plan,

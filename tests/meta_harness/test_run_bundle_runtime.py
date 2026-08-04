@@ -262,9 +262,8 @@ def test_execute_run_bundle_crosses_program_harbor_import_and_lineage_boundary(t
     assert provenance.execution_seed_semantics == "paired_repetition_label_only"
     assert provenance.motif_ids == ("motif.serial-review",)
     assert provenance.evaluation_plan_ref == evaluation_plan_ref
-    assert record.outputs.agent_result is not None
-    assert record.outputs.agent_result["usage_model_calls"] == 1
     assert record.cost is not None
+    assert record.cost.model_calls == 1
     assert record.cost.cache_read_tokens == 0
     assert record.cost.cache_write_tokens == 0
     assert record.cost.estimated_cost_usd == 0.001

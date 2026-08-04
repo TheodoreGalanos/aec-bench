@@ -288,7 +288,6 @@ def _run_adapter(
     """
     from aec_bench.adapters.base import AdapterRequest
     from aec_bench.adapters.local_registry import LocalAdapterRegistry
-    from aec_bench.adapters.transcript import TranscriptRole
     from aec_bench.trajectory.writer import TrajectoryWriter
 
     instruction = instruction_override if instruction_override is not None else read_instruction(workspace)
@@ -343,28 +342,17 @@ def _run_adapter(
         "status": result.agent_output.status.value,
         "model": model,
         "adapter": adapter_kind,
+        "model_calls": result.usage_model_calls or 0,
         "input_tokens": result.usage_input_tokens or 0,
         "output_tokens": result.usage_output_tokens or 0,
+        "cache_read_tokens": result.usage_cache_read_tokens or 0,
+        "cache_write_tokens": result.usage_cache_write_tokens or 0,
         "output_source": output_source,
     }
 
     Path(workspace, "agent_result.json").write_text(
         json.dumps(agent_result_data, indent=2),
     )
-
-    # Write conversation.jsonl from the adapter's transcript
-    conversation_path = Path(workspace, "conversation.jsonl")
-    with conversation_path.open("w", encoding="utf-8") as f:
-        for entry in result.transcript:
-            f.write(
-                json.dumps(
-                    {
-                        "role": entry.role.value if isinstance(entry.role, TranscriptRole) else str(entry.role),
-                        "content": entry.content or "",
-                    }
-                )
-                + "\n"
-            )
 
     return agent_result_data
 

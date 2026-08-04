@@ -9,11 +9,7 @@ from typing import Any, Protocol
 
 from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.proposal_execution import ProposalSessionReceipt
-from aec_bench.contracts.trial_record import (
-    ArtifactReference,
-    WorldExecutionRecord,
-    WorldTrialProvenance,
-)
+from aec_bench.contracts.trial_record import ArtifactReference
 
 PROPOSAL_EXECUTION_KIND = "proposal_session"
 
@@ -76,14 +72,8 @@ class ProposalHarborImportEvidence:
         return evaluation
 
     @property
-    def world_execution(self) -> WorldExecutionRecord | None:
-        """Proposal sessions do not project stewardship execution evidence."""
-
-        return None
-
-    @property
-    def world_provenance(self) -> WorldTrialProvenance | None:
-        """Proposal sessions do not project stewardship provenance."""
+    def episode_artifact(self) -> ArtifactReference | None:
+        """Proposal sessions do not produce a task-owned episode artifact."""
 
         return None
 

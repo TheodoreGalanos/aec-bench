@@ -86,10 +86,8 @@ def test_import_harbor_trial_maps_real_successful_trial() -> None:
     assert record.outputs.raw_output_path is not None
     assert record.outputs.conversation_path is not None
     assert record.outputs.agent_result is not None
-    assert record.outputs.agent_result["usage_input_tokens"] == 65551
-    assert record.outputs.agent_result["usage_output_tokens"] == 9283
-    assert record.outputs.agent_result["usage_cache_tokens"] == 50835
-    assert record.outputs.agent_result["usage_cache_write_tokens"] == 14707
+    assert "usage_input_tokens" not in record.outputs.agent_result
+    assert record.outputs.terminated is True
     assert record.evaluation.reward == pytest.approx(1.0)
     assert record.evaluation.validity.verifier_completed is True
     assert record.evaluation.breakdown is not None
@@ -99,8 +97,11 @@ def test_import_harbor_trial_maps_real_successful_trial() -> None:
     assert record.timing.setup_seconds is not None
     assert record.timing.verification_seconds is not None
     assert record.cost is not None
+    assert record.cost.model_calls is not None
     assert record.cost.tokens_in == 131093
     assert record.cost.tokens_out == 9283
+    assert record.cost.cache_read_tokens == 50835
+    assert record.cost.cache_write_tokens == 14707
     assert record.cost.estimated_cost_usd == pytest.approx(0.25379475)
     assert record.completeness is Completeness.PARTIAL
 
@@ -382,22 +383,13 @@ def test_import_current_entrypoint_result_preserves_effective_configuration(
     assert record.agent.configuration["tool_policy"] == "allowlisted"
 
 
-def test_import_current_entrypoint_result_preserves_all_usage_evidence(tmp_path: Path) -> None:
+def test_import_current_entrypoint_result_normalizes_all_usage_into_cost(tmp_path: Path) -> None:
     repo_root, trial_dir = _write_current_entrypoint_trial(tmp_path)
 
     record = import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
 
     assert record.outputs.agent_result is not None
-    expected_usage = {
-        "usage_input_tokens": 101,
-        "usage_output_tokens": 202,
-        "usage_cache_read_tokens": 33,
-        "usage_cache_write_tokens": 44,
-        "usage_advisor_calls": 2,
-        "usage_advisor_input_tokens": 55,
-        "usage_advisor_output_tokens": 66,
-    }
-    assert {key: record.outputs.agent_result.get(key) for key in expected_usage} == expected_usage
+    assert not any(key.startswith("usage_") for key in record.outputs.agent_result)
     assert record.cost is not None
     assert record.cost.tokens_in == 101
     assert record.cost.tokens_out == 202

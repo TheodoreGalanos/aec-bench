@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Any, Literal
 
@@ -12,11 +11,6 @@ from pydantic import NonNegativeInt, PositiveInt, field_validator, model_validat
 
 from aec_bench.contracts.harness_kernel import validate_sha256
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
-
-logger = logging.getLogger(__name__)
-
-TRAJECTORY_FORMAT = "aec-bench-trajectory"
-TRAJECTORY_VERSION = 1
 
 
 class MetaHarnessTrajectoryContext(StrictModel):
@@ -78,11 +72,7 @@ class TrajectoryEntry(StrictModel):
 
 
 def read_trajectory(path: Path) -> list[TrajectoryEntry]:
-    """Read a trajectory JSONL file and return validated TrajectoryEntry objects.
-
-    Skips the version header line. Returns an empty list if the file does not exist.
-    Logs a warning if the version number in the header does not match TRAJECTORY_VERSION.
-    """
+    """Read current trajectory JSONL entries, or return an empty list when absent."""
     if not path.exists():
         return []
 
@@ -92,15 +82,6 @@ def read_trajectory(path: Path) -> list[TrajectoryEntry]:
         if not line:
             continue
         data = json.loads(line)
-        if "version" in data and "format" in data:
-            if data["version"] != TRAJECTORY_VERSION:
-                logger.warning(
-                    "Trajectory file %s has unknown version %s (expected %s)",
-                    path,
-                    data["version"],
-                    TRAJECTORY_VERSION,
-                )
-            continue
         entries.append(TrajectoryEntry.model_validate(data))
 
     return entries

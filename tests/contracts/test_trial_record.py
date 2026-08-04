@@ -1064,6 +1064,40 @@ def test_output_record_accepts_all_none_fields() -> None:
 
     assert output.agent_output is None
     assert output.raw_output_path is None
+    assert output.terminated is False
+    assert output.truncated is False
+    assert output.final_reason is None
+
+
+def test_output_record_rejects_conflicting_terminal_state() -> None:
+    with pytest.raises(ValidationError, match="both terminated and truncated"):
+        OutputRecord(terminated=True, truncated=True)
+
+
+def test_episode_artifact_must_be_attached_to_outputs() -> None:
+    episode = ArtifactReference(
+        kind="episode-inventory",
+        path="artifacts/episode/inventory.json",
+        sha256="a" * 64,
+        media_type="application/json",
+    )
+
+    with pytest.raises(ValidationError, match="episode artifact must be included"):
+        build_trial_record(
+            episode_artifact=episode,
+            outputs=OutputRecord(artifacts=[]),
+        )
+
+    record = build_trial_record(
+        episode_artifact=episode,
+        outputs=OutputRecord(artifacts=[episode]),
+    )
+    assert record.episode_artifact == episode
+
+
+def test_obsolete_world_projection_fields_fail_current_validation() -> None:
+    with pytest.raises(ValidationError):
+        build_trial_record(world_execution={}, world_provenance={})
 
 
 def test_timing_record_rejects_negative_total_seconds() -> None:

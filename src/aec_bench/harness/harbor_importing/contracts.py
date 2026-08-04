@@ -9,11 +9,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from aec_bench.contracts.evaluation_result import EvaluationResult
-from aec_bench.contracts.trial_record import (
-    ArtifactReference,
-    WorldExecutionRecord,
-    WorldTrialProvenance,
-)
+from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.harness.harbor_contract import HarborTrialResult
 
 
@@ -66,12 +62,8 @@ class ImportedExecutionEvidence(Protocol):
         """Attach execution-specific evaluation evidence or return it unchanged."""
 
     @property
-    def world_execution(self) -> WorldExecutionRecord | None:
-        """Return the optional stewardship execution projection."""
-
-    @property
-    def world_provenance(self) -> WorldTrialProvenance | None:
-        """Return the optional stewardship provenance projection."""
+    def episode_artifact(self) -> ArtifactReference | None:
+        """Return the optional task-owned episode artifact authority."""
 
 
 class ImportEvidenceExtension(Protocol):

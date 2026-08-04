@@ -12,20 +12,7 @@ from aec_bench.contracts.evaluation_result import (
     EvaluationResult,
     StewardshipEvaluation,
 )
-from aec_bench.contracts.trial_record import (
-    ArtifactReference,
-    TemporalWorldExecutionRecord,
-    TemporalWorldTrialProvenance,
-    WorldExecutionRecord,
-    WorldTemporalEvidenceExecution,
-    WorldTemporalEvidenceProvenance,
-    WorldTrialProvenance,
-)
-from aec_bench.contracts.world_session import (
-    StewardshipStateSnapshotRef,
-    WorldSessionRequest,
-    WorldSessionResult,
-)
+from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.evaluation.stewardship import evaluate_pump_station_reference_run
 from aec_bench.harness.harbor_importing.artifact_io import (
     artifact_reference,
@@ -38,7 +25,6 @@ from aec_bench.harness.harbor_importing.contracts import (
     ImportEvidenceContext,
     ImportEvidenceIntent,
 )
-from aec_bench.task_world_templates.continual_catalogue import default_continual_world_catalogue
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     PUMP_STATION_HARBOR_EXECUTION_KIND,
     load_pump_station_harbor_bridge,
@@ -63,10 +49,8 @@ _TEMPORAL_VERIFICATION_NAME = "temporal-verification-report.json"
 class StewardshipHarborImportEvidence:
     """Verified world evidence projected into the generic import contract."""
 
-    world_execution: WorldExecutionRecord
-    world_provenance: WorldTrialProvenance
+    episode_artifact: ArtifactReference
     artifacts: tuple[ArtifactReference, ...]
-    package_content_id: str
     evaluation: StewardshipEvaluation
 
     @property
@@ -91,12 +75,6 @@ class StewardshipHarborImportEvidence:
         portable.pop("world_session", None)
         portable.pop("extra_env", None)
         portable["execution_kind"] = self.execution_kind
-        portable["world_session_evidence"] = {
-            "task_world_id": self.world_execution.task_world_id,
-            "session_id": self.world_execution.session_id,
-            "package_content_id": self.package_content_id,
-            "transition_count": self.world_execution.transition_count,
-        }
         return portable
 
     def augment_evaluation(
@@ -157,41 +135,19 @@ def _load_stewardship_evidence(
     if verified.get("valid") is not True:
         raise HarborImportError("stewardship world-session is not valid")
 
-    request = WorldSessionRequest.model_validate(
-        _read_trial_json(
-            run_dir / _REQUEST_NAME,
-            context=context,
-            label="world-session request",
-        )
-    )
-    result = WorldSessionResult.model_validate(
-        _read_trial_json(
-            run_dir / _RESULT_NAME,
-            context=context,
-            label="world-session result",
-        )
-    )
     inventory = _read_trial_json(
         run_dir / _INVENTORY_NAME,
         context=context,
         label="world-session artifact inventory",
     )
-    start_snapshot = StewardshipStateSnapshotRef.model_validate(inventory.get("start_snapshot"))
-    end_snapshot = StewardshipStateSnapshotRef.model_validate(inventory.get("end_snapshot"))
-    transition_count = _required_non_negative_int(
-        inventory.get("transition_count"),
-        "world-session transition count",
-    )
-    model = _verified_model(context)
-    artifacts, references = _artifact_evidence(
+    _validate_model(context)
+    artifacts, episode_artifact = _artifact_evidence(
         context=context,
         run_dir=run_dir,
         inventory=inventory,
         bridge=bridge,
     )
     imported_artifact_sha256 = tuple(sorted({artifact.sha256 for artifact in artifacts}))
-    definition = default_continual_world_catalogue().resolve(bridge.world_build)
-    definition.load_profile(bridge.profile_ref)
     repository = PumpStationWorldRunRepository(run_dir / "world-run")
     run = PumpStationWorldRun.resume_reference_system(repository=repository, snapshot=repository.current_snapshot())
     evaluation = StewardshipEvaluation.model_validate(
@@ -201,46 +157,9 @@ def _load_stewardship_evidence(
             evaluation_scope=("bounded_continuation" if bridge.rollout_child_ref is not None else "complete_journey"),
         )
     )
-    execution_fields = {
-        "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
-        "session_id": request.session_id,
-        "task_world_id": result.task_world_id,
-        "agent_tenure_id": request.agent_tenure_id,
-        "adapter": "tool_loop",
-        "resolved_model": model,
-        "status": "completed",
-        "start_snapshot": start_snapshot,
-        "end_snapshot": end_snapshot,
-        "transition_count": transition_count,
-        "tool_names": bridge.allowed_tools,
-    }
-    provenance_fields = {
-        "world_session_request": references[_REQUEST_NAME],
-        "world_session_result": references[_RESULT_NAME],
-        "artifact_inventory": references[_INVENTORY_NAME],
-        "export_manifest": references["export_manifest"],
-        "package_manifest": references["package_manifest"],
-        "verification_report": references[_VERIFICATION_NAME],
-    }
-    if bridge.temporal_evidence:
-        temporal_execution, temporal_provenance = _temporal_trial_evidence(
-            inventory=inventory,
-            references=references,
-        )
-        execution: WorldExecutionRecord = TemporalWorldExecutionRecord.model_validate(
-            {**execution_fields, "temporal_evidence": temporal_execution}
-        )
-        provenance: WorldTrialProvenance = TemporalWorldTrialProvenance.model_validate(
-            {**provenance_fields, "temporal_evidence": temporal_provenance}
-        )
-    else:
-        execution = WorldExecutionRecord.model_validate(execution_fields)
-        provenance = WorldTrialProvenance.model_validate(provenance_fields)
     return StewardshipHarborImportEvidence(
-        world_execution=execution,
-        world_provenance=provenance,
+        episode_artifact=episode_artifact,
         artifacts=artifacts,
-        package_content_id=bridge.package.package_content_id,
         evaluation=evaluation,
     )
 
@@ -260,12 +179,11 @@ def _world_run_directory(context: ImportEvidenceContext) -> Path:
     )
 
 
-def _verified_model(context: ImportEvidenceContext) -> str:
+def _validate_model(context: ImportEvidenceContext) -> None:
     configured = context.harbor_result.config.agent.model_name
     declared = context.harbor_result.agent_result.metadata.get("model")
     if declared is not None and declared != configured:
         raise HarborImportError("stewardship controller identity differs from the Harbor agent model")
-    return configured
 
 
 def _artifact_evidence(
@@ -274,7 +192,7 @@ def _artifact_evidence(
     run_dir: Path,
     inventory: dict[str, Any],
     bridge: Any,
-) -> tuple[tuple[ArtifactReference, ...], dict[str, ArtifactReference]]:
+) -> tuple[tuple[ArtifactReference, ...], ArtifactReference]:
     raw_entries = inventory.get("artifacts")
     if not isinstance(raw_entries, list):
         raise HarborImportError("world-session artifact inventory must be a list")
@@ -339,48 +257,7 @@ def _artifact_evidence(
             runtime_reference,
         )
     )
-    references[_INVENTORY_NAME] = inventory_reference
-    references["export_manifest"] = export_reference
-    references["package_manifest"] = package_reference
-    return tuple(artifacts), references
-
-
-def _temporal_trial_evidence(
-    *,
-    inventory: dict[str, Any],
-    references: dict[str, ArtifactReference],
-) -> tuple[WorldTemporalEvidenceExecution, WorldTemporalEvidenceProvenance]:
-    temporal = _mapping(
-        inventory.get("temporal_evidence"),
-        "temporal evidence inventory",
-    )
-    execution = WorldTemporalEvidenceExecution.model_validate(temporal)
-    fixed_paths = {
-        "capability": "world-run/temporal-evidence/capability.json",
-        "corpus_manifest": "world-run/temporal-evidence/corpus/manifest.json",
-        "lineage_manifest": "world-run/temporal-evidence/corpus/lineage.json",
-        "availability_schedule": "world-run/temporal-evidence/corpus/availability.json",
-        "retrieval_policy": "world-run/temporal-evidence/policies/retrieval.json",
-        "access_policy": "world-run/temporal-evidence/policies/access.json",
-        "branch_policy": "world-run/temporal-evidence/policies/branch.json",
-        "cost_policy": "world-run/temporal-evidence/policies/cost.json",
-    }
-    missing = tuple(path for path in fixed_paths.values() if path not in references)
-    if missing:
-        raise HarborImportError("temporal evidence inventory lacks required authority artifacts")
-    fixed_references = {name: references[path] for name, path in fixed_paths.items()}
-    excluded = {*fixed_paths.values(), _TEMPORAL_VERIFICATION_NAME}
-    ledger_artifacts = tuple(
-        references[path]
-        for path in sorted(references)
-        if path.startswith("world-run/temporal-evidence/") and path not in excluded
-    )
-    provenance = WorldTemporalEvidenceProvenance(
-        **fixed_references,
-        verification_report=references[_TEMPORAL_VERIFICATION_NAME],
-        ledger_artifacts=ledger_artifacts,
-    )
-    return execution, provenance
+    return tuple(artifacts), inventory_reference
 
 
 def _read_trial_json(
@@ -415,12 +292,6 @@ def _confined_relative_path(value: object) -> str:
     path = PurePosixPath(value)
     if path.is_absolute() or ".." in path.parts or path.as_posix() != value:
         raise HarborImportError(f"world-session artifact path is not confined: {value}")
-    return value
-
-
-def _required_non_negative_int(value: object, label: str) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-        raise HarborImportError(f"{label} must be a non-negative integer")
     return value
 
 

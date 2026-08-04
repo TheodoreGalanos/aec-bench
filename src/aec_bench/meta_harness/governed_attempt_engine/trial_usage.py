@@ -42,8 +42,8 @@ def aggregate_governed_trial_usage(
     cache_write_tokens = 0
     estimated_costs: list[float] = []
     for record in records:
-        calls = _model_calls(record)
         cost = _complete_cost(record)
+        calls = _model_calls(record)
         advisor_calls, advisor_input, advisor_output = _advisor_usage(
             record=record,
             cost=cost,
@@ -68,8 +68,7 @@ def aggregate_governed_trial_usage(
 
 
 def _model_calls(record: TrialRecord) -> int:
-    payload = record.outputs.agent_result
-    value = None if payload is None else payload.get("usage_model_calls")
+    value = None if record.cost is None else record.cost.model_calls
     if not isinstance(value, int) or isinstance(value, bool) or value < 1:
         raise GovernedTrialUsageError(
             f"TrialRecord {record.trial_id!r} lacks exact model-call evidence",
@@ -108,25 +107,14 @@ def _advisor_usage(
         cost.advisor_input_tokens,
         cost.advisor_output_tokens,
     )
-    payload = record.outputs.agent_result or {}
-    reported_calls = payload.get("usage_advisor_calls")
     if all(value is None for value in cost_values):
-        if reported_calls not in {None, 0}:
-            raise GovernedTrialUsageError(
-                f"TrialRecord {record.trial_id!r} lacks complete advisor usage evidence",
-            )
         return 0, 0, 0
     if any(value is None for value in cost_values):
         raise GovernedTrialUsageError(
             f"TrialRecord {record.trial_id!r} lacks complete advisor usage evidence",
         )
-    advisor_calls = _required_token(cost.advisor_calls)
-    if reported_calls is not None and reported_calls != advisor_calls:
-        raise GovernedTrialUsageError(
-            f"TrialRecord {record.trial_id!r} advisor call evidence disagrees",
-        )
     return (
-        advisor_calls,
+        _required_token(cost.advisor_calls),
         _required_token(cost.advisor_input_tokens),
         _required_token(cost.advisor_output_tokens),
     )

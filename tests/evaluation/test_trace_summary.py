@@ -61,7 +61,6 @@ def test_extract_signals_from_trajectory(tmp_path: Path) -> None:
     """Trajectory-first reading with structured data."""
     trajectory_path = tmp_path / "trajectory.jsonl"
     trajectory_path.write_text(
-        '{"version": 1, "format": "aec-bench-trajectory"}\n'
         '{"step": 0, "role": "system", "content": "prompt"}\n'
         '{"step": 0, "role": "user", "content": "instruction"}\n'
         '{"step": 1, "role": "assistant", "content": "Thinking..."}\n'
@@ -98,7 +97,6 @@ def test_extract_signals_trajectory_with_errors(tmp_path: Path) -> None:
     """Tool errors are counted from non-zero exit_code in tool_result entries."""
     trajectory_path = tmp_path / "trajectory.jsonl"
     trajectory_path.write_text(
-        '{"version": 1, "format": "aec-bench-trajectory"}\n'
         '{"step": 1, "role": "tool_call", "tool_name": "bash", "command": "bad_cmd"}\n'
         '{"step": 1, "role": "tool_result", "tool_name": "bash", "stdout": "", '
         '"stderr": "command not found", "exit_code": 127, "duration_ms": 5}\n'
@@ -144,7 +142,6 @@ def test_extract_signals_skips_warmup_entries(tmp_path: Path) -> None:
     """Warmup entries (call_type=warmup) should be excluded from trace signal counts."""
     trajectory_path = tmp_path / "trajectory.jsonl"
     trajectory_path.write_text(
-        '{"version": 1, "format": "aec-bench-trajectory"}\n'
         '{"step": 1, "role": "assistant", "content": "warmup", "call_type": "warmup"}\n'
         '{"step": 1, "role": "tool_call", "tool_name": "bash", "command": "echo warmup", "call_type": "warmup"}\n'
         '{"step": 1, "role": "tool_result", "tool_name": "bash", "stdout": "warmup", '
@@ -175,7 +172,6 @@ def test_extract_signals_partial_trajectory(tmp_path: Path) -> None:
     """Incomplete trajectory (tool_call without tool_result) is handled gracefully."""
     trajectory_path = tmp_path / "trajectory.jsonl"
     trajectory_path.write_text(
-        '{"version": 1, "format": "aec-bench-trajectory"}\n'
         '{"step": 1, "role": "assistant", "content": "Running..."}\n'
         '{"step": 1, "role": "tool_call", "tool_name": "bash", "command": "long_cmd"}\n'
     )

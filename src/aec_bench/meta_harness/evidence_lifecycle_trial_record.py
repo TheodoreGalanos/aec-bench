@@ -461,6 +461,9 @@ def _build_lifecycle_trial_record(
                 "raw_outputs": raw_outputs,
             },
             artifacts=artifacts or None,
+            terminated=agent_status is AgentOutputStatus.COMPLETED,
+            truncated=agent_status is not AgentOutputStatus.COMPLETED,
+            final_reason=execution_status,
         ),
         evaluation=EvaluationResult(
             reward=float(verification["reward"]),

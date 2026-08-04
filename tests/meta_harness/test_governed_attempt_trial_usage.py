@@ -16,13 +16,9 @@ from tests.support.trial_record_factories import make_trial_record
 def test_aggregate_governed_trial_usage_includes_advisor_effects() -> None:
     first = make_trial_record(
         trial_id="trial-alpha",
-        outputs=OutputRecord(
-            agent_result={
-                "usage_model_calls": 2,
-                "usage_advisor_calls": 1,
-            },
-        ),
+        outputs=OutputRecord(),
         cost=CostRecord(
+            model_calls=2,
             tokens_in=100,
             tokens_out=20,
             cache_read_tokens=10,
@@ -35,8 +31,9 @@ def test_aggregate_governed_trial_usage_includes_advisor_effects() -> None:
     )
     second = make_trial_record(
         trial_id="trial-beta",
-        outputs=OutputRecord(agent_result={"usage_model_calls": 1}),
+        outputs=OutputRecord(),
         cost=CostRecord(
+            model_calls=1,
             tokens_in=40,
             tokens_out=8,
             cache_read_tokens=2,
@@ -78,15 +75,13 @@ def test_aggregate_governed_trial_usage_includes_advisor_effects() -> None:
             "model-call evidence",
         ),
         (
-            make_trial_record(
-                outputs=OutputRecord(agent_result={"usage_model_calls": 1}),
-            ),
+            make_trial_record(),
             "cost evidence",
         ),
         (
             make_trial_record(
-                outputs=OutputRecord(agent_result={"usage_model_calls": 1}),
                 cost=CostRecord(
+                    model_calls=1,
                     tokens_in=1,
                     tokens_out=1,
                     cache_read_tokens=None,
@@ -108,8 +103,8 @@ def test_aggregate_governed_trial_usage_rejects_incomplete_evidence(
 
 def test_aggregate_governed_trial_usage_rejects_duplicate_trial_identity() -> None:
     record = make_trial_record(
-        outputs=OutputRecord(agent_result={"usage_model_calls": 1}),
         cost=CostRecord(
+            model_calls=1,
             tokens_in=1,
             tokens_out=1,
             cache_read_tokens=0,
