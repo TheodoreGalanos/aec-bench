@@ -255,8 +255,7 @@ def import_harbor_trial(
         evaluation=evaluation,
         timing=_timing_record(harbor_result),
         cost=_cost_record(agent),
-        world_execution=(None if import_evidence is None else import_evidence.world_execution),
-        world_provenance=(None if import_evidence is None else import_evidence.world_provenance),
+        episode_artifact=(None if import_evidence is None else import_evidence.episode_artifact),
         completeness=Completeness.PARTIAL,
     )
 
@@ -487,7 +486,11 @@ def _output_record(
 ) -> OutputRecord:
     execution_result = agent.execution_result
     payload = agent.payload
-    usage = agent.usage
+    terminated, truncated, final_reason = _terminal_state(
+        execution_result=execution_result,
+        payload=payload,
+        status=agent.status,
+    )
     return OutputRecord(
         agent_output=AgentOutput(
             status=agent.status,
@@ -529,15 +532,6 @@ def _output_record(
             ),
             "completion_commit": agent.completion_commit,
             "provider_error": (execution_result.provider_error if execution_result is not None else agent.output_error),
-            **({"usage_model_calls": usage.model_calls} if usage.model_calls is not None else {}),
-            "usage_input_tokens": usage.input_tokens,
-            "usage_output_tokens": usage.output_tokens,
-            "usage_cache_tokens": usage.cache_read_tokens,
-            "usage_cache_read_tokens": usage.cache_read_tokens,
-            "usage_cache_write_tokens": usage.cache_write_tokens,
-            "usage_advisor_calls": usage.advisor_calls,
-            "usage_advisor_input_tokens": (usage.advisor_input_tokens),
-            "usage_advisor_output_tokens": (usage.advisor_output_tokens),
             "harbor_status": (
                 execution_result.agent_output.status.value if execution_result is not None else payload.get("status")
             ),
@@ -558,7 +552,24 @@ def _output_record(
             "reward_owner": payload.get("reward_owner"),
         },
         artifacts=(None if import_evidence is None else list(import_evidence.artifacts)),
+        terminated=terminated,
+        truncated=truncated,
+        final_reason=final_reason,
     )
+
+
+def _terminal_state(
+    *,
+    execution_result: AdapterResult | None,
+    payload: dict[str, Any],
+    status: AgentOutputStatus,
+) -> tuple[bool, bool, str | None]:
+    for field, terminated in (("completion_reason", True), ("stop_reason", False), ("failure_kind", False)):
+        current = None if execution_result is None else getattr(execution_result, field)
+        reason = current.value if current is not None else payload.get(field)
+        if isinstance(reason, str) and reason:
+            return terminated, not terminated, reason
+    return status is AgentOutputStatus.COMPLETED, False, None
 
 
 def _completion_assistance(
@@ -603,6 +614,7 @@ def _cost_record(agent: _PreparedAgentEvidence) -> CostRecord:
         usage.input_tokens if agent.execution_result is not None else _total_input_tokens(agent.payload)
     )
     return CostRecord(
+        model_calls=usage.model_calls,
         tokens_in=total_input_tokens,
         tokens_out=usage.output_tokens,
         cache_read_tokens=usage.cache_read_tokens,

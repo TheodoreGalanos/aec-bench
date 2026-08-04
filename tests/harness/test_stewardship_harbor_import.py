@@ -148,13 +148,13 @@ def test_verified_world_session_imports_and_reloads_exact_trial_record(
 
     assert reloaded == record
     assert record.agent.adapter == "tool_loop"
-    assert record.world_execution is not None
-    assert record.world_execution.transition_count == 25
-    assert record.world_execution.end_snapshot == completed.result.snapshot
-    assert record.world_provenance is not None
+    assert record.episode_artifact is not None
+    assert record.episode_artifact.kind == "world-session-inventory"
+    assert record.episode_artifact.path.endswith("world-session/artifact-inventory.json")
     assert record.outputs.artifacts is not None
-    assert len(record.outputs.artifacts) > len(record.world_provenance.bound_artifacts)
+    assert record.episode_artifact in record.outputs.artifacts
     assert "world_session" not in record.agent.configuration
+    assert "world_session_evidence" not in record.agent.configuration
     assert record.agent.configuration["execution_kind"] == ("stewardship_world_session")
     assert exported.manifest_path.exists()
 
@@ -191,12 +191,8 @@ def test_registered_world_session_imports_through_the_current_run(
     reloaded = TrialRecord.model_validate_json(record.model_dump_json())
 
     assert reloaded == record
-    assert record.world_execution is not None
-    assert record.world_execution.start_snapshot.sequence == 0
-    assert record.world_execution.end_snapshot.sequence == 25
-    assert record.world_execution.transition_count == 25
-    assert record.world_execution.end_snapshot == completed.result.snapshot
-    assert record.world_provenance is not None
+    assert record.episode_artifact is not None
+    assert record.episode_artifact in (record.outputs.artifacts or [])
     assert record.evaluation.stewardship is not None
     assert record.evaluation.stewardship.valid
     assert exported.manifest_path.exists()

@@ -10,6 +10,7 @@ from aec_bench.contracts.trial_record import (
     AdaptationProvenance,
     AgentReference,
     Completeness,
+    CostRecord,
     EnvironmentSnapshot,
     FileReference,
     InputRecord,
@@ -42,6 +43,8 @@ def build_trial_record(
     adaptation: AdaptationProvenance | None = None,
     completeness: Completeness = Completeness.PARTIAL,
 ) -> TrialRecord:
+    stop_reason = result.stop_reason or result.failure_kind
+    final_reason = result.completion_reason or stop_reason
     return TrialRecord(
         trial_id=trial_id,
         experiment_id=experiment_id,
@@ -89,13 +92,23 @@ def build_trial_record(
                 ),
                 "failure_kind": (result.failure_kind.value if result.failure_kind is not None else None),
                 "provider_error": result.provider_error,
-                **({"usage_model_calls": result.usage_model_calls} if result.usage_model_calls is not None else {}),
-                "usage_input_tokens": result.usage_input_tokens,
-                "usage_output_tokens": result.usage_output_tokens,
             },
+            terminated=result.agent_output.status.value == "completed" and stop_reason is None,
+            truncated=stop_reason is not None,
+            final_reason=None if final_reason is None else final_reason.value,
         ),
         evaluation=evaluation,
         timing=TimingRecord(total_seconds=total_seconds),
+        cost=CostRecord(
+            model_calls=result.usage_model_calls,
+            tokens_in=result.usage_input_tokens,
+            tokens_out=result.usage_output_tokens,
+            cache_read_tokens=result.usage_cache_read_tokens,
+            cache_write_tokens=result.usage_cache_write_tokens,
+            advisor_calls=result.usage_advisor_calls,
+            advisor_input_tokens=result.usage_advisor_input_tokens,
+            advisor_output_tokens=result.usage_advisor_output_tokens,
+        ),
         adaptation=adaptation,
         completeness=completeness,
     )

@@ -19,7 +19,6 @@ from aec_bench.contracts.evaluation_plane import EvaluationPlanRef
 from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel, ensure_non_empty_string
-from aec_bench.contracts.world_session import StewardshipStateSnapshotRef
 
 
 class Completeness(StrEnum):
@@ -79,6 +78,15 @@ class OutputRecord(StrictModel):
     trajectory_path: str | None = None
     agent_result: dict[str, Any] | None = None
     artifacts: list[ArtifactReference] | None = None
+    terminated: bool = False
+    truncated: bool = False
+    final_reason: NonEmptyStr | None = None
+
+    @model_validator(mode="after")
+    def validate_terminal_state(self) -> "OutputRecord":
+        if self.terminated and self.truncated:
+            raise ValueError("output cannot be both terminated and truncated")
+        return self
 
 
 class TimingRecord(StrictModel):
@@ -89,6 +97,7 @@ class TimingRecord(StrictModel):
 
 
 class CostRecord(StrictModel):
+    model_calls: NonNegativeInt | None = None
     tokens_in: NonNegativeInt | None = None
     tokens_out: NonNegativeInt | None = None
     cache_read_tokens: NonNegativeInt | None = None
@@ -315,144 +324,6 @@ class ProposalSessionTrialProvenance(StrictModel):
         )
 
 
-class WorldExecutionRecord(StrictModel):
-    """One bounded interaction window over a continuing stewardship world."""
-
-    execution_kind: Literal["stewardship_world_session"]
-    session_id: NonEmptyStr
-    task_world_id: NonEmptyStr
-    agent_tenure_id: NonEmptyStr
-    adapter: NonEmptyStr
-    resolved_model: NonEmptyStr
-    status: Literal["completed", "failed", "partial"]
-    start_snapshot: StewardshipStateSnapshotRef
-    end_snapshot: StewardshipStateSnapshotRef
-    transition_count: NonNegativeInt
-    tool_names: tuple[NonEmptyStr, ...]
-
-    @model_validator(mode="after")
-    def validate_world_window(self) -> "WorldExecutionRecord":
-        start = self.start_snapshot
-        end = self.end_snapshot
-        if (
-            start.run_id,
-            start.episode_id,
-            start.world_branch_id,
-        ) != (
-            end.run_id,
-            end.episode_id,
-            end.world_branch_id,
-        ):
-            raise ValueError("world execution snapshots belong to different worlds")
-        if end.sequence - start.sequence != self.transition_count:
-            raise ValueError("world execution transition count differs from its snapshots")
-        if not self.tool_names or len(set(self.tool_names)) != len(self.tool_names):
-            raise ValueError("world execution tool names must be non-empty and distinct")
-        return self
-
-
-class WorldTemporalEvidenceExecution(StrictModel):
-    """Typed deterministic temporal-evidence facts for one enabled world window."""
-
-    profile: Literal["deterministic_snapshot"]
-    capability_id: NonEmptyStr
-    corpus_snapshot_id: NonEmptyStr
-    retrieval_policy_id: NonEmptyStr
-    access_policy_id: NonEmptyStr
-    availability_schedule_id: NonEmptyStr
-    branch_namespace_policy_id: NonEmptyStr
-    cost_policy_id: NonEmptyStr
-    access_count: NonNegativeInt
-    reliance_count: NonNegativeInt
-    carrier_count: NonNegativeInt
-    verification_report_id: NonEmptyStr
-
-
-class TemporalWorldExecutionRecord(WorldExecutionRecord):
-    """World execution subtype used only when temporal evidence is present."""
-
-    temporal_evidence: WorldTemporalEvidenceExecution
-
-
-class WorldTrialProvenance(StrictModel):
-    """Immutable evidence references needed to reload one world execution."""
-
-    world_session_request: ArtifactReference
-    world_session_result: ArtifactReference
-    artifact_inventory: ArtifactReference
-    export_manifest: ArtifactReference
-    package_manifest: ArtifactReference
-    verification_report: ArtifactReference
-
-    @property
-    def bound_artifacts(self) -> tuple[ArtifactReference, ...]:
-        """Return every artifact that must appear on the enclosing record."""
-
-        return (
-            self.world_session_request,
-            self.world_session_result,
-            self.artifact_inventory,
-            self.export_manifest,
-            self.package_manifest,
-            self.verification_report,
-        )
-
-
-class WorldTemporalEvidenceProvenance(StrictModel):
-    """Typed immutable references required to reload temporal world evidence."""
-
-    capability: ArtifactReference
-    corpus_manifest: ArtifactReference
-    lineage_manifest: ArtifactReference
-    availability_schedule: ArtifactReference
-    retrieval_policy: ArtifactReference
-    access_policy: ArtifactReference
-    branch_policy: ArtifactReference
-    cost_policy: ArtifactReference
-    verification_report: ArtifactReference
-    ledger_artifacts: tuple[ArtifactReference, ...]
-
-    @model_validator(mode="after")
-    def validate_temporal_artifacts(self) -> "WorldTemporalEvidenceProvenance":
-        if not self.ledger_artifacts:
-            raise ValueError("temporal evidence provenance requires ledger artifacts")
-        identities = tuple(
-            (item.path, item.sha256) for item in self.bound_artifacts
-        )
-        if len(identities) != len(set(identities)):
-            raise ValueError("temporal evidence provenance artifacts must be distinct")
-        return self
-
-    @property
-    def bound_artifacts(self) -> tuple[ArtifactReference, ...]:
-        """Return every temporal artifact required on the enclosing record."""
-
-        return (
-            self.capability,
-            self.corpus_manifest,
-            self.lineage_manifest,
-            self.availability_schedule,
-            self.retrieval_policy,
-            self.access_policy,
-            self.branch_policy,
-            self.cost_policy,
-            self.verification_report,
-            *self.ledger_artifacts,
-        )
-
-
-class TemporalWorldTrialProvenance(WorldTrialProvenance):
-    """World provenance subtype used only when temporal evidence is present."""
-
-    temporal_evidence: WorldTemporalEvidenceProvenance
-
-    @property
-    def bound_artifacts(self) -> tuple[ArtifactReference, ...]:
-        """Return ordinary world evidence followed by temporal evidence."""
-
-        return (*super().bound_artifacts, *self.temporal_evidence.bound_artifacts)
-
-
 class MetaHarnessTrialProvenance(StrictModel):
     run_id: NonEmptyStr
     policy_id: NonEmptyStr
@@ -536,8 +407,7 @@ class TrialRecord(StrictModel):
     adaptation: AdaptationProvenance | None = None
     lifecycle_execution: LifecycleExecutionRecord | None = None
     lifecycle_provenance: LifecycleTrialProvenance | None = None
-    world_execution: WorldExecutionRecord | TemporalWorldExecutionRecord | None = None
-    world_provenance: WorldTrialProvenance | TemporalWorldTrialProvenance | None = None
+    episode_artifact: ArtifactReference | None = None
     meta_harness_provenance: MetaHarnessTrialProvenance | None = None
     completeness: Completeness
 
@@ -546,8 +416,7 @@ class TrialRecord(StrictModel):
         _validate_complete_trial_fields(self)
         _validate_lifecycle_pair(self)
         _validate_lifecycle_bindings(self)
-        _validate_world_pair(self)
-        _validate_world_bindings(self)
+        _validate_episode_artifact(self)
         _validate_meta_harness_bindings(self)
         return self
 
@@ -573,9 +442,8 @@ def _complete_trial_missing_fields(record: TrialRecord) -> list[str]:
         missing.extend(_complete_lifecycle_missing_fields(record))
         if not record.outputs.artifacts:
             missing.append("outputs.artifacts")
-    if record.world_execution is not None or record.world_provenance is not None:
-        if not record.outputs.artifacts:
-            missing.append("world provenance must be included in output artifacts")
+    if record.episode_artifact is not None and not record.outputs.artifacts:
+        missing.append("episode artifact must be included in output artifacts")
     if record.meta_harness_provenance is not None and not record.outputs.artifacts:
         missing.append("meta-harness provenance must be included in output artifacts")
     return missing
@@ -685,23 +553,11 @@ def _validate_lifecycle_artifact_bindings(record: TrialRecord) -> None:
         raise ValueError("lifecycle provenance must be included in output artifacts")
 
 
-def _validate_world_pair(record: TrialRecord) -> None:
-    if (record.world_execution is None) != (record.world_provenance is None):
-        raise ValueError("world execution and provenance must be provided together")
-
-
-def _validate_world_bindings(record: TrialRecord) -> None:
-    execution = record.world_execution
-    provenance = record.world_provenance
-    if execution is None or provenance is None:
+def _validate_episode_artifact(record: TrialRecord) -> None:
+    if record.episode_artifact is None:
         return
-    if execution.adapter != record.agent.adapter:
-        raise ValueError("agent adapter must match the world execution adapter")
-    if execution.resolved_model != record.agent.model:
-        raise ValueError("agent model must match the world execution resolved model")
-    artifacts = record.outputs.artifacts or []
-    if any(artifact not in artifacts for artifact in provenance.bound_artifacts):
-        raise ValueError("world provenance must be included in output artifacts")
+    if record.outputs.artifacts is None or record.episode_artifact not in record.outputs.artifacts:
+        raise ValueError("episode artifact must be included in output artifacts")
 
 
 def _validate_meta_harness_bindings(record: TrialRecord) -> None:

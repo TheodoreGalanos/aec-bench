@@ -1,4 +1,4 @@
-# ABOUTME: Ledger-backed experiment reporting that mirrors legacy Harbor job summaries.
+# ABOUTME: Ledger-backed experiment reporting from current TrialRecord authorities.
 # ABOUTME: Builds stable summary, JSON, and CSV outputs from TrialRecord data only.
 
 from __future__ import annotations
@@ -75,19 +75,14 @@ class ExperimentReport:
 def trial_report_from_record(record: TrialRecord) -> TrialReport:
     task_type, task_name = split_task_id(record.task.task_id)
     agent_result = record.outputs.agent_result or {}
-    fallback_output_tokens = (
-        record.cost.tokens_out if record.cost is not None and record.cost.tokens_out is not None else 0
-    )
+    cost = record.cost
     tokens = TokenUsage(
-        input_tokens=coerce_int(agent_result.get("usage_input_tokens")),
-        output_tokens=coerce_int(
-            agent_result.get("usage_output_tokens"),
-            fallback=fallback_output_tokens,
-        ),
-        cache_read_tokens=coerce_int(agent_result.get("usage_cache_tokens")),
-        cache_write_tokens=coerce_int(agent_result.get("usage_cache_write_tokens")),
+        input_tokens=0 if cost is None else coerce_int(cost.tokens_in),
+        output_tokens=0 if cost is None else coerce_int(cost.tokens_out),
+        cache_read_tokens=0 if cost is None else coerce_int(cost.cache_read_tokens),
+        cache_write_tokens=0 if cost is None else coerce_int(cost.cache_write_tokens),
     )
-    cost_usd = record.cost.estimated_cost_usd if record.cost is not None else None
+    cost_usd = None if cost is None else cost.estimated_cost_usd
     if cost_usd is None:
         cost_usd = estimate_cost_usd(
             record.agent.model,

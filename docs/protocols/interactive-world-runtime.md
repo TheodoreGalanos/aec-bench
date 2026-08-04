@@ -174,6 +174,21 @@ The neutral world definition contains no provider or Harbor port. Evaluation
 is called by the importer after durable run verification, never by live world
 transition code.
 
+## Trial evidence boundary
+
+The pump repository and its artifact inventory remain the replay authority.
+Harbor import verifies that task-owned evidence, evaluates the verified run,
+and attaches the inventory to `TrialRecord.episode_artifact`. It does not copy
+snapshots, transition counts, temporal evidence, or replay identity into a
+shared world-execution projection.
+
+`OutputRecord` records whether execution terminated normally or was truncated,
+plus the current completion, stop, or failure reason. `CostRecord` owns
+aggregate calls, tokens, cache usage, advisor usage, and estimated cost. Public
+experiment and leaderboard exports select report fields only; they do not
+publish episode state, verifier paths, sealed identifiers, provider
+configuration, or recovery data.
+
 ## Supported entry points
 
 | Entry point | Current behavior |
@@ -208,4 +223,6 @@ cannot manufacture a successful transition or evaluation.
 - [pump functional core](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_functional_core.py)
 - [current pump serialization](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_world_run_serialization.py)
 - [registered Harbor path](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_registered_world_harbor.py)
+- [verified pump TrialRecord import](../../tests/harness/test_stewardship_harbor_import.py)
+- [public report visibility](../../tests/communication/test_standalone.py)
 - [registered rollout](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_registered_rollout_orchestration.py)

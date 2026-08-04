@@ -648,6 +648,7 @@ def _write_model_evidence(
             "configuration_record": adapter_result.configuration_record,
             "max_turns": max_turns,
             "turns_used": adapter_result.turns_used,
+            "model_calls": adapter_result.usage_model_calls or 0,
             "input_tokens": adapter_result.usage_input_tokens or 0,
             "output_tokens": adapter_result.usage_output_tokens or 0,
             "cache_read_tokens": adapter_result.usage_cache_read_tokens or 0,
@@ -656,21 +657,6 @@ def _write_model_evidence(
             "provider_error": adapter_result.provider_error,
         },
     )
-    with (destination / "conversation.jsonl").open("w", encoding="utf-8") as handle:
-        for entry in adapter_result.transcript:
-            handle.write(
-                json.dumps(
-                    {
-                        "role": entry.role.value,
-                        "event": entry.event.value,
-                        "content": entry.content,
-                        "tool_name": entry.tool_name,
-                        "tool_call_id": entry.tool_call_id,
-                    },
-                    sort_keys=True,
-                )
-                + "\n"
-            )
 
 
 def _write_session_evidence(

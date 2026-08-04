@@ -62,7 +62,8 @@ The current path is:
 1. Author or generate a task and validate its `TaskDefinition`.
 2. Resolve one runnable task instance and stage its workspace.
 3. Run a provider-neutral adapter through a local or hosted compute backend.
-4. Collect output, transcript, trajectory, and verifier artifacts.
+4. Collect output, the current trajectory, any provider-required transcript,
+   and verifier artifacts.
 5. Build an `EvaluationResult` and persist a `TrialRecord`.
 
 Deterministic templates and suite generation live with authoring and generation.
@@ -139,6 +140,19 @@ queries. `TrialRecord` is the durable trial provenance envelope. Dataset
 manifests identify immutable benchmark snapshots. Evidence-lifecycle and world
 records add content-addressed artifacts where replay, recovery, or isolation
 requires them.
+
+`TrialRecord` references evidence authorities; it does not copy task-owned
+episode state or replay facts into a second shared model. `OutputRecord` owns
+termination versus truncation and the final runtime reason. `CostRecord` owns
+aggregate model calls, token usage, cache usage, advisor usage, and estimated
+cost. A task-owned episode inventory can be attached through one verified
+`ArtifactReference`. Reports consume these canonical fields and never recover
+aggregate usage from the open-ended provider metadata map.
+
+`trajectory.jsonl` is the current ordered interaction record for ordinary
+adapter runs. It contains validated entries only and has no version header or
+historical reader. Provider transcripts remain only where an external or
+sealed evidence workflow requires their exact representation.
 
 Immutability is a property of accepted evidence, published datasets, and other
 named records. It is not a requirement that every internal object, service, or

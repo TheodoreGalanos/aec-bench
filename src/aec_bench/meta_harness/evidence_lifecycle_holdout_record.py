@@ -824,6 +824,9 @@ def _build_trial_record(
                 "sessions": evidence.model_dump(mode="json")["sessions"],
             },
             artifacts=artifacts,
+            terminated=execution_status == "completed",
+            truncated=execution_status != "completed",
+            final_reason=execution_status,
         ),
         evaluation=EvaluationResult(
             reward=float(verification["reward"]),

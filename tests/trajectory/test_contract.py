@@ -1,9 +1,8 @@
 # ABOUTME: Tests for TrajectoryEntry Pydantic contract and read_trajectory reader function.
-# ABOUTME: Covers entry parsing, validation, version header skipping, and OutputRecord integration.
+# ABOUTME: Covers current entry parsing, strict rejection, and OutputRecord integration.
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 import pytest
@@ -118,7 +117,7 @@ def test_optional_fields_default_to_none() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_read_trajectory_skips_version_header(tmp_path: Path) -> None:
+def test_read_trajectory_reads_writer_output(tmp_path: Path) -> None:
     from aec_bench.contracts.trajectory import read_trajectory
 
     writer = TrajectoryWriter(str(tmp_path / "trace.jsonl"))
@@ -126,7 +125,6 @@ def test_read_trajectory_skips_version_header(tmp_path: Path) -> None:
     writer.close()
 
     entries = read_trajectory(tmp_path / "trace.jsonl")
-    # Only the system entry — version header must be skipped
     assert len(entries) == 1
     assert entries[0].role == "system"
 
@@ -138,7 +136,7 @@ def test_read_trajectory_returns_empty_for_missing_file(tmp_path: Path) -> None:
     assert result == []
 
 
-def test_read_trajectory_returns_empty_for_version_only_file(tmp_path: Path) -> None:
+def test_read_trajectory_returns_empty_for_empty_writer_output(tmp_path: Path) -> None:
     from aec_bench.contracts.trajectory import read_trajectory
 
     writer = TrajectoryWriter(str(tmp_path / "trace.jsonl"))
@@ -148,24 +146,17 @@ def test_read_trajectory_returns_empty_for_version_only_file(tmp_path: Path) -> 
     assert entries == []
 
 
-def test_read_trajectory_logs_warning_for_unknown_version(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_read_trajectory_rejects_obsolete_header_payload(tmp_path: Path) -> None:
     import json
 
     from aec_bench.contracts.trajectory import read_trajectory
 
     out = tmp_path / "trace.jsonl"
     header = {"version": 99, "format": "aec-bench-trajectory"}
-    entry = {"step": 1, "role": "assistant", "content": "hello"}
-    out.write_text(
-        json.dumps(header) + "\n" + json.dumps(entry) + "\n",
-        encoding="utf-8",
-    )
+    out.write_text(json.dumps(header) + "\n", encoding="utf-8")
 
-    with caplog.at_level(logging.WARNING):
-        entries = read_trajectory(out)
-
-    assert any("version" in record.message.lower() for record in caplog.records)
-    assert len(entries) == 1
+    with pytest.raises(ValidationError):
+        read_trajectory(out)
 
 
 # ---------------------------------------------------------------------------
@@ -299,7 +290,6 @@ def test_read_trajectory_preserves_call_type(tmp_path: Path) -> None:
 
     traj = tmp_path / "trajectory.jsonl"
     lines = [
-        json.dumps({"version": 1, "format": "aec-bench-trajectory"}),
         json.dumps(
             {
                 "role": "assistant",
@@ -358,7 +348,6 @@ def test_read_trajectory_preserves_output_summary(tmp_path: Path) -> None:
 
     traj = tmp_path / "trajectory.jsonl"
     lines = [
-        json.dumps({"version": 1, "format": "aec-bench-trajectory"}),
         json.dumps(
             {
                 "role": "tool_result",
@@ -383,7 +372,6 @@ def test_read_trajectory_preserves_metadata(tmp_path: Path) -> None:
 
     traj = tmp_path / "trajectory.jsonl"
     lines = [
-        json.dumps({"version": 1, "format": "aec-bench-trajectory"}),
         json.dumps(
             {
                 "role": "tool_result",

@@ -19,7 +19,7 @@ _skip_no_job_data = pytest.mark.skipif(
 
 
 @_skip_no_job_data
-def test_trace_summary_from_record_preserves_legacy_summary_fields() -> None:
+def test_trace_summary_from_record_uses_current_record_authorities() -> None:
     record = import_harbor_trial(trial_dir=HARBOR_TRIAL_DIR, repo_root=REPO_ROOT)
 
     summary = trace_summary_from_record(record)

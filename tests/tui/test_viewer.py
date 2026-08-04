@@ -194,7 +194,6 @@ def test_group_entries_by_step_output_summary_none_when_absent() -> None:
 def test_render_transcript_from_trajectory(tmp_path: Path) -> None:
     trajectory_path = tmp_path / "trajectory.jsonl"
     trajectory_path.write_text(
-        '{"version": 1, "format": "aec-bench-trajectory"}\n'
         '{"step": 1, "role": "assistant", "content": "I will calculate."}\n'
         '{"step": 1, "role": "tool_call", "tool_name": "bash", "command": "python3 calc.py"}\n'
         '{"step": 1, "role": "tool_result", "tool_name": "bash",'
@@ -219,7 +218,6 @@ def test_render_transcript_from_trajectory(tmp_path: Path) -> None:
 def test_render_transcript_shows_errors(tmp_path: Path) -> None:
     trajectory_path = tmp_path / "trajectory.jsonl"
     trajectory_path.write_text(
-        '{"version": 1, "format": "aec-bench-trajectory"}\n'
         '{"step": 1, "role": "tool_call", "tool_name": "bash", "command": "bad_cmd"}\n'
         '{"step": 1, "role": "tool_result", "tool_name": "bash",'
         ' "stdout": "", "stderr": "not found", "exit_code": 127}\n'
@@ -239,7 +237,7 @@ def test_render_transcript_shows_errors(tmp_path: Path) -> None:
 
 def test_render_transcript_empty_trajectory(tmp_path: Path) -> None:
     trajectory_path = tmp_path / "trajectory.jsonl"
-    trajectory_path.write_text('{"version": 1, "format": "aec-bench-trajectory"}\n')
+    trajectory_path.write_text("")
 
     record = make_trial_record(
         outputs=OutputRecord(

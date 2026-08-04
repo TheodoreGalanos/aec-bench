@@ -3,7 +3,7 @@
 
 from pytest import raises
 
-from aec_bench.evaluation.adaptation import (
+from aec_bench.contracts.adaptation import (
     AdaptationSpec,
     VariationAxis,
     expand_adaptation_spec,

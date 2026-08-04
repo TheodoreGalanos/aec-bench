@@ -1066,10 +1066,6 @@ class _RecordingProposalEnvironment:
             context_payload["program_node_id"] = "tampered-node"
         lines = (
             {
-                "version": 1,
-                "format": "aec-bench-trajectory",
-            },
-            {
                 "step": 1,
                 "role": "assistant",
                 "content": "Child execution completed.",

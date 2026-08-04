@@ -29,7 +29,6 @@ class TrajectoryWriter:
         self._meta_harness_context: JsonObject | None = None
         self._seen_system_hash: str | None = None
         self._file = open(path, "w", encoding="utf-8")  # noqa: SIM115
-        self._write({"version": 1, "format": "aec-bench-trajectory"})
 
     # ------------------------------------------------------------------
     # Step management

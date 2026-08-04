@@ -102,6 +102,7 @@ def collect_local_trial_record(
     advisor_calls: int | None = None
     advisor_input_tokens: int | None = None
     advisor_output_tokens: int | None = None
+    model_calls: int | None = None
 
     if agent_result_path.exists():
         agent_result = json.loads(agent_result_path.read_text())
@@ -112,6 +113,7 @@ def collect_local_trial_record(
         advisor_calls = agent_result.get("advisor_calls")
         advisor_input_tokens = agent_result.get("advisor_input_tokens")
         advisor_output_tokens = agent_result.get("advisor_output_tokens")
+        model_calls = agent_result.get("model_calls")
 
     # --- verifier outputs ----------------------------------------------------
     reward_path = workspace_dir / "logs" / "verifier" / "reward.json"
@@ -158,6 +160,7 @@ def collect_local_trial_record(
     )
     if tokens_in is not None or tokens_out is not None or has_advisor_stats:
         cost = CostRecord(
+            model_calls=model_calls,
             tokens_in=tokens_in,
             tokens_out=tokens_out,
             cache_read_tokens=cache_read if cache_read else None,
@@ -178,7 +181,8 @@ def collect_local_trial_record(
         outputs=OutputRecord(
             conversation_path=conversation_path_val,
             trajectory_path=trajectory_path_val,
-            agent_result=agent_result,
+            agent_result=None if agent_result is None else {"status": agent_result.get("status")},
+            terminated=agent_result is not None and agent_result.get("status") in {"ok", "completed"},
         ),
         evaluation=evaluation,
         timing=TimingRecord(total_seconds=0.0),
@@ -388,12 +392,10 @@ def _run_adapter_in_workspace(
     """Execute a task using the local adapter registry.
 
     Mirrors the logic from run_local.py's _run_adapter but without CLI
-    dependencies. Writes agent_result.json, conversation.jsonl, and
-    trajectory.jsonl to the workspace.
+    dependencies. Writes agent_result.json and trajectory.jsonl to the workspace.
     """
     from aec_bench.adapters.base import AdapterRequest
     from aec_bench.adapters.local_registry import LocalAdapterRegistry
-    from aec_bench.adapters.transcript import TranscriptRole
     from aec_bench.harness.local_runtime import read_instruction
     from aec_bench.trajectory.writer import TrajectoryWriter
 
@@ -433,25 +435,12 @@ def _run_adapter_in_workspace(
         if result.raw_output_text:
             output_path.write_text(result.raw_output_text)
 
-    # Write conversation.jsonl from the adapter's transcript
-    conversation_path = Path(workspace, "conversation.jsonl")
-    with conversation_path.open("w", encoding="utf-8") as f:
-        for entry in result.transcript:
-            f.write(
-                json.dumps(
-                    {
-                        "role": entry.role.value if isinstance(entry.role, TranscriptRole) else str(entry.role),
-                        "content": entry.content or "",
-                    }
-                )
-                + "\n"
-            )
-
     # Write agent_result.json (includes cache token counts and advisor stats when available)
     agent_result_data: dict[str, int | str] = {
         "status": result.agent_output.status.value,
         "model": model,
         "adapter": adapter_kind,
+        "model_calls": result.usage_model_calls or 0,
         "input_tokens": result.usage_input_tokens or 0,
         "output_tokens": result.usage_output_tokens or 0,
         "cache_read_tokens": result.usage_cache_read_tokens or 0,

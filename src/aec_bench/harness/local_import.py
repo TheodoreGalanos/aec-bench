@@ -125,10 +125,13 @@ def build_trial_record_from_workspace(
     )
 
     cost: CostRecord | None = None
-    if tokens_in or tokens_out:
+    if tokens_in or tokens_out or cache_read or cache_write:
         cost = CostRecord(
+            model_calls=agent_result.get("model_calls") if agent_result is not None else None,
             tokens_in=tokens_in,
             tokens_out=tokens_out,
+            cache_read_tokens=cache_read,
+            cache_write_tokens=cache_write,
             estimated_cost_usd=cost_usd,
         )
 
@@ -159,7 +162,8 @@ def build_trial_record_from_workspace(
             ),
             conversation_path=conversation_path_val,
             trajectory_path=trajectory_path_val,
-            agent_result=agent_result,
+            agent_result=None if agent_result is None else {"status": status_str},
+            terminated=agent_status is AgentOutputStatus.COMPLETED,
         ),
         evaluation=evaluation,
         timing=effective_timing,
@@ -303,16 +307,13 @@ def build_trial_record(
             conversation_path=_rel_posix(conversation),
             trajectory_path=_rel_posix(trajectory),
             agent_result={
-                "usage_input_tokens": input_tokens,
-                "usage_output_tokens": output_tokens,
-                "usage_cache_tokens": cache_read,
-                "usage_cache_write_tokens": cache_write,
                 "turns_used": agent_result.get("turns_used"),
                 "max_turns": agent_result.get("max_turns"),
                 "harbor_status": status_str,
                 "output_source": agent_result.get("output_source"),
                 "compaction_count": agent_result.get("compaction_count", 0),
             },
+            terminated=agent_status is AgentOutputStatus.COMPLETED,
         ),
         evaluation=EvaluationResult(
             reward=0.0,
@@ -330,8 +331,11 @@ def build_trial_record(
             verification_seconds=None,
         ),
         cost=CostRecord(
+            model_calls=agent_result.get("model_calls"),
             tokens_in=input_tokens,
             tokens_out=output_tokens,
+            cache_read_tokens=cache_read,
+            cache_write_tokens=cache_write,
             estimated_cost_usd=cost,
         ),
         completeness=Completeness.PARTIAL,
