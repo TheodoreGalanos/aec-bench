@@ -25,6 +25,7 @@ Read the implementation and tests for the area you will change. Then read only t
 - `docs/INVARIANTS.md`: non-negotiable benchmark-validity and reproducibility rules.
 - `docs/CONTRACTS.md`: logical data contracts at real domain boundaries.
 - `docs/ARCHITECTURE.md`: domain ownership and dependency direction.
+- `docs/world-authoring.md`: current contributor path for artifact tasks and interactive worlds.
 - `README.md`: documented public commands, installation, and user-visible behaviour.
 - `pyproject.toml`: Python dependencies, build configuration, and tool settings.
 - `docs/PROJECT_STRUCTURE.md`: navigation and design context, not a requirement to preserve obsolete packages or paths.

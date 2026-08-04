@@ -20,6 +20,7 @@ EXPECTED_REPOSITORY_DOCS = {
     "protocols/interactive-world-runtime.md",
     "protocols/sealed-holdout-and-verifier-isolation.md",
     "protocols/staged-evidence-and-publication.md",
+    "world-authoring.md",
 }
 MAINTAINED_INDEX_TARGETS = {
     "AGENTS.md",
@@ -31,6 +32,7 @@ MAINTAINED_INDEX_TARGETS = {
     "protocols/interactive-world-runtime.md",
     "protocols/sealed-holdout-and-verifier-isolation.md",
     "protocols/staged-evidence-and-publication.md",
+    "world-authoring.md",
 }
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\((?P<target>[^)]+)\)")
 FIXED_TEST_COUNT = re.compile(r"\b\d[\d,]*\s+(?:tests?|test cases)\b", re.IGNORECASE)
@@ -84,6 +86,18 @@ def test_agent_guides_do_not_freeze_test_counts() -> None:
     guides = (REPO_ROOT / "AGENTS.md", DOCS_ROOT / "AGENTS.md")
 
     assert all(FIXED_TEST_COUNT.search(path.read_text(encoding="utf-8")) is None for path in guides)
+
+
+def test_root_agent_guide_routes_world_authors_to_current_guidance() -> None:
+    root_guidance = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    current_guidance = (REPO_ROOT / "AGENTS.md", *sorted(DOCS_ROOT.rglob("*.md")))
+
+    assert "docs/world-authoring.md" in root_guidance
+    assert all(
+        "WORLD_AUTHORING_GUIDE.md" not in path.read_text(encoding="utf-8")
+        and "WORLD_CONFORMANCE_CHECKLIST.md" not in path.read_text(encoding="utf-8")
+        for path in current_guidance
+    )
 
 
 def test_installed_domain_check_guidance_uses_current_authorities() -> None:
