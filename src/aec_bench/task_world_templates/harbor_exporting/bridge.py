@@ -165,7 +165,7 @@ def validate_compiled_world(compiled: CompiledLifecycleWorld) -> ValidatedCompil
 def validate_adapter_surface(envelope: CompiledWorldEnvelope) -> None:
     if envelope.visibility != "public":
         raise ValueError("Harbor lifecycle export refuses non-public compiled worlds")
-    if envelope.adapter.operation_resolver_factory is None or envelope.operation_protocol_sha256 is None:
+    if "operations" not in envelope.adapter.capabilities or envelope.operation_protocol_sha256 is None:
         raise ValueError("Harbor lifecycle export requires a content-pinned operation resolver")
 
 

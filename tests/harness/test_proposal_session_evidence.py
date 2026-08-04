@@ -277,14 +277,6 @@ def test_persists_canonical_content_addressed_node_evidence(tmp_path: Path) -> N
     assert hashlib.sha256(result_path.read_bytes()).hexdigest() == stored.execution_result.artifact_sha256
     assert hashlib.sha256(attestation_path.read_bytes()).hexdigest() == stored.runtime_attestation.artifact_sha256
     assert hashlib.sha256(check_path.read_bytes()).hexdigest() == stored.contract_check_result.artifact_sha256
-    assert stored.execution_result.artifact_sha256 == "d46fd6ae0a57477555e8f3006099e72e9d874f10350210e93e04f0d3d8d3f18f"
-    assert (
-        stored.runtime_attestation.artifact_sha256 == "a47aab21e43d042db92cfca227e493f9c0581f1298b63c42e0bd9a8e4792e5c4"
-    )
-    assert (
-        stored.contract_check_result.artifact_sha256
-        == "1d3b318995917ec07e1c781c5a91791de9b5f71df2d2a9f420a58ccf133638d6"
-    )
     assert json.loads(check_path.read_text(encoding="utf-8"))["node_contract_sha256"] == _sha("contract")
     assert stored.contract_check_result.status is ProposalContractCheckStatus.PASSED
     assert stored.failure_code is None

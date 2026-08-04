@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 from pydantic import ValidationError
 
@@ -13,9 +15,9 @@ from aec_bench.contracts.continual_world import (
     ContinualRolloutGroupState,
     ContinualRolloutGroupStatus,
     ContinualRolloutLineage,
-    ContinualWorldDefinitionRef,
     ContinualWorldProfileRef,
     ContinualWorldSnapshotRef,
+    WorldBuildRef,
 )
 
 
@@ -36,15 +38,14 @@ def _request(**updates: object) -> ContinualRolloutGroupRequest:
         "group_id": "group-1",
         "task_world_id": "world.example",
         "authority_id": "host-control",
-        "definition_ref": ContinualWorldDefinitionRef(
+        "world_build": WorldBuildRef(
             task_world_id="world.example",
-            definition_version="1",
-            content_sha256="a" * 64,
+            entry_point="example.world:definition",
+            artifact_sha256="a" * 64,
         ),
         "profile_ref": ContinualWorldProfileRef(
             task_world_id="world.example",
             profile_id="profile.example",
-            profile_version="1",
             profile_content_sha256="b" * 64,
         ),
         "parent_manifest_content_sha256": "c" * 64,
@@ -67,7 +68,7 @@ def _request(**updates: object) -> ContinualRolloutGroupRequest:
         ),
     }
     values.update(updates)
-    return ContinualRolloutGroupRequest(**values)
+    return ContinualRolloutGroupRequest.model_validate(values)
 
 
 def test_rollout_group_request_has_stable_content_identity_and_child_order() -> None:
@@ -93,11 +94,11 @@ def test_rollout_group_request_rejects_reused_child_identity(identity_field: str
 
 def test_rollout_group_request_rejects_foreign_definition_or_profile() -> None:
     request = _request()
-    foreign_definition = request.definition_ref.model_copy(update={"task_world_id": "world.foreign"})
-    foreign_profile = request.profile_ref.model_copy(update={"task_world_id": "world.foreign"})
+    foreign_definition = replace(request.world_build, task_world_id="world.foreign")
+    foreign_profile = replace(request.profile_ref, task_world_id="world.foreign")
 
     with pytest.raises(ValidationError, match="definition must belong to the requested task world"):
-        _request(definition_ref=foreign_definition)
+        _request(world_build=foreign_definition)
     with pytest.raises(ValidationError, match="profile must belong to the requested task world"):
         _request(profile_ref=foreign_profile)
 
@@ -195,7 +196,7 @@ def test_rollout_lineage_rejects_child_receipt_from_another_parent_snapshot() ->
             request_id=request.request_id,
             group_id=request.group_id,
             task_world_id=request.task_world_id,
-            definition_ref=request.definition_ref,
+            world_build=request.world_build,
             profile_ref=request.profile_ref,
             request_content_sha256=request.content_sha256,
             parent_manifest_content_sha256=request.parent_manifest_content_sha256,

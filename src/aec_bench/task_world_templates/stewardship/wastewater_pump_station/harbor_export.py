@@ -7,14 +7,16 @@ import json
 import shutil
 import tempfile
 import tomllib
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Final, Literal, cast
 
+from pydantic import TypeAdapter
+
 from aec_bench.contracts.continual_world import (
     ContinualRolloutChildRunRef,
-    ContinualWorldDefinitionRef,
     ContinualWorldProfileRef,
+    WorldBuildRef,
 )
 from aec_bench.task_world_templates.harbor_exporting.constants import (
     BASE_IMAGE,
@@ -57,7 +59,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
 PUMP_STATION_HARBOR_EXECUTION_KIND: Final[Literal["stewardship_world_session"]] = "stewardship_world_session"
 PUMP_STATION_HARBOR_BRIDGE_MODE = "wastewater_pump_station_reference"
 PUMP_STATION_HARBOR_OUTPUT_PATH = "/workspace/world-session"
-PUMP_STATION_REGISTERED_HARBOR_EXPORT_SCHEMA_VERSION = "aecbench.pump-station-harbor-export.v2"
 PUMP_STATION_CONTROLLER_MODES = (
     "deterministic_reference",
     "model_tool_loop",
@@ -118,9 +119,9 @@ class PumpStationHarborBridge:
     execution_kind: str
     task_world_id: str
     bridge_mode: str
-    definition_ref: ContinualWorldDefinitionRef | None
-    profile_ref: ContinualWorldProfileRef | None
-    reference_system_root: Path | None
+    world_build: WorldBuildRef
+    profile_ref: ContinualWorldProfileRef
+    reference_system_root: Path
     initial_run_root: Path | None
     rollout_child_ref: ContinualRolloutChildRunRef | None
 
@@ -128,10 +129,10 @@ class PumpStationHarborBridge:
 def _export_authority(
     profile_ref: ContinualWorldProfileRef | None,
 ) -> tuple[ReferencePackage, PumpStationReferenceSystem | None]:
-    if profile_ref is None:
-        return load_reference_package(), None
     definition = pump_station_continual_world_definition()
-    if profile_ref not in definition.spec.profiles:
+    if profile_ref is None:
+        raise ValueError("pump-station Harbor export requires the registered profile")
+    if profile_ref not in definition.profiles:
         raise ValueError("pump-station Harbor profile is not registered")
     loaded = definition.load_profile(profile_ref).value
     if not isinstance(loaded, PumpStationContinualProfile):
@@ -204,84 +205,63 @@ def load_pump_station_harbor_bridge(
         "execution_kind",
         "harbor",
         "package",
-        "schema_version",
         "task_world_id",
         "verifier",
     }
-    schema_version = manifest.get("schema_version")
-    registered_profile = schema_version == PUMP_STATION_REGISTERED_HARBOR_EXPORT_SCHEMA_VERSION
-    if not registered_profile:
-        raise ValueError("unsupported pump-station Harbor export version")
     initial_run_present = "initial_run" in manifest
-    if initial_run_present and not registered_profile:
-        raise ValueError("pump-station Harbor initial run requires a registered profile")
     _require_exact_keys(
         manifest,
         base_fields
-        | (
-            {
-                "continual_definition",
-                "continual_profile",
-                "reference_system",
-            }
-            if registered_profile
-            else set()
-        )
+        | {"world_build", "continual_profile", "reference_system"}
         | ({"initial_run"} if initial_run_present else set()),
         label="pump-station Harbor export manifest",
     )
-    definition_ref: ContinualWorldDefinitionRef | None = None
-    profile_ref: ContinualWorldProfileRef | None = None
-    reference_system_root: Path | None = None
+    definition = pump_station_continual_world_definition()
+    world_build = TypeAdapter(WorldBuildRef).validate_python(manifest["world_build"])
+    if world_build != definition.ref:
+        raise ValueError("pump-station Harbor build is not registered")
+    profile_ref = TypeAdapter(ContinualWorldProfileRef).validate_python(manifest["continual_profile"])
+    if profile_ref not in definition.profiles:
+        raise ValueError("pump-station Harbor profile is not registered")
+    reference_payload = _mapping(manifest["reference_system"], "reference_system")
+    _require_exact_keys(
+        reference_payload,
+        {"descriptor_content_id", "descriptor_id", "directory_sha256", "path"},
+        label="pump-station Harbor reference system",
+    )
+    reference_system_root = task_root / str(reference_payload["path"])
+    reference_system = load_reference_system(root=reference_system_root)
+    if (
+        reference_system.descriptor_id != reference_payload["descriptor_id"]
+        or reference_system.descriptor_content_id != reference_payload["descriptor_content_id"]
+        or directory_sha256(reference_system_root) != reference_payload["directory_sha256"]
+        or reference_system.descriptor_content_id != profile_ref.profile_content_sha256
+    ):
+        raise ValueError("pump-station Harbor reference system differs from the export")
     initial_run_root: Path | None = None
     rollout_child_ref: ContinualRolloutChildRunRef | None = None
-    if registered_profile:
-        definition = pump_station_continual_world_definition()
-        definition_ref = ContinualWorldDefinitionRef.model_validate(manifest["continual_definition"])
-        if definition_ref != definition.ref:
-            raise ValueError("pump-station Harbor definition is not registered")
-        profile_ref = ContinualWorldProfileRef.model_validate(manifest["continual_profile"])
-        if profile_ref not in definition.spec.profiles:
-            raise ValueError("pump-station Harbor profile is not registered")
-        reference_payload = _mapping(manifest["reference_system"], "reference_system")
+    if initial_run_present:
+        initial_run_payload = _mapping(manifest["initial_run"], "initial run")
         _require_exact_keys(
-            reference_payload,
-            {"descriptor_content_id", "descriptor_id", "directory_sha256", "path"},
-            label="pump-station Harbor reference system",
+            initial_run_payload,
+            {"directory_sha256", "path", "rollout_child_ref"},
+            label="pump-station Harbor initial run",
         )
-        reference_system_root = task_root / str(reference_payload["path"])
-        reference_system = load_reference_system(root=reference_system_root)
-        if (
-            reference_system.descriptor_id != reference_payload["descriptor_id"]
-            or reference_system.descriptor_content_id != reference_payload["descriptor_content_id"]
-            or directory_sha256(reference_system_root) != reference_payload["directory_sha256"]
-            or reference_system.descriptor_content_id != profile_ref.profile_content_sha256
-        ):
-            raise ValueError("pump-station Harbor reference system differs from the export")
-        if initial_run_present:
-            initial_run_payload = _mapping(manifest["initial_run"], "initial run")
-            _require_exact_keys(
-                initial_run_payload,
-                {"directory_sha256", "path", "rollout_child_ref"},
-                label="pump-station Harbor initial run",
+        if initial_run_payload["path"] != _INITIAL_RUN_PATH:
+            raise ValueError("pump-station Harbor initial run path differs")
+        initial_run_root = task_root / _INITIAL_RUN_PATH
+        if directory_sha256(initial_run_root) != initial_run_payload["directory_sha256"]:
+            raise ValueError("pump-station Harbor initial run differs from the export")
+        rollout_child_ref = ContinualRolloutChildRunRef.model_validate(initial_run_payload["rollout_child_ref"])
+        try:
+            validate_pump_station_rollout_child_run(
+                initial_run_root,
+                rollout_child_ref,
+                world_build=world_build,
+                profile_ref=profile_ref,
             )
-            if initial_run_payload["path"] != _INITIAL_RUN_PATH:
-                raise ValueError("pump-station Harbor initial run path differs")
-            initial_run_root = task_root / _INITIAL_RUN_PATH
-            if directory_sha256(initial_run_root) != initial_run_payload["directory_sha256"]:
-                raise ValueError("pump-station Harbor initial run differs from the export")
-            rollout_child_ref = ContinualRolloutChildRunRef.model_validate(
-                initial_run_payload["rollout_child_ref"],
-            )
-            try:
-                validate_pump_station_rollout_child_run(
-                    initial_run_root,
-                    rollout_child_ref,
-                    definition_ref=definition_ref,
-                    profile_ref=profile_ref,
-                )
-            except (OSError, RuntimeError, ValueError) as exc:
-                raise ValueError("pump-station Harbor initial run identity differs") from exc
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise ValueError("pump-station Harbor initial run identity differs") from exc
     bridge_payload = _mapping(manifest["bridge"], "bridge")
     expected_execution_kind = PUMP_STATION_HARBOR_EXECUTION_KIND
     expected_task_world_id = PUMP_STATION_TASK_WORLD_ID
@@ -349,7 +329,7 @@ def load_pump_station_harbor_bridge(
         execution_kind=expected_execution_kind,
         task_world_id=expected_task_world_id,
         bridge_mode=expected_bridge_mode,
-        definition_ref=definition_ref,
+        world_build=world_build,
         profile_ref=profile_ref,
         reference_system_root=reference_system_root,
         initial_run_root=initial_run_root,
@@ -395,11 +375,11 @@ def _write_export(
     if initial_run_root is not None and rollout_child_ref is not None:
         if profile_ref is None:
             raise ValueError("pump-station Harbor rollout child requires one exact profile")
-        definition_ref = pump_station_continual_world_definition().ref
+        world_build = pump_station_continual_world_definition().ref
         validate_pump_station_rollout_child_run(
             initial_run_root,
             rollout_child_ref,
-            definition_ref=definition_ref,
+            world_build=world_build,
             profile_ref=profile_ref,
         )
         initial_run_dir = task_dir / _INITIAL_RUN_PATH
@@ -410,7 +390,7 @@ def _write_export(
         validate_pump_station_rollout_child_run(
             initial_run_dir,
             rollout_child_ref,
-            definition_ref=definition_ref,
+            world_build=world_build,
             profile_ref=profile_ref,
         )
     runtime = build_verifier_runtime_wheel(
@@ -504,7 +484,6 @@ def _export_manifest(
         "controller_modes": list(PUMP_STATION_CONTROLLER_MODES),
     }
     manifest: dict[str, Any] = {
-        "schema_version": PUMP_STATION_REGISTERED_HARBOR_EXPORT_SCHEMA_VERSION,
         "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
         "task_world_id": PUMP_STATION_TASK_WORLD_ID,
         "package": {
@@ -538,8 +517,8 @@ def _export_manifest(
         },
     }
     if profile_ref is not None and reference_system is not None and reference_system_dir is not None:
-        manifest["continual_definition"] = pump_station_continual_world_definition().ref.model_dump(mode="json")
-        manifest["continual_profile"] = profile_ref.model_dump(mode="json")
+        manifest["world_build"] = asdict(pump_station_continual_world_definition().ref)
+        manifest["continual_profile"] = asdict(profile_ref)
         manifest["reference_system"] = {
             "path": "tests/reference-system",
             "descriptor_id": reference_system.descriptor_id,
@@ -723,7 +702,6 @@ __all__ = (
     "PUMP_STATION_HARBOR_BRIDGE_MODE",
     "PUMP_STATION_HARBOR_EXECUTION_KIND",
     "PUMP_STATION_HARBOR_OUTPUT_PATH",
-    "PUMP_STATION_REGISTERED_HARBOR_EXPORT_SCHEMA_VERSION",
     "PumpStationHarborBridge",
     "export_pump_station_harbor_task",
     "is_pump_station_harbor_inventory_artifact",

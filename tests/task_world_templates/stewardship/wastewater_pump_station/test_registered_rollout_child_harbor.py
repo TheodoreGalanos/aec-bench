@@ -17,18 +17,21 @@ from aec_bench.contracts.continual_world import (
     ContinualRolloutGroupRequest,
     ContinualWorldSnapshotRef,
 )
-from aec_bench.contracts.evaluation_result import StewardshipEvaluation
 from aec_bench.contracts.world_interface import WorldActorActionRequest
 from aec_bench.contracts.world_session import (
     WorldSessionRequest,
     WorldSessionResult,
 )
+from aec_bench.evaluation.stewardship import evaluate_pump_station_reference_run
 from aec_bench.harness.harbor_importing.core import import_harbor_trial
 from aec_bench.task_world_templates.continual.rollout_control import ContinualRolloutControl
 from aec_bench.task_world_templates.continual.rollout_repository import ContinualRolloutRepository
 from aec_bench.task_world_templates.harbor_exporting.stable_io import directory_sha256
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
     pump_station_continual_world_definition,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_rollout_adapter import (
+    PumpStationContinualWorldBranchPort,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
     PumpStationEpisodeHost,
@@ -86,7 +89,7 @@ def _create_registered_rollout(
     ContinualRolloutChildRunRef,
 ]:
     definition = pump_station_continual_world_definition()
-    profile_ref = definition.spec.profiles[0]
+    profile_ref = definition.profiles[0]
     parent_root = tmp_path / "parent-world"
     parent = PumpStationWorldRun.create_reference_system(
         repository=PumpStationWorldRunRepository(parent_root),
@@ -113,7 +116,7 @@ def _create_registered_rollout(
         group_id="harbor-rollout-group",
         task_world_id=definition.ref.task_world_id,
         authority_id="harbor-rollout-host",
-        definition_ref=definition.ref,
+        world_build=definition.build,
         profile_ref=profile_ref,
         parent_manifest_content_sha256=pump_station_artifact_id(parent.manifest),
         parent_snapshot=_continual_snapshot(parent_snapshot),
@@ -137,6 +140,7 @@ def _create_registered_rollout(
     rollout_root = tmp_path / "rollouts"
     control = ContinualRolloutControl(
         definition,
+        PumpStationContinualWorldBranchPort(),
         parent_run_root=parent_root,
         rollout_repository_root=rollout_root,
         authorised_principal_ids=("harbor-rollout-host",),
@@ -171,7 +175,7 @@ def test_registered_rollout_child_export_binds_the_exact_immutable_initial_run(
     parent_before = _tree_bytes(parent_root)
     selected_before = _tree_bytes(selected_root)
     sibling_before = _tree_bytes(sibling_root)
-    profile_ref = pump_station_continual_world_definition().spec.profiles[0]
+    profile_ref = pump_station_continual_world_definition().profiles[0]
     assert selected_ref.initial_snapshot.sequence > 0
 
     exported = export_pump_station_harbor_task(
@@ -219,7 +223,7 @@ def test_local_harbor_trial_resumes_one_rollout_child_for_one_bounded_actor_acti
     parent_before = _tree_bytes(parent_root)
     selected_before = _tree_bytes(selected_root)
     sibling_before = _tree_bytes(sibling_root)
-    profile_ref = pump_station_continual_world_definition().spec.profiles[0]
+    profile_ref = pump_station_continual_world_definition().profiles[0]
     repo_root = tmp_path / "repo"
     exported = export_pump_station_harbor_task(
         repo_root / "tasks" / "stewardship" / "wastewater-pump-station",
@@ -332,12 +336,9 @@ def test_local_harbor_trial_resumes_one_rollout_child_for_one_bounded_actor_acti
     assert record.world_execution is not None
     assert record.world_execution.transition_count == 1
     imported_hashes = tuple(sorted({artifact.sha256 for artifact in record.outputs.artifacts or ()}))
-    definition = pump_station_continual_world_definition()
-    assert definition.evaluation_port is not None
-    direct_evaluation = definition.evaluation_port.evaluate_run(
-        profile=definition.load_profile(profile_ref),
-        run_root=world_session_dir / "world-run",
+    direct_evaluation = evaluate_pump_station_reference_run(
+        completed,
         imported_artifact_sha256=imported_hashes,
         evaluation_scope="bounded_continuation",
     )
-    assert record.evaluation.stewardship == StewardshipEvaluation.model_validate(direct_evaluation)
+    assert record.evaluation.stewardship == direct_evaluation

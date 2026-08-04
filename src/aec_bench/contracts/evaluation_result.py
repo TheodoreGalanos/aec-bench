@@ -198,7 +198,6 @@ class StewardshipEvaluationEvidence(StrictModel):
 class StewardshipEvaluation(StrictModel):
     """Authoritative stewardship evaluation attached to an EvaluationResult."""
 
-    schema_version: NonEmptyStr
     evaluation_scope: Literal["complete_journey", "bounded_continuation"] = "complete_journey"
     valid: bool
     gates: StewardshipIntegrityGates

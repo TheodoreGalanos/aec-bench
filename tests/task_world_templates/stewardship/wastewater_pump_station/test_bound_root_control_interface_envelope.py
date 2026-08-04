@@ -14,8 +14,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_
     PUMP_STATION_TASK_WORLD_ID,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PUMP_STATION_BOUND_CONTROL_VERSION,
-    PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
     PumpStationBoundControlRequest,
     PumpStationCommonBoundaryRequest,
 )
@@ -23,7 +21,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 
 def _bound_control() -> PumpStationBoundControlRequest:
     return PumpStationBoundControlRequest(
-        control_envelope_version=PUMP_STATION_BOUND_CONTROL_VERSION,
         request_id="control-power-unavailable",
         run_id="run-v4",
         episode_id="episode-v4",
@@ -32,7 +29,6 @@ def _bound_control() -> PumpStationBoundControlRequest:
         base_commit_id="commit-v4-004",
         based_on_sequence=4,
         control=PumpStationCommonBoundaryRequest(
-            version=PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION,
             request_id="control-power-unavailable",
             authority_id="operations-controller",
             boundary_kind="power",

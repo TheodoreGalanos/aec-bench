@@ -18,8 +18,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_
     PumpStationEpisodeHost,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PUMP_STATION_BOUND_CONTROL_VERSION,
-    PUMP_STATION_OPERATIONS_REVIEW_VERSION,
     PumpStationBoundControlRequest,
     PumpStationOperationsBoundaryReviewRequest,
 )
@@ -113,7 +111,6 @@ def _review(
 ) -> None:
     snapshot = run.snapshot()
     review = PumpStationOperationsBoundaryReviewRequest(
-        version=PUMP_STATION_OPERATIONS_REVIEW_VERSION,
         review_id=review_id,
         review_kind=review_kind,
         pump_id=pump_id,
@@ -126,7 +123,6 @@ def _review(
     )
     control.execute(
         PumpStationBoundControlRequest(
-            control_envelope_version=PUMP_STATION_BOUND_CONTROL_VERSION,
             request_id=review_id,
             run_id=snapshot.run_id,
             episode_id=snapshot.episode_id,

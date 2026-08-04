@@ -13,19 +13,11 @@ from pydantic import field_validator, model_validator
 from aec_bench.contracts.harness_kernel import ContentAddressedModel
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 
-TEMPORAL_EVIDENCE_SCHEMA_VERSION = "pump-station.temporal-evidence.v1"
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 class TemporalEvidenceIntegrityError(RuntimeError):
     """Raised when temporal evidence does not match its declared authority."""
-
-
-class TemporalEvidenceProfile(StrEnum):
-    """Supported local and later external execution profiles."""
-
-    DETERMINISTIC_SNAPSHOT = "deterministic_snapshot"
-    OPAQUE_EXTERNAL_PILOT = "opaque_external_pilot"
 
 
 class TemporalEvidenceRightsClass(StrEnum):
@@ -70,7 +62,6 @@ class TemporalEvidenceEventKind(StrEnum):
 class TemporalEvidenceSource(ContentAddressedModel):
     """One source and its immutable rights declaration."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     source_id: NonEmptyStr
     source_class: TemporalEvidenceSourceClass
     rights_class: TemporalEvidenceRightsClass
@@ -93,7 +84,6 @@ class TemporalEvidenceSource(ContentAddressedModel):
 class TemporalEvidenceLineage(ContentAddressedModel):
     """Rights, derivation, assumption, transformation, and treatment authority."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     parent_profile_id: NonEmptyStr
     parent_generation_id: NonEmptyStr
     parent_package_content_id: NonEmptyStr
@@ -120,7 +110,6 @@ class TemporalEvidenceLineage(ContentAddressedModel):
 class TemporalEvidenceVersion(ContentAddressedModel):
     """One immutable documentary version with distinct temporal meanings."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     logical_document_id: NonEmptyStr
     version_id: NonEmptyStr
     title: NonEmptyStr
@@ -205,7 +194,6 @@ class TemporalEvidenceVersionRef(FrozenStrictModel):
 class TemporalEvidenceAvailabilityEvent(ContentAddressedModel):
     """One scheduled documentary event that never creates an agent turn itself."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     event_id: NonEmptyStr
     kind: TemporalEvidenceEventKind
     scheduled_seconds: int
@@ -228,7 +216,6 @@ class TemporalEvidenceAvailabilityEvent(ContentAddressedModel):
 class TemporalEvidenceAvailabilitySchedule(ContentAddressedModel):
     """Content-pinned chronological epistemic event schedule."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     schedule_id: NonEmptyStr
     events: tuple[TemporalEvidenceAvailabilityEvent, ...]
 
@@ -244,24 +231,26 @@ class TemporalEvidenceAvailabilitySchedule(ContentAddressedModel):
 class TemporalRetrievalPolicy(ContentAddressedModel):
     """Pinned normalization, ranking, tie-break, snippet, and limit policy."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     policy_id: NonEmptyStr
-    normalization_version: Literal["unicode-nfkc-lower-whitespace.v1"]
-    index_version: Literal["token-index.v1"]
-    ranking_version: Literal["token-frequency.v1"]
-    tie_break_version: Literal["version-id-ascending.v1"]
-    snippet_version: Literal["matched-window.v1"]
+    normalization: Literal["unicode_nfkc_lower_whitespace"]
+    index: Literal["token_index"]
+    ranking: Literal["token_frequency"]
+    tie_break: Literal["version_id_ascending"]
+    snippet: Literal["matched_window"]
     maximum_query_characters: int
     maximum_results: int
     maximum_snippet_characters: int
 
     @model_validator(mode="after")
     def validate_limits(self) -> Self:
-        if min(
-            self.maximum_query_characters,
-            self.maximum_results,
-            self.maximum_snippet_characters,
-        ) <= 0:
+        if (
+            min(
+                self.maximum_query_characters,
+                self.maximum_results,
+                self.maximum_snippet_characters,
+            )
+            <= 0
+        ):
             raise ValueError("retrieval policy limits must be positive")
         return self
 
@@ -269,7 +258,6 @@ class TemporalRetrievalPolicy(ContentAddressedModel):
 class TemporalAccessPolicy(ContentAddressedModel):
     """Pinned role and bounded actor-selected scope policy."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     policy_id: NonEmptyStr
     actor_roles: tuple[NonEmptyStr, ...]
     allowed_scopes: tuple[NonEmptyStr, ...]
@@ -284,7 +272,6 @@ class TemporalAccessPolicy(ContentAddressedModel):
 class TemporalBranchPolicy(ContentAddressedModel):
     """Pinned branch namespace and pre-fork inheritance policy."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     policy_id: NonEmptyStr
     shared_namespace: NonEmptyStr
     initial_branch_id: NonEmptyStr
@@ -293,7 +280,6 @@ class TemporalBranchPolicy(ContentAddressedModel):
 class TemporalCostPolicy(ContentAddressedModel):
     """Pinned retrieval cost and invocation/completion ordering."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     policy_id: NonEmptyStr
     simulated_duration_seconds: int = 0
     provider_spend_microusd: int = 0
@@ -327,7 +313,6 @@ class RetrievalBudgetVector(FrozenStrictModel):
 class TemporalCorpusManifest(ContentAddressedModel):
     """Complete immutable snapshot and its parent-world and lineage bindings."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     evidence_corpus_id: NonEmptyStr
     parent_profile_id: NonEmptyStr
     parent_generation_id: NonEmptyStr
@@ -342,9 +327,7 @@ class TemporalCorpusManifest(ContentAddressedModel):
         if not self.versions:
             raise ValueError("temporal corpus must contain evidence")
         _require_distinct((item.version_id for item in self.versions), "corpus version ids")
-        if tuple(item.version_id for item in self.versions) != tuple(
-            sorted(item.version_id for item in self.versions)
-        ):
+        if tuple(item.version_id for item in self.versions) != tuple(sorted(item.version_id for item in self.versions)):
             raise ValueError("corpus versions must be sorted")
         return self
 
@@ -352,7 +335,6 @@ class TemporalCorpusManifest(ContentAddressedModel):
 class TemporalEvidenceCapability(ContentAddressedModel):
     """Present-only declaration for one deterministic temporal corpus."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     profile: Literal["deterministic_snapshot"] = "deterministic_snapshot"
     evidence_corpus_id: NonEmptyStr
     corpus_snapshot_id: NonEmptyStr
@@ -367,7 +349,6 @@ class TemporalEvidenceCapability(ContentAddressedModel):
 class TemporalEvidenceBundle(ContentAddressedModel):
     """Complete enabled local corpus and every policy needed to replay it."""
 
-    schema_version: str = TEMPORAL_EVIDENCE_SCHEMA_VERSION
     capability: TemporalEvidenceCapability
     corpus_manifest: TemporalCorpusManifest
     lineage: TemporalEvidenceLineage
@@ -380,13 +361,9 @@ class TemporalEvidenceBundle(ContentAddressedModel):
 
     @model_validator(mode="after")
     def validate_bundle(self) -> Self:
-        manifest_refs = tuple(
-            (item.version_id, item.content_sha256)
-            for item in self.corpus_manifest.versions
-        )
+        manifest_refs = tuple((item.version_id, item.content_sha256) for item in self.corpus_manifest.versions)
         version_refs = tuple(
-            (item.version_id, item.content_sha256)
-            for item in sorted(self.versions, key=lambda item: item.version_id)
+            (item.version_id, item.content_sha256) for item in sorted(self.versions, key=lambda item: item.version_id)
         )
         if manifest_refs != version_refs:
             raise ValueError("corpus manifest and evidence versions differ")

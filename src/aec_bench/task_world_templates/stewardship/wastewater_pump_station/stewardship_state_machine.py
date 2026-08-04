@@ -12,7 +12,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
     PumpStationCoupledModel,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PUMP_STATION_COUPLED_TREATMENT_VERSION,
     CancelProcess,
     ContinueOperation,
     PumpStationCommonBoundaryRequest,
@@ -327,8 +326,6 @@ def apply_coupled_treatment(
     request: PumpStationCoupledTreatmentRequest,
 ) -> PumpStationCoupledTransition:
     """Apply one current child-only common-cause treatment."""
-    if request.version != PUMP_STATION_COUPLED_TREATMENT_VERSION:
-        raise PumpStationProposalError("coupled-treatment-version", request.version)
     if request.authority_id != "rollout-host":
         raise PumpStationProposalError("coupled-treatment-authority", request.authority_id)
     if request.base_state_id != state.state_id:

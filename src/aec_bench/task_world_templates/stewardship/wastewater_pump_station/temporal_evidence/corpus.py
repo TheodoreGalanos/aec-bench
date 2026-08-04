@@ -94,11 +94,11 @@ def build_reference_temporal_evidence_bundle(
     )
     retrieval_policy = TemporalRetrievalPolicy(
         policy_id="pump-station-local-retrieval.v1",
-        normalization_version="unicode-nfkc-lower-whitespace.v1",
-        index_version="token-index.v1",
-        ranking_version="token-frequency.v1",
-        tie_break_version="version-id-ascending.v1",
-        snippet_version="matched-window.v1",
+        normalization="unicode_nfkc_lower_whitespace",
+        index="token_index",
+        ranking="token_frequency",
+        tie_break="version_id_ascending",
+        snippet="matched_window",
         maximum_query_characters=256,
         maximum_results=5,
         maximum_snippet_characters=240,
@@ -194,11 +194,11 @@ def build_asw_8_reference_temporal_evidence_bundle(
     )
     retrieval_policy = TemporalRetrievalPolicy(
         policy_id="pump-station-asw-8-local-retrieval.v1",
-        normalization_version="unicode-nfkc-lower-whitespace.v1",
-        index_version="token-index.v1",
-        ranking_version="token-frequency.v1",
-        tie_break_version="version-id-ascending.v1",
-        snippet_version="matched-window.v1",
+        normalization="unicode_nfkc_lower_whitespace",
+        index="token_index",
+        ranking="token_frequency",
+        tie_break="version_id_ascending",
+        snippet="matched_window",
         maximum_query_characters=256,
         maximum_results=1,
         maximum_snippet_characters=240,

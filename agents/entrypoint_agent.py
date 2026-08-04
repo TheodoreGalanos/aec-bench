@@ -26,6 +26,7 @@ from aec_bench.adapters.rlm.providers import (
 )
 from aec_bench.adapters.runtime_limits import configured_positive_int, validate_runtime_limit_contract
 from aec_bench.agents.tools import inject_trajectory_writer
+from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.harness_instance import AgentBindingConfig
 from aec_bench.contracts.proposal_execution import (
     ProposalSessionExecutionRef,
@@ -51,15 +52,28 @@ from aec_bench.harness.proposal_session_output import (
 from aec_bench.harness.runtime_dependencies import PYDANTIC_AI_RUNTIME_VERSION, RUNTIME_PYTHON_PACKAGES
 from aec_bench.meta_harness.evidence_lifecycle_episode import LifecycleVisibilityPolicy
 from aec_bench.meta_harness.evidence_lifecycle_local import run_local_evidence_lifecycle_session
-from aec_bench.task_world_templates.continual.definition import (
-    ContinualWorldHarborPort,
-)
-from aec_bench.task_world_templates.continual_catalogue import default_continual_world_catalogue
 from aec_bench.task_world_templates.harbor_export import (
     HARBOR_LIFECYCLE_BRIDGE_MODE,
     HarborLifecycleBridge,
     load_harbor_lifecycle_bridge,
     write_harbor_lifecycle_attestation,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
+    PUMP_STATION_HARBOR_BRIDGE_MODE,
+    PUMP_STATION_HARBOR_EXECUTION_KIND,
+    PumpStationHarborBridge,
+    load_pump_station_harbor_bridge,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
+    PUMP_STATION_MODEL_CONTROLLER_MODE,
+    PUMP_STATION_MODEL_MAX_TURNS,
+    CompletedPumpStationModelSession,
+    CompletedPumpStationReferenceSession,
+    run_pump_station_model_session,
+    run_pump_station_reference_session,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+    PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -177,8 +191,7 @@ class EntrypointAgent(BaseAgent):
         self._params: dict[str, Any] = kwargs
         self._lifecycle_bridge: HarborLifecycleBridge | None = None
         self._proposal_inputs: LoadedProposalSessionHostInputs | None = None
-        self._world_session_port: ContinualWorldHarborPort | None = None
-        self._world_session_bridge: object | None = None
+        self._world_session_bridge: PumpStationHarborBridge | None = None
 
     @staticmethod
     def name() -> str:
@@ -190,12 +203,8 @@ class EntrypointAgent(BaseAgent):
     async def setup(self, environment: Any) -> None:
         if "world_session" in self._params:
             self._validate_world_session_configuration()
-            port = self._world_session_port
-            if port is None:
-                raise RuntimeError("continual-world Harbor port resolution failed")
-            bridge = port.load_bridge(Path(environment.environment_dir))
-            identity = port.bridge_identity(bridge)
-            if identity.execution_kind != self._params.get("execution_kind"):
+            bridge = load_pump_station_harbor_bridge(Path(environment.environment_dir))
+            if bridge.execution_kind != self._params.get("execution_kind"):
                 raise ValueError("continual-world Harbor bridge execution kind differs")
             self._world_session_bridge = bridge
             return
@@ -657,12 +666,8 @@ class EntrypointAgent(BaseAgent):
 
     def _validate_world_session_configuration(self) -> None:
         execution_kind = str(self._params.get("execution_kind") or "").strip()
-        if not execution_kind:
-            raise ValueError("continual-world session requires an execution kind")
-        try:
-            _, port = default_continual_world_catalogue().resolve_harbor(execution_kind)
-        except KeyError as exc:
-            raise ValueError(str(exc)) from exc
+        if execution_kind != PUMP_STATION_HARBOR_EXECUTION_KIND:
+            raise ValueError(f"unsupported world-session execution kind: {execution_kind}")
         if self._params.get("adapter") != "tool_loop":
             raise ValueError("continual-world session requires the tool_loop adapter")
         if self._params.get("extra_env") not in (None, {}):
@@ -688,11 +693,18 @@ class EntrypointAgent(BaseAgent):
             configuration=self._params,
         )
         _reject_serialized_provider_secrets(self._params)
-        port.validate_configuration(
-            configuration=self._params,
-            model_name=str(self.model_name or ""),
-        )
-        self._world_session_port = port
+        session = self._params.get("world_session")
+        if not isinstance(session, dict) or session.get("bridge_mode") != PUMP_STATION_HARBOR_BRIDGE_MODE:
+            raise ValueError("pump-station world-session bridge configuration differs")
+        model = str(self.model_name or "")
+        reference_controller = model == PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
+        expected_session = {"bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE}
+        if not reference_controller:
+            expected_session["controller"] = PUMP_STATION_MODEL_CONTROLLER_MODE
+        if session != expected_session:
+            raise ValueError("pump-station world-session bridge configuration differs")
+        if not reference_controller and not model.strip():
+            raise ValueError("pump-station model controller requires a model")
 
     async def _run_world_session(
         self,
@@ -703,18 +715,16 @@ class EntrypointAgent(BaseAgent):
     ) -> None:
         del instruction
         self._validate_world_session_configuration()
-        port = self._world_session_port
         configured_bridge = self._world_session_bridge
-        if port is None or configured_bridge is None:
+        if configured_bridge is None:
             raise RuntimeError("continual-world session setup has not completed")
-        current_bridge = port.load_bridge(Path(environment.environment_dir))
+        current_bridge = load_pump_station_harbor_bridge(Path(environment.environment_dir))
         if current_bridge != configured_bridge:
             raise ValueError("continual-world Harbor task changed after agent setup")
-        bridge_identity = port.bridge_identity(current_bridge)
         session_configuration = cast(dict[str, Any], self._params["world_session"])
         if (
-            self._params.get("execution_kind") != bridge_identity.execution_kind
-            or session_configuration.get("bridge_mode") != bridge_identity.bridge_mode
+            self._params.get("execution_kind") != current_bridge.execution_kind
+            or session_configuration.get("bridge_mode") != current_bridge.bridge_mode
         ):
             raise ValueError("continual-world Harbor bridge identity changed after setup")
         session_identity = str(getattr(environment, "session_id", "")).strip()
@@ -722,36 +732,65 @@ class EntrypointAgent(BaseAgent):
             raise RuntimeError("continual-world Harbor environment has no session identity")
 
         model = str(self.model_name or "")
-        uses_provider = port.uses_model_controller(
-            bridge=current_bridge,
-            model_name=model,
-        )
+        uses_provider = model != PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
         provider_environment = _host_model_provider_environment(model) if uses_provider else {}
-        max_turns = configured_positive_int(self._params, "max_turns") or port.default_max_turns
+        max_turns = configured_positive_int(self._params, "max_turns") or PUMP_STATION_MODEL_MAX_TURNS
         with tempfile.TemporaryDirectory(prefix="aec-bench-continual-world-harbor-") as raw_run:
             staging = Path(raw_run)
+            output_dir = staging / "world-session"
             try:
-                completed = await asyncio.to_thread(
-                    port.run_session,
-                    bridge=current_bridge,
-                    staging_dir=staging,
-                    session_identity=session_identity,
-                    model_name=model,
-                    max_turns=max_turns,
-                    registry=self._lifecycle_registry(),
-                )
+                completed: CompletedPumpStationModelSession | CompletedPumpStationReferenceSession
+                if uses_provider:
+                    completed = await asyncio.to_thread(
+                        run_pump_station_model_session,
+                        bridge=current_bridge,
+                        output_dir=output_dir,
+                        session_identity=session_identity,
+                        model=model,
+                        max_turns=max_turns,
+                        registry=self._lifecycle_registry(),
+                    )
+                    adapter_result = completed.adapter_result
+                    input_tokens = adapter_result.usage_input_tokens or 0
+                    output_tokens = adapter_result.usage_output_tokens or 0
+                    resolved_model = adapter_result.resolved_model
+                    completed_session_id = completed.request.session_id
+                    session_status = (
+                        "completed"
+                        if adapter_result.agent_output.status is AgentOutputStatus.COMPLETED
+                        and completed.verification.valid
+                        else "incomplete"
+                    )
+                    output_file = output_dir / "output.md"
+                else:
+                    completed = await asyncio.to_thread(
+                        run_pump_station_reference_session,
+                        bridge=current_bridge,
+                        output_dir=output_dir,
+                        session_identity=session_identity,
+                    )
+                    output_file = staging / "output.md"
+                    output_file.write_text(
+                        "The deterministic wastewater pump-station episode completed.\n",
+                        encoding="utf-8",
+                    )
+                    input_tokens = 0
+                    output_tokens = 0
+                    resolved_model = PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
+                    completed_session_id = completed.request.session_id
+                    session_status = "completed"
             except Exception as exc:
                 if not uses_provider:
                     raise
                 context.metadata = {
                     "adapter_name": "tool_loop",
-                    "bridge_mode": bridge_identity.bridge_mode,
-                    "bridge_manifest_sha256": bridge_identity.manifest_sha256,
+                    "bridge_mode": current_bridge.bridge_mode,
+                    "bridge_manifest_sha256": current_bridge.export_manifest_sha256,
                     "error": _redact_environment_values(
                         str(exc),
                         provider_environment,
                     ),
-                    "execution_kind": bridge_identity.execution_kind,
+                    "execution_kind": current_bridge.execution_kind,
                     "model": model,
                     "resolved_model": model,
                     "reward_owner": "harbor_verifier",
@@ -759,11 +798,11 @@ class EntrypointAgent(BaseAgent):
                 }
                 return
             await environment.upload_dir(
-                str(completed.output_dir),
-                bridge_identity.output_path,
+                str(output_dir),
+                current_bridge.output_path,
             )
             permissions = await environment.exec(
-                f"chmod -R go-rwx {bridge_identity.output_path}",
+                f"chmod -R go-rwx {current_bridge.output_path}",
             )
             if permissions.return_code != 0:
                 raise RuntimeError(
@@ -772,22 +811,22 @@ class EntrypointAgent(BaseAgent):
                     f"stderr: {permissions.stderr}",
                 )
             await environment.upload_file(
-                str(completed.output_file),
+                str(output_file),
                 "/workspace/output.md",
             )
 
-        context.n_input_tokens = completed.input_tokens
-        context.n_output_tokens = completed.output_tokens
+        context.n_input_tokens = input_tokens
+        context.n_output_tokens = output_tokens
         context.metadata = {
             "adapter_name": "tool_loop",
-            "bridge_mode": bridge_identity.bridge_mode,
-            "bridge_manifest_sha256": bridge_identity.manifest_sha256,
-            "execution_kind": bridge_identity.execution_kind,
-            "model": completed.resolved_model,
-            "resolved_model": completed.resolved_model,
+            "bridge_mode": current_bridge.bridge_mode,
+            "bridge_manifest_sha256": current_bridge.export_manifest_sha256,
+            "execution_kind": current_bridge.execution_kind,
+            "model": resolved_model,
+            "resolved_model": resolved_model,
             "reward_owner": "harbor_verifier",
-            "world_session_id": completed.session_id,
-            "world_session_status": completed.status,
+            "world_session_id": completed_session_id,
+            "world_session_status": session_status,
         }
 
 

@@ -30,12 +30,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
     PumpStationServiceRequirement,
 )
 
-PUMP_STATION_OPERATIONS_REVIEW_VERSION = "pump-station.operations-boundary-review.v1"
-PUMP_STATION_PROCESS_OUTCOME_VERSION = "pump-station.process-outcome.v1"
-PUMP_STATION_COMMON_BOUNDARY_CONTROL_VERSION = "pump-station.common-boundary-control.v1"
-PUMP_STATION_COUPLED_TREATMENT_VERSION = "pump-station.coupled-treatment.v1"
-PUMP_STATION_BOUND_CONTROL_VERSION = "pump-station.bound-control.v1"
-
 
 class PumpStationProposalError(ValueError):
     """Raised when a proposal or control leaves the current task contract."""
@@ -487,7 +481,6 @@ type PumpStationStewardshipStateRecord = PumpStationStewardshipState
 
 @dataclass(frozen=True, slots=True)
 class PumpStationOperationsBoundaryReviewRequest:
-    version: str
     review_id: str
     review_kind: str
     pump_id: str
@@ -509,7 +502,6 @@ class PumpStationOperationsBoundaryReviewRequest:
 
 @dataclass(frozen=True, slots=True)
 class PumpStationProcessOutcomeRequest:
-    version: str
     request_id: str
     authority_id: str
     process_id: str
@@ -528,7 +520,6 @@ class PumpStationProcessOutcomeRequest:
 
 @dataclass(frozen=True, slots=True)
 class PumpStationCommonBoundaryRequest:
-    version: str
     request_id: str
     authority_id: str
     boundary_kind: str
@@ -546,7 +537,6 @@ class PumpStationCommonBoundaryRequest:
 
 @dataclass(frozen=True, slots=True)
 class PumpStationCoupledTreatmentRequest:
-    version: str
     request_id: str
     authority_id: str
     treatment_label: str
@@ -574,7 +564,6 @@ type PumpStationRootControl = (
 
 @dataclass(frozen=True, slots=True)
 class PumpStationBoundControlRequest:
-    control_envelope_version: str
     request_id: str
     run_id: str
     episode_id: str
@@ -585,8 +574,6 @@ class PumpStationBoundControlRequest:
     control: PumpStationRootControl
 
     def __post_init__(self) -> None:
-        if self.control_envelope_version != PUMP_STATION_BOUND_CONTROL_VERSION:
-            _fail("control-envelope-version", self.control_envelope_version)
         for field_name in (
             "request_id",
             "run_id",

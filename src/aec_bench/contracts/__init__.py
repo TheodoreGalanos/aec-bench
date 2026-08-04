@@ -386,21 +386,16 @@ _EXPORTS_BY_MODULE: dict[str, tuple[str, ...]] = {
     ),
     "aec_bench.contracts.world_session": (
         "StewardshipStateSnapshotRef",
-        "WORLD_SESSION_SCHEMA_VERSION",
         "WorldSessionExecutionKind",
         "WorldSessionOpenMode",
         "WorldSessionRequest",
         "WorldSessionResult",
     ),
     "aec_bench.contracts.continual_world": (
-        "CONTINUAL_WORLD_DEFINITION_SCHEMA_VERSION",
-        "CONTINUAL_WORLD_PROFILE_SCHEMA_VERSION",
-        "ContinualWorldDefinitionRef",
-        "ContinualWorldDefinitionSpec",
         "ContinualWorldProfileRef",
+        "WorldBuildRef",
     ),
     "aec_bench.contracts.world_interface": (
-        "WORLD_CONTROL_INTERFACE_SCHEMA_VERSION",
         "WorldActorActionCapability",
         "WorldActorActionRequest",
         "WorldActorActionResult",

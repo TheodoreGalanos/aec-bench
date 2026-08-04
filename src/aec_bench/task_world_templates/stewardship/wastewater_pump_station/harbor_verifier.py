@@ -11,10 +11,12 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, cast
 
+from pydantic import TypeAdapter
+
 from aec_bench.contracts.continual_world import (
     ContinualRolloutChildRunRef,
-    ContinualWorldDefinitionRef,
     ContinualWorldProfileRef,
+    WorldBuildRef,
 )
 from aec_bench.contracts.world_session import StewardshipStateSnapshotRef, WorldSessionRequest, WorldSessionResult
 from aec_bench.evaluation.stewardship import evaluate_pump_station_reference_run
@@ -33,11 +35,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
     PUMP_STATION_HARBOR_EXECUTION_KIND,
-    PUMP_STATION_REGISTERED_HARBOR_EXPORT_SCHEMA_VERSION,
     is_pump_station_harbor_inventory_artifact,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
-    PUMP_STATION_HARBOR_RUN_SCHEMA_VERSION,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
@@ -74,15 +72,14 @@ def verify_pump_station_harbor_run(
     root = Path(run_dir)
     manifest = _read_json(export_manifest_path)
     if (
-        manifest.get("schema_version") != PUMP_STATION_REGISTERED_HARBOR_EXPORT_SCHEMA_VERSION
-        or manifest.get("execution_kind") != PUMP_STATION_HARBOR_EXECUTION_KIND
+        manifest.get("execution_kind") != PUMP_STATION_HARBOR_EXECUTION_KIND
         or manifest.get("task_world_id") != PUMP_STATION_TASK_WORLD_ID
     ):
         raise ValueError("pump-station Harbor export identity differs")
     definition = pump_station_continual_world_definition()
-    definition_ref = ContinualWorldDefinitionRef.model_validate(manifest.get("continual_definition"))
-    profile_ref = ContinualWorldProfileRef.model_validate(manifest.get("continual_profile"))
-    if definition_ref != definition.ref or profile_ref not in definition.spec.profiles:
+    world_build = TypeAdapter(WorldBuildRef).validate_python(manifest.get("world_build"))
+    profile_ref = TypeAdapter(ContinualWorldProfileRef).validate_python(manifest.get("continual_profile"))
+    if world_build != definition.ref or profile_ref not in definition.profiles:
         raise ValueError("pump-station Harbor profile is not registered")
     _verify_export_authority(
         manifest=manifest,
@@ -94,7 +91,7 @@ def verify_pump_station_harbor_run(
     child_ref = _verify_initial_run(
         manifest=manifest,
         initial_run_dir=initial_run_dir,
-        definition_ref=definition_ref,
+        world_build=world_build,
         profile_ref=profile_ref,
     )
 
@@ -105,8 +102,7 @@ def verify_pump_station_harbor_run(
     package_payload = _mapping(manifest.get("package"), "package")
     package = load_reference_package(Path(package_dir), profile_id=str(package_payload["profile_id"]))
     if (
-        inventory.get("schema_version") != PUMP_STATION_HARBOR_RUN_SCHEMA_VERSION
-        or inventory.get("execution_kind") != PUMP_STATION_HARBOR_EXECUTION_KIND
+        inventory.get("execution_kind") != PUMP_STATION_HARBOR_EXECUTION_KIND
         or inventory.get("task_world_id") != PUMP_STATION_TASK_WORLD_ID
         or inventory.get("export_manifest_sha256") != file_sha256(export_manifest_path)
         or inventory.get("verifier_runtime_sha256") != verifier_payload.get("runtime_wheel_sha256")
@@ -230,7 +226,7 @@ def _verify_initial_run(
     *,
     manifest: dict[str, Any],
     initial_run_dir: Path | None,
-    definition_ref: ContinualWorldDefinitionRef,
+    world_build: WorldBuildRef,
     profile_ref: ContinualWorldProfileRef,
 ) -> ContinualRolloutChildRunRef | None:
     payload = manifest.get("initial_run")
@@ -247,7 +243,7 @@ def _verify_initial_run(
     validate_pump_station_rollout_child_run(
         initial_run_dir,
         child_ref,
-        definition_ref=definition_ref,
+        world_build=world_build,
         profile_ref=profile_ref,
     )
     return child_ref

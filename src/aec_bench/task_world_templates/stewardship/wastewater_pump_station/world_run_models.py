@@ -1,5 +1,5 @@
 # ABOUTME: Defines the current durable records for one registered pump-station run.
-# ABOUTME: Keeps persistence versions at this edge and exposes no historical runtime family.
+# ABOUTME: Uses one current codec with no historical schema selectors or version families.
 
 from __future__ import annotations
 
@@ -15,35 +15,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationInformationSet,
 )
 
-# These values identify the current persisted document shapes. They are not live
-# protocol families and are not used to select executable behaviour.
-PUMP_STATION_WORLD_RECORD_VERSION = "pump-station-world-run.v2"
-PUMP_STATION_POINTER_RECORD_VERSION = "pump-station-world-run.v1"
-PUMP_STATION_STATE_SNAPSHOT_RECORD_VERSION = "pump-station-state-snapshot.v4"
-PUMP_STATION_COMMAND_RECORD_VERSION = "pump-station-world-command.v4"
-PUMP_STATION_STATE_RECORD_VERSION = "pump-station-stewardship-state.v4"
-PUMP_STATION_RECEIPT_RECORD_VERSION = "pump-station-transition-receipt.v4"
-PUMP_STATION_AUTHORITY_POLICY_RECORD_VERSION = "pump-station-authority-policy.v4"
-PUMP_STATION_TRANSITION_RULE_RECORD_VERSION = "pump-station-transition-rules.v4"
-
-
-@dataclass(frozen=True, slots=True)
-class PumpStationRecordVersions:
-    """Persistence versions selected by the one current run manifest."""
-
-    snapshot_version: str
-    receipt_version: str
-    authority_policy_version: str
-    transition_rule_version: str
-
-
-PUMP_STATION_RECORD_VERSIONS = PumpStationRecordVersions(
-    snapshot_version=PUMP_STATION_STATE_SNAPSHOT_RECORD_VERSION,
-    receipt_version=PUMP_STATION_RECEIPT_RECORD_VERSION,
-    authority_policy_version=PUMP_STATION_AUTHORITY_POLICY_RECORD_VERSION,
-    transition_rule_version=PUMP_STATION_TRANSITION_RULE_RECORD_VERSION,
-)
-
 
 class PumpStationWorldRunError(RuntimeError):
     """Raised when durable pump-station run evidence is invalid or unsafe."""
@@ -57,12 +28,6 @@ def require_world_run_text(value: object, field_name: str) -> None:
     """Require one non-empty durable identity."""
     if not isinstance(value, str) or not value.strip():
         raise PumpStationWorldRunError("world-run-shape", f"{field_name} must not be empty")
-
-
-def require_world_run_version(value: str, expected: str, code: str) -> None:
-    """Reject a document that is not the one current persisted shape."""
-    if value != expected:
-        raise PumpStationWorldRunError(code, value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,11 +93,6 @@ class PumpStationInitialStateSource:
 class PumpStationRegisteredWorldRunManifest:
     """Current persisted identity for one registered root or rollout branch."""
 
-    serialization_version: str
-    snapshot_version: str
-    receipt_version: str
-    authority_policy_version: str
-    transition_rule_version: str
     run_id: str
     episode_id: str
     world_branch_id: str
@@ -145,10 +105,9 @@ class PumpStationRegisteredWorldRunManifest:
     initial_sequence: int
     initial_state_id: str
     task_world_id: str
-    definition_version: str
-    definition_content_sha256: str
+    world_build_entry_point: str
+    world_build_artifact_sha256: str
     continual_profile_id: str
-    continual_profile_version: str
     continual_profile_content_sha256: str
     reference_system_id: str
     reference_system_content_id: str
@@ -164,14 +123,6 @@ class PumpStationRegisteredWorldRunManifest:
     initial_state_source: PumpStationInitialStateSource
 
     def __post_init__(self) -> None:
-        require_world_run_version(
-            self.serialization_version,
-            PUMP_STATION_WORLD_RECORD_VERSION,
-            "serialization-version",
-        )
-        versions = self.record_versions
-        if versions != PUMP_STATION_RECORD_VERSIONS:
-            raise PumpStationWorldRunError("record-versions", "manifest record versions differ")
         for field_name in (
             "run_id",
             "episode_id",
@@ -184,10 +135,9 @@ class PumpStationRegisteredWorldRunManifest:
             "model_id",
             "initial_state_id",
             "task_world_id",
-            "definition_version",
-            "definition_content_sha256",
+            "world_build_entry_point",
+            "world_build_artifact_sha256",
             "continual_profile_id",
-            "continual_profile_version",
             "continual_profile_content_sha256",
             "reference_system_id",
             "reference_system_content_id",
@@ -218,21 +168,11 @@ class PumpStationRegisteredWorldRunManifest:
                 "reference-system roots must start at sequence zero",
             )
 
-    @property
-    def record_versions(self) -> PumpStationRecordVersions:
-        return PumpStationRecordVersions(
-            snapshot_version=self.snapshot_version,
-            receipt_version=self.receipt_version,
-            authority_policy_version=self.authority_policy_version,
-            transition_rule_version=self.transition_rule_version,
-        )
-
 
 @dataclass(frozen=True, slots=True)
 class PumpStationStateSnapshotRef:
     """Exact dynamic state selected for one durable pump-station run."""
 
-    snapshot_version: str
     run_id: str
     episode_id: str
     world_branch_id: str
@@ -241,11 +181,6 @@ class PumpStationStateSnapshotRef:
     commit_id: str
 
     def __post_init__(self) -> None:
-        require_world_run_version(
-            self.snapshot_version,
-            PUMP_STATION_STATE_SNAPSHOT_RECORD_VERSION,
-            "snapshot-version",
-        )
         for field_name in ("run_id", "episode_id", "world_branch_id", "state_id", "commit_id"):
             require_world_run_text(getattr(self, field_name), field_name)
         if self.sequence < 0:
@@ -269,7 +204,6 @@ def _reject_nonstandard_json_constant(value: str) -> NoReturn:
 class PumpStationCommand:
     """Persistence-edge command bound to one selected current parent."""
 
-    command_version: str
     kind: str
     request_id: str
     request_content_id: str
@@ -290,7 +224,6 @@ class PumpStationCommand:
     authority_id: str | None = None
 
     def __post_init__(self) -> None:
-        require_world_run_version(self.command_version, PUMP_STATION_COMMAND_RECORD_VERSION, "command-version")
         expected_actions = {
             "operations_review": "operations_boundary_review",
             "process_outcome": "process_outcome",
@@ -353,7 +286,6 @@ class PumpStationCommand:
 class PumpStationWorldRunCommit:
     """Opening commit for the one current run record family."""
 
-    serialization_version: str
     run_id: str
     sequence: int
     parent_commit_id: None
@@ -365,11 +297,6 @@ class PumpStationWorldRunCommit:
     event_batch_content_id: None
 
     def __post_init__(self) -> None:
-        require_world_run_version(
-            self.serialization_version,
-            PUMP_STATION_POINTER_RECORD_VERSION,
-            "serialization-version",
-        )
         require_world_run_text(self.run_id, "run_id")
         require_world_run_text(self.state_id, "state_id")
         if self.sequence < 0:
@@ -380,7 +307,6 @@ class PumpStationWorldRunCommit:
 class PumpStationCommandCommit:
     """Immutable link from one parent commit to complete current command evidence."""
 
-    serialization_version: str
     run_id: str
     sequence: int
     parent_commit_id: str
@@ -392,11 +318,6 @@ class PumpStationCommandCommit:
     receipt_content_id: str
 
     def __post_init__(self) -> None:
-        require_world_run_version(
-            self.serialization_version,
-            PUMP_STATION_WORLD_RECORD_VERSION,
-            "serialization-version",
-        )
         for field_name in (
             "run_id",
             "parent_commit_id",
@@ -425,18 +346,10 @@ type PumpStationCommit = PumpStationWorldRunCommit | PumpStationCommandCommit
 class PumpStationCurrentRunPointer:
     """Single mutable selector for the last atomically published commit."""
 
-    serialization_version: str
     run_id: str
     sequence: int
     state_id: str
     commit_id: str
-
-    def __post_init__(self) -> None:
-        require_world_run_version(
-            self.serialization_version,
-            PUMP_STATION_POINTER_RECORD_VERSION,
-            "serialization-version",
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -461,17 +374,11 @@ class PumpStationStagedCommand:
 
 
 __all__ = [
-    "PUMP_STATION_COMMAND_RECORD_VERSION",
-    "PUMP_STATION_POINTER_RECORD_VERSION",
-    "PUMP_STATION_RECORD_VERSIONS",
-    "PUMP_STATION_STATE_SNAPSHOT_RECORD_VERSION",
-    "PUMP_STATION_WORLD_RECORD_VERSION",
     "PumpStationCommand",
     "PumpStationCommandCommit",
     "PumpStationCommit",
     "PumpStationCurrentRunPointer",
     "PumpStationInitialStateSource",
-    "PumpStationRecordVersions",
     "PumpStationRegisteredWorldRunManifest",
     "PumpStationStagedCommand",
     "PumpStationStateSnapshotRef",

@@ -61,7 +61,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     decode_pump_station_command,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
-    PUMP_STATION_POINTER_RECORD_VERSION,
     PumpStationCommand,
     PumpStationCommandCommit,
     PumpStationCommit,
@@ -158,7 +157,6 @@ class PumpStationWorldRunRepository:
             self._publish_root_immutable("manifest.json", manifest)
             self._publish_state(initial_state)
             commit = PumpStationWorldRunCommit(
-                serialization_version=PUMP_STATION_POINTER_RECORD_VERSION,
                 run_id=manifest.run_id,
                 sequence=manifest.initial_sequence,
                 parent_commit_id=None,
@@ -174,7 +172,6 @@ class PumpStationWorldRunRepository:
             if before_select is not None:
                 before_select()
             pointer = PumpStationCurrentRunPointer(
-                serialization_version=PUMP_STATION_POINTER_RECORD_VERSION,
                 run_id=manifest.run_id,
                 sequence=manifest.initial_sequence,
                 state_id=manifest.initial_state_id,
@@ -231,7 +228,6 @@ class PumpStationWorldRunRepository:
             _fail("artifact-integrity", "commit is not on the selected chain")
         manifest = self.load_manifest()
         return PumpStationStateSnapshotRef(
-            snapshot_version=manifest.snapshot_version,
             run_id=manifest.run_id,
             episode_id=manifest.episode_id,
             world_branch_id=manifest.world_branch_id,
@@ -306,7 +302,6 @@ class PumpStationWorldRunRepository:
             )
         self._publish_content("receipts", receipt_content_id, receipt)
         commit = PumpStationCommandCommit(
-            serialization_version=manifest.serialization_version,
             run_id=manifest.run_id,
             sequence=receipt.sequence,
             parent_commit_id=prior_snapshot.commit_id,
@@ -322,7 +317,6 @@ class PumpStationWorldRunRepository:
         return PumpStationStagedCommand(
             prior_snapshot=prior_snapshot,
             snapshot=PumpStationStateSnapshotRef(
-                snapshot_version=manifest.snapshot_version,
                 run_id=manifest.run_id,
                 episode_id=manifest.episode_id,
                 world_branch_id=manifest.world_branch_id,
@@ -353,7 +347,6 @@ class PumpStationWorldRunRepository:
             _fail("stale-publication", "world run advanced after transition preparation")
         self._replace_current(
             PumpStationCurrentRunPointer(
-                serialization_version=PUMP_STATION_POINTER_RECORD_VERSION,
                 run_id=staged.snapshot.run_id,
                 sequence=staged.snapshot.sequence,
                 state_id=staged.snapshot.state_id,
@@ -375,7 +368,6 @@ class PumpStationWorldRunRepository:
             or commit.sequence != snapshot.sequence
             or commit.parent_commit_id != prior.commit_id
             or commit.state_id != snapshot.state_id
-            or snapshot.snapshot_version != prior.snapshot_version
             or snapshot.run_id != prior.run_id
             or snapshot.episode_id != prior.episode_id
             or snapshot.world_branch_id != prior.world_branch_id
@@ -465,7 +457,6 @@ class PumpStationWorldRunRepository:
             _fail("transition-integrity", "staged recovery does not extend its parent")
         staged = PumpStationStagedCommand(
             prior_snapshot=PumpStationStateSnapshotRef(
-                snapshot_version=manifest.snapshot_version,
                 run_id=manifest.run_id,
                 episode_id=manifest.episode_id,
                 world_branch_id=manifest.world_branch_id,
@@ -474,7 +465,6 @@ class PumpStationWorldRunRepository:
                 commit_id=commit.parent_commit_id,
             ),
             snapshot=PumpStationStateSnapshotRef(
-                snapshot_version=manifest.snapshot_version,
                 run_id=manifest.run_id,
                 episode_id=manifest.episode_id,
                 world_branch_id=manifest.world_branch_id,
@@ -519,12 +509,10 @@ class PumpStationWorldRunRepository:
     def commits_through(self, snapshot: PumpStationStateSnapshotRef) -> tuple[PumpStationCommit, ...]:
         manifest = self.load_manifest()
         if (
-            snapshot.snapshot_version,
             snapshot.run_id,
             snapshot.episode_id,
             snapshot.world_branch_id,
         ) != (
-            manifest.snapshot_version,
             manifest.run_id,
             manifest.episode_id,
             manifest.world_branch_id,
@@ -817,7 +805,6 @@ class PumpStationWorldRunRepository:
         pointer: PumpStationCurrentRunPointer,
     ) -> PumpStationStateSnapshotRef:
         return PumpStationStateSnapshotRef(
-            snapshot_version=manifest.snapshot_version,
             run_id=manifest.run_id,
             episode_id=manifest.episode_id,
             world_branch_id=manifest.world_branch_id,

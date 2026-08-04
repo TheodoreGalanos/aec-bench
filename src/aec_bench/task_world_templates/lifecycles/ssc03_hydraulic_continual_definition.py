@@ -8,11 +8,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-from aec_bench.contracts.continual_world import (
-    ContinualWorldDefinitionRef,
-    ContinualWorldDefinitionSpec,
-    ContinualWorldProfileRef,
-)
+from aec_bench.contracts.continual_world import ContinualWorldProfileRef, WorldBuildRef
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
 from aec_bench.meta_harness.evidence_lifecycle_episode import LifecycleEpisodeEnvironment
 from aec_bench.meta_harness.lifecycle_operation_protocol import LifecycleOperationResolver
@@ -26,7 +22,7 @@ from aec_bench.task_world_templates.compiled_world import (
 from aec_bench.task_world_templates.continual.definition import (
     ContinualWorldDefinition,
     LoadedContinualWorldProfile,
-    python_source_sha256,
+    source_tree_world_build,
 )
 from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate
 from aec_bench.task_world_templates.hydraulics.revisions import build_hydraulic_revision_source_state
@@ -36,15 +32,8 @@ from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_interaction_varia
     TEMPLATE_ID,
     get_ssc03_hydraulic_interaction_variant,
 )
-from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_rollout_adapter import (
-    Ssc03HydraulicContinualBranchPort,
-    ssc03_hydraulic_continual_branch_port,
-    ssc03_hydraulic_rollout_source_sha256,
-)
 
 SSC03_HYDRAULIC_CONTINUAL_WORLD_ID = "aec.task_world.composite.hydraulic-interaction-lifecycle-review"
-SSC03_HYDRAULIC_CONTINUAL_DEFINITION_VERSION = "1"
-SSC03_HYDRAULIC_PROFILE_VERSION = "1"
 
 
 @dataclass(frozen=True)
@@ -52,7 +41,7 @@ class Ssc03HydraulicContinualProfile:
     """Immutable SSC-03 profile binding over the existing lifecycle adapter."""
 
     reference: ContinualWorldProfileRef
-    definition_reference: ContinualWorldDefinitionRef
+    world_build: WorldBuildRef
 
     @property
     def profile_id(self) -> str:
@@ -98,7 +87,7 @@ class Ssc03HydraulicContinualProfile:
         return adapter.verify(Path(package_dir), Path(run_dir))
 
     def _validated_port(self) -> tuple[CompositeTaskWorldTemplate, LifecycleWorldAdapter]:
-        if _ssc03_definition_spec().ref != self.definition_reference:
+        if _ssc03_world_build() != self.world_build:
             raise ValueError("SSC-03 continual-world definition implementation differs")
         current = _profile_ref(self.profile_id)
         if current != self.reference:
@@ -123,8 +112,7 @@ def _validated_context() -> tuple[CompositeTaskWorldTemplate, LifecycleWorldAdap
         raise ValueError("SSC-03 continual-world identity differs")
     adapter = registered_lifecycle_adapter(TEMPLATE_ID)
     validate_lifecycle_world_adapter(template, adapter)
-    identity = adapter.identity()
-    if identity.operation_resolver_factory is None or identity.smoke_environment_factory is None:
+    if "operations" not in adapter.identity().capabilities:
         raise ValueError("SSC-03 continual-world adapter is missing an executable lifecycle port")
     return template, adapter
 
@@ -137,7 +125,6 @@ def _profile_ref(profile_id: str) -> ContinualWorldProfileRef:
     variant = get_ssc03_hydraulic_interaction_variant(profile_id)
     profile_content_sha256 = canonical_content_sha256(
         {
-            "schema_version": "aecbench.ssc03-hydraulic-continual-profile.v1",
             "task_world_id": lifecycle.world_id,
             "template": template.model_dump(mode="json"),
             "variant": variant.model_dump(mode="json"),
@@ -148,7 +135,6 @@ def _profile_ref(profile_id: str) -> ContinualWorldProfileRef:
     return ContinualWorldProfileRef(
         task_world_id=lifecycle.world_id,
         profile_id=profile_id,
-        profile_version=SSC03_HYDRAULIC_PROFILE_VERSION,
         profile_content_sha256=profile_content_sha256,
     )
 
@@ -165,44 +151,36 @@ def _load_ssc03_hydraulic_profile(reference: ContinualWorldProfileRef) -> Loaded
         reference=reference,
         value=Ssc03HydraulicContinualProfile(
             reference=reference,
-            definition_reference=_ssc03_definition_spec().ref,
+            world_build=_ssc03_world_build(),
         ),
     )
 
 
-def _implementation_content_sha256(adapter: LifecycleWorldAdapter) -> str:
-    return canonical_content_sha256(
-        {
-            "adapter": adapter.identity().model_dump(mode="json"),
-            "definition_spec_builder": python_source_sha256(_ssc03_definition_spec),
-            "implementation_identity_builder": python_source_sha256(_implementation_content_sha256),
-            "loaded_profile": python_source_sha256(Ssc03HydraulicContinualProfile),
-            "profile_loader": python_source_sha256(_load_ssc03_hydraulic_profile),
-            "profile_reference": python_source_sha256(_profile_ref),
-            "rollout_branch_port": python_source_sha256(Ssc03HydraulicContinualBranchPort),
-            "rollout_branch_source": ssc03_hydraulic_rollout_source_sha256(),
-        }
-    )
-
-
-def _ssc03_definition_spec() -> ContinualWorldDefinitionSpec:
-    template, adapter = _validated_context()
-    assert template.evidence_lifecycle is not None
-    task_world_id = template.evidence_lifecycle.world_id
-    profiles = tuple(_profile_ref(profile_id) for profile_id in adapter.variant_ids())
-    return ContinualWorldDefinitionSpec(
-        task_world_id=task_world_id,
-        definition_version=SSC03_HYDRAULIC_CONTINUAL_DEFINITION_VERSION,
-        implementation_content_sha256=_implementation_content_sha256(adapter),
-        profiles=profiles,
+@cache
+def _ssc03_world_build() -> WorldBuildRef:
+    source_root = Path(__file__).resolve().parents[1]
+    return source_tree_world_build(
+        task_world_id=SSC03_HYDRAULIC_CONTINUAL_WORLD_ID,
+        entry_point=(
+            "aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_continual_definition:"
+            "ssc03_hydraulic_continual_world_definition"
+        ),
+        roots=(
+            Path(__file__),
+            source_root / "compiled_world.py",
+            source_root / "lifecycles",
+            source_root / "hydraulics",
+            source_root / "continual",
+        ),
     )
 
 
 @cache
 def ssc03_hydraulic_continual_world_definition() -> ContinualWorldDefinition:
     """Return the exact SSC-03 world definition over the existing lifecycle adapter."""
+    _, adapter = _validated_context()
     return ContinualWorldDefinition(
-        spec=_ssc03_definition_spec(),
+        build=_ssc03_world_build(),
+        profiles=tuple(_profile_ref(profile_id) for profile_id in adapter.variant_ids()),
         profile_loader=_load_ssc03_hydraulic_profile,
-        branch_port=ssc03_hydraulic_continual_branch_port(),
     )

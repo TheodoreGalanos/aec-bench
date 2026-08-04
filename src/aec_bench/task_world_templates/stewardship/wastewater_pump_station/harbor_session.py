@@ -60,7 +60,6 @@ from aec_bench.trajectory.writer import TrajectoryWriter
 
 PUMP_STATION_MODEL_CONTROLLER_MODE = "model"
 PUMP_STATION_MODEL_MAX_TURNS = 90
-PUMP_STATION_HARBOR_RUN_SCHEMA_VERSION = "aecbench.pump-station-harbor-run.v1"
 
 
 @dataclass(frozen=True)
@@ -509,14 +508,14 @@ def _run_rollout_child_reference(
 def _copy_rollout_child_for_execution(*, bridge: PumpStationHarborBridge, repository_root: Path) -> None:
     source = bridge.initial_run_root
     child_ref = bridge.rollout_child_ref
-    definition_ref = bridge.definition_ref
+    world_build = bridge.world_build
     profile_ref = bridge.profile_ref
-    if source is None or child_ref is None or definition_ref is None or profile_ref is None:
+    if source is None or child_ref is None or world_build is None or profile_ref is None:
         raise ValueError("pump-station Harbor rollout child authority is incomplete")
     validate_pump_station_rollout_child_run(
         source,
         child_ref,
-        definition_ref=definition_ref,
+        world_build=world_build,
         profile_ref=profile_ref,
     )
     expected_sha256 = directory_sha256(source)
@@ -526,7 +525,7 @@ def _copy_rollout_child_for_execution(*, bridge: PumpStationHarborBridge, reposi
     validate_pump_station_rollout_child_run(
         repository_root,
         child_ref,
-        definition_ref=definition_ref,
+        world_build=world_build,
         profile_ref=profile_ref,
     )
 
@@ -544,12 +543,10 @@ def _shared_snapshot(snapshot: Any) -> StewardshipStateSnapshotRef:
 
 def _private_snapshot(snapshot: StewardshipStateSnapshotRef) -> Any:
     from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
-        PUMP_STATION_STATE_SNAPSHOT_RECORD_VERSION,
         PumpStationStateSnapshotRef,
     )
 
     return PumpStationStateSnapshotRef(
-        snapshot_version=PUMP_STATION_STATE_SNAPSHOT_RECORD_VERSION,
         run_id=snapshot.run_id,
         episode_id=snapshot.episode_id,
         world_branch_id=snapshot.world_branch_id,
@@ -597,7 +594,6 @@ def _artifact_inventory(
             }
         )
     inventory: dict[str, Any] = {
-        "schema_version": PUMP_STATION_HARBOR_RUN_SCHEMA_VERSION,
         "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
         "task_world_id": PUMP_STATION_TASK_WORLD_ID,
         "controller_id": controller_id,
@@ -711,7 +707,6 @@ def _read_json(path: Path) -> dict[str, Any]:
 __all__ = (
     "CompletedPumpStationModelSession",
     "CompletedPumpStationReferenceSession",
-    "PUMP_STATION_HARBOR_RUN_SCHEMA_VERSION",
     "PUMP_STATION_MODEL_CONTROLLER_MODE",
     "PUMP_STATION_MODEL_MAX_TURNS",
     "run_pump_station_model_session",

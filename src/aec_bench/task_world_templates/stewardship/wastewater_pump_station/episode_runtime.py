@@ -81,7 +81,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     PumpStationWorldRun,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
-    PUMP_STATION_COMMAND_RECORD_VERSION,
     PumpStationCommand,
     PumpStationRegisteredWorldRunManifest,
     PumpStationStateSnapshotRef,
@@ -494,7 +493,6 @@ class PumpStationEpisodeHost:
             ),
         )
         command = PumpStationCommand(
-            command_version=PUMP_STATION_COMMAND_RECORD_VERSION,
             kind="actor",
             request_id=request.request_id,
             request_content_id=_request_content_id(request),
@@ -588,7 +586,7 @@ class PumpStationEpisodeHost:
         return canonical_content_sha256(
             {
                 "task_world_id": manifest.task_world_id,
-                "world_build": manifest.definition_content_sha256,
+                "world_build": manifest.world_build_artifact_sha256,
                 "profile": manifest.continual_profile_content_sha256,
                 "run_id": manifest.run_id,
                 "episode_id": manifest.episode_id,

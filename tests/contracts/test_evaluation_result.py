@@ -214,7 +214,6 @@ def _stewardship_evaluation(
         errors=(() if artifact_and_replay_integrity else ("artifact and replay evidence differs",)),
     )
     return StewardshipEvaluation(
-        schema_version="stewardship-evaluation.v1",
         valid=artifact_and_replay_integrity,
         gates=gates,
         metrics=StewardshipMetricVector(

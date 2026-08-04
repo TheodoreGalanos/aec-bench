@@ -18,7 +18,7 @@ from aec_bench.contracts.continual_world import (
     ContinualRolloutGroupRequest,
     ContinualRolloutGroupState,
     ContinualRolloutLineage,
-    ContinualWorldDefinitionSpec,
+    WorldBuildRef,
 )
 from aec_bench.meta_harness.evidence_lifecycle import (
     EvidenceLifecycleError,
@@ -39,6 +39,7 @@ from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_continual_definit
 )
 from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_rollout_adapter import (
     Ssc03HydraulicRolloutBranchReceipt,
+    ssc03_hydraulic_continual_branch_port,
     ssc03_hydraulic_rollout_origin,
 )
 
@@ -51,7 +52,7 @@ def test_shared_control_rejects_all_unsafe_storage_identities_before_origin_or_w
     tmp_path: Path,
 ) -> None:
     definition = ssc03_hydraulic_continual_world_definition()
-    profile_ref = definition.profile_ref("major_idf_revision", "1")
+    profile_ref = definition.profile_ref("major_idf_revision")
     loaded = definition.load_profile(profile_ref)
     assert isinstance(loaded.value, Ssc03HydraulicContinualProfile)
     compiled = loaded.value.compile(tmp_path / "package")
@@ -75,7 +76,7 @@ def test_shared_control_rejects_all_unsafe_storage_identities_before_origin_or_w
         group_id="storage-preflight-group",
         task_world_id=definition.ref.task_world_id,
         authority_id="host-control",
-        definition_ref=definition.ref,
+        world_build=definition.build,
         profile_ref=profile_ref,
         parent_manifest_content_sha256=origin.parent_manifest_content_sha256,
         parent_snapshot=origin.parent_snapshot,
@@ -86,6 +87,7 @@ def test_shared_control_rejects_all_unsafe_storage_identities_before_origin_or_w
     rollout_root = tmp_path / "rollouts"
     control = ContinualRolloutControl(
         definition,
+        ssc03_hydraulic_continual_branch_port(),
         parent_run_root=parent_run,
         rollout_repository_root=rollout_root,
         authorised_principal_ids=("host-control",),
@@ -137,7 +139,7 @@ def test_shared_control_branches_two_real_ssc03_children_from_one_chosen_checkpo
     tmp_path: Path,
 ) -> None:
     definition = ssc03_hydraulic_continual_world_definition()
-    profile_ref = definition.profile_ref("major_idf_revision", "1")
+    profile_ref = definition.profile_ref("major_idf_revision")
     loaded = definition.load_profile(profile_ref)
     assert isinstance(loaded.value, Ssc03HydraulicContinualProfile)
     compiled = loaded.value.compile(tmp_path / "package")
@@ -171,7 +173,7 @@ def test_shared_control_branches_two_real_ssc03_children_from_one_chosen_checkpo
         group_id="group-ssc03-1",
         task_world_id=definition.ref.task_world_id,
         authority_id="host-control",
-        definition_ref=definition.ref,
+        world_build=definition.build,
         profile_ref=profile_ref,
         parent_manifest_content_sha256=origin.parent_manifest_content_sha256,
         parent_snapshot=origin.parent_snapshot,
@@ -194,6 +196,7 @@ def test_shared_control_branches_two_real_ssc03_children_from_one_chosen_checkpo
     )
     control = ContinualRolloutControl(
         definition,
+        ssc03_hydraulic_continual_branch_port(),
         parent_run_root=parent_run,
         rollout_repository_root=tmp_path / "rollouts",
         authorised_principal_ids=("host-control",),
@@ -248,15 +251,18 @@ def test_shared_control_branches_two_real_ssc03_children_from_one_chosen_checkpo
     with pytest.raises(ContinualRolloutError, match="request-conflict"):
         control.create_group(ContinualRolloutGroupRequest(**changed_payload))
 
-    stale_spec_payload = definition.spec.model_dump(mode="python", exclude={"content_sha256"})
-    stale_spec_payload["implementation_content_sha256"] = "f" * 64
     stale_definition = ContinualWorldDefinition(
-        spec=ContinualWorldDefinitionSpec(**stale_spec_payload),
+        build=WorldBuildRef(
+            task_world_id=definition.build.task_world_id,
+            entry_point=definition.build.entry_point,
+            artifact_sha256="f" * 64,
+        ),
+        profiles=definition.profiles,
         profile_loader=definition.profile_loader,
-        branch_port=definition.branch_port,
     )
     stale_control = ContinualRolloutControl(
         stale_definition,
+        ssc03_hydraulic_continual_branch_port(),
         parent_run_root=parent_run,
         rollout_repository_root=tmp_path / "rollouts",
         authorised_principal_ids=("host-control",),
@@ -316,7 +322,7 @@ def test_nested_ssc03_rollout_keeps_declared_parent_run_identity_and_lineage(
     tmp_path: Path,
 ) -> None:
     definition = ssc03_hydraulic_continual_world_definition()
-    profile_ref = definition.profile_ref("major_idf_revision", "1")
+    profile_ref = definition.profile_ref("major_idf_revision")
     loaded = definition.load_profile(profile_ref)
     assert isinstance(loaded.value, Ssc03HydraulicContinualProfile)
     compiled = loaded.value.compile(tmp_path / "package")
@@ -340,7 +346,7 @@ def test_nested_ssc03_rollout_keeps_declared_parent_run_identity_and_lineage(
         group_id="nested-parent-group",
         task_world_id=definition.ref.task_world_id,
         authority_id="host-control",
-        definition_ref=definition.ref,
+        world_build=definition.build,
         profile_ref=profile_ref,
         parent_manifest_content_sha256=parent_origin.parent_manifest_content_sha256,
         parent_snapshot=parent_origin.parent_snapshot,
@@ -350,6 +356,7 @@ def test_nested_ssc03_rollout_keeps_declared_parent_run_identity_and_lineage(
     )
     parent_control = ContinualRolloutControl(
         definition,
+        ssc03_hydraulic_continual_branch_port(),
         parent_run_root=parent_run,
         rollout_repository_root=tmp_path / "parent-rollouts",
         authorised_principal_ids=("host-control",),
@@ -380,7 +387,7 @@ def test_nested_ssc03_rollout_keeps_declared_parent_run_identity_and_lineage(
         group_id="nested-group",
         task_world_id=definition.ref.task_world_id,
         authority_id="host-control",
-        definition_ref=definition.ref,
+        world_build=definition.build,
         profile_ref=profile_ref,
         parent_manifest_content_sha256=nested_origin.parent_manifest_content_sha256,
         parent_snapshot=nested_origin.parent_snapshot,
@@ -390,6 +397,7 @@ def test_nested_ssc03_rollout_keeps_declared_parent_run_identity_and_lineage(
     )
     nested_control = ContinualRolloutControl(
         definition,
+        ssc03_hydraulic_continual_branch_port(),
         parent_run_root=nested_parent_root,
         rollout_repository_root=tmp_path / "nested-rollouts",
         authorised_principal_ids=("host-control",),
@@ -433,7 +441,7 @@ def test_shared_control_recovers_real_ssc03_child_created_before_its_receipt(
     tmp_path: Path,
 ) -> None:
     definition = ssc03_hydraulic_continual_world_definition()
-    profile_ref = definition.profile_ref("major_idf_revision", "1")
+    profile_ref = definition.profile_ref("major_idf_revision")
     loaded = definition.load_profile(profile_ref)
     assert isinstance(loaded.value, Ssc03HydraulicContinualProfile)
     compiled = loaded.value.compile(tmp_path / "package")
@@ -457,7 +465,7 @@ def test_shared_control_recovers_real_ssc03_child_created_before_its_receipt(
         group_id="interrupted-group",
         task_world_id=definition.ref.task_world_id,
         authority_id="host-control",
-        definition_ref=definition.ref,
+        world_build=definition.build,
         profile_ref=profile_ref,
         parent_manifest_content_sha256=origin_fields.parent_manifest_content_sha256,
         parent_snapshot=origin_fields.parent_snapshot,
@@ -471,13 +479,14 @@ def test_shared_control_recovers_real_ssc03_child_created_before_its_receipt(
     )
     control = ContinualRolloutControl(
         definition,
+        ssc03_hydraulic_continual_branch_port(),
         parent_run_root=parent_run,
         rollout_repository_root=tmp_path / "rollouts",
         authorised_principal_ids=("host-control",),
         package_root=compiled.package_dir,
     )
-    assert definition.branch_port is not None
-    verified_origin = definition.branch_port.verify_origin(
+    branch_port = ssc03_hydraulic_continual_branch_port()
+    verified_origin = branch_port.verify_origin(
         profile_value=loaded.value,
         package_root=compiled.package_dir,
         parent_run_root=parent_run,
@@ -488,7 +497,7 @@ def test_shared_control_recovers_real_ssc03_child_created_before_its_receipt(
     assert control.group_status(request.group_id).state is ContinualRolloutGroupState.PREPARING
     with repository.locked(request.group_id):
         repository.publish_child_request(request.group_id, child)
-    definition.branch_port.materialize_child(
+    branch_port.materialize_child(
         profile_value=loaded.value,
         package_root=compiled.package_dir,
         parent_run_root=parent_run,
@@ -591,7 +600,7 @@ def test_ssc03_historical_rollout_validates_only_the_selected_submission_prefix(
     tmp_path: Path,
 ) -> None:
     definition = ssc03_hydraulic_continual_world_definition()
-    profile_ref = definition.profile_ref("major_idf_revision", "1")
+    profile_ref = definition.profile_ref("major_idf_revision")
     loaded = definition.load_profile(profile_ref)
     assert isinstance(loaded.value, Ssc03HydraulicContinualProfile)
     compiled = loaded.value.compile(tmp_path / "package")
@@ -623,7 +632,7 @@ def test_ssc03_historical_rollout_validates_only_the_selected_submission_prefix(
         group_id="historical-prefix-group",
         task_world_id=definition.ref.task_world_id,
         authority_id="host-control",
-        definition_ref=definition.ref,
+        world_build=definition.build,
         profile_ref=profile_ref,
         parent_manifest_content_sha256=origin.parent_manifest_content_sha256,
         parent_snapshot=origin.parent_snapshot,
@@ -633,6 +642,7 @@ def test_ssc03_historical_rollout_validates_only_the_selected_submission_prefix(
     )
     control = ContinualRolloutControl(
         definition,
+        ssc03_hydraulic_continual_branch_port(),
         parent_run_root=parent_run,
         rollout_repository_root=tmp_path / "rollouts",
         authorised_principal_ids=("host-control",),

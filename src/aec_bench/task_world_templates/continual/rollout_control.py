@@ -34,20 +34,19 @@ class ContinualRolloutControl:
     def __init__(
         self,
         definition: ContinualWorldDefinition,
+        branch_port: ContinualWorldBranchPort,
         *,
         parent_run_root: Path,
         rollout_repository_root: Path,
         authorised_principal_ids: tuple[str, ...],
         package_root: Path | None = None,
     ) -> None:
-        if definition.branch_port is None:
-            raise ValueError("continual-world definition has no registered branch port")
         if not authorised_principal_ids or any(not principal.strip() for principal in authorised_principal_ids):
             raise ValueError("continual rollout control requires one authorised host principal")
         if len(authorised_principal_ids) != len(set(authorised_principal_ids)):
             raise ValueError("continual rollout host principals must be distinct")
         self._definition = definition
-        self._branch_port: ContinualWorldBranchPort = definition.branch_port
+        self._branch_port = branch_port
         self._parent_run_root = Path(parent_run_root)
         self._package_root = Path(package_root) if package_root is not None else None
         disjoint_roots = (self._parent_run_root,) + ((self._package_root,) if self._package_root is not None else ())
@@ -106,7 +105,7 @@ class ContinualRolloutControl:
                 request_id=selected.request_id,
                 group_id=selected.group_id,
                 task_world_id=selected.task_world_id,
-                definition_ref=selected.definition_ref,
+                world_build=selected.world_build,
                 profile_ref=selected.profile_ref,
                 request_content_sha256=selected.content_sha256,
                 parent_manifest_content_sha256=selected.parent_manifest_content_sha256,
@@ -232,7 +231,7 @@ class ContinualRolloutControl:
             raise ContinualRolloutError("request-integrity", str(exc)) from exc
         if selected.authority_id not in self._authorised_principal_ids:
             raise ContinualRolloutError("authority", "rollout authority is not authorised")
-        if selected.definition_ref != self._definition.ref:
+        if selected.world_build != self._definition.ref:
             raise ContinualRolloutError("definition", "rollout definition reference does not match")
         if selected.task_world_id != self._definition.ref.task_world_id:
             raise ContinualRolloutError("task-world", "rollout task world does not match")
@@ -463,7 +462,7 @@ class ContinualRolloutControl:
             lineage.request_id != request.request_id
             or lineage.group_id != request.group_id
             or lineage.task_world_id != request.task_world_id
-            or lineage.definition_ref != request.definition_ref
+            or lineage.world_build != request.world_build
             or lineage.profile_ref != request.profile_ref
             or lineage.request_content_sha256 != request.content_sha256
             or lineage.parent_manifest_content_sha256 != request.parent_manifest_content_sha256

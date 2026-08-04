@@ -86,7 +86,7 @@ def test_entrypoint_result_path_matches_harbor_artifact_contract() -> None:
     assert _RESULT_REMOTE_PATH == "/workspace/agent_result.json"
 
 
-def test_entrypoint_agent_does_not_import_a_concrete_continual_task() -> None:
+def test_entrypoint_agent_calls_the_pump_harbor_owner_without_a_neutral_provider_registry() -> None:
     tree = ast.parse(
         ENTRYPOINT_AGENT_PATH.read_text(encoding="utf-8"),
         filename=str(ENTRYPOINT_AGENT_PATH),
@@ -106,46 +106,21 @@ def test_entrypoint_agent_does_not_import_a_concrete_continual_task() -> None:
         )
     )
 
-    assert pump_imports == ()
-
-
-def test_entrypoint_agent_does_not_branch_on_continual_task_stage_profile_or_controller() -> None:
-    tree = ast.parse(
-        ENTRYPOINT_AGENT_PATH.read_text(encoding="utf-8"),
-        filename=str(ENTRYPOINT_AGENT_PATH),
-    )
-    forbidden_branch_tokens = {
-        "controller",
-        "evidence_health",
-        "expected_reference_controller",
-        "maintenance_review",
-        "profile_ref",
-        "reference_controller",
-        "reference_runner",
-        "rich_work_processes",
-        "temporal_evidence",
+    assert set(pump_imports) == {
+        "aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export",
+        "aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session",
+        "aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller",
     }
-    violations: list[tuple[int, tuple[str, ...]]] = []
-    for node in ast.walk(tree):
-        branch_expressions: tuple[ast.AST, ...] = ()
-        if isinstance(node, ast.If | ast.IfExp):
-            branch_expressions = (node.test,)
-        elif isinstance(node, ast.Match):
-            branch_expressions = (node.subject, *(case.pattern for case in node.cases))
-        for expression in branch_expressions:
-            tokens: set[str] = set()
-            for child in ast.walk(expression):
-                if isinstance(child, ast.Name):
-                    tokens.add(child.id)
-                elif isinstance(child, ast.Attribute):
-                    tokens.add(child.attr)
-                elif isinstance(child, ast.Constant) and isinstance(child.value, str):
-                    tokens.add(child.value)
-            forbidden = tuple(sorted(tokens & forbidden_branch_tokens))
-            if forbidden:
-                violations.append((getattr(node, "lineno", 0), forbidden))
 
-    assert violations == []
+
+def test_entrypoint_agent_has_no_neutral_world_provider_or_compatibility_layer() -> None:
+    source = ENTRYPOINT_AGENT_PATH.read_text(encoding="utf-8")
+
+    assert "default_continual_world_catalogue" not in source
+    assert "resolve_harbor" not in source
+    assert "ContinualWorldHarborPort" not in source
+    assert "execution_port" not in source
+    assert "evaluation_port" not in source
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +297,7 @@ def test_world_session_entrypoint_normalizes_remote_evidence_permissions(
     exported = export_pump_station_harbor_task(
         task_dir,
         project_root=Path(__file__).resolve().parents[2],
-        profile_ref=pump_station_continual_world_definition().spec.profiles[0],
+        profile_ref=pump_station_continual_world_definition().profiles[0],
     )
     bridge = load_pump_station_harbor_bridge(task_dir / "environment")
     agent = EntrypointAgent(

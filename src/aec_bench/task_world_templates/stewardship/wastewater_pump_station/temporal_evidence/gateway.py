@@ -77,8 +77,7 @@ class TemporalEvidenceGateway:
         ranked = self._rank(eligible, normalized)
         visible_versions = ranked[:limit]
         references = tuple(
-            self._visible_reference(item, context=context, state=state, query=normalized)
-            for item in visible_versions
+            self._visible_reference(item, context=context, state=state, query=normalized) for item in visible_versions
         )
         private_reason = (
             TemporalEvidencePrivateReason.INVALID_REQUEST
@@ -87,11 +86,7 @@ class TemporalEvidenceGateway:
             if references
             else self._negative_reason(candidates, context)
         )
-        status = (
-            TemporalEvidenceAccessStatus.OK
-            if references
-            else TemporalEvidenceAccessStatus.NO_ACCESSIBLE_RESULT
-        )
+        status = TemporalEvidenceAccessStatus.OK if references else TemporalEvidenceAccessStatus.NO_ACCESSIBLE_RESULT
         consumed = _visible_cost(
             references=references,
             fetched_content=None,
@@ -394,8 +389,7 @@ class TemporalEvidenceGateway:
         events = tuple(
             event
             for event in self._bundle.availability.events
-            if event.evidence_version_id == version.version_id
-            and event.scheduled_seconds <= context.world_time_seconds
+            if event.evidence_version_id == version.version_id and event.scheduled_seconds <= context.world_time_seconds
         )
         searchable = any(
             event.kind is TemporalEvidenceEventKind.SEARCHABLE

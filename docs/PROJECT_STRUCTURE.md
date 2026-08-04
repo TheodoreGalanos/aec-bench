@@ -41,9 +41,10 @@ The installed package groups code by responsibility:
 - Task-world templates own executable world semantics and packaged world data.
 - Adapters, agents, providers, and harness code own model execution and compute
   integration without taking over task semantics.
-- The continual-world package owns task-neutral registration, dispatch,
-  optional rollout orchestration, and shared durability surfaces. The external
-  catalogue is its composition root.
+- The continual-world package owns task-neutral registration, the episode
+  shell, optional rollout orchestration, and shared durability surfaces. The
+  external catalogue is its composition root; concrete actor, provider, and
+  evaluation calls remain with their owners.
 - Evaluation owns scoring, validity interpretation, diagnostics, and
   task-specific evaluation extensions.
 - Ledger and artifact modules own persistence and retrieval mechanics.
