@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -31,23 +30,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     stewardship_state_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    CancelProcess,
-    ContinueOperation,
-    PumpStationCoupledStewardshipState,
     PumpStationCoupledTransition,
     PumpStationCoupledTransitionReceipt,
-    PumpStationProposal,
     PumpStationStewardshipState,
-    RequestConditionCheck,
-    RequestDependencyWaiver,
-    RequestDutyAssignment,
-    RequestFunctionalCheck,
-    RequestInspection,
-    RequestObstructionClearance,
-    RequestProvisionalClosure,
-    RequestProvisionalReturn,
-    RequestVerification,
-    ResumeProcess,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationCoupledRunStep,
@@ -55,10 +40,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
     PumpStationCoupledActorView,
     PumpStationInformationSet,
-    bind_information_set,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_commands import (
-    decode_pump_station_command,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
     PumpStationCommand,
@@ -76,24 +57,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     pump_station_artifact_bytes,
     pump_station_artifact_id,
 )
-
-_PROPOSAL_TYPES: dict[str, type[object]] = {
-    proposal_type.__name__: proposal_type
-    for proposal_type in (
-        ContinueOperation,
-        RequestDutyAssignment,
-        RequestInspection,
-        RequestConditionCheck,
-        RequestObstructionClearance,
-        RequestFunctionalCheck,
-        RequestProvisionalReturn,
-        RequestProvisionalClosure,
-        RequestVerification,
-        ResumeProcess,
-        CancelProcess,
-        RequestDependencyWaiver,
-    )
-}
 
 
 def _fail(code: str, detail: str) -> NoReturn:
@@ -137,7 +100,7 @@ class PumpStationWorldRunRepository:
     def initialize(
         self,
         manifest: PumpStationRegisteredWorldRunManifest,
-        initial_state: PumpStationCoupledStewardshipState,
+        initial_state: PumpStationStewardshipState,
         *,
         before_select: Callable[[], None] | None = None,
     ) -> PumpStationStateSnapshotRef:
@@ -161,11 +124,6 @@ class PumpStationWorldRunRepository:
                 sequence=manifest.initial_sequence,
                 parent_commit_id=None,
                 state_id=manifest.initial_state_id,
-                proposal_id=None,
-                proposal_content_id=None,
-                information_set_content_id=None,
-                receipt_content_id=None,
-                event_batch_content_id=None,
             )
             commit_id = pump_station_artifact_id(commit)
             self._publish_content("commits", commit_id, commit)
@@ -201,7 +159,7 @@ class PumpStationWorldRunRepository:
         self.load_state(pointer.state_id)
         return self._snapshot(manifest, pointer)
 
-    def load_state(self, state_id: str) -> PumpStationCoupledStewardshipState:
+    def load_state(self, state_id: str) -> PumpStationStewardshipState:
         state = load_pump_station_artifact(
             self._read_content("states", state_id),
             PumpStationStewardshipState,
@@ -243,14 +201,11 @@ class PumpStationWorldRunRepository:
         prior_snapshot: PumpStationStateSnapshotRef,
         command: PumpStationCommand,
         transition: PumpStationCoupledTransition,
-        proposal: PumpStationProposal | None = None,
-        information_set: PumpStationInformationSet | None = None,
     ) -> PumpStationStagedCommand:
         """Publish complete current command evidence without selecting its state."""
         if self.load_manifest() != manifest:
             _fail("world-run-identity", "caller manifest differs from the stored run")
         self._require_command_scope(command, manifest)
-        decode_pump_station_command(command)
         receipt = transition.receipt
         actor_step = command.kind == "actor"
         if (
@@ -263,43 +218,19 @@ class PumpStationWorldRunRepository:
             or receipt.request_id != command.request_id
             or receipt.action_or_control_kind != command.action_name
             or receipt.actor_action != actor_step
-            or actor_step != (proposal is not None and information_set is not None)
         ):
             _fail("transition-integrity", "transition does not extend the selected state")
         if actor_step:
-            assert proposal is not None
-            assert information_set is not None
-            self._require_actor_information_set(
+            self._require_actor_binding(
                 manifest,
                 self.load_state(prior_snapshot.state_id),
                 command,
-                information_set,
             )
-            if (
-                proposal.context.proposal_id != command.request_id
-                or proposal.context.agent_tenure_id != command.agent_tenure_id
-                or proposal.context.based_on_sequence != command.based_on_sequence
-                or proposal.context.base_view_id != command.actor_view_id
-                or proposal.context.information_set_id != command.information_set_id
-                or information_set.information_set_id != command.information_set_id
-            ):
-                _fail("transition-integrity", "actor evidence bindings differ")
         self._reject_command_collision(command, parent_commit_id=prior_snapshot.commit_id)
         state_id = self._publish_state(transition.state)
         command_content_id = pump_station_artifact_id(command)
         receipt_content_id = pump_station_artifact_id(receipt)
-        proposal_content_id: str | None = None
-        information_set_content_id: str | None = None
         self._publish_content("commands", command_content_id, command)
-        if proposal is not None and information_set is not None:
-            proposal_content_id = pump_station_artifact_id(proposal)
-            information_set_content_id = pump_station_artifact_id(information_set)
-            self._publish_content("proposals", proposal_content_id, proposal)
-            self._publish_content(
-                "information-sets",
-                information_set_content_id,
-                information_set,
-            )
         self._publish_content("receipts", receipt_content_id, receipt)
         commit = PumpStationCommandCommit(
             run_id=manifest.run_id,
@@ -308,8 +239,6 @@ class PumpStationWorldRunRepository:
             state_id=state_id,
             request_id=command.request_id,
             command_content_id=command_content_id,
-            proposal_content_id=proposal_content_id,
-            information_set_content_id=information_set_content_id,
             receipt_content_id=receipt_content_id,
         )
         commit_id = pump_station_artifact_id(commit)
@@ -327,8 +256,6 @@ class PumpStationWorldRunRepository:
             command=command,
             transition=transition,
             commit=commit,
-            proposal=proposal,
-            information_set=information_set,
         )
 
     def publish_staged_command(self, staged: PumpStationStagedCommand) -> PumpStationCoupledTransition:
@@ -379,11 +306,9 @@ class PumpStationWorldRunRepository:
         parent = self.load_commit(prior.commit_id)
         if parent.run_id != prior.run_id or parent.sequence != prior.sequence or parent.state_id != prior.state_id:
             _fail("transition-integrity", "staged prior snapshot and commit differ")
-        command, proposal, information_set, transition = self._load_command_step(commit)
+        command, transition = self._load_command_step(commit)
         if (
             command != staged.command
-            or proposal != staged.proposal
-            or information_set != staged.information_set
             or transition != staged.transition
             or not self._command_step_extends_parent(parent, commit, command, transition)
         ):
@@ -427,15 +352,7 @@ class PumpStationWorldRunRepository:
     ) -> PumpStationCoupledTransition | None:
         manifest = self.load_manifest()
         self._require_command_scope(command, manifest)
-        decode_pump_station_command(command)
-        matches: list[
-            tuple[
-                PumpStationCommandCommit,
-                PumpStationProposal | None,
-                PumpStationInformationSet | None,
-                PumpStationCoupledTransition,
-            ]
-        ] = []
+        matches: list[tuple[PumpStationCommandCommit, PumpStationCoupledTransition]] = []
         commits_root = self._root / "commits"
         if not commits_root.exists():
             return None
@@ -443,15 +360,15 @@ class PumpStationWorldRunRepository:
             commit = self.load_commit(path.stem)
             if not isinstance(commit, PumpStationCommandCommit) or commit.request_id != command.request_id:
                 continue
-            stored_command, proposal, information_set, transition = self._load_command_step(commit)
+            stored_command, transition = self._load_command_step(commit)
             if stored_command != command or commit.parent_commit_id != command.base_commit_id:
                 _fail("command-id-conflict", f"{command.request_id} has different staged content")
-            matches.append((commit, proposal, information_set, transition))
+            matches.append((commit, transition))
         if not matches:
             return None
         if len(matches) != 1:
             _fail("command-id-conflict", f"{command.request_id} has more than one durable outcome")
-        commit, proposal, information_set, transition = matches[0]
+        commit, transition = matches[0]
         parent = self.load_commit(commit.parent_commit_id)
         if not self._command_step_extends_parent(parent, commit, command, transition):
             _fail("transition-integrity", "staged recovery does not extend its parent")
@@ -475,8 +392,6 @@ class PumpStationWorldRunRepository:
             command=command,
             transition=transition,
             commit=commit,
-            proposal=proposal,
-            information_set=information_set,
         )
         return self._publish_staged_command_under_lock(staged)
 
@@ -485,7 +400,7 @@ class PumpStationWorldRunRepository:
         commit: PumpStationCommandCommit,
         command: PumpStationCommand,
     ) -> PumpStationCoupledTransition:
-        stored_command, _, _, transition = self._load_command_step(commit)
+        stored_command, transition = self._load_command_step(commit)
         if stored_command != command:
             _fail("command-id-conflict", f"{command.request_id} is already bound to different content")
         return transition
@@ -542,12 +457,10 @@ class PumpStationWorldRunRepository:
         for commit in commits[1:]:
             if not isinstance(commit, PumpStationCommandCommit):
                 _fail("artifact-integrity", "non-initial history contains an opening commit")
-            command, proposal, information_set, transition = self._load_command_step(commit)
+            command, transition = self._load_command_step(commit)
             steps.append(
                 PumpStationCoupledRunStep(
                     command=command,
-                    proposal=proposal,
-                    information_set=information_set,
                     transition=transition,
                 )
             )
@@ -556,29 +469,13 @@ class PumpStationWorldRunRepository:
     def _load_command_step(
         self,
         commit: PumpStationCommandCommit,
-    ) -> tuple[
-        PumpStationCommand,
-        PumpStationProposal | None,
-        PumpStationInformationSet | None,
-        PumpStationCoupledTransition,
-    ]:
+    ) -> tuple[PumpStationCommand, PumpStationCoupledTransition]:
         command = load_pump_station_artifact(
             self._read_content("commands", commit.command_content_id),
             PumpStationCommand,
         )
         manifest = self.load_manifest()
         self._require_command_scope(command, manifest)
-        decode_pump_station_command(command)
-        proposal: PumpStationProposal | None = None
-        information_set: PumpStationInformationSet | None = None
-        if commit.proposal_content_id is not None:
-            if commit.information_set_content_id is None:
-                _fail("artifact-integrity", "actor commit lacks an information set")
-            proposal = self._load_proposal(commit.proposal_content_id)
-            information_set = load_pump_station_artifact(
-                self._read_content("information-sets", commit.information_set_content_id),
-                PumpStationInformationSet,
-            )
         receipt = load_pump_station_artifact(
             self._read_content("receipts", commit.receipt_content_id),
             PumpStationCoupledTransitionReceipt,
@@ -596,20 +493,9 @@ class PumpStationWorldRunRepository:
         ):
             _fail("artifact-integrity", "commit evidence does not reconcile")
         if command.kind == "actor":
-            if proposal is None or information_set is None:
-                _fail("artifact-integrity", "actor command lacks bound proposal evidence")
             parent_state = self.load_state(self.load_commit(commit.parent_commit_id).state_id)
-            self._require_actor_information_set(manifest, parent_state, command, information_set)
-            if (
-                pump_station_artifact_id(proposal) != commit.proposal_content_id
-                or pump_station_artifact_id(information_set) != commit.information_set_content_id
-                or proposal.context.proposal_id != command.request_id
-                or proposal.context.information_set_id != information_set.information_set_id
-            ):
-                _fail("artifact-integrity", "actor evidence does not reconcile")
-        elif proposal is not None or information_set is not None:
-            _fail("artifact-integrity", "host control contains actor evidence")
-        return command, proposal, information_set, transition
+            self._require_actor_binding(manifest, parent_state, command)
+        return command, transition
 
     @staticmethod
     def _require_command_scope(
@@ -632,13 +518,14 @@ class PumpStationWorldRunRepository:
     @staticmethod
     def _project_information_set(
         manifest: PumpStationRegisteredWorldRunManifest,
-        state: PumpStationCoupledStewardshipState,
+        state: PumpStationStewardshipState,
         command: PumpStationCommand,
     ) -> PumpStationInformationSet:
         if command.agent_tenure_id is None:
             _fail("command-content", "actor command lacks its tenure")
         return project_coupled_information_set(
             state,
+            sequence=command.based_on_sequence,
             episode_id=manifest.episode_id,
             world_branch_id=manifest.world_branch_id,
             actor_id="pump-station-actor",
@@ -651,45 +538,24 @@ class PumpStationWorldRunRepository:
             workspace_tool_ids=(PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID,),
         )
 
-    def _require_actor_information_set(
+    def _require_actor_binding(
         self,
         manifest: PumpStationRegisteredWorldRunManifest,
-        state: PumpStationCoupledStewardshipState,
+        state: PumpStationStewardshipState,
         command: PumpStationCommand,
-        information_set: PumpStationInformationSet,
     ) -> None:
         expected = self._project_information_set(manifest, state, command)
-        view = information_set.base_view
+        view = expected.base_view
         if not isinstance(view, PumpStationCoupledActorView):
             _fail("artifact-integrity", "actor information set has the wrong view")
         if (
             command.actor_id != view.actor_id
-            or view != expected.base_view
-            or information_set.information_set_id != command.information_set_id
-            or bind_information_set(
-                view,
-                information_set.observation_history,
-                information_set.current_context,
-            )
-            != information_set
-            or information_set.current_context.workspace_tool_ids != (PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID,)
-            or not set(view.source_artifact_ids).issubset(information_set.current_context.visible_material_ids)
+            or view.view_id != command.actor_view_id
+            or expected.information_set_id != command.information_set_id
+            or expected.current_context.workspace_tool_ids != (PUMP_STATION_ACTOR_WORKSPACE_TOOL_ID,)
+            or not set(view.source_artifact_ids).issubset(expected.current_context.visible_material_ids)
         ):
             _fail("artifact-integrity", "actor decision or information-set evidence differs")
-
-    def _load_proposal(self, content_id: str) -> PumpStationProposal:
-        payload = self._read_content("proposals", content_id)
-        try:
-            type_name = json.loads(payload)["$type"]
-        except (json.JSONDecodeError, KeyError, TypeError) as error:
-            _fail("artifact-type", f"stored proposal has no valid type: {error}")
-        proposal_type = _PROPOSAL_TYPES.get(type_name)
-        if proposal_type is None:
-            _fail("artifact-type", f"unknown stored proposal type {type_name!r}")
-        return cast(
-            PumpStationProposal,
-            load_pump_station_artifact(payload, proposal_type),
-        )
 
     def _reject_command_collision(self, command: PumpStationCommand, *, parent_commit_id: str) -> None:
         commits_root = self._root / "commits"
@@ -699,7 +565,7 @@ class PumpStationWorldRunRepository:
             commit = self.load_commit(path.stem)
             if not isinstance(commit, PumpStationCommandCommit) or commit.request_id != command.request_id:
                 continue
-            stored, _, _, _ = self._load_command_step(commit)
+            stored, _ = self._load_command_step(commit)
             if stored == command and commit.parent_commit_id == parent_commit_id:
                 _fail("command-already-staged", f"{command.request_id} already has one durable staged outcome")
             _fail("command-id-conflict", f"{command.request_id} has different staged content")
@@ -721,7 +587,7 @@ class PumpStationWorldRunRepository:
         for commit in chain[1:]:
             if not isinstance(commit, PumpStationCommandCommit):
                 _fail("artifact-integrity", "opening commit appears after the initial state")
-            command, _, _, transition = self._load_command_step(commit)
+            command, transition = self._load_command_step(commit)
             if not self._command_step_extends_parent(previous, commit, command, transition):
                 _fail("artifact-integrity", "commit does not extend its parent")
             previous = commit
@@ -732,7 +598,7 @@ class PumpStationWorldRunRepository:
         ):
             _fail("artifact-integrity", "commit chain does not reach current pointer")
 
-    def _publish_state(self, state: PumpStationCoupledStewardshipState) -> str:
+    def _publish_state(self, state: PumpStationStewardshipState) -> str:
         state_id = stewardship_state_id(state)
         self._publish_content("states", state_id, state)
         return state_id

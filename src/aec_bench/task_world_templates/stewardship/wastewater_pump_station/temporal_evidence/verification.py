@@ -75,7 +75,7 @@ def verify_temporal_evidence_repository(
     repository: TemporalEvidenceRepository,
     *,
     package: ReferencePackage,
-    proposal_bindings: Mapping[str, tuple[str, str]] | None = None,
+    actor_bindings: Mapping[str, tuple[str, str]] | None = None,
 ) -> TemporalEvidenceVerificationReport:
     """Recompute every deterministic access and cross-check all continuing state."""
 
@@ -171,7 +171,7 @@ def verify_temporal_evidence_repository(
                 repository,
                 gateway,
                 record,
-                proposal_bindings=proposal_bindings,
+                actor_bindings=actor_bindings,
                 issues=issues,
                 action_sets=action_sets,
             )
@@ -262,7 +262,7 @@ def _verify_reliance(
     gateway: TemporalEvidenceGateway,
     record: TemporalEvidenceRelianceRecord,
     *,
-    proposal_bindings: Mapping[str, tuple[str, str]] | None,
+    actor_bindings: Mapping[str, tuple[str, str]] | None,
     issues: list[TemporalEvidenceVerificationIssue],
     action_sets: list[TemporalActionEvidenceSets],
 ) -> None:
@@ -300,13 +300,13 @@ def _verify_reliance(
                 artifact_id=record.action_request_id,
             )
         )
-    if proposal_bindings is not None:
-        binding = proposal_bindings.get(record.action_request_id)
+    if actor_bindings is not None:
+        binding = actor_bindings.get(record.action_request_id)
         if binding != (record.information_set_id, record.base_view_id):
             issues.append(
                 TemporalEvidenceVerificationIssue(
                     code="reliance-action-binding",
-                    detail="reliance record and durable proposal binding differ",
+                    detail="reliance record and durable actor binding differ",
                     artifact_id=record.action_request_id,
                 )
             )

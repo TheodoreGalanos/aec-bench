@@ -11,7 +11,7 @@ from decimal import Decimal
 from enum import Enum
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PumpStationStewardshipStateRecord,
+    PumpStationStewardshipState,
 )
 
 
@@ -46,6 +46,6 @@ def stewardship_content_id(value: object) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def stewardship_state_id(state: PumpStationStewardshipStateRecord) -> str:
+def stewardship_state_id(state: PumpStationStewardshipState) -> str:
     """Return the computed identity of one complete stewardship state."""
     return stewardship_content_id(state)

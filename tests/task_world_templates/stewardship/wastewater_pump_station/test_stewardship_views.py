@@ -48,7 +48,7 @@ def test_actor_observation_excludes_private_host_binding(tmp_path: Path) -> None
 
 def test_information_set_identity_binds_history_and_visible_context(tmp_path: Path) -> None:
     run, host = _start(tmp_path / "run")
-    information_set = host._information_set(run.manifest, run.state)
+    information_set = host._information_set(run.manifest, run.state, run.snapshot().sequence)
     view = information_set.base_view
     repeated_history = PumpStationObservationHistory(
         agent_tenure_id=view.agent_tenure_id,

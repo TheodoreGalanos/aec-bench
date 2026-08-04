@@ -13,17 +13,16 @@ from aec_bench.contracts.evaluation_result import (
     StewardshipMetricVector,
     StewardshipTerminalLiability,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
-    PumpStationChangeKind,
-)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PumpStationAuthorityOutcome,
     PumpStationObligationStatus,
     PumpStationRestrictionStatus,
+    PumpStationStewardshipState,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationConservationReport,
     PumpStationCoupledRunStep,
+    PumpStationCoupledVerificationReport,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import (
     PumpStationWorldRun,
@@ -34,10 +33,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 
 type PumpStationReferenceRun = PumpStationWorldRun
 
-_MAINTENANCE_CHANGES = {
-    PumpStationChangeKind.CLEAR_OBSTRUCTION,
-    PumpStationChangeKind.REPAIR_CLEARANCE,
-}
 _PERMITTED_AUTHORITY_OUTCOMES = {
     PumpStationAuthorityOutcome.PERMITTED,
     PumpStationAuthorityOutcome.PERMITTED_WITH_CONDITIONS,
@@ -98,9 +93,9 @@ class PumpStationSemanticOutcome:
 def _handover_count(steps: tuple[PumpStationCoupledRunStep, ...]) -> int:
     """Count verified actor-tenure changes without inventing a world transition."""
     tenure_ids = tuple(
-        step.proposal.context.agent_tenure_id
+        step.command.agent_tenure_id
         for step in steps
-        if step.command.kind == "actor" and step.proposal is not None
+        if step.command.kind == "actor" and step.command.agent_tenure_id is not None
     )
     return sum(previous != current for previous, current in zip(tenure_ids, tenure_ids[1:], strict=False))
 
@@ -111,10 +106,32 @@ def evaluate_pump_station_reference_run(
     imported_artifact_sha256: tuple[str, ...] = (),
     evaluation_scope: Literal["complete_journey", "bounded_continuation"] = "complete_journey",
 ) -> StewardshipEvaluation:
-    """Map one current registered run into the shared stewardship contract."""
+    """Load current run evidence and delegate to the task-owned evaluator."""
     report = run.verify()
     state = run.state
     steps = run.repository.command_steps()
+    return evaluate(
+        state,
+        report,
+        steps,
+        manifest_content_id=pump_station_artifact_id(run.manifest),
+        initial_state_id=run.manifest.initial_state_id,
+        imported_artifact_sha256=imported_artifact_sha256,
+        evaluation_scope=evaluation_scope,
+    )
+
+
+def evaluate(
+    state: PumpStationStewardshipState,
+    report: PumpStationCoupledVerificationReport,
+    steps: tuple[PumpStationCoupledRunStep, ...],
+    *,
+    manifest_content_id: str,
+    initial_state_id: str,
+    imported_artifact_sha256: tuple[str, ...] = (),
+    evaluation_scope: Literal["complete_journey", "bounded_continuation"] = "complete_journey",
+) -> StewardshipEvaluation:
+    """Evaluate canonical state plus explicit verified episode evidence."""
     receipts = tuple(step.transition.receipt for step in steps)
     closing_work = report.conservation.work.closing_ids
     consumed_resources = sum(int(getattr(pool, "consumed", 0)) for pool in state.resources.pools)
@@ -143,9 +160,9 @@ def evaluate_pump_station_reference_run(
         errors.append("terminal-stewardship")
     gates = StewardshipIntegrityGates(
         artifact_and_replay_integrity=report.replay_valid,
-        output_and_action_contract_validity=report.actor_proposals_valid,
+        output_and_action_contract_validity=report.actor_actions_valid,
         authority_and_execution_consistency=report.host_controls_valid,
-        decision_time_validity=report.actor_proposals_valid,
+        decision_time_validity=report.actor_actions_valid,
         obligation_and_restriction_integrity=report.conservation.liabilities.valid,
         physical_and_service_outcomes_available=report.conservation.duty.valid,
         resource_stewardship_available=report.conservation.resources.valid,
@@ -169,7 +186,7 @@ def evaluate_pump_station_reference_run(
         unresolved_evidence=evidence_gaps > 0,
     )
     metrics = StewardshipMetricVector(
-        decision_time_invalid_count=0 if report.actor_proposals_valid else 1,
+        decision_time_invalid_count=0 if report.actor_actions_valid else 1,
         physical_service_review_required=False,
         maintenance_intervention_count=sum(
             receipt.action_or_control_kind
@@ -194,8 +211,8 @@ def evaluate_pump_station_reference_run(
         gates=gates,
         metrics=metrics,
         evidence=StewardshipEvaluationEvidence(
-            world_run_manifest_content_id=pump_station_artifact_id(run.manifest),
-            initial_state_id=run.manifest.initial_state_id,
+            world_run_manifest_content_id=manifest_content_id,
+            initial_state_id=initial_state_id,
             terminal_state_id=state.state_id,
             replayed_transition_ids=report.replayed_transition_ids,
             imported_artifact_sha256=tuple(sorted(set(imported_artifact_sha256))),
@@ -247,11 +264,11 @@ def pump_station_semantic_outcome(
         reward=1.0 if evaluation.valid else 0.0,
         trial_valid=report.replay_valid,
         artifact_valid=report.replay_valid,
-        policy_valid=report.actor_proposals_valid and report.host_controls_valid,
+        policy_valid=report.actor_actions_valid and report.host_controls_valid,
         evaluation_valid=evaluation.valid,
         integrity_gates=(
             ("artifact_and_replay_integrity", gate_values.artifact_and_replay_integrity),
-            ("actor_proposal_integrity", report.actor_proposals_valid),
+            ("actor_action_integrity", report.actor_actions_valid),
             ("host_control_integrity", report.host_controls_valid),
             ("duty_conservation", report.conservation.duty.valid),
             ("resource_conservation", report.conservation.resources.valid),

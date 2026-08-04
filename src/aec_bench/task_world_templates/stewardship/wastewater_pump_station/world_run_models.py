@@ -3,16 +3,13 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from typing import NoReturn
 
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PumpStationAction,
     PumpStationCoupledTransition,
-    PumpStationProposal,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
-    PumpStationInformationSet,
+    PumpStationRootControl,
+    pump_station_action_name,
 )
 
 
@@ -187,19 +184,6 @@ class PumpStationStateSnapshotRef:
             raise PumpStationWorldRunError("world-run-shape", "snapshot sequence must be non-negative")
 
 
-def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    value: dict[str, object] = {}
-    for key, child in pairs:
-        if key in value:
-            raise PumpStationWorldRunError("canonical-json", f"duplicate field {key}")
-        value[key] = child
-    return value
-
-
-def _reject_nonstandard_json_constant(value: str) -> NoReturn:
-    raise PumpStationWorldRunError("canonical-json", f"non-standard JSON constant {value}")
-
-
 @dataclass(frozen=True, slots=True)
 class PumpStationCommand:
     """Persistence-edge command bound to one selected current parent."""
@@ -207,8 +191,8 @@ class PumpStationCommand:
     kind: str
     request_id: str
     request_content_id: str
-    action_name: str
-    arguments_json: str
+    action: PumpStationAction | None
+    control: PumpStationRootControl | None
     task_world_id: str
     run_id: str
     episode_id: str
@@ -224,20 +208,11 @@ class PumpStationCommand:
     authority_id: str | None = None
 
     def __post_init__(self) -> None:
-        expected_actions = {
-            "operations_review": "operations_boundary_review",
-            "process_outcome": "process_outcome",
-            "common_boundary": "common_boundary_control",
-            "coupled_treatment": "coupled_physical_treatment",
-        }
-        if self.kind != "actor" and self.kind not in expected_actions:
+        if self.kind not in {"actor", "operations_review", "process_outcome", "common_boundary", "coupled_treatment"}:
             raise PumpStationWorldRunError("command-kind", self.kind)
-        if self.kind in expected_actions and self.action_name != expected_actions[self.kind]:
-            raise PumpStationWorldRunError("command-kind", self.action_name)
         for field_name in (
             "request_id",
             "request_content_id",
-            "action_name",
             "task_world_id",
             "run_id",
             "episode_id",
@@ -256,30 +231,38 @@ class PumpStationCommand:
             ("information_set_id", self.information_set_id),
         )
         if self.kind == "actor":
-            if any(value is None for _, value in actor_fields) or self.authority_id is not None:
+            if (
+                any(value is None for _, value in actor_fields)
+                or self.authority_id is not None
+                or self.action is None
+                or self.control is not None
+            ):
                 raise PumpStationWorldRunError("command-shape", "actor command lacks its actor binding")
             for field_name, value in actor_fields:
                 require_world_run_text(value, field_name)
         else:
-            if any(value is not None for _, value in actor_fields) or self.authority_id is None:
+            if (
+                any(value is not None for _, value in actor_fields)
+                or self.authority_id is None
+                or self.action is not None
+                or self.control is None
+            ):
                 raise PumpStationWorldRunError(
                     "command-shape",
                     "host-control command has an actor binding or lacks authority",
                 )
             require_world_run_text(self.authority_id, "authority_id")
-        try:
-            arguments = json.loads(
-                self.arguments_json,
-                object_pairs_hook=_unique_json_object,
-                parse_constant=_reject_nonstandard_json_constant,
-            )
-        except (json.JSONDecodeError, UnicodeDecodeError) as error:
-            raise PumpStationWorldRunError("canonical-json", str(error)) from error
-        if not isinstance(arguments, dict):
-            raise PumpStationWorldRunError("command-shape", "arguments must be an object")
-        canonical = json.dumps(arguments, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-        if canonical != self.arguments_json:
-            raise PumpStationWorldRunError("canonical-json", "command arguments are not canonical")
+
+    @property
+    def action_name(self) -> str:
+        if self.action is not None:
+            return pump_station_action_name(self.action)
+        return {
+            "operations_review": "operations_boundary_review",
+            "process_outcome": "process_outcome",
+            "common_boundary": "common_boundary_control",
+            "coupled_treatment": "coupled_physical_treatment",
+        }[self.kind]
 
 
 @dataclass(frozen=True, slots=True)
@@ -290,11 +273,6 @@ class PumpStationWorldRunCommit:
     sequence: int
     parent_commit_id: None
     state_id: str
-    proposal_id: None
-    proposal_content_id: None
-    information_set_content_id: None
-    receipt_content_id: None
-    event_batch_content_id: None
 
     def __post_init__(self) -> None:
         require_world_run_text(self.run_id, "run_id")
@@ -313,8 +291,6 @@ class PumpStationCommandCommit:
     state_id: str
     request_id: str
     command_content_id: str
-    proposal_content_id: str | None
-    information_set_content_id: str | None
     receipt_content_id: str
 
     def __post_init__(self) -> None:
@@ -329,14 +305,6 @@ class PumpStationCommandCommit:
             require_world_run_text(getattr(self, field_name), field_name)
         if self.sequence < 1:
             raise PumpStationWorldRunError("world-run-shape", "transition commit sequence must be positive")
-        if (self.proposal_content_id is None) != (self.information_set_content_id is None):
-            raise PumpStationWorldRunError(
-                "world-run-shape",
-                "actor proposal and information set must appear together",
-            )
-        if self.proposal_content_id is not None:
-            require_world_run_text(self.proposal_content_id, "proposal_content_id")
-            require_world_run_text(self.information_set_content_id, "information_set_content_id")
 
 
 type PumpStationCommit = PumpStationWorldRunCommit | PumpStationCommandCommit
@@ -361,16 +329,6 @@ class PumpStationStagedCommand:
     command: PumpStationCommand
     transition: PumpStationCoupledTransition
     commit: PumpStationCommandCommit
-    proposal: PumpStationProposal | None = None
-    information_set: PumpStationInformationSet | None = None
-
-    def __post_init__(self) -> None:
-        actor_step = self.command.kind == "actor"
-        if actor_step != (self.proposal is not None and self.information_set is not None):
-            raise PumpStationWorldRunError(
-                "transition-integrity",
-                "actor evidence requires one proposal and information set",
-            )
 
 
 __all__ = [

@@ -39,7 +39,7 @@ def test_reference_controller_runs_one_canonical_journey_without_a_handover_tran
     assert dict(result.semantic_outcome.evaluation.metrics)["handover_count"] == 0
     assert result.semantic_outcome.evaluation.evaluation_valid
     assert report.valid
-    assert report.actor_proposals_valid
+    assert report.actor_actions_valid
     assert report.host_controls_valid
     assert report.conservation.valid
     assert len(report.conservation.work.opening_ids) == 2

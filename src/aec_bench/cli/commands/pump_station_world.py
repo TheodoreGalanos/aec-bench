@@ -65,7 +65,7 @@ def _verification_payload(
     return {
         "valid": report.valid,
         "replay_valid": report.replay_valid,
-        "actor_proposals_valid": report.actor_proposals_valid,
+        "actor_actions_valid": report.actor_actions_valid,
         "host_controls_valid": report.host_controls_valid,
         "issues": list(report.issues),
         "replayed_transition_ids": list(report.replayed_transition_ids),

@@ -3,9 +3,10 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from collections.abc import Callable
+from dataclasses import asdict, replace
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Literal, NoReturn, cast
+from typing import Any, Literal, NoReturn, TypeVar, cast
 
 from aec_bench.task_world_templates.continual.world_logic import ActionRejected
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
@@ -22,14 +23,12 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_
     consume_reservation,
     create_asw_8_resource_state,
     generate_work_once,
+    planned_outage_admissible,
     release_reservations,
     reserve_process_resources,
     resume_process_reservations,
     retain_consumable_reservations,
     sort_eligible_backlog,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_world import (
-    planned_outage_admissible,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence_health import (
     PumpStationEvidenceHealth,
@@ -66,6 +65,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     stewardship_content_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PumpStationAction,
+    PumpStationActionError,
     PumpStationAuthority,
     PumpStationCommonBoundaryRequest,
     PumpStationCoupledTransition,
@@ -81,15 +82,11 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationRestriction,
     PumpStationRestrictionKind,
     PumpStationRestrictionStatus,
+    PumpStationRootControl,
     PumpStationStewardshipState,
     PumpStationWorkOrder,
     PumpStationWorkOrderStatus,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
-    apply_coupled_treatment as _apply_stable_coupled_treatment,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
-    finish_coupled_transition as _finish_transition,
+    pump_station_action_name,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_views import (
     PumpStationContinuityCarrier,
@@ -108,10 +105,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.time_pre
 PUMP_STATION_ACTOR_PROJECTION_POLICY_ID = "pump-station.current-state"
 PUMP_STATION_ACTOR_VIEW_SCHEMA_ID = "pump-station.actor-view"
 PUMP_STATION_INFORMATION_BOUNDARY_ID = "pump-station.actor-view"
-if TYPE_CHECKING:
-    type PumpStationCoupledWorldState = PumpStationStewardshipState
-else:
-    PumpStationCoupledWorldState = PumpStationStewardshipState
 
 
 class PumpStationCoupledWorldError(ValueError):
@@ -126,8 +119,125 @@ def _fail(code: str, detail: str) -> NoReturn:
     raise PumpStationCoupledWorldError(code, detail)
 
 
-PumpStationCoupledTransitionReceipt = PumpStationCoupledTransitionReceipt
-PumpStationCoupledTransition = PumpStationCoupledTransition
+_RecordT = TypeVar("_RecordT")
+
+
+def _changed_owner_ids(
+    before: tuple[_RecordT, ...],
+    after: tuple[_RecordT, ...],
+    identity: Callable[[_RecordT], str],
+) -> tuple[str, ...]:
+    before_by_id = {identity(item): item for item in before}
+    after_by_id = {identity(item): item for item in after}
+    return tuple(
+        sorted(
+            record_id
+            for record_id in before_by_id.keys() | after_by_id.keys()
+            if before_by_id.get(record_id) != after_by_id.get(record_id)
+        )
+    )
+
+
+def _liability_owner_records(state: PumpStationStewardshipState) -> dict[str, object]:
+    owners: dict[str, object] = {item.obligation_id: item for item in state.obligations}
+    owners.update({item.episode_id: item for item in state.outage_episodes})
+    owners.update({item.item_id: item for item in state.backlog if item.generation_rule_id in {"WG-06", "WG-07"}})
+    return owners
+
+
+def _changed_liability_owner_ids(
+    before: PumpStationStewardshipState,
+    after: PumpStationStewardshipState,
+) -> tuple[str, ...]:
+    before_owners = _liability_owner_records(before)
+    after_owners = _liability_owner_records(after)
+    return tuple(
+        sorted(
+            owner_id
+            for owner_id in before_owners.keys() | after_owners.keys()
+            if before_owners.get(owner_id) != after_owners.get(owner_id)
+        )
+    )
+
+
+def _required_authorities(action_kind: str) -> tuple[str, ...]:
+    if action_kind == "request_functional_check":
+        return ("maintenance", "operations")
+    if action_kind in {
+        "continue_operation",
+        "request_duty_assignment",
+        "request_provisional_return",
+        "operations_boundary_review",
+        "common_boundary_control",
+    }:
+        return ("operations",)
+    if action_kind in {
+        "request_inspection",
+        "request_obstruction_clearance",
+        "resume_process",
+        "cancel_process",
+    }:
+        return ("maintenance",)
+    if action_kind in {"request_post_maintenance_verification", "process_outcome"}:
+        return ("verification",)
+    if action_kind in {"request_provisional_closure", "request_dependency_waiver"}:
+        return ("work_management",)
+    if action_kind == "request_condition_check":
+        return ("engineering",)
+    return ("host",)
+
+
+def finish_transition(
+    before: PumpStationStewardshipState,
+    after: PumpStationStewardshipState,
+    *,
+    sequence: int,
+    request_id: str,
+    action_kind: str,
+    actor_action: bool,
+    target_id: str | None,
+    backlog_item_id: str | None,
+    reason: str,
+    changed_record_ids: tuple[str, ...],
+    operating_interval_id: str | None = None,
+    authority_requirements: tuple[str, ...] | None = None,
+) -> PumpStationCoupledTransition:
+    """Create the task receipt for one accepted state transition."""
+    receipt = PumpStationCoupledTransitionReceipt(
+        sequence=sequence,
+        transition_id=f"transition-{sequence}-{request_id}",
+        request_id=request_id,
+        action_or_control_kind=action_kind,
+        actor_action=actor_action,
+        authority_outcome="permitted",
+        required_authorities=authority_requirements or _required_authorities(action_kind),
+        authority_decision_detail="All required task authorities accepted the bound request.",
+        permit_ids=(f"controlled-test-permit-{request_id}",) if action_kind == "request_functional_check" else (),
+        execution_status="applied",
+        before_state_id=before.state_id,
+        after_state_id=after.state_id,
+        start_calendar_seconds=before.calendar_seconds,
+        end_calendar_seconds=after.calendar_seconds,
+        target_id=target_id,
+        backlog_item_id=backlog_item_id,
+        reason=reason,
+        changed_record_ids=changed_record_ids,
+        changed_pool_ids=_changed_owner_ids(before.resources.pools, after.resources.pools, lambda item: item.pool_id),
+        changed_reservation_ids=_changed_owner_ids(
+            before.resource_reservations,
+            after.resource_reservations,
+            lambda item: item.reservation_id,
+        ),
+        changed_backlog_item_ids=_changed_owner_ids(before.backlog, after.backlog, lambda item: item.item_id),
+        generation_record_ids=_changed_owner_ids(
+            before.generation_records,
+            after.generation_records,
+            lambda item: item.backlog_item_id,
+        ),
+        changed_liability_owner_ids=_changed_liability_owner_ids(before, after),
+        operating_interval_id=operating_interval_id,
+    )
+    return PumpStationCoupledTransition(state=after, receipt=receipt)
 
 
 def _opening_backlog() -> tuple[PumpStationBacklogItem, PumpStationBacklogItem]:
@@ -223,7 +333,7 @@ def _accepted_evidence_record(
     )
 
 
-def create_asw_8_world_state() -> PumpStationCoupledWorldState:
+def initial_state() -> PumpStationStewardshipState:
     """Construct the exact descriptor-bound ASW-8 opening state."""
     system = load_reference_system()
     state = PumpStationStewardshipState(
@@ -232,7 +342,6 @@ def create_asw_8_world_state() -> PumpStationCoupledWorldState:
             inflow_m3_s=Decimal("0.0155"),
             wet_well_level_m=Decimal("1.65"),
         ),
-        sequence=0,
         resources=create_asw_8_resource_state(),
         restrictions=(
             PumpStationRestriction(
@@ -257,7 +366,7 @@ def create_asw_8_world_state() -> PumpStationCoupledWorldState:
                 kind=PumpStationObligationKind.POST_MAINTENANCE_VERIFICATION,
                 pump_id="pump-a",
                 status=PumpStationObligationStatus.ACTIVE,
-                originating_proposal_id="initial-a-provisional-return",
+                originating_action_id="initial-a-provisional-return",
                 responsible_authority=PumpStationAuthority.VERIFICATION,
                 linked_restriction_id="restriction-a-run-in-001",
                 due_calendar_seconds=64_800,
@@ -346,7 +455,7 @@ def create_asw_8_world_state() -> PumpStationCoupledWorldState:
 
 
 def _opening_state_specification_value(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
 ) -> dict[str, object]:
     reusable = tuple(pool for pool in state.resources.pools if isinstance(pool, PumpStationReusablePool))
     consumable = tuple(pool for pool in state.resources.pools if isinstance(pool, PumpStationConsumablePool))
@@ -489,14 +598,14 @@ def _model() -> PumpStationCoupledModel:
     return coupled_pump_station_model_from_package(load_reference_package(profile_id=REFERENCE_PROFILE_V2))
 
 
-def _service_requirement(state: PumpStationCoupledWorldState, at_seconds: int) -> int:
+def _service_requirement(state: PumpStationStewardshipState, at_seconds: int) -> int:
     for requirement in state.service_schedule:
         if requirement.start_calendar_seconds <= at_seconds < requirement.end_calendar_seconds:
             return requirement.required_service_scu
     _fail("service-schedule", f"no requirement at {at_seconds}")
 
 
-def _baseline_assignment(state: PumpStationCoupledWorldState, at_seconds: int) -> tuple[str, ...]:
+def _baseline_assignment(state: PumpStationStewardshipState, at_seconds: int) -> tuple[str, ...]:
     for start, end, pumps in state.baseline_schedule:
         if start <= at_seconds < end:
             return pumps
@@ -504,7 +613,7 @@ def _baseline_assignment(state: PumpStationCoupledWorldState, at_seconds: int) -
 
 
 def _selected_service_running(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     assignment: tuple[str, ...] | None = None,
     required_scu: int | None = None,
 ) -> tuple[str, ...]:
@@ -517,11 +626,11 @@ def _selected_service_running(
 
 
 def _with_physical_running_sets(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     *,
     service: tuple[str, ...],
     test: tuple[str, ...] | None = None,
-) -> PumpStationCoupledWorldState:
+) -> PumpStationStewardshipState:
     previous = set(state.physical.service_running_pump_ids) | set(state.physical.test_running_pump_ids)
     selected_test = state.physical.test_running_pump_ids if test is None else test
     current = set(service) | set(selected_test)
@@ -538,9 +647,9 @@ def _with_physical_running_sets(
 
 
 def _replace_backlog_item(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     item: PumpStationBacklogItem,
-) -> PumpStationCoupledWorldState:
+) -> PumpStationStewardshipState:
     state.backlog_item(item.item_id)
     return replace(
         state,
@@ -549,14 +658,15 @@ def _replace_backlog_item(
 
 
 def _start_process(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     *,
+    sequence: int,
     kind: str,
     target_id: str,
     backlog_item_id: str,
     duration_seconds: int,
     pool_ids: tuple[str, ...],
-) -> PumpStationCoupledWorldState:
+) -> PumpStationStewardshipState:
     _require_field_process_admissible(
         state,
         process_kind=kind,
@@ -571,7 +681,7 @@ def _start_process(
         _fail("backlog-binding", backlog_item_id)
     if any(process.status is PumpStationCoupledProcessStatus.ACTIVE for process in state.processes):
         _fail("process-conflict", "the shared work lane already has an active process")
-    process_id = f"process-{kind}-{target_id}-{state.sequence + 1}"
+    process_id = f"process-{kind}-{target_id}-{sequence}"
     resources, reservations = reserve_process_resources(
         state.resources,
         state.resource_reservations,
@@ -608,7 +718,7 @@ def _start_process(
 
 
 def _require_field_process_admissible(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     *,
     process_kind: str,
     target_id: str,
@@ -702,11 +812,11 @@ def _generated_item(
 
 
 def _add_generated_work(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     generation: PumpStationWorkGenerationRecord,
     item: PumpStationBacklogItem,
-) -> PumpStationCoupledWorldState:
-    result = generate_work_once(
+) -> PumpStationStewardshipState:
+    generation_records, backlog = generate_work_once(
         state.generation_records,
         state.backlog,
         generation,
@@ -714,13 +824,13 @@ def _add_generated_work(
     )
     return replace(
         state,
-        generation_records=result.records,
-        backlog=result.backlog,
+        generation_records=generation_records,
+        backlog=backlog,
     )
 
 
 def _collateral_runtime(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     episode_id: str,
     pump_id: str,
 ) -> int:
@@ -731,7 +841,7 @@ def _collateral_runtime(
 
 
 def _runtime_clock_values(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
 ) -> dict[tuple[str, str], int]:
     values = {("pump_total", pump.pump_id): pump.exposure.runtime_seconds for pump in state.physical.pumps}
     values.update(
@@ -744,7 +854,7 @@ def _runtime_clock_values(
 
 
 def _runtime_clock_accrues(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     *,
     clock_kind: str,
     clock_id: str,
@@ -769,7 +879,7 @@ def _runtime_clock_accrues(
 
 
 def _runtime_boundary_candidates(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
 ) -> tuple[tuple[int, str, str], ...]:
     clocks = _runtime_clock_values(state)
     candidates: list[tuple[int, str, str]] = []
@@ -813,7 +923,7 @@ def _runtime_boundary_candidates(
 
 
 def _runtime_boundary_effect_ids(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
 ) -> tuple[str, ...]:
     clocks = _runtime_clock_values(state)
     effects: list[str] = []
@@ -841,10 +951,10 @@ def _runtime_boundary_effect_ids(
 
 def _advance_physical(
     model: PumpStationCoupledModel,
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     end_seconds: int,
     transition_id: str,
-) -> PumpStationCoupledWorldState:
+) -> PumpStationStewardshipState:
     elapsed = end_seconds - state.calendar_seconds
     if elapsed <= 0:
         _fail("time-order", str(end_seconds))
@@ -929,7 +1039,7 @@ def _advance_physical(
 _STATIC_EVENT_TIMES = (61_200, 64_800, 93_600, 100_800, 108_000, 122_400, 151_200, 165_600, 194_400, 226_800)
 
 
-def _next_event_time(state: PumpStationCoupledWorldState) -> int:
+def _next_event_time(state: PumpStationStewardshipState) -> int:
     candidates = [value for value in _STATIC_EVENT_TIMES if value > state.calendar_seconds]
     candidates.extend(
         process.due_at_calendar_seconds
@@ -944,10 +1054,10 @@ def _next_event_time(state: PumpStationCoupledWorldState) -> int:
 
 
 def _set_reusable_availability(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     *,
     available: bool,
-) -> PumpStationCoupledWorldState:
+) -> PumpStationStewardshipState:
     resources = state.resources
     for pool in resources.pools:
         if not isinstance(pool, PumpStationReusablePool):
@@ -965,9 +1075,9 @@ def _set_reusable_availability(
 
 
 def _suspend_process(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     process: PumpStationCoupledProcess,
-) -> PumpStationCoupledWorldState:
+) -> PumpStationStewardshipState:
     """Suspend one active process before a safety or resource-withdrawal event."""
     if process.status is not PumpStationCoupledProcessStatus.ACTIVE:
         return state
@@ -1002,10 +1112,10 @@ def _suspend_process(
 
 
 def _complete_process(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     process: PumpStationCoupledProcess,
     transition_id: str,
-) -> PumpStationCoupledWorldState:
+) -> PumpStationStewardshipState:
     resources = state.resources
     reservations = state.resource_reservations
     item = state.backlog_item(process.backlog_item_id)
@@ -1174,11 +1284,11 @@ def _complete_process(
 
 
 def _apply_event_effects(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     *,
     event_time: int,
     transition_id: str,
-) -> PumpStationCoupledWorldState:
+) -> PumpStationStewardshipState:
     updated = state
     effect_ids = list(updated.event_effect_ids)
     effect_ids.extend(_runtime_boundary_effect_ids(state))
@@ -1218,7 +1328,7 @@ def _apply_event_effects(
 
 
 def pump_station_root_control_operations(
-    state: PumpStationCoupledWorldState | None,
+    state: PumpStationStewardshipState | None,
     *,
     authority_id: str,
     process_id: str | None = None,
@@ -1245,13 +1355,14 @@ def pump_station_root_control_operations(
 
 def _continue_operation(
     model: PumpStationCoupledModel,
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     *,
+    sequence: int,
     request_id: str,
     reason: str,
 ) -> PumpStationCoupledTransition:
     event_time = _next_event_time(state)
-    transition_id = f"transition-{state.sequence + 1}-{request_id}"
+    transition_id = f"transition-{sequence}-{request_id}"
     advanced = _advance_physical(model, state, event_time, transition_id)
     interval = advanced.operating_intervals[-1]
     updated = _apply_event_effects(
@@ -1259,9 +1370,10 @@ def _continue_operation(
         event_time=event_time,
         transition_id=transition_id,
     )
-    return _finish_transition(
+    return finish_transition(
         state,
         updated,
+        sequence=sequence,
         request_id=request_id,
         action_kind="continue_operation",
         actor_action=True,
@@ -1273,29 +1385,26 @@ def _continue_operation(
     )
 
 
-def apply_coupled_actor_action(
-    state: PumpStationCoupledWorldState,
+def transition(
+    state: PumpStationStewardshipState,
     *,
+    sequence: int = 1,
     request_id: str,
-    action_name: str,
-    arguments: dict[str, Any],
+    action: PumpStationAction,
     model: PumpStationCoupledModel | None = None,
 ) -> PumpStationCoupledTransition:
-    """Apply one exact actor action without accepting private overrides."""
-    reason_value = arguments.get("reason")
-    if not isinstance(reason_value, str) or not reason_value.strip():
-        _fail("actor-action-arguments", "a non-empty natural-language reason is required")
-    reason = reason_value.strip()
+    """Apply one task-owned action without accepting host or protocol fields."""
+    action_name = pump_station_action_name(action)
+    arguments = asdict(action)
+    reason = action.reason.strip()
     if action_name == "continue_operation":
         return _continue_operation(
             model or _model(),
             state,
+            sequence=sequence,
             request_id=request_id,
             reason=reason,
         )
-    if action_name in {"search_evidence", "fetch_evidence"}:
-        _fail("temporal-action-route", "search and fetch use the verified temporal gateway")
-
     target_value = arguments.get("pump_id")
     target_id = target_value if isinstance(target_value, str) else None
     backlog_value = arguments.get("backlog_item_id")
@@ -1336,7 +1445,7 @@ def apply_coupled_actor_action(
         assigned_service_scu = len(selected)
         unserved_service_scu = max(0, required - assigned_service_scu)
         assignment_record = PumpStationDutyAssignment(
-            assignment_id=f"assignment-{state.sequence + 1}",
+            assignment_id=f"assignment-{sequence}",
             ordered_pump_ids=assignment,
             active=True,
             source_need_id=f"service-{state.calendar_seconds}",
@@ -1394,12 +1503,13 @@ def apply_coupled_actor_action(
                         kind=PumpStationRestrictionKind.NO_INTERVENTION,
                         pump_id=target_id,
                         status=PumpStationRestrictionStatus.ACTIVE,
-                        created_sequence=state.sequence + 1,
+                        created_sequence=sequence,
                     ),
                 ),
             )
             updated = _start_process(
                 updated,
+                sequence=sequence,
                 kind="inspection",
                 target_id=target_id,
                 backlog_item_id=backlog_item_id,
@@ -1427,6 +1537,7 @@ def apply_coupled_actor_action(
                 _fail("clearance-boundary", target_id)
             updated = _start_process(
                 updated,
+                sequence=sequence,
                 kind="obstruction_clearance",
                 target_id=target_id,
                 backlog_item_id=backlog_item_id,
@@ -1445,6 +1556,7 @@ def apply_coupled_actor_action(
                 _fail("functional-check-boundary", target_id)
             updated = _start_process(
                 updated,
+                sequence=sequence,
                 kind="functional_check",
                 target_id=target_id,
                 backlog_item_id=backlog_item_id,
@@ -1470,6 +1582,7 @@ def apply_coupled_actor_action(
                 _fail("verification-boundary", target_id)
             updated = _start_process(
                 updated,
+                sequence=sequence,
                 kind="post_maintenance_verification",
                 target_id=target_id,
                 backlog_item_id=backlog_item_id,
@@ -1508,7 +1621,7 @@ def apply_coupled_actor_action(
                     kind=PumpStationRestrictionKind.POST_MAINTENANCE_RUN_IN,
                     pump_id=target_id,
                     status=PumpStationRestrictionStatus.ACTIVE,
-                    created_sequence=state.sequence + 1,
+                    created_sequence=sequence,
                     evidence_id=str(evidence_id),
                 ),
             ),
@@ -1519,12 +1632,12 @@ def apply_coupled_actor_action(
                     kind=PumpStationObligationKind.POST_MAINTENANCE_VERIFICATION,
                     pump_id=target_id,
                     status=PumpStationObligationStatus.ACTIVE,
-                    originating_proposal_id=request_id,
+                    originating_action_id=request_id,
                     responsible_authority=PumpStationAuthority.VERIFICATION,
                     linked_restriction_id=restriction_id,
                     due_calendar_seconds=state.calendar_seconds + 57_600,
                     due_runtime_seconds=(state.physical.pump(target_id).exposure.runtime_seconds + 28_800),
-                    created_sequence=state.sequence + 1,
+                    created_sequence=sequence,
                     evidence_id=str(evidence_id),
                 ),
             ),
@@ -1532,7 +1645,7 @@ def apply_coupled_actor_action(
         runtime = updated.physical.pump(target_id).exposure.runtime_seconds
         generation, item = _generated_item(
             rule_id="WG-04",
-            source_transition_id=f"transition-{state.sequence + 1}-{request_id}",
+            source_transition_id=f"transition-{sequence}-{request_id}",
             target_kind="asset",
             target_id=target_id,
             ordinal=1,
@@ -1558,7 +1671,7 @@ def apply_coupled_actor_action(
     elif action_name == "request_condition_check":
         if target_id is None:
             _fail("condition-check", "pump_id is required")
-        evidence_id = f"condition-check-{target_id}-{state.sequence + 1}"
+        evidence_id = f"condition-check-{target_id}-{sequence}"
         updated = replace(
             updated,
             evidence=(
@@ -1678,9 +1791,10 @@ def apply_coupled_actor_action(
         _fail("dependency-waiver", "RS1 has no waivable current dependency")
     else:
         _fail("unknown-actor-action", action_name)
-    return _finish_transition(
+    return finish_transition(
         state,
         updated,
+        sequence=sequence,
         request_id=request_id,
         action_kind=action_name,
         actor_action=True,
@@ -1692,8 +1806,10 @@ def apply_coupled_actor_action(
 
 
 def apply_operations_boundary_review(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     request: PumpStationOperationsBoundaryReviewRequest,
+    *,
+    sequence: int = 1,
 ) -> PumpStationCoupledTransition:
     """Apply one exact host-only Operations review after matching accepted evidence."""
     if "operations_review" not in pump_station_root_control_operations(
@@ -1809,9 +1925,10 @@ def apply_operations_boundary_review(
         )
     else:
         _fail("operations-review-kind", request.review_kind)
-    return _finish_transition(
+    return finish_transition(
         state,
         updated,
+        sequence=sequence,
         request_id=request.review_id,
         action_kind="operations_boundary_review",
         actor_action=False,
@@ -1822,17 +1939,67 @@ def apply_operations_boundary_review(
     )
 
 
-def apply_coupled_treatment(
-    state: PumpStationCoupledWorldState,
+def apply_treatment(
+    state: PumpStationStewardshipState,
     request: PumpStationCoupledTreatmentRequest,
+    *,
+    sequence: int = 1,
 ) -> PumpStationCoupledTransition:
-    """Call the stable task-owned private treatment transition."""
-    return _apply_stable_coupled_treatment(state, request)
+    """Apply one current child-only common-cause treatment."""
+    if request.authority_id != "rollout-host":
+        raise PumpStationActionError("coupled-treatment-authority", request.authority_id)
+    if request.base_state_id != state.state_id:
+        raise PumpStationActionError("stale-coupled-treatment", request.request_id)
+    if not request.treatment_label.strip():
+        raise PumpStationActionError("coupled-treatment-label", request.request_id)
+    pump_ids = tuple(pump.pump_id for pump in state.physical.pumps)
+    if (
+        not request.affected_pump_ids
+        or len(set(request.affected_pump_ids)) != len(request.affected_pump_ids)
+        or not set(request.affected_pump_ids) <= set(pump_ids)
+    ):
+        raise PumpStationActionError("coupled-treatment-targets", request.request_id)
+    if request.obstruction_delta < 0 or request.clearance_loss_delta < 0:
+        raise PumpStationActionError("coupled-treatment-delta", request.request_id)
+    updated_pumps: list[Any] = []
+    for pump in state.physical.pumps:
+        if pump.pump_id not in request.affected_pump_ids:
+            updated_pumps.append(pump)
+            continue
+        obstruction = pump.condition.obstruction + request.obstruction_delta
+        clearance_loss = pump.condition.clearance_loss + request.clearance_loss_delta
+        if obstruction > 1 or clearance_loss > 1:
+            raise PumpStationActionError("coupled-treatment-range", pump.pump_id)
+        updated_pumps.append(
+            replace(
+                pump,
+                condition=PumpCondition(obstruction=obstruction, clearance_loss=clearance_loss),
+            )
+        )
+    updated = replace(
+        state,
+        physical=replace(state.physical, pumps=cast(tuple[Any, Any, Any], tuple(updated_pumps))),
+        event_effect_ids=(*state.event_effect_ids, request.content_id),
+    )
+    return finish_transition(
+        state,
+        updated,
+        sequence=sequence,
+        request_id=request.request_id,
+        action_kind="coupled_physical_treatment",
+        actor_action=False,
+        target_id=None,
+        backlog_item_id=None,
+        reason="Apply the authorised child-only common-cause treatment.",
+        changed_record_ids=(request.content_id, *request.affected_pump_ids),
+    )
 
 
 def apply_process_outcome(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     request: PumpStationProcessOutcomeRequest,
+    *,
+    sequence: int = 1,
 ) -> PumpStationCoupledTransition:
     """Record a failed functional or verification attempt without false closure."""
     if request.base_state_id != state.state_id:
@@ -1935,9 +2102,10 @@ def apply_process_outcome(
         )
         updated = _add_generated_work(updated, generation, rework)
         changed.append(rework.item_id)
-    return _finish_transition(
+    return finish_transition(
         state,
         updated,
+        sequence=sequence,
         request_id=request.request_id,
         action_kind="process_outcome",
         actor_action=False,
@@ -1950,8 +2118,10 @@ def apply_process_outcome(
 
 
 def apply_common_boundary_control(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     request: PumpStationCommonBoundaryRequest,
+    *,
+    sequence: int = 1,
 ) -> PumpStationCoupledTransition:
     """Apply a station-wide hard stop or restoration before later decisions."""
     if "common_boundary" not in pump_station_root_control_operations(
@@ -2001,9 +2171,10 @@ def apply_common_boundary_control(
         assignment=assignment,
         event_effect_ids=(*updated.event_effect_ids, request.content_id),
     )
-    return _finish_transition(
+    return finish_transition(
         state,
         updated,
+        sequence=sequence,
         request_id=request.request_id,
         action_kind="common_boundary_control",
         actor_action=False,
@@ -2014,8 +2185,26 @@ def apply_common_boundary_control(
     )
 
 
+def apply_control(
+    state: PumpStationStewardshipState,
+    control: PumpStationRootControl,
+    *,
+    sequence: int = 1,
+) -> PumpStationCoupledTransition:
+    """Apply one closed root control through its task-owned transition."""
+    if isinstance(control, PumpStationOperationsBoundaryReviewRequest):
+        return apply_operations_boundary_review(state, control, sequence=sequence)
+    if isinstance(control, PumpStationProcessOutcomeRequest):
+        return apply_process_outcome(state, control, sequence=sequence)
+    if isinstance(control, PumpStationCommonBoundaryRequest):
+        return apply_common_boundary_control(state, control, sequence=sequence)
+    if isinstance(control, PumpStationCoupledTreatmentRequest):
+        return apply_treatment(state, control, sequence=sequence)
+    raise PumpStationActionError("control-type", f"unsupported control type {type(control).__name__}")
+
+
 def _project_pump_availability(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     pump_id: str,
 ) -> PumpStationPumpAvailability:
     """Bind visible availability predicates to their canonical evidence and restriction sources."""
@@ -2036,9 +2225,10 @@ def _project_pump_availability(
     )
 
 
-def project_coupled_actor_view(
-    state: PumpStationCoupledWorldState,
+def observe(
+    state: PumpStationStewardshipState,
     *,
+    sequence: int = 0,
     episode_id: str = "oracle-episode",
     world_branch_id: str = "oracle-branch",
     actor_id: str = "reference-controller",
@@ -2074,7 +2264,7 @@ def project_coupled_actor_view(
         observation_schema_id=PUMP_STATION_ACTOR_VIEW_SCHEMA_ID,
         information_boundary_id=PUMP_STATION_INFORMATION_BOUNDARY_ID,
         state_id=state.state_id,
-        sequence=state.sequence,
+        sequence=sequence,
         time_zone=PUMP_STATION_TIME_ZONE,
         current_datetime=pump_station_datetime(state.calendar_seconds),
         calendar_seconds=state.calendar_seconds,
@@ -2160,8 +2350,9 @@ def project_coupled_actor_view(
 
 
 def project_coupled_information_set(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     *,
+    sequence: int,
     episode_id: str,
     world_branch_id: str,
     actor_id: str,
@@ -2170,8 +2361,9 @@ def project_coupled_information_set(
     workspace_tool_ids: tuple[str, ...],
 ) -> PumpStationInformationSet:
     """Project the complete current actor view and its exact visible context."""
-    view = project_coupled_actor_view(
+    view = observe(
         state,
+        sequence=sequence,
         episode_id=episode_id,
         world_branch_id=world_branch_id,
         actor_id=actor_id,

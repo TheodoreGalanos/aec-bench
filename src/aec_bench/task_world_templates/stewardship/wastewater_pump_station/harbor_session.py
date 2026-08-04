@@ -557,18 +557,18 @@ def _private_snapshot(snapshot: StewardshipStateSnapshotRef) -> Any:
 
 
 def _verify_temporal(run: Any) -> TemporalEvidenceVerificationReport:
-    proposal_bindings = {
-        step.proposal.context.proposal_id: (
-            step.proposal.context.information_set_id,
-            step.proposal.context.base_view_id,
+    actor_bindings = {
+        step.command.request_id: (
+            step.command.information_set_id or "",
+            step.command.actor_view_id or "",
         )
         for step in run.repository.command_steps()
-        if step.proposal is not None
+        if step.command.kind == "actor"
     }
     return verify_temporal_evidence_repository(
         TemporalEvidenceRepository(run.repository.root / "temporal-evidence"),
         package=run.package,
-        proposal_bindings=proposal_bindings,
+        actor_bindings=actor_bindings,
     )
 
 

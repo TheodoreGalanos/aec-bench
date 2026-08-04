@@ -57,7 +57,6 @@ authority.
 | [Interactive-world runtime](protocols/interactive-world-runtime.md) | Protocol | Current | World, runtime, and transport contributors | Continual-world runtime and registered worlds |
 | [Staged evidence and publication](protocols/staged-evidence-and-publication.md) | Protocol | Current | Lifecycle and evaluation contributors | Evidence-lifecycle host |
 | [Sealed holdout and verifier isolation](protocols/sealed-holdout-and-verifier-isolation.md) | Protocol | Current | Holdout providers and evaluation owners | Sealed lifecycle boundary |
-| [ASW-8 runtime consolidation](history/asw8-runtime-consolidation.md) | Historical | Historical | Maintainers investigating the current boundary | Repository maintainers |
 | [Documentation agent guide](AGENTS.md) | Guide | Current | Coding agents editing this directory | Repository maintainers |
 
 ## Repository design docs and public docs

@@ -19,8 +19,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PumpStationBoundControlRequest,
     PumpStationCommonBoundaryRequest,
-    PumpStationCoupledStewardshipState,
     PumpStationObligationStatus,
+    PumpStationStewardshipState,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationCoupledRunStep,
@@ -52,7 +52,7 @@ def _create_run(root: Path, suffix: str) -> ReferenceRun:
 
 def _verify_steps(
     run: ReferenceRun,
-    opening_state: PumpStationCoupledStewardshipState,
+    opening_state: PumpStationStewardshipState,
     steps: tuple[PumpStationCoupledRunStep, ...] | None = None,
 ) -> PumpStationCoupledVerificationReport:
     manifest = run.manifest
@@ -139,7 +139,7 @@ def test_conservation_uses_the_run_opening_state_and_detects_each_balance_mismat
     assert not derive_pump_station_conservation_report(opening, liability_state).liabilities.valid
 
 
-def test_verification_reports_actor_proposals_and_host_controls_separately(
+def test_verification_reports_actor_actions_and_host_controls_separately(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "mixed-run"
@@ -198,13 +198,13 @@ def test_verification_reports_actor_proposals_and_host_controls_separately(
     actor_report = _verify_steps(run, opening, (altered_actor, steps[1]))
     control_report = _verify_steps(run, opening, (steps[0], altered_control))
 
-    assert report.actor_proposals_valid
+    assert report.actor_actions_valid
     assert report.host_controls_valid
     assert report.conservation.valid
-    assert not actor_report.actor_proposals_valid
+    assert not actor_report.actor_actions_valid
     assert actor_report.host_controls_valid
-    assert "actor-proposal-integrity" in actor_report.issues
-    assert control_report.actor_proposals_valid
+    assert "actor-action-integrity" in actor_report.issues
+    assert control_report.actor_actions_valid
     assert not control_report.host_controls_valid
     assert "host-control-integrity" in control_report.issues
 

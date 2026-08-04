@@ -62,6 +62,19 @@ An accepted transition advances once after the recorder succeeds. A rejected
 action retains state, step, and decision. World termination and host
 truncation remain distinct.
 
+The pump world binds one task-owned functional core to that shell:
+
+- `initial_state()` constructs the certified canonical
+  `PumpStationStewardshipState`;
+- `observe()` derives the actor view from that state and explicit host step;
+- `transition()` consumes one of the 12 typed pump actions; and
+- `evaluate()` consumes canonical terminal state plus explicit verified step
+  evidence, outside the live transition.
+
+Pump state owns physical condition, clocks, assignment, work, resources,
+evidence, restrictions, and obligations. It does not own the episode step,
+opaque decision, request correlation, repository location, or content digest.
+
 ## Actor boundary
 
 `ContinualWorldActorRequest` is the one current unversioned installed actor
@@ -115,6 +128,11 @@ selected build entry point and executable-artifact digest, the current profile
 identity, and the task/run identities needed for replay. Commands, receipts,
 states, commits, and pointers use current strict dataclasses and the
 current-only codec.
+
+An actor command stores the typed pump action and its host-owned decision
+binding once. It does not store a second proposal, argument JSON copy, or
+duplicate information-set artifact. Replay derives the expected actor view
+from the parent state and re-applies the typed action directly.
 
 The recorder stages command, receipt, state, and commit, then publishes the
 selected pointer last. If recording or pointer publication fails, the call
@@ -187,6 +205,7 @@ cannot manufacture a successful transition or evaluation.
 - [world-kernel conformance](../../tests/task_world_templates/continual/test_hydraulic_world_conformance.py)
 - [separate-process actor resolution](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_actor_interface_transport_e2e.py)
 - [pump transition retry and recovery](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_registered_world_run_transitions.py)
+- [pump functional core](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_functional_core.py)
 - [current pump serialization](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_world_run_serialization.py)
 - [registered Harbor path](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_registered_world_harbor.py)
 - [registered rollout](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_registered_rollout_orchestration.py)

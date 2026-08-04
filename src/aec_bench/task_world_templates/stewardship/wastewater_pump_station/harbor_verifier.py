@@ -135,18 +135,18 @@ def verify_pump_station_harbor_run(
     if not report.valid or _read_json(root / "verification-report.json") != _verification_payload(report):
         raise ValueError("pump-station Harbor verification evidence differs")
 
-    proposal_bindings = {
-        step.proposal.context.proposal_id: (
-            step.proposal.context.information_set_id,
-            step.proposal.context.base_view_id,
+    actor_bindings = {
+        step.command.request_id: (
+            step.command.information_set_id or "",
+            step.command.actor_view_id or "",
         )
         for step in repository.command_steps()
-        if step.proposal is not None
+        if step.command.kind == "actor"
     }
     temporal = verify_temporal_evidence_repository(
         TemporalEvidenceRepository(repository.root / "temporal-evidence"),
         package=run.package,
-        proposal_bindings=proposal_bindings,
+        actor_bindings=actor_bindings,
     )
     if not temporal.valid or _read_json(root / "temporal-verification-report.json") != temporal.model_dump(mode="json"):
         raise ValueError("pump-station temporal verification evidence differs")

@@ -16,8 +16,7 @@ from aec_bench.task_world_templates.continual.definition import (
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station import reference_package_reader
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
-    PumpStationCoupledWorldState,
-    create_asw_8_world_state,
+    initial_state,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
     PUMP_STATION_TASK_WORLD_ID,
@@ -36,6 +35,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
     PumpStationReferenceSystem,
     load_reference_system,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PumpStationStewardshipState,
+)
 
 
 @dataclass(frozen=True)
@@ -45,7 +47,7 @@ class PumpStationContinualProfile:
     reference_system: PumpStationReferenceSystem
     station_package: ReferencePackage
     model: PumpStationCoupledModel
-    opening_state: PumpStationCoupledWorldState
+    opening_state: PumpStationStewardshipState
 
 
 def pump_station_profile_ref(profile: LoadedContinualWorldProfile) -> ContinualWorldProfileRef:
@@ -92,7 +94,7 @@ def _load_pump_station_profile(reference: ContinualWorldProfileRef) -> LoadedCon
             reference_system=system,
             station_package=package,
             model=coupled_pump_station_model_from_package(package),
-            opening_state=create_asw_8_world_state(),
+            opening_state=initial_state(),
         ),
     )
 

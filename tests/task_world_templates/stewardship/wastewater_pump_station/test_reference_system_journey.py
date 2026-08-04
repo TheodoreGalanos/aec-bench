@@ -8,15 +8,17 @@ from decimal import Decimal
 
 import pytest
 
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
+    parse_pump_station_action,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
     PumpStationCoupledWorldError,
-    PumpStationCoupledWorldState,
     apply_common_boundary_control,
-    apply_coupled_actor_action,
     apply_operations_boundary_review,
     apply_process_outcome,
-    create_asw_8_world_state,
-    project_coupled_actor_view,
+    initial_state,
+    observe,
+    transition,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
     PumpStationAvailabilityInterval,
@@ -34,35 +36,38 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     PumpStationCommonBoundaryRequest,
     PumpStationOperationsBoundaryReviewRequest,
     PumpStationProcessOutcomeRequest,
+    PumpStationStewardshipState,
 )
 
 
 def _act(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     request_id: str,
     action_name: str,
     **arguments: object,
-) -> PumpStationCoupledWorldState:
-    return apply_coupled_actor_action(
+) -> PumpStationStewardshipState:
+    return transition(
         state,
         request_id=request_id,
-        action_name=action_name,
-        arguments={"reason": f"Complete {request_id} under the visible service plan.", **arguments},
+        action=parse_pump_station_action(
+            action_name,
+            {"reason": f"Complete {request_id} under the visible service plan.", **arguments},
+        ),
     ).state
 
 
-def _continue_to(state: PumpStationCoupledWorldState, target: int) -> PumpStationCoupledWorldState:
+def _continue_to(state: PumpStationStewardshipState, target: int) -> PumpStationStewardshipState:
     while state.calendar_seconds < target:
         state = _act(
             state,
-            f"continue-{state.sequence + 1}",
+            f"continue-{state.calendar_seconds}",
             "continue_operation",
         )
     assert state.calendar_seconds == target
     return state
 
 
-def _item_id(state: PumpStationCoupledWorldState, rule: str, target: str) -> str:
+def _item_id(state: PumpStationStewardshipState, rule: str, target: str) -> str:
     matching = tuple(
         item.item_id
         for item in state.backlog
@@ -75,14 +80,14 @@ def _item_id(state: PumpStationCoupledWorldState, rule: str, target: str) -> str
 
 
 def _review(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     *,
     review_id: str,
     kind: str,
     pump_id: str,
     restriction_id: str,
     evidence_id: str,
-) -> PumpStationCoupledWorldState:
+) -> PumpStationStewardshipState:
     return apply_operations_boundary_review(
         state,
         PumpStationOperationsBoundaryReviewRequest(
@@ -100,11 +105,11 @@ def _review(
 
 
 def _set_power_boundary(
-    state: PumpStationCoupledWorldState,
+    state: PumpStationStewardshipState,
     request_id: str,
     *,
     available: bool,
-) -> PumpStationCoupledWorldState:
+) -> PumpStationStewardshipState:
     return apply_common_boundary_control(
         state,
         PumpStationCommonBoundaryRequest(
@@ -149,7 +154,7 @@ def _runtime_backlog(item_id: str, pump_id: str, runtime_limit: int) -> PumpStat
 
 
 def test_current_projection_presents_dates_and_complete_planning_windows() -> None:
-    view = project_coupled_actor_view(create_asw_8_world_state())
+    view = observe(initial_state())
 
     assert view.time_zone == "Australia/Sydney"
     assert view.current_datetime == "2026-01-01T06:00:00+11:00"
@@ -176,8 +181,8 @@ def test_current_projection_presents_dates_and_complete_planning_windows() -> No
     )
 
 
-def run_reference_journey() -> PumpStationCoupledWorldState:
-    state = create_asw_8_world_state()
+def run_reference_journey() -> PumpStationStewardshipState:
+    state = initial_state()
     state = _act(
         state,
         "a-verification",
@@ -243,7 +248,7 @@ def run_reference_journey() -> PumpStationCoupledWorldState:
         work_order_id="work-order-b-001",
     )
     verification_id = _item_id(state, "WG-04", "pump-b")
-    view = project_coupled_actor_view(state)
+    view = observe(state)
     assert view.ranked_backlog[0].generation_rule_id == "WG-07"
     state = _act(
         state,
@@ -293,7 +298,7 @@ def run_reference_journey() -> PumpStationCoupledWorldState:
 
 def test_complete_reference_journey_reaches_declared_terminal_state() -> None:
     state = run_reference_journey()
-    view = project_coupled_actor_view(state)
+    view = observe(state)
 
     assert state.calendar_seconds == 223_200
     assert state.assignment.ordered_pump_ids == ("pump-a", "pump-b")
@@ -315,7 +320,7 @@ def test_complete_reference_journey_reaches_declared_terminal_state() -> None:
 
 
 def test_operations_review_rejects_stale_or_mismatched_input() -> None:
-    state = create_asw_8_world_state()
+    state = initial_state()
     state = _act(
         state,
         "a-verification",
@@ -388,7 +393,7 @@ def test_operations_review_rejects_stale_or_mismatched_input() -> None:
 
 
 def test_power_stop_suspends_clearance_and_resume_uses_remaining_duration() -> None:
-    state = create_asw_8_world_state()
+    state = initial_state()
     state = _act(
         state,
         "late-b-clearance",
@@ -417,7 +422,7 @@ def test_power_stop_suspends_clearance_and_resume_uses_remaining_duration() -> N
 
 
 def test_resource_withdrawal_wins_over_same_time_process_completion() -> None:
-    state = create_asw_8_world_state()
+    state = initial_state()
     state = replace(
         state,
         physical=replace(state.physical, calendar_seconds=46_800),
@@ -444,7 +449,7 @@ def test_resource_withdrawal_wins_over_same_time_process_completion() -> None:
 def test_field_process_start_and_resume_recheck_visible_assured_capacity() -> None:
     extended_window = (PumpStationAvailabilityInterval(21_600, 93_600),)
 
-    def at_capacity_boundary(state: PumpStationCoupledWorldState) -> PumpStationCoupledWorldState:
+    def at_capacity_boundary(state: PumpStationStewardshipState) -> PumpStationStewardshipState:
         resources = replace(
             state.resources,
             pools=tuple(
@@ -460,7 +465,7 @@ def test_field_process_start_and_resume_recheck_visible_assured_capacity() -> No
             resources=resources,
         )
 
-    start = at_capacity_boundary(create_asw_8_world_state())
+    start = at_capacity_boundary(initial_state())
     with pytest.raises(PumpStationCoupledWorldError, match="planned-outage-capacity"):
         _act(
             start,
@@ -471,7 +476,7 @@ def test_field_process_start_and_resume_recheck_visible_assured_capacity() -> No
             inspection_evidence_id="initial-b-inspection-accepted",
         )
 
-    resume = create_asw_8_world_state()
+    resume = initial_state()
     resume = _act(
         resume,
         "capacity-resume-clearance",
@@ -496,7 +501,7 @@ def test_field_process_start_and_resume_recheck_visible_assured_capacity() -> No
 
 
 def test_cancel_after_suspension_replans_work_and_releases_the_consumable() -> None:
-    state = create_asw_8_world_state()
+    state = initial_state()
     state = _act(
         state,
         "cancel-clearance-start",
@@ -518,7 +523,7 @@ def test_cancel_after_suspension_replans_work_and_releases_the_consumable() -> N
 
 
 def test_failed_functional_check_retains_work_and_failed_verification_creates_rework() -> None:
-    functional = create_asw_8_world_state()
+    functional = initial_state()
     functional = _act(
         functional,
         "failed-functional-clearance",
@@ -554,7 +559,7 @@ def test_failed_functional_check_retains_work_and_failed_verification_creates_re
     assert retained.closure_evidence_ids == ("evidence-b-functional-failed-001",)
     assert len([item for item in functional.backlog if item.generation_rule_id == "WG-03"]) == 1
 
-    verification = create_asw_8_world_state()
+    verification = initial_state()
     verification = _act(
         verification,
         "failed-verification-start",
@@ -578,7 +583,7 @@ def test_failed_functional_check_retains_work_and_failed_verification_creates_re
 
 
 def test_common_hard_stop_requires_a_fresh_assignment_after_restore() -> None:
-    state = create_asw_8_world_state()
+    state = initial_state()
     stopped = _set_power_boundary(state, "power-stop", available=False)
 
     assert stopped.physical.service_running_pump_ids == ()
@@ -608,7 +613,7 @@ def test_common_hard_stop_requires_a_fresh_assignment_after_restore() -> None:
 
 
 def test_continue_operation_stops_at_the_first_named_runtime_boundary() -> None:
-    state = create_asw_8_world_state()
+    state = initial_state()
     state = replace(
         state,
         assignment=replace(state.assignment, ordered_pump_ids=("pump-a", "pump-c")),
@@ -636,7 +641,7 @@ def test_continue_operation_stops_at_the_first_named_runtime_boundary() -> None:
 
 
 def test_assignment_rejects_avoidable_deficit_and_records_unavoidable_deficit() -> None:
-    state = create_asw_8_world_state()
+    state = initial_state()
     peak = replace(
         state,
         physical=replace(state.physical, calendar_seconds=64_800),
@@ -647,7 +652,7 @@ def test_assignment_rejects_avoidable_deficit_and_records_unavoidable_deficit() 
         "request_duty_assignment",
         ordered_pump_ids=("pump-c",),
     )
-    view = project_coupled_actor_view(unavoidable)
+    view = observe(unavoidable)
 
     assert unavoidable.assignment.required_service_scu == 2
     assert unavoidable.assignment.assigned_service_scu == 1

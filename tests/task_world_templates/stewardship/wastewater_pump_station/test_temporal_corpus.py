@@ -38,8 +38,7 @@ def test_temporal_corpus_publishes_and_reloads_exact_certified_lineage(
     assert reloaded.versions
     assert all(item.content_text for item in reloaded.versions)
     assert all(
-        source.rights_class is TemporalEvidenceRightsClass.REDISTRIBUTABLE
-        for source in reloaded.lineage.sources
+        source.rights_class is TemporalEvidenceRightsClass.REDISTRIBUTABLE for source in reloaded.lineage.sources
     )
 
 

@@ -12,10 +12,13 @@ from hypothesis import strategies as st
 
 from aec_bench.task_world_templates.continual.world_logic import Transition
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station import coupled_runtime
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
+    parse_pump_station_action,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
-    apply_coupled_actor_action,
-    create_asw_8_world_state,
-    project_coupled_actor_view,
+    initial_state,
+    observe,
+    transition,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_kernel import (
     coupled_pump_station_model_from_package,
@@ -109,19 +112,21 @@ def test_registered_pump_actor_transition_uses_physical_world_transition(
         return original(model, state, action)
 
     monkeypatch.setattr(coupled_runtime, "transition_coupled_pump_station", record_transition)
-    initial = create_asw_8_world_state()
-    initial_view = project_coupled_actor_view(initial)
-    transition = apply_coupled_actor_action(
+    initial = initial_state()
+    initial_view = observe(initial)
+    applied = transition(
         initial,
         request_id="kernel-route",
-        action_name="continue_operation",
-        arguments={"reason": "Advance through the registered actor transition."},
+        action=parse_pump_station_action(
+            "continue_operation",
+            {"reason": "Advance through the registered actor transition."},
+        ),
         model=_model(),
     )
-    final_view = project_coupled_actor_view(transition.state)
+    final_view = observe(applied.state, sequence=1)
 
     assert calls == 1
-    assert transition.state.calendar_seconds > initial.calendar_seconds
+    assert applied.state.calendar_seconds > initial.calendar_seconds
     assert "condition" not in repr(asdict(initial_view))
     assert "condition" not in repr(asdict(final_view))
 

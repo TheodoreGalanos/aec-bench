@@ -17,7 +17,6 @@ EXPECTED_REPOSITORY_DOCS = {
     "INVARIANTS.md",
     "PROJECT_STRUCTURE.md",
     "README.md",
-    "history/asw8-runtime-consolidation.md",
     "protocols/interactive-world-runtime.md",
     "protocols/sealed-holdout-and-verifier-isolation.md",
     "protocols/staged-evidence-and-publication.md",
@@ -29,7 +28,6 @@ MAINTAINED_INDEX_TARGETS = {
     "INVARIANTS.md",
     "PROJECT_STRUCTURE.md",
     "README.md",
-    "history/asw8-runtime-consolidation.md",
     "protocols/interactive-world-runtime.md",
     "protocols/sealed-holdout-and-verifier-isolation.md",
     "protocols/staged-evidence-and-publication.md",
@@ -80,14 +78,6 @@ def test_retired_continual_world_document_is_not_referenced() -> None:
 
     assert not (DOCS_ROOT / "CONTINUAL_WORLD_RUNTIME.md").exists()
     assert all(RETIRED_CONTINUAL_WORLD_DOC not in path.read_text(encoding="utf-8") for path in current_guidance)
-
-
-def test_asw8_history_is_explicitly_non_normative() -> None:
-    history = (DOCS_ROOT / "history" / "asw8-runtime-consolidation.md").read_text(encoding="utf-8")
-
-    assert "| Class | Historical |" in history
-    assert "| Status | Historical |" in history
-    assert "non-normative" in history
 
 
 def test_agent_guides_do_not_freeze_test_counts() -> None:

@@ -1,5 +1,5 @@
 # ABOUTME: Defines the unversioned live values for the current coupled pump world.
-# ABOUTME: Keeps actor proposals, root controls, state, and transition results task-local.
+# ABOUTME: Keeps actor actions, root controls, state, and transition results task-local.
 
 from __future__ import annotations
 
@@ -20,19 +20,17 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evidence
     PumpStationEvidenceHealth,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
-    PumpInspectionObservation,
     PumpStationCoupledEnvironment,
     PumpStationCoupledOperatingInterval,
     PumpStationCoupledPhysicalState,
     PumpStationDutyAssignment,
-    PumpStationObservation,
     PumpStationOutageEpisode,
     PumpStationServiceRequirement,
 )
 
 
-class PumpStationProposalError(ValueError):
-    """Raised when a proposal or control leaves the current task contract."""
+class PumpStationActionError(ValueError):
+    """Raised when an action or control leaves the current task contract."""
 
     def __init__(self, code: str, detail: str) -> None:
         self.code = code
@@ -40,12 +38,12 @@ class PumpStationProposalError(ValueError):
 
 
 def _fail(code: str, detail: str) -> NoReturn:
-    raise PumpStationProposalError(code, detail)
+    raise PumpStationActionError(code, detail)
 
 
 def _require_text(value: object, field_name: str) -> None:
     if not isinstance(value, str) or not value.strip():
-        _fail("proposal-shape", f"{field_name} must not be empty")
+        _fail("action-shape", f"{field_name} must not be empty")
 
 
 def _require_non_negative(value: int, field_name: str) -> None:
@@ -109,38 +107,22 @@ class PumpStationEvidenceKind(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class ProposalContext:
-    """Host-created binding for one validated current proposal."""
-
-    proposal_id: str
-    agent_tenure_id: str
-    based_on_sequence: int
-    base_view_id: str
-    information_set_id: str
+class ContinueOperation:
     reason: str
 
     def __post_init__(self) -> None:
-        _require_text(self.proposal_id, "proposal_id")
-        _require_text(self.agent_tenure_id, "agent_tenure_id")
-        _require_non_negative(self.based_on_sequence, "based_on_sequence")
-        _require_text(self.base_view_id, "base_view_id")
-        _require_text(self.information_set_id, "information_set_id")
         _require_text(self.reason, "reason")
 
 
 @dataclass(frozen=True, slots=True)
-class ContinueOperation:
-    context: ProposalContext
-
-
-@dataclass(frozen=True, slots=True)
 class RequestDutyAssignment:
-    context: ProposalContext
+    reason: str
     ordered_pump_ids: tuple[str, ...]
     source_outage_id: str | None = None
     source_backlog_item_id: str | None = None
 
     def __post_init__(self) -> None:
+        _require_text(self.reason, "reason")
         if not self.ordered_pump_ids or len(self.ordered_pump_ids) > 2:
             raise ValueError("ordered_pump_ids must contain one or two pumps")
         if len(set(self.ordered_pump_ids)) != len(self.ordered_pump_ids):
@@ -157,114 +139,121 @@ class RequestDutyAssignment:
 
 @dataclass(frozen=True, slots=True)
 class RequestInspection:
-    context: ProposalContext
+    reason: str
     pump_id: str
-    backlog_item_id: str | None = None
+    backlog_item_id: str
 
     def __post_init__(self) -> None:
+        _require_text(self.reason, "reason")
         _require_text(self.pump_id, "pump_id")
-        if self.backlog_item_id is not None:
-            _require_text(self.backlog_item_id, "backlog_item_id")
+        _require_text(self.backlog_item_id, "backlog_item_id")
 
 
 @dataclass(frozen=True, slots=True)
 class RequestConditionCheck:
-    context: ProposalContext
+    reason: str
     pump_id: str
 
     def __post_init__(self) -> None:
+        _require_text(self.reason, "reason")
         _require_text(self.pump_id, "pump_id")
 
 
 @dataclass(frozen=True, slots=True)
 class RequestObstructionClearance:
-    context: ProposalContext
+    reason: str
     pump_id: str
     inspection_evidence_id: str
-    backlog_item_id: str | None = None
+    backlog_item_id: str
 
     def __post_init__(self) -> None:
+        _require_text(self.reason, "reason")
         _require_text(self.pump_id, "pump_id")
         _require_text(self.inspection_evidence_id, "inspection_evidence_id")
-        if self.backlog_item_id is not None:
-            _require_text(self.backlog_item_id, "backlog_item_id")
+        _require_text(self.backlog_item_id, "backlog_item_id")
 
 
 @dataclass(frozen=True, slots=True)
 class RequestFunctionalCheck:
-    context: ProposalContext
+    reason: str
     pump_id: str
     backlog_item_id: str
 
     def __post_init__(self) -> None:
+        _require_text(self.reason, "reason")
         _require_text(self.pump_id, "pump_id")
         _require_text(self.backlog_item_id, "backlog_item_id")
 
 
 @dataclass(frozen=True, slots=True)
 class RequestProvisionalReturn:
-    context: ProposalContext
+    reason: str
     pump_id: str
     functional_check_evidence_id: str
 
     def __post_init__(self) -> None:
+        _require_text(self.reason, "reason")
         _require_text(self.pump_id, "pump_id")
         _require_text(self.functional_check_evidence_id, "functional_check_evidence_id")
 
 
 @dataclass(frozen=True, slots=True)
 class RequestProvisionalClosure:
-    context: ProposalContext
+    reason: str
     work_order_id: str
 
     def __post_init__(self) -> None:
+        _require_text(self.reason, "reason")
         _require_text(self.work_order_id, "work_order_id")
 
 
 @dataclass(frozen=True, slots=True)
 class RequestVerification:
-    context: ProposalContext
+    reason: str
     pump_id: str
-    backlog_item_id: str | None = None
+    backlog_item_id: str
 
     def __post_init__(self) -> None:
+        _require_text(self.reason, "reason")
         _require_text(self.pump_id, "pump_id")
-        if self.backlog_item_id is not None:
-            _require_text(self.backlog_item_id, "backlog_item_id")
+        _require_text(self.backlog_item_id, "backlog_item_id")
 
 
 @dataclass(frozen=True, slots=True)
 class ResumeProcess:
-    context: ProposalContext
+    reason: str
     process_id: str
 
     def __post_init__(self) -> None:
+        _require_text(self.reason, "reason")
         _require_text(self.process_id, "process_id")
 
 
 @dataclass(frozen=True, slots=True)
 class CancelProcess:
-    context: ProposalContext
+    reason: str
     process_id: str
 
     def __post_init__(self) -> None:
+        _require_text(self.reason, "reason")
         _require_text(self.process_id, "process_id")
 
 
 @dataclass(frozen=True, slots=True)
 class RequestDependencyWaiver:
-    context: ProposalContext
+    reason: str
     process_id: str
     dependency_id: str
     evidence_id: str
 
     def __post_init__(self) -> None:
+        _require_text(self.reason, "reason")
         _require_text(self.process_id, "process_id")
         _require_text(self.dependency_id, "dependency_id")
         _require_text(self.evidence_id, "evidence_id")
 
 
-type PumpStationProposal = (
+type PumpStationAction = (
     ContinueOperation
     | RequestDutyAssignment
     | RequestInspection
@@ -278,6 +267,25 @@ type PumpStationProposal = (
     | CancelProcess
     | RequestDependencyWaiver
 )
+
+
+def pump_station_action_name(action: PumpStationAction) -> str:
+    """Return the installed operation name for one task-owned action."""
+    names = {
+        ContinueOperation: "continue_operation",
+        RequestDutyAssignment: "request_duty_assignment",
+        RequestInspection: "request_inspection",
+        RequestObstructionClearance: "request_obstruction_clearance",
+        RequestFunctionalCheck: "request_functional_check",
+        RequestProvisionalReturn: "request_provisional_return",
+        RequestProvisionalClosure: "request_provisional_closure",
+        RequestVerification: "request_post_maintenance_verification",
+        ResumeProcess: "resume_process",
+        CancelProcess: "cancel_process",
+        RequestDependencyWaiver: "request_dependency_waiver",
+        RequestConditionCheck: "request_condition_check",
+    }
+    return names[type(action)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -297,7 +305,7 @@ class PumpStationObligation:
     kind: PumpStationObligationKind
     pump_id: str
     status: PumpStationObligationStatus
-    originating_proposal_id: str
+    originating_action_id: str
     responsible_authority: PumpStationAuthority
     linked_restriction_id: str
     due_calendar_seconds: int
@@ -322,10 +330,8 @@ class PumpStationEvidence:
     created_at_seconds: int
     produced_by: PumpStationAuthority
     accepted_by: PumpStationAuthority | None
-    inspection: PumpInspectionObservation | None = None
     passed: bool | None = None
     health: PumpStationEvidenceHealth | None = None
-    condition_observation: PumpStationObservation | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -334,7 +340,6 @@ class PumpStationStewardshipState:
 
     physical: PumpStationCoupledPhysicalState
     environment: PumpStationCoupledEnvironment
-    sequence: int
     resources: PumpStationResourceState
     restrictions: tuple[PumpStationRestriction, ...]
     obligations: tuple[PumpStationObligation, ...]
@@ -355,7 +360,6 @@ class PumpStationStewardshipState:
     event_effect_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        _require_non_negative(self.sequence, "sequence")
         if len({item.item_id for item in self.backlog}) != len(self.backlog):
             _fail("backlog-identity", "backlog item IDs must be distinct")
 
@@ -473,10 +477,6 @@ class PumpStationStewardshipState:
             if evidence.kind is kind and evidence.pump_id == pump_id:
                 return evidence
         raise LookupError(f"missing {kind.value} evidence for {pump_id}")
-
-
-type PumpStationCoupledStewardshipState = PumpStationStewardshipState
-type PumpStationStewardshipStateRecord = PumpStationStewardshipState
 
 
 @dataclass(frozen=True, slots=True)
@@ -656,5 +656,5 @@ class PumpStationCoupledTransition:
     receipt: PumpStationCoupledTransitionReceipt
 
     def __post_init__(self) -> None:
-        if self.state.sequence != self.receipt.sequence or self.state.state_id != self.receipt.after_state_id:
+        if self.state.state_id != self.receipt.after_state_id:
             _fail("transition-integrity", "state and receipt differ")

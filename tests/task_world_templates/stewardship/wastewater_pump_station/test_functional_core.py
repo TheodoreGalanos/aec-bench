@@ -21,9 +21,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 def _start(root: Path) -> PumpStationWorldRun:
     return PumpStationWorldRun.create_reference_system(
         repository=PumpStationWorldRunRepository(root),
-        run_id="state-machine-run",
-        episode_id="state-machine-episode",
-        world_branch_id="state-machine-branch",
+        run_id="functional-core-run",
+        episode_id="functional-core-episode",
+        world_branch_id="functional-core-branch",
     )
 
 
@@ -35,7 +35,7 @@ def test_current_actor_transition_advances_and_replays_once(tmp_path: Path) -> N
 
     result = host.invoke(
         WorldActorActionRequest(
-            request_id="state-machine-action",
+            request_id="functional-core-action",
             decision_id=observation.decision_id,
             action_name="continue_operation",
             arguments={"reason": "Advance the current registered world."},
