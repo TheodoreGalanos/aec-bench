@@ -54,6 +54,7 @@ authority.
 | [Contracts](CONTRACTS.md) | Normative | Current | Boundary owners and consumers | Owning domains |
 | [Invariants](INVARIANTS.md) | Normative | Normative | All contributors | Benchmark governance |
 | [Project structure](PROJECT_STRUCTURE.md) | Guide | Current | Contributors and agents | Repository maintainers |
+| [World authoring](world-authoring.md) | Guide | Current | Task and interactive-world contributors | Task-world owners and continual-world maintainers |
 | [Interactive-world runtime](protocols/interactive-world-runtime.md) | Protocol | Current | World, runtime, and transport contributors | Continual-world runtime and registered worlds |
 | [Staged evidence and publication](protocols/staged-evidence-and-publication.md) | Protocol | Current | Lifecycle and evaluation contributors | Evidence-lifecycle host |
 | [Sealed holdout and verifier isolation](protocols/sealed-holdout-and-verifier-isolation.md) | Protocol | Current | Holdout providers and evaluation owners | Sealed lifecycle boundary |
