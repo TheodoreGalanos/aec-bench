@@ -11,7 +11,7 @@ from typing import Any, cast
 
 import pytest
 
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station import (
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_reader import (
     EXPECTED_MANIFEST_CONTENT_ID,
     EXPECTED_PACKAGE_CONTENT_ID,
     REFERENCE_PACKAGE_FILE_NAMES,

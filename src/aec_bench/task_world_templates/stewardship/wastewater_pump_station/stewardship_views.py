@@ -102,7 +102,7 @@ class PumpStationObservationHistory:
 
 @dataclass(frozen=True, slots=True)
 class PumpStationCurrentContext:
-    """Exact non-world material visible when an actor commits a proposal."""
+    """Exact non-world material visible when an actor submits an action."""
 
     continuity_carrier: PumpStationContinuityCarrier
     conversation_prefix_id: str | None

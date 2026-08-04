@@ -152,10 +152,7 @@ def test_search_replay_fetch_and_budget_are_deterministic_and_safe() -> None:
     assert first.receipt.budget_after == first.next_state.remaining_budget
     assert first.receipt.budget_consumed.calls == 1
     assert first.receipt.budget_before.calls - first.receipt.budget_consumed.calls == first.receipt.budget_after.calls
-    assert all(
-        item.snippet.startswith("[UNTRUSTED DOCUMENTARY EVIDENCE]")
-        for item in first.result.references
-    )
+    assert all(item.snippet.startswith("[UNTRUSTED DOCUMENTARY EVIDENCE]") for item in first.result.references)
 
     selected = first.result.references[0]
     fetched = gateway.fetch(

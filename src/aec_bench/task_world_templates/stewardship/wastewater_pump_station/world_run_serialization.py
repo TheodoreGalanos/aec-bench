@@ -72,13 +72,6 @@ def _decode_union(value: object, expected: object) -> object:
     options = get_args(expected)
     if value is None and type(None) in options:
         return None
-    if isinstance(value, dict) and isinstance(value.get("$type"), str):
-        type_name = value["$type"]
-        for option in options:
-            candidate = _expected_value(option)
-            if isinstance(candidate, type) and is_dataclass(candidate) and candidate.__name__ == type_name:
-                return _decode(value, candidate)
-        _fail("artifact-type", f"unknown stored type {type_name}")
     failures: list[PumpStationWorldRunError] = []
     for option in options:
         if option is type(None):

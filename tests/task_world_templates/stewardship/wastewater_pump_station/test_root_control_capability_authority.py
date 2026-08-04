@@ -22,8 +22,8 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PumpStationBoundControlRequest,
-    PumpStationCoupledStewardshipState,
     PumpStationProcessOutcomeRequest,
+    PumpStationStewardshipState,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_control import (
     PUMP_STATION_ROOT_CONTROL_OPERATIONS,
@@ -41,7 +41,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 
 type RegisteredRun = PumpStationWorldRun[
     PumpStationCoupledModel,
-    PumpStationCoupledStewardshipState,
+    PumpStationStewardshipState,
 ]
 
 _OPERATIONS_PRINCIPAL = "operations-controller"

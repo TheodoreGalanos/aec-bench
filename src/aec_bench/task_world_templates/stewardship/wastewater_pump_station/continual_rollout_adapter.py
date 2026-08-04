@@ -31,7 +31,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewards
     stewardship_content_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
-    PumpStationCoupledStewardshipState,
+    PumpStationStewardshipState,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence.models import (
     TemporalEvidenceBundle,
@@ -64,7 +64,7 @@ class _PumpStationVerifiedRolloutOrigin:
     """Pump values captured from one prefix-verified selected-history origin."""
 
     manifest: PumpStationRegisteredWorldRunManifest
-    state: PumpStationCoupledStewardshipState
+    state: PumpStationStewardshipState
     bundle: TemporalEvidenceBundle
     snapshot: PumpStationStateSnapshotRef
     remaining_schedule_sha256: str
@@ -423,7 +423,7 @@ class PumpStationContinualWorldBranchPort:
 
 
 def _remaining_schedule_sha256(
-    state: PumpStationCoupledStewardshipState,
+    state: PumpStationStewardshipState,
 ) -> str:
     remaining = tuple(
         requirement

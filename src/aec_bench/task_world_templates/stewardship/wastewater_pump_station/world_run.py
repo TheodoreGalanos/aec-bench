@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from dataclasses import replace
 from typing import TYPE_CHECKING, NoReturn
@@ -14,6 +13,7 @@ from aec_bench.contracts.continual_world import (
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
     PumpStationCoupledWorldError,
+    apply_control,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
     PumpStationCoupledModel,
@@ -22,22 +22,18 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
     ReferencePackage,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
-    canonical_stewardship_value,
     stewardship_content_id,
     stewardship_state_id,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+    PumpStationActionError,
     PumpStationBoundControlRequest,
     PumpStationCommonBoundaryRequest,
-    PumpStationCoupledStewardshipState,
     PumpStationCoupledTransition,
     PumpStationCoupledTreatmentRequest,
     PumpStationOperationsBoundaryReviewRequest,
     PumpStationProcessOutcomeRequest,
-    PumpStationProposalError,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_state_machine import (
-    apply_stewardship_control,
+    PumpStationStewardshipState,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationCoupledVerificationReport,
@@ -287,7 +283,7 @@ class PumpStationWorldRun:
         return self._profile_ref(self._manifest)
 
     @property
-    def state(self) -> PumpStationCoupledStewardshipState:
+    def state(self) -> PumpStationStewardshipState:
         snapshot = self._repository.current_snapshot()
         return self._repository.load_state(snapshot.state_id)
 
@@ -333,8 +329,8 @@ class PumpStationWorldRun:
                 _fail("control-request-scope", "registered control does not bind the selected snapshot")
             state = self._repository.load_state(prior.state_id)
             try:
-                transition = apply_stewardship_control(state, request.control)
-            except (PumpStationProposalError, PumpStationCoupledWorldError) as error:
+                transition = apply_control(state, request.control, sequence=request.based_on_sequence + 1)
+            except (PumpStationActionError, PumpStationCoupledWorldError) as error:
                 _fail(error.code, str(error))
             staged = self._repository.stage_command_transition(
                 manifest=self._manifest,
@@ -373,7 +369,7 @@ class PumpStationWorldRun:
             return PumpStationCoupledVerificationReport(
                 valid=False,
                 replay_valid=False,
-                actor_proposals_valid=False,
+                actor_actions_valid=False,
                 host_controls_valid=False,
                 issues=(f"repository-invalid:{error}",),
                 replayed_transition_ids=(),
@@ -390,13 +386,14 @@ class PumpStationWorldRun:
             expected_episode_id=self._manifest.episode_id,
             expected_world_branch_id=self._manifest.world_branch_id,
             expected_actor_id="pump-station-actor",
+            initial_sequence=self._manifest.initial_sequence,
             expected_source_artifact_ids=(
                 self._manifest.reference_system_content_id,
                 self._manifest.package_content_id,
                 self._manifest.temporal_bundle_content_id,
             ),
         )
-        proposal_bindings = {
+        actor_bindings = {
             step.command.request_id: (
                 step.command.information_set_id or "",
                 step.command.actor_view_id or "",
@@ -407,7 +404,7 @@ class PumpStationWorldRun:
         temporal_report = verify_temporal_evidence_repository(
             TemporalEvidenceRepository(self._repository.root / "temporal-evidence"),
             package=self._package,
-            proposal_bindings=proposal_bindings,
+            actor_bindings=actor_bindings,
         )
         temporal_issues = tuple(
             f"temporal-evidence-invalid:{issue.code}:{issue.artifact_id or '-'}" for issue in temporal_report.issues
@@ -477,7 +474,7 @@ class PumpStationWorldRun:
             manifest_content_id=package.manifest_content_id,
             asset_id=model.asset_id,
             model_id=stewardship_content_id(model),
-            initial_sequence=profile.opening_state.sequence,
+            initial_sequence=0,
             initial_state_id=stewardship_state_id(profile.opening_state),
             task_world_id=world_build.task_world_id,
             world_build_entry_point=world_build.entry_point,
@@ -568,7 +565,7 @@ class PumpStationWorldRun:
         temporal_repository = TemporalEvidenceRepository(repository.root / "temporal-evidence")
         try:
             steps = repository.command_steps()
-            proposal_bindings = {
+            actor_bindings = {
                 step.command.request_id: (
                     step.command.information_set_id or "",
                     step.command.actor_view_id or "",
@@ -579,7 +576,7 @@ class PumpStationWorldRun:
             report = verify_temporal_evidence_repository(
                 temporal_repository,
                 package=package,
-                proposal_bindings=proposal_bindings,
+                actor_bindings=actor_bindings,
             )
         except (OSError, ValueError, PumpStationWorldRunError, TemporalEvidenceIntegrityError) as error:
             _fail("temporal-evidence", f"registered temporal evidence is invalid: {error}")
@@ -645,27 +642,21 @@ class PumpStationWorldRun:
     def _control_command(self, request: PumpStationBoundControlRequest) -> PumpStationCommand:
         control = request.control
         if isinstance(control, PumpStationOperationsBoundaryReviewRequest):
-            kind, action_name = "operations_review", "operations_boundary_review"
+            kind = "operations_review"
         elif isinstance(control, PumpStationProcessOutcomeRequest):
-            kind, action_name = "process_outcome", "process_outcome"
+            kind = "process_outcome"
         elif isinstance(control, PumpStationCommonBoundaryRequest):
-            kind, action_name = "common_boundary", "common_boundary_control"
+            kind = "common_boundary"
         elif isinstance(control, PumpStationCoupledTreatmentRequest):
-            kind, action_name = "coupled_treatment", "coupled_physical_treatment"
+            kind = "coupled_treatment"
         else:
             _fail("control-type", f"unsupported registered control {type(control).__name__}")
         return PumpStationCommand(
             kind=kind,
             request_id=request.request_id,
             request_content_id=control.content_id,
-            action_name=action_name,
-            arguments_json=json.dumps(
-                canonical_stewardship_value(control),
-                allow_nan=False,
-                ensure_ascii=False,
-                separators=(",", ":"),
-                sort_keys=True,
-            ),
+            action=None,
+            control=control,
             task_world_id=self._manifest.task_world_id,
             run_id=request.run_id,
             episode_id=request.episode_id,

@@ -99,6 +99,12 @@ Initial state, actor observation, transition functions, outputs, and evaluation
 remain task-owned because the hydraulic and pump behaviors do not honestly
 share one public structural protocol.
 
+The pump world has one authoritative `PumpStationStewardshipState`. Its direct
+`initial_state`, `observe`, and typed `transition` functions own pump behavior;
+the evaluation package owns the direct evaluator. The episode shell owns step
+advancement and opaque decisions, while the pump persistence edge stores only
+the current typed command, receipt, state, commit, and selected pointer.
+
 Interactive worlds and artifact tasks meet at the experiment and evidence
 layers. An interactive world does not need to pretend that each action is a
 workspace submission, and an artifact task does not need a world-session API.

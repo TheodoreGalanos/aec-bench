@@ -8,6 +8,11 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import NoReturn, Self
 
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.physical_models import (
+    PumpStationCoupledPhysicalState,
+    PumpStationServiceRequirement,
+)
+
 
 class PumpStationResourceError(ValueError):
     """Raised when resource quantities, windows, or reservations are invalid."""
@@ -224,28 +229,6 @@ def create_asw_8_resource_state() -> PumpStationResourceState:
                 free=1,
                 reserved=0,
             ),
-        )
-    )
-
-
-def record_consumable_arrival(
-    resources: PumpStationResourceState,
-    *,
-    pool_id: str,
-    quantity: int,
-) -> PumpStationResourceState:
-    """Record one declared stock arrival without changing reserved stock."""
-    if quantity <= 0:
-        _resource_fail("resource-quantity", pool_id)
-    pool = resources.pool(pool_id)
-    if not isinstance(pool, PumpStationConsumablePool):
-        _resource_fail("resource-class", pool_id)
-    return resources.with_pool(
-        replace(
-            pool,
-            on_hand=pool.on_hand + quantity,
-            free=pool.free + quantity,
-            arrivals=pool.arrivals + quantity,
         )
     )
 
@@ -623,40 +606,12 @@ class PumpStationWorkGenerationRecord:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class PumpStationWorkGenerationResult:
-    """Updated generation and backlog collections after one idempotent attempt."""
-
-    records: tuple[PumpStationWorkGenerationRecord, ...]
-    backlog: tuple[PumpStationBacklogItem, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class PumpStationDeclaredWorkTrigger:
-    """Typed source facts for one of the closed WG-01 to WG-09 rules."""
-
-    rule_id: str
-    source_transition_id: str
-    target_kind: str
-    target_id: str
-    generation_ordinal: int
-    generated_at_calendar_seconds: int
-    current_runtime_seconds: int = 0
-    next_capacity_critical_calendar_seconds: int | None = None
-    linked_clearance_due_calendar_seconds: int | None = None
-    linked_obligation_ids: tuple[str, ...] = ()
-    linked_restriction_ids: tuple[str, ...] = ()
-    existing_item_id: str | None = None
-    target_is_serving: bool = False
-    blocks_urgent_work: bool = False
-
-
 def generate_work_once(
     records: tuple[PumpStationWorkGenerationRecord, ...],
     backlog: tuple[PumpStationBacklogItem, ...],
     generation: PumpStationWorkGenerationRecord,
     item: PumpStationBacklogItem,
-) -> PumpStationWorkGenerationResult:
+) -> tuple[tuple[PumpStationWorkGenerationRecord, ...], tuple[PumpStationBacklogItem, ...]]:
     """Create one stable item or return the exact existing content on retry."""
     if generation.backlog_item_id != item.item_id:
         raise PumpStationWorkGenerationError("generation-link", item.item_id)
@@ -667,170 +622,45 @@ def generate_work_once(
         linked = tuple(value for value in backlog if value.item_id == generation.backlog_item_id)
         if linked != (item,):
             raise PumpStationWorkGenerationError("generation-content-mismatch", item.item_id)
-        return PumpStationWorkGenerationResult(records=records, backlog=backlog)
+        return records, backlog
     if any(value.item_id == item.item_id for value in backlog):
         raise PumpStationWorkGenerationError("generation-content-mismatch", item.item_id)
-    return PumpStationWorkGenerationResult(
-        records=(*records, generation),
-        backlog=(*backlog, item),
-    )
+    return (*records, generation), (*backlog, item)
 
 
-def apply_declared_work_generation(
-    records: tuple[PumpStationWorkGenerationRecord, ...],
-    backlog: tuple[PumpStationBacklogItem, ...],
-    trigger: PumpStationDeclaredWorkTrigger,
-) -> PumpStationWorkGenerationResult:
-    """Apply exactly one closed WG-01 to WG-09 generation or retention rule."""
-    if trigger.rule_id in {"WG-08", "WG-09"}:
-        if trigger.existing_item_id is None:
-            raise PumpStationWorkGenerationError("generation-existing-item", trigger.rule_id)
-        matching = tuple(item for item in backlog if item.item_id == trigger.existing_item_id)
-        if len(matching) != 1:
-            raise PumpStationWorkGenerationError("generation-existing-item", trigger.existing_item_id)
-        item = matching[0]
-        if trigger.rule_id == "WG-08":
-            if item.status not in {
-                PumpStationBacklogStatus.OPEN,
-                PumpStationBacklogStatus.PLANNED,
-                PumpStationBacklogStatus.IN_PROGRESS,
-            }:
-                raise PumpStationWorkGenerationError("generation-item-state", item.item_id)
-            updated = replace(
-                item,
-                status=PumpStationBacklogStatus.BLOCKED,
-                blocked_from_status=item.status,
-                blocked_since_calendar_seconds=trigger.generated_at_calendar_seconds,
-            )
-        else:
-            if item.status is not PumpStationBacklogStatus.BLOCKED:
-                raise PumpStationWorkGenerationError("generation-item-state", item.item_id)
-            updated = replace(
-                item,
-                status=PumpStationBacklogStatus.PLANNED,
-                blocked_from_status=None,
-                accumulated_blocked_seconds=(
-                    item.accumulated_blocked_seconds
-                    + trigger.generated_at_calendar_seconds
-                    - (item.blocked_since_calendar_seconds or trigger.generated_at_calendar_seconds)
-                ),
-                blocked_since_calendar_seconds=None,
-            )
-        return PumpStationWorkGenerationResult(
-            records=records,
-            backlog=tuple(updated if value.item_id == item.item_id else value for value in backlog),
-        )
-    specifications = {
-        "WG-01": ("inspection", "accepted inspection evidence", PumpStationPriority.P2),
-        "WG-02": (
-            "obstruction_clearance",
-            "successful clearance and functional-check generation",
-            PumpStationPriority.P2,
-        ),
-        "WG-03": ("minimum_functional_check", "accepted functional-check evidence", PumpStationPriority.P1),
-        "WG-04": (
-            "post_maintenance_verification",
-            "accepted verification and Operations restriction review",
-            PumpStationPriority.P1,
-        ),
-        "WG-05": ("rework_investigation", "accepted rework investigation", PumpStationPriority.P1),
-        "WG-06": (
-            "replenish_clearance_kit",
-            "declared stock arrival is durably recorded",
-            PumpStationPriority.P2,
-        ),
-        "WG-07": ("collateral_duty_inspection", "accepted target inspection", PumpStationPriority.P2),
-    }
-    if trigger.rule_id not in specifications:
-        raise PumpStationWorkGenerationError("generation-rule", trigger.rule_id)
-    work_type, closure_rule, priority = specifications[trigger.rule_id]
-    generated_at = trigger.generated_at_calendar_seconds
-    due_calendar: int | None = None
-    due_runtime_kind: str | None = None
-    due_runtime_id: str | None = None
-    due_runtime_limit: int | None = None
-    if trigger.rule_id in {"WG-01", "WG-02"}:
-        candidates = [generated_at + 2 * D_CALENDAR_SECONDS]
-        if trigger.next_capacity_critical_calendar_seconds is not None:
-            candidates.append(trigger.next_capacity_critical_calendar_seconds)
-            if trigger.next_capacity_critical_calendar_seconds <= generated_at + 2 * D_CALENDAR_SECONDS:
-                priority = PumpStationPriority.P1
-        due_calendar = min(candidates)
-    elif trigger.rule_id == "WG-03":
-        due_calendar = generated_at + 3_600
-    elif trigger.rule_id == "WG-04":
-        due_calendar = generated_at + 2 * D_CALENDAR_SECONDS
-        due_runtime_kind = "pump_total"
-        due_runtime_id = trigger.target_id
-        due_runtime_limit = trigger.current_runtime_seconds + D_RUNTIME_SECONDS
-    elif trigger.rule_id == "WG-05":
-        due_calendar = generated_at + D_CALENDAR_SECONDS
-        due_runtime_kind = "pump_total"
-        due_runtime_id = trigger.target_id
-        due_runtime_limit = trigger.current_runtime_seconds + D_RUNTIME_SECONDS
-        if trigger.target_is_serving:
-            priority = PumpStationPriority.P0
-    elif trigger.rule_id == "WG-06":
-        candidates = [generated_at + 1_209_600]
-        if trigger.linked_clearance_due_calendar_seconds is not None:
-            candidates.append(trigger.linked_clearance_due_calendar_seconds)
-        due_calendar = min(candidates)
-        if trigger.blocks_urgent_work:
-            priority = PumpStationPriority.P1
-    elif trigger.rule_id == "WG-07":
-        due_calendar = generated_at + 2 * D_CALENDAR_SECONDS
-        due_runtime_kind = "outage_episode_collateral"
-        due_runtime_id = trigger.target_id
-        due_runtime_limit = trigger.current_runtime_seconds + 2 * D_RUNTIME_SECONDS
-    key = (
-        trigger.rule_id,
-        trigger.source_transition_id,
-        trigger.target_kind,
-        trigger.target_id,
-        trigger.generation_ordinal,
+def planned_outage_admissible(
+    state: PumpStationCoupledPhysicalState,
+    *,
+    target_pump_id: str,
+    start_calendar_seconds: int,
+    completion_calendar_seconds: int,
+    visible_service_schedule: tuple[PumpStationServiceRequirement, ...],
+    disclosed_through_calendar_seconds: int,
+) -> bool:
+    """Return whether assured non-target capacity covers each disclosed work interval."""
+    if completion_calendar_seconds > disclosed_through_calendar_seconds:
+        return False
+    if target_pump_id in state.service_running_pump_ids or target_pump_id in state.test_running_pump_ids:
+        return False
+    assured_non_target = sum(
+        state.availability(pump.pump_id).assured_for_outage_planning
+        for pump in state.pumps
+        if pump.pump_id != target_pump_id
     )
-    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
-        stewardship_content_id,
+    relevant = tuple(
+        requirement
+        for requirement in visible_service_schedule
+        if requirement.start_calendar_seconds < completion_calendar_seconds
+        and requirement.end_calendar_seconds > start_calendar_seconds
     )
-
-    item_id = f"backlog-{trigger.rule_id.lower()}-{stewardship_content_id(key)[:16]}"
-    generation = PumpStationWorkGenerationRecord(
-        rule_id=trigger.rule_id,
-        source_transition_id=trigger.source_transition_id,
-        target_kind=trigger.target_kind,
-        target_id=trigger.target_id,
-        generation_ordinal=trigger.generation_ordinal,
-        backlog_item_id=item_id,
-    )
-    item = PumpStationBacklogItem(
-        item_id=item_id,
-        work_type=work_type,
-        target_kind=trigger.target_kind,
-        target_id=trigger.target_id,
-        generation_rule_id=trigger.rule_id,
-        generation_ordinal=trigger.generation_ordinal,
-        originating_record_id=trigger.source_transition_id,
-        linked_obligation_ids=trigger.linked_obligation_ids,
-        linked_restriction_ids=trigger.linked_restriction_ids,
-        linked_work_order_id=None,
-        linked_process_id=None,
-        generated_at_calendar_seconds=generated_at,
-        base_priority=priority,
-        effective_priority=priority,
-        due_calendar_seconds=due_calendar,
-        due_runtime_clock_kind=due_runtime_kind,
-        due_runtime_clock_id=due_runtime_id,
-        due_runtime_limit_seconds=due_runtime_limit,
-        status=PumpStationBacklogStatus.OPEN,
-        blocked_from_status=None,
-        blocked_since_calendar_seconds=None,
-        accumulated_blocked_seconds=0,
-        closure_rule=closure_rule,
-        closure_evidence_ids=(),
-        supersedes_item_id=None,
-        superseded_by_item_id=None,
-    )
-    return generate_work_once(records, backlog, generation, item)
+    if not relevant:
+        return False
+    cursor = start_calendar_seconds
+    for requirement in sorted(relevant, key=lambda item: item.start_calendar_seconds):
+        if requirement.start_calendar_seconds > cursor or requirement.required_service_scu > assured_non_target:
+            return False
+        cursor = max(cursor, min(requirement.end_calendar_seconds, completion_calendar_seconds))
+    return cursor >= completion_calendar_seconds
 
 
 _PRIORITY_ORDER = {

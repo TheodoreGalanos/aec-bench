@@ -11,7 +11,7 @@ import pytest
 from aec_bench.task_world_templates import continual_catalogue as continual_catalogue_module
 from aec_bench.task_world_templates.continual.catalogue import ContinualWorldCatalogue
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime import (
-    create_asw_8_world_state,
+    initial_state,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_system import (
     PUMP_STATION_ASW_8_EVENT_SCHEDULE_ID,
@@ -70,7 +70,7 @@ def test_current_reference_system_persists_exact_registered_identity(tmp_path: P
     assert manifest.temporal_bundle_content_id == bundle.content_sha256
     assert manifest.initial_state_source.kind == "reference_system_specification"
     assert snapshot.sequence == 0
-    assert run.state == create_asw_8_world_state()
+    assert run.state == initial_state()
     assert TemporalEvidenceRepository(root / "temporal-evidence").load_bundle(package=run.package) == bundle
     assert len(run.repository.commits()) == 1
     assert not (root / "HEAD").exists()
@@ -131,7 +131,7 @@ def test_opening_publication_recovers_after_interruption(tmp_path: Path, monkeyp
 
     recovered = _start(root)
     assert recovered.snapshot().sequence == 0
-    assert recovered.state == create_asw_8_world_state()
+    assert recovered.state == initial_state()
     assert len(recovered.repository.commits()) == 1
 
 
