@@ -6,7 +6,7 @@ from pathlib import Path
 
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
-from aec_bench.templates.registry import load_engine_module, load_template
+from aec_bench.templates.registry import load_template
 
 _PARAMS_TOML = """\
 [meta]
@@ -104,11 +104,9 @@ def _write_template(tmp_path: Path, *, hooks: bool, custom_verifier: bool, syste
 
 
 def _scaffold(tmp_path: Path, tdir: Path) -> Path:
-    config, template_dir = load_template(tdir)
-    engine = load_engine_module(template_dir)
-    instance = sample_instance(config, engine.compute, "easy", seed=7, instance_index=0)
-    engine_source = (template_dir / "engine.py").read_text()
-    return scaffold_task_instance(config, engine_source, template_dir, instance, tmp_path / "out")
+    template = load_template(tdir)
+    instance = sample_instance(template, "easy", seed=7, instance_index=0)
+    return scaffold_task_instance(template, instance, tmp_path / "out")
 
 
 def test_build_sources_hook_writes_files_and_dockerfile_copies(tmp_path: Path) -> None:

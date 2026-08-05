@@ -89,7 +89,10 @@ uv run aec-bench generate validate-template path/to/template/
 The built-in catalogue is larger than a README can usefully list. Use
 `uv run aec-bench generate list-templates` for the live template list, or
 `uv run aec-bench library export --pretty` for the JSON catalogue consumed by
-the public docs site.
+the public docs site. Direct template loading is strict; catalogue discovery
+reports invalid candidates. Generated task lineage records the template source
+digest, seed, instance index, and difficulty, so repeated generation does not
+depend on wall-clock time.
 
 ### Run Experiments
 

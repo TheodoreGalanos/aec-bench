@@ -272,7 +272,7 @@ class StructuralSplitManifest(ContentAddressedModel):
         generation_keys = tuple(
             (
                 item.generation_identity.template,
-                item.generation_identity.template_version,
+                item.generation_identity.template_source_sha256,
                 item.generation_identity.seed,
                 item.generation_identity.instance_index,
             )

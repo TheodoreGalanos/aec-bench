@@ -207,7 +207,9 @@ def test_params_toml_loads_into_template_config() -> None:
     """params.toml is loadable by the registry and has correct structure."""
     from aec_bench.templates.registry import load_template
 
-    config, _ = load_template(TEMPLATE_DIR)
+    loaded_template = load_template(TEMPLATE_DIR)
+    config = loaded_template.config
+    _ = loaded_template.path
     assert config.meta.name == "rule-length"
     assert config.meta.discipline == "maritime"
     assert "extreme_length_on_waterline_at_TSC_m" in config.params

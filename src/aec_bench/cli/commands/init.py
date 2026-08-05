@@ -72,29 +72,26 @@ def init_project(
         try:
             from aec_bench.generation.sampler import sample_instance
             from aec_bench.generation.scaffolder import scaffold_task_instance
-            from aec_bench.templates.registry import discover_templates, load_engine_module
+            from aec_bench.templates.registry import discover_templates
 
-            templates = discover_templates()
+            templates, _diagnostics = discover_templates()
             # Find the terzaghi-bearing-capacity template.
             terzaghi = next(
-                ((cfg, tdir) for cfg, tdir in templates if cfg.meta.name == "terzaghi-bearing-capacity"),
+                (template for template in templates if template.config.meta.name == "terzaghi-bearing-capacity"),
                 None,
             )
             if terzaghi is not None:
-                cfg, tdir = terzaghi
-                engine_mod = load_engine_module(tdir)
-                engine_source = (tdir / "engine.py").read_text(encoding="utf-8")
+                cfg = terzaghi.config
                 # Pick the first difficulty preset available.
                 difficulty_name = next(iter(cfg.difficulty))
                 instance = sample_instance(
-                    cfg,
-                    engine_mod.compute,
+                    terzaghi,
                     difficulty_name,
                     seed=42,
                     instance_index=0,
                 )
                 tasks_dir = target / "tasks"
-                scaffold_task_instance(cfg, engine_source, tdir, instance, tasks_dir)
+                scaffold_task_instance(terzaghi, instance, tasks_dir)
                 messages.append(f"Generated example instance: {instance.instance_name}")
             else:
                 messages.append("Warning: terzaghi-bearing-capacity template not found — skipping example.")

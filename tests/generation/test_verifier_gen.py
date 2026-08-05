@@ -4,12 +4,11 @@
 import json
 import subprocess
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from aec_bench.generation.contracts import GenerationMetadata, SampledInstance
+from aec_bench.generation.contracts import SampledInstance
 from aec_bench.generation.verifier_gen import generate_verifier
 from aec_bench.templates.contracts import (
     OutputSpec,
@@ -33,15 +32,11 @@ def _build_test_instance() -> SampledInstance:
         archetype_name="test_arch",
         site_context="test-site",
         difficulty="easy",
-        metadata=GenerationMetadata(
-            template="test",
-            seed=42,
-            timestamp=datetime.now(UTC),
-            difficulty="easy",
-            visibility_level=VisibilityLevel.ALL_GIVEN,
-            archetype="test_arch",
-            site_context="test-site",
-        ),
+        template_name="test",
+        template_source_sha256="0" * 64,
+        seed=42,
+        instance_index=0,
+        visibility_level=VisibilityLevel.ALL_GIVEN,
     )
 
 

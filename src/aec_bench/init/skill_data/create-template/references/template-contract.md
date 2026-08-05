@@ -415,3 +415,8 @@ Before considering a template complete, verify:
 - [ ] `instruction.md` has `{% if ... is defined %}` guards for hideable params
 - [ ] `instruction.md` has conditional `{% if tool_available %}` tool section
 - [ ] `instruction.md` ends with output format and `/workspace/output.md` directive
+
+The materializer derives `template_source_sha256` from the supported template
+source files and writes it with the seed, instance index, and difficulty in the
+generated `task.toml`. Authors do not declare a template version or generation
+timestamp in the template source.

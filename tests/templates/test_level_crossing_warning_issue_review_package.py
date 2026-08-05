@@ -14,7 +14,7 @@ import pytest
 
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
-from aec_bench.templates.registry import discover_templates, load_engine_module, load_template
+from aec_bench.templates.registry import discover_templates, load_template
 
 TEMPLATE_DIR = (
     Path(__file__).resolve().parents[2]
@@ -106,32 +106,33 @@ def _base_params(packet_variant: str = "clean") -> dict[str, object]:
 
 
 def _sample_review_instance(tmp_path: Path, seed: int = 20260706) -> tuple[Path, dict]:
-    config, template_dir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(template_dir)
-    instance = sample_instance(config, engine.compute, difficulty_name="medium", seed=seed, instance_index=0)
-    engine_source = (template_dir / "engine.py").read_text(encoding="utf-8")
-    instance_dir = scaffold_task_instance(config, engine_source, template_dir, instance, tmp_path)
+    loaded_template = load_template(TEMPLATE_DIR)
+    template_dir = loaded_template.path
+    instance = sample_instance(loaded_template, difficulty_name="medium", seed=seed, instance_index=0)
+    (template_dir / "engine.py").read_text(encoding="utf-8")
+    instance_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
     return instance_dir, instance.ground_truth
 
 
 def _load() -> tuple:
-    config, template_dir = load_template(TEMPLATE_DIR)
-    return config, template_dir, load_engine_module(template_dir)
+    loaded_template = load_template(TEMPLATE_DIR)
+    config = loaded_template.config
+    template_dir = loaded_template.path
+    return loaded_template, config, template_dir, loaded_template.engine
 
 
 def _instance_for_variant(variant: str, max_seeds: int = 800):
-    config, template_dir, engine = _load()
+    loaded_template, config, template_dir, engine = _load()
     for seed in range(max_seeds):
-        instance = sample_instance(config, engine.compute, difficulty_name="medium", seed=seed, instance_index=0)
+        instance = sample_instance(loaded_template, difficulty_name="medium", seed=seed, instance_index=0)
         if instance.all_params["packet_variant"] == variant:
-            return config, template_dir, engine, instance
+            return loaded_template, config, template_dir, engine, instance
     raise AssertionError(f"Could not sample variant {variant!r}")
 
 
 def _scaffold_variant(tmp_path: Path, variant: str) -> tuple[Path, dict]:
-    config, template_dir, _engine, instance = _instance_for_variant(variant)
-    engine_source = (template_dir / "engine.py").read_text(encoding="utf-8")
-    instance_dir = scaffold_task_instance(config, engine_source, template_dir, instance, tmp_path)
+    loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant(variant)
+    instance_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
     return instance_dir, instance.ground_truth
 
 
@@ -174,7 +175,7 @@ def _replace_json_block(text: str, payload: dict) -> str:
 
 
 def test_template_is_discoverable_and_review_native() -> None:
-    templates = {config.meta.name: config for config, _path in discover_templates()}
+    templates = {template.config.meta.name: template.config for template in discover_templates()[0]}
 
     config = templates["level-crossing-warning-issue-review-package"]
     assert config.meta.discipline == "electrical"
@@ -183,10 +184,9 @@ def test_template_is_discoverable_and_review_native() -> None:
 
 
 def test_parameters_vary_across_seeds_and_do_not_include_dead_inputs() -> None:
-    config, _template_dir, engine = _load()
+    loaded_template, config, _template_dir, engine = _load()
     samples = [
-        sample_instance(config, engine.compute, difficulty_name="medium", seed=seed, instance_index=0)
-        for seed in range(40)
+        sample_instance(loaded_template, difficulty_name="medium", seed=seed, instance_index=0) for seed in range(40)
     ]
 
     assert len({sample.ground_truth["strike_in_distance_m"] for sample in samples}) >= 10
@@ -196,17 +196,17 @@ def test_parameters_vary_across_seeds_and_do_not_include_dead_inputs() -> None:
 
 
 def test_same_seed_reproduces_ground_truth() -> None:
-    config, _template_dir, engine = _load()
+    loaded_template, config, _template_dir, engine = _load()
 
-    first = sample_instance(config, engine.compute, difficulty_name="medium", seed=20260710, instance_index=0)
-    second = sample_instance(config, engine.compute, difficulty_name="medium", seed=20260710, instance_index=0)
+    first = sample_instance(loaded_template, difficulty_name="medium", seed=20260710, instance_index=0)
+    second = sample_instance(loaded_template, difficulty_name="medium", seed=20260710, instance_index=0)
 
     assert first.all_params == second.all_params
     assert first.ground_truth == second.ground_truth
 
 
 def test_engine_quantizes_before_derivation() -> None:
-    _config, _template_dir, engine = _load()
+    _loaded_template, config, _template_dir, engine = _load()
     params = _base_params()
     params["maximum_train_speed_kmh"] = 80.04
     params["temperature_derating_factor"] = 0.854
@@ -219,7 +219,7 @@ def test_engine_quantizes_before_derivation() -> None:
 
 @pytest.mark.parametrize("variant", VARIANT_EXPECTATIONS)
 def test_variant_gold_statuses_and_readiness(variant: str) -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant(variant)
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant(variant)
     flips, readiness, findings, requests, carried = VARIANT_EXPECTATIONS[variant]
 
     for key in STATUS_KEYS:
@@ -231,8 +231,9 @@ def test_variant_gold_statuses_and_readiness(variant: str) -> None:
 
 
 def test_engine_localizes_clean_missing_and_genuine_failure_variants() -> None:
-    _config, template_dir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(template_dir)
+    loaded_template = load_template(TEMPLATE_DIR)
+    _config = loaded_template.config
+    engine = loaded_template.engine
 
     clean = engine.compute(**_base_params("clean"))
     missing = engine.compute(**_base_params("missing_battery_capacity"))
@@ -266,7 +267,7 @@ def test_engine_localizes_clean_missing_and_genuine_failure_variants() -> None:
     ],
 )
 def test_each_variant_changes_only_its_intended_source(variant: str, expected_changed: set[str]) -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant(variant)
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant(variant)
     clean_params = dict(instance.all_params)
     clean_params["packet_variant"] = "clean"
     clean = engine.build_sources(clean_params)
@@ -276,7 +277,7 @@ def test_each_variant_changes_only_its_intended_source(variant: str, expected_ch
 
 
 def test_stale_warning_variant_has_a_real_register_revision_mismatch() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("stale_warning_revision")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("stale_warning_revision")
     sources = engine.build_sources(instance.all_params)
 
     assert "SIGHT-SSC02-LX-01 | Sighting and warning time worksheet | Rev B" in sources["sources/document-register.md"]
@@ -284,7 +285,7 @@ def test_stale_warning_variant_has_a_real_register_revision_mismatch() -> None:
 
 
 def test_chainage_variant_requires_cross_file_identity_reconciliation() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("chainage_sighting_mismatch")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("chainage_sighting_mismatch")
     sources = engine.build_sources(instance.all_params)
 
     assert "Crossing ID | LX-SSC02-041" in sources["sources/route-profile.md"]
@@ -362,7 +363,7 @@ def _row_value(label: str, text: str) -> float:
 
 @pytest.mark.parametrize("variant", VARIANT_EXPECTATIONS)
 def test_all_evidence_recomputes_from_rendered_sources(variant: str) -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant(variant)
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant(variant)
     sources = engine.build_sources(instance.all_params)
     route = sources["sources/route-profile.md"]
     warning = sources["sources/sighting-warning-time.md"]

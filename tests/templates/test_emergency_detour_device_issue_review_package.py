@@ -13,7 +13,7 @@ import pytest
 
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
-from aec_bench.templates.registry import discover_templates, load_engine_module, load_template
+from aec_bench.templates.registry import discover_templates, load_template
 
 TEMPLATE_DIR = (
     Path(__file__).resolve().parents[2]
@@ -105,24 +105,26 @@ SOURCE_FILES = [
 
 
 def _load() -> tuple:
-    config, template_dir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(template_dir)
-    return config, template_dir, engine
+    loaded_template = load_template(TEMPLATE_DIR)
+    config = loaded_template.config
+    template_dir = loaded_template.path
+    engine = loaded_template.engine
+    return loaded_template, config, template_dir, engine
 
 
 def _instance_for_variant(variant: str, max_seeds: int = 1000):
-    config, template_dir, engine = _load()
+    loaded_template, config, template_dir, engine = _load()
     for seed in range(max_seeds):
-        instance = sample_instance(config, engine.compute, "medium", seed=seed, instance_index=0)
+        instance = sample_instance(loaded_template, "medium", seed=seed, instance_index=0)
         if instance.all_params["packet_variant"] == variant:
-            return config, template_dir, engine, instance
+            return loaded_template, config, template_dir, engine, instance
     pytest.fail(f"No instance with variant {variant!r} found in {max_seeds} seeds")
 
 
 def _scaffold_variant(tmp_path: Path, variant: str) -> tuple[Path, dict]:
-    config, template_dir, engine, instance = _instance_for_variant(variant)
-    engine_source = (template_dir / "engine.py").read_text(encoding="utf-8")
-    instance_dir = scaffold_task_instance(config, engine_source, template_dir, instance, tmp_path)
+    loaded_template, config, template_dir, engine, instance = _instance_for_variant(variant)
+    (template_dir / "engine.py").read_text(encoding="utf-8")
+    instance_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
     return instance_dir, instance.ground_truth
 
 
@@ -166,7 +168,7 @@ def _grab(pattern: str, text: str) -> float:
 
 
 def test_template_is_discoverable_by_builtin_name() -> None:
-    templates = {config.meta.name: config for config, _path in discover_templates()}
+    templates = {template.config.meta.name: template.config for template in discover_templates()[0]}
 
     assert "emergency-detour-device-issue-review-package" in templates
     config = templates["emergency-detour-device-issue-review-package"]
@@ -176,12 +178,12 @@ def test_template_is_discoverable_by_builtin_name() -> None:
 
 
 def test_parameters_vary_across_seeds() -> None:
-    config, _template_dir, engine = _load()
+    loaded_template, config, _template_dir, engine = _load()
 
     variants = set()
     reading_times = set()
     for seed in range(40):
-        instance = sample_instance(config, engine.compute, "medium", seed=seed, instance_index=0)
+        instance = sample_instance(loaded_template, "medium", seed=seed, instance_index=0)
         variants.add(instance.all_params["packet_variant"])
         reading_times.add(round(instance.ground_truth["vms_reading_time_s"], 3))
 
@@ -190,10 +192,10 @@ def test_parameters_vary_across_seeds() -> None:
 
 
 def test_same_seed_reproduces_ground_truth() -> None:
-    config, _template_dir, engine = _load()
+    loaded_template, config, _template_dir, engine = _load()
 
-    a = sample_instance(config, engine.compute, "medium", seed=33, instance_index=0)
-    b = sample_instance(config, engine.compute, "medium", seed=33, instance_index=0)
+    a = sample_instance(loaded_template, "medium", seed=33, instance_index=0)
+    b = sample_instance(loaded_template, "medium", seed=33, instance_index=0)
 
     assert a.all_params == b.all_params
     assert a.ground_truth == b.ground_truth
@@ -201,7 +203,7 @@ def test_same_seed_reproduces_ground_truth() -> None:
 
 @pytest.mark.parametrize("variant", sorted(VARIANT_EXPECTATIONS))
 def test_variant_gold_statuses_and_readiness(variant: str) -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant(variant)
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant(variant)
     gold = instance.ground_truth
     expected = VARIANT_EXPECTATIONS[variant]
 
@@ -216,7 +218,7 @@ def test_variant_gold_statuses_and_readiness(variant: str) -> None:
 
 
 def test_clean_variant_evidence_is_consistent() -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant("clean")
     gold = instance.ground_truth
 
     for key in EVIDENCE_KEYS:
@@ -230,20 +232,20 @@ def test_clean_variant_evidence_is_consistent() -> None:
 
 
 def test_battery_runtime_deficient_variant_fails_criterion() -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant("battery_runtime_deficient")
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant("battery_runtime_deficient")
 
     assert instance.ground_truth["battery_margin_h"] < 0.0
 
 
 def test_missing_closure_duration_variant_omits_battery_margin() -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant("missing_closure_duration")
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant("missing_closure_duration")
 
     assert "battery_runtime_h" in instance.ground_truth
     assert "battery_margin_h" not in instance.ground_truth
 
 
 def test_build_sources_produces_seven_files_with_ids() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("clean")
     sources = engine.build_sources(instance.all_params)
 
     assert sorted(sources) == sorted(SOURCE_FILES)
@@ -268,7 +270,7 @@ def test_build_sources_produces_seven_files_with_ids() -> None:
 
 
 def test_missing_closure_duration_sources_do_not_print_review_answer() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("missing_closure_duration")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("missing_closure_duration")
     sources = engine.build_sources(instance.all_params)
 
     detour = sources["sources/detour-plan.md"].lower()
@@ -284,7 +286,7 @@ def test_missing_closure_duration_sources_do_not_print_review_answer() -> None:
 
 
 def test_criteria_define_unit_conversions() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("clean")
     sources = engine.build_sources(instance.all_params)
 
     criteria = sources["sources/criteria-comments.md"].lower()
@@ -297,7 +299,7 @@ def test_criteria_define_unit_conversions() -> None:
 
 
 def test_scenario_copy_forward_sources_bound_other_checks_to_current_packet() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("scenario_copy_forward")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("scenario_copy_forward")
     sources = engine.build_sources(instance.all_params)
 
     detour = sources["sources/detour-plan.md"]
@@ -313,7 +315,7 @@ def test_scenario_copy_forward_sources_bound_other_checks_to_current_packet() ->
 
 
 def test_sources_print_quantized_values() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("clean")
     sources = engine.build_sources(instance.all_params)
 
     message = sources["sources/message-library.md"]
@@ -326,7 +328,7 @@ def test_sources_print_quantized_values() -> None:
 
 
 def _assert_detour_evidence_recomputable_from_sources(variant: str) -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant(variant)
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant(variant)
     gold = instance.ground_truth
     sources = engine.build_sources(instance.all_params)
     detour = sources["sources/detour-plan.md"]

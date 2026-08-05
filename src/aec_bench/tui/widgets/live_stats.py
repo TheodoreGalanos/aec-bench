@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from aec_bench.dataset.storage import list_datasets
-from aec_bench.generation.discovery import scan_seeds, scan_templates
 from aec_bench.ledger.reader import read_trial_records
+from aec_bench.tasks.library_export import load_seeds
+from aec_bench.templates.registry import discover_templates
 
 
 @dataclass(frozen=True)
@@ -69,8 +70,8 @@ def build_disciplines_summary(
     templates_root: Path,
 ) -> list[DisciplineSummary]:
     """Count seeds and templates per discipline."""
-    seeds = scan_seeds(tasks_root)
-    templates = scan_templates(templates_root)
+    seeds, _seed_diagnostics = load_seeds(tasks_root)
+    templates, _template_diagnostics = discover_templates(user_dirs=[templates_root], include_builtin=False)
 
     seed_counts: dict[str, int] = {}
     for seed in seeds:
@@ -78,7 +79,8 @@ def build_disciplines_summary(
 
     template_counts: dict[str, int] = {}
     for tpl in templates:
-        template_counts[tpl.discipline] = template_counts.get(tpl.discipline, 0) + 1
+        discipline = tpl.config.meta.discipline
+        template_counts[discipline] = template_counts.get(discipline, 0) + 1
 
     all_disciplines = sorted(set(seed_counts) | set(template_counts))
     return [

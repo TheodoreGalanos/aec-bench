@@ -21,7 +21,7 @@ from aec_bench.contracts.task_definition import Difficulty
 if TYPE_CHECKING:
     from aec_bench.contracts.dataset import DatasetSource
     from aec_bench.contracts.task_definition import TaskDefinition
-    from aec_bench.generation.dataset import DatasetManifest as SuiteOutputManifest
+    from aec_bench.generation.dataset import SuiteOutput as SuiteOutputManifest
 
 app = typer.Typer(help="Create and manage versioned benchmark datasets.")
 
@@ -150,7 +150,7 @@ def _parse_difficulties(values: list[str] | None) -> list[Difficulty]:
 
 
 def _load_suite_output_manifest(suite_output: Path) -> SuiteOutputManifest:
-    from aec_bench.generation.dataset import DatasetManifest as SuiteOutputManifest
+    from aec_bench.generation.dataset import SuiteOutput as SuiteOutputManifest
 
     manifest_path = suite_output.resolve()
     if not manifest_path.is_file():

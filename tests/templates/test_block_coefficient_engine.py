@@ -221,7 +221,9 @@ def test_params_toml_loads_into_template_config() -> None:
     """params.toml is loadable by the registry and has correct structure."""
     from aec_bench.templates.registry import load_template
 
-    config, _ = load_template(TEMPLATE_DIR)
+    loaded_template = load_template(TEMPLATE_DIR)
+    config = loaded_template.config
+    _ = loaded_template.path
     assert config.meta.name == "block-coefficient"
     assert config.meta.discipline == "maritime"
     assert "moulded_displacement_t" in config.params

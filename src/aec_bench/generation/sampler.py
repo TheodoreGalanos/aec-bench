@@ -2,16 +2,15 @@
 # ABOUTME: Produces SampledInstance by drawing params from archetype ranges and difficulty presets.
 
 import random
-from collections.abc import Callable
-from datetime import UTC, datetime
 
-from aec_bench.generation.contracts import GenerationMetadata, SampledInstance
+from aec_bench.generation.contracts import SampledInstance
 from aec_bench.templates.contracts import (
     DifficultyPreset,
     ParamType,
     TemplateConfig,
     VisibilityLevel,
 )
+from aec_bench.templates.registry import LoadedTemplate
 
 
 def _sample_param_value(
@@ -92,8 +91,7 @@ def _make_instance_name(archetype_name: str, site_context: str, instance_index: 
 
 
 def sample_instance(
-    config: TemplateConfig,
-    engine_compute: Callable[..., dict[str, float]],
+    template: LoadedTemplate,
     difficulty_name: str,
     seed: int,
     instance_index: int,
@@ -104,6 +102,9 @@ def sample_instance(
     calls engine_compute to obtain ground truth, and returns a SampledInstance
     with full provenance metadata.
     """
+    if instance_index < 0:
+        raise ValueError("instance_index must be non-negative")
+    config = template.config
     preset = config.difficulty[difficulty_name]
     rng = random.Random(seed + instance_index)
 
@@ -117,7 +118,7 @@ def sample_instance(
         all_params[param_name] = _sample_param_value(param_name, config, archetype_name, preset, rng)
 
     # Compute ground truth by calling the engine
-    ground_truth: dict[str, float] = engine_compute(**all_params)
+    ground_truth: dict[str, float] = template.engine.compute(**all_params)
 
     # Split into visible and hidden based on difficulty visibility level
     if preset.visibility is VisibilityLevel.ALL_GIVEN:
@@ -131,19 +132,6 @@ def sample_instance(
 
     instance_name = _make_instance_name(archetype_name, site_context, instance_index)
 
-    metadata = GenerationMetadata(
-        origin="generated",
-        template=config.meta.name,
-        template_version="1.0",
-        seed=seed,
-        instance_index=instance_index,
-        timestamp=datetime.now(tz=UTC),
-        difficulty=difficulty_name,
-        visibility_level=preset.visibility,
-        archetype=archetype_name,
-        site_context=site_context,
-    )
-
     return SampledInstance(
         instance_name=instance_name,
         all_params=all_params,
@@ -153,5 +141,9 @@ def sample_instance(
         archetype_name=archetype_name,
         site_context=site_context,
         difficulty=difficulty_name,
-        metadata=metadata,
+        template_name=config.meta.name,
+        template_source_sha256=template.source_sha256,
+        seed=seed,
+        instance_index=instance_index,
+        visibility_level=preset.visibility,
     )

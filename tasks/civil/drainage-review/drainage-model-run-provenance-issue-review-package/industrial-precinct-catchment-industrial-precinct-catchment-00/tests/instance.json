@@ -1,6 +1,7 @@
 {
   "instance_name": "industrial-precinct-catchment-industrial-precinct-catchment-00",
   "seed": 7301,
+  "instance_index": 0,
   "difficulty": "hard",
   "all_params": {
     "current_catchment_area_ha": 37.91947207599105,

@@ -486,7 +486,7 @@ def test_manifest_rejects_duplicate_package_or_generation_identity() -> None:
             "generation_identity": TaskGenerationIdentity(
                 task_id=dev_item.task_id,
                 template=train_item.generation_identity.template,
-                template_version=train_item.generation_identity.template_version,
+                template_source_sha256=train_item.generation_identity.template_source_sha256,
                 seed=train_item.generation_identity.seed,
                 instance_index=train_item.generation_identity.instance_index,
             )
@@ -540,7 +540,7 @@ def _item(
         generation_identity=TaskGenerationIdentity(
             task_id=task_id,
             template=f"template:{family}",
-            template_version="1",
+            template_source_sha256=_digest(f"template:{family}"),
             seed=int.from_bytes(hashlib.sha256(task_id.encode()).digest()[:4]),
             instance_index=0,
         ),

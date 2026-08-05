@@ -80,11 +80,7 @@ def test_generate_task_creates_instances(tmp_path: Path) -> None:
 
 
 def test_generate_task_deterministic(tmp_path: Path) -> None:
-    """Same seed should produce identical parameter and structural content across two runs.
-
-    The timestamp field in task.toml is wall-clock time and will differ between runs.
-    We verify all other content (instruction.md, verify.py, the TOML except timestamp) is identical.
-    """
+    """The same template source and seed produce identical task content."""
     kwargs = [
         "generate",
         "task",
@@ -109,16 +105,13 @@ def test_generate_task_deterministic(tmp_path: Path) -> None:
     instr_b = next(out_b.rglob("instruction.md"))
     assert instr_a.read_text() == instr_b.read_text()
 
-    # task.toml has all same fields except the wall-clock timestamp
-    import re
-
     toml_a = next(out_a.rglob("task.toml"))
     toml_b = next(out_b.rglob("task.toml"))
-
-    def _strip_timestamp(text: str) -> str:
-        return re.sub(r'timestamp = ".*?"', 'timestamp = "STRIPPED"', text)
-
-    assert _strip_timestamp(toml_a.read_text()) == _strip_timestamp(toml_b.read_text())
+    assert toml_a.read_bytes() == toml_b.read_bytes()
+    generation = tomllib.loads(toml_a.read_text(encoding="utf-8"))["generation"]
+    assert len(generation["template_source_sha256"]) == 64
+    assert "timestamp" not in generation
+    assert "template_version" not in generation
 
 
 def test_generate_task_dry_run_creates_nothing(tmp_path: Path) -> None:

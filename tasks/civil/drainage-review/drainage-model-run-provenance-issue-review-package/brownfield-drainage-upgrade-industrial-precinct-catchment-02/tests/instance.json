@@ -1,6 +1,7 @@
 {
   "instance_name": "brownfield-drainage-upgrade-industrial-precinct-catchment-02",
   "seed": 7301,
+  "instance_index": 2,
   "difficulty": "hard",
   "all_params": {
     "current_catchment_area_ha": 31.850237030717334,

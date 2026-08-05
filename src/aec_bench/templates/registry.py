@@ -1,9 +1,11 @@
 # ABOUTME: Registry for loading, discovering, and validating task generation templates.
 # ABOUTME: Handles TOML parsing with field remapping, dynamic engine import, and directory scanning.
 
+import hashlib
 import importlib.util
 import tomllib
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -20,6 +22,7 @@ from aec_bench.templates.contracts import (
 
 # Files that must be present in every template directory.
 _REQUIRED_FILES = ("engine.py", "params.toml", "instruction.md")
+_SOURCE_FILES = (*_REQUIRED_FILES, "verify.py", "system_prompt.md", "output_contract.json")
 
 # Known fields for DifficultyPreset — anything else becomes `extra`.
 _DIFFICULTY_KNOWN_FIELDS = frozenset({"description", "visibility", "archetypes", "hidden_params", "replacement_text"})
@@ -82,12 +85,34 @@ def _parse_difficulty_preset(raw: dict[str, Any]) -> dict[str, Any]:
     return known
 
 
-def load_engine_module(template_dir: Path) -> ModuleType:
-    """Dynamically load engine.py from template_dir and verify it has a callable compute.
+@dataclass(frozen=True, slots=True)
+class LoadedTemplate:
+    """Validated template source and its one loaded engine instance."""
 
-    Raises FileNotFoundError if engine.py is absent.
-    Raises ValueError if the module lacks a callable compute attribute.
-    """
+    config: TemplateConfig
+    path: Path
+    engine: ModuleType
+    engine_source: str
+    source_sha256: str
+
+    @property
+    def discipline(self) -> str:
+        return self.config.meta.discipline
+
+    @property
+    def task_id(self) -> str:
+        return self.config.meta.name
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateDiagnostic:
+    """One invalid template candidate found during diagnostic discovery."""
+
+    path: Path
+    error: str
+
+
+def _load_engine(template_dir: Path) -> tuple[ModuleType, str]:
     engine_path = template_dir / "engine.py"
     if not engine_path.exists():
         msg = f"engine.py not found in {template_dir}"
@@ -105,11 +130,27 @@ def load_engine_module(template_dir: Path) -> ModuleType:
         msg = f"engine.py in {template_dir} must define a callable 'compute' function"
         raise ValueError(msg)
 
-    return module
+    return module, engine_path.read_text(encoding="utf-8")
 
 
-def load_template(template_dir: Path) -> tuple[TemplateConfig, Path]:
-    """Load a template from a directory, returning (TemplateConfig, template_dir).
+def _template_source_sha256(template_dir: Path) -> str:
+    """Hash the supported source files that determine generated task content."""
+    digest = hashlib.sha256()
+    for name in _SOURCE_FILES:
+        path = template_dir / name
+        if not path.is_file():
+            continue
+        content = path.read_bytes()
+        digest.update(name.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(len(content)).encode("ascii"))
+        digest.update(b"\0")
+        digest.update(content)
+    return digest.hexdigest()
+
+
+def load_template(template_dir: Path) -> LoadedTemplate:
+    """Strictly load one template and execute its engine exactly once.
 
     Checks for required files, parses params.toml with field remapping,
     and verifies engine.py has a callable compute function.
@@ -161,88 +202,57 @@ def load_template(template_dir: Path) -> tuple[TemplateConfig, Path]:
         constraints=constraints,
     )
 
-    # Verify the engine module is loadable and has compute.
-    load_engine_module(template_dir)
+    engine, engine_source = _load_engine(template_dir)
+    return LoadedTemplate(
+        config=config,
+        path=template_dir,
+        engine=engine,
+        engine_source=engine_source,
+        source_sha256=_template_source_sha256(template_dir),
+    )
 
-    return config, template_dir
 
-
-def discover_templates(user_dirs: Sequence[Path] = ()) -> list[tuple[TemplateConfig, Path]]:
-    """Scan built-in and user template directories for valid templates.
+def discover_templates(
+    user_dirs: Sequence[Path] = (),
+    *,
+    include_builtin: bool = True,
+) -> tuple[list[LoadedTemplate], list[TemplateDiagnostic]]:
+    """Discover valid templates and report every invalid candidate.
 
     Built-in templates live under the `builtin/` subdirectory of this package's
     templates directory. User directories are scanned similarly.
 
-    A directory is considered a template candidate if it directly contains engine.py.
-    Candidates that fail to load are silently skipped.
-
-    Returns a list of (TemplateConfig, Path) tuples for all successfully loaded templates.
+    A directory is a candidate when it contains any required template source file.
+    Direct loading remains strict. Discovery continues past invalid candidates but
+    returns a diagnostic for each failure instead of silently dropping it.
     """
     builtin_dir = Path(__file__).parent / "builtin"
 
     search_dirs: list[Path] = []
-    if builtin_dir.exists():
+    if include_builtin and builtin_dir.exists():
         search_dirs.append(builtin_dir)
     search_dirs.extend(user_dirs)
 
-    results: list[tuple[TemplateConfig, Path]] = []
+    results: list[LoadedTemplate] = []
+    diagnostics: list[TemplateDiagnostic] = []
 
     for search_dir in search_dirs:
         if not search_dir.is_dir():
             continue
-        # Recursively find all engine.py files; each parent directory is a candidate.
-        for engine_path in sorted(search_dir.rglob("engine.py")):
-            candidate = engine_path.parent
+        candidates = {path.parent for filename in _REQUIRED_FILES for path in search_dir.rglob(filename)}
+        for candidate in sorted(candidates):
             try:
-                config, path = load_template(candidate)
-                results.append((config, path))
-            except (FileNotFoundError, ValueError):
-                # Skip templates that fail to load; errors surface via validate_template.
-                pass
-            except Exception:
-                # Unexpected errors (syntax, import, permission) — log-worthy but not fatal
-                import logging
+                results.append(load_template(candidate))
+            except Exception as exc:
+                diagnostics.append(TemplateDiagnostic(path=candidate, error=str(exc)))
 
-                logging.getLogger(__name__).debug(
-                    "Skipping template at %s due to unexpected error", candidate, exc_info=True
-                )
-
-    return results
+    return results, diagnostics
 
 
 def validate_template(template_dir: Path) -> list[str]:
-    """Validate a template directory, returning a list of error strings.
-
-    An empty list means the template is valid. Each string describes one problem.
-    Checks required files, TOML structure, and engine.py compute callable.
-    """
-    errors: list[str] = []
-
-    for filename in _REQUIRED_FILES:
-        fpath = template_dir / filename
-        if not fpath.exists():
-            errors.append(f"Missing required file: {filename}")
-
-    if errors:
-        # Cannot proceed with further checks if core files are missing.
-        return errors
-
+    """Return the strict loader error for a template, or an empty list."""
     try:
         load_template(template_dir)
-    except FileNotFoundError as exc:
-        errors.append(f"Missing file: {exc}")
-    except ValueError as exc:
-        msg = str(exc)
-        if "compute" in msg.lower():
-            errors.append(f"engine.py missing callable compute: {exc}")
-        else:
-            errors.append(f"Template validation error: {exc}")
     except Exception as exc:
-        errors.append(f"Unexpected error loading template: {exc}")
-
-    return errors
-
-
-def has_custom_verifier(template_dir: Path) -> bool:
-    """Return True if the template directory contains a custom verify.py."""
-    return (template_dir / "verify.py").exists()
+        return [str(exc)]
+    return []

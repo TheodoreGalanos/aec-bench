@@ -242,7 +242,7 @@ def _write_corpus_task(
             "\n[generation]\n"
             'origin = "generated"\n'
             'template = "drainage-review"\n'
-            'template_version = "1.0"\n'
+            f'template_source_sha256 = "{"0" * 64}"\n'
             f"seed = {seed}\n"
             f"instance_index = {instance_index}\n"
             'difficulty = "medium"\n'

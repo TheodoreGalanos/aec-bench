@@ -185,9 +185,10 @@ def _resolve_template(name_or_path: str) -> Path:
     # Search builtin templates by name
     from aec_bench.templates.registry import discover_templates
 
-    for config, path in discover_templates():
-        if config.meta.name == name_or_path:
-            return path
+    templates, _diagnostics = discover_templates()
+    for template in templates:
+        if template.config.meta.name == name_or_path:
+            return template.path
 
     msg = f"Template '{name_or_path}' not found as path or builtin template"
     raise FileNotFoundError(msg)
@@ -205,12 +206,10 @@ def generate_task_instances(gen_config: TaskGenerateConfig) -> list[Path]:
     """
     from aec_bench.generation.sampler import sample_instance
     from aec_bench.generation.scaffolder import scaffold_task_instance
-    from aec_bench.templates.registry import load_engine_module, load_template
+    from aec_bench.templates.registry import load_template
 
     template_dir = _resolve_template(gen_config.template)
-    config, template_dir = load_template(template_dir)
-    engine_module = load_engine_module(template_dir)
-    engine_source = (template_dir / "engine.py").read_text(encoding="utf-8")
+    template = load_template(template_dir)
 
     output_dir = Path(tempfile.mkdtemp(prefix="aec-bench-evo-tasks-"))
     difficulties = gen_config.difficulties
@@ -219,16 +218,13 @@ def generate_task_instances(gen_config: TaskGenerateConfig) -> list[Path]:
     for i in range(gen_config.count):
         difficulty = difficulties[i % len(difficulties)]
         instance = sample_instance(
-            config=config,
-            engine_compute=engine_module.compute,
+            template=template,
             difficulty_name=difficulty,
             seed=gen_config.seed,
             instance_index=i,
         )
         instance_dir = scaffold_task_instance(
-            config=config,
-            engine_source=engine_source,
-            template_dir=template_dir,
+            template=template,
             instance=instance,
             output_dir=output_dir,
         )

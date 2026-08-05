@@ -7,12 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from aec_bench.generation.discovery import (
-    LibrarySeed,
-    LibraryTemplate,
-    scan_seeds,
-    scan_templates,
-)
+from aec_bench.tasks.library_export import LoadedSeed, load_seeds
+from aec_bench.templates.registry import LoadedTemplate, discover_templates
 
 
 @dataclass(frozen=True)
@@ -35,8 +31,8 @@ class SearchEntry:
     _search_text: str
 
 
-def _entry_from_seed(seed: LibrarySeed, *, has_template: bool) -> SearchEntry:
-    """Build a SearchEntry from a LibrarySeed."""
+def _entry_from_seed(seed: LoadedSeed, *, has_template: bool) -> SearchEntry:
+    """Build a SearchEntry from a validated seed."""
     search_parts = [
         seed.task_id,
         seed.task_name,
@@ -65,35 +61,32 @@ def _entry_from_seed(seed: LibrarySeed, *, has_template: bool) -> SearchEntry:
     )
 
 
-def _entry_from_template(template: LibraryTemplate) -> SearchEntry:
-    """Build a SearchEntry from a LibraryTemplate."""
-    meta = template.params_raw.get("meta", {})
-    params = template.params_raw.get("params", {})
-    outputs = template.params_raw.get("outputs", {})
-
-    description = meta.get("description", "")
-    long_description = meta.get("long_description", "")
-    tags = tuple(meta.get("tags", []))
-    standards = tuple(meta.get("standards", []))
-
-    input_descs = tuple(spec.get("description", name) for name, spec in params.items())
-    output_descs = tuple(spec.get("description", name) for name, spec in outputs.items())
+def _entry_from_template(template: LoadedTemplate) -> SearchEntry:
+    """Build a SearchEntry from a validated template."""
+    config = template.config
+    meta = config.meta
+    description = meta.description
+    long_description = meta.long_description
+    tags = tuple(meta.tags)
+    standards = tuple(meta.standards)
+    input_descs = tuple(spec.description or name for name, spec in config.params.items())
+    output_descs = tuple(spec.description or name for name, spec in config.outputs.items())
 
     search_parts = [
-        template.task_id,
+        meta.name,
         description,
         long_description,
-        template.discipline,
-        meta.get("category", ""),
+        meta.discipline,
+        meta.category,
         *tags,
         *standards,
         *input_descs,
         *output_descs,
     ]
     return SearchEntry(
-        name=template.task_id,
-        discipline=template.discipline,
-        category=meta.get("category", ""),
+        name=meta.name,
+        discipline=meta.discipline,
+        category=meta.category,
         description=description,
         long_description=long_description,
         tags=tags,
@@ -108,18 +101,18 @@ def _entry_from_template(template: LibraryTemplate) -> SearchEntry:
 
 
 def build_index(
-    seeds: list[LibrarySeed],
-    templates: list[LibraryTemplate],
+    seeds: list[LoadedSeed],
+    templates: list[LoadedTemplate],
 ) -> list[SearchEntry]:
     """Build a search index from scanned seeds and templates."""
-    template_ids = {(t.discipline, t.task_id) for t in templates}
+    template_ids = {(t.config.meta.discipline, t.config.meta.name) for t in templates}
     entries: list[SearchEntry] = []
 
     # Add template entries (these take priority over seeds with same ID)
     template_task_ids: set[tuple[str, str]] = set()
     for template in templates:
         entries.append(_entry_from_template(template))
-        template_task_ids.add((template.discipline, template.task_id))
+        template_task_ids.add((template.config.meta.discipline, template.config.meta.name))
 
     # Add seed entries for tasks that don't have a template
     for seed in seeds:
@@ -135,8 +128,8 @@ def build_index_from_paths(
     templates_root: Path,
 ) -> list[SearchEntry]:
     """Build a search index by scanning filesystem paths."""
-    seeds = scan_seeds(tasks_root)
-    templates = scan_templates(templates_root)
+    seeds, _seed_diagnostics = load_seeds(tasks_root)
+    templates, _template_diagnostics = discover_templates(user_dirs=[templates_root], include_builtin=False)
     return build_index(seeds, templates)
 
 

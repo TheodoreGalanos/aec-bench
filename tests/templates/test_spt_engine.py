@@ -118,7 +118,9 @@ def test_params_toml_loads_into_template_config() -> None:
     """Verify the hand-authored params.toml parses without error."""
     from aec_bench.templates.registry import load_template
 
-    config, _ = load_template(SPT_TEMPLATE_DIR)
+    loaded_template = load_template(SPT_TEMPLATE_DIR)
+    config = loaded_template.config
+    _ = loaded_template.path
     assert config.meta.name == "spt-corrections"
     assert "raw_n_value" in config.params
     assert len(config.difficulty) >= 2

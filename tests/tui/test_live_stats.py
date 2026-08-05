@@ -166,6 +166,8 @@ def _write_seed(tasks_root: Path, discipline: str, task_id: str) -> None:
     seed_dir = tasks_root / discipline / task_id
     seed_dir.mkdir(parents=True, exist_ok=True)
     data = {
+        "status": "proposed",
+        "seed_origin": "test",
         "source": {
             "discipline": discipline,
             "task_id": task_id,
@@ -176,20 +178,25 @@ def _write_seed(tasks_root: Path, discipline: str, task_id: str) -> None:
             "standards": [],
             "inputs": [],
             "outputs": [],
-        }
+        },
     }
     (seed_dir / "source_task.json").write_text(json.dumps(data), encoding="utf-8")
 
 
 def _write_template(templates_root: Path, discipline: str, task_id: str) -> None:
-    """Write minimal template files (params.toml + engine.py)."""
+    """Write a minimal valid template directory."""
     tpl_dir = templates_root / discipline / task_id
     tpl_dir.mkdir(parents=True, exist_ok=True)
     (tpl_dir / "params.toml").write_text(
-        f'[meta]\nname = "{task_id}"\ndiscipline = "{discipline}"\n',
+        (
+            f'[meta]\nname = "{task_id}"\ndescription = "Test"\n'
+            f'discipline = "{discipline}"\ncategory = "general"\n'
+            'tool_mode = "no-tool"\n'
+        ),
         encoding="utf-8",
     )
-    (tpl_dir / "engine.py").write_text("# engine stub\n", encoding="utf-8")
+    (tpl_dir / "engine.py").write_text("def compute() -> dict[str, float]:\n    return {}\n", encoding="utf-8")
+    (tpl_dir / "instruction.md").write_text("Test instruction.\n", encoding="utf-8")
 
 
 def _write_dataset_manifest(datasets_root: Path, name: str, version: str, *, task_count: int) -> None:
