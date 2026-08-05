@@ -8,8 +8,6 @@ import pytest
 
 from aec_bench.templates.registry import (
     discover_templates,
-    has_custom_verifier,
-    load_engine_module,
     load_template,
     validate_template,
 )
@@ -62,7 +60,9 @@ def _make_template(
 def test_load_template_from_valid_directory(tmp_path: Path) -> None:
     tdir = _make_template(tmp_path)
 
-    config, path = load_template(tdir)
+    template = load_template(tdir)
+    config = template.config
+    path = template.path
 
     assert config.meta.name == "test-template"
     assert config.meta.discipline == "test"
@@ -75,7 +75,7 @@ def test_load_template_from_valid_directory(tmp_path: Path) -> None:
 def test_load_template_returns_param_with_remapped_range(tmp_path: Path) -> None:
     tdir = _make_template(tmp_path)
 
-    config, _ = load_template(tdir)
+    config = load_template(tdir).config
 
     param = config.params["value_a"]
     assert param.min_value == 0.0
@@ -118,7 +118,7 @@ site_contexts = ["brisbane-alluvial"]
     )
     tdir = _make_template(tmp_path, toml_str=toml_with_archetypes)
 
-    config, _ = load_template(tdir)
+    config = load_template(tdir).config
 
     assert "soft_nc_clay" in config.archetypes
     archetype = config.archetypes["soft_nc_clay"]
@@ -152,7 +152,7 @@ hidden_params = ["value_a"]
     )
     tdir = _make_template(tmp_path, toml_str=toml_with_difficulty)
 
-    config, _ = load_template(tdir)
+    config = load_template(tdir).config
 
     assert "easy" in config.difficulty
     assert "hard" in config.difficulty
@@ -177,37 +177,41 @@ custom_key = "custom_value"
     )
     tdir = _make_template(tmp_path, toml_str=toml_with_extra)
 
-    config, _ = load_template(tdir)
+    config = load_template(tdir).config
 
     assert "medium" in config.difficulty
     assert config.difficulty["medium"].extra.get("custom_key") == "custom_value"
 
 
-# --- load_engine_module tests ---
+# --- engine loading tests ---
 
 
-def test_load_engine_module_returns_callable(tmp_path: Path) -> None:
+def test_load_template_returns_callable_engine(tmp_path: Path) -> None:
     tdir = _make_template(tmp_path)
 
-    module = load_engine_module(tdir)
+    module = load_template(tdir).engine
 
     assert isinstance(module, ModuleType)
     assert callable(module.compute)
 
 
-def test_load_engine_module_rejects_engine_without_compute(tmp_path: Path) -> None:
-    tdir = _make_template(tmp_path, engine_code="x = 42")
+def test_template_source_digest_changes_with_supported_source(tmp_path: Path) -> None:
+    tdir = _make_template(tmp_path)
+    original = load_template(tdir).source_sha256
 
-    with pytest.raises((AttributeError, ValueError)):
-        load_engine_module(tdir)
+    (tdir / "instruction.md").write_text("Compute a different result.", encoding="utf-8")
+
+    changed = load_template(tdir).source_sha256
+    assert changed != original
+    assert len(changed) == 64
 
 
-def test_load_engine_module_raises_on_missing_file(tmp_path: Path) -> None:
+def test_load_template_raises_on_missing_file(tmp_path: Path) -> None:
     tdir = tmp_path / "no_engine"
     tdir.mkdir()
 
     with pytest.raises((FileNotFoundError, ValueError)):
-        load_engine_module(tdir)
+        load_template(tdir)
 
 
 # --- discover_templates tests ---
@@ -215,7 +219,9 @@ def test_load_engine_module_raises_on_missing_file(tmp_path: Path) -> None:
 
 def _count_builtin_templates() -> int:
     """Count built-in templates so tests can account for them in discovery assertions."""
-    return len(discover_templates(user_dirs=[]))
+    templates, diagnostics = discover_templates(user_dirs=[])
+    assert diagnostics == []
+    return len(templates)
 
 
 def test_discover_templates_from_user_dir(tmp_path: Path) -> None:
@@ -228,12 +234,13 @@ def test_discover_templates_from_user_dir(tmp_path: Path) -> None:
     (tdir / "instruction.md").write_text("Compute the result.")
 
     builtin_count = _count_builtin_templates()
-    results = discover_templates(user_dirs=[user_dir])
+    results, diagnostics = discover_templates(user_dirs=[user_dir])
 
     assert len(results) == builtin_count + 1
-    user_results = [(c, p) for c, p in results if p == tdir]
+    assert diagnostics == []
+    user_results = [template for template in results if template.path == tdir]
     assert len(user_results) == 1
-    assert user_results[0][0].meta.name == "test-template"
+    assert user_results[0].config.meta.name == "test-template"
 
 
 def test_discover_templates_empty_when_no_dirs(tmp_path: Path) -> None:
@@ -241,9 +248,10 @@ def test_discover_templates_empty_when_no_dirs(tmp_path: Path) -> None:
     empty_dir.mkdir()
 
     builtin_count = _count_builtin_templates()
-    results = discover_templates(user_dirs=[empty_dir])
+    results, diagnostics = discover_templates(user_dirs=[empty_dir])
 
     assert len(results) == builtin_count
+    assert diagnostics == []
 
 
 def test_discover_templates_multiple_user_dirs(tmp_path: Path) -> None:
@@ -267,9 +275,10 @@ def test_discover_templates_multiple_user_dirs(tmp_path: Path) -> None:
     (tdir_b / "instruction.md").write_text("B")
 
     builtin_count = _count_builtin_templates()
-    results = discover_templates(user_dirs=[dir_a, dir_b])
+    results, diagnostics = discover_templates(user_dirs=[dir_a, dir_b])
 
     assert len(results) == builtin_count + 2
+    assert diagnostics == []
 
 
 def test_discover_templates_finds_nested_templates(tmp_path: Path) -> None:
@@ -283,15 +292,16 @@ def test_discover_templates_finds_nested_templates(tmp_path: Path) -> None:
     (nested / "instruction.md").write_text("Nested template.")
 
     builtin_count = _count_builtin_templates()
-    results = discover_templates(user_dirs=[user_dir])
+    results, diagnostics = discover_templates(user_dirs=[user_dir])
 
     assert len(results) == builtin_count + 1
-    user_results = [(c, p) for c, p in results if p == nested]
+    assert diagnostics == []
+    user_results = [template for template in results if template.path == nested]
     assert len(user_results) == 1
-    assert user_results[0][0].meta.name == "test-template"
+    assert user_results[0].config.meta.name == "test-template"
 
 
-def test_discover_templates_skips_directories_without_engine(tmp_path: Path) -> None:
+def test_discover_templates_reports_candidate_without_engine(tmp_path: Path) -> None:
     user_dir = tmp_path / "mixed_dir"
     user_dir.mkdir()
 
@@ -302,34 +312,21 @@ def test_discover_templates_skips_directories_without_engine(tmp_path: Path) -> 
     (valid / "params.toml").write_text(MINIMAL_TOML)
     (valid / "instruction.md").write_text("Valid")
 
-    # Directory without engine.py — should be skipped
+    # A directory containing template source but no engine.py is an invalid candidate.
     invalid = user_dir / "no_engine_tmpl"
     invalid.mkdir()
     (invalid / "params.toml").write_text(MINIMAL_TOML)
     (invalid / "instruction.md").write_text("Invalid")
 
     builtin_count = _count_builtin_templates()
-    results = discover_templates(user_dirs=[user_dir])
+    results, diagnostics = discover_templates(user_dirs=[user_dir])
 
     assert len(results) == builtin_count + 1
-    user_results = [(c, p) for c, p in results if p == valid]
+    assert len(diagnostics) == 1
+    assert diagnostics[0].path == invalid
+    assert "engine.py" in diagnostics[0].error
+    user_results = [template for template in results if template.path == valid]
     assert len(user_results) == 1
-
-
-# --- has_custom_verifier tests ---
-
-
-def test_has_custom_verifier_true(tmp_path: Path) -> None:
-    tdir = _make_template(tmp_path)
-    (tdir / "verify.py").write_text("def verify(): pass")
-
-    assert has_custom_verifier(tdir) is True
-
-
-def test_has_custom_verifier_false(tmp_path: Path) -> None:
-    tdir = _make_template(tmp_path)
-
-    assert has_custom_verifier(tdir) is False
 
 
 # --- validate_template tests ---

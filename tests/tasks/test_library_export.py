@@ -15,8 +15,6 @@ from aec_bench.tasks.library_export import (
     ExportDiagnostics,
     SkippedEntry,
     _git_short_sha,
-    _is_holdout_seed,
-    _is_holdout_template,
     _project_seed,
     _project_template,
     build_catalogue,
@@ -89,7 +87,7 @@ def test_load_seeds_loads_valid_seed(tmp_path: Path) -> None:
     _write_seed(tmp_path / "electrical" / "cat1" / "t1" / "source_task.json", _valid_seed())
     seeds, skipped = load_seeds(tmp_path)
     assert len(seeds) == 1
-    assert seeds[0].source.task_id == "t1"
+    assert seeds[0].seed.source.task_id == "t1"
     assert skipped == []
 
 
@@ -118,7 +116,7 @@ def test_load_seeds_finds_nested_seeds(tmp_path: Path) -> None:
     _write_seed(tmp_path / "electrical" / "a" / "s1" / "source_task.json", _valid_seed("s1"))
     _write_seed(tmp_path / "civil" / "b" / "s2" / "source_task.json", _valid_seed("s2", "civil"))
     seeds, skipped = load_seeds(tmp_path)
-    assert {s.source.task_id for s in seeds} == {"s1", "s2"}
+    assert {s.seed.source.task_id for s in seeds} == {"s1", "s2"}
     assert skipped == []
 
 
@@ -128,7 +126,7 @@ def test_load_seeds_returns_stable_order(tmp_path: Path) -> None:
         _write_seed(tmp_path / tid / "source_task.json", _valid_seed(tid))
     seeds1, _ = load_seeds(tmp_path)
     seeds2, _ = load_seeds(tmp_path)
-    assert [s.source.task_id for s in seeds1] == [s.source.task_id for s in seeds2]
+    assert [s.seed.source.task_id for s in seeds1] == [s.seed.source.task_id for s in seeds2]
 
 
 def _make_template_config() -> TemplateConfig:
@@ -346,18 +344,6 @@ def test_project_seed_missing_category_falls_back() -> None:
     # Fallback: category becomes the task_id (stable, non-empty).
     assert entry.category == "busbar-thermal"
     assert entry.category_label is None
-
-
-def test_is_holdout_template_no_op_today() -> None:
-    """Templates don't carry a holdout field yet — the predicate returns False for all."""
-    cfg = _make_template_config()
-    assert _is_holdout_template(cfg) is False
-
-
-def test_is_holdout_seed_no_op_today() -> None:
-    """Seeds don't carry a holdout field yet — the predicate returns False for all."""
-    seed = _make_seed_plain()
-    assert _is_holdout_seed(seed) is False
 
 
 def test_git_short_sha_returns_none_outside_repo(tmp_path: Path) -> None:

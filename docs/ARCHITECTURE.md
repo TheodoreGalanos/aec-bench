@@ -67,8 +67,10 @@ The current path is:
 5. Build an `EvaluationResult` and persist a `TrialRecord`.
 
 Deterministic templates and suite generation live with authoring and generation.
-Generated instances remain derived artifacts; the template, parameters, seed,
-and implementation identity needed to reproduce them belong in provenance.
+Generated instances remain derived artifacts. Their generation provenance uses
+the template source digest, seed, instance index, difficulty, and visibility;
+ambient materialization time is not part of task meaning. The generated task
+directory is validated through the current `TaskDefinition` loader before use.
 
 ### Interactive worlds
 

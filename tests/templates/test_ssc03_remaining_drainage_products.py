@@ -12,7 +12,7 @@ import pytest
 
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
-from aec_bench.templates.registry import discover_templates, load_engine_module
+from aec_bench.templates.registry import discover_templates
 
 SSC03_PRODUCT_CASES = [
     {
@@ -204,7 +204,7 @@ SSC03_PRODUCT_CASES = [
 
 
 def _templates_by_name():
-    return {config.meta.name: (config, path) for config, path in discover_templates()}
+    return {template.config.meta.name: template for template in discover_templates()[0]}
 
 
 @pytest.mark.parametrize("case", SSC03_PRODUCT_CASES, ids=[case["name"] for case in SSC03_PRODUCT_CASES])
@@ -212,27 +212,28 @@ def test_ssc03_remaining_product_template_is_discoverable(case: dict[str, object
     templates = _templates_by_name()
 
     assert case["name"] in templates
-    config, _template_dir = templates[case["name"]]
+    config = templates[case["name"]].config
     assert config.meta.discipline == case["discipline"]
     assert config.meta.category == case["category"]
 
 
 @pytest.mark.parametrize("case", SSC03_PRODUCT_CASES, ids=[case["name"] for case in SSC03_PRODUCT_CASES])
 def test_ssc03_remaining_product_metrics_are_deterministic(case: dict[str, object]) -> None:
-    config, template_dir = _templates_by_name()[case["name"]]
-    engine = load_engine_module(template_dir)
-    instance = sample_instance(config, engine.compute, difficulty_name="easy", seed=73, instance_index=0)
+    loaded_template = _templates_by_name()[case["name"]]
+
+    instance = sample_instance(loaded_template, difficulty_name="easy", seed=73, instance_index=0)
 
     assert instance.ground_truth == pytest.approx(case["expected"])
 
 
 @pytest.mark.parametrize("case", SSC03_PRODUCT_CASES, ids=[case["name"] for case in SSC03_PRODUCT_CASES])
 def test_ssc03_remaining_product_instruction_is_source_bound(case: dict[str, object], tmp_path: Path) -> None:
-    config, template_dir = _templates_by_name()[case["name"]]
-    engine = load_engine_module(template_dir)
-    instance = sample_instance(config, engine.compute, difficulty_name="easy", seed=73, instance_index=0)
-    engine_source = (template_dir / "engine.py").read_text(encoding="utf-8")
-    instance_dir = scaffold_task_instance(config, engine_source, template_dir, instance, tmp_path)
+    loaded_template = _templates_by_name()[case["name"]]
+
+    template_dir = loaded_template.path
+    instance = sample_instance(loaded_template, difficulty_name="easy", seed=73, instance_index=0)
+    (template_dir / "engine.py").read_text(encoding="utf-8")
+    instance_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
     instruction = (instance_dir / "instruction.md").read_text(encoding="utf-8")
 
     assert case["product_id"] in instruction
@@ -244,11 +245,12 @@ def test_ssc03_remaining_product_instruction_is_source_bound(case: dict[str, obj
 
 @pytest.mark.parametrize("case", SSC03_PRODUCT_CASES, ids=[case["name"] for case in SSC03_PRODUCT_CASES])
 def test_ssc03_remaining_product_golden_pass_scores_one(case: dict[str, object], tmp_path: Path) -> None:
-    config, template_dir = _templates_by_name()[case["name"]]
-    engine = load_engine_module(template_dir)
-    instance = sample_instance(config, engine.compute, difficulty_name="easy", seed=73, instance_index=0)
-    engine_source = (template_dir / "engine.py").read_text(encoding="utf-8")
-    instance_dir = scaffold_task_instance(config, engine_source, template_dir, instance, tmp_path)
+    loaded_template = _templates_by_name()[case["name"]]
+
+    template_dir = loaded_template.path
+    instance = sample_instance(loaded_template, difficulty_name="easy", seed=73, instance_index=0)
+    (template_dir / "engine.py").read_text(encoding="utf-8")
+    instance_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
     golden_pass = instance_dir / "tests" / "fixtures" / "golden_pass.md"
     reward_file = tmp_path / f"{case['name']}-reward.json"
 

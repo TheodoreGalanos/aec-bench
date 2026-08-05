@@ -14,7 +14,7 @@ import pytest
 
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
-from aec_bench.templates.registry import discover_templates, load_engine_module, load_template
+from aec_bench.templates.registry import discover_templates, load_template
 
 TEMPLATE_DIR = (
     Path(__file__).resolve().parents[2]
@@ -105,25 +105,27 @@ SOURCE_FILES = [
 
 
 def _load() -> tuple:
-    config, template_dir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(template_dir)
-    return config, template_dir, engine
+    loaded_template = load_template(TEMPLATE_DIR)
+    config = loaded_template.config
+    template_dir = loaded_template.path
+    engine = loaded_template.engine
+    return loaded_template, config, template_dir, engine
 
 
 def _instance_for_variant(variant: str, max_seeds: int = 400):
     """Sample seeds until an instance with the requested packet variant appears."""
-    config, template_dir, engine = _load()
+    loaded_template, config, template_dir, engine = _load()
     for seed in range(max_seeds):
-        instance = sample_instance(config, engine.compute, "medium", seed=seed, instance_index=0)
+        instance = sample_instance(loaded_template, "medium", seed=seed, instance_index=0)
         if instance.all_params["packet_variant"] == variant:
-            return config, template_dir, engine, instance
+            return loaded_template, config, template_dir, engine, instance
     pytest.fail(f"No instance with variant {variant!r} found in {max_seeds} seeds")
 
 
 def _scaffold_variant(tmp_path: Path, variant: str) -> tuple[Path, dict]:
-    config, template_dir, engine, instance = _instance_for_variant(variant)
-    engine_source = (template_dir / "engine.py").read_text(encoding="utf-8")
-    instance_dir = scaffold_task_instance(config, engine_source, template_dir, instance, tmp_path)
+    loaded_template, config, template_dir, engine, instance = _instance_for_variant(variant)
+    (template_dir / "engine.py").read_text(encoding="utf-8")
+    instance_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
     return instance_dir, instance.ground_truth
 
 
@@ -166,7 +168,7 @@ def _replace_json_block(text: str, payload: dict) -> str:
 
 
 def test_template_is_discoverable_by_builtin_name() -> None:
-    templates = {config.meta.name: config for config, _path in discover_templates()}
+    templates = {template.config.meta.name: template.config for template in discover_templates()[0]}
 
     assert "road-low-point-issue-review-package" in templates
     config = templates["road-low-point-issue-review-package"]
@@ -176,12 +178,12 @@ def test_template_is_discoverable_by_builtin_name() -> None:
 
 
 def test_parameters_vary_across_seeds() -> None:
-    config, _template_dir, engine = _load()
+    loaded_template, config, _template_dir, engine = _load()
 
     variants = set()
     spreads = set()
     for seed in range(40):
-        instance = sample_instance(config, engine.compute, "medium", seed=seed, instance_index=0)
+        instance = sample_instance(loaded_template, "medium", seed=seed, instance_index=0)
         variants.add(instance.all_params["packet_variant"])
         spreads.add(instance.ground_truth["spread_width_m"])
 
@@ -190,10 +192,10 @@ def test_parameters_vary_across_seeds() -> None:
 
 
 def test_same_seed_reproduces_ground_truth() -> None:
-    config, _template_dir, engine = _load()
+    loaded_template, config, _template_dir, engine = _load()
 
-    a = sample_instance(config, engine.compute, "medium", seed=11, instance_index=0)
-    b = sample_instance(config, engine.compute, "medium", seed=11, instance_index=0)
+    a = sample_instance(loaded_template, "medium", seed=11, instance_index=0)
+    b = sample_instance(loaded_template, "medium", seed=11, instance_index=0)
 
     assert a.all_params == b.all_params
     assert a.ground_truth == b.ground_truth
@@ -206,7 +208,7 @@ def test_same_seed_reproduces_ground_truth() -> None:
 
 @pytest.mark.parametrize("variant", sorted(VARIANT_EXPECTATIONS))
 def test_variant_gold_statuses_and_readiness(variant: str) -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant(variant)
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant(variant)
     gold = instance.ground_truth
     expected = VARIANT_EXPECTATIONS[variant]
 
@@ -221,7 +223,7 @@ def test_variant_gold_statuses_and_readiness(variant: str) -> None:
 
 
 def test_clean_variant_evidence_is_consistent() -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant("clean")
     gold = instance.ground_truth
     params = instance.all_params
 
@@ -236,14 +238,14 @@ def test_clean_variant_evidence_is_consistent() -> None:
 
 
 def test_freeboard_deficient_variant_fails_criterion() -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant("freeboard_deficient")
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant("freeboard_deficient")
     gold = instance.ground_truth
 
     assert gold["cabinet_freeboard_m"] < float(instance.all_params["minimum_cabinet_freeboard_m"])
 
 
 def test_missing_cabinet_level_variant_omits_freeboard_evidence() -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant("missing_cabinet_level")
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant("missing_cabinet_level")
 
     assert "cabinet_freeboard_m" not in instance.ground_truth
 
@@ -254,7 +256,7 @@ def test_missing_cabinet_level_variant_omits_freeboard_evidence() -> None:
 
 
 def test_build_sources_produces_seven_files_with_ids() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("clean")
     sources = engine.build_sources(instance.all_params)
 
     assert sorted(sources) == sorted(SOURCE_FILES)
@@ -269,7 +271,7 @@ def test_build_sources_produces_seven_files_with_ids() -> None:
 
 
 def test_missing_cabinet_level_sources_omit_pad_level() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("missing_cabinet_level")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("missing_cabinet_level")
     sources = engine.build_sources(instance.all_params)
 
     equipment = sources["sources/field-equipment.md"]
@@ -282,7 +284,7 @@ def test_missing_cabinet_level_sources_omit_pad_level() -> None:
 
 
 def test_stale_hgl_sources_have_revision_mismatch() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("stale_hgl_revision")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("stale_hgl_revision")
     sources = engine.build_sources(instance.all_params)
 
     register = sources["sources/document-register.md"]
@@ -294,7 +296,7 @@ def test_stale_hgl_sources_have_revision_mismatch() -> None:
 
 def test_sources_print_exact_engine_values() -> None:
     """Source files must carry the exact quantized values the engine computed with."""
-    _config, _template_dir, engine, instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("clean")
     sources = engine.build_sources(instance.all_params)
     drainage = sources["sources/drainage-package.md"]
 
@@ -309,7 +311,7 @@ def _grab(pattern: str, text: str) -> float:
 
 def _assert_low_point_evidence_recomputable_from_sources(variant: str) -> None:
     """Recompute the gold evidence available in a rendered source packet."""
-    _config, _template_dir, engine, instance = _instance_for_variant(variant)
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant(variant)
     gold = instance.ground_truth
     sources = engine.build_sources(instance.all_params)
     drainage = sources["sources/drainage-package.md"]

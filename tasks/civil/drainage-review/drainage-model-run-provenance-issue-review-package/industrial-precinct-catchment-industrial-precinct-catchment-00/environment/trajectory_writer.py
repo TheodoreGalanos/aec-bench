@@ -7,6 +7,8 @@ import hashlib
 import json
 from datetime import UTC, datetime
 
+type JsonObject = dict[str, object]
+
 
 def _now_utc_iso() -> str:
     """Return current UTC time as ISO 8601 string with Z suffix."""
@@ -24,10 +26,9 @@ class TrajectoryWriter:
         self._path = path
         self._step: int = 0
         self._call_type: str | None = None
-        self._meta_harness_context: dict | None = None
+        self._meta_harness_context: JsonObject | None = None
         self._seen_system_hash: str | None = None
         self._file = open(path, "w", encoding="utf-8")  # noqa: SIM115
-        self._write({"version": 1, "format": "aec-bench-trajectory"})
 
     # ------------------------------------------------------------------
     # Step management
@@ -41,10 +42,10 @@ class TrajectoryWriter:
         that tag.  Pass ``None`` (the default) for ordinary steps.
         """
         self._step += 1
-        self._call_type: str | None = call_type
+        self._call_type = call_type
         return self._step
 
-    def set_meta_harness_context(self, context: dict | None) -> None:
+    def set_meta_harness_context(self, context: JsonObject | None) -> None:
         """Bind subsequent non-system entries to one compiled program node."""
         self._meta_harness_context = None if context is None else dict(context)
 
@@ -72,10 +73,10 @@ class TrajectoryWriter:
         self,
         tool_name: str,
         command: str,
-        arguments: dict | None = None,
+        arguments: JsonObject | None = None,
     ) -> None:
         """Write a tool_call entry at the current step."""
-        entry: dict = {
+        entry: JsonObject = {
             "role": "tool_call",
             "step": self._step,
             "tool_name": tool_name,
@@ -95,11 +96,11 @@ class TrajectoryWriter:
         exit_code: int = 0,
         duration_ms: int | None = None,
         media: list[str] | None = None,
-        metadata: dict | None = None,
+        metadata: JsonObject | None = None,
         output_summary: str | None = None,
     ) -> None:
         """Write a tool_result entry at the current step."""
-        entry: dict = {
+        entry: JsonObject = {
             "role": "tool_result",
             "step": self._step,
             "tool_name": tool_name,
@@ -133,11 +134,13 @@ class TrajectoryWriter:
     # Internal
     # ------------------------------------------------------------------
 
-    def _write(self, entry: dict) -> None:
+    def _write(self, entry: JsonObject) -> None:
         """Add a timestamp, serialise to JSON, write a line, and flush."""
-        if self._call_type is not None and entry.get("step", 0) > 0:
+        step = entry.get("step", 0)
+        is_active_step = isinstance(step, int) and step > 0
+        if self._call_type is not None and is_active_step:
             entry["call_type"] = self._call_type
-        if self._meta_harness_context is not None and entry.get("step", 0) > 0:
+        if self._meta_harness_context is not None and is_active_step:
             entry["meta_harness"] = dict(self._meta_harness_context)
         entry["timestamp"] = _now_utc_iso()
         self._file.write(json.dumps(entry, ensure_ascii=False) + "\n")

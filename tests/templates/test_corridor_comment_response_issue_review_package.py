@@ -13,7 +13,7 @@ import pytest
 
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
-from aec_bench.templates.registry import discover_templates, load_engine_module, load_template
+from aec_bench.templates.registry import discover_templates, load_template
 
 TEMPLATE_DIR = (
     Path(__file__).resolve().parents[2]
@@ -107,24 +107,26 @@ SOURCE_FILES = [
 
 
 def _load() -> tuple:
-    config, template_dir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(template_dir)
-    return config, template_dir, engine
+    loaded_template = load_template(TEMPLATE_DIR)
+    config = loaded_template.config
+    template_dir = loaded_template.path
+    engine = loaded_template.engine
+    return loaded_template, config, template_dir, engine
 
 
 def _instance_for_variant(variant: str, max_seeds: int = 800):
-    config, template_dir, engine = _load()
+    loaded_template, config, template_dir, engine = _load()
     for seed in range(max_seeds):
-        instance = sample_instance(config, engine.compute, "medium", seed=seed, instance_index=0)
+        instance = sample_instance(loaded_template, "medium", seed=seed, instance_index=0)
         if instance.all_params["packet_variant"] == variant:
-            return config, template_dir, engine, instance
+            return loaded_template, config, template_dir, engine, instance
     pytest.fail(f"No instance with variant {variant!r} found in {max_seeds} seeds")
 
 
 def _scaffold_variant(tmp_path: Path, variant: str) -> tuple[Path, dict]:
-    config, template_dir, engine, instance = _instance_for_variant(variant)
-    engine_source = (template_dir / "engine.py").read_text(encoding="utf-8")
-    instance_dir = scaffold_task_instance(config, engine_source, template_dir, instance, tmp_path)
+    loaded_template, config, template_dir, engine, instance = _instance_for_variant(variant)
+    (template_dir / "engine.py").read_text(encoding="utf-8")
+    instance_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
     return instance_dir, instance.ground_truth
 
 
@@ -168,7 +170,7 @@ def _grab(pattern: str, text: str) -> float:
 
 
 def test_template_is_discoverable_by_builtin_name() -> None:
-    templates = {config.meta.name: config for config, _path in discover_templates()}
+    templates = {template.config.meta.name: template.config for template in discover_templates()[0]}
 
     assert "corridor-comment-response-issue-review-package" in templates
     config = templates["corridor-comment-response-issue-review-package"]
@@ -178,12 +180,12 @@ def test_template_is_discoverable_by_builtin_name() -> None:
 
 
 def test_parameters_vary_across_seeds() -> None:
-    config, _template_dir, engine = _load()
+    loaded_template, config, _template_dir, engine = _load()
 
     variants = set()
     voltage_margins = set()
     for seed in range(40):
-        instance = sample_instance(config, engine.compute, "medium", seed=seed, instance_index=0)
+        instance = sample_instance(loaded_template, "medium", seed=seed, instance_index=0)
         variants.add(instance.all_params["packet_variant"])
         voltage_margins.add(instance.ground_truth["voltage_drop_margin_percent"])
 
@@ -192,10 +194,10 @@ def test_parameters_vary_across_seeds() -> None:
 
 
 def test_same_seed_reproduces_ground_truth() -> None:
-    config, _template_dir, engine = _load()
+    loaded_template, config, _template_dir, engine = _load()
 
-    a = sample_instance(config, engine.compute, "medium", seed=22, instance_index=0)
-    b = sample_instance(config, engine.compute, "medium", seed=22, instance_index=0)
+    a = sample_instance(loaded_template, "medium", seed=22, instance_index=0)
+    b = sample_instance(loaded_template, "medium", seed=22, instance_index=0)
 
     assert a.all_params == b.all_params
     assert a.ground_truth == b.ground_truth
@@ -203,7 +205,7 @@ def test_same_seed_reproduces_ground_truth() -> None:
 
 @pytest.mark.parametrize("variant", sorted(VARIANT_EXPECTATIONS))
 def test_variant_gold_statuses_and_readiness(variant: str) -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant(variant)
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant(variant)
     gold = instance.ground_truth
     expected = VARIANT_EXPECTATIONS[variant]
 
@@ -218,7 +220,7 @@ def test_variant_gold_statuses_and_readiness(variant: str) -> None:
 
 
 def test_clean_variant_evidence_is_consistent() -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant("clean")
     gold = instance.ground_truth
 
     for key in EVIDENCE_KEYS:
@@ -232,14 +234,14 @@ def test_clean_variant_evidence_is_consistent() -> None:
 
 
 def test_unsupported_downstream_repair_variant_fails_voltage_criterion() -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant("unsupported_downstream_repair")
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant("unsupported_downstream_repair")
     gold = instance.ground_truth
 
     assert gold["voltage_drop_margin_percent"] < 0.0
 
 
 def test_missing_revised_chainage_variant_omits_delta_evidence() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("missing_revised_chainage")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("missing_revised_chainage")
     sources = engine.build_sources(instance.all_params)
 
     assert "changed_chainage_delta_m" not in instance.ground_truth
@@ -247,7 +249,7 @@ def test_missing_revised_chainage_variant_omits_delta_evidence() -> None:
 
 
 def test_build_sources_produces_eight_files_with_ids() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("clean")
     sources = engine.build_sources(instance.all_params)
 
     assert sorted(sources) == sorted(SOURCE_FILES)
@@ -263,7 +265,7 @@ def test_build_sources_produces_eight_files_with_ids() -> None:
 
 
 def test_stale_change_register_sources_have_revision_mismatch() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("stale_change_register_revision")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("stale_change_register_revision")
     sources = engine.build_sources(instance.all_params)
 
     register = sources["sources/document-register.md"]
@@ -274,7 +276,7 @@ def test_stale_change_register_sources_have_revision_mismatch() -> None:
 
 
 def test_scenario_copy_forward_sources_keep_vms_legibility_numerically_clean() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("scenario_copy_forward")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("scenario_copy_forward")
     sources = engine.build_sources(instance.all_params)
     vms = sources["sources/vms-operations-note.md"]
 
@@ -291,7 +293,7 @@ def test_scenario_copy_forward_sources_keep_vms_legibility_numerically_clean() -
 
 def test_scenario_copy_forward_sources_bound_other_checks_to_current_packet() -> None:
     """Scenario-copy variants should not leave unrelated checks plausibly under-evidenced."""
-    _config, _template_dir, engine, instance = _instance_for_variant("scenario_copy_forward")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("scenario_copy_forward")
     sources = engine.build_sources(instance.all_params)
 
     comments = sources["sources/comment-register.md"]
@@ -315,7 +317,7 @@ def test_scenario_copy_forward_sources_bound_other_checks_to_current_packet() ->
 
 def test_criteria_source_does_not_print_copied_scenario_review_answer() -> None:
     """Copied-scenario sources can show the defect without printing the gold localization."""
-    _config, _template_dir, engine, instance = _instance_for_variant("scenario_copy_forward")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("scenario_copy_forward")
     criteria = engine.build_sources(instance.all_params)["sources/criteria-comments.md"].lower()
 
     assert "copied scenario" in criteria
@@ -327,7 +329,7 @@ def test_criteria_source_does_not_print_copied_scenario_review_answer() -> None:
 
 def test_missing_chainage_sources_do_not_print_review_answer() -> None:
     """Missing chainage sources expose the gap without prescribing the review status."""
-    _config, _template_dir, engine, instance = _instance_for_variant("missing_revised_chainage")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("missing_revised_chainage")
     sources = engine.build_sources(instance.all_params)
     criteria = sources["sources/criteria-comments.md"].lower()
     markup = sources["sources/marked-up-plan.md"].lower()
@@ -341,7 +343,7 @@ def test_missing_chainage_sources_do_not_print_review_answer() -> None:
 
 
 def test_sources_print_quantized_electrical_values() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("clean")
     sources = engine.build_sources(instance.all_params)
     feeder = sources["sources/electrical-feeder-check.md"]
 
@@ -351,7 +353,7 @@ def test_sources_print_quantized_electrical_values() -> None:
 
 def _assert_corridor_evidence_recomputable_from_sources(variant: str) -> None:
     """Recompute the gold evidence available in a rendered source packet."""
-    _config, _template_dir, engine, instance = _instance_for_variant(variant)
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant(variant)
     gold = instance.ground_truth
     sources = engine.build_sources(instance.all_params)
     markup = sources["sources/marked-up-plan.md"]

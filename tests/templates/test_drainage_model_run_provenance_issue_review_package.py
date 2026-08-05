@@ -21,7 +21,7 @@ from aec_bench.meta_harness.declared_task_surface import project_declared_task_s
 from aec_bench.meta_harness.kernel_catalogue import default_kernel_registry
 from aec_bench.tasks.loader import load_task_definition
 from aec_bench.templates.contracts import TemplateConfig
-from aec_bench.templates.registry import discover_templates, load_engine_module, load_template
+from aec_bench.templates.registry import LoadedTemplate, discover_templates, load_template
 
 TEMPLATE_DIR = (
     Path(__file__).resolve().parents[2]
@@ -162,28 +162,30 @@ SOURCE_FILES = [
 ]
 
 
-def _load() -> tuple[TemplateConfig, Path, ModuleType]:
-    config, template_dir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(template_dir)
-    return config, template_dir, engine
+def _load() -> tuple[LoadedTemplate, TemplateConfig, Path, ModuleType]:
+    loaded_template = load_template(TEMPLATE_DIR)
+    config = loaded_template.config
+    template_dir = loaded_template.path
+    engine = loaded_template.engine
+    return loaded_template, config, template_dir, engine
 
 
 def _instance_for_variant(
     variant: str,
     max_seeds: int = 2000,
-) -> tuple[TemplateConfig, Path, ModuleType, SampledInstance]:
-    config, template_dir, engine = _load()
+) -> tuple[LoadedTemplate, TemplateConfig, Path, ModuleType, SampledInstance]:
+    loaded_template, config, template_dir, engine = _load()
     for seed in range(max_seeds):
-        instance = sample_instance(config, engine.compute, "medium", seed=seed, instance_index=0)
+        instance = sample_instance(loaded_template, "medium", seed=seed, instance_index=0)
         if instance.all_params["packet_variant"] == variant:
-            return config, template_dir, engine, instance
+            return loaded_template, config, template_dir, engine, instance
     pytest.fail(f"No instance with variant {variant!r} found in {max_seeds} seeds")
 
 
 def _scaffold_variant(tmp_path: Path, variant: str) -> tuple[Path, dict[str, float]]:
-    config, template_dir, engine, instance = _instance_for_variant(variant)
-    engine_source = (template_dir / "engine.py").read_text(encoding="utf-8")
-    instance_dir = scaffold_task_instance(config, engine_source, template_dir, instance, tmp_path)
+    loaded_template, config, template_dir, engine, instance = _instance_for_variant(variant)
+    (template_dir / "engine.py").read_text(encoding="utf-8")
+    instance_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
     return instance_dir, instance.ground_truth
 
 
@@ -232,7 +234,7 @@ def _grab(pattern: str, text: str) -> float:
 
 
 def test_template_is_discoverable_by_builtin_name() -> None:
-    templates = {config.meta.name: config for config, _path in discover_templates()}
+    templates = {template.config.meta.name: template.config for template in discover_templates()[0]}
 
     assert "drainage-model-run-provenance-issue-review-package" in templates
     config = templates["drainage-model-run-provenance-issue-review-package"]
@@ -300,12 +302,12 @@ def test_generated_world_is_an_opaque_atomic_task(tmp_path: Path) -> None:
 
 
 def test_parameters_vary_across_seeds() -> None:
-    config, _template_dir, engine = _load()
+    loaded_template, config, _template_dir, engine = _load()
 
     variants = set()
     peak_flows = set()
     for seed in range(60):
-        instance = sample_instance(config, engine.compute, "medium", seed=seed, instance_index=0)
+        instance = sample_instance(loaded_template, "medium", seed=seed, instance_index=0)
         variants.add(instance.all_params["packet_variant"])
         peak_flows.add(instance.ground_truth["report_peak_flow_m3_s"])
 
@@ -314,10 +316,10 @@ def test_parameters_vary_across_seeds() -> None:
 
 
 def test_same_seed_reproduces_ground_truth() -> None:
-    config, _template_dir, engine = _load()
+    loaded_template, config, _template_dir, engine = _load()
 
-    first = sample_instance(config, engine.compute, "medium", seed=23, instance_index=0)
-    second = sample_instance(config, engine.compute, "medium", seed=23, instance_index=0)
+    first = sample_instance(loaded_template, "medium", seed=23, instance_index=0)
+    second = sample_instance(loaded_template, "medium", seed=23, instance_index=0)
 
     assert first.all_params == second.all_params
     assert first.ground_truth == second.ground_truth
@@ -325,7 +327,7 @@ def test_same_seed_reproduces_ground_truth() -> None:
 
 @pytest.mark.parametrize("variant", sorted(VARIANT_EXPECTATIONS))
 def test_variant_gold_statuses_and_transitions(variant: str) -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant(variant)
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant(variant)
     gold = instance.ground_truth
     expected = VARIANT_EXPECTATIONS[variant]
 
@@ -342,7 +344,9 @@ def test_variant_gold_statuses_and_transitions(variant: str) -> None:
 
 
 def test_missing_manifest_revision_omits_only_revision_match_evidence() -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant("missing_manifest_catchment_revision")
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant(
+        "missing_manifest_catchment_revision"
+    )
 
     assert "all_input_revisions_match_score" not in instance.ground_truth
     for key in set(EVIDENCE_KEYS) - {"all_input_revisions_match_score"}:
@@ -357,7 +361,7 @@ def test_each_defect_variant_flips_one_matrix_item() -> None:
 
 
 def test_build_sources_produces_temporal_packet() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("clean")
     sources = engine.build_sources(instance.all_params)
 
     assert sorted(sources) == sorted(SOURCE_FILES)
@@ -381,7 +385,7 @@ def test_build_sources_produces_temporal_packet() -> None:
 
 
 def test_source_owned_contract_defines_binary_revision_identity() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("clean")
     criteria = " ".join(engine.build_sources(instance.all_params)["sources/criteria-comments.md"].lower().split())
 
     assert "all_input_revisions_match_score" in criteria
@@ -400,7 +404,7 @@ def test_matrix_separates_integrity_checks_from_transition_applicability() -> No
 
 
 def test_variant_sources_change_only_the_intended_condition() -> None:
-    _config, _template_dir, engine, clean_instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, engine, clean_instance = _instance_for_variant("clean")
     clean_sources = engine.build_sources(clean_instance.all_params)
 
     cases = {
@@ -421,7 +425,7 @@ def test_variant_sources_change_only_the_intended_condition() -> None:
 
 
 def test_continuity_variant_changes_only_report_and_exceeds_limit() -> None:
-    _config, _template_dir, engine, clean_instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, engine, clean_instance = _instance_for_variant("clean")
     clean_sources = engine.build_sources(clean_instance.all_params)
     failed_params = dict(clean_instance.all_params)
     failed_params["packet_variant"] = "continuity_limit_exceeded"
@@ -435,7 +439,7 @@ def test_continuity_variant_changes_only_report_and_exceeds_limit() -> None:
 
 @pytest.mark.parametrize("variant", sorted(VARIANT_EXPECTATIONS))
 def test_evidence_recomputable_from_rendered_sources(variant: str) -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant(variant)
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant(variant)
     gold = instance.ground_truth
     sources = engine.build_sources(instance.all_params)
     register = sources["sources/document-register.md"]

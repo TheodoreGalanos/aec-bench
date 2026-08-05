@@ -813,7 +813,7 @@ def test_access_controller_engine_sizes_controllers_power_and_backup() -> None:
 
 
 def test_source_task_tranche_templates_are_discoverable() -> None:
-    registry = {config.meta.name for config, _ in discover_templates()}
+    registry = {template.config.meta.name for template in discover_templates()[0]}
 
     for template_name in [
         "tidal-prism",

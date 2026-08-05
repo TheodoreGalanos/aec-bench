@@ -1209,7 +1209,7 @@ def _structural_item(
         generation_identity=TaskGenerationIdentity(
             task_id=task_id,
             template=f"template:{family}",
-            template_version="1",
+            template_source_sha256=_sha(f"template:{family}"),
             seed=int.from_bytes(hashlib.sha256(task_id.encode()).digest()[:4]),
             instance_index=0,
         ),

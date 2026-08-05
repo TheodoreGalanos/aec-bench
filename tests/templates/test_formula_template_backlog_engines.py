@@ -305,7 +305,9 @@ def test_backlog_templates_load_from_registry(
     expected_name: str,
     expected_discipline: str,
 ) -> None:
-    config, path = load_template(TEMPLATE_ROOT / template_dir)
+    loaded_template = load_template(TEMPLATE_ROOT / template_dir)
+    config = loaded_template.config
+    path = loaded_template.path
 
     assert path == TEMPLATE_ROOT / template_dir
     assert config.meta.name == expected_name
@@ -657,12 +659,11 @@ def test_lmtd_engine_calculates_counterflow_heat_duty() -> None:
 
 
 def test_lmtd_template_samples_valid_parallel_temperature_differences() -> None:
-    config, _ = load_template(TEMPLATE_ROOT / "mechanical/lmtd_calculation")
+    loaded_template = load_template(TEMPLATE_ROOT / "mechanical/lmtd_calculation")
 
     instance = sample_instance(
-        config,
-        compute_lmtd,
-        "medium",
+        loaded_template,
+        difficulty_name="medium",
         seed=20260936,
         instance_index=412,
     )

@@ -1,9 +1,7 @@
 # ABOUTME: Tests for the Jinja2 instruction renderer that renders templates with sampled param values.
 # ABOUTME: Covers visible/hidden param separation, tool section toggling, outputs, and standards.
 
-from datetime import UTC, datetime
-
-from aec_bench.generation.contracts import GenerationMetadata, SampledInstance
+from aec_bench.generation.contracts import SampledInstance
 from aec_bench.generation.instruction_renderer import render_instruction
 from aec_bench.templates.contracts import (
     OutputSpec,
@@ -50,15 +48,11 @@ def _build_test_instance() -> SampledInstance:
         archetype_name="test_arch",
         site_context="test-site",
         difficulty="easy",
-        metadata=GenerationMetadata(
-            template="test",
-            seed=42,
-            timestamp=datetime.now(UTC),
-            difficulty="easy",
-            visibility_level=VisibilityLevel.ALL_GIVEN,
-            archetype="test_arch",
-            site_context="test-site",
-        ),
+        template_name="test",
+        template_source_sha256="0" * 64,
+        seed=42,
+        instance_index=0,
+        visibility_level=VisibilityLevel.ALL_GIVEN,
     )
 
 
@@ -193,15 +187,11 @@ def test_visible_params_accessible_via_direct_access() -> None:
         archetype_name="test_arch",
         site_context="test-site",
         difficulty="easy",
-        metadata=GenerationMetadata(
-            template="test",
-            seed=42,
-            timestamp=datetime.now(UTC),
-            difficulty="easy",
-            visibility_level=VisibilityLevel.ALL_GIVEN,
-            archetype="test_arch",
-            site_context="test-site",
-        ),
+        template_name="test",
+        template_source_sha256="0" * 64,
+        seed=42,
+        instance_index=0,
+        visibility_level=VisibilityLevel.ALL_GIVEN,
     )
     config = _build_test_config()
 

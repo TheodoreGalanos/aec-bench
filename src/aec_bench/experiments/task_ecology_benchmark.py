@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import random
 import shutil
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -17,8 +16,7 @@ from aec_bench.evolution.report_data import list_runs
 from aec_bench.generation.contracts import SampledInstance
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
-from aec_bench.templates.contracts import TemplateConfig
-from aec_bench.templates.registry import load_engine_module, load_template
+from aec_bench.templates.registry import LoadedTemplate, load_template
 
 Strategy = Literal["hill_climb", "qd"]
 
@@ -127,23 +125,18 @@ def materialise_suite(
     materialised: list[MaterialisedInstance] = []
     for template_index, entry in enumerate(entries):
         template_dir = repo_root / entry.source_task_path
-        config, loaded_template_dir = load_template(template_dir)
-        engine_module = load_engine_module(loaded_template_dir)
-        engine_source = (loaded_template_dir / "engine.py").read_text(encoding="utf-8")
+        template = load_template(template_dir)
 
         for difficulty_index, difficulty in enumerate(difficulties):
             instance = _sample_instance_with_retries(
                 template_task_id=entry.task_id,
-                config=config,
-                engine_compute=engine_module.compute,
+                template=template,
                 difficulty=difficulty,
                 seed=seed + template_index * 100,
                 instance_index=difficulty_index,
             )
             instance_dir = scaffold_task_instance(
-                config=config,
-                engine_source=engine_source,
-                template_dir=loaded_template_dir,
+                template=template,
                 instance=instance,
                 output_dir=suite_root,
             )
@@ -163,8 +156,7 @@ def materialise_suite(
 def _sample_instance_with_retries(
     *,
     template_task_id: str,
-    config: TemplateConfig,
-    engine_compute: Callable[..., dict[str, float]],
+    template: LoadedTemplate,
     difficulty: str,
     seed: int,
     instance_index: int,
@@ -175,8 +167,7 @@ def _sample_instance_with_retries(
     for attempt in range(max_attempts):
         try:
             return sample_instance(
-                config=config,
-                engine_compute=engine_compute,
+                template=template,
                 difficulty_name=difficulty,
                 seed=seed,
                 instance_index=instance_index + attempt * 1000,

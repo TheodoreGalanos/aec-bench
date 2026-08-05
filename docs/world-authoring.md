@@ -46,6 +46,19 @@ the result can be judged from submitted files or a bounded workspace.
 5. Submit the task package with its `task.toml`, `instruction.md`, verifier,
    fixtures, any declared output contract, and passing validation evidence.
 
+Direct validation and `--template` loading are strict: an invalid requested
+template fails. Template listing, suite generation, and public library export
+use the same diagnostic discovery path, so invalid candidates are reported
+without becoming catalogue entries. One validated load supplies the config,
+engine, source path, and source digest used for sampling and materialization.
+
+Generated `task.toml` records the template source SHA-256, seed, instance
+index, difficulty, and visibility. It does not record ambient generation time
+as lineage. The generated directory is the runnable artifact and the current
+task loader validates it into `TaskDefinition`; the library catalogue remains
+a projection from explicitly supplied public template and seed roots. This
+calculation-template path does not apply to the interactive worlds below.
+
 The root [README](../README.md#generate-tasks) owns the public CLI route. This
 guide does not duplicate the task and template authoring instructions.
 

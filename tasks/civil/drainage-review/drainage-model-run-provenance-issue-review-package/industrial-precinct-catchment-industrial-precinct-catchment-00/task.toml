@@ -24,10 +24,9 @@ allow_internet = true
 [generation]
 origin = "generated"
 template = "drainage-model-run-provenance-issue-review-package"
-template_version = "1.0"
+template_source_sha256 = "bc9cebcaf713d63f537a4b7f8d02e053fb3fda008c64c77e612b17e98147820b"
 seed = 7301
 instance_index = 0
-timestamp = "2026-07-22T11:08:42.208100+00:00"
 difficulty = "hard"
 visibility_level = "partial"
 archetype = "industrial_precinct_catchment"

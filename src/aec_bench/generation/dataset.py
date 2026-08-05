@@ -8,15 +8,16 @@ import logging
 import math
 import tomllib
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from fnmatch import fnmatch
 from pathlib import Path
-from types import ModuleType
 
 from pydantic import Field
 
 from aec_bench.contracts.validators import StrictModel
-from aec_bench.templates.contracts import TemplateConfig, ToolMode
+from aec_bench.templates.contracts import ToolMode
+from aec_bench.templates.registry import LoadedTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,8 @@ class OutputConfig(StrictModel):
     dir: Path = Path("./tasks/")
 
 
-class CoverageWarning(StrictModel):
+@dataclass(frozen=True, slots=True)
+class CoverageWarning:
     """A warning about a coverage target that couldn't be met."""
 
     category: str
@@ -136,10 +138,10 @@ def largest_remainder_round(ratios: dict[str, float], *, total: int) -> dict[str
 
 
 def filter_templates(
-    templates: list[tuple[TemplateConfig, Path]],
+    templates: list[LoadedTemplate],
     *,
     include: list[str],
-) -> list[tuple[TemplateConfig, Path]]:
+) -> list[LoadedTemplate]:
     """Filter templates by matching 'discipline/name' against include glob patterns.
 
     Each template's metadata discipline and name are combined as 'discipline/name'
@@ -148,12 +150,13 @@ def filter_templates(
 
     Raises ValueError if no templates survive filtering.
     """
-    matched: list[tuple[TemplateConfig, Path]] = []
+    matched: list[LoadedTemplate] = []
 
-    for config, path in templates:
+    for template in templates:
+        config = template.config
         logical_path = f"{config.meta.discipline}/{config.meta.name}"
         if any(fnmatch(logical_path, pattern) for pattern in include):
-            matched.append((config, path))
+            matched.append(template)
 
     if not matched:
         msg = f"No templates matched include patterns: {include}"
@@ -163,7 +166,7 @@ def filter_templates(
 
 
 def allocate_budget(
-    templates: list[tuple[TemplateConfig, Path]],
+    templates: list[LoadedTemplate],
     *,
     per_task: int,
     total_max: int,
@@ -188,8 +191,8 @@ def allocate_budget(
 
     # Group templates by discipline
     by_discipline: dict[str, list[str]] = defaultdict(list)
-    for (cfg, _), key in zip(templates, keys, strict=True):
-        by_discipline[cfg.meta.discipline].append(key)
+    for template, key in zip(templates, keys, strict=True):
+        by_discipline[template.config.meta.discipline].append(key)
 
     # Calculate discipline guarantees
     discipline_guarantees: dict[str, int] = {}
@@ -244,12 +247,14 @@ def allocate_budget(
     return allocation, warnings
 
 
-def _template_allocation_keys(templates: list[tuple[TemplateConfig, Path]]) -> list[str]:
+def _template_allocation_keys(templates: list[LoadedTemplate]) -> list[str]:
     """Return stable unique keys for allocation while preserving old keys when possible."""
-    name_counts = Counter(cfg.meta.name for cfg, _ in templates)
+    name_counts = Counter(template.config.meta.name for template in templates)
     used: set[str] = set()
     keys: list[str] = []
-    for cfg, path in templates:
+    for template in templates:
+        cfg = template.config
+        path = template.path
         if name_counts[cfg.meta.name] == 1:
             key = cfg.meta.name
         else:
@@ -261,18 +266,20 @@ def _template_allocation_keys(templates: list[tuple[TemplateConfig, Path]]) -> l
     return keys
 
 
-class PlannedInstance(StrictModel):
+@dataclass(frozen=True, slots=True)
+class PlannedInstance:
     """A single planned task instance within a composition plan."""
 
     template_name: str
-    template_dir: Path
+    template: LoadedTemplate
     difficulty: str
     tool_mode: str
     visibility: str
     seed_offset: int
 
 
-class DatasetSummary(StrictModel):
+@dataclass(frozen=True, slots=True)
+class DatasetSummary:
     """Aggregate counts for a dataset or composition plan."""
 
     total_instances: int
@@ -282,7 +289,8 @@ class DatasetSummary(StrictModel):
     by_tool_mode: dict[str, int]
 
 
-class CompositionPlan(StrictModel):
+@dataclass(frozen=True, slots=True)
+class CompositionPlan:
     """The output of compose_dataset: a deterministic plan for generating instances."""
 
     suite_name: str
@@ -341,11 +349,11 @@ def _assign_tool_modes(
 
 def _build_summary(
     planned: list[PlannedInstance],
-    templates: list[tuple[TemplateConfig, Path]],
+    templates: list[LoadedTemplate],
 ) -> DatasetSummary:
     """Compute aggregate summary counts from planned instances."""
-    name_to_discipline = {cfg.meta.name: cfg.meta.discipline for cfg, _ in templates}
-    path_to_discipline = {path: cfg.meta.discipline for cfg, path in templates}
+    name_to_discipline = {template.config.meta.name: template.config.meta.discipline for template in templates}
+    path_to_discipline = {template.path: template.config.meta.discipline for template in templates}
 
     by_discipline: dict[str, int] = defaultdict(int)
     by_difficulty: dict[str, int] = defaultdict(int)
@@ -353,7 +361,7 @@ def _build_summary(
     by_tool_mode: dict[str, int] = defaultdict(int)
 
     for p in planned:
-        disc = path_to_discipline.get(p.template_dir, name_to_discipline.get(p.template_name, "unknown"))
+        disc = path_to_discipline.get(p.template.path, name_to_discipline.get(p.template_name, "unknown"))
         by_discipline[disc] += 1
         by_difficulty[p.difficulty] += 1
         by_visibility[p.visibility] += 1
@@ -371,7 +379,7 @@ def _build_summary(
 def _validate_coverage(
     summary: DatasetSummary,
     config: SuiteConfig,
-    templates: list[tuple[TemplateConfig, Path]],
+    templates: list[LoadedTemplate],
 ) -> list[CoverageWarning]:
     """Compare achieved ratios against targets and produce warnings for deviations > 0.1."""
     warnings: list[CoverageWarning] = []
@@ -422,7 +430,7 @@ def _validate_coverage(
             )
 
     # Discipline minimum
-    name_to_discipline = {cfg.meta.name: cfg.meta.discipline for cfg, _ in templates}
+    name_to_discipline = {template.config.meta.name: template.config.meta.discipline for template in templates}
     disciplines = set(name_to_discipline.values())
     for disc in disciplines:
         count = summary.by_discipline.get(disc, 0)
@@ -443,7 +451,7 @@ def _validate_coverage(
 
 def compose_dataset(
     config: SuiteConfig,
-    templates: list[tuple[TemplateConfig, Path]],
+    templates: list[LoadedTemplate],
 ) -> CompositionPlan:
     """Build a deterministic composition plan from a suite config and template list.
 
@@ -467,12 +475,11 @@ def compose_dataset(
 
     planned: list[PlannedInstance] = []
     cumulative_index = 0
-    template_lookup = {
-        key: (cfg, path) for key, (cfg, path) in zip(_template_allocation_keys(filtered), filtered, strict=True)
-    }
+    template_lookup = dict(zip(_template_allocation_keys(filtered), filtered, strict=True))
 
     for template_name, instance_count in allocation.items():
-        cfg, path = template_lookup[template_name]
+        template = template_lookup[template_name]
+        cfg = template.config
         template_difficulties = list(cfg.difficulty.keys())
 
         # Assign difficulties for this template's instances
@@ -492,7 +499,7 @@ def compose_dataset(
             planned.append(
                 PlannedInstance(
                     template_name=template_name,
-                    template_dir=path,
+                    template=template,
                     difficulty=diff_name,
                     tool_mode=tm,
                     visibility=vis,
@@ -528,7 +535,7 @@ class InstanceEntry(StrictModel):
     tool_mode: str
 
 
-class DatasetManifest(StrictModel):
+class SuiteOutput(StrictModel):
     """The dataset.json file written alongside generated instances."""
 
     name: str
@@ -552,41 +559,27 @@ def execute_plan(
     config: SuiteConfig,
     *,
     config_path: str = "suite.toml",
-) -> DatasetManifest:
+) -> SuiteOutput:
     """Execute a composition plan by scaffolding all instances and writing dataset.json.
 
-    Caches template loads per template_dir to avoid redundant I/O.
-    Returns the DatasetManifest that was written to disk.
+    Reuses the loaded template carried by each planned instance.
+    Returns the suite output that was written to disk.
     """
     from aec_bench import __version__
     from aec_bench.generation.sampler import sample_instance
     from aec_bench.generation.scaffolder import scaffold_task_instance
-    from aec_bench.templates.registry import load_engine_module, load_template
 
     output_dir = config.output.dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Cache: template_dir -> (TemplateConfig, engine_module, engine_source)
-    cache: dict[Path, tuple[TemplateConfig, ModuleType, str]] = {}
-
     entries: list[InstanceEntry] = []
 
     for instance_index, planned in enumerate(plan.planned_instances):
-        tdir = planned.template_dir
-
-        # Load and cache template resources
-        if tdir not in cache:
-            template_config, _ = load_template(tdir)
-            engine_module = load_engine_module(tdir)
-            engine_source = (tdir / "engine.py").read_text(encoding="utf-8")
-            cache[tdir] = (template_config, engine_module, engine_source)
-
-        template_config, engine_module, engine_source = cache[tdir]
+        template = planned.template
 
         # Sample instance
         sampled = sample_instance(
-            config=template_config,
-            engine_compute=engine_module.compute,
+            template=template,
             difficulty_name=planned.difficulty,
             seed=planned.seed_offset,
             instance_index=instance_index,
@@ -594,9 +587,7 @@ def execute_plan(
 
         # Scaffold to disk
         instance_dir = scaffold_task_instance(
-            config=template_config,
-            engine_source=engine_source,
-            template_dir=tdir,
+            template=template,
             instance=sampled,
             output_dir=output_dir,
             tool_mode_override=planned.tool_mode,
@@ -617,7 +608,7 @@ def execute_plan(
         )
 
     # Build manifest
-    manifest = DatasetManifest(
+    manifest = SuiteOutput(
         name=plan.suite_name,
         seed=plan.seed,
         created=datetime.now(tz=UTC),

@@ -33,9 +33,14 @@ class TaskGenerationIdentity(FrozenStrictModel):
     task_id: NonEmptyStr
     origin: Literal["generated"] = "generated"
     template: NonEmptyStr
-    template_version: NonEmptyStr
+    template_source_sha256: str
     seed: int
     instance_index: NonNegativeInt
+
+    @field_validator("template_source_sha256")
+    @classmethod
+    def validate_template_source_sha256(cls, value: str) -> str:
+        return validate_sha256(value)
 
 
 class AdaptiveCycleCorpusSplit(FrozenStrictModel):
@@ -164,7 +169,7 @@ class AdaptiveCycleCorpusManifest(ContentAddressedModel):
         generation_keys = {
             (
                 identity.template,
-                identity.template_version,
+                identity.template_source_sha256,
                 identity.seed,
                 identity.instance_index,
             )
@@ -289,7 +294,7 @@ def _load_generation_identity(
                 "task_id": task_id,
                 "origin": generation.get("origin"),
                 "template": generation.get("template"),
-                "template_version": generation.get("template_version"),
+                "template_source_sha256": generation.get("template_source_sha256"),
                 "seed": generation.get("seed"),
                 "instance_index": generation.get("instance_index"),
             }

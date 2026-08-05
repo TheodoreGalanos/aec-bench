@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from aec_bench.generation.discovery import LibraryTemplate, scan_templates
+from aec_bench.templates.registry import LoadedTemplate, discover_templates
 from aec_bench.web.dependencies import get_web_settings
 from aec_bench.web.schemas import (
     LibraryDetailResponse,
@@ -19,22 +19,21 @@ from aec_bench.web.schemas import (
 router = APIRouter()
 
 
-def _template_to_dict(template: LibraryTemplate) -> dict[str, Any]:
-    """Convert a LibraryTemplate to a dict for the template context."""
-    meta = template.params_raw.get("meta", {})
-    params = template.params_raw.get("params", {})
-    outputs = template.params_raw.get("outputs", {})
+def _template_to_dict(template: LoadedTemplate) -> dict[str, Any]:
+    """Convert a validated template to the existing API projection."""
+    config = template.config
+    meta = config.meta
 
     return {
-        "task_id": template.task_id,
-        "discipline": template.discipline,
-        "description": meta.get("description", ""),
-        "long_description": meta.get("long_description", ""),
-        "tags": meta.get("tags", []),
-        "standards": meta.get("standards", []),
-        "inputs": [{"name": name, "description": spec.get("description", name)} for name, spec in params.items()],
-        "outputs": [{"name": name, "description": spec.get("description", name)} for name, spec in outputs.items()],
-        "param_count": len(params),
+        "task_id": meta.name,
+        "discipline": meta.discipline,
+        "description": meta.description,
+        "long_description": meta.long_description,
+        "tags": meta.tags,
+        "standards": meta.standards,
+        "inputs": [{"name": name, "description": spec.description} for name, spec in config.params.items()],
+        "outputs": [{"name": name, "description": spec.description} for name, spec in config.outputs.items()],
+        "param_count": len(config.params),
     }
 
 
@@ -60,11 +59,14 @@ def library_api(
 ) -> LibraryListResponse:
     """Return the template catalogue as JSON."""
     settings = get_web_settings(request)
-    all_templates = scan_templates(settings.benchmark_templates_root)
-    disciplines = sorted({t.discipline for t in all_templates})
+    all_templates, _diagnostics = discover_templates(
+        user_dirs=[settings.benchmark_templates_root],
+        include_builtin=False,
+    )
+    disciplines = sorted({template.config.meta.discipline for template in all_templates})
 
     if discipline:
-        filtered = [t for t in all_templates if t.discipline == discipline]
+        filtered = [t for t in all_templates if t.config.meta.discipline == discipline]
     else:
         filtered = all_templates
 
@@ -85,10 +87,17 @@ def library_detail_api(
 ) -> LibraryDetailResponse:
     """Return a single template's detail as JSON."""
     settings = get_web_settings(request)
-    templates = scan_templates(settings.benchmark_templates_root)
+    templates, _diagnostics = discover_templates(
+        user_dirs=[settings.benchmark_templates_root],
+        include_builtin=False,
+    )
 
     match = next(
-        (t for t in templates if t.discipline == discipline and t.task_id == template_id),
+        (
+            template
+            for template in templates
+            if template.config.meta.discipline == discipline and template.config.meta.name == template_id
+        ),
         None,
     )
     if match is None:

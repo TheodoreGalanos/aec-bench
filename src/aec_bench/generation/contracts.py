@@ -1,30 +1,13 @@
-# ABOUTME: Pydantic contract models for generated task instances.
-# ABOUTME: Covers generation provenance metadata and the full sampled instance envelope.
+# ABOUTME: Ordinary in-process values produced while sampling task templates.
+# ABOUTME: Keeps generation inputs explicit without creating a serialized contract layer.
 
-from datetime import datetime
+from dataclasses import dataclass
 
-from pydantic import NonNegativeInt
-
-from aec_bench.contracts.validators import StrictModel
 from aec_bench.templates.contracts import VisibilityLevel
 
 
-class GenerationMetadata(StrictModel):
-    """Provenance record for a generated task instance."""
-
-    origin: str = "generated"
-    template: str
-    template_version: str = "1.0"
-    seed: int
-    instance_index: NonNegativeInt = 0
-    timestamp: datetime
-    difficulty: str
-    visibility_level: VisibilityLevel
-    archetype: str
-    site_context: str
-
-
-class SampledInstance(StrictModel):
+@dataclass(frozen=True, slots=True)
+class SampledInstance:
     """A fully sampled task instance produced by the generation sampler."""
 
     instance_name: str
@@ -35,4 +18,8 @@ class SampledInstance(StrictModel):
     archetype_name: str
     site_context: str
     difficulty: str
-    metadata: GenerationMetadata
+    template_name: str
+    template_source_sha256: str
+    seed: int
+    instance_index: int
+    visibility_level: VisibilityLevel

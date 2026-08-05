@@ -23,7 +23,7 @@ from aec_bench.generation.instruction_renderer import render_instruction
 from aec_bench.generation.verifier_gen import generate_verifier
 from aec_bench.images.extensions import generate_dockerfile
 from aec_bench.templates.contracts import TemplateConfig, ToolMode
-from aec_bench.templates.registry import has_custom_verifier, load_engine_module
+from aec_bench.templates.registry import LoadedTemplate
 
 RUNNABLE_DIFFICULTIES = {"easy", "medium", "hard"}
 
@@ -73,8 +73,6 @@ def _build_task_toml(
     tags = list(config.meta.tags) + [tool_mode.value]
     tags_toml = ", ".join(f'"{t}"' for t in tags)
 
-    meta = instance.metadata
-    timestamp_iso = meta.timestamp.isoformat()
     metadata_difficulty = _runnable_metadata_difficulty(instance.difficulty)
     generation_difficulty_line = _generation_difficulty_metadata_line(instance.difficulty)
 
@@ -104,15 +102,14 @@ allow_internet = true
 
 [generation]
 origin = "generated"
-template = "{meta.template}"
-template_version = "1.0"
-seed = {meta.seed}
-instance_index = {meta.instance_index}
-timestamp = "{timestamp_iso}"
-difficulty = "{meta.difficulty}"
-visibility_level = "{meta.visibility_level}"
-archetype = "{meta.archetype}"
-site_context = "{meta.site_context}"
+template = "{instance.template_name}"
+template_source_sha256 = "{instance.template_source_sha256}"
+seed = {instance.seed}
+instance_index = {instance.instance_index}
+difficulty = "{instance.difficulty}"
+visibility_level = "{instance.visibility_level}"
+archetype = "{instance.archetype_name}"
+site_context = "{instance.site_context}"
 """
 
     # Add [tools] section when tool_mode is WITH_TOOL
@@ -256,8 +253,8 @@ def _write_instance_record(instance: SampledInstance, tests_dir: Path) -> None:
     """Write tests/instance.json so a custom verifier can read instance gold state."""
     record = {
         "instance_name": instance.instance_name,
-        "seed": instance.metadata.seed,
-        "instance_index": instance.metadata.instance_index,
+        "seed": instance.seed,
+        "instance_index": instance.instance_index,
         "difficulty": instance.difficulty,
         "all_params": instance.all_params,
         "ground_truth": instance.ground_truth,
@@ -324,15 +321,11 @@ def _generated_task_world_profile(
 
 
 def scaffold_task_instance(
-    config: TemplateConfig,
-    engine_source: str,
-    template_dir: Path,
+    template: LoadedTemplate,
     instance: SampledInstance,
     output_dir: Path,
     tool_mode_override: str | None = None,
     task_visibility: Visibility = Visibility.PUBLIC,
-    sealed_output_dir: Path | None = None,
-    public_instruction: str | None = None,
 ) -> Path:
     """Scaffold a complete task instance directory from a TemplateConfig and SampledInstance.
 
@@ -342,34 +335,22 @@ def scaffold_task_instance(
 
     Returns the path to the created instance directory.
     """
-    if (sealed_output_dir is None) != (public_instruction is None):
-        raise ValueError("sealed output and public instruction must be supplied together")
-    if public_instruction is not None and not public_instruction.strip():
-        raise ValueError("public instruction must not be blank")
-    if sealed_output_dir is not None:
-        _validate_disjoint_output_roots(
-            public_root=Path(output_dir),
-            sealed_root=Path(sealed_output_dir),
-        )
-
+    config = template.config
+    template_dir = template.path
     tool_mode = _resolve_tool_mode(config, tool_mode_override)
 
     # Build the instance directory path: output_dir/discipline/category/template_name/instance_name
     template_name = config.meta.name
     relative_instance_dir = Path(config.meta.discipline) / config.meta.category / template_name / instance.instance_name
     instance_dir = output_dir / relative_instance_dir
-    sealed_instance_dir = None if sealed_output_dir is None else Path(sealed_output_dir) / relative_instance_dir
     if instance_dir.exists():
         raise FileExistsError(f"refusing to overwrite existing task package: {instance_dir}")
-    if sealed_instance_dir is not None and sealed_instance_dir.exists():
-        raise FileExistsError(f"refusing to overwrite existing sealed task package: {sealed_instance_dir}")
-    engine_module = load_engine_module(template_dir)
+    engine_module = template.engine
 
     # Create required subdirectories
     (instance_dir / "environment").mkdir(parents=True, exist_ok=True)
     (instance_dir / "tests").mkdir(parents=True, exist_ok=True)
-    authority_dir = sealed_instance_dir or instance_dir
-    (authority_dir / "tests" / "fixtures").mkdir(parents=True, exist_ok=True)
+    (instance_dir / "tests" / "fixtures").mkdir(parents=True, exist_ok=True)
 
     # Copy trajectory_writer.py into the environment directory so the Dockerfile can COPY it
     writer_source = importlib.resources.files("aec_bench.trajectory") / "writer.py"
@@ -379,15 +360,8 @@ def scaffold_task_instance(
     (instance_dir / "task.toml").write_text(_build_task_toml(config, instance, tool_mode, task_visibility))
 
     # 2. Render and write instruction.md
-    if public_instruction is None:
-        instruction_template = (template_dir / "instruction.md").read_text()
-        rendered_instruction = render_instruction(
-            instruction_template,
-            instance,
-            config,
-        )
-    else:
-        rendered_instruction = public_instruction
+    instruction_template = (template_dir / "instruction.md").read_text()
+    rendered_instruction = render_instruction(instruction_template, instance, config)
     (instance_dir / "instruction.md").write_text(rendered_instruction)
 
     # 3. Write template-provided sidecars and source-pack files, then environment/Dockerfile
@@ -405,14 +379,14 @@ def scaffold_task_instance(
     # 5. If with-tool: generate and write the calc script
     if tool_mode is ToolMode.WITH_TOOL:
         calc_filename = f"{template_name}_calc.py"
-        calc_source = generate_cli_wrapper(config, engine_source)
+        calc_source = generate_cli_wrapper(config, template.engine_source)
         (instance_dir / "environment" / calc_filename).write_text(calc_source)
 
     # 6. Write tests/verify.py — copy custom if present, otherwise generate.
     #    Custom verifiers also get tests/instance.json with the instance gold state.
-    if has_custom_verifier(template_dir):
+    if (template_dir / "verify.py").is_file():
         shutil.copy(template_dir / "verify.py", instance_dir / "tests" / "verify.py")
-        _write_instance_record(instance, authority_dir / "tests")
+        _write_instance_record(instance, instance_dir / "tests")
     else:
         verifier_source = generate_verifier(instance, config)
         (instance_dir / "tests" / "verify.py").write_text(verifier_source)
@@ -431,25 +405,14 @@ def scaffold_task_instance(
         golden_fail = engine_module.build_golden_fail(dict(instance.all_params), dict(instance.ground_truth))
     else:
         golden_fail = _build_golden_fail(instance.ground_truth)
-    (authority_dir / "tests" / "fixtures" / "golden_pass.md").write_text(golden_pass)
-    (authority_dir / "tests" / "fixtures" / "golden_fail.md").write_text(golden_fail)
+    (instance_dir / "tests" / "fixtures" / "golden_pass.md").write_text(golden_pass)
+    (instance_dir / "tests" / "fixtures" / "golden_fail.md").write_text(golden_fail)
 
     world_profile = _generated_task_world_profile(config, instance)
     world_payload = world_profile.model_dump(mode="json", exclude_none=True)
-    (authority_dir / "world.json").write_text(
+    (instance_dir / "world.json").write_text(
         json.dumps(world_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 
     return instance_dir
-
-
-def _validate_disjoint_output_roots(
-    *,
-    public_root: Path,
-    sealed_root: Path,
-) -> None:
-    public = public_root.resolve()
-    sealed = sealed_root.resolve()
-    if public == sealed or public.is_relative_to(sealed) or sealed.is_relative_to(public):
-        raise ValueError("public and sealed output roots must be physically disjoint")

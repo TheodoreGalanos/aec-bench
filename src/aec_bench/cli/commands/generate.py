@@ -12,7 +12,7 @@ from rich.table import Table
 from aec_bench.cli.commands.generate_dockerfiles import generate_dockerfiles_command
 from aec_bench.cli.output import console, emit, print_success, print_warning
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.templates.registry import discover_templates, load_template, validate_template
+from aec_bench.templates.registry import LoadedTemplate, discover_templates, load_template, validate_template
 
 app = typer.Typer(help="Generate task instances from templates.", no_args_is_help=True)
 
@@ -20,15 +20,17 @@ app = typer.Typer(help="Generate task instances from templates.", no_args_is_hel
 app.command("dockerfiles")(generate_dockerfiles_command)
 
 
-def _find_named_template(name: str) -> Path | None:
+def _find_named_template(name: str) -> LoadedTemplate | None:
     """Search built-in templates for one matching the given name.
 
-    Returns the template directory path, or None if not found.
+    Returns the already-loaded template, or None if not found.
     """
-    templates = discover_templates()
-    for config, path in templates:
-        if config.meta.name == name:
-            return path
+    templates, diagnostics = discover_templates()
+    for diagnostic in diagnostics:
+        print_warning(f"Skipped invalid template {diagnostic.path}: {diagnostic.error}")
+    for loaded in templates:
+        if loaded.config.meta.name == name:
+            return loaded
     return None
 
 
@@ -94,11 +96,20 @@ def generate_task(
         return
 
     if template is not None:
-        template_dir = template.resolve()
+        try:
+            loaded_template = load_template(template.resolve())
+        except Exception as exc:
+            emit(
+                "generate task",
+                data=None,
+                errors=[f"failed to load template: {exc}"],
+                start_time=start,
+            )
+            return
     else:
         assert name is not None
-        named_template_dir = _find_named_template(name)
-        if named_template_dir is None:
+        named_template = _find_named_template(name)
+        if named_template is None:
             emit(
                 "generate task",
                 data=None,
@@ -106,19 +117,9 @@ def generate_task(
                 start_time=start,
             )
             return
-        template_dir = named_template_dir
-
-    # Load the template
-    try:
-        config, resolved_dir = load_template(template_dir)
-    except (FileNotFoundError, ValueError) as exc:
-        emit(
-            "generate task",
-            data=None,
-            errors=[f"failed to load template: {exc}"],
-            start_time=start,
-        )
-        return
+        loaded_template = named_template
+    config = loaded_template.config
+    resolved_dir = loaded_template.path
 
     # Resolve difficulty list
     available_difficulties = list(config.difficulty.keys())
@@ -178,10 +179,6 @@ def generate_task(
     # Import generation modules lazily to keep startup fast
     from aec_bench.generation.sampler import sample_instance
     from aec_bench.generation.scaffolder import scaffold_task_instance
-    from aec_bench.templates.registry import load_engine_module
-
-    engine_module = load_engine_module(resolved_dir)
-    engine_source = (resolved_dir / "engine.py").read_text(encoding="utf-8")
 
     created_paths: list[Path] = []
 
@@ -189,16 +186,13 @@ def generate_task(
         diff = difficulty_cycle[i % len(difficulty_cycle)]
         instance_index = start_index + i
         instance = sample_instance(
-            config=config,
-            engine_compute=engine_module.compute,
+            template=loaded_template,
             difficulty_name=diff,
             seed=seed,
             instance_index=instance_index,
         )
         instance_dir = scaffold_task_instance(
-            config=config,
-            engine_source=engine_source,
-            template_dir=resolved_dir,
+            template=loaded_template,
             instance=instance,
             output_dir=output.resolve(),
             tool_mode_override=tool_mode,
@@ -271,20 +265,22 @@ def list_templates(
     if user_dir is not None:
         user_dirs.append(user_dir.resolve())
 
-    templates = discover_templates(user_dirs=user_dirs)
+    templates, diagnostics = discover_templates(user_dirs=user_dirs)
+    for diagnostic in diagnostics:
+        print_warning(f"Skipped invalid template {diagnostic.path}: {diagnostic.error}")
 
     if discipline is not None:
-        templates = [(cfg, path) for cfg, path in templates if cfg.meta.discipline == discipline]
+        templates = [template for template in templates if template.config.meta.discipline == discipline]
 
     templates_list = [
         {
-            "name": cfg.meta.name,
-            "discipline": cfg.meta.discipline,
-            "category": cfg.meta.category,
-            "tool_mode": cfg.meta.tool_mode.value,
-            "description": cfg.meta.description,
+            "name": template.config.meta.name,
+            "discipline": template.config.meta.discipline,
+            "category": template.config.meta.category,
+            "tool_mode": template.config.meta.tool_mode.value,
+            "description": template.config.meta.description,
         }
-        for cfg, _path in templates
+        for template in templates
     ]
 
     def _render(data: list[dict[str, str]]) -> None:
@@ -435,7 +431,9 @@ def generate_suite(
         suite_config = suite_config.model_copy(update={"output": OutputConfig(dir=output.resolve())})
 
     # Discover templates
-    templates = discover_templates(user_dirs=[p.resolve() for p in suite_config.templates.user_dirs])
+    templates, diagnostics = discover_templates(user_dirs=[p.resolve() for p in suite_config.templates.user_dirs])
+    for diagnostic in diagnostics:
+        print_warning(f"Skipped invalid template {diagnostic.path}: {diagnostic.error}")
 
     if validate_only:
         try:

@@ -5,16 +5,17 @@ import json
 import textwrap
 import tomllib
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 from pydantic import ValidationError
 
 from aec_bench.generation.dataset import (
     CompositionPlan,
-    DatasetManifest,
     InstanceEntry,
     OutputConfig,
     SuiteConfig,
+    SuiteOutput,
     allocate_budget,
     compose_dataset,
     execute_plan,
@@ -31,6 +32,7 @@ from aec_bench.templates.contracts import (
     ToolMode,
     VisibilityLevel,
 )
+from aec_bench.templates.registry import LoadedTemplate
 
 
 def _parse_suite_toml(toml_str: str) -> SuiteConfig:
@@ -171,7 +173,19 @@ def test_largest_remainder_round_one_item() -> None:
 # --- Task 3: Template Filtering ---
 
 
-def _make_template(name: str, discipline: str) -> tuple[TemplateConfig, Path]:
+def _loaded_template(config: TemplateConfig, path: Path) -> LoadedTemplate:
+    engine = ModuleType(f"test_engine_{config.meta.name}")
+    engine.compute = lambda **_kwargs: {name: 0.0 for name in config.outputs}
+    return LoadedTemplate(
+        config=config,
+        path=path,
+        engine=engine,
+        engine_source="def compute(**kwargs): ...",
+        source_sha256="0" * 64,
+    )
+
+
+def _make_template(name: str, discipline: str) -> LoadedTemplate:
     """Build a minimal TemplateConfig stub for testing."""
     meta = TemplateMeta(
         name=name,
@@ -185,7 +199,7 @@ def _make_template(name: str, discipline: str) -> tuple[TemplateConfig, Path]:
         params={},
         outputs={},
     )
-    return config, Path(f"/fake/{discipline}/{name}")
+    return _loaded_template(config, Path(f"/fake/{discipline}/{name}"))
 
 
 def test_filter_templates_wildcard_matches_all() -> None:
@@ -206,7 +220,7 @@ def test_filter_templates_discipline_glob() -> None:
     ]
     result = filter_templates(templates, include=["ground/*"])
     assert len(result) == 1
-    assert result[0][0].meta.name == "terzaghi"
+    assert result[0].config.meta.name == "terzaghi"
 
 
 def test_filter_templates_name_glob() -> None:
@@ -217,7 +231,7 @@ def test_filter_templates_name_glob() -> None:
     ]
     result = filter_templates(templates, include=["ground/terz*"])
     assert len(result) == 1
-    assert result[0][0].meta.name == "terzaghi"
+    assert result[0].config.meta.name == "terzaghi"
 
 
 def test_filter_templates_multiple_patterns() -> None:
@@ -304,7 +318,7 @@ def _make_template_with_difficulty(
     discipline: str,
     difficulties: dict[str, VisibilityLevel],
     tool_mode: ToolMode = ToolMode.WITH_TOOL,
-) -> tuple[TemplateConfig, Path]:
+) -> LoadedTemplate:
     """Build a TemplateConfig with specified difficulty presets."""
     meta = TemplateMeta(
         name=name,
@@ -328,7 +342,7 @@ def _make_template_with_difficulty(
         outputs={"result": OutputSpec(description="test output")},
         difficulty=diff_presets,
     )
-    return config, Path(f"/fake/{discipline}/{name}")
+    return _loaded_template(config, Path(f"/fake/{discipline}/{name}"))
 
 
 def test_compose_dataset_basic() -> None:
@@ -498,7 +512,8 @@ def test_execute_plan_creates_instance_dirs(tmp_path: Path) -> None:
     """execute_plan should scaffold all instances and return a manifest."""
     from aec_bench.templates.registry import discover_templates
 
-    templates = discover_templates()
+    templates, diagnostics = discover_templates()
+    assert diagnostics == []
     assert len(templates) >= 1, "Need at least the Terzaghi built-in"
 
     toml_str = MINIMAL_SUITE_TOML.replace("per_task = 3", "per_task = 2")
@@ -508,7 +523,7 @@ def test_execute_plan_creates_instance_dirs(tmp_path: Path) -> None:
     plan = compose_dataset(config_with_output, templates)
     manifest = execute_plan(plan, config_with_output)
 
-    assert isinstance(manifest, DatasetManifest)
+    assert isinstance(manifest, SuiteOutput)
     assert manifest.name == "test-suite"
     assert len(manifest.instances) == plan.summary.total_instances
 
@@ -523,7 +538,8 @@ def test_execute_plan_writes_dataset_json(tmp_path: Path) -> None:
     """execute_plan should write dataset.json to the output dir."""
     from aec_bench.templates.registry import discover_templates
 
-    templates = discover_templates()
+    templates, diagnostics = discover_templates()
+    assert diagnostics == []
     toml_str = MINIMAL_SUITE_TOML.replace("per_task = 3", "per_task = 1")
     config = _parse_suite_toml(toml_str)
     config_with_output = config.model_copy(update={"output": OutputConfig(dir=tmp_path)})
@@ -544,7 +560,8 @@ def test_execute_plan_writes_unique_instance_paths(tmp_path: Path) -> None:
     """Suite execution should not collapse repeated template slots onto one path."""
     from aec_bench.templates.registry import discover_templates
 
-    templates = discover_templates()
+    templates, diagnostics = discover_templates()
+    assert diagnostics == []
     toml_str = MINIMAL_SUITE_TOML.replace("per_task = 3", "per_task = 5").replace(
         'include = ["*/*"]',
         'include = ["civil/mannings-pipe-capacity"]',
@@ -590,7 +607,8 @@ def test_manifest_instance_entries_have_archetype(tmp_path: Path) -> None:
     """Instance entries should have archetype and site_context from sampling."""
     from aec_bench.templates.registry import discover_templates
 
-    templates = discover_templates()
+    templates, diagnostics = discover_templates()
+    assert diagnostics == []
     toml_str = MINIMAL_SUITE_TOML.replace("per_task = 3", "per_task = 1")
     config = _parse_suite_toml(toml_str)
     config_with_output = config.model_copy(update={"output": OutputConfig(dir=tmp_path)})

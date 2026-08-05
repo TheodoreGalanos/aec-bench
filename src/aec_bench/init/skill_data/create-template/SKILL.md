@@ -194,6 +194,10 @@ uv run aec-bench generate task <meta.name> --instances 1 --seed 42 --output /tmp
 ```
 
 Show the generated `instruction.md` with concrete parameter values so the user can see exactly what an agent would receive.
+Also validate the generated task directory with `aec-bench task validate`. Its
+`task.toml` generation section should identify the template source digest,
+seed, instance index, and difficulty; it should not use creation time as task
+lineage.
 
 ## Reference Files
 

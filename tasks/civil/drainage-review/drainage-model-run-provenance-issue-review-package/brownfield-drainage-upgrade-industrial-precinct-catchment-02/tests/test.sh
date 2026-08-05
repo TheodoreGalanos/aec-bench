@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# ABOUTME: Runs the task-owned Python verifier inside Harbor's verifier phase.
+# ABOUTME: Guarantees a fail-closed reward artifact when verification aborts.
 set -euo pipefail
 mkdir -p /logs/verifier
 trap 'if [ ! -f /logs/verifier/reward.json ]; then echo "{\"reward\": 0.0}" > /logs/verifier/reward.json; fi' EXIT

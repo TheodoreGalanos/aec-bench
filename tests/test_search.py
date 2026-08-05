@@ -2,9 +2,13 @@
 # ABOUTME: Covers index building, search matching, and filtering by discipline/kind.
 
 from pathlib import Path
+from types import ModuleType
 
-from aec_bench.generation.discovery import LibrarySeed, LibraryTemplate
+from aec_bench.contracts.seed_task import SeedTask
 from aec_bench.search import build_index, search
+from aec_bench.tasks.library_export import LoadedSeed
+from aec_bench.templates.contracts import OutputSpec, ParamSpec, ParamType, TemplateConfig, TemplateMeta, ToolMode
+from aec_bench.templates.registry import LoadedTemplate
 
 
 def _make_seed(
@@ -15,17 +19,26 @@ def _make_seed(
     standards: tuple[str, ...] = ("AS 1234",),
     inputs: tuple[str, ...] = ("Flow rate (L/s)",),
     outputs: tuple[str, ...] = ("Head loss (m)",),
-) -> LibrarySeed:
-    return LibrarySeed(
-        discipline=discipline,
-        category=category,
-        task_id=task_id,
-        task_name=task_id.replace("-", " ").title(),
-        description=description,
-        complexity="low",
-        standards=standards,
-        inputs=inputs,
-        outputs=outputs,
+) -> LoadedSeed:
+    seed = SeedTask.model_validate(
+        {
+            "status": "proposed",
+            "seed_origin": "test",
+            "source": {
+                "discipline": discipline,
+                "category_id": category,
+                "task_id": task_id,
+                "task_name": task_id.replace("-", " ").title(),
+                "description": description,
+                "complexity": "low",
+                "standards": list(standards),
+                "inputs": list(inputs),
+                "outputs": list(outputs),
+            },
+        }
+    )
+    return LoadedSeed(
+        seed=seed,
         path=Path("/tmp/test"),
     )
 
@@ -38,27 +51,36 @@ def _make_template(
     long_description: str = "",
     tags: list[str] | None = None,
     standards: list[str] | None = None,
-) -> LibraryTemplate:
-    meta = {
-        "name": task_id,
-        "description": description,
-        "discipline": discipline,
-        "category": category,
-        "tags": tags or [],
-        "standards": standards or [],
-        "tool_mode": "with-tool",
-    }
-    if long_description:
-        meta["long_description"] = long_description
-    return LibraryTemplate(
-        discipline=discipline,
-        task_id=task_id,
-        path=Path("/tmp/test"),
-        params_raw={
-            "meta": meta,
-            "params": {"flow_rate": {"type": "float", "description": "Flow rate"}},
-            "outputs": {"head_loss": {"description": "Head loss in metres"}},
+) -> LoadedTemplate:
+    config = TemplateConfig(
+        meta=TemplateMeta(
+            name=task_id,
+            description=description,
+            long_description=long_description,
+            discipline=discipline,
+            category=category,
+            tags=tags or [],
+            standards=standards or [],
+            tool_mode=ToolMode.WITH_TOOL,
+        ),
+        params={
+            "flow_rate": ParamSpec(
+                type=ParamType.FLOAT,
+                description="Flow rate",
+                min_value=0,
+                max_value=1,
+            )
         },
+        outputs={"head_loss": OutputSpec(description="Head loss in metres")},
+    )
+    engine = ModuleType("test_engine")
+    engine.compute = lambda **_kwargs: {"head_loss": 0.0}
+    return LoadedTemplate(
+        config=config,
+        path=Path("/tmp/test"),
+        engine=engine,
+        engine_source="def compute(**kwargs): ...",
+        source_sha256="0" * 64,
     )
 
 

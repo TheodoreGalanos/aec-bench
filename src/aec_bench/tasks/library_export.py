@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -22,7 +21,7 @@ from aec_bench.contracts.library_catalogue import (
 )
 from aec_bench.contracts.seed_task import SeedTask, StructuredSeedField
 from aec_bench.templates.contracts import ParamSpec, TemplateConfig
-from aec_bench.templates.registry import load_template
+from aec_bench.templates.registry import discover_templates
 
 type _CatalogueDiscipline = Literal["civil", "electrical", "ground", "maritime", "mechanical", "structural"]
 type _CatalogueInputType = Literal["float", "int", "enum", "categorical"]
@@ -35,6 +34,50 @@ class SkippedEntry:
     path: Path
     reason: str
     kind: Literal["template", "seed"]
+
+
+@dataclass(frozen=True, slots=True)
+class LoadedSeed:
+    """Validated seed plus the directory that supplied it."""
+
+    seed: SeedTask
+    path: Path
+
+    @property
+    def discipline(self) -> str:
+        return self.seed.source.discipline
+
+    @property
+    def category(self) -> str:
+        return self.seed.source.category_id or self.path.parent.name
+
+    @property
+    def task_id(self) -> str:
+        return self.seed.source.task_id
+
+    @property
+    def task_name(self) -> str:
+        return self.seed.source.task_name
+
+    @property
+    def description(self) -> str:
+        return self.seed.source.description
+
+    @property
+    def complexity(self) -> str:
+        return self.seed.source.complexity
+
+    @property
+    def standards(self) -> tuple[str, ...]:
+        return tuple(self.seed.source.standards)
+
+    @property
+    def inputs(self) -> tuple[str, ...]:
+        return tuple(value if isinstance(value, str) else value.name for value in self.seed.source.inputs)
+
+    @property
+    def outputs(self) -> tuple[str, ...]:
+        return tuple(value if isinstance(value, str) else value.name for value in self.seed.source.outputs)
 
 
 @dataclass(frozen=True)
@@ -70,7 +113,7 @@ def _slug_to_title(slug: str) -> str:
     return slug.replace("-", " ").replace("_", " ").title()
 
 
-def load_seeds(tasks_root: Path) -> tuple[list[SeedTask], list[SkippedEntry]]:
+def load_seeds(tasks_root: Path) -> tuple[list[LoadedSeed], list[SkippedEntry]]:
     """Walk tasks_root for source_task.json files and validate each against SeedTask.
 
     Returns (valid_seeds, skipped_entries). Malformed or schema-violating files
@@ -79,35 +122,23 @@ def load_seeds(tasks_root: Path) -> tuple[list[SeedTask], list[SkippedEntry]]:
     if not tasks_root.is_dir():
         return [], []
 
-    valid: list[SeedTask] = []
+    valid: list[LoadedSeed] = []
     skipped: list[SkippedEntry] = []
 
     for path in sorted(tasks_root.rglob("source_task.json")):
         try:
-            raw = path.read_text(encoding="utf-8")
-        except OSError as exc:
-            skipped.append(SkippedEntry(path=path, reason=f"read error: {exc}", kind="seed"))
-            continue
-
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            skipped.append(SkippedEntry(path=path, reason=f"json decode error: {exc}", kind="seed"))
-            continue
-
-        try:
-            seed = SeedTask.model_validate(data)
-        except ValidationError as exc:
+            seed = SeedTask.model_validate_json(path.read_text(encoding="utf-8"))
+        except (OSError, ValidationError) as exc:
             skipped.append(
                 SkippedEntry(
                     path=path,
-                    reason=f"schema validation failed: {exc.errors()[0]['msg']}",
+                    reason=str(exc),
                     kind="seed",
                 )
             )
             continue
 
-        valid.append(seed)
+        valid.append(LoadedSeed(seed=seed, path=path.parent))
 
     return valid, skipped
 
@@ -192,24 +223,6 @@ def _project_seed(seed: SeedTask) -> SeedEntry:
     )
 
 
-def _is_holdout_template(cfg: TemplateConfig) -> bool:
-    """Return True if the template should be excluded from the public catalogue.
-
-    Templates do not yet carry a holdout/visibility field — this is a forward-compat
-    predicate. Once TemplateMeta grows a visibility flag, update this to read it.
-    """
-    return False
-
-
-def _is_holdout_seed(seed: SeedTask) -> bool:
-    """Return True if the seed should be excluded from the public catalogue.
-
-    Seeds do not yet carry a holdout/visibility field — this is a forward-compat
-    predicate. Once SeedSource grows a visibility flag, update this to read it.
-    """
-    return False
-
-
 def _git_short_sha(cwd: Path) -> str | None:
     """Return the short git SHA of HEAD, or None if not a repo / git unavailable."""
     try:
@@ -229,28 +242,6 @@ def _git_short_sha(cwd: Path) -> str | None:
     return sha or None
 
 
-def _scan_templates_in_root(
-    templates_root: Path,
-) -> list[tuple[TemplateConfig, Path]]:
-    """Load every valid template directly beneath ``templates_root``.
-
-    Mirrors the inner loop of ``templates.registry.discover_templates`` but without
-    the built-in-directory merging, so tests can stage tmp-path trees in isolation.
-    Silently skips individual templates that fail to load — matches registry behaviour.
-    """
-    if not templates_root.is_dir():
-        return []
-    found: list[tuple[TemplateConfig, Path]] = []
-    for engine_path in sorted(templates_root.rglob("engine.py")):
-        candidate = engine_path.parent
-        try:
-            cfg, _ = load_template(candidate)
-        except (FileNotFoundError, ValueError):
-            continue
-        found.append((cfg, candidate))
-    return found
-
-
 def build_catalogue(
     *,
     templates_root: Path,
@@ -265,19 +256,21 @@ def build_catalogue(
     Raises ValueError if both templates and seeds are empty (misconfiguration signal).
     Soft-skips malformed seeds and duplicate seeds — counted in diagnostics, never fatal.
     """
-    loaded_templates = _scan_templates_in_root(templates_root)
+    loaded_templates, template_diagnostics = discover_templates(
+        user_dirs=[templates_root],
+        include_builtin=False,
+    )
     loaded_seeds, skipped_seeds = load_seeds(tasks_root)
 
     if not loaded_templates and not loaded_seeds:
         msg = "library export is empty: no templates or seeds found"
         raise ValueError(msg)
 
-    # --- Templates: detect dupes, apply holdout filter, project ---
+    # The caller supplies the public template and seed roots; sealed material is not scanned.
     template_keys: set[tuple[str, str]] = set()
     template_entries: list[TemplateEntry] = []
-    for cfg, _path in loaded_templates:
-        if _is_holdout_template(cfg):
-            continue
+    for template in loaded_templates:
+        cfg = template.config
         key = (cfg.meta.discipline, cfg.meta.name)
         if key in template_keys:
             msg = f"duplicate template: {cfg.meta.discipline}/{cfg.meta.name}"
@@ -285,12 +278,11 @@ def build_catalogue(
         template_keys.add(key)
         template_entries.append(_project_template(cfg))
 
-    # --- Seeds: suppress template-matched, holdout, and duplicate seeds ---
+    # Suppress template-matched and duplicate seeds.
     seed_keys: set[tuple[str, str]] = set()
     seed_entries: list[SeedEntry] = []
-    for seed in loaded_seeds:
-        if _is_holdout_seed(seed):
-            continue
+    for loaded_seed in loaded_seeds:
+        seed = loaded_seed.seed
         key = (seed.source.discipline, seed.source.task_id)
         if key in template_keys:
             # Approach A: template wins, seed suppressed silently (not a skip).
@@ -298,7 +290,7 @@ def build_catalogue(
         if key in seed_keys:
             skipped_seeds.append(
                 SkippedEntry(
-                    path=Path(f"{seed.source.discipline}/{seed.source.task_id}"),
+                    path=loaded_seed.path,
                     reason=f"duplicate seed key: {key[0]}/{key[1]}",
                     kind="seed",
                 )
@@ -323,7 +315,10 @@ def build_catalogue(
     )
 
     diagnostics = ExportDiagnostics(
-        skipped_templates=[],  # discover_templates already silently drops; future: enrich.
+        skipped_templates=[
+            SkippedEntry(path=diagnostic.path, reason=diagnostic.error, kind="template")
+            for diagnostic in template_diagnostics
+        ],
         skipped_seeds=skipped_seeds,
     )
 

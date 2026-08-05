@@ -20,10 +20,11 @@ def _find_template_by_name(name: str) -> tuple:
     """Discover built-in templates and find one by name."""
     from aec_bench.templates.registry import discover_templates
 
-    templates = discover_templates()
-    for config, tdir in templates:
-        if config.meta.name == name:
-            return config, tdir
+    templates, diagnostics = discover_templates()
+    assert diagnostics == []
+    for template in templates:
+        if template.config.meta.name == name:
+            return template.config, template.path
     msg = f"Template {name} not found in built-ins"
     raise ValueError(msg)
 
@@ -32,13 +33,11 @@ def _scaffold_terzaghi_instance(tmp_path: Path, difficulty: str = "easy", seed: 
     """Helper: generate a complete Terzaghi instance in tmp_path."""
     from aec_bench.generation.sampler import sample_instance
     from aec_bench.generation.scaffolder import scaffold_task_instance
-    from aec_bench.templates.registry import load_engine_module, load_template
+    from aec_bench.templates.registry import load_template
 
-    config, template_dir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(template_dir)
-    instance = sample_instance(config, engine.compute, difficulty, seed=seed, instance_index=0)
-    engine_source = (template_dir / "engine.py").read_text()
-    return scaffold_task_instance(config, engine_source, template_dir, instance, tmp_path)
+    loaded_template = load_template(TEMPLATE_DIR)
+    instance = sample_instance(loaded_template, difficulty, seed=seed, instance_index=0)
+    return scaffold_task_instance(loaded_template, instance, tmp_path)
 
 
 def test_generated_verifier_scores_golden_pass_at_1_0(tmp_path: Path) -> None:
@@ -151,7 +150,8 @@ def test_dataset_generation_verifier_scores_golden_pass(tmp_path: Path) -> None:
         output=OutputConfig(dir=output_dir),
     )
 
-    templates = discover_templates()
+    templates, diagnostics = discover_templates()
+    assert diagnostics == []
     plan = compose_dataset(suite, templates)
     assert plan.summary.total_instances == 2
 
@@ -187,8 +187,9 @@ def test_builtin_templates_discovered() -> None:
     """All built-in templates should be discoverable."""
     from aec_bench.templates.registry import discover_templates
 
-    templates = discover_templates()
-    names = sorted(cfg.meta.name for cfg, _ in templates)
+    templates, diagnostics = discover_templates()
+    assert diagnostics == []
+    names = sorted(template.config.meta.name for template in templates)
     assert len(templates) >= 3
     assert "infinite-slope" in names
     assert "spt-corrections" in names
@@ -233,7 +234,8 @@ def test_dataset_with_three_templates(tmp_path: Path) -> None:
     raw["output"]["dir"] = str(tmp_path)
     config = SuiteConfig.model_validate(raw)
 
-    templates = discover_templates()
+    templates, diagnostics = discover_templates()
+    assert diagnostics == []
     plan = compose_dataset(config, templates)
 
     # All ground templates represented (2 instances each)

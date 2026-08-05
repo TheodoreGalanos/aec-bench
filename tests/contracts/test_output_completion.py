@@ -19,7 +19,7 @@ from aec_bench.contracts.output_completion import (
 )
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
-from aec_bench.templates.registry import load_engine_module, load_template
+from aec_bench.templates.registry import load_template
 
 REQUIRED_KEYS = (
     "source_inventory",
@@ -271,17 +271,11 @@ def test_output_commit_attestation_rejects_invalid_hashes(field_name: str) -> No
 
 
 def test_drainage_template_scaffolds_validated_contract_into_environment(tmp_path: Path) -> None:
-    config, template_dir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(template_dir)
-    instance = sample_instance(config, engine.compute, "hard", seed=7_301, instance_index=0)
+    loaded_template = load_template(TEMPLATE_DIR)
+    template_dir = loaded_template.path
+    instance = sample_instance(loaded_template, "hard", seed=7_301, instance_index=0)
 
-    task_dir = scaffold_task_instance(
-        config,
-        (template_dir / "engine.py").read_text(encoding="utf-8"),
-        template_dir,
-        instance,
-        tmp_path,
-    )
+    task_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
 
     template_contract = (template_dir / "output_contract.json").read_bytes()
     generated_contract_path = task_dir / "environment" / "output_contract.json"

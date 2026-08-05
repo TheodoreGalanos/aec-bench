@@ -12,7 +12,7 @@ import pytest
 
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
-from aec_bench.templates.registry import discover_templates, load_engine_module, load_template
+from aec_bench.templates.registry import discover_templates, load_template
 
 TEMPLATE_DIR = (
     Path(__file__).resolve().parents[2]
@@ -51,15 +51,15 @@ EXPECTED_METRICS = {
 
 
 def _sample_ssc08_instance(tmp_path: Path) -> Path:
-    config, template_dir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(template_dir)
-    instance = sample_instance(config, engine.compute, difficulty_name="easy", seed=63, instance_index=0)
-    engine_source = (template_dir / "engine.py").read_text(encoding="utf-8")
-    return scaffold_task_instance(config, engine_source, template_dir, instance, tmp_path)
+    loaded_template = load_template(TEMPLATE_DIR)
+    template_dir = loaded_template.path
+    instance = sample_instance(loaded_template, difficulty_name="easy", seed=63, instance_index=0)
+    (template_dir / "engine.py").read_text(encoding="utf-8")
+    return scaffold_task_instance(loaded_template, instance, tmp_path)
 
 
 def test_template_is_discoverable_by_builtin_name() -> None:
-    templates = {config.meta.name: config for config, _path in discover_templates()}
+    templates = {template.config.meta.name: template.config for template in discover_templates()[0]}
 
     assert "station-population-egress-vertical-package" in templates
     config = templates["station-population-egress-vertical-package"]
@@ -68,9 +68,8 @@ def test_template_is_discoverable_by_builtin_name() -> None:
 
 
 def test_engine_reproduces_task_owned_source_pack_metrics() -> None:
-    config, template_dir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(template_dir)
-    instance = sample_instance(config, engine.compute, difficulty_name="easy", seed=63, instance_index=0)
+    loaded_template = load_template(TEMPLATE_DIR)
+    instance = sample_instance(loaded_template, difficulty_name="easy", seed=63, instance_index=0)
 
     assert instance.ground_truth == pytest.approx(EXPECTED_METRICS)
 

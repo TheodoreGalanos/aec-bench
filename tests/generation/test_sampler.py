@@ -1,7 +1,10 @@
 # ABOUTME: Tests for the generation sampler — sample_instance() and associated contracts.
 # ABOUTME: Follows TDD: written before implementation, covers contracts and sampling behaviour.
 
-from aec_bench.generation.contracts import GenerationMetadata, SampledInstance
+from pathlib import Path
+from types import ModuleType
+
+from aec_bench.generation.contracts import SampledInstance
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.templates.contracts import (
     ArchetypeRange,
@@ -15,6 +18,7 @@ from aec_bench.templates.contracts import (
     ToolMode,
     VisibilityLevel,
 )
+from aec_bench.templates.registry import LoadedTemplate
 
 
 def _trivial_compute(value_a: float = 0.0, mode: str = "normal") -> dict[str, float]:
@@ -103,15 +107,26 @@ def _build_test_config() -> TemplateConfig:
     )
 
 
+def _build_test_template() -> LoadedTemplate:
+    engine = ModuleType("test_engine")
+    engine.compute = _trivial_compute
+    return LoadedTemplate(
+        config=_build_test_config(),
+        path=Path("test-template"),
+        engine=engine,
+        engine_source="def compute(): ...",
+        source_sha256="0" * 64,
+    )
+
+
 # --- Contract shape tests ---
 
 
 def test_sampled_instance_has_all_params() -> None:
     """All declared params must be present in all_params."""
-    config = _build_test_config()
+    template = _build_test_template()
     result = sample_instance(
-        config=config,
-        engine_compute=_trivial_compute,
+        template=template,
         difficulty_name="easy",
         seed=42,
         instance_index=0,
@@ -124,10 +139,9 @@ def test_sampled_instance_has_all_params() -> None:
 
 def test_sampled_instance_respects_archetype_ranges() -> None:
     """Float param with archetype override must fall within the archetype's range."""
-    config = _build_test_config()
+    template = _build_test_template()
     result = sample_instance(
-        config=config,
-        engine_compute=_trivial_compute,
+        template=template,
         difficulty_name="easy",
         seed=99,
         instance_index=0,
@@ -141,10 +155,9 @@ def test_sampled_instance_respects_archetype_ranges() -> None:
 
 def test_sampled_instance_visibility_all_given() -> None:
     """Easy difficulty (ALL_GIVEN) should expose all params as visible, none hidden."""
-    config = _build_test_config()
+    template = _build_test_template()
     result = sample_instance(
-        config=config,
-        engine_compute=_trivial_compute,
+        template=template,
         difficulty_name="easy",
         seed=7,
         instance_index=0,
@@ -156,10 +169,9 @@ def test_sampled_instance_visibility_all_given() -> None:
 
 def test_sampled_instance_visibility_partial() -> None:
     """Hard difficulty (PARTIAL) should move hidden_params to hidden_params dict."""
-    config = _build_test_config()
+    template = _build_test_template()
     result = sample_instance(
-        config=config,
-        engine_compute=_trivial_compute,
+        template=template,
         difficulty_name="hard",
         seed=7,
         instance_index=0,
@@ -173,17 +185,15 @@ def test_sampled_instance_visibility_partial() -> None:
 
 def test_sampled_instance_deterministic_with_seed() -> None:
     """Same seed + index + difficulty must produce an identical SampledInstance."""
-    config = _build_test_config()
+    template = _build_test_template()
     result_a = sample_instance(
-        config=config,
-        engine_compute=_trivial_compute,
+        template=template,
         difficulty_name="easy",
         seed=123,
         instance_index=5,
     )
     result_b = sample_instance(
-        config=config,
-        engine_compute=_trivial_compute,
+        template=template,
         difficulty_name="easy",
         seed=123,
         instance_index=5,
@@ -196,17 +206,15 @@ def test_sampled_instance_deterministic_with_seed() -> None:
 
 def test_sampled_instance_different_seeds_differ() -> None:
     """Different seeds must (almost always) produce different float param values."""
-    config = _build_test_config()
+    template = _build_test_template()
     result_a = sample_instance(
-        config=config,
-        engine_compute=_trivial_compute,
+        template=template,
         difficulty_name="easy",
         seed=1,
         instance_index=0,
     )
     result_b = sample_instance(
-        config=config,
-        engine_compute=_trivial_compute,
+        template=template,
         difficulty_name="easy",
         seed=99999,
         instance_index=0,
@@ -219,10 +227,9 @@ def test_sampled_instance_different_seeds_differ() -> None:
 
 def test_sampled_instance_has_ground_truth() -> None:
     """ground_truth must contain float values from engine_compute."""
-    config = _build_test_config()
+    template = _build_test_template()
     result = sample_instance(
-        config=config,
-        engine_compute=_trivial_compute,
+        template=template,
         difficulty_name="easy",
         seed=42,
         instance_index=0,
@@ -237,10 +244,9 @@ def test_sampled_instance_has_ground_truth() -> None:
 
 def test_sampled_instance_has_site_context() -> None:
     """site_context must be a non-empty string."""
-    config = _build_test_config()
+    template = _build_test_template()
     result = sample_instance(
-        config=config,
-        engine_compute=_trivial_compute,
+        template=template,
         difficulty_name="easy",
         seed=42,
         instance_index=0,
@@ -251,16 +257,16 @@ def test_sampled_instance_has_site_context() -> None:
 
 
 def test_sampled_instance_has_valid_metadata() -> None:
-    """Metadata must have origin=='generated' and template matching config name."""
-    config = _build_test_config()
+    """Generation identity must bind the selected template source."""
+    template = _build_test_template()
     result = sample_instance(
-        config=config,
-        engine_compute=_trivial_compute,
+        template=template,
         difficulty_name="easy",
         seed=42,
         instance_index=0,
     )
 
-    assert isinstance(result.metadata, GenerationMetadata)
-    assert result.metadata.origin == "generated"
-    assert result.metadata.template == "test-template"
+    assert result.template_name == "test-template"
+    assert result.template_source_sha256 == "0" * 64
+    assert result.seed == 42
+    assert result.instance_index == 0

@@ -14,7 +14,7 @@ import pytest
 
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
-from aec_bench.templates.registry import discover_templates, load_engine_module, load_template
+from aec_bench.templates.registry import discover_templates, load_template
 
 TEMPLATE_DIR = (
     Path(__file__).resolve().parents[2]
@@ -104,24 +104,26 @@ SOURCE_FILES = [
 
 
 def _load() -> tuple:
-    config, template_dir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(template_dir)
-    return config, template_dir, engine
+    loaded_template = load_template(TEMPLATE_DIR)
+    config = loaded_template.config
+    template_dir = loaded_template.path
+    engine = loaded_template.engine
+    return loaded_template, config, template_dir, engine
 
 
 def _instance_for_variant(variant: str, max_seeds: int = 1000):
-    config, template_dir, engine = _load()
+    loaded_template, config, template_dir, engine = _load()
     for seed in range(max_seeds):
-        instance = sample_instance(config, engine.compute, "medium", seed=seed, instance_index=0)
+        instance = sample_instance(loaded_template, "medium", seed=seed, instance_index=0)
         if instance.all_params["packet_variant"] == variant:
-            return config, template_dir, engine, instance
+            return loaded_template, config, template_dir, engine, instance
     pytest.fail(f"No instance with variant {variant!r} found in {max_seeds} seeds")
 
 
 def _scaffold_variant(tmp_path: Path, variant: str) -> tuple[Path, dict]:
-    config, template_dir, engine, instance = _instance_for_variant(variant)
-    engine_source = (template_dir / "engine.py").read_text(encoding="utf-8")
-    instance_dir = scaffold_task_instance(config, engine_source, template_dir, instance, tmp_path)
+    loaded_template, config, template_dir, engine, instance = _instance_for_variant(variant)
+    (template_dir / "engine.py").read_text(encoding="utf-8")
+    instance_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
     return instance_dir, instance.ground_truth
 
 
@@ -159,7 +161,7 @@ def _replace_json_block(text: str, payload: dict) -> str:
 
 
 def test_template_is_discoverable_by_builtin_name() -> None:
-    templates = {config.meta.name: config for config, _path in discover_templates()}
+    templates = {template.config.meta.name: template.config for template in discover_templates()[0]}
 
     assert "ground-structural-electrical-issue-review-package" in templates
     config = templates["ground-structural-electrical-issue-review-package"]
@@ -169,12 +171,12 @@ def test_template_is_discoverable_by_builtin_name() -> None:
 
 
 def test_parameters_vary_across_seeds() -> None:
-    config, _template_dir, engine = _load()
+    loaded_template, config, _template_dir, engine = _load()
 
     variants = set()
     bearing_values = set()
     for seed in range(40):
-        instance = sample_instance(config, engine.compute, "medium", seed=seed, instance_index=0)
+        instance = sample_instance(loaded_template, "medium", seed=seed, instance_index=0)
         variants.add(instance.all_params["packet_variant"])
         bearing_values.add(instance.ground_truth.get("allowable_bearing_kpa", -1.0))
 
@@ -183,10 +185,10 @@ def test_parameters_vary_across_seeds() -> None:
 
 
 def test_same_seed_reproduces_ground_truth() -> None:
-    config, _template_dir, engine = _load()
+    loaded_template, config, _template_dir, engine = _load()
 
-    a = sample_instance(config, engine.compute, "medium", seed=17, instance_index=0)
-    b = sample_instance(config, engine.compute, "medium", seed=17, instance_index=0)
+    a = sample_instance(loaded_template, "medium", seed=17, instance_index=0)
+    b = sample_instance(loaded_template, "medium", seed=17, instance_index=0)
 
     assert a.all_params == b.all_params
     assert a.ground_truth == b.ground_truth
@@ -194,7 +196,7 @@ def test_same_seed_reproduces_ground_truth() -> None:
 
 @pytest.mark.parametrize("variant", sorted(VARIANT_EXPECTATIONS))
 def test_variant_gold_statuses_and_readiness(variant: str) -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant(variant)
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant(variant)
     gold = instance.ground_truth
     expected = VARIANT_EXPECTATIONS[variant]
 
@@ -209,7 +211,7 @@ def test_variant_gold_statuses_and_readiness(variant: str) -> None:
 
 
 def test_clean_variant_evidence_is_consistent() -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant("clean")
     gold = instance.ground_truth
 
     for key in EVIDENCE_KEYS:
@@ -223,7 +225,7 @@ def test_clean_variant_evidence_is_consistent() -> None:
 
 
 def test_bearing_deficient_variant_fails_criterion() -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant("bearing_fos_deficient")
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant("bearing_fos_deficient")
     gold = instance.ground_truth
 
     assert gold["bearing_margin_kpa"] < 0.0
@@ -232,7 +234,7 @@ def test_bearing_deficient_variant_fails_criterion() -> None:
 
 
 def test_missing_groundwater_omits_bearing_evidence() -> None:
-    _config, _template_dir, _engine, instance = _instance_for_variant("missing_groundwater_level")
+    _loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant("missing_groundwater_level")
 
     assert "allowable_bearing_kpa" not in instance.ground_truth
     assert "bearing_margin_kpa" not in instance.ground_truth
@@ -241,7 +243,7 @@ def test_missing_groundwater_omits_bearing_evidence() -> None:
 
 
 def test_build_sources_produces_eight_files_with_ids() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("clean")
     sources = engine.build_sources(instance.all_params)
 
     assert sorted(sources) == sorted(SOURCE_FILES)
@@ -256,7 +258,7 @@ def test_build_sources_produces_eight_files_with_ids() -> None:
 
 
 def test_missing_groundwater_sources_mark_pending_record() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("missing_groundwater_level")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("missing_groundwater_level")
     sources = engine.build_sources(instance.all_params)
 
     groundwater = sources["sources/groundwater-record.md"]
@@ -269,7 +271,7 @@ def test_missing_groundwater_sources_mark_pending_record() -> None:
 
 
 def test_partition_variant_sources_misuse_resistivity_as_strength() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("resistivity_strength_misuse")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("resistivity_strength_misuse")
     sources = engine.build_sources(instance.all_params)
 
     memo = sources["sources/ground-interpretation-memo.md"]
@@ -278,7 +280,7 @@ def test_partition_variant_sources_misuse_resistivity_as_strength() -> None:
 
 
 def test_stale_ground_memo_sources_have_revision_mismatch() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("stale_ground_memo_revision")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("stale_ground_memo_revision")
     sources = engine.build_sources(instance.all_params)
 
     register = sources["sources/document-register.md"]
@@ -289,7 +291,7 @@ def test_stale_ground_memo_sources_have_revision_mismatch() -> None:
 
 
 def test_sources_print_exact_engine_values() -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant("clean")
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant("clean")
     sources = engine.build_sources(instance.all_params)
     criteria = sources["sources/criteria-comments.md"]
 
@@ -314,7 +316,7 @@ def _bearing_factors(phi_deg: float) -> tuple[float, float, float]:
 
 
 def _assert_ground_evidence_recomputable_from_sources(variant: str) -> None:
-    _config, _template_dir, engine, instance = _instance_for_variant(variant)
+    _loaded_template, _config, _template_dir, engine, instance = _instance_for_variant(variant)
     gold = instance.ground_truth
     sources = engine.build_sources(instance.all_params)
     borehole = sources["sources/borehole-spt-logs.md"]

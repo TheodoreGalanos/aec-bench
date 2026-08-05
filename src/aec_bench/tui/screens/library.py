@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import textwrap
-import tomllib
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -21,13 +20,12 @@ from textual.widgets import Footer, Static, Tree
 from aec_bench.contracts.dataset import DatasetManifest
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.dataset.storage import list_datasets
-from aec_bench.generation.discovery import (
-    LibrarySeed,
-    LibraryTemplate,
-    scan_seeds,
-    scan_templates,
-)
 from aec_bench.ledger.reader import query_trial_records
+from aec_bench.tasks.library_export import LoadedSeed as LibrarySeed
+from aec_bench.tasks.library_export import load_seeds
+from aec_bench.tasks.loader import LoadError, iter_task_instance_dirs, load_task_definition
+from aec_bench.templates.registry import LoadedTemplate as LibraryTemplate
+from aec_bench.templates.registry import discover_templates
 from aec_bench.tui.widgets.shared import reward_style
 
 
@@ -58,19 +56,15 @@ class LibrarySummary:
     complexity_counts: dict[str, int]
 
 
-def scan_instances(tasks_root: Path) -> list[LibraryInstance]:
-    """Scan task instances that have task.toml + instruction.md."""
+def load_library_instances(tasks_root: Path) -> list[LibraryInstance]:
+    """Project runnable tasks through the authoritative task loader."""
     if not tasks_root.is_dir():
         return []
     instances: list[LibraryInstance] = []
-    for toml_path in sorted(tasks_root.rglob("task.toml")):
-        instruction_path = toml_path.parent / "instruction.md"
-        if not instruction_path.exists():
-            continue
+    for instance_dir in iter_task_instance_dirs(tasks_root):
         try:
-            raw = tomllib.loads(toml_path.read_text(encoding="utf-8"))
-            metadata = raw.get("metadata", {})
-            parts = toml_path.parent.relative_to(tasks_root).parts
+            task = load_task_definition(instance_dir, tasks_root)
+            parts = task.task_id.split("/")
             discipline = parts[0] if len(parts) >= 1 else "unknown"
             category = parts[1] if len(parts) >= 2 else discipline
             task_name = parts[2] if len(parts) >= 3 else parts[-1]
@@ -81,17 +75,16 @@ def scan_instances(tasks_root: Path) -> list[LibraryInstance]:
                     category=category,
                     task_name=task_name,
                     instance_name=instance_name,
-                    difficulty=metadata.get("difficulty", "unknown"),
-                    path=toml_path.parent,
-                    has_dockerfile=(toml_path.parent / "environment" / "Dockerfile").exists(),
+                    difficulty=task.difficulty.value,
+                    path=instance_dir,
+                    has_dockerfile=(instance_dir / "environment" / "Dockerfile").exists(),
                     has_verifier=(
-                        (toml_path.parent / "tests" / "verify.py").exists()
-                        or (toml_path.parent / "tests" / "test.sh").exists()
+                        (instance_dir / "tests" / "verify.py").exists() or (instance_dir / "tests" / "test.sh").exists()
                     ),
-                    tags=tuple(metadata.get("tags", [])),
+                    tags=tuple(task.tags),
                 )
             )
-        except (tomllib.TOMLDecodeError, KeyError):
+        except LoadError:
             continue
     return instances
 
@@ -166,13 +159,13 @@ def render_seed_detail(
     # Show template long_description if available, otherwise seed description
     long_desc = ""
     if template:
-        long_desc = template.params_raw.get("meta", {}).get("long_description", "")
+        long_desc = template.config.meta.long_description
     desc_text = long_desc if long_desc else seed.description
     parts.append(textwrap.fill(desc_text, width=75) + "\n")
 
     # Show tags from template if available
     if template:
-        tags = template.params_raw.get("meta", {}).get("tags", [])
+        tags = template.config.meta.tags
         if tags:
             tag_str = " ".join(f"[cyan]#{t}[/cyan]" for t in tags)
             parts.append(f"{tag_str}\n")
@@ -207,43 +200,43 @@ def render_seed_detail(
 
 def render_template_detail(template: LibraryTemplate) -> str:
     """Render detail pane for a template."""
-    raw = template.params_raw
-    meta = raw.get("meta", {})
+    config = template.config
+    meta = config.meta
     parts: list[str] = []
 
     # Header with category and discipline
-    category = meta.get("category", "")
+    category = meta.category
     parts.append(f"[bold underline]{template.task_id}[/bold underline]")
     parts.append(f"[dim]template \u2022 {template.discipline} \u2022 {category}[/dim]")
     parts.append(f"[dim]{'─' * 50}[/dim]\n")
 
     # Long description (paragraph) if available, otherwise short description
-    long_description = meta.get("long_description", "")
-    description = meta.get("description", "")
+    long_description = meta.long_description
+    description = meta.description
     desc_text = long_description if long_description else description
     if desc_text:
         parts.append(textwrap.fill(desc_text, width=75) + "\n")
 
     # Tags
-    tags = meta.get("tags", [])
+    tags = meta.tags
     if tags:
         tag_str = " ".join(f"[cyan]#{t}[/cyan]" for t in tags)
         parts.append(f"{tag_str}\n")
 
     # Standards
-    standards = meta.get("standards", [])
+    standards = meta.standards
     if standards:
         parts.append(_section("Standards", "  " + ", ".join(standards)))
 
     # Parameters
-    params = raw.get("params", {})
+    params = config.params
     if params:
         param_lines: list[str] = []
-        for name, spec in params.items():
-            p_type = spec.get("type", "?")
-            p_min = spec.get("min", "")
-            p_max = spec.get("max", "")
-            p_unit = spec.get("unit", "")
+        for name, param_spec in params.items():
+            p_type = param_spec.type.value
+            p_min = param_spec.min_value if param_spec.min_value is not None else ""
+            p_max = param_spec.max_value if param_spec.max_value is not None else ""
+            p_unit = param_spec.unit or ""
             range_str = ""
             if p_min != "" or p_max != "":
                 range_str = f" [{p_min}\u2013{p_max}]"
@@ -252,31 +245,31 @@ def render_template_detail(template: LibraryTemplate) -> str:
         parts.append(_section("Parameters", "\n".join(param_lines)))
 
     # Outputs
-    outputs = raw.get("outputs", {})
+    outputs = config.outputs
     if outputs:
         output_lines: list[str] = []
-        for name, spec in outputs.items():
-            desc = spec.get("description", "")
-            tol = spec.get("tolerance", "")
+        for name, output_spec in outputs.items():
+            desc = output_spec.description
+            tol = output_spec.tolerance
             tol_str = f" (\u00b1{tol})" if tol else ""
             output_lines.append(f"    {name}: {desc}{tol_str}")
         parts.append(_section("Outputs", "\n".join(output_lines)))
 
     # Archetypes
-    archetypes = raw.get("archetypes", {})
+    archetypes = config.archetypes
     if archetypes:
         arch_lines: list[str] = []
-        for name, spec in archetypes.items():
-            desc = spec.get("description", name)
+        for name, archetype in archetypes.items():
+            desc = archetype.description or name
             arch_lines.append(f"    \u2022 {name}: {desc}")
         parts.append(_section("Archetypes", "\n".join(arch_lines)))
 
     # Difficulty presets
-    difficulty = raw.get("difficulty", {})
+    difficulty = config.difficulty
     if difficulty:
         diff_lines: list[str] = []
-        for level, spec in difficulty.items():
-            desc = spec.get("description", level)
+        for level, preset in difficulty.items():
+            desc = preset.description or level
             diff_lines.append(f"    {level}: {desc}")
         parts.append(_section("Difficulty Presets", "\n".join(diff_lines)))
 
@@ -581,9 +574,12 @@ class LibraryScreen(Screen[None]):
     @work(thread=True, exclusive=True)
     def _load_tree(self) -> None:
         """Scan the filesystem in a background thread, then update the UI."""
-        seeds = scan_seeds(self._tasks_root)
-        templates = scan_templates(self._templates_root)
-        instances = scan_instances(self._tasks_root)
+        seeds, _seed_diagnostics = load_seeds(self._tasks_root)
+        templates, _template_diagnostics = discover_templates(
+            user_dirs=[self._templates_root],
+            include_builtin=False,
+        )
+        instances = load_library_instances(self._tasks_root)
         summary = build_summary(seeds, templates, instances)
         template_ids = {(t.discipline, t.task_id) for t in templates}
 

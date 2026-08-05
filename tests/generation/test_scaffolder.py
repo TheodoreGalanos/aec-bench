@@ -3,6 +3,7 @@
 
 import json
 import tomllib
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -10,7 +11,7 @@ import pytest
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.task_world import TaskWorldProfile
 from aec_bench.generation.sampler import sample_instance
-from aec_bench.templates.registry import load_engine_module, load_template
+from aec_bench.templates.registry import load_template
 
 TEMPLATE_DIR = (
     Path(__file__).resolve().parents[2]
@@ -25,13 +26,11 @@ TEMPLATE_DIR = (
 
 def _generate_test_instance(tmp_path: Path) -> Path:
     """Load the Terzaghi template, sample an instance, and scaffold it."""
-    config, tdir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(tdir)
-    inst = sample_instance(config, engine.compute, "easy", seed=42, instance_index=0)
-    engine_source = (tdir / "engine.py").read_text()
+    template = load_template(TEMPLATE_DIR)
+    inst = sample_instance(template, "easy", seed=42, instance_index=0)
     from aec_bench.generation.scaffolder import scaffold_task_instance
 
-    return scaffold_task_instance(config, engine_source, tdir, inst, tmp_path)
+    return scaffold_task_instance(template, inst, tmp_path)
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +82,9 @@ def test_scaffold_task_toml_has_generation_metadata(tmp_path: Path) -> None:
     assert gen["origin"] == "generated"
     assert "template" in gen
     assert "seed" in gen
-    assert "timestamp" in gen
+    assert "timestamp" not in gen
+    assert gen["template_source_sha256"] == load_template(TEMPLATE_DIR).source_sha256
+    assert "template_version" not in gen
     assert "difficulty" in gen
     assert "visibility_level" in gen
     assert "archetype" in gen
@@ -92,20 +93,13 @@ def test_scaffold_task_toml_has_generation_metadata(tmp_path: Path) -> None:
 
 def test_scaffold_task_toml_preserves_nonstandard_generation_difficulty(tmp_path: Path) -> None:
     """Custom generation presets must not make runnable task metadata invalid."""
-    config, tdir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(tdir)
-    inst = sample_instance(config, engine.compute, "easy", seed=42, instance_index=0)
-    inst = inst.model_copy(
-        update={
-            "difficulty": "baseline_audited",
-            "metadata": inst.metadata.model_copy(update={"difficulty": "baseline_audited"}),
-        }
-    )
-    engine_source = (tdir / "engine.py").read_text()
+    template = load_template(TEMPLATE_DIR)
+    inst = sample_instance(template, "easy", seed=42, instance_index=0)
+    inst = replace(inst, difficulty="baseline_audited")
 
     from aec_bench.generation.scaffolder import scaffold_task_instance
 
-    instance_dir = scaffold_task_instance(config, engine_source, tdir, inst, tmp_path)
+    instance_dir = scaffold_task_instance(template, inst, tmp_path)
 
     with open(instance_dir / "task.toml", "rb") as fh:
         data = tomllib.load(fh)
@@ -176,14 +170,12 @@ def test_scaffold_test_entrypoint_executes_sibling_verifier(tmp_path: Path) -> N
 
 def test_scaffold_golden_pass_has_correct_values(tmp_path: Path) -> None:
     """tests/fixtures/golden_pass.md must contain a JSON block with ground truth values."""
-    config, tdir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(tdir)
-    inst = sample_instance(config, engine.compute, "easy", seed=42, instance_index=0)
-    engine_source = (tdir / "engine.py").read_text()
+    template = load_template(TEMPLATE_DIR)
+    inst = sample_instance(template, "easy", seed=42, instance_index=0)
 
     from aec_bench.generation.scaffolder import scaffold_task_instance
 
-    instance_dir = scaffold_task_instance(config, engine_source, tdir, inst, tmp_path)
+    instance_dir = scaffold_task_instance(template, inst, tmp_path)
 
     golden_pass = (instance_dir / "tests" / "fixtures" / "golden_pass.md").read_text()
 
@@ -209,14 +201,12 @@ def test_scaffold_golden_pass_has_correct_values(tmp_path: Path) -> None:
 
 def test_scaffold_no_tool_mode_omits_calc_script(tmp_path: Path) -> None:
     """With tool_mode_override='no-tool', no *_calc.py should be present in environment/."""
-    config, tdir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(tdir)
-    inst = sample_instance(config, engine.compute, "easy", seed=42, instance_index=0)
-    engine_source = (tdir / "engine.py").read_text()
+    template = load_template(TEMPLATE_DIR)
+    inst = sample_instance(template, "easy", seed=42, instance_index=0)
 
     from aec_bench.generation.scaffolder import scaffold_task_instance
 
-    instance_dir = scaffold_task_instance(config, engine_source, tdir, inst, tmp_path, tool_mode_override="no-tool")
+    instance_dir = scaffold_task_instance(template, inst, tmp_path, tool_mode_override="no-tool")
 
     calc_scripts = list((instance_dir / "environment").glob("*_calc.py"))
     assert calc_scripts == [], "No *_calc.py should be present in no-tool mode"
@@ -246,14 +236,12 @@ def test_scaffold_copies_custom_verifier(tmp_path: Path) -> None:
     )
     (fake_template_dir / "verify.py").write_text(custom_verifier_content)
 
-    config, tdir = load_template(fake_template_dir)
-    engine = load_engine_module(tdir)
-    inst = sample_instance(config, engine.compute, "easy", seed=42, instance_index=0)
-    engine_source = (tdir / "engine.py").read_text()
+    template = load_template(fake_template_dir)
+    inst = sample_instance(template, "easy", seed=42, instance_index=0)
 
     from aec_bench.generation.scaffolder import scaffold_task_instance
 
-    instance_dir = scaffold_task_instance(config, engine_source, fake_template_dir, inst, tmp_path / "output")
+    instance_dir = scaffold_task_instance(template, inst, tmp_path / "output")
 
     verify_py = (instance_dir / "tests" / "verify.py").read_text()
     assert "custom verifier" in verify_py, "Custom verify.py content must be copied verbatim"
@@ -295,14 +283,12 @@ def test_scaffold_task_toml_has_tools_section_when_with_tool(tmp_path: Path) -> 
 
 def test_scaffold_task_toml_no_tools_section_in_no_tool_mode(tmp_path: Path) -> None:
     """task.toml must NOT contain a [tools] section when tool_mode is no-tool."""
-    config, tdir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(tdir)
-    inst = sample_instance(config, engine.compute, "easy", seed=42, instance_index=0)
-    engine_source = (tdir / "engine.py").read_text()
+    template = load_template(TEMPLATE_DIR)
+    inst = sample_instance(template, "easy", seed=42, instance_index=0)
 
     from aec_bench.generation.scaffolder import scaffold_task_instance
 
-    instance_dir = scaffold_task_instance(config, engine_source, tdir, inst, tmp_path, tool_mode_override="no-tool")
+    instance_dir = scaffold_task_instance(template, inst, tmp_path, tool_mode_override="no-tool")
 
     with open(instance_dir / "task.toml", "rb") as fh:
         data = tomllib.load(fh)
@@ -312,17 +298,13 @@ def test_scaffold_task_toml_no_tools_section_in_no_tool_mode(tmp_path: Path) -> 
 
 def test_scaffold_records_explicit_task_visibility_and_instance_index(tmp_path: Path) -> None:
     """Generated research tasks must preserve registry visibility and stable sampling identity."""
-    config, tdir = load_template(TEMPLATE_DIR)
-    engine = load_engine_module(tdir)
-    instance = sample_instance(config, engine.compute, "easy", seed=42, instance_index=12)
-    engine_source = (tdir / "engine.py").read_text()
+    template = load_template(TEMPLATE_DIR)
+    instance = sample_instance(template, "easy", seed=42, instance_index=12)
 
     from aec_bench.generation.scaffolder import scaffold_task_instance
 
     instance_dir = scaffold_task_instance(
-        config,
-        engine_source,
-        tdir,
+        template,
         instance,
         tmp_path,
         task_visibility=Visibility.HOLDOUT,
