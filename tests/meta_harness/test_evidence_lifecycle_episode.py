@@ -13,6 +13,10 @@ import pytest
 from pydantic import ValidationError
 
 import aec_bench.meta_harness.evidence_lifecycle as lifecycle_runtime
+from aec_bench.contracts.evidence_lifecycle import (
+    EvidenceCheckpointSpec,
+    EvidenceLifecycleSpec,
+)
 from aec_bench.ledger.immutable_artifact_store import ImmutableByteStore
 from aec_bench.meta_harness.evidence_lifecycle import (
     EvidenceLifecycleError,
@@ -33,12 +37,7 @@ from aec_bench.meta_harness.evidence_lifecycle_episode import (
     LifecycleExecutionMode,
     LifecycleVisibilityPolicy,
 )
-from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.contracts import (
-    EvidenceCheckpointSpec,
-    EvidenceLifecycleSpec,
-)
-from aec_bench.task_world_templates.lifecycles import materialize_lifecycle_template
+from aec_bench.task_world_templates.lifecycles import materialize_lifecycle
 
 HYDRAULIC_TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
 
@@ -193,8 +192,8 @@ def test_episode_request_versions_reject_later_visibility_fields() -> None:
 
 
 def test_v3_episode_request_binds_and_persists_public_operation_state(tmp_path: Path) -> None:
-    package = materialize_lifecycle_template(
-        get_template(HYDRAULIC_TEMPLATE_ID),
+    package = materialize_lifecycle(
+        HYDRAULIC_TEMPLATE_ID,
         tmp_path / "package",
         variant_id="tailwater_revision",
     )
@@ -258,8 +257,8 @@ def test_v3_episode_request_binds_and_persists_public_operation_state(tmp_path: 
 
 
 def test_v3_closeout_binds_prior_operation_evidence_without_offering_operations(tmp_path: Path) -> None:
-    package = materialize_lifecycle_template(
-        get_template(HYDRAULIC_TEMPLATE_ID),
+    package = materialize_lifecycle(
+        HYDRAULIC_TEMPLATE_ID,
         tmp_path / "package",
         variant_id="tailwater_revision",
     )

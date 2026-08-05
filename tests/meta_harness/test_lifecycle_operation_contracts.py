@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from aec_bench.task_world_templates.contracts import (
+from aec_bench.contracts.evidence_lifecycle import (
     ConditionalEvidenceSpec,
     ConditionalOperationSpec,
     EvidenceCheckpointSpec,

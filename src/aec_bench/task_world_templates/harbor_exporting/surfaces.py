@@ -9,9 +9,9 @@ import tempfile
 from pathlib import Path
 from typing import cast
 
+from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec, LifecycleTaskMetadata
 from aec_bench.meta_harness.evidence_lifecycle import prepare_evidence_checkpoint
 from aec_bench.task_world_templates.compiled_world import CompiledWorldEnvelope
-from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate, EvidenceLifecycleSpec
 
 from .constants import (
     BASE_IMAGE,
@@ -46,10 +46,10 @@ def validate_canonical_agent_surface(
     initial_context: Path,
     instruction: RegularFileSnapshot,
     dockerfile: RegularFileSnapshot,
-    template: CompositeTaskWorldTemplate,
+    metadata: LifecycleTaskMetadata,
     lifecycle: EvidenceLifecycleSpec,
 ) -> None:
-    if snapshot_text(instruction) != instruction_text(template=template, lifecycle=lifecycle):
+    if snapshot_text(instruction) != instruction_text(metadata=metadata, lifecycle=lifecycle):
         raise ValueError("Harbor canonical agent surface does not match the compiled lifecycle instruction")
     if snapshot_text(dockerfile) != dockerfile_text():
         raise ValueError("Harbor canonical agent surface does not match the supported environment")
@@ -60,9 +60,9 @@ def validate_canonical_agent_surface(
             raise ValueError("Harbor canonical agent surface contains undeclared lifecycle context")
 
 
-def task_toml_text(*, template: CompositeTaskWorldTemplate, envelope: CompiledWorldEnvelope) -> str:
+def task_toml_text(*, metadata: LifecycleTaskMetadata, envelope: CompiledWorldEnvelope) -> str:
     variant = envelope.variant_id or "unversioned"
-    domain = template.discipline_scope[0]
+    domain = metadata.discipline
     tags = sorted({"compiled-world", "evidence-lifecycle", domain.lower().replace(" ", "-")})
     return (
         "# ABOUTME: Harbor task metadata for one content-pinned compiled lifecycle world.\n"
@@ -93,12 +93,12 @@ def task_toml_text(*, template: CompositeTaskWorldTemplate, envelope: CompiledWo
     )
 
 
-def instruction_text(*, template: CompositeTaskWorldTemplate, lifecycle: EvidenceLifecycleSpec) -> str:
+def instruction_text(*, metadata: LifecycleTaskMetadata, lifecycle: EvidenceLifecycleSpec) -> str:
     checkpoint_lines = "\n".join(
         f"- `{checkpoint.checkpoint_id}`: {checkpoint.title}" for checkpoint in lifecycle.checkpoints
     )
     return (
-        f"# {template.name}\n\n"
+        f"# {metadata.name}\n\n"
         "Complete this staged evidence lifecycle through the task-owned lifecycle tools. The host releases only "
         "the active checkpoint context and declared operation results; arbitrary shell access is unavailable.\n\n"
         "The agent must not write a reward. Preserve the completed lifecycle run at `/workspace/lifecycle-run`; "

@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec, LifecycleOperationSpec
 from aec_bench.meta_harness.evidence_lifecycle_state import (
     LifecycleOperationActionRecord,
     LifecycleOperationDisposition,
@@ -21,7 +22,6 @@ from aec_bench.meta_harness.lifecycle_operation_protocol import (
     LifecycleOperationSourceContext,
     current_lifecycle_operation_action,
 )
-from aec_bench.task_world_templates.contracts import EvidenceLifecycleSpec, LifecycleOperationSpec
 from aec_bench.task_world_templates.hydraulics import (
     build_hydraulic_run_request,
     execute_hydraulic_world,

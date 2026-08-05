@@ -217,4 +217,4 @@ These tests run locally without Harbor, provider credentials, or paid services.
 - [ ] Require no provider or paid service for the local proof.
 - [ ] Add no global action union, compatibility layer, live schema version, or
       content hash without a real protected boundary.
-- [ ] Update the maintained documentation or catalogue route when required.
+- [ ] Update the maintained documentation or explicit composition root when required.

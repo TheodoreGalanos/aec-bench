@@ -13,8 +13,7 @@ from pydantic import ValidationError
 
 from aec_bench.meta_harness.evidence_lifecycle import EvidenceLifecycleError, run_evidence_lifecycle
 from aec_bench.meta_harness.evidence_lifecycle_experiment import record_lifecycle_experiment
-from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.lifecycles import lifecycle_package_variant
+from aec_bench.task_world_templates.lifecycles import lifecycle_package_variant, materialize_lifecycle
 from aec_bench.task_world_templates.lifecycles.ssc03_drainage_model import verify_ssc03_evidence_lifecycle
 from aec_bench.task_world_templates.lifecycles.ssc03_drainage_variants import (
     DEFAULT_SSC03_LIFECYCLE_VARIANT_ID,
@@ -23,7 +22,6 @@ from aec_bench.task_world_templates.lifecycles.ssc03_drainage_variants import (
     get_ssc03_lifecycle_variant,
     list_ssc03_lifecycle_variant_ids,
 )
-from aec_bench.task_world_templates.materializer import materialize_template_lifecycle
 from tests.support.lifecycle_episode import deterministic_episode_environment
 
 EXPECTED_VARIANTS = (
@@ -99,8 +97,8 @@ def test_ssc03_variant_contract_rejects_competing_closeout_events() -> None:
 
 
 def test_default_variant_preserves_pr11_agent_visible_package_bytes(tmp_path: Path) -> None:
-    package = materialize_template_lifecycle(
-        get_template("drainage-model-evidence-lifecycle-review"),
+    package = materialize_lifecycle(
+        "drainage-model-evidence-lifecycle-review",
         tmp_path / "package",
     )
 
@@ -109,8 +107,8 @@ def test_default_variant_preserves_pr11_agent_visible_package_bytes(tmp_path: Pa
 
 
 def test_rematerializing_into_non_empty_package_is_rejected_without_mutation(tmp_path: Path) -> None:
-    template = get_template("drainage-model-evidence-lifecycle-review")
-    package = materialize_template_lifecycle(
+    template = "drainage-model-evidence-lifecycle-review"
+    package = materialize_lifecycle(
         template,
         tmp_path / "package",
         variant_id=DEFAULT_SSC03_LIFECYCLE_VARIANT_ID,
@@ -118,7 +116,7 @@ def test_rematerializing_into_non_empty_package_is_rejected_without_mutation(tmp
     original = _package_files(package)
 
     with pytest.raises(ValueError, match="output directory must be empty"):
-        materialize_template_lifecycle(template, package, variant_id="memo_closeout_missing")
+        materialize_lifecycle(template, package, variant_id="memo_closeout_missing")
 
     assert _package_files(package) == original
     assert (package / "releases" / "closeout_review" / "drainage-design-memo-rev-e.md").is_file()
@@ -129,9 +127,9 @@ def test_ssc03_variants_materialize_deterministically_and_golden_state_verifies(
     tmp_path: Path,
     variant_id: str,
 ) -> None:
-    template = get_template("drainage-model-evidence-lifecycle-review")
-    first = materialize_template_lifecycle(template, tmp_path / "first", variant_id=variant_id)
-    second = materialize_template_lifecycle(template, tmp_path / "second", variant_id=variant_id)
+    template = "drainage-model-evidence-lifecycle-review"
+    first = materialize_lifecycle(template, tmp_path / "first", variant_id=variant_id)
+    second = materialize_lifecycle(template, tmp_path / "second", variant_id=variant_id)
 
     assert _package_files(first) == _package_files(second)
     assert _load_json(first / "hidden" / "variant.json")["variant_id"] == variant_id
@@ -158,8 +156,8 @@ def test_ssc03_variant_gold_encodes_declared_change_topology(
     expected_failures: tuple[str | None, ...],
     expected_readiness: str,
 ) -> None:
-    package = materialize_template_lifecycle(
-        get_template("drainage-model-evidence-lifecycle-review"),
+    package = materialize_lifecycle(
+        "drainage-model-evidence-lifecycle-review",
         tmp_path / variant_id,
         variant_id=variant_id,
     )
@@ -177,8 +175,8 @@ def test_ssc03_variant_gold_encodes_declared_change_topology(
 
 @pytest.mark.parametrize("variant_id", EXPECTED_VARIANTS)
 def test_rendered_sources_independently_support_variant_gold(tmp_path: Path, variant_id: str) -> None:
-    package = materialize_template_lifecycle(
-        get_template("drainage-model-evidence-lifecycle-review"),
+    package = materialize_lifecycle(
+        "drainage-model-evidence-lifecycle-review",
         tmp_path / variant_id,
         variant_id=variant_id,
     )
@@ -224,13 +222,13 @@ def test_rendered_sources_independently_support_variant_gold(tmp_path: Path, var
 
 
 def test_assertion_variants_do_not_treat_assertions_as_closure_evidence(tmp_path: Path) -> None:
-    template = get_template("drainage-model-evidence-lifecycle-review")
-    response_assertion = materialize_template_lifecycle(
+    template = "drainage-model-evidence-lifecycle-review"
+    response_assertion = materialize_lifecycle(
         template,
         tmp_path / "response-assertion",
         variant_id="response_assertion_only",
     )
-    memo_assertion = materialize_template_lifecycle(
+    memo_assertion = materialize_lifecycle(
         template,
         tmp_path / "memo-assertion",
         variant_id="memo_closeout_missing",
@@ -247,8 +245,8 @@ def test_assertion_variants_do_not_treat_assertions_as_closure_evidence(tmp_path
 
 @pytest.mark.parametrize("variant_id", ["semantic_no_op_release", "response_assertion_only"])
 def test_deferred_correction_sources_only_name_findings_present_in_gold(tmp_path: Path, variant_id: str) -> None:
-    package = materialize_template_lifecycle(
-        get_template("drainage-model-evidence-lifecycle-review"),
+    package = materialize_lifecycle(
+        "drainage-model-evidence-lifecycle-review",
         tmp_path / variant_id,
         variant_id=variant_id,
     )
@@ -268,8 +266,8 @@ def test_deferred_correction_sources_only_name_findings_present_in_gold(tmp_path
 
 @pytest.mark.parametrize("variant_id", ["semantic_no_op_release", "response_assertion_only"])
 def test_direct_closeout_decision_ids_and_lineage_follow_actual_topology(tmp_path: Path, variant_id: str) -> None:
-    package = materialize_template_lifecycle(
-        get_template("drainage-model-evidence-lifecycle-review"),
+    package = materialize_lifecycle(
+        "drainage-model-evidence-lifecycle-review",
         tmp_path / variant_id,
         variant_id=variant_id,
     )
@@ -290,8 +288,8 @@ def test_direct_closeout_decision_ids_and_lineage_follow_actual_topology(tmp_pat
 
 @pytest.mark.parametrize("variant_id", ["semantic_no_op_release", "response_assertion_only"])
 def test_non_evidence_response_events_preserve_engineering_state(tmp_path: Path, variant_id: str) -> None:
-    package = materialize_template_lifecycle(
-        get_template("drainage-model-evidence-lifecycle-review"),
+    package = materialize_lifecycle(
+        "drainage-model-evidence-lifecycle-review",
         tmp_path / variant_id,
         variant_id=variant_id,
     )
@@ -318,8 +316,8 @@ def test_non_evidence_response_events_preserve_engineering_state(tmp_path: Path,
 
 
 def test_verifier_rejects_variant_identity_that_does_not_match_package_topology(tmp_path: Path) -> None:
-    package = materialize_template_lifecycle(
-        get_template("drainage-model-evidence-lifecycle-review"),
+    package = materialize_lifecycle(
+        "drainage-model-evidence-lifecycle-review",
         tmp_path / "package",
         variant_id="memo_closeout_missing",
     )
@@ -333,8 +331,8 @@ def test_verifier_rejects_variant_identity_that_does_not_match_package_topology(
 
 @pytest.mark.parametrize("failure_kind", ["missing", "malformed"])
 def test_verifier_rejects_missing_or_malformed_variant_identity(tmp_path: Path, failure_kind: str) -> None:
-    package = materialize_template_lifecycle(
-        get_template("drainage-model-evidence-lifecycle-review"),
+    package = materialize_lifecycle(
+        "drainage-model-evidence-lifecycle-review",
         tmp_path / "package",
     )
     variant_path = package / "hidden" / "variant.json"
@@ -348,8 +346,8 @@ def test_verifier_rejects_missing_or_malformed_variant_identity(tmp_path: Path, 
 
 
 def test_non_default_variant_is_recorded_in_manifest_and_index(tmp_path: Path) -> None:
-    package = materialize_template_lifecycle(
-        get_template("drainage-model-evidence-lifecycle-review"),
+    package = materialize_lifecycle(
+        "drainage-model-evidence-lifecycle-review",
         tmp_path / "package",
         variant_id="response_assertion_only",
     )
@@ -376,8 +374,8 @@ def test_non_default_variant_is_recorded_in_manifest_and_index(tmp_path: Path) -
 
 
 def test_mismatched_variant_identity_cannot_enter_experiment_index(tmp_path: Path) -> None:
-    package = materialize_template_lifecycle(
-        get_template("drainage-model-evidence-lifecycle-review"),
+    package = materialize_lifecycle(
+        "drainage-model-evidence-lifecycle-review",
         tmp_path / "package",
         variant_id="memo_closeout_missing",
     )
@@ -407,13 +405,13 @@ def test_mismatched_variant_identity_cannot_enter_experiment_index(tmp_path: Pat
 
 
 def test_valid_package_from_another_variant_cannot_be_paired_with_run(tmp_path: Path) -> None:
-    template = get_template("drainage-model-evidence-lifecycle-review")
-    run_package = materialize_template_lifecycle(
+    template = "drainage-model-evidence-lifecycle-review"
+    run_package = materialize_lifecycle(
         template,
         tmp_path / "run-package",
         variant_id="memo_closeout_missing",
     )
-    supplied_package = materialize_template_lifecycle(
+    supplied_package = materialize_lifecycle(
         template,
         tmp_path / "supplied-package",
         variant_id="response_assertion_only",
@@ -441,8 +439,8 @@ def test_valid_package_from_another_variant_cannot_be_paired_with_run(tmp_path: 
 
 
 def test_prepared_workspace_never_contains_hidden_variant_metadata(tmp_path: Path) -> None:
-    package = materialize_template_lifecycle(
-        get_template("drainage-model-evidence-lifecycle-review"),
+    package = materialize_lifecycle(
+        "drainage-model-evidence-lifecycle-review",
         tmp_path / "package",
         variant_id="response_assertion_only",
     )
@@ -459,13 +457,13 @@ def test_prepared_workspace_never_contains_hidden_variant_metadata(tmp_path: Pat
 
 
 def test_variant_packages_have_distinct_host_side_hashes(tmp_path: Path) -> None:
-    template = get_template("drainage-model-evidence-lifecycle-review")
+    template = "drainage-model-evidence-lifecycle-review"
     digests = {
         hashlib.sha256(
             b"".join(
                 relative.encode() + b"\0" + content
                 for relative, content in _package_files(
-                    materialize_template_lifecycle(template, tmp_path / variant_id, variant_id=variant_id)
+                    materialize_lifecycle(template, tmp_path / variant_id, variant_id=variant_id)
                 ).items()
             )
         ).hexdigest()
@@ -477,8 +475,8 @@ def test_variant_packages_have_distinct_host_side_hashes(tmp_path: Path) -> None
 
 @pytest.mark.parametrize("variant_id", EXPECTED_VARIANTS)
 def test_variant_identity_is_hidden_from_agent_visible_files(tmp_path: Path, variant_id: str) -> None:
-    package = materialize_template_lifecycle(
-        get_template("drainage-model-evidence-lifecycle-review"),
+    package = materialize_lifecycle(
+        "drainage-model-evidence-lifecycle-review",
         tmp_path / variant_id,
         variant_id=variant_id,
     )

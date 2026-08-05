@@ -8,8 +8,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate, EvidenceCheckpointSpec
+from aec_bench.contracts.evidence_lifecycle import (
+    ConditionalOperationSpec,
+    EvidenceCheckpointSpec,
+    EvidenceLifecycleSpec,
+    LifecycleOperationSpec,
+    LifecycleTaskMetadata,
+)
 from aec_bench.task_world_templates.hydraulics import build_hydraulic_run_request, materialize_hydraulic_world
 from aec_bench.task_world_templates.hydraulics.contracts import HydraulicSourceState
 from aec_bench.task_world_templates.hydraulics.interventions import (
@@ -21,6 +26,146 @@ from aec_bench.task_world_templates.hydraulics.interventions import (
 
 TEMPLATE_ID = "hydraulic-design-response-lifecycle-review"
 LIFECYCLE_ID = "ssc03.hydraulic-design-response-lifecycle"
+METADATA = LifecycleTaskMetadata(
+    template_id=TEMPLATE_ID,
+    name="Hydraulic Design Response Lifecycle Review",
+    discipline="civil",
+)
+
+
+def _calculation_operations(source_prerequisites: tuple[str, ...] = ()) -> list[LifecycleOperationSpec]:
+    operations: list[LifecycleOperationSpec] = []
+    for scenario_id, title in (("design-10yr", "design"), ("major-100yr", "major")):
+        operations.append(
+            LifecycleOperationSpec(
+                operation_id=f"hydrology.{scenario_id}",
+                kind="run_hydrology",
+                title=f"Run {title}-scenario hydrology",
+                description="Calculate bounded Rational Method hydrology for the declared scenario.",
+                prerequisite_operation_ids=source_prerequisites,
+            )
+        )
+    for scenario_id, title in (("design-10yr", "design"), ("major-100yr", "major")):
+        operations.append(
+            LifecycleOperationSpec(
+                operation_id=f"detention-outlet.{scenario_id}.declared-outlet",
+                kind="run_detention_outlet",
+                title=f"Run {title}-scenario coupled detention and outlet analysis",
+                description="Execute the declared coupled basin, outlet, and downstream network calculation.",
+                prerequisite_operation_ids=source_prerequisites + (f"hydrology.{scenario_id}",),
+            )
+        )
+    for scenario_id, title in (("design-10yr", "design"), ("major-100yr", "major")):
+        operations.append(
+            LifecycleOperationSpec(
+                operation_id=f"network-hgl.{scenario_id}.declared-tailwater",
+                kind="run_network_hgl",
+                title=f"Project {title}-scenario network HGL",
+                description="Project HGL evidence from the exact coupled run at the declared boundary.",
+                prerequisite_operation_ids=source_prerequisites + (f"detention-outlet.{scenario_id}.declared-outlet",),
+            )
+        )
+    return operations
+
+
+def _intervention_operations() -> ConditionalOperationSpec:
+    operation_id = "source-intervention.selected"
+    operations = [
+        LifecycleOperationSpec(
+            operation_id=operation_id,
+            kind="activate_source_intervention",
+            title="Activate the selected source intervention",
+            description="Activate only the bounded intervention archived at the prior selection checkpoint.",
+        ),
+        *_calculation_operations((operation_id,)),
+    ]
+    return ConditionalOperationSpec(operation_budget=len(operations), operations=tuple(operations))
+
+
+LIFECYCLE = EvidenceLifecycleSpec(
+    lifecycle_id=LIFECYCLE_ID,
+    world_id=f"aec.task_world.composite.{TEMPLATE_ID}",
+    checkpoints=[
+        EvidenceCheckpointSpec(
+            checkpoint_id="problem_analysis",
+            title="Issued hydraulic problem analysis",
+            release_path="releases/problem_analysis",
+            instruction_path="instructions/problem_analysis.md",
+            submission_path="submissions/problem_analysis.json",
+            required_submission_fields=[
+                "checkpoint_id",
+                "visible_source_state_sha256",
+                "selected_operations",
+                "accepted_decisions",
+                "readiness_decision",
+                "claim_boundary",
+            ],
+            allow_additional_submission_fields=False,
+            conditional_operations=ConditionalOperationSpec(
+                operation_budget=6,
+                operations=tuple(_calculation_operations()),
+            ),
+        ),
+        EvidenceCheckpointSpec(
+            checkpoint_id="intervention_selection",
+            title="Bounded intervention selection",
+            release_path="releases/intervention_selection",
+            instruction_path="instructions/intervention_selection.md",
+            submission_path="submissions/intervention_selection.json",
+            depends_on=["problem_analysis"],
+            required_submission_fields=[
+                "checkpoint_id",
+                "visible_source_state_sha256",
+                "selected_intervention_id",
+                "selection_basis",
+                "claim_boundary",
+            ],
+            allow_additional_submission_fields=False,
+        ),
+        EvidenceCheckpointSpec(
+            checkpoint_id="intervention_analysis",
+            title="Selected intervention analysis",
+            release_path="releases/intervention_analysis",
+            instruction_path="instructions/intervention_analysis.md",
+            submission_path="submissions/intervention_analysis.json",
+            depends_on=["intervention_selection"],
+            required_submission_fields=[
+                "checkpoint_id",
+                "selected_intervention_id",
+                "visible_source_state_sha256",
+                "selected_operations",
+                "accepted_decisions",
+                "supersession_lineage",
+                "readiness_decision",
+                "claim_boundary",
+            ],
+            allow_additional_submission_fields=False,
+            conditional_operations=_intervention_operations(),
+        ),
+        EvidenceCheckpointSpec(
+            checkpoint_id="closeout_review",
+            title="Hydraulic design-response closeout",
+            release_path="releases/closeout_review",
+            instruction_path="instructions/closeout_review.md",
+            submission_path="submissions/closeout_review.json",
+            depends_on=["intervention_analysis"],
+            required_submission_fields=[
+                "checkpoint_id",
+                "selected_intervention_id",
+                "visible_source_state_sha256",
+                "selected_operations",
+                "run_reference",
+                "report_reference",
+                "memo",
+                "accepted_decisions",
+                "supersession_lineage",
+                "readiness_decision",
+                "claim_boundary",
+            ],
+            allow_additional_submission_fields=False,
+        ),
+    ],
+)
 
 
 def build_ssc03_hydraulic_intervention_resolver(package_dir: Path, run_dir: Path) -> Any:
@@ -35,23 +180,17 @@ def build_ssc03_hydraulic_intervention_resolver(package_dir: Path, run_dir: Path
 
 def materialize_ssc03_hydraulic_intervention_lifecycle(
     output_dir: Path,
-    *,
-    template: CompositeTaskWorldTemplate | None = None,
 ) -> Path:
     """Materialize one deterministic four-checkpoint design-response package."""
     output = Path(output_dir)
-    template = template or get_template(TEMPLATE_ID)
-    if template.template_id != TEMPLATE_ID or template.evidence_lifecycle is None:
-        raise ValueError(f"unexpected hydraulic intervention template: {template.template_id}")
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError(f"output directory must be empty: {output}")
 
-    _write_json(output / "template.json", template.model_dump(mode="json"))
-    _write_json(output / "world.json", template.compile_task_world_payload())
-    _write_json(output / "lifecycle.json", template.evidence_lifecycle.model_dump(mode="json"))
+    _write_json(output / "template.json", METADATA.model_dump(mode="json"))
+    _write_json(output / "lifecycle.json", LIFECYCLE.model_dump(mode="json"))
     (output / "README.md").parent.mkdir(parents=True, exist_ok=True)
     (output / "README.md").write_text(_readme(), encoding="utf-8")
-    for checkpoint_id, instruction in _instructions(template).items():
+    for checkpoint_id, instruction in _instructions().items():
         path = output / "instructions" / f"{checkpoint_id}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(instruction, encoding="utf-8")
@@ -90,11 +229,9 @@ def validated_ssc03_hydraulic_intervention_package(package_dir: Path) -> dict[st
     package = Path(package_dir)
     intervention_ids = list_hydraulic_intervention_ids()
     try:
-        template = get_template(TEMPLATE_ID)
-        if _read_json(package / "template.json") != template.model_dump(mode="json"):
+        if _read_json(package / "template.json") != METADATA.model_dump(mode="json"):
             raise ValueError("template mismatch")
-        assert template.evidence_lifecycle is not None
-        if _read_json(package / "lifecycle.json") != template.evidence_lifecycle.model_dump(mode="json"):
+        if _read_json(package / "lifecycle.json") != LIFECYCLE.model_dump(mode="json"):
             raise ValueError("lifecycle mismatch")
         public_catalogue = _read_json(package / "releases" / "intervention_selection" / "interventions.json")
         if public_catalogue != _public_intervention_catalogue():
@@ -192,9 +329,8 @@ def _resolution_manifest(public_catalogue: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _instructions(template: CompositeTaskWorldTemplate) -> dict[str, str]:
-    assert template.evidence_lifecycle is not None
-    checkpoints = {checkpoint.checkpoint_id: checkpoint for checkpoint in template.evidence_lifecycle.checkpoints}
+def _instructions() -> dict[str, str]:
+    checkpoints = {checkpoint.checkpoint_id: checkpoint for checkpoint in LIFECYCLE.checkpoints}
     claim = (
         "Do not describe these synthetic screening calculations as SWMM, authority approval, standards "
         "compliance, project design evidence, model transfer, post-training, or continual learning."

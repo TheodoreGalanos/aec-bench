@@ -16,6 +16,7 @@ from typing import Any, Literal
 
 from pydantic import ValidationError
 
+from aec_bench.contracts.evidence_lifecycle import EvidenceCheckpointSpec, EvidenceLifecycleSpec
 from aec_bench.ledger.durability import fsync_directory, fsync_tree, mkdir_durable
 from aec_bench.ledger.immutable_artifact_store import (
     ImmutableArtifactStoreError,
@@ -99,7 +100,6 @@ from aec_bench.meta_harness.lifecycle_operation_store import (
     _sync_lifecycle_operation_ledger,
     _write_lifecycle_operation_catalog,
 )
-from aec_bench.task_world_templates.contracts import EvidenceCheckpointSpec, EvidenceLifecycleSpec
 
 LifecycleVerifier = Callable[[Path, Path], dict[str, Any] | LifecycleVerificationResult]
 

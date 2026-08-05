@@ -12,13 +12,12 @@ from typing import Any, NoReturn
 
 import pytest
 
-from aec_bench.task_world_templates.catalogue import get_template
+from aec_bench.task_world_templates.compiled_world import compile_lifecycle
 from aec_bench.task_world_templates.harbor_export import (
     HARBOR_LIFECYCLE_BRIDGE_MODE,
     ExportedHarborTask,
     export_compiled_lifecycle_harbor_task,
 )
-from aec_bench.task_world_templates.materializer import compile_template_lifecycle
 from agents.entrypoint_agent import EntrypointAgent
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -75,8 +74,8 @@ class _FailingLifecycleEntrypointAgent(EntrypointAgent):
 
 
 def _export_task(tmp_path: Path) -> ExportedHarborTask:
-    compiled = compile_template_lifecycle(
-        get_template(TEMPLATE_ID),
+    compiled = compile_lifecycle(
+        TEMPLATE_ID,
         tmp_path / "compiled",
         variant_id="administrative_no_op",
     )

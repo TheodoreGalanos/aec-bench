@@ -12,10 +12,9 @@ from typing import Any, cast
 import pytest
 
 from aec_bench.meta_harness.evidence_lifecycle import read_evidence_lifecycle_state, run_evidence_lifecycle
-from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.lifecycles import (
-    materialize_lifecycle_template,
-    verify_lifecycle_template,
+    materialize_lifecycle,
+    verify_lifecycle,
 )
 from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_interaction_smoke import (
     _run_references,
@@ -66,7 +65,7 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _run_policy(tmp_path: Path, intervention_id: str) -> tuple[Path, Path, dict[str, Any]]:
-    package = materialize_lifecycle_template(get_template(TEMPLATE_ID), tmp_path / f"package-{intervention_id}")
+    package = materialize_lifecycle(TEMPLATE_ID, tmp_path / f"package-{intervention_id}")
     run = tmp_path / f"run-{intervention_id}"
     environment = build_ssc03_hydraulic_intervention_smoke_environment(
         package,
@@ -74,7 +73,7 @@ def _run_policy(tmp_path: Path, intervention_id: str) -> tuple[Path, Path, dict[
     )
 
     lifecycle = run_evidence_lifecycle(package, run, episode_environment=environment)
-    verification = verify_lifecycle_template(package, run)
+    verification = verify_lifecycle(package, run)
 
     assert lifecycle["status"] == "complete"
     return package, run, verification
@@ -165,7 +164,7 @@ def test_two_bounded_policies_diverge_from_the_same_problem_source(tmp_path: Pat
 
 
 def test_undeclared_duplicate_package_cannot_hijack_verifier_lookup(tmp_path: Path) -> None:
-    package = materialize_lifecycle_template(get_template(TEMPLATE_ID), tmp_path / "package")
+    package = materialize_lifecycle(TEMPLATE_ID, tmp_path / "package")
     declared = package / "hidden" / "hydraulic" / "packages" / "interventions" / "controlled_orifice_resize"
     undeclared = package / "hidden" / "hydraulic" / "packages" / "aaa"
     shutil.copytree(declared, undeclared)
@@ -177,14 +176,14 @@ def test_undeclared_duplicate_package_cannot_hijack_verifier_lookup(tmp_path: Pa
     )
 
     run_evidence_lifecycle(package, run, episode_environment=environment)
-    result = verify_lifecycle_template(package, run)
+    result = verify_lifecycle(package, run)
 
     assert result["passed"] is True
     assert result["reward"] == 1.0
 
 
 def test_omitting_the_failing_major_chain_cannot_bypass_the_reward_cap(tmp_path: Path) -> None:
-    package = materialize_lifecycle_template(get_template(TEMPLATE_ID), tmp_path / "package")
+    package = materialize_lifecycle(TEMPLATE_ID, tmp_path / "package")
     run = tmp_path / "run"
     full_selected: dict[str, str] = {}
 
@@ -253,7 +252,7 @@ def test_omitting_the_failing_major_chain_cannot_bypass_the_reward_cap(tmp_path:
         run,
         episode_environment=deterministic_episode_environment(execute),
     )
-    result = verify_lifecycle_template(package, run)
+    result = verify_lifecycle(package, run)
 
     assert result["reward"] <= 0.5
     for gate_id in (

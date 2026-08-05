@@ -18,8 +18,7 @@ from aec_bench.meta_harness.evidence_lifecycle import (
     submit_evidence_checkpoint,
 )
 from aec_bench.meta_harness.evidence_request_protocol import EvidenceLifecycleError
-from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.lifecycles import materialize_lifecycle_template
+from aec_bench.task_world_templates.lifecycles import materialize_lifecycle
 from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_intervention import TEMPLATE_ID
 
 SCENARIO_IDS = ("design-10yr", "major-100yr")
@@ -136,7 +135,7 @@ def test_archived_selection_controls_source_and_selective_recomputation(
     tmp_path: Path,
     intervention_id: str,
 ) -> None:
-    package = materialize_lifecycle_template(get_template(TEMPLATE_ID), tmp_path / "package")
+    package = materialize_lifecycle(TEMPLATE_ID, tmp_path / "package")
     run = tmp_path / "run"
     problem_actions = _archive_problem_analysis(package, run)
     selection_sha256 = _archive_selection(package, run, intervention_id)
@@ -196,7 +195,7 @@ def test_archived_selection_controls_source_and_selective_recomputation(
 
 
 def test_undeclared_archived_selection_fails_before_intervention_release(tmp_path: Path) -> None:
-    package = materialize_lifecycle_template(get_template(TEMPLATE_ID), tmp_path / "package")
+    package = materialize_lifecycle(TEMPLATE_ID, tmp_path / "package")
     run = tmp_path / "run"
     _archive_problem_analysis(package, run)
     _archive_selection(package, run, "invented_outlet_option")
@@ -206,7 +205,7 @@ def test_undeclared_archived_selection_fails_before_intervention_release(tmp_pat
 
 
 def test_archived_selection_cannot_be_changed_after_submission(tmp_path: Path) -> None:
-    package = materialize_lifecycle_template(get_template(TEMPLATE_ID), tmp_path / "package")
+    package = materialize_lifecycle(TEMPLATE_ID, tmp_path / "package")
     run = tmp_path / "run"
     _archive_problem_analysis(package, run)
     _archive_selection(package, run, "controlled_orifice_resize")
@@ -220,7 +219,7 @@ def test_archived_selection_cannot_be_changed_after_submission(tmp_path: Path) -
 
 
 def test_selection_tampering_after_checkpoint_release_cannot_activate_an_option(tmp_path: Path) -> None:
-    package = materialize_lifecycle_template(get_template(TEMPLATE_ID), tmp_path / "package")
+    package = materialize_lifecycle(TEMPLATE_ID, tmp_path / "package")
     run = tmp_path / "run"
     _archive_problem_analysis(package, run)
     _archive_selection(package, run, "controlled_orifice_resize")

@@ -7,10 +7,11 @@ import json
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from pydantic import ValidationError
 
+from aec_bench.contracts.evidence_lifecycle import EvidenceCheckpointSpec, EvidenceLifecycleSpec
 from aec_bench.ledger.durability import fsync_directory, fsync_tree, mkdir_durable
 from aec_bench.meta_harness.evidence_lifecycle_state import (
     CheckpointAttemptStatus,
@@ -51,7 +52,6 @@ from aec_bench.meta_harness.lifecycle_operation_protocol import (
     lifecycle_operation_state_sha256,
     validate_lifecycle_operation_run_state,
 )
-from aec_bench.task_world_templates.contracts import EvidenceCheckpointSpec, EvidenceLifecycleSpec
 
 
 def _resolver_for_package(package_dir: Path, run_dir: Path) -> LifecycleOperationResolver:
@@ -60,7 +60,7 @@ def _resolver_for_package(package_dir: Path, run_dir: Path) -> LifecycleOperatio
     resolver = lifecycle_operation_resolver(package_dir, run_dir)
     if resolver is None:
         raise EvidenceLifecycleError("lifecycle package does not support model-facing operations")
-    return cast(LifecycleOperationResolver, resolver)
+    return resolver
 
 
 def _all_operation_actions(state: EvidenceLifecycleRunState) -> list[LifecycleOperationActionRecord]:

@@ -19,8 +19,7 @@ from aec_bench.meta_harness.evidence_lifecycle import (
 from aec_bench.meta_harness.evidence_lifecycle_local import EvidenceLifecycleControlTool
 from aec_bench.meta_harness.evidence_lifecycle_state import EvidenceLifecycleRunState
 from aec_bench.meta_harness.lifecycle_operation_store import resolve_lifecycle_operation_current_source
-from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.lifecycles import materialize_lifecycle_template
+from aec_bench.task_world_templates.lifecycles import materialize_lifecycle
 
 TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
 
@@ -32,8 +31,8 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _prepare(tmp_path: Path) -> tuple[Path, Path, str]:
-    package = materialize_lifecycle_template(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         tmp_path / "package",
         variant_id="tailwater_revision",
     )

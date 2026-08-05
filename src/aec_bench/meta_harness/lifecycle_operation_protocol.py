@@ -11,6 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from aec_bench.contracts.evidence_lifecycle import (
+    EvidenceCheckpointSpec,
+    EvidenceLifecycleSpec,
+    LifecycleOperationSpec,
+)
 from aec_bench.meta_harness.evidence_lifecycle_state import (
     CheckpointRunRecord,
     EvidenceLifecycleRunState,
@@ -20,11 +25,6 @@ from aec_bench.meta_harness.evidence_lifecycle_state import (
     LifecycleOperationRejection,
 )
 from aec_bench.meta_harness.evidence_request_protocol import EvidenceLifecycleError
-from aec_bench.task_world_templates.contracts import (
-    EvidenceCheckpointSpec,
-    EvidenceLifecycleSpec,
-    LifecycleOperationSpec,
-)
 
 _LIFECYCLE_OPERATION_PROTOCOL: dict[str, Any] = {
     "schema_version": "1",

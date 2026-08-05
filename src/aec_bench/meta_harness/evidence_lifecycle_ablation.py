@@ -45,14 +45,11 @@ from aec_bench.meta_harness.evidence_lifecycle_local import (
     run_local_evidence_lifecycle_session,
     validate_completed_persistent_lifecycle_recovery,
 )
-from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.lifecycles import (
     lifecycle_package_variant,
-    registered_lifecycle_smoke_environment,
-)
-from aec_bench.task_world_templates.materializer import (
-    materialize_template_lifecycle,
-    verify_template_lifecycle,
+    lifecycle_smoke_environment,
+    materialize_lifecycle,
+    verify_lifecycle,
 )
 
 __all__ = [
@@ -319,7 +316,7 @@ def run_lifecycle_ablation(
                 package_dir=package,
                 run_dir=run_dir,
                 model=trial.agent.model,
-                verifier=verify_template_lifecycle,
+                verifier=verify_lifecycle,
                 adapter_kind=trial.agent.adapter,
                 max_turns=max_turns,
                 process_id=f"process.lifecycle.{trial.trial_id}",
@@ -346,7 +343,7 @@ def run_lifecycle_ablation(
                     package_dir=package,
                     run_dir=run_dir,
                     model=trial.agent.model,
-                    verifier=verify_template_lifecycle,
+                    verifier=verify_lifecycle,
                     adapter_kind=trial.agent.adapter,
                     max_turns=max_turns,
                     process_id=f"process.lifecycle.{trial.trial_id}",
@@ -361,7 +358,7 @@ def run_lifecycle_ablation(
                     package_dir=package,
                     run_dir=run_dir,
                     model=trial.agent.model,
-                    verifier=verify_template_lifecycle,
+                    verifier=verify_lifecycle,
                     adapter_kind=trial.agent.adapter,
                     max_turns=max_turns,
                     process_id=f"process.lifecycle.{trial.trial_id}",
@@ -428,8 +425,8 @@ def _ensure_variant_package(manifest: LifecycleAblationManifest, trial: Lifecycl
     variant_id = trial.variant_id
     package = Path(manifest.output_root) / "packages" / variant_id
     if not package.exists():
-        materialize_template_lifecycle(
-            get_template(manifest.lifecycle_template_id),
+        materialize_lifecycle(
+            manifest.lifecycle_template_id,
             package,
             variant_id=variant_id,
         )
@@ -461,7 +458,7 @@ def _smoke_lifecycle_packages(packages: dict[str, Path]) -> None:
             template_id = template.get("template_id")
             if not isinstance(template_id, str):
                 raise ValueError(f"lifecycle package has no template identity: {variant_id}")
-            episode_environment = registered_lifecycle_smoke_environment(template_id, package)
+            episode_environment = lifecycle_smoke_environment(template_id, package)
             if episode_environment is None:
                 gold_path = package / "hidden" / "gold-submissions.json"
                 if not gold_path.is_file():
@@ -474,7 +471,7 @@ def _smoke_lifecycle_packages(packages: dict[str, Path]) -> None:
                 run_dir,
                 episode_environment=episode_environment,
             )
-            verification = verify_template_lifecycle(package, run_dir)
+            verification = verify_lifecycle(package, run_dir)
             if not verification.get("passed") or float(verification.get("reward", 0.0)) != 1.0:
                 raise ValueError(f"lifecycle package failed deterministic smoke verification: {variant_id}")
 
@@ -493,8 +490,8 @@ def _dry_run_smoke_error(
                 if planned.exists():
                     packages[variant_id] = planned
                     continue
-                packages[variant_id] = materialize_template_lifecycle(
-                    get_template(manifest.lifecycle_template_id),
+                packages[variant_id] = materialize_lifecycle(
+                    manifest.lifecycle_template_id,
                     temporary_root / variant_id,
                     variant_id=variant_id,
                 )

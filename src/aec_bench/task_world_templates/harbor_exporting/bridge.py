@@ -10,16 +10,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec, LifecycleTaskMetadata
 from aec_bench.task_world_templates.compiled_world import (
     CompiledLifecycleWorld,
     CompiledWorldEnvelope,
     build_compiled_world_envelope,
 )
-from aec_bench.task_world_templates.contracts import (
-    CompositeTaskWorldTemplate,
-    EvidenceLifecycleSpec,
-)
-from aec_bench.task_world_templates.lifecycles import registered_lifecycle_adapter
+from aec_bench.task_world_templates.lifecycles import lifecycle_definition
 
 from .constants import (
     ATTESTATION_FILENAME,
@@ -54,7 +51,7 @@ from .surfaces import (
 
 @dataclass(frozen=True)
 class ValidatedCompiledWorld:
-    template: CompositeTaskWorldTemplate
+    metadata: LifecycleTaskMetadata
     lifecycle: EvidenceLifecycleSpec
 
 
@@ -83,7 +80,6 @@ class _BridgeSource:
 
 def validate_harbor_lifecycle_semantics(lifecycle: EvidenceLifecycleSpec) -> None:
     """Reject lifecycle behavior that the explicit Harbor bridge cannot preserve."""
-    lifecycle = EvidenceLifecycleSpec.model_validate(lifecycle.model_dump(mode="json"))
     if any(checkpoint.conditional_evidence is not None for checkpoint in lifecycle.checkpoints):
         raise ValueError("Harbor lifecycle export does not support conditional evidence requests")
     previous_checkpoint_id: str | None = None
@@ -121,7 +117,7 @@ def load_bridge(environment_dir: Path) -> BridgeLoadResult:
     )
     authority_snapshots = _validate_harbor_authority(
         task_root=task_root,
-        template=source.compiled.template,
+        metadata=source.compiled.metadata,
         envelope=source.envelope,
         harbor=harbor_payload,
         runtime_wheel=runtime_snapshot.path,
@@ -145,27 +141,29 @@ def load_bridge(environment_dir: Path) -> BridgeLoadResult:
 
 def validate_compiled_world(compiled: CompiledLifecycleWorld) -> ValidatedCompiledWorld:
     package = Path(compiled.package_dir)
-    template = CompositeTaskWorldTemplate.model_validate(_read_json_object(package / "template.json"))
+    metadata = LifecycleTaskMetadata.model_validate(_read_json_object(package / "template.json"))
     lifecycle = EvidenceLifecycleSpec.model_validate(_read_json_object(package / "lifecycle.json"))
-    if template.evidence_lifecycle != lifecycle:
-        raise ValueError("compiled world template and lifecycle contracts do not match")
-    adapter = registered_lifecycle_adapter(compiled.envelope.template_id)
+    definition = lifecycle_definition(compiled.envelope.template_id)
+    if metadata != definition.metadata or lifecycle != definition.lifecycle:
+        raise ValueError("compiled world contracts do not match the current lifecycle task")
     rebuilt = build_compiled_world_envelope(
-        template=template,
-        adapter=adapter,
+        template_id=metadata.template_id,
         package_dir=package,
         requested_variant_id=compiled.envelope.variant_id,
         visibility=compiled.envelope.visibility,
     )
     if rebuilt != compiled.envelope:
         raise ValueError("compiled world envelope does not match the materialized package bytes")
-    return ValidatedCompiledWorld(template=template, lifecycle=lifecycle)
+    return ValidatedCompiledWorld(metadata=metadata, lifecycle=lifecycle)
 
 
-def validate_adapter_surface(envelope: CompiledWorldEnvelope) -> None:
+def validate_operation_surface(envelope: CompiledWorldEnvelope) -> None:
     if envelope.visibility != "public":
         raise ValueError("Harbor lifecycle export refuses non-public compiled worlds")
-    if "operations" not in envelope.adapter.capabilities or envelope.operation_protocol_sha256 is None:
+    if (
+        lifecycle_definition(envelope.template_id).operation_resolver is None
+        or envelope.operation_protocol_sha256 is None
+    ):
         raise ValueError("Harbor lifecycle export requires a content-pinned operation resolver")
 
 
@@ -302,7 +300,7 @@ def _load_bridge_source(*, task_root: Path, manifest: dict[str, Any]) -> _Bridge
     compiled = CompiledLifecycleWorld(package_dir=package_dir, envelope=envelope)
     validated = validate_compiled_world(compiled)
     validate_harbor_lifecycle_semantics(validated.lifecycle)
-    validate_adapter_surface(envelope)
+    validate_operation_surface(envelope)
     validate_source_identity(source=source, envelope=envelope)
     return _BridgeSource(
         envelope=envelope,
@@ -363,7 +361,7 @@ def _validate_bridge_agent_surface(
         initial_context=initial_context,
         instruction=instruction,
         dockerfile=dockerfile,
-        template=source.compiled.template,
+        metadata=source.compiled.metadata,
         lifecycle=source.compiled.lifecycle,
     )
     return instruction, dockerfile
@@ -389,7 +387,7 @@ def _validate_bridge_runtime(
 def _validate_harbor_authority(
     *,
     task_root: Path,
-    template: CompositeTaskWorldTemplate,
+    metadata: LifecycleTaskMetadata,
     envelope: CompiledWorldEnvelope,
     harbor: dict[str, Any],
     runtime_wheel: Path,
@@ -412,7 +410,7 @@ def _validate_harbor_authority(
         tomllib.loads(task_text)
     except (OSError, UnicodeError, tomllib.TOMLDecodeError) as exc:
         raise ValueError("Harbor task metadata is invalid") from exc
-    if task_text != task_toml_text(template=template, envelope=envelope):
+    if task_text != task_toml_text(metadata=metadata, envelope=envelope):
         raise ValueError("Harbor task security contract does not match the canonical lifecycle export")
 
     if harbor["test_script"] != "tests/test.sh":

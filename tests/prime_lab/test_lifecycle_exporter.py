@@ -23,8 +23,7 @@ from aec_bench.prime_lab.lifecycle_exporter import (
     PrimeLifecycleExportConfig,
     export_prime_lifecycle_environment,
 )
-from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.materializer import materialize_template_lifecycle
+from aec_bench.task_world_templates.lifecycles import materialize_lifecycle
 
 TEMPLATE_ID = "drainage-model-evidence-lifecycle-review"
 INTERACTION_TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
@@ -193,8 +192,8 @@ def test_local_lifecycle_environment_rejects_mixed_request_capabilities(tmp_path
 
 def test_local_lifecycle_environment_rejects_mixed_operation_capabilities(tmp_path: Path) -> None:
     legacy = _materialize(tmp_path / "legacy", PUBLIC_VARIANTS[0])
-    interaction = materialize_template_lifecycle(
-        get_template(INTERACTION_TEMPLATE_ID),
+    interaction = materialize_lifecycle(
+        INTERACTION_TEMPLATE_ID,
         tmp_path / "interaction",
         variant_id="tailwater_revision",
     )
@@ -441,8 +440,8 @@ def test_generated_lifecycle_rollout_exposes_conditional_evidence_only_for_capab
 def test_generated_lifecycle_rollout_executes_hydraulic_operation_with_public_schema(
     tmp_path: Path,
 ) -> None:
-    package = materialize_template_lifecycle(
-        get_template(INTERACTION_TEMPLATE_ID),
+    package = materialize_lifecycle(
+        INTERACTION_TEMPLATE_ID,
         tmp_path / "package",
         variant_id="tailwater_revision",
     )
@@ -689,14 +688,12 @@ def test_prime_export_lifecycle_cli_writes_local_only_manifest(tmp_path: Path) -
 
 
 def _materialize(path: Path, variant_id: str) -> Path:
-    return materialize_template_lifecycle(get_template(TEMPLATE_ID), path, variant_id=variant_id)
+    return materialize_lifecycle(TEMPLATE_ID, path, variant_id=variant_id)
 
 
 def _add_conditional_evidence(package: Path) -> None:
     lifecycle_path = package / "lifecycle.json"
-    template_path = package / "template.json"
     lifecycle = _read_json(lifecycle_path)
-    template = _read_json(template_path)
     checkpoint_id = lifecycle["checkpoints"][0]["checkpoint_id"]
     conditional = {
         "request_budget": 1,
@@ -710,9 +707,7 @@ def _add_conditional_evidence(package: Path) -> None:
         ],
     }
     lifecycle["checkpoints"][0]["conditional_evidence"] = conditional
-    template["evidence_lifecycle"]["checkpoints"][0]["conditional_evidence"] = conditional
     _write_json(lifecycle_path, lifecycle)
-    _write_json(template_path, template)
     _write_json(
         package / "hidden" / "evidence-request-resolutions.json",
         {

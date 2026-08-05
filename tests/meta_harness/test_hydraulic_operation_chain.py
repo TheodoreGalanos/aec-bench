@@ -15,12 +15,11 @@ from aec_bench.meta_harness.evidence_lifecycle import (
     prepare_evidence_checkpoint,
     submit_evidence_checkpoint,
 )
-from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.hydraulics import (
     build_hydraulic_run_request,
     execute_hydraulic_world,
 )
-from aec_bench.task_world_templates.lifecycles import materialize_lifecycle_template
+from aec_bench.task_world_templates.lifecycles import materialize_lifecycle
 
 TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
 SCENARIO_IDS = ("design-10yr", "major-100yr")
@@ -56,8 +55,8 @@ def _execute(
 
 
 def _prepare_baseline(tmp_path: Path, variant_id: str = "tailwater_revision") -> tuple[Path, Path]:
-    package = materialize_lifecycle_template(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         tmp_path / "package",
         variant_id=variant_id,
     )

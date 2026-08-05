@@ -21,6 +21,7 @@ import aec_bench.meta_harness.evidence_lifecycle as lifecycle_runtime
 import aec_bench.meta_harness.evidence_lifecycle_local as lifecycle_local_runtime
 import aec_bench.meta_harness.evidence_request_protocol as evidence_request_protocol_runtime
 import aec_bench.meta_harness.evidence_request_store as evidence_request_store_runtime
+from aec_bench.contracts.evidence_lifecycle import EvidenceCheckpointSpec, EvidenceLifecycleSpec
 from aec_bench.meta_harness.evidence_lifecycle import (
     EvidenceLifecycleError,
     branch_evidence_lifecycle,
@@ -60,7 +61,6 @@ from aec_bench.meta_harness.evidence_lifecycle_state import (
     EvidenceLifecycleRunState,
     LifecycleRunStatus,
 )
-from aec_bench.task_world_templates.contracts import EvidenceCheckpointSpec, EvidenceLifecycleSpec
 
 
 def test_lifecycle_contract_rejects_duplicate_ids_and_path_escape() -> None:

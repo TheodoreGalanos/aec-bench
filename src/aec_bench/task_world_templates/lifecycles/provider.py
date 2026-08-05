@@ -13,6 +13,11 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Protocol, TypeVar, cast, runtime_checkable
 
+from aec_bench.contracts.evidence_lifecycle import (
+    EvidenceLifecycleSpec,
+    LifecycleOperationSpec,
+    LifecycleTaskMetadata,
+)
 from aec_bench.meta_harness.evidence_lifecycle import evidence_lifecycle_package_identity
 from aec_bench.meta_harness.evidence_lifecycle_state import (
     LifecycleOperationActionRecord,
@@ -26,11 +31,6 @@ from aec_bench.meta_harness.lifecycle_operation_protocol import (
     LifecycleOperationResolver,
     LifecycleOperationSourceContext,
     lifecycle_operation_source_identity,
-)
-from aec_bench.task_world_templates.contracts import (
-    CompositeTaskWorldTemplate,
-    EvidenceLifecycleSpec,
-    LifecycleOperationSpec,
 )
 
 SEALED_LIFECYCLE_RECEIPT_FILENAME = "sealed-lifecycle.json"
@@ -348,11 +348,9 @@ def _validate_package_contract(
     try:
         if require_receipt:
             _read_validated_receipt(package)
-        template = CompositeTaskWorldTemplate.model_validate(_read_json(package / "template.json"))
-        lifecycle = EvidenceLifecycleSpec.model_validate(_read_json(package / "lifecycle.json"))
-        if template.evidence_lifecycle != lifecycle:
-            raise ValueError("lifecycle mismatch")
-        if template.template_id in public_template_ids:
+        metadata = LifecycleTaskMetadata.model_validate(_read_json(package / "template.json"))
+        EvidenceLifecycleSpec.model_validate(_read_json(package / "lifecycle.json"))
+        if metadata.template_id in public_template_ids:
             raise SealedLifecycleProviderError("sealed_provider_public_template_collision")
         identity_before_validation = evidence_lifecycle_package_identity(package)
         tree_before_validation = _sealed_package_tree_sha256(package)

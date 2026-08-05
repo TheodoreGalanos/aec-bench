@@ -1,5 +1,5 @@
-# ABOUTME: Registry namespace for runnable evidence-lifecycle companion packages.
-# ABOUTME: Keeps task-specific packet builders separate from the generic lifecycle runtime.
+# ABOUTME: Direct composition for the three current evidence-lifecycle tasks.
+# ABOUTME: Resolves task-owned callables without string entrypoints or capability adapters.
 
 from __future__ import annotations
 
@@ -7,21 +7,24 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache
-from importlib import import_module
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
+from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec, LifecycleTaskMetadata
 from aec_bench.meta_harness.evidence_lifecycle import validate_lifecycle_verification
 from aec_bench.meta_harness.evidence_lifecycle_episode import LifecycleEpisodeEnvironment
-from aec_bench.task_world_templates.compiled_world import (
-    LifecycleWorldAdapter,
-    OperationLifecycleFunctions,
-    VariantLifecycleFunctions,
-    source_tree_artifact_sha256,
+from aec_bench.meta_harness.lifecycle_operation_protocol import LifecycleOperationResolver
+from aec_bench.task_world_templates.compiled_world import source_tree_artifact_sha256
+from aec_bench.task_world_templates.lifecycles import (
+    ssc03_drainage_model,
+    ssc03_drainage_variants,
+    ssc03_hydraulic_interaction,
+    ssc03_hydraulic_interaction_smoke,
+    ssc03_hydraulic_interaction_variants,
+    ssc03_hydraulic_intervention,
+    ssc03_hydraulic_intervention_smoke,
 )
-from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate, EvidenceLifecycleSpec
 from aec_bench.task_world_templates.lifecycles.provider import (
-    SEALED_LIFECYCLE_RECEIPT_FILENAME,
     SealedLifecycleMount,
     SealedLifecycleProvider,
     SealedLifecycleProviderError,
@@ -29,320 +32,201 @@ from aec_bench.task_world_templates.lifecycles.provider import (
     _materialize_sealed_lifecycle,
     active_sealed_lifecycle_mount,
     is_sealed_lifecycle_package,
-    sealed_lifecycle_mount_active,
-    sealed_lifecycle_provider_protocol_identity,
 )
 
-__all__ = [
-    "SEALED_LIFECYCLE_RECEIPT_FILENAME",
-    "LifecycleTemplateRegistration",
-    "SealedLifecycleMount",
-    "SealedLifecycleProvider",
-    "SealedLifecycleProviderError",
-    "bind_sealed_lifecycle",
-    "is_sealed_lifecycle_package",
-    "lifecycle_operation_resolver",
-    "lifecycle_package_variant",
-    "lifecycle_variant_ids",
-    "lifecycle_variant_metadata",
-    "materialize_lifecycle_template",
-    "materialize_sealed_lifecycle",
-    "registered_lifecycle_adapter",
-    "registered_lifecycle_operation_resolver",
-    "registered_lifecycle_smoke_environment",
-    "registered_lifecycle_template_ids",
-    "registered_lifecycle_verifier",
-    "sealed_lifecycle_mount_active",
-    "sealed_lifecycle_provider_protocol_identity",
-    "verify_lifecycle_template",
-]
+
+@dataclass(frozen=True, slots=True)
+class _LifecycleDefinition:
+    metadata: LifecycleTaskMetadata
+    lifecycle: EvidenceLifecycleSpec
+    materializer: Callable[..., Path]
+    verifier: Callable[[Path, Path], dict[str, Any]]
+    source_paths: tuple[Path, ...]
+    package_validator: Callable[[Path], dict[str, Any]] | None = None
+    variant_ids: Callable[[], tuple[str, ...]] | None = None
+    variant_metadata: Callable[[str], Any] | None = None
+    operation_resolver: Callable[[Path, Path], LifecycleOperationResolver] | None = None
+    smoke_environment: Callable[[Path], LifecycleEpisodeEnvironment] | None = None
 
 
-@dataclass(frozen=True)
-class LifecycleTemplateRegistration:
-    template_id: str
-    module_name: str
-    materializer_name: str
-    verifier_name: str
-    variant_module_name: str | None = None
-    variant_ids_name: str | None = None
-    variant_get_name: str | None = None
-    variant_metadata_name: str | None = None
-    operation_resolver_name: str | None = None
-    smoke_module_name: str | None = None
-    smoke_environment_name: str | None = None
-
-
-_LIFECYCLES = {
-    registration.template_id: registration
-    for registration in [
-        LifecycleTemplateRegistration(
-            template_id="drainage-model-evidence-lifecycle-review",
-            module_name="aec_bench.task_world_templates.lifecycles.ssc03_drainage_model",
-            materializer_name="materialize_ssc03_evidence_lifecycle",
-            verifier_name="verify_ssc03_evidence_lifecycle",
-            variant_module_name="aec_bench.task_world_templates.lifecycles.ssc03_drainage_variants",
-            variant_ids_name="list_ssc03_lifecycle_variant_ids",
-            variant_get_name="get_ssc03_lifecycle_variant",
-            variant_metadata_name="validated_ssc03_package_variant",
+_DEFINITIONS = {
+    definition.metadata.template_id: definition
+    for definition in (
+        _LifecycleDefinition(
+            metadata=ssc03_drainage_model.METADATA,
+            lifecycle=ssc03_drainage_model.LIFECYCLE,
+            materializer=ssc03_drainage_model.materialize_ssc03_evidence_lifecycle,
+            verifier=ssc03_drainage_model.verify_ssc03_evidence_lifecycle,
+            source_paths=(
+                Path(ssc03_drainage_model.__file__),
+                Path(ssc03_drainage_variants.__file__),
+            ),
+            package_validator=ssc03_drainage_model.validated_ssc03_package_variant,
+            variant_ids=ssc03_drainage_variants.list_ssc03_lifecycle_variant_ids,
+            variant_metadata=ssc03_drainage_variants.get_ssc03_lifecycle_variant,
         ),
-        LifecycleTemplateRegistration(
-            template_id="hydraulic-interaction-lifecycle-review",
-            module_name="aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_interaction",
-            materializer_name="materialize_ssc03_hydraulic_interaction_lifecycle",
-            verifier_name="verify_ssc03_hydraulic_interaction_lifecycle",
-            variant_module_name=("aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_interaction_variants"),
-            variant_ids_name="list_ssc03_hydraulic_interaction_variant_ids",
-            variant_get_name="get_ssc03_hydraulic_interaction_variant",
-            variant_metadata_name="validated_ssc03_hydraulic_interaction_variant",
-            operation_resolver_name="build_ssc03_hydraulic_operation_resolver",
-            smoke_module_name=("aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_interaction_smoke"),
-            smoke_environment_name="build_ssc03_hydraulic_smoke_environment",
+        _LifecycleDefinition(
+            metadata=ssc03_hydraulic_interaction.METADATA,
+            lifecycle=ssc03_hydraulic_interaction.LIFECYCLE,
+            materializer=ssc03_hydraulic_interaction.materialize_ssc03_hydraulic_interaction_lifecycle,
+            verifier=ssc03_hydraulic_interaction.verify_ssc03_hydraulic_interaction_lifecycle,
+            source_paths=(
+                Path(ssc03_hydraulic_interaction.__file__),
+                Path(ssc03_hydraulic_interaction_variants.__file__),
+                Path(ssc03_hydraulic_interaction_smoke.__file__),
+            ),
+            package_validator=ssc03_hydraulic_interaction.validated_ssc03_hydraulic_interaction_variant,
+            variant_ids=ssc03_hydraulic_interaction_variants.list_ssc03_hydraulic_interaction_variant_ids,
+            variant_metadata=ssc03_hydraulic_interaction_variants.get_ssc03_hydraulic_interaction_variant,
+            operation_resolver=ssc03_hydraulic_interaction.build_ssc03_hydraulic_operation_resolver,
+            smoke_environment=ssc03_hydraulic_interaction_smoke.build_ssc03_hydraulic_smoke_environment,
         ),
-        LifecycleTemplateRegistration(
-            template_id="hydraulic-design-response-lifecycle-review",
-            module_name="aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_intervention",
-            materializer_name="materialize_ssc03_hydraulic_intervention_lifecycle",
-            verifier_name="verify_ssc03_hydraulic_intervention_lifecycle",
-            operation_resolver_name="build_ssc03_hydraulic_intervention_resolver",
-            smoke_module_name=("aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_intervention_smoke"),
-            smoke_environment_name="build_ssc03_hydraulic_intervention_smoke_environment",
+        _LifecycleDefinition(
+            metadata=ssc03_hydraulic_intervention.METADATA,
+            lifecycle=ssc03_hydraulic_intervention.LIFECYCLE,
+            materializer=ssc03_hydraulic_intervention.materialize_ssc03_hydraulic_intervention_lifecycle,
+            verifier=ssc03_hydraulic_intervention.verify_ssc03_hydraulic_intervention_lifecycle,
+            source_paths=(
+                Path(ssc03_hydraulic_intervention.__file__),
+                Path(ssc03_hydraulic_intervention_smoke.__file__),
+            ),
+            operation_resolver=ssc03_hydraulic_intervention.build_ssc03_hydraulic_intervention_resolver,
+            smoke_environment=ssc03_hydraulic_intervention_smoke.build_ssc03_hydraulic_intervention_smoke_environment,
         ),
-    ]
+    )
 }
 
 
-def registered_lifecycle_template_ids() -> set[str]:
-    """Return the template IDs with executable lifecycle registrations."""
-    return set(_LIFECYCLES)
+def lifecycle_template_ids() -> set[str]:
+    return set(_DEFINITIONS)
+
+
+def lifecycle_definition(template_id: str) -> _LifecycleDefinition:
+    try:
+        return _DEFINITIONS[template_id]
+    except KeyError as exc:
+        known = ", ".join(sorted(_DEFINITIONS))
+        raise KeyError(f"No lifecycle task for {template_id!r}. Known: {known}") from exc
 
 
 @cache
-def registered_lifecycle_adapter(template_id: str) -> LifecycleWorldAdapter:
-    """Resolve one typed public lifecycle adapter from the existing registration."""
-    registration = _entry(template_id)
-    module = import_module(registration.module_name)
-    variant_module = import_module(registration.variant_module_name or registration.module_name)
-    smoke_module = import_module(registration.smoke_module_name or registration.module_name)
-    source_paths = {
-        Path(__file__),
-        Path(cast(str, module.__file__)),
-        Path(cast(str, variant_module.__file__)),
-        Path(cast(str, smoke_module.__file__)),
-    }
-    capabilities: list[VariantLifecycleFunctions | OperationLifecycleFunctions] = []
-    if registration.variant_metadata_name is not None:
-        if registration.variant_ids_name is None or registration.variant_get_name is None:
-            raise ValueError("lifecycle variant registration is incomplete")
-        capabilities.append(
-            VariantLifecycleFunctions(
-                package_validator=cast(
-                    Callable[[Path], dict[str, Any]],
-                    getattr(module, registration.variant_metadata_name),
-                ),
-                variant_ids=cast(Callable[[], tuple[str, ...]], getattr(variant_module, registration.variant_ids_name)),
-                variant_metadata=cast(Callable[[str], Any], getattr(variant_module, registration.variant_get_name)),
-            )
-        )
-    if registration.operation_resolver_name is not None:
-        if registration.smoke_environment_name is None:
-            raise ValueError("lifecycle operation registration is incomplete")
-        capabilities.append(
-            OperationLifecycleFunctions(
-                resolver=cast(Callable[[Path, Path], Any], getattr(module, registration.operation_resolver_name)),
-                smoke_environment=cast(
-                    Callable[[Path], LifecycleEpisodeEnvironment],
-                    getattr(smoke_module, registration.smoke_environment_name),
-                ),
-            )
-        )
-    return LifecycleWorldAdapter(
-        template_id=registration.template_id,
-        entry_point=f"{registration.module_name}:{registration.materializer_name}",
-        artifact_sha256=source_tree_artifact_sha256(tuple(sorted(source_paths))),
-        materializer_entrypoint=cast(Callable[..., Path], getattr(module, registration.materializer_name)),
-        verifier_entrypoint=cast(
-            Callable[[Path, Path], dict[str, Any]],
-            getattr(module, registration.verifier_name),
-        ),
-        capabilities=tuple(capabilities),
-    )
+def lifecycle_executable_artifact_sha256(template_id: str) -> str:
+    return source_tree_artifact_sha256(lifecycle_definition(template_id).source_paths)
+
+
+def lifecycle_variant_ids(template_id: str) -> tuple[str, ...]:
+    variants = lifecycle_definition(template_id).variant_ids
+    return () if variants is None else tuple(variants())
+
+
+def lifecycle_variant_metadata(template_id: str, variant_id: str) -> dict[str, Any]:
+    resolver = lifecycle_definition(template_id).variant_metadata
+    if resolver is None:
+        raise KeyError(f"lifecycle task {template_id!r} does not declare variant metadata")
+    value = resolver(variant_id)
+    if hasattr(value, "model_dump"):
+        value = value.model_dump(mode="json")
+    if not isinstance(value, dict):
+        raise TypeError("lifecycle variant metadata must be a mapping")
+    return value
+
+
+def lifecycle_verifier(template_id: str) -> Callable[[Path, Path], dict[str, Any]]:
+    return lifecycle_definition(template_id).verifier
+
+
+def lifecycle_smoke_environment(template_id: str, package_dir: Path) -> LifecycleEpisodeEnvironment | None:
+    factory = lifecycle_definition(template_id).smoke_environment
+    return None if factory is None else factory(Path(package_dir))
+
+
+def lifecycle_package_variant(package_dir: Path) -> dict[str, Any] | None:
+    package = Path(package_dir)
+    if is_sealed_lifecycle_package(package):
+        return None
+    metadata_path = package / "template.json"
+    if not metadata_path.is_file():
+        return None
+    metadata = LifecycleTaskMetadata.model_validate(_read_json(metadata_path))
+    try:
+        validator = lifecycle_definition(metadata.template_id).package_validator
+    except KeyError:
+        return None
+    return None if validator is None else validator(package)
+
+
+def materialize_lifecycle(
+    template_id: str,
+    output_dir: Path,
+    *,
+    variant_id: str | None = None,
+) -> Path:
+    definition = lifecycle_definition(template_id)
+    variants = lifecycle_variant_ids(template_id)
+    if definition.variant_ids is None:
+        if variant_id is not None:
+            raise ValueError(f"lifecycle task {template_id!r} does not support variants")
+        return Path(definition.materializer(Path(output_dir)))
+    if variant_id is not None and variant_id not in variants:
+        known = ", ".join(variants)
+        raise ValueError(f"unknown lifecycle variant for {template_id}: {variant_id}. Known: {known}")
+    return Path(definition.materializer(Path(output_dir), variant_id=variant_id))
+
+
+def lifecycle_operation_resolver(package_dir: Path, run_dir: Path) -> LifecycleOperationResolver | None:
+    package = Path(package_dir)
+    if is_sealed_lifecycle_package(package):
+        return active_sealed_lifecycle_mount(package).build_operation_resolver(Path(run_dir))
+    metadata = LifecycleTaskMetadata.model_validate(_read_json(package / "template.json"))
+    factory = lifecycle_definition(metadata.template_id).operation_resolver
+    return None if factory is None else factory(package, Path(run_dir))
+
+
+def verify_lifecycle(package_dir: Path, run_dir: Path) -> dict[str, Any]:
+    package = Path(package_dir)
+    if is_sealed_lifecycle_package(package):
+        result = active_sealed_lifecycle_mount(package).verify(Path(run_dir))
+        validated: dict[str, Any] | None = None
+        valid = False
+        try:
+            validated = validate_lifecycle_verification(result)
+            metadata = LifecycleTaskMetadata.model_validate(_read_json(package / "template.json"))
+            lifecycle = EvidenceLifecycleSpec.model_validate(_read_json(package / "lifecycle.json"))
+            if validated["lifecycle_id"] != lifecycle.lifecycle_id or validated.get("template_id") not in {
+                None,
+                metadata.template_id,
+            }:
+                raise ValueError("sealed verifier identity mismatch")
+            valid = True
+        except Exception:
+            pass
+        if not valid or validated is None:
+            raise SealedLifecycleProviderError("sealed_provider_verifier_result_invalid")
+        return validated
+
+    metadata = LifecycleTaskMetadata.model_validate(_read_json(package / "template.json"))
+    lifecycle = EvidenceLifecycleSpec.model_validate(_read_json(package / "lifecycle.json"))
+    definition = lifecycle_definition(metadata.template_id)
+    if metadata != definition.metadata or lifecycle != definition.lifecycle:
+        raise ValueError("materialized lifecycle contracts do not match the current task definition")
+    return validate_lifecycle_verification(definition.verifier(package, Path(run_dir)))
 
 
 def materialize_sealed_lifecycle(
     provider: SealedLifecycleProvider,
     output_dir: Path,
 ) -> SealedLifecycleMount:
-    """Materialize one external holdout without adding it to any public registry."""
-    return _materialize_sealed_lifecycle(
-        provider,
-        output_dir,
-        public_template_ids=frozenset(_LIFECYCLES),
-    )
+    return _materialize_sealed_lifecycle(provider, output_dir, public_template_ids=frozenset(_DEFINITIONS))
 
 
 def bind_sealed_lifecycle(
     provider: SealedLifecycleProvider,
     package_dir: Path,
 ) -> SealedLifecycleMount:
-    """Rebind one existing sealed package for an explicit recovery call context."""
-    return _bind_sealed_lifecycle(
-        provider,
-        package_dir,
-        public_template_ids=frozenset(_LIFECYCLES),
-    )
-
-
-def lifecycle_variant_ids(template_id: str) -> tuple[str, ...]:
-    """Return declared materialization variants without exposing hidden task answers."""
-    registration = _entry(template_id)
-    if registration.variant_ids_name is None:
-        return ()
-    module = import_module(registration.variant_module_name or registration.module_name)
-    return tuple(getattr(module, registration.variant_ids_name)())
-
-
-def lifecycle_variant_metadata(template_id: str, variant_id: str) -> dict[str, Any]:
-    """Return validated host-side metadata for one registered public variant."""
-    registration = _entry(template_id)
-    if registration.variant_get_name is None:
-        raise KeyError(f"lifecycle template {template_id!r} does not declare variant metadata")
-    module = import_module(registration.variant_module_name or registration.module_name)
-    variant = getattr(module, registration.variant_get_name)(variant_id)
-    return cast(dict[str, Any], variant.model_dump(mode="json"))
-
-
-def registered_lifecycle_verifier(template_id: str) -> Callable[[Path, Path], dict[str, Any]]:
-    """Resolve the task-specific verifier that performs lifecycle scoring."""
-    registration = _entry(template_id)
-    return cast(
-        Callable[[Path, Path], dict[str, Any]],
-        getattr(import_module(registration.module_name), registration.verifier_name),
-    )
-
-
-def registered_lifecycle_operation_resolver(template_id: str) -> Callable[[Path, Path], Any] | None:
-    """Resolve an optional task-owned lifecycle operation resolver factory."""
-    registration = _entry(template_id)
-    if registration.operation_resolver_name is None:
-        return None
-    return cast(
-        Callable[[Path, Path], Any],
-        getattr(import_module(registration.module_name), registration.operation_resolver_name),
-    )
-
-
-def registered_lifecycle_smoke_environment(
-    template_id: str,
-    package_dir: Path,
-) -> LifecycleEpisodeEnvironment | None:
-    """Build an optional task-owned deterministic environment for campaign preflight."""
-    registration = _entry(template_id)
-    if registration.smoke_environment_name is None:
-        return None
-    module = import_module(registration.smoke_module_name or registration.module_name)
-    factory = cast(
-        Callable[[Path], LifecycleEpisodeEnvironment],
-        getattr(module, registration.smoke_environment_name),
-    )
-    return factory(Path(package_dir))
-
-
-def lifecycle_package_variant(package_dir: Path) -> dict[str, Any] | None:
-    """Validate and return task-owned variant metadata when a package declares it."""
-    if is_sealed_lifecycle_package(package_dir):
-        return None
-    template_path = Path(package_dir) / "template.json"
-    if not template_path.is_file():
-        return None
-    payload = json.loads(template_path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict) or not isinstance(payload.get("template_id"), str):
-        raise ValueError(f"invalid lifecycle package template identity: {template_path}")
-    try:
-        registration = _entry(payload["template_id"])
-    except KeyError:
-        return None
-    if registration.variant_metadata_name is None:
-        return None
-    validator = getattr(import_module(registration.module_name), registration.variant_metadata_name)
-    return cast(dict[str, Any], validator(Path(package_dir)))
-
-
-def materialize_lifecycle_template(
-    template: CompositeTaskWorldTemplate,
-    output_dir: Path,
-    *,
-    variant_id: str | None = None,
-) -> Path:
-    """Dispatch lifecycle materialisation from the exact validated template contract."""
-    if template.evidence_lifecycle is None:
-        raise ValueError(f"template {template.template_id!r} does not define an evidence lifecycle")
-    registration = _entry(template.template_id)
-    materializer = cast(
-        Callable[..., Path], getattr(import_module(registration.module_name), registration.materializer_name)
-    )
-    if registration.variant_ids_name is None:
-        if variant_id is not None:
-            raise ValueError(f"lifecycle template {template.template_id!r} does not support variants")
-        return materializer(Path(output_dir), template=template)
-    return materializer(Path(output_dir), template=template, variant_id=variant_id)
-
-
-def lifecycle_operation_resolver(package_dir: Path, run_dir: Path) -> Any | None:
-    """Resolve operations from an exact sealed mount or the public registry."""
-    package = Path(package_dir)
-    if is_sealed_lifecycle_package(package):
-        return active_sealed_lifecycle_mount(package).build_operation_resolver(Path(run_dir))
-    template = _read_json(package / "template.json")
-    template_id = template.get("template_id")
-    if not isinstance(template_id, str):
-        raise ValueError("lifecycle package template identity is invalid")
-    factory = registered_lifecycle_operation_resolver(template_id)
-    return None if factory is None else factory(package, Path(run_dir))
-
-
-def verify_lifecycle_template(package_dir: Path, run_dir: Path) -> dict[str, Any]:
-    """Validate package identity, then dispatch through the registered task verifier."""
-    if is_sealed_lifecycle_package(package_dir):
-        result = active_sealed_lifecycle_mount(package_dir).verify(Path(run_dir))
-        invalid_result = False
-        validated: dict[str, Any] | None = None
-        try:
-            validated = validate_lifecycle_verification(result)
-            template_payload = _read_json(Path(package_dir) / "template.json")
-            lifecycle = EvidenceLifecycleSpec.model_validate(_read_json(Path(package_dir) / "lifecycle.json"))
-            if validated["lifecycle_id"] != lifecycle.lifecycle_id or validated.get("template_id") not in {
-                None,
-                template_payload.get("template_id"),
-            }:
-                raise ValueError("sealed verifier identity mismatch")
-        except Exception:
-            invalid_result = True
-        if invalid_result or validated is None:
-            raise SealedLifecycleProviderError("sealed_provider_verifier_result_invalid")
-        return validated
-    template_path = Path(package_dir) / "template.json"
-    template = CompositeTaskWorldTemplate.model_validate(_read_json(template_path))
-    if template.evidence_lifecycle is None:
-        raise ValueError(f"template {template.template_id!r} does not define an evidence lifecycle")
-    lifecycle = EvidenceLifecycleSpec.model_validate(_read_json(Path(package_dir) / "lifecycle.json"))
-    if lifecycle != template.evidence_lifecycle:
-        raise ValueError("materialized lifecycle contract does not match template.json")
-    verifier = registered_lifecycle_verifier(template.template_id)
-    return validate_lifecycle_verification(verifier(Path(package_dir), Path(run_dir)))
-
-
-def _entry(template_id: str) -> LifecycleTemplateRegistration:
-    try:
-        return _LIFECYCLES[template_id]
-    except KeyError as exc:
-        known = ", ".join(sorted(_LIFECYCLES))
-        raise KeyError(f"No lifecycle package builder for {template_id!r}. Known: {known}") from exc
+    return _bind_sealed_lifecycle(provider, package_dir, public_template_ids=frozenset(_DEFINITIONS))
 
 
 def _read_json(path: Path) -> dict[str, Any]:
-    import json
-
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"expected JSON object in {path}")

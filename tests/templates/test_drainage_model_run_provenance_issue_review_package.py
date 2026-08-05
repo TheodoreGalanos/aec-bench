@@ -19,7 +19,6 @@ from aec_bench.generation.scaffolder import scaffold_task_instance
 from aec_bench.meta_harness.applicability import profile_task_applicability
 from aec_bench.meta_harness.declared_task_surface import project_declared_task_surface
 from aec_bench.meta_harness.kernel_catalogue import default_kernel_registry
-from aec_bench.task_world_templates.catalogue import get_template as get_composite_template
 from aec_bench.tasks.loader import load_task_definition
 from aec_bench.templates.contracts import TemplateConfig
 from aec_bench.templates.registry import discover_templates, load_engine_module, load_template
@@ -261,22 +260,14 @@ def test_checked_stage1_program_recovery_pair_is_distinct_synthetic_long_horizon
         "stale_catchment_revision",
     ]
     assert len({payload["instance_name"] for payload in instance_payloads}) == 2
-    assert [payload["template_id"] for payload in world_payloads] == [
-        "drainage-model-run-provenance-issue-review-package",
-        "drainage-model-run-provenance-issue-review-package",
-    ]
+    assert all("template_id" not in payload for payload in world_payloads)
     test_scripts = tuple((task_dir / "tests" / "test.sh").read_text(encoding="utf-8") for task_dir in task_dirs)
     assert all('python3 "$SCRIPT_DIR/verify.py"' in script for script in test_scripts)
     assert all("/workspace/tests/verify.py" not in script for script in test_scripts)
     assert all("python3 /tests/verify.py" not in script for script in test_scripts)
-    topology_counts = [
-        (len(payload["stages"]), len(payload["handoffs"]), len(payload["branch_decisions"]))
-        for payload in world_payloads
-    ]
-    assert topology_counts == [
-        (5, 8, 4),
-        (5, 8, 4),
-    ]
+    assert all("stages" not in payload for payload in world_payloads)
+    assert all("handoffs" not in payload for payload in world_payloads)
+    assert all("branch_decisions" not in payload for payload in world_payloads)
 
     scores = tuple(
         (
@@ -288,33 +279,8 @@ def test_checked_stage1_program_recovery_pair_is_distinct_synthetic_long_horizon
     assert scores == ((0.31, 1.0), (0.21, 1.0))
 
 
-def test_composite_catalogue_models_the_temporal_provenance_chain() -> None:
-    template = get_composite_template("drainage-model-run-provenance-issue-review-package")
-
-    assert [stage.id for stage in template.stages] == [
-        "source_inventory",
-        "input_authority",
-        "run_provenance",
-        "claim_propagation",
-        "closure_decision",
-    ]
-    template_refs = {ref for stage in template.stages for ref in stage.template_refs}
-    assert "swmm-hec-report-source-policy-package" in template_refs
-    assert "detention-outlet-hgl-package" in template_refs
-    assert {handoff.id for handoff in template.handoffs}.issuperset(
-        {
-            "governing_input_set",
-            "run_applicability",
-            "report_applicability",
-            "design_claim_support",
-            "readiness_decision",
-        }
-    )
-
-
-def test_generated_world_preserves_declared_provenance_topology(tmp_path: Path) -> None:
+def test_generated_world_is_an_opaque_atomic_task(tmp_path: Path) -> None:
     instance_dir, _ground_truth = _scaffold_variant(tmp_path, "downstream_memo_stale_report")
-    template = get_composite_template("drainage-model-run-provenance-issue-review-package")
 
     world_payload = json.loads((instance_dir / "world.json").read_text(encoding="utf-8"))
     task = load_task_definition(instance_dir, tmp_path)
@@ -325,30 +291,12 @@ def test_generated_world_preserves_declared_provenance_topology(tmp_path: Path) 
         registry=default_kernel_registry(),
     )
 
-    assert world_payload["template_id"] == template.template_id
-    assert world_payload["pattern"] == template.pattern
-    assert world_payload["stages"] == [stage.model_dump(mode="json") for stage in template.stages]
-    assert world_payload["handoffs"] == [
-        handoff.model_dump(
-            mode="json",
-            include={"id", "description", "unit", "producer_stage", "consumer_stages"},
-        )
-        for handoff in template.handoffs
-    ]
-    assert world_payload["branch_decisions"] == [
-        decision.model_dump(
-            mode="json",
-            include={"id", "description", "allowed", "evidence_key"},
-        )
-        for decision in template.branch_decisions
-    ]
-    assert all("example_value" not in handoff for handoff in world_payload["handoffs"])
-    assert all("selected_example" not in decision for decision in world_payload["branch_decisions"])
-    assert surface.topology_basis == "stage_handoff_graph"
-    assert surface.canonical_nodes == tuple(sorted(stage.id for stage in template.stages))
-    assert surface.branch_count == len(template.branch_decisions)
-    assert applicability.descriptor.stage_pattern == "fork_join"
-    assert applicability.descriptor.branching_characteristic == "conditional"
+    assert set(world_payload) == {"world_id", "name", "task_unit", "logic_profile", "operation_profile"}
+    assert surface.topology_basis == "opaque_atomic"
+    assert surface.canonical_nodes == ("task",)
+    assert surface.branch_count == 0
+    assert applicability.descriptor.stage_pattern == "opaque_atomic"
+    assert applicability.descriptor.branching_characteristic == "none"
 
 
 def test_parameters_vary_across_seeds() -> None:

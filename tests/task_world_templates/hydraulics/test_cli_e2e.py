@@ -24,10 +24,10 @@ def _run_cli(*args: str, cwd: Path) -> dict[str, Any]:
     return cast(dict[str, Any], json.loads(completed.stdout))
 
 
-def _run_composite_cli(*args: str, cwd: Path) -> dict[str, Any]:
+def _run_lifecycle_cli(*args: str, cwd: Path) -> dict[str, Any]:
     executable = Path(sys.executable).parent / "aec-bench"
     completed = subprocess.run(
-        [str(executable), "--json", "task", "composite-template", *args],
+        [str(executable), "--json", "task", "lifecycle", *args],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -71,13 +71,13 @@ def test_installed_cli_materializes_runs_and_verifies_public_world(tmp_path: Pat
 def test_installed_cli_lists_and_materializes_hydraulic_interaction_variant(tmp_path: Path) -> None:
     package = tmp_path / "interaction-package"
 
-    listed = _run_composite_cli(
-        "list-lifecycle-variants",
+    listed = _run_lifecycle_cli(
+        "list-variants",
         "hydraulic-interaction-lifecycle-review",
         cwd=tmp_path,
     )
-    materialized = _run_composite_cli(
-        "materialize-lifecycle",
+    materialized = _run_lifecycle_cli(
+        "materialize",
         "hydraulic-interaction-lifecycle-review",
         "--variant",
         "major_idf_revision",

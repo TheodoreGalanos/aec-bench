@@ -24,15 +24,14 @@ from aec_bench.meta_harness.evidence_lifecycle_local import (
     run_local_evidence_lifecycle_fresh_context,
     run_local_evidence_lifecycle_session,
 )
-from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.lifecycles import materialize_lifecycle_template
+from aec_bench.task_world_templates.lifecycles import materialize_lifecycle
 
 TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
 
 
 def _interaction_package(path: Path) -> Path:
-    return materialize_lifecycle_template(
-        get_template(TEMPLATE_ID),
+    return materialize_lifecycle(
+        TEMPLATE_ID,
         path,
         variant_id="tailwater_revision",
     )

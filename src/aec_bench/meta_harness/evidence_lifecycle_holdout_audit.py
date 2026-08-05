@@ -29,7 +29,7 @@ from aec_bench.meta_harness.evidence_lifecycle_transfer import (
     LifecycleTransferEvaluationSpec,
     build_sealed_lifecycle_transfer_evaluation,
 )
-from aec_bench.task_world_templates.lifecycles import (
+from aec_bench.task_world_templates.lifecycles.provider import (
     SealedLifecycleMount,
     sealed_lifecycle_provider_protocol_identity,
 )

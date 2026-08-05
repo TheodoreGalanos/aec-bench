@@ -19,52 +19,32 @@ from aec_bench.meta_harness.evidence_lifecycle import (
     submit_evidence_checkpoint,
 )
 from aec_bench.meta_harness.evidence_lifecycle_local import run_local_evidence_lifecycle_session
-from aec_bench.meta_harness.logic_profile import evaluate_logic_profile
-from aec_bench.task_world_templates.catalogue import get_template, list_templates
-from aec_bench.task_world_templates.lifecycles import registered_lifecycle_template_ids
+from aec_bench.task_world_templates.lifecycles import lifecycle_definition, lifecycle_template_ids
 from aec_bench.task_world_templates.lifecycles.ssc03_drainage_model import (
-    GATE_IDS,
     materialize_ssc03_evidence_lifecycle,
     verify_ssc03_evidence_lifecycle,
 )
-from aec_bench.task_world_templates.materializer import materialize_template_lifecycle
 from tests.support.lifecycle_episode import deterministic_episode_environment
 
 
-def test_ssc03_lifecycle_is_additive_to_single_episode_template() -> None:
-    single_episode = get_template("drainage-model-run-provenance-issue-review-package")
-    lifecycle = get_template("drainage-model-evidence-lifecycle-review")
+def test_ssc03_lifecycle_definition_is_owned_by_the_task() -> None:
+    definition = lifecycle_definition("drainage-model-evidence-lifecycle-review")
 
-    assert single_episode.evidence_lifecycle is None
-    assert lifecycle.evidence_lifecycle is not None
-    assert [checkpoint.checkpoint_id for checkpoint in lifecycle.evidence_lifecycle.checkpoints] == [
+    assert definition.metadata.discipline == "civil"
+    assert [checkpoint.checkpoint_id for checkpoint in definition.lifecycle.checkpoints] == [
         "initial_review",
         "response_review",
         "closeout_review",
     ]
-    assert lifecycle.world_id != single_episode.world_id
+    assert definition.lifecycle.world_id == ("aec.task_world.composite.drainage-model-evidence-lifecycle-review")
 
 
 def test_every_lifecycle_template_has_one_executable_registration() -> None:
-    declared = {template.template_id for template in list_templates() if template.evidence_lifecycle is not None}
-
-    assert registered_lifecycle_template_ids() == declared
-
-
-def test_ssc03_declared_verifier_gates_match_executable_gates() -> None:
-    template = get_template("drainage-model-evidence-lifecycle-review")
-
-    assert tuple(gate.id for gate in template.verifier_gates) == GATE_IDS
-
-
-def test_generic_materializer_uses_the_supplied_template_contract(tmp_path: Path) -> None:
-    template = get_template("drainage-model-evidence-lifecycle-review").model_copy(
-        update={"summary": "Caller-owned lifecycle summary."}
-    )
-
-    package = materialize_template_lifecycle(template, tmp_path / "package")
-
-    assert _load_json(package / "template.json")["summary"] == "Caller-owned lifecycle summary."
+    assert lifecycle_template_ids() == {
+        "drainage-model-evidence-lifecycle-review",
+        "hydraulic-design-response-lifecycle-review",
+        "hydraulic-interaction-lifecycle-review",
+    }
 
 
 def test_repeated_lifecycle_materialization_is_byte_identical(tmp_path: Path) -> None:
@@ -78,21 +58,6 @@ def test_repeated_lifecycle_materialization_is_byte_identical(tmp_path: Path) ->
         str(path.relative_to(second)): path.read_bytes() for path in sorted(second.rglob("*")) if path.is_file()
     }
     assert first_files == second_files
-
-
-def test_generic_materializer_revalidates_unchecked_template_copies(tmp_path: Path) -> None:
-    template = get_template("drainage-model-evidence-lifecycle-review")
-    assert template.evidence_lifecycle is not None
-    unchecked = template.model_copy(
-        update={
-            "evidence_lifecycle": template.evidence_lifecycle.model_copy(
-                update={"world_id": "aec.task_world.composite.wrong-world"}
-            )
-        }
-    )
-
-    with pytest.raises(ValueError, match="world_id must match"):
-        materialize_template_lifecycle(unchecked, tmp_path / "package")
 
 
 def test_materialized_package_keeps_future_releases_outside_agent_workspace(tmp_path: Path) -> None:
@@ -215,7 +180,7 @@ def test_gold_uses_released_run_register_document_ids_for_run_lineage(tmp_path: 
     ]
 
 
-def test_golden_lifecycle_scores_one_without_bypassing_parent_agentic_review(tmp_path: Path) -> None:
+def test_golden_lifecycle_scores_one_through_the_task_verifier(tmp_path: Path) -> None:
     package = materialize_ssc03_evidence_lifecycle(tmp_path / "package")
     run_dir = tmp_path / "run"
     gold = _load_json(package / "hidden" / "gold-submissions.json")
@@ -231,9 +196,6 @@ def test_golden_lifecycle_scores_one_without_bypassing_parent_agentic_review(tmp
         verifier=verify_ssc03_evidence_lifecycle,
     )
     task_run = resolver({"process_id": "process.ssc03"})
-    world = get_template("drainage-model-evidence-lifecycle-review").compile_task_world_payload()
-    evaluation = evaluate_logic_profile(world["logic_profile"], task_run["evidence"])
-
     assert task_run["evidence"]["score"] == {"reward": 1.0, "passed": True}
     assert task_run["evidence"]["verification"]["overall"] == "pass"
     semantic = task_run["evidence"]["verification"]["semantic_metrics"]
@@ -243,8 +205,6 @@ def test_golden_lifecycle_scores_one_without_bypassing_parent_agentic_review(tmp
     assert semantic["aggregate"]["update_recall"] == 1.0
     assert semantic["aggregate"]["retention"] == 1.0
     assert semantic["aggregate"]["interference_count"] == 0
-    assert {item["status"] for item in evaluation.closure_results} == {"certified"}
-    assert evaluation.overall_status == "review_required"
 
 
 def test_semantic_metrics_separate_missed_acquisition_from_existing_gate_reward(tmp_path: Path) -> None:

@@ -10,6 +10,7 @@ from typing import Any, cast
 
 import pytest
 
+from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec
 from aec_bench.meta_harness.evidence_lifecycle import (
     execute_lifecycle_operation,
     load_evidence_lifecycle_spec,
@@ -25,9 +26,7 @@ from aec_bench.meta_harness.lifecycle_operation_protocol import (
     validate_lifecycle_operation_run_state,
 )
 from aec_bench.meta_harness.lifecycle_operation_snapshot import validate_lifecycle_operation_snapshot
-from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.contracts import EvidenceLifecycleSpec
-from aec_bench.task_world_templates.lifecycles import materialize_lifecycle_template
+from aec_bench.task_world_templates.lifecycles import materialize_lifecycle
 
 TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
 
@@ -42,8 +41,8 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _materialize(tmp_path: Path, *, variant_id: str = "administrative_no_op") -> tuple[Path, Path]:
-    package = materialize_lifecycle_template(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         tmp_path / "package",
         variant_id=variant_id,
     )

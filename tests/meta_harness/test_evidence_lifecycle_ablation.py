@@ -65,12 +65,10 @@ from aec_bench.meta_harness.evidence_lifecycle_trial_record import (
     finalize_lifecycle_trial_record,
     validate_historical_lifecycle_ablation_record,
 )
-from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate
-from aec_bench.task_world_templates.lifecycles import registered_lifecycle_verifier
-from aec_bench.task_world_templates.materializer import (
-    materialize_template_lifecycle,
-    verify_template_lifecycle,
+from aec_bench.task_world_templates.lifecycles import (
+    lifecycle_verifier,
+    materialize_lifecycle,
+    verify_lifecycle,
 )
 
 TEMPLATE_ID = "drainage-model-evidence-lifecycle-review"
@@ -172,7 +170,7 @@ def test_lifecycle_ablation_plan_expands_deterministically_with_unique_ids(tmp_p
     assert all(len(trial.package_sha256) == 64 for trial in first.trials)
     assert all(len(trial.spec_sha256) == 64 for trial in first.trials)
     assert len(first.code_provenance.verifier_source_sha256) == 64
-    task_verifier = registered_lifecycle_verifier(TEMPLATE_ID)
+    task_verifier = lifecycle_verifier(TEMPLATE_ID)
     verifier_path = Path(inspect.getsourcefile(task_verifier) or "")
     assert first.code_provenance.verifier_qualified_name == f"{task_verifier.__module__}.{task_verifier.__qualname__}"
     assert first.code_provenance.verifier_source_sha256 == _sha256(verifier_path)
@@ -444,7 +442,7 @@ def test_lifecycle_ablation_dry_run_applies_smoke_gate_without_writes(
             "gates": {"probe": {"passed": False, "score": 0.0, "failures": ["forced"]}},
         }
 
-    monkeypatch.setattr(ablation_runtime, "verify_template_lifecycle", failing_verifier)
+    monkeypatch.setattr(ablation_runtime, "verify_lifecycle", failing_verifier)
 
     inspection = inspect_lifecycle_ablation_plan(manifest)
 
@@ -552,7 +550,7 @@ def test_build_lifecycle_trial_record_maps_validated_working_provenance(tmp_path
     assert record.lifecycle_provenance.runtime_distributions == trial.runtime_provenance.distributions
     assert record.lifecycle_provenance.runtime_dependency_sha256 == trial.runtime_provenance.dependency_inventory_sha256
     assert record.completeness is Completeness.PARTIAL
-    task_verifier = registered_lifecycle_verifier(TEMPLATE_ID)
+    task_verifier = lifecycle_verifier(TEMPLATE_ID)
     assert record.lifecycle_provenance.verifier_qualified_name == (
         f"{task_verifier.__module__}.{task_verifier.__qualname__}"
     )
@@ -1237,8 +1235,8 @@ def test_concurrent_finalization_repairs_shared_index_without_lost_entries(tmp_p
     plan = build_lifecycle_ablation_plan(manifest)
     prepared: list[tuple[LifecycleAblationTrial, Path, Path]] = []
     for trial in plan.trials:
-        package = materialize_template_lifecycle(
-            get_template(TEMPLATE_ID),
+        package = materialize_lifecycle(
+            TEMPLATE_ID,
             Path(trial.package_dir),
             variant_id=trial.variant_id,
         )
@@ -1250,7 +1248,7 @@ def test_concurrent_finalization_repairs_shared_index_without_lost_entries(tmp_p
             adapter_kind=trial.agent.adapter,
             max_turns=trial.max_turns_per_session,
             registry=_GoldFreshRegistry(package, resolved_model=trial.agent.model),
-            verifier=verify_template_lifecycle,
+            verifier=verify_lifecycle,
             visibility_policy=trial.memory_visibility_policy,
             sweep_context=LifecycleExperimentSweepContext(
                 sweep_experiment_id=manifest.experiment_id,
@@ -1286,8 +1284,8 @@ def test_run_lifecycle_ablation_rejects_submitted_checkpoint_without_attempt_own
 ) -> None:
     manifest = _single_manifest(tmp_path).model_copy(update={"experiment_id": "ssc03-unowned-checkpoint"})
     trial = build_lifecycle_ablation_plan(manifest).trials[0]
-    package = materialize_template_lifecycle(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         Path(trial.package_dir),
         variant_id=trial.variant_id,
     )
@@ -1468,8 +1466,8 @@ def test_run_lifecycle_ablation_rejects_attempt_mode_outside_planned_condition(
 ) -> None:
     manifest = _single_manifest(tmp_path).model_copy(update={"experiment_id": "ssc03-attempt-mode-conflict"})
     trial = build_lifecycle_ablation_plan(manifest).trials[0]
-    package = materialize_template_lifecycle(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         Path(trial.package_dir),
         variant_id=trial.variant_id,
     )
@@ -1504,8 +1502,8 @@ def test_run_lifecycle_ablation_rejects_fresh_session_shared_across_checkpoints(
 ) -> None:
     manifest = _single_manifest(tmp_path).model_copy(update={"experiment_id": "ssc03-shared-fresh-session"})
     trial = build_lifecycle_ablation_plan(manifest).trials[0]
-    package = materialize_template_lifecycle(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         Path(trial.package_dir),
         variant_id=trial.variant_id,
     )
@@ -1563,8 +1561,8 @@ def test_run_lifecycle_ablation_ignores_incomplete_canonical_staging_directory(
 def test_run_lifecycle_ablation_resumes_matching_unfinalized_runtime_state(tmp_path: Path) -> None:
     manifest = _single_manifest(tmp_path)
     trial = build_lifecycle_ablation_plan(manifest).trials[0]
-    package = materialize_template_lifecycle(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         Path(trial.package_dir),
         variant_id=trial.variant_id,
     )
@@ -1587,8 +1585,8 @@ def test_run_lifecycle_ablation_resumes_matching_unfinalized_runtime_state(tmp_p
 def test_run_lifecycle_ablation_seals_interrupted_attempt_before_resume(tmp_path: Path) -> None:
     manifest = _single_manifest(tmp_path).model_copy(update={"experiment_id": "ssc03-interrupted-resume"})
     trial = build_lifecycle_ablation_plan(manifest).trials[0]
-    package = materialize_template_lifecycle(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         Path(trial.package_dir),
         variant_id=trial.variant_id,
     )
@@ -1636,8 +1634,8 @@ def test_run_lifecycle_ablation_seals_interrupted_persistent_session_before_resu
         }
     )
     trial = build_lifecycle_ablation_plan(manifest).trials[0]
-    package = materialize_template_lifecycle(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         Path(trial.package_dir),
         variant_id=trial.variant_id,
     )
@@ -1735,12 +1733,12 @@ def test_provider_failure_before_later_conditional_checkpoint_preserves_pending_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def materialize_later_conditional_lifecycle(
-        template: CompositeTaskWorldTemplate,
+        template: str,
         output_dir: Path,
         *,
         variant_id: str | None = None,
     ) -> Path:
-        package = materialize_template_lifecycle(
+        package = materialize_lifecycle(
             template,
             output_dir,
             variant_id=variant_id,
@@ -1750,14 +1748,17 @@ def test_provider_failure_before_later_conditional_checkpoint_preserves_pending_
 
     monkeypatch.setattr(
         ablation_plan_runtime,
-        "materialize_template_lifecycle",
+        "materialize_lifecycle",
         materialize_later_conditional_lifecycle,
     )
     monkeypatch.setattr(
         ablation_runtime,
-        "materialize_template_lifecycle",
+        "materialize_lifecycle",
         materialize_later_conditional_lifecycle,
     )
+    direct_verifier = lifecycle_verifier(TEMPLATE_ID)
+    monkeypatch.setattr(ablation_plan_runtime, "verify_lifecycle", direct_verifier)
+    monkeypatch.setattr(ablation_runtime, "verify_lifecycle", direct_verifier)
     manifest = _single_manifest(tmp_path).model_copy(
         update={"experiment_id": "ssc03-later-conditional-provider-failure"}
     )
@@ -1918,8 +1919,8 @@ def test_run_lifecycle_ablation_rejects_manifest_drift_before_adapter_call(tmp_p
 def test_run_lifecycle_ablation_rejects_package_conflict_before_adapter_call(tmp_path: Path) -> None:
     manifest = _single_manifest(tmp_path)
     trial = build_lifecycle_ablation_plan(manifest).trials[0]
-    package = materialize_template_lifecycle(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         Path(trial.package_dir),
         variant_id=trial.variant_id,
     )
@@ -2151,8 +2152,8 @@ def _recorded_trial(
         limits=LifecycleAblationLimits(max_trials=1),
     )
     trial = build_lifecycle_ablation_plan(manifest).trials[0]
-    package = materialize_template_lifecycle(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         Path(trial.package_dir),
         variant_id=trial.variant_id,
     )
@@ -2164,7 +2165,7 @@ def _recorded_trial(
         adapter_kind=trial.agent.adapter,
         max_turns=trial.max_turns_per_session,
         registry=_GoldFreshRegistry(package, resolved_model=trial.agent.model),
-        verifier=verify_template_lifecycle,
+        verifier=verify_lifecycle,
         visibility_policy=trial.memory_visibility_policy,
         sweep_context=LifecycleExperimentSweepContext(
             sweep_experiment_id=manifest.experiment_id,
@@ -2182,12 +2183,12 @@ def _conditional_recorded_trial(
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[LifecycleAblationManifest, LifecycleAblationTrial, Path, Path]:
     def materialize_conditional_lifecycle(
-        template: CompositeTaskWorldTemplate,
+        template: str,
         output_dir: Path,
         *,
         variant_id: str | None = None,
     ) -> Path:
-        package = materialize_template_lifecycle(
+        package = materialize_lifecycle(
             template,
             output_dir,
             variant_id=variant_id,
@@ -2197,14 +2198,19 @@ def _conditional_recorded_trial(
 
     monkeypatch.setattr(
         ablation_plan_runtime,
-        "materialize_template_lifecycle",
+        "materialize_lifecycle",
         materialize_conditional_lifecycle,
+    )
+    monkeypatch.setattr(
+        ablation_plan_runtime,
+        "verify_lifecycle",
+        lifecycle_verifier(TEMPLATE_ID),
     )
     manifest = _single_manifest(tmp_path).model_copy(update={"experiment_id": "ssc03-conditional-import"})
     plan = build_lifecycle_ablation_plan(manifest)
     trial = plan.trials[0]
     package = materialize_conditional_lifecycle(
-        get_template(TEMPLATE_ID),
+        TEMPLATE_ID,
         Path(trial.package_dir),
         variant_id=trial.variant_id,
     )
@@ -2216,7 +2222,7 @@ def _conditional_recorded_trial(
         adapter_kind=trial.agent.adapter,
         max_turns=trial.max_turns_per_session,
         registry=_ConditionalGoldFreshRegistry(package),
-        verifier=verify_template_lifecycle,
+        verifier=lifecycle_verifier(TEMPLATE_ID),
         visibility_policy=trial.memory_visibility_policy,
         sweep_context=LifecycleExperimentSweepContext(
             sweep_experiment_id=manifest.experiment_id,
@@ -2231,9 +2237,7 @@ def _conditional_recorded_trial(
 
 def _add_conditional_evidence(package: Path) -> None:
     lifecycle_path = package / "lifecycle.json"
-    template_path = package / "template.json"
     lifecycle = json.loads(lifecycle_path.read_text(encoding="utf-8"))
-    template = json.loads(template_path.read_text(encoding="utf-8"))
     checkpoint_id = lifecycle["checkpoints"][0]["checkpoint_id"]
     conditional = {
         "request_budget": 1,
@@ -2247,9 +2251,7 @@ def _add_conditional_evidence(package: Path) -> None:
         ],
     }
     lifecycle["checkpoints"][0]["conditional_evidence"] = conditional
-    template["evidence_lifecycle"]["checkpoints"][0]["conditional_evidence"] = conditional
     lifecycle_path.write_text(json.dumps(lifecycle, indent=2, sort_keys=True), encoding="utf-8")
-    template_path.write_text(json.dumps(template, indent=2, sort_keys=True), encoding="utf-8")
     resolution = package / "hidden" / "evidence-request-resolutions.json"
     resolution.write_text(
         json.dumps(
@@ -2276,9 +2278,7 @@ def _add_conditional_evidence(package: Path) -> None:
 
 def _add_later_conditional_evidence(package: Path) -> None:
     lifecycle_path = package / "lifecycle.json"
-    template_path = package / "template.json"
     lifecycle = json.loads(lifecycle_path.read_text(encoding="utf-8"))
-    template = json.loads(template_path.read_text(encoding="utf-8"))
     checkpoint_id = lifecycle["checkpoints"][1]["checkpoint_id"]
     conditional = {
         "request_budget": 1,
@@ -2292,9 +2292,7 @@ def _add_later_conditional_evidence(package: Path) -> None:
         ],
     }
     lifecycle["checkpoints"][1]["conditional_evidence"] = conditional
-    template["evidence_lifecycle"]["checkpoints"][1]["conditional_evidence"] = conditional
     lifecycle_path.write_text(json.dumps(lifecycle, indent=2, sort_keys=True), encoding="utf-8")
-    template_path.write_text(json.dumps(template, indent=2, sort_keys=True), encoding="utf-8")
     resolution = package / "hidden" / "evidence-request-resolutions.json"
     resolution.write_text(
         json.dumps(
@@ -2323,8 +2321,8 @@ def _terminal_persistent_state(
     manifest: LifecycleAblationManifest,
 ) -> tuple[LifecycleAblationTrial, Path, Path, str]:
     trial = build_lifecycle_ablation_plan(manifest).trials[0]
-    package = materialize_template_lifecycle(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         Path(trial.package_dir),
         variant_id=trial.variant_id,
     )

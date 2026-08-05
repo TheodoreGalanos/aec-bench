@@ -26,9 +26,9 @@ from aec_bench.meta_harness.evidence_lifecycle import (
 from aec_bench.meta_harness.evidence_lifecycle_experiment import repository_provenance
 from aec_bench.prime_lab.exporter import DEFAULT_PRIME_ENVIRONMENTS_DIR, normalise_environment_id
 from aec_bench.task_world_templates.lifecycles import (
-    is_sealed_lifecycle_package,
     lifecycle_package_variant,
 )
+from aec_bench.task_world_templates.lifecycles.provider import is_sealed_lifecycle_package
 
 
 class PrimeLifecycleSourceProvenance(StrictModel):

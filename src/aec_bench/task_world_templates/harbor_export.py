@@ -13,19 +13,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec, LifecycleTaskMetadata
 from aec_bench.task_world_templates.compiled_world import (
     CompiledLifecycleWorld,
     CompiledWorldEnvelope,
 )
-from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate, EvidenceLifecycleSpec
 from aec_bench.task_world_templates.harbor_exporting.bridge import (
     allowed_tools as _allowed_tools,
 )
 from aec_bench.task_world_templates.harbor_exporting.bridge import (
     load_bridge as _load_bridge,
-)
-from aec_bench.task_world_templates.harbor_exporting.bridge import (
-    validate_adapter_surface as _validate_adapter_surface,
 )
 from aec_bench.task_world_templates.harbor_exporting.bridge import (
     validate_bridge_attestation as _validate_bridge_attestation,
@@ -35,6 +32,9 @@ from aec_bench.task_world_templates.harbor_exporting.bridge import (
 )
 from aec_bench.task_world_templates.harbor_exporting.bridge import (
     validate_harbor_lifecycle_semantics as validate_harbor_lifecycle_semantics,
+)
+from aec_bench.task_world_templates.harbor_exporting.bridge import (
+    validate_operation_surface as _validate_operation_surface,
 )
 from aec_bench.task_world_templates.harbor_exporting.bridge import (
     validate_source_identity as _validate_source_identity,
@@ -93,7 +93,7 @@ from aec_bench.task_world_templates.harbor_exporting.surfaces import (
 from aec_bench.task_world_templates.harbor_exporting.surfaces import (
     test_script_text as _test_script,
 )
-from aec_bench.task_world_templates.lifecycles import registered_lifecycle_adapter
+from aec_bench.task_world_templates.lifecycles import verify_lifecycle
 
 
 @dataclass(frozen=True)
@@ -124,7 +124,7 @@ def export_compiled_lifecycle_harbor_task(
     """Export one immutable compiled world without exposing hidden authority to the agent."""
     source = _validate_compiled_world(compiled)
     validate_harbor_lifecycle_semantics(source.lifecycle)
-    _validate_adapter_surface(compiled.envelope)
+    _validate_operation_surface(compiled.envelope)
     root = _validate_project_root(project_root)
 
     destination = Path(task_dir)
@@ -137,7 +137,7 @@ def export_compiled_lifecycle_harbor_task(
         staging.mkdir()
         exported = _write_export(
             compiled=compiled,
-            template=source.template,
+            metadata=source.metadata,
             lifecycle=source.lifecycle,
             task_dir=staging,
             project_root=root,
@@ -192,7 +192,7 @@ def write_harbor_lifecycle_attestation(
 def _write_export(
     *,
     compiled: CompiledLifecycleWorld,
-    template: CompositeTaskWorldTemplate,
+    metadata: LifecycleTaskMetadata,
     lifecycle: EvidenceLifecycleSpec,
     task_dir: Path,
     project_root: Path,
@@ -214,13 +214,13 @@ def _write_export(
     runtime = _build_verifier_runtime_wheel(project_root=project_root, output_dir=runtime_dir)
 
     instruction_path = task_dir / "instruction.md"
-    instruction_path.write_text(_instruction(template=template, lifecycle=lifecycle), encoding="utf-8")
+    instruction_path.write_text(_instruction(metadata=metadata, lifecycle=lifecycle), encoding="utf-8")
     dockerfile = task_dir / "environment" / "Dockerfile"
     dockerfile.parent.mkdir(parents=True, exist_ok=True)
     dockerfile.write_text(_dockerfile(), encoding="utf-8")
     task_toml = task_dir / "task.toml"
     task_toml.write_text(
-        _task_toml(template=template, envelope=compiled.envelope),
+        _task_toml(metadata=metadata, envelope=compiled.envelope),
         encoding="utf-8",
     )
     test_script = tests_dir / "test.sh"
@@ -304,7 +304,7 @@ def verify_exported_lifecycle_run(
     compiled = CompiledLifecycleWorld(package_dir=Path(package_dir), envelope=envelope)
     source = _validate_compiled_world(compiled)
     validate_harbor_lifecycle_semantics(source.lifecycle)
-    _validate_adapter_surface(envelope)
+    _validate_operation_surface(envelope)
     manifest = _validated_manifest_shape(_read_json(export_manifest_path))
     manifest_source = cast(dict[str, Any], manifest["source"])
     bridge_payload = cast(dict[str, Any], manifest["bridge"])
@@ -339,8 +339,7 @@ def verify_exported_lifecycle_run(
         manifest_sha256=manifest_sha256,
     )
 
-    adapter = registered_lifecycle_adapter(envelope.template_id)
-    verification = adapter.verify(Path(package_dir), Path(run_dir))
+    verification = verify_lifecycle(Path(package_dir), Path(run_dir))
     reward = float(verification["reward"])
     passed = bool(verification["passed"])
     details = {

@@ -32,7 +32,7 @@ from aec_bench.meta_harness.evidence_lifecycle_trial_record import (
     validate_captured_lifecycle_operation_interaction,
     validate_historical_lifecycle_ablation_record,
 )
-from aec_bench.task_world_templates.lifecycles import sealed_lifecycle_mount_active
+from aec_bench.task_world_templates.lifecycles.provider import sealed_lifecycle_mount_active
 
 __all__ = [
     "FrozenLifecycleCondition",

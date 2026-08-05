@@ -10,6 +10,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from aec_bench.contracts.evidence_lifecycle import (
+    EvidenceLifecycleSpec,
+    LifecycleOperationSpec,
+    LifecycleTaskMetadata,
+)
 from aec_bench.meta_harness.evidence_lifecycle import (
     load_validated_lifecycle_submissions,
     read_evidence_lifecycle_state,
@@ -23,11 +28,6 @@ from aec_bench.meta_harness.lifecycle_operation_protocol import (
     LifecycleOperationPrerequisiteError,
     LifecycleOperationSourceContext,
     lifecycle_operation_source_identity,
-)
-from aec_bench.task_world_templates.contracts import (
-    CompositeTaskWorldTemplate,
-    EvidenceLifecycleSpec,
-    LifecycleOperationSpec,
 )
 
 FIXTURE_TEMPLATE_ID = "fixture-sealed-lifecycle"
@@ -88,12 +88,11 @@ class FakeSealedLifecycleProvider:
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(self.sentinels["prompt"], encoding="utf-8")
             raise RuntimeError(self.sentinels["path"])
-        template = _template()
+        metadata = _metadata()
+        lifecycle = _lifecycle()
         output.mkdir(parents=True)
-        _write_json(output / "template.json", template.model_dump(mode="json"))
-        _write_json(output / "world.json", template.compile_task_world_payload())
-        assert template.evidence_lifecycle is not None
-        _write_json(output / "lifecycle.json", template.evidence_lifecycle.model_dump(mode="json"))
+        _write_json(output / "template.json", metadata.model_dump(mode="json"))
+        _write_json(output / "lifecycle.json", lifecycle.model_dump(mode="json"))
         (output / "instructions").mkdir()
         (output / "instructions" / f"{FIXTURE_CHECKPOINT_ID}.md").write_text(
             f"# Fixture review\n\n{self.sentinels['prompt']}\n",
@@ -127,13 +126,13 @@ class FakeSealedLifecycleProvider:
         if self.failure_stage == "validate_package":
             raise RuntimeError(self.sentinels["source"])
         package = Path(package_dir)
-        template = CompositeTaskWorldTemplate.model_validate(_read_json(package / "template.json"))
+        metadata = LifecycleTaskMetadata.model_validate(_read_json(package / "template.json"))
         lifecycle = EvidenceLifecycleSpec.model_validate(_read_json(package / "lifecycle.json"))
         source = _read_json(package / "hidden" / "source.json")
         resolution = _read_json(package / "hidden" / "operation-resolution.json")
         if (
-            template.template_id != FIXTURE_TEMPLATE_ID
-            or template.evidence_lifecycle != lifecycle
+            metadata != _metadata()
+            or lifecycle != _lifecycle()
             or source.get("source_note") != self.sentinels["source"]
             or resolution.get("mapping_note") != self.sentinels["action_mapping"]
         ):
@@ -296,57 +295,44 @@ class FixtureOperationResolver:
         )
 
 
-def _template() -> CompositeTaskWorldTemplate:
-    template_id = FIXTURE_TEMPLATE_ID
-    world_id = f"aec.task_world.composite.{template_id}"
-    return CompositeTaskWorldTemplate.model_validate(
+def _metadata() -> LifecycleTaskMetadata:
+    return LifecycleTaskMetadata(
+        template_id=FIXTURE_TEMPLATE_ID,
+        name="Fixture sealed lifecycle",
+        discipline="fixture",
+    )
+
+
+def _lifecycle() -> EvidenceLifecycleSpec:
+    return EvidenceLifecycleSpec.model_validate(
         {
-            "template_id": template_id,
-            "name": "Fixture sealed lifecycle",
-            "summary": "Domain-neutral fake package for external provider contract tests.",
-            "pattern": "sealed-fixture",
-            "discipline_scope": ["fixture"],
-            "source_artifacts": [],
-            "stages": [
+            "lifecycle_id": FIXTURE_LIFECYCLE_ID,
+            "world_id": f"aec.task_world.composite.{FIXTURE_TEMPLATE_ID}",
+            "checkpoints": [
                 {
-                    "id": FIXTURE_CHECKPOINT_ID,
+                    "checkpoint_id": FIXTURE_CHECKPOINT_ID,
                     "title": "Fixture review",
-                    "discipline": "fixture",
+                    "release_path": f"releases/{FIXTURE_CHECKPOINT_ID}",
+                    "instruction_path": f"instructions/{FIXTURE_CHECKPOINT_ID}.md",
+                    "submission_path": f"submissions/{FIXTURE_CHECKPOINT_ID}.json",
+                    "required_submission_fields": [
+                        "checkpoint_id",
+                        "selected_action_id",
+                        "observed_value",
+                    ],
+                    "conditional_operations": {
+                        "operation_budget": 1,
+                        "operations": [
+                            {
+                                "operation_id": FIXTURE_OPERATION_ID,
+                                "kind": FIXTURE_OPERATION_KIND,
+                                "title": "Derive fixture observation",
+                                "description": "Compute one deterministic observation from the current source.",
+                            }
+                        ],
+                    },
                 }
             ],
-            "handoffs": [],
-            "verifier_gates": [],
-            "deliverables": [],
-            "data_gaps": [],
-            "evidence_lifecycle": {
-                "lifecycle_id": FIXTURE_LIFECYCLE_ID,
-                "world_id": world_id,
-                "checkpoints": [
-                    {
-                        "checkpoint_id": FIXTURE_CHECKPOINT_ID,
-                        "title": "Fixture review",
-                        "release_path": f"releases/{FIXTURE_CHECKPOINT_ID}",
-                        "instruction_path": f"instructions/{FIXTURE_CHECKPOINT_ID}.md",
-                        "submission_path": f"submissions/{FIXTURE_CHECKPOINT_ID}.json",
-                        "required_submission_fields": [
-                            "checkpoint_id",
-                            "selected_action_id",
-                            "observed_value",
-                        ],
-                        "conditional_operations": {
-                            "operation_budget": 1,
-                            "operations": [
-                                {
-                                    "operation_id": FIXTURE_OPERATION_ID,
-                                    "kind": FIXTURE_OPERATION_KIND,
-                                    "title": "Derive fixture observation",
-                                    "description": "Compute one deterministic observation from the current source.",
-                                }
-                            ],
-                        },
-                    }
-                ],
-            },
         }
     )
 

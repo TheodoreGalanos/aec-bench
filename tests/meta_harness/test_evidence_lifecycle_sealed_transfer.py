@@ -34,9 +34,9 @@ from aec_bench.meta_harness.evidence_lifecycle_transfer import (
     build_lifecycle_transfer_evaluation,
 )
 from aec_bench.task_world_templates.lifecycles import (
-    SealedLifecycleMount,
     materialize_sealed_lifecycle,
 )
+from aec_bench.task_world_templates.lifecycles.provider import SealedLifecycleMount
 from tests.meta_harness.test_evidence_lifecycle_transfer import _write_record
 from tests.support.sealed_lifecycle_audit import (
     CompletedSealedLifecycleAudit,

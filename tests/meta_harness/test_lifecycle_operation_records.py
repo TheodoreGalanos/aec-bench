@@ -24,10 +24,9 @@ from aec_bench.meta_harness.evidence_lifecycle_experiment import (
 )
 from aec_bench.meta_harness.evidence_request_protocol import EvidenceLifecycleError
 from aec_bench.meta_harness.lifecycle_operation_protocol import lifecycle_operation_protocol_identity
-from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.lifecycles import (
-    materialize_lifecycle_template,
-    registered_lifecycle_verifier,
+    lifecycle_verifier,
+    materialize_lifecycle,
 )
 
 TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
@@ -128,7 +127,7 @@ def test_operation_protocol_and_transactions_are_manifest_bound(tmp_path: Path) 
         package_dir=package,
         run_dir=run_dir,
         agent=_agent(),
-        verifier=registered_lifecycle_verifier(TEMPLATE_ID),
+        verifier=lifecycle_verifier(TEMPLATE_ID),
         verification=_verification(),
         tool_schema=tool_schema,
         repository_dir=Path(__file__).resolve().parents[2],
@@ -179,7 +178,7 @@ def test_recording_rejects_malformed_operation_tool_before_publishing_identity(t
             package_dir=package,
             run_dir=run_dir,
             agent=_agent(),
-            verifier=registered_lifecycle_verifier(TEMPLATE_ID),
+            verifier=lifecycle_verifier(TEMPLATE_ID),
             verification=_verification(),
             tool_schema=malformed_schema,
             repository_dir=Path(__file__).resolve().parents[2],
@@ -203,7 +202,7 @@ def test_trial_record_import_rejects_rehashed_malformed_operation_tool_schema(tm
         package_dir=package,
         run_dir=run_dir,
         agent=_agent(),
-        verifier=registered_lifecycle_verifier(TEMPLATE_ID),
+        verifier=lifecycle_verifier(TEMPLATE_ID),
         verification=_verification(),
         tool_schema=valid_schema,
         repository_dir=Path(__file__).resolve().parents[2],
@@ -254,7 +253,7 @@ def test_trial_record_import_rejects_rehashed_operation_protocol_forgeries(
         package_dir=package,
         run_dir=run_dir,
         agent=_agent(),
-        verifier=registered_lifecycle_verifier(TEMPLATE_ID),
+        verifier=lifecycle_verifier(TEMPLATE_ID),
         verification=_verification(),
         tool_schema=valid_schema,
         repository_dir=Path(__file__).resolve().parents[2],
@@ -447,8 +446,8 @@ def test_snapshotted_v5_state_rejects_current_source_from_a_different_package(tm
         reason="Activate the declared tailwater revision.",
         session_id="revision.session-001",
     )
-    different_package = materialize_lifecycle_template(
-        get_template(TEMPLATE_ID),
+    different_package = materialize_lifecycle(
+        TEMPLATE_ID,
         tmp_path / "different-package",
         variant_id="major_idf_revision",
     )
@@ -538,8 +537,8 @@ def test_v5_snapshot_resolves_reuse_to_exact_prior_completed_action(tmp_path: Pa
 
 
 def _operation_run(tmp_path: Path) -> tuple[Path, Path, dict[str, object]]:
-    package = materialize_lifecycle_template(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         tmp_path / "package",
         variant_id="tailwater_revision",
     )
