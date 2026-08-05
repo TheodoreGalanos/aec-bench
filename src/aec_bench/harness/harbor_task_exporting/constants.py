@@ -1,4 +1,4 @@
-# ABOUTME: Defines the immutable Harbor lifecycle export identity and resource limits.
+# ABOUTME: Defines the current Harbor lifecycle export filenames and resource limits.
 # ABOUTME: Shares one policy surface across export, bridge loading, and verification.
 
 from __future__ import annotations
@@ -6,8 +6,6 @@ from __future__ import annotations
 from pathlib import Path
 
 HARBOR_LIFECYCLE_BRIDGE_MODE = "host_owned_evidence_lifecycle"
-EXPORT_SCHEMA_VERSION = "2"
-ATTESTATION_SCHEMA_VERSION = "1"
 ATTESTATION_FILENAME = "harbor-bridge-attestation.json"
 CANONICAL_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 MAX_CANONICAL_SOURCE_FILE_BYTES = 64 * 1024 * 1024

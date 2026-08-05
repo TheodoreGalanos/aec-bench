@@ -170,10 +170,11 @@ operation resolver, and optional smoke environment directly. A lifecycle
 without interactive operations carries no placeholder resolver or
 smoke-environment port, and there is no shared lifecycle adapter protocol.
 
-Harbor export, agent execution, and import use the pump-owned bridge directly.
-The neutral world definition contains no provider or Harbor port. Evaluation
-is called by the importer after durable run verification, never by live world
-transition code.
+Harbor export, agent execution, and import use the concrete pump integration
+owned by the harness. That integration calls the pump functional core and
+durability owner directly; the neutral world definition contains no provider
+or Harbor port. Evaluation is called by the importer after durable run
+verification, never by live world transition code.
 
 ## Trial evidence boundary
 
@@ -223,7 +224,8 @@ cannot manufacture a successful transition or evaluation.
 - [pump transition retry and recovery](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_registered_world_run_transitions.py)
 - [pump functional core](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_functional_core.py)
 - [current pump serialization](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_world_run_serialization.py)
-- [registered Harbor path](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_registered_world_harbor.py)
+- [registered Harbor path](../../tests/harness/test_pump_station_harbor.py)
+- [registered rollout child through Harbor](../../tests/harness/test_pump_station_rollout_child_harbor.py)
 - [verified pump TrialRecord import](../../tests/harness/test_stewardship_harbor_import.py)
 - [public report visibility](../../tests/communication/test_standalone.py)
 - [registered rollout](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_registered_rollout_orchestration.py)

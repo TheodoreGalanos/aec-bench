@@ -308,7 +308,7 @@ class EvolutionConfig(StrictModel):
     structural_weight: float = 0.3
     discipline_balanced: bool = False
     solver: AgentConfig | None = None
-    backend: str = "local"
+    backend: Literal["local", "modal", "morph"] = "local"
     timeout: PositiveInt = 1800
     harness_config: str | None = None
     strategy: Literal["hill_climb", "qd"] = "hill_climb"

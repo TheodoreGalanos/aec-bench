@@ -17,7 +17,7 @@ from aec_bench.contracts.proposal_execution import (
 )
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr
-from aec_bench.harness.harbor_importing.proposal import ProposalHarborImportEvidence
+from aec_bench.harness.harbor_importing.proposal_evidence import ProposalHarborImportEvidence
 from aec_bench.meta_harness.authority_ledger import StoredAuthorityEvent, StoredBasis
 from aec_bench.meta_harness.proposal_import_consumption import (
     ProposalImportConsumptionClaim,

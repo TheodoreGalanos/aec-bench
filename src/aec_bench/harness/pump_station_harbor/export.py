@@ -1,5 +1,5 @@
 # ABOUTME: Exports the wastewater pump-station world as a provider-neutral Harbor task.
-# ABOUTME: Keeps public agent material separate from package and verifier authority.
+# ABOUTME: Keeps transport packaging outside the task-owned pump functional core.
 
 from __future__ import annotations
 
@@ -18,15 +18,15 @@ from aec_bench.contracts.continual_world import (
     ContinualWorldProfileRef,
     WorldBuildRef,
 )
-from aec_bench.task_world_templates.harbor_exporting.constants import (
+from aec_bench.harness.harbor_task_exporting.constants import (
     BASE_IMAGE,
     RUNTIME_DEPENDENCIES,
 )
-from aec_bench.task_world_templates.harbor_exporting.runtime_wheel import (
+from aec_bench.harness.harbor_task_exporting.runtime_wheel import (
     RuntimeWheel,
     build_verifier_runtime_wheel,
 )
-from aec_bench.task_world_templates.harbor_exporting.stable_io import (
+from aec_bench.harness.harbor_task_exporting.stable_io import (
     directory_sha256,
     file_sha256,
 )
@@ -654,7 +654,7 @@ RUNTIME_DIR="$(mktemp -d)"
 "$PYTHON_BIN" -m zipfile -e "$VERIFIER_RUNTIME" "$RUNTIME_DIR"
 
 PYTHONPATH="$RUNTIME_DIR${{PYTHONPATH:+:$PYTHONPATH}}" "$PYTHON_BIN" \\
-  -m aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_verifier \\
+  -m aec_bench.harness.pump_station_harbor.verifier \\
   --run-dir "$RUN_DIR" \\
   --export-manifest "$EXPORT_MANIFEST" \\
   --package-dir "$PACKAGE_DIR" \\

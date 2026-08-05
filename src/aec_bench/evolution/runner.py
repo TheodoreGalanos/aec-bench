@@ -7,7 +7,7 @@ import logging
 import tempfile
 from pathlib import Path
 
-from aec_bench.contracts.evolution import EvolutionConfig, TaskGenerateConfig
+from aec_bench.contracts.evolution import EvolutionConfig, TaskGenerateConfig, WorkspaceSnapshot
 from aec_bench.evolution.backends.local import SolveFn, make_local_solve_fn, make_stub_solve_fn
 from aec_bench.evolution.engine import AECEvolutionEngine
 from aec_bench.evolution.llm import build_evolution_llm_clients
@@ -119,8 +119,8 @@ def build_evolution_runner_from_config(
 
     # 6. Build solve function based on config.backend
     experiment_id = f"evo-{workspace.manifest.name}"
-    if config.backend in ("harbor", "modal", "morph") and config.solver is not None:
-        solve_fn = _build_remote_solve_fn(
+    if config.backend in ("modal", "morph") and config.solver is not None:
+        solve_fn = _build_harbor_solve_fn(
             config=config,
             task_dirs=task_dirs,
             experiment_id=experiment_id,
@@ -135,7 +135,7 @@ def build_evolution_runner_from_config(
             workspace_root=Path(config.workspace_path),
         )
     else:
-        if config.backend in ("harbor", "modal", "morph"):
+        if config.backend in ("modal", "morph"):
             _log.warning(
                 "backend=%r requires solver config (via harness_config or explicit solver). "
                 "Falling back to stub solve function.",
@@ -235,85 +235,72 @@ def generate_task_instances(gen_config: TaskGenerateConfig) -> list[Path]:
     return generated_dirs
 
 
-def _build_remote_solve_fn(
+def _build_harbor_solve_fn(
     *,
     config: EvolutionConfig,
     task_dirs: list[Path],
     experiment_id: str,
 ) -> SolveFn:
-    """Build a remote solve function from config.
+    """Build an evolution solve function that consumes the current Harbor workflow."""
 
-    Constructs a remote ComputeBackend, adapter, and resolved tasks from the solver config.
-    All harness imports are deferred to avoid requiring Modal SDK at module load.
-    Falls back to the stub solve function when backend dependencies are not installed.
-    """
-    try:
-        from aec_bench.adapters.factory import build_remote_adapter
-        from aec_bench.evolution.backends.harbor import make_harbor_solve_fn
-        from aec_bench.harness.trial_runner import TrialRunner
-        from aec_bench.tasks.instance import ResolvedTaskInstance, resolve_instance_paths
-        from aec_bench.tasks.loader import load_task_definition
-    except ImportError as exc:
-        _log.error("Remote backend wiring failed to import common dependencies. Error: %s", exc)
-        return make_stub_solve_fn([])
+    from aec_bench.contracts.experiment_manifest import ComputeConfig, ExperimentManifest, TaskSelector
+    from aec_bench.contracts.task_definition import TaskDefinition
+    from aec_bench.contracts.trial_record import TrialRecord
+    from aec_bench.evolution.backends.local import inject_snapshot_into_workspace
+    from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
+    from aec_bench.tasks.loader import load_task_definition
 
-    assert config.solver is not None  # caller guarantees this
-
-    # Build adapter from solver config
-    adapter = build_remote_adapter(config.solver)
-
-    # Build artifacts dir alongside the workspace
-    artifacts_dir = Path(config.workspace_path) / "artifacts"
-
-    backend: object
-    if config.backend == "morph":
-        try:
-            from aec_bench.harness.morph_runner import MorphSandboxRunner
-            from aec_bench.providers.morph_cloud import MorphCloudOperations
-        except ImportError as exc:
-            _log.error(
-                "Morph backend requires Morph Cloud dependencies. Install with: uv add morphcloud. Error: %s",
-                exc,
-            )
-            return make_stub_solve_fn([])
-        backend = MorphSandboxRunner(
-            operations=MorphCloudOperations(),
-            artifacts_dir=artifacts_dir,
-        )
-    else:
-        try:
-            from aec_bench.harness.modal_runner import ModalSandboxRunner, ModalSdkOperations
-        except ImportError as exc:
-            _log.error("Harbor/modal backend requires Modal SDK. Install with: uv add modal. Error: %s", exc)
-            return make_stub_solve_fn([])
-        backend = ModalSandboxRunner(
-            operations=ModalSdkOperations(),
-            artifacts_dir=artifacts_dir,
-        )
-
-    # Resolve task instances — tasks_root is the parent of the first task dir's
-    # discipline segment, inferred as the common ancestor two levels up from each
-    # task_dir so that derive_task_id produces the right slash-separated IDs.
-    resolved_tasks: list[ResolvedTaskInstance] = []
+    solver = config.solver
+    assert solver is not None
+    project_root = Path(__file__).resolve().parents[3]
+    artifact_root = Path(config.workspace_path) / "artifacts"
+    resolved: list[tuple[TaskDefinition, Path, Path]] = []
     for task_dir in task_dirs:
         try:
-            # tasks_root is two levels above the task instance dir
-            # (tasks/<discipline>/<task-type>/<instance> → tasks_root = tasks/)
             tasks_root = task_dir.parents[2]
-            task_def = load_task_definition(task_dir, tasks_root)
-            resolved = resolve_instance_paths(task_def, task_dir)
-            resolved_tasks.append(resolved)
-        except Exception:
+            resolved.append((load_task_definition(task_dir, tasks_root), task_dir, tasks_root))
+        except (OSError, ValueError):
             _log.warning("Failed to resolve task: %s", task_dir, exc_info=True)
 
-    # Build trial runner
-    trial_runner = TrialRunner(artifacts_dir=artifacts_dir)
+    call_count = 0
 
-    return make_harbor_solve_fn(
-        trial_runner=trial_runner,
-        backend=backend,
-        tasks=resolved_tasks,
-        adapter=adapter,
-        experiment_id=experiment_id,
-        runtime_image=f"evolution-{config.solver.adapter}",
-    )
+    def solve(snapshot: WorkspaceSnapshot, batch_size: int) -> list[TrialRecord]:
+        nonlocal call_count
+        records: list[TrialRecord] = []
+        for index, (task, task_dir, tasks_root) in enumerate(resolved[:batch_size]):
+            try:
+                inject_snapshot_into_workspace(snapshot, task_dir)
+                manifest = ExperimentManifest(
+                    experiment_id=experiment_id,
+                    name=f"Evolution solve {call_count}:{index}",
+                    tasks=TaskSelector(include_patterns=[task.task_id]),
+                    agents=[solver],
+                    compute=ComputeConfig(
+                        backend=config.backend,
+                        timeout_override=config.timeout,
+                    ),
+                    repetitions=1,
+                )
+                workflow = SynchronousHarborWorkflow(
+                    project_root=project_root,
+                    repo_root=project_root,
+                    tasks_root=tasks_root,
+                    ledger_root=artifact_root / "ledger",
+                    jobs_root=artifact_root / "jobs",
+                )
+                result = workflow.run(
+                    manifest=manifest,
+                    config_path=artifact_root / f"harbor-{call_count}-{index}.yaml",
+                    resolved_tasks=(task,),
+                    task_path_overrides={task.task_id: task_dir.resolve()},
+                )
+                records.extend(
+                    TrialRecord.model_validate_json(path.read_text(encoding="utf-8"))
+                    for path in result.import_result.ledger_paths
+                )
+            except Exception:
+                _log.exception("Harbor evolution task failed: %s", task.task_id)
+        call_count += 1
+        return records
+
+    return solve

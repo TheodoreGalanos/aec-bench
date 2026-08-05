@@ -15,19 +15,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from aec_bench.contracts.stage_execution import KernelInstructionOverride
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
-    pump_station_continual_world_definition,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
+from aec_bench.harness.pump_station_harbor.export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
     export_pump_station_harbor_task,
     load_pump_station_harbor_bridge,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
+from aec_bench.harness.pump_station_harbor.session import (
     PUMP_STATION_MODEL_CONTROLLER_MODE,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_verifier import (
+from aec_bench.harness.pump_station_harbor.verifier import (
     verify_pump_station_harbor_run,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
+    pump_station_continual_world_definition,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
@@ -101,14 +101,13 @@ def test_entrypoint_agent_calls_the_pump_harbor_owner_without_a_neutral_provider
     pump_imports = tuple(
         module
         for module in imported_modules
-        if module.startswith(
-            "aec_bench.task_world_templates.stewardship.wastewater_pump_station",
-        )
+        if module.startswith("aec_bench.harness.pump_station_harbor")
+        or module == ("aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller")
     )
 
     assert set(pump_imports) == {
-        "aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export",
-        "aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session",
+        "aec_bench.harness.pump_station_harbor.export",
+        "aec_bench.harness.pump_station_harbor.session",
         "aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller",
     }
 

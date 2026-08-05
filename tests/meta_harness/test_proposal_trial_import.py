@@ -22,7 +22,9 @@ from aec_bench.contracts.proposal_execution import (
     ProposalSessionReceipt,
 )
 from aec_bench.contracts.trial_record import Completeness, TrialRecord
-from aec_bench.harness.harbor_import import load_proposal_harbor_import_evidence
+from aec_bench.harness.harbor_importing.proposal_evidence.api import (
+    load_proposal_harbor_import_evidence,
+)
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger
 from aec_bench.meta_harness.proposal_dispatch_governance import (
     GovernedProposalDispatchAuthorization,

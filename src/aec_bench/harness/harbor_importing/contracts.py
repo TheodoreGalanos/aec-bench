@@ -1,15 +1,12 @@
-# ABOUTME: Defines the generic extension boundary for importing execution-specific Harbor evidence.
-# ABOUTME: Keeps the core TrialRecord importer independent from proposal and future execution policies.
+# ABOUTME: Defines current Harbor import context and the two supported evidence intents.
+# ABOUTME: Keeps execution-kind dispatch concrete at the serialized import boundary.
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Protocol
 
-from aec_bench.contracts.evaluation_result import EvaluationResult
-from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.harness.harbor_contract import HarborTrialResult
 
 
@@ -26,7 +23,7 @@ class ImportEvidenceIntent(StrEnum):
 
 @dataclass(frozen=True)
 class ImportEvidenceContext:
-    """Canonical Harbor and task paths supplied to one evidence extension."""
+    """Canonical Harbor and task paths supplied to concrete evidence readers."""
 
     trial_dir: Path
     repo_root: Path
@@ -34,58 +31,12 @@ class ImportEvidenceContext:
     harbor_result: HarborTrialResult
 
 
-class ImportedExecutionEvidence(Protocol):
-    """Evidence projection consumed by the generic TrialRecord importer."""
+def execution_kind_from_context(context: ImportEvidenceContext) -> str | None:
+    """Return the current execution kind declared by one Harbor agent."""
 
-    @property
-    def execution_kind(self) -> str:
-        """Return the allowlisted execution kind that produced this evidence."""
-
-    @property
-    def adapter_name(self) -> str:
-        """Return the adapter identity recorded on the TrialRecord."""
-
-    @property
-    def artifacts(self) -> tuple[ArtifactReference, ...]:
-        """Return exact verified artifacts to attach to the TrialRecord."""
-
-    def sanitize_agent_configuration(
-        self,
-        configuration: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Return a portable, evidence-bound agent configuration."""
-
-    def augment_evaluation(
-        self,
-        evaluation: EvaluationResult,
-    ) -> EvaluationResult:
-        """Attach execution-specific evaluation evidence or return it unchanged."""
-
-    @property
-    def episode_artifact(self) -> ArtifactReference | None:
-        """Return the optional task-owned episode artifact authority."""
-
-
-class ImportEvidenceExtension(Protocol):
-    """Loads fail-closed evidence for one allowlisted execution kind."""
-
-    @property
-    def execution_kind(self) -> str:
-        """Return the exact execution kind handled by this extension."""
-
-    def load(
-        self,
-        *,
-        context: ImportEvidenceContext,
-        intent: ImportEvidenceIntent,
-    ) -> ImportedExecutionEvidence:
-        """Validate and return evidence for the requested import intent."""
-
-
-__all__ = (
-    "HarborImportError",
-    "ImportEvidenceContext",
-    "ImportEvidenceExtension",
-    "ImportEvidenceIntent",
-    "ImportedExecutionEvidence",
-)
+    configuration = context.harbor_result.config.agent.kwargs
+    declared = configuration.get("execution_kind")
+    if isinstance(declared, str) and declared:
+        return declared
+    adapter = configuration.get("adapter")
+    return adapter if isinstance(adapter, str) and adapter else None

@@ -28,7 +28,7 @@ from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.harness.harbor_dispatch import (
     HarborCommandExecutor,
-    SubprocessHarborExecutor,
+    execute_harbor_config,
 )
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger, StoredBasis
 from aec_bench.meta_harness.proposal_dispatch_governance import (
@@ -447,14 +447,16 @@ def run_governed_proposal_harbor(
     execution_root.mkdir(parents=True)
     _write_new_file(config_path, config_bytes)
     before = _job_directories(jobs)
-    resolved_executor = executor or SubprocessHarborExecutor()
     exit_code: int | None
     executor_failed = False
     try:
-        exit_code = resolved_executor.execute(
-            command=list(command),
-            cwd=project,
+        observed_command, exit_code = execute_harbor_config(
+            config_path=config_path,
+            project_root=project,
+            executor=executor,
         )
+        if tuple(observed_command) != command:
+            raise RuntimeError("Harbor dispatcher changed the authorized proposal command")
     except Exception:
         exit_code = None
         executor_failed = True

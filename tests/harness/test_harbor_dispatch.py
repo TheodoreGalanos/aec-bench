@@ -1,6 +1,7 @@
 # ABOUTME: Tests for the Harbor dispatch boundary in the Python harness.
 # ABOUTME: Verifies config generation, agent resolution, and injected command execution.
 
+import ast
 import importlib
 import subprocess
 from collections.abc import Callable
@@ -42,7 +43,9 @@ from aec_bench.meta_harness.program_proposal_compilation import (
 from aec_bench.tasks.loader import load_task_definition
 from tests.support.task_factories import make_task_definition
 
-_PROPOSAL_MORPH_ENVIRONMENT_IMPORT_PATH = "aec_bench.providers.proposal_morph_harbor:ProposalMorphHarborEnvironment"
+_PROPOSAL_MORPH_ENVIRONMENT_IMPORT_PATH = (
+    "aec_bench.providers.proposal_morph.environment:ProposalMorphHarborEnvironment"
+)
 
 
 class FakeExecutor:
@@ -54,6 +57,29 @@ class FakeExecutor:
         self.command = command
         self.cwd = cwd
         return 0
+
+
+def test_task_worlds_and_episode_shell_do_not_import_execution_sdks() -> None:
+    source_root = Path(__file__).resolve().parents[2] / "src" / "aec_bench" / "task_world_templates"
+    forbidden_roots = {"harbor", "modal", "morphcloud"}
+    offenders: list[str] = []
+    for source_path in sorted(source_root.rglob("*.py")):
+        tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+        imported_roots = {
+            module.split(".", maxsplit=1)[0]
+            for node in ast.walk(tree)
+            for module in (
+                [alias.name for alias in node.names]
+                if isinstance(node, ast.Import)
+                else [node.module]
+                if isinstance(node, ast.ImportFrom) and node.module is not None
+                else []
+            )
+        }
+        if imported_roots & forbidden_roots:
+            offenders.append(source_path.relative_to(source_root).as_posix())
+
+    assert offenders == []
 
 
 def test_build_harbor_job_config_uses_precise_task_paths() -> None:

@@ -31,7 +31,7 @@ from aec_bench.harness.harbor_dispatch import (
     ProposalHarborDispatchInput,
     build_proposal_harbor_job_config,
 )
-from aec_bench.harness.harbor_importing.proposal import ProposalHarborImportEvidence
+from aec_bench.harness.harbor_importing.proposal_evidence import ProposalHarborImportEvidence
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger
 from aec_bench.meta_harness.immutable_artifact_store import EvidenceRepository
 from aec_bench.meta_harness.proposal_dispatch_governance import (

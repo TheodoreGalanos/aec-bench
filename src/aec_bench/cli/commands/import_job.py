@@ -31,7 +31,7 @@ def import_job(
         emit("import", data=None, errors=[f"job directory not found: {job_dir}"], start_time=start)
         return
 
-    from aec_bench.harness.harbor_import import import_harbor_job
+    from aec_bench.harness.harbor_importing.core import import_harbor_job
     from aec_bench.ledger.writer import DuplicateTrialRecordError, write_trial_record
 
     with console.status("Importing Harbor job..."):

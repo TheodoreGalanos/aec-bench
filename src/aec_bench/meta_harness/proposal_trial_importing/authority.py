@@ -17,7 +17,7 @@ from aec_bench.contracts.authority import (
 )
 from aec_bench.contracts.harness_kernel import ContentAddressedModel
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
-from aec_bench.harness.harbor_importing.proposal import ProposalHarborImportEvidence
+from aec_bench.harness.harbor_importing.proposal_evidence import ProposalHarborImportEvidence
 from aec_bench.meta_harness.authority_ledger import (
     AuthorityLedger,
     StoredBasis,

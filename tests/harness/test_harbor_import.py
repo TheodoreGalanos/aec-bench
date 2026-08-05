@@ -20,11 +20,13 @@ from aec_bench.contracts.output_completion import (
 from aec_bench.contracts.proposal_execution import ProposalSessionStatus
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import Completeness
-from aec_bench.harness.harbor_import import (
-    HarborImportError,
+from aec_bench.harness.harbor_importing.contracts import HarborImportError
+from aec_bench.harness.harbor_importing.core import (
     import_harbor_job,
     import_harbor_trial,
     iter_harbor_trial_dirs,
+)
+from aec_bench.harness.harbor_importing.proposal_evidence.api import (
     load_proposal_harbor_candidate_failure_evidence,
     load_proposal_harbor_import_evidence,
 )
@@ -125,6 +127,9 @@ def test_import_current_entrypoint_result_preserves_failure_evidence(tmp_path: P
 
     assert record.outputs.agent_result is not None
     assert record.outputs.agent_result["failure_kind"] == "provider_error"
+    assert not record.outputs.terminated
+    assert not record.outputs.truncated
+    assert record.outputs.final_reason == "provider_error"
 
 
 def test_import_current_entrypoint_result_preserves_typed_completion_reason(tmp_path: Path) -> None:
@@ -148,6 +153,9 @@ def test_import_current_entrypoint_result_preserves_typed_completion_reason(tmp_
 
     assert record.outputs.agent_result is not None
     assert record.outputs.agent_result["completion_reason"] == "output_contract_satisfied"
+    assert record.outputs.terminated
+    assert not record.outputs.truncated
+    assert record.outputs.final_reason == "output_contract_satisfied"
     assert record.outputs.agent_result["completion_assistance"] == {
         "contract_satisfied": True,
         "reminder_sent": True,
@@ -313,6 +321,9 @@ def test_import_current_entrypoint_result_preserves_typed_stop_and_turn_evidence
     assert record.outputs.agent_result["stop_reason"] == "iteration_cap"
     assert record.outputs.agent_result["turns_used"] == 7
     assert record.outputs.agent_result["max_turns"] == 7
+    assert not record.outputs.terminated
+    assert record.outputs.truncated
+    assert record.outputs.final_reason == "iteration_cap"
 
 
 def test_import_turn_limited_output_accepts_positive_verifier_attestation(tmp_path: Path) -> None:
@@ -1242,7 +1253,7 @@ def _write_proposal_result(
                 },
             },
             "environment": {
-                "import_path": ("aec_bench.providers.proposal_morph_harbor:ProposalMorphHarborEnvironment"),
+                "import_path": ("aec_bench.providers.proposal_morph.environment:ProposalMorphHarborEnvironment"),
                 "kwargs": {
                     "compute_backend": "morph",
                     "runtime_archive_path": host_config.runtime_archive_path,

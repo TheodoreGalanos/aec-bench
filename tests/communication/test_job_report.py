@@ -19,7 +19,7 @@ from aec_bench.evaluation.behavioral import (
     ClassifiedTrace,
     TurnClassification,
 )
-from aec_bench.harness.harbor_import import import_harbor_job, import_harbor_trial
+from aec_bench.harness.harbor_importing.core import import_harbor_job, import_harbor_trial
 from tests.support.trial_record_factories import make_trial_record
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

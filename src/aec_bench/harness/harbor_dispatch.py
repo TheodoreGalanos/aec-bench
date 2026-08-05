@@ -9,7 +9,6 @@ import stat
 import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
-from importlib import import_module
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -30,6 +29,9 @@ from aec_bench.harness.proposal_task_packaging.contracts import (
     ProposalTaskPackageManifest,
 )
 from aec_bench.harness.scheduler import build_trial_plan
+from aec_bench.providers.proposal_morph.constants import (
+    PROPOSAL_MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH,
+)
 from aec_bench.tasks.loader import LoadError, load_task_definition
 
 MORPH_BACKEND = "morph"
@@ -40,6 +42,13 @@ HARBOR_RUN_BACKENDS = (*HARBOR_NATIVE_BACKENDS, MORPH_BACKEND)
 
 class HarborDispatchError(Exception):
     pass
+
+
+def validate_harbor_job_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Validate one concrete config at the Harbor SDK boundary."""
+
+    JobConfig.model_validate(config)
+    return config
 
 
 @dataclass(frozen=True)
@@ -75,6 +84,55 @@ class SubprocessHarborExecutor:
         return int(completed.returncode)
 
 
+def execute_harbor_config(
+    *,
+    config_path: Path,
+    project_root: Path,
+    executor: HarborCommandExecutor | None = None,
+    execute: bool = True,
+) -> tuple[list[str], int | None]:
+    """Execute one already-written Harbor configuration through the current effect boundary."""
+
+    command = ["uv", "run", "harbor", "run", "-c", str(config_path)]
+    if not execute:
+        return command, None
+    exit_code = (executor or SubprocessHarborExecutor()).execute(
+        command=command,
+        cwd=Path(project_root),
+    )
+    return command, exit_code
+
+
+def dispatch_harbor_config(
+    *,
+    config: dict[str, Any],
+    config_path: Path,
+    project_root: Path,
+    selected_task_count: int,
+    planned_trial_count: int,
+    executor: HarborCommandExecutor | None = None,
+    execute: bool = True,
+) -> HarborDispatchResult:
+    """Write and optionally execute one validated Harbor configuration."""
+
+    destination = Path(config_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    command, exit_code = execute_harbor_config(
+        config_path=destination,
+        project_root=project_root,
+        executor=executor,
+        execute=execute,
+    )
+    return HarborDispatchResult(
+        config_path=destination,
+        command=command,
+        selected_task_count=selected_task_count,
+        planned_trial_count=planned_trial_count,
+        exit_code=exit_code,
+    )
+
+
 @dataclass(frozen=True)
 class HarborExperimentDispatcher:
     project_root: Path
@@ -99,21 +157,15 @@ class HarborExperimentDispatcher:
             jobs_dir=self.jobs_dir,
             task_path_overrides=task_path_overrides,
         )
-        config_path.write_text(yaml.safe_dump(job_config, sort_keys=False), encoding="utf-8")
-
         planned_trials = build_trial_plan(manifest, tasks)
-        command = ["uv", "run", "harbor", "run", "-c", str(config_path)]
-        exit_code: int | None = None
-        if execute:
-            resolved_executor = executor or SubprocessHarborExecutor()
-            exit_code = resolved_executor.execute(command=command, cwd=self.project_root)
-
-        return HarborDispatchResult(
+        return dispatch_harbor_config(
+            config=job_config,
             config_path=config_path,
-            command=command,
+            project_root=self.project_root,
             selected_task_count=len(tasks),
             planned_trial_count=len(planned_trials),
-            exit_code=exit_code,
+            executor=executor,
+            execute=execute,
         )
 
 
@@ -138,7 +190,7 @@ def build_harbor_job_config(
             "n_concurrent_trials": int(manifest.compute.resource_limits.get("n_concurrent_trials", 1)),
             "quiet": False,
         },
-        "environment": _harbor_environment_config(manifest.compute.backend),
+        "environment": harbor_environment_config(manifest.compute.backend),
         "agents": agents,
         "datasets": [],
         "tasks": _harbor_task_configs(
@@ -229,7 +281,7 @@ def build_proposal_harbor_job_config(
             "quiet": False,
         },
         "environment": {
-            "import_path": _proposal_morph_environment_import_path(),
+            "import_path": PROPOSAL_MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH,
             "force_build": False,
             "delete": True,
             "kwargs": {
@@ -267,28 +319,12 @@ def build_proposal_harbor_job_config(
         ],
     }
     try:
-        JobConfig.model_validate(config)
+        validate_harbor_job_config(config)
     except ValueError as error:
         raise HarborDispatchError(
             f"proposal Harbor JobConfig is invalid: {error}",
         ) from error
     return config
-
-
-def _proposal_morph_environment_import_path() -> str:
-    module = import_module(
-        "aec_bench.providers.proposal_morph_harbor",
-    )
-    value = getattr(
-        module,
-        "PROPOSAL_MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH",
-        None,
-    )
-    if not isinstance(value, str) or not value.strip():
-        raise HarborDispatchError(
-            "proposal Morph Harbor environment import path is unavailable",
-        )
-    return value
 
 
 def _harbor_task_configs(
@@ -450,7 +486,7 @@ def _validate_exact_proposal_task_package_member(
     return True
 
 
-def _harbor_environment_config(backend: str) -> dict[str, Any]:
+def harbor_environment_config(backend: str) -> dict[str, Any]:
     if backend == MORPH_BACKEND:
         return {
             "import_path": MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH,
@@ -468,25 +504,6 @@ def _harbor_environment_config(backend: str) -> dict[str, Any]:
 
 ENTRYPOINT_AGENT_IMPORT_PATH = "agents.entrypoint_agent:EntrypointAgent"
 ENTRYPOINT_AGENT_RUNTIME_NAME = "entrypoint"
-
-# Kept for reference during deprecation — no longer used for routing.
-_LEGACY_HARBOR_IMPORT_PATH_TABLE: dict[tuple[str, str], str] = {
-    # Tool-loop agents
-    ("tool_loop", "anthropic"): "agents.tool_loop_anthropic:ToolLoopAnthropicAgent",
-    ("tool-loop-anthropic", "anthropic"): "agents.tool_loop_anthropic:ToolLoopAnthropicAgent",
-    ("tool_loop", "azure_openai"): "agents.tool_loop_azure_openai:ToolLoopAzureOpenAIAgent",
-    # Script agents (single-turn)
-    ("direct", "anthropic"): "agents.script_anthropic:ScriptAnthropicAgent",
-    ("direct-anthropic", "anthropic"): "agents.script_anthropic:ScriptAnthropicAgent",
-    ("direct", "azure_openai"): "agents.script_azure_openai:ScriptAzureOpenAIAgent",
-    # PydanticAI agent (provider-agnostic)
-    ("pydantic_ai", "anthropic"): "agents.pydantic_ai_agent:PydanticAIBenchAgent",
-    ("pydantic_ai", "azure_openai"): "agents.pydantic_ai_agent:PydanticAIBenchAgent",
-    # RLM REPL agent (provider-agnostic via PydanticAI)
-    ("rlm", "anthropic"): "agents.rlm_agent:RlmAgent",
-    ("rlm", "azure_openai"): "agents.rlm_agent:RlmAgent",
-    ("rlm-anthropic", "anthropic"): "agents.rlm_agent:RlmAgent",
-}
 
 
 def _harbor_agent_config(agent: AgentConfig) -> dict[str, Any]:

@@ -61,7 +61,8 @@ The current path is:
 
 1. Author or generate a task and validate its `TaskDefinition`.
 2. Resolve one runnable task instance and stage its workspace.
-3. Run a provider-neutral adapter through a local or hosted compute backend.
+3. Run a provider-neutral adapter locally or lower the experiment to the one
+   Harbor dispatch-and-import workflow for hosted execution.
 4. Collect output, the current trajectory, any provider-required transcript,
    and verifier artifacts.
 5. Build an `EvaluationResult` and persist a `TrialRecord`.
@@ -89,7 +90,8 @@ The current registered continual-world path provides:
 - shared chosen-point rollout orchestration through an explicitly supplied
   branch capability;
 - task-neutral local durability primitives; and
-- task-owned Harbor and evaluation calls outside neutral world registration.
+- harness-owned Harbor task integration and task-owned evaluation calls outside
+  neutral world registration.
 
 The public composition root currently registers two real consumers: the
 wastewater pump-station stewardship world and the SSC-03 hydraulic interaction

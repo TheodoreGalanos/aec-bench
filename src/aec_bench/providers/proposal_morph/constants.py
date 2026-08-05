@@ -1,5 +1,5 @@
 # ABOUTME: Centralizes stable public paths and bounded Morph proposal payload limits.
-# ABOUTME: Keeps the provider facade path and confinement policy free of orchestration state.
+# ABOUTME: Keeps the current environment path and confinement policy free of orchestration state.
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from aec_bench.providers.proposal_morph_cloud import (
 )
 
 PROPOSAL_MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH = (
-    "aec_bench.providers.proposal_morph_harbor:ProposalMorphHarborEnvironment"
+    "aec_bench.providers.proposal_morph.environment:ProposalMorphHarborEnvironment"
 )
 REMOTE_WORKSPACE_DIR = "/workspace"
 REMOTE_LOGS_DIR = "/logs"

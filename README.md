@@ -111,6 +111,9 @@ uv run aec-bench run tasks/electrical/pf-droop --model "<model-id>" --backend mo
 ```
 
 `aec-bench run` defaults to Harbor's `modal` backend. Morph Cloud runs use Harbor's normal task, agent, artifact, and verifier lifecycle through `--backend morph`; set `MORPH_API_KEY` in `.env` before using it.
+Remote runs use the same synchronous Harbor dispatch-and-import workflow and
+produce current `TrialRecord` ledger entries. `aec-bench run-local` remains the
+separate no-Harbor path for local execution.
 
 ### Meta-Harness
 

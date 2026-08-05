@@ -1,21 +1,22 @@
-# ABOUTME: Builds and runs Harbor jobs for the wastewater pump-station world.
-# ABOUTME: Applies task-specific backend checks before a provider execution starts.
+# ABOUTME: Builds the concrete Harbor job for the wastewater pump-station world.
+# ABOUTME: Delegates config execution to the one current Harbor dispatcher.
 
 from __future__ import annotations
 
-import os
-import subprocess
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-from harbor.models.job.config import JobConfig  # type: ignore[import-untyped]
-
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
+from aec_bench.harness.harbor_dispatch import (
+    HarborCommandExecutor,
+    HarborDispatchResult,
+    dispatch_harbor_config,
+    harbor_environment_config,
+    validate_harbor_job_config,
+)
+from aec_bench.harness.pump_station_harbor.export import (
     load_pump_station_harbor_bridge,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
+from aec_bench.harness.pump_station_harbor.session import (
     PUMP_STATION_MODEL_CONTROLLER_MODE,
     PUMP_STATION_MODEL_MAX_TURNS,
 )
@@ -24,17 +25,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.referenc
 )
 
 _ENTRYPOINT_IMPORT_PATH = "agents.entrypoint_agent:EntrypointAgent"
-_MORPH_ENVIRONMENT_IMPORT_PATH = "aec_bench.providers.morph_harbor:MorphHarborEnvironment"
 PUMP_STATION_HARBOR_BACKENDS = ("docker", "modal", "morph")
-
-
-@dataclass(frozen=True)
-class PumpStationHarborJobResult:
-    """Local paths and process result for one Harbor job request."""
-
-    config_path: Path
-    command: tuple[str, ...]
-    exit_code: int | None
 
 
 def build_pump_station_harbor_job_config(
@@ -49,7 +40,8 @@ def build_pump_station_harbor_job_config(
 
     task_root = Path(task_dir).resolve(strict=True)
     bridge = load_pump_station_harbor_bridge(task_root / "environment")
-    environment = _harbor_environment(backend)
+    validate_pump_station_harbor_backend(backend)
+    environment = harbor_environment_config(backend)
     model = model_name.strip()
     if not model:
         raise ValueError("pump-station Harbor model name is required")
@@ -99,8 +91,7 @@ def build_pump_station_harbor_job_config(
             },
         ],
     }
-    JobConfig.model_validate(config)
-    return config
+    return validate_harbor_job_config(config)
 
 
 def run_pump_station_harbor_job(
@@ -113,14 +104,14 @@ def run_pump_station_harbor_job(
     model_name: str = PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
     max_turns: int = PUMP_STATION_MODEL_MAX_TURNS,
     execute: bool = True,
-) -> PumpStationHarborJobResult:
+    executor: HarborCommandExecutor | None = None,
+) -> HarborDispatchResult:
     """Write the exact job config and optionally execute local Harbor."""
 
     root = Path(project_root).resolve(strict=True)
     if not (root / "agents" / "entrypoint_agent.py").is_file():
         raise ValueError("project root lacks the Harbor entrypoint agent")
-    if execute:
-        validate_pump_station_harbor_backend_for_execution(backend)
+    validate_pump_station_harbor_backend(backend)
     config = build_pump_station_harbor_job_config(
         task_dir=task_dir,
         jobs_dir=jobs_dir,
@@ -128,61 +119,19 @@ def run_pump_station_harbor_job(
         model_name=model_name,
         max_turns=max_turns,
     )
-    destination = Path(config_path)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(
-        yaml.safe_dump(config, sort_keys=False),
-        encoding="utf-8",
-    )
-    command = ("uv", "run", "harbor", "run", "-c", str(destination))
-    exit_code: int | None = None
-    if execute:
-        environment = dict(os.environ)
-        existing_pythonpath = environment.get("PYTHONPATH", "")
-        environment["PYTHONPATH"] = str(root) if not existing_pythonpath else f"{root}{os.pathsep}{existing_pythonpath}"
-        completed = subprocess.run(
-            command,
-            cwd=root,
-            check=False,
-            env=environment,
-        )
-        exit_code = int(completed.returncode)
-    return PumpStationHarborJobResult(
-        config_path=destination,
-        command=command,
-        exit_code=exit_code,
+    return dispatch_harbor_config(
+        config=config,
+        config_path=config_path,
+        project_root=root,
+        selected_task_count=1,
+        planned_trial_count=1,
+        executor=executor,
+        execute=execute,
     )
 
 
-def validate_pump_station_harbor_backend_for_execution(backend: str) -> None:
+def validate_pump_station_harbor_backend(backend: str) -> None:
     """Reject a backend that cannot enforce the pump-station network rule."""
 
     if backend not in PUMP_STATION_HARBOR_BACKENDS:
         raise ValueError("unsupported pump-station Harbor backend: " + backend)
-
-
-def _harbor_environment(backend: str) -> dict[str, Any]:
-    if backend not in PUMP_STATION_HARBOR_BACKENDS:
-        raise ValueError("unsupported pump-station Harbor backend: " + backend)
-    if backend == "morph":
-        return {
-            "import_path": _MORPH_ENVIRONMENT_IMPORT_PATH,
-            "force_build": False,
-            "delete": True,
-            "kwargs": {"compute_backend": "morph"},
-        }
-    return {
-        "type": backend,
-        "force_build": False,
-        "delete": True,
-    }
-
-
-__all__ = (
-    "PumpStationHarborJobResult",
-    "PUMP_STATION_HARBOR_BACKENDS",
-    "PUMP_STATION_MODEL_CONTROLLER_MODE",
-    "build_pump_station_harbor_job_config",
-    "run_pump_station_harbor_job",
-    "validate_pump_station_harbor_backend_for_execution",
-)

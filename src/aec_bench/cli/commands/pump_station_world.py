@@ -255,11 +255,11 @@ def export_harbor_command(
 ) -> None:
     """Export the registered wastewater pump-station Harbor task."""
 
+    from aec_bench.harness.pump_station_harbor.export import (
+        export_pump_station_harbor_task,
+    )
     from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
         pump_station_continual_world_definition,
-    )
-    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
-        export_pump_station_harbor_task,
     )
 
     started = time.monotonic()
@@ -326,7 +326,7 @@ def run_harbor_command(
 ) -> None:
     """Prepare and optionally run one local provider-free Harbor job."""
 
-    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_job import (
+    from aec_bench.harness.pump_station_harbor.job import (
         run_pump_station_harbor_job,
     )
 

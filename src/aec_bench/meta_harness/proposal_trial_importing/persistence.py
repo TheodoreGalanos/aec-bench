@@ -1,5 +1,5 @@
 # ABOUTME: Persists and reopens immutable proposal-import artifacts in EvidenceRepository.
-# ABOUTME: Preserves legacy paths, canonical bytes, physical hashes, and confinement errors.
+# ABOUTME: Preserves canonical bytes, physical hashes, and confinement errors.
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from pydantic import TypeAdapter
 from aec_bench.contracts.harness_kernel import ContentAddressedModel
 from aec_bench.contracts.proposal_execution import ProposalSessionReceipt
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
-from aec_bench.harness.harbor_importing.proposal import ProposalHarborImportEvidence
+from aec_bench.harness.harbor_importing.proposal_evidence import ProposalHarborImportEvidence
 from aec_bench.meta_harness.immutable_artifact_store import (
     EvidenceRepository,
     ImmutableArtifactCollisionError,

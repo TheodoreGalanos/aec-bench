@@ -139,7 +139,7 @@ RUNTIME_DIR="$(mktemp -d)"
 "$PYTHON_BIN" -m zipfile -e "$VERIFIER_RUNTIME" "$RUNTIME_DIR"
 
 PYTHONPATH="$RUNTIME_DIR${{PYTHONPATH:+:$PYTHONPATH}}" "$PYTHON_BIN" \\
-  -m aec_bench.task_world_templates.harbor_export verify \\
+  -m aec_bench.harness.harbor_task_export verify \\
   --package-dir "$PACKAGE_DIR" \\
   --run-dir "$RUN_DIR" \\
   --envelope "$ENVELOPE_PATH" \\

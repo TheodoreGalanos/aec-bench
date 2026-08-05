@@ -39,7 +39,7 @@ from aec_bench.contracts.proposal_execution import (
 from aec_bench.harness.proposal_runtime_archive import ProposalRuntimeArchive
 from aec_bench.harness.runtime_dependencies import RUNTIME_PYTHON_PACKAGES
 from aec_bench.providers.morph_cloud import MorphCommandResult
-from aec_bench.providers.proposal_morph_harbor import (
+from aec_bench.providers.proposal_morph import (
     PROPOSAL_MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH,
     ProposalMorphBoundaryError,
     ProposalMorphHarborEnvironment,

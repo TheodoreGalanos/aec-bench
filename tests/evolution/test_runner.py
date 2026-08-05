@@ -2,18 +2,28 @@
 # ABOUTME: Verifies the runner wires workspace, engine, and orchestrator correctly.
 
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 import yaml  # type: ignore[import-untyped]
 
-from aec_bench.contracts.evolution import EvolutionConfig, EvolverModelConfig, TaskGenerateConfig
+from aec_bench.contracts.evolution import (
+    EvolutionConfig,
+    EvolverModelConfig,
+    TaskGenerateConfig,
+    WorkspaceSnapshot,
+)
 from aec_bench.contracts.experiment_manifest import AgentConfig, ClientConfig, TaskSelector
 from aec_bench.evolution.runner import (
+    _build_harbor_solve_fn,
     _resolve_template,
     build_evolution_runner,
     build_evolution_runner_from_config,
     generate_task_instances,
 )
+from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
+from tests.support.trial_record_factories import make_trial_record
 
 
 def _scaffold_workspace(root: Path) -> Path:
@@ -121,23 +131,20 @@ class TestBuildEvolutionRunnerFromConfig:
         assert runner._workspace.manifest.name == "runner-test"
 
 
-class TestBuildEvolutionRunnerHarborFallback:
-    """Tests for harbor backend wiring — uses stubs since Modal SDK may not be installed."""
+class TestBuildEvolutionRunnerRemoteExecution:
+    """Tests remote evolution wiring without contacting a provider."""
 
-    def test_harbor_without_solver_warns_and_stubs(self, tmp_path: Path) -> None:
+    def test_undocumented_harbor_backend_alias_is_rejected(self, tmp_path: Path) -> None:
         ws_root = _scaffold_workspace(tmp_path / "ws")
-        config = EvolutionConfig(
-            workspace_path=str(ws_root),
-            models=EvolverModelConfig(classifier="haiku", evolver="sonnet"),
-            task_selector=TaskSelector(),
-            backend="harbor",
-            # No solver config
-        )
-        runner = build_evolution_runner_from_config(config=config)
-        # Should fall back to stub (no solver = can't build adapter)
-        assert hasattr(runner, "run")
+        with pytest.raises(ValueError, match="Input should be 'local', 'modal' or 'morph'"):
+            EvolutionConfig(
+                workspace_path=str(ws_root),
+                models=EvolverModelConfig(classifier="haiku", evolver="sonnet"),
+                task_selector=TaskSelector(),
+                backend="harbor",  # type: ignore[arg-type]
+            )
 
-    def test_modal_backend_alias(self, tmp_path: Path) -> None:
+    def test_modal_without_solver_warns_and_stubs(self, tmp_path: Path) -> None:
         ws_root = _scaffold_workspace(tmp_path / "ws")
         config = EvolutionConfig(
             workspace_path=str(ws_root),
@@ -176,6 +183,68 @@ class TestBuildEvolutionRunnerHarborFallback:
         )
         runner = build_evolution_runner_from_config(config=config)
         assert callable(runner._solve_fn)
+
+    def test_remote_solve_consumes_the_current_harbor_workflow(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        workspace = _scaffold_workspace(tmp_path / "ws")
+        task_dir = tmp_path / "tasks" / "electrical" / "voltage-drop" / "demo"
+        (task_dir / "environment").mkdir(parents=True)
+        (task_dir / "tests").mkdir()
+        (task_dir / "task.toml").write_text('[metadata]\ndifficulty = "easy"\n', encoding="utf-8")
+        (task_dir / "instruction.md").write_text(
+            "Calculate voltage drop and write /workspace/output.md.",
+            encoding="utf-8",
+        )
+        (task_dir / "environment" / "Dockerfile").write_text("FROM python:3.13-slim\n", encoding="utf-8")
+        (task_dir / "tests" / "test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        record = make_trial_record(experiment_id="evo-current-harbor")
+        ledger_path = tmp_path / "ledger-record.json"
+        ledger_path.write_text(record.model_dump_json(), encoding="utf-8")
+        observed: dict[str, Any] = {}
+
+        def fake_run(_workflow: SynchronousHarborWorkflow, **kwargs: Any) -> SimpleNamespace:
+            observed.update(kwargs)
+            return SimpleNamespace(
+                import_result=SimpleNamespace(ledger_paths=[ledger_path]),
+            )
+
+        monkeypatch.setattr(SynchronousHarborWorkflow, "run", fake_run)
+        config = EvolutionConfig(
+            workspace_path=str(workspace),
+            models=EvolverModelConfig(classifier="haiku", evolver="sonnet"),
+            task_selector=TaskSelector(),
+            solver=AgentConfig(
+                name="evo-solver",
+                adapter="direct",
+                model="replay-direct",
+                client=ClientConfig(kind="replay", settings={"output_text": "done"}),
+            ),
+            backend="morph",
+        )
+        solve = _build_harbor_solve_fn(
+            config=config,
+            task_dirs=[task_dir],
+            experiment_id="evo-current-harbor",
+        )
+
+        records = solve(
+            WorkspaceSnapshot(
+                system_prompt="Use the evolved instructions.",
+                workspace_version="evo-1",
+            ),
+            1,
+        )
+
+        assert records == [record]
+        assert observed["manifest"].compute.backend == "morph"
+        assert observed["resolved_tasks"][0].task_id == "electrical/voltage-drop/demo"
+        assert observed["task_path_overrides"] == {
+            "electrical/voltage-drop/demo": task_dir.resolve(),
+        }
+        assert "Use the evolved instructions." in (task_dir / "system_prompt.md").read_text(encoding="utf-8")
 
 
 class TestResolveTemplate:

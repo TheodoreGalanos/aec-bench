@@ -34,7 +34,7 @@ readable.
 | Trial and episode record | Harness and ledger | Execution, verifier, and artifact evidence becomes reportable benchmark evidence | Current persisted record; no retained historical reader | [`TrialRecord`](../src/aec_bench/contracts/trial_record.py) plus the owning episode or world protocol | Persisted and exportable |
 | Evaluation result | Evaluation | Verifier output and review evidence become reward, validity, and diagnostics | Protected as part of a persisted trial or published result | [`EvaluationResult`](../src/aec_bench/contracts/evaluation_result.py) | Persisted and externally reported |
 | Dataset manifest and identity | Dataset generation and storage | A set of task bytes becomes a named benchmark snapshot | Protected when published; content identity is authoritative | [`DatasetManifest`](../src/aec_bench/contracts/dataset.py) and dataset hashing/storage | Persisted and publishable |
-| Adapter and backend request/result | Adapters and harness | Harness input crosses into model or compute execution and returns untrusted output | Internal request/result; external provider documents are lenient ingestion boundaries | [`AdapterRequest` and `AdapterResult`](../src/aec_bench/adapters/base.py), [`BackendExecutionRequest` and `BackendExecutionResult`](../src/aec_bench/harness/backend.py), and [Harbor ingestion models](../src/aec_bench/harness/harbor_contract.py) | Internal, cross-process, and external |
+| Adapter and Harbor execution | Adapters and harness | Harness input crosses into local model execution or the supported Harbor workflow and returns untrusted output | Internal adapter values; Harbor result documents are lenient ingestion boundaries | [`AdapterRequest` and `AdapterResult`](../src/aec_bench/adapters/base.py), the [Harbor workflow](../src/aec_bench/harness/harbor_workflow.py), and [Harbor ingestion models](../src/aec_bench/harness/harbor_contract.py) | Internal, cross-process, and external |
 | Artifact and evidence reference | Harness, ledger, and the producing domain | Filesystem or provider output becomes content-bound evidence | Protected when stored in a trial, dataset, freeze, or published record | `ArtifactReference` in [`trial_record.py`](../src/aec_bench/contracts/trial_record.py) and narrower owner-specific references | Persisted reference |
 | Visibility classification | Task ownership and evaluation policy | Material enters public, calibration, or holdout handling | Protected | `Visibility` in [`task_definition.py`](../src/aec_bench/contracts/task_definition.py) and visibility checks in persisted records | Persisted and policy-bearing |
 | Interactive-world registration and calls | Continual runtime and registered task worlds | An exact executable build/profile is resolved and an actor or host request reaches task-owned behavior | Current unversioned installed calls; task-owned persisted run records | [`continual_world.py`](../src/aec_bench/contracts/continual_world.py), [`world_interface.py`](../src/aec_bench/contracts/world_interface.py), and the [runtime protocol](protocols/interactive-world-runtime.md) | Internal, persisted, and installed JSON |
@@ -117,8 +117,9 @@ published benchmark claim must cite the content hash, not rely on a mutable
 ## Provider request and result envelopes
 
 The harness-facing adapter contract is `AdapterRequest` to `AdapterResult`.
-Compute backends wrap that execution in `BackendExecutionRequest` and return
-`BackendExecutionResult`. Harbor documents are external input and therefore use
+Local execution calls the selected adapter directly. Hosted execution lowers
+the current experiment manifest into Harbor configuration, dispatches through
+the synchronous Harbor workflow, and imports Harbor result documents through
 lenient ingestion models before repository-owned validation and normalization.
 
 These are related boundaries, not one universal provider schema. Provider
