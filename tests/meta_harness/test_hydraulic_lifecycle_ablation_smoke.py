@@ -15,16 +15,15 @@ from aec_bench.meta_harness.evidence_lifecycle_ablation_plan import (
     LifecycleAblationManifest,
     LifecycleAblationStudyDesign,
 )
-from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.lifecycles import materialize_lifecycle_template
+from aec_bench.task_world_templates.lifecycles import materialize_lifecycle
 from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_interaction_smoke import (
     write_ssc03_hydraulic_smoke_submission,
 )
 
 
 def test_hydraulic_smoke_helper_writes_without_submitting(tmp_path: Path) -> None:
-    package = materialize_lifecycle_template(
-        get_template("hydraulic-interaction-lifecycle-review"),
+    package = materialize_lifecycle(
+        "hydraulic-interaction-lifecycle-review",
         tmp_path / "package",
         variant_id="tailwater_revision",
     )

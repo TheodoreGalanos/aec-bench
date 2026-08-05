@@ -51,10 +51,10 @@ from aec_bench.meta_harness.lifecycle_operation_protocol import (
     lifecycle_operation_protocol_identity,
 )
 from aec_bench.task_world_templates.lifecycles import (
-    SealedLifecycleMount,
     materialize_sealed_lifecycle,
-    verify_lifecycle_template,
+    verify_lifecycle,
 )
+from aec_bench.task_world_templates.lifecycles.provider import SealedLifecycleMount
 from tests.support.sealed_lifecycle_provider import (
     FIXTURE_CHECKPOINT_ID,
     FIXTURE_OPERATION_ID,
@@ -148,7 +148,7 @@ def build_completed_sealed_lifecycle_audit(
             package_dir=mount.package_dir,
             run_dir=run_dir,
             model=calibration.selected_condition.requested_model,
-            verifier=verify_lifecycle_template,
+            verifier=verify_lifecycle,
             adapter_kind=calibration.selected_condition.requested_adapter,
             max_turns=calibration.selected_condition.max_turns_per_session,
             registry=registry,

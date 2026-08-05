@@ -36,15 +36,12 @@ from aec_bench.meta_harness.evidence_lifecycle_experiment import (
 from aec_bench.meta_harness.evidence_lifecycle_local import (
     run_local_evidence_lifecycle_fresh_context,
 )
-from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.lifecycles import (
     lifecycle_variant_ids,
     lifecycle_variant_metadata,
-    registered_lifecycle_verifier,
-)
-from aec_bench.task_world_templates.materializer import (
-    materialize_template_lifecycle,
-    verify_template_lifecycle,
+    lifecycle_verifier,
+    materialize_lifecycle,
+    verify_lifecycle,
 )
 
 
@@ -372,10 +369,9 @@ def build_lifecycle_ablation_plan(manifest: LifecycleAblationManifest) -> Lifecy
     package_identities: dict[str, dict[str, str]] = {}
     with tempfile.TemporaryDirectory(prefix="aec-bench-lifecycle-plan-") as temporary:
         package_root = Path(temporary)
-        template = get_template(manifest.lifecycle_template_id)
         for variant_id in sorted(manifest.variants):
-            package = materialize_template_lifecycle(
-                template,
+            package = materialize_lifecycle(
+                manifest.lifecycle_template_id,
                 package_root / variant_id,
                 variant_id=variant_id,
             )
@@ -471,8 +467,8 @@ def _ablation_code_provenance(template_id: str) -> LifecycleAblationCodeProvenan
     lifecycle_runtime_path = planner_path.with_name("evidence_lifecycle.py")
     local_runner_path = Path(inspect.getsourcefile(run_local_evidence_lifecycle_fresh_context) or "")
     importer_path = planner_path.with_name("evidence_lifecycle_trial_record.py")
-    verifier_entrypoint_path = Path(inspect.getsourcefile(verify_template_lifecycle) or "")
-    verifier = registered_lifecycle_verifier(template_id)
+    verifier_entrypoint_path = Path(inspect.getsourcefile(verify_lifecycle) or "")
+    verifier = lifecycle_verifier(template_id)
     verifier_path = Path(inspect.getsourcefile(verifier) or "")
     paths = {
         "planner_source_sha256": planner_path,
@@ -490,8 +486,6 @@ def _ablation_code_provenance(template_id: str) -> LifecycleAblationCodeProvenan
         **{name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in paths.items()},
         repository_commit=str(repository["commit"]),
         source_inventory_sha256=str(repository["source_inventory_sha256"]),
-        verifier_entrypoint_qualified_name=(
-            f"{verify_template_lifecycle.__module__}.{verify_template_lifecycle.__qualname__}"
-        ),
+        verifier_entrypoint_qualified_name=(f"{verify_lifecycle.__module__}.{verify_lifecycle.__qualname__}"),
         verifier_qualified_name=f"{verifier.__module__}.{verifier.__qualname__}",
     )

@@ -22,11 +22,8 @@ from aec_bench.generation.contracts import SampledInstance
 from aec_bench.generation.instruction_renderer import render_instruction
 from aec_bench.generation.verifier_gen import generate_verifier
 from aec_bench.images.extensions import generate_dockerfile
-from aec_bench.task_world_templates.catalogue import list_templates as list_composite_templates
 from aec_bench.templates.contracts import TemplateConfig, ToolMode
 from aec_bench.templates.registry import has_custom_verifier, load_engine_module
-
-RUNNABLE_DIFFICULTIES = {"easy", "medium", "hard"}
 
 RUNNABLE_DIFFICULTIES = {"easy", "medium", "hard"}
 
@@ -326,35 +323,6 @@ def _generated_task_world_profile(
     )
 
 
-def _declared_catalogue_topology(template_id: str) -> dict[str, object]:
-    """Project reward-blind catalogue topology without copying example answers."""
-    template = next(
-        (candidate for candidate in list_composite_templates() if candidate.template_id == template_id),
-        None,
-    )
-    if template is None:
-        return {}
-    return {
-        "template_id": template.template_id,
-        "pattern": template.pattern,
-        "stages": [stage.model_dump(mode="json") for stage in template.stages],
-        "handoffs": [
-            handoff.model_dump(
-                mode="json",
-                include={"id", "description", "unit", "producer_stage", "consumer_stages"},
-            )
-            for handoff in template.handoffs
-        ],
-        "branch_decisions": [
-            decision.model_dump(
-                mode="json",
-                include={"id", "description", "allowed", "evidence_key"},
-            )
-            for decision in template.branch_decisions
-        ],
-    }
-
-
 def scaffold_task_instance(
     config: TemplateConfig,
     engine_source: str,
@@ -468,7 +436,6 @@ def scaffold_task_instance(
 
     world_profile = _generated_task_world_profile(config, instance)
     world_payload = world_profile.model_dump(mode="json", exclude_none=True)
-    world_payload.update(_declared_catalogue_topology(config.meta.name))
     (authority_dir / "world.json").write_text(
         json.dumps(world_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

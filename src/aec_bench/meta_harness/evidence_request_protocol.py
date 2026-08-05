@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
+from aec_bench.contracts.evidence_lifecycle import EvidenceCheckpointSpec, EvidenceLifecycleSpec
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.meta_harness.evidence_lifecycle_state import (
     CheckpointRunRecord,
@@ -22,7 +23,6 @@ from aec_bench.meta_harness.evidence_lifecycle_state import (
     LifecycleTransitionKind,
     LifecycleTransitionRecord,
 )
-from aec_bench.task_world_templates.contracts import EvidenceCheckpointSpec, EvidenceLifecycleSpec
 
 
 class EvidenceLifecycleError(RuntimeError):

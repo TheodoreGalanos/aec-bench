@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 from pydantic import ValidationError
 
+from aec_bench.contracts.evidence_lifecycle import EvidenceCheckpointSpec, EvidenceLifecycleSpec
 from aec_bench.ledger.durability import (
     DurableFileReplaceError,
     fsync_directory,
@@ -40,7 +41,6 @@ from aec_bench.meta_harness.evidence_request_protocol import (
     _validate_evidence_request_state_contract,
 )
 from aec_bench.meta_harness.ledger import append_ledger_entry, read_ledger
-from aec_bench.task_world_templates.contracts import EvidenceCheckpointSpec, EvidenceLifecycleSpec
 
 
 def _load_evidence_request_resolutions(

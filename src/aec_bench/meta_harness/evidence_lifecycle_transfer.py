@@ -14,6 +14,10 @@ from typing import Literal
 from pydantic import NonNegativeInt, PositiveInt, ValidationError, field_validator, model_validator
 
 from aec_bench.contracts.evaluation_result import ValidityCheck
+from aec_bench.contracts.evidence_lifecycle import (
+    EvidenceLifecycleSpec,
+    LifecycleTaskMetadata,
+)
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import ArtifactReference, Completeness, TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
@@ -63,8 +67,8 @@ from aec_bench.meta_harness.lifecycle_operation_store import (
     resolve_lifecycle_operation_current_source,
     validate_lifecycle_operation_resolver_replay,
 )
-from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate, EvidenceLifecycleSpec
-from aec_bench.task_world_templates.lifecycles import SealedLifecycleMount, lifecycle_package_variant
+from aec_bench.task_world_templates.lifecycles import lifecycle_package_variant
+from aec_bench.task_world_templates.lifecycles.provider import SealedLifecycleMount
 
 
 class LifecycleTransferRecordReference(StrictModel):
@@ -890,11 +894,9 @@ def _validate_v5_snapshot_reconciliation(
     template_content = package_content.get("template.json")
     if template_content is None:
         raise ValueError("v5 lifecycle package template is missing")
-    template = CompositeTaskWorldTemplate.model_validate_json(template_content)
-    if template.template_id != record.task.task_id:
+    metadata = LifecycleTaskMetadata.model_validate_json(template_content)
+    if metadata.template_id != record.task.task_id:
         raise ValueError("v5 lifecycle package template does not match the TrialRecord task")
-    if template.evidence_lifecycle != spec:
-        raise ValueError("v5 lifecycle package template and lifecycle contract disagree")
     _validate_v5_canonical_metadata(
         record,
         artifacts=artifacts,

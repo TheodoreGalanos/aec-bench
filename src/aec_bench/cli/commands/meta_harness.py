@@ -65,7 +65,7 @@ from aec_bench.meta_harness.world_process import (
     build_world_generation_request,
 )
 from aec_bench.meta_harness.world_runtime import run_process
-from aec_bench.task_world_templates.materializer import verify_template_lifecycle
+from aec_bench.task_world_templates.lifecycles import verify_lifecycle
 
 app = typer.Typer(help="Run meta-harness intake, world, operation, and governance processes.")
 
@@ -175,7 +175,7 @@ def lifecycle_run_local_command(
             adapter_kind=adapter,
             max_turns=max_turns,
             process_id=process_id,
-            verifier=verify_template_lifecycle,
+            verifier=verify_lifecycle,
             visibility_policy=selected_visibility,
         )
     elif mode == "fresh-context":
@@ -189,7 +189,7 @@ def lifecycle_run_local_command(
             adapter_kind=adapter,
             max_turns=max_turns,
             process_id=process_id,
-            verifier=verify_template_lifecycle,
+            verifier=verify_lifecycle,
             visibility_policy=selected_visibility,
         )
     else:

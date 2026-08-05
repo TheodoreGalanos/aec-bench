@@ -27,20 +27,21 @@ from aec_bench.prime_lab.lifecycle_exporter import (
     PrimeLifecycleExportConfig,
     export_prime_lifecycle_environment,
 )
-from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.lifecycles import (
-    SEALED_LIFECYCLE_RECEIPT_FILENAME,
-    SealedLifecycleProvider,
-    SealedLifecycleProviderError,
     bind_sealed_lifecycle,
     lifecycle_operation_resolver,
     lifecycle_package_variant,
-    materialize_lifecycle_template,
+    lifecycle_template_ids,
+    materialize_lifecycle,
     materialize_sealed_lifecycle,
-    registered_lifecycle_template_ids,
+    verify_lifecycle,
+)
+from aec_bench.task_world_templates.lifecycles.provider import (
+    SEALED_LIFECYCLE_RECEIPT_FILENAME,
+    SealedLifecycleProvider,
+    SealedLifecycleProviderError,
     sealed_lifecycle_mount_active,
     sealed_lifecycle_provider_protocol_identity,
-    verify_lifecycle_template,
 )
 from tests.support.sealed_lifecycle_provider import (
     FIXTURE_CHECKPOINT_ID,
@@ -61,7 +62,7 @@ class _ExplodingProviderContract:
 def test_explicit_sealed_mount_runs_real_task_without_mutating_public_registries(tmp_path: Path) -> None:
     assert sealed_lifecycle_mount_active() is False
     public_before = _public_cli_data()
-    public_ids_before = registered_lifecycle_template_ids()
+    public_ids_before = lifecycle_template_ids()
     provider = FakeSealedLifecycleProvider()
     package = tmp_path / "private" / "package"
     run_dir = tmp_path / "private" / "run"
@@ -113,7 +114,7 @@ def test_explicit_sealed_mount_runs_real_task_without_mutating_public_registries
             )
         )
         completed = json.loads(control.submit_checkpoint(FIXTURE_CHECKPOINT_ID))
-        verification = verify_lifecycle_template(package, run_dir)
+        verification = verify_lifecycle(package, run_dir)
 
         assert initial["checkpoint_id"] == FIXTURE_CHECKPOINT_ID
         assert operation["status"] == "completed"
@@ -124,14 +125,14 @@ def test_explicit_sealed_mount_runs_real_task_without_mutating_public_registries
 
         provider.failure_stage = "verify"
         with pytest.raises(SealedLifecycleProviderError, match="^sealed_provider_verifier_failed$") as verify_error:
-            verify_lifecycle_template(package, run_dir)
+            verify_lifecycle(package, run_dir)
         _assert_sanitized_error(verify_error.value, provider)
         provider.failure_stage = "wrong_identity"
         with pytest.raises(
             SealedLifecycleProviderError,
             match="^sealed_provider_verifier_result_invalid$",
         ) as identity_error:
-            verify_lifecycle_template(package, run_dir)
+            verify_lifecycle(package, run_dir)
         _assert_sanitized_error(identity_error.value, provider)
 
         provider.failure_stage = None
@@ -147,14 +148,14 @@ def test_explicit_sealed_mount_runs_real_task_without_mutating_public_registries
     public_after = _public_cli_data()
     assert provider.calls == calls_before_listing
     assert public_after == public_before
-    assert registered_lifecycle_template_ids() == public_ids_before
+    assert lifecycle_template_ids() == public_ids_before
     assert FIXTURE_TEMPLATE_ID not in public_ids_before
     assert lifecycle_package_variant(package) is None
     with pytest.raises(SealedLifecycleProviderError, match="^sealed_provider_not_mounted$"):
-        verify_lifecycle_template(package, run_dir)
+        verify_lifecycle(package, run_dir)
     rebound = bind_sealed_lifecycle(provider, package)
     with rebound.activate():
-        assert verify_lifecycle_template(package, run_dir)["passed"] is True
+        assert verify_lifecycle(package, run_dir)["passed"] is True
 
 
 def test_sealed_receipt_is_generic_exact_and_contains_no_provider_content(tmp_path: Path) -> None:
@@ -181,8 +182,8 @@ def test_public_prime_and_experiment_records_reject_sealed_packages_atomically(t
     private_mount = materialize_sealed_lifecycle(private_provider, private_package)
     receipt_bytes = (private_package / SEALED_LIFECYCLE_RECEIPT_FILENAME).read_bytes()
 
-    public_package = materialize_lifecycle_template(
-        get_template("hydraulic-interaction-lifecycle-review"),
+    public_package = materialize_lifecycle(
+        "hydraulic-interaction-lifecycle-review",
         tmp_path / "public-collision-package",
         variant_id="administrative_no_op",
     )
@@ -204,7 +205,7 @@ def test_public_prime_and_experiment_records_reject_sealed_packages_atomically(t
     assert not export_root.exists()
     assert lifecycle_package_variant(public_package) is None
     with pytest.raises(SealedLifecycleProviderError, match="^sealed_provider_not_mounted$"):
-        verify_lifecycle_template(public_package, tmp_path / "unused-run")
+        verify_lifecycle(public_package, tmp_path / "unused-run")
 
     with private_mount.activate():
         with pytest.raises(ValueError, match="^sealed_holdout_public_record_forbidden$") as record_error:
@@ -212,7 +213,7 @@ def test_public_prime_and_experiment_records_reject_sealed_packages_atomically(t
                 package_dir=private_package,
                 run_dir=tmp_path / "unused-private-run",
                 agent={},
-                verifier=verify_lifecycle_template,
+                verifier=verify_lifecycle,
                 verification={},
                 tool_schema=[],
             )
@@ -306,7 +307,7 @@ def test_provider_failures_are_sanitized_before_reaching_host_or_model_surfaces(
     mutating_verifier_provider.failure_stage = "mutate_verify"
     with mutating_verifier_mount.activate():
         with pytest.raises(SealedLifecycleProviderError, match="^sealed_provider_package_changed$") as mutation:
-            verify_lifecycle_template(mutating_verifier_package, tmp_path / "unused-verifier-run")
+            verify_lifecycle(mutating_verifier_package, tmp_path / "unused-verifier-run")
     _assert_sanitized_error(mutation.value, mutating_verifier_provider)
 
 
@@ -402,7 +403,7 @@ def test_private_prerequisite_failure_remains_a_typed_zero_cost_rejection(tmp_pa
 
 
 def _public_cli_data() -> dict[str, object]:
-    result = runner.invoke(app, ["--json", "task", "composite-template", "list"])
+    result = runner.invoke(app, ["--json", "task", "lifecycle", "list"])
     assert result.exit_code == 0, result.output
     return dict(json.loads(result.output)["data"])
 

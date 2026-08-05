@@ -9,14 +9,14 @@ from typing import Any, cast
 
 import pytest
 
-from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.hydraulics import build_hydraulic_run_request
 from aec_bench.task_world_templates.hydraulics.interventions import list_hydraulic_intervention_ids
 from aec_bench.task_world_templates.lifecycles import (
-    materialize_lifecycle_template,
-    registered_lifecycle_template_ids,
+    lifecycle_template_ids,
+    materialize_lifecycle,
 )
 from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_intervention import (
+    LIFECYCLE,
     TEMPLATE_ID,
     validated_ssc03_hydraulic_intervention_package,
 )
@@ -29,12 +29,10 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def test_intervention_lifecycle_has_a_distinct_four_checkpoint_contract() -> None:
-    template = get_template(TEMPLATE_ID)
-    assert template.evidence_lifecycle is not None
-    checkpoints = template.evidence_lifecycle.checkpoints
+    checkpoints = LIFECYCLE.checkpoints
 
-    assert TEMPLATE_ID in registered_lifecycle_template_ids()
-    assert template.evidence_lifecycle.lifecycle_id == "ssc03.hydraulic-design-response-lifecycle"
+    assert TEMPLATE_ID in lifecycle_template_ids()
+    assert LIFECYCLE.lifecycle_id == "ssc03.hydraulic-design-response-lifecycle"
     assert [checkpoint.checkpoint_id for checkpoint in checkpoints] == [
         "problem_analysis",
         "intervention_selection",
@@ -59,7 +57,7 @@ def test_intervention_lifecycle_has_a_distinct_four_checkpoint_contract() -> Non
 
 
 def test_materialized_package_exposes_options_without_outcomes(tmp_path: Path) -> None:
-    package = materialize_lifecycle_template(get_template(TEMPLATE_ID), tmp_path / "package")
+    package = materialize_lifecycle(TEMPLATE_ID, tmp_path / "package")
 
     validated = validated_ssc03_hydraulic_intervention_package(package)
     public_catalogue = _read_json(package / "releases" / "intervention_selection" / "interventions.json")
@@ -81,7 +79,7 @@ def test_materialized_package_exposes_options_without_outcomes(tmp_path: Path) -
 
 
 def test_materialized_package_rejects_option_tampering(tmp_path: Path) -> None:
-    package = materialize_lifecycle_template(get_template(TEMPLATE_ID), tmp_path / "package")
+    package = materialize_lifecycle(TEMPLATE_ID, tmp_path / "package")
     source = (
         package
         / "hidden"

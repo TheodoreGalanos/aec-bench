@@ -9,6 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec
 from aec_bench.meta_harness.evidence_lifecycle_episode import (
     LifecycleOperationCatalog,
     LifecycleOperationCurrentSource,
@@ -26,7 +27,6 @@ from aec_bench.meta_harness.lifecycle_operation_protocol import (
     lifecycle_operation_source_state_bytes,
     validate_lifecycle_operation_run_state,
 )
-from aec_bench.task_world_templates.contracts import EvidenceLifecycleSpec
 
 
 def expected_lifecycle_operation_run_artifact_paths(

@@ -20,6 +20,7 @@ from typing import Any, Literal, cast
 
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
+from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trajectory import read_trajectory
 from aec_bench.contracts.trial_record import (
@@ -91,11 +92,10 @@ from aec_bench.meta_harness.lifecycle_operation_store import (
     resolve_lifecycle_operation_current_source,
     validate_lifecycle_operation_resolver_replay,
 )
-from aec_bench.task_world_templates.contracts import EvidenceLifecycleSpec
 from aec_bench.task_world_templates.lifecycles import (
-    is_sealed_lifecycle_package,
     lifecycle_package_variant,
 )
+from aec_bench.task_world_templates.lifecycles.provider import is_sealed_lifecycle_package
 
 
 @dataclass(frozen=True)

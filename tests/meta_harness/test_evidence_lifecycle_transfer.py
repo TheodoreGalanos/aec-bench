@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 import aec_bench.meta_harness.evidence_lifecycle_experiment as experiment_runtime
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
+from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec
 from aec_bench.contracts.experiment_manifest import AgentConfig
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import (
@@ -69,11 +70,9 @@ from aec_bench.meta_harness.lifecycle_operation_protocol import (
     lifecycle_operation_protocol_identity,
     lifecycle_operation_source_identity,
 )
-from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.contracts import EvidenceLifecycleSpec
 from aec_bench.task_world_templates.lifecycles import (
     lifecycle_package_variant,
-    materialize_lifecycle_template,
+    materialize_lifecycle,
 )
 
 _RUNTIME_SHA256 = "1" * 64
@@ -917,10 +916,8 @@ def test_transfer_evaluator_binds_v5_visibility_to_validated_package_variant(
     assert result.status == "not_evaluable"
 
 
-@pytest.mark.parametrize("mutation", ["template_id", "lifecycle_contract"])
 def test_transfer_evaluator_binds_v5_package_template_to_record_task(
     tmp_path: Path,
-    mutation: Literal["template_id", "lifecycle_contract"],
 ) -> None:
     condition = _condition()
     calibration = _upgrade_to_v5_operation_snapshot(
@@ -935,7 +932,7 @@ def test_transfer_evaluator_binds_v5_package_template_to_record_task(
         ),
         forge_catalog=False,
     )
-    _forge_v5_package_template(calibration, mutation=mutation)
+    _forge_v5_package_template(calibration)
     target = _write_record(
         tmp_path,
         experiment_id="target",
@@ -1135,8 +1132,8 @@ def test_missing_or_escaping_snapshot_artifact_is_not_evaluable(
 
 
 def test_evidence_request_state_contract_rejects_unknown_checkpoint_id(tmp_path: Path) -> None:
-    package = materialize_lifecycle_template(
-        get_template("hydraulic-interaction-lifecycle-review"),
+    package = materialize_lifecycle(
+        "hydraulic-interaction-lifecycle-review",
         tmp_path / "package",
         variant_id="tailwater_revision",
     )
@@ -1792,8 +1789,8 @@ def _upgrade_to_v5_operation_snapshot(
     )
     run_root = artifact_root / "run"
     package_root = artifact_root / "package"
-    materialize_lifecycle_template(
-        get_template("hydraulic-interaction-lifecycle-review"),
+    materialize_lifecycle(
+        "hydraulic-interaction-lifecycle-review",
         package_root,
         variant_id="tailwater_revision",
     )
@@ -2400,8 +2397,6 @@ def _forge_v5_snapshot_metadata(
 
 def _forge_v5_package_template(
     written: _WrittenRecord,
-    *,
-    mutation: Literal["template_id", "lifecycle_contract"],
 ) -> None:
     record = TrialRecord.model_validate_json(written.record_path.read_text(encoding="utf-8"))
     assert record.outputs.artifacts is not None
@@ -2412,10 +2407,7 @@ def _forge_v5_package_template(
     )
     template_path = ledger_root / template_reference.path
     template = json.loads(template_path.read_text(encoding="utf-8"))
-    if mutation == "template_id":
-        template["template_id"] = "forged-template-id"
-    else:
-        template["evidence_lifecycle"]["lifecycle_id"] = "forged.template.lifecycle"
+    template["template_id"] = "forged-template-id"
     template_path.write_text(json.dumps(template, sort_keys=True), encoding="utf-8")
     template_reference = template_reference.model_copy(update={"sha256": _sha256(template_path)})
     package_sha256 = _package_sha256(template_path.parent)

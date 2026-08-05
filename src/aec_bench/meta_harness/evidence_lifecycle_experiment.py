@@ -46,10 +46,10 @@ from aec_bench.meta_harness.lifecycle_operation_protocol import (
     validate_lifecycle_operation_tool_schema,
 )
 from aec_bench.task_world_templates.lifecycles import (
-    is_sealed_lifecycle_package,
     lifecycle_package_variant,
-    registered_lifecycle_verifier,
+    lifecycle_verifier,
 )
+from aec_bench.task_world_templates.lifecycles.provider import is_sealed_lifecycle_package
 
 
 class LifecycleExperimentMetrics(StrictModel):
@@ -241,7 +241,7 @@ def record_lifecycle_experiment(
         template_id = _read_json(template_path).get("template_id")
         if isinstance(template_id, str):
             try:
-                registered_verifier = _callable_provenance(registered_lifecycle_verifier(template_id))
+                registered_verifier = _callable_provenance(lifecycle_verifier(template_id))
             except KeyError:
                 pass
     verifier_chain = [verifier_entrypoint]

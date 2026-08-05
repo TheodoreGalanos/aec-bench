@@ -31,8 +31,7 @@ from aec_bench.prime_lab.lifecycle_exporter import (
     PrimeLifecycleSourceProvenance,
     load_prime_lifecycle_manifest,
 )
-from aec_bench.task_world_templates.lifecycles import lifecycle_package_variant
-from aec_bench.task_world_templates.materializer import verify_template_lifecycle
+from aec_bench.task_world_templates.lifecycles import lifecycle_package_variant, verify_lifecycle
 
 _SYSTEM_PROMPT = """You are completing one staged AEC evidence lifecycle in a single persistent interaction.
 Use only the lifecycle workspace and control tools. Review the currently released evidence, write the active
@@ -168,7 +167,7 @@ async def aec_bench_lifecycle_reward(state: dict[str, Any]) -> float:
         state["aec_bench_reward"] = 0.0
         return 0.0
 
-    verification = verify_template_lifecycle(package_dir, run_dir)
+    verification = verify_lifecycle(package_dir, run_dir)
     reward = float(verification["reward"])
     state["lifecycle_verification"] = verification
     state["lifecycle_reward_status"] = "verified"

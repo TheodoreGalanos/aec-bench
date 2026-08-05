@@ -52,9 +52,9 @@ from aec_bench.meta_harness.evidence_lifecycle_local import (
     build_lifecycle_tool_schema,
 )
 from aec_bench.task_world_templates.lifecycles import (
-    SealedLifecycleMount,
     materialize_sealed_lifecycle,
 )
+from aec_bench.task_world_templates.lifecycles.provider import SealedLifecycleMount
 from tests.support.sealed_lifecycle_audit import (
     _campaign_manifest,
     _copy_repository_source,

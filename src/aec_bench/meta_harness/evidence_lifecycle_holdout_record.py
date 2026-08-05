@@ -148,10 +148,10 @@ from aec_bench.meta_harness.lifecycle_operation_protocol import (
     validate_lifecycle_operation_tool_schema,
 )
 from aec_bench.task_world_templates.lifecycles import (
-    SealedLifecycleMount,
     bind_sealed_lifecycle,
-    verify_lifecycle_template,
+    verify_lifecycle,
 )
+from aec_bench.task_world_templates.lifecycles.provider import SealedLifecycleMount
 
 __all__ = [
     "LifecycleHoldoutAuditManifest",
@@ -712,9 +712,7 @@ def _validate_snapshot(
             state = read_evidence_lifecycle_state(replay_package, replay_run)
             _validate_run_authorization(state, run_start, replay_run)
             verification = (
-                normalized
-                if normalized["overall"] == "incomplete"
-                else verify_lifecycle_template(replay_package, replay_run)
+                normalized if normalized["overall"] == "incomplete" else verify_lifecycle(replay_package, replay_run)
             )
     if verification != normalized:
         raise ValueError("sealed holdout verifier replay does not match the audit manifest")

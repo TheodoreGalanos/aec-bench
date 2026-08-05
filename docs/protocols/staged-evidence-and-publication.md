@@ -168,7 +168,7 @@ effect claim merely because candidate scores differ.
 
 Authoritative implementations include:
 
-- [`EvidenceCheckpointSpec` and `ConditionalEvidenceSpec`](../../src/aec_bench/task_world_templates/contracts.py)
+- [`EvidenceCheckpointSpec` and `ConditionalEvidenceSpec`](../../src/aec_bench/contracts/evidence_lifecycle.py)
 - [lifecycle coordination and recovery](../../src/aec_bench/meta_harness/evidence_lifecycle.py)
 - [episode request/result boundary](../../src/aec_bench/meta_harness/evidence_lifecycle_episode.py)
 - [conditional-evidence publication](../../src/aec_bench/meta_harness/evidence_request_store.py)

@@ -32,8 +32,7 @@ from aec_bench.meta_harness.lifecycle_operation_protocol import (
     validate_lifecycle_operation_run_state,
 )
 from aec_bench.meta_harness.lifecycle_operation_store import validate_lifecycle_operation_resolver_replay
-from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.lifecycles import materialize_lifecycle_template
+from aec_bench.task_world_templates.lifecycles import materialize_lifecycle
 
 TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
 
@@ -81,8 +80,8 @@ def _execute(
 
 
 def _prepare(tmp_path: Path, *, variant_id: str) -> tuple[Path, Path]:
-    package = materialize_lifecycle_template(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         tmp_path / "package",
         variant_id=variant_id,
     )

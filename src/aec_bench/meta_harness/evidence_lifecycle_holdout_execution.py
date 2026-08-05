@@ -51,9 +51,9 @@ from aec_bench.meta_harness.evidence_lifecycle_local import (
 )
 from aec_bench.meta_harness.lifecycle_operation_protocol import lifecycle_operation_protocol_identity
 from aec_bench.task_world_templates.lifecycles import (
-    SealedLifecycleMount,
-    verify_lifecycle_template,
+    verify_lifecycle,
 )
+from aec_bench.task_world_templates.lifecycles.provider import SealedLifecycleMount
 
 __all__ = [
     "LifecycleHoldoutExecutionResult",
@@ -239,7 +239,7 @@ def execute_lifecycle_holdout_audit_once(
                 package_dir=mount.package_dir,
                 run_dir=run_dir,
                 model=condition.requested_model,
-                verifier=verify_lifecycle_template,
+                verifier=verify_lifecycle,
                 adapter_kind=condition.requested_adapter,
                 max_turns=condition.max_turns_per_session,
                 process_id="process.sealed-holdout",
@@ -255,7 +255,7 @@ def execute_lifecycle_holdout_audit_once(
                 package_dir=mount.package_dir,
                 run_dir=run_dir,
                 model=condition.requested_model,
-                verifier=verify_lifecycle_template,
+                verifier=verify_lifecycle,
                 adapter_kind=condition.requested_adapter,
                 max_turns=condition.max_turns_per_session,
                 process_id="process.sealed-holdout",
@@ -344,7 +344,7 @@ def recover_lifecycle_holdout_audit_once(
     with mount.activate():
         state = read_evidence_lifecycle_state(mount.package_dir, run_dir)
         if state["status"] == "complete" and agent["status"] == "completed":
-            verification = verify_lifecycle_template(mount.package_dir, run_dir)
+            verification = verify_lifecycle(mount.package_dir, run_dir)
         else:
             verification = _incomplete_verification(calibration.selected_condition, state)
     tool_schema = _tool_schema(mount.package_dir, condition)
@@ -362,7 +362,7 @@ def recover_lifecycle_holdout_audit_once(
         package_dir=mount.package_dir,
         run_dir=run_dir,
         agent=agent,
-        verifier=verify_lifecycle_template,
+        verifier=verify_lifecycle,
         verification=verification,
         tool_schema=tool_schema,
         repository_dir=Path(repository_dir),

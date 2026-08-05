@@ -19,10 +19,9 @@ from aec_bench.meta_harness.evidence_lifecycle import (
     submit_evidence_checkpoint,
 )
 from aec_bench.meta_harness.evidence_request_protocol import EvidenceLifecycleError
-from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.lifecycles import (
-    materialize_lifecycle_template,
-    verify_lifecycle_template,
+    materialize_lifecycle,
+    verify_lifecycle,
 )
 
 TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
@@ -198,8 +197,8 @@ def _complete_lifecycle(
     mutate_submission: Callable[[str, dict[str, Any]], None] | None = None,
     add_rejected_operation: bool = False,
 ) -> tuple[Path, Path, str]:
-    package = materialize_lifecycle_template(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         tmp_path / "package",
         variant_id=variant_id,
     )
@@ -352,7 +351,7 @@ def test_complete_interaction_lifecycle_passes_all_evidence_gates(
 ) -> None:
     package, run, readiness = _complete_lifecycle(tmp_path, variant_id)
 
-    result = verify_lifecycle_template(package, run)
+    result = verify_lifecycle(package, run)
 
     failed_gates = {gate_id: gate for gate_id, gate in result["gates"].items() if not gate["passed"]}
     assert failed_gates == {}
@@ -401,7 +400,7 @@ def test_closeout_reference_failures_are_isolated(
         mutate_submission=mutate,
     )
 
-    result = verify_lifecycle_template(package, run)
+    result = verify_lifecycle(package, run)
 
     assert result["passed"] is False
     assert result["gates"][failed_gate]["passed"] is False
@@ -435,7 +434,7 @@ def test_revision_decision_continuity_is_checked_by_topology(
         mutate_submission=mutate,
     )
 
-    result = verify_lifecycle_template(package, run)
+    result = verify_lifecycle(package, run)
 
     assert result["passed"] is False
     assert result["gates"][expected_failed_gate]["passed"] is False
@@ -454,7 +453,7 @@ def test_affected_scenario_baseline_decision_is_verified(tmp_path: Path) -> None
         mutate_submission=mutate,
     )
 
-    result = verify_lifecycle_template(package, run)
+    result = verify_lifecycle(package, run)
 
     assert result["passed"] is False
     assert result["gates"]["affected_decision_update"]["passed"] is False
@@ -471,7 +470,7 @@ def test_checkpoint_contract_rejects_duplicate_scenario_decisions(tmp_path: Path
         mutate_submission=mutate,
     )
 
-    result = verify_lifecycle_template(package, run)
+    result = verify_lifecycle(package, run)
 
     assert result["passed"] is False
     assert result["gates"]["checkpoint_contract"]["passed"] is False
@@ -492,7 +491,7 @@ def test_stale_selected_operation_cannot_masquerade_as_current(tmp_path: Path) -
         mutate_submission=mutate,
     )
 
-    result = verify_lifecycle_template(package, run)
+    result = verify_lifecycle(package, run)
 
     assert result["passed"] is False
     assert result["gates"]["operation_evidence_integrity"]["passed"] is False
@@ -506,7 +505,7 @@ def test_extra_rejected_action_does_not_change_reward(tmp_path: Path) -> None:
         add_rejected_operation=True,
     )
 
-    result = verify_lifecycle_template(package, run)
+    result = verify_lifecycle(package, run)
 
     assert result["passed"] is True
     assert result["reward"] == 1.0
@@ -523,7 +522,7 @@ def test_unsafe_claim_boundary_fails_closed(tmp_path: Path) -> None:
         mutate_submission=mutate,
     )
 
-    result = verify_lifecycle_template(package, run)
+    result = verify_lifecycle(package, run)
 
     assert result["passed"] is False
     assert result["reward"] == 0.0
@@ -541,4 +540,4 @@ def test_canonical_pr18_result_tampering_fails_closed(tmp_path: Path) -> None:
     result_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     with pytest.raises(EvidenceLifecycleError, match="operation artifact hash mismatch"):
-        verify_lifecycle_template(package, run)
+        verify_lifecycle(package, run)

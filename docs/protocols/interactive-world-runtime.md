@@ -164,10 +164,11 @@ recovers ordered isolated children, verifies each child, and publishes exact
 receipts and lineage. It does not select a provider, open an actor session,
 apply a treatment, or evaluate a child.
 
-Compiled lifecycle composition is concrete. Each `LifecycleWorldAdapter`
-contains only the callable bundles its template supports. A lifecycle without
-interactive operations carries no placeholder resolver or smoke-environment
-port.
+Evidence-lifecycle composition is concrete and task-owned. The lifecycle
+composition root calls each retained task's materializer, verifier, optional
+operation resolver, and optional smoke environment directly. A lifecycle
+without interactive operations carries no placeholder resolver or
+smoke-environment port, and there is no shared lifecycle adapter protocol.
 
 Harbor export, agent execution, and import use the pump-owned bridge directly.
 The neutral world definition contains no provider or Harbor port. Evaluation

@@ -9,10 +9,13 @@ import re
 from pathlib import Path
 from typing import Any
 
+from aec_bench.contracts.evidence_lifecycle import (
+    EvidenceCheckpointSpec,
+    EvidenceLifecycleSpec,
+    LifecycleTaskMetadata,
+)
 from aec_bench.meta_harness.evidence_lifecycle import load_validated_lifecycle_submissions
 from aec_bench.meta_harness.evidence_lifecycle_metrics import score_semantic_transitions
-from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate
 from aec_bench.task_world_templates.lifecycles.ssc03_drainage_variants import (
     Ssc03LifecycleVariantContent,
     Ssc03LifecycleVariantSpec,
@@ -21,6 +24,75 @@ from aec_bench.task_world_templates.lifecycles.ssc03_drainage_variants import (
 )
 
 CHECKPOINT_IDS = ("initial_review", "response_review", "closeout_review")
+TEMPLATE_ID = "drainage-model-evidence-lifecycle-review"
+LIFECYCLE_ID = "ssc03.drainage-model-evidence-lifecycle"
+METADATA = LifecycleTaskMetadata(
+    template_id=TEMPLATE_ID,
+    name="Drainage Model Evidence Lifecycle Review",
+    discipline="civil",
+)
+LIFECYCLE = EvidenceLifecycleSpec(
+    lifecycle_id=LIFECYCLE_ID,
+    world_id=f"aec.task_world.composite.{TEMPLATE_ID}",
+    checkpoints=[
+        EvidenceCheckpointSpec(
+            checkpoint_id="initial_review",
+            title="Initial provenance review",
+            release_path="releases/initial_review",
+            instruction_path="instructions/initial_review.md",
+            submission_path="submissions/initial_review.json",
+            required_submission_fields=[
+                "checkpoint_id",
+                "evidence_refs",
+                "review_matrix",
+                "transition_decision",
+                "findings",
+                "closure_evidence_requests",
+                "accepted_decisions",
+                "readiness_decision",
+                "claim_boundary_statement",
+            ],
+        ),
+        EvidenceCheckpointSpec(
+            checkpoint_id="response_review",
+            title="Response and rerun review",
+            release_path="releases/response_review",
+            instruction_path="instructions/response_review.md",
+            submission_path="submissions/response_review.json",
+            depends_on=["initial_review"],
+            required_submission_fields=[
+                "checkpoint_id",
+                "evidence_refs",
+                "review_matrix",
+                "transition_decision",
+                "findings",
+                "closure_evidence_requests",
+                "accepted_decisions",
+                "readiness_decision",
+                "claim_boundary_statement",
+            ],
+        ),
+        EvidenceCheckpointSpec(
+            checkpoint_id="closeout_review",
+            title="Final closeout review",
+            release_path="releases/closeout_review",
+            instruction_path="instructions/closeout_review.md",
+            submission_path="submissions/closeout_review.json",
+            depends_on=["response_review"],
+            required_submission_fields=[
+                "checkpoint_id",
+                "evidence_refs",
+                "review_matrix",
+                "transition_decision",
+                "findings",
+                "closure_evidence_requests",
+                "accepted_decisions",
+                "readiness_decision",
+                "claim_boundary_statement",
+            ],
+        ),
+    ],
+)
 GATE_IDS = (
     "checkpoint_contract",
     "reviewer_self_consistency",
@@ -36,23 +108,16 @@ GATE_IDS = (
 def materialize_ssc03_evidence_lifecycle(
     output_dir: Path,
     *,
-    template: CompositeTaskWorldTemplate | None = None,
     variant_id: str | None = None,
 ) -> Path:
     """Write the runnable three-release SSC-03 lifecycle package."""
     output = Path(output_dir)
-    template = template or get_template("drainage-model-evidence-lifecycle-review")
-    if template.template_id != "drainage-model-evidence-lifecycle-review":
-        raise ValueError(f"unexpected SSC-03 lifecycle template: {template.template_id}")
-    if template.evidence_lifecycle is None:
-        raise ValueError("SSC-03 lifecycle template is missing its evidence_lifecycle contract")
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError(f"output directory must be empty: {output}")
     variant, content = _compile_variant_content(variant_id)
 
-    _write_json(output / "template.json", template.model_dump(mode="json"))
-    _write_json(output / "world.json", template.compile_task_world_payload())
-    _write_json(output / "lifecycle.json", template.evidence_lifecycle.model_dump(mode="json"))
+    _write_json(output / "template.json", METADATA.model_dump(mode="json"))
+    _write_json(output / "lifecycle.json", LIFECYCLE.model_dump(mode="json"))
     (output / "README.md").parent.mkdir(parents=True, exist_ok=True)
     (output / "README.md").write_text(_readme(), encoding="utf-8")
 

@@ -9,14 +9,14 @@ from typing import Any, cast
 
 import pytest
 
-from aec_bench.task_world_templates.catalogue import get_template
 from aec_bench.task_world_templates.hydraulics import build_hydraulic_run_request
 from aec_bench.task_world_templates.lifecycles import (
+    lifecycle_template_ids,
     lifecycle_variant_ids,
-    materialize_lifecycle_template,
-    registered_lifecycle_template_ids,
+    materialize_lifecycle,
 )
 from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_interaction import (
+    LIFECYCLE,
     validated_ssc03_hydraulic_interaction_variant,
 )
 
@@ -40,12 +40,9 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def test_hydraulic_interaction_family_is_registered_with_exact_public_variants() -> None:
-    template = get_template(TEMPLATE_ID)
-
-    assert TEMPLATE_ID in registered_lifecycle_template_ids()
+    assert TEMPLATE_ID in lifecycle_template_ids()
     assert lifecycle_variant_ids(TEMPLATE_ID) == VARIANT_IDS
-    assert template.evidence_lifecycle is not None
-    assert [checkpoint.checkpoint_id for checkpoint in template.evidence_lifecycle.checkpoints] == [
+    assert [checkpoint.checkpoint_id for checkpoint in LIFECYCLE.checkpoints] == [
         "baseline_analysis",
         "revision_analysis",
         "closeout_review",
@@ -54,9 +51,8 @@ def test_hydraulic_interaction_family_is_registered_with_exact_public_variants()
 
 @pytest.mark.parametrize("variant_id", VARIANT_IDS)
 def test_materialized_interaction_package_is_byte_identical_and_source_bound(tmp_path: Path, variant_id: str) -> None:
-    template = get_template(TEMPLATE_ID)
-    first = materialize_lifecycle_template(template, tmp_path / "first", variant_id=variant_id)
-    second = materialize_lifecycle_template(template, tmp_path / "second", variant_id=variant_id)
+    first = materialize_lifecycle(TEMPLATE_ID, tmp_path / "first", variant_id=variant_id)
+    second = materialize_lifecycle(TEMPLATE_ID, tmp_path / "second", variant_id=variant_id)
 
     assert _tree_bytes(first) == _tree_bytes(second)
     assert validated_ssc03_hydraulic_interaction_variant(first)["variant_id"] == variant_id
@@ -72,8 +68,8 @@ def test_materialized_interaction_package_is_byte_identical_and_source_bound(tmp
 
 
 def test_public_catalogues_are_bounded_and_hidden_resolver_contains_no_gold_answers(tmp_path: Path) -> None:
-    package = materialize_lifecycle_template(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         tmp_path / "package",
         variant_id="tailwater_revision",
     )
@@ -108,8 +104,8 @@ def test_public_catalogues_are_bounded_and_hidden_resolver_contains_no_gold_answ
 
 
 def test_public_instructions_define_the_structured_submission_without_topology_answers(tmp_path: Path) -> None:
-    package = materialize_lifecycle_template(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         tmp_path / "package",
         variant_id="major_idf_revision",
     )
@@ -150,8 +146,8 @@ def test_public_instructions_define_the_structured_submission_without_topology_a
 
 
 def test_variant_validation_rejects_revision_package_tampering(tmp_path: Path) -> None:
-    package = materialize_lifecycle_template(
-        get_template(TEMPLATE_ID),
+    package = materialize_lifecycle(
+        TEMPLATE_ID,
         tmp_path / "package",
         variant_id="major_idf_revision",
     )

@@ -14,10 +14,13 @@ from zipfile import ZipFile
 import pytest
 from harbor.models.task.task import Task as HarborTask  # type: ignore[import-untyped]
 
+from aec_bench.contracts.evidence_lifecycle import ConditionalEvidenceSpec, EvidenceRequestSpec
 from aec_bench.meta_harness.evidence_lifecycle import run_evidence_lifecycle
-from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.compiled_world import CompiledLifecycleWorld, CompiledWorldEnvelope
-from aec_bench.task_world_templates.contracts import ConditionalEvidenceSpec, EvidenceRequestSpec
+from aec_bench.task_world_templates.compiled_world import (
+    CompiledLifecycleWorld,
+    CompiledWorldEnvelope,
+    compile_lifecycle,
+)
 from aec_bench.task_world_templates.harbor_export import (
     HARBOR_LIFECYCLE_BRIDGE_MODE,
     ExportedHarborTask,
@@ -30,8 +33,7 @@ from aec_bench.task_world_templates.harbor_export import (
 from aec_bench.task_world_templates.harbor_exporting import bridge as harbor_bridge_module
 from aec_bench.task_world_templates.harbor_exporting import stable_io
 from aec_bench.task_world_templates.harbor_exporting.stable_io import RegularFileSnapshot
-from aec_bench.task_world_templates.lifecycles import registered_lifecycle_adapter
-from aec_bench.task_world_templates.materializer import compile_template_lifecycle
+from aec_bench.task_world_templates.lifecycles import lifecycle_definition, lifecycle_smoke_environment
 from aec_bench.tasks.registry import TaskRegistry
 from aec_bench.tasks.validator import validate_task
 
@@ -57,8 +59,8 @@ def _directory_sha256(path: Path) -> str:
 
 
 def _export_ssc03(tmp_path: Path) -> tuple[CompiledLifecycleWorld, ExportedHarborTask, Path]:
-    compiled = compile_template_lifecycle(
-        get_template(TEMPLATE_ID),
+    compiled = compile_lifecycle(
+        TEMPLATE_ID,
         tmp_path / "compiled",
         variant_id="administrative_no_op",
     )
@@ -368,8 +370,8 @@ def test_descriptor_bound_reader_rejects_in_place_mutation_before_open(
 
 
 def test_repeated_export_is_content_deterministic(tmp_path: Path) -> None:
-    compiled = compile_template_lifecycle(
-        get_template(TEMPLATE_ID),
+    compiled = compile_lifecycle(
+        TEMPLATE_ID,
         tmp_path / "compiled",
         variant_id="administrative_no_op",
     )
@@ -407,8 +409,7 @@ def test_independent_verifier_uses_hidden_package_only_after_agent_phase(tmp_pat
     compiled, exported, _ = _export_ssc03(tmp_path)
     verifier_package = exported.task_dir / "tests" / "compiled-world"
     run_dir = tmp_path / "reference-run"
-    adapter = registered_lifecycle_adapter(TEMPLATE_ID)
-    environment = adapter.build_smoke_environment(verifier_package)
+    environment = lifecycle_smoke_environment(TEMPLATE_ID, verifier_package)
     assert environment is not None
     run_evidence_lifecycle(verifier_package, run_dir, episode_environment=environment)
     write_harbor_lifecycle_attestation(
@@ -440,8 +441,7 @@ def test_independent_verifier_rejects_missing_or_drifted_bridge_attestation(tmp_
     _, exported, _ = _export_ssc03(tmp_path)
     verifier_package = exported.task_dir / "tests" / "compiled-world"
     run_dir = tmp_path / "reference-run"
-    adapter = registered_lifecycle_adapter(TEMPLATE_ID)
-    environment = adapter.build_smoke_environment(verifier_package)
+    environment = lifecycle_smoke_environment(TEMPLATE_ID, verifier_package)
     assert environment is not None
     run_evidence_lifecycle(verifier_package, run_dir, episode_environment=environment)
 
@@ -487,8 +487,7 @@ def test_verifier_rejects_hidden_package_or_runtime_drift(tmp_path: Path) -> Non
 
 
 def test_harbor_semantics_reject_unsupported_lifecycle_and_output_contracts() -> None:
-    lifecycle = get_template(TEMPLATE_ID).evidence_lifecycle
-    assert lifecycle is not None
+    lifecycle = lifecycle_definition(TEMPLATE_ID).lifecycle
     first = lifecycle.checkpoints[0]
 
     with pytest.raises(ValueError, match="exact JSON submission fields"):
@@ -503,8 +502,7 @@ def test_harbor_semantics_reject_unsupported_lifecycle_and_output_contracts() ->
             )
         )
 
-    evidence_request_lifecycle = get_template("drainage-model-evidence-lifecycle-review").evidence_lifecycle
-    assert evidence_request_lifecycle is not None
+    evidence_request_lifecycle = lifecycle_definition("drainage-model-evidence-lifecycle-review").lifecycle
     evidence_checkpoint = evidence_request_lifecycle.checkpoints[0].model_copy(
         update={
             "conditional_evidence": ConditionalEvidenceSpec(

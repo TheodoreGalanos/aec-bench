@@ -7,8 +7,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from aec_bench.task_world_templates.catalogue import get_template
-from aec_bench.task_world_templates.contracts import CompositeTaskWorldTemplate, EvidenceCheckpointSpec
+from aec_bench.contracts.evidence_lifecycle import (
+    ConditionalOperationSpec,
+    EvidenceCheckpointSpec,
+    EvidenceLifecycleSpec,
+    LifecycleOperationSpec,
+    LifecycleTaskMetadata,
+)
 from aec_bench.task_world_templates.hydraulics import build_hydraulic_run_request, materialize_hydraulic_world
 from aec_bench.task_world_templates.hydraulics.contracts import HydraulicSourceState
 from aec_bench.task_world_templates.hydraulics.operations import Ssc03HydraulicOperationResolver
@@ -22,6 +27,129 @@ from aec_bench.task_world_templates.lifecycles.ssc03_hydraulic_interaction_varia
 
 TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
 LIFECYCLE_ID = "ssc03.hydraulic-interaction-lifecycle"
+METADATA = LifecycleTaskMetadata(
+    template_id=TEMPLATE_ID,
+    name="Hydraulic Interaction Lifecycle Review",
+    discipline="civil",
+)
+
+
+def _calculation_operations(*, source_prerequisites: tuple[str, ...] = ()) -> list[LifecycleOperationSpec]:
+    operations: list[LifecycleOperationSpec] = []
+    for scenario_id, title in (("design-10yr", "design"), ("major-100yr", "major")):
+        operations.append(
+            LifecycleOperationSpec(
+                operation_id=f"hydrology.{scenario_id}",
+                kind="run_hydrology",
+                title=f"Run {title}-scenario hydrology",
+                description="Calculate bounded Rational Method hydrology for the declared scenario.",
+                prerequisite_operation_ids=source_prerequisites,
+            )
+        )
+    for scenario_id, title in (("design-10yr", "design"), ("major-100yr", "major")):
+        operations.append(
+            LifecycleOperationSpec(
+                operation_id=f"detention-outlet.{scenario_id}.declared-outlet",
+                kind="run_detention_outlet",
+                title=f"Run {title}-scenario coupled detention and outlet analysis",
+                description="Execute the declared coupled basin, outlet, and downstream network calculation.",
+                prerequisite_operation_ids=source_prerequisites + (f"hydrology.{scenario_id}",),
+            )
+        )
+    for scenario_id, title in (("design-10yr", "design"), ("major-100yr", "major")):
+        operations.append(
+            LifecycleOperationSpec(
+                operation_id=f"network-hgl.{scenario_id}.declared-tailwater",
+                kind="run_network_hgl",
+                title=f"Project {title}-scenario network HGL",
+                description="Project HGL evidence from the exact coupled run at the declared boundary.",
+                prerequisite_operation_ids=source_prerequisites + (f"detention-outlet.{scenario_id}.declared-outlet",),
+            )
+        )
+    return operations
+
+
+def _operations(*, include_revision: bool) -> ConditionalOperationSpec:
+    operations: list[LifecycleOperationSpec] = []
+    source_prerequisites: tuple[str, ...] = ()
+    if include_revision:
+        operations.append(
+            LifecycleOperationSpec(
+                operation_id="source-revision.current",
+                kind="request_source_revision",
+                title="Activate the declared source revision",
+                description="Activate the one public source revision bound to this calibration package.",
+            )
+        )
+        source_prerequisites = ("source-revision.current",)
+    operations.extend(_calculation_operations(source_prerequisites=source_prerequisites))
+    return ConditionalOperationSpec(operation_budget=len(operations), operations=tuple(operations))
+
+
+LIFECYCLE = EvidenceLifecycleSpec(
+    lifecycle_id=LIFECYCLE_ID,
+    world_id=f"aec.task_world.composite.{TEMPLATE_ID}",
+    checkpoints=[
+        EvidenceCheckpointSpec(
+            checkpoint_id="baseline_analysis",
+            title="Baseline hydraulic analysis",
+            release_path="releases/baseline_analysis",
+            instruction_path="instructions/baseline_analysis.md",
+            submission_path="submissions/baseline_analysis.json",
+            required_submission_fields=[
+                "checkpoint_id",
+                "visible_source_state_sha256",
+                "selected_operations",
+                "accepted_decisions",
+                "readiness_decision",
+                "claim_boundary",
+            ],
+            allow_additional_submission_fields=False,
+            conditional_operations=_operations(include_revision=False),
+        ),
+        EvidenceCheckpointSpec(
+            checkpoint_id="revision_analysis",
+            title="Revision hydraulic analysis",
+            release_path="releases/revision_analysis",
+            instruction_path="instructions/revision_analysis.md",
+            submission_path="submissions/revision_analysis.json",
+            depends_on=["baseline_analysis"],
+            required_submission_fields=[
+                "checkpoint_id",
+                "revision_id",
+                "visible_source_state_sha256",
+                "selected_operations",
+                "accepted_decisions",
+                "supersession_lineage",
+                "readiness_decision",
+                "claim_boundary",
+            ],
+            allow_additional_submission_fields=False,
+            conditional_operations=_operations(include_revision=True),
+        ),
+        EvidenceCheckpointSpec(
+            checkpoint_id="closeout_review",
+            title="Hydraulic interaction closeout",
+            release_path="releases/closeout_review",
+            instruction_path="instructions/closeout_review.md",
+            submission_path="submissions/closeout_review.json",
+            depends_on=["revision_analysis"],
+            required_submission_fields=[
+                "checkpoint_id",
+                "visible_source_state_sha256",
+                "selected_operations",
+                "run_reference",
+                "report_reference",
+                "memo",
+                "accepted_decisions",
+                "supersession_lineage",
+                "readiness_decision",
+                "claim_boundary",
+            ],
+            allow_additional_submission_fields=False,
+        ),
+    ],
+)
 
 
 def build_ssc03_hydraulic_operation_resolver(
@@ -36,24 +164,19 @@ def build_ssc03_hydraulic_operation_resolver(
 def materialize_ssc03_hydraulic_interaction_lifecycle(
     output_dir: Path,
     *,
-    template: CompositeTaskWorldTemplate | None = None,
     variant_id: str | None = None,
 ) -> Path:
     """Materialize one deterministic three-checkpoint hydraulic interaction package."""
     output = Path(output_dir)
-    template = template or get_template(TEMPLATE_ID)
-    if template.template_id != TEMPLATE_ID or template.evidence_lifecycle is None:
-        raise ValueError(f"unexpected hydraulic interaction template: {template.template_id}")
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError(f"output directory must be empty: {output}")
     variant = get_ssc03_hydraulic_interaction_variant(variant_id or DEFAULT_VARIANT_ID)
 
-    _write_json(output / "template.json", template.model_dump(mode="json"))
-    _write_json(output / "world.json", template.compile_task_world_payload())
-    _write_json(output / "lifecycle.json", template.evidence_lifecycle.model_dump(mode="json"))
+    _write_json(output / "template.json", METADATA.model_dump(mode="json"))
+    _write_json(output / "lifecycle.json", LIFECYCLE.model_dump(mode="json"))
     (output / "README.md").parent.mkdir(parents=True, exist_ok=True)
     (output / "README.md").write_text(_readme(), encoding="utf-8")
-    for checkpoint_id, instruction in _instructions(template).items():
+    for checkpoint_id, instruction in _instructions().items():
         path = output / "instructions" / f"{checkpoint_id}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(instruction, encoding="utf-8")
@@ -157,13 +280,12 @@ def _resolution_manifest(variant: Ssc03HydraulicInteractionVariantSpec) -> dict[
     }
 
 
-def _instructions(template: CompositeTaskWorldTemplate) -> dict[str, str]:
+def _instructions() -> dict[str, str]:
     claim = (
         "Do not describe these synthetic screening calculations as SWMM, authority approval, standards "
         "compliance, project design evidence, transfer, or continual learning."
     )
-    assert template.evidence_lifecycle is not None
-    checkpoints = {checkpoint.checkpoint_id: checkpoint for checkpoint in template.evidence_lifecycle.checkpoints}
+    checkpoints = {checkpoint.checkpoint_id: checkpoint for checkpoint in LIFECYCLE.checkpoints}
     return {
         "baseline_analysis": (
             "# Baseline hydraulic analysis\n\nExecute the declared baseline hydrology, coupled detention/outlet, "
