@@ -1,5 +1,5 @@
 # ABOUTME: Tests least-privilege Harbor export of content-pinned lifecycle worlds.
-# ABOUTME: Proves SSC-03 staging, provenance, verifier isolation, and fail-closed semantics.
+# ABOUTME: Proves SSC-03 integration staging, provenance, verifier isolation, and fail-closed semantics.
 
 from __future__ import annotations
 
@@ -15,13 +15,7 @@ import pytest
 from harbor.models.task.task import Task as HarborTask  # type: ignore[import-untyped]
 
 from aec_bench.contracts.evidence_lifecycle import ConditionalEvidenceSpec, EvidenceRequestSpec
-from aec_bench.meta_harness.evidence_lifecycle import run_evidence_lifecycle
-from aec_bench.task_world_templates.compiled_world import (
-    CompiledLifecycleWorld,
-    CompiledWorldEnvelope,
-    compile_lifecycle,
-)
-from aec_bench.task_world_templates.harbor_export import (
+from aec_bench.harness.harbor_task_export import (
     HARBOR_LIFECYCLE_BRIDGE_MODE,
     ExportedHarborTask,
     export_compiled_lifecycle_harbor_task,
@@ -30,9 +24,15 @@ from aec_bench.task_world_templates.harbor_export import (
     verify_exported_lifecycle_run,
     write_harbor_lifecycle_attestation,
 )
-from aec_bench.task_world_templates.harbor_exporting import bridge as harbor_bridge_module
-from aec_bench.task_world_templates.harbor_exporting import stable_io
-from aec_bench.task_world_templates.harbor_exporting.stable_io import RegularFileSnapshot
+from aec_bench.harness.harbor_task_exporting import bridge as harbor_bridge_module
+from aec_bench.harness.harbor_task_exporting import stable_io
+from aec_bench.harness.harbor_task_exporting.stable_io import RegularFileSnapshot
+from aec_bench.meta_harness.evidence_lifecycle import run_evidence_lifecycle
+from aec_bench.task_world_templates.compiled_world import (
+    CompiledLifecycleWorld,
+    CompiledWorldEnvelope,
+    compile_lifecycle,
+)
 from aec_bench.task_world_templates.lifecycles import lifecycle_definition, lifecycle_smoke_environment
 from aec_bench.tasks.registry import TaskRegistry
 from aec_bench.tasks.validator import validate_task
@@ -145,7 +145,7 @@ def test_ssc03_export_is_loadable_staged_and_verifier_isolated(tmp_path: Path) -
     assert b"verify_ssc03_hydraulic_interaction_lifecycle" not in agent_surface
     assert b"administrative_no_op" not in agent_surface
     with ZipFile(exported.verifier_runtime_wheel_path) as verifier_runtime:
-        assert "aec_bench/task_world_templates/harbor_export.py" in verifier_runtime.namelist()
+        assert "aec_bench/harness/harbor_task_export.py" in verifier_runtime.namelist()
 
     bridge = load_harbor_lifecycle_bridge(task_dir / "environment")
     assert bridge.task_root == task_dir.resolve()
@@ -222,7 +222,7 @@ def test_bridge_validation_binds_hidden_manifest_and_harbor_security_contract(tm
 
 def test_bridge_rejects_coordinated_verifier_runtime_and_manifest_replacement(tmp_path: Path) -> None:
     _, exported, _ = _export_ssc03(tmp_path)
-    synthetic_path = "aec_bench/task_world_templates/harbor_export.py"
+    synthetic_path = "aec_bench/harness/harbor_task_export.py"
     synthetic_source = b"def synthetic_reward_bypass(): return 1.0\n"
     with ZipFile(exported.verifier_runtime_wheel_path, "w") as wheel:
         wheel.writestr(synthetic_path, synthetic_source)

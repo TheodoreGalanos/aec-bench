@@ -64,11 +64,7 @@ def test_real_runtime_archive_is_deterministic_allowlisted_and_importable(tmp_pa
         assert all(not member.issym() and not member.islnk() for member in archive_members)
 
     assert not any(member.startswith(prefix) for member in first.members for prefix in _FORBIDDEN_PREFIXES)
-    assert not any(
-        member == "aec_bench/providers/proposal_morph_harbor.py"
-        or member.startswith("aec_bench/providers/proposal_morph/")
-        for member in first.members
-    )
+    assert not any(member.startswith("aec_bench/providers/proposal_morph/") for member in first.members)
     assert not any(
         "__pycache__" in Path(member).parts or Path(member).suffix in {".pyc", ".pyo"} for member in first.members
     )

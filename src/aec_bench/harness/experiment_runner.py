@@ -8,7 +8,7 @@ from pathlib import Path
 from aec_bench.contracts.experiment_manifest import AgentConfig, ExperimentManifest
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.harness.harbor_import import import_harbor_job
+from aec_bench.harness.harbor_importing.core import import_harbor_job
 from aec_bench.harness.progress_tracker import ImportProgressTracker
 from aec_bench.harness.scheduler import build_trial_plan, select_manifest_tasks
 from aec_bench.ledger.writer import DuplicateTrialRecordError, write_trial_record

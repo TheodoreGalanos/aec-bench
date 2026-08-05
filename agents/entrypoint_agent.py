@@ -37,6 +37,12 @@ from aec_bench.contracts.proposal_execution_profile import (
 )
 from aec_bench.contracts.stage_execution import KernelInstructionOverride
 from aec_bench.harness.execution_payload import build_entrypoint_execution_bundle, write_execution_bundle
+from aec_bench.harness.harbor_task_export import (
+    HARBOR_LIFECYCLE_BRIDGE_MODE,
+    HarborLifecycleBridge,
+    load_harbor_lifecycle_bridge,
+    write_harbor_lifecycle_attestation,
+)
 from aec_bench.harness.proposal_session import (
     ProposalBackend,
     build_proposal_session_execution_ref,
@@ -49,22 +55,13 @@ from aec_bench.harness.proposal_session_config import (
 from aec_bench.harness.proposal_session_output import (
     verified_proposal_final_output_path,
 )
-from aec_bench.harness.runtime_dependencies import PYDANTIC_AI_RUNTIME_VERSION, RUNTIME_PYTHON_PACKAGES
-from aec_bench.meta_harness.evidence_lifecycle_episode import LifecycleVisibilityPolicy
-from aec_bench.meta_harness.evidence_lifecycle_local import run_local_evidence_lifecycle_session
-from aec_bench.task_world_templates.harbor_export import (
-    HARBOR_LIFECYCLE_BRIDGE_MODE,
-    HarborLifecycleBridge,
-    load_harbor_lifecycle_bridge,
-    write_harbor_lifecycle_attestation,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
+from aec_bench.harness.pump_station_harbor.export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
     PUMP_STATION_HARBOR_EXECUTION_KIND,
     PumpStationHarborBridge,
     load_pump_station_harbor_bridge,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
+from aec_bench.harness.pump_station_harbor.session import (
     PUMP_STATION_MODEL_CONTROLLER_MODE,
     PUMP_STATION_MODEL_MAX_TURNS,
     CompletedPumpStationModelSession,
@@ -72,6 +69,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_s
     run_pump_station_model_session,
     run_pump_station_reference_session,
 )
+from aec_bench.harness.runtime_dependencies import PYDANTIC_AI_RUNTIME_VERSION, RUNTIME_PYTHON_PACKAGES
+from aec_bench.meta_harness.evidence_lifecycle_episode import LifecycleVisibilityPolicy
+from aec_bench.meta_harness.evidence_lifecycle_local import run_local_evidence_lifecycle_session
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )

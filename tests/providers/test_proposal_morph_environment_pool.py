@@ -14,7 +14,7 @@ import pytest
 from harbor.models.trial.paths import TrialPaths  # type: ignore[import-untyped]
 
 from aec_bench.harness.proposal_runtime_archive import ProposalRuntimeArchive
-from aec_bench.providers.proposal_morph_harbor import (
+from aec_bench.providers.proposal_morph import (
     ProposalCandidateInvocationTransition,
     ProposalMorphBoundaryError,
     ProposalMorphHarborEnvironment,

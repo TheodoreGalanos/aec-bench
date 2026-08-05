@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Protocol
 
 from aec_bench.contracts.trial_record import ArtifactReference
-from aec_bench.harness.harbor_importing.proposal import (
+from aec_bench.harness.harbor_importing.proposal_evidence import (
     ProposalHarborImportEvidence,
     load_proposal_harbor_candidate_failure_evidence,
 )

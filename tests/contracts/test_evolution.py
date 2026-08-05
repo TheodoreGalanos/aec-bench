@@ -821,14 +821,14 @@ class TestEvolutionConfig:
         )
         assert config.harness_config == "experiment.yaml"
 
-    def test_harbor_backend(self) -> None:
-        config = EvolutionConfig(
-            workspace_path="/tmp/workspace",
-            models=EvolverModelConfig(classifier="haiku", evolver="sonnet"),
-            task_selector=TaskSelector(),
-            backend="harbor",
-        )
-        assert config.backend == "harbor"
+    def test_harbor_backend_is_not_a_supported_alias(self) -> None:
+        with pytest.raises(ValidationError, match="local.*modal.*morph"):
+            EvolutionConfig(
+                workspace_path="/tmp/workspace",
+                models=EvolverModelConfig(classifier="haiku", evolver="sonnet"),
+                task_selector=TaskSelector(),
+                backend="harbor",
+            )
 
     def test_timeout_defaults(self) -> None:
         config = EvolutionConfig(

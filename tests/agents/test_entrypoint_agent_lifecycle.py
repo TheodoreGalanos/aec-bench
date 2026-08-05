@@ -12,12 +12,12 @@ from typing import Any, NoReturn
 
 import pytest
 
-from aec_bench.task_world_templates.compiled_world import compile_lifecycle
-from aec_bench.task_world_templates.harbor_export import (
+from aec_bench.harness.harbor_task_export import (
     HARBOR_LIFECYCLE_BRIDGE_MODE,
     ExportedHarborTask,
     export_compiled_lifecycle_harbor_task,
 )
+from aec_bench.task_world_templates.compiled_world import compile_lifecycle
 from agents.entrypoint_agent import EntrypointAgent
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

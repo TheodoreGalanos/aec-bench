@@ -1,5 +1,5 @@
 # ABOUTME: Exports compiled lifecycle worlds as least-privilege Harbor task packages.
-# ABOUTME: Keeps agent staging separate from content-pinned hidden verifier material.
+# ABOUTME: Keeps Harbor packaging in the concrete integration owner and outside task semantics.
 
 from __future__ import annotations
 
@@ -14,84 +14,78 @@ from pathlib import Path
 from typing import Any, cast
 
 from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec, LifecycleTaskMetadata
+from aec_bench.harness.harbor_task_exporting.bridge import (
+    allowed_tools as _allowed_tools,
+)
+from aec_bench.harness.harbor_task_exporting.bridge import (
+    load_bridge as _load_bridge,
+)
+from aec_bench.harness.harbor_task_exporting.bridge import (
+    validate_bridge_attestation as _validate_bridge_attestation,
+)
+from aec_bench.harness.harbor_task_exporting.bridge import (
+    validate_compiled_world as _validate_compiled_world,
+)
+from aec_bench.harness.harbor_task_exporting.bridge import (
+    validate_harbor_lifecycle_semantics as validate_harbor_lifecycle_semantics,
+)
+from aec_bench.harness.harbor_task_exporting.bridge import (
+    validate_operation_surface as _validate_operation_surface,
+)
+from aec_bench.harness.harbor_task_exporting.bridge import (
+    validate_source_identity as _validate_source_identity,
+)
+from aec_bench.harness.harbor_task_exporting.bridge import (
+    validated_manifest_shape as _validated_manifest_shape,
+)
+from aec_bench.harness.harbor_task_exporting.constants import (
+    ATTESTATION_FILENAME as _ATTESTATION_FILENAME,
+)
+from aec_bench.harness.harbor_task_exporting.constants import (
+    BASE_IMAGE as _BASE_IMAGE,
+)
+from aec_bench.harness.harbor_task_exporting.constants import (
+    HARBOR_LIFECYCLE_BRIDGE_MODE as HARBOR_LIFECYCLE_BRIDGE_MODE,
+)
+from aec_bench.harness.harbor_task_exporting.constants import (
+    HARBOR_SECURITY as _HARBOR_SECURITY,
+)
+from aec_bench.harness.harbor_task_exporting.constants import (
+    OUTPUT_PATH as _OUTPUT_PATH,
+)
+from aec_bench.harness.harbor_task_exporting.constants import (
+    RUNTIME_DEPENDENCIES as _RUNTIME_DEPENDENCIES,
+)
+from aec_bench.harness.harbor_task_exporting.runtime_wheel import (
+    build_verifier_runtime_wheel as _build_verifier_runtime_wheel,
+)
+from aec_bench.harness.harbor_task_exporting.stable_io import (
+    canonical_sha256 as _canonical_sha256,
+)
+from aec_bench.harness.harbor_task_exporting.stable_io import (
+    directory_sha256 as _directory_sha256,
+)
+from aec_bench.harness.harbor_task_exporting.stable_io import (
+    file_sha256 as _file_sha256,
+)
+from aec_bench.harness.harbor_task_exporting.surfaces import (
+    dockerfile_text as _dockerfile,
+)
+from aec_bench.harness.harbor_task_exporting.surfaces import (
+    instruction_text as _instruction,
+)
+from aec_bench.harness.harbor_task_exporting.surfaces import (
+    stage_initial_context as _stage_initial_context,
+)
+from aec_bench.harness.harbor_task_exporting.surfaces import (
+    task_toml_text as _task_toml,
+)
+from aec_bench.harness.harbor_task_exporting.surfaces import (
+    test_script_text as _test_script,
+)
 from aec_bench.task_world_templates.compiled_world import (
     CompiledLifecycleWorld,
     CompiledWorldEnvelope,
-)
-from aec_bench.task_world_templates.harbor_exporting.bridge import (
-    allowed_tools as _allowed_tools,
-)
-from aec_bench.task_world_templates.harbor_exporting.bridge import (
-    load_bridge as _load_bridge,
-)
-from aec_bench.task_world_templates.harbor_exporting.bridge import (
-    validate_bridge_attestation as _validate_bridge_attestation,
-)
-from aec_bench.task_world_templates.harbor_exporting.bridge import (
-    validate_compiled_world as _validate_compiled_world,
-)
-from aec_bench.task_world_templates.harbor_exporting.bridge import (
-    validate_harbor_lifecycle_semantics as validate_harbor_lifecycle_semantics,
-)
-from aec_bench.task_world_templates.harbor_exporting.bridge import (
-    validate_operation_surface as _validate_operation_surface,
-)
-from aec_bench.task_world_templates.harbor_exporting.bridge import (
-    validate_source_identity as _validate_source_identity,
-)
-from aec_bench.task_world_templates.harbor_exporting.bridge import (
-    validated_manifest_shape as _validated_manifest_shape,
-)
-from aec_bench.task_world_templates.harbor_exporting.constants import (
-    ATTESTATION_FILENAME as _ATTESTATION_FILENAME,
-)
-from aec_bench.task_world_templates.harbor_exporting.constants import (
-    ATTESTATION_SCHEMA_VERSION as _ATTESTATION_SCHEMA_VERSION,
-)
-from aec_bench.task_world_templates.harbor_exporting.constants import (
-    BASE_IMAGE as _BASE_IMAGE,
-)
-from aec_bench.task_world_templates.harbor_exporting.constants import (
-    EXPORT_SCHEMA_VERSION as _EXPORT_SCHEMA_VERSION,
-)
-from aec_bench.task_world_templates.harbor_exporting.constants import (
-    HARBOR_LIFECYCLE_BRIDGE_MODE as HARBOR_LIFECYCLE_BRIDGE_MODE,
-)
-from aec_bench.task_world_templates.harbor_exporting.constants import (
-    HARBOR_SECURITY as _HARBOR_SECURITY,
-)
-from aec_bench.task_world_templates.harbor_exporting.constants import (
-    OUTPUT_PATH as _OUTPUT_PATH,
-)
-from aec_bench.task_world_templates.harbor_exporting.constants import (
-    RUNTIME_DEPENDENCIES as _RUNTIME_DEPENDENCIES,
-)
-from aec_bench.task_world_templates.harbor_exporting.runtime_wheel import (
-    build_verifier_runtime_wheel as _build_verifier_runtime_wheel,
-)
-from aec_bench.task_world_templates.harbor_exporting.stable_io import (
-    canonical_sha256 as _canonical_sha256,
-)
-from aec_bench.task_world_templates.harbor_exporting.stable_io import (
-    directory_sha256 as _directory_sha256,
-)
-from aec_bench.task_world_templates.harbor_exporting.stable_io import (
-    file_sha256 as _file_sha256,
-)
-from aec_bench.task_world_templates.harbor_exporting.surfaces import (
-    dockerfile_text as _dockerfile,
-)
-from aec_bench.task_world_templates.harbor_exporting.surfaces import (
-    instruction_text as _instruction,
-)
-from aec_bench.task_world_templates.harbor_exporting.surfaces import (
-    stage_initial_context as _stage_initial_context,
-)
-from aec_bench.task_world_templates.harbor_exporting.surfaces import (
-    task_toml_text as _task_toml,
-)
-from aec_bench.task_world_templates.harbor_exporting.surfaces import (
-    test_script_text as _test_script,
 )
 from aec_bench.task_world_templates.lifecycles import verify_lifecycle
 
@@ -182,7 +176,6 @@ def write_harbor_lifecycle_attestation(
             "manifest_sha256": bridge.manifest_sha256,
             "output_path": bridge.output_path,
             "reward_owner": "harbor_verifier",
-            "schema_version": _ATTESTATION_SCHEMA_VERSION,
             "source_package_sha256": bridge.envelope.package_sha256,
         },
     )
@@ -228,7 +221,6 @@ def _write_export(
     test_script.chmod(0o755)
 
     manifest = {
-        "schema_version": _EXPORT_SCHEMA_VERSION,
         "source": {
             "envelope": envelope_payload,
             "envelope_sha256": _canonical_sha256(envelope_payload),

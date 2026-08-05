@@ -1,5 +1,5 @@
 # ABOUTME: Imports canonical Harbor trial artifacts into generic TrialRecord contracts.
-# ABOUTME: Delegates execution-specific evidence policy through the selected extension boundary.
+# ABOUTME: Selects the two current execution-specific evidence readers directly.
 
 from __future__ import annotations
 
@@ -49,20 +49,33 @@ from aec_bench.harness.harbor_importing.artifact_io import (
 )
 from aec_bench.harness.harbor_importing.contracts import (
     HarborImportError,
-    ImportedExecutionEvidence,
     ImportEvidenceContext,
     ImportEvidenceIntent,
+    execution_kind_from_context,
 )
 from aec_bench.harness.harbor_importing.output_commit import (
     verify_output_commit,
 )
-from aec_bench.harness.harbor_importing.registry import (
-    load_import_evidence,
+from aec_bench.harness.harbor_importing.proposal_evidence.api import (
+    load_proposal_import_evidence_for_context,
+)
+from aec_bench.harness.harbor_importing.proposal_evidence.contracts import (
+    PROPOSAL_EXECUTION_KIND,
+    ProposalHarborImportEvidence,
+)
+from aec_bench.harness.harbor_importing.stewardship import (
+    StewardshipHarborImportEvidence,
+    load_stewardship_import_evidence,
+)
+from aec_bench.harness.pump_station_harbor.export import (
+    PUMP_STATION_HARBOR_EXECUTION_KIND,
 )
 from aec_bench.harness.verifier_artifacts import (
     read_verifier_artifacts,
 )
 from aec_bench.tasks.loader import load_task_definition
+
+type HarborImportEvidence = ProposalHarborImportEvidence | StewardshipHarborImportEvidence
 
 
 @dataclass(frozen=True)
@@ -170,7 +183,7 @@ def import_harbor_trial(
         context.task_instance_dir,
         context.repo_root / "tasks",
     )
-    import_evidence = load_import_evidence(
+    import_evidence = _load_import_evidence(
         context=context,
         intent=ImportEvidenceIntent.TRIAL_RECORD,
     )
@@ -258,6 +271,19 @@ def import_harbor_trial(
         episode_artifact=(None if import_evidence is None else import_evidence.episode_artifact),
         completeness=Completeness.PARTIAL,
     )
+
+
+def _load_import_evidence(
+    *,
+    context: ImportEvidenceContext,
+    intent: ImportEvidenceIntent,
+) -> HarborImportEvidence | None:
+    execution_kind = execution_kind_from_context(context)
+    if execution_kind == PROPOSAL_EXECUTION_KIND:
+        return load_proposal_import_evidence_for_context(context=context, intent=intent)
+    if execution_kind == PUMP_STATION_HARBOR_EXECUTION_KIND:
+        return load_stewardship_import_evidence(context=context, intent=intent)
+    return None
 
 
 def _collect_trial_artifacts(
@@ -436,7 +462,7 @@ def _resolved_record_adapter(
     *,
     harbor_result: HarborTrialResult,
     execution_result: AdapterResult | None,
-    import_evidence: ImportedExecutionEvidence | None,
+    import_evidence: HarborImportEvidence | None,
 ) -> str:
     if import_evidence is not None:
         return import_evidence.adapter_name
@@ -451,7 +477,7 @@ def _agent_configuration_record(
     resolved_model: str,
     import_path: str | None,
     execution_result: AdapterResult | None,
-    import_evidence: ImportedExecutionEvidence | None,
+    import_evidence: HarborImportEvidence | None,
 ) -> dict[str, Any]:
     if execution_result is not None:
         return dict(execution_result.configuration_record)
@@ -482,7 +508,7 @@ def _output_record(
     artifacts: _CollectedTrialArtifacts,
     agent: _PreparedAgentEvidence,
     expected_output_path: str,
-    import_evidence: ImportedExecutionEvidence | None,
+    import_evidence: HarborImportEvidence | None,
 ) -> OutputRecord:
     execution_result = agent.execution_result
     payload = agent.payload
@@ -564,11 +590,15 @@ def _terminal_state(
     payload: dict[str, Any],
     status: AgentOutputStatus,
 ) -> tuple[bool, bool, str | None]:
-    for field, terminated in (("completion_reason", True), ("stop_reason", False), ("failure_kind", False)):
+    for field, flags in (
+        ("completion_reason", (True, False)),
+        ("stop_reason", (False, True)),
+        ("failure_kind", (False, False)),
+    ):
         current = None if execution_result is None else getattr(execution_result, field)
         reason = current.value if current is not None else payload.get(field)
         if isinstance(reason, str) and reason:
-            return terminated, not terminated, reason
+            return flags[0], flags[1], reason
     return status is AgentOutputStatus.COMPLETED, False, None
 
 

@@ -16,11 +16,9 @@ from aec_bench.contracts.trial_record import (
     ProposalSessionTrialProvenance,
     TrialRecord,
 )
-from aec_bench.harness.harbor_import import (
-    HarborImportError,
-    import_harbor_trial,
-)
-from aec_bench.harness.harbor_importing.proposal import (
+from aec_bench.harness.harbor_importing.contracts import HarborImportError
+from aec_bench.harness.harbor_importing.core import import_harbor_trial
+from aec_bench.harness.harbor_importing.proposal_evidence import (
     ProposalHarborImportEvidence,
     load_proposal_harbor_import_evidence,
 )

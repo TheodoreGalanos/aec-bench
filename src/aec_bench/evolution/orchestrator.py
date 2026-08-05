@@ -34,7 +34,7 @@ class EvolutionOrchestrator:
     """Outer loop that coordinates solve → enrich → evolve → repeat.
 
     The orchestrator delegates the solve step to an injected callable so the
-    execution backend (local, Modal, Harbor) is decoupled from the loop logic.
+    execution path (local or Harbor-backed Modal/Morph) is decoupled from the loop logic.
     Convergence is detected when scores stagnate across a rolling window.
     """
 

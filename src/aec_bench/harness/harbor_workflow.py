@@ -226,8 +226,9 @@ class SynchronousHarborWorkflow:
         matching_dirs = [job_dir for job_dir in new_job_dirs if self._job_result_id(job_dir) == manifest.experiment_id]
         if len(matching_dirs) == 1:
             return matching_dirs[0]
-        # Fall back to most recent (last in sorted order = latest timestamp)
-        return new_job_dirs[-1]
+        raise HarborWorkflowError(
+            "Harbor dispatch produced multiple job directories without one exact experiment match"
+        )
 
     def _job_result_id(self, job_dir: Path) -> str | None:
         result_path = job_dir / "result.json"

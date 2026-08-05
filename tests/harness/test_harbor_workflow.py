@@ -67,25 +67,6 @@ class MultiJobExecutor:
         return 0
 
 
-class MultiMatchExecutor:
-    def __init__(
-        self,
-        *,
-        source_job_dir: Path,
-        jobs_root: Path,
-        job_names: tuple[str, str] = ("run-a", "run-b"),
-    ) -> None:
-        self.source_job_dir = source_job_dir
-        self.jobs_root = jobs_root
-        self.job_names = job_names
-
-    def execute(self, *, command: list[str], cwd: Path) -> int:
-        del command, cwd
-        for job_name in self.job_names:
-            shutil.copytree(self.source_job_dir, self.jobs_root / job_name)
-        return 0
-
-
 class EmptyJobExecutor:
     def __init__(self, jobs_root: Path) -> None:
         self.jobs_root = jobs_root
@@ -478,20 +459,12 @@ def test_synchronous_workflow_selects_matching_job_when_multiple_new_dirs_appear
     assert result.import_result.imported_trials == 60
 
 
-@_skip_no_job_data
 def test_synchronous_workflow_rejects_ambiguous_matching_job_dirs(tmp_path: Path) -> None:
     manifest = ExperimentManifest(
-        experiment_id="6834bc30-3801-4a45-a114-afb2d3764b7d",
-        name="Mechanical Harbor run",
-        tasks=TaskSelector(domains=["mechanical"]),
-        agents=[
-            AgentConfig(
-                name="tool-loop-sonnet-45",
-                adapter="tool_loop",
-                model="claude-sonnet-4-6",
-                parameters={"harbor_import_path": ("agents.tool_loop_anthropic:ToolLoopAnthropicAgent")},
-            )
-        ],
+        experiment_id="ambiguous-job-run",
+        name="Ambiguous Harbor job run",
+        tasks=TaskSelector(domains=["electrical"]),
+        agents=[AgentConfig(name="agent", adapter="direct", model="test-model")],
         compute=ComputeConfig(backend="modal"),
     )
     jobs_root = tmp_path / "jobs"
@@ -504,14 +477,23 @@ def test_synchronous_workflow_rejects_ambiguous_matching_job_dirs(tmp_path: Path
         jobs_root=jobs_root,
     )
 
-    # Multiple matching dirs: workflow picks the latest instead of rejecting
-    result = workflow.run(
-        manifest=manifest,
-        config_path=tmp_path / "generated-job.yaml",
-        executor=MultiMatchExecutor(source_job_dir=HARBOR_JOB_DIR, jobs_root=jobs_root),
-    )
-    assert result.job_dir is not None
-    assert result.import_result.imported_trials > 0
+    matching_dirs = {jobs_root / "run-a", jobs_root / "run-b"}
+    for job_dir in matching_dirs:
+        job_dir.mkdir()
+        (job_dir / "result.json").write_text(
+            json.dumps({"id": manifest.experiment_id}),
+            encoding="utf-8",
+        )
+
+    with pytest.raises(
+        HarborWorkflowError,
+        match="multiple job directories without one exact experiment match",
+    ):
+        workflow._resolve_job_dir(
+            manifest=manifest,
+            before=set(),
+            after=matching_dirs,
+        )
 
 
 def _rewrite_job_result_id(job_dir: Path, new_id: str) -> None:

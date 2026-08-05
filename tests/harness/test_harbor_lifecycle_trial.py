@@ -1,5 +1,5 @@
 # ABOUTME: Exercises SSC-03 Harbor Trial orchestration through the production lifecycle bridge.
-# ABOUTME: Proves phase ordering and verifier ownership without claiming container isolation.
+# ABOUTME: Proves integration phase ordering and verifier ownership without container claims.
 
 from __future__ import annotations
 
@@ -11,11 +11,11 @@ from typing import Any, cast
 from harbor.models.trial.config import TrialConfig  # type: ignore[import-untyped]
 from harbor.trial.trial import Trial  # type: ignore[import-untyped]
 
-from aec_bench.task_world_templates.compiled_world import compile_lifecycle
-from aec_bench.task_world_templates.harbor_export import (
+from aec_bench.harness.harbor_task_export import (
     HARBOR_LIFECYCLE_BRIDGE_MODE,
     export_compiled_lifecycle_harbor_task,
 )
+from aec_bench.task_world_templates.compiled_world import compile_lifecycle
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"

@@ -1,5 +1,5 @@
 # ABOUTME: Connects Harbor controllers to the registered pump-station episode host.
-# ABOUTME: Writes provider evidence without owning world state, decisions, or transition order.
+# ABOUTME: Keeps model transport outside world state, decisions, and transition order.
 
 from __future__ import annotations
 
@@ -23,7 +23,12 @@ from aec_bench.contracts.world_session import (
     WorldSessionRequest,
     WorldSessionResult,
 )
-from aec_bench.task_world_templates.harbor_exporting.stable_io import directory_sha256
+from aec_bench.harness.harbor_task_exporting.stable_io import directory_sha256
+from aec_bench.harness.pump_station_harbor.export import (
+    PUMP_STATION_HARBOR_EXECUTION_KIND,
+    PumpStationHarborBridge,
+    is_pump_station_harbor_inventory_artifact,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
     PUMP_STATION_ACTOR_ACTION_NAMES,
 )
@@ -33,11 +38,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continua
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
     PUMP_STATION_TASK_WORLD_ID,
     PumpStationEpisodeHost,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
-    PUMP_STATION_HARBOR_EXECUTION_KIND,
-    PumpStationHarborBridge,
-    is_pump_station_harbor_inventory_artifact,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,

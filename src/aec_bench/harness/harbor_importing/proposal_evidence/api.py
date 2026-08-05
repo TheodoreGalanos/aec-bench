@@ -1,9 +1,8 @@
-# ABOUTME: Owns the public Harbor proposal-import extension and compatibility loaders.
-# ABOUTME: Selects completed or candidate-failure evidence without leaking host paths.
+# ABOUTME: Owns the current Harbor proposal-evidence readers.
+# ABOUTME: Selects completed or candidate-failure evidence without compatibility dispatch.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 from aec_bench.contracts.proposal_execution import ProposalSessionStatus
@@ -11,32 +10,24 @@ from aec_bench.harness.harbor_importing.contracts import (
     HarborImportError,
     ImportEvidenceContext,
     ImportEvidenceIntent,
+    execution_kind_from_context,
 )
-from aec_bench.harness.harbor_importing.registry import execution_kind_from_context
 
 from .contracts import PROPOSAL_EXECUTION_KIND, ProposalHarborImportEvidence
 from .orchestration import load_proposal_import_evidence
 
 
-@dataclass(frozen=True)
-class ProposalImportEvidenceExtension:
-    """Load proposal evidence after the generic importer selects its kind."""
+def load_proposal_import_evidence_for_context(
+    *,
+    context: ImportEvidenceContext,
+    intent: ImportEvidenceIntent,
+) -> ProposalHarborImportEvidence:
+    """Load proposal evidence after concrete execution-kind selection."""
 
-    execution_kind: str = PROPOSAL_EXECUTION_KIND
-
-    def load(
-        self,
-        *,
-        context: ImportEvidenceContext,
-        intent: ImportEvidenceIntent,
-    ) -> ProposalHarborImportEvidence:
-        return load_proposal_import_evidence(
-            context=context,
-            required_status=_required_status(intent),
-        )
-
-
-PROPOSAL_IMPORT_EVIDENCE_EXTENSION = ProposalImportEvidenceExtension()
+    return load_proposal_import_evidence(
+        context=context,
+        required_status=_required_status(intent),
+    )
 
 
 def load_proposal_harbor_import_evidence(
@@ -83,7 +74,7 @@ def _load_public_proposal_evidence(
     )
     if execution_kind_from_context(context) != PROPOSAL_EXECUTION_KIND:
         return None
-    return PROPOSAL_IMPORT_EVIDENCE_EXTENSION.load(
+    return load_proposal_import_evidence_for_context(
         context=context,
         intent=intent,
     )
@@ -99,11 +90,3 @@ def _required_status(
     raise HarborImportError(
         f"unsupported proposal import evidence intent: {intent}",
     )
-
-
-__all__ = (
-    "PROPOSAL_IMPORT_EVIDENCE_EXTENSION",
-    "ProposalImportEvidenceExtension",
-    "load_proposal_harbor_candidate_failure_evidence",
-    "load_proposal_harbor_import_evidence",
-)

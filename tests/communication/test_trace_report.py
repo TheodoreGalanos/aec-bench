@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from aec_bench.communication.trace_report import build_trace_summaries, trace_summary_from_record
-from aec_bench.harness.harbor_import import import_harbor_job, import_harbor_trial
+from aec_bench.harness.harbor_importing.core import import_harbor_job, import_harbor_trial
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HARBOR_JOB_DIR = REPO_ROOT / "jobs" / "2026-03-04__17-57-43"

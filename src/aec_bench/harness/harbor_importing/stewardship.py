@@ -25,11 +25,11 @@ from aec_bench.harness.harbor_importing.contracts import (
     ImportEvidenceContext,
     ImportEvidenceIntent,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
+from aec_bench.harness.pump_station_harbor.export import (
     PUMP_STATION_HARBOR_EXECUTION_KIND,
     load_pump_station_harbor_bridge,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_verifier import (
+from aec_bench.harness.pump_station_harbor.verifier import (
     verify_pump_station_harbor_run,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import PumpStationWorldRun
@@ -89,26 +89,16 @@ class StewardshipHarborImportEvidence:
         return EvaluationResult.model_validate(payload)
 
 
-class StewardshipImportEvidenceExtension:
-    """Load one verified stewardship session from an allowlisted Harbor trial."""
+def load_stewardship_import_evidence(
+    *,
+    context: ImportEvidenceContext,
+    intent: ImportEvidenceIntent,
+) -> StewardshipHarborImportEvidence:
+    """Validate and project one immutable world-session into current evidence."""
 
-    @property
-    def execution_kind(self) -> str:
-        """Return the exact execution kind handled by this extension."""
-
-        return PUMP_STATION_HARBOR_EXECUTION_KIND
-
-    def load(
-        self,
-        *,
-        context: ImportEvidenceContext,
-        intent: ImportEvidenceIntent,
-    ) -> StewardshipHarborImportEvidence:
-        """Validate and project the immutable world-session evidence."""
-
-        if intent is not ImportEvidenceIntent.TRIAL_RECORD:
-            raise HarborImportError("stewardship world evidence supports TrialRecord import only")
-        return _load_stewardship_evidence(context)
+    if intent is not ImportEvidenceIntent.TRIAL_RECORD:
+        raise HarborImportError("stewardship world evidence supports TrialRecord import only")
+    return _load_stewardship_evidence(context)
 
 
 def _load_stewardship_evidence(
@@ -293,13 +283,3 @@ def _confined_relative_path(value: object) -> str:
     if path.is_absolute() or ".." in path.parts or path.as_posix() != value:
         raise HarborImportError(f"world-session artifact path is not confined: {value}")
     return value
-
-
-STEWARDSHIP_IMPORT_EVIDENCE_EXTENSION = StewardshipImportEvidenceExtension()
-
-
-__all__ = (
-    "STEWARDSHIP_IMPORT_EVIDENCE_EXTENSION",
-    "StewardshipHarborImportEvidence",
-    "StewardshipImportEvidenceExtension",
-)

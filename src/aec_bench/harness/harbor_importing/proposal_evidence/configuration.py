@@ -13,7 +13,7 @@ from aec_bench.harness.harbor_importing.contracts import HarborImportError
 from aec_bench.harness.proposal_session_config import LoadedProposalSessionHostInputs
 
 _PROPOSAL_MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH = (
-    "aec_bench.providers.proposal_morph_harbor:ProposalMorphHarborEnvironment"
+    "aec_bench.providers.proposal_morph.environment:ProposalMorphHarborEnvironment"
 )
 
 

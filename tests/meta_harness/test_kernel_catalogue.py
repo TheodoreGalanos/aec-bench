@@ -72,7 +72,6 @@ _PROPOSAL_SESSION_RUNTIME_SOURCE_PATHS = (
 )
 
 _HARBOR_PROPOSAL_IMPORT_SOURCE_PATHS = (
-    "aec_bench/harness/harbor_importing/proposal.py",
     "aec_bench/harness/harbor_importing/proposal_evidence/__init__.py",
     "aec_bench/harness/harbor_importing/proposal_evidence/api.py",
     "aec_bench/harness/harbor_importing/proposal_evidence/artifacts.py",

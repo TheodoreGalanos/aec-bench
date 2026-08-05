@@ -1,5 +1,5 @@
 # ABOUTME: Proves Harbor can resume one exact registered continual-rollout child.
-# ABOUTME: Binds immutable child bytes and runs one bounded actor action without leaks.
+# ABOUTME: Binds immutable child bytes through the integration and runs one bounded actor action.
 
 from __future__ import annotations
 
@@ -24,9 +24,15 @@ from aec_bench.contracts.world_session import (
 )
 from aec_bench.evaluation.stewardship import evaluate_pump_station_reference_run
 from aec_bench.harness.harbor_importing.core import import_harbor_trial
+from aec_bench.harness.harbor_task_exporting.stable_io import directory_sha256
+from aec_bench.harness.pump_station_harbor.export import (
+    PUMP_STATION_HARBOR_BRIDGE_MODE,
+    PUMP_STATION_HARBOR_EXECUTION_KIND,
+    export_pump_station_harbor_task,
+    load_pump_station_harbor_bridge,
+)
 from aec_bench.task_world_templates.continual.rollout_control import ContinualRolloutControl
 from aec_bench.task_world_templates.continual.rollout_repository import ContinualRolloutRepository
-from aec_bench.task_world_templates.harbor_exporting.stable_io import directory_sha256
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
     pump_station_continual_world_definition,
 )
@@ -35,12 +41,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continua
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
     PumpStationEpisodeHost,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
-    PUMP_STATION_HARBOR_BRIDGE_MODE,
-    PUMP_STATION_HARBOR_EXECUTION_KIND,
-    export_pump_station_harbor_task,
-    load_pump_station_harbor_bridge,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
@@ -58,7 +58,7 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
     pump_station_artifact_id,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[4]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _INITIAL_RUN_PATH = "tests/initial-world-run"
 
 

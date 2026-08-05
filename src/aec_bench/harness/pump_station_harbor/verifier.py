@@ -1,5 +1,5 @@
 # ABOUTME: Independently reloads and verifies registered pump-station Harbor evidence.
-# ABOUTME: Reconciles exported authority, episode output, durable transitions, and evaluation.
+# ABOUTME: Keeps artifact reconciliation outside the pump functional core and evaluator.
 
 from __future__ import annotations
 
@@ -20,7 +20,11 @@ from aec_bench.contracts.continual_world import (
 )
 from aec_bench.contracts.world_session import StewardshipStateSnapshotRef, WorldSessionRequest, WorldSessionResult
 from aec_bench.evaluation.stewardship import evaluate_pump_station_reference_run
-from aec_bench.task_world_templates.harbor_exporting.stable_io import directory_sha256, file_sha256
+from aec_bench.harness.harbor_task_exporting.stable_io import directory_sha256, file_sha256
+from aec_bench.harness.pump_station_harbor.export import (
+    PUMP_STATION_HARBOR_EXECUTION_KIND,
+    is_pump_station_harbor_inventory_artifact,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
     PUMP_STATION_ACTOR_ACTION_NAMES,
 )
@@ -32,10 +36,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continua
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
     PUMP_STATION_TASK_WORLD_ID,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
-    PUMP_STATION_HARBOR_EXECUTION_KIND,
-    is_pump_station_harbor_inventory_artifact,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,

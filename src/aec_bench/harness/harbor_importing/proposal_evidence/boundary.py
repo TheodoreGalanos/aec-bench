@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import hashlib
-from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
 
@@ -22,6 +21,9 @@ from aec_bench.harness.harbor_importing.contracts import (
     ImportEvidenceContext,
 )
 from aec_bench.harness.proposal_session_config import LoadedProposalSessionHostInputs
+from aec_bench.providers.proposal_morph.evidence import (
+    load_completed_proposal_morph_cleanup_receipt,
+)
 
 from .contracts import (
     ProposalBoundaryEvidence,
@@ -267,19 +269,7 @@ def _load_proposal_cleanup_receipt(
     runtime_archive_sha256: str,
     runtime_archive_content_sha256: str,
 ) -> ProposalCleanupReceipt:
-    module = import_module(
-        "aec_bench.providers.proposal_morph_harbor",
-    )
-    loader = getattr(
-        module,
-        "load_completed_proposal_morph_cleanup_receipt",
-        None,
-    )
-    if not callable(loader):
-        raise RuntimeError(
-            "proposal Morph cleanup receipt loader is unavailable",
-        )
-    result = loader(
+    result = load_completed_proposal_morph_cleanup_receipt(
         path,
         expected_runtime_archive_sha256=runtime_archive_sha256,
         expected_runtime_archive_content_sha256=(runtime_archive_content_sha256),

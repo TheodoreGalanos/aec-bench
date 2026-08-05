@@ -1,4 +1,4 @@
-# ABOUTME: Admits task-owned Harbor lifecycle bridges against frozen export contracts.
+# ABOUTME: Admits task-owned lifecycle bridges against current Harbor export contracts.
 # ABOUTME: Separates manifest, agent, verifier, and Harbor authority validation stages.
 
 from __future__ import annotations
@@ -20,10 +20,8 @@ from aec_bench.task_world_templates.lifecycles import lifecycle_definition
 
 from .constants import (
     ATTESTATION_FILENAME,
-    ATTESTATION_SCHEMA_VERSION,
     BASE_IMAGE,
     BASE_TOOLS,
-    EXPORT_SCHEMA_VERSION,
     HARBOR_LIFECYCLE_BRIDGE_MODE,
     HARBOR_SECURITY,
     MAX_EXPORT_MANIFEST_BYTES,
@@ -170,11 +168,9 @@ def validate_operation_surface(envelope: CompiledWorldEnvelope) -> None:
 def validated_manifest_shape(manifest: dict[str, Any]) -> dict[str, Any]:
     _require_exact_keys(
         manifest,
-        {"schema_version", "source", "agent_surface", "bridge", "harbor", "verifier"},
+        {"source", "agent_surface", "bridge", "harbor", "verifier"},
         label="export manifest",
     )
-    if manifest["schema_version"] != EXPORT_SCHEMA_VERSION:
-        raise ValueError("unsupported Harbor lifecycle export schema")
     source = _require_mapping(manifest["source"], label="source manifest")
     _require_exact_keys(source, {"envelope", "envelope_sha256", "package", "package_sha256"}, label="source")
     agent_surface = _require_mapping(manifest["agent_surface"], label="agent surface manifest")
@@ -253,7 +249,6 @@ def validate_bridge_attestation(
         "manifest_sha256": manifest_sha256,
         "output_path": OUTPUT_PATH,
         "reward_owner": "harbor_verifier",
-        "schema_version": ATTESTATION_SCHEMA_VERSION,
         "source_package_sha256": envelope.package_sha256,
     }
     if attestation != expected:

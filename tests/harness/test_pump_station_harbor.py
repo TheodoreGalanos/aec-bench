@@ -1,5 +1,5 @@
 # ABOUTME: Proves registered pump worlds use the canonical Harbor export, episode host, and verifier.
-# ABOUTME: Covers exact profile authority, durable episode evidence, and the real local entrypoint.
+# ABOUTME: Covers exact profile authority, durable episode evidence, and the integration entrypoint.
 
 from __future__ import annotations
 
@@ -12,6 +12,21 @@ import pytest
 from harbor.models.trial.config import TrialConfig  # type: ignore[import-untyped]
 from harbor.trial.trial import Trial  # type: ignore[import-untyped]
 
+from aec_bench.harness.pump_station_harbor.export import (
+    PUMP_STATION_HARBOR_BRIDGE_MODE,
+    PUMP_STATION_HARBOR_EXECUTION_KIND,
+    export_pump_station_harbor_task,
+    load_pump_station_harbor_bridge,
+)
+from aec_bench.harness.pump_station_harbor.job import (
+    build_pump_station_harbor_job_config,
+)
+from aec_bench.harness.pump_station_harbor.session import (
+    run_pump_station_reference_session,
+)
+from aec_bench.harness.pump_station_harbor.verifier import (
+    verify_pump_station_harbor_run,
+)
 from aec_bench.task_world_templates.continual_catalogue import default_continual_world_catalogue
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
     PUMP_STATION_ACTOR_ACTION_NAMES,
@@ -22,26 +37,11 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continua
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
     PUMP_STATION_TASK_WORLD_ID,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
-    PUMP_STATION_HARBOR_BRIDGE_MODE,
-    PUMP_STATION_HARBOR_EXECUTION_KIND,
-    export_pump_station_harbor_task,
-    load_pump_station_harbor_bridge,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_job import (
-    build_pump_station_harbor_job_config,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
-    run_pump_station_reference_session,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_verifier import (
-    verify_pump_station_harbor_run,
-)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[4]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_registered_profile_export_uses_the_canonical_harbor_bridge(

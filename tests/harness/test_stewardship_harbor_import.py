@@ -12,18 +12,17 @@ import pytest
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.harness.harbor_importing.contracts import HarborImportError
 from aec_bench.harness.harbor_importing.core import import_harbor_trial
-from aec_bench.harness.harbor_importing.registry import resolve_import_evidence_extension
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
-    pump_station_continual_world_definition,
-)
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_export import (
+from aec_bench.harness.pump_station_harbor.export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
     export_pump_station_harbor_task,
     load_pump_station_harbor_bridge,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.harbor_session import (
+from aec_bench.harness.pump_station_harbor.session import (
     CompletedPumpStationReferenceSession,
     run_pump_station_reference_session,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
+    pump_station_continual_world_definition,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
@@ -106,14 +105,6 @@ def _write_harbor_trial(
         encoding="utf-8",
     )
     return trial_dir
-
-
-def test_stewardship_execution_kind_selects_world_evidence_extension() -> None:
-    extension = resolve_import_evidence_extension("stewardship_world_session")
-
-    assert extension is not None
-    assert extension.execution_kind == "stewardship_world_session"
-    assert resolve_import_evidence_extension("tool_loop") is None
 
 
 def test_verified_world_session_imports_and_reloads_exact_trial_record(

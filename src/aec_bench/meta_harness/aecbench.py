@@ -12,7 +12,7 @@ from typing import Any
 
 from aec_bench.contracts.experiment_manifest import ExperimentManifest
 from aec_bench.evaluation.llm_reviewer import ReviewerJobResult
-from aec_bench.harness.harbor_import import import_harbor_trial
+from aec_bench.harness.harbor_importing.core import import_harbor_trial
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 
 
