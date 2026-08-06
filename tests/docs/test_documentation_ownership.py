@@ -9,7 +9,8 @@ from urllib.parse import unquote, urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCS_ROOT = REPO_ROOT / "docs"
-DOMAIN_CHECK_ROOT = REPO_ROOT / "src" / "aec_bench" / "init" / "skill_data" / "domain-check"
+SKILL_ROOT = REPO_ROOT / "src" / "aec_bench" / "init" / "skill_data"
+DOMAIN_CHECK_ROOT = SKILL_ROOT / "domain-check"
 EXPECTED_REPOSITORY_DOCS = {
     "AGENTS.md",
     "ARCHITECTURE.md",
@@ -18,7 +19,6 @@ EXPECTED_REPOSITORY_DOCS = {
     "PROJECT_STRUCTURE.md",
     "README.md",
     "protocols/interactive-world-runtime.md",
-    "protocols/sealed-holdout-and-verifier-isolation.md",
     "protocols/staged-evidence-and-publication.md",
     "world-authoring.md",
 }
@@ -30,7 +30,6 @@ MAINTAINED_INDEX_TARGETS = {
     "PROJECT_STRUCTURE.md",
     "README.md",
     "protocols/interactive-world-runtime.md",
-    "protocols/sealed-holdout-and-verifier-isolation.md",
     "protocols/staged-evidence-and-publication.md",
     "world-authoring.md",
 }
@@ -56,8 +55,7 @@ def test_repository_markdown_relative_links_resolve() -> None:
         REPO_ROOT / "README.md",
         REPO_ROOT / "AGENTS.md",
         *sorted(DOCS_ROOT.rglob("*.md")),
-        DOMAIN_CHECK_ROOT / "SKILL.md",
-        *sorted((DOMAIN_CHECK_ROOT / "references").glob("*.md")),
+        *sorted(SKILL_ROOT.rglob("*.md")),
     ]
     missing: list[str] = []
     for source in markdown_files:
@@ -74,8 +72,7 @@ def test_retired_continual_world_document_is_not_referenced() -> None:
         REPO_ROOT / "README.md",
         REPO_ROOT / "AGENTS.md",
         *sorted(DOCS_ROOT.rglob("*.md")),
-        DOMAIN_CHECK_ROOT / "SKILL.md",
-        *sorted((DOMAIN_CHECK_ROOT / "references").glob("*.md")),
+        *sorted(SKILL_ROOT.rglob("*.md")),
     ]
 
     assert not (DOCS_ROOT / "CONTINUAL_WORLD_RUNTIME.md").exists()
@@ -116,6 +113,23 @@ def test_installed_domain_check_guidance_uses_current_authorities() -> None:
     assert "original 7" not in guidance
 
 
+def test_packaged_skills_do_not_reference_retired_runtime_paths() -> None:
+    guidance_files = [*sorted(SKILL_ROOT.rglob("*.md")), *sorted(SKILL_ROOT.rglob("evals.json"))]
+    guidance = "\n".join(path.read_text(encoding="utf-8") for path in guidance_files)
+    retired_terms = {
+        "96 across 3 domains",
+        "Only `import math`",
+        "legacy script",
+        "script (legacy)",
+        "src/aec_bench/continual/",
+        "src/aec_bench/task_worlds/",
+        "src/aec_bench/providers/ interface",
+        "terzaghi_bearing/",
+    }
+
+    assert all(term not in guidance for term in retired_terms)
+
+
 def test_meta_harness_fixtures_live_outside_docs() -> None:
     fixture_root = REPO_ROOT / "tests" / "fixtures" / "meta_harness"
 
@@ -125,10 +139,10 @@ def test_meta_harness_fixtures_live_outside_docs() -> None:
     assert not (DOCS_ROOT / "examples").exists()
 
 
-def test_readme_routes_public_guides_to_the_documentation_site() -> None:
+def test_readme_links_only_to_published_specific_guides() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
 
-    assert "https://aecbench.com/docs/advanced/meta-harness-runtime" in readme
+    assert "https://aecbench.com/docs/advanced/meta-harness-runtime" not in readme
     assert "https://aecbench.com/docs/advanced/prime-lab" in readme
     assert "docs/meta-harness-guide.md" not in readme
     assert "docs/prime-lab-guide.md" not in readme

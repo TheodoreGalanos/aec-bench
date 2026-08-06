@@ -13,9 +13,6 @@ checkpoint release, conditional evidence, submissions, attempts, durable
 records, verification, and calibration. The agent controls only its permitted
 actions and submitted content.
 
-Sealed holdout execution adds a stricter provider and recording boundary; see
-[Sealed holdout and verifier isolation](sealed-holdout-and-verifier-isolation.md).
-
 ## Authorities
 
 | Authority | Owns |
@@ -145,8 +142,7 @@ silently removed from the comparison.
 
 The freeze recomputes the declared winner, hashes the exact input records and
 artifacts, and is write-once: a retry can accept identical bytes but cannot
-replace different content. Calibration selection cannot run while a sealed
-holdout mount is active.
+replace different content.
 
 Calibration and transfer studies report the controls and resource envelope
 they actually used. A descriptive sequential study does not support a causal

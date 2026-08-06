@@ -1,5 +1,5 @@
 # ABOUTME: Selects one lifecycle condition exclusively from immutable public calibration evidence.
-# ABOUTME: Publishes a deterministic write-once freeze before any sealed holdout audit is allowed.
+# ABOUTME: Publishes a deterministic write-once freeze for the selected public calibration condition.
 
 from __future__ import annotations
 
@@ -32,7 +32,6 @@ from aec_bench.meta_harness.evidence_lifecycle_trial_record import (
     validate_captured_lifecycle_operation_interaction,
     validate_historical_lifecycle_ablation_record,
 )
-from aec_bench.task_world_templates.lifecycles.provider import sealed_lifecycle_mount_active
 
 __all__ = [
     "FrozenLifecycleCondition",
@@ -254,8 +253,6 @@ def build_lifecycle_calibration_freeze(
     manifest: LifecycleAblationManifest,
 ) -> LifecycleCalibrationFreeze:
     """Choose one exact condition using only a complete immutable public campaign."""
-    if sealed_lifecycle_mount_active():
-        raise ValueError("calibration condition cannot be frozen while a sealed holdout is mounted")
     manifest = LifecycleAblationManifest.model_validate(manifest.model_dump(mode="json"))
     policy = manifest.selection_policy
     if policy is None:

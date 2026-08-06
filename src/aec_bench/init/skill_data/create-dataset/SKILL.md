@@ -24,12 +24,13 @@ Scan the project:
 - Run `aec-bench dataset list` to see existing datasets
 - Count tasks on disk by discipline (scan `tasks/` directory)
 
-Show the user what's available:
+Show the user what's available using the live command output. Do not copy fixed
+catalogue counts into the response:
 
 ```
-Templates available: 96 across 3 domains (ground: 10, electrical: 14, civil: 72)
-Tasks on disk: 6 instances
-Existing datasets: 0
+Templates available: <live total grouped by discipline>
+Tasks on disk: <live instance count>
+Existing datasets: <live dataset count>
 ```
 
 ### Step 2 — Strategy Selection
@@ -44,14 +45,14 @@ Ask the user which approach they want:
 
 ### Step 3 — Template Selection (if A or C)
 
-If generating from templates, show available templates grouped by domain:
+If generating from templates, show available templates grouped by discipline:
 
-```
-Ground (10 templates):
+```text
+Ground:
   terzaghi-bearing-capacity, spt-corrections, infinite-slope, ...
-Electrical (14 templates):
+Electrical:
   voltage-drop, cable-sizing, fault-current, ...
-Civil (72 templates):
+Civil:
   rational-method, design-wind-pressure, retaining-wall-stability, ...
 ```
 

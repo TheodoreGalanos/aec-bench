@@ -64,10 +64,6 @@ Single-turn agent. Sends the instruction to the LLM once, gets a response, done.
 
 **Use when:** single-turn tasks that don't need tools. Rare in aec-bench since most tasks benefit from tool use.
 
-### script (legacy)
-
-Older single-turn agent variant. Prefer `direct` for new experiments.
-
 ## Common Model Names
 
 ### Anthropic

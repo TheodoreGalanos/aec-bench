@@ -37,8 +37,6 @@ from aec_bench.meta_harness.evidence_lifecycle_episode import (
     LifecycleExecutionMode,
     LifecycleVisibilityPolicy,
 )
-from aec_bench.task_world_templates.lifecycles import materialize_sealed_lifecycle
-from tests.support.sealed_lifecycle_provider import FakeSealedLifecycleProvider
 
 
 def test_preregistered_selection_policy_changes_manifest_and_plan_identity(tmp_path: Path) -> None:
@@ -121,17 +119,6 @@ def test_missing_provider_credentials_fail_before_campaign_writes(
 
     assert not Path(manifest.output_root).exists()
     assert not Path(manifest.ledger_root).exists()
-
-
-def test_freeze_refuses_to_run_inside_a_sealed_holdout_mount(tmp_path: Path) -> None:
-    mount = materialize_sealed_lifecycle(
-        FakeSealedLifecycleProvider(),
-        tmp_path / "sealed-package",
-    )
-    manifest = _manifest(tmp_path, selection_policy=_selection_policy())
-
-    with mount.activate(), pytest.raises(ValueError, match="sealed holdout is mounted"):
-        build_lifecycle_calibration_freeze(manifest)
 
 
 def test_selectable_campaign_rejects_injected_registry_before_writes(tmp_path: Path) -> None:

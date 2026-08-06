@@ -123,7 +123,7 @@ Write engine.py to the output directory. Key requirements:
 - Pure `compute()` function returning `dict[str, float]`
 - Lookup tables as module-level constants
 - All outputs `round(value, 2)`
-- Only `import math` (stdlib only)
+- Standard-library imports only; use modules such as `math`, `typing`, or `json` when the computation needs them
 
 If the seed contains structured `inputs` with types and units, use those to inform parameter naming and validation. For example, `{"name": "Cable length", "type": "float", "unit": "m"}` suggests a parameter named `cable_length_m` with float validation.
 

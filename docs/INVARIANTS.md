@@ -84,8 +84,7 @@ holdout task content.
 
 Missing visibility is unknown, not public. Holdout-derived evidence can change
 general principles only through a deliberate review that does not reveal the
-held-out target. The current sealed boundary is defined in
-[Sealed holdout and verifier isolation](protocols/sealed-holdout-and-verifier-isolation.md).
+held-out target.
 
 ## Failures remain failures
 

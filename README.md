@@ -148,9 +148,8 @@ uv run aec-bench meta-harness recipe \
 ```
 
 The recipe writes a scriptable workspace for intake, world generation, reviewer
-evidence, governance, and comparison artifacts. See the public
-[Meta-Harness Runtime](https://aecbench.com/docs/advanced/meta-harness-runtime)
-documentation for the full CLI/API workflow.
+evidence, governance, and comparison artifacts. Run
+`aec-bench meta-harness --help` for the complete command surface.
 
 ### Prime Lab Export
 
@@ -290,7 +289,7 @@ uv run aec-bench import jobs/2026-03-04__17-57-43
 uv run aec-bench evaluate -e experiment-001
 
 # JSON output
-uv run aec-bench evaluate -e experiment-001 -o json
+uv run aec-bench --json evaluate -e experiment-001
 
 # Generate an HTML report
 uv run aec-bench evaluate -e experiment-001 --report report.html
@@ -365,7 +364,7 @@ the wheel and sdist include the compiled SPA:
 
 ```bash
 cd src/aec_bench/web/frontend
-npm install
+npm ci
 npm run build
 cd -
 uv build
@@ -376,7 +375,7 @@ For Web UI development with Vite hot reload:
 ```bash
 uv sync --extra webui --dev
 cd src/aec_bench/web/frontend
-npm install
+npm ci
 cd -
 uv run aec-bench web --dev
 ```
@@ -400,12 +399,21 @@ or another agent environment.
 | Skill | Command | Purpose |
 |-------|---------|---------|
 | **Add Task** | `/add-task` | Interview-driven seed creation from expert description |
+| **Configure Experiment** | `/configure-experiment` | Select tasks, agents, models, and execution settings for a validated experiment manifest |
+| **Create Dataset** | `/create-dataset` | Build and verify a reproducible dataset from templates or existing tasks |
 | **Create Template** | `/create-template <seed-path>` | Build a generation template from a seed file |
 | **Hardening Pass** | `/hardening-pass <path>` | Quality-gate a template or task instance before benchmarking |
 | **Domain Check** | `/domain-check` | Verify architectural invariants before publishing or committing |
 | **Meta-Harness** | `/meta-harness` | Design or compare a harness candidate from task prose and run evidence |
 
-**Typical flow:** `/add-task` interviews an expert and produces a seed file. If the task is parameterisable, it hands off to `/create-template` which builds the template and generates instances. Then `/hardening-pass` reviews the template for correctness before use in real benchmarks.
+`aec-bench init` installs the packaged skills into `.claude/skills/`. Run
+`aec-bench init --update-skills` in an existing project to refresh the packaged
+copies without replacing user-added skills.
+
+**Typical flow:** `/add-task` produces an expert-authored seed. For a
+parameterisable task, `/create-template` builds the generation template and
+`/hardening-pass` checks it before benchmark use. `/create-dataset` freezes a
+reproducible selection, then `/configure-experiment` prepares the run.
 
 ## Harbor Agent
 
@@ -420,15 +428,19 @@ current execution bundle. Do not create a second per-provider Harbor agent.
 
 ## Task Disciplines
 
-~240 seed tasks across 5 engineering disciplines:
+Task sources and built-in generation templates cover six engineering
+disciplines. The catalogue changes frequently, so use
+`aec-bench generate list-templates` for the current template inventory and
+`aec-bench library export --pretty` for the current public catalogue.
 
-| Discipline | Examples | Seeds |
-|------------|----------|-------|
-| **Civil** | Roads, drainage, pavement, hydraulics, earthworks | ~85 |
-| **Electrical** | Cable sizing, fault current, lighting, power systems | ~75 |
-| **Ground** | Foundations, slopes, retaining walls, soil interpretation | ~5 |
-| **Mechanical** | HVAC, fire protection, piping, acoustics, process eng. | ~75 |
-| **Structural** | Steel/concrete design, seismic, fatigue, connections | ~38 |
+| Discipline | Examples |
+|------------|----------|
+| **Civil** | Roads, drainage, pavement, hydraulics, earthworks |
+| **Electrical** | Cable sizing, fault current, lighting, power systems |
+| **Ground** | Foundations, slopes, retaining walls, soil interpretation |
+| **Maritime** | Port, coastal, berth, and marine infrastructure |
+| **Mechanical** | HVAC, fire protection, piping, acoustics, process engineering |
+| **Structural** | Steel and concrete design, seismic, fatigue, connections |
 
 ## Project Structure
 

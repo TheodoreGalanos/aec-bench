@@ -73,7 +73,7 @@ description = "Generate a chart from computed data."
 returns_image = true
 ```
 
-`returns_image = true` documents that the tool may produce image files. The unified entrypoint currently passes tool output as text, so binary image self-review requires an intentionally selected legacy script route.
+`returns_image = true` documents that the tool may produce image files. The unified entrypoint currently passes tool output as text, so binary image self-review is not supported by the current runtime.
 
 ---
 

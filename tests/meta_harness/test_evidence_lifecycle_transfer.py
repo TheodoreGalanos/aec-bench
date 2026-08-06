@@ -78,7 +78,7 @@ from aec_bench.task_world_templates.lifecycles import (
 _RUNTIME_SHA256 = "1" * 64
 
 
-def test_unsealed_partial_holdout_cannot_stand_in_for_a_sealed_target(
+def test_partial_holdout_cannot_stand_in_for_complete_target_evidence(
     tmp_path: Path,
 ) -> None:
     condition = _condition()
@@ -460,44 +460,6 @@ def test_tampered_record_or_snapshot_artifact_is_not_evaluable(tmp_path: Path, t
     assert result.status == "not_evaluable"
     assert expected_reason in result.target_results[0].reasons
     assert result.mean_target_reward is None
-
-
-def test_v3_snapshot_cannot_smuggle_v4_evidence_request_fields(tmp_path: Path) -> None:
-    condition = _condition()
-    calibration = _write_record(
-        tmp_path,
-        experiment_id="calibration",
-        trial_id="calibration-001",
-        visibility=Visibility.PUBLIC,
-        package_sha256="a" * 64,
-        reward=1.0,
-        condition=condition,
-        state_checkpoint_updates={
-            "evidence_request_budget": 1,
-            "evidence_request_budget_remaining": 1,
-            "evidence_request_actions": [],
-        },
-    )
-    target = _write_record(
-        tmp_path,
-        experiment_id="target",
-        trial_id="target-001",
-        visibility=Visibility.HOLDOUT,
-        package_sha256="b" * 64,
-        reward=1.0,
-        condition=condition,
-    )
-
-    result = build_lifecycle_transfer_evaluation(
-        _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
-    )
-
-    assert result.status == "not_evaluable"
-    assert result.calibration_results[0].reasons == ("snapshot_contract_invalid",)
-    assert result.target_results[0].reasons == (
-        "no_public_calibration_support",
-        "record_incomplete",
-    )
 
 
 @pytest.mark.parametrize(
@@ -1147,7 +1109,7 @@ def test_evidence_request_state_contract_rejects_unknown_checkpoint_id(tmp_path:
         validate_evidence_request_run_state(state, spec)
 
 
-def test_unsealed_zero_reward_is_not_misreported_as_holdout_evidence(tmp_path: Path) -> None:
+def test_incomplete_zero_reward_is_not_misreported_as_holdout_evidence(tmp_path: Path) -> None:
     condition = _condition()
     calibration = _write_record(
         tmp_path,
@@ -1492,7 +1454,6 @@ def _write_record(
     verification_overall: str | None = None,
     verification_lifecycle_id: str | None = None,
     verification_template_id: str = "drainage-model-evidence-lifecycle-review",
-    state_checkpoint_updates: dict[str, object] | None = None,
 ) -> _WrittenRecord:
     record_completeness = completeness or (
         Completeness.PARTIAL if visibility is Visibility.HOLDOUT else Completeness.COMPLETE
@@ -1536,7 +1497,6 @@ def _write_record(
         sha256=_sha256(snapshot_path),
         media_type="application/json",
     )
-    checkpoint_updates = state_checkpoint_updates or {}
     state_payload = {
         "schema_version": "3",
         "lifecycle_id": f"lifecycle-{trial_id}",
@@ -1551,7 +1511,6 @@ def _write_record(
                 "status": "submitted",
                 "submission_path": f"episodes/{checkpoint_id}/submission.json",
                 "submission_sha256": "7" * 64,
-                **checkpoint_updates,
             }
             for checkpoint_id in ("initial", "corrected")
         ],

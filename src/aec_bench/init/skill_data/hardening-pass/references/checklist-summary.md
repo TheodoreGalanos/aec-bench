@@ -11,7 +11,7 @@
 | T2 | Formula | Edge cases caught in _validate_inputs() | High |
 | T3 | Formula | Outputs rounded to 2 decimal places | Low |
 | T4 | Formula | compute() is a pure function (no side effects) | High |
-| T5 | Formula | Only stdlib imports (math) | Medium |
+| T5 | Formula | Standard-library imports only | Medium |
 | T6 | Params | Min/max ranges are physically realistic | Critical |
 | T7 | Params | Archetype combinations produce reasonable scenarios | High |
 | T8 | Params | Categorical values match standard terminology | Medium |
