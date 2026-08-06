@@ -11,6 +11,7 @@ from typing import Any
 import typer
 
 from aec_bench.cli.commands.config import resolve_path
+from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import console, emit, print_success
 from aec_bench.prime_lab.eval_import import (
     fetch_prime_eval_payloads,
@@ -106,6 +107,7 @@ def _load_payloads(
 
     if eval_id is None:
         raise ValueError("provide a Prime eval id or both --evaluation-json and --samples-json")
+    require_optional_extra("Prime evaluation import support", "prime", commands=("prime",))
     return fetch_prime_eval_payloads(eval_id)
 
 

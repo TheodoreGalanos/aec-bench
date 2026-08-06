@@ -671,11 +671,8 @@ def build_model_reference(endpoint: ModelEndpoint) -> Any:
 
 
 def _build_openai_family_model(endpoint: ModelEndpoint, provider: str) -> Any:
-    try:
-        from pydantic_ai.models.openai import OpenAIChatModel
-        from pydantic_ai.providers.openai import OpenAIProvider
-    except ImportError as exc:
-        raise _missing_pydantic_ai_error() from exc
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.openai import OpenAIProvider
 
     if provider == "together":
         model_name = _strip_together_prefix(endpoint.model)
@@ -697,10 +694,8 @@ def _build_openai_family_model(endpoint: ModelEndpoint, provider: str) -> Any:
             raise RuntimeError("required environment variable is not set: AZURE_OPENAI_API_KEY")
         if endpoint_url.rstrip("/").lower().endswith("/openai/v1"):
             return OpenAIChatModel(endpoint.model, provider=OpenAIProvider(base_url=endpoint_url, api_key=api_key))
-        try:
-            from pydantic_ai.providers.azure import AzureProvider
-        except ImportError as exc:
-            raise _missing_pydantic_ai_error() from exc
+        from pydantic_ai.providers.azure import AzureProvider
+
         api_version = (
             endpoint.api_version
             or _env(endpoint.api_version_env)
@@ -728,18 +723,13 @@ def build_model_settings(endpoint: ModelEndpoint) -> Any | None:
         settings["max_tokens"] = endpoint.max_tokens
     if not settings:
         return None
-    try:
-        from pydantic_ai import ModelSettings
-    except ImportError as exc:
-        raise _missing_pydantic_ai_error() from exc
+    from pydantic_ai import ModelSettings
+
     return cast(ModelSettings, settings)
 
 
 def _problem_space_brief_output_type() -> Any:
-    try:
-        from pydantic import BaseModel, Field
-    except ImportError as exc:
-        raise RuntimeError("pydantic is required for structured intake outputs") from exc
+    from pydantic import BaseModel, Field
 
     class ProblemSpaceBriefOutput(BaseModel):
         brief_id: str = Field(min_length=1)
@@ -758,10 +748,7 @@ def _problem_space_brief_output_type() -> Any:
 
 
 def _world_generation_output_type() -> Any:
-    try:
-        from pydantic import BaseModel, Field
-    except ImportError as exc:
-        raise RuntimeError("pydantic is required for structured world-generation outputs") from exc
+    from pydantic import BaseModel, Field
 
     class WorldCardOutput(BaseModel):
         world_id: str = Field(min_length=1)
@@ -782,10 +769,7 @@ def _world_generation_output_type() -> Any:
 
 
 def _operation_plan_output_type() -> Any:
-    try:
-        from pydantic import BaseModel, Field
-    except ImportError as exc:
-        raise RuntimeError("pydantic is required to build structured operation-plan model outputs") from exc
+    from pydantic import BaseModel, Field
 
     class OperationPlanStepOutput(BaseModel):
         id: str = Field(min_length=1)
@@ -889,15 +873,9 @@ def _aggregate_model_costs(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _pydantic_ai_agent_type() -> Any:
-    try:
-        from pydantic_ai import Agent
-    except ImportError as exc:
-        raise _missing_pydantic_ai_error() from exc
+    from pydantic_ai import Agent
+
     return Agent
-
-
-def _missing_pydantic_ai_error() -> RuntimeError:
-    return RuntimeError("pydantic-ai is required to run meta-harness model endpoints")
 
 
 def _effective_provider(endpoint: ModelEndpoint) -> str:

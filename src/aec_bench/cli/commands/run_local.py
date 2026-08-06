@@ -18,6 +18,7 @@ from typing import Annotated, cast
 
 import typer
 
+from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import StructuredError, console, emit
 from aec_bench.contracts.canonical_refs import CanonicalRefSet, parse_canonical_refs
 from aec_bench.contracts.task_definition import ToolSpec
@@ -672,6 +673,7 @@ def run_local(
     Examples:
       aec-bench run-local tasks/electrical/voltage-drop -m gpt-4.1-mini --adapter direct
     """
+    require_optional_extra("Local agent execution support", "local-agents", ("pydantic_ai",))
     task_dir = Path(task_path).resolve()
     if not task_dir.is_dir():
         StructuredError(
@@ -684,18 +686,6 @@ def run_local(
             ],
         ).print()
         raise typer.Exit(1)
-
-    # Check pydantic-ai is installed — it's an optional dependency
-    try:
-        import pydantic_ai  # noqa: F401
-    except ImportError as exc:
-        StructuredError(
-            message="pydantic-ai is not installed",
-            why="pydantic-ai is an optional dependency required for local execution",
-            fix="Install it with uv",
-            try_steps=["uv pip install 'pydantic-ai>=0.1'"],
-        ).print()
-        raise typer.Exit(1) from exc
 
     console.print(f"[bold]Setting up local workspace for {task_dir.name}...[/bold]")
 

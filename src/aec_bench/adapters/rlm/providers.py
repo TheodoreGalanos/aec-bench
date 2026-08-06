@@ -534,28 +534,22 @@ def _build_model_settings(
         return None
 
     if provider == "bedrock":
-        try:
-            from pydantic_ai.models.bedrock import BedrockModelSettings
+        from pydantic_ai.models.bedrock import BedrockModelSettings
 
-            return BedrockModelSettings(
-                bedrock_cache_instructions=True,
-                bedrock_cache_tool_definitions=True,
-                bedrock_cache_messages=True,
-            )
-        except ImportError:
-            return None
+        return BedrockModelSettings(
+            bedrock_cache_instructions=True,
+            bedrock_cache_tool_definitions=True,
+            bedrock_cache_messages=True,
+        )
 
     if provider in ("anthropic", "auto"):
-        try:
-            from pydantic_ai.models.anthropic import AnthropicModelSettings
+        from pydantic_ai.models.anthropic import AnthropicModelSettings
 
-            return AnthropicModelSettings(
-                anthropic_cache_instructions=True,
-                anthropic_cache_tool_definitions=True,
-                anthropic_cache_messages=True,
-            )
-        except ImportError:
-            return None
+        return AnthropicModelSettings(
+            anthropic_cache_instructions=True,
+            anthropic_cache_tool_definitions=True,
+            anthropic_cache_messages=True,
+        )
 
     return None
 

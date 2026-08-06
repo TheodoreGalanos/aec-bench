@@ -13,6 +13,7 @@ import tarfile
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from importlib.util import find_spec
 from pathlib import Path, PurePosixPath
 from typing import Any, cast
 from uuid import uuid4
@@ -538,11 +539,10 @@ def _dockerfile_relative_path(*, dockerfile_path: Path, context_dir: Path) -> Pa
 
 
 def _morph_client() -> Any:
-    try:
-        from morphcloud.api import MorphCloudClient
-    except ImportError as exc:
-        msg = "Morph Cloud support requires the morphcloud package and MORPH_API_KEY configuration."
-        raise RuntimeError(msg) from exc
+    if find_spec("morphcloud") is None:
+        raise RuntimeError('Morph Cloud support is not installed.\nInstall it with: pip install "aec-bench[morph]"')
+    from morphcloud.api import MorphCloudClient
+
     return MorphCloudClient()
 
 

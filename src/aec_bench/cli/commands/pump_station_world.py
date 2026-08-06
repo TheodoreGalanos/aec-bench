@@ -11,6 +11,7 @@ from typing import cast
 import typer
 from pydantic import BaseModel, TypeAdapter
 
+from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import emit
 from aec_bench.contracts.continual_world import (
     ContinualControlExecuteRequest,
@@ -24,7 +25,6 @@ from aec_bench.contracts.world_interface import WorldActorActionRequest, WorldCo
 from aec_bench.evaluation.stewardship import (
     evaluate_pump_station_reference_run,
 )
-from aec_bench.harness.harbor_importing.core import import_harbor_trial
 from aec_bench.task_world_templates.continual.rollout_control import ContinualRolloutControl
 from aec_bench.task_world_templates.continual_catalogue import default_continual_world_catalogue
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_rollout_adapter import (
@@ -255,6 +255,7 @@ def export_harbor_command(
 ) -> None:
     """Export the registered wastewater pump-station Harbor task."""
 
+    require_optional_extra("Harbor execution support", "execution", ("harbor",))
     from aec_bench.harness.pump_station_harbor.export import (
         export_pump_station_harbor_task,
     )
@@ -326,6 +327,9 @@ def run_harbor_command(
 ) -> None:
     """Prepare and optionally run one local provider-free Harbor job."""
 
+    extra = "execution,morph" if backend == "morph" else "execution"
+    modules = ("harbor", "morphcloud") if backend == "morph" else ("harbor",)
+    require_optional_extra("Harbor execution support", extra, modules)
     from aec_bench.harness.pump_station_harbor.job import (
         run_pump_station_harbor_job,
     )
@@ -377,6 +381,9 @@ def import_harbor_trial_command(
     ),
 ) -> None:
     """Strictly import one verified stewardship Harbor trial."""
+
+    require_optional_extra("Harbor execution support", "execution", ("harbor",))
+    from aec_bench.harness.harbor_importing.core import import_harbor_trial
 
     started = time.monotonic()
     if record_path.exists():

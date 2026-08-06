@@ -4,6 +4,7 @@
 import typer
 
 from aec_bench.cli.commands.config import resolve_path
+from aec_bench.cli.optional_dependencies import require_optional_extra
 
 
 def launch_tui(
@@ -25,6 +26,7 @@ def launch_tui(
     datasets_root: str | None = typer.Option(None, "--datasets-root", help="Datasets directory"),
 ) -> None:
     """Launch the interactive terminal UI for browsing, viewing, and reviewing trials."""
+    require_optional_extra("Terminal UI support", "tui", ("textual", "rich_pixels", "PIL"))
     resolved_ledger = resolve_path("ledger_root", cli_override=ledger_root)
     resolved_tasks = resolve_path("tasks_root", cli_override=tasks_root)
     resolved_feedback = resolve_path("feedback_root", cli_override=feedback_root)

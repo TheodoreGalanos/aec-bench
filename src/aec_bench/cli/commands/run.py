@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from aec_bench.contracts.experiment_manifest import ExperimentManifest
 
 from aec_bench.cli.commands.config import resolve_path
+from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import console, emit, print_success
 from aec_bench.evaluation.llm_reviewer import (
     ReviewerEndpointConfig,
@@ -221,6 +222,15 @@ def _execute_manifest(
     start: float,
     reviewer_config: ReviewerRunConfig | None = None,
 ) -> None:
+    effective_reviewer_config = reviewer_config or reviewer_config_from_manifest(manifest.reviewer)
+    morph = manifest.compute.backend == "morph"
+    modules = ("harbor", "morphcloud") if morph else ("harbor",)
+    extras = "execution,morph" if morph else "execution"
+    if effective_reviewer_config is not None and effective_reviewer_config.enabled:
+        modules = (*modules, "pydantic_ai")
+        extras += ",local-agents"
+    require_optional_extra("Experiment execution support", extras, modules)
+
     from aec_bench.harness.harbor_dispatch import HARBOR_RUN_BACKENDS
     from aec_bench.harness.scheduler import build_trial_plan, select_manifest_tasks
     from aec_bench.tasks.registry import TaskRegistry
@@ -254,7 +264,6 @@ def _execute_manifest(
     plan = build_trial_plan(manifest, selected_tasks)
 
     if dry_run:
-        effective_reviewer_config = reviewer_config or reviewer_config_from_manifest(manifest.reviewer)
         plan_data = {
             "experiment_id": manifest.experiment_id,
             "backend": manifest.compute.backend,

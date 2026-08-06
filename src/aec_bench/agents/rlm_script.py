@@ -547,15 +547,12 @@ if _is_bedrock_model:
     )
 elif not _is_azure_model:
     # Direct Anthropic API
-    try:
-        from pydantic_ai.models.anthropic import AnthropicModelSettings
-        _agent_settings = AnthropicModelSettings(
-            anthropic_cache_instructions=True,
-            anthropic_cache_tool_definitions=True,
-            anthropic_cache_messages=True,
-        )
-    except ImportError:
-        pass
+    from pydantic_ai.models.anthropic import AnthropicModelSettings
+    _agent_settings = AnthropicModelSettings(
+        anthropic_cache_instructions=True,
+        anthropic_cache_tool_definitions=True,
+        anthropic_cache_messages=True,
+    )
 
 rlm_agent = Agent(
     _model,

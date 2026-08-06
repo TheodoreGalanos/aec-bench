@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 
 from aec_bench.cli.commands.config import resolve_path
+from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import console, emit, print_success
 
 
@@ -23,6 +24,7 @@ def import_job(
       aec-bench import jobs/exp-001-run-1
       aec-bench --json import jobs/exp-001-run-1 | jq '.data.imported'
     """
+    require_optional_extra("Harbor execution support", "execution", ("harbor",))
     start = time.monotonic()
     resolved_ledger = resolve_path("ledger_root", cli_override=ledger_root)
     resolved_tasks = resolve_path("tasks_root", cli_override=tasks_root)

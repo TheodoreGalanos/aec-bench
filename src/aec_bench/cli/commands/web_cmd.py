@@ -5,29 +5,15 @@ import signal
 import subprocess
 import sys
 import webbrowser
-from importlib.util import find_spec
 from pathlib import Path
 from secrets import token_urlsafe
 
 import typer
 
 from aec_bench.cli.commands.config import resolve_path
+from aec_bench.cli.optional_dependencies import require_optional_extra
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
-
-
-def _ensure_webui_runtime() -> None:
-    missing = [name for name in ("fastapi", "uvicorn") if find_spec(name) is None]
-    if not missing:
-        return
-    packages = ", ".join(missing)
-    typer.echo(
-        "The web UI runtime is optional and is not installed "
-        f"(missing: {packages}). Install it with 'aec-bench[webui]' "
-        "or run 'uv sync --extra webui'.",
-        err=True,
-    )
-    raise typer.Exit(1)
 
 
 def _resolve_internal_token(host: str, internal_token: str | None) -> str | None:
@@ -40,7 +26,7 @@ def _resolve_internal_token(host: str, internal_token: str | None) -> str | None
 
 def _start_dev_servers(host: str, port: int) -> None:
     """Start Vite dev server and FastAPI in parallel for development."""
-    _ensure_webui_runtime()
+    require_optional_extra("Web UI support", "webui", ("fastapi", "uvicorn"))
     frontend_dir = Path(__file__).resolve().parents[2] / "web" / "frontend"
 
     if not (frontend_dir / "package.json").exists():
@@ -110,7 +96,7 @@ def launch_web(
     dev: bool = typer.Option(False, "--dev", help="Run Vite dev server + FastAPI for HMR development"),
 ) -> None:
     """Launch the web UI for browsing experiments, triaging trials, and viewing results."""
-    _ensure_webui_runtime()
+    require_optional_extra("Web UI support", "webui", ("fastapi", "uvicorn"))
     if dev:
         _start_dev_servers(host=host, port=port)
         return

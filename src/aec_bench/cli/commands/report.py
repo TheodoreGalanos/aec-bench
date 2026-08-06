@@ -8,6 +8,7 @@ from typing import Any
 import typer
 
 from aec_bench.cli.commands.config import resolve_path
+from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import console, emit, print_success
 
 app = typer.Typer(help="Generate reports and analysis from ledger data.")
@@ -220,6 +221,7 @@ def behavioral(
       aec-bench --json report behavioral -e exp-001 \\
         --classifier claude-sonnet-4-20250514 | jq '.data.trials'
     """
+    require_optional_extra("Behavioral report support", "local-agents", ("pydantic_ai",))
     start = time.monotonic()
     resolved_ledger = resolve_path("ledger_root", cli_override=ledger_root)
 

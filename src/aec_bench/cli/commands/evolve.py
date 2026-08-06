@@ -9,6 +9,7 @@ from pathlib import Path
 import typer
 import yaml
 
+from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import console, emit
 
 app = typer.Typer(help="Evolve agent workspaces through automated improvement loops.")
@@ -98,6 +99,8 @@ def evolve_run(
             start_time=start,
         )
         raise typer.Exit(1)
+
+    require_optional_extra("Evolution execution support", "evolution,local-agents", ("numpy", "ribs", "pydantic_ai"))
 
     from aec_bench.evolution.config_loader import (
         load_evolution_config,
