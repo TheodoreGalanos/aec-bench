@@ -104,7 +104,7 @@ def _verify_base(*, python: Path, cli: Path, work: Path, env: dict[str, str]) ->
             f"names={OPTIONAL_BASE_MODULES!r}",
             "missing=[name for name in names if importlib.util.find_spec(name) is not None]",
             "assert not missing, missing",
-            "import aec_bench, aec_bench.cli.main",
+            "import aec_bench, aec_bench.cli.main, aec_bench.providers",
         )
     )
     _run([str(python), "-I", "-c", absent_probe], cwd=work, env=env)
