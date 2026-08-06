@@ -1,5 +1,5 @@
 # ABOUTME: Exposes the canonical governed proposal-dispatch contracts and transactions.
-# ABOUTME: Keeps the package API identical to the stable proposal_dispatch_governance facade.
+# ABOUTME: Exposes the current governed proposal-dispatch boundary.
 
 from aec_bench.meta_harness.proposal_dispatch.authorization import (
     authorize_governed_proposal_dispatch,

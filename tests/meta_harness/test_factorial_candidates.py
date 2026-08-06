@@ -45,7 +45,7 @@ from aec_bench.meta_harness.factorial_candidates import (
 )
 from aec_bench.meta_harness.factorial_plan import FactorialCell
 from aec_bench.meta_harness.kernel_catalogue import KernelRuntimeRegistry, default_kernel_registry
-from aec_bench.meta_harness.program_runtime import ProgramExecutionStatus
+from aec_bench.meta_harness.program_execution import ProgramExecutionStatus
 from aec_bench.meta_harness.run_bundle_runtime import MetaHarnessStudyContext, execute_run_bundle
 from tests.support.adaptive_harness import (
     runtime_attestation_for_harbor_agent,

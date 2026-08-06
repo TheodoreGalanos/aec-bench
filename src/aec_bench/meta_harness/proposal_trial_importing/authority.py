@@ -23,7 +23,7 @@ from aec_bench.meta_harness.authority_ledger import (
     StoredBasis,
 )
 from aec_bench.meta_harness.immutable_artifact_store import EvidenceRepository
-from aec_bench.meta_harness.proposal_dispatch_governance import (
+from aec_bench.meta_harness.proposal_dispatch import (
     GovernedProposalDispatchAuthorization,
 )
 from aec_bench.meta_harness.proposal_harbor_runtime import (

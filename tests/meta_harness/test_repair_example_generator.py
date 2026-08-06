@@ -18,7 +18,7 @@ from aec_bench.contracts.harness_instance import (
     ComputeBindingConfig,
     ContextBindingConfig,
 )
-from aec_bench.evolution.repair_loop import RepairOwner
+from aec_bench.evolution.repair_lifecycle import RepairOwner
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.meta_harness.adaptive_diagnosis import (
     AdaptiveDiagnosisPolicy,

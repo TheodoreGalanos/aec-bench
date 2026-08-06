@@ -151,7 +151,7 @@ def build_completed_sealed_lifecycle_audit(
             verifier=verify_lifecycle,
             adapter_kind=calibration.selected_condition.requested_adapter,
             max_turns=calibration.selected_condition.max_turns_per_session,
-            registry=registry,
+            adapter_builder=registry.build,
             visibility_policy=calibration.selected_condition.memory_visibility_policy,
             require_adapter_identity_match=True,
             experiment_recorder=recorder,

@@ -367,7 +367,7 @@ def _validate_promotion_monitor_attestation(
     attestation: PromotionMonitorAttestation,
     evaluation_plan_sha256: str,
 ) -> None:
-    from aec_bench.meta_harness.monitors import (
+    from aec_bench.meta_harness.standing_monitors import (
         CycleMonitorReport,
         ProductionCycleMonitorEnvelope,
     )

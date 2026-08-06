@@ -19,20 +19,13 @@ from aec_bench.contracts.evaluation_plane import (
 )
 from aec_bench.contracts.harness_instance import CompiledHarnessInstance
 from aec_bench.contracts.harness_kernel import ContentAddressedModel
-from aec_bench.contracts.program_proposal import (
-    CandidateGenerationManifest,
-    DecompositionLeakageAudit,
-    DecompositionProblemView,
-)
+from aec_bench.contracts.program_proposal.candidate import CandidateGenerationManifest
+from aec_bench.contracts.program_proposal.problem import DecompositionLeakageAudit, DecompositionProblemView
 from aec_bench.contracts.proposal_execution_profile import (
     ProposalExecutionProfile,
 )
-from aec_bench.contracts.provider_calibration import (
-    ProviderCalibrationTaskManifest,
-)
 from aec_bench.meta_harness.authority_ledger import (
     AuthorityLedger,
-    StoredAuthorityEvent,
     StoredBasis,
 )
 from aec_bench.meta_harness.proposal_freezing.contracts import (
@@ -54,8 +47,6 @@ def observe_input_basis(
     evaluation_plan_candidate_scope: CandidateManifestScope | None,
     operator: OperatorAuthority,
     structural_split: StructuralSplitManifest,
-    provider_calibration_manifest: ProviderCalibrationTaskManifest | None,
-    provider_calibration_release_authority: StoredAuthorityEvent | None,
     leakage_audit: DecompositionLeakageAudit,
     problem_view: DecompositionProblemView,
     candidate_manifest: CandidateGenerationManifest,
@@ -105,34 +96,6 @@ def observe_input_basis(
         producer=host_policy,
         host_runtime=host_runtime,
         operation_id="proposal-freeze.observe-structural-split",
-    )
-    calibration = (
-        None
-        if provider_calibration_manifest is None
-        else _observe_model(
-            ledger=ledger,
-            artifact_id=(f"{scope}.provider-calibration-manifest.{provider_calibration_manifest.manifest_id}"),
-            model=provider_calibration_manifest,
-            producer=host_policy,
-            host_runtime=host_runtime,
-            operation_id=("proposal-freeze.observe-provider-calibration-manifest"),
-        )
-    )
-    calibration_release = (
-        None
-        if provider_calibration_release_authority is None
-        else ledger.observe_model_basis(
-            kind=BasisKind.AUTHORITY_EVENT,
-            artifact_id=(f"{scope}.provider-calibration-release-authority"),
-            model=provider_calibration_release_authority.event,
-            producer=provider_calibration_release_authority.event.principal,
-            producer_process_id="aecbench.authority-ledger",
-            observed_by=host_runtime,
-            channel="proposal-freeze",
-            operation_id=("proposal-freeze.observe-provider-calibration-release"),
-            invocation_id=(provider_calibration_release_authority.event.content_sha256),
-            operation_taint=(TaintLabel.HUMAN_AUTHORITY,),
-        )
     )
     audit = _observe_model(
         ledger=ledger,
@@ -236,20 +199,11 @@ def observe_input_basis(
             operation_taint=(TaintLabel.RUNTIME_OBSERVED,),
         )
     )
-    calibration_stored = tuple(
-        item
-        for item in (
-            calibration,
-            calibration_release,
-        )
-        if item is not None
-    )
     stored = (
         plan,
         *((candidate_scope,) if candidate_scope is not None else ()),
         authority,
         structural,
-        *calibration_stored,
         audit,
         view,
         manifest,
@@ -265,8 +219,6 @@ def observe_input_basis(
         evaluation_plan_candidate_scope=(None if candidate_scope is None else candidate_scope.reference),
         operator_authority=authority.reference,
         structural_split=structural.reference,
-        provider_calibration_manifest=(None if calibration is None else calibration.reference),
-        provider_calibration_release_authority=(None if calibration_release is None else calibration_release.reference),
         leakage_audit=audit.reference,
         problem_view=view.reference,
         candidate_manifest=manifest.reference,

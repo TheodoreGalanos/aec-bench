@@ -9,13 +9,13 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 import os
 
+from aec_bench.contracts.evolution import WorkspaceManifest
 from aec_bench.evolution.analysis import GraduatedScope
 from aec_bench.evolution.mutation import _extract_json, _repair_json_strings
 from aec_bench.evolution.prompts import (
     build_evolution_analysis_prompt,
     build_evolver_system_prompt,
 )
-from aec_bench.contracts.evolution import WorkspaceManifest
 from aec_bench.providers.behavioral_llm import build_behavioral_llm_client
 
 model = os.environ["AWS_SONNET_MODEL_ID"]

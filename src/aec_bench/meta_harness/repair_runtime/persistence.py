@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from aec_bench.contracts.trial_record import ArtifactReference
-from aec_bench.evolution.repair_loop import RepairLoopResult
+from aec_bench.evolution.repair_lifecycle import RepairLoopResult
 from aec_bench.meta_harness.authority_ledger import StoredAuthorityEvent
 
 

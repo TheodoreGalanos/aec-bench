@@ -1,15 +1,11 @@
-# ABOUTME: Provides the stable public facade for proposal-execution contracts.
-# ABOUTME: Re-exports graph, compilation, session, budget, context, profile, and policy types.
+# ABOUTME: Exposes the current proposal-execution boundary contracts.
+# ABOUTME: Groups graph, compilation, session, budget, context, profile, and policy types.
 
-from aec_bench.contracts.proposal_execution.compilation import (
-    _V1_COMPATIBILITY_PROFILE_CONTEXT_KEY as _V1_COMPATIBILITY_PROFILE_CONTEXT_KEY,
-)
 from aec_bench.contracts.proposal_execution.compilation import (
     ProposalCompilationRecord,
     ProposalCompilationRejection,
     ProposalCompilationSuccess,
     ProposalCompileDiagnostic,
-    validate_proposal_compilation_v1_compatibility,
 )
 from aec_bench.contracts.proposal_execution.graph import (
     ExecutableCandidateGraph,
@@ -97,5 +93,4 @@ __all__ = (
     "ProposedDecompositionGraph",
     "ScopedSourceMaterialization",
     "SemanticSubtaskSpec",
-    "validate_proposal_compilation_v1_compatibility",
 )

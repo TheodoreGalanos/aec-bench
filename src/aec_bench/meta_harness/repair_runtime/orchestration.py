@@ -19,7 +19,7 @@ from aec_bench.contracts.authority import (
 from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
 from aec_bench.contracts.run_bundle import RunBundle, TaskSnapshotRef
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
-from aec_bench.evolution.repair_loop import (
+from aec_bench.evolution.repair_lifecycle import (
     CompiledRepairCandidate,
     RepairCandidate,
     RepairDiagnosis,
@@ -45,13 +45,13 @@ from aec_bench.meta_harness.authority_ledger import (
     StoredAuthorityEvent,
     StoredBasis,
 )
-from aec_bench.meta_harness.compiler import (
+from aec_bench.meta_harness.compilation import (
     compile_execution_program,
     compile_harness_instance,
     compile_run_bundle,
 )
 from aec_bench.meta_harness.kernel_catalogue import KernelRuntimeRegistry
-from aec_bench.meta_harness.program_runtime import (
+from aec_bench.meta_harness.program_execution import (
     OperationExecutionStatus,
     ProgramExecutionStatus,
 )

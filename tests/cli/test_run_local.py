@@ -1,5 +1,5 @@
 # ABOUTME: Tests for local RLM execution without Docker/Modal/Harbor.
-# ABOUTME: Validates workspace setup, instruction reading, verifier, and legacy script prep.
+# ABOUTME: Validates workspace setup, instruction reading, verifier, and retry behavior.
 
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ from aec_bench.cli.commands.run_local import (
 from aec_bench.harness.local_runtime import (
     read_instruction,
     setup_workspace,
-    setup_workspace_for_script,
 )
 
 run_local_module = importlib.import_module("aec_bench.cli.commands.run_local")
@@ -151,7 +150,6 @@ class TestRunLocalWorkspacePrivacy:
             output_dir=str(tmp_path / "results"),
             timeout=30,
             keep_workspace=False,
-            legacy_script=False,
             no_verify=False,
             no_import=True,
             no_normalise=True,
@@ -210,7 +208,6 @@ class TestRunLocalWorkspacePrivacy:
             output_dir=str(tmp_path / "results"),
             timeout=30,
             keep_workspace=False,
-            legacy_script=False,
             no_verify=False,
             no_import=True,
             no_normalise=True,
@@ -223,38 +220,6 @@ class TestRunLocalWorkspacePrivacy:
 
         assert agent_visibility == [False, False]
         assert verifier_visibility == [True, True]
-
-
-class TestSetupWorkspaceForScript:
-    """Validate legacy script workspace with trajectory_writer and path patching."""
-
-    def test_writes_trajectory_writer(self) -> None:
-        """Legacy workspace should inject trajectory_writer.py."""
-        with tempfile.TemporaryDirectory() as task_dir:
-            Path(task_dir, "instruction.md").write_text("Do the thing")
-
-            workspace = setup_workspace_for_script(task_dir)
-            try:
-                traj_path = Path(workspace, "trajectory_writer.py")
-                assert traj_path.exists()
-                content = traj_path.read_text()
-                assert "TrajectoryWriter" in content
-            finally:
-                shutil.rmtree(workspace, ignore_errors=True)
-
-    def test_patches_workspace_paths_in_python_files(self) -> None:
-        """Legacy workspace should patch /workspace/ in copied .py files."""
-        with tempfile.TemporaryDirectory() as task_dir:
-            Path(task_dir, "instruction.md").write_text("Do the thing")
-            Path(task_dir, "repl_commands.py").write_text('path = "/workspace/data.json"')
-
-            workspace = setup_workspace_for_script(task_dir)
-            try:
-                content = Path(workspace, "repl_commands.py").read_text()
-                assert "/workspace/" not in content
-                assert workspace.rstrip("/") in content
-            finally:
-                shutil.rmtree(workspace, ignore_errors=True)
 
 
 class TestReadInstruction:

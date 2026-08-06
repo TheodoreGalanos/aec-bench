@@ -23,7 +23,6 @@ from aec_bench.meta_harness.motifs.promotion import (
     MotifPromotionDecision,
     MotifPromotionPolicy,
     apply_motif_promotion,
-    apply_motif_promotion_v1_compatibility,
     decide_motif_promotion,
 )
 from aec_bench.meta_harness.motifs.selection import (
@@ -67,7 +66,6 @@ __all__ = [
     "TransferEvidenceReference",
     "UnitFloat",
     "apply_motif_promotion",
-    "apply_motif_promotion_v1_compatibility",
     "decide_motif_promotion",
     "load_pinned_motif_library",
     "resolve_motif_selection",

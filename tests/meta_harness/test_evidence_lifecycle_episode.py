@@ -164,34 +164,7 @@ def test_episode_contract_enforces_mode_visibility_and_failure_consistency() -> 
         LifecycleEpisodeResult.model_validate({**completed.model_dump(mode="json"), "status": "failed"})
 
 
-def test_episode_request_versions_reject_later_visibility_fields() -> None:
-    request = _request().model_dump(mode="json")
-
-    with pytest.raises(ValidationError, match="v1 episode request cannot carry later-version"):
-        LifecycleEpisodeRequest.model_validate({**request, "schema_version": "1"})
-    with pytest.raises(ValidationError, match="v2 episode request cannot carry operation visibility"):
-        LifecycleEpisodeRequest.model_validate({**request, "schema_version": "2"})
-
-    v1 = dict(request)
-    v1["schema_version"] = "1"
-    for field_name in (
-        "evidence_request_catalog",
-        "released_evidence_artifacts",
-        "operation_catalog",
-        "current_source",
-        "visible_operation_artifacts",
-    ):
-        v1.pop(field_name)
-    assert LifecycleEpisodeRequest.model_validate(v1).schema_version == "1"
-
-    v2 = dict(request)
-    v2["schema_version"] = "2"
-    for field_name in ("operation_catalog", "current_source", "visible_operation_artifacts"):
-        v2.pop(field_name)
-    assert LifecycleEpisodeRequest.model_validate(v2).schema_version == "2"
-
-
-def test_v3_episode_request_binds_and_persists_public_operation_state(tmp_path: Path) -> None:
+def test_current_episode_request_binds_and_persists_public_operation_state(tmp_path: Path) -> None:
     package = materialize_lifecycle(
         HYDRAULIC_TEMPLATE_ID,
         tmp_path / "package",
@@ -256,7 +229,7 @@ def test_v3_episode_request_binds_and_persists_public_operation_state(tmp_path: 
     assert str(raised.value) == f"episode request conflicts with durable attempt: {request.attempt_id}"
 
 
-def test_v3_closeout_binds_prior_operation_evidence_without_offering_operations(tmp_path: Path) -> None:
+def test_current_closeout_binds_prior_operation_evidence_without_offering_operations(tmp_path: Path) -> None:
     package = materialize_lifecycle(
         HYDRAULIC_TEMPLATE_ID,
         tmp_path / "package",
@@ -435,69 +408,6 @@ def test_retry_adopts_identical_request_left_before_attempt_publication(
     assert not (first_session / "environment_prepared_episode_request.json").exists()
     state = _read_json(run_dir / "state.json")
     assert state["checkpoint_runs"][0]["attempts"][0]["status"] == "submitted"
-
-
-def test_retry_adopts_v1_request_left_before_attempt_publication(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    package = _write_package(tmp_path / "package")
-    run_dir = tmp_path / "run"
-    environment = _RecordingEnvironment()
-    original_open_attempt = lifecycle_runtime.open_checkpoint_attempt
-
-    def interrupt_before_publication(*_args: Any, **_kwargs: Any) -> Never:
-        raise KeyboardInterrupt("simulated pre-publication interruption")
-
-    monkeypatch.setattr(lifecycle_runtime, "open_checkpoint_attempt", interrupt_before_publication)
-    with pytest.raises(KeyboardInterrupt, match="simulated pre-publication interruption"):
-        run_evidence_lifecycle(package, run_dir, episode_environment=environment)
-
-    request_path = run_dir / "episodes" / "initial_review" / "initial_review.session-001" / "episode_request.json"
-    _downgrade_episode_request_and_state(request_path, run_dir / "state.json")
-    request_bytes = request_path.read_bytes()
-
-    monkeypatch.setattr(lifecycle_runtime, "open_checkpoint_attempt", original_open_attempt)
-    result = run_evidence_lifecycle(package, run_dir, episode_environment=environment)
-
-    assert result["status"] == "complete"
-    assert request_path.read_bytes() == request_bytes
-    assert environment.requests[0].schema_version == "1"
-
-
-def test_recovery_accepts_v1_request_for_interrupted_v3_attempt(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    package = _write_package(tmp_path / "package")
-    run_dir = tmp_path / "run"
-    environment = _RecordingEnvironment()
-    original_open_attempt = lifecycle_runtime.open_checkpoint_attempt
-
-    def interrupt_after_publication(*args: Any, **kwargs: Any) -> Never:
-        original_open_attempt(*args, **kwargs)
-        raise KeyboardInterrupt("simulated publication interruption")
-
-    monkeypatch.setattr(lifecycle_runtime, "open_checkpoint_attempt", interrupt_after_publication)
-    with pytest.raises(KeyboardInterrupt, match="simulated publication interruption"):
-        run_evidence_lifecycle(package, run_dir, episode_environment=environment)
-
-    request_path = run_dir / "episodes" / "initial_review" / "initial_review.session-001" / "episode_request.json"
-    _downgrade_episode_request_and_state(request_path, run_dir / "state.json")
-
-    monkeypatch.setattr(lifecycle_runtime, "open_checkpoint_attempt", original_open_attempt)
-    result = run_evidence_lifecycle(package, run_dir, episode_environment=environment)
-
-    assert result["status"] == "complete"
-    interrupted_result = _read_json(request_path.with_name("episode_result.json"))
-    assert interrupted_result["status"] == "failed"
-    assert interrupted_result["failure_kind"] == "interrupted"
-    state = _read_json(run_dir / "state.json")
-    assert state["schema_version"] == "4"
-    assert [attempt["status"] for attempt in state["checkpoint_runs"][0]["attempts"]] == [
-        "interrupted",
-        "submitted",
-    ]
 
 
 def test_recovery_rejects_tampered_active_attempt_request(
@@ -1055,30 +965,6 @@ def _checkpoint(checkpoint_id: str) -> EvidenceCheckpointSpec:
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-
-
-def _downgrade_episode_request_and_state(request_path: Path, state_path: Path) -> None:
-    request = _read_json(request_path)
-    request["schema_version"] = "1"
-    request.pop("evidence_request_catalog")
-    request.pop("released_evidence_artifacts")
-    request.pop("operation_catalog")
-    request.pop("current_source")
-    request.pop("visible_operation_artifacts")
-    request_path.write_text(json.dumps(request, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-    state = _read_json(state_path)
-    state["schema_version"] = "3"
-    for checkpoint in state["checkpoint_runs"]:
-        checkpoint.pop("evidence_request_budget")
-        checkpoint.pop("evidence_request_budget_remaining")
-        checkpoint.pop("evidence_request_actions")
-        for attempt in checkpoint["attempts"]:
-            attempt.pop("inherited_from_parent")
-    attempts = state["checkpoint_runs"][0]["attempts"]
-    if attempts:
-        attempts[0]["episode_request_sha256"] = lifecycle_runtime._sha256(request_path)
-    _write_json(state_path, state)
 
 
 def _read_json(path: Path) -> dict[str, Any]:

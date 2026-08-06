@@ -9,9 +9,7 @@ from pathlib import Path
 from typing import Literal, Protocol, TypedDict
 
 from aec_bench.contracts.output_completion import OutputCompletionContract
-from aec_bench.contracts.proposal_execution import (
-    ProposalNodeReceipt,
-)
+from aec_bench.contracts.proposal_execution.session import ProposalNodeReceipt
 from aec_bench.contracts.provider_broker import ProviderBrokerPolicy
 from aec_bench.harness.execution_payload import ExecutionBundle
 from aec_bench.harness.proposal_node_context import (

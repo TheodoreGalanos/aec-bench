@@ -30,7 +30,7 @@ from aec_bench.contracts.stage_execution import (
 )
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
-from aec_bench.meta_harness.program_runtime import OperationExecutionContext
+from aec_bench.meta_harness.program_execution import OperationExecutionContext
 
 _FINAL_JSON_BLOCK = re.compile(r"```json\s*(?P<body>\{.*?\})\s*```", re.DOTALL)
 

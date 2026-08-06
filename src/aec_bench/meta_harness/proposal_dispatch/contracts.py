@@ -19,10 +19,8 @@ from aec_bench.contracts.harness_kernel import (
     canonical_content_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.program_proposal import (
-    MatchedEvaluationCoordinate,
-    ProgramCandidateRef,
-)
+from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
+from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.harness.proposal_session_config import ProposalSessionHostConfig

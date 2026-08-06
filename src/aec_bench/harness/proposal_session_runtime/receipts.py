@@ -6,19 +6,16 @@ from __future__ import annotations
 import hashlib
 import re
 
-from aec_bench.contracts.program_proposal import MatchedEvaluationCoordinate
-from aec_bench.contracts.proposal_execution import (
-    FinalSynthesisSpec,
-    NodeBudgetReservation,
+from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
+from aec_bench.contracts.proposal_execution.graph import FinalSynthesisSpec, ProposalHandoff, SemanticSubtaskSpec
+from aec_bench.contracts.proposal_execution.session import (
     ProposalContainerTransitionRef,
-    ProposalHandoff,
     ProposalHandoffArtifactRef,
     ProposalNodeReceipt,
-    ProposalNodeReceiptStatus,
-    ProposalNodeSkipCause,
     ProposalSessionExecutionRef,
-    SemanticSubtaskSpec,
 )
+from aec_bench.contracts.proposal_execution_budget import NodeBudgetReservation
+from aec_bench.contracts.proposal_execution_types import ProposalNodeReceiptStatus, ProposalNodeSkipCause
 from aec_bench.harness.proposal_session_config import (
     LoadedProposalSessionHostInputs,
 )
@@ -90,10 +87,6 @@ def _validate_evaluation_coordinate(
         or coordinate.task_revision != bundle.task_snapshot.definition_sha256
         or coordinate.split is not freeze.split
         or coordinate.world_lineage_id != freeze.selected_world_lineage_id
-        or (
-            freeze.provider_calibration_evaluation_seed is not None
-            and coordinate.seed != freeze.provider_calibration_evaluation_seed
-        )
     ):
         raise ProposalSessionRuntimeError(
             "session_execution_mismatch",

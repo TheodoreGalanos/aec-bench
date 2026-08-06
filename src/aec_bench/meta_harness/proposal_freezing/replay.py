@@ -1,23 +1,19 @@
 # ABOUTME: Revalidates governed proposal-freeze authority and complete ledger basis closure.
-# ABOUTME: Fails closed when the exact freeze, event, replay, or calibration lifecycle drifts.
+# ABOUTME: Fails closed when the exact freeze, event, or replay basis drifts.
 
 from __future__ import annotations
 
-from aec_bench.contracts.program_proposal import ProposalFreeze
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
 from aec_bench.meta_harness.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerError,
     StoredAuthorityEvent,
 )
-from aec_bench.meta_harness.monitors import replay_scheduled_basis
 from aec_bench.meta_harness.proposal_freezing.contracts import (
     GovernedProposalFreezeError,
     GovernedProposalFreezeResult,
 )
-from aec_bench.meta_harness.proposal_freezing.validation import (
-    ProposalFreezeLifecyclePolicy,
-    assert_calibration_freeze_active,
-)
+from aec_bench.meta_harness.standing_monitors import replay_scheduled_basis
 
 
 def assert_proposal_freeze_authority(
@@ -25,7 +21,6 @@ def assert_proposal_freeze_authority(
     ledger: AuthorityLedger,
     result: GovernedProposalFreezeResult,
     freeze: ProposalFreeze | None = None,
-    lifecycle_policy: ProposalFreezeLifecyclePolicy | None = None,
 ) -> StoredAuthorityEvent:
     """Fail closed unless the exact freeze event and complete basis still resolve."""
 
@@ -74,11 +69,6 @@ def assert_proposal_freeze_authority(
             raise GovernedProposalFreezeError(
                 "proposal freeze basis is no longer complete",
             )
-        assert_calibration_freeze_active(
-            ledger=ledger,
-            result=validated,
-            lifecycle_policy=lifecycle_policy,
-        )
         return stored
     except AuthorityLedgerError as error:
         raise GovernedProposalFreezeError(

@@ -21,7 +21,7 @@ from aec_bench.contracts.harness_kernel import (
     canonical_content_sha256,
     validate_sha256,
 )
-from aec_bench.harness.proposal_session import ProposalSessionEnvironment
+from aec_bench.harness.proposal_session_runtime import ProposalSessionEnvironment
 
 _INVOCATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 

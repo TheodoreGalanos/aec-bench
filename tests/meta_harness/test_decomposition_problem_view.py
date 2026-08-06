@@ -10,10 +10,7 @@ from typing import Any
 import pytest
 
 from aec_bench.contracts.output_completion import OutputCompletionContract
-from aec_bench.contracts.program_proposal import (
-    PublicAuthorityBoundary,
-    PublicDataGapBoundary,
-)
+from aec_bench.contracts.program_proposal.problem import PublicAuthorityBoundary, PublicDataGapBoundary
 from aec_bench.meta_harness.decomposition_problem_view import (
     DecompositionProblemViewRejected,
     PublicSourceBinding,

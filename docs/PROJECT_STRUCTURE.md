@@ -19,7 +19,7 @@ live package tree when exact paths matter.
 | `tests/` | Permanent unit, contract, integration, and public-surface coverage |
 | `tasks/` | Runnable benchmark task packages and task-owned assets |
 | `seeds/` | Expert-authored task sources used to create or extend templates |
-| `agents/` | Ready-to-use Harbor agent implementations |
+| `agents/` | The repository-owned Harbor execution entrypoint |
 | `scripts/` | Maintained repository commands that are not installed API surfaces |
 | `docs/` | Current repository design authorities, protocols, guides, and selected history |
 | `assets/` | Repository and public-presentation assets |
@@ -35,7 +35,9 @@ surface.
 The installed package groups code by responsibility:
 
 - Contracts validate real external, persisted, untrusted, or cross-process
-  boundaries. They are not a universal application layer.
+  boundaries. They are not a universal application layer. Import a contract
+  from its owning module; `aec_bench.contracts` deliberately exports no
+  contract symbols.
 - Task loading, templates, generation, and datasets own authoring, compilation,
   deterministic generation, and benchmark snapshot identity.
 - Task-world templates own executable world semantics and packaged world data.
@@ -105,6 +107,10 @@ generator, certifier, migration, fixture, or data file to its permanent owner.
   define competing metrics.
 - Composition roots may assemble lower-level implementations but must not move
   domain policy into the registration layer.
+
+The focused rules above are enforced by `tests/test_package_ownership.py`.
+Keep enforcement explicit and standard-library based; do not add a dependency
+graph framework or plugin registry for package layout.
 
 Add a new top-level directory or package only when it owns a stable
 responsibility that does not fit an existing owner.

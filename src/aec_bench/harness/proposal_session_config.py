@@ -17,7 +17,7 @@ from aec_bench.contracts.harness_kernel import (
     canonical_content_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.program_proposal import MatchedEvaluationCoordinate
+from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.harness.proposal_runtime_archive import (
@@ -258,10 +258,6 @@ def _validate_evaluation_coordinate(
         or coordinate.task_revision != bundle.task_snapshot.definition_sha256
         or coordinate.split is not freeze.split
         or coordinate.world_lineage_id != freeze.selected_world_lineage_id
-        or (
-            freeze.provider_calibration_evaluation_seed is not None
-            and coordinate.seed != freeze.provider_calibration_evaluation_seed
-        )
     ):
         raise ProposalSessionHostConfigError(
             "proposal evaluation coordinate differs from the compiled session",

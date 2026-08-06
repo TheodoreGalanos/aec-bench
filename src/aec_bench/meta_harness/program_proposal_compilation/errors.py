@@ -1,7 +1,7 @@
 # ABOUTME: Defines host-owned and candidate-owned proposal-compilation failures.
 # ABOUTME: Preserves the error boundary that prevents host faults becoming candidate utility.
 
-from aec_bench.contracts.proposal_execution import ProposalCompileRejectionCode
+from aec_bench.contracts.proposal_execution_types import ProposalCompileRejectionCode
 
 
 class ProposalCompilationHostError(RuntimeError):

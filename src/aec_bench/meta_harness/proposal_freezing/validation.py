@@ -1,10 +1,9 @@
-# ABOUTME: Validates proposal-freeze principals, lifecycle evidence, and exact frozen bindings.
-# ABOUTME: Keeps calibration, task, harness, policy, and candidate checks ordered and fail closed.
+# ABOUTME: Validates proposal-freeze principals and exact frozen bindings.
+# ABOUTME: Keeps task, harness, policy, and candidate checks ordered and fail closed.
 
 from __future__ import annotations
 
 import hashlib
-from typing import Protocol
 
 from aec_bench.contracts.authority import (
     AuthorityPrincipal,
@@ -21,26 +20,14 @@ from aec_bench.contracts.harness_instance import (
     TaskSourceBindingConfig,
 )
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
-from aec_bench.contracts.program_proposal import (
-    CandidateGenerationManifest,
-    DecompositionLeakageAudit,
-    DecompositionProblemView,
-    OptimizationSplit,
-    ProgramCandidateKind,
-)
-from aec_bench.contracts.provider_calibration import (
-    ProviderCalibrationTaskManifest,
-)
-from aec_bench.meta_harness.authority_ledger import (
-    AuthorityLedger,
-    StoredAuthorityEvent,
-)
+from aec_bench.contracts.program_proposal.candidate import CandidateGenerationManifest
+from aec_bench.contracts.program_proposal.problem import DecompositionLeakageAudit, DecompositionProblemView
+from aec_bench.contracts.program_proposal.types import OptimizationSplit, ProgramCandidateKind
 from aec_bench.meta_harness.decomposition_problem_view import (
     fixed_harness_policy_sha256,
 )
 from aec_bench.meta_harness.proposal_freezing.contracts import (
     GovernedProposalFreezeError,
-    GovernedProposalFreezeResult,
     IncumbentArtifact,
     ProposalArtifact,
     SelectedTaskBinding,
@@ -48,37 +35,6 @@ from aec_bench.meta_harness.proposal_freezing.contracts import (
 from aec_bench.meta_harness.structural_generalization_corpus import (
     StructuralSplitManifest,
 )
-
-
-class ProposalFreezeLifecyclePolicy(Protocol):
-    """Supplies experiment-owned lifecycle decisions to generic freeze mechanics."""
-
-    def validate_lifecycle(
-        self,
-        *,
-        ledger: AuthorityLedger,
-        evaluation_plan: EvaluationPlan,
-        structural_split: StructuralSplitManifest,
-        manifest: ProviderCalibrationTaskManifest,
-        release_authority: StoredAuthorityEvent,
-    ) -> StoredAuthorityEvent:
-        """Validate that an exact task-manifest release remains usable."""
-
-    def assert_freeze_active(
-        self,
-        *,
-        ledger: AuthorityLedger,
-        result: GovernedProposalFreezeResult,
-    ) -> None:
-        """Revalidate experiment lifecycle evidence during authority replay."""
-
-    def select_task(
-        self,
-        *,
-        manifest: ProviderCalibrationTaskManifest,
-        problem_view: DecompositionProblemView,
-    ) -> SelectedTaskBinding:
-        """Resolve the exact task selected by a proposal problem view."""
 
 
 def validate_principals(
@@ -103,74 +59,12 @@ def validate_principals(
         )
 
 
-def validate_calibration_lifecycle(
-    *,
-    ledger: AuthorityLedger,
-    evaluation_plan: EvaluationPlan,
-    structural_split: StructuralSplitManifest,
-    split: OptimizationSplit,
-    manifest: ProviderCalibrationTaskManifest | None,
-    release_authority: StoredAuthorityEvent | None,
-    lifecycle_policy: ProposalFreezeLifecyclePolicy | None,
-) -> StoredAuthorityEvent | None:
-    """Validate active provider-calibration lifecycle evidence when selected."""
-
-    if split is not OptimizationSplit.PROVIDER_CALIBRATION:
-        if manifest is not None or release_authority is not None:
-            raise GovernedProposalFreezeError(
-                "provider calibration lifecycle evidence is only valid for provider_calibration",
-            )
-        return None
-    if manifest is None or release_authority is None:
-        raise GovernedProposalFreezeError(
-            "provider_calibration requires a typed calibration task manifest and release",
-        )
-    if lifecycle_policy is None:
-        raise GovernedProposalFreezeError(
-            "provider_calibration requires an experiment lifecycle policy",
-        )
-    released = lifecycle_policy.validate_lifecycle(
-        ledger=ledger,
-        evaluation_plan=evaluation_plan,
-        structural_split=structural_split,
-        manifest=manifest,
-        release_authority=release_authority,
-    )
-    if released.event.kernel_sha256 != evaluation_plan.kernel_sha256:
-        raise GovernedProposalFreezeError(
-            "provider calibration release authority kernel does not match the evaluation plan",
-        )
-    return released
-
-
-def assert_calibration_freeze_active(
-    *,
-    ledger: AuthorityLedger,
-    result: GovernedProposalFreezeResult,
-    lifecycle_policy: ProposalFreezeLifecyclePolicy | None,
-) -> None:
-    """Revalidate the active calibration manifest and release at replay time."""
-
-    freeze = result.freeze
-    if freeze.split is not OptimizationSplit.PROVIDER_CALIBRATION:
-        return
-    if lifecycle_policy is None:
-        raise GovernedProposalFreezeError(
-            "provider_calibration replay requires an experiment lifecycle policy",
-        )
-    lifecycle_policy.assert_freeze_active(
-        ledger=ledger,
-        result=result,
-    )
-
-
 def validate_frozen_bindings(
     *,
     evaluation_plan: EvaluationPlan,
     evaluation_plan_candidate_scope: CandidateManifestScope | None,
     structural_split: StructuralSplitManifest,
     split: OptimizationSplit,
-    provider_calibration_manifest: ProviderCalibrationTaskManifest | None,
     leakage_audit: DecompositionLeakageAudit,
     problem_view: DecompositionProblemView,
     candidate_manifest: CandidateGenerationManifest,
@@ -180,7 +74,6 @@ def validate_frozen_bindings(
     proposal_artifacts: tuple[ProposalArtifact, ...],
     incumbent_artifact: IncumbentArtifact | None,
     host_policy: AuthorityPrincipal,
-    lifecycle_policy: ProposalFreezeLifecyclePolicy | None,
 ) -> SelectedTaskBinding:
     """Validate every exact binding before constructing the proposal freeze."""
 
@@ -194,7 +87,6 @@ def validate_frozen_bindings(
     _validate_evaluation_manifest_bindings(
         evaluation_plan=evaluation_plan,
         structural_split=structural_split,
-        provider_calibration_manifest=provider_calibration_manifest,
         fixed_harness=fixed_harness,
         candidate_manifest=candidate_manifest,
     )
@@ -211,9 +103,7 @@ def validate_frozen_bindings(
     selected_task = _validate_selected_task(
         structural_split=structural_split,
         split=split,
-        provider_calibration_manifest=provider_calibration_manifest,
         problem_view=problem_view,
-        lifecycle_policy=lifecycle_policy,
     )
     proposal_candidate_ids = _validate_realized_proposal_artifacts(
         candidate_manifest=candidate_manifest,
@@ -267,7 +157,6 @@ def _validate_evaluation_manifest_bindings(
     *,
     evaluation_plan: EvaluationPlan,
     structural_split: StructuralSplitManifest,
-    provider_calibration_manifest: ProviderCalibrationTaskManifest | None,
     fixed_harness: CompiledHarnessInstance,
     candidate_manifest: CandidateGenerationManifest,
 ) -> None:
@@ -275,12 +164,7 @@ def _validate_evaluation_manifest_bindings(
         raise GovernedProposalFreezeError(
             "evaluation plan structural split does not match the supplied manifest",
         )
-    expected_task_manifest_sha256 = (
-        provider_calibration_manifest.content_sha256
-        if provider_calibration_manifest is not None
-        else structural_split.task_manifest_sha256
-    )
-    if evaluation_plan.task_manifest_sha256 != expected_task_manifest_sha256:
+    if evaluation_plan.task_manifest_sha256 != structural_split.task_manifest_sha256:
         raise GovernedProposalFreezeError(
             "evaluation plan task manifest does not match the selected task manifest",
         )
@@ -428,23 +312,8 @@ def _validate_selected_task(
     *,
     structural_split: StructuralSplitManifest,
     split: OptimizationSplit,
-    provider_calibration_manifest: ProviderCalibrationTaskManifest | None,
     problem_view: DecompositionProblemView,
-    lifecycle_policy: ProposalFreezeLifecyclePolicy | None,
 ) -> SelectedTaskBinding:
-    if split is OptimizationSplit.PROVIDER_CALIBRATION:
-        if provider_calibration_manifest is None:
-            raise GovernedProposalFreezeError(
-                "provider_calibration requires a typed calibration task manifest and release",
-            )
-        if lifecycle_policy is None:
-            raise GovernedProposalFreezeError(
-                "provider_calibration requires an experiment lifecycle policy",
-            )
-        return lifecycle_policy.select_task(
-            manifest=provider_calibration_manifest,
-            problem_view=problem_view,
-        )
     selected_split = {
         OptimizationSplit.TRAINING: structural_split.train,
         OptimizationSplit.DEVELOPMENT: structural_split.dev,

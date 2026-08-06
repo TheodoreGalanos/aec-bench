@@ -13,7 +13,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 from aec_bench.adapters.base import AdapterRequest
-from aec_bench.adapters.local_registry import LocalAdapterRegistry
+from aec_bench.adapters.local_registry import build_local_adapter
 from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.contracts.trajectory import read_trajectory
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
@@ -284,7 +284,7 @@ def run_local_evidence_lifecycle_session(
     adapter_kind: str = "tool_loop",
     max_turns: int = 60,
     process_id: str = "process.lifecycle",
-    registry: Any | None = None,
+    adapter_builder: Callable[..., Any] | None = None,
     visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
     sweep_context: LifecycleExperimentSweepContext | None = None,
     repository_dir: Path | None = None,
@@ -387,9 +387,9 @@ def run_local_evidence_lifecycle_session(
             ),
         ]
     )
-    resolved_registry = registry or LocalAdapterRegistry()
+    resolved_builder = adapter_builder or build_local_adapter
     try:
-        adapter = resolved_registry.build(
+        adapter = resolved_builder(
             adapter_kind=adapter_kind,
             model_name=model,
             workspace=initial["workspace"],
@@ -660,7 +660,7 @@ def run_local_evidence_lifecycle_fresh_context(
     adapter_kind: str = "tool_loop",
     max_turns: int = 20,
     process_id: str = "process.lifecycle",
-    registry: Any | None = None,
+    adapter_builder: Callable[..., Any] | None = None,
     visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
     sweep_context: LifecycleExperimentSweepContext | None = None,
     repository_dir: Path | None = None,
@@ -678,7 +678,7 @@ def run_local_evidence_lifecycle_fresh_context(
         model=model,
         adapter_kind=adapter_kind,
         max_turns=max_turns,
-        registry=registry,
+        adapter_builder=adapter_builder,
         visibility_policy=visibility_policy,
         require_adapter_identity_match=require_adapter_identity_match,
     )
@@ -738,13 +738,13 @@ def run_local_evidence_lifecycle_fresh_context(
 
 @dataclass(frozen=True)
 class LocalEvidenceLifecycleEpisodeEnvironment:
-    """Execute fresh checkpoint episodes through one provider-neutral local adapter registry."""
+    """Execute fresh checkpoint episodes through one local adapter builder."""
 
     package_dir: Path
     model: str
     adapter_kind: str = "tool_loop"
     max_turns: int = 20
-    registry: Any | None = None
+    adapter_builder: Callable[..., Any] | None = None
     memory_visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.ARTIFACT_MEMORY
     require_adapter_identity_match: bool = False
     execution_mode: LifecycleExecutionMode = LifecycleExecutionMode.FRESH_CONTEXT
@@ -868,9 +868,9 @@ class LocalEvidenceLifecycleEpisodeEnvironment:
                     description="Execute one declared operation against the current visible source state.",
                 )
             )
-        resolved_registry = self.registry or LocalAdapterRegistry()
+        resolved_builder = self.adapter_builder or build_local_adapter
         try:
-            adapter = resolved_registry.build(
+            adapter = resolved_builder(
                 adapter_kind=self.adapter_kind,
                 model_name=self.model,
                 workspace=request.workspace,
@@ -963,7 +963,7 @@ def build_local_evidence_lifecycle_episode_environment(
     model: str,
     adapter_kind: str = "tool_loop",
     max_turns: int = 20,
-    registry: Any | None = None,
+    adapter_builder: Callable[..., Any] | None = None,
     visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
     require_adapter_identity_match: bool = False,
 ) -> LifecycleEpisodeEnvironment:
@@ -973,7 +973,7 @@ def build_local_evidence_lifecycle_episode_environment(
         model=model,
         adapter_kind=adapter_kind,
         max_turns=max_turns,
-        registry=registry,
+        adapter_builder=adapter_builder,
         memory_visibility_policy=visibility_policy,
         require_adapter_identity_match=require_adapter_identity_match,
     )

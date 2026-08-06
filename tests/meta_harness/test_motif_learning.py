@@ -1,9 +1,8 @@
-# ABOUTME: Exercises the causal motif-learning, frozen selection, materialization, and transfer pipeline.
-# ABOUTME: Proves real stage-zero and paired-repair evidence can promote one typed Hx/px motif end to end.
+# ABOUTME: Exercises causal motif learning from stage-zero and paired-repair evidence.
+# ABOUTME: Proves evaluation stops before an authority-bearing reusable promotion.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 
@@ -23,8 +22,7 @@ from aec_bench.contracts.harness_instance import (
     HarnessRecipe,
     TaskSourceBindingConfig,
 )
-from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
-from aec_bench.evolution.repair_loop import RepairCandidate, RepairOwner, RepairProgramTemplate
+from aec_bench.evolution.repair_lifecycle import RepairCandidate, RepairOwner, RepairProgramTemplate
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.meta_harness.factorial_candidates import (
     FactorialCandidateFactoryRequest,
@@ -39,15 +37,12 @@ from aec_bench.meta_harness.factorial_experiment import (
 from aec_bench.meta_harness.kernel_catalogue import KernelRuntimeRegistry
 from aec_bench.meta_harness.motif_learning import (
     attest_factorial_experiment_applicability,
-    attest_task_snapshots_applicability,
     capture_accepted_repair_evidence,
     derive_motif_solution_descriptor,
     learn_and_promote_motif,
-    learn_and_promote_motif_v1_compatibility,
-    select_and_materialize_motif_v1_compatibility,
-    write_motif_audit_report,
 )
-from aec_bench.meta_harness.motif_library import (
+from aec_bench.meta_harness.motif_transfer_runtime import validate_holdout_task_visibility
+from aec_bench.meta_harness.motifs import (
     FactorialEvidenceReference,
     HarnessProgramMotif,
     MotifApplicabilityDescriptor,
@@ -55,15 +50,6 @@ from aec_bench.meta_harness.motif_library import (
     MotifPromotionPolicy,
     MotifStatus,
     MotifTemplate,
-    TransferEvidenceReference,
-)
-from aec_bench.meta_harness.motif_materialization import MotifFactorialInstantiationRequest
-from aec_bench.meta_harness.motif_transfer_runtime import (
-    MotifTransferEvaluationReport,
-    execute_motif_transfer_v1_compatibility,
-    finalize_motif_transfer,
-    validate_holdout_task_visibility,
-    verify_motif_transfer_evaluation,
 )
 from aec_bench.meta_harness.repair_runtime import (
     ProgramMaxTotalAttemptsPatch,
@@ -236,7 +222,7 @@ def test_sidecar_world_contributes_one_canonical_motif_lineage(tmp_path: Path) -
     assert motif.supporting_world_lineage_ids == (world_lineage,)
 
 
-def test_real_internal_evidence_promotes_materializes_and_transfer_validates_motif(
+def test_real_internal_evidence_learns_provisional_motif_without_granting_authority(
     tmp_path: Path,
 ) -> None:
     repair_executor = RewardByProgramIdentityHarborExecutor()
@@ -379,29 +365,6 @@ def test_real_internal_evidence_promotes_materializes_and_transfer_validates_mot
     assert learned.report.promotion_decisions[-1].accepted is True
     assert learned.report.promotion_decisions[-1].target_status is MotifStatus.REUSABLE
 
-    learned = learn_and_promote_motif_v1_compatibility(
-        source_stage_report=stage_result.report,
-        child_calibration_report=child_result.report,
-        repair_execution=repair_execution,
-        repaired_candidate=terminal,
-        policy=policy,
-        registry=runtime.registry,
-        library=MotifLibrary.create(),
-    )
-
-    assert learned.motif.status is MotifStatus.REUSABLE
-    assert learned.report.final_motif_sha256 == learned.motif.motif_sha256
-    assert learned.report.source_stage_report_sha256 == stage_result.report.content_sha256
-    assert learned.report.child_calibration_report_sha256 == child_result.report.content_sha256
-    assert learned.report.repair_terminal == repair_execution.terminal.reference
-    assert learned.report.promotion_decisions[-1].accepted is True
-    assert learned.report.quality_evidence.estimated_cost_usd == pytest.approx(0.002)
-    assert learned.motif.estimated_cost_usd == pytest.approx(0.012)
-    assert learned.motif.descriptor == derive_motif_solution_descriptor(
-        terminal.harness_request.recipe,
-        repaired_program,
-    )
-
     invalid_child_result = run_stage_zero(
         spec=child_spec,
         registry=runtime.registry,
@@ -427,276 +390,6 @@ def test_real_internal_evidence_promotes_materializes_and_transfer_validates_mot
     assert invalid_learning.motif.status is MotifStatus.PROVISIONAL
     assert invalid_learning.report.promotion_decisions[-1].accepted is False
     assert "minimum_validity_rate_not_met" in invalid_learning.report.promotion_decisions[-1].reasons
-
-    target_tasks = (
-        "civil/calculation/runtime-transfer-a",
-        "civil/calculation/runtime-transfer-b",
-    )
-    for index, task_id in enumerate(target_tasks, start=1):
-        _write_task(runtime.tasks_root, task_id)
-        task_toml = runtime.tasks_root / task_id / "task.toml"
-        task_toml.write_text(
-            task_toml.read_text(encoding="utf-8").replace(
-                'visibility = "public"',
-                'visibility = "holdout"',
-            ),
-            encoding="utf-8",
-        )
-        instruction = runtime.tasks_root / task_id / "instruction.md"
-        instruction.write_text(
-            instruction.read_text(encoding="utf-8") + f"Target family {index}.\n",
-            encoding="utf-8",
-        )
-    target_attestation = attest_task_snapshots_applicability(
-        task_refs=target_tasks,
-        tasks_root=runtime.tasks_root,
-        registry=runtime.registry,
-    )
-    transfer_plan = select_and_materialize_motif_v1_compatibility(
-        library=learned.library,
-        applicability=target_attestation,
-        selection_split="calibration",
-        request=MotifFactorialInstantiationRequest(
-            candidate_set_id="motif-transfer.world-b",
-            world_id="world-b",
-            experiment_id="motif-transfer-holdout",
-            kernel_ref=runtime.registry.manifest.ref,
-            task_refs=target_tasks,
-            model=_agent_model(terminal),
-            harness_budget=runtime.request.pairing.budget,
-            program_limits=terminal.program_template.limits,
-            seeds=(47,),
-            repetitions=1,
-            fixed_harness_recipe=_rebind_recipe_tasks(
-                _fixed_harness_recipe(terminal, runtime.registry),
-                task_refs=target_tasks,
-            ),
-            fixed_program=_fanout_factor(terminal.program_template.limits),
-        ),
-    )
-    assert transfer_plan.selection_request.target_world_lineage_ids == target_attestation.world_lineage_ids
-    first_target_toml = runtime.tasks_root / target_tasks[0] / "task.toml"
-    first_target_toml.write_text(
-        first_target_toml.read_text(encoding="utf-8").replace(
-            'visibility = "holdout"',
-            'visibility = "public"',
-        ),
-        encoding="utf-8",
-    )
-    blocked_executor = StageZeroHarborExecutor()
-    with pytest.raises(ValueError, match="transfer target tasks must be declared holdout"):
-        execute_motif_transfer_v1_compatibility(
-            frozen_library=learned.library,
-            plan=transfer_plan,
-            policy=policy,
-            registry=runtime.registry,
-            workflow=_workflow(runtime.tasks_root.parent, runtime.tasks_root),
-            artifacts_root=tmp_path / "blocked-transfer-artifacts",
-            policy_id="policy.motif-transfer",
-            harness_generator_sha256="1" * 64,
-            program_generator_sha256="2" * 64,
-            randomization_seed=101,
-            bootstrap_replicates=8,
-            executor=blocked_executor,
-        )
-    assert blocked_executor.calls == 0
-    first_target_toml.write_text(
-        first_target_toml.read_text(encoding="utf-8").replace(
-            'visibility = "public"',
-            'visibility = "holdout"',
-        ),
-        encoding="utf-8",
-    )
-    transfer_run = execute_motif_transfer_v1_compatibility(
-        frozen_library=learned.library,
-        plan=transfer_plan,
-        policy=policy,
-        registry=runtime.registry,
-        workflow=_workflow(runtime.tasks_root.parent, runtime.tasks_root),
-        artifacts_root=tmp_path / "transfer-artifacts",
-        policy_id="policy.motif-transfer",
-        harness_generator_sha256="1" * 64,
-        program_generator_sha256="2" * 64,
-        randomization_seed=101,
-        bootstrap_replicates=8,
-        executor=StageZeroHarborExecutor(),
-    )
-    assert transfer_plan.selection_decision.selected_motif_sha256 == learned.motif.motif_sha256
-    report_artifact = write_motif_audit_report(
-        transfer_run.finalization.report,
-        artifacts_root=tmp_path / "motif-reports",
-    )
-
-    assert transfer_run.evaluation.trial_count == 4
-    assert transfer_run.evaluation.transfer_evidence.joint_uplift == pytest.approx(0.7)
-    assert transfer_run.evaluation.transfer_evidence.joint_incremental_uplift == pytest.approx(0.4)
-    assert transfer_run.finalization.motif.status is MotifStatus.TRANSFER_VALIDATED
-    assert transfer_run.finalization.report.promotion_decision.accepted is True
-    assert transfer_run.finalization.report.selected_before_holdout is True
-    assert transfer_run.finalization.report.transfer_evaluation_sha256 == transfer_run.evaluation.content_sha256
-    assert Path(report_artifact.path).exists()
-    assert Path(report_artifact.path).parent.name == transfer_run.finalization.report.content_sha256
-
-    evaluated_without_authority = finalize_motif_transfer(
-        frozen_library=learned.library,
-        evaluation=transfer_run.evaluation,
-        policy=policy,
-    )
-    assert evaluated_without_authority.report.promotion_decision.accepted is True
-    assert evaluated_without_authority.motif.status is MotifStatus.REUSABLE
-    assert (
-        evaluated_without_authority.report.final_motif_sha256
-        == evaluated_without_authority.report.evidence_motif_sha256
-    )
-
-    invalid_transfer_run = execute_motif_transfer_v1_compatibility(
-        frozen_library=learned.library,
-        plan=transfer_plan,
-        policy=policy,
-        registry=runtime.registry,
-        workflow=_workflow(
-            runtime.tasks_root.parent,
-            runtime.tasks_root,
-            run_label="invalid-transfer",
-        ),
-        artifacts_root=tmp_path / "invalid-transfer-artifacts",
-        policy_id="policy.motif-transfer.invalid-output",
-        harness_generator_sha256="1" * 64,
-        program_generator_sha256="2" * 64,
-        randomization_seed=101,
-        bootstrap_replicates=8,
-        executor=StageZeroHarborExecutor(invalid_call_indices=frozenset({1})),
-    )
-
-    assert 0.0 < invalid_transfer_run.evaluation.validity_rate < 1.0
-    assert (
-        invalid_transfer_run.evaluation.transfer_evidence.validity_rate == invalid_transfer_run.evaluation.validity_rate
-    )
-    assert invalid_transfer_run.finalization.motif.status is MotifStatus.REUSABLE
-    assert invalid_transfer_run.finalization.report.promotion_decision.accepted is False
-    assert (
-        "minimum_transfer_validity_rate_not_met" in invalid_transfer_run.finalization.report.promotion_decision.reasons
-    )
-
-    expected_motif_ids = _motif_lineage_ids(
-        learned.library,
-        transfer_plan.selection_decision.selected_motif_sha256,
-    )
-    assert transfer_run.evaluation.motif_ids == expected_motif_ids
-    for trial in transfer_run.evaluation.trials:
-        for artifact in trial.trial_records:
-            record = TrialRecord.model_validate_json(Path(artifact.path).read_text(encoding="utf-8"))
-            assert record.meta_harness_provenance is not None
-            assert record.meta_harness_provenance.motif_ids == expected_motif_ids
-
-    original_trial = transfer_run.evaluation.trials[0]
-    original_artifact = original_trial.trial_records[0]
-    original_record = TrialRecord.model_validate_json(Path(original_artifact.path).read_text(encoding="utf-8"))
-    assert original_record.meta_harness_provenance is not None
-    forged_record = original_record.model_copy(
-        update={
-            "meta_harness_provenance": original_record.meta_harness_provenance.model_copy(
-                update={"execution_seed": 999}
-            )
-        }
-    )
-    forged_path = tmp_path / "forged-transfer-trial.json"
-    forged_bytes = (json.dumps(forged_record.model_dump(mode="json"), sort_keys=True) + "\n").encode()
-    forged_path.write_bytes(forged_bytes)
-    forged_artifact = ArtifactReference(
-        kind="trial-record",
-        path=str(forged_path),
-        sha256=hashlib.sha256(forged_bytes).hexdigest(),
-        media_type="application/json",
-    )
-    forged_trial = original_trial.model_copy(
-        update={"trial_records": (forged_artifact, *original_trial.trial_records[1:])}
-    )
-    forged_report_payload = transfer_run.evaluation.model_dump(mode="python", exclude={"content_sha256"})
-    forged_report_payload["trials"] = (forged_trial, *transfer_run.evaluation.trials[1:])
-    forged_report = MotifTransferEvaluationReport.model_validate(forged_report_payload)
-    with pytest.raises(ValueError, match="transfer TrialRecord lineage"):
-        verify_motif_transfer_evaluation(forged_report, frozen_library=learned.library)
-    with pytest.raises(ValueError, match="transfer TrialRecord lineage"):
-        finalize_motif_transfer(
-            frozen_library=learned.library,
-            evaluation=forged_report,
-            policy=policy,
-        )
-
-    forged_motif_record = original_record.model_copy(
-        update={"meta_harness_provenance": original_record.meta_harness_provenance.model_copy(update={"motif_ids": ()})}
-    )
-    forged_motif_path = tmp_path / "forged-transfer-motif-lineage.json"
-    forged_motif_bytes = (json.dumps(forged_motif_record.model_dump(mode="json"), sort_keys=True) + "\n").encode()
-    forged_motif_path.write_bytes(forged_motif_bytes)
-    forged_motif_artifact = ArtifactReference(
-        kind="trial-record",
-        path=str(forged_motif_path),
-        sha256=hashlib.sha256(forged_motif_bytes).hexdigest(),
-        media_type="application/json",
-    )
-    forged_motif_trial = original_trial.model_copy(
-        update={"trial_records": (forged_motif_artifact, *original_trial.trial_records[1:])}
-    )
-    forged_motif_report_payload = transfer_run.evaluation.model_dump(mode="python", exclude={"content_sha256"})
-    forged_motif_report_payload["trials"] = (
-        forged_motif_trial,
-        *transfer_run.evaluation.trials[1:],
-    )
-    forged_motif_report = MotifTransferEvaluationReport.model_validate(forged_motif_report_payload)
-    with pytest.raises(ValueError, match="motif ancestry"):
-        verify_motif_transfer_evaluation(forged_motif_report, frozen_library=learned.library)
-
-    transfer = transfer_run.evaluation.transfer_evidence
-    forged_transfer = TransferEvidenceReference.create(
-        evaluation_sha256=transfer.evaluation_sha256,
-        world_lineage_ids=transfer.world_lineage_ids,
-        split=transfer.split,
-        objective_reward=1.0,
-        validity_rate=transfer.validity_rate,
-        joint_uplift=1.0,
-        joint_incremental_uplift=1.0,
-        joint_incremental_uplift_lower_bound=1.0,
-        estimated_cost_usd=transfer.estimated_cost_usd,
-        selected_before_holdout=True,
-        archive_frozen=True,
-    )
-    forged_transfer_payload = transfer_run.evaluation.model_dump(mode="python", exclude={"content_sha256"})
-    forged_transfer_payload["transfer_evidence"] = forged_transfer
-    forged_transfer_report = MotifTransferEvaluationReport.model_validate(forged_transfer_payload)
-    with pytest.raises(ValueError, match="derived transfer evidence"):
-        finalize_motif_transfer(
-            frozen_library=learned.library,
-            evaluation=forged_transfer_report,
-            policy=policy,
-        )
-
-    with pytest.raises(TypeError, match="unexpected keyword argument 'evidence'"):
-        finalize_motif_transfer(
-            frozen_library=learned.library,
-            evidence=transfer_run.evaluation.transfer_evidence,  # type: ignore[call-arg]
-            policy=policy,
-        )
-
-    trial_artifact = transfer_run.evaluation.trials[0].trial_records[0]
-    Path(trial_artifact.path).write_text("{}\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="artifact digest mismatch"):
-        verify_motif_transfer_evaluation(
-            transfer_run.evaluation,
-            frozen_library=learned.library,
-        )
-
-
-def _motif_lineage_ids(library: MotifLibrary, selected_motif_sha256: str | None) -> tuple[str, ...]:
-    assert selected_motif_sha256 is not None
-    by_id = {motif.motif_sha256: motif for motif in library.motifs}
-    lineage: set[str] = set()
-    current_id: str | None = selected_motif_sha256
-    while current_id is not None:
-        lineage.add(current_id)
-        current_id = by_id[current_id].parent_motif_sha256
-    return tuple(sorted(lineage))
 
 
 def _program_factor(template: RepairProgramTemplate) -> ProgramFactorTemplate:

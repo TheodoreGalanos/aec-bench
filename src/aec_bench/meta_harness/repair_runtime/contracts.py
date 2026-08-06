@@ -23,7 +23,7 @@ from aec_bench.contracts.output_completion import OutputCompletionEvaluation
 from aec_bench.contracts.stage_execution import DeclaredStageGraph
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
-from aec_bench.evolution.repair_loop import (
+from aec_bench.evolution.repair_lifecycle import (
     RepairCandidate,
     RepairFailureDomain,
     RepairLoopRequest,
@@ -32,7 +32,7 @@ from aec_bench.evolution.repair_loop import (
     RepairPairingSpec,
 )
 from aec_bench.meta_harness.harness_budget import HarnessBudgetObservation
-from aec_bench.meta_harness.program_runtime import (
+from aec_bench.meta_harness.program_execution import (
     ProgramExecutionResult,
     ProgramExecutionStatus,
 )

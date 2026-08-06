@@ -5,7 +5,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aec_bench.evaluation.stewardship import evaluate_pump_station_reference_run
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evaluation import (
+    evaluate_pump_station_reference_run,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     run_pump_station_reference_controller,
 )

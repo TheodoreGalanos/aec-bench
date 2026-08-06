@@ -9,12 +9,10 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipal,
     AuthorityPrincipalKind,
 )
-from aec_bench.contracts.program_proposal import (
-    MatchedEvaluationCoordinate,
-    ProgramCandidateKind,
-    ProgramCandidateRef,
-    ProposalFreeze,
-)
+from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
+from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
+from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.harness.harbor_dispatch import ProposalHarborDispatchInput
 from aec_bench.harness.proposal_session_config import ProposalSessionHostConfig
@@ -30,7 +28,7 @@ from aec_bench.meta_harness.program_proposal_compilation import (
 from aec_bench.meta_harness.proposal_dispatch.errors import (
     ProposalDispatchGovernanceError,
 )
-from aec_bench.meta_harness.proposal_freeze import (
+from aec_bench.meta_harness.proposal_freezing import (
     GovernedProposalFreezeResult,
 )
 
@@ -203,7 +201,7 @@ def validate_evaluation_coordinate(
     coordinate: MatchedEvaluationCoordinate,
     freeze: ProposalFreeze,
 ) -> None:
-    """Validate the exact task, split, lineage, and optional calibration seed."""
+    """Validate the exact task, split, and world lineage."""
 
     view = freeze.problem_view
     if (
@@ -214,9 +212,4 @@ def validate_evaluation_coordinate(
     ):
         raise ProposalDispatchGovernanceError(
             "evaluation coordinate differs from the governed task, split, or world lineage",
-        )
-    calibration_seed = freeze.provider_calibration_evaluation_seed
-    if calibration_seed is not None and coordinate.seed != calibration_seed:
-        raise ProposalDispatchGovernanceError(
-            "evaluation coordinate seed differs from the provider calibration freeze",
         )

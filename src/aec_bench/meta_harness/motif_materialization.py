@@ -33,7 +33,7 @@ from aec_bench.meta_harness.factorial_candidates import (
     FactorialCandidateFactoryRequest,
     ProgramFactorTemplate,
 )
-from aec_bench.meta_harness.motif_library import (
+from aec_bench.meta_harness.motifs import (
     MotifLibrary,
     MotifSelectionDecision,
     MotifSelectionOutcome,

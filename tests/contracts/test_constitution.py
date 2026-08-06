@@ -186,17 +186,6 @@ class TestConstitutionManifest:
             m.version = "0.2.0"  # type: ignore[misc]
 
 
-class TestPackageReExports:
-    def test_imports_from_contracts(self) -> None:
-        from aec_bench.contracts import (
-            ConstitutionManifest,
-        )
-
-        # Sanity check: instantiate one to prove the symbol is real
-        m = ConstitutionManifest(version="0.1.0", principles=[])
-        assert isinstance(m, ConstitutionManifest)
-
-
 class TestParseConstitution:
     def test_minimal_manifest(self) -> None:
         from aec_bench.contracts.constitution import parse_constitution

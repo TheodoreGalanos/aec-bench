@@ -12,7 +12,7 @@ import yaml
 
 from aec_bench.contracts.authority import AuthorityAction, BasisKind
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger
-from aec_bench.meta_harness.proposal_dispatch_governance import (
+from aec_bench.meta_harness.proposal_dispatch import (
     GovernedProposalDispatchAuthorization,
     ProposalDispatchGovernanceError,
 )

@@ -22,7 +22,6 @@ from aec_bench.contracts.evaluation_outcome import (
 from aec_bench.meta_harness.critic_stress_runtime import (
     AcceptanceGrounding,
     AcceptanceGroundingKind,
-    AdaptiveCriticStressMeasurement,
     CriticStressClassificationPolicy,
     CriticStressFindingKind,
     CriticStressLimitation,
@@ -33,9 +32,6 @@ from aec_bench.meta_harness.critic_stress_runtime import (
     VerifiedCausalSeamEvidence,
     VRedChallengeEvidence,
     reduce_critic_stress,
-)
-from aec_bench.meta_harness.critic_stress_runtime import (
-    reduce_critic_stress as reduce_adaptive_critic_stress,
 )
 
 
@@ -86,8 +82,8 @@ def _measurement(
     gap: CriticGapDecomposition,
     *,
     grounding: AcceptanceGrounding | None = None,
-) -> AdaptiveCriticStressMeasurement:
-    return AdaptiveCriticStressMeasurement(
+) -> CriticStressMeasurement:
+    return CriticStressMeasurement(
         measurement_id="critic-stress.measurement-001",
         critic_generation_sha256=_sha("critic-generation-current"),
         gap=gap,
@@ -137,7 +133,7 @@ def _challenge(
     )
 
 
-def test_evergreen_runtime_preserves_adaptive_schema_bytes_and_hashes() -> None:
+def test_current_runtime_returns_a_provider_free_causal_report() -> None:
     measurement = _measurement(
         _gap(
             selection_gain=0.50,
@@ -145,26 +141,15 @@ def test_evergreen_runtime_preserves_adaptive_schema_bytes_and_hashes() -> None:
             acceptance_gain=0.10,
         )
     )
-    adaptive = reduce_adaptive_critic_stress(
-        policy=_policy(),
-        measurement=measurement,
-    )
-    evergreen = reduce_critic_stress(
+    report = reduce_critic_stress(
         policy=_policy(),
         measurement=measurement,
     )
 
-    assert CriticStressMeasurement is AdaptiveCriticStressMeasurement
-    assert CriticStressReport is type(adaptive)
-    assert evergreen == adaptive
-    assert measurement.content_sha256 == "66e0073536aae3914e1edb56fcb7ed04fd920565749a273b3b194e74093f4a86"
-    assert adaptive.content_sha256 == "63ae86526532b28ad1beec13f1234a9a29c4541191edfb6d3e82875b4ab26d45"
-    assert hashlib.sha256(measurement.model_dump_json().encode()).hexdigest() == (
-        "efc8bee8b0e371e2b193a7c132fe0ea8837b6fa80562627d9914a3fdcbd5a4a6"
-    )
-    assert hashlib.sha256(adaptive.model_dump_json().encode()).hexdigest() == (
-        "57f79759f8ea349c90555658f2ceadb2d6c1efd65db6129726eccebd88d81f0a"
-    )
+    assert isinstance(report, CriticStressReport)
+    assert report.measurement == measurement
+    assert report.provider_calls == 0
+    assert report.provider_cost_usd == 0.0
 
 
 def test_positive_raw_selection_noise_gap_does_not_create_a_regression_case() -> None:
@@ -176,7 +161,7 @@ def test_positive_raw_selection_noise_gap_does_not_create_a_regression_case() ->
         )
     )
 
-    report = reduce_adaptive_critic_stress(
+    report = reduce_critic_stress(
         policy=_policy(),
         measurement=measurement,
     )
@@ -197,7 +182,7 @@ def test_residual_requires_causal_seam_evidence_before_becoming_a_regression() -
     )
     challenge = _challenge(policy)
 
-    detector_only = reduce_adaptive_critic_stress(
+    detector_only = reduce_critic_stress(
         policy=policy,
         measurement=measurement,
         vred_challenges=(challenge,),
@@ -217,7 +202,7 @@ def test_residual_requires_causal_seam_evidence_before_becoming_a_regression() -
             kind=AuthorityPrincipalKind.HOST_RUNTIME,
         ),
     )
-    grounded = reduce_adaptive_critic_stress(
+    grounded = reduce_critic_stress(
         policy=policy,
         measurement=measurement,
         causal_seam_evidence=(causal,),
@@ -229,7 +214,7 @@ def test_residual_requires_causal_seam_evidence_before_becoming_a_regression() -
     assert grounded.regression_case.target_critic_generation_sha256 == policy.next_critic_generation_sha256
     assert not grounded.regression_case.current_promotion_basis_permitted
     with pytest.raises(ValueError, match="forbidden as current promotion basis"):
-        reduce_adaptive_critic_stress(
+        reduce_critic_stress(
             policy=policy,
             measurement=measurement,
             causal_seam_evidence=(causal,),
@@ -254,7 +239,7 @@ def test_near_zero_gap_with_independent_truth_credits_shared_critic_breach() -> 
         )
     )
 
-    report = reduce_adaptive_critic_stress(
+    report = reduce_critic_stress(
         policy=_policy(),
         measurement=measurement,
     )
@@ -286,7 +271,7 @@ def test_replayed_forbidden_flow_creates_an_integrity_regression() -> None:
         ),
     )
 
-    report = reduce_adaptive_critic_stress(
+    report = reduce_critic_stress(
         policy=policy,
         measurement=measurement,
         replayed_boundary_evidence=(replay,),
@@ -306,7 +291,7 @@ def test_hidden_rubric_acceptance_records_the_conditional_gap_limitation() -> No
         grounding=_grounding(AcceptanceGroundingKind.HIDDEN_RUBRIC),
     )
 
-    report = reduce_adaptive_critic_stress(
+    report = reduce_critic_stress(
         policy=_policy(),
         measurement=measurement,
     )
@@ -327,7 +312,7 @@ def test_vred_challenge_cannot_support_current_promotion_or_skip_a_generation() 
     challenge = _challenge(policy)
 
     with pytest.raises(ValueError, match="forbidden as current promotion basis"):
-        reduce_adaptive_critic_stress(
+        reduce_critic_stress(
             policy=policy,
             measurement=measurement,
             vred_challenges=(challenge,),
@@ -339,7 +324,7 @@ def test_vred_challenge_cannot_support_current_promotion_or_skip_a_generation() 
         target_generation_sha256=_sha("critic-generation-after-next"),
     )
     with pytest.raises(ValueError, match="next critic generation"):
-        reduce_adaptive_critic_stress(
+        reduce_critic_stress(
             policy=policy,
             measurement=measurement,
             vred_challenges=(later_challenge,),

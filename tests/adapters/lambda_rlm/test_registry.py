@@ -1,9 +1,8 @@
-# ABOUTME: Tests that the lambda-rlm adapter is registered and buildable.
-# ABOUTME: Validates LocalAdapterRegistry can construct a LambdaRlmAdapter.
+# ABOUTME: Tests that the lambda-rlm adapter is available to local execution.
+# ABOUTME: Validates the fixed local composition root advertises Lambda-RLM.
 
-from aec_bench.adapters.local_registry import LocalAdapterRegistry
+from aec_bench.adapters.local_registry import available_local_adapters
 
 
 def test_lambda_rlm_is_registered():
-    registry = LocalAdapterRegistry()
-    assert "lambda-rlm" in registry.available_adapters()
+    assert "lambda-rlm" in available_local_adapters()

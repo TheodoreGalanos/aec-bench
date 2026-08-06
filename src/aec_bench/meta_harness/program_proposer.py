@@ -29,16 +29,13 @@ from aec_bench.contracts.harness_kernel import (
     validate_sha256,
 )
 from aec_bench.contracts.pricing import estimate_cost_usd, match_pricing
-from aec_bench.contracts.program_proposal import (
-    CandidateGenerationManifest,
-    DecompositionProblemView,
-    ProgramCandidateKind,
-    ProgramCandidateRef,
-)
+from aec_bench.contracts.program_proposal.candidate import CandidateGenerationManifest, ProgramCandidateRef
+from aec_bench.contracts.program_proposal.problem import DecompositionProblemView
+from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 from aec_bench.contracts.program_proposer import FrozenProgramProposerPolicy
-from aec_bench.contracts.proposal_execution import ProposedDecompositionGraph
+from aec_bench.contracts.proposal_execution.graph import ProposedDecompositionGraph
 from aec_bench.contracts.validators import NonEmptyStr
-from aec_bench.meta_harness.proposal_freeze import ProposalArtifact
+from aec_bench.meta_harness.proposal_freezing import ProposalArtifact
 
 
 class ProgramProposalTurnStatus(StrEnum):

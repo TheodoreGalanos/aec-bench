@@ -153,8 +153,6 @@ def test_untrusted_or_non_authoritative_principals_cannot_grant_promotion(
         AuthorityAction.REVEAL_ACCEPTANCE_MANIFEST,
         AuthorityAction.RELEASE_EVALUATION_COHORT,
         AuthorityAction.RETIRE_EVALUATION_COHORT,
-        AuthorityAction.RELEASE_PROVIDER_CALIBRATION_MANIFEST,
-        AuthorityAction.RETIRE_PROVIDER_CALIBRATION_MANIFEST,
     ],
 )
 def test_human_governance_transitions_require_human_principal(action: AuthorityAction) -> None:

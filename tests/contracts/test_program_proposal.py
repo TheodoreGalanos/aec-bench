@@ -10,28 +10,33 @@ import pytest
 from pydantic import ValidationError
 
 from aec_bench.contracts.authority import OperatorRole, operator_authority_for
-from aec_bench.contracts.evaluation_generation import EvaluationCohortBinding
+from aec_bench.contracts.evaluation_generation.cohort import EvaluationCohortBinding
 from aec_bench.contracts.evaluation_plane import CandidateManifestScope, EvaluationPlanRef
 from aec_bench.contracts.harness_instance import HarnessBudget
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
-from aec_bench.contracts.program_proposal import (
-    CandidateEvidenceKind,
+from aec_bench.contracts.program_proposal.candidate import (
     CandidateGenerationCoordinate,
     CandidateGenerationManifest,
+    ProgramCandidateRef,
+)
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
+from aec_bench.contracts.program_proposal.problem import (
     DecompositionLeakageAudit,
-    DecompositionOptimizationCycle,
     DecompositionProblemView,
-    EvaluationProposalFreeze,
+    PublicSourceRef,
+)
+from aec_bench.contracts.program_proposal.study import (
+    DecompositionOptimizationCycle,
     MatchedCandidateEvidenceRef,
     MatchedEvaluationCoordinate,
+    PairedCandidateComparison,
+    ProgramCandidateStudy,
+)
+from aec_bench.contracts.program_proposal.types import (
+    CandidateEvidenceKind,
     OptimizationDisposition,
     OptimizationSplit,
-    PairedCandidateComparison,
     ProgramCandidateKind,
-    ProgramCandidateRef,
-    ProgramCandidateStudy,
-    ProposalFreeze,
-    PublicSourceRef,
 )
 
 
@@ -227,30 +232,29 @@ def test_proposal_freeze_can_bind_one_member_of_a_multitask_candidate_scope() ->
         ProposalFreeze.model_validate(payload)
 
 
-def test_structural_freeze_preserves_legacy_v1_bytes_and_content_identity() -> None:
+def test_structural_freeze_content_identity_matches_current_payload() -> None:
     freeze = _freeze()
     payload = freeze.model_dump(mode="json")
 
     assert "selected_provider_calibration_task_sha256" not in payload
     assert "provider_calibration_manifest_sha256" not in payload
     assert "provider_calibration_release_authority_event_sha256" not in payload
-    legacy_payload = {key: value for key, value in payload.items() if key != "content_sha256"}
-    legacy_content_sha256 = canonical_content_sha256(legacy_payload)
+    current_payload = {key: value for key, value in payload.items() if key != "content_sha256"}
+    current_content_sha256 = canonical_content_sha256(current_payload)
 
-    assert freeze.content_sha256 == legacy_content_sha256
-    assert freeze.content_sha256 == "d3985026d4d8e03a7422361f8858f09f73c22a7c58eb57fb1c8a420027f86a27"
+    assert freeze.content_sha256 == current_content_sha256
     assert (
         ProposalFreeze.model_validate(
             {
-                **legacy_payload,
-                "content_sha256": legacy_content_sha256,
+                **current_payload,
+                "content_sha256": current_content_sha256,
             }
         )
         == freeze
     )
 
 
-def test_structural_freeze_can_bind_an_execution_profile_without_changing_v1_schema() -> None:
+def test_structural_freeze_can_bind_an_execution_profile() -> None:
     profile_sha256 = _sha("proposal-execution-profile")
     freeze = ProposalFreeze.model_validate(
         {
@@ -259,7 +263,7 @@ def test_structural_freeze_can_bind_an_execution_profile_without_changing_v1_sch
         }
     )
 
-    assert freeze.schema_version == "aecbench.proposal-freeze.v1"
+    assert freeze.schema_version == "aecbench.evaluation-proposal-freeze.v2"
     assert freeze.execution_profile_sha256 == profile_sha256
     assert freeze.model_dump(mode="json")["execution_profile_sha256"] == profile_sha256
     assert freeze.content_sha256 != _freeze().content_sha256
@@ -279,7 +283,7 @@ def test_generic_calibration_freeze_binds_one_evaluation_cohort() -> None:
         ),
     )
 
-    freeze = EvaluationProposalFreeze.model_validate(payload)
+    freeze = ProposalFreeze.model_validate(payload)
     encoded = freeze.model_dump(mode="json")
 
     assert freeze.evaluation_cohort.cohort_id == "cohort.calibration"
@@ -719,24 +723,15 @@ def test_proposal_freeze_rejects_problem_view_and_checkpoint_drift() -> None:
         )
 
 
-def test_proposal_freeze_rejects_split_specific_lifecycle_evidence() -> None:
+def test_proposal_freeze_rejects_obsolete_provider_calibration_fields() -> None:
     freeze = _freeze()
     structural_payload = freeze.model_dump(mode="json", exclude={"content_sha256"})
 
-    with pytest.raises(ValidationError, match="cannot carry provider calibration"):
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         ProposalFreeze.model_validate(
             {
                 **structural_payload,
                 "provider_calibration_manifest_sha256": _sha("provider-manifest"),
-            }
-        )
-
-    with pytest.raises(ValidationError, match="requires exact manifest, task, and release authority"):
-        ProposalFreeze.model_validate(
-            {
-                **structural_payload,
-                "split": OptimizationSplit.PROVIDER_CALIBRATION,
-                "selected_structural_item_sha256": None,
             }
         )
 

@@ -19,7 +19,7 @@ from aec_bench.contracts.harness_kernel import (
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
-from aec_bench.evolution.repair_loop import (
+from aec_bench.evolution.repair_lifecycle import (
     RepairCandidate,
     RepairLoopRequest,
     RepairLoopStatus,
@@ -40,16 +40,13 @@ from aec_bench.meta_harness.factorial_experiment import (
     FactorialExperimentSpec,
 )
 from aec_bench.meta_harness.motif_learning import MotifLearningResult
-from aec_bench.meta_harness.motif_library import (
-    MotifLibraryArtifact,
-    MotifPromotionPolicy,
-    MotifStatus,
-)
 from aec_bench.meta_harness.motif_materialization import (
     MotifFactorialInstantiationRequest,
 )
-from aec_bench.meta_harness.motif_transfer_runtime import (
-    MotifTransferRuntimeResult,
+from aec_bench.meta_harness.motifs import (
+    MotifLibraryArtifact,
+    MotifPromotionPolicy,
+    MotifStatus,
 )
 from aec_bench.meta_harness.repair_runtime import (
     RepairRuntimeExecution,
@@ -61,14 +58,6 @@ class AdaptiveCycleOutcome(StrEnum):
     """Whether the governed cycle completed transfer evaluation or stopped at an evidence gate."""
 
     STOPPED = "stopped"
-    COMPLETED = "completed"
-
-
-class _AdaptiveCycleLifecycle(StrEnum):
-    """Authority policy separating active evaluation from historical v1 replay."""
-
-    ACTIVE = "active"
-    V1_COMPATIBILITY = "v1_compatibility"
 
 
 class AdaptiveCycleTerminalStage(StrEnum):
@@ -76,7 +65,6 @@ class AdaptiveCycleTerminalStage(StrEnum):
 
     REPAIR = "repair"
     MOTIF_PROMOTION = "motif_promotion"
-    TRANSFER_PROMOTION = "transfer_promotion"
 
 
 class AdaptiveCycleTerminalReason(StrEnum):
@@ -89,8 +77,6 @@ class AdaptiveCycleTerminalReason(StrEnum):
     REPAIR_NO_REPAIR_REQUIRED = "repair_no_repair_required"
     REPAIR_NO_APPLICABLE_REPAIR = "repair_no_applicable_repair"
     MOTIF_NOT_REUSABLE = "motif_not_reusable"
-    TRANSFER_VALIDATED = "transfer_validated"
-    TRANSFER_GATE_REJECTED = "transfer_gate_rejected"
 
 
 class AdaptiveFactorialStageSpec(FrozenStrictModel):
@@ -155,7 +141,6 @@ class AdaptiveCycleExecutors:
     source: HarborCommandExecutor | None = None
     repair: HarborCommandExecutor | None = None
     child_calibration: HarborCommandExecutor | None = None
-    transfer: HarborCommandExecutor | None = None
 
 
 class AdaptiveCycleReport(ContentAddressedModel):
@@ -176,8 +161,6 @@ class AdaptiveCycleReport(ContentAddressedModel):
     child_calibration_report: ArtifactReference | None = None
     motif_learning_report: ArtifactReference | None = None
     learning_motif_library: ArtifactReference | None = None
-    transfer_evaluation_report: ArtifactReference | None = None
-    transfer_promotion_report: ArtifactReference | None = None
     motif_library: ArtifactReference
     learned_motif_sha256: str | None = None
     learning_archive_sha256: str | None = None
@@ -210,8 +193,6 @@ class AdaptiveCycleReport(ContentAddressedModel):
             _validate_repair_terminal(self)
         elif self.terminal_stage is AdaptiveCycleTerminalStage.MOTIF_PROMOTION:
             _validate_motif_terminal(self)
-        else:
-            _validate_transfer_terminal(self)
         return self
 
 
@@ -224,7 +205,6 @@ class AdaptiveCycleResult:
     repaired_candidate: RepairCandidate | None
     child_calibration: FactorialExperimentRunResult | None
     learning: MotifLearningResult | None
-    transfer: MotifTransferRuntimeResult | None
     report: AdaptiveCycleReport
     path: Path
 
@@ -329,8 +309,6 @@ def _validate_report_artifact_kinds(report: AdaptiveCycleReport) -> None:
         "child_calibration_report": "stage-zero-report",
         "motif_learning_report": "motif-learning-report",
         "learning_motif_library": "motif-library",
-        "transfer_evaluation_report": "motif-transfer-evaluation",
-        "transfer_promotion_report": "motif-transfer-promotion-report",
         "motif_library": "motif-library",
     }
     for field_name, expected_kind in expected_artifact_kinds.items():
@@ -345,8 +323,6 @@ def _validate_report_artifact_shape(report: AdaptiveCycleReport) -> None:
         "child_calibration_report": report.child_calibration_report,
         "motif_learning_report": report.motif_learning_report,
         "learning_motif_library": report.learning_motif_library,
-        "transfer_evaluation_report": report.transfer_evaluation_report,
-        "transfer_promotion_report": report.transfer_promotion_report,
     }
     present = frozenset(name for name, value in downstream.items() if value is not None)
     required = {
@@ -359,7 +335,6 @@ def _validate_report_artifact_shape(report: AdaptiveCycleReport) -> None:
                 "learning_motif_library",
             }
         ),
-        AdaptiveCycleTerminalStage.TRANSFER_PROMOTION: frozenset(downstream),
     }[report.terminal_stage]
     if present != required:
         raise ValueError("adaptive cycle terminal artifact shape does not match its terminal stage")
@@ -413,31 +388,6 @@ def _validate_motif_terminal(report: AdaptiveCycleReport) -> None:
         raise ValueError("adaptive cycle stopped motif cannot already be reusable")
     if report.final_archive_sha256 != report.learning_archive_sha256:
         raise ValueError("adaptive cycle motif terminal archive must equal its learning archive")
-
-
-def _validate_transfer_terminal(report: AdaptiveCycleReport) -> None:
-    if report.outcome is not AdaptiveCycleOutcome.COMPLETED or report.terminal_reason not in {
-        AdaptiveCycleTerminalReason.TRANSFER_VALIDATED,
-        AdaptiveCycleTerminalReason.TRANSFER_GATE_REJECTED,
-    }:
-        raise ValueError("adaptive cycle transfer terminal has an invalid outcome or reason")
-    if any(
-        value is None
-        for value in (
-            report.learned_motif_sha256,
-            report.learning_archive_sha256,
-            report.final_motif_sha256,
-            report.final_status,
-        )
-    ):
-        raise ValueError("adaptive cycle transfer terminal requires complete motif identity")
-    expected_status = (
-        MotifStatus.TRANSFER_VALIDATED
-        if report.terminal_reason is AdaptiveCycleTerminalReason.TRANSFER_VALIDATED
-        else MotifStatus.REUSABLE
-    )
-    if report.final_status is not expected_status:
-        raise ValueError("adaptive cycle transfer terminal status does not match its reason")
 
 
 def repair_terminal_reason(

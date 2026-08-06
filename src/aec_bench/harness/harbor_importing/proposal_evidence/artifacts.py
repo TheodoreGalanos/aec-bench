@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aec_bench.contracts.proposal_execution import ProposalSessionReceipt
+from aec_bench.contracts.proposal_execution.session import ProposalSessionReceipt
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.harness.harbor_importing.artifact_io import artifact_reference, read_regular_trial_tree
 from aec_bench.harness.harbor_importing.contracts import ImportEvidenceContext

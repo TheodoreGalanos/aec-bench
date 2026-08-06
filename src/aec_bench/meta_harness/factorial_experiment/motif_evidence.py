@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
-from aec_bench.meta_harness.motif_library import FactorialEvidenceReference
 from aec_bench.meta_harness.motif_materialization import (
     encode_harness_motif_template,
     encode_program_motif_template,
 )
+from aec_bench.meta_harness.motifs import FactorialEvidenceReference
 
 from .contracts import FactorialExperimentReport
 from .verification import verify_factorial_experiment_report

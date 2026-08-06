@@ -10,12 +10,15 @@ from typing import cast
 from pydantic import JsonValue
 
 from aec_bench.contracts.world_interface import WorldActorActionRequest, WorldActorActionResult
-from aec_bench.evaluation.stewardship import PumpStationSemanticOutcome, pump_station_semantic_outcome
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
     PumpStationBacklogStatus,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
     PumpStationEpisodeHost,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evaluation import (
+    PumpStationSemanticOutcome,
+    pump_station_semantic_outcome,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PumpStationBoundControlRequest,

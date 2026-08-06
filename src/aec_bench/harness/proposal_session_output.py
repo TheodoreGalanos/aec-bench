@@ -8,12 +8,8 @@ import re
 import stat
 from pathlib import Path
 
-from aec_bench.contracts.proposal_execution import (
-    ProposalNodeReceipt,
-    ProposalNodeReceiptStatus,
-    ProposalSessionReceipt,
-    ProposalSessionStatus,
-)
+from aec_bench.contracts.proposal_execution.session import ProposalNodeReceipt, ProposalSessionReceipt
+from aec_bench.contracts.proposal_execution_types import ProposalNodeReceiptStatus, ProposalSessionStatus
 
 _INVOCATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 _MAX_FINAL_OUTPUT_BYTES = 64 * 1024 * 1024

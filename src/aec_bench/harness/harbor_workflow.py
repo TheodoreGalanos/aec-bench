@@ -9,12 +9,6 @@ from pathlib import Path
 from aec_bench.contracts.experiment_manifest import ExperimentManifest
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.evaluation.llm_reviewer import (
-    ReviewerJobResult,
-    ReviewerRunConfig,
-    reviewer_config_from_manifest,
-    run_harbor_job_reviewer,
-)
 from aec_bench.harness.experiment_runner import (
     ExperimentImportResult,
     HarborImportExperimentRunner,
@@ -26,6 +20,12 @@ from aec_bench.harness.harbor_dispatch import (
 )
 from aec_bench.harness.progress_tracker import WorkflowProgressSnapshot, WorkflowProgressTracker
 from aec_bench.harness.scheduler import build_trial_plan, select_manifest_tasks
+from aec_bench.meta_harness.llm_reviewer import (
+    ReviewerJobResult,
+    ReviewerRunConfig,
+    reviewer_config_from_manifest,
+    run_harbor_job_reviewer,
+)
 from aec_bench.tasks.registry import TaskRegistry
 
 

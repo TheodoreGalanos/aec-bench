@@ -13,17 +13,9 @@ from aec_bench.contracts.harness_kernel import (
     ContentAddressedModel,
     canonical_content_sha256,
 )
-from aec_bench.contracts.program_proposal import (
-    OptimizationSplit,
-    ProgramCandidateKind,
-)
-from aec_bench.contracts.proposal_execution import (
-    MonolithicIncumbentProgram,
-    ProposalSessionStatus,
-)
-from aec_bench.contracts.provider_calibration import (
-    ProviderCalibrationTaskManifest,
-)
+from aec_bench.contracts.program_proposal.types import OptimizationSplit, ProgramCandidateKind
+from aec_bench.contracts.proposal_execution.graph import MonolithicIncumbentProgram
+from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.harness.harbor_dispatch import (
@@ -34,7 +26,7 @@ from aec_bench.harness.harbor_dispatch import (
 from aec_bench.harness.harbor_importing.proposal_evidence import ProposalHarborImportEvidence
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger
 from aec_bench.meta_harness.immutable_artifact_store import EvidenceRepository
-from aec_bench.meta_harness.proposal_dispatch_governance import (
+from aec_bench.meta_harness.proposal_dispatch import (
     GovernedProposalDispatchAuthorization,
 )
 from aec_bench.meta_harness.proposal_harbor_runtime import (
@@ -143,45 +135,6 @@ def resolve_world_lineage(
         expected_content_sha256=freeze.structural_split_sha256,
         label="structural split",
     )
-    if freeze.split is OptimizationSplit.PROVIDER_CALIBRATION:
-        if (
-            freeze.provider_calibration_manifest_sha256 is None
-            or freeze.selected_provider_calibration_task_sha256 is None
-        ):
-            raise ProposalTrialImportError(
-                "provider calibration import lacks its sealed task manifest",
-            )
-        manifest = resolve_unique_event_model(
-            ledger=ledger,
-            event=authorization.freeze_authority_event,
-            model_type=ProviderCalibrationTaskManifest,
-            expected_content_sha256=freeze.provider_calibration_manifest_sha256,
-            label="provider calibration task manifest",
-        )
-        calibration_matches = tuple(
-            task
-            for task in manifest.tasks
-            if (
-                task.task_id == authorization.dispatch.task_id
-                and task.content_sha256 == freeze.selected_provider_calibration_task_sha256
-            )
-        )
-        if len(calibration_matches) != 1:
-            raise ProposalTrialImportError(
-                "provider calibration import has no exact selected task",
-            )
-        calibration_task = calibration_matches[0]
-        if (
-            calibration_task.world_package_sha256 != freeze.selected_world_lineage_id
-            or not calibration_task.topology_signature_sha256
-        ):
-            raise ProposalTrialImportError(
-                "provider calibration import lacks exact world and topology evidence",
-            )
-        return WorldLineage(
-            package_sha256=calibration_task.world_package_sha256,
-            topology_sha256=calibration_task.topology_signature_sha256,
-        )
     selected_sha256 = freeze.selected_structural_item_sha256
     if selected_sha256 is None:
         raise ProposalTrialImportError(
@@ -496,7 +449,7 @@ def meta_split(
     split: OptimizationSplit,
 ) -> Literal["discovery", "repair_gate", "calibration", "holdout"]:
     """Map proposal optimization splits to the closed TrialRecord vocabulary."""
-    if split is OptimizationSplit.PROVIDER_CALIBRATION:
+    if split is OptimizationSplit.CALIBRATION:
         return "calibration"
     if split is OptimizationSplit.TRAINING:
         return "discovery"

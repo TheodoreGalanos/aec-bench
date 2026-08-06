@@ -7,16 +7,16 @@ from pathlib import Path
 
 from pydantic import TypeAdapter
 
-from aec_bench.contracts.evaluation_generation import (
+from aec_bench.contracts.evaluation_generation.batch import EvaluationBatchPlan
+from aec_bench.contracts.evaluation_generation.lifecycle import (
     CandidateBatchRejectionClosure,
-    EvaluationBatchPlan,
     EvaluationGenerationClosure,
     EvaluationGenerationRetirementClosure,
     GovernedBatchExecutionClosure,
     GovernedBatchTerminalEvidence,
-    PreparedEvaluationGeneration,
     ProposalGenerationClosure,
 )
+from aec_bench.contracts.evaluation_generation.preparation import PreparedEvaluationGeneration
 from aec_bench.meta_harness.evaluation_generation_evidence import (
     EvaluationGenerationEvidenceError,
     verify_completed_governed_batch_evidence,

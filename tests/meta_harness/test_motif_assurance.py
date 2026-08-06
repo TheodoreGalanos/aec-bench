@@ -18,7 +18,7 @@ from aec_bench.meta_harness.motif_assurance import (
     derive_motif_assurance_snapshot,
     motif_subject_sha256,
 )
-from aec_bench.meta_harness.motif_library import (
+from aec_bench.meta_harness.motifs import (
     HarnessProgramMotif,
     MotifApplicabilityDescriptor,
     MotifPromotionPolicy,

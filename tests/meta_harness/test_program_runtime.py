@@ -32,7 +32,7 @@ from aec_bench.contracts.execution_program import (
     VerifyNode,
 )
 from aec_bench.contracts.harness_instance import HarnessInstanceRef, ProgramOperationRef
-from aec_bench.meta_harness.program_runtime import (
+from aec_bench.meta_harness.program_execution import (
     NodeExecutionEvidence,
     NodeExecutionStatus,
     OperationExecutionContext,

@@ -1,5 +1,5 @@
-# ABOUTME: Tests the phase-neutral module boundaries behind the program-proposal contract facade.
-# ABOUTME: Proves public imports remain stable while problem, candidate, freeze, and study contracts stay separated.
+# ABOUTME: Tests the phase-neutral module boundaries behind the program-proposal package API.
+# ABOUTME: Proves public imports remain stable while current contract owners stay separated.
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ def test_program_proposal_facade_reexports_contracts_from_coherent_modules() -> 
     problem = import_module("aec_bench.contracts.program_proposal.problem")
     candidate = import_module("aec_bench.contracts.program_proposal.candidate")
     freeze = import_module("aec_bench.contracts.program_proposal.freeze")
-    compatibility = import_module("aec_bench.contracts.program_proposal.compatibility")
     study = import_module("aec_bench.contracts.program_proposal.study")
 
     expected_owners = {
@@ -35,8 +34,7 @@ def test_program_proposal_facade_reexports_contracts_from_coherent_modules() -> 
             "CandidateGenerationManifest",
             "ProgramCandidateRef",
         ),
-        freeze: ("EvaluationProposalFreeze",),
-        compatibility: ("ProposalFreeze",),
+        freeze: ("ProposalFreeze",),
         study: (
             "DecompositionOptimizationCycle",
             "MatchedCandidateEvidenceRef",

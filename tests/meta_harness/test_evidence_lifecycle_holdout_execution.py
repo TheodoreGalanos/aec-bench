@@ -100,7 +100,7 @@ def test_one_shot_execution_claims_and_marks_before_exactly_one_bound_local_run(
         private_execution_root=execution_root,
         private_ledger_root=private_ledger_root,
         repository_dir=prepared.repository_dir,
-        registry=registry,
+        adapter_builder=registry.build,
     )
 
     assert registry.build_count == 1
@@ -156,7 +156,7 @@ def test_same_claim_cannot_start_a_second_run_or_call_a_second_adapter(tmp_path:
         private_execution_root=first_root,
         private_ledger_root=private_ledger_root,
         repository_dir=prepared.repository_dir,
-        registry=registry,
+        adapter_builder=registry.build,
     )
 
     registry.run_start_path = second_root / "run-start.json"
@@ -169,7 +169,7 @@ def test_same_claim_cannot_start_a_second_run_or_call_a_second_adapter(tmp_path:
             private_execution_root=second_root,
             private_ledger_root=private_ledger_root,
             repository_dir=prepared.repository_dir,
-            registry=registry,
+            adapter_builder=registry.build,
         )
 
     assert registry.build_count == 1
@@ -207,7 +207,7 @@ def test_target_bound_private_layout_rejects_alternate_audit_paths_before_adapte
             private_execution_root=execution_root,
             private_ledger_root=ledger_root,
             repository_dir=prepared.repository_dir,
-            registry=registry,
+            adapter_builder=registry.build,
         )
 
     assert registry.build_count == 0
@@ -457,7 +457,7 @@ def test_adapter_exception_is_recorded_once_with_zero_reward_and_recovery_never_
             private_execution_root=execution_root,
             private_ledger_root=private_ledger_root,
             repository_dir=prepared.repository_dir,
-            registry=registry,
+            adapter_builder=registry.build,
         )
 
     record_paths = _private_record_paths(private_ledger_root)
@@ -505,7 +505,7 @@ def test_recovery_finalizes_bound_completed_artifacts_without_calling_an_adapter
             private_execution_root=execution_root,
             private_ledger_root=private_ledger_root,
             repository_dir=prepared.repository_dir,
-            registry=registry,
+            adapter_builder=registry.build,
         )
 
     assert registry.build_count == 1

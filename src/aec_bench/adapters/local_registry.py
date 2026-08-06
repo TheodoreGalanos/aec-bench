@@ -1,5 +1,5 @@
-# ABOUTME: Local adapter registry for in-process execution without containers.
-# ABOUTME: Maps adapter_kind strings to builder functions, reusing existing provider clients.
+# ABOUTME: Builds the fixed set of local in-process adapters without containers.
+# ABOUTME: Keeps provider construction at the execution composition boundary.
 
 from __future__ import annotations
 
@@ -387,57 +387,28 @@ _DEFAULT_BUILDERS: dict[str, AdapterBuilder] = {
 }
 
 
-class LocalAdapterRegistry:
-    """Registry that maps adapter kind strings to builder functions.
+def available_local_adapters() -> tuple[str, ...]:
+    """Return the fixed local adapter names accepted by the current runtime."""
+    return tuple(sorted(_DEFAULT_BUILDERS))
 
-    Each builder creates a fully-wired adapter for in-process local
-    execution.  Provider credentials are read from environment variables.
 
-    The registry ships with builders for the built-in local adapters and
-    compatibility aliases. Additional builders can be registered via
-    :meth:`register`.
-    """
+def build_local_adapter(
+    *,
+    adapter_kind: str,
+    model_name: str,
+    workspace: str,
+    **kwargs: Any,
+) -> Any:
+    """Build one of the package's current local adapters."""
+    builder = _DEFAULT_BUILDERS.get(adapter_kind)
+    if builder is None:
+        available = ", ".join(available_local_adapters())
+        raise ValueError(f"Unknown adapter kind: '{adapter_kind}'. Available: {available}")
 
-    def __init__(self) -> None:
-        self._builders: dict[str, AdapterBuilder] = dict(_DEFAULT_BUILDERS)
-
-    def register(self, adapter_kind: str, builder: AdapterBuilder) -> None:
-        """Register a new adapter builder (or override an existing one)."""
-        self._builders[adapter_kind] = builder
-
-    def available_adapters(self) -> list[str]:
-        """Return sorted list of registered adapter kinds."""
-        return sorted(self._builders.keys())
-
-    def build(
-        self,
-        *,
-        adapter_kind: str,
-        model_name: str,
-        workspace: str,
-        **kwargs: Any,
-    ) -> Any:
-        """Build an adapter instance for local execution.
-
-        Looks up the builder for *adapter_kind* and calls it with the
-        model name, workspace path, and any additional keyword arguments.
-
-        Raises ``ValueError`` if *adapter_kind* is not registered.
-        """
-        builder = self._builders.get(adapter_kind)
-        if builder is None:
-            available = ", ".join(self.available_adapters())
-            msg = f"Unknown adapter kind: '{adapter_kind}'. Available: {available}"
-            raise ValueError(msg)
-
-        logger.info(
-            "Building %s adapter: model=%s workspace=%s",
-            adapter_kind,
-            model_name,
-            workspace,
-        )
-        return builder(
-            model_name=model_name,
-            workspace=workspace,
-            **kwargs,
-        )
+    logger.info(
+        "Building %s adapter: model=%s workspace=%s",
+        adapter_kind,
+        model_name,
+        workspace,
+    )
+    return builder(model_name=model_name, workspace=workspace, **kwargs)

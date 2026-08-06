@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from aec_bench.contracts.evaluation_generation import EvaluationTaskIdentity
+from aec_bench.contracts.evaluation_generation.cohort import EvaluationTaskIdentity
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
 from aec_bench.contracts.output_completion import OutputCompletionContract
 from aec_bench.contracts.run_bundle import TaskSnapshotRef

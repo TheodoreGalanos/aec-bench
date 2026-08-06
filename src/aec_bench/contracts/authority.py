@@ -45,9 +45,6 @@ class AuthorityAction(StrEnum):
     REVEAL_ACCEPTANCE_MANIFEST = "reveal_acceptance_manifest"
     RELEASE_EVALUATION_COHORT = "release_evaluation_cohort"
     RETIRE_EVALUATION_COHORT = "retire_evaluation_cohort"
-    # Historical Phase 9.1a action strings remain valid for v1 replay.
-    RELEASE_PROVIDER_CALIBRATION_MANIFEST = "release_provider_calibration_manifest"
-    RETIRE_PROVIDER_CALIBRATION_MANIFEST = "retire_provider_calibration_manifest"
     CHANGE_KERNEL_VERSION = "change_kernel_version"
     SUSPEND_SUBJECT = "suspend_subject"
 
@@ -427,10 +424,6 @@ _CRITIC_GENERATION_ACTIONS = {
     AuthorityAction.RETIRE_CRITIC_GENERATION,
     AuthorityAction.REVEAL_ACCEPTANCE_MANIFEST,
 }
-_PROVIDER_CALIBRATION_ACTIONS = {
-    AuthorityAction.RELEASE_PROVIDER_CALIBRATION_MANIFEST,
-    AuthorityAction.RETIRE_PROVIDER_CALIBRATION_MANIFEST,
-}
 _EVALUATION_COHORT_ACTIONS = {
     AuthorityAction.RELEASE_EVALUATION_COHORT,
     AuthorityAction.RETIRE_EVALUATION_COHORT,
@@ -438,7 +431,6 @@ _EVALUATION_COHORT_ACTIONS = {
 _HUMAN_ONLY_ACTIONS = {
     *_CRITIC_GENERATION_ACTIONS,
     *_EVALUATION_COHORT_ACTIONS,
-    *_PROVIDER_CALIBRATION_ACTIONS,
     AuthorityAction.CHANGE_KERNEL_VERSION,
 }
 _GRANT_AUTHORITY: dict[AuthorityAction, frozenset[AuthorityPrincipalKind]] = {
@@ -508,8 +500,6 @@ _GRANT_AUTHORITY: dict[AuthorityAction, frozenset[AuthorityPrincipalKind]] = {
     AuthorityAction.REVEAL_ACCEPTANCE_MANIFEST: frozenset({AuthorityPrincipalKind.HUMAN}),
     AuthorityAction.RELEASE_EVALUATION_COHORT: frozenset({AuthorityPrincipalKind.HUMAN}),
     AuthorityAction.RETIRE_EVALUATION_COHORT: frozenset({AuthorityPrincipalKind.HUMAN}),
-    AuthorityAction.RELEASE_PROVIDER_CALIBRATION_MANIFEST: frozenset({AuthorityPrincipalKind.HUMAN}),
-    AuthorityAction.RETIRE_PROVIDER_CALIBRATION_MANIFEST: frozenset({AuthorityPrincipalKind.HUMAN}),
     AuthorityAction.CHANGE_KERNEL_VERSION: frozenset({AuthorityPrincipalKind.HUMAN}),
     AuthorityAction.SUSPEND_SUBJECT: frozenset(
         {

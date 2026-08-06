@@ -13,7 +13,7 @@ from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     validate_sha256,
 )
-from aec_bench.contracts.program_proposal import ProgramCandidateKind
+from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 from aec_bench.contracts.validators import NonEmptyStr
 
 

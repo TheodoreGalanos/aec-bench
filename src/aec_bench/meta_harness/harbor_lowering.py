@@ -28,7 +28,7 @@ from aec_bench.contracts.stage_execution import KernelInstructionOverride
 from aec_bench.contracts.task_definition import TaskDefinition, ToolSpec
 from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext
 from aec_bench.harness.harbor_dispatch import build_harbor_job_config
-from aec_bench.meta_harness.compiler import CompilationDiagnostic, CompilationOwner
+from aec_bench.meta_harness.compilation import CompilationDiagnostic, CompilationOwner
 from aec_bench.meta_harness.kernel_catalogue import (
     AgentAdapterRuntime,
     ContextProviderRuntime,

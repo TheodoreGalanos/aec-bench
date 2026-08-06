@@ -9,11 +9,9 @@ from pydantic import model_validator
 
 from aec_bench.contracts.harness_instance import CompiledHarnessInstance, ProgramOperationRef
 from aec_bench.contracts.harness_kernel import ContentAddressedModel
-from aec_bench.contracts.proposal_execution import (
-    ProposalCompilationSuccess,
-    ProposalExecutionSemantics,
-    ProposalSessionPlan,
-)
+from aec_bench.contracts.proposal_execution.compilation import ProposalCompilationSuccess
+from aec_bench.contracts.proposal_execution.session import ProposalSessionPlan
+from aec_bench.contracts.proposal_execution_types import ProposalExecutionSemantics
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.meta_harness.task_snapshot import (

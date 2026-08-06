@@ -23,10 +23,7 @@ from aec_bench.contracts.output_completion import (
     OutputCompletionEvaluation,
     evaluate_output_completion,
 )
-from aec_bench.contracts.proposal_execution import (
-    FinalSynthesisSpec,
-    SemanticSubtaskSpec,
-)
+from aec_bench.contracts.proposal_execution.graph import FinalSynthesisSpec, SemanticSubtaskSpec
 
 
 class ProposalNodeContractError(RuntimeError):

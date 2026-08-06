@@ -16,10 +16,8 @@ from aec_bench.contracts.authority import (
     TaintLabel,
 )
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
-from aec_bench.contracts.program_proposal import (
-    MatchedEvaluationCoordinate,
-    ProgramCandidateRef,
-)
+from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
+from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
 from aec_bench.harness.harbor_dispatch import (
     HarborDispatchError,
     ProposalHarborDispatchInput,
@@ -62,10 +60,9 @@ from aec_bench.meta_harness.proposal_dispatch.replay import (
 from aec_bench.meta_harness.proposal_dispatch.serialization import (
     canonical_json,
 )
-from aec_bench.meta_harness.proposal_freeze import (
+from aec_bench.meta_harness.proposal_freezing import (
     GovernedProposalFreezeError,
     GovernedProposalFreezeResult,
-    ProposalFreezeLifecyclePolicy,
     assert_proposal_freeze_authority,
 )
 
@@ -87,7 +84,6 @@ def authorize_governed_proposal_dispatch(
     harbor_job_config: Mapping[str, Any],
     host_runtime: AuthorityPrincipal,
     jobs_dir: Path | str = "jobs",
-    lifecycle_policy: ProposalFreezeLifecyclePolicy | None = None,
 ) -> GovernedProposalDispatchAuthorization:
     """Validate, observe, and authorize one exact proposal Harbor dispatch."""
 
@@ -95,7 +91,6 @@ def authorize_governed_proposal_dispatch(
         stored_freeze = assert_proposal_freeze_authority(
             ledger=ledger,
             result=governed_freeze,
-            lifecycle_policy=lifecycle_policy,
         )
     except (
         AuthorityLedgerError,

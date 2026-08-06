@@ -22,7 +22,6 @@ from aec_bench.contracts.world_session import (
     WorldSessionRequest,
     WorldSessionResult,
 )
-from aec_bench.evaluation.stewardship import evaluate_pump_station_reference_run
 from aec_bench.harness.harbor_importing.core import import_harbor_trial
 from aec_bench.harness.harbor_task_exporting.stable_io import directory_sha256
 from aec_bench.harness.pump_station_harbor.export import (
@@ -41,6 +40,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continua
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
     PumpStationEpisodeHost,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evaluation import (
+    evaluate_pump_station_reference_run,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,

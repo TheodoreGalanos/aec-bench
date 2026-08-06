@@ -44,7 +44,7 @@ from aec_bench.meta_harness.monitor_repository import (
     _RuntimeFlowClaim,
     _RuntimeManifestClaim,
 )
-from aec_bench.meta_harness.monitors import default_forbidden_flow_rules
+from aec_bench.meta_harness.standing_monitors import default_forbidden_flow_rules
 
 
 def _sha(label: str) -> str:

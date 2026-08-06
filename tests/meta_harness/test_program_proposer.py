@@ -22,14 +22,11 @@ from aec_bench.contracts.authority import (
 from aec_bench.contracts.harness_instance import HarnessBudget
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
 from aec_bench.contracts.pricing import estimate_cost_usd
-from aec_bench.contracts.program_proposal import (
-    CandidateGenerationCoordinate,
-    CandidateGenerationManifest,
-    DecompositionProblemView,
-    ProgramCandidateKind,
-)
+from aec_bench.contracts.program_proposal.candidate import CandidateGenerationCoordinate, CandidateGenerationManifest
+from aec_bench.contracts.program_proposal.problem import DecompositionProblemView
+from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 from aec_bench.contracts.program_proposer import FrozenProgramProposerPolicy
-from aec_bench.contracts.proposal_execution import ProposedDecompositionGraph
+from aec_bench.contracts.proposal_execution.graph import ProposedDecompositionGraph
 from aec_bench.meta_harness.program_proposer import (
     ProgramProposalInvocationStatus,
     ProgramProposalTurnStatus,

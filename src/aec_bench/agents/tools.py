@@ -27,7 +27,7 @@ def parse_tools_from_toml(toml_content: str) -> list[dict[str, Any]]:
     # New format: [[environment.tools]]
     env_tools = toml_data.get("environment", {}).get("tools", [])
     if env_tools:
-        discovered: list[dict[str, Any]] = []
+        environment_tools: list[dict[str, Any]] = []
         for entry in env_tools:
             tool: dict[str, Any] = {
                 "name": entry["name"],
@@ -36,17 +36,17 @@ def parse_tools_from_toml(toml_content: str) -> list[dict[str, Any]]:
             }
             if "returns_image" in entry:
                 tool["returns_image"] = entry["returns_image"]
-            discovered.append(tool)
-        return discovered
+            environment_tools.append(tool)
+        return environment_tools
 
     # Legacy format: [tools] scripts = [...]
     tools_section = toml_data.get("tools", {})
     scripts = tools_section.get("scripts", [])
 
-    legacy_discovered: list[dict[str, Any]] = []
+    discovered: list[dict[str, Any]] = []
     for script in scripts:
         stem = PurePosixPath(script).stem
-        legacy_discovered.append(
+        discovered.append(
             {
                 "name": stem.replace("_", "-") if "_" in stem else stem,
                 "source": script,
@@ -54,7 +54,7 @@ def parse_tools_from_toml(toml_content: str) -> list[dict[str, Any]]:
             }
         )
 
-    return legacy_discovered
+    return discovered
 
 
 async def discover_tools(environment: Any) -> list[dict[str, Any]]:

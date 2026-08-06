@@ -9,45 +9,38 @@ from aec_bench.contracts.harness_instance import (
     HarnessBudget,
     ProgramOperationScope,
 )
-from aec_bench.contracts.program_proposal import (
-    OptimizationSplit,
-    ProgramCandidateRef,
-    ProposalFreeze,
-)
-from aec_bench.contracts.proposal_execution import (
-    ExecutableCandidateGraph,
-    MonolithicIncumbentProgram,
+from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
+from aec_bench.contracts.program_proposal.types import OptimizationSplit
+from aec_bench.contracts.proposal_execution.compilation import (
     ProposalCompilationRejection,
     ProposalCompilationSuccess,
     ProposalCompileDiagnostic,
-    ProposalExecutionSemantics,
-    ProposalSessionPlan,
-    ScopedSourceMaterialization,
 )
+from aec_bench.contracts.proposal_execution.graph import ExecutableCandidateGraph, MonolithicIncumbentProgram
+from aec_bench.contracts.proposal_execution.session import ProposalSessionPlan
 from aec_bench.contracts.proposal_execution_budget import CandidateBudgetPlan
-from aec_bench.contracts.proposal_execution_context import ProposalSourceScopeManifest
+from aec_bench.contracts.proposal_execution_context import ProposalSourceScopeManifest, ScopedSourceMaterialization
 from aec_bench.contracts.proposal_execution_profile import ProposalExecutionProfile
 from aec_bench.contracts.proposal_execution_types import (
     ProposalCompilationStatus,
     ProposalCompileRejectionCode,
     ProposalDiagnosticVisibility,
+    ProposalExecutionSemantics,
 )
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger, AuthorityLedgerError
-from aec_bench.meta_harness.compiler import (
+from aec_bench.meta_harness.compilation import (
     CompilationError,
     CompilationOwner,
     ProgramCompilationProfile,
     compile_execution_program,
 )
 from aec_bench.meta_harness.kernel_catalogue import KernelRuntimeRegistry
-from aec_bench.meta_harness.proposal_freeze import (
+from aec_bench.meta_harness.proposal_freezing import (
     GovernedProposalFreezeError,
     GovernedProposalFreezeResult,
     assert_proposal_freeze_authority,
-)
-from aec_bench.meta_harness.proposal_freezing.validation import (
-    ProposalFreezeLifecyclePolicy,
 )
 
 from .candidate import (
@@ -87,7 +80,6 @@ def compile_governed_proposal(
     lowering_policy_sha256: str,
     allocation_policy_sha256: str,
     session_overhead_seconds: int = 0,
-    lifecycle_policy: ProposalFreezeLifecyclePolicy | None = None,
 ) -> ProposalRunSessionBundle | ProposalCompilationRejection:
     """Compile one exact frozen proposal without importing or invoking any runtime."""
     task_snapshot_sha256 = _validate_host_inputs(
@@ -111,7 +103,6 @@ def compile_governed_proposal(
         governed_freeze=governed_freeze,
         proposal_freeze=proposal_freeze,
         execution_profile=execution_profile,
-        lifecycle_policy=lifecycle_policy,
     )
     candidate_bytes = _resolve_exact_candidate_bytes(
         ledger=ledger,
@@ -200,14 +191,12 @@ def _replay_governed_freeze(
     governed_freeze: GovernedProposalFreezeResult,
     proposal_freeze: ProposalFreeze,
     execution_profile: ProposalExecutionProfile,
-    lifecycle_policy: ProposalFreezeLifecyclePolicy | None,
 ) -> str:
     try:
         stored_event = assert_proposal_freeze_authority(
             ledger=ledger,
             result=governed_freeze,
             freeze=proposal_freeze,
-            lifecycle_policy=lifecycle_policy,
         )
     except (AuthorityLedgerError, GovernedProposalFreezeError, ValueError) as error:
         raise ProposalCompilationHostError(

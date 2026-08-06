@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 from pydantic import TypeAdapter
 
 from aec_bench.contracts.harness_kernel import ContentAddressedModel
-from aec_bench.contracts.proposal_execution import ProposalSessionReceipt
+from aec_bench.contracts.proposal_execution.session import ProposalSessionReceipt
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.harness.harbor_importing.proposal_evidence import ProposalHarborImportEvidence
 from aec_bench.meta_harness.immutable_artifact_store import (
@@ -24,7 +24,7 @@ from aec_bench.meta_harness.immutable_artifact_store import (
     ImmutableArtifactIntegrityError,
     validate_evidence_root,
 )
-from aec_bench.meta_harness.proposal_dispatch_governance import (
+from aec_bench.meta_harness.proposal_dispatch import (
     GovernedProposalDispatchAuthorization,
 )
 from aec_bench.meta_harness.proposal_trial_importing.contracts import (

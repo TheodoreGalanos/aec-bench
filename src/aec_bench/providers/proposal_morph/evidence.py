@@ -11,10 +11,8 @@ from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 
 from aec_bench.contracts.harness_kernel import canonical_content_sha256, validate_sha256
-from aec_bench.contracts.proposal_execution import (
-    ProposalSessionReceipt,
-    ProposalSessionStatus,
-)
+from aec_bench.contracts.proposal_execution.session import ProposalSessionReceipt
+from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 
 from .boundary import (
     BoundaryPhase,

@@ -24,7 +24,7 @@ from aec_bench.meta_harness.monitor_runtime.surface_io import (
     guard_surface_path,
     validate_canary_surface,
 )
-from aec_bench.meta_harness.monitors import CanaryCommitment
+from aec_bench.meta_harness.standing_monitors import CanaryCommitment
 
 
 class MonitorRuntimeState:

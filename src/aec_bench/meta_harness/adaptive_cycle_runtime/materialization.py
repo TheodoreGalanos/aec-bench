@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from aec_bench.evolution.repair_loop import RepairCandidate
+from aec_bench.evolution.repair_lifecycle import RepairCandidate
 from aec_bench.meta_harness.adaptive_cycle_runtime.contracts import (
     AdaptiveFactorialStageSpec,
 )

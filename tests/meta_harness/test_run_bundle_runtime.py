@@ -27,12 +27,12 @@ from aec_bench.contracts.harness_instance import HarnessBudget
 from aec_bench.contracts.trial_record import Completeness, TrialRecord
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger
-from aec_bench.meta_harness.compiler import compile_execution_program, compile_run_bundle
+from aec_bench.meta_harness.compilation import compile_execution_program, compile_run_bundle
 from aec_bench.meta_harness.kernel_catalogue import (
     KernelRuntimeRegistry,
     default_kernel_registry,
 )
-from aec_bench.meta_harness.program_runtime import ProgramExecutionStatus
+from aec_bench.meta_harness.program_execution import ProgramExecutionStatus
 from aec_bench.meta_harness.run_bundle_governed_attempt import (
     assess_run_bundle_governed_attempt,
     execute_run_bundle_with_governed_attempt_assessment,

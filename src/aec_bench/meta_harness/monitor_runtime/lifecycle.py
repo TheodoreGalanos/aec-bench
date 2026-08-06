@@ -33,7 +33,7 @@ from aec_bench.meta_harness.monitor_runtime.coverage import (
 from aec_bench.meta_harness.monitor_runtime.instrumentation import (
     MonitorInstrumentationRuntime,
 )
-from aec_bench.meta_harness.monitors import (
+from aec_bench.meta_harness.standing_monitors import (
     CycleMonitorReportStatus,
     replay_scheduled_basis,
     run_production_cycle_monitors,

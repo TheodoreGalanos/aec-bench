@@ -13,13 +13,13 @@ from typing import Any
 import pytest
 
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
-from aec_bench.contracts.proposal_execution import ProposalSessionStatus
+from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 from aec_bench.harness.proposal_environment_pool import (
     IsolatedProposalEnvironmentIdentity,
     IsolatedProposalEnvironmentPool,
     ProposalEnvironmentPoolError,
 )
-from aec_bench.harness.proposal_session import run_proposal_session
+from aec_bench.harness.proposal_session_runtime import run_proposal_session
 from tests.harness.test_proposal_ready_set_session import (
     _BranchOrderingEnvironment,
     _ready_set_bundle,

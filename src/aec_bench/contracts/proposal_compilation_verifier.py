@@ -6,8 +6,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from pydantic import ValidationInfo
-
 from aec_bench.contracts.execution_program import (
     ActionNode,
     ExecutionProgram,
@@ -21,27 +19,24 @@ from aec_bench.contracts.harness_instance import (
 from aec_bench.contracts.harness_kernel import (
     canonical_content_sha256,
 )
-from aec_bench.contracts.program_proposal import (
-    OptimizationSplit,
-    ProgramCandidateKind,
-    ProgramCandidateRef,
-    ProposalFreeze,
-)
-from aec_bench.contracts.proposal_execution import (
-    _V1_COMPATIBILITY_PROFILE_CONTEXT_KEY,
-    CandidateBudgetPlan,
-    ExecutableCandidateGraph,
-    MonolithicIncumbentProgram,
-    NodeInstructionVisibility,
+from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
+from aec_bench.contracts.program_proposal.types import OptimizationSplit, ProgramCandidateKind
+from aec_bench.contracts.proposal_execution.compilation import (
     ProposalCompilationRejection,
     ProposalCompilationSuccess,
-    ProposalDiagnosticVisibility,
-    ProposalSourceScopeManifest,
+)
+from aec_bench.contracts.proposal_execution.graph import (
+    ExecutableCandidateGraph,
+    MonolithicIncumbentProgram,
     ProposedDecompositionGraph,
 )
+from aec_bench.contracts.proposal_execution_budget import CandidateBudgetPlan
+from aec_bench.contracts.proposal_execution_context import ProposalSourceScopeManifest
 from aec_bench.contracts.proposal_execution_profile import (
     ProposalExecutionProfile,
 )
+from aec_bench.contracts.proposal_execution_types import NodeInstructionVisibility, ProposalDiagnosticVisibility
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,25 +62,6 @@ class ProposalCompilationRejectionVerification:
     diagnostic_visibility: str
 
 
-def resolve_proposal_execution_profile(
-    profile: ProposalExecutionProfile | None,
-    *,
-    info: ValidationInfo,
-) -> ProposalExecutionProfile:
-    """Resolve a profile-bound record or its explicit historical v1 context."""
-
-    if profile is not None:
-        return profile
-    context = info.context
-    compatibility_profile = context.get(_V1_COMPATIBILITY_PROFILE_CONTEXT_KEY) if isinstance(context, dict) else None
-    if not isinstance(
-        compatibility_profile,
-        ProposalExecutionProfile,
-    ):
-        raise ValueError("proposal compilation requires an explicit execution profile")
-    return compatibility_profile
-
-
 def verify_proposal_compilation_success(
     compilation: ProposalCompilationSuccess,
     *,
@@ -93,16 +69,6 @@ def verify_proposal_compilation_success(
 ) -> ProposalCompilationSuccessVerification:
     """Recompute every cross-record binding for a compiled proposal."""
 
-    if (
-        compilation.execution_profile is None
-        and compilation.schema_version != "aecbench.proposal-compilation-success.v1"
-    ):
-        raise ValueError("profile-less proposal compilation requires the explicit v1 compatibility path")
-    if (
-        compilation.execution_profile is not None
-        and compilation.schema_version != "aecbench.proposal-compilation-success.v2"
-    ):
-        raise ValueError("profile-bound proposal compilation requires the v2 schema")
     _validate_common_compilation_bindings(
         candidate_ref=compilation.candidate_ref,
         raw_proposal_artifact_sha256=(compilation.raw_proposal_artifact_sha256),
@@ -145,13 +111,6 @@ def verify_proposal_compilation_rejection(
 ) -> ProposalCompilationRejectionVerification:
     """Recompute every cross-record binding for a compilation rejection."""
 
-    if rejection.execution_profile is None and rejection.schema_version != "aecbench.proposal-compilation-rejection.v1":
-        raise ValueError("profile-less proposal rejection requires the explicit v1 compatibility path")
-    if (
-        rejection.execution_profile is not None
-        and rejection.schema_version != "aecbench.proposal-compilation-rejection.v2"
-    ):
-        raise ValueError("profile-bound proposal rejection requires the v2 schema")
     _validate_frozen_compilation_inputs(
         candidate_ref=rejection.candidate_ref,
         freeze=rejection.proposal_freeze,

@@ -14,6 +14,7 @@ from typing import Any, cast
 from pydantic import JsonValue
 
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
+from aec_bench.adapters.local_registry import build_local_adapter
 from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.contracts.world_interface import WorldActorActionRequest
 from aec_bench.contracts.world_session import (
@@ -342,7 +343,7 @@ def run_pump_station_model_session(
     session_identity: str,
     model: str,
     max_turns: int = PUMP_STATION_MODEL_MAX_TURNS,
-    registry: Any | None = None,
+    adapter_builder: Callable[..., Any] | None = None,
 ) -> CompletedPumpStationModelSession:
     """Let a model act through the registered actor boundary and persist accepted steps."""
     _require_registered_bridge(bridge)
@@ -365,8 +366,8 @@ def run_pump_station_model_session(
     tools = _PumpStationActorTools(host)
     trajectory = TrajectoryWriter(path=str(destination / "trajectory.jsonl"))
     try:
-        resolved_registry = registry or _local_adapter_registry()
-        adapter = resolved_registry.build(
+        resolved_builder = adapter_builder or build_local_adapter
+        adapter = resolved_builder(
             adapter_kind="tool_loop",
             model_name=model_name,
             workspace=str(destination),
@@ -671,12 +672,6 @@ def _write_session_evidence(
         destination / "verification-report.json",
         cast(dict[str, Any], json.loads(json.dumps(asdict(verification)))),
     )
-
-
-def _local_adapter_registry() -> Any:
-    from aec_bench.adapters.local_registry import LocalAdapterRegistry
-
-    return LocalAdapterRegistry()
 
 
 def _write_json(path: Path, payload: object) -> None:

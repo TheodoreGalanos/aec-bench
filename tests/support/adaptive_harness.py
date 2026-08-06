@@ -40,7 +40,7 @@ from aec_bench.harness.execution_payload import (
     execution_request_sha256,
 )
 from aec_bench.harness.harbor_dispatch import ENTRYPOINT_AGENT_RUNTIME_NAME
-from aec_bench.meta_harness.compiler import (
+from aec_bench.meta_harness.compilation import (
     compile_execution_program,
     compile_harness_instance,
     compile_run_bundle,

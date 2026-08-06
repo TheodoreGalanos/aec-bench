@@ -1,5 +1,5 @@
 # ABOUTME: Exposes the canonical adaptive-cycle contracts, orchestration, and verification surface.
-# ABOUTME: Provides one implementation identity for the stable adaptive_cycle compatibility facade.
+# ABOUTME: Provides the current adaptive-cycle implementation identity.
 
 from aec_bench.meta_harness.adaptive_cycle_runtime.contracts import (
     AdaptiveCycleExecutors,
@@ -16,7 +16,6 @@ from aec_bench.meta_harness.adaptive_cycle_runtime.materialization import (
 )
 from aec_bench.meta_harness.adaptive_cycle_runtime.orchestration import (
     run_adaptive_cycle,
-    run_adaptive_cycle_v1_compatibility,
 )
 from aec_bench.meta_harness.adaptive_cycle_runtime.verification import (
     load_adaptive_cycle_report,
@@ -41,6 +40,5 @@ __all__ = (
     "load_adaptive_cycle_report",
     "materialize_child_factorial_request",
     "run_adaptive_cycle",
-    "run_adaptive_cycle_v1_compatibility",
     "verify_adaptive_cycle_report",
 )

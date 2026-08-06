@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-import aec_bench.contracts as contracts
 from aec_bench.contracts.evaluation_result import (
     Annotation,
     ConfidenceMetadata,
@@ -24,16 +23,6 @@ from aec_bench.contracts.evaluation_result import (
 )
 
 # --- Valid construction ---
-
-
-def test_stewardship_evaluation_contracts_are_public_library_exports() -> None:
-    assert {
-        "StewardshipEvaluation",
-        "StewardshipEvaluationEvidence",
-        "StewardshipIntegrityGates",
-        "StewardshipMetricVector",
-        "StewardshipTerminalLiability",
-    }.issubset(contracts.__all__)
 
 
 def test_evaluation_result_accepts_minimal_valid_payload() -> None:

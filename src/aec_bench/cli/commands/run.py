@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 from aec_bench.cli.commands.config import resolve_path
 from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import console, emit, print_success
-from aec_bench.evaluation.llm_reviewer import (
+from aec_bench.meta_harness.llm_reviewer import (
     ReviewerEndpointConfig,
     ReviewerRunConfig,
     load_reviewer_config,

@@ -23,15 +23,6 @@ from aec_bench.meta_harness.monitor_runtime import (
     MonitorCanarySurface,
     ProductionMonitorRuntime,
 )
-from aec_bench.meta_harness.monitors import (
-    CanaryCommitment,
-    CanaryKind,
-    CycleMonitorPlan,
-    FlowAction,
-    FlowSurface,
-    StandingMonitorPolicy,
-    default_forbidden_flow_rules,
-)
 from aec_bench.meta_harness.motif_assurance import (
     MotifAssuranceLedger,
     MotifAssuranceSnapshot,
@@ -40,7 +31,7 @@ from aec_bench.meta_harness.motif_assurance import (
     derive_motif_assurance_snapshot,
     motif_subject_sha256,
 )
-from aec_bench.meta_harness.motif_library import (
+from aec_bench.meta_harness.motifs import (
     HarnessProgramMotif,
     MotifApplicabilityDescriptor,
     MotifLibrary,
@@ -48,6 +39,15 @@ from aec_bench.meta_harness.motif_library import (
     MotifStatus,
     MotifStructuralDescriptor,
     MotifTemplate,
+)
+from aec_bench.meta_harness.standing_monitors import (
+    CanaryCommitment,
+    CanaryKind,
+    CycleMonitorPlan,
+    FlowAction,
+    FlowSurface,
+    StandingMonitorPolicy,
+    default_forbidden_flow_rules,
 )
 from aec_bench.meta_harness.surface_guard import (
     PrincipalAwareSurfaceGuard,

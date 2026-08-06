@@ -49,7 +49,25 @@ from aec_bench.meta_harness.governance_gate import (
     issue_governed_promotion,
 )
 from aec_bench.meta_harness.integrity_gate import evaluate_with_integrity_gate
-from aec_bench.meta_harness.monitors import (
+from aec_bench.meta_harness.motif_assurance import (
+    MotifAssuranceEntry,
+    MotifAssuranceLedger,
+    MotifAssurancePin,
+    MotifAssuranceSnapshot,
+    MotifAssuranceState,
+    MotifLifecycleEvent,
+    append_authorized_motif_event,
+    apply_governed_motif_promotion,
+    derive_motif_assurance_snapshot,
+    motif_subject_sha256,
+)
+from aec_bench.meta_harness.motifs import (
+    HarnessProgramMotif,
+    MotifStatus,
+    decide_motif_promotion,
+)
+from aec_bench.meta_harness.motifs.promotion import apply_authorized_motif_promotion
+from aec_bench.meta_harness.standing_monitors import (
     CanaryCommitment,
     CanaryKind,
     CanaryObservation,
@@ -65,24 +83,6 @@ from aec_bench.meta_harness.monitors import (
     default_forbidden_flow_rules,
     run_production_cycle_monitors,
     run_standing_monitors,
-)
-from aec_bench.meta_harness.motif_assurance import (
-    MotifAssuranceEntry,
-    MotifAssuranceLedger,
-    MotifAssurancePin,
-    MotifAssuranceSnapshot,
-    MotifAssuranceState,
-    MotifLifecycleEvent,
-    append_authorized_motif_event,
-    apply_governed_motif_promotion,
-    derive_motif_assurance_snapshot,
-    motif_subject_sha256,
-)
-from aec_bench.meta_harness.motif_library import (
-    HarnessProgramMotif,
-    MotifStatus,
-    apply_motif_promotion_v1_compatibility,
-    decide_motif_promotion,
 )
 from tests.meta_harness.test_motif_library import _motif, _policy, _transfer
 
@@ -752,7 +752,7 @@ def test_motif_state_change_requires_current_assurance_and_complete_authority_ch
         authority_ledger=ledger,
     )
     snapshot = derive_motif_assurance_snapshot(assurance)
-    reusable = apply_motif_promotion_v1_compatibility(
+    reusable = apply_authorized_motif_promotion(
         provisional,
         decide_motif_promotion(provisional, MotifStatus.REUSABLE, policy),
         policy,

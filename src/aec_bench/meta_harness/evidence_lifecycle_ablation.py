@@ -337,6 +337,7 @@ def run_lifecycle_ablation(
             continue
 
         registry = registry_factory(trial, package, run_dir) if registry_factory is not None else None
+        adapter_builder = registry.build if registry is not None else None
         try:
             if trial.execution_mode is LifecycleExecutionMode.PERSISTENT_CONTEXT:
                 run_local_evidence_lifecycle_session(
@@ -347,7 +348,7 @@ def run_lifecycle_ablation(
                     adapter_kind=trial.agent.adapter,
                     max_turns=max_turns,
                     process_id=f"process.lifecycle.{trial.trial_id}",
-                    registry=registry,
+                    adapter_builder=adapter_builder,
                     visibility_policy=trial.memory_visibility_policy,
                     sweep_context=sweep_context,
                     repository_dir=Path(__file__).resolve().parent,
@@ -362,7 +363,7 @@ def run_lifecycle_ablation(
                     adapter_kind=trial.agent.adapter,
                     max_turns=max_turns,
                     process_id=f"process.lifecycle.{trial.trial_id}",
-                    registry=registry,
+                    adapter_builder=adapter_builder,
                     visibility_policy=trial.memory_visibility_policy,
                     sweep_context=sweep_context,
                     repository_dir=Path(__file__).resolve().parent,

@@ -25,15 +25,17 @@ from harbor.models.trial.config import (  # type: ignore[import-untyped]
 from harbor.models.trial.paths import TrialPaths  # type: ignore[import-untyped]
 
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
-from aec_bench.contracts.program_proposal import MatchedEvaluationCoordinate
-from aec_bench.contracts.proposal_execution import (
-    ProposalCandidateFailureCode,
-    ProposalContractCheckStatus,
+from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
+from aec_bench.contracts.proposal_execution.session import (
     ProposalNodeReceipt,
-    ProposalNodeReceiptStatus,
     ProposalSessionExecutionRef,
     ProposalSessionPlan,
     ProposalSessionReceipt,
+)
+from aec_bench.contracts.proposal_execution_types import (
+    ProposalCandidateFailureCode,
+    ProposalContractCheckStatus,
+    ProposalNodeReceiptStatus,
     ProposalSessionStatus,
 )
 from aec_bench.harness.proposal_runtime_archive import ProposalRuntimeArchive

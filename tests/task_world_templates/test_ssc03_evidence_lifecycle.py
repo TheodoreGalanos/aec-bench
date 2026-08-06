@@ -586,7 +586,7 @@ def test_persistent_session_runner_closes_actual_three_checkpoint_contract(tmp_p
         package_dir=package,
         run_dir=run_dir,
         model="test-model",
-        registry=registry,
+        adapter_builder=registry.build,
         verifier=verify_ssc03_evidence_lifecycle,
         process_id="process.ssc03",
     )

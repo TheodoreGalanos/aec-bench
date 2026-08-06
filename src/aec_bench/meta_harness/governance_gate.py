@@ -30,14 +30,6 @@ from aec_bench.meta_harness.authority_ledger import (
     StoredAuthorityEvent,
     StoredBasis,
 )
-from aec_bench.meta_harness.monitors import (
-    CycleMonitorReport,
-    ProductionCycleMonitorEnvelope,
-    StandingMonitorPlan,
-    StandingMonitorPolicy,
-    assert_current_cycle_monitor_report,
-    assert_current_production_cycle_monitor_envelope,
-)
 from aec_bench.meta_harness.motif_assurance import (
     MotifAssuranceBoundary,
     MotifAssurancePin,
@@ -45,7 +37,15 @@ from aec_bench.meta_harness.motif_assurance import (
     assert_motif_assurance_current,
     motif_subject_sha256,
 )
-from aec_bench.meta_harness.motif_library import HarnessProgramMotif, MotifStatus
+from aec_bench.meta_harness.motifs import HarnessProgramMotif, MotifStatus
+from aec_bench.meta_harness.standing_monitors import (
+    CycleMonitorReport,
+    ProductionCycleMonitorEnvelope,
+    StandingMonitorPlan,
+    StandingMonitorPolicy,
+    assert_current_cycle_monitor_report,
+    assert_current_production_cycle_monitor_envelope,
+)
 
 
 class GovernedPromotionError(ValueError):

@@ -19,7 +19,7 @@ from aec_bench.meta_harness.monitor_repository import (
     MonitorRuntimeIntegrityError,
 )
 from aec_bench.meta_harness.monitor_runtime.contracts import MonitorCanarySurface
-from aec_bench.meta_harness.monitors import (
+from aec_bench.meta_harness.standing_monitors import (
     CanaryCommitment,
     CanaryKind,
 )

@@ -15,8 +15,7 @@ from aec_bench.contracts.program_proposal._canonical import (
     canonical_unique_strings,
 )
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
-from aec_bench.contracts.program_proposal.compatibility import ProposalFreeze
-from aec_bench.contracts.program_proposal.freeze import EvaluationProposalFreeze
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
 from aec_bench.contracts.program_proposal.types import (
     CandidateEvidenceKind,
     OptimizationDisposition,
@@ -87,7 +86,7 @@ class ProgramCandidateStudy(ContentAddressedModel):
     kernel_sha256: str
     fixed_harness_sha256: str
     evaluation_plan_ref: EvaluationPlanRef
-    proposal_freeze: ProposalFreeze | EvaluationProposalFreeze
+    proposal_freeze: ProposalFreeze
     aggregate_budget: HarnessBudget
     incumbent_candidate: ProgramCandidateRef
     coordinates: tuple[MatchedEvaluationCoordinate, ...] = Field(min_length=1)

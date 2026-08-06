@@ -24,9 +24,9 @@ from aec_bench.contracts.execution_program import (
 from aec_bench.contracts.stage_execution import KernelInstructionOverride, StageContextManifest
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
-from aec_bench.meta_harness.compiler import compile_execution_program, compile_run_bundle
+from aec_bench.meta_harness.compilation import compile_execution_program, compile_run_bundle
 from aec_bench.meta_harness.kernel_catalogue import default_kernel_registry
-from aec_bench.meta_harness.program_runtime import ProgramExecutionStatus
+from aec_bench.meta_harness.program_execution import ProgramExecutionStatus
 from aec_bench.meta_harness.run_bundle_runtime import (
     MetaHarnessStudyContext,
     execute_run_bundle,

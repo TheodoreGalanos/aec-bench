@@ -70,7 +70,6 @@ _COMPILATION_SOURCE_PATHS = (
     "aec_bench/meta_harness/compilation/profile.py",
     "aec_bench/meta_harness/compilation/program.py",
     "aec_bench/meta_harness/compilation/task_surfaces.py",
-    "aec_bench/meta_harness/compiler.py",
 )
 
 _PROPOSAL_SESSION_RUNTIME_SOURCE_PATHS = (
@@ -97,7 +96,6 @@ _HARBOR_PROPOSAL_IMPORT_SOURCE_PATHS = (
 )
 
 _MOTIF_LIBRARY_SOURCE_PATHS = (
-    "aec_bench/meta_harness/motif_library.py",
     "aec_bench/meta_harness/motifs/__init__.py",
     "aec_bench/meta_harness/motifs/contracts.py",
     "aec_bench/meta_harness/motifs/promotion.py",
@@ -111,11 +109,9 @@ _PROGRAM_EXECUTION_SOURCE_PATHS = (
     "aec_bench/meta_harness/program_execution/contracts.py",
     "aec_bench/meta_harness/program_execution/executor.py",
     "aec_bench/meta_harness/program_execution/registry.py",
-    "aec_bench/meta_harness/program_runtime.py",
 )
 
 _PROPOSAL_FREEZE_SOURCE_PATHS = (
-    "aec_bench/meta_harness/proposal_freeze.py",
     "aec_bench/meta_harness/proposal_freezing/__init__.py",
     "aec_bench/meta_harness/proposal_freezing/contracts.py",
     "aec_bench/meta_harness/proposal_freezing/evidence.py",
@@ -125,7 +121,6 @@ _PROPOSAL_FREEZE_SOURCE_PATHS = (
 )
 
 _STANDING_MONITOR_SOURCE_PATHS = (
-    "aec_bench/meta_harness/monitors.py",
     "aec_bench/meta_harness/standing_monitors/__init__.py",
     "aec_bench/meta_harness/standing_monitors/assertions.py",
     "aec_bench/meta_harness/standing_monitors/evaluation.py",
@@ -156,8 +151,6 @@ _EXECUTOR_IMPORT_CLOSURE_SOURCE_PATHS = (
     "aec_bench/contracts/__init__.py",
     "aec_bench/contracts/advisor.py",
     "aec_bench/contracts/behavioral_types.py",
-    "aec_bench/contracts/compatibility/__init__.py",
-    "aec_bench/contracts/compatibility/provider_calibration_v1.py",
     "aec_bench/contracts/constitution.py",
     "aec_bench/contracts/evaluation_generation/__init__.py",
     "aec_bench/contracts/evaluation_generation/cohort.py",
@@ -166,7 +159,6 @@ _EXECUTOR_IMPORT_CLOSURE_SOURCE_PATHS = (
     "aec_bench/contracts/proposal_compilation_verifier.py",
     "aec_bench/contracts/proposal_graph_verifier.py",
     "aec_bench/contracts/proposal_session_verifier.py",
-    "aec_bench/contracts/provider_calibration.py",
     "aec_bench/contracts/report_template.py",
     "aec_bench/contracts/rubric.py",
     "aec_bench/contracts/synthesis.py",
@@ -176,7 +168,6 @@ _EXECUTOR_IMPORT_CLOSURE_SOURCE_PATHS = (
     "aec_bench/evaluation/behavioral.py",
     "aec_bench/evaluation/confidence.py",
     "aec_bench/evaluation/llm_judge.py",
-    "aec_bench/evaluation/llm_reviewer.py",
     "aec_bench/evaluation/pipeline.py",
     "aec_bench/evaluation/rubric_scorer.py",
     "aec_bench/evaluation/stats.py",
@@ -205,6 +196,7 @@ _EXECUTOR_IMPORT_CLOSURE_SOURCE_PATHS = (
     "aec_bench/meta_harness/lifecycle_operation_protocol.py",
     "aec_bench/meta_harness/lifecycle_operation_snapshot.py",
     "aec_bench/meta_harness/lifecycle_operation_store.py",
+    "aec_bench/meta_harness/llm_reviewer.py",
     "aec_bench/meta_harness/logic_profile.py",
     "aec_bench/meta_harness/model_runner.py",
     "aec_bench/meta_harness/operation_orchestrator.py",
@@ -237,6 +229,7 @@ _EXECUTOR_IMPORT_CLOSURE_SOURCE_PATHS = (
     "aec_bench/task_world_templates/continual/__init__.py",
     "aec_bench/task_world_templates/continual/world_logic.py",
     "aec_bench/task_world_templates/hydraulics/__init__.py",
+    "aec_bench/task_world_templates/stewardship/wastewater_pump_station/evaluation.py",
     "aec_bench/task_world_templates/hydraulics/contracts.py",
     "aec_bench/task_world_templates/hydraulics/identity.py",
     "aec_bench/task_world_templates/hydraulics/intervention_operations.py",
@@ -265,7 +258,6 @@ _EXECUTOR_IMPORT_CLOSURE_SOURCE_PATHS = (
     # are therefore executable fixed-K inputs, not a hidden dynamic extension.
     "aec_bench/contracts/continual_world.py",
     "aec_bench/contracts/world_interface.py",
-    "aec_bench/evaluation/stewardship.py",
     "aec_bench/harness/harbor_importing/stewardship.py",
     "aec_bench/harness/pump_station_harbor/__init__.py",
     "aec_bench/harness/pump_station_harbor/export.py",
@@ -402,7 +394,6 @@ DEFAULT_KERNEL_EXECUTOR_SOURCE_PATHS: tuple[str, ...] = tuple(
             "aec_bench/contracts/program_proposal/__init__.py",
             "aec_bench/contracts/program_proposal/_canonical.py",
             "aec_bench/contracts/program_proposal/candidate.py",
-            "aec_bench/contracts/program_proposal/compatibility.py",
             "aec_bench/contracts/program_proposal/freeze.py",
             "aec_bench/contracts/program_proposal/problem.py",
             "aec_bench/contracts/program_proposal/study.py",
@@ -445,7 +436,6 @@ DEFAULT_KERNEL_EXECUTOR_SOURCE_PATHS: tuple[str, ...] = tuple(
             "aec_bench/harness/proposal_node_contract.py",
             "aec_bench/harness/proposal_runtime_archive.py",
             "aec_bench/harness/proposal_scheduler.py",
-            "aec_bench/harness/proposal_session.py",
             "aec_bench/harness/proposal_session_config.py",
             "aec_bench/harness/proposal_session_evidence.py",
             *_PROPOSAL_SESSION_RUNTIME_SOURCE_PATHS,
@@ -1296,7 +1286,6 @@ def _default_operation_definitions(
             implementation=_operation_implementation_identity(
                 executor_sources,
                 paths=(
-                    "aec_bench/harness/proposal_session.py",
                     "aec_bench/harness/proposal_session_config.py",
                     "aec_bench/harness/proposal_scheduler.py",
                     *_PROPOSAL_SESSION_RUNTIME_SOURCE_PATHS,
@@ -1324,7 +1313,6 @@ def _default_operation_definitions(
                 executor_sources,
                 paths=(
                     "aec_bench/harness/proposal_node_context.py",
-                    "aec_bench/harness/proposal_session.py",
                     *_PROPOSAL_SESSION_RUNTIME_SOURCE_PATHS,
                     *_COMPILATION_SOURCE_PATHS,
                     "aec_bench/meta_harness/kernel_catalogue.py",
@@ -1354,7 +1342,6 @@ def _default_operation_definitions(
                 executor_sources,
                 paths=(
                     "aec_bench/harness/proposal_node_contract.py",
-                    "aec_bench/harness/proposal_session.py",
                     *_PROPOSAL_SESSION_RUNTIME_SOURCE_PATHS,
                     *_COMPILATION_SOURCE_PATHS,
                     "aec_bench/meta_harness/kernel_catalogue.py",
@@ -1385,7 +1372,6 @@ def _default_operation_definitions(
                 executor_sources,
                 paths=(
                     "aec_bench/harness/proposal_node_contract.py",
-                    "aec_bench/harness/proposal_session.py",
                     *_PROPOSAL_SESSION_RUNTIME_SOURCE_PATHS,
                     *_COMPILATION_SOURCE_PATHS,
                     "aec_bench/meta_harness/kernel_catalogue.py",

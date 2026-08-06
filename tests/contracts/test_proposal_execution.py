@@ -32,60 +32,54 @@ from aec_bench.contracts.harness_kernel import (
     KernelCapabilityRef,
     canonical_content_sha256,
 )
-from aec_bench.contracts.program_proposal import (
+from aec_bench.contracts.program_proposal.candidate import (
     CandidateGenerationCoordinate,
     CandidateGenerationManifest,
+    ProgramCandidateRef,
+)
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
+from aec_bench.contracts.program_proposal.problem import (
     DecompositionLeakageAudit,
     DecompositionProblemView,
     FixedHarnessCapabilityProjection,
-    MatchedEvaluationCoordinate,
-    OptimizationSplit,
-    ProgramCandidateKind,
-    ProgramCandidateRef,
-    ProposalFreeze,
     PublicSourceRef,
 )
+from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
+from aec_bench.contracts.program_proposal.types import OptimizationSplit, ProgramCandidateKind
 from aec_bench.contracts.proposal_compilation_verifier import (
     verify_proposal_compilation_success,
 )
-from aec_bench.contracts.proposal_execution import (
-    CandidateBudgetPlan,
-    CompiledNodeContextScope,
-    FinalSynthesisSpec,
-    NodeBudgetReservation,
-    NodeEvidenceContract,
-    NodeInstructionVisibility,
-    ProposalCandidateFailureCode,
+from aec_bench.contracts.proposal_execution.compilation import (
     ProposalCompilationRecord,
     ProposalCompilationRejection,
-    ProposalCompilationStatus,
     ProposalCompilationSuccess,
     ProposalCompileDiagnostic,
-    ProposalCompileRejectionCode,
+)
+from aec_bench.contracts.proposal_execution.graph import (
+    FinalSynthesisSpec,
+    NodeEvidenceContract,
+    ProposalHandoff,
+    ProposalInputPort,
+    ProposalOutputPort,
+    ProposalSourceScope,
+    ProposedDecompositionGraph,
+    SemanticSubtaskSpec,
+)
+from aec_bench.contracts.proposal_execution.session import (
     ProposalContainerTransitionRef,
     ProposalContractCheckResultRef,
-    ProposalContractCheckStatus,
-    ProposalDiagnosticVisibility,
-    ProposalExecutionSemantics,
-    ProposalHandoff,
     ProposalHandoffArtifactRef,
-    ProposalInputPort,
     ProposalNodeExecutionResultRef,
     ProposalNodeReceipt,
-    ProposalNodeReceiptStatus,
-    ProposalNodeSkipCause,
-    ProposalOutputPort,
-    ProposalPortKind,
     ProposalSessionExecutionRef,
     ProposalSessionPlan,
     ProposalSessionReceipt,
-    ProposalSessionStatus,
-    ProposalSourceScope,
+)
+from aec_bench.contracts.proposal_execution_budget import CandidateBudgetPlan, NodeBudgetReservation
+from aec_bench.contracts.proposal_execution_context import (
+    CompiledNodeContextScope,
     ProposalSourceScopeManifest,
-    ProposedDecompositionGraph,
     ScopedSourceMaterialization,
-    SemanticSubtaskSpec,
-    validate_proposal_compilation_v1_compatibility,
 )
 from aec_bench.contracts.proposal_execution_profile import (
     ProposalEnvironmentPolicy,
@@ -96,6 +90,19 @@ from aec_bench.contracts.proposal_execution_profile import (
     ProposalOperationConstraint,
     ProposalSchedulingPolicy,
     ProposalSchedulingSemantics,
+)
+from aec_bench.contracts.proposal_execution_types import (
+    NodeInstructionVisibility,
+    ProposalCandidateFailureCode,
+    ProposalCompilationStatus,
+    ProposalCompileRejectionCode,
+    ProposalContractCheckStatus,
+    ProposalDiagnosticVisibility,
+    ProposalExecutionSemantics,
+    ProposalNodeReceiptStatus,
+    ProposalNodeSkipCause,
+    ProposalPortKind,
+    ProposalSessionStatus,
 )
 from aec_bench.contracts.proposal_graph_verifier import (
     verify_proposed_decomposition_graph,
@@ -1104,29 +1111,6 @@ def test_compilation_success_binds_candidate_freeze_sources_budget_and_program()
     payload["candidate_ref"].pop("content_sha256")
     with pytest.raises(ValidationError, match="candidate artifact"):
         ProposalCompilationSuccess.model_validate(payload)
-
-
-def test_profileless_v1_compilation_bytes_require_explicit_compatibility_profile() -> None:
-    success = _success()
-    assert success.schema_version == "aecbench.proposal-compilation-success.v2"
-    payload = success.model_dump(mode="json", exclude={"content_sha256"})
-    profile = payload.pop("execution_profile")
-    payload["schema_version"] = "aecbench.proposal-compilation-success.v1"
-    legacy_sha256 = canonical_content_sha256(payload)
-    legacy_payload = {**payload, "content_sha256": legacy_sha256}
-
-    with pytest.raises(ValidationError, match="execution profile"):
-        ProposalCompilationSuccess.model_validate(legacy_payload)
-
-    parsed = validate_proposal_compilation_v1_compatibility(
-        ProposalCompilationSuccess,
-        legacy_payload,
-        profile=ProposalExecutionProfile.model_validate(profile),
-    )
-
-    assert parsed.execution_profile is None
-    assert parsed.content_sha256 == legacy_sha256
-    assert parsed.model_dump(mode="json") == legacy_payload
 
 
 def test_grammar_invalid_rejection_binds_raw_frozen_candidate_without_a_graph() -> None:

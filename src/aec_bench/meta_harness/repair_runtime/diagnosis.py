@@ -12,8 +12,8 @@ from aec_bench.contracts.execution_program import RetryPolicy
 from aec_bench.contracts.harness_instance import prohibited_retry_safe_error_codes
 from aec_bench.contracts.harness_kernel import KernelCapabilityRef
 from aec_bench.contracts.output_completion import OutputCompletionReason
-from aec_bench.evolution.repair_loop import RepairFailureDomain, RepairOwner
-from aec_bench.meta_harness.program_runtime import ProgramExecutionStatus
+from aec_bench.evolution.repair_lifecycle import RepairFailureDomain, RepairOwner
+from aec_bench.meta_harness.program_execution import ProgramExecutionStatus
 from aec_bench.meta_harness.repair_runtime.contracts import (
     HarnessAgentCapabilityPatch,
     HarnessAgentMaxTurnsPatch,

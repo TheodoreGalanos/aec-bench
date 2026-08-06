@@ -15,15 +15,15 @@ from aec_bench.contracts.output_completion import (
     OutputCompletionContract,
     evaluate_output_completion,
 )
-from aec_bench.contracts.proposal_execution import (
+from aec_bench.contracts.proposal_execution.graph import (
     FinalSynthesisSpec,
     NodeEvidenceContract,
     ProposalInputPort,
     ProposalOutputPort,
-    ProposalPortKind,
     ProposalSourceScope,
     SemanticSubtaskSpec,
 )
+from aec_bench.contracts.proposal_execution_types import ProposalPortKind
 from aec_bench.harness.proposal_node_contract import (
     ProposalNodeContractCheck,
     ProposalNodeContractError,

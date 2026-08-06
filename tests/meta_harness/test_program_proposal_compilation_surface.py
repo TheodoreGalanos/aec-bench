@@ -14,10 +14,10 @@ def test_program_proposal_compilation_facade_reexports_single_implementations() 
     assert facade.compile_governed_proposal is compilation.compile_governed_proposal
     assert facade.ProposalRunSessionBundle is contracts.ProposalRunSessionBundle
     assert facade.ProposalCompilationHostError is errors.ProposalCompilationHostError
-    assert facade.proposal_execution_profile_v1_compatibility is profile.proposal_execution_profile_v1_compatibility
+    assert facade.proposal_execution_profile is profile.proposal_execution_profile
     assert facade.__all__ == (
         "ProposalCompilationHostError",
         "ProposalRunSessionBundle",
         "compile_governed_proposal",
-        "proposal_execution_profile_v1_compatibility",
+        "proposal_execution_profile",
     )

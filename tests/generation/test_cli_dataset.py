@@ -128,17 +128,3 @@ def test_suite_invalid_config(tmp_path: Path) -> None:
     """Invalid config path should produce an error."""
     result = runner.invoke(app, ["generate", "suite", "--config", str(tmp_path / "nonexistent.toml")])
     assert result.exit_code != 0
-
-
-def test_generate_dataset_alias_still_works(tmp_path: Path) -> None:
-    """Deprecated generate dataset alias should remain available during transition."""
-    config_file = _write_suite_toml(tmp_path)
-    output_dir = tmp_path / "output"
-    output_dir.mkdir()
-
-    toml_content = MINIMAL_SUITE_TOML.replace('dir = "./tasks/"', f'dir = "{output_dir}"')
-    config_file.write_text(toml_content)
-
-    result = runner.invoke(app, ["generate", "dataset", "--config", str(config_file), "--dry-run"])
-
-    assert result.exit_code == 0, result.output

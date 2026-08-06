@@ -31,7 +31,7 @@ from aec_bench.meta_harness.immutable_artifact_store import (
     EvidenceRepository,
     ImmutableArtifactStoreError,
 )
-from aec_bench.meta_harness.proposal_freeze import (
+from aec_bench.meta_harness.proposal_freezing import (
     GovernedProposalFreezeError,
     GovernedProposalFreezeResult,
     assert_proposal_freeze_authority,

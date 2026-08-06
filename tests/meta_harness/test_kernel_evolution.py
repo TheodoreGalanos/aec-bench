@@ -16,7 +16,7 @@ from aec_bench.contracts.harness_kernel import (
     KernelCapabilitySpec,
     KernelPortSpec,
 )
-from aec_bench.meta_harness.compiler import CompilationError, compile_execution_program
+from aec_bench.meta_harness.compilation import CompilationError, compile_execution_program
 from aec_bench.meta_harness.kernel_catalogue import default_kernel_registry
 from aec_bench.meta_harness.kernel_evolution import (
     EvidenceSelectionBasis,

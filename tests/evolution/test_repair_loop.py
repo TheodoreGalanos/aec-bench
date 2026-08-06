@@ -36,7 +36,7 @@ from aec_bench.evolution.paired_repair import (
     RepairMutationScope,
     RepairTrialOutcome,
 )
-from aec_bench.evolution.repair_loop import (
+from aec_bench.evolution.repair_lifecycle import (
     CompiledRepairCandidate,
     RepairCandidate,
     RepairDiagnosis,
@@ -58,7 +58,7 @@ from aec_bench.evolution.repair_loop import (
     VerifiedRepairRun,
     run_repair_loop,
 )
-from aec_bench.meta_harness.compiler import (
+from aec_bench.meta_harness.compilation import (
     compile_execution_program,
     compile_harness_instance,
     compile_run_bundle,

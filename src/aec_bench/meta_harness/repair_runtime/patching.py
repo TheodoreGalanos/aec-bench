@@ -26,7 +26,7 @@ from aec_bench.contracts.harness_instance import (
     HarnessRecipe,
 )
 from aec_bench.contracts.run_bundle import RunBundle
-from aec_bench.evolution.repair_loop import (
+from aec_bench.evolution.repair_lifecycle import (
     CompiledRepairCandidate,
     RepairCandidate,
     RepairProgramTemplate,

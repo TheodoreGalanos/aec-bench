@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-from aec_bench.contracts.evaluation_generation import EvaluationBatchPlan
-from aec_bench.contracts.proposal_execution import (
+from aec_bench.contracts.evaluation_generation.batch import EvaluationBatchPlan
+from aec_bench.contracts.proposal_execution.compilation import (
     ProposalCompilationRejection,
     ProposalCompilationSuccess,
 )

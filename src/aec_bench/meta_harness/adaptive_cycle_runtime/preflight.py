@@ -11,7 +11,7 @@ from aec_bench.meta_harness.adaptive_cycle_runtime.contracts import (
 )
 from aec_bench.meta_harness.applicability import profile_task_applicability
 from aec_bench.meta_harness.kernel_catalogue import KernelRuntimeRegistry
-from aec_bench.meta_harness.motif_library import (
+from aec_bench.meta_harness.motifs import (
     MotifLibrary,
     load_pinned_motif_library,
 )

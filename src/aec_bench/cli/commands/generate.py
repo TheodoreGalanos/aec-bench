@@ -365,7 +365,6 @@ def validate_template_cmd(
         )
 
 
-@app.command("dataset", deprecated=True)
 @app.command("suite")
 def generate_suite(
     config: Path = typer.Option(..., "--config", help="Path to suite.toml"),

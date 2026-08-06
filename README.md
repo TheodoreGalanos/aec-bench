@@ -407,29 +407,16 @@ or another agent environment.
 
 **Typical flow:** `/add-task` interviews an expert and produces a seed file. If the task is parameterisable, it hands off to `/create-template` which builds the template and generates instances. Then `/hardening-pass` reviews the template for correctness before use in real benchmarks.
 
-## Writing Agents
+## Harbor Agent
 
-Default agents live at `agents/` and subclass Harbor's `BaseAgent` directly, composing aec-bench utility functions:
+Harbor execution uses one repository-owned agent at `agents/entrypoint_agent.py`.
+It reads the execution bundle created by the harness and dispatches to the
+selected current adapter. Provider selection, lifecycle tools, proposal
+sessions, and pump-world execution stay behind that composition boundary;
+task worlds do not import provider SDKs.
 
-```python
-from harbor import BaseAgent
-from aec_bench.agents.scripts import build_anthropic_tool_loop_script
-from aec_bench.agents.env import build_provider_env
-from aec_bench.agents.tools import discover_tools
-
-class MyToolAgent(BaseAgent):
-    def get_script(self, task) -> str:
-        tools = discover_tools(task)
-        return build_anthropic_tool_loop_script(tools=tools)
-
-    def get_env(self, task) -> dict[str, str]:
-        return build_provider_env("anthropic")
-```
-
-Ready-to-use agents in `agents/`:
-- `script_anthropic.py`, `script_azure_openai.py` — single-turn
-- `tool_loop_anthropic.py`, `tool_loop_azure_openai.py` — multi-turn with tools
-- `pydantic_ai_agent.py` — legacy PydanticAI script agent with chart generation support
+Add adapter behavior to the installed adapter owner and route it through the
+current execution bundle. Do not create a second per-provider Harbor agent.
 
 ## Task Disciplines
 

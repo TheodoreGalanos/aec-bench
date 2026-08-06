@@ -1,4 +1,4 @@
-# ABOUTME: Tests for LocalEnvironment protocol and HostEnvironment implementation.
+# ABOUTME: Tests direct HostEnvironment workspace, adapter, verifier, and cleanup behavior.
 # ABOUTME: Covers workspace setup, teardown, and keep-workspace behaviour.
 
 from __future__ import annotations

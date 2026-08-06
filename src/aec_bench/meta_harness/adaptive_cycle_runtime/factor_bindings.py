@@ -15,7 +15,7 @@ from aec_bench.contracts.harness_instance import (
 )
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.evolution.repair_loop import RepairCandidate
+from aec_bench.evolution.repair_lifecycle import RepairCandidate
 from aec_bench.meta_harness.applicability import MotifApplicabilityAttestation
 from aec_bench.meta_harness.factorial_candidates import (
     FactorialCandidateFactoryRequest,

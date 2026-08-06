@@ -16,7 +16,7 @@ from aec_bench.contracts.authority import (
     TaintLabel,
 )
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger
-from aec_bench.meta_harness.monitors import (
+from aec_bench.meta_harness.standing_monitors import (
     replay_scheduled_basis,
     schedule_basis_replay,
 )

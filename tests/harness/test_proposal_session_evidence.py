@@ -32,12 +32,11 @@ from aec_bench.contracts.output_completion import (
     OutputCompletionEvaluation,
     OutputCompletionReason,
 )
-from aec_bench.contracts.proposal_execution import (
+from aec_bench.contracts.proposal_execution.graph import ProposalHandoff
+from aec_bench.contracts.proposal_execution.session import ProposalContainerTransitionRef, ProposalNodeReceipt
+from aec_bench.contracts.proposal_execution_types import (
     ProposalCandidateFailureCode,
-    ProposalContainerTransitionRef,
     ProposalContractCheckStatus,
-    ProposalHandoff,
-    ProposalNodeReceipt,
     ProposalNodeReceiptStatus,
 )
 from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext

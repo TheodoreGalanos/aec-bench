@@ -5,21 +5,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from aec_bench.contracts.proposal_execution import (
-    CompiledNodeContextScope,
-    ExecutableCandidateGraph,
-    NodeBudgetReservation,
-    ProposalCandidateFailureCode,
-    ProposalCompilationSuccess,
+from aec_bench.contracts.proposal_execution.compilation import ProposalCompilationSuccess
+from aec_bench.contracts.proposal_execution.graph import ExecutableCandidateGraph
+from aec_bench.contracts.proposal_execution.session import (
     ProposalContainerTransitionRef,
     ProposalNodeReceipt,
-    ProposalNodeReceiptStatus,
-    ProposalNodeSkipCause,
     ProposalSessionReceipt,
-    ProposalSessionStatus,
 )
+from aec_bench.contracts.proposal_execution_budget import NodeBudgetReservation
+from aec_bench.contracts.proposal_execution_context import CompiledNodeContextScope
 from aec_bench.contracts.proposal_execution_profile import (
     ProposalSchedulingSemantics,
+)
+from aec_bench.contracts.proposal_execution_types import (
+    ProposalCandidateFailureCode,
+    ProposalNodeReceiptStatus,
+    ProposalNodeSkipCause,
+    ProposalSessionStatus,
 )
 from aec_bench.contracts.stage_execution import StageResourceEvidence
 
@@ -154,10 +156,6 @@ def _validate_session_execution_binding(
         or coordinate.task_revision != freeze.problem_view.task_revision
         or coordinate.split is not freeze.split
         or coordinate.world_lineage_id != freeze.selected_world_lineage_id
-        or (
-            freeze.provider_calibration_evaluation_seed is not None
-            and coordinate.seed != freeze.provider_calibration_evaluation_seed
-        )
     ):
         raise ValueError(
             "proposal execution evaluation coordinate does not bind the compiled task, split, and world",

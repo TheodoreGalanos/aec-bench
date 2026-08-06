@@ -9,7 +9,7 @@ import pytest
 from pydantic import JsonValue
 
 from aec_bench.contracts.authority import AuthorityPrincipal, AuthorityPrincipalKind
-from aec_bench.meta_harness.monitors import (
+from aec_bench.meta_harness.standing_monitors import (
     BasisReplayObservation,
     BasisReplayRequirement,
     CanaryCommitment,

@@ -24,7 +24,7 @@ from aec_bench.contracts.harness_kernel import (
 )
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
-from aec_bench.meta_harness.monitors import (
+from aec_bench.meta_harness.standing_monitors import (
     FlowAction,
     FlowSurface,
     ForbiddenFlowRule,

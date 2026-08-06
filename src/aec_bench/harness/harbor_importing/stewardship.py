@@ -13,7 +13,6 @@ from aec_bench.contracts.evaluation_result import (
     StewardshipEvaluation,
 )
 from aec_bench.contracts.trial_record import ArtifactReference
-from aec_bench.evaluation.stewardship import evaluate_pump_station_reference_run
 from aec_bench.harness.harbor_importing.artifact_io import (
     artifact_reference,
     read_regular_trial_tree,
@@ -31,6 +30,9 @@ from aec_bench.harness.pump_station_harbor.export import (
 )
 from aec_bench.harness.pump_station_harbor.verifier import (
     verify_pump_station_harbor_run,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evaluation import (
+    evaluate_pump_station_reference_run,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import PumpStationWorldRun
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (

@@ -40,7 +40,7 @@ from aec_bench.meta_harness.harbor_lowering import (
 )
 from aec_bench.meta_harness.harness_budget import HarnessBudgetLedger
 from aec_bench.meta_harness.kernel_catalogue import KernelRuntimeRegistry
-from aec_bench.meta_harness.program_runtime import OperationExecutionContext
+from aec_bench.meta_harness.program_execution import OperationExecutionContext
 from aec_bench.meta_harness.run_bundle_evidence import (
     MetaHarnessStudyContext,
 )

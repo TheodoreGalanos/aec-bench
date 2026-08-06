@@ -10,12 +10,9 @@ from aec_bench.adapters.base import SerializedAdapterExecution
 from aec_bench.contracts.harness_instance import ContextBindingConfig
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
 from aec_bench.contracts.output_completion import OutputCompletionContract
-from aec_bench.contracts.program_proposal import MatchedEvaluationCoordinate
-from aec_bench.contracts.proposal_execution import (
-    FinalSynthesisSpec,
-    NodeBudgetReservation,
-    SemanticSubtaskSpec,
-)
+from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
+from aec_bench.contracts.proposal_execution.graph import FinalSynthesisSpec, SemanticSubtaskSpec
+from aec_bench.contracts.proposal_execution_budget import NodeBudgetReservation
 from aec_bench.contracts.provider_broker import ProviderBrokerPolicy
 from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext
 from aec_bench.harness.execution_payload import (

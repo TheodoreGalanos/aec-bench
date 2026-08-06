@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
-from aec_bench.evolution.repair_loop import RepairLoopStatus
+from aec_bench.evolution.repair_lifecycle import RepairLoopStatus
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.meta_harness.adaptive_cycle_runtime.artifacts import (
     artifact_reference,
@@ -21,11 +21,9 @@ from aec_bench.meta_harness.adaptive_cycle_runtime.contracts import (
     AdaptiveCycleSpec,
     AdaptiveCycleTerminalReason,
     AdaptiveCycleTerminalStage,
-    _AdaptiveCycleLifecycle,
     repair_terminal_reason,
 )
 from aec_bench.meta_harness.adaptive_cycle_runtime.factor_bindings import (
-    align_instantiation_runtime_resource_budget,
     task_snapshots_for_refs,
 )
 from aec_bench.meta_harness.adaptive_cycle_runtime.materialization import (
@@ -44,14 +42,9 @@ from aec_bench.meta_harness.factorial_experiment import (
 from aec_bench.meta_harness.kernel_catalogue import KernelRuntimeRegistry
 from aec_bench.meta_harness.motif_learning import (
     learn_and_promote_motif,
-    learn_and_promote_motif_v1_compatibility,
-    select_and_materialize_motif_v1_compatibility,
     write_motif_audit_report,
 )
-from aec_bench.meta_harness.motif_library import MotifStatus
-from aec_bench.meta_harness.motif_transfer_runtime import (
-    execute_motif_transfer_v1_compatibility,
-)
+from aec_bench.meta_harness.motifs import MotifStatus
 from aec_bench.meta_harness.repair_runtime import (
     RepairEvidenceUsePolicy,
     RepairRuntime,
@@ -75,27 +68,6 @@ def run_adaptive_cycle(
         workflow=workflow,
         artifacts_root=artifacts_root,
         executors=executors,
-        lifecycle=_AdaptiveCycleLifecycle.ACTIVE,
-    )
-
-
-def run_adaptive_cycle_v1_compatibility(
-    *,
-    spec: AdaptiveCycleSpec,
-    registry: KernelRuntimeRegistry,
-    workflow: SynchronousHarborWorkflow,
-    artifacts_root: Path,
-    executors: AdaptiveCycleExecutors | None = None,
-) -> AdaptiveCycleResult:
-    """Replay the historical v1 ungoverned learning, dispatch, and transfer lifecycle."""
-
-    return _run_adaptive_cycle(
-        spec=spec,
-        registry=registry,
-        workflow=workflow,
-        artifacts_root=artifacts_root,
-        executors=executors,
-        lifecycle=_AdaptiveCycleLifecycle.V1_COMPATIBILITY,
     )
 
 
@@ -106,9 +78,8 @@ def _run_adaptive_cycle(
     workflow: SynchronousHarborWorkflow,
     artifacts_root: Path,
     executors: AdaptiveCycleExecutors | None,
-    lifecycle: _AdaptiveCycleLifecycle,
 ) -> AdaptiveCycleResult:
-    """Execute common fixed-K stages under one explicit lifecycle authority policy."""
+    """Execute fixed-K evidence stages without granting protected motif status."""
 
     source = AdaptiveCycleSpec.model_validate(spec.model_dump(mode="python"))
     input_library = preflight_cycle_inputs(
@@ -176,7 +147,6 @@ def _run_adaptive_cycle(
             repaired_candidate=None,
             child_calibration=None,
             learning=None,
-            transfer=None,
             report=report,
             path=path,
         )
@@ -218,12 +188,7 @@ def _run_adaptive_cycle(
         artifacts_root=root / "child-calibration",
         executor=selected_executors.child_calibration,
     )
-    learning_function = (
-        learn_and_promote_motif_v1_compatibility
-        if lifecycle is _AdaptiveCycleLifecycle.V1_COMPATIBILITY
-        else learn_and_promote_motif
-    )
-    learning = learning_function(
+    learning = learn_and_promote_motif(
         source_stage_report=source_stage.report,
         child_calibration_report=child_calibration.report,
         repair_execution=repair,
@@ -278,97 +243,8 @@ def _run_adaptive_cycle(
             repaired_candidate=repaired_candidate,
             child_calibration=child_calibration,
             learning=learning,
-            transfer=None,
             report=report,
             path=path,
         )
 
-    if lifecycle is not _AdaptiveCycleLifecycle.V1_COMPATIBILITY:
-        raise RuntimeError("active adaptive cycle reached reusable status without governed qualification")
-    transfer_plan = select_and_materialize_motif_v1_compatibility(
-        library=learning.library,
-        applicability=source.transfer.applicability,
-        selection_split="calibration",
-        request=align_instantiation_runtime_resource_budget(
-            source.transfer.instantiation,
-            repaired_candidate.harness_request.recipe,
-        ),
-    )
-    transfer = execute_motif_transfer_v1_compatibility(
-        frozen_library=learning.library,
-        plan=transfer_plan,
-        policy=source.promotion_policy,
-        registry=registry,
-        workflow=workflow,
-        artifacts_root=root / "transfer",
-        policy_id=source.transfer.policy_id,
-        harness_generator_sha256=source.harness_generator_sha256,
-        program_generator_sha256=source.program_generator_sha256,
-        randomization_seed=source.transfer.randomization_seed,
-        executor=selected_executors.transfer,
-        confidence_level=source.transfer.confidence_level,
-        bootstrap_replicates=source.transfer.bootstrap_replicates,
-        bootstrap_seed=source.transfer.bootstrap_seed,
-    )
-    promotion_reference = write_motif_audit_report(
-        transfer.finalization.report,
-        artifacts_root=root / "motif-reports",
-    )
-    evaluation_reference = write_json_artifact(
-        transfer.evaluation.model_dump(mode="json"),
-        identity=transfer.evaluation.content_sha256,
-        root=root / "transfer-evaluations",
-        filename="motif-transfer-evaluation.json",
-        kind="motif-transfer-evaluation",
-    )
-    library_reference = write_json_artifact(
-        transfer.finalization.library.model_dump(mode="json"),
-        identity=transfer.finalization.library.archive_sha256,
-        root=root / "motif-libraries",
-        filename="motif-library.json",
-        kind="motif-library",
-    )
-    report = AdaptiveCycleReport(
-        outcome=AdaptiveCycleOutcome.COMPLETED,
-        terminal_stage=AdaptiveCycleTerminalStage.TRANSFER_PROMOTION,
-        terminal_reason=(
-            AdaptiveCycleTerminalReason.TRANSFER_VALIDATED
-            if transfer.finalization.motif.status is MotifStatus.TRANSFER_VALIDATED
-            else AdaptiveCycleTerminalReason.TRANSFER_GATE_REJECTED
-        ),
-        spec_sha256=source.content_sha256,
-        spec_artifact=spec_reference,
-        kernel_ref=registry.manifest.ref,
-        input_motif_library=source.input_motif_library,
-        source_stage_report=artifact_reference(
-            source_stage.path,
-            kind="stage-zero-report",
-        ),
-        repair_terminal=repair.terminal.reference,
-        repaired_candidate=repaired_candidate_reference,
-        child_calibration_report=artifact_reference(
-            child_calibration.path,
-            kind="stage-zero-report",
-        ),
-        motif_learning_report=learning_reference,
-        learning_motif_library=learning_library_reference,
-        transfer_evaluation_report=evaluation_reference,
-        transfer_promotion_report=promotion_reference,
-        motif_library=library_reference,
-        learned_motif_sha256=learning.motif.motif_sha256,
-        learning_archive_sha256=learning.library.archive_sha256,
-        final_motif_sha256=transfer.finalization.motif.motif_sha256,
-        final_archive_sha256=transfer.finalization.library.archive_sha256,
-        final_status=transfer.finalization.motif.status,
-    )
-    report_path = write_cycle_report(report, root=root)
-    return AdaptiveCycleResult(
-        source_stage=source_stage,
-        repair=repair,
-        repaired_candidate=repaired_candidate,
-        child_calibration=child_calibration,
-        learning=learning,
-        transfer=transfer,
-        report=report,
-        path=report_path,
-    )
+    raise RuntimeError("adaptive cycle reached reusable status without governed qualification")

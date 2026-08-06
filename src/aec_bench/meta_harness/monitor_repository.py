@@ -25,7 +25,7 @@ from aec_bench.meta_harness.immutable_artifact_store import (
     ImmutableArtifactConfinementError,
     ImmutableArtifactIntegrityError,
 )
-from aec_bench.meta_harness.monitors import ForbiddenFlowRule
+from aec_bench.meta_harness.standing_monitors import ForbiddenFlowRule
 
 
 class MonitorRuntimeError(RuntimeError):

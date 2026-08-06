@@ -1,5 +1,5 @@
 # ABOUTME: Defines and persists RunBundle study, invocation, authority, and execution evidence.
-# ABOUTME: Keeps stable v1 Harbor receipt bytes and replay validation outside runtime orchestration.
+# ABOUTME: Keeps canonical Harbor receipt bytes and replay validation outside runtime orchestration.
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ from aec_bench.meta_harness.declared_stage_runtime import (
     StoredStageExecutionReceipt,
 )
 from aec_bench.meta_harness.harness_budget import HarnessBudgetObservation
-from aec_bench.meta_harness.program_runtime import (
+from aec_bench.meta_harness.program_execution import (
     OperationExecutionContext,
     ProgramExecutionResult,
 )
@@ -255,7 +255,7 @@ def persist_harbor_invocation_receipt(
     job_dir: Path,
     imported_trial_paths: tuple[Path, ...],
 ) -> HarborInvocationReceiptArtifact:
-    """Persist the historical v1 receipt with byte-identical serialization."""
+    """Persist the current receipt with canonical serialization."""
 
     receipt = HarborInvocationReceipt(
         bundle_id=bundle.bundle_id,

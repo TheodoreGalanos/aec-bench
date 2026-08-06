@@ -7,10 +7,8 @@ import hashlib
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from aec_bench.contracts.proposal_execution import (
-    ProposalSessionReceipt,
-    ProposalSessionStatus,
-)
+from aec_bench.contracts.proposal_execution.session import ProposalSessionReceipt
+from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 from aec_bench.harness.harbor_importing.artifact_io import (
     read_regular_trial_tree,
     read_required_trial_file,

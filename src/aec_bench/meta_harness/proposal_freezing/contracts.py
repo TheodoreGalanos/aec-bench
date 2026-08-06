@@ -1,5 +1,5 @@
 # ABOUTME: Defines the exact evidence, basis, and result contracts for proposal freezing.
-# ABOUTME: Validates complete candidate, profile, calibration, authority, and replay bindings.
+# ABOUTME: Validates complete candidate, profile, authority, and replay bindings.
 
 from __future__ import annotations
 
@@ -24,12 +24,9 @@ from aec_bench.contracts.authority import (
     BasisReference,
 )
 from aec_bench.contracts.harness_kernel import ContentAddressedModel
-from aec_bench.contracts.program_proposal import (
-    OptimizationSplit,
-    ProgramCandidateRef,
-    ProposalFreeze,
-)
-from aec_bench.meta_harness.monitors import (
+from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
+from aec_bench.meta_harness.standing_monitors import (
     BasisReplayObservation,
     BasisReplayRequirement,
 )
@@ -69,8 +66,6 @@ class ObservedInputBasis:
     evaluation_plan_candidate_scope: BasisReference | None
     operator_authority: BasisReference
     structural_split: BasisReference
-    provider_calibration_manifest: BasisReference | None
-    provider_calibration_release_authority: BasisReference | None
     leakage_audit: BasisReference
     problem_view: BasisReference
     candidate_manifest: BasisReference
@@ -85,7 +80,7 @@ class ObservedInputBasis:
 
 @dataclass(frozen=True)
 class SelectedTaskBinding:
-    """Exact selected item identity shared by structural and calibration freezes."""
+    """Exact selected structural item identity."""
 
     content_sha256: str
     world_lineage_id: str
@@ -99,8 +94,6 @@ class ProposalFreezeBasis(ContentAddressedModel):
     evaluation_plan_candidate_scope: BasisReference | None = None
     operator_authority: BasisReference
     structural_split: BasisReference
-    provider_calibration_manifest: BasisReference | None = None
-    provider_calibration_release_authority: BasisReference | None = None
     leakage_audit: BasisReference
     problem_view: BasisReference
     candidate_manifest: BasisReference
@@ -137,10 +130,6 @@ class ProposalFreezeBasis(ContentAddressedModel):
             raise TypeError(
                 "proposal freeze basis serialization must produce an object",
             )
-        if self.provider_calibration_manifest is None:
-            payload.pop("provider_calibration_manifest", None)
-        if self.provider_calibration_release_authority is None:
-            payload.pop("provider_calibration_release_authority", None)
         if self.incumbent_artifact is None:
             payload.pop("incumbent_artifact", None)
         if self.evaluation_plan_candidate_scope is None:
@@ -152,18 +141,7 @@ class ProposalFreezeBasis(ContentAddressedModel):
     @model_validator(mode="after")
     def validate_basis_kinds_and_uniqueness(self) -> Self:
         references = self.references
-        if (
-            self.provider_calibration_release_authority is not None
-            and self.provider_calibration_release_authority.kind is not BasisKind.AUTHORITY_EVENT
-        ):
-            raise ValueError(
-                "provider calibration release must use the authority-event basis kind",
-            )
-        if any(
-            reference.kind is not BasisKind.EVIDENCE
-            for reference in references
-            if reference != self.provider_calibration_release_authority
-        ):
+        if any(reference.kind is not BasisKind.EVIDENCE for reference in references):
             raise ValueError(
                 "proposal-freeze basis artifacts must use the evidence basis kind",
             )
@@ -189,8 +167,6 @@ class ProposalFreezeBasis(ContentAddressedModel):
             reference
             for reference in (
                 self.evaluation_plan_candidate_scope,
-                self.provider_calibration_manifest,
-                self.provider_calibration_release_authority,
                 self.execution_profile,
             )
             if reference is not None
@@ -250,10 +226,6 @@ class GovernedProposalFreezeResult(ContentAddressedModel):
             freeze=self.freeze,
             basis=self.basis,
             scope=scope,
-        )
-        _validate_result_calibration_basis(
-            freeze=self.freeze,
-            basis=self.basis,
         )
         _validate_result_replay(
             event=self.authority_event,
@@ -330,7 +302,7 @@ def _validate_result_profile_basis(
     if freeze.execution_profile_sha256 is None:
         if basis.execution_profile is not None:
             raise ValueError(
-                "legacy profile-less proposal freeze cannot carry an execution-profile basis",
+                "profile-less proposal freeze cannot carry an execution-profile basis",
             )
         return
     if (
@@ -339,28 +311,6 @@ def _validate_result_profile_basis(
     ):
         raise ValueError(
             "proposal freeze result does not bind its exact execution-profile basis",
-        )
-
-
-def _validate_result_calibration_basis(
-    *,
-    freeze: ProposalFreeze,
-    basis: ProposalFreezeBasis,
-) -> None:
-    if freeze.split is OptimizationSplit.PROVIDER_CALIBRATION:
-        if (
-            freeze.provider_calibration_manifest_sha256 is None
-            or freeze.provider_calibration_release_authority_event_sha256 is None
-            or basis.provider_calibration_manifest is None
-            or basis.provider_calibration_release_authority is None
-        ):
-            raise ValueError(
-                "provider calibration freeze result requires exact manifest and release basis",
-            )
-        return
-    if basis.provider_calibration_manifest is not None or basis.provider_calibration_release_authority is not None:
-        raise ValueError(
-            "structural proposal freeze result cannot carry provider calibration basis",
         )
 
 

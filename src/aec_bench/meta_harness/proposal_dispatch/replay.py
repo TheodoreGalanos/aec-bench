@@ -11,7 +11,7 @@ from aec_bench.contracts.authority import (
     BasisReference,
     OriginStamp,
 )
-from aec_bench.contracts.proposal_execution import ProposalCompilationSuccess
+from aec_bench.contracts.proposal_execution.compilation import ProposalCompilationSuccess
 from aec_bench.meta_harness.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerError,

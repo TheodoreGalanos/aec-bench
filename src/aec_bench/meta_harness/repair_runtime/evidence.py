@@ -23,7 +23,7 @@ from aec_bench.contracts.output_completion import (
 from aec_bench.contracts.run_bundle import RunBundle, TaskSnapshotRef
 from aec_bench.contracts.trial_record import Completeness, TrialRecord
 from aec_bench.evolution.paired_repair import RepairTrialOutcome
-from aec_bench.evolution.repair_loop import (
+from aec_bench.evolution.repair_lifecycle import (
     CompiledRepairCandidate,
     RepairExecutionObservation,
     RepairExecutionStatus,
@@ -33,7 +33,7 @@ from aec_bench.evolution.repair_loop import (
     RepairRunObservation,
     RepairRunResult,
 )
-from aec_bench.meta_harness.program_runtime import NodeExecutionStatus
+from aec_bench.meta_harness.program_execution import NodeExecutionStatus
 from aec_bench.meta_harness.repair_runtime.contracts import (
     RepairAgentExecutionEvidence,
     RepairMonolithicRunBatchEvidence,
