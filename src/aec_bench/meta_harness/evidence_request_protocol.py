@@ -92,8 +92,6 @@ def validate_evidence_request_run_state(
     spec: EvidenceLifecycleSpec,
 ) -> None:
     """Validate action history against its public catalogue without mutating a run."""
-    if state.schema_version == "3" and any(checkpoint.evidence_request_actions for checkpoint in state.checkpoint_runs):
-        raise EvidenceLifecycleError("v3 lifecycle state cannot contain evidence request actions")
     _validate_evidence_request_state_contract(state, spec)
 
 

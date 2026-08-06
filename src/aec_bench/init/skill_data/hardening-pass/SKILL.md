@@ -25,7 +25,7 @@ The skill accepts a path to either:
 - **A task instance directory** (detected by presence of `task.toml`)
 
 ```
-/hardening-pass src/aec_bench/templates/builtin/ground/terzaghi_bearing/
+/hardening-pass src/aec_bench/templates/builtin/ground/terzaghi_bearing_capacity/
 /hardening-pass tasks/mechanical/heat-load/audit-office-building/brisbane-8rm/
 ```
 
@@ -54,7 +54,7 @@ Read `engine.py` and assess:
 - [ ] **Check edge cases** — does `_validate_inputs()` catch physically impossible values? (negative angles, zero denominators, out-of-range coefficients)
 - [ ] **Check output rounding** — are all outputs `round(value, 2)`?
 - [ ] **Check purity** — does `compute()` have side effects? It should be a pure function (inputs → outputs, no I/O, no state).
-- [ ] **Stdlib only** — only `import math` allowed, no third-party dependencies.
+- [ ] **Stdlib only** — standard-library imports are allowed; third-party dependencies are not.
 
 #### 2b. Parameter Ranges
 

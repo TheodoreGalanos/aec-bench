@@ -24,15 +24,6 @@ from aec_bench.task_world_templates.lifecycles import (
     ssc03_hydraulic_intervention,
     ssc03_hydraulic_intervention_smoke,
 )
-from aec_bench.task_world_templates.lifecycles.provider import (
-    SealedLifecycleMount,
-    SealedLifecycleProvider,
-    SealedLifecycleProviderError,
-    _bind_sealed_lifecycle,
-    _materialize_sealed_lifecycle,
-    active_sealed_lifecycle_mount,
-    is_sealed_lifecycle_package,
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,8 +133,6 @@ def lifecycle_smoke_environment(template_id: str, package_dir: Path) -> Lifecycl
 
 def lifecycle_package_variant(package_dir: Path) -> dict[str, Any] | None:
     package = Path(package_dir)
-    if is_sealed_lifecycle_package(package):
-        return None
     metadata_path = package / "template.json"
     if not metadata_path.is_file():
         return None
@@ -175,8 +164,6 @@ def materialize_lifecycle(
 
 def lifecycle_operation_resolver(package_dir: Path, run_dir: Path) -> LifecycleOperationResolver | None:
     package = Path(package_dir)
-    if is_sealed_lifecycle_package(package):
-        return active_sealed_lifecycle_mount(package).build_operation_resolver(Path(run_dir))
     metadata = LifecycleTaskMetadata.model_validate(_read_json(package / "template.json"))
     factory = lifecycle_definition(metadata.template_id).operation_resolver
     return None if factory is None else factory(package, Path(run_dir))
@@ -184,46 +171,12 @@ def lifecycle_operation_resolver(package_dir: Path, run_dir: Path) -> LifecycleO
 
 def verify_lifecycle(package_dir: Path, run_dir: Path) -> dict[str, Any]:
     package = Path(package_dir)
-    if is_sealed_lifecycle_package(package):
-        result = active_sealed_lifecycle_mount(package).verify(Path(run_dir))
-        validated: dict[str, Any] | None = None
-        valid = False
-        try:
-            validated = validate_lifecycle_verification(result)
-            metadata = LifecycleTaskMetadata.model_validate(_read_json(package / "template.json"))
-            lifecycle = EvidenceLifecycleSpec.model_validate(_read_json(package / "lifecycle.json"))
-            if validated["lifecycle_id"] != lifecycle.lifecycle_id or validated.get("template_id") not in {
-                None,
-                metadata.template_id,
-            }:
-                raise ValueError("sealed verifier identity mismatch")
-            valid = True
-        except Exception:
-            pass
-        if not valid or validated is None:
-            raise SealedLifecycleProviderError("sealed_provider_verifier_result_invalid")
-        return validated
-
     metadata = LifecycleTaskMetadata.model_validate(_read_json(package / "template.json"))
     lifecycle = EvidenceLifecycleSpec.model_validate(_read_json(package / "lifecycle.json"))
     definition = lifecycle_definition(metadata.template_id)
     if metadata != definition.metadata or lifecycle != definition.lifecycle:
         raise ValueError("materialized lifecycle contracts do not match the current task definition")
     return validate_lifecycle_verification(definition.verifier(package, Path(run_dir)))
-
-
-def materialize_sealed_lifecycle(
-    provider: SealedLifecycleProvider,
-    output_dir: Path,
-) -> SealedLifecycleMount:
-    return _materialize_sealed_lifecycle(provider, output_dir, public_template_ids=frozenset(_DEFINITIONS))
-
-
-def bind_sealed_lifecycle(
-    provider: SealedLifecycleProvider,
-    package_dir: Path,
-) -> SealedLifecycleMount:
-    return _bind_sealed_lifecycle(provider, package_dir, public_template_ids=frozenset(_DEFINITIONS))
 
 
 def _read_json(path: Path) -> dict[str, Any]:

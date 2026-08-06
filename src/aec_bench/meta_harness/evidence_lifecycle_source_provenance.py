@@ -3,10 +3,10 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import aec_bench
-from aec_bench.meta_harness.evidence_lifecycle_private_snapshot import sha256
 
 
 def validate_repository_matches_loaded_source(repository_dir: Path) -> None:
@@ -31,5 +31,5 @@ def _source_inventory(root: Path) -> dict[str, str]:
         if path.is_symlink() or (path.exists() and not path.is_file() and not path.is_dir()):
             raise ValueError("repository source inventory contains a non-regular entry")
         if path.is_file():
-            inventory[relative.as_posix()] = sha256(path)
+            inventory[relative.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
     return inventory

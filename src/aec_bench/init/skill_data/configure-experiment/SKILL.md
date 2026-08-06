@@ -110,7 +110,7 @@ Available agents:
 
 Add contextual notes based on the selected tasks:
 - If tasks have tools: "X of your Y tasks declare tools — tool_loop or pydantic_ai will use them, direct won't."
-- If tasks have `returns_image: true`: "Z tasks have image-returning tools — binary image returns are not exposed by the unified entrypoint yet, so treat this as a gap unless you are intentionally using a legacy script agent."
+- If tasks have `returns_image: true`: "Z tasks have image-returning tools — binary image returns are not exposed by the current unified entrypoint, so treat self-review of those images as unsupported."
 - If tasks include `lambda-rlm.toml` or `report_template.toml`, mention `lambda-rlm` as the adapter that consumes those files.
 
 Ask: **Which agent type?**
@@ -151,7 +151,7 @@ Ask: **How many repetitions per task-agent pair?** (default: 1)
 - Fresh user: "1 is fine for a quick test. Use 3+ for statistically meaningful results."
 
 Ask: **Compute backend?** (default from `aec-bench.toml`)
-- Valid values: `modal` (serverless via Modal), `docker` (local Docker)
+- Valid values: `modal`, `morph`, `e2b`, `daytona`, and `docker`
 - Fresh user: "modal is the default — runs trials in cloud containers."
 
 Ask: **Concurrent trials?** (default: 4)

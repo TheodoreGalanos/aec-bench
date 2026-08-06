@@ -49,7 +49,6 @@ from aec_bench.task_world_templates.lifecycles import (
     lifecycle_package_variant,
     lifecycle_verifier,
 )
-from aec_bench.task_world_templates.lifecycles.provider import is_sealed_lifecycle_package
 
 
 class LifecycleExperimentMetrics(StrictModel):
@@ -196,8 +195,6 @@ def record_lifecycle_experiment(
 ) -> LifecycleExperimentRecordingResult:
     """Write one self-contained run record and append its immutable index entry."""
     package = Path(package_dir)
-    if is_sealed_lifecycle_package(package):
-        raise ValueError("sealed_holdout_public_record_forbidden")
     run = Path(run_dir)
     verification_path = run / "verification.json"
     metrics_path = run / "metrics.json"

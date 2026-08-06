@@ -7,6 +7,7 @@ from pathlib import Path
 
 from aec_bench.cli.commands.init import init_project
 from aec_bench.init.scaffold import (
+    _PACKAGED_SKILLS,
     copy_skills,
     create_scaffold,
     write_gitignore,
@@ -88,11 +89,8 @@ def test_copy_skills_creates_skill_dirs(tmp_path: Path) -> None:
 
     skills_dir = tmp_path / ".claude" / "skills"
     assert skills_dir.is_dir()
-    assert (skills_dir / "add-task" / "SKILL.md").exists()
-    assert (skills_dir / "create-template" / "SKILL.md").exists()
-    assert (skills_dir / "hardening-pass" / "SKILL.md").exists()
-    assert (skills_dir / "domain-check" / "SKILL.md").exists()
-    assert (skills_dir / "meta-harness" / "SKILL.md").exists()
+    assert {path.name for path in skills_dir.iterdir() if path.is_dir()} == set(_PACKAGED_SKILLS)
+    assert all((skills_dir / skill_name / "SKILL.md").is_file() for skill_name in _PACKAGED_SKILLS)
     assert (skills_dir / "meta-harness" / "references" / "experiment-workflows.md").exists()
     assert (skills_dir / "meta-harness" / "examples" / "lifecycle-ablation.yaml").exists()
 

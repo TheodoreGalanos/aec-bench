@@ -14,9 +14,8 @@ status, audience, and owner for maintained repository documentation.
 | Task definitions and revisions | `tasks/`, `src/aec_bench/tasks/` | `docs/CONTRACTS.md`, `docs/ARCHITECTURE.md` | Is task meaning provider-neutral and revision identity explicit? |
 | Templates and generation | `src/aec_bench/templates/`, `src/aec_bench/generation/` | `docs/ARCHITECTURE.md` | Is compilation separate from execution and evaluation policy? |
 | Agents, adapters, and backends | `agents/`, `src/aec_bench/agents/`, `src/aec_bench/adapters/`, `src/aec_bench/harness/` | `docs/ARCHITECTURE.md`, `docs/CONTRACTS.md` | Does the code translate or orchestrate without taking task or scoring ownership? |
-| Interactive worlds | `src/aec_bench/continual/`, `src/aec_bench/task_worlds/` | `docs/protocols/interactive-world-runtime.md` | Does the registered world own semantics while the runtime owns generic machinery? |
+| Interactive worlds | `src/aec_bench/task_world_templates/` | `docs/world-authoring.md`, `docs/protocols/interactive-world-runtime.md` | Does the registered world own semantics while the episode runtime owns generic machinery? |
 | Evidence lifecycles and publication | `src/aec_bench/meta_harness/` | `docs/protocols/staged-evidence-and-publication.md` | Are checkpoint authority, recovery, and publication preserved? |
-| Sealed holdout execution | lifecycle provider and holdout modules | `docs/protocols/sealed-holdout-and-verifier-isolation.md` | Can private authority leak or bypass its one-shot mounted path? |
 | Evaluation | `src/aec_bench/evaluation/` and registered evaluators | `docs/ARCHITECTURE.md`, `docs/INVARIANTS.md` | Does evaluation remain the only scoring and invalidity authority? |
 | Ledger and artifacts | `src/aec_bench/ledger/` and artifact stores | `docs/CONTRACTS.md`, owning protocol | Does persistence preserve evidence without inventing policy? |
 | Reports and review | `src/aec_bench/communication/`, `src/aec_bench/feedback/` | `docs/ARCHITECTURE.md`, `docs/INVARIANTS.md` | Does presentation report established results and structured judgment? |

@@ -161,10 +161,8 @@ artifact integrity. Do not collapse task evidence, provider output, world
 snapshots, and dataset entries into one global evidence model merely because
 they all contain hashes.
 
-Detailed lifecycle rules live in:
-
-- [Staged evidence and publication](protocols/staged-evidence-and-publication.md)
-- [Sealed holdout and verifier isolation](protocols/sealed-holdout-and-verifier-isolation.md)
+Detailed lifecycle rules live in
+[Staged evidence and publication](protocols/staged-evidence-and-publication.md).
 
 ## Visibility classification
 
@@ -172,9 +170,8 @@ Detailed lifecycle rules live in:
 difficulty, task name, and storage path. Importers and evaluators preserve the
 explicit value. Historical records that omit visibility remain unknown and are
 ineligible for operations that require a public or holdout classification.
-
-Public exports reject sealed provenance. Holdout execution and evaluation use
-their explicit provider, mount, audit, recording, and redaction boundaries.
+Each exporter and evaluator must enforce the visibility accepted by its own
+documented boundary.
 
 ## Contract design rules
 

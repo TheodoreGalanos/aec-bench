@@ -261,10 +261,6 @@ class LifecycleTrialProvenance(StrictModel):
     invocation_index: ArtifactReference | None = None
     ablation_manifest: ArtifactReference | None = None
     ablation_plan: ArtifactReference | None = None
-    calibration_freeze: ArtifactReference | None = None
-    sealed_target_freeze: ArtifactReference | None = None
-    sealed_audit_claim: ArtifactReference | None = None
-    sealed_audit_manifest: ArtifactReference | None = None
 
     @field_validator(
         "spec_sha256",
@@ -474,22 +470,11 @@ def _complete_lifecycle_provenance_missing_fields(
     missing: list[str] = []
     if provenance.repository_dirty:
         missing.append("lifecycle_provenance.clean_repository")
-    public_fields = ("invocation_index", "ablation_manifest", "ablation_plan")
-    holdout_fields = (
-        "calibration_freeze",
-        "sealed_target_freeze",
-        "sealed_audit_claim",
-        "sealed_audit_manifest",
-    )
-    required_fields, forbidden_fields = (
-        (holdout_fields, public_fields) if visibility is Visibility.HOLDOUT else (public_fields, holdout_fields)
-    )
-    for field in required_fields:
+    if visibility is Visibility.HOLDOUT:
+        missing.append("lifecycle_provenance.public_visibility")
+    for field in ("invocation_index", "ablation_manifest", "ablation_plan"):
         if getattr(provenance, field) is None:
             missing.append(f"lifecycle_provenance.{field}")
-    for field in forbidden_fields:
-        if getattr(provenance, field) is not None:
-            missing.append(f"lifecycle_provenance.forbidden_{field}")
     return missing
 
 
@@ -544,10 +529,6 @@ def _validate_lifecycle_artifact_bindings(record: TrialRecord) -> None:
         provenance.invocation_index,
         provenance.ablation_manifest,
         provenance.ablation_plan,
-        provenance.calibration_freeze,
-        provenance.sealed_target_freeze,
-        provenance.sealed_audit_claim,
-        provenance.sealed_audit_manifest,
     )
     if any(artifact is not None and artifact not in record.outputs.artifacts for artifact in bound_artifacts):
         raise ValueError("lifecycle provenance must be included in output artifacts")

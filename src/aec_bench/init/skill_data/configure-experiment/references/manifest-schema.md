@@ -54,6 +54,6 @@ client:
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `backend` | string | Yes | — | Execution backend. `modal` = serverless via Modal, `docker` = local Docker. The value is passed as `environment.type` in the Harbor config. |
+| `backend` | string | Yes | — | Harbor execution backend: `modal`, `morph`, `e2b`, `daytona`, or `docker`. The value selects the current Harbor environment path. |
 | `resource_limits` | dict | No | {} | Backend-specific limits. Common key: `n_concurrent_trials` (int). |
 | `timeout_override` | positive int | No | null | Global per-trial timeout in seconds. Overrides the task's own timeout. |

@@ -36,12 +36,6 @@ _PUBLIC_LIFECYCLE_PROVENANCE_FIELDS = (
     "ablation_manifest",
     "ablation_plan",
 )
-_SEALED_HOLDOUT_PROVENANCE_FIELDS = (
-    "calibration_freeze",
-    "sealed_target_freeze",
-    "sealed_audit_claim",
-    "sealed_audit_manifest",
-)
 
 
 def build_trial_record(**overrides: object) -> TrialRecord:
@@ -124,30 +118,6 @@ def build_lifecycle_artifacts() -> dict[str, ArtifactReference]:
             kind="lifecycle_ablation_plan",
             path="_artifacts/trial-001/sweep/plan.json",
             sha256="3" * 64,
-            media_type="application/json",
-        ),
-        "calibration_freeze": ArtifactReference(
-            kind="lifecycle_calibration_freeze",
-            path="_artifacts/trial-001/sealed/calibration-freeze.json",
-            sha256="4" * 64,
-            media_type="application/json",
-        ),
-        "sealed_target_freeze": ArtifactReference(
-            kind="lifecycle_sealed_target_freeze",
-            path="_artifacts/trial-001/sealed/target-freeze.json",
-            sha256="5" * 64,
-            media_type="application/json",
-        ),
-        "sealed_audit_claim": ArtifactReference(
-            kind="lifecycle_sealed_audit_claim",
-            path="_artifacts/trial-001/sealed/audit-claim.json",
-            sha256="6" * 64,
-            media_type="application/json",
-        ),
-        "sealed_audit_manifest": ArtifactReference(
-            kind="lifecycle_sealed_audit_manifest",
-            path="_artifacts/trial-001/sealed/audit-manifest.json",
-            sha256="7" * 64,
             media_type="application/json",
         ),
     }
@@ -445,8 +415,6 @@ def test_complete_public_lifecycle_record_accepts_only_public_sweep_provenance()
     assert record.lifecycle_provenance is not None
     for field in _PUBLIC_LIFECYCLE_PROVENANCE_FIELDS:
         assert getattr(record.lifecycle_provenance, field) is not None
-    for field in _SEALED_HOLDOUT_PROVENANCE_FIELDS:
-        assert getattr(record.lifecycle_provenance, field) is None
 
 
 @pytest.mark.parametrize("missing_field", _PUBLIC_LIFECYCLE_PROVENANCE_FIELDS)
@@ -462,51 +430,11 @@ def test_complete_public_lifecycle_record_requires_every_public_sweep_reference(
         )
 
 
-@pytest.mark.parametrize("sealed_field", _SEALED_HOLDOUT_PROVENANCE_FIELDS)
-def test_complete_public_lifecycle_record_rejects_sealed_audit_provenance(
-    sealed_field: str,
-) -> None:
-    with pytest.raises(ValidationError):
-        build_complete_lifecycle_record(
-            visibility=Visibility.PUBLIC,
-            provenance_fields=(*_PUBLIC_LIFECYCLE_PROVENANCE_FIELDS, sealed_field),
-        )
-
-
-def test_complete_holdout_lifecycle_record_accepts_only_sealed_audit_provenance() -> None:
-    record = build_complete_lifecycle_record(
-        visibility=Visibility.HOLDOUT,
-        provenance_fields=_SEALED_HOLDOUT_PROVENANCE_FIELDS,
-    )
-
-    assert record.lifecycle_provenance is not None
-    for field in _SEALED_HOLDOUT_PROVENANCE_FIELDS:
-        assert getattr(record.lifecycle_provenance, field) is not None
-    for field in _PUBLIC_LIFECYCLE_PROVENANCE_FIELDS:
-        assert getattr(record.lifecycle_provenance, field) is None
-
-
-@pytest.mark.parametrize("missing_field", _SEALED_HOLDOUT_PROVENANCE_FIELDS)
-def test_complete_holdout_lifecycle_record_requires_every_sealed_audit_reference(
-    missing_field: str,
-) -> None:
-    provenance_fields = tuple(field for field in _SEALED_HOLDOUT_PROVENANCE_FIELDS if field != missing_field)
-
-    with pytest.raises(ValidationError):
+def test_complete_holdout_lifecycle_record_is_not_supported() -> None:
+    with pytest.raises(ValidationError, match="public_visibility"):
         build_complete_lifecycle_record(
             visibility=Visibility.HOLDOUT,
-            provenance_fields=provenance_fields,
-        )
-
-
-@pytest.mark.parametrize("public_field", _PUBLIC_LIFECYCLE_PROVENANCE_FIELDS)
-def test_complete_holdout_lifecycle_record_rejects_public_sweep_provenance(
-    public_field: str,
-) -> None:
-    with pytest.raises(ValidationError):
-        build_complete_lifecycle_record(
-            visibility=Visibility.HOLDOUT,
-            provenance_fields=(*_SEALED_HOLDOUT_PROVENANCE_FIELDS, public_field),
+            provenance_fields=_PUBLIC_LIFECYCLE_PROVENANCE_FIELDS,
         )
 
 
@@ -521,15 +449,6 @@ def test_complete_holdout_lifecycle_record_rejects_public_sweep_provenance(
                 id=f"public-{field}",
             )
             for field in ("invocation_manifest", *_PUBLIC_LIFECYCLE_PROVENANCE_FIELDS)
-        ],
-        *[
-            pytest.param(
-                Visibility.HOLDOUT,
-                _SEALED_HOLDOUT_PROVENANCE_FIELDS,
-                field,
-                id=f"holdout-{field}",
-            )
-            for field in ("invocation_manifest", *_SEALED_HOLDOUT_PROVENANCE_FIELDS)
         ],
     ],
 )
