@@ -6,23 +6,13 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.13"
 dependencies = [
-    "harbor>=0.1.45",
-    "httpx>=0.28,<1",
+    "click>=8.3.3,<8.4",
     "jinja2>=3.1,<4",
-    "modal>=1.3,<2",
-    "packaging>=25,<26",
-    "polars>=1.30,<2",
     "pydantic>=2.11,<3",
     "python-dotenv>=1.2.2",
     "PyYAML>=6.0,<7",
-    "rich-pixels>=3.0.1",
     "rich>=14.1,<15",
-    "textual>=8.1,<9",
-    "typer>=0.16,<1",
-    "ribs[visualize]>=0.9.0",
-    "pdfplumber>=0.11.9",
-    "pymupdf>=1.27.2.2",
-    "morphcloud>=0.1.111",
+    "typer>=0.25.1,<0.26",
 ]
 
 [project.scripts]
@@ -31,28 +21,43 @@ aec-bench = "aec_bench.cli.main:run"
 [dependency-groups]
 dev = [
     "boto3-stubs>=1.43.56",
-    "fastapi>=0.128,<1",
     "hypothesis>=6.130,<7",
     "jsonschema>=4.26.0",
     "mypy>=1.16,<2",
-    "pillow>=12.1.1",
-    "pydantic-ai>=0.1",
     "pyfiglet>=1.0.4",
     "pytest-asyncio>=1.3.0",
     "pytest>=9.0,<10",
-    "rich-pixels>=3.0.1",
     "ruff>=0.11,<0.12",
     "types-pyyaml>=6.0.12.20260724",
-    "uvicorn>=0.38,<1",
-    "verifiers>=0.1.14",
 ]
 
 [project.optional-dependencies]
-pydantic-ai = ["pydantic-ai>=0.1"]
-prime = ["verifiers>=0.1.14"]
+execution = ["harbor>=0.1.45"]
+morph = ["morphcloud>=0.1.111"]
+local-agents = [
+    "boto3>=1.42,<2",
+    "botocore>=1.42,<2",
+    "httpx>=0.28,<1",
+    "pydantic-ai>=1.61,<1.62",
+]
+prime = [
+    "packaging>=25,<26",
+    "prime==0.6.2",
+    "verifiers>=0.1.14,<0.2",
+]
 webui = [
     "fastapi>=0.128,<1",
+    "starlette>=0.48,<1",
     "uvicorn>=0.38,<1",
+]
+tui = [
+    "pillow>=12.1.1",
+    "rich-pixels>=3.0.1",
+    "textual>=8.1,<9",
+]
+evolution = [
+    "numpy>=2.4,<3",
+    "ribs>=0.9.0",
 ]
 
 [build-system]

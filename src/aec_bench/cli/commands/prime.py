@@ -14,6 +14,7 @@ from typing import TypedDict
 import typer
 
 from aec_bench.cli.commands.config import resolve_path
+from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import emit, print_success
 from aec_bench.prime_lab.exporter import (
     DEFAULT_PRIME_ENVIRONMENTS_DIR,
@@ -22,6 +23,10 @@ from aec_bench.prime_lab.exporter import (
 )
 
 app = typer.Typer(help="Export aec-bench tasks for Prime Lab.")
+
+
+def _require_prime_runtime() -> None:
+    require_optional_extra("Prime integration support", "prime", ("verifiers",), ("prime",))
 
 
 @dataclass(frozen=True)
@@ -145,6 +150,7 @@ def export_prime_lifecycle(
     ),
 ) -> None:
     """Reference existing evidence lifecycles from one local Verifiers package."""
+    require_optional_extra("Prime lifecycle export support", "prime", ("packaging",))
     from aec_bench.prime_lab.lifecycle_exporter import (
         PrimeLifecycleExportConfig,
         export_prime_lifecycle_environment,
@@ -208,6 +214,7 @@ def prime_push(
     team: str | None = typer.Option(None, "--team", help="Prime Hub team slug"),
 ) -> None:
     """Export selected tasks, then push the generated environment to Prime Hub."""
+    _require_prime_runtime()
     export_result = _export_prime_package(
         name=name,
         output_dir=output_dir,
@@ -343,6 +350,7 @@ def prime_eval(
     follow: bool = typer.Option(True, "--follow/--no-follow", help="Follow hosted eval logs"),
 ) -> None:
     """Export selected tasks and run `prime eval run`, locally or hosted."""
+    _require_prime_runtime()
     if remote_env is None and name is None:
         raise typer.BadParameter("--name is required unless --remote-env is provided")
 
@@ -434,6 +442,7 @@ def prime_eval(
 @app.command("adapters")
 def prime_adapters() -> None:
     """List Prime inference adapter deployments."""
+    _require_prime_runtime()
     deployments = _prime_deployments()
     adapters = deployments.get("models", [])
     data = adapters if isinstance(adapters, list) else []
@@ -604,6 +613,7 @@ def prime_train(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip Prime confirmation prompt."),
 ) -> None:
     """Launch a Hosted Training run through the Prime CLI."""
+    _require_prime_runtime()
     command = ["prime", "train", str(config_path), "--plain"]
     for item in env_var or []:
         command.extend(["--env-var", item])
@@ -674,6 +684,7 @@ def prime_smoke(
     ),
 ) -> None:
     """Export, install, and locally load one Prime environment package."""
+    _require_prime_runtime()
     from aec_bench.prime_lab.doctor import (
         install_generated_environment,
         load_generated_environment,

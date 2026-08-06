@@ -181,6 +181,12 @@ provider-neutral execution model or a Prime-specific record authority.
 Provider errors, timeouts, missing output, and incomplete execution remain
 explicit failures. A transport cannot turn them into successful trials.
 
+The installed package keeps these adapters behind feature-owned extras.
+Package import and CLI help are provider-free. A command checks only whether
+its top-level optional runtime is present, reports the named extra when it is
+absent, and then imports the runtime normally. Failures inside an installed
+provider are not translated into missing-extra errors.
+
 ### Contributor and presentation surfaces
 
 The CLI is the installed automation surface. The TUI and web UI present

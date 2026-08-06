@@ -296,12 +296,9 @@ def build_lambda_rlm_adapter(
     # Build optional advisor client when configured.
     resolved_advisor_client: RlmClient | None = advisor_client
     if config.advisor and config.advisor.enabled and resolved_advisor_client is None:
-        try:
-            from aec_bench.adapters.rlm.providers import make_rlm_client
-        except ImportError:
-            _log.warning("Advisor requested but pydantic-ai is not installed; skipping.")
-        else:
-            resolved_advisor_client = make_rlm_client(config.advisor.model, cache=True)
+        from aec_bench.adapters.rlm.providers import make_rlm_client
+
+        resolved_advisor_client = make_rlm_client(config.advisor.model, cache=True)
 
     # Resolve constitution: inline > path > None. Inference fires only when a
     # constitutional_client is available AND a manifest is configured.

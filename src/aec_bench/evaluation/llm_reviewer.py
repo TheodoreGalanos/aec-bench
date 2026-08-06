@@ -283,11 +283,7 @@ def _run_endpoint(*, request: ReviewRequestPacket, endpoint: ReviewerEndpointCon
     model_reference = _build_model_reference(endpoint)
     model_settings = _model_settings(endpoint)
 
-    try:
-        from pydantic_ai import Agent
-    except ImportError as exc:
-        msg = "pydantic-ai is required to run LLM reviewer models"
-        raise RuntimeError(msg) from exc
+    from pydantic_ai import Agent
 
     agent = Agent(
         model_reference,

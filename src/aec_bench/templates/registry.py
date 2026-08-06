@@ -243,7 +243,7 @@ def discover_templates(
         for candidate in sorted(candidates):
             try:
                 results.append(load_template(candidate))
-            except Exception as exc:
+            except (FileNotFoundError, ValueError) as exc:
                 diagnostics.append(TemplateDiagnostic(path=candidate, error=str(exc)))
 
     return results, diagnostics
@@ -253,6 +253,6 @@ def validate_template(template_dir: Path) -> list[str]:
     """Return the strict loader error for a template, or an empty list."""
     try:
         load_template(template_dir)
-    except Exception as exc:
+    except (FileNotFoundError, ValueError) as exc:
         return [str(exc)]
     return []

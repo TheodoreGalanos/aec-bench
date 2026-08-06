@@ -12,6 +12,7 @@ from typing import Any
 import typer
 import yaml
 
+from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import emit, print_success
 from aec_bench.meta_harness.autonomy import AutonomyConfig, run_autonomous_process
 from aec_bench.meta_harness.evidence_lifecycle import (
@@ -416,6 +417,7 @@ def harbor_task_command(
     models_config: Path | None = typer.Option(None, "--models-config", help="Endpoint config JSON"),
 ) -> None:
     """Materialize a Harbor-shaped operation-orchestrator task package."""
+    require_optional_extra("Harbor execution support", "execution", ("harbor",))
     start = time.monotonic()
     result = materialize_harbor_task_package(
         output_dir=output,
@@ -795,6 +797,8 @@ def process_command(
 
 
 def _load_stage_endpoints(specs: list[str] | None, config: Path | None) -> list[Any]:
+    if specs or config is not None:
+        require_optional_extra("Meta-harness model support", "local-agents", ("pydantic_ai",))
     endpoints = []
     if config is not None:
         endpoints.extend(load_model_endpoints(config))

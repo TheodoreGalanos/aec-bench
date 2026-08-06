@@ -13,7 +13,24 @@ pip install aec-bench
 aec-bench --help
 ```
 
-Install the optional Web UI runtime when you want the browser interface:
+The base installation supports task discovery, generation and validation,
+datasets, the ledger, deterministic evaluation and reports, and provider-free
+world functions. Optional commands stay in `--help`; when a feature is absent,
+the command prints its exact installation command.
+
+Install only the features you use:
+
+| Feature | Install command |
+|---|---|
+| Harbor execution and import | `pip install "aec-bench[execution]"` |
+| Harbor on Morph Cloud | `pip install "aec-bench[execution,morph]"` |
+| Local model-backed agents and reviewers | `pip install "aec-bench[local-agents]"` |
+| Prime CLI, export, and hosted evaluation | `pip install "aec-bench[prime]"` |
+| Web UI | `pip install "aec-bench[webui]"` |
+| Terminal UI | `pip install "aec-bench[tui]"` |
+| Evolution and local model execution | `pip install "aec-bench[evolution,local-agents]"` |
+
+For example, to launch the browser interface:
 
 ```bash
 pip install "aec-bench[webui]"
@@ -24,7 +41,7 @@ For development from a source checkout, keep commands inside `uv run`:
 
 ```bash
 # Install source dependencies
-uv sync --extra webui --dev
+uv sync --all-extras --dev
 
 # List available templates
 uv run aec-bench generate list-templates
@@ -96,6 +113,10 @@ depend on wall-clock time.
 
 ### Run Experiments
 
+Install `aec-bench[execution]` before using Harbor. Add the `morph` extra for a
+Morph Cloud backend. The separate `run-local` command requires
+`aec-bench[local-agents]`.
+
 ```bash
 # Run a single task path against a model
 uv run aec-bench run tasks/ground/shallow-foundations --model "<model-id>"
@@ -134,6 +155,7 @@ documentation for the full CLI/API workflow.
 ### Prime Lab Export
 
 AEC-Bench can export tasks as Prime Lab environments for local and hosted evals.
+Install `aec-bench[prime]` for commands that invoke Prime or Verifiers.
 The integration has two current task-package behaviors: plain tasks use
 `SingleTurnEnv`; tasks with tools, workspace manifests, Compose files, or
 RLM/lambda-RLM policy use one stateful workspace environment. A mixed package
@@ -304,6 +326,8 @@ uv run aec-bench ledger export -o trials.jsonl
 ```
 
 ### Interactive TUI
+
+Install `aec-bench[tui]` before launching the terminal interface.
 
 ```bash
 # Launch the terminal UI

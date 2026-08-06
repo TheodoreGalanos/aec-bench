@@ -46,7 +46,6 @@ from aec_bench.feedback.review_service import (
     submit_review_annotation,
 )
 from aec_bench.feedback.signals import build_feedback_confidence, generate_feedback_items
-from aec_bench.feedback.textual_app import ReviewTerminalApp
 
 __all__ = [
     "AdjudicationRecord",
@@ -66,7 +65,6 @@ __all__ = [
     "ReviewError",
     "ReviewNotFoundError",
     "ReviewQueueSnapshot",
-    "ReviewTerminalApp",
     "ReviewTrialBundle",
     "adjudicate_review_trial",
     "adjudicate_trial_feedback",

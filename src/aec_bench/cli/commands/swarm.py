@@ -8,6 +8,7 @@ from typing import Any
 
 import typer
 
+from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import console, print_error
 
 app = typer.Typer(help="Multi-agent QD evolution swarm.")
@@ -25,6 +26,7 @@ def swarm_run(
     if not path.exists():
         print_error(f"Config not found: {path}")
         raise typer.Exit(1)
+    require_optional_extra("Swarm execution support", "evolution,local-agents", ("numpy", "ribs", "pydantic_ai"))
     try:
         from aec_bench.evolution.swarm.config import load_swarm_config
 
@@ -130,6 +132,7 @@ def swarm_resume(
     state_dir: str = typer.Option(".", "--state-dir", help="Directory containing swarm state"),
 ) -> None:
     """Resume a swarm run from its event log."""
+    require_optional_extra("Swarm execution support", "evolution,local-agents", ("numpy", "ribs", "pydantic_ai"))
     event_log = Path(state_dir) / run_id / "events.jsonl"
     if not event_log.exists():
         print_error(f"Event log not found: {event_log}")

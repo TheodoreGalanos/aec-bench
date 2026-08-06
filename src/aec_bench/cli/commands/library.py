@@ -20,7 +20,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-_DEFAULT_TEMPLATES_ROOT = Path("src/aec_bench/templates/builtin")
+_DEFAULT_TEMPLATES_ROOT = Path(__file__).resolve().parents[2] / "templates" / "builtin"
 
 
 @app.callback()

@@ -35,8 +35,36 @@ jobs:
       - name: Check public CLI startup
         run: uv run aec-bench --help
 
+      - name: Check optional dependency boundaries
+        run: uv run pytest -q tests/cli/test_optional_dependencies.py
+
       - name: Check repository lint
         run: uv run ruff check src/ tests/
+
+  packaged-base:
+    name: Provider-free wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: Build wheel
+        run: uv build --wheel
+
+      - name: Verify isolated base installation
+        run: >-
+          python tests/packaging/verify_wheel_profiles.py
+          --wheel dist/aec_bench-0.1.0-py3-none-any.whl
+          --profile base
 
   world-kernel-conformance:
     name: World kernel and conformance
