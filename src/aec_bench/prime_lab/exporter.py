@@ -13,11 +13,9 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from aec_bench.prime_lab.classifier import (
-    PrimeHarnessClassification,
-    PrimeHarnessKind,
-    classify_prime_harness,
-)
+from aec_bench.contracts.task_definition import TaskDefinition, Visibility
+from aec_bench.dataset.hashing import hash_task_directory
+from aec_bench.prime_lab.classifier import PrimeHarnessKind, classify_prime_harness
 from aec_bench.tasks.loader import load_task_definition
 
 DEFAULT_PRIME_ENVIRONMENTS_DIR = Path("prime-rl/environments")
@@ -68,10 +66,12 @@ def export_prime_lab_environment(config: PrimeLabExportConfig) -> PrimeLabExport
             raise FileNotFoundError(f"task not found: {task_id}")
 
         task_def = load_task_definition(source_dir, config.tasks_root)
-        harness = _resolve_harness_classification(config.harness_mode, task_def, source_dir)
+        harness_kind = _resolve_harness_kind(config.harness_mode, task_def, source_dir)
+        if task_def.visibility is not Visibility.PUBLIC:
+            raise ValueError(f"Prime export requires a public task: {task_def.task_id}")
         raw_toml = tomllib.loads((source_dir / "task.toml").read_text(encoding="utf-8"))
         verifier_timeout = int(raw_toml.get("verifier", {}).get("timeout_sec", 120))
-        rollout_limits = _load_rollout_limits(source_dir, harness.kind)
+        rollout_limits = _load_rollout_limits(source_dir)
         relative_dest = Path(*task_id.split("/"))
         shutil.copytree(
             source_dir,
@@ -81,18 +81,23 @@ def export_prime_lab_environment(config: PrimeLabExportConfig) -> PrimeLabExport
         _prepare_task_environment_files(tasks_dir / relative_dest)
         record: dict[str, Any] = {
             "task_id": task_def.task_id,
+            "task_revision": hash_task_directory(source_dir),
+            "visibility": task_def.visibility.value,
             "domain": task_def.domain,
             "difficulty": task_def.difficulty.value,
             "tags": task_def.tags,
             "instruction": task_def.instruction,
             "verifier_timeout_seconds": verifier_timeout,
-            "harness_kind": harness.kind.value,
-            "harness_reasons": harness.reasons,
+            "environment_kind": harness_kind.value,
             "rollout_limits": rollout_limits,
         }
         if config.dataset_metadata is not None:
             record["dataset"] = config.dataset_metadata
         records.append(record)
+
+    if any(record["environment_kind"] == PrimeHarnessKind.STATEFUL_WORKSPACE.value for record in records):
+        for record in records:
+            record["environment_kind"] = PrimeHarnessKind.STATEFUL_WORKSPACE.value
 
     (package_module / "__init__.py").write_text(
         "\n".join(
@@ -121,28 +126,25 @@ def export_prime_lab_environment(config: PrimeLabExportConfig) -> PrimeLabExport
     return PrimeLabExportResult(package_dir=package_dir, task_count=len(records))
 
 
-def _resolve_harness_classification(
+def _resolve_harness_kind(
     mode: PrimeExportHarnessMode,
-    task_def: Any,
+    task_def: TaskDefinition,
     source_dir: Path,
-) -> PrimeHarnessClassification:
+) -> PrimeHarnessKind:
+    required = classify_prime_harness(task_def, source_dir)
     if mode is PrimeExportHarnessMode.AUTO:
-        return classify_prime_harness(task_def, source_dir)
+        return required
     if mode is PrimeExportHarnessMode.SINGLE_TURN:
-        return PrimeHarnessClassification(
-            kind=PrimeHarnessKind.SINGLE_TURN,
-            reasons=["forced by export harness mode"],
-        )
+        if required is PrimeHarnessKind.STATEFUL_WORKSPACE:
+            raise ValueError(f"task requires the stateful workspace harness: {task_def.task_id}")
+        return PrimeHarnessKind.SINGLE_TURN
     if mode is PrimeExportHarnessMode.STATEFUL_WORKSPACE:
-        return PrimeHarnessClassification(
-            kind=PrimeHarnessKind.STATEFUL_WORKSPACE,
-            reasons=["forced by export harness mode"],
-        )
+        return PrimeHarnessKind.STATEFUL_WORKSPACE
     raise ValueError(f"unsupported Prime harness mode: {mode}")
 
 
-def _load_rollout_limits(task_dir: Path, harness_kind: PrimeHarnessKind) -> dict[str, int]:
-    policy_path = _rollout_policy_path(task_dir, harness_kind)
+def _load_rollout_limits(task_dir: Path) -> dict[str, int]:
+    policy_path = _rollout_policy_path(task_dir)
     if policy_path is None:
         return {}
 
@@ -158,11 +160,11 @@ def _load_rollout_limits(task_dir: Path, harness_kind: PrimeHarnessKind) -> dict
     return limits
 
 
-def _rollout_policy_path(task_dir: Path, harness_kind: PrimeHarnessKind) -> Path | None:
-    if harness_kind is PrimeHarnessKind.LAMBDA_RLM_POLICY:
-        return task_dir / "lambda-rlm.toml"
-    if harness_kind is PrimeHarnessKind.RLM_POLICY:
-        return task_dir / "rlm.toml"
+def _rollout_policy_path(task_dir: Path) -> Path | None:
+    for name in ("lambda-rlm.toml", "rlm.toml"):
+        path = task_dir / name
+        if path.is_file():
+            return path
     return None
 
 
@@ -336,12 +338,7 @@ def _render_environment_py(records: list[dict[str, Any]]) -> str:
 
 
 def _requires_stateful_workspace(records: list[dict[str, Any]]) -> bool:
-    stateful_kinds = {
-        PrimeHarnessKind.STATEFUL_WORKSPACE.value,
-        PrimeHarnessKind.RLM_POLICY.value,
-        PrimeHarnessKind.LAMBDA_RLM_POLICY.value,
-    }
-    return any(record.get("harness_kind") in stateful_kinds for record in records)
+    return any(record.get("environment_kind") == PrimeHarnessKind.STATEFUL_WORKSPACE.value for record in records)
 
 
 def _render_single_turn_environment_py(records: list[dict[str, Any]]) -> str:
@@ -353,7 +350,6 @@ from __future__ import annotations
 
 import json
 import random
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -454,15 +450,13 @@ async def aec_bench_reward(
     with tempfile.TemporaryDirectory(prefix="aec-prime-") as temp_dir:
         temp_path = Path(temp_dir)
         task_dir = temp_path / "task"
-        workspace = temp_path / "workspace"
         _copy_resource_tree(task_resource, task_dir)
-        shutil.copytree(task_dir, workspace)
 
-        output_path = workspace / "output.md"
+        output_path = task_dir / "output.md"
         reward_path = temp_path / "reward.json"
         output_path.write_text(response, encoding="utf-8")
 
-        verifier = workspace / "tests" / "verify.py"
+        verifier = task_dir / "tests" / "verify.py"
         if not verifier.exists():
             return 0.0
 
@@ -475,7 +469,7 @@ async def aec_bench_reward(
                 "--output",
                 str(reward_path),
             ],
-            cwd=workspace,
+            cwd=task_dir,
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
@@ -709,13 +703,18 @@ class AecBenchStatefulWorkspaceEnv(vf.StatefulToolEnv):
 
     async def setup_state(self, state: vf.State) -> vf.State:
         info = state.get("info", {{}})
+        if isinstance(info, str):
+            info = json.loads(info)
         task_id = info["task_id"]
         tempdir = tempfile.TemporaryDirectory(prefix="aec-prime-stateful-")
+        task_dir = Path(tempdir.name) / "task"
         workspace = Path(tempdir.name) / "workspace"
         task_resource = files(__package__).joinpath("tasks", *task_id.split("/"))
-        _copy_resource_tree(task_resource, workspace)
+        _copy_resource_tree(task_resource, task_dir)
+        _copy_resource_tree(task_resource, workspace, excluded_names=frozenset({{"tests"}}))
         _expose_environment_files(workspace)
         state["aec_tempdir"] = tempdir
+        state["task_path"] = str(task_dir)
         state["workspace_path"] = str(workspace)
         state["workspace"] = WorkspaceCommandSet(workspace)
         return state
@@ -860,12 +859,14 @@ async def aec_bench_reward(
 
     if state is not None and state.get("workspace_path"):
         workspace = Path(state["workspace_path"])
+        task_dir = Path(state["task_path"])
         tempdir = state.get("aec_tempdir")
         try:
             output_path = workspace / "output.md"
             if not output_path.exists():
                 output_path.write_text(_completion_text(completion), encoding="utf-8")
-            return _score_workspace(workspace, timeout_seconds)
+            shutil.copy2(output_path, task_dir / "output.md")
+            return _score_submission(task_dir, timeout_seconds)
         finally:
             if tempdir is not None:
                 tempdir.cleanup()
@@ -874,16 +875,15 @@ async def aec_bench_reward(
     task_id = task_info["task_id"]
     task_resource = files(__package__).joinpath("tasks", *task_id.split("/"))
     with tempfile.TemporaryDirectory(prefix="aec-prime-") as temp_dir:
-        temp_path = Path(temp_dir)
-        workspace = temp_path / "workspace"
-        _copy_resource_tree(task_resource, workspace)
-        (workspace / "output.md").write_text(response, encoding="utf-8")
-        return _score_workspace(workspace, timeout_seconds)
+        task_dir = Path(temp_dir) / "task"
+        _copy_resource_tree(task_resource, task_dir)
+        (task_dir / "output.md").write_text(response, encoding="utf-8")
+        return _score_submission(task_dir, timeout_seconds)
 
 
-def _score_workspace(workspace: Path, timeout_seconds: int) -> float:
-    reward_path = workspace.parent / "reward.json"
-    verifier = workspace / "tests" / "verify.py"
+def _score_submission(task_dir: Path, timeout_seconds: int) -> float:
+    reward_path = task_dir.parent / "reward.json"
+    verifier = task_dir / "tests" / "verify.py"
     if not verifier.exists():
         return 0.0
     process = subprocess.run(
@@ -891,11 +891,11 @@ def _score_workspace(workspace: Path, timeout_seconds: int) -> float:
             sys.executable,
             str(verifier),
             "--input",
-            str(workspace / "output.md"),
+            str(task_dir / "output.md"),
             "--output",
             str(reward_path),
         ],
-        cwd=workspace,
+        cwd=task_dir,
         capture_output=True,
         text=True,
         timeout=timeout_seconds,
@@ -916,12 +916,19 @@ def _completion_text(completion: list[dict[str, Any]]) -> str:
     return json.dumps(content)
 
 
-def _copy_resource_tree(source: Any, destination: Path) -> None:
+def _copy_resource_tree(
+    source: Any,
+    destination: Path,
+    *,
+    excluded_names: frozenset[str] = frozenset(),
+) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     for child in source.iterdir():
+        if child.name in excluded_names:
+            continue
         child_destination = destination / child.name
         if child.is_dir():
-            _copy_resource_tree(child, child_destination)
+            _copy_resource_tree(child, child_destination, excluded_names=excluded_names)
         else:
             child_destination.write_bytes(child.read_bytes())
 """

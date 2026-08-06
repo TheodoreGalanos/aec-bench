@@ -30,7 +30,6 @@ from aec_bench.prime_lab.exporter import (
     PrimeLabExportConfig,
     export_prime_lab_environment,
 )
-from aec_bench.prime_lab.workspace_tools import WorkspaceCommandSet
 from aec_bench.tasks.loader import load_task_definition
 
 runner = CliRunner()
@@ -130,22 +129,16 @@ def test_prime_harness_classifier_marks_plain_task_single_turn(tmp_path: Path) -
     task_dir = _make_task(tasks_root)
     task = load_task_definition(task_dir, tasks_root)
 
-    classification = classify_prime_harness(task, task_dir)
-
-    assert classification.kind is PrimeHarnessKind.SINGLE_TURN
-    assert classification.reasons == ["no task tools or workspace policy detected"]
+    assert classify_prime_harness(task, task_dir) is PrimeHarnessKind.SINGLE_TURN
 
 
-def test_prime_harness_classifier_prefers_lambda_rlm_policy(tmp_path: Path) -> None:
+def test_prime_harness_classifier_marks_lambda_policy_stateful(tmp_path: Path) -> None:
     tasks_root = tmp_path / "tasks"
     task_dir = _make_task(tasks_root, "electrical/report-policy")
     (task_dir / "lambda-rlm.toml").write_text("[policy]\n", encoding="utf-8")
     task = load_task_definition(task_dir, tasks_root)
 
-    classification = classify_prime_harness(task, task_dir)
-
-    assert classification.kind is PrimeHarnessKind.LAMBDA_RLM_POLICY
-    assert classification.reasons == ["lambda-rlm.toml present"]
+    assert classify_prime_harness(task, task_dir) is PrimeHarnessKind.STATEFUL_WORKSPACE
 
 
 def test_prime_harness_classifier_marks_rlm_policy(tmp_path: Path) -> None:
@@ -154,10 +147,7 @@ def test_prime_harness_classifier_marks_rlm_policy(tmp_path: Path) -> None:
     (task_dir / "rlm.toml").write_text("[guardrails]\nmax_iterations = 20\n", encoding="utf-8")
     task = load_task_definition(task_dir, tasks_root)
 
-    classification = classify_prime_harness(task, task_dir)
-
-    assert classification.kind is PrimeHarnessKind.RLM_POLICY
-    assert classification.reasons == ["rlm.toml present"]
+    assert classify_prime_harness(task, task_dir) is PrimeHarnessKind.STATEFUL_WORKSPACE
 
 
 def test_prime_harness_classifier_marks_bash_task_stateful(tmp_path: Path) -> None:
@@ -179,32 +169,7 @@ def test_prime_harness_classifier_marks_bash_task_stateful(tmp_path: Path) -> No
     )
     task = load_task_definition(task_dir, tasks_root)
 
-    classification = classify_prime_harness(task, task_dir)
-
-    assert classification.kind is PrimeHarnessKind.STATEFUL_WORKSPACE
-    assert classification.reasons == ["workspace-affecting tool declared: bash"]
-
-
-def test_workspace_commands_keep_paths_inside_workspace(tmp_path: Path) -> None:
-    commands = WorkspaceCommandSet(tmp_path)
-
-    commands.write_file("notes/result.md", "done")
-    commands.write_file("/workspace/output.md", "alias")
-
-    assert commands.read_file("notes/result.md") == "done"
-    assert commands.read_file("output.md") == "alias"
-    assert "notes/result.md" in commands.list_files(".")
-    with pytest.raises(ValueError, match="outside workspace"):
-        commands.read_file("../secret.txt")
-
-
-def test_workspace_commands_run_argument_vector(tmp_path: Path) -> None:
-    commands = WorkspaceCommandSet(tmp_path)
-
-    result = commands.run_command(["python", "-c", "print('hello')"])
-
-    assert result.exit_code == 0
-    assert result.stdout.strip() == "hello"
+    assert classify_prime_harness(task, task_dir) is PrimeHarnessKind.STATEFUL_WORKSPACE
 
 
 def test_export_creates_prime_lab_package(tmp_path: Path) -> None:
@@ -231,13 +196,59 @@ def test_export_creates_prime_lab_package(tmp_path: Path) -> None:
     assert 'tags = ["aec-bench", "aec", "benchmark"]' in (package_dir / "pyproject.toml").read_text(encoding="utf-8")
     assert "force-include" not in (package_dir / "pyproject.toml").read_text(encoding="utf-8")
     assert "def load_environment" in (package_dir / "aec_voltage_drop" / "environment.py").read_text(encoding="utf-8")
-    assert '"harness_kind": "single_turn"' in (package_dir / "aec_voltage_drop" / "environment.py").read_text(
-        encoding="utf-8"
-    )
+    source = (package_dir / "aec_voltage_drop" / "environment.py").read_text(encoding="utf-8")
+    assert '"environment_kind": "single_turn"' in source
+    assert '"task_revision": "' in source
+    assert '"visibility": "public"' in source
+    assert "harness_reasons" not in source
     py_compile.compile(
         str(package_dir / "aec_voltage_drop" / "environment.py"),
         doraise=True,
     )
+
+
+def test_export_rejects_holdout_task(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    task_dir = _make_task(tasks_root)
+    task_toml = task_dir / "task.toml"
+    task_toml.write_text(
+        task_toml.read_text(encoding="utf-8").replace(
+            "[metadata]\n",
+            '[metadata]\nvisibility = "holdout"\n',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="requires a public task"):
+        export_prime_lab_environment(
+            PrimeLabExportConfig(
+                name="aec-holdout",
+                tasks_root=tasks_root,
+                output_dir=tmp_path / "environments",
+                task_ids=["electrical/voltage-drop"],
+            )
+        )
+
+
+def test_mixed_package_uses_one_stateful_environment_kind(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    _make_task(tasks_root, "electrical/plain")
+    stateful_dir = _make_task(tasks_root, "electrical/stateful")
+    (stateful_dir / "rlm.toml").write_text("[guardrails]\nmax_iterations = 3\n", encoding="utf-8")
+
+    result = export_prime_lab_environment(
+        PrimeLabExportConfig(
+            name="aec-mixed",
+            tasks_root=tasks_root,
+            output_dir=tmp_path / "environments",
+            task_ids=["electrical/plain", "electrical/stateful"],
+        )
+    )
+
+    source = (result.package_dir / "aec_mixed" / "environment.py").read_text(encoding="utf-8")
+    assert source.count('"environment_kind": "stateful_workspace"') == 2
+    assert '"environment_kind": "single_turn"' not in source
+    assert "class AecBenchStatefulWorkspaceEnv(vf.StatefulToolEnv)" in source
 
 
 def test_export_carries_rlm_guardrails_into_stateful_environment(tmp_path: Path) -> None:
@@ -259,7 +270,7 @@ def test_export_carries_rlm_guardrails_into_stateful_environment(tmp_path: Path)
 
     environment_py = result.package_dir / "aec_rlm_test" / "environment.py"
     source = environment_py.read_text(encoding="utf-8")
-    assert '"harness_kind": "rlm_policy"' in source
+    assert '"environment_kind": "stateful_workspace"' in source
     assert '"rollout_limits": {' in source
     assert '"max_turns": 20' in source
     assert '"token_budget": 100000' in source
@@ -300,11 +311,11 @@ def test_export_creates_stateful_workspace_environment_for_bash_task(tmp_path: P
     source = environment_py.read_text(encoding="utf-8")
     assert "class AecBenchStatefulWorkspaceEnv(vf.StatefulToolEnv)" in source
     assert "def run_command(" in source
-    assert '"harness_kind": "stateful_workspace"' in source
+    assert '"environment_kind": "stateful_workspace"' in source
     py_compile.compile(str(environment_py), doraise=True)
 
 
-def test_export_can_force_single_turn_for_workspace_task(tmp_path: Path) -> None:
+def test_export_rejects_forced_single_turn_for_workspace_task(tmp_path: Path) -> None:
     tasks_root = tmp_path / "tasks"
     task_dir = _make_task(tasks_root)
     (task_dir / "task.toml").write_text(
@@ -322,21 +333,16 @@ def test_export_can_force_single_turn_for_workspace_task(tmp_path: Path) -> None
         encoding="utf-8",
     )
 
-    result = export_prime_lab_environment(
-        PrimeLabExportConfig(
-            name="aec-forced-single",
-            tasks_root=tasks_root,
-            output_dir=tmp_path / "environments",
-            task_ids=["electrical/voltage-drop"],
-            harness_mode=PrimeExportHarnessMode.SINGLE_TURN,
+    with pytest.raises(ValueError, match="requires the stateful workspace harness"):
+        export_prime_lab_environment(
+            PrimeLabExportConfig(
+                name="aec-forced-single",
+                tasks_root=tasks_root,
+                output_dir=tmp_path / "environments",
+                task_ids=["electrical/voltage-drop"],
+                harness_mode=PrimeExportHarnessMode.SINGLE_TURN,
+            )
         )
-    )
-
-    source = (result.package_dir / "aec_forced_single" / "environment.py").read_text(encoding="utf-8")
-    assert "vf.SingleTurnEnv" in source
-    assert "class AecBenchStatefulWorkspaceEnv" not in source
-    assert '"harness_kind": "single_turn"' in source
-    assert "forced by export harness mode" in source
 
 
 def test_prime_export_cli_accepts_harness_mode(tmp_path: Path) -> None:
@@ -365,7 +371,7 @@ def test_prime_export_cli_accepts_harness_mode(tmp_path: Path) -> None:
     assert result.exit_code == 0
     source = (output_dir / "aec_forced_stateful" / "aec_forced_stateful" / "environment.py").read_text(encoding="utf-8")
     assert "class AecBenchStatefulWorkspaceEnv(vf.StatefulToolEnv)" in source
-    assert '"harness_kind": "stateful_workspace"' in source
+    assert '"environment_kind": "stateful_workspace"' in source
 
 
 def test_generated_stateful_package_loads_outside_repo_root(tmp_path: Path) -> None:
@@ -447,30 +453,33 @@ def test_generated_stateful_workspace_tools_score_with_verifier(tmp_path: Path) 
         [
             sys.executable,
             "-c",
-            "import asyncio, tempfile\n"
+            "import asyncio\n"
+            "import sys\n"
+            "import verifiers as vf\n"
             "from pathlib import Path\n"
             "from aec_workspace_task.environment import (\n"
-            "    WorkspaceCommandSet,\n"
             "    aec_bench_reward,\n"
+            "    load_environment,\n"
             "    run_command,\n"
             "    submit_answer,\n"
             ")\n"
-            "with tempfile.TemporaryDirectory() as temp_dir:\n"
-            "    workspace = Path(temp_dir) / 'workspace'\n"
-            "    task_dir = Path(__import__('aec_workspace_task').__file__).parent\n"
-            "    source = task_dir / 'tasks' / 'electrical' / 'voltage-drop'\n"
-            "    import shutil\n"
-            "    shutil.copytree(source, workspace)\n"
-            "    commands = WorkspaceCommandSet(workspace)\n"
-            "    state = {'workspace_path': str(workspace)}\n"
-            "    result = run_command(['python', '-c', \"print('tool-ok')\"], commands)\n"
-            "    assert result['exit_code'] == 0\n"
-            "    assert 'tool-ok' in result['stdout']\n"
-            "    submit_answer('42', commands, state, path='/workspace/output.md')\n"
-            "    reward = asyncio.run(\n"
-            "        aec_bench_reward([], {'verifier_timeout_seconds': 120}, state)\n"
-            "    )\n"
-            "    print(reward)\n",
+            "environment = load_environment()\n"
+            "state = asyncio.run(environment.setup_state(\n"
+            "    vf.State.for_task(environment.dataset[0])\n"
+            "))\n"
+            "workspace = Path(state['workspace_path'])\n"
+            "private_task = Path(state['task_path'])\n"
+            "assert not (workspace / 'tests').exists()\n"
+            "assert (private_task / 'tests' / 'verify.py').exists()\n"
+            "commands = state['workspace']\n"
+            "result = run_command([sys.executable, '-c', \"print('tool-ok')\"], commands)\n"
+            "assert result['exit_code'] == 0\n"
+            "assert 'tool-ok' in result['stdout']\n"
+            "submit_answer('42', commands, state, path='/workspace/output.md')\n"
+            "reward = asyncio.run(\n"
+            "    aec_bench_reward([], {'verifier_timeout_seconds': 120}, state)\n"
+            ")\n"
+            "print(reward)\n",
         ],
         cwd=tmp_path,
         env=env,
@@ -517,30 +526,28 @@ def test_generated_stateful_write_file_keeps_rollout_open_for_workspace_alias(
         [
             sys.executable,
             "-c",
-            "import asyncio, tempfile, shutil\n"
-            "from pathlib import Path\n"
+            "import asyncio\n"
+            "import verifiers as vf\n"
             "from aec_workspace_task.environment import (\n"
-            "    WorkspaceCommandSet,\n"
             "    aec_bench_reward,\n"
+            "    load_environment,\n"
             "    write_file,\n"
             "    submit_answer,\n"
             ")\n"
-            "with tempfile.TemporaryDirectory() as temp_dir:\n"
-            "    workspace = Path(temp_dir) / 'workspace'\n"
-            "    task_dir = Path(__import__('aec_workspace_task').__file__).parent\n"
-            "    source = task_dir / 'tasks' / 'electrical' / 'voltage-drop'\n"
-            "    shutil.copytree(source, workspace)\n"
-            "    commands = WorkspaceCommandSet(workspace)\n"
-            "    state = {'workspace_path': str(workspace)}\n"
-            "    written = write_file('/workspace/output.md', '42', commands)\n"
-            "    assert written == 'output.md'\n"
-            "    assert 'final_env_response' not in state\n"
-            "    submit_answer('42', commands, state, path='/workspace/output.md')\n"
-            "    assert state['final_env_response']\n"
-            "    reward = asyncio.run(\n"
-            "        aec_bench_reward([], {'verifier_timeout_seconds': 120}, state)\n"
-            "    )\n"
-            "    print(reward)\n",
+            "environment = load_environment()\n"
+            "state = asyncio.run(environment.setup_state(\n"
+            "    vf.State.for_task(environment.dataset[0])\n"
+            "))\n"
+            "commands = state['workspace']\n"
+            "written = write_file('/workspace/output.md', '42', commands)\n"
+            "assert written == 'output.md'\n"
+            "assert 'final_env_response' not in state\n"
+            "submit_answer('42', commands, state, path='/workspace/output.md')\n"
+            "assert state['final_env_response']\n"
+            "reward = asyncio.run(\n"
+            "    aec_bench_reward([], {'verifier_timeout_seconds': 120}, state)\n"
+            ")\n"
+            "print(reward)\n",
         ],
         cwd=tmp_path,
         env=env,

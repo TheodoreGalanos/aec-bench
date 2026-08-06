@@ -61,8 +61,9 @@ The current path is:
 
 1. Author or generate a task and validate its `TaskDefinition`.
 2. Resolve one runnable task instance and stage its workspace.
-3. Run a provider-neutral adapter locally or lower the experiment to the one
-   Harbor dispatch-and-import workflow for hosted execution.
+3. Run a provider-neutral adapter locally, lower the experiment to the one
+   Harbor dispatch-and-import workflow, or use the distinct Prime package and
+   hosted-evaluation integration.
 4. Collect output, the current trajectory, any provider-required transcript,
    and verifier artifacts.
 5. Build an `EvaluationResult` and persist a `TrialRecord`.
@@ -169,6 +170,13 @@ translate local or hosted execution. Provider modules and Harbor integration
 sit outside task semantics. They may depend on task-neutral runtime surfaces;
 task worlds and core contracts do not depend on provider SDKs, CLI, web, or TUI
 modules.
+
+Prime is a separate external package and evaluation boundary, not a Harbor
+backend. Its exporter projects current public task or task-owned lifecycle
+authority into independently installed Prime/verifiers packages. Its importer
+normalizes provider samples into `TrialRecord`, `EvaluationResult`,
+`CostRecord`, and content-bound artifact references. It does not introduce a
+provider-neutral execution model or a Prime-specific record authority.
 
 Provider errors, timeouts, missing output, and incomplete execution remain
 explicit failures. A transport cannot turn them into successful trials.

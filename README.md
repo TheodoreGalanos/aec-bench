@@ -134,10 +134,13 @@ documentation for the full CLI/API workflow.
 ### Prime Lab Export
 
 AEC-Bench can export tasks as Prime Lab environments for local and hosted evals.
-The integration maps deterministic tasks to `SingleTurnEnv`, workspace tasks to
-stateful workspace tools, and RLM/lambda-RLM tasks to policy-aware stateful
-exports. See the public [Prime Lab](https://aecbench.com/docs/advanced/prime-lab)
-documentation.
+The integration has two current task-package behaviors: plain tasks use
+`SingleTurnEnv`; tasks with tools, workspace manifests, Compose files, or
+RLM/lambda-RLM policy use one stateful workspace environment. A mixed package
+uses the stateful environment for every selected task. General exports accept
+public tasks only, keep verifier files out of the actor workspace, and record
+each task's content revision and visibility. See the public
+[Prime Lab](https://aecbench.com/docs/advanced/prime-lab) documentation.
 
 ```bash
 uv run aec-bench prime smoke \
@@ -188,6 +191,14 @@ uv run aec-bench prime eval \
 Use repeated `--difficulty` values for mixed slices, and use
 `--env-arg KEY=VALUE` for additional `load_environment()` arguments that are not
 first-class CLI options yet.
+
+`aec-bench import-prime-eval` imports Prime samples into the current
+`TrialRecord` and `EvaluationResult` authorities. Provider completion,
+truncation, and errors determine execution status independently of reward. The
+import preserves the provider sample, conversation, and submitted output as
+content-bound artifacts. Live Prime commands remain explicit and require the
+user's Prime installation, credentials, and network access; the normal test
+suite makes no hosted calls.
 
 ### Datasets
 
