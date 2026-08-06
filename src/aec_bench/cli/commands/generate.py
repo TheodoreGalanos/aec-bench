@@ -98,7 +98,7 @@ def generate_task(
     if template is not None:
         try:
             loaded_template = load_template(template.resolve())
-        except Exception as exc:
+        except (FileNotFoundError, ValueError) as exc:
             emit(
                 "generate task",
                 data=None,

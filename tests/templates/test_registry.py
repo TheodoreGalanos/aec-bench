@@ -329,6 +329,15 @@ def test_discover_templates_reports_candidate_without_engine(tmp_path: Path) -> 
     assert len(user_results) == 1
 
 
+def test_discover_templates_keeps_unexpected_engine_import_errors_visible(tmp_path: Path) -> None:
+    user_dir = tmp_path / "user_templates"
+    user_dir.mkdir()
+    _make_template(user_dir, engine_code="import missing_template_dependency")
+
+    with pytest.raises(ModuleNotFoundError, match="missing_template_dependency"):
+        discover_templates(user_dirs=[user_dir], include_builtin=False)
+
+
 # --- validate_template tests ---
 
 
@@ -375,3 +384,10 @@ def test_validate_template_returns_errors_for_engine_without_compute(tmp_path: P
 
     assert len(errors) > 0
     assert any("compute" in e.lower() for e in errors)
+
+
+def test_validate_template_keeps_unexpected_engine_import_errors_visible(tmp_path: Path) -> None:
+    tdir = _make_template(tmp_path, engine_code="import missing_template_dependency")
+
+    with pytest.raises(ModuleNotFoundError, match="missing_template_dependency"):
+        validate_template(tdir)

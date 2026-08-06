@@ -4,6 +4,7 @@
 import tomllib
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
@@ -196,6 +197,21 @@ def test_generate_task_from_local_template(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     task_tomls = list(tmp_path.rglob("task.toml"))
     assert len(task_tomls) == 1
+
+
+def test_generate_task_keeps_unexpected_template_import_errors_visible(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_to_import_template(_template_dir: Path) -> None:
+        raise ModuleNotFoundError("missing_template_dependency")
+
+    monkeypatch.setattr("aec_bench.cli.commands.generate.load_template", fail_to_import_template)
+
+    result = runner.invoke(app, ["generate", "task", "--template", str(tmp_path)])
+
+    assert isinstance(result.exception, ModuleNotFoundError)
+    assert str(result.exception) == "missing_template_dependency"
 
 
 def test_generate_task_supports_explicit_visibility_and_start_index(tmp_path: Path) -> None:
