@@ -35,6 +35,7 @@ readable.
 | Evaluation result | Evaluation | Verifier output and review evidence become reward, validity, and diagnostics | Protected as part of a persisted trial or published result | [`EvaluationResult`](../src/aec_bench/contracts/evaluation_result.py) | Persisted and externally reported |
 | Dataset manifest and identity | Dataset generation and storage | A set of task bytes becomes a named benchmark snapshot | Protected when published; content identity is authoritative | [`DatasetManifest`](../src/aec_bench/contracts/dataset.py) and dataset hashing/storage | Persisted and publishable |
 | Adapter and Harbor execution | Adapters and harness | Harness input crosses into local model execution or the supported Harbor workflow and returns untrusted output | Internal adapter values; Harbor result documents are lenient ingestion boundaries | [`AdapterRequest` and `AdapterResult`](../src/aec_bench/adapters/base.py), the [Harbor workflow](../src/aec_bench/harness/harbor_workflow.py), and [Harbor ingestion models](../src/aec_bench/harness/harbor_contract.py) | Internal, cross-process, and external |
+| Prime package and evaluation integration | Prime integration | Current public task or lifecycle material becomes an independently installed package; hosted samples return as untrusted provider evidence | Public command and external package behavior; samples normalize into current records | [`exporter.py`](../src/aec_bench/prime_lab/exporter.py), [`lifecycle_exporter.py`](../src/aec_bench/prime_lab/lifecycle_exporter.py), and [`eval_import.py`](../src/aec_bench/prime_lab/eval_import.py) | External package and provider ingestion |
 | Artifact and evidence reference | Harness, ledger, and the producing domain | Filesystem or provider output becomes content-bound evidence | Protected when stored in a trial, dataset, freeze, or published record | `ArtifactReference` in [`trial_record.py`](../src/aec_bench/contracts/trial_record.py) and narrower owner-specific references | Persisted reference |
 | Visibility classification | Task ownership and evaluation policy | Material enters public, calibration, or holdout handling | Protected | `Visibility` in [`task_definition.py`](../src/aec_bench/contracts/task_definition.py) and visibility checks in persisted records | Persisted and policy-bearing |
 | Interactive-world registration and calls | Continual runtime and registered task worlds | An exact executable build/profile is resolved and an actor or host request reaches task-owned behavior | Current unversioned installed calls; task-owned persisted run records | [`continual_world.py`](../src/aec_bench/contracts/continual_world.py), [`world_interface.py`](../src/aec_bench/contracts/world_interface.py), and the [runtime protocol](protocols/interactive-world-runtime.md) | Internal, persisted, and installed JSON |
@@ -127,6 +128,15 @@ configuration, resolved model identity, stop reason, failure kind, raw output,
 and collected artifacts must survive normalization when they can affect
 validity. Aggregate usage normalizes into `CostRecord`; it is not duplicated in
 `OutputRecord.agent_result`.
+
+Prime remains separate from Harbor. General Prime packages project the current
+`TaskDefinition` and task content revision; they reject holdout tasks. Stateful
+packages give the actor a task workspace without `tests/`, while the verifier
+uses its own full private task copy. Hosted Prime samples map provider
+completion, truncation, and error facts to `OutputRecord`; reward never decides
+termination. The provider sample, conversation, and submitted output are
+retained as SHA-256-bound `ArtifactReference` values, while score and validity
+remain `EvaluationResult` authority.
 
 Adapter-only extraction metadata must not become task-semantic output. The
 lambda-RLM `__confidence__` key is reserved for extraction confidence and is

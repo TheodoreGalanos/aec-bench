@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -14,8 +15,10 @@ from typing import Any
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.jsonl import write_jsonl
+from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import (
     AgentReference,
+    ArtifactReference,
     Completeness,
     CostRecord,
     EnvironmentSnapshot,
@@ -39,10 +42,9 @@ class PrimeEvalImportResult:
 
 def fetch_prime_eval_payloads(eval_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     evaluation = _run_prime_json(["prime", "eval", "get", eval_id, "--plain", "-o", "json"])
-    first_page = _run_prime_json(["prime", "eval", "samples", eval_id, "--plain", "-n", "100", "-o", "json"])
-    samples = list(first_page.get("samples", []))
-    total_pages = int(first_page.get("total_pages") or 1)
-    for page in range(2, total_pages + 1):
+    page = 1
+    samples: list[dict[str, Any]] = []
+    while True:
         payload = _run_prime_json(
             [
                 "prime",
@@ -58,7 +60,13 @@ def fetch_prime_eval_payloads(eval_id: str) -> tuple[dict[str, Any], list[dict[s
                 "json",
             ]
         )
-        samples.extend(payload.get("samples", []))
+        page_samples = [sample for sample in payload.get("samples", []) if isinstance(sample, dict)]
+        samples.extend(page_samples)
+        total = _optional_int(payload.get("total"))
+        limit = _optional_int(payload.get("limit")) or 100
+        if not page_samples or (total is not None and len(samples) >= total) or len(page_samples) < limit:
+            break
+        page += 1
     return evaluation, samples
 
 
@@ -77,8 +85,8 @@ def import_prime_eval_samples(
     artifact_paths: list[Path] = []
     skipped_duplicates = 0
 
-    for sample in samples:
-        sample_id = str(sample.get("sample_id") or f"sample-{len(imported_records) + 1}")
+    for sample_index, sample in enumerate(samples, start=1):
+        sample_id = str(sample.get("sample_id") or f"sample-{sample_index}")
         trial_id = f"prime-{_slug(eval_id)}-{_slug(sample_id)}"
         record_path = ledger_root / resolved_experiment / f"{trial_id}.json"
         if skip_duplicates and record_path.exists():
@@ -91,6 +99,7 @@ def import_prime_eval_samples(
             experiment_id=resolved_experiment,
             trial_id=trial_id,
             artifact_dir=artifact_dir,
+            ledger_root=ledger_root,
         )
         try:
             record_path = write_trial_record(ledger_root=ledger_root, record=record)
@@ -119,11 +128,12 @@ def _build_record(
     experiment_id: str,
     trial_id: str,
     artifact_dir: Path,
+    ledger_root: Path,
 ) -> tuple[TrialRecord, list[Path]]:
     info = _dict(sample.get("info"))
-    metrics = _dict(info.get("metrics"))
-    timing = _dict(info.get("timing"))
-    token_usage = _dict(info.get("token_usage"))
+    metrics = _dict(sample.get("metrics"))
+    timing = _dict(sample.get("timing"))
+    token_usage = _dict(sample.get("token_usage"))
     conversation = _conversation_messages(sample)
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
@@ -139,11 +149,21 @@ def _build_record(
         artifacts.append(output_path)
 
     reward = _reward(sample, metrics)
-    error = _dict(info.get("error"))
+    reward_present = _has_reward(sample, metrics)
+    error = _dict(sample.get("error"))
     error_name = str(error.get("error") or "")
     error_message = str(error.get("error_chain_str") or error_name)
     has_error = bool(error_name)
-    status = AgentOutputStatus.COMPLETED if reward > 0.0 else AgentOutputStatus.FAILED
+    status, terminated, truncated, final_reason = _outcome(sample, has_error, error_message)
+    artifact_sources = [
+        (conversation_path, "prime_conversation"),
+        (sample_path, "prime_sample"),
+    ]
+    if output_path is not None:
+        artifact_sources.append((output_path, "agent_output"))
+    artifact_references = [
+        _artifact_reference(path=path, ledger_root=ledger_root, kind=kind) for path, kind in artifact_sources
+    ]
 
     agent_result = {
         "source": "prime-eval-samples",
@@ -151,10 +171,11 @@ def _build_record(
         "prime_sample_id": sample.get("sample_id"),
         "example_id": sample.get("example_id"),
         "rollout_number": sample.get("rollout_number"),
-        "stop_condition": info.get("stop_condition"),
-        "is_completed": info.get("is_completed"),
+        "stop_condition": sample.get("stop_condition"),
+        "is_completed": sample.get("is_completed"),
+        "is_truncated": sample.get("is_truncated"),
         "error": error or None,
-        **metrics,
+        "validity_basis": "provider_score_present" if reward_present else "provider_score_absent",
     }
 
     return (
@@ -165,7 +186,8 @@ def _build_record(
             timestamp=_timestamp(sample),
             task=TaskReference(
                 task_id=_task_id(sample, info),
-                task_revision=str(info.get("task_revision") or "prime-hosted"),
+                task_revision=str(info.get("task_revision") or "unresolved"),
+                visibility=_visibility(info),
             ),
             agent=AgentReference(
                 adapter="prime-hosted",
@@ -190,32 +212,35 @@ def _build_record(
             outputs=OutputRecord(
                 agent_output=AgentOutput(
                     status=status,
-                    output_path=output_path.name if output_path is not None else "output.md",
+                    output_path=(
+                        output_path.relative_to(artifact_dir).as_posix() if output_path is not None else "output.md"
+                    ),
                     output_format="markdown",
-                    error_message=error_message if has_error and reward == 0.0 else None,
+                    error_message=error_message if has_error else None,
                 ),
                 raw_output_path=str(output_path) if output_path is not None else None,
                 conversation_path=str(conversation_path),
                 trajectory_path=None,
                 agent_result=agent_result,
-                terminated=status is AgentOutputStatus.COMPLETED,
-                truncated=status is not AgentOutputStatus.COMPLETED,
-                final_reason=None if status is AgentOutputStatus.COMPLETED else error_message,
+                artifacts=artifact_references,
+                terminated=terminated,
+                truncated=truncated,
+                final_reason=final_reason,
             ),
             evaluation=EvaluationResult(
                 reward=reward,
                 validity=ValidityCheck(
-                    output_parseable=reward > 0.0,
-                    schema_valid=reward > 0.0,
-                    verifier_completed=True,
-                    errors=[error_message] if has_error and reward == 0.0 else [],
+                    output_parseable=reward_present,
+                    schema_valid=reward_present,
+                    verifier_completed=reward_present,
+                    errors=[error_message] if has_error else [],
                 ),
                 breakdown=metrics,
             ),
             timing=TimingRecord(
                 total_seconds=_total_seconds(sample, timing),
-                agent_seconds=_seconds(timing.get("generation_ms")),
-                verification_seconds=_seconds(timing.get("scoring_ms")),
+                agent_seconds=_duration_seconds(timing.get("generation")),
+                verification_seconds=_duration_seconds(timing.get("scoring")),
             ),
             cost=CostRecord(
                 tokens_in=_optional_int(token_usage.get("input_tokens")),
@@ -277,7 +302,14 @@ def _write_submitted_output(
             content = arguments.get("content")
             if not isinstance(content, str) or not content:
                 continue
-            output_path = artifact_dir / str(arguments.get("path") or "output.md")
+            relative_path = Path(str(arguments.get("path") or "output.md"))
+            if relative_path.is_absolute() or ".." in relative_path.parts:
+                raise ValueError("Prime submitted output path must stay inside its artifact directory")
+            output_path = (artifact_dir / relative_path).resolve()
+            try:
+                output_path.relative_to(artifact_dir.resolve())
+            except ValueError as exc:
+                raise ValueError("Prime submitted output path must stay inside its artifact directory") from exc
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(content, encoding="utf-8")
             return output_path
@@ -340,6 +372,16 @@ def _dataset_id(info: dict[str, Any]) -> str | None:
     return None
 
 
+def _visibility(info: dict[str, Any]) -> Visibility | None:
+    raw = info.get("visibility")
+    if raw is None:
+        return None
+    try:
+        return Visibility(str(raw))
+    except ValueError:
+        return None
+
+
 def _timestamp(sample: dict[str, Any]) -> datetime:
     raw = sample.get("created_at")
     if isinstance(raw, str) and raw:
@@ -350,27 +392,61 @@ def _timestamp(sample: dict[str, Any]) -> datetime:
 def _reward(sample: dict[str, Any], metrics: dict[str, Any]) -> float:
     value = sample.get(
         "reward",
-        sample.get("aec_bench_reward", metrics.get("aec_bench_reward", 0.0)),
+        sample.get("score", metrics.get("aec_bench_reward", 0.0)),
     )
     return float(value or 0.0)
+
+
+def _has_reward(sample: dict[str, Any], metrics: dict[str, Any]) -> bool:
+    return "reward" in sample or "score" in sample or "aec_bench_reward" in metrics
+
+
+def _outcome(
+    sample: dict[str, Any],
+    has_error: bool,
+    error_message: str,
+) -> tuple[AgentOutputStatus, bool, bool, str]:
+    if has_error:
+        return AgentOutputStatus.FAILED, False, False, error_message
+    stop_condition = str(sample.get("stop_condition") or "")
+    if sample.get("is_truncated") is True:
+        return AgentOutputStatus.PARTIAL, False, True, stop_condition or "provider_truncated"
+    if sample.get("is_completed") is True:
+        return AgentOutputStatus.COMPLETED, True, False, stop_condition or "provider_completed"
+    return AgentOutputStatus.PARTIAL, False, False, stop_condition or "provider_outcome_unknown"
 
 
 def _total_seconds(sample: dict[str, Any], timing: dict[str, Any]) -> float:
     if sample.get("total_time") is not None:
         return float(sample["total_time"])
-    if timing.get("total_ms") is not None:
-        return float(timing["total_ms"]) / 1000.0
-    if sample.get("latency_ms") is not None:
-        return float(sample["latency_ms"]) / 1000.0
+    if timing.get("total") is not None:
+        return float(timing["total"])
     return 0.0
 
 
-def _seconds(value: object) -> float | None:
-    if value is None:
+def _duration_seconds(value: object) -> float | None:
+    if not isinstance(value, dict):
         return None
-    if not isinstance(value, str | int | float) or isinstance(value, bool):
+    duration = value.get("duration")
+    if not isinstance(duration, str | int | float) or isinstance(duration, bool):
         return None
-    return float(value) / 1000.0
+    return float(duration)
+
+
+def _artifact_reference(*, path: Path, ledger_root: Path, kind: str) -> ArtifactReference:
+    media_type = "application/jsonl" if path.suffix == ".jsonl" else "application/json"
+    if path.suffix in {".md", ".txt"}:
+        media_type = "text/markdown" if path.suffix == ".md" else "text/plain"
+    return ArtifactReference(
+        kind=kind,
+        path=_ledger_path(path, ledger_root),
+        sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        media_type=media_type,
+    )
+
+
+def _ledger_path(path: Path, ledger_root: Path) -> str:
+    return path.relative_to(ledger_root).as_posix()
 
 
 def _optional_int(value: object) -> int | None:

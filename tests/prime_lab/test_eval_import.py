@@ -3,15 +3,19 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
+import aec_bench.prime_lab.eval_import as eval_import
 from aec_bench.cli.main import app
+from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.evaluation.behavioral import load_behavioral_trace
 from aec_bench.ledger.reader import query_trial_records
-from aec_bench.prime_lab.eval_import import import_prime_eval_samples
+from aec_bench.prime_lab.eval_import import fetch_prime_eval_payloads, import_prime_eval_samples
 
 runner = CliRunner()
 
@@ -107,31 +111,37 @@ def _sample_payload() -> dict[str, object]:
             },
         ],
         "reward": 1.0,
+        "metrics": {
+            "aec_bench_reward": 1.0,
+            "num_turns": 2.0,
+            "total_tool_calls": 2.0,
+            "run_command_calls": 1.0,
+            "submit_answer_calls": 1.0,
+        },
+        "timing": {
+            "total": 12.5,
+            "generation": {"start": 1.0, "end": 13.0, "duration": 12.0},
+            "scoring": {"start": 13.0, "end": 13.5, "duration": 0.5},
+        },
+        "token_usage": {"input_tokens": 1000, "output_tokens": 250},
+        "stop_condition": "has_final_env_response",
+        "is_completed": True,
+        "is_truncated": False,
         "total_time": 12.5,
         "created_at": "2026-05-08T21:13:35.662468Z",
         "info": {
             "task_id": "generated/prime-50-suite/electrical/fault-current/example-1",
             "domain": "electrical",
             "difficulty": "medium",
-            "harness_kind": "stateful_workspace",
+            "environment_kind": "stateful_workspace",
+            "task_revision": "task-sha256",
+            "visibility": "public",
             "dataset": {
                 "name": "prime-50-suite",
                 "version": "0.1.0",
                 "content_hash": "abc123",
             },
-            "timing": {"total_ms": 12500, "generation_ms": 12000, "scoring_ms": 500},
-            "token_usage": {"input_tokens": 1000, "output_tokens": 250},
-            "metrics": {
-                "aec_bench_reward": 1.0,
-                "num_turns": 2.0,
-                "total_tool_calls": 2.0,
-                "run_command_calls": 1.0,
-                "submit_answer_calls": 1.0,
-            },
-            "stop_condition": "has_final_env_response",
-            "is_completed": True,
         },
-        "aec_bench_reward": 1.0,
     }
 
 
@@ -152,11 +162,35 @@ def test_import_prime_eval_samples_writes_ledger_record_and_conversation(tmp_pat
     assert record.dataset_id == "prime-50-suite@0.1.0"
     assert record.agent.adapter == "prime-hosted"
     assert record.agent.model == "Qwen/Qwen3.5-4B:adapter-123"
+    assert record.task.task_revision == "task-sha256"
+    assert record.task.visibility == "public"
     assert record.evaluation.reward == 1.0
+    assert record.evaluation.breakdown["submit_answer_calls"] == 1.0
+    assert record.timing.total_seconds == 12.5
+    assert record.timing.agent_seconds == 12.0
+    assert record.timing.verification_seconds == 0.5
+    assert record.cost.tokens_in == 1000
+    assert record.cost.tokens_out == 250
+    assert record.outputs.agent_output is not None
+    assert record.outputs.agent_output.status is AgentOutputStatus.COMPLETED
+    assert record.outputs.terminated is True
+    assert record.outputs.truncated is False
+    assert record.outputs.final_reason == "has_final_env_response"
     assert record.outputs.conversation_path is not None
     assert record.outputs.raw_output_path is not None
     assert record.outputs.agent_result is not None
-    assert record.outputs.agent_result["submit_answer_calls"] == 1.0
+    assert record.outputs.agent_result["validity_basis"] == "provider_score_present"
+    assert "submit_answer_calls" not in record.outputs.agent_result
+    assert record.outputs.artifacts is not None
+    assert {artifact.kind for artifact in record.outputs.artifacts} == {
+        "agent_output",
+        "prime_conversation",
+        "prime_sample",
+    }
+    for artifact in record.outputs.artifacts:
+        artifact_path = tmp_path / artifact.path
+        assert artifact_path.exists()
+        assert hashlib.sha256(artifact_path.read_bytes()).hexdigest() == artifact.sha256
 
     conversation_path = Path(record.outputs.conversation_path)
     assert conversation_path.exists()
@@ -168,6 +202,111 @@ def test_import_prime_eval_samples_writes_ledger_record_and_conversation(tmp_pat
     assert assistant_turns[0].tool_calls[0].tool_name == "run_command"
     assert assistant_turns[0].tool_results[0].tool_name == "run_command"
     assert assistant_turns[1].tool_calls[0].tool_name == "submit_answer"
+
+
+def test_import_prime_eval_zero_reward_can_be_completed(tmp_path: Path) -> None:
+    sample = _sample_payload()
+    sample["reward"] = 0.0
+    sample["metrics"] = {"aec_bench_reward": 0.0}
+
+    result = import_prime_eval_samples(
+        evaluation=_evaluation_payload(),
+        samples=[sample],
+        ledger_root=tmp_path,
+    )
+
+    record = result.records[0]
+    assert record.evaluation.reward == 0.0
+    assert record.outputs.agent_output is not None
+    assert record.outputs.agent_output.status is AgentOutputStatus.COMPLETED
+    assert record.outputs.terminated is True
+    assert record.evaluation.validity.verifier_completed is True
+
+
+def test_import_prime_eval_provider_error_is_failed_even_with_positive_reward(tmp_path: Path) -> None:
+    sample = _sample_payload()
+    sample["error"] = {
+        "error": "EnvironmentError",
+        "error_chain_repr": "EnvironmentError('lost worker')",
+        "error_chain_str": "EnvironmentError: lost worker",
+    }
+
+    result = import_prime_eval_samples(
+        evaluation=_evaluation_payload(),
+        samples=[sample],
+        ledger_root=tmp_path,
+    )
+
+    record = result.records[0]
+    assert record.evaluation.reward == 1.0
+    assert record.outputs.agent_output is not None
+    assert record.outputs.agent_output.status is AgentOutputStatus.FAILED
+    assert record.outputs.terminated is False
+    assert record.outputs.truncated is False
+    assert record.outputs.final_reason == "EnvironmentError: lost worker"
+
+
+def test_import_prime_eval_truncation_is_independent_of_positive_reward(tmp_path: Path) -> None:
+    sample = _sample_payload()
+    sample["is_completed"] = False
+    sample["is_truncated"] = True
+    sample["stop_condition"] = "max_turns_reached"
+
+    result = import_prime_eval_samples(
+        evaluation=_evaluation_payload(),
+        samples=[sample],
+        ledger_root=tmp_path,
+    )
+
+    record = result.records[0]
+    assert record.evaluation.reward == 1.0
+    assert record.outputs.agent_output is not None
+    assert record.outputs.agent_output.status is AgentOutputStatus.PARTIAL
+    assert record.outputs.terminated is False
+    assert record.outputs.truncated is True
+    assert record.outputs.final_reason == "max_turns_reached"
+
+
+def test_import_prime_eval_rejects_submitted_output_outside_artifact_directory(tmp_path: Path) -> None:
+    sample = _sample_payload()
+    completion = sample["completion"]
+    assert isinstance(completion, list)
+    submit_call = completion[2]
+    assert isinstance(submit_call, dict)
+    tool_calls = submit_call["tool_calls"]
+    assert isinstance(tool_calls, list)
+    payload = json.loads(tool_calls[0])
+    payload["function"]["arguments"] = json.dumps({"path": "../../escaped.md", "content": "no"})
+    tool_calls[0] = json.dumps(payload)
+
+    with pytest.raises(ValueError, match="inside its artifact directory"):
+        import_prime_eval_samples(
+            evaluation=_evaluation_payload(),
+            samples=[sample],
+            ledger_root=tmp_path,
+        )
+
+    assert not (tmp_path / "escaped.md").exists()
+
+
+def test_fetch_prime_eval_payloads_uses_total_page_and_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(args: list[str]) -> dict[str, object]:
+        calls.append(args)
+        if args[2] == "get":
+            return _evaluation_payload()
+        page = int(args[args.index("-p") + 1])
+        samples = [{"sample_id": f"sample-{page}-{index}"} for index in range(2 if page < 3 else 1)]
+        return {"samples": samples, "total": 5, "page": page, "limit": 2}
+
+    monkeypatch.setattr(eval_import, "_run_prime_json", fake_run)
+
+    evaluation, samples = fetch_prime_eval_payloads("eval-123")
+
+    assert evaluation["evaluation_id"] == "eval-123"
+    assert len(samples) == 5
+    assert [call[call.index("-p") + 1] for call in calls[1:]] == ["1", "2", "3"]
 
 
 def test_import_prime_eval_samples_accepts_explicit_experiment_id(tmp_path: Path) -> None:

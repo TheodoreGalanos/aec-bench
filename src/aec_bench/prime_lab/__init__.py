@@ -1,17 +1,2 @@
-# ABOUTME: Prime Lab integration helpers for exporting aec-bench tasks.
-# ABOUTME: Keeps Prime/verifiers packaging separate from benchmark task contracts.
-
-from aec_bench.prime_lab.exporter import PrimeLabExportConfig, export_prime_lab_environment
-from aec_bench.prime_lab.lifecycle_exporter import (
-    PrimeLifecycleExportConfig,
-    PrimeLifecycleExportResult,
-    export_prime_lifecycle_environment,
-)
-
-__all__ = [
-    "PrimeLabExportConfig",
-    "PrimeLifecycleExportConfig",
-    "PrimeLifecycleExportResult",
-    "export_prime_lab_environment",
-    "export_prime_lifecycle_environment",
-]
+# ABOUTME: Prime Lab execution and result-import integration package.
+# ABOUTME: Keeps Prime-specific code separate from benchmark tasks and evaluation authority.
