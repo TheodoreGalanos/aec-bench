@@ -70,7 +70,7 @@ from aec_bench.meta_harness.harness_budget import (
 )
 from aec_bench.meta_harness.harness_contracts import HarnessContractError
 from aec_bench.meta_harness.kernel_catalogue import KernelRuntimeRegistry
-from aec_bench.meta_harness.program_runtime import (
+from aec_bench.meta_harness.program_execution import (
     OperationExecutionContext,
     OperationHandlerFailure,
 )

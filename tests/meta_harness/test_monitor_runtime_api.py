@@ -31,7 +31,7 @@ from aec_bench.meta_harness.monitor_runtime import (
     ProductionMonitorRuntimeClosure,
     ProductionMonitorRuntimeManifest,
 )
-from aec_bench.meta_harness.monitors import (
+from aec_bench.meta_harness.standing_monitors import (
     CanaryCommitment,
     CanaryKind,
     CanaryObservation,

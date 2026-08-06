@@ -39,7 +39,7 @@ readable.
 | Artifact and evidence reference | Harness, ledger, and the producing domain | Filesystem or provider output becomes content-bound evidence | Protected when stored in a trial, dataset, freeze, or published record | `ArtifactReference` in [`trial_record.py`](../src/aec_bench/contracts/trial_record.py) and narrower owner-specific references | Persisted reference |
 | Visibility classification | Task ownership and evaluation policy | Material enters public, calibration, or holdout handling | Protected | `Visibility` in [`task_definition.py`](../src/aec_bench/contracts/task_definition.py) and visibility checks in persisted records | Persisted and policy-bearing |
 | Interactive-world registration and calls | Continual runtime and registered task worlds | An exact executable build/profile is resolved and an actor or host request reaches task-owned behavior | Current unversioned installed calls; task-owned persisted run records | [`continual_world.py`](../src/aec_bench/contracts/continual_world.py), [`world_interface.py`](../src/aec_bench/contracts/world_interface.py), and the [runtime protocol](protocols/interactive-world-runtime.md) | Internal, persisted, and installed JSON |
-| Pump functional core | Wastewater pump-station task | Typed pump actions change one canonical current state and observations are derived from it | Ordinary task-owned dataclasses and direct callables | [`coupled_runtime.py`](../src/aec_bench/task_world_templates/stewardship/wastewater_pump_station/coupled_runtime.py) and [`stewardship_models.py`](../src/aec_bench/task_world_templates/stewardship/wastewater_pump_station/stewardship_models.py) | Internal |
+| Pump functional core | Wastewater pump-station task | Typed pump actions change one canonical current state and observations and scores are derived from it | Ordinary task-owned dataclasses and direct callables | [`coupled_runtime.py`](../src/aec_bench/task_world_templates/stewardship/wastewater_pump_station/coupled_runtime.py), [`stewardship_models.py`](../src/aec_bench/task_world_templates/stewardship/wastewater_pump_station/stewardship_models.py), and task-owned [`evaluation.py`](../src/aec_bench/task_world_templates/stewardship/wastewater_pump_station/evaluation.py) | Internal |
 
 ## Task specification
 
@@ -82,7 +82,8 @@ protocol records. They do not replace `TrialRecord`. Finalization validates and
 references their durable artifacts from the canonical trial evidence. A
 task-owned episode is represented by one verified `episode_artifact` reference;
 the shared trial record does not copy its snapshots, transitions, temporal
-facts, or replay model.
+facts, or replay model. Lifecycle request and run-state readers accept only the
+current shapes and do not migrate prior local run directories.
 
 Trial records are append-only evidence once accepted. Internal builders and
 temporary run directories remain replaceable implementation.
@@ -128,6 +129,12 @@ configuration, resolved model identity, stop reason, failure kind, raw output,
 and collected artifacts must survive normalization when they can affect
 validity. Aggregate usage normalizes into `CostRecord`; it is not duplicated in
 `OutputRecord.agent_result`.
+
+The local composition edge uses `build_local_adapter` from
+[`local_registry.py`](../src/aec_bench/adapters/local_registry.py) for its fixed
+current adapter set. The file name is historical; it does not expose a mutable
+registry. Tests pass an adapter-builder callable directly when they need a
+deterministic substitute.
 
 Prime remains separate from Harbor. General Prime packages project the current
 `TaskDefinition` and task content revision; they reject holdout tasks. Stateful

@@ -135,12 +135,12 @@ def apply_motif_promotion(
     return _create_promoted_motif(motif, decision)
 
 
-def apply_motif_promotion_v1_compatibility(
+def apply_authorized_motif_promotion(
     motif: HarnessProgramMotif,
     decision: MotifPromotionDecision,
     policy: MotifPromotionPolicy,
 ) -> HarnessProgramMotif:
-    """Replay the historical v1 pure-decision lifecycle, including protected status edges."""
+    """Create a protected status edge after the caller has verified durable authority."""
 
     _validate_motif_promotion_application(motif, decision, policy)
     return _create_promoted_motif(motif, decision)

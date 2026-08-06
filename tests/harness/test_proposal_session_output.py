@@ -9,11 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from aec_bench.harness.proposal_session import run_proposal_session
 from aec_bench.harness.proposal_session_output import (
     ProposalSessionOutputError,
     verified_proposal_final_output_path,
 )
+from aec_bench.harness.proposal_session_runtime import run_proposal_session
 from tests.harness.test_proposal_ready_set_session import (
     _ready_set_bundle,
     _RecordingProposalEnvironmentPool,

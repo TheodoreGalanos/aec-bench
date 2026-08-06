@@ -1,5 +1,5 @@
 # ABOUTME: Defines phase-neutral critic-stress evidence, findings, and report contracts.
-# ABOUTME: Preserves historical adaptive schema identities while exposing evergreen aliases.
+# ABOUTME: Keeps critic-stress evidence and classification with their current workflow owner.
 
 from __future__ import annotations
 
@@ -116,7 +116,7 @@ class AcceptanceGrounding(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class AdaptiveCriticStressMeasurement(ContentAddressedModel):
+class CriticStressMeasurement(ContentAddressedModel):
     """Raw critic gains and null decomposition before any exploit classification."""
 
     schema_version: Literal["aecbench.adaptive-critic-stress-measurement.v1"] = (
@@ -327,12 +327,12 @@ class CriticRegressionCase(ContentAddressedModel):
         return self
 
 
-class AdaptiveCriticStressReport(ContentAddressedModel):
+class CriticStressReport(ContentAddressedModel):
     """Provider-free causal classification and next-generation regression output."""
 
     schema_version: Literal["aecbench.adaptive-critic-stress-report.v1"] = "aecbench.adaptive-critic-stress-report.v1"
     policy: CriticStressClassificationPolicy
-    measurement: AdaptiveCriticStressMeasurement
+    measurement: CriticStressMeasurement
     causal_seam_evidence: tuple[VerifiedCausalSeamEvidence, ...] = ()
     replayed_boundary_evidence: tuple[ReplayedBoundaryEvidence, ...] = ()
     vred_challenges: tuple[VRedChallengeEvidence, ...] = ()
@@ -396,7 +396,7 @@ class AdaptiveCriticStressReport(ContentAddressedModel):
         return self
 
 
-def _validate_measurement_bindings(report: AdaptiveCriticStressReport) -> None:
+def _validate_measurement_bindings(report: CriticStressReport) -> None:
     if report.measurement.critic_generation_sha256 != report.policy.current_critic_generation_sha256:
         raise ValueError("critic-stress measurement does not bind the current critic generation")
     if any(item.measurement_sha256 != report.measurement.content_sha256 for item in report.causal_seam_evidence) or any(
@@ -404,10 +404,10 @@ def _validate_measurement_bindings(report: AdaptiveCriticStressReport) -> None:
     ):
         raise ValueError("critic-stress evidence does not bind the raw measurement")
     if report.provider_cost_usd != 0.0:
-        raise ValueError("adaptive critic-stress reduction is provider-free")
+        raise ValueError("critic-stress reduction is provider-free")
 
 
-def _validate_challenge_scope(report: AdaptiveCriticStressReport) -> None:
+def _validate_challenge_scope(report: CriticStressReport) -> None:
     challenge_artifacts = {challenge.artifact_sha256 for challenge in report.vred_challenges}
     if any(evidence.challenge_artifact_sha256 not in challenge_artifacts for evidence in report.causal_seam_evidence):
         raise ValueError("causal seam evidence requires a provenance-bound Vred challenge")
@@ -435,7 +435,7 @@ def _validate_challenge_scope(report: AdaptiveCriticStressReport) -> None:
         raise ValueError("Vred challenge evidence is forbidden as current promotion basis")
 
 
-def _validate_limitations(report: AdaptiveCriticStressReport) -> None:
+def _validate_limitations(report: CriticStressReport) -> None:
     expected_limitations = (
         (CriticStressLimitation.HIDDEN_RUBRIC_CONDITIONAL_GAP,)
         if report.measurement.acceptance_grounding.kind is AcceptanceGroundingKind.HIDDEN_RUBRIC
@@ -445,7 +445,7 @@ def _validate_limitations(report: AdaptiveCriticStressReport) -> None:
         raise ValueError("critic-stress limitations do not match acceptance grounding")
 
 
-def _validate_classification(report: AdaptiveCriticStressReport) -> None:
+def _validate_classification(report: CriticStressReport) -> None:
     from .reducer import derive_classification
 
     expected_finding, expected_regression = derive_classification(
@@ -466,7 +466,3 @@ def _require_host_observer(principal: AuthorityPrincipal) -> None:
         AuthorityPrincipalKind.HOST_POLICY,
     }:
         raise ValueError("causal critic-stress evidence requires a host observer")
-
-
-CriticStressMeasurement = AdaptiveCriticStressMeasurement
-CriticStressReport = AdaptiveCriticStressReport

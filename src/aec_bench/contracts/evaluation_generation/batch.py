@@ -24,11 +24,9 @@ from aec_bench.contracts.evaluation_plane import (
 )
 from aec_bench.contracts.harness_instance import HarnessBudget
 from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
-from aec_bench.contracts.program_proposal import (
-    MatchedEvaluationCoordinate,
-    ProgramCandidateKind,
-    ProgramCandidateRef,
-)
+from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
+from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
+from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 from aec_bench.contracts.validators import NonEmptyStr
 
 

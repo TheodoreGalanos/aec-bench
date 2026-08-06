@@ -22,7 +22,7 @@ from aec_bench.contracts.harness_kernel import (
 )
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger, AuthorityLedgerError
-from aec_bench.meta_harness.motif_library import (
+from aec_bench.meta_harness.motifs import (
     HarnessProgramMotif,
     MotifPromotionDecision,
     MotifPromotionPolicy,
@@ -31,9 +31,9 @@ from aec_bench.meta_harness.motif_library import (
     MotifSelectionRequest,
     MotifStatus,
     apply_motif_promotion,
-    apply_motif_promotion_v1_compatibility,
     decide_motif_promotion,
 )
+from aec_bench.meta_harness.motifs.promotion import apply_authorized_motif_promotion
 
 
 class MotifAssuranceState(StrEnum):
@@ -585,7 +585,7 @@ def _apply_reusable_motif_promotion(
         raise MotifAssuranceAuthorityError(
             "reusable promotion authority does not bind the exact qualified provisional motif"
         )
-    return apply_motif_promotion_v1_compatibility(
+    return apply_authorized_motif_promotion(
         source,
         decision,
         policy,
@@ -642,7 +642,7 @@ def _apply_transfer_validated_motif_promotion(
             "transfer-validated promotion requires exact granted motif_state_change "
             "authority for the assured subject, kernel, and critic generation"
         )
-    return apply_motif_promotion_v1_compatibility(
+    return apply_authorized_motif_promotion(
         source,
         decision,
         policy,

@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from aec_bench.contracts import validators as validators_module
+import aec_bench.contracts.validators as validators_module
 from aec_bench.task_world_templates.continual.world_logic import ActionRejected
 from aec_bench.task_world_templates.hydraulics import contracts as contracts_module
 from aec_bench.task_world_templates.hydraulics import identity as identity_module

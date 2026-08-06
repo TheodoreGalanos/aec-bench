@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Protocol
 
 from aec_bench.contracts.evaluation_plane import EvaluationPlan
-from aec_bench.contracts.proposal_execution import ProposalSessionStatus
+from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 from aec_bench.contracts.trial_record import (
     ArtifactReference,
     Completeness,
@@ -27,7 +27,7 @@ from aec_bench.meta_harness.authority_ledger import (
     AuthorityLedgerError,
 )
 from aec_bench.meta_harness.immutable_artifact_store import EvidenceRepository
-from aec_bench.meta_harness.proposal_dispatch_governance import (
+from aec_bench.meta_harness.proposal_dispatch import (
     GovernedProposalDispatchAuthorization,
     ProposalDispatchGovernanceError,
     replay_governed_proposal_dispatch,

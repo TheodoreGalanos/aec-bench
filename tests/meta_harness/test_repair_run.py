@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from aec_bench.contracts.harness_kernel import KernelManifest
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
-from aec_bench.evolution.repair_loop import (
+from aec_bench.evolution.repair_lifecycle import (
     CompiledRepairCandidate,
     RepairLoopError,
     RepairLoopStatus,

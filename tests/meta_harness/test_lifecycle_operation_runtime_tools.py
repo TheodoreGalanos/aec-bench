@@ -268,7 +268,7 @@ def test_local_runner_assemblies_expose_and_execute_operation_tool(
         "package_dir": package,
         "run_dir": run_dir,
         "model": "deterministic-operation-probe",
-        "registry": registry,
+        "adapter_builder": registry.build,
         "verifier": _completed_runtime_verification,
     }
 

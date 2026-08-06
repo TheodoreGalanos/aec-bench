@@ -17,7 +17,7 @@ from aec_bench.contracts.output_completion import (
     OutputCompletionContract,
     evaluate_output_completion,
 )
-from aec_bench.contracts.proposal_execution import ProposalSessionStatus
+from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import Completeness
 from aec_bench.harness.harbor_importing.contracts import HarborImportError
@@ -31,13 +31,13 @@ from aec_bench.harness.harbor_importing.proposal_evidence.api import (
     load_proposal_harbor_import_evidence,
 )
 from aec_bench.harness.proposal_runtime_archive import build_proposal_runtime_archive
-from aec_bench.harness.proposal_session import (
-    build_proposal_session_execution_ref,
-    run_proposal_session,
-)
 from aec_bench.harness.proposal_session_config import (
     ProposalSessionHostConfig,
     load_proposal_session_host_inputs,
+)
+from aec_bench.harness.proposal_session_runtime import (
+    build_proposal_session_execution_ref,
+    run_proposal_session,
 )
 from aec_bench.harness.proposal_task_package import (
     ProposalTaskPackageIdentity,

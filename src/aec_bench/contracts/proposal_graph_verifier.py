@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from aec_bench.contracts.proposal_execution import (
+    from aec_bench.contracts.proposal_execution.graph import (
         FinalSynthesisSpec,
         ProposalHandoff,
         ProposalInputPort,

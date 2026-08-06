@@ -33,7 +33,7 @@ from aec_bench.meta_harness.factorial_plan import (
     build_factorial_plan,
 )
 from aec_bench.meta_harness.kernel_catalogue import KernelRuntimeRegistry
-from aec_bench.meta_harness.program_runtime import ProgramExecutionStatus
+from aec_bench.meta_harness.program_execution import ProgramExecutionStatus
 from aec_bench.meta_harness.run_bundle_runtime import (
     MetaHarnessStudyContext,
     RunBundleExecution,

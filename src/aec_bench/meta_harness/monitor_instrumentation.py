@@ -36,22 +36,22 @@ from aec_bench.meta_harness.monitor_runtime import (
     FlowCollectorProbeReceipt,
     ProductionMonitorRuntime,
 )
-from aec_bench.meta_harness.monitors import (
-    CanaryCommitment,
-    CanaryKind,
-    ForbiddenFlowRule,
-)
 from aec_bench.meta_harness.motif_assurance import (
     AssuredMotifSelectionRecord,
     MotifAssuranceSnapshot,
     motif_subject_sha256,
 )
-from aec_bench.meta_harness.motif_library import (
+from aec_bench.meta_harness.motifs import (
     MotifLibrary,
     MotifSelectionOutcome,
     MotifSelectionRequest,
     resolve_motif_selection,
     select_motif,
+)
+from aec_bench.meta_harness.standing_monitors import (
+    CanaryCommitment,
+    CanaryKind,
+    ForbiddenFlowRule,
 )
 from aec_bench.meta_harness.surface_guard import (
     PrincipalAwareSurfaceGuard,

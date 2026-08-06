@@ -8,14 +8,13 @@ import hashlib
 import pytest
 from pydantic import ValidationError
 
-import aec_bench.contracts as contracts
-from aec_bench.contracts.evaluation_generation import (
+from aec_bench.contracts.evaluation_generation.spec import (
     CandidateKindRequirement,
     EvaluationExecutionProfileRef,
     EvaluationGenerationBudget,
     EvaluationGenerationSpec,
 )
-from aec_bench.contracts.program_proposal import ProgramCandidateKind
+from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 
 
 def _sha(label: str) -> str:
@@ -48,15 +47,6 @@ def _custom_budget() -> EvaluationGenerationBudget:
         max_wall_time_seconds=7_200,
         max_concurrency=3,
     )
-
-
-def test_evaluation_generation_contracts_are_public_library_exports() -> None:
-    assert {
-        "EvaluationCohortManifest",
-        "EvaluationGenerationSpec",
-        "PreparedEvaluationGeneration",
-        "EvaluationBatchPlan",
-    }.issubset(contracts.__all__)
 
 
 def test_generation_spec_treats_cardinality_and_budget_as_supplied_data() -> None:

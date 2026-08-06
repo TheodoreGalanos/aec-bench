@@ -12,7 +12,7 @@ from aec_bench.contracts.execution_program import ActionNode, FanoutNode, RetryP
 from aec_bench.contracts.harness_instance import AgentBindingConfig, prohibited_retry_safe_error_codes
 from aec_bench.contracts.harness_kernel import FrozenStrictModel, KernelCapabilityRef
 from aec_bench.contracts.validators import NonEmptyStr
-from aec_bench.evolution.repair_loop import RepairCandidate, RepairPairingSpec
+from aec_bench.evolution.repair_lifecycle import RepairCandidate, RepairPairingSpec
 from aec_bench.meta_harness.repair_rule_registry import (
     RepairDiagnosisRuleRegistration,
     RepairDiagnosisRuleRegistry,

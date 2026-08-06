@@ -11,14 +11,9 @@ from pydantic import ValidationError
 from aec_bench.contracts.evaluation_plane import EvaluationPlanRef
 from aec_bench.contracts.harness_instance import HarnessBudget
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
-from aec_bench.contracts.program_proposal import (
-    CandidateEvidenceKind,
-    MatchedCandidateEvidenceRef,
-    MatchedEvaluationCoordinate,
-    OptimizationSplit,
-    ProgramCandidateKind,
-    ProgramCandidateRef,
-)
+from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
+from aec_bench.contracts.program_proposal.study import MatchedCandidateEvidenceRef, MatchedEvaluationCoordinate
+from aec_bench.contracts.program_proposal.types import CandidateEvidenceKind, OptimizationSplit, ProgramCandidateKind
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.meta_harness.program_necessity import (
     ProgramComplexityDerivationRef,

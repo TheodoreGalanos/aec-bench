@@ -20,7 +20,6 @@ from aec_bench.contracts.harness_instance import HarnessBudget
 from aec_bench.meta_harness.applicability import profile_task_applicability
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger
 from aec_bench.meta_harness.kernel_catalogue import default_kernel_registry
-from aec_bench.meta_harness.monitors import CycleMonitorReport
 from aec_bench.meta_harness.motif_assurance import (
     AssuredMotifSelectionRecord,
     MotifAssuranceAuthorityError,
@@ -40,18 +39,19 @@ from aec_bench.meta_harness.motif_learning import (
     select_and_materialize_assured_motif,
     select_and_materialize_motif,
 )
-from aec_bench.meta_harness.motif_library import (
+from aec_bench.meta_harness.motif_materialization import (
+    MotifFactorialInstantiationRequest,
+    encode_harness_motif_template,
+    encode_program_motif_template,
+)
+from aec_bench.meta_harness.motifs import (
     HarnessProgramMotif,
     MotifLibrary,
     MotifSelectionRequest,
     MotifStatus,
     decide_motif_promotion,
 )
-from aec_bench.meta_harness.motif_materialization import (
-    MotifFactorialInstantiationRequest,
-    encode_harness_motif_template,
-    encode_program_motif_template,
-)
+from aec_bench.meta_harness.standing_monitors import CycleMonitorReport
 from tests.meta_harness.test_motif_library import _motif, _policy, _transfer
 from tests.meta_harness.test_motif_materialization import (
     _descriptor,

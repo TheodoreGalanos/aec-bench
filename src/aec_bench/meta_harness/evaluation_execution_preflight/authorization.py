@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from aec_bench.contracts.evaluation_generation import EvaluationBatchPlan
+from aec_bench.contracts.evaluation_generation.batch import EvaluationBatchPlan
 from aec_bench.contracts.evaluation_plane import (
     EvaluationPlan,
     TaskVerifierSurfaceScope,
@@ -41,7 +41,7 @@ from aec_bench.meta_harness.evaluation_generation_authorization import (
     require_evaluation_dispatch_authorization_count,
     verify_evaluation_dispatch_assignment_order,
 )
-from aec_bench.meta_harness.proposal_dispatch_governance import (
+from aec_bench.meta_harness.proposal_dispatch import (
     GovernedProposalDispatchAuthorization,
     ProposalDispatchGovernanceError,
     replay_governed_proposal_dispatch,

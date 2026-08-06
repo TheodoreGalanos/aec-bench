@@ -30,7 +30,7 @@ from aec_bench.contracts.harness_instance import (
 )
 from aec_bench.contracts.output_completion import OutputCompletionEvaluation, OutputCompletionReason
 from aec_bench.contracts.stage_execution import DeclaredStage, DeclaredStageGraph
-from aec_bench.evolution.repair_loop import (
+from aec_bench.evolution.repair_lifecycle import (
     RepairCandidate,
     RepairFailureDomain,
     RepairOwner,
@@ -53,7 +53,7 @@ from aec_bench.meta_harness.adaptive_diagnosis import (
     validate_adaptive_diagnosis_feasibility,
 )
 from aec_bench.meta_harness.kernel_catalogue import default_kernel_registry
-from aec_bench.meta_harness.program_runtime import ProgramExecutionStatus
+from aec_bench.meta_harness.program_execution import ProgramExecutionStatus
 from aec_bench.meta_harness.repair_runtime import (
     HarnessAgentCapabilityPatch,
     HarnessAgentMaxTurnsPatch,

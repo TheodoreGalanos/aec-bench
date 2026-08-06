@@ -11,10 +11,7 @@ from pydantic import JsonValue
 
 from aec_bench.adapters.base import AdapterResult
 from aec_bench.contracts.agent_output import AgentOutputStatus
-from aec_bench.contracts.proposal_execution import (
-    ProposalHandoff,
-    SemanticSubtaskSpec,
-)
+from aec_bench.contracts.proposal_execution.graph import ProposalHandoff, SemanticSubtaskSpec
 from aec_bench.contracts.provider_broker import (
     ProviderBrokerCallPlane,
     ProviderBrokerPolicy,

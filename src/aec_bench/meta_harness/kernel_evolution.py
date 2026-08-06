@@ -18,7 +18,7 @@ from aec_bench.contracts.harness_kernel import (
     validate_sha256,
 )
 from aec_bench.contracts.validators import NonEmptyStr
-from aec_bench.meta_harness.compiler import CompilationError
+from aec_bench.meta_harness.compilation import CompilationError
 from aec_bench.meta_harness.kernel_catalogue import KernelRuntimeRegistry
 
 

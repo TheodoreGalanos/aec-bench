@@ -1,5 +1,5 @@
 # ABOUTME: Evaluates pump-station stewardship trajectories from immutable run evidence.
-# ABOUTME: Owns ordered integrity gates, diagnostic metrics, and terminal liabilities.
+# ABOUTME: Keeps pump-specific scoring, diagnostics, and terminal liabilities with the task owner.
 
 from __future__ import annotations
 

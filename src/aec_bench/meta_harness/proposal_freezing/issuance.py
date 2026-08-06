@@ -17,28 +17,16 @@ from aec_bench.contracts.evaluation_plane import (
     EvaluationPlan,
 )
 from aec_bench.contracts.harness_instance import CompiledHarnessInstance
-from aec_bench.contracts.program_proposal import (
-    CandidateGenerationManifest,
-    DecompositionLeakageAudit,
-    DecompositionProblemView,
-    OptimizationSplit,
-    ProgramCandidateRef,
-    ProposalFreeze,
-)
+from aec_bench.contracts.program_proposal.candidate import CandidateGenerationManifest, ProgramCandidateRef
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
+from aec_bench.contracts.program_proposal.problem import DecompositionLeakageAudit, DecompositionProblemView
+from aec_bench.contracts.program_proposal.types import OptimizationSplit
 from aec_bench.contracts.proposal_execution_profile import (
     ProposalExecutionProfile,
-)
-from aec_bench.contracts.provider_calibration import (
-    ProviderCalibrationTaskManifest,
 )
 from aec_bench.meta_harness.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerError,
-    StoredAuthorityEvent,
-)
-from aec_bench.meta_harness.monitors import (
-    replay_scheduled_basis,
-    schedule_basis_replay,
 )
 from aec_bench.meta_harness.proposal_freezing.contracts import (
     GovernedProposalFreezeError,
@@ -51,10 +39,12 @@ from aec_bench.meta_harness.proposal_freezing.evidence import (
     observe_input_basis,
 )
 from aec_bench.meta_harness.proposal_freezing.validation import (
-    ProposalFreezeLifecyclePolicy,
-    validate_calibration_lifecycle,
     validate_frozen_bindings,
     validate_principals,
+)
+from aec_bench.meta_harness.standing_monitors import (
+    replay_scheduled_basis,
+    schedule_basis_replay,
 )
 from aec_bench.meta_harness.structural_generalization_corpus import (
     StructuralSplitManifest,
@@ -73,8 +63,6 @@ def issue_governed_proposal_freeze(
     operator_authority: OperatorAuthority,
     structural_split: StructuralSplitManifest,
     split: OptimizationSplit,
-    provider_calibration_manifest: ProviderCalibrationTaskManifest | None = None,
-    provider_calibration_release_authority: StoredAuthorityEvent | None = None,
     leakage_audit: DecompositionLeakageAudit,
     problem_view: DecompositionProblemView,
     candidate_manifest: CandidateGenerationManifest,
@@ -86,7 +74,6 @@ def issue_governed_proposal_freeze(
     host_policy: AuthorityPrincipal,
     host_runtime: AuthorityPrincipal,
     incumbent_artifact: IncumbentArtifact | None = None,
-    lifecycle_policy: ProposalFreezeLifecyclePolicy | None = None,
 ) -> GovernedProposalFreezeResult:
     """Validate, persist, authorize, and immediately replay one exact proposal freeze."""
 
@@ -106,13 +93,6 @@ def issue_governed_proposal_freeze(
         )
         structural = StructuralSplitManifest.model_validate(
             structural_split.model_dump(mode="python"),
-        )
-        calibration_manifest = (
-            None
-            if provider_calibration_manifest is None
-            else ProviderCalibrationTaskManifest.model_validate(
-                provider_calibration_manifest.model_dump(mode="python"),
-            )
         )
         audit = DecompositionLeakageAudit.model_validate(
             leakage_audit.model_dump(mode="python"),
@@ -185,21 +165,11 @@ def issue_governed_proposal_freeze(
         raise GovernedProposalFreezeError(
             "proposal execution profile requires a different fixed-harness kernel",
         )
-    calibration_release = validate_calibration_lifecycle(
-        ledger=ledger,
-        evaluation_plan=plan,
-        structural_split=structural,
-        split=split,
-        manifest=calibration_manifest,
-        release_authority=provider_calibration_release_authority,
-        lifecycle_policy=lifecycle_policy,
-    )
     selected_task = validate_frozen_bindings(
         evaluation_plan=plan,
         evaluation_plan_candidate_scope=candidate_scope,
         structural_split=structural,
         split=split,
-        provider_calibration_manifest=calibration_manifest,
         leakage_audit=audit,
         problem_view=view,
         candidate_manifest=manifest,
@@ -209,7 +179,6 @@ def issue_governed_proposal_freeze(
         proposal_artifacts=artifacts,
         incumbent_artifact=incumbent,
         host_policy=policy_principal,
-        lifecycle_policy=lifecycle_policy,
     )
 
     try:
@@ -219,21 +188,7 @@ def issue_governed_proposal_freeze(
             evaluation_plan_candidate_manifest_sha256=(plan.candidate_manifest_sha256),
             evaluation_plan_candidate_scope=candidate_scope,
             structural_split_sha256=structural.content_sha256,
-            selected_structural_item_sha256=(
-                selected_task.content_sha256 if split is not OptimizationSplit.PROVIDER_CALIBRATION else None
-            ),
-            selected_provider_calibration_task_sha256=(
-                selected_task.content_sha256 if split is OptimizationSplit.PROVIDER_CALIBRATION else None
-            ),
-            provider_calibration_manifest_sha256=(
-                None if calibration_manifest is None else calibration_manifest.content_sha256
-            ),
-            provider_calibration_release_authority_event_sha256=(
-                None if calibration_release is None else calibration_release.event.content_sha256
-            ),
-            provider_calibration_evaluation_seed=(
-                None if calibration_manifest is None else calibration_manifest.evaluation_seed
-            ),
+            selected_structural_item_sha256=selected_task.content_sha256,
             selected_world_lineage_id=selected_task.world_lineage_id,
             fixed_harness_sha256=harness.content_sha256,
             execution_profile_sha256=(None if profile is None else profile.content_sha256),
@@ -263,8 +218,6 @@ def issue_governed_proposal_freeze(
             evaluation_plan_candidate_scope=candidate_scope,
             operator=operator,
             structural_split=structural,
-            provider_calibration_manifest=calibration_manifest,
-            provider_calibration_release_authority=calibration_release,
             leakage_audit=audit,
             problem_view=view,
             candidate_manifest=manifest,
@@ -295,8 +248,6 @@ def issue_governed_proposal_freeze(
             evaluation_plan_candidate_scope=(observed.evaluation_plan_candidate_scope),
             operator_authority=observed.operator_authority,
             structural_split=observed.structural_split,
-            provider_calibration_manifest=(observed.provider_calibration_manifest),
-            provider_calibration_release_authority=(observed.provider_calibration_release_authority),
             leakage_audit=observed.leakage_audit,
             problem_view=observed.problem_view,
             candidate_manifest=observed.candidate_manifest,
@@ -325,7 +276,6 @@ def issue_governed_proposal_freeze(
                 "fixed_harness_change",
                 "structural_split_change",
                 *(("execution_profile_change",) if profile is not None else ()),
-                *(("provider_calibration_manifest_retired",) if calibration_manifest is not None else ()),
             ),
         )
         stored = ledger.issue_authority_event(event)

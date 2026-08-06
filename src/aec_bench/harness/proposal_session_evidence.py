@@ -27,15 +27,14 @@ from aec_bench.contracts.harness_kernel import (
     validate_sha256,
 )
 from aec_bench.contracts.pricing import estimate_cost_usd
-from aec_bench.contracts.proposal_execution import (
-    ProposalCandidateFailureCode,
+from aec_bench.contracts.proposal_execution.graph import ProposalHandoff
+from aec_bench.contracts.proposal_execution.session import (
     ProposalContainerTransitionRef,
     ProposalContractCheckResultRef,
-    ProposalContractCheckStatus,
-    ProposalHandoff,
     ProposalHandoffArtifactRef,
     ProposalNodeExecutionResultRef,
 )
+from aec_bench.contracts.proposal_execution_types import ProposalCandidateFailureCode, ProposalContractCheckStatus
 from aec_bench.contracts.stage_execution import StageResourceEvidence
 from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext
 from aec_bench.contracts.validators import NonEmptyStr

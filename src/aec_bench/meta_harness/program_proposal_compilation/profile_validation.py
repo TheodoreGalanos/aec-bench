@@ -10,12 +10,10 @@ from aec_bench.contracts.harness_instance import (
     ToolBindingConfig,
 )
 from aec_bench.contracts.harness_kernel import canonical_content_sha256, validate_sha256
-from aec_bench.contracts.program_proposal import (
-    ProgramCandidateKind,
-    ProgramCandidateRef,
-    ProposalFreeze,
-)
-from aec_bench.contracts.proposal_execution import ScopedSourceMaterialization
+from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
+from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
+from aec_bench.contracts.proposal_execution_context import ScopedSourceMaterialization
 from aec_bench.contracts.proposal_execution_profile import ProposalExecutionProfile
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.meta_harness.kernel_catalogue import (
@@ -24,7 +22,7 @@ from aec_bench.meta_harness.kernel_catalogue import (
     KernelRuntimeRegistry,
     KernelRuntimeRegistryError,
 )
-from aec_bench.meta_harness.proposal_freeze import GovernedProposalFreezeResult
+from aec_bench.meta_harness.proposal_freezing import GovernedProposalFreezeResult
 from aec_bench.meta_harness.task_snapshot import (
     TaskSnapshotError,
     graph_hidden_task_snapshot_sha256,
@@ -120,9 +118,7 @@ def _validate_governed_freeze_binding(
     if governed_freeze.freeze != proposal_freeze:
         raise ProposalCompilationHostError("supplied ProposalFreeze differs from its governed authority context")
     if proposal_freeze.execution_profile_sha256 is None:
-        raise ProposalCompilationHostError(
-            "legacy proposal freeze does not bind an execution profile and is not executable"
-        )
+        raise ProposalCompilationHostError("proposal freeze does not bind an execution profile and is not executable")
     if proposal_freeze.execution_profile_sha256 != execution_profile.content_sha256:
         raise ProposalCompilationHostError("execution profile differs from the exact governed ProposalFreeze")
     profile_basis = governed_freeze.basis.execution_profile

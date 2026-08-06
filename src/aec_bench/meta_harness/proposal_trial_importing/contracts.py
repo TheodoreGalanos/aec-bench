@@ -11,10 +11,8 @@ from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
-from aec_bench.contracts.proposal_execution import (
-    ProposalSessionReceipt,
-    ProposalSessionStatus,
-)
+from aec_bench.contracts.proposal_execution.session import ProposalSessionReceipt
+from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.harness.harbor_importing.proposal_evidence import ProposalHarborImportEvidence

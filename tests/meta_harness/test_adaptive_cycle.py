@@ -1,5 +1,5 @@
-# ABOUTME: Exercises the production fixed-K adaptive-cycle orchestrator from candidate search through transfer.
-# ABOUTME: Proves the executable example persists a complete repair, calibration, motif, and holdout lineage.
+# ABOUTME: Exercises the fixed-K adaptive-cycle orchestrator through governed promotion handoff.
+# ABOUTME: Proves repair, calibration, and motif evidence stop before authority-bearing status changes.
 
 from __future__ import annotations
 
@@ -17,12 +17,13 @@ from aec_bench.contracts.execution_program import (
     StopOutcome,
 )
 from aec_bench.evolution.paired_repair import RepairAcceptancePolicy
-from aec_bench.evolution.repair_loop import (
+from aec_bench.evolution.repair_lifecycle import (
     RepairCandidate,
     RepairLoopError,
     RepairProgramTemplate,
 )
-from aec_bench.meta_harness.adaptive_cycle import (
+from aec_bench.meta_harness.adaptive_cycle_cli import run_cli
+from aec_bench.meta_harness.adaptive_cycle_runtime import (
     AdaptiveCycleExecutors,
     AdaptiveCycleOutcome,
     AdaptiveCycleSpec,
@@ -32,9 +33,7 @@ from aec_bench.meta_harness.adaptive_cycle import (
     HarnessMaxTurnsDiagnosisRule,
     load_adaptive_cycle_report,
     materialize_child_factorial_request,
-    run_adaptive_cycle_v1_compatibility,
 )
-from aec_bench.meta_harness.adaptive_cycle_cli import run_cli
 from aec_bench.meta_harness.adaptive_diagnosis import (
     AdaptiveDiagnosisPolicy,
 )
@@ -46,12 +45,12 @@ from aec_bench.meta_harness.factorial_candidates import (
 from aec_bench.meta_harness.factorial_experiment import (
     prepare_factorial_experiment_spec as prepare_stage_zero_spec,
 )
-from aec_bench.meta_harness.motif_library import (
+from aec_bench.meta_harness.motif_materialization import MotifFactorialInstantiationRequest
+from aec_bench.meta_harness.motifs import (
     MotifLibrary,
     MotifStatus,
     write_motif_library_artifact,
 )
-from aec_bench.meta_harness.motif_materialization import MotifFactorialInstantiationRequest
 from aec_bench.meta_harness.repair_runtime import RepairVerifierPolicy
 from tests.meta_harness.test_motif_learning import (
     _agent_model,
@@ -60,7 +59,6 @@ from tests.meta_harness.test_motif_learning import (
     _policy,
     _program_factor,
     _rebind_recipe_tasks,
-    _workflow,
 )
 from tests.meta_harness.test_repair_runtime import (
     RewardByTurnsHarborExecutor,
@@ -428,7 +426,6 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
     source_executor = StageZeroHarborExecutor()
     repair_executor = RewardByTurnsHarborExecutor(emit_turn_limit_failure=True)
     child_executor = StageZeroHarborExecutor()
-    transfer_executor = StageZeroHarborExecutor()
     spec_path = tmp_path / "adaptive-cycle-spec.json"
     spec_path.write_text(json.dumps(spec.model_dump(mode="json")), encoding="utf-8")
 
@@ -462,7 +459,6 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
                     source=blocked_source_executor,
                     repair=RewardByTurnsHarborExecutor(emit_turn_limit_failure=True),
                     child_calibration=StageZeroHarborExecutor(),
-                    transfer=StageZeroHarborExecutor(),
                 ),
             )
     finally:
@@ -505,7 +501,6 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
                     source=drift_after_source_executor,
                     repair=blocked_repair_executor,
                     child_calibration=StageZeroHarborExecutor(),
-                    transfer=StageZeroHarborExecutor(),
                 ),
             )
     finally:
@@ -537,7 +532,6 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
             source=source_executor,
             repair=repair_executor,
             child_calibration=child_executor,
-            transfer=transfer_executor,
         ),
     )
 
@@ -546,7 +540,6 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
     assert result.report.terminal_stage is AdaptiveCycleTerminalStage.MOTIF_PROMOTION
     assert result.report.terminal_reason is AdaptiveCycleTerminalReason.MOTIF_NOT_REUSABLE
     assert result.report.final_status is MotifStatus.PROVISIONAL
-    assert result.transfer is None
     assert result.child_calibration is not None
     assert result.learning is not None
     assert result.report.child_calibration_report is not None
@@ -559,32 +552,6 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
     assert source_executor.calls == 6
     assert repair_executor.calls == [(17, 1), (29, 1), (17, 2), (29, 2)]
     assert child_executor.calls == 6
-    assert transfer_executor.calls == 0
-
-    compatibility_transfer_executor = StageZeroHarborExecutor()
-    compatibility = run_adaptive_cycle_v1_compatibility(
-        spec=spec,
-        registry=registry,
-        workflow=_workflow(
-            fixture_runtime.tasks_root.parent,
-            fixture_runtime.tasks_root,
-            run_label="adaptive-cycle-v1-compatibility",
-        ),
-        artifacts_root=tmp_path / "adaptive-cycle-v1-compatibility-artifacts",
-        executors=AdaptiveCycleExecutors(
-            source=StageZeroHarborExecutor(),
-            repair=RewardByTurnsHarborExecutor(emit_turn_limit_failure=True),
-            child_calibration=StageZeroHarborExecutor(),
-            transfer=compatibility_transfer_executor,
-        ),
-    )
-
-    assert compatibility.report.final_status is MotifStatus.TRANSFER_VALIDATED
-    assert compatibility.transfer is not None
-    assert compatibility.transfer.finalization.motif.status is MotifStatus.TRANSFER_VALIDATED
-    assert compatibility.transfer.evaluation.trial_count == 4
-    assert compatibility_transfer_executor.calls == 6
-    assert load_adaptive_cycle_report(compatibility.path) == compatibility.report
 
     rejected_payload = spec.model_dump(mode="python", exclude={"content_sha256"})
     rejected_payload["repair_request"]["acceptance_policy"] = RepairAcceptancePolicy(
@@ -598,7 +565,6 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
         encoding="utf-8",
     )
     rejected_child_executor = StageZeroHarborExecutor()
-    rejected_transfer_executor = StageZeroHarborExecutor()
 
     rejected = run_cli(
         [
@@ -621,7 +587,6 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
             source=StageZeroHarborExecutor(),
             repair=RewardByTurnsHarborExecutor(emit_turn_limit_failure=True),
             child_calibration=rejected_child_executor,
-            transfer=rejected_transfer_executor,
         ),
     )
 
@@ -636,9 +601,7 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
     assert rejected.repaired_candidate is None
     assert rejected.child_calibration is None
     assert rejected.learning is None
-    assert rejected.transfer is None
     assert rejected_child_executor.calls == 0
-    assert rejected_transfer_executor.calls == 0
     assert load_adaptive_cycle_report(rejected.path) == rejected.report
 
     Path(result.report.motif_library.path).write_text("{}\n", encoding="utf-8")

@@ -14,7 +14,7 @@ import time
 import tomllib
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated
 
 import typer
 
@@ -22,21 +22,20 @@ from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import StructuredError, console, emit
 from aec_bench.contracts.canonical_refs import CanonicalRefSet, parse_canonical_refs
 from aec_bench.contracts.task_definition import ToolSpec
-from aec_bench.evaluation.llm_reviewer import (
-    ReviewerEndpointConfig,
-    ReviewerRunConfig,
-    ReviewerRunResult,
-    load_reviewer_config,
-    run_workspace_reviewer,
-)
 from aec_bench.evaluation.normalisation import NormalisationResult, normalise_output
 from aec_bench.harness.local_runtime import (
     patch_workspace_paths,
     read_instruction,
     setup_workspace,
-    setup_workspace_for_script,
     stage_verifier_assets,
     unstage_verifier_assets,
+)
+from aec_bench.meta_harness.llm_reviewer import (
+    ReviewerEndpointConfig,
+    ReviewerRunConfig,
+    ReviewerRunResult,
+    load_reviewer_config,
+    run_workspace_reviewer,
 )
 
 # Output files we expect the adapter to produce
@@ -278,9 +277,9 @@ def _run_adapter(
     constitutional_model: str | None = None,
     instruction_override: str | None = None,
 ) -> dict[str, object]:
-    """Execute a task using the adapter registry.
+    """Execute a task using the current local adapter builder.
 
-    Builds the adapter via LocalAdapterRegistry, executes it, and
+    Builds the adapter, executes it, and
     writes output files to the workspace. Returns the agent result dict.
 
     When *constitutional_model* is provided and the workspace rlm.toml has
@@ -288,7 +287,7 @@ def _run_adapter(
     instead of the default from rlm.toml.
     """
     from aec_bench.adapters.base import AdapterRequest
-    from aec_bench.adapters.local_registry import LocalAdapterRegistry
+    from aec_bench.adapters.local_registry import build_local_adapter
     from aec_bench.trajectory.writer import TrajectoryWriter
 
     instruction = instruction_override if instruction_override is not None else read_instruction(workspace)
@@ -304,9 +303,7 @@ def _run_adapter(
     traj_path = str(Path(workspace) / "trajectory.jsonl")
     trajectory_writer = TrajectoryWriter(path=traj_path)
 
-    # Build adapter via registry — constitutional_model is forwarded to _build_rlm
-    registry = LocalAdapterRegistry()
-    adapter = registry.build(
+    adapter = build_local_adapter(
         adapter_kind=adapter_kind,
         model_name=model,
         workspace=workspace,
@@ -356,54 +353,6 @@ def _run_adapter(
     )
 
     return agent_result_data
-
-
-def _run_legacy_script(
-    *,
-    workspace: str,
-    model: str,
-    timeout: int,
-) -> dict[str, object]:
-    """Execute the RLM task using the legacy standalone script as a subprocess.
-
-    This is the original execution path kept as a fallback for validation.
-    """
-    from aec_bench.agents.rlm_script import build_rlm_script
-
-    env = dict(os.environ)
-    instruction = read_instruction(workspace)
-    if not instruction:
-        console.print("[red]No instruction file found in task directory[/red]")
-        raise typer.Exit(1)
-
-    env["AGENT_INSTRUCTION"] = instruction
-    env["AGENT_MODEL"] = model
-
-    # Build the RLM script and patch /workspace/ paths for local execution
-    script = build_rlm_script()
-    normalised = workspace.rstrip("/")
-    script = script.replace("/workspace/", f"{normalised}/")
-
-    console.print(f"  Script: {len(script):,} chars")
-
-    proc = subprocess.run(
-        [sys.executable, "-c", script],
-        cwd=workspace,
-        env=env,
-        timeout=timeout,
-        capture_output=False,  # let stderr stream to terminal
-    )
-
-    if proc.returncode != 0:
-        console.print(f"\n[yellow]Process exited with code {proc.returncode}[/yellow]")
-
-    # Read results
-    result_path = Path(workspace, "agent_result.json")
-    if result_path.exists():
-        payload = json.loads(result_path.read_text())
-        if isinstance(payload, dict):
-            return cast(dict[str, object], payload)
-    return {}
 
 
 def _report_results(
@@ -630,11 +579,6 @@ def run_local(
     ),
     timeout: int = typer.Option(1800, "--timeout", "-t", help="Timeout in seconds (default: 30 minutes)"),
     keep_workspace: bool = typer.Option(False, "--keep-workspace", help="Don't delete temp workspace after run"),
-    legacy_script: bool = typer.Option(
-        False,
-        "--legacy-script",
-        help="Use the legacy standalone script instead of the library adapter",
-    ),
     no_verify: Annotated[bool, typer.Option("--no-verify", help="Skip verifier execution after the agent run")] = False,
     no_import: Annotated[bool, typer.Option("--no-import", help="Skip auto-import of results into the ledger")] = False,
     no_normalise: Annotated[
@@ -689,18 +633,12 @@ def run_local(
 
     console.print(f"[bold]Setting up local workspace for {task_dir.name}...[/bold]")
 
-    # Legacy script path needs extra workspace setup (path patching, etc.)
-    if legacy_script:
-        workspace = setup_workspace_for_script(str(task_dir))
-    else:
-        workspace = setup_workspace(str(task_dir))
-        patch_workspace_paths(workspace)
+    workspace = setup_workspace(str(task_dir))
+    patch_workspace_paths(workspace)
 
     console.print(f"  Workspace: {workspace}")
     console.print(f"  Model: {model}")
     console.print(f"  Adapter: {adapter}")
-    if legacy_script:
-        console.print("  Mode: [dim]legacy-script[/dim]")
     console.print()
     reviewer_result: ReviewerRunResult | None = None
     reviewer_config = _reviewer_config_from_cli(
@@ -724,19 +662,12 @@ def run_local(
 
         agent_start = time.monotonic()
 
-        if legacy_script:
-            agent_result = _run_legacy_script(
-                workspace=workspace,
-                model=model,
-                timeout=timeout,
-            )
-        else:
-            agent_result = _run_adapter(
-                adapter_kind=adapter,
-                workspace=workspace,
-                model=model,
-                constitutional_model=constitutional_model,
-            )
+        agent_result = _run_adapter(
+            adapter_kind=adapter,
+            workspace=workspace,
+            model=model,
+            constitutional_model=constitutional_model,
+        )
 
         agent_seconds = time.monotonic() - agent_start
 
@@ -774,8 +705,7 @@ def run_local(
                 console.print(f"[green]Verifier completed in {verifier_seconds:.1f}s[/green]")
 
         if (
-            not legacy_script
-            and not no_verify
+            not no_verify
             and verifier_seconds is not None
             and _should_run_verifier_feedback_retry(Path(workspace), reward=reward)
         ):
@@ -893,7 +823,7 @@ def run_local(
             {
                 "status": agent_result.get("status", "unknown"),
                 "adapter": adapter,
-                "mode": "legacy-script" if legacy_script else "adapter",
+                "mode": "adapter",
                 "output_dir": str(out_path),
                 "files": copied,
                 "agent_seconds": agent_seconds,

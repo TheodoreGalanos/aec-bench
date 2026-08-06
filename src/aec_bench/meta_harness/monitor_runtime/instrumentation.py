@@ -41,7 +41,7 @@ from aec_bench.meta_harness.monitor_runtime.surface_io import (
     read_external_file,
     read_surface_canonical_json,
 )
-from aec_bench.meta_harness.monitors import (
+from aec_bench.meta_harness.standing_monitors import (
     FlowAction,
     FlowSurface,
     ForbiddenFlowRule,

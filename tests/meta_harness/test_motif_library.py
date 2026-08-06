@@ -11,7 +11,7 @@ from typing import Any, cast
 import pytest
 from pydantic import ValidationError
 
-from aec_bench.meta_harness.motif_library import (
+from aec_bench.meta_harness.motifs import (
     FactorialEvidenceReference,
     HarnessProgramMotif,
     MotifApplicabilityDescriptor,
@@ -29,7 +29,6 @@ from aec_bench.meta_harness.motif_library import (
     QualityEvidenceReference,
     TransferEvidenceReference,
     apply_motif_promotion,
-    apply_motif_promotion_v1_compatibility,
     decide_motif_promotion,
     resolve_motif_selection,
     select_motif,
@@ -455,60 +454,6 @@ def test_reusable_promotion_requires_two_distinct_calibration_world_lineages() -
     assert "insufficient_distinct_calibration_world_lineages" in decision.reasons
 
 
-def test_candidate_promotes_through_provisional_to_reusable() -> None:
-    candidate = _motif()
-
-    provisional_decision = decide_motif_promotion(candidate, MotifStatus.PROVISIONAL, _policy())
-    provisional = apply_motif_promotion(candidate, provisional_decision, _policy())
-    reusable_decision = decide_motif_promotion(provisional, MotifStatus.REUSABLE, _policy())
-    reusable = apply_motif_promotion_v1_compatibility(
-        provisional,
-        reusable_decision,
-        _policy(),
-    )
-
-    assert provisional_decision.accepted is True
-    assert provisional.status is MotifStatus.PROVISIONAL
-    assert provisional.parent_motif_sha256 == candidate.motif_sha256
-    assert reusable_decision.accepted is True
-    assert reusable_decision.reasons == ()
-    assert reusable.status is MotifStatus.REUSABLE
-    assert reusable.motif_sha256 != provisional.motif_sha256
-
-
-def test_v1_compatibility_promotion_preserves_published_motif_identities() -> None:
-    candidate = _motif()
-    provisional = apply_motif_promotion(
-        candidate,
-        decide_motif_promotion(candidate, MotifStatus.PROVISIONAL, _policy()),
-        _policy(),
-    )
-    reusable = apply_motif_promotion_v1_compatibility(
-        provisional,
-        decide_motif_promotion(provisional, MotifStatus.REUSABLE, _policy()),
-        _policy(),
-    )
-    transfer_source = _motif(
-        status=MotifStatus.REUSABLE,
-        transfer_refs=(_transfer(),),
-    )
-    transfer_validated = apply_motif_promotion_v1_compatibility(
-        transfer_source,
-        decide_motif_promotion(
-            transfer_source,
-            MotifStatus.TRANSFER_VALIDATED,
-            _policy(),
-        ),
-        _policy(),
-    )
-
-    assert candidate.motif_sha256 == "708898a21c34a1093004386682f62da5653660623c6f4f0698d785e3b3c3ada3"
-    assert provisional.motif_sha256 == "f8c1d43253543c026c05cdaf74819a068b52947e375f00ac9042de027bd2788b"
-    assert reusable.motif_sha256 == "51d7c38b58805ba6848377bda58f9957b8612b713c8c5d72ab51884ad18e52ed"
-    assert transfer_source.motif_sha256 == "1bd82f44fcb94c0ac6a7f5ea383c9a2eaf72ef22ae8d13aa102e107b0bdc8955"
-    assert transfer_validated.motif_sha256 == "ac74f417f99ae39bd97d9b9c14911398435855110d9228c1682729ea9cf668e1"
-
-
 @pytest.mark.parametrize(
     ("motif", "target"),
     [
@@ -586,20 +531,6 @@ def test_transfer_promotion_fails_closed_on_holdout_leakage(
 
     assert decision.accepted is False
     assert reason in decision.reasons
-
-
-def test_clean_holdout_evidence_promotes_reusable_motif_to_transfer_validated() -> None:
-    motif = _motif(status=MotifStatus.REUSABLE, transfer_refs=(_transfer(),))
-
-    decision = decide_motif_promotion(motif, MotifStatus.TRANSFER_VALIDATED, _policy())
-    promoted = apply_motif_promotion_v1_compatibility(
-        motif,
-        decision,
-        _policy(),
-    )
-
-    assert decision.accepted is True
-    assert promoted.status is MotifStatus.TRANSFER_VALIDATED
 
 
 def test_library_add_query_and_archive_hash_are_deterministic() -> None:

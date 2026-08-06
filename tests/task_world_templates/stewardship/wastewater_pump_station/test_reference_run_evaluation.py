@@ -7,7 +7,6 @@ from dataclasses import replace
 from pathlib import Path
 
 from aec_bench.contracts.world_interface import WorldActorActionRequest
-from aec_bench.evaluation.stewardship import evaluate_pump_station_reference_run, pump_station_semantic_outcome
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
     PumpStationBacklogStatus,
     PumpStationPoolReservation,
@@ -15,6 +14,10 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
     PumpStationEpisodeHost,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evaluation import (
+    evaluate_pump_station_reference_run,
+    pump_station_semantic_outcome,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
     PumpStationBoundControlRequest,

@@ -20,12 +20,10 @@ from aec_bench.contracts.authority import (
 )
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
 from aec_bench.contracts.output_completion import OutputCompletionContract
-from aec_bench.contracts.program_proposal import (
-    MatchedEvaluationCoordinate,
-    ProgramCandidateKind,
-    ProgramCandidateRef,
-)
-from aec_bench.contracts.proposal_execution import ProposalCompilationRejection
+from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
+from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
+from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
+from aec_bench.contracts.proposal_execution.compilation import ProposalCompilationRejection
 from aec_bench.contracts.task_definition import TaskDefinition, Visibility
 from aec_bench.harness.harbor_dispatch import (
     ProposalHarborDispatchInput,
@@ -48,16 +46,15 @@ from aec_bench.meta_harness.program_proposal_compilation import (
     ProposalRunSessionBundle,
     compile_governed_proposal,
 )
-from aec_bench.meta_harness.proposal_dispatch_governance import (
+from aec_bench.meta_harness.proposal_dispatch import (
     GovernedProposalDispatch,
     GovernedProposalDispatchAuthorization,
     ProposalDispatchGovernanceError,
     authorize_governed_proposal_dispatch,
     replay_governed_proposal_dispatch,
 )
-from aec_bench.meta_harness.proposal_freeze import (
+from aec_bench.meta_harness.proposal_freezing import (
     GovernedProposalFreezeResult,
-    ProposalFreezeLifecyclePolicy,
 )
 from aec_bench.tasks.loader import load_task_definition
 
@@ -377,7 +374,6 @@ def _authorize(
     harbor_job_config: dict[str, object] | None = None,
     host_runtime: AuthorityPrincipal | None = None,
     evaluation_coordinate: MatchedEvaluationCoordinate | None = None,
-    lifecycle_policy: ProposalFreezeLifecyclePolicy | None = None,
 ) -> GovernedProposalDispatchAuthorization:
     return authorize_governed_proposal_dispatch(
         ledger=fixture.ledger,
@@ -395,7 +391,6 @@ def _authorize(
         harbor_job_config=(harbor_job_config if harbor_job_config is not None else fixture.harbor_job_config),
         host_runtime=host_runtime or fixture.host_runtime,
         jobs_dir="jobs/proposal",
-        lifecycle_policy=lifecycle_policy,
     )
 
 
@@ -515,11 +510,7 @@ def _materialize_dispatch_fixture(
         task_revision=governed.freeze.problem_view.task_revision,
         split=governed.freeze.split,
         world_lineage_id=governed.freeze.selected_world_lineage_id,
-        seed=(
-            governed.freeze.provider_calibration_evaluation_seed
-            if governed.freeze.provider_calibration_evaluation_seed is not None
-            else 701
-        ),
+        seed=701,
         repetition=1,
     )
     incumbent = governed.freeze.incumbent_candidate or ProgramCandidateRef(

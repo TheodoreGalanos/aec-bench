@@ -28,7 +28,7 @@ from aec_bench.meta_harness.monitor_runtime.coverage import (
     collection_is_complete,
     derive_coverage_attestation,
 )
-from aec_bench.meta_harness.monitors import (
+from aec_bench.meta_harness.standing_monitors import (
     BasisReplayObservation,
     CanaryKind,
     CanaryObservation,

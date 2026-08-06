@@ -53,7 +53,7 @@ from aec_bench.meta_harness.authority_ledger import (
     StoredAuthorityEvent,
     StoredBasis,
 )
-from aec_bench.meta_harness.critic_governance import (
+from aec_bench.meta_harness.critic_lifecycle import (
     StoredAcceptanceManifestReveal,
     StoredCriticGenerationRetirement,
     assert_acceptance_audit_closed,
@@ -68,7 +68,7 @@ from aec_bench.meta_harness.critic_governance import (
     retire_critic_generation,
     reveal_retired_acceptance_manifest,
 )
-from aec_bench.meta_harness.monitors import CycleMonitorReport
+from aec_bench.meta_harness.standing_monitors import CycleMonitorReport
 from tests.support.governed_promotion import issue_test_governed_promotion
 
 

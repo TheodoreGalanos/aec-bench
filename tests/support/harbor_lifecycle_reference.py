@@ -18,11 +18,11 @@ from agents.entrypoint_agent import EntrypointAgent
 class PublicToolReferenceEntrypointAgent(EntrypointAgent):
     """Exercise the production bridge with a deterministic public-surface agent."""
 
-    def _lifecycle_registry(self) -> Any:
-        return _PublicToolRegistry()
+    def _lifecycle_adapter_builder(self) -> Any:
+        return _PublicToolBuilder().build
 
 
-class _PublicToolRegistry:
+class _PublicToolBuilder:
     def build(
         self,
         *,

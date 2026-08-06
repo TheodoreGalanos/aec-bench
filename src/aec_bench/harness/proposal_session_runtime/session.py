@@ -7,18 +7,17 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from aec_bench.contracts.proposal_execution import (
-    ProposalHandoff,
+from aec_bench.contracts.proposal_execution.graph import ProposalHandoff
+from aec_bench.contracts.proposal_execution.session import (
     ProposalNodeReceipt,
-    ProposalNodeReceiptStatus,
     ProposalSessionExecutionRef,
     ProposalSessionReceipt,
-    ProposalSessionStatus,
 )
 from aec_bench.contracts.proposal_execution_profile import (
     ProposalSchedulingPolicy,
     ProposalSchedulingSemantics,
 )
+from aec_bench.contracts.proposal_execution_types import ProposalNodeReceiptStatus, ProposalSessionStatus
 from aec_bench.harness.proposal_node_context import (
     PersistedProposalHandoffArtifact,
 )

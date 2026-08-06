@@ -16,12 +16,9 @@ from aec_bench.contracts.harness_kernel import (
     canonical_content_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.program_proposal import (
-    MatchedCandidateEvidenceRef,
-    MatchedEvaluationCoordinate,
-    ProgramCandidateKind,
-    ProgramCandidateRef,
-)
+from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
+from aec_bench.contracts.program_proposal.study import MatchedCandidateEvidenceRef, MatchedEvaluationCoordinate
+from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.meta_harness.task_snapshot import (

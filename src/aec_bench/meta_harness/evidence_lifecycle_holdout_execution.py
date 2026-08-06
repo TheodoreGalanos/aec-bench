@@ -8,6 +8,7 @@ import json
 import os
 import platform
 import stat
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -177,7 +178,7 @@ def execute_lifecycle_holdout_audit_once(
     private_execution_root: Path,
     private_ledger_root: Path,
     repository_dir: Path,
-    registry: Any,
+    adapter_builder: Callable[..., Any],
 ) -> LifecycleHoldoutExecutionResult:
     """Claim, bind, and execute exactly one sealed audit through the selected local condition."""
     execution_root = Path(private_execution_root)
@@ -243,7 +244,7 @@ def execute_lifecycle_holdout_audit_once(
                 adapter_kind=condition.requested_adapter,
                 max_turns=condition.max_turns_per_session,
                 process_id="process.sealed-holdout",
-                registry=registry,
+                adapter_builder=adapter_builder,
                 visibility_policy=condition.memory_visibility_policy,
                 repository_dir=Path(repository_dir),
                 require_adapter_identity_match=True,
@@ -259,7 +260,7 @@ def execute_lifecycle_holdout_audit_once(
                 adapter_kind=condition.requested_adapter,
                 max_turns=condition.max_turns_per_session,
                 process_id="process.sealed-holdout",
-                registry=registry,
+                adapter_builder=adapter_builder,
                 visibility_policy=condition.memory_visibility_policy,
                 repository_dir=Path(repository_dir),
                 require_adapter_identity_match=True,

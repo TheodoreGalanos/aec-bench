@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from aec_bench.evaluation.llm_reviewer import (
+from aec_bench.meta_harness.llm_reviewer import (
     ReviewerEndpointConfig,
     ReviewerRunConfig,
     _build_model_reference,

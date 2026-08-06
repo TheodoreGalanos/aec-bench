@@ -6,8 +6,7 @@ from aec_bench.contracts.program_proposal.candidate import (
     CandidateGenerationManifest,
     ProgramCandidateRef,
 )
-from aec_bench.contracts.program_proposal.compatibility import ProposalFreeze
-from aec_bench.contracts.program_proposal.freeze import EvaluationProposalFreeze
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
 from aec_bench.contracts.program_proposal.problem import (
     DecompositionLeakageAudit,
     DecompositionProblemView,
@@ -37,7 +36,6 @@ __all__ = (
     "DecompositionLeakageAudit",
     "DecompositionOptimizationCycle",
     "DecompositionProblemView",
-    "EvaluationProposalFreeze",
     "FixedHarnessCapabilityProjection",
     "MatchedCandidateEvidenceRef",
     "MatchedEvaluationCoordinate",

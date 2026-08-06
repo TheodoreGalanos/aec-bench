@@ -1103,213 +1103,6 @@ def test_lifecycle_state_persists_first_class_checkpoint_records(tmp_path: Path)
     ]
 
 
-def test_lifecycle_state_migrates_legacy_dictionary_shape(tmp_path: Path) -> None:
-    package = _write_package(tmp_path / "package")
-    run_dir = tmp_path / "run"
-    archived_submission = run_dir / "episodes" / "initial_review" / "submission.json"
-    workspace_submission = run_dir / "workspace" / "submissions" / "initial_review.json"
-    _write_json(archived_submission, {"checkpoint_id": "initial_review"})
-    _write_json(workspace_submission, {"checkpoint_id": "initial_review"})
-    submission_sha256 = lifecycle_runtime._sha256(archived_submission)
-    _write_json(
-        run_dir / "state.json",
-        {
-            "lifecycle_id": "lifecycle.demo",
-            "world_id": "world.demo",
-            "status": "awaiting_checkpoint_submission",
-            "active_checkpoint_id": "response_review",
-            "active_released_files": ["response.txt"],
-            "completed_checkpoints": [
-                {
-                    "checkpoint_id": "initial_review",
-                    "submission_path": "submissions/initial_review.json",
-                    "submission_sha256": submission_sha256,
-                    "released_files": ["initial.txt"],
-                }
-            ],
-        },
-    )
-
-    state = read_evidence_lifecycle_state(package, run_dir)
-    persisted = json.loads((run_dir / "state.json").read_text(encoding="utf-8"))
-
-    assert state["active_checkpoint_id"] == "response_review"
-    assert persisted["schema_version"] == "4"
-    assert [item["status"] for item in persisted["checkpoint_runs"]] == ["submitted", "active"]
-
-
-def test_lifecycle_state_migrates_v2_records_without_losing_attempts(tmp_path: Path) -> None:
-    package = _write_package(tmp_path / "package")
-    run_dir = tmp_path / "run"
-    prepare_evidence_checkpoint(package, run_dir)
-    open_checkpoint_attempt(
-        package,
-        run_dir,
-        session_id="session-001",
-        execution_mode="persistent",
-    )
-    state_path = run_dir / "state.json"
-    state = _load_json(state_path)
-    state["schema_version"] = "2"
-    state.pop("lifecycle_spec_sha256")
-    state.pop("package_sha256")
-    _write_json(state_path, state)
-
-    migrated = read_evidence_lifecycle_state(package, run_dir)
-
-    assert _load_json(state_path)["schema_version"] == "4"
-    assert migrated["checkpoint_runs"][0]["attempts"][0]["session_id"] == "session-001"
-
-
-def test_lifecycle_state_migrates_v2_branch_with_action_lineage_hash(tmp_path: Path) -> None:
-    package = _write_package(tmp_path / "package")
-    parent_run = tmp_path / "parent"
-    branch_run = tmp_path / "branch"
-    _complete_demo_lifecycle(package, parent_run)
-    branch_evidence_lifecycle(
-        package,
-        parent_run,
-        branch_run,
-        checkpoint_id="initial_review",
-        branch_id="branch.v2-lineage",
-        reason="Resume a branch persisted before action lineage hashes.",
-    )
-    state_path = branch_run / "state.json"
-    state = _load_json(state_path)
-    state["schema_version"] = "2"
-    state.pop("lifecycle_spec_sha256")
-    state.pop("package_sha256")
-    state["branch"].pop("parent_action_state_sha256")
-    for checkpoint in state["checkpoint_runs"]:
-        checkpoint.pop("evidence_request_budget")
-        checkpoint.pop("evidence_request_budget_remaining")
-        checkpoint.pop("evidence_request_actions")
-        for attempt in checkpoint["attempts"]:
-            attempt.pop("inherited_from_parent")
-    _write_json(state_path, state)
-
-    migrated = read_evidence_lifecycle_state(package, branch_run)
-    persisted = _load_json(state_path)
-
-    assert persisted["schema_version"] == "4"
-    assert migrated["branch"]["parent_action_state_sha256"]
-    assert migrated["branch"]["branched_from_checkpoint_id"] == "initial_review"
-
-
-def test_lifecycle_state_migrates_v3_to_v4_without_inventing_actions(tmp_path: Path) -> None:
-    package = _write_package(tmp_path / "package")
-    run_dir = tmp_path / "run"
-    prepare_evidence_checkpoint(package, run_dir)
-    state_path = run_dir / "state.json"
-    state = _load_json(state_path)
-    state["schema_version"] = "3"
-    for checkpoint in state["checkpoint_runs"]:
-        checkpoint.pop("evidence_request_budget")
-        checkpoint.pop("evidence_request_budget_remaining")
-        checkpoint.pop("evidence_request_actions")
-    _write_json(state_path, state)
-
-    migrated = read_evidence_lifecycle_state(package, run_dir)
-
-    assert migrated["checkpoint_runs"][0]["evidence_request_actions"] == []
-    assert _load_json(state_path)["schema_version"] == "4"
-
-
-def test_v3_branch_rejects_attempts_on_inherited_checkpoint_records(tmp_path: Path) -> None:
-    package = _write_package(tmp_path / "package")
-    parent_run = tmp_path / "parent"
-    branch_run = tmp_path / "branch"
-    _complete_demo_lifecycle(package, parent_run)
-    branch_evidence_lifecycle(
-        package,
-        parent_run,
-        branch_run,
-        checkpoint_id="response_review",
-        branch_id="branch.impossible-v3-lineage",
-        reason="Construct an impossible v3 inherited-attempt payload.",
-    )
-    state_path = branch_run / "state.json"
-    state = _load_json(state_path)
-    state["schema_version"] = "3"
-    state["branch"].pop("parent_action_state_sha256")
-    for checkpoint in state["checkpoint_runs"]:
-        checkpoint.pop("evidence_request_budget")
-        checkpoint.pop("evidence_request_budget_remaining")
-        checkpoint.pop("evidence_request_actions")
-        for attempt in checkpoint["attempts"]:
-            attempt.pop("inherited_from_parent")
-    _write_json(state_path, state)
-
-    with pytest.raises(EvidenceLifecycleError, match="v3 inherited checkpoint cannot contain attempts"):
-        read_evidence_lifecycle_state(package, branch_run)
-
-
-def test_v3_branch_migration_preserves_branch_local_attempts(tmp_path: Path) -> None:
-    package = _write_package(tmp_path / "package")
-    parent_run = tmp_path / "parent"
-    branch_run = tmp_path / "branch"
-    _complete_demo_lifecycle(package, parent_run)
-    branch_evidence_lifecycle(
-        package,
-        parent_run,
-        branch_run,
-        checkpoint_id="response_review",
-        branch_id="branch.legacy-local-attempt",
-        reason="Match the attempt lineage emitted by the PR16 v3 branch runtime.",
-    )
-    state_path = branch_run / "state.json"
-    state = _load_json(state_path)
-    for checkpoint in state["checkpoint_runs"]:
-        checkpoint["attempts"] = []
-    _write_json(state_path, state)
-    open_checkpoint_attempt(
-        package,
-        branch_run,
-        session_id="branch-session-001",
-        execution_mode="fresh_context",
-    )
-    state = _load_json(state_path)
-    state["schema_version"] = "3"
-    state["branch"].pop("parent_action_state_sha256")
-    for checkpoint in state["checkpoint_runs"]:
-        checkpoint.pop("evidence_request_budget")
-        checkpoint.pop("evidence_request_budget_remaining")
-        checkpoint.pop("evidence_request_actions")
-        for attempt in checkpoint["attempts"]:
-            attempt.pop("inherited_from_parent")
-    _write_json(state_path, state)
-
-    migrated = read_evidence_lifecycle_state(package, branch_run)
-
-    assert migrated["checkpoint_runs"][0]["attempts"] == []
-    assert migrated["checkpoint_runs"][1]["attempts"] == [
-        {
-            "attempt_id": "response_review.attempt-001",
-            "session_id": "branch-session-001",
-            "sequence": 1,
-            "execution_mode": "fresh_context",
-            "status": "active",
-            "resumed_from_attempt_id": None,
-            "failure_kind": None,
-            "episode_request_sha256": None,
-            "inherited_from_parent": False,
-        }
-    ]
-
-
-def test_v3_state_cannot_smuggle_conditional_evidence_fields(tmp_path: Path) -> None:
-    package = _write_package(tmp_path / "package")
-    run_dir = tmp_path / "run"
-    prepare_evidence_checkpoint(package, run_dir)
-    state_path = run_dir / "state.json"
-    state = _load_json(state_path)
-    state["schema_version"] = "3"
-    _write_json(state_path, state)
-
-    with pytest.raises(EvidenceLifecycleError, match="v3 lifecycle state cannot contain"):
-        read_evidence_lifecycle_state(package, run_dir)
-
-
 def test_lifecycle_state_budget_must_match_conditional_contract(tmp_path: Path) -> None:
     package = _write_conditional_package(tmp_path / "package")
     run_dir = tmp_path / "run"
@@ -2038,7 +1831,7 @@ def test_local_episode_environment_builds_fresh_adapters_in_one_workspace(tmp_pa
         package_dir=package,
         model="test-model",
         adapter_kind="tool_loop",
-        registry=registry,
+        adapter_builder=registry.build,
     )
 
     result = run_evidence_lifecycle(package, run_dir, episode_environment=environment)
@@ -2069,7 +1862,7 @@ def test_fresh_local_environment_exposes_session_bound_conditional_request_tool(
         package_dir=package,
         model="test-model",
         adapter_kind="tool_loop",
-        registry=registry,
+        adapter_builder=registry.build,
     )
 
     result = run_evidence_lifecycle(package, run_dir, episode_environment=environment)
@@ -2089,7 +1882,7 @@ def test_local_episode_environment_marks_provider_failure_immediately(tmp_path: 
         package_dir=package,
         model="test-model",
         adapter_kind="tool_loop",
-        registry=_CrashingRegistry(),
+        adapter_builder=_CrashingRegistry().build,
     )
 
     with pytest.raises(RuntimeError, match="simulated crash"):
@@ -2109,7 +1902,7 @@ def test_local_episode_environment_reconciles_completed_result_when_submission_i
         package_dir=package,
         model="test-model",
         adapter_kind="tool_loop",
-        registry=_CompletedWithoutSubmissionRegistry(),
+        adapter_builder=_CompletedWithoutSubmissionRegistry().build,
     )
 
     with pytest.raises(EvidenceLifecycleError, match="checkpoint submission not found"):
@@ -2143,7 +1936,7 @@ def test_normalized_evidence_uses_host_attempt_when_failure_callback_breaks(tmp_
         package_dir=package,
         model="test-model",
         adapter_kind="tool_loop",
-        registry=_CompletedWithoutSubmissionRegistry(),
+        adapter_builder=_CompletedWithoutSubmissionRegistry().build,
     )
     environment = _FailureRecordingCrashWrapper(base_environment)
 
@@ -2175,7 +1968,7 @@ def test_local_episode_environment_preserves_failed_attempt_artifacts_on_retry(t
         package_dir=package,
         model="test-model",
         adapter_kind="tool_loop",
-        registry=_CrashingRegistry(),
+        adapter_builder=_CrashingRegistry().build,
     )
     with pytest.raises(RuntimeError, match="simulated crash"):
         run_evidence_lifecycle(package, run_dir, episode_environment=failed)
@@ -2186,7 +1979,7 @@ def test_local_episode_environment_preserves_failed_attempt_artifacts_on_retry(t
         package_dir=package,
         model="test-model",
         adapter_kind="tool_loop",
-        registry=_WritingRegistry(),
+        adapter_builder=_WritingRegistry().build,
     )
     result = run_evidence_lifecycle(package, run_dir, episode_environment=retry)
 
@@ -2205,7 +1998,7 @@ def test_local_episode_environment_recovers_crash_after_attempt_publication(
         package_dir=package,
         model="test-model",
         adapter_kind="tool_loop",
-        registry=_WritingRegistry(),
+        adapter_builder=_WritingRegistry().build,
     )
     original_open_attempt = lifecycle_runtime.open_checkpoint_attempt
 
@@ -2249,7 +2042,7 @@ def test_local_runners_return_the_same_normalized_evidence_schema(tmp_path: Path
         package_dir=package,
         run_dir=tmp_path / "fresh-run",
         model="test-model",
-        registry=_WritingRegistry(),
+        adapter_builder=_WritingRegistry().build,
         verifier=lambda _package, _run: verification,
         process_id="process.demo",
     )
@@ -2257,7 +2050,7 @@ def test_local_runners_return_the_same_normalized_evidence_schema(tmp_path: Path
         package_dir=package,
         run_dir=tmp_path / "persistent-run",
         model="test-model",
-        registry=_LifecycleSessionRegistry(package=package, run_dir=tmp_path / "persistent-run"),
+        adapter_builder=_LifecycleSessionRegistry(package=package, run_dir=tmp_path / "persistent-run").build,
         verifier=lambda _package, _run: verification,
         process_id="process.demo",
     )
@@ -2306,12 +2099,12 @@ def test_local_runners_forward_an_explicit_experiment_recorder(
     if execution_mode == "persistent_context":
         result = run_local_evidence_lifecycle_session(
             **common,
-            registry=_LifecycleSessionRegistry(package=package, run_dir=run_dir),
+            adapter_builder=_LifecycleSessionRegistry(package=package, run_dir=run_dir).build,
         )
     else:
         result = run_local_evidence_lifecycle_fresh_context(
             **common,
-            registry=_WritingRegistry(),
+            adapter_builder=_WritingRegistry().build,
         )
 
     assert len(recorder.calls) == 1
@@ -2336,7 +2129,7 @@ def test_local_runner_without_explicit_recorder_keeps_public_recording_default(t
         package_dir=package,
         run_dir=run_dir,
         model="test-model",
-        registry=_WritingRegistry(),
+        adapter_builder=_WritingRegistry().build,
         verifier=lambda _package, _run: {
             "lifecycle_id": "lifecycle.demo",
             "reward": 1.0,
@@ -2429,12 +2222,12 @@ def test_experiment_recorder_failure_does_not_fall_back_to_public_recording(
         if execution_mode == "persistent_context":
             run_local_evidence_lifecycle_session(
                 **common,
-                registry=_LifecycleSessionRegistry(package=package, run_dir=run_dir),
+                adapter_builder=_LifecycleSessionRegistry(package=package, run_dir=run_dir).build,
             )
         else:
             run_local_evidence_lifecycle_fresh_context(
                 **common,
-                registry=_WritingRegistry(),
+                adapter_builder=_WritingRegistry().build,
             )
 
     assert read_evidence_lifecycle_state(package, run_dir)["status"] == "complete"
@@ -2483,7 +2276,7 @@ def test_local_runner_records_aec_bench_source_provenance_not_caller_repository(
         package_dir=package,
         run_dir=run_dir,
         model="test-model",
-        registry=_WritingRegistry(),
+        adapter_builder=_WritingRegistry().build,
         verifier=lambda _package, _run: verification,
     )
 
@@ -2505,7 +2298,7 @@ def test_local_runners_close_returned_provider_failures(tmp_path: Path, mode: st
         "package_dir": package,
         "run_dir": run_dir,
         "model": "test-model",
-        "registry": _FailedRegistry(),
+        "adapter_builder": _FailedRegistry().build,
         "verifier": lambda _package, _run: {},
     }
 
@@ -2529,7 +2322,7 @@ def test_local_run_records_complete_experiment_provenance_and_normalized_metrics
         package_dir=package,
         run_dir=run_dir,
         model="claude-haiku-test-revision",
-        registry=_TracingRegistry(),
+        adapter_builder=_TracingRegistry().build,
         verifier=lambda _package, _run: {
             "lifecycle_id": "lifecycle.demo",
             "reward": 1.0,
@@ -2584,7 +2377,7 @@ def test_operational_metrics_preserve_nullable_legacy_fields_without_semantic_di
         package_dir=package,
         run_dir=run_dir,
         model="unpriced-test-model",
-        registry=_WritingRegistry(),
+        adapter_builder=_WritingRegistry().build,
         verifier=lambda _package, _run: {
             "lifecycle_id": "lifecycle.demo",
             "reward": 1.0,
@@ -2884,7 +2677,7 @@ def test_local_session_builds_one_adapter_for_all_checkpoints(tmp_path: Path) ->
         package_dir=package,
         run_dir=run_dir,
         model="test-model",
-        registry=registry,
+        adapter_builder=registry.build,
         verifier=lambda _package, _run: {
             "lifecycle_id": "lifecycle.demo",
             "reward": 0.75,
@@ -2930,7 +2723,7 @@ def test_persistent_local_session_exposes_conditional_request_tool_only_for_capa
         package_dir=package,
         run_dir=run_dir,
         model="test-model",
-        registry=registry,
+        adapter_builder=registry.build,
         verifier=lambda _package, _run: {
             "lifecycle_id": "lifecycle.demo",
             "reward": 1.0,
@@ -2984,7 +2777,7 @@ def test_persistent_session_guidance_uses_package_capability_when_only_later_che
         package_dir=package,
         run_dir=run_dir,
         model="test-model",
-        registry=registry,
+        adapter_builder=registry.build,
         verifier=lambda _package, _run: {
             "lifecycle_id": "lifecycle.demo",
             "reward": 1.0,
@@ -3019,7 +2812,7 @@ def test_local_session_continues_branch_with_editable_active_draft(tmp_path: Pat
         package_dir=package,
         run_dir=branch_run,
         model="test-model",
-        registry=registry,
+        adapter_builder=registry.build,
         verifier=lambda _package, _run: {
             "lifecycle_id": "lifecycle.demo",
             "reward": 1.0,
@@ -3047,7 +2840,7 @@ def test_local_session_preserves_agent_artifacts_before_verifier_failure(tmp_pat
             package_dir=package,
             run_dir=run_dir,
             model="test-model",
-            registry=registry,
+            adapter_builder=registry.build,
             verifier=lambda _package, _run: (_ for _ in ()).throw(RuntimeError("verifier failed")),
         )
 
@@ -3074,7 +2867,7 @@ def test_persistent_session_resumes_active_checkpoint_without_overwriting_failed
             package_dir=package,
             run_dir=run_dir,
             model="test-model",
-            registry=_CrashingRegistry(),
+            adapter_builder=_CrashingRegistry().build,
             verifier=lambda _package, _run: {},
         )
 
@@ -3082,7 +2875,7 @@ def test_persistent_session_resumes_active_checkpoint_without_overwriting_failed
         package_dir=package,
         run_dir=run_dir,
         model="test-model",
-        registry=_LifecycleSessionRegistry(package=package, run_dir=run_dir),
+        adapter_builder=_LifecycleSessionRegistry(package=package, run_dir=run_dir).build,
         verifier=lambda _package, _run: {
             "lifecycle_id": "lifecycle.demo",
             "reward": 1.0,
@@ -3120,7 +2913,7 @@ def test_fresh_context_exception_records_experiment_before_propagating(tmp_path:
             package_dir=package,
             run_dir=run_dir,
             model="test-model",
-            registry=_CrashingRegistry(),
+            adapter_builder=_CrashingRegistry().build,
             verifier=lambda _package, _run: {},
         )
 
@@ -3133,7 +2926,7 @@ def test_fresh_context_exception_records_experiment_before_propagating(tmp_path:
         package_dir=package,
         run_dir=run_dir,
         model="test-model",
-        registry=_WritingRegistry(),
+        adapter_builder=_WritingRegistry().build,
         verifier=lambda _package, _run: {
             "lifecycle_id": "lifecycle.demo",
             "reward": 1.0,

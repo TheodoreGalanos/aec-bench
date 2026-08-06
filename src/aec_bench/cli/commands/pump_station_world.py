@@ -22,15 +22,15 @@ from aec_bench.contracts.continual_world import (
 )
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.contracts.world_interface import WorldActorActionRequest, WorldControlRequest
-from aec_bench.evaluation.stewardship import (
-    evaluate_pump_station_reference_run,
-)
 from aec_bench.task_world_templates.continual.rollout_control import ContinualRolloutControl
 from aec_bench.task_world_templates.continual_catalogue import default_continual_world_catalogue
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_rollout_adapter import (
     PumpStationContinualWorldBranchPort,
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import PumpStationEpisodeHost
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evaluation import (
+    evaluate_pump_station_reference_run,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )

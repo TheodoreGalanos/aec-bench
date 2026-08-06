@@ -14,7 +14,7 @@ from aec_bench.contracts.run_bundle import RunBundle
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger
 from aec_bench.meta_harness.kernel_catalogue import default_kernel_registry
-from aec_bench.meta_harness.program_runtime import ProgramExecutionStatus
+from aec_bench.meta_harness.program_execution import ProgramExecutionStatus
 from aec_bench.meta_harness.run_bundle_evidence import MetaHarnessStudyContext
 from aec_bench.meta_harness.run_bundle_runtime import execute_run_bundle
 from tests.meta_harness.test_run_bundle_runtime import (

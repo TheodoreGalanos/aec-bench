@@ -1,5 +1,5 @@
 # ABOUTME: Runs post-verifier LLM review over completed task workspaces and Harbor trials.
-# ABOUTME: Persists structured reviewer requests, findings, and summaries as evaluation artifacts.
+# ABOUTME: Keeps model-backed review execution with meta-harness composition rather than pure evaluation.
 
 from __future__ import annotations
 

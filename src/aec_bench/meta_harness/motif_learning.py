@@ -7,7 +7,6 @@ import hashlib
 import json
 from collections import defaultdict
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 from statistics import fmean
 from typing import Literal, Self
@@ -35,7 +34,7 @@ from aec_bench.contracts.harness_kernel import (
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.evolution.paired_repair import RepairTrialOutcome, decide_repair
-from aec_bench.evolution.repair_loop import (
+from aec_bench.evolution.repair_lifecycle import (
     RepairCandidate,
     RepairLoopStatus,
     RepairProgramTemplate,
@@ -45,7 +44,7 @@ from aec_bench.meta_harness.applicability import (
     profile_task_applicability,
 )
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger
-from aec_bench.meta_harness.compiler import compile_execution_program, compile_harness_instance
+from aec_bench.meta_harness.compilation import compile_execution_program, compile_harness_instance
 from aec_bench.meta_harness.factorial_candidates import ProgramFactorTemplate
 from aec_bench.meta_harness.factorial_experiment import (
     FactorialExperimentReport,
@@ -61,7 +60,14 @@ from aec_bench.meta_harness.motif_assurance import (
     MotifAssuranceSnapshot,
     assert_assured_motif_selection_current,
 )
-from aec_bench.meta_harness.motif_library import (
+from aec_bench.meta_harness.motif_materialization import (
+    InstantiatedMotifFactors,
+    MotifFactorialInstantiationRequest,
+    encode_harness_motif_template,
+    encode_program_motif_template,
+    instantiate_selected_motif_factors,
+)
+from aec_bench.meta_harness.motifs import (
     FactorialEvidenceReference,
     HarnessProgramMotif,
     MotifLibrary,
@@ -75,17 +81,9 @@ from aec_bench.meta_harness.motif_library import (
     QualityEvidenceReference,
     TransferEvidenceReference,
     apply_motif_promotion,
-    apply_motif_promotion_v1_compatibility,
     decide_motif_promotion,
     resolve_motif_selection,
     select_motif,
-)
-from aec_bench.meta_harness.motif_materialization import (
-    InstantiatedMotifFactors,
-    MotifFactorialInstantiationRequest,
-    encode_harness_motif_template,
-    encode_program_motif_template,
-    instantiate_selected_motif_factors,
 )
 from aec_bench.meta_harness.repair_runtime import (
     RepairAttemptPlan,
@@ -95,13 +93,6 @@ from aec_bench.meta_harness.repair_runtime import (
 )
 
 SelectionSplit = Literal["discovery", "calibration"]
-
-
-class _MotifLearningLifecycle(StrEnum):
-    """Internal authority policy for active evaluation versus historical replay."""
-
-    ACTIVE = "active"
-    V1_COMPATIBILITY = "v1_compatibility"
 
 
 class AcceptedRepairEvidence(ContentAddressedModel):
@@ -226,7 +217,7 @@ class MotifTransferPlan(ContentAddressedModel):
 
 
 class GovernedMotifTransferPlan(ContentAddressedModel):
-    """Additive v2 envelope binding a legacy transfer plan to selection-time assurance."""
+    """Selection-time assurance bound to one exact transfer plan."""
 
     schema_version: Literal["aecbench.governed-motif-transfer-plan.v2"] = "aecbench.governed-motif-transfer-plan.v2"
     transfer_plan_sha256: str
@@ -242,7 +233,7 @@ class GovernedMotifTransferPlan(ContentAddressedModel):
     @model_validator(mode="after")
     def validate_assured_selection(self) -> Self:
         if self.transfer_plan.content_sha256 != self.transfer_plan_sha256:
-            raise ValueError("governed transfer plan does not bind its exact legacy plan")
+            raise ValueError("governed transfer plan does not bind its exact plan")
         if self.assured_selection.content_sha256 != self.assured_selection_sha256:
             raise ValueError("governed transfer plan does not bind its exact assured selection")
         if (
@@ -261,12 +252,12 @@ class GovernedMotifTransferPlan(ContentAddressedModel):
         transfer_plan: MotifTransferPlan,
         assured_selection: AssuredMotifSelectionRecord,
     ) -> GovernedMotifTransferPlan:
-        """Create the assurance-bearing plan without changing the legacy plan identity."""
-        legacy = MotifTransferPlan.model_validate(transfer_plan.model_dump(mode="python"))
+        """Create the assurance-bearing plan for one exact transfer plan."""
+        selected_plan = MotifTransferPlan.model_validate(transfer_plan.model_dump(mode="python"))
         assured = AssuredMotifSelectionRecord.model_validate(assured_selection.model_dump(mode="python"))
         return cls(
-            transfer_plan_sha256=legacy.content_sha256,
-            transfer_plan=legacy,
+            transfer_plan_sha256=selected_plan.content_sha256,
+            transfer_plan=selected_plan,
             assured_selection_sha256=assured.content_sha256,
             assured_selection=assured,
         )
@@ -550,31 +541,6 @@ def learn_and_promote_motif(
         policy=policy,
         registry=registry,
         library=library,
-        lifecycle=_MotifLearningLifecycle.ACTIVE,
-    )
-
-
-def learn_and_promote_motif_v1_compatibility(
-    *,
-    source_stage_report: FactorialExperimentReport,
-    child_calibration_report: FactorialExperimentReport,
-    repair_execution: RepairRuntimeExecution,
-    repaired_candidate: RepairCandidate,
-    policy: MotifPromotionPolicy,
-    registry: KernelRuntimeRegistry,
-    library: MotifLibrary,
-) -> MotifLearningResult:
-    """Replay historical v1 learning, including evidence-only promotion to reusable."""
-
-    return _evaluate_motif_learning(
-        source_stage_report=source_stage_report,
-        child_calibration_report=child_calibration_report,
-        repair_execution=repair_execution,
-        repaired_candidate=repaired_candidate,
-        policy=policy,
-        registry=registry,
-        library=library,
-        lifecycle=_MotifLearningLifecycle.V1_COMPATIBILITY,
     )
 
 
@@ -587,9 +553,8 @@ def _evaluate_motif_learning(
     policy: MotifPromotionPolicy,
     registry: KernelRuntimeRegistry,
     library: MotifLibrary,
-    lifecycle: _MotifLearningLifecycle,
 ) -> MotifLearningResult:
-    """Build one causal motif evaluation with an explicit protected-edge policy."""
+    """Build one causal motif evaluation without granting protected status."""
 
     source_library, attestation, calibration_attestation = _validate_motif_learning_reports(
         source_stage_report=source_stage_report,
@@ -608,7 +573,6 @@ def _evaluate_motif_learning(
         source_library=source_library,
         candidate=candidate,
         policy=policy,
-        lifecycle=lifecycle,
     )
     report = MotifLearningReport(
         source_stage_report_sha256=source_stage_report.content_sha256,
@@ -712,7 +676,6 @@ def _evaluate_motif_promotion_lineage(
     source_library: MotifLibrary,
     candidate: HarnessProgramMotif,
     policy: MotifPromotionPolicy,
-    lifecycle: _MotifLearningLifecycle,
 ) -> tuple[
     MotifLibrary,
     HarnessProgramMotif,
@@ -728,14 +691,9 @@ def _evaluate_motif_promotion_lineage(
         decisions.append(decision)
         if not decision.accepted:
             break
-        if decision.target_status is MotifStatus.REUSABLE and lifecycle is _MotifLearningLifecycle.ACTIVE:
+        if decision.target_status is MotifStatus.REUSABLE:
             break
-        promotion_function = (
-            apply_motif_promotion_v1_compatibility
-            if lifecycle is _MotifLearningLifecycle.V1_COMPATIBILITY
-            else apply_motif_promotion
-        )
-        current = promotion_function(current, decision, policy)
+        current = apply_motif_promotion(current, decision, policy)
         archive = archive.add(current)
         lineage.append(current.motif_sha256)
     return archive, current, tuple(lineage), tuple(decisions)
@@ -756,14 +714,14 @@ def select_and_materialize_motif(
     )
 
 
-def select_and_materialize_motif_v1_compatibility(
+def _select_and_materialize_motif(
     *,
     library: MotifLibrary,
     applicability: MotifApplicabilityAttestation,
     selection_split: SelectionSplit,
     request: MotifFactorialInstantiationRequest,
 ) -> MotifTransferPlan:
-    """Replay historical v1 unassured selection and materialization for persisted artifacts."""
+    """Select and materialize after the caller has established assurance."""
 
     frozen_library = MotifLibrary.model_validate(library.model_dump(mode="python"))
     target = MotifApplicabilityAttestation.model_validate(applicability.model_dump(mode="python"))
@@ -799,9 +757,9 @@ def select_and_materialize_assured_motif(
     request: MotifFactorialInstantiationRequest,
     assurance_snapshot: MotifAssuranceSnapshot,
 ) -> GovernedMotifTransferPlan:
-    """Materialize a legacy plan and freeze its active assurance in the same selection record."""
+    """Materialize a plan and freeze its active assurance in the same selection record."""
     frozen_library = MotifLibrary.model_validate(library.model_dump(mode="python"))
-    transfer_plan = select_and_materialize_motif_v1_compatibility(
+    transfer_plan = _select_and_materialize_motif(
         library=frozen_library,
         applicability=applicability,
         selection_split=selection_split,
@@ -834,22 +792,22 @@ def release_governed_motif_transfer_plan(
     authority_ledger: AuthorityLedger,
     boundary: MotifAssuranceBoundary,
 ) -> MotifTransferPlan:
-    """Release a legacy plan only after an immediate dispatch or promotion assurance recheck."""
+    """Release a plan only after an immediate dispatch or promotion assurance recheck."""
     governed = GovernedMotifTransferPlan.model_validate(plan.model_dump(mode="python"))
     library = MotifLibrary.model_validate(frozen_library.model_dump(mode="python"))
-    legacy = governed.transfer_plan
-    if library.archive_sha256 != legacy.frozen_archive_sha256:
+    released_plan = governed.transfer_plan
+    if library.archive_sha256 != released_plan.frozen_archive_sha256:
         raise ValueError("governed transfer requires the exact frozen selection archive")
     selected = resolve_motif_selection(
         library,
-        legacy.selection_request,
-        legacy.selection_decision,
+        released_plan.selection_request,
+        released_plan.selection_decision,
     )
     if selected is None:
         raise ValueError("governed transfer selection did not select a motif")
     if (
         selected.motif_sha256 != governed.assured_selection.selected_motif_sha256
-        or selected.motif_sha256 != legacy.instantiation.selected_motif_sha256
+        or selected.motif_sha256 != released_plan.instantiation.selected_motif_sha256
     ):
         raise ValueError("governed transfer resolved the wrong selected motif")
     assert_assured_motif_selection_current(
@@ -859,7 +817,7 @@ def release_governed_motif_transfer_plan(
         authority_ledger=authority_ledger,
         boundary=boundary,
     )
-    return legacy
+    return released_plan
 
 
 def write_motif_audit_report(

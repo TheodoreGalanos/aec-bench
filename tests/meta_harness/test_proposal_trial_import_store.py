@@ -11,14 +11,16 @@ from pathlib import Path
 import pytest
 
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
-from aec_bench.meta_harness.proposal_trial_import import (
+from aec_bench.meta_harness.proposal_trial_importing.contracts import (
     ProposalTrialImportError,
     ProposalTrialImportReceipt,
-    _open_host_artifacts_repository,
-    _persist_model_path,
-    _prepare_host_artifacts_repository,
-    _snapshot_file,
-    _write_or_load_exact_trial_record,
+)
+from aec_bench.meta_harness.proposal_trial_importing.persistence import (
+    open_host_artifacts_repository,
+    persist_model_path,
+    prepare_host_artifacts_repository,
+    snapshot_file,
+    write_or_load_exact_trial_record,
 )
 from tests.support.trial_record_factories import make_trial_record
 
@@ -62,10 +64,10 @@ def _canonical_bytes(receipt: ProposalTrialImportReceipt) -> bytes:
     ).encode("utf-8")
 
 
-def test_import_receipt_preserves_legacy_physical_digest_path_and_bytes(
+def test_import_receipt_preserves_physical_digest_path_and_bytes(
     tmp_path: Path,
 ) -> None:
-    repository = _prepare_host_artifacts_repository(
+    repository = prepare_host_artifacts_repository(
         tmp_path / "host-artifacts",
         forbidden_roots=(),
     )
@@ -76,7 +78,7 @@ def test_import_receipt_preserves_legacy_physical_digest_path_and_bytes(
 
     assert receipt.content_sha256 == "dd79f23f16717b2ef4162b7d982e93e78eb1c8b12d25740ab777403ba6e8010b"
     assert physical_sha256 == "d49e1a07c7940fd23ca1300b8e0886d09c7a7c93a884e0269cad391706aa9d97"
-    path = _persist_model_path(
+    path = persist_model_path(
         repository=repository,
         model=receipt,
         filename="proposal-trial-import-receipt.json",
@@ -86,9 +88,9 @@ def test_import_receipt_preserves_legacy_physical_digest_path_and_bytes(
     assert path == (object_root / physical_sha256 / "proposal-trial-import-receipt.json")
     assert path.read_bytes() == encoded
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
-    reopened = _open_host_artifacts_repository(repository.root)
+    reopened = open_host_artifacts_repository(repository.root)
     assert (
-        _persist_model_path(
+        persist_model_path(
             repository=reopened,
             model=receipt,
             filename="proposal-trial-import-receipt.json",
@@ -102,7 +104,7 @@ def test_import_receipt_preserves_legacy_physical_digest_path_and_bytes(
         ProposalTrialImportError,
         match="different bytes",
     ):
-        _persist_model_path(
+        persist_model_path(
             repository=reopened,
             model=receipt,
             filename="proposal-trial-import-receipt.json",
@@ -113,7 +115,7 @@ def test_import_receipt_preserves_legacy_physical_digest_path_and_bytes(
 def test_raw_snapshot_and_trial_record_preserve_distinct_identity_schemes(
     tmp_path: Path,
 ) -> None:
-    repository = _prepare_host_artifacts_repository(
+    repository = prepare_host_artifacts_repository(
         tmp_path / "host-artifacts",
         forbidden_roots=(),
     )
@@ -122,7 +124,7 @@ def test_raw_snapshot_and_trial_record_preserve_distinct_identity_schemes(
     source_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
     object_root = repository.root / "proposal-trial-imports" / ("8" * 64) / "objects"
 
-    snapshot = _snapshot_file(
+    snapshot = snapshot_file(
         repository=repository,
         reference=ArtifactReference(
             kind="proposal-final-output",
@@ -137,7 +139,7 @@ def test_raw_snapshot_and_trial_record_preserve_distinct_identity_schemes(
         experiment_id="experiment/raw",
         trial_id="trial/raw",
     )
-    record_path = _write_or_load_exact_trial_record(
+    record_path = write_or_load_exact_trial_record(
         repository=repository,
         ledger_root=repository.root / "proposal-trial-records",
         record=record,
@@ -147,9 +149,9 @@ def test_raw_snapshot_and_trial_record_preserve_distinct_identity_schemes(
     assert Path(snapshot.path).read_bytes() == b"candidate output\n"
     assert record_path == (repository.root / "proposal-trial-records" / "experiment" / "raw" / "trial" / "raw.json")
     assert record_path.read_bytes() == record.model_dump_json(indent=2).encode("utf-8")
-    reopened = _open_host_artifacts_repository(repository.root)
+    reopened = open_host_artifacts_repository(repository.root)
     assert (
-        _write_or_load_exact_trial_record(
+        write_or_load_exact_trial_record(
             repository=reopened,
             ledger_root=repository.root / "proposal-trial-records",
             record=record,
@@ -170,7 +172,7 @@ def test_raw_snapshot_and_trial_record_preserve_distinct_identity_schemes(
         ProposalTrialImportError,
         match="differs from the resumed import",
     ):
-        _write_or_load_exact_trial_record(
+        write_or_load_exact_trial_record(
             repository=reopened,
             ledger_root=repository.root / "proposal-trial-records",
             record=changed,
@@ -183,7 +185,7 @@ def test_artifact_repository_rejects_disjoint_root_overlap_and_symlink(
     candidate_root = tmp_path / "candidate"
     candidate_root.mkdir()
     with pytest.raises(ProposalTrialImportError, match="overlap"):
-        _prepare_host_artifacts_repository(
+        prepare_host_artifacts_repository(
             candidate_root / "host-artifacts",
             forbidden_roots=(candidate_root,),
         )
@@ -193,7 +195,7 @@ def test_artifact_repository_rejects_disjoint_root_overlap_and_symlink(
     symlink_root = tmp_path / "linked-artifacts"
     symlink_root.symlink_to(outside, target_is_directory=True)
     with pytest.raises(ProposalTrialImportError, match="symbolic|symlink"):
-        _prepare_host_artifacts_repository(
+        prepare_host_artifacts_repository(
             symlink_root,
             forbidden_roots=(),
         )

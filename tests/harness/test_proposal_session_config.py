@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from aec_bench.contracts.output_completion import OutputCompletionContract
-from aec_bench.contracts.program_proposal import MatchedEvaluationCoordinate
-from aec_bench.contracts.proposal_execution import ProposalCompilationRejection
+from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
+from aec_bench.contracts.proposal_execution.compilation import ProposalCompilationRejection
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.harness.proposal_runtime_archive import build_proposal_runtime_archive
 from aec_bench.harness.proposal_session_config import (

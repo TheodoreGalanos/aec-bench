@@ -11,21 +11,21 @@ from typing import cast
 
 import pytest
 
-from aec_bench.contracts.proposal_execution import (
-    ProposalCandidateFailureCode,
-    ProposalCompilationRejection,
-    ProposalExecutionSemantics,
-    ProposalNodeReceiptStatus,
-    ProposalNodeSkipCause,
-    ProposalSessionStatus,
-)
+from aec_bench.contracts.proposal_execution.compilation import ProposalCompilationRejection
 from aec_bench.contracts.proposal_execution_profile import (
     ProposalEnvironmentPolicy,
     ProposalExecutionProfile,
     ProposalSchedulingPolicy,
     ProposalSchedulingSemantics,
 )
-from aec_bench.harness.proposal_session import (
+from aec_bench.contracts.proposal_execution_types import (
+    ProposalCandidateFailureCode,
+    ProposalExecutionSemantics,
+    ProposalNodeReceiptStatus,
+    ProposalNodeSkipCause,
+    ProposalSessionStatus,
+)
+from aec_bench.harness.proposal_session_runtime import (
     ProposalSessionEnvironment,
     ProposalSessionRuntimeError,
     run_proposal_session,

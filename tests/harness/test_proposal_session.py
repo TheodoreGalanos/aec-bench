@@ -28,13 +28,13 @@ from aec_bench.contracts.output_completion import (
     evaluate_output_completion,
 )
 from aec_bench.contracts.pricing import estimate_cost_usd
-from aec_bench.contracts.program_proposal import MatchedEvaluationCoordinate
-from aec_bench.contracts.proposal_execution import (
+from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
+from aec_bench.contracts.proposal_execution.compilation import ProposalCompilationRejection
+from aec_bench.contracts.proposal_execution.session import ProposalSessionExecutionRef
+from aec_bench.contracts.proposal_execution_types import (
     ProposalCandidateFailureCode,
-    ProposalCompilationRejection,
     ProposalNodeReceiptStatus,
     ProposalNodeSkipCause,
-    ProposalSessionExecutionRef,
     ProposalSessionStatus,
 )
 from aec_bench.contracts.provider_broker import (
@@ -53,16 +53,16 @@ from aec_bench.harness.execution_payload import (
     read_execution_bundle,
     write_execution_result,
 )
-from aec_bench.harness.proposal_session import (
+from aec_bench.harness.proposal_session_config import (
+    load_proposal_session_host_inputs,
+)
+from aec_bench.harness.proposal_session_runtime import (
     ProposalSessionRuntimeError,
     _operation_definition_for_proposal_runtime,
     _validate_provider_broker_call_budgets,
     build_proposal_session_execution_ref,
     prepare_proposal_node_invocation,
     run_proposal_session,
-)
-from aec_bench.harness.proposal_session_config import (
-    load_proposal_session_host_inputs,
 )
 from aec_bench.meta_harness.kernel_catalogue import (
     KernelRuntimeRegistry,

@@ -365,7 +365,7 @@ class DashboardScreen(Screen[None]):
             ("aec-bench run", "run an experiment"),
             ("aec-bench init", "scaffold a new project"),
             ("aec-bench generate task", "create instances from template"),
-            ("aec-bench generate dataset", "build dataset from suite.toml"),
+            ("aec-bench generate suite", "build tasks from suite.toml"),
             ("aec-bench meta-harness recipe", "harness comparison workflow"),
             ("aec-bench evaluate", "score trial results"),
             ("aec-bench search", "search tasks and templates"),

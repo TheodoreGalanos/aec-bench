@@ -34,7 +34,7 @@ from aec_bench.contracts.harness_instance import (
     VerificationBindingConfig,
 )
 from aec_bench.evolution.paired_repair import RepairAcceptancePolicy
-from aec_bench.evolution.repair_loop import (
+from aec_bench.evolution.repair_lifecycle import (
     RepairCandidate,
     RepairLoopRequest,
     RepairPairingSpec,

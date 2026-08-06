@@ -31,7 +31,7 @@ from aec_bench.harness.harbor_dispatch import (
     execute_harbor_config,
 )
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger, StoredBasis
-from aec_bench.meta_harness.proposal_dispatch_governance import (
+from aec_bench.meta_harness.proposal_dispatch import (
     GovernedProposalDispatchAuthorization,
     replay_governed_proposal_dispatch,
 )

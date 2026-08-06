@@ -35,7 +35,13 @@ from aec_bench.contracts.evaluation_outcome import (
 from aec_bench.contracts.evaluation_plane import CriticRef, CriticRole, EvaluationPlanRef
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger, StoredAuthorityEvent
 from aec_bench.meta_harness.governance_gate import issue_governed_promotion
-from aec_bench.meta_harness.monitors import (
+from aec_bench.meta_harness.motif_assurance import (
+    MotifAssurancePin,
+    MotifAssuranceSnapshot,
+    motif_subject_sha256,
+)
+from aec_bench.meta_harness.motifs import HarnessProgramMotif
+from aec_bench.meta_harness.standing_monitors import (
     CanaryCommitment,
     CanaryKind,
     CanaryObservation,
@@ -43,12 +49,6 @@ from aec_bench.meta_harness.monitors import (
     StandingMonitorPlan,
     run_standing_monitors,
 )
-from aec_bench.meta_harness.motif_assurance import (
-    MotifAssurancePin,
-    MotifAssuranceSnapshot,
-    motif_subject_sha256,
-)
-from aec_bench.meta_harness.motif_library import HarnessProgramMotif
 
 
 def _sha(label: str) -> str:

@@ -7,13 +7,13 @@ from aec_bench.contracts.evaluation_outcome import CriticGapDecomposition
 
 from .contracts import (
     AcceptanceGroundingKind,
-    AdaptiveCriticStressMeasurement,
-    AdaptiveCriticStressReport,
     CriticRegressionCase,
     CriticStressClassificationPolicy,
     CriticStressFinding,
     CriticStressFindingKind,
     CriticStressLimitation,
+    CriticStressMeasurement,
+    CriticStressReport,
     ReplayedBoundaryEvidence,
     VerifiedCausalSeamEvidence,
     VRedChallengeEvidence,
@@ -23,15 +23,15 @@ from .contracts import (
 def reduce_critic_stress(
     *,
     policy: CriticStressClassificationPolicy,
-    measurement: AdaptiveCriticStressMeasurement,
+    measurement: CriticStressMeasurement,
     causal_seam_evidence: tuple[VerifiedCausalSeamEvidence, ...] = (),
     replayed_boundary_evidence: tuple[ReplayedBoundaryEvidence, ...] = (),
     vred_challenges: tuple[VRedChallengeEvidence, ...] = (),
     current_promotion_basis_sha256s: tuple[str, ...] = (),
-) -> AdaptiveCriticStressReport:
+) -> CriticStressReport:
     """Classify one raw measurement without provider work or self-authorized promotion."""
     selected_policy = CriticStressClassificationPolicy.model_validate(policy.model_dump(mode="python"))
-    selected_measurement = AdaptiveCriticStressMeasurement.model_validate(measurement.model_dump(mode="python"))
+    selected_measurement = CriticStressMeasurement.model_validate(measurement.model_dump(mode="python"))
     selected_causal = tuple(
         VerifiedCausalSeamEvidence.model_validate(item.model_dump(mode="python")) for item in causal_seam_evidence
     )
@@ -52,7 +52,7 @@ def reduce_critic_stress(
         if selected_measurement.acceptance_grounding.kind is AcceptanceGroundingKind.HIDDEN_RUBRIC
         else ()
     )
-    return AdaptiveCriticStressReport(
+    return CriticStressReport(
         policy=selected_policy,
         measurement=selected_measurement,
         causal_seam_evidence=selected_causal,
@@ -69,7 +69,7 @@ def reduce_critic_stress(
 def derive_classification(
     *,
     policy: CriticStressClassificationPolicy,
-    measurement: AdaptiveCriticStressMeasurement,
+    measurement: CriticStressMeasurement,
     causal_seam_evidence: tuple[VerifiedCausalSeamEvidence, ...],
     replayed_boundary_evidence: tuple[ReplayedBoundaryEvidence, ...],
 ) -> tuple[CriticStressFinding, CriticRegressionCase | None]:

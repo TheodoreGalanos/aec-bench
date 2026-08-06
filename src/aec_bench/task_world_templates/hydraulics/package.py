@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, cast
 
-from aec_bench.contracts import validators as validators_module
+import aec_bench.contracts.validators as validators_module
 from aec_bench.ledger.durability import fsync_directory, fsync_tree
 from aec_bench.task_world_templates.continual import world_logic as world_logic_module
 from aec_bench.task_world_templates.hydraulics import contracts as contracts_module

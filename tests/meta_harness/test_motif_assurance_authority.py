@@ -13,7 +13,6 @@ from aec_bench.meta_harness.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerIntegrityError,
 )
-from aec_bench.meta_harness.monitors import CycleMonitorReport
 from aec_bench.meta_harness.motif_assurance import (
     MotifAssuranceAuthorityError,
     MotifAssuranceLedger,
@@ -22,7 +21,8 @@ from aec_bench.meta_harness.motif_assurance import (
     append_authorized_motif_event,
     motif_subject_sha256,
 )
-from aec_bench.meta_harness.motif_library import HarnessProgramMotif, MotifStatus
+from aec_bench.meta_harness.motifs import HarnessProgramMotif, MotifStatus
+from aec_bench.meta_harness.standing_monitors import CycleMonitorReport
 from tests.meta_harness.test_motif_library import _motif
 from tests.support.governed_promotion import issue_test_governed_promotion
 

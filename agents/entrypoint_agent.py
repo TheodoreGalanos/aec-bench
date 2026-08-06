@@ -28,10 +28,7 @@ from aec_bench.adapters.runtime_limits import configured_positive_int, validate_
 from aec_bench.agents.tools import inject_trajectory_writer
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.harness_instance import AgentBindingConfig
-from aec_bench.contracts.proposal_execution import (
-    ProposalSessionExecutionRef,
-    ProposalSessionReceipt,
-)
+from aec_bench.contracts.proposal_execution.session import ProposalSessionExecutionRef, ProposalSessionReceipt
 from aec_bench.contracts.proposal_execution_profile import (
     ProposalSchedulingSemantics,
 )
@@ -43,17 +40,17 @@ from aec_bench.harness.harbor_task_export import (
     load_harbor_lifecycle_bridge,
     write_harbor_lifecycle_attestation,
 )
-from aec_bench.harness.proposal_session import (
-    ProposalBackend,
-    build_proposal_session_execution_ref,
-    run_proposal_session,
-)
 from aec_bench.harness.proposal_session_config import (
     LoadedProposalSessionHostInputs,
     load_proposal_session_host_inputs,
 )
 from aec_bench.harness.proposal_session_output import (
     verified_proposal_final_output_path,
+)
+from aec_bench.harness.proposal_session_runtime import (
+    ProposalBackend,
+    build_proposal_session_execution_ref,
+    run_proposal_session,
 )
 from aec_bench.harness.pump_station_harbor.export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
@@ -587,10 +584,10 @@ class EntrypointAgent(BaseAgent):
         validate_runtime_limit_contract(adapter_kind=str(adapter_kind), configuration=self._params)
         _reject_serialized_provider_secrets(self._params)
 
-    def _lifecycle_registry(self) -> Any:
-        from aec_bench.adapters.local_registry import LocalAdapterRegistry
+    def _lifecycle_adapter_builder(self) -> Any:
+        from aec_bench.adapters.local_registry import build_local_adapter
 
-        return LocalAdapterRegistry()
+        return build_local_adapter
 
     async def _run_host_lifecycle(
         self,
@@ -631,7 +628,7 @@ class EntrypointAgent(BaseAgent):
                     adapter_kind=adapter_kind,
                     max_turns=max_turns,
                     process_id="harbor.lifecycle",
-                    registry=self._lifecycle_registry(),
+                    adapter_builder=self._lifecycle_adapter_builder(),
                     visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
                     require_adapter_identity_match=True,
                 )
@@ -748,7 +745,7 @@ class EntrypointAgent(BaseAgent):
                         session_identity=session_identity,
                         model=model,
                         max_turns=max_turns,
-                        registry=self._lifecycle_registry(),
+                        adapter_builder=self._lifecycle_adapter_builder(),
                     )
                     adapter_result = completed.adapter_result
                     input_tokens = adapter_result.usage_input_tokens or 0

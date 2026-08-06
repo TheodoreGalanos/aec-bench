@@ -10,11 +10,9 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-import aec_bench.contracts as contracts
-from aec_bench.contracts.evaluation_generation import (
+from aec_bench.contracts.evaluation_generation.cohort import EvaluationCohortBinding, EvaluationCohortRetirement
+from aec_bench.contracts.evaluation_generation.lifecycle import (
     CandidateBatchRejectionClosure,
-    EvaluationCohortBinding,
-    EvaluationCohortRetirement,
     EvaluationCriticRetirementRef,
     EvaluationGenerationClosure,
     EvaluationGenerationEvidenceRef,
@@ -72,18 +70,6 @@ def _generation_views() -> tuple[_PreparedView, _BatchView]:
         ),
     )
     return prepared, batch
-
-
-def test_evaluation_generation_lifecycle_contracts_are_public_exports() -> None:
-    assert {
-        "CandidateBatchRejectionClosure",
-        "EvaluationGenerationClosure",
-        "EvaluationGenerationRetirementClosure",
-        "GovernedBatchAssignmentEvidence",
-        "GovernedBatchExecutionClosure",
-        "GovernedBatchTerminalEvidence",
-        "ProposalGenerationClosure",
-    }.issubset(contracts.__all__)
 
 
 def test_terminal_variants_round_trip_without_nullable_state_bags() -> None:

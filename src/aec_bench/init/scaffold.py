@@ -18,14 +18,6 @@ _PACKAGED_SKILLS: tuple[str, ...] = (
     "meta-harness",
 )
 
-_PACKAGED_AGENTS: tuple[str, ...] = (
-    "tool_loop_anthropic.py",
-    "tool_loop_azure_openai.py",
-    "pydantic_ai_agent.py",
-    "script_anthropic.py",
-    "script_azure_openai.py",
-)
-
 _SCAFFOLD_DIRS: tuple[str, ...] = (
     "tasks",
     "seeds",
@@ -221,33 +213,3 @@ def copy_skills(target: Path) -> None:
             continue
         dest_dir = dest_root / skill_name
         shutil.copytree(src_dir, dest_dir, dirs_exist_ok=True)
-
-
-def copy_agents(target: Path) -> None:
-    """Copy packaged default agents into ``<target>/agents/``.
-
-    Only the packaged agent files are written. User-added agents are
-    left untouched.
-    """
-    source = _locate_bundled_source("aec_bench.init.agent_data", "agents")
-    if source is None:
-        return
-
-    dest_dir = target / "agents"
-    dest_dir.mkdir(parents=True, exist_ok=True)
-
-    # Write __init__.py if not present
-    init_path = dest_dir / "__init__.py"
-    if not init_path.exists():
-        init_path.write_text(
-            "# ABOUTME: Default Harbor-native agents for aec-bench benchmark execution.\n"
-            "# ABOUTME: Each agent subclasses Harbor's BaseAgent and composes library utilities.\n",
-            encoding="utf-8",
-        )
-
-    for agent_file in _PACKAGED_AGENTS:
-        src_file = source / agent_file
-        if not src_file.is_file():
-            continue
-        dest_file = dest_dir / agent_file
-        shutil.copy2(src_file, dest_file)

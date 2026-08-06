@@ -166,14 +166,3 @@ class TestSynthesisOutput:
         )
         assert out.fallback_used is True
         assert out.fallback_reason == "budget_exhausted"
-
-
-def test_contracts_exported_from_package() -> None:
-    """Ensure the contracts package re-exports the synthesis types."""
-    from aec_bench import contracts
-
-    assert contracts.SynthesisCandidate is SynthesisCandidate
-    assert contracts.SynthesisConfig is SynthesisConfig
-    assert contracts.SynthesisCriteria is SynthesisCriteria
-    assert contracts.SynthesisInput is SynthesisInput
-    assert contracts.SynthesisOutput is SynthesisOutput

@@ -29,7 +29,7 @@ from aec_bench.contracts.harness_kernel import (
 )
 from aec_bench.contracts.run_bundle import RunBundle, TaskSnapshotRef
 from aec_bench.contracts.validators import NonEmptyStr
-from aec_bench.meta_harness.compiler import (
+from aec_bench.meta_harness.compilation import (
     compile_execution_program,
     compile_harness_instance,
     compile_run_bundle,

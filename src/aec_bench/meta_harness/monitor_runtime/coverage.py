@@ -7,7 +7,7 @@ from collections.abc import Iterable
 
 from aec_bench.contracts.authority import AuthorityPrincipal
 from aec_bench.meta_harness.monitor_repository import _flow_rule_identity
-from aec_bench.meta_harness.monitors import (
+from aec_bench.meta_harness.standing_monitors import (
     CycleMonitorPlan,
     ForbiddenFlowRule,
     MonitorCoverageAttestation,

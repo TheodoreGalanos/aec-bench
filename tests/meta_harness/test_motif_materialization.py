@@ -34,7 +34,14 @@ from aec_bench.meta_harness.factorial_candidates import (
 )
 from aec_bench.meta_harness.factorial_plan import FactorialCell
 from aec_bench.meta_harness.kernel_catalogue import KernelRuntimeRegistry, default_kernel_registry
-from aec_bench.meta_harness.motif_library import (
+from aec_bench.meta_harness.motif_materialization import (
+    MotifFactorialInstantiationRequest,
+    encode_harness_motif_template,
+    encode_program_motif_template,
+    instantiate_selected_motif_factors,
+    rebind_program_task_inputs,
+)
+from aec_bench.meta_harness.motifs import (
     HarnessProgramMotif,
     MotifApplicabilityDescriptor,
     MotifLibrary,
@@ -44,13 +51,6 @@ from aec_bench.meta_harness.motif_library import (
     MotifStructuralDescriptor,
     MotifTemplate,
     select_motif,
-)
-from aec_bench.meta_harness.motif_materialization import (
-    MotifFactorialInstantiationRequest,
-    encode_harness_motif_template,
-    encode_program_motif_template,
-    instantiate_selected_motif_factors,
-    rebind_program_task_inputs,
 )
 from tests.support.adaptive_harness import write_adaptive_task
 

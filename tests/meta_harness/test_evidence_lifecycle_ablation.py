@@ -1247,7 +1247,7 @@ def test_concurrent_finalization_repairs_shared_index_without_lost_entries(tmp_p
             model=trial.agent.model,
             adapter_kind=trial.agent.adapter,
             max_turns=trial.max_turns_per_session,
-            registry=_GoldFreshRegistry(package, resolved_model=trial.agent.model),
+            adapter_builder=_GoldFreshRegistry(package, resolved_model=trial.agent.model).build,
             verifier=verify_lifecycle,
             visibility_policy=trial.memory_visibility_policy,
             sweep_context=LifecycleExperimentSweepContext(
@@ -2164,7 +2164,7 @@ def _recorded_trial(
         model=trial.agent.model,
         adapter_kind=trial.agent.adapter,
         max_turns=trial.max_turns_per_session,
-        registry=_GoldFreshRegistry(package, resolved_model=trial.agent.model),
+        adapter_builder=_GoldFreshRegistry(package, resolved_model=trial.agent.model).build,
         verifier=verify_lifecycle,
         visibility_policy=trial.memory_visibility_policy,
         sweep_context=LifecycleExperimentSweepContext(
@@ -2221,7 +2221,7 @@ def _conditional_recorded_trial(
         model=trial.agent.model,
         adapter_kind=trial.agent.adapter,
         max_turns=trial.max_turns_per_session,
-        registry=_ConditionalGoldFreshRegistry(package),
+        adapter_builder=_ConditionalGoldFreshRegistry(package).build,
         verifier=lifecycle_verifier(TEMPLATE_ID),
         visibility_policy=trial.memory_visibility_policy,
         sweep_context=LifecycleExperimentSweepContext(

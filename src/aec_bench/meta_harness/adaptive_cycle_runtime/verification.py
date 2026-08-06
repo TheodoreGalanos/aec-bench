@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
-from aec_bench.evolution.repair_loop import RepairCandidate
+from aec_bench.evolution.repair_lifecycle import RepairCandidate
 from aec_bench.meta_harness.adaptive_cycle_runtime.artifacts import (
     verify_artifact,
 )
@@ -23,16 +23,10 @@ from aec_bench.meta_harness.factorial_experiment import (
 )
 from aec_bench.meta_harness.motif_learning import (
     MotifLearningReport,
-    MotifTransferPromotionReport,
 )
-from aec_bench.meta_harness.motif_library import (
+from aec_bench.meta_harness.motifs import (
     MotifLibrary,
     load_pinned_motif_library,
-)
-from aec_bench.meta_harness.motif_transfer_runtime import (
-    MotifTransferEvaluationReport,
-    finalize_motif_transfer_v1_compatibility,
-    verify_motif_transfer_evaluation,
 )
 from aec_bench.meta_harness.repair_runtime import RepairTerminalRecord
 
@@ -82,11 +76,7 @@ def verify_adaptive_cycle_report(report: AdaptiveCycleReport) -> None:
 
     learning = _load_learning_evidence(validated)
     _verify_learning_evidence(validated, common, learning)
-    if validated.terminal_stage is AdaptiveCycleTerminalStage.MOTIF_PROMOTION:
-        _verify_motif_stop(validated, common, learning)
-        return
-
-    _verify_transfer_terminal(validated, common, learning)
+    _verify_motif_stop(validated, common, learning)
 
 
 def _verify_referenced_artifacts(report: AdaptiveCycleReport) -> None:
@@ -98,8 +88,6 @@ def _verify_referenced_artifacts(report: AdaptiveCycleReport) -> None:
             report.child_calibration_report,
             report.motif_learning_report,
             report.learning_motif_library,
-            report.transfer_evaluation_report,
-            report.transfer_promotion_report,
             report.spec_artifact,
             report.source_stage_report,
             report.repair_terminal,
@@ -213,37 +201,3 @@ def _verify_motif_stop(
         or learning.report.final_motif_sha256 != report.final_motif_sha256
     ):
         raise ValueError("adaptive cycle motif stop does not match its promotion report")
-
-
-def _verify_transfer_terminal(
-    report: AdaptiveCycleReport,
-    common: _CommonEvidence,
-    learning: _LearningEvidence,
-) -> None:
-    assert report.transfer_evaluation_report is not None
-    assert report.transfer_promotion_report is not None
-    transfer_evaluation = MotifTransferEvaluationReport.model_validate_json(
-        Path(report.transfer_evaluation_report.path).read_text(encoding="utf-8")
-    )
-    transfer_promotion = MotifTransferPromotionReport.model_validate_json(
-        Path(report.transfer_promotion_report.path).read_text(encoding="utf-8")
-    )
-    verify_motif_transfer_evaluation(
-        transfer_evaluation,
-        frozen_library=learning.library,
-    )
-    recomputed_transfer = finalize_motif_transfer_v1_compatibility(
-        frozen_library=learning.library,
-        evaluation=transfer_evaluation,
-        policy=learning.report.policy,
-    )
-    if (
-        recomputed_transfer.report != transfer_promotion
-        or recomputed_transfer.library != common.final_library
-        or transfer_promotion.input_archive_sha256 != report.learning_archive_sha256
-        or transfer_promotion.transfer_evaluation_sha256 != transfer_evaluation.content_sha256
-        or common.final_library.archive_sha256 != report.final_archive_sha256
-        or recomputed_transfer.motif.motif_sha256 != report.final_motif_sha256
-        or recomputed_transfer.motif.status is not report.final_status
-    ):
-        raise ValueError("adaptive cycle transfer evidence does not match its final archive")

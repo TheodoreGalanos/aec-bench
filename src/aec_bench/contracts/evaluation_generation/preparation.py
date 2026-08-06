@@ -25,11 +25,8 @@ from aec_bench.contracts.evaluation_plane import (
 )
 from aec_bench.contracts.harness_instance import HarnessBudget
 from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
-from aec_bench.contracts.program_proposal import (
-    CandidateGenerationManifest,
-    DecompositionLeakageAudit,
-    DecompositionProblemView,
-)
+from aec_bench.contracts.program_proposal.candidate import CandidateGenerationManifest
+from aec_bench.contracts.program_proposal.problem import DecompositionLeakageAudit, DecompositionProblemView
 from aec_bench.contracts.validators import NonEmptyStr
 
 

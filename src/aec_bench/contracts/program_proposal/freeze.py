@@ -34,7 +34,7 @@ from aec_bench.contracts.validators import NonEmptyStr
 
 
 class ProposalFreezeBindings(Protocol):
-    """Structural fields shared by current and compatibility freeze contracts."""
+    """Structural fields used by the current proposal-freeze validators."""
 
     evaluation_plan_candidate_manifest_sha256: str
     evaluation_plan_candidate_scope: CandidateManifestScope | None
@@ -48,7 +48,7 @@ class ProposalFreezeBindings(Protocol):
     incumbent_candidate: ProgramCandidateRef | None
 
 
-class EvaluationProposalFreeze(ContentAddressedModel):
+class ProposalFreeze(ContentAddressedModel):
     """Phase-neutral host freeze binding proposals to an optional evaluation cohort."""
 
     schema_version: Literal["aecbench.evaluation-proposal-freeze.v2"] = "aecbench.evaluation-proposal-freeze.v2"
@@ -180,12 +180,8 @@ def _validate_freeze_candidate_policy_bindings(
 
 
 def _validate_evaluation_freeze_split_lifecycle(
-    freeze: EvaluationProposalFreeze,
+    freeze: ProposalFreeze,
 ) -> None:
-    if freeze.split is OptimizationSplit.PROVIDER_CALIBRATION:
-        raise ValueError(
-            "provider_calibration is a historical v1 split; use calibration with an evaluation cohort",
-        )
     if freeze.split is OptimizationSplit.CALIBRATION:
         if freeze.evaluation_cohort is None or freeze.selected_structural_item_sha256 is not None:
             raise ValueError(

@@ -384,7 +384,7 @@ class LifecycleBranchRecord(StrictModel):
 
 
 class EvidenceLifecycleRunState(StrictModel):
-    schema_version: Literal["3", "4", "5"] = "4"
+    schema_version: Literal["4", "5"] = "4"
     lifecycle_id: NonEmptyStr
     world_id: NonEmptyStr
     lifecycle_spec_sha256: NonEmptyStr
@@ -440,14 +440,14 @@ class EvidenceLifecycleRunState(StrictModel):
         ):
             raise ValueError(f"v{self.schema_version} branch state requires a parent action state sha256")
         operation_actions = [action for checkpoint in self.checkpoint_runs for action in checkpoint.operation_actions]
-        if self.schema_version in {"3", "4"} and (
+        if self.schema_version == "4" and (
             operation_actions
             or any(
                 checkpoint.operation_budget or checkpoint.operation_budget_remaining
                 for checkpoint in self.checkpoint_runs
             )
         ):
-            raise ValueError(f"v{self.schema_version} lifecycle state cannot contain operation state")
+            raise ValueError("v4 lifecycle state cannot contain operation state")
         for expected_sequence, action in enumerate(operation_actions, start=1):
             expected_action_id = f"operation-{expected_sequence:06d}"
             if action.sequence != expected_sequence or action.action_id != expected_action_id:

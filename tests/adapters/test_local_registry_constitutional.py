@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from aec_bench.adapters.local_registry import LocalAdapterRegistry
+from aec_bench.adapters.local_registry import build_local_adapter
 
 
 class StubRlmClient:
@@ -55,8 +55,7 @@ class TestConstitutionalWiringPresent:
 
         monkeypatch.setattr(rlm_providers, "make_rlm_client", fake_make_rlm_client)
 
-        registry = LocalAdapterRegistry()
-        adapter = registry.build(
+        adapter = build_local_adapter(
             adapter_kind="rlm",
             model_name="test-model",
             workspace=str(workspace),
@@ -76,8 +75,7 @@ class TestConstitutionalWiringPresent:
             '[template]\ntier = "flat"\n\n[guardrails]\ntoken_budget = 10_000\nmax_iterations = 5\n'
         )
 
-        registry = LocalAdapterRegistry()
-        adapter = registry.build(
+        adapter = build_local_adapter(
             adapter_kind="rlm",
             model_name="test-model",
             workspace=str(workspace),
@@ -117,8 +115,7 @@ class TestConstitutionalWiringPresent:
 
         monkeypatch.setattr(rlm_providers, "make_rlm_client", fake_make_rlm_client)
 
-        registry = LocalAdapterRegistry()
-        adapter = registry.build(
+        adapter = build_local_adapter(
             adapter_kind="rlm",
             model_name="test-model",
             workspace=str(workspace),
@@ -154,8 +151,7 @@ class TestConstitutionalWiringPresent:
 
         monkeypatch.setattr(rlm_providers, "make_rlm_client", fake_make_rlm_client)
 
-        registry = LocalAdapterRegistry()
-        registry.build(
+        build_local_adapter(
             adapter_kind="rlm",
             model_name="main-model",
             workspace=str(workspace),
@@ -189,8 +185,7 @@ class TestConstitutionalWiringPresent:
 
         monkeypatch.setattr(rlm_providers, "make_rlm_client", fake_make_rlm_client)
 
-        registry = LocalAdapterRegistry()
-        registry.build(
+        build_local_adapter(
             adapter_kind="rlm",
             model_name="main-model",
             workspace=str(workspace),
@@ -223,9 +218,8 @@ class TestTaskMetadataExtraction:
 
         monkeypatch.setattr(rlm_providers, "make_rlm_client", fake_make_rlm_client)
 
-        registry = LocalAdapterRegistry()
         # Must not raise
-        adapter = registry.build(
+        adapter = build_local_adapter(
             adapter_kind="rlm",
             model_name="test-model",
             workspace=str(workspace),

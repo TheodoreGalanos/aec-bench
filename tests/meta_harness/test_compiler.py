@@ -44,7 +44,7 @@ from aec_bench.contracts.harness_instance import (
     VerificationBindingConfig,
 )
 from aec_bench.contracts.harness_kernel import KernelCapabilityRef
-from aec_bench.meta_harness.compiler import (
+from aec_bench.meta_harness.compilation import (
     CompilationError,
     CompilationOwner,
     _operation_definition_for_compilation,

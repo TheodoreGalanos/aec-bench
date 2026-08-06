@@ -25,25 +25,26 @@ from aec_bench.contracts.evaluation_outcome import (
 )
 from aec_bench.contracts.evaluation_plane import CriticRef, CriticRole, EvaluationPlanRef
 from aec_bench.contracts.harness_instance import HarnessBudget
-from aec_bench.contracts.program_proposal import (
-    CandidateEvidenceKind,
+from aec_bench.contracts.program_proposal.candidate import (
     CandidateGenerationCoordinate,
     CandidateGenerationManifest,
-    DecompositionLeakageAudit,
+    ProgramCandidateRef,
+)
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
+from aec_bench.contracts.program_proposal.problem import DecompositionLeakageAudit, DecompositionProblemView
+from aec_bench.contracts.program_proposal.study import (
     DecompositionOptimizationCycle,
-    DecompositionProblemView,
     MatchedCandidateEvidenceRef,
     MatchedEvaluationCoordinate,
+)
+from aec_bench.contracts.program_proposal.types import (
+    CandidateEvidenceKind,
     OptimizationDisposition,
     OptimizationSplit,
-    PairedCandidateComparison,
     ProgramCandidateKind,
-    ProgramCandidateRef,
-    ProposalFreeze,
 )
 from aec_bench.meta_harness import decomposition_optimization
 from aec_bench.meta_harness.decomposition_optimization import (
-    DecompositionOptimizationResult,
     DevelopmentSelectionResult,
     EvidenceOutcomeBinding,
     FrozenSelectionRule,
@@ -822,74 +823,6 @@ def test_development_selection_rejects_non_development_critic_or_generation() ->
                 compatibility_generation="different-generation",
             ),
         )
-
-
-def test_historical_v1_accept_result_loads_without_rewriting_or_rehashing() -> None:
-    schedule = _schedule()
-    evidence, outcomes = _evidence_bundle(
-        schedule,
-        {
-            "candidate.incumbent": 0.5,
-            "candidate.1": 0.8,
-            "candidate.2": 0.8,
-        },
-    )
-    study = complete_program_candidate_study(
-        study_id="study.selection",
-        schedule=schedule,
-        evidence_refs=tuple(reversed(evidence)),
-    )
-    references_by_candidate = {
-        candidate_id: tuple(reference for reference in study.evidence_refs if reference.candidate_id == candidate_id)
-        for candidate_id in (
-            "candidate.incumbent",
-            "candidate.1",
-            "candidate.2",
-        )
-    }
-    comparisons = tuple(
-        PairedCandidateComparison(
-            comparison_id=f"cycle.selection:{candidate.candidate_id}",
-            study_sha256=study.content_sha256,
-            incumbent_candidate=study.incumbent_candidate,
-            challenger_candidate=candidate,
-            incumbent_evidence_refs=references_by_candidate["candidate.incumbent"],
-            challenger_evidence_refs=references_by_candidate[candidate.candidate_id],
-            coverage_complete=True,
-            integrity_passed=True,
-            utility_delta=0.30000000000000004,
-            disposition=(
-                OptimizationDisposition.ACCEPT
-                if candidate.candidate_id == "candidate.1"
-                else OptimizationDisposition.ABSTAIN
-            ),
-            selected_candidate_id=(candidate.candidate_id if candidate.candidate_id == "candidate.1" else None),
-        )
-        for candidate in study.proposal_freeze.realized_candidates
-    )
-    historical = DecompositionOptimizationResult(
-        schedule=schedule,
-        selection_rule=_selection_rule(),
-        outcome_bindings=outcomes,
-        cycle=DecompositionOptimizationCycle(
-            cycle_id="cycle.selection",
-            study=study,
-            scheduled_candidate_ids=("candidate.1", "candidate.2"),
-            completed_candidate_ids=("candidate.1", "candidate.2"),
-            comparisons=comparisons,
-            cycle_complete=True,
-            disposition=OptimizationDisposition.ACCEPT,
-            selected_candidate_id="candidate.1",
-        ),
-    )
-    historical_bytes = historical.model_dump_json().encode()
-
-    assert historical.content_sha256 == "61511a1185ead0119a30bfce6293276a046274b4927449f18e19334665917474"
-    loaded = load_decomposition_optimization_result(historical_bytes)
-    assert type(loaded) is DecompositionOptimizationResult
-    assert loaded.content_sha256 == historical.content_sha256
-    assert loaded.model_dump_json().encode() == historical_bytes
-    assert loaded.cycle.disposition is OptimizationDisposition.ACCEPT
 
 
 @pytest.mark.parametrize(

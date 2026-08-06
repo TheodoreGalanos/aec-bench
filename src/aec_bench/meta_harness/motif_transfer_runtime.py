@@ -1,5 +1,5 @@
 # ABOUTME: Executes assured motif selections on holdout factorials and derives evidence from real trials.
-# ABOUTME: Separates dispatch assurance, non-authoritative evaluation, and historical v1 replay.
+# ABOUTME: Separates dispatch assurance from non-authoritative evaluation.
 
 from __future__ import annotations
 
@@ -63,14 +63,13 @@ from aec_bench.meta_harness.motif_learning import (
     MotifTransferResult,
     release_governed_motif_transfer_plan,
 )
-from aec_bench.meta_harness.motif_library import (
+from aec_bench.meta_harness.motifs import (
     HarnessProgramMotif,
     MotifLibrary,
     MotifPromotionDecision,
     MotifPromotionPolicy,
     MotifStatus,
     TransferEvidenceReference,
-    apply_motif_promotion_v1_compatibility,
     decide_motif_promotion,
     resolve_motif_selection,
 )
@@ -295,50 +294,6 @@ def execute_motif_transfer(
     return MotifTransferRuntimeResult(evaluation=evaluation, finalization=finalization)
 
 
-def execute_motif_transfer_v1_compatibility(
-    *,
-    frozen_library: MotifLibrary,
-    plan: MotifTransferPlan,
-    policy: MotifPromotionPolicy,
-    registry: KernelRuntimeRegistry,
-    workflow: SynchronousHarborWorkflow,
-    artifacts_root: Path,
-    policy_id: str,
-    harness_generator_sha256: str,
-    program_generator_sha256: str,
-    randomization_seed: int,
-    executor: HarborCommandExecutor | None = None,
-    confidence_level: float = 0.95,
-    bootstrap_replicates: int = 2_000,
-    bootstrap_seed: int = 42,
-) -> MotifTransferRuntimeResult:
-    """Replay historical v1 unassured dispatch and evidence-only transfer promotion."""
-
-    library = MotifLibrary.model_validate(frozen_library.model_dump(mode="python"))
-    source_plan = MotifTransferPlan.model_validate(plan.model_dump(mode="python"))
-    evaluation = _execute_motif_transfer_evaluation(
-        library=library,
-        source_plan=source_plan,
-        registry=registry,
-        workflow=workflow,
-        artifacts_root=artifacts_root,
-        policy_id=policy_id,
-        harness_generator_sha256=harness_generator_sha256,
-        program_generator_sha256=program_generator_sha256,
-        randomization_seed=randomization_seed,
-        executor=executor,
-        confidence_level=confidence_level,
-        bootstrap_replicates=bootstrap_replicates,
-        bootstrap_seed=bootstrap_seed,
-    )
-    finalization = finalize_motif_transfer_v1_compatibility(
-        frozen_library=library,
-        evaluation=evaluation,
-        policy=policy,
-    )
-    return MotifTransferRuntimeResult(evaluation=evaluation, finalization=finalization)
-
-
 def _execute_motif_transfer_evaluation(
     *,
     library: MotifLibrary,
@@ -355,7 +310,7 @@ def _execute_motif_transfer_evaluation(
     bootstrap_replicates: int,
     bootstrap_seed: int,
 ) -> MotifTransferEvaluationReport:
-    """Execute and verify the holdout factorial for one already-released legacy plan."""
+    """Execute and verify the holdout factorial for one assured released plan."""
 
     if library.archive_sha256 != source_plan.frozen_archive_sha256:
         raise ValueError("transfer runtime requires the exact frozen selection archive")
@@ -442,31 +397,6 @@ def finalize_motif_transfer(
         enriched=enriched,
         decision=decision,
         final=enriched,
-    )
-
-
-def finalize_motif_transfer_v1_compatibility(
-    *,
-    frozen_library: MotifLibrary,
-    evaluation: MotifTransferEvaluationReport,
-    policy: MotifPromotionPolicy,
-) -> MotifTransferResult:
-    """Replay historical v1 finalization, including pure transfer-validated promotion."""
-
-    library, source, plan, selected, enriched, decision = _prepare_motif_transfer_finalization(
-        frozen_library=frozen_library,
-        evaluation=evaluation,
-        policy=policy,
-    )
-    final = apply_motif_promotion_v1_compatibility(enriched, decision, policy) if decision.accepted else enriched
-    return _build_motif_transfer_result(
-        library=library,
-        source=source,
-        plan=plan,
-        selected=selected,
-        enriched=enriched,
-        decision=decision,
-        final=final,
     )
 
 

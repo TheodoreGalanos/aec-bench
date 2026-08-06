@@ -236,7 +236,7 @@ class LifecycleEpisodeContext(StrictModel):
 class LifecycleEpisodeRequest(StrictModel):
     """Host-authored execution request for one lifecycle environment call."""
 
-    schema_version: Literal["1", "2", "3"] = "3"
+    schema_version: Literal["3"] = "3"
     episode_id: NonEmptyStr
     lifecycle_id: NonEmptyStr
     world_id: NonEmptyStr
@@ -273,12 +273,6 @@ class LifecycleEpisodeRequest(StrictModel):
     @model_validator(mode="after")
     def validate_execution_boundary(self) -> LifecycleEpisodeRequest:
         _validate_mode_visibility(self.execution_mode, self.memory_visibility_policy)
-        v2_fields = {"evidence_request_catalog", "released_evidence_artifacts"}
-        v3_fields = {"operation_catalog", "current_source", "visible_operation_artifacts"}
-        if self.schema_version == "1" and not (v2_fields | v3_fields).isdisjoint(self.model_fields_set):
-            raise ValueError("v1 episode request cannot carry later-version visibility fields")
-        if self.schema_version == "2" and not v3_fields.isdisjoint(self.model_fields_set):
-            raise ValueError("v2 episode request cannot carry operation visibility fields")
         if len(set(self.checkpoint_ids)) != len(self.checkpoint_ids):
             raise ValueError("episode checkpoint ids must be unique")
         if self.checkpoint_id not in self.checkpoint_ids:

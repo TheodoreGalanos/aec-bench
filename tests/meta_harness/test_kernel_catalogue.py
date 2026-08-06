@@ -56,7 +56,6 @@ _COMPILATION_SOURCE_PATHS = (
     "aec_bench/meta_harness/compilation/profile.py",
     "aec_bench/meta_harness/compilation/program.py",
     "aec_bench/meta_harness/compilation/task_surfaces.py",
-    "aec_bench/meta_harness/compiler.py",
 )
 
 _PROPOSAL_SESSION_RUNTIME_SOURCE_PATHS = (
@@ -83,7 +82,6 @@ _HARBOR_PROPOSAL_IMPORT_SOURCE_PATHS = (
 )
 
 _MOTIF_LIBRARY_SOURCE_PATHS = (
-    "aec_bench/meta_harness/motif_library.py",
     "aec_bench/meta_harness/motifs/__init__.py",
     "aec_bench/meta_harness/motifs/contracts.py",
     "aec_bench/meta_harness/motifs/promotion.py",
@@ -97,11 +95,9 @@ _PROGRAM_EXECUTION_SOURCE_PATHS = (
     "aec_bench/meta_harness/program_execution/contracts.py",
     "aec_bench/meta_harness/program_execution/executor.py",
     "aec_bench/meta_harness/program_execution/registry.py",
-    "aec_bench/meta_harness/program_runtime.py",
 )
 
 _PROPOSAL_FREEZE_SOURCE_PATHS = (
-    "aec_bench/meta_harness/proposal_freeze.py",
     "aec_bench/meta_harness/proposal_freezing/__init__.py",
     "aec_bench/meta_harness/proposal_freezing/contracts.py",
     "aec_bench/meta_harness/proposal_freezing/evidence.py",
@@ -111,7 +107,6 @@ _PROPOSAL_FREEZE_SOURCE_PATHS = (
 )
 
 _STANDING_MONITOR_SOURCE_PATHS = (
-    "aec_bench/meta_harness/monitors.py",
     "aec_bench/meta_harness/standing_monitors/__init__.py",
     "aec_bench/meta_harness/standing_monitors/assertions.py",
     "aec_bench/meta_harness/standing_monitors/evaluation.py",
@@ -226,7 +221,6 @@ def test_three_low_effect_operations_have_phase_neutral_kernel_definitions() -> 
             "effect": KernelOperationEffect.NO_EXTERNAL_EFFECT,
             "implementation_paths": (
                 "aec_bench/harness/proposal_node_contract.py",
-                "aec_bench/harness/proposal_session.py",
                 *_PROPOSAL_SESSION_RUNTIME_SOURCE_PATHS,
                 *_COMPILATION_SOURCE_PATHS,
                 "aec_bench/meta_harness/kernel_catalogue.py",
@@ -249,7 +243,6 @@ def test_three_low_effect_operations_have_phase_neutral_kernel_definitions() -> 
             "effect": KernelOperationEffect.MODEL_EXECUTION,
             "implementation_paths": (
                 "aec_bench/harness/proposal_node_contract.py",
-                "aec_bench/harness/proposal_session.py",
                 *_PROPOSAL_SESSION_RUNTIME_SOURCE_PATHS,
                 *_COMPILATION_SOURCE_PATHS,
                 "aec_bench/meta_harness/kernel_catalogue.py",
@@ -446,7 +439,6 @@ def test_proposal_execution_operations_have_phase_neutral_kernel_definitions() -
             "effect": KernelOperationEffect.GRAPH_ORCHESTRATION,
             "implementation_paths": (
                 "aec_bench/harness/proposal_scheduler.py",
-                "aec_bench/harness/proposal_session.py",
                 "aec_bench/harness/proposal_session_config.py",
                 *_PROPOSAL_SESSION_RUNTIME_SOURCE_PATHS,
                 *_COMPILATION_SOURCE_PATHS,
@@ -464,7 +456,6 @@ def test_proposal_execution_operations_have_phase_neutral_kernel_definitions() -
             "effect": KernelOperationEffect.MODEL_EXECUTION,
             "implementation_paths": (
                 "aec_bench/harness/proposal_node_context.py",
-                "aec_bench/harness/proposal_session.py",
                 *_PROPOSAL_SESSION_RUNTIME_SOURCE_PATHS,
                 *_COMPILATION_SOURCE_PATHS,
                 "aec_bench/meta_harness/kernel_catalogue.py",
@@ -553,7 +544,7 @@ def test_operation_definition_implementation_must_belong_to_the_kernel_executor_
             "implementation": KernelExecutorImplementationIdentity(
                 sources=(
                     KernelSourceDigest(
-                        path="aec_bench/meta_harness/critic_governance.py",
+                        path="aec_bench/meta_harness/critic_lifecycle/contracts.py",
                         sha256="0" * 64,
                     ),
                 )
@@ -832,7 +823,7 @@ def test_default_kernel_identity_owns_only_the_explicit_executor_surface() -> No
     assert set(_PROGRAM_EXECUTION_SOURCE_PATHS).issubset(executor_paths)
     assert set(_PROPOSAL_FREEZE_SOURCE_PATHS).issubset(executor_paths)
     assert set(_STANDING_MONITOR_SOURCE_PATHS).issubset(executor_paths)
-    assert "aec_bench/meta_harness/critic_governance.py" not in executor_paths
+    assert "aec_bench/meta_harness/critic_lifecycle/contracts.py" not in executor_paths
     assert "aec_bench/meta_harness/motif_learning.py" not in executor_paths
 
 
@@ -860,7 +851,7 @@ def test_default_registry_records_whole_package_fingerprint_outside_fixed_kernel
     executor_paths = {source.path for source in registry.manifest.implementation.sources}
 
     assert executor_paths < package_paths
-    assert "aec_bench/meta_harness/critic_governance.py" in package_paths
+    assert "aec_bench/meta_harness/critic_lifecycle/contracts.py" in package_paths
     assert "aec_bench/meta_harness/motif_learning.py" in package_paths
     assert registry.package_fingerprint.content_sha256 != registry.manifest.implementation.content_sha256
 
@@ -873,7 +864,7 @@ def test_non_executor_package_drift_does_not_change_fixed_kernel_identity(
     changed_package_sources = tuple(
         source
         for source in baseline.package_fingerprint.sources
-        if source.path != "aec_bench/meta_harness/critic_governance.py"
+        if source.path != "aec_bench/meta_harness/critic_lifecycle/contracts.py"
     )
     assert changed_package_sources != baseline.package_fingerprint.sources
 

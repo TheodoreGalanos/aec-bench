@@ -1063,7 +1063,7 @@ def run_evidence_lifecycle(
             attempt_id=attempt_id,
             session_id=session_id,
         )
-        request = _adopt_compatible_durable_episode_request(request)
+        request = _adopt_durable_episode_request(request)
         try:
             episode_environment.prepare(request)
         except Exception as exc:
@@ -1398,7 +1398,7 @@ def _recover_host_episode_attempt(
         attempt_id=attempt.attempt_id,
         session_id=attempt.session_id,
     )
-    if request != expected_request and not _matches_legacy_episode_request(request, expected_request):
+    if request != expected_request:
         raise EvidenceLifecycleError(f"interrupted episode request identity mismatch: {attempt.attempt_id}")
     result_path = result_dir / "episode_result.json"
     if result_path.is_file():
@@ -1493,10 +1493,10 @@ def _quarantine_prepared_host_artifacts(request: LifecycleEpisodeRequest) -> tup
     return tuple(quarantined)
 
 
-def _adopt_compatible_durable_episode_request(
+def _adopt_durable_episode_request(
     request: LifecycleEpisodeRequest,
 ) -> LifecycleEpisodeRequest:
-    """Reuse an exact durable request, including the pre-v2 shape, before environment preparation."""
+    """Reuse an exact current durable request before environment preparation."""
     request_path = (
         Path(request.run_dir) / "episodes" / request.checkpoint_id / request.session_id / "episode_request.json"
     )
@@ -1506,81 +1506,13 @@ def _adopt_compatible_durable_episode_request(
         durable = LifecycleEpisodeRequest.model_validate(_read_json(request_path))
     except (EvidenceLifecycleError, ValidationError):
         return request
-    if durable == request or _matches_legacy_episode_request(durable, request):
+    if durable == request:
         return durable
     return request
 
 
-def _matches_legacy_episode_request(
-    durable: LifecycleEpisodeRequest,
-    expected: LifecycleEpisodeRequest,
-) -> bool:
-    return _matches_legacy_v2_episode_request(durable, expected) or _matches_legacy_v1_episode_request(
-        durable,
-        expected,
-    )
-
-
-def _matches_legacy_v2_episode_request(
-    durable: LifecycleEpisodeRequest,
-    expected: LifecycleEpisodeRequest,
-) -> bool:
-    """Accept the exact field projection emitted before operation state was bound."""
-    v3_fields = {"operation_catalog", "current_source", "visible_operation_artifacts"}
-    if (
-        durable.schema_version != "2"
-        or expected.schema_version != "3"
-        or not v3_fields.isdisjoint(durable.model_fields_set)
-        or durable.operation_catalog is not None
-        or durable.current_source is not None
-        or durable.visible_operation_artifacts
-        or expected.operation_catalog is not None
-        or expected.current_source is not None
-        or expected.visible_operation_artifacts
-    ):
-        return False
-    return durable == expected.model_copy(update={"schema_version": "2"})
-
-
-def _matches_legacy_v1_episode_request(
-    durable: LifecycleEpisodeRequest,
-    expected: LifecycleEpisodeRequest,
-) -> bool:
-    """Accept only the exact field projection emitted by the v1 episode contract."""
-    later_fields = {
-        "evidence_request_catalog",
-        "released_evidence_artifacts",
-        "operation_catalog",
-        "current_source",
-        "visible_operation_artifacts",
-    }
-    if (
-        durable.schema_version != "1"
-        or expected.schema_version not in {"2", "3"}
-        or not later_fields.isdisjoint(durable.model_fields_set)
-        or durable.evidence_request_catalog is not None
-        or durable.released_evidence_artifacts
-        or durable.operation_catalog is not None
-        or durable.current_source is not None
-        or durable.visible_operation_artifacts
-        or expected.evidence_request_catalog is not None
-        or expected.released_evidence_artifacts
-        or expected.operation_catalog is not None
-        or expected.current_source is not None
-        or expected.visible_operation_artifacts
-    ):
-        return False
-    return durable == expected.model_copy(update={"schema_version": "1"})
-
-
 def _episode_request_json(request: LifecycleEpisodeRequest) -> str:
-    excluded: set[str] = set()
-    if request.schema_version == "1":
-        excluded.update({"evidence_request_catalog", "released_evidence_artifacts"})
-    if request.schema_version in {"1", "2"}:
-        excluded.update({"operation_catalog", "current_source", "visible_operation_artifacts"})
-    payload = request.model_dump(mode="json", exclude=excluded)
-    return json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    return json.dumps(request.model_dump(mode="json"), indent=2, sort_keys=True) + "\n"
 
 
 def _close_episode_failure(
@@ -1923,20 +1855,9 @@ def _load_state(
     payload = _read_json(path)
     version = payload.get("schema_version")
     try:
-        if version in {"4", "5"}:
-            state = EvidenceLifecycleRunState.model_validate(payload)
-            migrated = False
-        elif version == "3":
-            state = _migrate_v3_state(payload, spec)
-            migrated = True
-        elif version == "2":
-            state = _migrate_v2_state(payload, package_dir, spec)
-            migrated = True
-        elif version in {None, "1"}:
-            state = _migrate_legacy_state(payload, package_dir, spec)
-            migrated = True
-        else:
+        if version not in {"4", "5"}:
             raise EvidenceLifecycleError(f"unsupported lifecycle state schema version: {version}")
+        state = EvidenceLifecycleRunState.model_validate(payload)
     except ValidationError as exc:
         raise EvidenceLifecycleError(f"invalid lifecycle state: {path}") from exc
 
@@ -1950,8 +1871,6 @@ def _load_state(
         raise EvidenceLifecycleError("package does not match lifecycle run")
     _validate_evidence_request_state_contract(state, spec)
     validate_lifecycle_operation_run_state(state, spec)
-    if migrated:
-        _write_state(run_dir, state)
     _recover_evidence_request_transactions(run_dir, spec, state)
     if state.schema_version == "5":
         _recover_lifecycle_operation_transactions(package_dir, run_dir, spec, state)
@@ -2160,122 +2079,6 @@ def _completed_checkpoints(state: EvidenceLifecycleRunState) -> list[dict[str, A
 
 def _attempt_context(attempt: CheckpointAttemptRecord) -> dict[str, Any]:
     return attempt.model_dump(mode="json")
-
-
-def _migrate_v3_state(
-    payload: dict[str, Any],
-    spec: EvidenceLifecycleSpec,
-) -> EvidenceLifecycleRunState:
-    if any(checkpoint.conditional_evidence is not None for checkpoint in spec.checkpoints):
-        raise EvidenceLifecycleError("v3 lifecycle state cannot be paired with conditional evidence")
-    for checkpoint in payload.get("checkpoint_runs", []):
-        if not isinstance(checkpoint, dict):
-            raise EvidenceLifecycleError("invalid v3 lifecycle checkpoint state")
-        if checkpoint.get("inherited_from_parent") and checkpoint.get("attempts"):
-            raise EvidenceLifecycleError("v3 inherited checkpoint cannot contain attempts")
-        forbidden = {
-            "evidence_request_budget",
-            "evidence_request_budget_remaining",
-            "evidence_request_actions",
-        }
-        if forbidden.intersection(checkpoint):
-            raise EvidenceLifecycleError("v3 lifecycle state cannot contain evidence request fields")
-    migrated = copy.deepcopy(payload)
-    for checkpoint in migrated.get("checkpoint_runs", []):
-        checkpoint["evidence_request_budget"] = 0
-        checkpoint["evidence_request_budget_remaining"] = 0
-        checkpoint["evidence_request_actions"] = []
-    migrated["schema_version"] = "3"
-    branch = migrated.get("branch")
-    if isinstance(branch, dict):
-        branch.pop("parent_action_state_sha256", None)
-        provisional = EvidenceLifecycleRunState.model_validate(migrated)
-        branch_checkpoint_id = str(branch["branched_from_checkpoint_id"])
-        branch_index = next(
-            index
-            for index, checkpoint in enumerate(provisional.checkpoint_runs)
-            if checkpoint.checkpoint_id == branch_checkpoint_id
-        )
-        branch["parent_action_state_sha256"] = _branch_action_state_sha256(
-            provisional,
-            branch_index=branch_index,
-            inherited_only=False,
-        )
-    migrated["schema_version"] = "4"
-    return EvidenceLifecycleRunState.model_validate(migrated)
-
-
-def _migrate_v2_state(
-    payload: dict[str, Any],
-    package_dir: Path,
-    spec: EvidenceLifecycleSpec,
-) -> EvidenceLifecycleRunState:
-    if any(checkpoint.conditional_evidence is not None for checkpoint in spec.checkpoints):
-        raise EvidenceLifecycleError("v2 lifecycle state cannot be paired with conditional evidence")
-    migrated = copy.deepcopy(payload)
-    migrated["lifecycle_spec_sha256"] = _spec_sha256(spec)
-    migrated["package_sha256"] = _package_sha256(package_dir)
-    migrated["schema_version"] = "3"
-    branch = migrated.get("branch")
-    if isinstance(branch, dict):
-        branch.pop("parent_action_state_sha256", None)
-        provisional = EvidenceLifecycleRunState.model_validate(migrated)
-        branch_checkpoint_id = str(branch["branched_from_checkpoint_id"])
-        branch_index = next(
-            index
-            for index, checkpoint in enumerate(provisional.checkpoint_runs)
-            if checkpoint.checkpoint_id == branch_checkpoint_id
-        )
-        branch["parent_action_state_sha256"] = _branch_action_state_sha256(
-            provisional,
-            branch_index=branch_index,
-            inherited_only=False,
-        )
-    migrated["schema_version"] = "4"
-    return EvidenceLifecycleRunState.model_validate(migrated)
-
-
-def _migrate_legacy_state(
-    payload: dict[str, Any],
-    package_dir: Path,
-    spec: EvidenceLifecycleSpec,
-) -> EvidenceLifecycleRunState:
-    if any(checkpoint.conditional_evidence is not None for checkpoint in spec.checkpoints):
-        raise EvidenceLifecycleError("legacy lifecycle state cannot be paired with conditional evidence")
-    completed = {item["checkpoint_id"]: item for item in payload.get("completed_checkpoints", [])}
-    active_checkpoint_id = payload.get("active_checkpoint_id")
-    checkpoint_runs = []
-    for checkpoint in spec.checkpoints:
-        legacy = completed.get(checkpoint.checkpoint_id)
-        if legacy is not None:
-            checkpoint_runs.append(
-                CheckpointRunRecord(
-                    checkpoint_id=checkpoint.checkpoint_id,
-                    status=CheckpointRunStatus.SUBMITTED,
-                    released_files=list(legacy.get("released_files", [])),
-                    submission_path=legacy.get("submission_path"),
-                    submission_sha256=legacy.get("submission_sha256"),
-                )
-            )
-        elif checkpoint.checkpoint_id == active_checkpoint_id:
-            checkpoint_runs.append(
-                CheckpointRunRecord(
-                    checkpoint_id=checkpoint.checkpoint_id,
-                    status=CheckpointRunStatus.ACTIVE,
-                    released_files=list(payload.get("active_released_files", [])),
-                )
-            )
-        else:
-            checkpoint_runs.append(CheckpointRunRecord(checkpoint_id=checkpoint.checkpoint_id))
-    return EvidenceLifecycleRunState(
-        lifecycle_id=str(payload["lifecycle_id"]),
-        world_id=str(payload["world_id"]),
-        lifecycle_spec_sha256=_spec_sha256(spec),
-        package_sha256=_package_sha256(package_dir),
-        status=LifecycleRunStatus(str(payload.get("status", "awaiting_evidence_release"))),
-        active_checkpoint_id=active_checkpoint_id,
-        checkpoint_runs=checkpoint_runs,
-    )
 
 
 @contextmanager

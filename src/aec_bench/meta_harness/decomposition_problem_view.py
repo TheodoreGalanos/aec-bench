@@ -17,7 +17,7 @@ from aec_bench.contracts.harness_instance import (
 )
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
 from aec_bench.contracts.output_completion import OutputCompletionContract
-from aec_bench.contracts.program_proposal import (
+from aec_bench.contracts.program_proposal.problem import (
     DecompositionLeakageAudit,
     DecompositionProblemView,
     FixedHarnessCapabilityProjection,

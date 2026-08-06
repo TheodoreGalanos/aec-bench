@@ -20,13 +20,9 @@ from aec_bench.contracts.harness_kernel import (
     canonical_content_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.proposal_execution import (
-    CompiledNodeContextScope,
-    FinalSynthesisSpec,
-    NodeInstructionVisibility,
-    ScopedSourceMaterialization,
-    SemanticSubtaskSpec,
-)
+from aec_bench.contracts.proposal_execution.graph import FinalSynthesisSpec, SemanticSubtaskSpec
+from aec_bench.contracts.proposal_execution_context import CompiledNodeContextScope, ScopedSourceMaterialization
+from aec_bench.contracts.proposal_execution_types import NodeInstructionVisibility
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.harness.proposal_task_package import (
     ProposalTaskPackageError,

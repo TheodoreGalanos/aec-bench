@@ -115,8 +115,6 @@ _HUMAN_TRANSITION_ACTIONS = frozenset(
         AuthorityAction.RELEASE_CRITIC_GENERATION,
         AuthorityAction.RETIRE_CRITIC_GENERATION,
         AuthorityAction.REVEAL_ACCEPTANCE_MANIFEST,
-        AuthorityAction.RELEASE_PROVIDER_CALIBRATION_MANIFEST,
-        AuthorityAction.RETIRE_PROVIDER_CALIBRATION_MANIFEST,
         AuthorityAction.CHANGE_KERNEL_VERSION,
     }
 )

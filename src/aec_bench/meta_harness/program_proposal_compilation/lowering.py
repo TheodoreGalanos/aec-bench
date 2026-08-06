@@ -20,20 +20,20 @@ from aec_bench.contracts.harness_instance import (
     HarnessBudget,
     ToolBindingConfig,
 )
-from aec_bench.contracts.program_proposal import ProposalFreeze
-from aec_bench.contracts.proposal_execution import (
-    CandidateBudgetPlan,
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
+from aec_bench.contracts.proposal_execution.graph import ExecutableCandidateGraph, MonolithicIncumbentProgram
+from aec_bench.contracts.proposal_execution_budget import CandidateBudgetPlan, NodeBudgetReservation
+from aec_bench.contracts.proposal_execution_context import (
     CompiledNodeContextScope,
-    ExecutableCandidateGraph,
-    MonolithicIncumbentProgram,
-    NodeBudgetReservation,
-    NodeInstructionVisibility,
-    ProposalCompileRejectionCode,
-    ProposalExecutionSemantics,
     ProposalSourceScopeManifest,
     ScopedSourceMaterialization,
 )
 from aec_bench.contracts.proposal_execution_profile import ProposalExecutionProfile
+from aec_bench.contracts.proposal_execution_types import (
+    NodeInstructionVisibility,
+    ProposalCompileRejectionCode,
+    ProposalExecutionSemantics,
+)
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
 
 from .constants import (

@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from aec_bench.contracts.evaluation_generation import TaskCandidatePlan
+from aec_bench.contracts.evaluation_generation.batch import TaskCandidatePlan
 from aec_bench.meta_harness.decomposition_optimization import (
     DecompositionExecutionSchedule,
 )

@@ -8,8 +8,6 @@ class OptimizationSplit(StrEnum):
     """Closed task splits on which proposal candidates may be generated or studied."""
 
     CALIBRATION = "calibration"
-    # Historical Phase 9.1a split value remains valid for v1 replay.
-    PROVIDER_CALIBRATION = "provider_calibration"
     TRAINING = "training"
     DEVELOPMENT = "development"
     STRUCTURAL_HOLDOUT = "structural_holdout"

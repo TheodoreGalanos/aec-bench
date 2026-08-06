@@ -1,5 +1,5 @@
-# ABOUTME: Builds the explicit v1-compatible execution profile for governed proposal compilation.
-# ABOUTME: Reifies historical sequential policy against the installed kernel and fixed harness.
+# ABOUTME: Builds the current execution profile for governed proposal compilation.
+# ABOUTME: Binds sequential proposal policy to the installed kernel and fixed harness.
 
 from aec_bench.contracts.harness_instance import (
     AgentBindingConfig,
@@ -29,20 +29,20 @@ from .constants import _PROPOSAL_OPERATION_IDS
 from .errors import ProposalCompilationHostError
 
 
-def proposal_execution_profile_v1_compatibility(
+def proposal_execution_profile(
     *,
     registry: KernelRuntimeRegistry,
     fixed_harness: CompiledHarnessInstance,
     provider_broker_required: bool,
 ) -> ProposalExecutionProfile:
-    """Reify the historical sequential proposal policy as an explicit profile."""
+    """Build the current sequential proposal execution policy."""
 
     operation_constraints: list[ProposalOperationConstraint] = []
     for operation_id in _PROPOSAL_OPERATION_IDS:
         definition = registry.operation_definition(operation_id)
         operation = fixed_harness.program_surface.operation(operation_id)
         if definition is None or operation is None:
-            raise ProposalCompilationHostError("v1 compatibility profile requires every historical proposal operation")
+            raise ProposalCompilationHostError("proposal execution profile requires every proposal operation")
         operation_constraints.append(
             ProposalOperationConstraint(
                 operation_id=operation_id,
@@ -70,19 +70,21 @@ def proposal_execution_profile_v1_compatibility(
     )
     if len(agent_bindings) != 1 or not compute_bindings:
         raise ProposalCompilationHostError(
-            "v1 compatibility profile requires one agent and at least one execution backend"
+            "proposal execution profile requires one agent and at least one execution backend"
         )
     try:
         agent_runtime = registry.resolve(agent_bindings[0].capability_ref).runtime
         backend_runtimes = tuple(registry.resolve(binding.capability_ref).runtime for binding in compute_bindings)
     except KernelRuntimeRegistryError as error:
         raise ProposalCompilationHostError(
-            f"v1 compatibility profile cannot resolve the fixed harness: {error}"
+            f"proposal execution profile cannot resolve the fixed harness: {error}"
         ) from error
     if not isinstance(agent_runtime, AgentAdapterRuntime) or any(
         not isinstance(runtime, HarborBackendRuntime) for runtime in backend_runtimes
     ):
-        raise ProposalCompilationHostError("v1 compatibility profile requires typed agent and Harbor backend runtimes")
+        raise ProposalCompilationHostError(
+            "proposal execution profile requires typed agent and Harbor backend runtimes"
+        )
     backends = tuple(
         sorted({runtime.backend for runtime in backend_runtimes if isinstance(runtime, HarborBackendRuntime)})
     )
@@ -100,7 +102,7 @@ def proposal_execution_profile_v1_compatibility(
         )
     )
     return ProposalExecutionProfile(
-        profile_id="aecbench.proposal-execution.v1-compatibility",
+        profile_id="aecbench.proposal-execution",
         version="1.0.0",
         required_kernel_id=registry.manifest.kernel_id,
         required_kernel_version=registry.manifest.version,

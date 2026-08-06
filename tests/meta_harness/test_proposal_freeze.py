@@ -33,19 +33,20 @@ from aec_bench.contracts.evaluation_plane import (
 from aec_bench.contracts.harness_instance import CompiledHarnessInstance
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
 from aec_bench.contracts.output_completion import OutputCompletionContract
-from aec_bench.contracts.program_proposal import (
+from aec_bench.contracts.program_proposal.candidate import (
     CandidateGenerationCoordinate,
     CandidateGenerationManifest,
+    ProgramCandidateRef,
+)
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
+from aec_bench.contracts.program_proposal.problem import (
     DecompositionLeakageAudit,
     DecompositionProblemView,
-    MatchedEvaluationCoordinate,
-    OptimizationSplit,
-    ProgramCandidateKind,
-    ProgramCandidateRef,
-    ProposalFreeze,
     PublicAuthorityBoundary,
     PublicDataGapBoundary,
 )
+from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
+from aec_bench.contracts.program_proposal.types import OptimizationSplit, ProgramCandidateKind
 from aec_bench.contracts.proposal_execution_profile import (
     ProposalExecutionProfile,
 )
@@ -72,9 +73,9 @@ from aec_bench.meta_harness.pre_execution_protocol import (
     record_pre_execution_protocol,
 )
 from aec_bench.meta_harness.program_proposal_compilation import (
-    proposal_execution_profile_v1_compatibility,
+    proposal_execution_profile,
 )
-from aec_bench.meta_harness.proposal_freeze import (
+from aec_bench.meta_harness.proposal_freezing import (
     GovernedProposalFreezeError,
     GovernedProposalFreezeResult,
     ProposalArtifact,
@@ -108,7 +109,7 @@ def _sha(label: str) -> str:
 
 def _execution_profile(fixture: _Fixture) -> ProposalExecutionProfile:
     registry = default_kernel_registry()
-    return proposal_execution_profile_v1_compatibility(
+    return proposal_execution_profile(
         registry=registry,
         fixed_harness=fixture.fixed_harness,
         provider_broker_required=False,
@@ -146,33 +147,24 @@ def test_governed_freeze_persists_complete_basis_and_immediately_replays_it(
         selected_item.model_dump(mode="json")
     )
     assert result.freeze.selected_world_lineage_id == selected_item.world_lineage_id
-    assert result.freeze.selected_provider_calibration_task_sha256 is None
-    assert result.freeze.provider_calibration_manifest_sha256 is None
-    assert result.freeze.provider_calibration_release_authority_event_sha256 is None
     assert result.freeze.execution_profile_sha256 is None
-    assert result.basis.provider_calibration_manifest is None
-    assert result.basis.provider_calibration_release_authority is None
     assert result.basis.execution_profile is None
-    legacy_basis = result.basis.model_dump(mode="json")
-    assert "provider_calibration_manifest" not in legacy_basis
-    assert "provider_calibration_release_authority" not in legacy_basis
-    assert "execution_profile" not in legacy_basis
-    legacy_basis_payload = {key: value for key, value in legacy_basis.items() if key != "content_sha256"}
-    legacy_basis_sha256 = canonical_content_sha256(legacy_basis_payload)
-    assert result.basis.content_sha256 == legacy_basis_sha256
+    basis_payload = result.basis.model_dump(mode="json")
+    assert "execution_profile" not in basis_payload
+    basis_content = {key: value for key, value in basis_payload.items() if key != "content_sha256"}
+    basis_sha256 = canonical_content_sha256(basis_content)
+    assert result.basis.content_sha256 == basis_sha256
     assert (
         ProposalFreezeBasis.model_validate(
             {
-                **legacy_basis_payload,
-                "content_sha256": legacy_basis_sha256,
+                **basis_content,
+                "content_sha256": basis_sha256,
             }
         )
         == result.basis
     )
-    legacy_result = json.dumps(result.model_dump(mode="json"), sort_keys=True)
-    assert "provider_calibration_manifest" not in legacy_result
-    assert "provider_calibration_release_authority" not in legacy_result
-    assert "execution_profile_sha256" not in legacy_result
+    encoded_result = json.dumps(result.model_dump(mode="json"), sort_keys=True)
+    assert "execution_profile_sha256" not in encoded_result
     assert result.authority_event.action is AuthorityAction.PROPOSAL_FREEZE
     assert result.authority_event.decision is AuthorityDecision.GRANTED
     assert result.authority_event.subject_id == result.freeze.freeze_id

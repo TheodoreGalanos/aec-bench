@@ -48,7 +48,7 @@ class _CaptureLifecycleEnvironment(_NoSandboxAccessEnvironment):
         shutil.copytree(source_dir, self.capture_dir)
 
 
-class _FailingLifecycleRegistry:
+class _FailingLifecycleAdapterBuilder:
     def __init__(self, message: str) -> None:
         self.message = message
 
@@ -69,8 +69,8 @@ class _FailingLifecycleEntrypointAgent(EntrypointAgent):
         super().__init__(*args, **kwargs)
         self.failure_message = failure_message
 
-    def _lifecycle_registry(self) -> _FailingLifecycleRegistry:
-        return _FailingLifecycleRegistry(self.failure_message)
+    def _lifecycle_adapter_builder(self) -> Any:
+        return _FailingLifecycleAdapterBuilder(self.failure_message).build
 
 
 def _export_task(tmp_path: Path) -> ExportedHarborTask:

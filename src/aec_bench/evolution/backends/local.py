@@ -389,13 +389,13 @@ def _run_adapter_in_workspace(
     workspace: str,
     model: str,
 ) -> None:
-    """Execute a task using the local adapter registry.
+    """Execute a task using the current local adapter builder.
 
     Mirrors the logic from run_local.py's _run_adapter but without CLI
     dependencies. Writes agent_result.json and trajectory.jsonl to the workspace.
     """
     from aec_bench.adapters.base import AdapterRequest
-    from aec_bench.adapters.local_registry import LocalAdapterRegistry
+    from aec_bench.adapters.local_registry import build_local_adapter
     from aec_bench.harness.local_runtime import read_instruction
     from aec_bench.trajectory.writer import TrajectoryWriter
 
@@ -408,8 +408,7 @@ def _run_adapter_in_workspace(
     traj_path = str(Path(workspace) / "trajectory.jsonl")
     trajectory_writer = TrajectoryWriter(path=traj_path)
 
-    registry = LocalAdapterRegistry()
-    adapter = registry.build(
+    adapter = build_local_adapter(
         adapter_kind=adapter_kind,
         model_name=model,
         workspace=workspace,

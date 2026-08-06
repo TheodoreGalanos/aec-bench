@@ -7,14 +7,13 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 
-from aec_bench.contracts.proposal_execution import (
-    ProposalHandoff,
+from aec_bench.contracts.proposal_execution.graph import ProposalHandoff, SemanticSubtaskSpec
+from aec_bench.contracts.proposal_execution.session import (
     ProposalHandoffArtifactRef,
     ProposalNodeReceipt,
-    ProposalNodeReceiptStatus,
     ProposalSessionExecutionRef,
-    SemanticSubtaskSpec,
 )
+from aec_bench.contracts.proposal_execution_types import ProposalNodeReceiptStatus
 from aec_bench.harness.execution_payload import (
     write_execution_bundle,
 )

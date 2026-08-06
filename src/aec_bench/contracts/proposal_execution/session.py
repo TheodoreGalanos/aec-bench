@@ -9,7 +9,7 @@ from typing import Literal
 from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
-from aec_bench.contracts.program_proposal import MatchedEvaluationCoordinate
+from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
 from aec_bench.contracts.proposal_execution._canonical import (
     canonical_unique_models,
     canonical_unique_strings,

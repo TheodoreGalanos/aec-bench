@@ -44,7 +44,7 @@ from aec_bench.meta_harness.monitor_runtime.surface_io import (
     validate_canary_payload,
     validate_canary_surface,
 )
-from aec_bench.meta_harness.monitors import (
+from aec_bench.meta_harness.standing_monitors import (
     CanaryCommitment,
     CycleMonitorPlan,
     StandingMonitorPolicy,

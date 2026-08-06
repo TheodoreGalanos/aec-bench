@@ -7,7 +7,6 @@ from pathlib import Path
 
 from aec_bench.cli.commands.init import init_project
 from aec_bench.init.scaffold import (
-    copy_agents,
     copy_skills,
     create_scaffold,
     write_gitignore,
@@ -152,50 +151,3 @@ def test_init_project_update_skills_only(tmp_path: Path) -> None:
     result = init_project(target=tmp_path, update_skills=True)
     assert result.created
     assert skill_path.read_text(encoding="utf-8") != "modified"
-
-
-# ---------------------------------------------------------------------------
-# copy_agents() tests
-# ---------------------------------------------------------------------------
-
-
-def test_copy_agents_creates_agent_files(tmp_path: Path) -> None:
-    copy_agents(tmp_path)
-
-    agents_dir = tmp_path / "agents"
-    assert agents_dir.is_dir()
-    assert (agents_dir / "tool_loop_anthropic.py").is_file()
-    assert (agents_dir / "pydantic_ai_agent.py").is_file()
-    assert (agents_dir / "script_anthropic.py").is_file()
-
-
-def test_copy_agents_writes_init_file(tmp_path: Path) -> None:
-    copy_agents(tmp_path)
-
-    init_path = tmp_path / "agents" / "__init__.py"
-    assert init_path.is_file()
-    content = init_path.read_text(encoding="utf-8")
-    assert "ABOUTME" in content
-
-
-def test_copy_agents_does_not_overwrite_existing_init(tmp_path: Path) -> None:
-    agents_dir = tmp_path / "agents"
-    agents_dir.mkdir(parents=True)
-    init_path = agents_dir / "__init__.py"
-    init_path.write_text("# custom init\n", encoding="utf-8")
-
-    copy_agents(tmp_path)
-
-    assert init_path.read_text(encoding="utf-8") == "# custom init\n"
-
-
-def test_copy_agents_preserves_user_added_agents(tmp_path: Path) -> None:
-    agents_dir = tmp_path / "agents"
-    agents_dir.mkdir(parents=True)
-    user_agent = agents_dir / "my_custom_agent.py"
-    user_agent.write_text("# custom agent\n", encoding="utf-8")
-
-    copy_agents(tmp_path)
-
-    assert user_agent.read_text(encoding="utf-8") == "# custom agent\n"
-    assert (agents_dir / "tool_loop_anthropic.py").is_file()

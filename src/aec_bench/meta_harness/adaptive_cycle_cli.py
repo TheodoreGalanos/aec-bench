@@ -9,7 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
-from aec_bench.meta_harness.adaptive_cycle import (
+from aec_bench.meta_harness.adaptive_cycle_runtime import (
     AdaptiveCycleExecutors,
     AdaptiveCycleResult,
     AdaptiveCycleSpec,
@@ -61,7 +61,6 @@ def run_cli(
             source=subprocess_executor,
             repair=subprocess_executor,
             child_calibration=subprocess_executor,
-            transfer=subprocess_executor,
         )
     workflow = SynchronousHarborWorkflow(
         project_root=project_root,

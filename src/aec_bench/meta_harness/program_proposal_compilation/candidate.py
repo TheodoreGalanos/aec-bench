@@ -9,20 +9,18 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from aec_bench.contracts.authority import BasisReference
-from aec_bench.contracts.program_proposal import (
-    ProgramCandidateKind,
-    ProgramCandidateRef,
-    ProposalFreeze,
-)
-from aec_bench.contracts.proposal_execution import (
+from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
+from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
+from aec_bench.contracts.proposal_execution.graph import (
     ExecutableCandidateGraph,
     MonolithicIncumbentProgram,
-    ProposalCompileRejectionCode,
     ProposedDecompositionGraph,
 )
 from aec_bench.contracts.proposal_execution_profile import ProposalExecutionProfile
+from aec_bench.contracts.proposal_execution_types import ProposalCompileRejectionCode
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger, AuthorityLedgerError
-from aec_bench.meta_harness.proposal_freeze import GovernedProposalFreezeResult
+from aec_bench.meta_harness.proposal_freezing import GovernedProposalFreezeResult
 
 from .errors import ProposalCompilationHostError, _CandidateCompileError
 

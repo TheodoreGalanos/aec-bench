@@ -17,7 +17,7 @@ from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_s
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
-from aec_bench.evolution.repair_loop import (
+from aec_bench.evolution.repair_lifecycle import (
     RepairCandidate,
     RepairLoopRequest,
     RepairLoopResult,

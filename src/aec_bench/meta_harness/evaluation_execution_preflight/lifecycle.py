@@ -7,7 +7,7 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
-from aec_bench.contracts.evaluation_generation import EvaluationBatchPlan
+from aec_bench.contracts.evaluation_generation.batch import EvaluationBatchPlan
 from aec_bench.contracts.evaluation_plane import (
     EvaluationPlan,
     EvaluationPlanRef,
@@ -18,22 +18,14 @@ from aec_bench.contracts.harness_kernel import (
     ContentAddressedModel,
     validate_sha256,
 )
-from aec_bench.contracts.program_proposal import (
-    ProgramCandidateKind,
-    ProgramCandidateRef,
-)
-from aec_bench.contracts.proposal_execution import (
-    ProposalCompilationRejection,
-)
+from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
+from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
+from aec_bench.contracts.proposal_execution.compilation import ProposalCompilationRejection
 from aec_bench.contracts.proposal_execution_types import ProposalCompilationStatus
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger
 from aec_bench.meta_harness.decomposition_optimization import (
     DecompositionExecutionSchedule,
-)
-from aec_bench.meta_harness.monitors import (
-    CycleMonitorPlan,
-    StandingMonitorPolicy,
 )
 from aec_bench.meta_harness.motif_assurance import MotifAssuranceSnapshot
 from aec_bench.meta_harness.program_proposal_compilation import (
@@ -43,8 +35,12 @@ from aec_bench.meta_harness.program_proposer import (
     ProgramProposalInvocation,
     ProgramProposalInvocationStatus,
 )
-from aec_bench.meta_harness.proposal_dispatch_governance import (
+from aec_bench.meta_harness.proposal_dispatch import (
     GovernedProposalDispatchAuthorization,
+)
+from aec_bench.meta_harness.standing_monitors import (
+    CycleMonitorPlan,
+    StandingMonitorPolicy,
 )
 
 

@@ -11,36 +11,36 @@ from pathlib import Path
 
 import pytest
 
-import aec_bench.meta_harness.proposal_trial_import as proposal_trial_import_module
-import aec_bench.meta_harness.proposal_trial_importing as proposal_trial_importing_package
 from aec_bench.contracts.authority import AuthorityAction, AuthorityEvent
-from aec_bench.contracts.program_proposal import (
-    OptimizationSplit,
-    ProgramCandidateKind,
-)
-from aec_bench.contracts.proposal_execution import (
-    ProposalSessionReceipt,
-)
+from aec_bench.contracts.program_proposal.types import OptimizationSplit, ProgramCandidateKind
+from aec_bench.contracts.proposal_execution.session import ProposalSessionReceipt
 from aec_bench.contracts.trial_record import Completeness, TrialRecord
 from aec_bench.harness.harbor_importing.proposal_evidence.api import (
     load_proposal_harbor_import_evidence,
 )
 from aec_bench.meta_harness.authority_ledger import AuthorityLedger
-from aec_bench.meta_harness.proposal_dispatch_governance import (
+from aec_bench.meta_harness.proposal_dispatch import (
     GovernedProposalDispatchAuthorization,
 )
 from aec_bench.meta_harness.proposal_harbor_runtime import (
     ProposalHarborExecution,
     run_governed_proposal_harbor,
 )
-from aec_bench.meta_harness.proposal_trial_import import (
+from aec_bench.meta_harness.proposal_trial_importing import (
     GovernedProposalCandidateFailureImport,
     GovernedProposalTrialImport,
     ProposalTrialImportError,
-    _meta_split,
     finalize_governed_proposal_trial_import,
     replay_governed_proposal_candidate_failure_import,
     replay_governed_proposal_trial_import,
+)
+from aec_bench.meta_harness.proposal_trial_importing.finalization import (
+    DEFAULT_FINALIZATION_SERVICES,
+)
+from aec_bench.meta_harness.proposal_trial_importing.validation import (
+    meta_split,
+    sole_trial_dir,
+    validate_exact_evidence,
 )
 from tests.harness.test_harbor_import import (
     _write_proposal_harbor_trial_artifacts,
@@ -50,29 +50,6 @@ from tests.meta_harness.test_proposal_dispatch_governance import (
     _dispatch_fixture,
     _DispatchFixture,
 )
-
-
-def test_compatibility_facade_preserves_canonical_package_contracts() -> None:
-    assert (
-        proposal_trial_import_module.GovernedProposalCandidateFailureImport
-        is proposal_trial_importing_package.GovernedProposalCandidateFailureImport
-    )
-    assert (
-        proposal_trial_import_module.GovernedProposalTrialImport
-        is proposal_trial_importing_package.GovernedProposalTrialImport
-    )
-    assert (
-        proposal_trial_import_module.ProposalTrialImportReceipt
-        is proposal_trial_importing_package.ProposalTrialImportReceipt
-    )
-    assert (
-        proposal_trial_import_module.replay_governed_proposal_trial_import
-        is proposal_trial_importing_package.replay_governed_proposal_trial_import
-    )
-    assert (
-        proposal_trial_import_module.replay_governed_proposal_candidate_failure_import
-        is proposal_trial_importing_package.replay_governed_proposal_candidate_failure_import
-    )
 
 
 @dataclass
@@ -263,7 +240,7 @@ def test_rejects_session_execution_ref_that_differs_from_dispatch_assignment(
     changed_field: str,
 ) -> None:
     fixture, authorization, execution = _executed_proposal(tmp_path)
-    trial_dir = proposal_trial_import_module._sole_trial_dir(execution.receipt)
+    trial_dir = sole_trial_dir(execution.receipt)
     evidence = load_proposal_harbor_import_evidence(
         trial_dir=trial_dir,
         repo_root=tmp_path,
@@ -286,7 +263,7 @@ def test_rejects_session_execution_ref_that_differs_from_dispatch_assignment(
     )
 
     with pytest.raises(ProposalTrialImportError, match="authorized bundle"):
-        proposal_trial_import_module._validate_exact_evidence(
+        validate_exact_evidence(
             authorization=authorization,
             evidence=changed_evidence,
         )
@@ -339,17 +316,11 @@ def test_scored_import_resumes_after_trial_record_persistence_before_authority(
 ) -> None:
     fixture, authorization, execution = _executed_proposal(tmp_path)
     first_root = tmp_path / "host-artifacts.crash"
-    original = proposal_trial_import_module._record_import_authority
 
     def _crash_before_authority(*args: object, **kwargs: object) -> None:
         del args, kwargs
         raise RuntimeError("simulated process interruption after TrialRecord persistence")
 
-    monkeypatch.setattr(
-        proposal_trial_import_module,
-        "_record_import_authority",
-        _crash_before_authority,
-    )
     with pytest.raises(ProposalTrialImportError, match="simulated process interruption"):
         finalize_governed_proposal_trial_import(
             ledger=fixture.ledger,
@@ -359,14 +330,13 @@ def test_scored_import_resumes_after_trial_record_persistence_before_authority(
             artifacts_root=first_root,
             import_id="proposal-import.crash-recovery.first",
             authority_event_id="authority.scored-proposal-import.crash-recovery.first",
+            services=replace(
+                DEFAULT_FINALIZATION_SERVICES,
+                record_authority=_crash_before_authority,
+            ),
         )
     assert len(tuple((first_root / "proposal-trial-records").rglob("*.json"))) == 1
 
-    monkeypatch.setattr(
-        proposal_trial_import_module,
-        "_record_import_authority",
-        original,
-    )
     second_root = tmp_path / "host-artifacts.crash-second-root"
     recovered = finalize_governed_proposal_trial_import(
         ledger=AuthorityLedger(fixture.ledger.root),
@@ -392,17 +362,11 @@ def test_scored_import_resumes_after_authority_before_terminal_index(
 ) -> None:
     fixture, authorization, execution = _executed_proposal(tmp_path)
     first_root = tmp_path / "host-artifacts.authority-crash"
-    original = proposal_trial_import_module.persist_proposal_import_terminal
 
     def _crash_before_terminal(*args: object, **kwargs: object) -> None:
         del args, kwargs
         raise RuntimeError("simulated process interruption before terminal index")
 
-    monkeypatch.setattr(
-        proposal_trial_import_module,
-        "persist_proposal_import_terminal",
-        _crash_before_terminal,
-    )
     with pytest.raises(ProposalTrialImportError, match="before terminal index"):
         finalize_governed_proposal_trial_import(
             ledger=fixture.ledger,
@@ -412,17 +376,16 @@ def test_scored_import_resumes_after_authority_before_terminal_index(
             artifacts_root=first_root,
             import_id="proposal-import.authority-crash.first",
             authority_event_id="authority.scored-proposal-import.authority-crash.first",
+            services=replace(
+                DEFAULT_FINALIZATION_SERVICES,
+                persist_terminal=_crash_before_terminal,
+            ),
         )
     first_event = fixture.ledger.authority_event_for_id(
         "authority.scored-proposal-import.authority-crash.first",
     )
     assert first_event is not None
 
-    monkeypatch.setattr(
-        proposal_trial_import_module,
-        "persist_proposal_import_terminal",
-        original,
-    )
     second_root = tmp_path / "host-artifacts.authority-crash-second"
     recovered = finalize_governed_proposal_trial_import(
         ledger=AuthorityLedger(fixture.ledger.root),
@@ -865,7 +828,7 @@ def test_replay_rejects_node_origin_drift(
 @pytest.mark.parametrize(
     ("source", "expected"),
     (
-        (OptimizationSplit.PROVIDER_CALIBRATION, "calibration"),
+        (OptimizationSplit.CALIBRATION, "calibration"),
         (OptimizationSplit.TRAINING, "discovery"),
         (OptimizationSplit.DEVELOPMENT, "repair_gate"),
         (OptimizationSplit.STRUCTURAL_HOLDOUT, "holdout"),
@@ -875,7 +838,7 @@ def test_maps_proposal_splits_to_closed_trial_splits(
     source: OptimizationSplit,
     expected: str,
 ) -> None:
-    assert _meta_split(source) == expected
+    assert meta_split(source) == expected
 
 
 def _executed_proposal(

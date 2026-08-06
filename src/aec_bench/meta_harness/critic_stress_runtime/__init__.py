@@ -1,11 +1,9 @@
-# ABOUTME: Exposes phase-neutral critic-stress contracts and causal reduction.
-# ABOUTME: Retains historical adaptive names as compatibility aliases with stable schemas.
+# ABOUTME: Exposes the current phase-neutral critic-stress contracts.
+# ABOUTME: Routes causal reduction through the critic-stress workflow owner.
 
 from .contracts import (
     AcceptanceGrounding,
     AcceptanceGroundingKind,
-    AdaptiveCriticStressMeasurement,
-    AdaptiveCriticStressReport,
     CriticRegressionCase,
     CriticStressClassificationPolicy,
     CriticStressFinding,
@@ -25,8 +23,6 @@ from .reducer import reduce_critic_stress
 __all__ = [
     "AcceptanceGrounding",
     "AcceptanceGroundingKind",
-    "AdaptiveCriticStressMeasurement",
-    "AdaptiveCriticStressReport",
     "CriticRegressionCase",
     "CriticStressClassificationPolicy",
     "CriticStressFinding",

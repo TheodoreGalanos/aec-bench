@@ -51,7 +51,7 @@ from aec_bench.contracts.output_completion import (
 )
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.evolution.paired_repair import RepairAcceptancePolicy
-from aec_bench.evolution.repair_loop import (
+from aec_bench.evolution.repair_lifecycle import (
     RepairCandidate,
     RepairFailureDomain,
     RepairLoopError,
@@ -72,7 +72,7 @@ from aec_bench.meta_harness.kernel_catalogue import (
     default_kernel_registry,
 )
 from aec_bench.meta_harness.motif_learning import capture_accepted_repair_evidence
-from aec_bench.meta_harness.program_runtime import ProgramExecutionStatus
+from aec_bench.meta_harness.program_execution import ProgramExecutionStatus
 from aec_bench.meta_harness.repair_runtime import (
     DiagnosisFunction,
     HarnessAgentCapabilityPatch,

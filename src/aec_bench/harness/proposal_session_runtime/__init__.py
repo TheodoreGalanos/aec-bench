@@ -1,5 +1,5 @@
 # ABOUTME: Exposes the canonical fixed-K proposal-session runtime surface.
-# ABOUTME: Keeps compatibility imports stable while implementations remain cohesive.
+# ABOUTME: Exposes the current cohesive proposal-session runtime boundary.
 
 from .child_evidence import (
     _validate_provider_broker_call_budgets as _validate_provider_broker_call_budgets,

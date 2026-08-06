@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from aec_bench.contracts.evaluation_result import EvaluationResult
-from aec_bench.contracts.proposal_execution import ProposalSessionReceipt
+from aec_bench.contracts.proposal_execution.session import ProposalSessionReceipt
 from aec_bench.contracts.trial_record import ArtifactReference
 
 PROPOSAL_EXECUTION_KIND = "proposal_session"

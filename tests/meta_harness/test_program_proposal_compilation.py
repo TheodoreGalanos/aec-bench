@@ -22,31 +22,31 @@ from aec_bench.contracts.harness_instance import (
     ProgramOperationScope,
 )
 from aec_bench.contracts.harness_kernel import canonical_content_sha256
-from aec_bench.contracts.program_proposal import (
-    ProgramCandidateKind,
-    ProgramCandidateRef,
-    ProposalFreeze,
-)
-from aec_bench.contracts.proposal_execution import (
+from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
+from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
+from aec_bench.contracts.proposal_execution.compilation import ProposalCompilationRejection
+from aec_bench.contracts.proposal_execution.graph import (
     FinalSynthesisSpec,
     MonolithicIncumbentProgram,
     NodeEvidenceContract,
-    ProposalCompilationRejection,
-    ProposalCompileRejectionCode,
-    ProposalExecutionSemantics,
     ProposalHandoff,
     ProposalInputPort,
     ProposalOutputPort,
-    ProposalPortKind,
     ProposalSourceScope,
     ProposedDecompositionGraph,
-    ScopedSourceMaterialization,
     SemanticSubtaskSpec,
 )
+from aec_bench.contracts.proposal_execution_context import ScopedSourceMaterialization
 from aec_bench.contracts.proposal_execution_profile import (
     ProposalLoweringPolicy,
 )
-from aec_bench.meta_harness.compiler import (
+from aec_bench.contracts.proposal_execution_types import (
+    ProposalCompileRejectionCode,
+    ProposalExecutionSemantics,
+    ProposalPortKind,
+)
+from aec_bench.meta_harness.compilation import (
     CompilationError,
     CompilationOwner,
     compile_execution_program,
@@ -56,9 +56,9 @@ from aec_bench.meta_harness.program_proposal_compilation import (
     ProposalCompilationHostError,
     ProposalRunSessionBundle,
     compile_governed_proposal,
-    proposal_execution_profile_v1_compatibility,
+    proposal_execution_profile,
 )
-from aec_bench.meta_harness.proposal_freeze import (
+from aec_bench.meta_harness.proposal_freezing import (
     GovernedProposalFreezeResult,
     IncumbentArtifact,
     ProposalArtifact,
@@ -444,7 +444,7 @@ def test_malformed_frozen_artifact_returns_typed_zero_dispatch_rejection(
     assert result.trial_record_permitted is False
 
 
-def test_compile_rejects_legacy_profileless_freeze(
+def test_compile_rejects_freeze_without_execution_profile(
     tmp_path: Path,
 ) -> None:
     fixture = _fixture(tmp_path)
@@ -900,7 +900,7 @@ def _compile_arguments(
         "candidate_artifact_root": fixture.ledger.root / "basis-objects",
         "registry": registry,
         "fixed_harness": resolved_harness,
-        "execution_profile": proposal_execution_profile_v1_compatibility(
+        "execution_profile": proposal_execution_profile(
             registry=registry,
             fixed_harness=resolved_harness,
             provider_broker_required=False,

@@ -107,7 +107,7 @@ share one public structural protocol.
 
 The pump world has one authoritative `PumpStationStewardshipState`. Its direct
 `initial_state`, `observe`, and typed `transition` functions own pump behavior;
-the evaluation package owns the direct evaluator. The episode shell owns step
+the pump task package owns its direct evaluator. The episode shell owns step
 advancement and opaque decisions, while the pump persistence edge stores only
 the current typed command, receipt, state, commit, and selected pointer.
 
@@ -137,6 +137,10 @@ Evaluation owns validity interpretation, reward, score breakdowns, behavioural
 analysis, error taxonomy, confidence, and task-specific evaluation extensions.
 Verifiers provide task-owned evidence. Reports, the TUI, and the web UI consume
 evaluation results; they do not define competing metrics.
+
+Cross-task model reviewing belongs to the meta-harness because it coordinates
+review jobs and their evidence. Task-specific evaluation, including wastewater
+pump stewardship scoring, remains with the task package.
 
 ### Durable artifacts
 
@@ -181,6 +185,11 @@ provider-neutral execution model or a Prime-specific record authority.
 Provider errors, timeouts, missing output, and incomplete execution remain
 explicit failures. A transport cannot turn them into successful trials.
 
+Local execution selects from one fixed set of adapter builders at the harness
+composition edge. Tests inject a builder callable directly; production does
+not expose a mutable adapter registry or a speculative local-environment
+protocol.
+
 The installed package keeps these adapters behind feature-owned extras.
 Package import and CLI help are provider-free. A command checks only whether
 its top-level optional runtime is present, reports the named extra when it is
@@ -210,6 +219,10 @@ Dependencies follow ownership, not a permanent numbered hierarchy:
 - CLI, TUI, web, reports, and research compose lower-level capabilities.
 - A composition root may import concrete implementations to register them. The
   registered core must remain independent of those implementations.
+
+`tests/test_package_ownership.py` enforces the small dependency rules that are
+most important to keep mechanical: contracts and task worlds cannot import
+optional provider runtimes, and task worlds cannot import provider adapters.
 
 Pydantic models belong at untrusted, external, persisted, or cross-process
 boundaries. Normal Python values are sufficient inside one owner. The

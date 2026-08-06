@@ -21,7 +21,7 @@ from aec_bench.meta_harness.applicability import (
     profile_task_applicability,
 )
 from aec_bench.meta_harness.kernel_catalogue import KernelRuntimeRegistry
-from aec_bench.meta_harness.motif_library import MotifApplicabilityDescriptor
+from aec_bench.meta_harness.motifs import MotifApplicabilityDescriptor
 from aec_bench.tasks.registry import TaskRegistry
 
 CorpusSplitName = Literal["discovery", "calibration", "holdout"]

@@ -47,7 +47,7 @@ def setup_workspace(task_dir: str) -> str:
                         Path(workspace) / env_item.name,
                         dirs_exist_ok=True,
                     )
-            # Keep the full directory for backwards compatibility
+            # Keep the full directory because task-relative imports can use it.
             shutil.copytree(item, os.path.join(workspace, item.name))
         elif item.is_dir() and item.name not in {"__pycache__", "tests"}:
             shutil.copytree(item, os.path.join(workspace, item.name), dirs_exist_ok=True)
@@ -66,36 +66,6 @@ def stage_verifier_assets(task_dir: str | Path, workspace: str | Path) -> None:
 def unstage_verifier_assets(workspace: str | Path) -> None:
     """Remove private verifier assets before another agent turn."""
     shutil.rmtree(Path(workspace) / "tests", ignore_errors=True)
-
-
-def setup_workspace_for_script(task_dir: str) -> str:
-    """Copy task files and prepare workspace for legacy script execution.
-
-    Writes trajectory_writer.py and patches /workspace/ paths in Python
-    files for local execution outside a container.
-    """
-    from aec_bench.agents.tools import build_trajectory_writer_source
-
-    workspace = setup_workspace(task_dir)
-
-    # Write trajectory_writer.py into workspace, patching /workspace/ paths
-    traj_source = build_trajectory_writer_source()
-    traj_source = traj_source.replace("/workspace/", f"{workspace.rstrip('/')}/")
-    Path(workspace, "trajectory_writer.py").write_text(traj_source)
-
-    # Patch /workspace references in any copied Python files (e.g. repl_commands.py)
-    # These files use /workspace as the container mount point which doesn't exist locally.
-    normalised = workspace.rstrip("/")
-    for py_file in Path(workspace).glob("*.py"):
-        if py_file.name == "trajectory_writer.py":
-            continue  # already patched
-        content = py_file.read_text()
-        if '"/workspace"' in content or '"/workspace/' in content:
-            patched = content.replace('"/workspace"', f'"{normalised}"')
-            patched = patched.replace('"/workspace/', f'"{normalised}/')
-            py_file.write_text(patched)
-
-    return workspace
 
 
 def patch_workspace_paths(workspace: str) -> None:

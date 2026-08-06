@@ -10,7 +10,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from aec_bench.adapters.local_registry import (
-    LocalAdapterRegistry,
+    available_local_adapters,
+    build_local_adapter,
     detect_direct_provider,
 )
 
@@ -37,13 +38,12 @@ class TestDetectDirectProvider:
         assert detect_direct_provider("some-random-model") == "anthropic"
 
 
-class TestLocalAdapterRegistry:
-    """Tests for the registry itself."""
+class TestLocalAdapterBuilder:
+    """Tests for the fixed local adapter composition root."""
 
     def test_registered_adapter_kinds(self) -> None:
-        """Registry should know about the local execution adapters."""
-        registry = LocalAdapterRegistry()
-        kinds = registry.available_adapters()
+        """The builder should know about the supported local adapters."""
+        kinds = available_local_adapters()
         assert "rlm" in kinds
         assert "direct" in kinds
         assert "lambda-rlm" in kinds
@@ -52,9 +52,8 @@ class TestLocalAdapterRegistry:
         assert "pydantic_ai" in kinds
 
     def test_unknown_adapter_raises(self) -> None:
-        registry = LocalAdapterRegistry()
         with pytest.raises(ValueError, match="nonexistent"):
-            registry.build(
+            build_local_adapter(
                 adapter_kind="nonexistent",
                 model_name="test-model",
                 workspace=MagicMock(),
@@ -73,10 +72,9 @@ class TestBuildRlm:
             '[template]\ntier = "flat"\n\n[guardrails]\ntoken_budget = 10_000\nmax_iterations = 5\n'
         )
 
-        registry = LocalAdapterRegistry()
         # Provide a mock client to avoid needing real credentials
         mock_client = MagicMock()
-        adapter = registry.build(
+        adapter = build_local_adapter(
             adapter_kind="rlm",
             model_name="test-model",
             workspace=str(workspace),
@@ -91,9 +89,8 @@ class TestBuildRlm:
         workspace = tmp_path / "workspace"
         workspace.mkdir()
 
-        registry = LocalAdapterRegistry()
         mock_client = MagicMock()
-        adapter = registry.build(
+        adapter = build_local_adapter(
             adapter_kind="rlm",
             model_name="test-model",
             workspace=str(workspace),
@@ -110,9 +107,8 @@ class TestBuildDirect:
         workspace = tmp_path / "workspace"
         workspace.mkdir()
 
-        registry = LocalAdapterRegistry()
         mock_client = MagicMock()
-        adapter = registry.build(
+        adapter = build_local_adapter(
             adapter_kind="direct",
             model_name="test-model",
             workspace=str(workspace),
@@ -148,8 +144,7 @@ definition = "report_template.toml"
 """
         )
 
-        registry = LocalAdapterRegistry()
-        adapter = registry.build(
+        adapter = build_local_adapter(
             adapter_kind="lambda_rlm",
             model_name="test-model",
             workspace=str(workspace),
@@ -165,8 +160,7 @@ definition = "report_template.toml"
         workspace = tmp_path / "workspace"
         workspace.mkdir()
 
-        registry = LocalAdapterRegistry()
-        adapter = registry.build(
+        adapter = build_local_adapter(
             adapter_kind="pydantic_ai",
             model_name="test-model",
             workspace=str(workspace),
@@ -723,32 +717,3 @@ enabled = false
 
         assert called_models == []
         assert adapter._advisor_client is None
-
-
-class TestCustomBuilder:
-    """Tests for registering custom adapter builders."""
-
-    def test_register_custom_builder(self) -> None:
-        """Should be able to register a custom adapter kind."""
-        registry = LocalAdapterRegistry()
-
-        def my_builder(
-            *,
-            model_name: str,
-            workspace: str,
-            **kwargs,
-        ) -> MagicMock:
-            adapter = MagicMock()
-            adapter.adapter_name.return_value = "custom"
-            adapter.resolved_model.return_value = model_name
-            return adapter
-
-        registry.register("custom", my_builder)
-        assert "custom" in registry.available_adapters()
-
-        adapter = registry.build(
-            adapter_kind="custom",
-            model_name="test-model",
-            workspace="/tmp/test",
-        )
-        assert adapter.adapter_name() == "custom"

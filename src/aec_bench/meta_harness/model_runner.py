@@ -226,7 +226,7 @@ def run_review_models(
 
 
 def build_review_request(world: dict[str, Any], run: dict[str, Any]) -> dict[str, Any]:
-    from aec_bench.evaluation.llm_reviewer import ReviewResponse
+    from aec_bench.meta_harness.llm_reviewer import ReviewResponse
 
     request = _review_request(world, run)
     return request | {"response_schema": ReviewResponse.model_json_schema()}
@@ -240,7 +240,7 @@ def run_review_model(
     request: dict[str, Any],
     endpoint: ModelEndpoint,
 ) -> dict[str, Any]:
-    from aec_bench.evaluation.llm_reviewer import ReviewResponse
+    from aec_bench.meta_harness.llm_reviewer import ReviewResponse
 
     agent = _agent(
         endpoint=endpoint,
@@ -634,7 +634,7 @@ def _review_request(world: dict[str, Any], run: dict[str, Any]) -> dict[str, Any
 
 
 def _coerce_review_output(output: Any) -> dict[str, Any]:
-    from aec_bench.evaluation.llm_reviewer import ReviewResponse
+    from aec_bench.meta_harness.llm_reviewer import ReviewResponse
 
     if isinstance(output, ReviewResponse):
         return output.model_dump(mode="json", exclude_none=True)

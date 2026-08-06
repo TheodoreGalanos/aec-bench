@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any
 
 from aec_bench.contracts.harness_instance import AgentBindingConfig
-from aec_bench.contracts.proposal_execution import ProposalSessionReceipt
+from aec_bench.contracts.proposal_execution.session import ProposalSessionReceipt
 from aec_bench.harness.harbor_contract import HarborTrialResult
 from aec_bench.harness.harbor_dispatch import MORPH_BACKEND
 from aec_bench.harness.harbor_importing.contracts import HarborImportError

@@ -1,5 +1,5 @@
-# ABOUTME: Tests that historical research contracts stay at explicit experiment or compatibility boundaries.
-# ABOUTME: Proves ordinary contract imports do not eagerly load provider-calibration wire schemas.
+# ABOUTME: Tests that obsolete research contracts are absent from current package boundaries.
+# ABOUTME: Proves ordinary contract imports do not eagerly load deleted experiment schemas.
 
 from __future__ import annotations
 
@@ -8,33 +8,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-import aec_bench.contracts as contracts
-from aec_bench.contracts.compatibility.provider_calibration_v1 import (
-    ProviderCalibrationTask as CompatibilityProviderCalibrationTask,
-)
-from aec_bench.contracts.evaluation_generation import (
+from aec_bench.contracts.evaluation_generation.lifecycle import (
     GovernedBatchExecutionClosure,
     GovernedBatchTerminalEvidence,
 )
-from aec_bench.contracts.provider_calibration import ProviderCalibrationTask
-
-
-def test_provider_calibration_contract_path_is_an_identity_preserving_adapter() -> None:
-    assert ProviderCalibrationTask is CompatibilityProviderCalibrationTask
 
 
 def test_historical_pilot_contract_paths_are_owned_by_the_experiment() -> None:
     assert importlib.util.find_spec("aec_bench.contracts.phase_nine_calibration") is None
     assert importlib.util.find_spec("aec_bench.contracts.compatibility.phase91a_v1") is None
-
-
-def test_historical_experiment_contracts_are_not_general_package_exports() -> None:
-    exported = set(contracts.__all__)
-
-    assert "Phase91aPilotPlan" not in exported
-    assert "ProviderCalibrationPilotPlan" not in exported
-    assert "ProviderCalibrationTask" not in exported
-    assert "ProviderCalibrationTaskManifest" not in exported
 
 
 def test_importing_one_contract_does_not_load_historical_experiment_contracts() -> None:
@@ -47,9 +29,7 @@ def test_importing_one_contract_does_not_load_historical_experiment_contracts() 
                 "import aec_bench.contracts.harness_kernel; "
                 "blocked = {"
                 "'aec_bench.contracts.phase_nine_calibration', "
-                "'aec_bench.contracts.provider_calibration', "
-                "'aec_bench.contracts.compatibility.phase91a_v1', "
-                "'aec_bench.contracts.compatibility.provider_calibration_v1'"
+                "'aec_bench.contracts.compatibility.phase91a_v1'"
                 "}; "
                 "loaded = sorted(blocked.intersection(sys.modules)); "
                 "assert not loaded, loaded"

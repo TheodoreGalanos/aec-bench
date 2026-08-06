@@ -23,18 +23,20 @@ from aec_bench.contracts.harness_kernel import (
     ContentAddressedModel,
     validate_sha256,
 )
-from aec_bench.contracts.program_proposal import (
-    CandidateEvidenceKind,
+from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
+from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
+from aec_bench.contracts.program_proposal.study import (
     DecompositionOptimizationCycle,
     MatchedCandidateEvidenceRef,
     MatchedEvaluationCoordinate,
+    PairedCandidateComparison,
+    ProgramCandidateStudy,
+)
+from aec_bench.contracts.program_proposal.types import (
+    CandidateEvidenceKind,
     OptimizationDisposition,
     OptimizationSplit,
-    PairedCandidateComparison,
     ProgramCandidateKind,
-    ProgramCandidateRef,
-    ProgramCandidateStudy,
-    ProposalFreeze,
 )
 from aec_bench.contracts.validators import NonEmptyStr
 
@@ -250,11 +252,8 @@ class DevelopmentSelectionRegime(ContentAddressedModel):
 
 
 class DecompositionOptimizationResult(ContentAddressedModel):
-    """Historical v1 cycle result retained for exact artifact replay."""
+    """Internal exact cycle result nested inside the current development selection."""
 
-    schema_version: Literal["aecbench.decomposition-optimization-result.v1"] = (
-        "aecbench.decomposition-optimization-result.v1"
-    )
     schedule: DecompositionExecutionSchedule
     selection_rule: FrozenSelectionRule
     outcome_bindings: tuple[EvidenceOutcomeBinding, ...] = Field(min_length=1)
@@ -429,8 +428,8 @@ def complete_decomposition_optimization_cycle(
 
 def load_decomposition_optimization_result(
     content: bytes | str,
-) -> DecompositionOptimizationResult | DevelopmentSelectionResult:
-    """Load historical v1 or current Vdev-only results without migrating artifact bytes."""
+) -> DevelopmentSelectionResult:
+    """Load one current development-selection result."""
     try:
         payload = json.loads(content)
     except (json.JSONDecodeError, TypeError, UnicodeDecodeError) as error:
@@ -438,8 +437,6 @@ def load_decomposition_optimization_result(
     if not isinstance(payload, dict):
         raise ValueError("decomposition optimization artifact must be a JSON object")
     schema_version = payload.get("schema_version")
-    if schema_version == "aecbench.decomposition-optimization-result.v1":
-        return DecompositionOptimizationResult.model_validate(payload)
     if schema_version == "aecbench.development-selection-result.v1":
         return DevelopmentSelectionResult.model_validate(payload)
     raise ValueError(f"unsupported decomposition optimization schema {schema_version!r}")

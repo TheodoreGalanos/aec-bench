@@ -41,7 +41,7 @@ from aec_bench.meta_harness.governed_attempt_engine import (
     GovernedAttemptUsageLimits,
 )
 from aec_bench.meta_harness.harbor_lowering import LoweredHarborRun
-from aec_bench.meta_harness.program_runtime import OperationExecutionContext
+from aec_bench.meta_harness.program_execution import OperationExecutionContext
 
 _EXACT_CALL_ADAPTERS = frozenset({"direct", "tool_loop"})
 
