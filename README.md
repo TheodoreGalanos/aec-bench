@@ -114,8 +114,9 @@ depend on wall-clock time.
 ### Run Experiments
 
 Install `aec-bench[execution]` before using Harbor. Add the `morph` extra for a
-Morph Cloud backend. The separate `run-local` command requires
-`aec-bench[local-agents]`.
+Morph Cloud backend. The provider-backed adapters on the separate `run-local`
+path require `aec-bench[local-agents]`. The `prime-agent` adapter instead uses a
+separately installed Prime Agent executable.
 
 ```bash
 # Run a single task path against a model
@@ -135,6 +136,36 @@ uv run aec-bench run tasks/electrical/pf-droop --model "<model-id>" --backend mo
 Remote runs use the same synchronous Harbor dispatch-and-import workflow and
 produce current `TrialRecord` ledger entries. `aec-bench run-local` remains the
 separate no-Harbor path for local execution.
+
+#### Prime Agent local adapter
+
+Install [upstream Prime Agent](https://github.com/PrimeIntellect-ai/prime-agent#getting-started)
+separately so `prime-agent` is on `PATH`, then select it explicitly:
+
+```bash
+uv run aec-bench run-local tasks/<task> \
+  --adapter prime-agent \
+  --model anthropic/<model-id>
+```
+
+This adapter supports the current artifact/workspace task path. AEC-Bench stages
+the task, launches Prime Agent in JSON mode, then uses the existing output,
+normalisation, verifier, evaluation, and trial-import flow. The model string is
+passed to Prime unchanged. All existing local adapters remain available and
+`rlm` remains the default.
+
+Each trial uses isolated Prime configuration and session directories under
+`logs/prime/`. Ambient skills, extensions, prompt templates, themes, and context
+files are disabled. Provider credentials can still be inherited by the process,
+but are not written to provenance. Results preserve `prime-events.jsonl`,
+`prime-stderr.log`, `prime-run.json`, and saved Prime session files. The
+integration is tested against Prime Agent 0.7.0 and JSON event stream version 3;
+unsupported stream versions fail explicitly.
+
+Prime Agent executes model-generated Python and commands with the current user's
+OS permissions. Process isolation and trial-specific state are reproducibility
+controls, not a security sandbox. Use this local path only with trusted task
+packages; use an externally contained execution path for untrusted material.
 
 ### Meta-Harness
 

@@ -72,6 +72,28 @@ def test_copy_artifacts_skips_missing_files(tmp_path: Path) -> None:
             assert not (artifact_dir / fname).exists()
 
 
+def test_copy_artifacts_preserves_prime_evidence_and_sessions(tmp_path: Path) -> None:
+    run_path = tmp_path / "run"
+    run_path.mkdir()
+    artifact_dir = tmp_path / "artifacts"
+    for name in ("prime-events.jsonl", "prime-stderr.log", "prime-run.json"):
+        (run_path / name).write_text(name, encoding="utf-8")
+    session_file = run_path / "logs" / "prime" / "sessions" / "session.jsonl"
+    session_file.parent.mkdir(parents=True)
+    session_file.write_text("session", encoding="utf-8")
+
+    copied = copy_artifacts(run_path, artifact_dir)
+
+    assert copied == [
+        "prime-events.jsonl",
+        "prime-stderr.log",
+        "prime-run.json",
+        "logs/prime/sessions/session.jsonl",
+    ]
+    assert (artifact_dir / "prime-events.jsonl").exists()
+    assert (artifact_dir / "logs" / "prime" / "sessions" / "session.jsonl").exists()
+
+
 def _scaffold_task_dir(tasks_dir: Path, task_slug: str) -> Path:
     """Create a minimal valid task directory under a tasks/ root."""
     task_dir = tasks_dir / task_slug
@@ -307,3 +329,48 @@ def test_build_trial_record_from_workspace_without_verifier(tmp_path: Path) -> N
     # No optional artifacts
     assert record.outputs.conversation_path is None
     assert record.outputs.trajectory_path is None
+
+
+def test_prime_trial_preserves_resolved_model_configuration_and_unknown_usage(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "agent_result.json").write_text(
+        json.dumps(
+            {
+                "status": "completed",
+                "model": "anthropic/requested",
+                "resolved_model": "anthropic/resolved",
+                "adapter": "prime-agent",
+                "adapter_configuration": {
+                    "prime_version": "0.7.0",
+                    "event_stream_version": 3,
+                    "session_id": "session-1",
+                },
+                "model_calls": None,
+                "input_tokens": None,
+                "output_tokens": None,
+                "cache_read_tokens": None,
+                "cache_write_tokens": None,
+                "output_source": "direct_write",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "output.md").write_text("# Result\n", encoding="utf-8")
+
+    record = build_trial_record_from_workspace(
+        workspace_dir=workspace,
+        trial_id="prime-trial",
+        experiment_id="local",
+        task_id="public-task",
+        model="anthropic/requested",
+        adapter="prime-agent",
+        instruction="Write output.md",
+    )
+
+    assert record.agent.model == "anthropic/resolved"
+    assert record.agent.configuration["model_requested"] == "anthropic/requested"
+    assert record.agent.configuration["prime_version"] == "0.7.0"
+    assert record.agent.configuration["event_stream_version"] == 3
+    assert record.agent.configuration["session_id"] == "session-1"
+    assert record.cost is None

@@ -376,6 +376,23 @@ def _build_pydantic_ai(
     )
 
 
+def _build_prime_agent(
+    *,
+    model_name: str,
+    workspace: str,
+    executable: str = "prime-agent",
+    **_kwargs: Any,
+) -> Any:
+    """Build the external-process Prime Agent adapter without provider SDK imports."""
+    from aec_bench.adapters.prime_agent import PrimeAgentAdapter
+
+    return PrimeAgentAdapter(
+        model_name=model_name,
+        workspace=workspace,
+        executable=executable,
+    )
+
+
 # Default builder registry
 _DEFAULT_BUILDERS: dict[str, AdapterBuilder] = {
     "rlm": _build_rlm,
@@ -384,6 +401,7 @@ _DEFAULT_BUILDERS: dict[str, AdapterBuilder] = {
     "lambda_rlm": _build_lambda_rlm,
     "tool_loop": _build_tool_loop,
     "pydantic_ai": _build_pydantic_ai,
+    "prime-agent": _build_prime_agent,
 }
 
 

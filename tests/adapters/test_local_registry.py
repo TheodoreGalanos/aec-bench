@@ -50,6 +50,7 @@ class TestLocalAdapterBuilder:
         assert "lambda_rlm" in kinds
         assert "tool_loop" in kinds
         assert "pydantic_ai" in kinds
+        assert "prime-agent" in kinds
 
     def test_unknown_adapter_raises(self) -> None:
         with pytest.raises(ValueError, match="nonexistent"):
@@ -117,6 +118,21 @@ class TestBuildDirect:
         assert hasattr(adapter, "execute")
         assert adapter.adapter_name() == "direct"
         assert adapter.resolved_model() == "test-model"
+
+
+class TestBuildPrimeAgent:
+    """Tests for selecting the separately installed Prime Agent process adapter."""
+
+    def test_build_prime_agent_does_not_construct_a_pydantic_ai_client(self, tmp_path: Path) -> None:
+        adapter = build_local_adapter(
+            adapter_kind="prime-agent",
+            model_name="anthropic/test-model",
+            workspace=str(tmp_path),
+            executable="/test/bin/prime-agent",
+        )
+
+        assert adapter.adapter_name() == "prime-agent"
+        assert adapter.resolved_model() == "anthropic/test-model"
 
 
 class TestBuildAdapterAliases:

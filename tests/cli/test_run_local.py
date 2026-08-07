@@ -4,16 +4,24 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import json
+import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
+
+import pytest
+import typer
 
 from aec_bench.cli.commands.run_local import (
     _archive_verifier_retry_attempt,
     _build_verifier_retry_instruction,
     _copy_output_files,
     _prepare_verifier_retry_workspace,
+    _require_adapter_runtime,
+    _run_adapter,
     _run_verifier,
     _should_run_verifier_feedback_retry,
 )
@@ -23,6 +31,286 @@ from aec_bench.harness.local_runtime import (
 )
 
 run_local_module = importlib.import_module("aec_bench.cli.commands.run_local")
+
+
+def test_run_local_default_adapter_remains_rlm() -> None:
+    adapter_option = inspect.signature(run_local_module.run_local).parameters["adapter"].default
+
+    assert adapter_option.default == "rlm"
+
+
+def test_prime_preflight_checks_only_the_external_executable(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(run_local_module, "resolve_prime_executable", lambda executable: Path(f"/bin/{executable}"))
+    monkeypatch.setattr(
+        run_local_module,
+        "require_optional_extra",
+        lambda *_args, **_kwargs: calls.append("pydantic-ai"),
+    )
+
+    _require_adapter_runtime("prime-agent")
+
+    assert calls == []
+
+
+def test_existing_adapter_preflight_still_requires_local_agents_extra(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[object, ...]] = []
+    monkeypatch.setattr(run_local_module, "require_optional_extra", lambda *args, **_kwargs: calls.append(args))
+
+    _require_adapter_runtime("direct")
+
+    assert calls == [("Local agent execution support", "local-agents", ("pydantic_ai",))]
+
+
+def test_missing_prime_executable_reports_separate_install(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from aec_bench.prime_agent.batch import PrimeExecutableNotFoundError
+
+    def fail(_executable: str) -> Path:
+        raise PrimeExecutableNotFoundError("prime-agent executable was not found")
+
+    monkeypatch.setattr(run_local_module, "resolve_prime_executable", fail)
+
+    with pytest.raises(typer.Exit) as error:
+        _require_adapter_runtime("prime-agent")
+
+    stderr = capsys.readouterr().err
+    assert error.value.exit_code == 1
+    assert "Prime Agent executable was not found" in stderr
+    assert "aec-bench[local-agents]" not in stderr
+
+
+def test_prime_adapter_receives_run_local_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from aec_bench.adapters.base import AdapterResult
+    from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
+
+    (tmp_path / "instruction.md").write_text("Write output.md", encoding="utf-8")
+    observed: dict[str, object] = {}
+
+    class FakeAdapter:
+        def execute(self, request):  # noqa: ANN001
+            observed["configuration"] = request.configuration
+            observed["output_path"] = request.output_path
+            (tmp_path / "output.md").write_text("Done", encoding="utf-8")
+            return AdapterResult(
+                adapter_name="prime-agent",
+                resolved_model="anthropic/resolved",
+                configuration_record={},
+                agent_output=AgentOutput(
+                    status=AgentOutputStatus.COMPLETED,
+                    output_path=request.output_path,
+                    output_format=request.output_format,
+                ),
+                transcript=[],
+            )
+
+    monkeypatch.setattr(
+        "aec_bench.adapters.local_registry.build_local_adapter",
+        lambda **_kwargs: FakeAdapter(),
+    )
+
+    result = _run_adapter(
+        adapter_kind="prime-agent",
+        workspace=str(tmp_path),
+        model="anthropic/requested",
+        timeout=37,
+    )
+
+    assert observed == {"configuration": {"timeout_seconds": 37}, "output_path": "output.md"}
+    assert result["status"] == "completed"
+
+
+def test_existing_direct_adapter_still_reaches_the_same_execution_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from aec_bench.adapters.base import AdapterResult
+    from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
+
+    (tmp_path / "instruction.md").write_text("Answer directly", encoding="utf-8")
+    observed: dict[str, object] = {}
+
+    class FakeDirectAdapter:
+        def execute(self, request):  # noqa: ANN001
+            observed["instruction"] = request.instruction
+            observed["configuration"] = request.configuration
+            return AdapterResult(
+                adapter_name="direct",
+                resolved_model="test-model",
+                configuration_record={"model": "test-model"},
+                agent_output=AgentOutput(
+                    status=AgentOutputStatus.COMPLETED,
+                    output_path=request.output_path,
+                    output_format=request.output_format,
+                ),
+                transcript=[],
+                raw_output_text="Existing result",
+            )
+
+    def fake_builder(**kwargs: object) -> FakeDirectAdapter:
+        observed["adapter_kind"] = kwargs["adapter_kind"]
+        return FakeDirectAdapter()
+
+    monkeypatch.setattr("aec_bench.adapters.local_registry.build_local_adapter", fake_builder)
+
+    result = _run_adapter(
+        adapter_kind="direct",
+        workspace=str(tmp_path),
+        model="test-model",
+        timeout=19,
+    )
+
+    assert observed == {
+        "adapter_kind": "direct",
+        "instruction": "Answer directly",
+        "configuration": {},
+    }
+    assert result["status"] == "completed"
+    assert (tmp_path / "output.md").read_text(encoding="utf-8") == "Existing result"
+
+
+def test_copy_output_files_includes_prime_evidence_and_sessions(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    for name in ("prime-events.jsonl", "prime-stderr.log", "prime-run.json"):
+        (workspace / name).write_text(name, encoding="utf-8")
+    session = workspace / "logs" / "prime" / "sessions" / "session.jsonl"
+    session.parent.mkdir(parents=True)
+    session.write_text("session", encoding="utf-8")
+    output = tmp_path / "output"
+
+    copied = _copy_output_files(str(workspace), output)
+
+    assert copied == [
+        "prime-events.jsonl",
+        "prime-stderr.log",
+        "prime-run.json",
+        "logs/prime/sessions/session.jsonl",
+    ]
+    assert (output / "logs" / "prime" / "sessions" / "session.jsonl").exists()
+
+
+def test_prime_path_stages_runs_verifies_and_imports_with_fake_executable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from aec_bench.contracts.trial_record import TimingRecord
+    from aec_bench.harness.local_import import build_trial_record_from_workspace
+
+    executable_dir = tmp_path / "bin"
+    executable_dir.mkdir()
+    executable = executable_dir / "prime-agent"
+    executable.write_text(
+        f"""#!{sys.executable}
+import json
+import os
+from pathlib import Path
+import sys
+
+if "--version" in sys.argv:
+    print("prime-agent 0.7.0")
+    raise SystemExit(0)
+
+Path("output.md").write_text("# Prime result\\n", encoding="utf-8")
+session_dir = Path(os.environ["PRIME_AGENT_SESSION_DIR"])
+session_dir.mkdir(parents=True, exist_ok=True)
+(session_dir / "session.jsonl").write_text('{{"type":"session"}}\\n', encoding="utf-8")
+message = {{
+    "role": "assistant",
+    "content": [{{"type": "text", "text": "Completed"}}],
+    "provider": "anthropic",
+    "model": "anthropic/requested",
+    "responseModel": "anthropic/resolved",
+    "responseId": "integration-response",
+    "usage": {{"input": 10, "output": 4, "cacheRead": 0, "cacheWrite": 0}},
+    "stopReason": "stop",
+    "timestamp": 1786064524000,
+}}
+for event in [
+    {{"type": "session", "version": 3, "id": "integration-session", "cwd": os.getcwd()}},
+    {{"type": "turn_start"}},
+    {{"type": "message_end", "message": message}},
+    {{"type": "turn_end", "message": message, "toolResults": []}},
+    {{"type": "agent_end", "messages": [message]}},
+]:
+    print(json.dumps(event), flush=True)
+""",
+        encoding="utf-8",
+    )
+    executable.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{executable_dir}{os.pathsep}{os.environ['PATH']}")
+
+    task_dir = tmp_path / "tasks" / "public-task"
+    task_dir.mkdir(parents=True)
+    (task_dir / "instruction.md").write_text("Write output.md", encoding="utf-8")
+    verifier = task_dir / "tests" / "verify.py"
+    verifier.parent.mkdir()
+    verifier.write_text(
+        """import argparse
+import json
+from pathlib import Path
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--input")
+parser.add_argument("--output")
+args = parser.parse_args()
+Path(args.output).write_text(json.dumps({"reward": 1.0}), encoding="utf-8")
+""",
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "result"
+    imported: dict[str, object] = {}
+
+    def fake_auto_import(**kwargs: object) -> None:
+        workspace = Path(str(kwargs["workspace"]))
+        record = build_trial_record_from_workspace(
+            workspace_dir=workspace,
+            trial_id="prime-trial",
+            experiment_id="local",
+            task_id="public-task",
+            model=str(kwargs["model"]),
+            adapter=str(kwargs["adapter"]),
+            instruction="Write output.md",
+            timing=TimingRecord(total_seconds=1.0),
+        )
+        imported["adapter"] = record.agent.adapter
+        imported["model"] = record.agent.model
+        imported["reward"] = record.evaluation.reward
+        imported["tokens_in"] = record.cost.tokens_in if record.cost is not None else None
+
+    monkeypatch.setattr(run_local_module, "_auto_import", fake_auto_import)
+    monkeypatch.setattr(run_local_module, "emit", lambda *args, **kwargs: None)
+
+    run_local_module.run_local(
+        task_path=str(task_dir),
+        model="anthropic/requested",
+        adapter="prime-agent",
+        output_dir=str(output_dir),
+        timeout=5,
+        keep_workspace=False,
+        no_verify=False,
+        no_import=False,
+        no_normalise=True,
+        constitutional_model=None,
+        reviewer=False,
+        reviewer_model=None,
+        reviewer_models_config=None,
+        fail_on_reviewer_error=False,
+    )
+
+    assert imported == {
+        "adapter": "prime-agent",
+        "model": "anthropic/resolved",
+        "reward": 1.0,
+        "tokens_in": 10,
+    }
+    assert (output_dir / "output.md").exists()
+    assert (output_dir / "prime-events.jsonl").exists()
+    assert (output_dir / "prime-stderr.log").exists()
+    assert (output_dir / "prime-run.json").exists()
+    assert (output_dir / "logs" / "prime" / "sessions" / "session.jsonl").exists()
 
 
 class TestSetupWorkspace:
@@ -460,6 +748,10 @@ class TestVerifierFeedbackRetry:
         workspace = tmp_path / "workspace"
         workspace.mkdir()
         (workspace / "output.md").write_text("first output")
+        (workspace / "prime-events.jsonl").write_text('{"type":"session"}\n')
+        prime_session = workspace / "logs" / "prime" / "sessions" / "session.jsonl"
+        prime_session.parent.mkdir(parents=True)
+        prime_session.write_text("prime session")
         (workspace / "rewrite_integrity_report.json").write_text(json.dumps({"attempt": 1}))
         verifier_dir = workspace / "logs" / "verifier"
         verifier_dir.mkdir(parents=True)
@@ -474,6 +766,8 @@ class TestVerifierFeedbackRetry:
         assert json.loads((archive_dir / "details.json").read_text()) == {"field": 0.0}
         assert (archive_dir / "feedback.md").read_text() == "retry needed"
         assert (archive_dir / "artifacts" / "rewrite_integrity_report.json").exists()
+        assert (archive_dir / "prime-events.jsonl").exists()
+        assert (archive_dir / "prime-sessions" / "session.jsonl").read_text() == "prime session"
 
     def test_prepare_verifier_retry_workspace_archives_and_clears_output(
         self,
