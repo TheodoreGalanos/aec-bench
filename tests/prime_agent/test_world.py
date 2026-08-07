@@ -269,11 +269,18 @@ async def test_prime_end_turn_while_world_is_live_is_recorded_incomplete(tmp_pat
     assert result.world_state == "active"
     assert result.completion == "incomplete"
     assert result.verification.valid
-    assert result.evaluation.valid is False
+    assert result.evaluation.evaluation_scope == "bounded_continuation"
+    assert result.evaluation.valid
+    assert result.evaluation.metrics.terminal_liability.active_restriction_count == 2
     assert result.actor_transport_file.exists()
     assert result.run_file.exists()
     assert result.world_action_attempts == 1
     assert not result.prime.benchmark_valid
+    run_evidence = json.loads(result.run_file.read_text(encoding="utf-8"))
+    assert run_evidence["evaluation_scope"] == "bounded_continuation"
+    assert run_evidence["evaluation_valid"] is True
+    assert run_evidence["world_state"] == "active"
+    assert run_evidence["completion"] == "incomplete"
 
 
 @pytest.mark.asyncio
@@ -298,5 +305,7 @@ async def test_sandboxed_prime_reaches_world_only_through_the_scoped_proxy(tmp_p
     assert result.world_state == "active"
     assert result.completion == "incomplete"
     assert result.verification.valid
+    assert result.evaluation.evaluation_scope == "bounded_continuation"
+    assert result.evaluation.valid
     assert result.prime.benchmark_valid
     assert result.benchmark_valid

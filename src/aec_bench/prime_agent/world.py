@@ -473,7 +473,10 @@ async def run_prime_pump_world_session(
         snapshot=repository.current_snapshot(),
     )
     verification = run.verify()
-    evaluation = evaluate_pump_station_reference_run(run)
+    # One Prime ACP session can make only actor-authorised progress. Host-owned
+    # Operations reviews remain outside its capability, so this composition is
+    # a bounded continuation rather than the task's complete reference journey.
+    evaluation = evaluate_pump_station_reference_run(run, evaluation_scope="bounded_continuation")
     if not verification.valid:
         world_state = "failed"
     elif last_action is not None and last_action.terminated:
@@ -511,6 +514,8 @@ async def run_prime_pump_world_session(
                 "prime_limit_reason": prime.limit_reason,
                 "world_state": world_state,
                 "completion": completion,
+                "evaluation_scope": evaluation.evaluation_scope,
+                "evaluation_valid": evaluation.valid,
                 "benchmark_valid": benchmark_valid,
             },
             indent=2,

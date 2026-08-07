@@ -221,11 +221,22 @@ Prime session state and world state remain separate. In particular, ACP
 start another prompt automatically. World replay, verification, and evaluation
 continue to use the existing task-owned repository and evaluator.
 
+One Prime ACP session is evaluated as a task-owned `bounded_continuation`.
+Prime has no host-control capability, so the bounded scope does not require it
+to perform Operations reviews that belong to the host boundary. This changes
+only the terminal-stewardship availability gate: active restrictions, deferred
+work, unavailable assets, and other closing liabilities remain explicit in the
+evaluation. A valid bounded evaluation does not mark an active world or an
+incomplete or interrupted Prime session as completed. A `complete_journey`
+treatment requires separately designed host-owned control orchestration.
+
 Each run preserves `prime-acp-in.jsonl`, `prime-acp-out.jsonl`,
 `prime-stderr.log`, `prime-run.json`, `prime-world-run.json`, Prime session
 files, and a separate actor-transport log. `prime-run.json` normalizes usage,
 cost, root/child session topology, refinement counts, configured limits, and
-the limit that ended the prompt. Unknown ACP `_meta` content stays in the raw
+the limit that ended the prompt. `prime-world-run.json` records the selected
+task-owned evaluation scope and whether that evaluation passed alongside the
+separate session and world states. Unknown ACP `_meta` content stays in the raw
 evidence. The actor log timestamps every accepted, rejected, unauthorized, and
 malformed transport attempt without recording the socket capability, host
 paths, or hidden state. Trial-local Prime HOME/XDG directories, configuration,
