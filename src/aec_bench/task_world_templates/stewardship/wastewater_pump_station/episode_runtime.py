@@ -46,6 +46,9 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_
     project_coupled_information_set,
     transition,
 )
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_work import (
+    PumpStationResourceError,
+)
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_identity import (
     canonical_stewardship_value,
 )
@@ -528,7 +531,7 @@ class PumpStationEpisodeHost:
                 action=action.action,
                 model=run.model,
             )
-        except (PumpStationActionError, PumpStationCoupledWorldError) as error:
+        except (PumpStationActionError, PumpStationCoupledWorldError, PumpStationResourceError) as error:
             return ActionRejected(getattr(error, "code", "domain-action-rejected"), str(error))
         return Transition(state=task_transition.state, output=task_transition)
 
