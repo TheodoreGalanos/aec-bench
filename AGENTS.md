@@ -17,6 +17,11 @@ AEC-Bench is a Python platform for creating, running, and evaluating Architectur
 
 Do not preserve obsolete code, package structure, or documentation only because it already exists. The task is to leave the current system coherent, not to preserve its full history.
 
+## Communication and language
+
+- Use ASD-STE100 Simplified Technical English for all AEC-Bench work. This rule applies to progress updates, reviews, handoffs, documentation, issues, and pull requests.
+- Keep code identifiers, commands, paths, schemas, error messages, and quoted source text exact. Do not rewrite these technical literals to follow ASD-STE100.
+
 ## Start with the relevant authority
 
 Read the implementation and tests for the area you will change. Then read only the documents that govern that change:

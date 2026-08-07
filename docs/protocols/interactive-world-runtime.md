@@ -151,6 +151,17 @@ normalized Prime run evidence records configured limits, aggregate usage and
 cost, root/child session counts, refinement status counts, and any limit that
 ended the prompt. Unknown ACP metadata remains in the raw ACP evidence.
 
+The current Prime composition is one bounded actor continuation. It invokes the
+task-owned pump evaluator with `evaluation_scope="bounded_continuation"`
+because Operations boundary reviews remain host controls and are not available
+through the Prime actor capability. The bounded scope changes only the
+terminal-stewardship availability gate. Verification, conservation, authority,
+evidence, and liability checks remain unchanged, and closing liabilities remain
+in the result. Evaluation validity therefore does not convert an active world
+or an incomplete or interrupted Prime session into a completed one. A
+`complete_journey` Prime treatment requires explicit host-owned control
+orchestration outside the composite actor principal.
+
 Same-user Prime execution is development-only and cannot produce
 benchmark-valid evidence. The current benchmark-valid local path uses a macOS
 Seatbelt profile applied to Prime and its descendants. It denies the AECBench
