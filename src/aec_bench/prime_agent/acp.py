@@ -7,9 +7,11 @@ import asyncio
 import contextlib
 import hashlib
 import importlib
+import importlib.metadata
 import json
 import os
 import re
+import shutil
 import signal
 import sys
 import time
@@ -19,6 +21,8 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, NoReturn
+
+import yaml
 
 from aec_bench.prime_agent.batch import (
     PRIME_AGENT_TESTED_VERSION,
@@ -124,9 +128,10 @@ def build_prime_acp_command(
     model: str,
     actor_workspace: Path,
     session_dir: Path,
-    skill_directory: Path,
+    skill_directories: Sequence[Path],
 ) -> list[str]:
     """Build Prime's one-session ACP command without using a shell."""
+    skill_arguments = [argument for directory in skill_directories for argument in ("--skill", str(directory))]
     return [
         str(executable),
         "--mode",
@@ -138,8 +143,7 @@ def build_prime_acp_command(
         "--session-dir",
         str(session_dir),
         "--no-skills",
-        "--skill",
-        str(skill_directory),
+        *skill_arguments,
         "--no-extensions",
         "--no-prompt-templates",
         "--no-themes",
@@ -188,7 +192,7 @@ async def run_prime_acp_session(
     *,
     actor_workspace: Path,
     evidence_directory: Path,
-    skill_directory: Path,
+    skill_directories: Sequence[Path],
     instruction: str,
     model: str,
     actor_environment: Mapping[str, str],
@@ -203,11 +207,22 @@ async def run_prime_acp_session(
     acp_schema = importlib.import_module("acp.schema")
     actor_workspace = actor_workspace.resolve()
     evidence_directory = evidence_directory.resolve()
-    skill_directory = skill_directory.resolve()
+    if any(directory.is_symlink() for directory in skill_directories):
+        raise PrimeAcpIsolationError("Prime explicit skill directories must not be symbolic links")
+    resolved_skill_directories = tuple(directory.resolve() for directory in skill_directories)
     if not instruction.strip():
         raise ValueError("Prime ACP instruction must be non-empty")
-    if not actor_workspace.is_dir() or not skill_directory.is_dir():
-        raise FileNotFoundError("Prime actor workspace and explicit skill must exist")
+    if not actor_workspace.is_dir():
+        raise FileNotFoundError("Prime actor workspace must exist")
+    _validate_skill_directories(actor_workspace, resolved_skill_directories)
+    selected_skills = [
+        {
+            "order": order,
+            "name": _skill_name(directory),
+            "sha256": _directory_digest(directory),
+        }
+        for order, directory in enumerate(resolved_skill_directories)
+    ]
     if _paths_overlap(actor_workspace, evidence_directory):
         raise PrimeAcpIsolationError("host evidence directory must be outside the actor workspace")
 
@@ -239,7 +254,7 @@ async def run_prime_acp_session(
         model=model,
         actor_workspace=actor_workspace,
         session_dir=paths.session_dir,
-        skill_directory=skill_directory,
+        skill_directories=resolved_skill_directories,
     )
     command = list(base_command)
     sandbox_profile: Path | None = None
@@ -407,6 +422,7 @@ async def run_prime_acp_session(
             with contextlib.suppress(Exception):
                 await stderr_task
         _redact_session_artifacts(paths.session_dir, env, redact_values)
+        _preserve_session_artifacts(paths.session_dir, evidence_directory)
         if sandbox_profile is not None:
             sandbox_profile.unlink(missing_ok=True)
 
@@ -474,7 +490,8 @@ async def run_prime_acp_session(
         model=model,
         instruction=instruction,
         actor_workspace=actor_workspace,
-        skill_directory=skill_directory,
+        skill_directories=resolved_skill_directories,
+        selected_skills=selected_skills,
         sandbox_profile=sandbox_profile,
     )
     return run
@@ -724,14 +741,20 @@ def _write_run_provenance(
     model: str,
     instruction: str,
     actor_workspace: Path,
-    skill_directory: Path,
+    skill_directories: Sequence[Path],
+    selected_skills: Sequence[Mapping[str, Any]],
     sandbox_profile: Path | None,
 ) -> None:
     replacements = {
         str(actor_workspace): "<actor-workspace>",
         str(run.paths.session_dir): "<prime-session-dir>",
-        str(skill_directory): "<aec-world-skill>",
     }
+    replacements.update(
+        {
+            str(directory): f"<skill:{skill['name']}>"
+            for directory, skill in zip(skill_directories, selected_skills, strict=True)
+        }
+    )
     if sandbox_profile is not None:
         replacements[str(sandbox_profile)] = "<sandbox-profile>"
     sanitized_command = [replacements.get(argument, argument) for argument in run.command]
@@ -748,6 +771,7 @@ def _write_run_provenance(
         "exit_code": run.exit_code,
         "session_id": run.session_id,
         "protocol_version": run.protocol_version,
+        "acp_sdk_version": _installed_distribution_version("agent-client-protocol"),
         "agent_name": run.agent_name,
         "agent_version": run.agent_version,
         "agent_capabilities": run.agent_capabilities,
@@ -785,7 +809,8 @@ def _write_run_provenance(
         "benchmark_valid": run.benchmark_valid,
         "actor_principal_scope": "prime-session-composite",
         "runtime_home_scope": "actor-workspace",
-        "skill_sha256": _directory_digest(skill_directory),
+        "skill_sha256": selected_skills[0]["sha256"],
+        "skills": selected_skills,
         "update_count": len(run.updates),
         "error": run.error,
     }
@@ -826,6 +851,16 @@ def _redact_session_artifacts(
             continue
 
 
+def _preserve_session_artifacts(session_directory: Path, evidence_directory: Path) -> None:
+    session_files = sorted(path for path in session_directory.rglob("*.jsonl") if path.is_file())
+    for index, session_file in enumerate(session_files):
+        suffix = "" if index == 0 else f"-{index + 1}"
+        destination = evidence_directory / f"prime-session{suffix}.jsonl"
+        if destination.exists():
+            raise FileExistsError(f"Prime session evidence destination already exists: {destination.name}")
+        shutil.copyfile(session_file, destination)
+
+
 def _directory_digest(directory: Path) -> str:
     digest = hashlib.sha256()
     for path in sorted(item for item in directory.rglob("*") if item.is_file()):
@@ -834,3 +869,59 @@ def _directory_digest(directory: Path) -> str:
         digest.update(path.read_bytes())
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def _validate_skill_directories(actor_workspace: Path, skill_directories: Sequence[Path]) -> None:
+    if not skill_directories:
+        raise ValueError("Prime ACP requires at least one explicit skill")
+    if any(path.is_symlink() for path in actor_workspace.rglob("*")):
+        raise PrimeAcpIsolationError("actor workspace must not contain symbolic links")
+    names: set[str] = set()
+    for index, directory in enumerate(skill_directories):
+        if not directory.is_dir():
+            raise FileNotFoundError(f"Prime explicit skill directory does not exist: {index}")
+        if directory == actor_workspace or not directory.is_relative_to(actor_workspace):
+            raise PrimeAcpIsolationError("Prime explicit skills must be installed under the actor workspace")
+        name = _skill_name(directory)
+        if name in names:
+            raise ValueError(f"Prime explicit skill name is duplicated: {name}")
+        names.add(name)
+    for index, directory in enumerate(skill_directories):
+        for other in skill_directories[index + 1 :]:
+            if _paths_overlap(directory, other):
+                raise PrimeAcpIsolationError("Prime explicit skill directories must not overlap")
+
+
+def _skill_name(directory: Path) -> str:
+    skill_file = directory / "SKILL.md"
+    if not skill_file.is_file():
+        raise FileNotFoundError("Prime explicit skill has no SKILL.md")
+    try:
+        text = skill_file.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("Prime explicit SKILL.md must be UTF-8") from exc
+    if not text.startswith("---\n") or "\n---\n" not in text[4:]:
+        raise ValueError("Prime explicit SKILL.md must contain YAML frontmatter")
+    frontmatter, _body = text[4:].split("\n---\n", 1)
+    try:
+        metadata = yaml.safe_load(frontmatter)
+    except yaml.YAMLError as exc:
+        raise ValueError("Prime explicit SKILL.md frontmatter must be valid YAML") from exc
+    if not isinstance(metadata, dict):
+        raise ValueError("Prime explicit SKILL.md frontmatter must be a mapping")
+    name = metadata.get("name")
+    description = metadata.get("description")
+    if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name):
+        raise ValueError("Prime explicit skill name is invalid")
+    if name != directory.name:
+        raise ValueError("Prime explicit skill name must match its directory")
+    if not isinstance(description, str) or not description.strip():
+        raise ValueError("Prime explicit skill description is required")
+    return name
+
+
+def _installed_distribution_version(distribution: str) -> str:
+    try:
+        return importlib.metadata.version(distribution)
+    except importlib.metadata.PackageNotFoundError:
+        return "unknown"

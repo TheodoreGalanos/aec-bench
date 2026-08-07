@@ -180,12 +180,31 @@ pip install "aec-bench[prime-agent]"
 The maintained async Python entry point is
 `aec_bench.prime_agent.world.run_prime_pump_world_session`. It receives a
 host-selected `WorldSessionRequest`, launches one Prime ACP process for one
-session, supplies the resolved objective in the initial prompt, and installs
-only the generic `aec-world` skill. This is the Open condition: Prime receives
-the objective, actor-visible starting material, and generic actor capability,
-with no task-family guidance or external plan. Callers must also supply a
-`PrimeWorldSessionLimits` value with positive world-action, model-call, token,
-cost, and wall-clock limits.
+session, and supplies the resolved objective in the initial prompt. By default,
+it installs only the generic `aec-world` skill. This is the Open treatment:
+Prime receives the objective, actor-visible starting material, and generic
+actor capability, with no task-family method or external plan.
+
+The caller can select the experimental Guided treatment explicitly:
+
+```python
+await run_prime_pump_world_session(
+    ...,
+    pump_station_guidance=True,
+)
+```
+
+Guided installs `aec-world` followed by `pump-station-guidance` and tells Prime
+to load the second skill before its first world action. The guidance teaches
+compact state, exact action accounting, rejection interpretation, and
+pump-station decision checks. Its current protocol tells Prime to combine each
+world action, ledger append, compact-state update, and selected output in one
+notebook cell. It does not expose or coach Prime against host-side execution
+limits, and it does not contain a fixed plan, action sequence, or current
+instance solution. It is validated only against the current registered profile
+until a second profile supplies cross-profile evidence. Callers must also
+supply a `PrimeWorldSessionLimits` value with positive world-action, model-call,
+token, cost, and wall-clock emergency limits.
 
 Inside Prime, the available world calls are:
 
@@ -234,14 +253,17 @@ Each run preserves `prime-acp-in.jsonl`, `prime-acp-out.jsonl`,
 `prime-stderr.log`, `prime-run.json`, `prime-world-run.json`, Prime session
 files, and a separate actor-transport log. `prime-run.json` normalizes usage,
 cost, root/child session topology, refinement counts, configured limits, and
-the limit that ended the prompt. `prime-world-run.json` records the selected
-task-owned evaluation scope and whether that evaluation passed alongside the
-separate session and world states. Unknown ACP `_meta` content stays in the raw
-evidence. The actor log timestamps every accepted, rejected, unauthorized, and
-malformed transport attempt without recording the socket capability, host
-paths, or hidden state. Trial-local Prime HOME/XDG directories, configuration,
-sessions, workspace files, and refinement artifacts are isolated and are not
-promoted to another run.
+the limit that ended the prompt. It also records the selected skills in order,
+with content digests but no host paths. Skill availability in that provenance
+and a completed skill read in the retained session are separate treatment-
+integrity facts. `prime-world-run.json` records the selected task-owned
+evaluation scope and whether that evaluation passed alongside the separate
+session and world states. Unknown ACP `_meta` content stays in the raw evidence.
+The actor log timestamps every accepted, rejected, unauthorized, and malformed
+transport attempt without recording the socket capability, host paths, or
+hidden state. Trial-local Prime HOME/XDG directories, configuration, sessions,
+workspace files, and refinement artifacts are isolated and are not promoted to
+another run.
 
 `PrimeAcpIsolation.DEVELOPMENT_SAME_USER` is explicitly non-benchmark-valid
 development evidence because Prime has the current user's OS permissions.
@@ -253,7 +275,8 @@ until an equivalent filesystem/process boundary is implemented.
 
 This integration is additive. It does not change Harbor, the installed
 `actor-interface`, task templates, world semantics, verification, or
-evaluation.
+evaluation. Guided selection also does not change actor authority, world state,
+replay, automatic continuation, verification, or evaluation.
 
 ### Meta-Harness
 

@@ -81,6 +81,24 @@ The Prime root process and its descendants receive the same scoped capability,
 so they form one composite actor principal. Per-child action attribution is not
 claimed without enforceable per-child capability scoping.
 
+The composition selects explicit skills in caller order while ambient skills,
+extensions, prompt templates, themes, and context files remain disabled. Open
+installs only `aec-world`. The optional Guided pump treatment installs
+`aec-world` followed by `pump-station-guidance` and adds one instruction to load
+the guidance before the first world action. The caller selects Guided
+explicitly; task, world, profile, and model identities do not route it. Both
+skills are copied under the isolated actor workspace before Prime starts.
+Selected skill names, order, and content digests are normalized in
+`prime-run.json` without retaining their host paths. Retained session evidence
+separately shows whether Prime completed the guidance read.
+
+The `pump-station-guidance` treatment asks Prime to combine each actor
+invocation, ledger append, compact-state update, and selected output in one
+notebook cell. Host-side emergency limits are not included in the guidance or
+added instruction. The guidance does not select actions, add actor observations,
+expose verifier state, or change world and evaluation rules. Its content digest
+in `prime-run.json` identifies the exact guidance used by a retained run.
+
 The composed entry point requires positive host limits for world actions,
 model calls, aggregate tokens, aggregate provider cost, and elapsed wall time.
 The actor proxy counts distinct invoke request content while allowing an exact
@@ -184,7 +202,7 @@ state, verifier paths, provider configuration, or recovery data.
 | `actor-interface` | Invoke the pump episode host with current actor JSON. |
 | `control-interface` | Invoke pump controls or explicit rollout composition. |
 | Harbor agent and import | Use the concrete pump transport and evaluator. |
-| Prime ACP Python entry | Run one Open-mode Prime session against one scoped pump actor proxy. |
+| Prime ACP Python entry | Run one Open or explicitly Guided Prime session against one scoped pump actor proxy. |
 
 The boundary fails closed for unknown build or profile identity, stale
 decisions, unavailable actions, unauthorized controls, invalid rollout
@@ -201,4 +219,5 @@ successful transition or evaluation.
 - [pump retry and recovery](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_registered_world_run_transitions.py)
 - [Prime actor proxy and world composition](../../tests/prime_agent/test_world.py)
 - [Prime ACP lifecycle and isolation](../../tests/prime_agent/test_acp.py)
+- [Prime treatment and trajectory analysis](../../tests/prime_agent/test_trajectory.py)
 - [Harbor import](../../tests/harness/test_stewardship_harbor_import.py)
