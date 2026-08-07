@@ -185,6 +185,13 @@ provider-neutral execution model or a Prime-specific record authority.
 Provider errors, timeouts, missing output, and incomplete execution remain
 explicit failures. A transport cannot turn them into successful trials.
 
+The separate `prime_agent` integration runs the upstream Prime Agent executable
+directly. JSON mode adapts staged artifact tasks on the existing local path;
+ACP mode owns one persistent Prime process and a capability-scoped actor proxy
+for one interactive episode. The proxy translates only the current actor
+request and result models. Task-world persistence, verification, evaluation,
+and Harbor paths remain owned by their existing layers.
+
 Local execution selects from one fixed set of adapter builders at the harness
 composition edge. Tests inject a builder callable directly; production does
 not expose a mutable adapter registry or a speculative local-environment

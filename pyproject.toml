@@ -59,6 +59,9 @@ evolution = [
     "numpy>=2.4,<3",
     "ribs>=0.9.0",
 ]
+prime-agent = [
+    "agent-client-protocol>=0.12,<0.13",
+]
 
 [build-system]
 requires = ["hatchling"]

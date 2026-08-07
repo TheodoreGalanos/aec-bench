@@ -12,6 +12,7 @@ NEUTRAL_ROOTS = (
     REPOSITORY_ROOT / "src" / "aec_bench" / "task_world_templates",
 )
 OPTIONAL_RUNTIME_ROOTS = {
+    "acp",
     "anthropic",
     "boto3",
     "botocore",

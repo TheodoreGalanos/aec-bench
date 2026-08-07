@@ -26,6 +26,7 @@ Install only the features you use:
 | Harbor on Morph Cloud | `pip install "aec-bench[execution,morph]"` |
 | Local model-backed agents and reviewers | `pip install "aec-bench[local-agents]"` |
 | Prime CLI, export, and hosted evaluation | `pip install "aec-bench[prime]"` |
+| Prime Agent interactive worlds over ACP | `pip install "aec-bench[prime-agent]"` |
 | Web UI | `pip install "aec-bench[webui]"` |
 | Terminal UI | `pip install "aec-bench[tui]"` |
 | Evolution and local model execution | `pip install "aec-bench[evolution,local-agents]"` |
@@ -166,6 +167,64 @@ Prime Agent executes model-generated Python and commands with the current user's
 OS permissions. Process isolation and trial-specific state are reproducibility
 controls, not a security sandbox. Use this local path only with trusted task
 packages; use an externally contained execution path for untrusted material.
+
+#### Prime Agent interactive world sessions
+
+Install the ACP client separately from the upstream executable:
+
+```bash
+pip install "aec-bench[prime-agent]"
+# Install upstream Prime Agent separately so prime-agent is on PATH.
+```
+
+The maintained async Python entry point is
+`aec_bench.prime_agent.world.run_prime_pump_world_session`. It receives a
+host-selected `WorldSessionRequest`, launches one Prime ACP process for one
+session, supplies the resolved objective in the initial prompt, and installs
+only the generic `aec-world` skill. This is the Open condition: Prime receives
+the objective, actor-visible starting material, and generic actor capability,
+with no task-family guidance or external plan.
+
+Inside Prime, the available world calls are:
+
+```python
+await aec_world.capabilities()
+observation = await aec_world.observe()
+await aec_world.invoke(
+    "continue_operation",
+    {"reason": "Advance the current world."},
+    decision_id=observation["decision_id"],
+)
+```
+
+The host-owned actor proxy privately binds one pump-world repository and exposes
+only `capabilities`, `observe`, and `invoke`. Prime never receives a world run
+directory or host-control selector. The Prime root session and all descendants
+share one capability and are therefore one composite AECBench actor principal;
+this integration does not claim that only the root process can invoke actions.
+
+Prime session state and world state remain separate. In particular, ACP
+`end_turn` while the world is active produces an incomplete result and does not
+start another prompt automatically. World replay, verification, and evaluation
+continue to use the existing task-owned repository and evaluator.
+
+Each run preserves `prime-acp-in.jsonl`, `prime-acp-out.jsonl`,
+`prime-stderr.log`, `prime-run.json`, Prime session files, and a separate
+actor-transport log. Unknown ACP `_meta` content stays in the raw evidence.
+Trial-local Prime configuration, sessions, workspace files, and refinement
+artifacts are isolated and are not promoted to another run.
+
+`PrimeAcpIsolation.DEVELOPMENT_SAME_USER` is explicitly non-benchmark-valid
+development evidence because Prime has the current user's OS permissions.
+Benchmark-valid local execution currently requires
+`PrimeAcpIsolation.MACOS_SANDBOX`, which applies a macOS Seatbelt profile to
+Prime and its descendants, denies the AECBench source and private world
+repository, and permits the scoped actor socket. Other platforms fail closed
+until an equivalent filesystem/process boundary is implemented.
+
+This integration is additive. It does not change Harbor, the installed
+`actor-interface`, task templates, world semantics, verification, or
+evaluation.
 
 ### Meta-Harness
 

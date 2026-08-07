@@ -46,6 +46,9 @@ prime = [
     { name = "prime" },
     { name = "verifiers" },
 ]
+prime-agent = [
+    { name = "agent-client-protocol" },
+]
 tui = [
     { name = "pillow" },
     { name = "rich-pixels" },
@@ -72,6 +75,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "agent-client-protocol", marker = "extra == 'prime-agent'", specifier = ">=0.12,<0.13" },
     { name = "boto3", marker = "extra == 'local-agents'", specifier = ">=1.42,<2" },
     { name = "botocore", marker = "extra == 'local-agents'", specifier = ">=1.42,<2" },
     { name = "click", specifier = ">=8.3.3,<8.4" },
@@ -97,7 +101,7 @@ requires-dist = [
     { name = "uvicorn", marker = "extra == 'webui'", specifier = ">=0.38,<1" },
     { name = "verifiers", marker = "extra == 'prime'", specifier = ">=0.1.14,<0.2" },
 ]
-provides-extras = ["execution", "morph", "local-agents", "prime", "webui", "tui", "evolution"]
+provides-extras = ["execution", "morph", "local-agents", "prime", "webui", "tui", "evolution", "prime-agent"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -122,6 +126,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/53/ee/319d189343e1dc67b1109c950a0d1091fe32498104b5917fbbd806ff58dd/ag_ui_protocol-0.1.14.tar.gz", hash = "sha256:d8e86b308f86a6cf6a5e18ca7154d7642895de2fe94cd2cece57723cdbba6406", size = 5687, upload-time = "2026-03-18T00:43:13.358Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0c/99/eaa83816924791fc25ebb44ac7987196b687a3fdf597b1e7a62c69306a8d/ag_ui_protocol-0.1.14-py3-none-any.whl", hash = "sha256:ec072e6a45e0d45b8714e6d54919cc9bde3d097fdc36f7e82953b2f21f1cdbef", size = 8069, upload-time = "2026-03-18T00:43:12.1Z" },
+]
+
+[[package]]
+name = "agent-client-protocol"
+version = "0.12.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f8/50/65bfb4e3e13f350a52c368cbfc4bc36a1b3b3f34a6b3f5a2e3551e1bd63b/agent_client_protocol-0.12.0.tar.gz", hash = "sha256:4d42ac680388556b038cb6dd58dbbbd1561f9e545a334c1a352cc055f98b1c79", size = 135037, upload-time = "2026-08-01T15:58:22.35Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9c/c7/b84b8698879464bd8f869551bac31454bed14a3a22910f65d9693f3701bd/agent_client_protocol-0.12.0-py3-none-any.whl", hash = "sha256:233626748034896214de118f5cf5a319484ad2186705fd595219afee92237ccc", size = 92992, upload-time = "2026-08-01T15:58:21.216Z" },
 ]
 
 [[package]]
