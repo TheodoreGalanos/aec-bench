@@ -8,6 +8,8 @@ import json
 import os
 import socket
 import sys
+from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
@@ -23,6 +25,7 @@ from aec_bench.prime_agent.world import (
     WORLD_ACTOR_CAPABILITY_ENV,
     WORLD_ACTOR_SOCKET_ENV,
     PrimeWorldActorProxy,
+    PrimeWorldSessionLimits,
     install_aec_world_skill,
     run_prime_pump_world_session,
 )
@@ -41,6 +44,16 @@ def _session_request() -> WorldSessionRequest:
         run_id="prime-run",
         episode_id="prime-episode",
         world_branch_id="prime-branch",
+    )
+
+
+def _limits(*, max_world_actions: int = 20) -> PrimeWorldSessionLimits:
+    return PrimeWorldSessionLimits(
+        max_world_actions=max_world_actions,
+        max_model_calls=10,
+        max_tokens=1_000,
+        max_cost_usd=Decimal("10"),
+        max_wall_seconds=5,
     )
 
 
@@ -72,6 +85,7 @@ async def test_scoped_proxy_preserves_actor_semantics_and_redacted_transport_evi
     proxy = PrimeWorldActorProxy(
         world_run_directory=world_directory,
         socket_directory=actor_workspace / ".actor",
+        max_world_actions=20,
         evidence_file=evidence_file,
     )
     proxy.open_world_session(_session_request())
@@ -139,13 +153,19 @@ async def test_scoped_proxy_preserves_actor_semantics_and_redacted_transport_evi
             },
         )
         assert forbidden_control == forbidden
+        unauthorized = _raw_call(
+            environment[WORLD_ACTOR_SOCKET_ENV],
+            {"capability": "wrong-capability-secret", "request": {"operation": "observe"}},
+        )
+        assert unauthorized == {"error": {"code": "actor-unauthorized", "detail": "actor capability is invalid"}}
 
     assert not Path(environment[WORLD_ACTOR_SOCKET_ENV]).exists()
     evidence = evidence_file.read_text(encoding="utf-8")
     assert environment[WORLD_ACTOR_CAPABILITY_ENV] not in evidence
+    assert "wrong-capability-secret" not in evidence
     assert str(world_directory) not in evidence
     events = [json.loads(line) for line in evidence.splitlines()]
-    assert [event["request"]["operation"] for event in events] == [
+    assert [event["operation"] for event in events] == [
         "capabilities",
         "observe",
         "invoke",
@@ -153,7 +173,64 @@ async def test_scoped_proxy_preserves_actor_semantics_and_redacted_transport_evi
         "invoke",
         "invoke",
         "invoke",
+        "observe",
+        None,
+        "observe",
     ]
+    assert all(datetime.fromisoformat(event["received_at"]) for event in events)
+    assert events[-3]["request"] is None
+    assert events[-2]["request"] is None
+    assert events[-1]["request"] is None
+
+
+@pytest.mark.asyncio
+async def test_world_action_budget_preserves_exact_retry_and_blocks_a_new_action(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    world_directory = tmp_path / "private-world"
+    actor_workspace = tmp_path / "actor-workspace"
+    actor_workspace.mkdir()
+    evidence_file = tmp_path / "host-evidence" / "actor-transport.jsonl"
+    client = _load_skill(actor_workspace, monkeypatch)
+    proxy = PrimeWorldActorProxy(
+        world_run_directory=world_directory,
+        socket_directory=actor_workspace / ".actor",
+        max_world_actions=1,
+        evidence_file=evidence_file,
+    )
+    proxy.open_world_session(_session_request())
+
+    with proxy:
+        environment = proxy.connection_environment()
+        monkeypatch.setenv(WORLD_ACTOR_SOCKET_ENV, environment[WORLD_ACTOR_SOCKET_ENV])
+        monkeypatch.setenv(WORLD_ACTOR_CAPABILITY_ENV, environment[WORLD_ACTOR_CAPABILITY_ENV])
+        observation = await client.observe()
+        first = await client.invoke(
+            "continue_operation",
+            {"reason": "Advance once."},
+            decision_id=observation["decision_id"],
+            request_id="action-1",
+        )
+        retry = await client.invoke(
+            "continue_operation",
+            {"reason": "Advance once."},
+            decision_id=observation["decision_id"],
+            request_id="action-1",
+        )
+        assert retry == first
+        with pytest.raises(client.ActorError, match="world-action-budget-exhausted"):
+            await client.invoke(
+                "continue_operation",
+                {"reason": "Try another action."},
+                decision_id=first["next_observation"]["decision_id"],
+                request_id="action-2",
+            )
+
+    assert proxy.world_action_attempts == 2
+    assert proxy.world_action_limit_reached
+    events = [json.loads(line) for line in evidence_file.read_text(encoding="utf-8").splitlines()]
+    assert events[-1]["error"]["code"] == "world-action-budget-exhausted"
 
 
 def test_packaged_skill_has_only_the_three_actor_operations(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -183,7 +260,7 @@ async def test_prime_end_turn_while_world_is_live_is_recorded_incomplete(tmp_pat
         instruction="Advance the current world, then end the turn.",
         model="anthropic/test",
         isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
-        timeout_seconds=5,
+        limits=_limits(),
         executable=str(_fake_prime_agent(tmp_path)),
         environment={**os.environ, "FAKE_ACP_SCENARIO": "world"},
     )
@@ -194,6 +271,8 @@ async def test_prime_end_turn_while_world_is_live_is_recorded_incomplete(tmp_pat
     assert result.verification.valid
     assert result.evaluation.valid is False
     assert result.actor_transport_file.exists()
+    assert result.run_file.exists()
+    assert result.world_action_attempts == 1
     assert not result.prime.benchmark_valid
 
 
@@ -210,7 +289,7 @@ async def test_sandboxed_prime_reaches_world_only_through_the_scoped_proxy(tmp_p
         instruction="Advance the current world, then end the turn.",
         model="anthropic/test",
         isolation=PrimeAcpIsolation.MACOS_SANDBOX,
-        timeout_seconds=5,
+        limits=_limits(),
         executable=str(_fake_prime_agent(tmp_path)),
         environment={**os.environ, "FAKE_ACP_SCENARIO": "world"},
     )

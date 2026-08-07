@@ -183,7 +183,9 @@ host-selected `WorldSessionRequest`, launches one Prime ACP process for one
 session, supplies the resolved objective in the initial prompt, and installs
 only the generic `aec-world` skill. This is the Open condition: Prime receives
 the objective, actor-visible starting material, and generic actor capability,
-with no task-family guidance or external plan.
+with no task-family guidance or external plan. Callers must also supply a
+`PrimeWorldSessionLimits` value with positive world-action, model-call, token,
+cost, and wall-clock limits.
 
 Inside Prime, the available world calls are:
 
@@ -202,6 +204,17 @@ only `capabilities`, `observe`, and `invoke`. Prime never receives a world run
 directory or host-control selector. The Prime root session and all descendants
 share one capability and are therefore one composite AECBench actor principal;
 this integration does not claim that only the root process can invoke actions.
+The host rejects new world actions after the configured allowance. An exact
+retry of the same request remains available and does not consume another
+allowance, so the installed actor retry contract stays authoritative.
+
+AECBench monitors all Prime session artifacts for the composite principal and
+cancels the active ACP prompt when a model-call, aggregate-token, or aggregate-
+cost threshold is reached. Token and cost limits are enforced at completed
+provider-response boundaries: the response that reaches the threshold is
+preserved and can cross it, and a provider request already in flight when the
+host cancels can also report usage. The wall-clock limit covers Prime process
+setup and the active prompt.
 
 Prime session state and world state remain separate. In particular, ACP
 `end_turn` while the world is active produces an incomplete result and does not
@@ -209,10 +222,15 @@ start another prompt automatically. World replay, verification, and evaluation
 continue to use the existing task-owned repository and evaluator.
 
 Each run preserves `prime-acp-in.jsonl`, `prime-acp-out.jsonl`,
-`prime-stderr.log`, `prime-run.json`, Prime session files, and a separate
-actor-transport log. Unknown ACP `_meta` content stays in the raw evidence.
-Trial-local Prime configuration, sessions, workspace files, and refinement
-artifacts are isolated and are not promoted to another run.
+`prime-stderr.log`, `prime-run.json`, `prime-world-run.json`, Prime session
+files, and a separate actor-transport log. `prime-run.json` normalizes usage,
+cost, root/child session topology, refinement counts, configured limits, and
+the limit that ended the prompt. Unknown ACP `_meta` content stays in the raw
+evidence. The actor log timestamps every accepted, rejected, unauthorized, and
+malformed transport attempt without recording the socket capability, host
+paths, or hidden state. Trial-local Prime HOME/XDG directories, configuration,
+sessions, workspace files, and refinement artifacts are isolated and are not
+promoted to another run.
 
 `PrimeAcpIsolation.DEVELOPMENT_SAME_USER` is explicitly non-benchmark-valid
 development evidence because Prime has the current user's OS permissions.
