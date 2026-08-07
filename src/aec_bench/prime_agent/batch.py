@@ -141,9 +141,16 @@ def _secret_values(environment: Mapping[str, str]) -> tuple[str, ...]:
     return tuple(sorted(values, key=len, reverse=True))
 
 
-def _redact(data: bytes, environment: Mapping[str, str]) -> bytes:
+def redact_prime_bytes(
+    data: bytes,
+    environment: Mapping[str, str],
+    *,
+    additional_values: tuple[str, ...] = (),
+) -> bytes:
+    """Redact credential-like environment values and explicit transport secrets."""
     redacted = data
-    for value in _secret_values(environment):
+    values = tuple(sorted({*_secret_values(environment), *additional_values}, key=len, reverse=True))
+    for value in values:
         literal = value.encode("utf-8", errors="ignore")
         escaped = json.dumps(value, ensure_ascii=False)[1:-1].encode("utf-8")
         if literal:
@@ -164,7 +171,7 @@ def _capture_stream(
     try:
         with destination.open("wb") as sink:
             while line := source.readline():
-                sink.write(_redact(line, environment))
+                sink.write(redact_prime_bytes(line, environment))
                 sink.flush()
     except OSError:
         errors.append(f"could not preserve {destination.name}")
@@ -234,14 +241,14 @@ def _workspace_has_output(workspace: Path) -> bool:
         return False
 
 
-def _redact_session_artifacts(paths: PrimePaths, environment: Mapping[str, str]) -> None:
+def redact_prime_session_artifacts(paths: PrimePaths, environment: Mapping[str, str]) -> None:
     """Remove inherited credential values before Prime session files become durable run artifacts."""
     for session_artifact in paths.session_dir.rglob("*"):
         if not session_artifact.is_file():
             continue
         try:
             original = session_artifact.read_bytes()
-            redacted = _redact(original, environment)
+            redacted = redact_prime_bytes(original, environment)
             if redacted != original:
                 session_artifact.write_bytes(redacted)
         except OSError:
@@ -346,7 +353,7 @@ def run_prime_agent(
         error_detail = exc.strerror or type(exc).__name__
         start_error = f"Prime Agent could not be started: {error_detail}"
         paths.events_file.write_bytes(b"")
-        paths.stderr_file.write_bytes(_redact((start_error + "\n").encode(), env))
+        paths.stderr_file.write_bytes(redact_prime_bytes((start_error + "\n").encode(), env))
         run = PrimeRun(
             command=tuple(command),
             prime_version=prime_version,
@@ -397,7 +404,7 @@ def run_prime_agent(
 
     finished_at = datetime.now(UTC)
     elapsed_seconds = time.monotonic() - started_monotonic
-    _redact_session_artifacts(paths, env)
+    redact_prime_session_artifacts(paths, env)
 
     parsed_events: PrimeEvents | None = None
     parser_error: str | None = None

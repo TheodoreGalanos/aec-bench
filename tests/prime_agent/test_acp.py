@@ -1,0 +1,352 @@
+# ABOUTME: Exercises the Prime ACP lifecycle against a deterministic protocol-speaking subprocess.
+# ABOUTME: Proves strict framing, one session, raw metadata evidence, redaction, and validity labeling.
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from aec_bench.prime_agent.acp import (
+    PrimeAcpIsolation,
+    build_macos_sandbox_profile,
+    build_prime_acp_command,
+    run_prime_acp_session,
+)
+from aec_bench.prime_agent.batch import PRIME_AGENT_TESTED_VERSION
+from aec_bench.prime_agent.world import (
+    WORLD_ACTOR_CAPABILITY_ENV,
+    WORLD_ACTOR_SOCKET_ENV,
+    install_aec_world_skill,
+)
+
+
+def _fake_prime_agent(tmp_path: Path) -> Path:
+    executable = tmp_path / "fake-prime-agent"
+    executable.write_text(
+        f"""#!{Path(sys.executable).resolve()}
+import json
+import os
+from pathlib import Path
+import sys
+import time
+
+if "--version" in sys.argv:
+    print("prime-agent {PRIME_AGENT_TESTED_VERSION}")
+    raise SystemExit(0)
+
+Path("observed-acp.json").write_text(json.dumps({{"argv": sys.argv[1:], "cwd": os.getcwd()}}))
+scenario = os.environ.get("FAKE_ACP_SCENARIO", "success")
+sessions = 0
+for line in sys.stdin:
+    request = json.loads(line)
+    method = request.get("method")
+    if method == "initialize":
+        version = 99 if scenario == "unsupported" else 1
+        result = {{
+            "protocolVersion": version,
+            "agentCapabilities": None if scenario == "missing-capabilities" else {{"loadSession": False}},
+            "agentInfo": {{"name": "prime-agent", "version": "{PRIME_AGENT_TESTED_VERSION}"}},
+            "_meta": {{"futureInitializeMetadata": {{"preserve": True}}}},
+        }}
+        print(json.dumps({{"jsonrpc": "2.0", "id": request["id"], "result": result}}), flush=True)
+    elif method == "session/new":
+        sessions += 1
+        print(json.dumps({{"jsonrpc": "2.0", "id": request["id"], "result": {{
+            "sessionId": f"fake-session-{{sessions}}", "_meta": {{"unknownSessionKey": 7}}
+        }}}}), flush=True)
+    elif method == "session/prompt":
+        if scenario == "process-exit":
+            raise SystemExit(7)
+        if scenario == "timeout":
+            time.sleep(60)
+        if scenario == "malformed":
+            print("not-json", flush=True)
+            continue
+        if scenario == "world":
+            import asyncio
+            sys.path.insert(0, os.getcwd())
+            import aec_world
+            async def act():
+                observation = await aec_world.observe()
+                await aec_world.invoke(
+                    "continue_operation",
+                    {{"reason": "Advance the current world once."}},
+                    decision_id=observation["decision_id"],
+                    request_id="fake-prime-world-action",
+                )
+            asyncio.run(act())
+        print(json.dumps({{
+            "jsonrpc": "2.0",
+            "method": "session/update",
+            "params": {{
+                "sessionId": f"fake-session-{{sessions}}",
+                "update": {{
+                    "sessionUpdate": "agent_message_chunk",
+                    "content": {{"type": "text", "text": "Working"}},
+                    "_meta": {{"unknownUpdateKey": "kept"}},
+                }},
+                "_meta": {{"unknownNotificationKey": True}},
+            }},
+        }}), flush=True)
+        print(json.dumps({{"jsonrpc": "2.0", "id": request["id"], "result": {{
+            "stopReason": "end_turn", "_meta": {{"futurePromptMetadata": [1, 2, 3]}}
+        }}}}), flush=True)
+        print("stderr " + os.environ.get("FAKE_SECRET_TOKEN", "none"), file=sys.stderr, flush=True)
+    elif method == "session/close":
+        print(json.dumps({{"jsonrpc": "2.0", "id": request["id"], "result": {{}}}}), flush=True)
+    elif method == "session/cancel":
+        pass
+""",
+        encoding="utf-8",
+    )
+    executable.chmod(0o755)
+    return executable
+
+
+def _workspace(tmp_path: Path) -> tuple[Path, Path, Path]:
+    actor_workspace = tmp_path / "actor"
+    actor_workspace.mkdir()
+    skill = install_aec_world_skill(actor_workspace)
+    evidence = tmp_path / "host-evidence"
+    return actor_workspace, skill, evidence
+
+
+def test_builds_acp_command_with_only_the_explicit_skill(tmp_path: Path) -> None:
+    actor_workspace, skill, _ = _workspace(tmp_path)
+
+    command = build_prime_acp_command(
+        executable=Path("/opt/prime/bin/prime-agent"),
+        model="anthropic/test",
+        actor_workspace=actor_workspace,
+        session_dir=actor_workspace / "sessions",
+        skill_directory=skill,
+    )
+
+    assert command == [
+        "/opt/prime/bin/prime-agent",
+        "--mode",
+        "acp",
+        "--model",
+        "anthropic/test",
+        "--cwd",
+        str(actor_workspace),
+        "--session-dir",
+        str(actor_workspace / "sessions"),
+        "--no-skills",
+        "--skill",
+        str(skill),
+        "--no-extensions",
+        "--no-prompt-templates",
+        "--no-themes",
+        "--no-context-files",
+        "--offline",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_runs_one_acp_session_and_preserves_unknown_metadata(tmp_path: Path) -> None:
+    actor_workspace, skill, evidence = _workspace(tmp_path)
+    secret = "super-secret-provider-value"
+    result = await run_prime_acp_session(
+        actor_workspace=actor_workspace,
+        evidence_directory=evidence,
+        skill_directory=skill,
+        instruction="Use the current world actor until the task is complete.",
+        model="anthropic/test",
+        actor_environment={
+            WORLD_ACTOR_SOCKET_ENV: "/private/tmp/scoped-actor.sock",
+            WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
+        },
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        timeout_seconds=5,
+        executable=str(_fake_prime_agent(tmp_path)),
+        environment={**os.environ, "FAKE_SECRET_TOKEN": secret},
+    )
+
+    assert result.session_state == "ended"
+    assert result.stop_reason == "end_turn"
+    assert result.session_id == "fake-session-1"
+    assert result.exit_code == 0
+    assert result.prime_version == PRIME_AGENT_TESTED_VERSION
+    assert result.protocol_version == 1
+    assert result.agent_name == "prime-agent"
+    assert result.agent_capabilities is not None
+    assert len(result.updates) == 1
+    assert not result.benchmark_valid
+    inbound = result.paths.inbound_file.read_text(encoding="utf-8")
+    outbound = result.paths.outbound_file.read_text(encoding="utf-8")
+    assert inbound.count('"method":"session/new"') == 1
+    assert "futureInitializeMetadata" in outbound
+    assert "unknownSessionKey" in outbound
+    assert "futurePromptMetadata" in outbound
+    assert "unknownUpdateKey" in outbound
+    assert "unknownNotificationKey" in outbound
+    assert secret not in result.paths.stderr_file.read_text(encoding="utf-8")
+    provenance = json.loads(result.paths.run_file.read_text(encoding="utf-8"))
+    assert provenance["actor_principal_scope"] == "prime-session-composite"
+    assert provenance["isolation"] == "development_same_user"
+    assert provenance["benchmark_valid"] is False
+    assert "environment" not in provenance
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scenario", ["malformed", "unsupported", "missing-capabilities"])
+async def test_fails_closed_on_malformed_or_unsupported_acp(tmp_path: Path, scenario: str) -> None:
+    actor_workspace, skill, evidence = _workspace(tmp_path)
+    result = await run_prime_acp_session(
+        actor_workspace=actor_workspace,
+        evidence_directory=evidence,
+        skill_directory=skill,
+        instruction="Act once.",
+        model="anthropic/test",
+        actor_environment={
+            WORLD_ACTOR_SOCKET_ENV: "/private/tmp/scoped-actor.sock",
+            WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
+        },
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        timeout_seconds=2,
+        executable=str(_fake_prime_agent(tmp_path)),
+        environment={**os.environ, "FAKE_ACP_SCENARIO": scenario},
+    )
+
+    assert result.session_state == "failed"
+    assert result.benchmark_valid is False
+    assert result.error is not None
+
+
+@pytest.mark.asyncio
+async def test_timeout_cancels_then_reaps_the_prime_process(tmp_path: Path) -> None:
+    actor_workspace, skill, evidence = _workspace(tmp_path)
+    result = await run_prime_acp_session(
+        actor_workspace=actor_workspace,
+        evidence_directory=evidence,
+        skill_directory=skill,
+        instruction="Wait indefinitely.",
+        model="anthropic/test",
+        actor_environment={
+            WORLD_ACTOR_SOCKET_ENV: "/private/tmp/scoped-actor.sock",
+            WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
+        },
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        timeout_seconds=0.1,
+        executable=str(_fake_prime_agent(tmp_path)),
+        environment={**os.environ, "FAKE_ACP_SCENARIO": "timeout"},
+    )
+
+    assert result.session_state == "cancelled"
+    assert result.timed_out
+    assert result.exit_code is not None
+    assert '"method":"session/cancel"' in result.paths.inbound_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_process_exit_during_prompt_is_a_failed_session(tmp_path: Path) -> None:
+    actor_workspace, skill, evidence = _workspace(tmp_path)
+    result = await run_prime_acp_session(
+        actor_workspace=actor_workspace,
+        evidence_directory=evidence,
+        skill_directory=skill,
+        instruction="Act.",
+        model="anthropic/test",
+        actor_environment={
+            WORLD_ACTOR_SOCKET_ENV: "/private/tmp/scoped-actor.sock",
+            WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
+        },
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        timeout_seconds=2,
+        executable=str(_fake_prime_agent(tmp_path)),
+        environment={**os.environ, "FAKE_ACP_SCENARIO": "process-exit"},
+    )
+
+    assert result.session_state == "failed"
+    assert result.exit_code == 7
+    assert result.stop_reason is None
+
+
+def test_macos_profile_denies_repo_and_private_world_but_allows_scoped_actor(tmp_path: Path) -> None:
+    actor_workspace, _skill, _evidence = _workspace(tmp_path)
+    executable = tmp_path / "prime-install" / "bin" / "prime-agent"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("", encoding="utf-8")
+    world = tmp_path / "world-repository"
+    socket_path = tmp_path / "socket" / "actor.sock"
+
+    profile = build_macos_sandbox_profile(
+        actor_workspace=actor_workspace,
+        executable=executable,
+        actor_socket=socket_path,
+        private_paths=(world,),
+    )
+
+    assert str(Path(__file__).resolve().parents[2]) in profile
+    assert str(world.resolve()) in profile
+    assert str(actor_workspace.resolve()) in profile
+    assert str(socket_path.parent.resolve()) in profile
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS Seatbelt boundary")
+def test_macos_profile_enforces_the_filesystem_boundary(tmp_path: Path) -> None:
+    actor_workspace, _skill, _evidence = _workspace(tmp_path)
+    visible = actor_workspace / "visible.txt"
+    visible.write_text("visible", encoding="utf-8")
+    repository_file = Path(__file__).resolve().parents[2] / "README.md"
+    executable = Path(sys.executable)
+    profile_path = tmp_path / "profile.sb"
+    profile_path.write_text(
+        build_macos_sandbox_profile(
+            actor_workspace=actor_workspace,
+            executable=executable,
+            actor_socket=tmp_path / "socket" / "actor.sock",
+            private_paths=(),
+        ),
+        encoding="utf-8",
+    )
+
+    allowed = subprocess.run(
+        ["/usr/bin/sandbox-exec", "-f", str(profile_path), "/bin/cat", str(visible)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    denied = subprocess.run(
+        ["/usr/bin/sandbox-exec", "-f", str(profile_path), "/bin/cat", str(repository_file)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert allowed.returncode == 0
+    assert allowed.stdout == "visible"
+    assert denied.returncode != 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS Seatbelt boundary")
+async def test_macos_sandboxed_acp_run_is_benchmark_valid(tmp_path: Path) -> None:
+    actor_workspace, skill, evidence = _workspace(tmp_path)
+    result = await run_prime_acp_session(
+        actor_workspace=actor_workspace,
+        evidence_directory=evidence,
+        skill_directory=skill,
+        instruction="End the turn.",
+        model="anthropic/test",
+        actor_environment={
+            WORLD_ACTOR_SOCKET_ENV: str(tmp_path / "socket" / "actor.sock"),
+            WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
+        },
+        isolation=PrimeAcpIsolation.MACOS_SANDBOX,
+        private_paths=(tmp_path / "private-world",),
+        timeout_seconds=2,
+        executable=str(_fake_prime_agent(tmp_path)),
+        environment=os.environ,
+    )
+
+    assert result.session_state == "ended"
+    assert result.exit_code == 0
+    assert result.benchmark_valid
+    assert not (evidence / ".prime-sandbox.sb").exists()

@@ -19,6 +19,7 @@ from aec_bench.providers import morph_cloud
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 OPTIONAL_IMPORT_ROOTS = {
     "PIL",
+    "acp",
     "fastapi",
     "harbor",
     "morphcloud",
@@ -57,6 +58,7 @@ def test_dependency_groups_have_one_named_feature_owner() -> None:
         "webui": {"fastapi", "starlette", "uvicorn"},
         "tui": {"pillow", "rich-pixels", "textual"},
         "evolution": {"numpy", "ribs"},
+        "prime-agent": {"agent-client-protocol"},
     }
 
 

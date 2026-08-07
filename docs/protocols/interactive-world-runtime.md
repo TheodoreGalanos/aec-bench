@@ -68,6 +68,19 @@ separate-process calls without a public binding or in-memory session
 coordinator. A selected-state change makes the prior decision stale. Exact
 retries require the same request identity and command content.
 
+Prime interactive sessions use an additional host-owned, single-episode
+transport around the same `PumpStationEpisodeHost`. A random capability and a
+Unix-domain socket authorize one strict `ContinualWorldActorRequest`; the proxy
+returns the existing actor result models. The remote request has no run,
+episode, branch, profile, actor, tenure, evaluation, verification, rollout, or
+host-control selector. The proxy owns the world repository path and closes with
+the Prime ACP session. Stale-decision and exact-retry decisions therefore remain
+inside the existing episode host.
+
+The Prime root process and its descendants receive the same scoped capability,
+so they form one composite actor principal. Per-child action attribution is not
+claimed without enforceable per-child capability scoping.
+
 ## Host controls
 
 The installed control command parses a strict discriminated union for:
@@ -111,6 +124,18 @@ Harbor uses the concrete pump integration. The neutral world definition has no
 provider or Harbor port. Harbor import verifies durable pump evidence before
 calling evaluation.
 
+Prime ACP evidence and actor transport evidence are secondary execution
+evidence. The pump repository remains canonical replay authority. The actor log
+contains only actor-visible requests, results, and errors; it excludes the
+capability secret, endpoint and repository paths, and hidden state.
+
+Same-user Prime execution is development-only and cannot produce
+benchmark-valid evidence. The current benchmark-valid local path uses a macOS
+Seatbelt profile applied to Prime and its descendants. It denies the AECBench
+repository and private world persistence while allowing the isolated actor
+workspace, Prime installation, and scoped socket. Platforms without an
+equivalent enforced boundary fail closed.
+
 ## Trial evidence and entry points
 
 The pump repository and artifact inventory are replay authority.
@@ -126,6 +151,7 @@ state, verifier paths, provider configuration, or recovery data.
 | `actor-interface` | Invoke the pump episode host with current actor JSON. |
 | `control-interface` | Invoke pump controls or explicit rollout composition. |
 | Harbor agent and import | Use the concrete pump transport and evaluator. |
+| Prime ACP Python entry | Run one Open-mode Prime session against one scoped pump actor proxy. |
 
 The boundary fails closed for unknown build or profile identity, stale
 decisions, unavailable actions, unauthorized controls, invalid rollout
@@ -140,4 +166,6 @@ successful transition or evaluation.
 - [world conformance](../../tests/task_world_templates/continual/test_hydraulic_world_conformance.py)
 - [separate-process actor resolution](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_actor_interface_transport_e2e.py)
 - [pump retry and recovery](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_registered_world_run_transitions.py)
+- [Prime actor proxy and world composition](../../tests/prime_agent/test_world.py)
+- [Prime ACP lifecycle and isolation](../../tests/prime_agent/test_acp.py)
 - [Harbor import](../../tests/harness/test_stewardship_harbor_import.py)

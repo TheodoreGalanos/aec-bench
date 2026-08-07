@@ -27,13 +27,15 @@ PROFILES = {
         ("boto3", "botocore", "httpx", "pydantic_ai.models.anthropic", "pydantic_ai.models.bedrock"),
     ),
     "prime": Profile("prime", ("verifiers",)),
+    "prime-agent": Profile("prime-agent", ("acp",)),
     "webui": Profile("webui", ("fastapi", "starlette", "uvicorn")),
     "tui": Profile("tui", ("PIL", "rich_pixels", "textual")),
     "evolution": Profile("evolution,local-agents", ("numpy", "pydantic_ai", "ribs")),
     "combined": Profile(
-        "execution,morph,local-agents,prime,webui,tui,evolution",
+        "execution,morph,local-agents,prime,prime-agent,webui,tui,evolution",
         (
             "PIL",
+            "acp",
             "fastapi",
             "harbor",
             "morphcloud",
@@ -48,6 +50,7 @@ PROFILES = {
 }
 OPTIONAL_BASE_MODULES = (
     "PIL",
+    "acp",
     "fastapi",
     "harbor",
     "morphcloud",
