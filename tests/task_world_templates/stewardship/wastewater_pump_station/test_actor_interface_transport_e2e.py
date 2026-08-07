@@ -184,3 +184,60 @@ def test_registered_episode_records_accepted_step_before_runtime_truncation(
     assert run.verify().valid
     with pytest.raises(EpisodeFinishedError, match="episode is truncated"):
         PumpStationEpisodeHost(run_dir, limits=EpisodeLimits(max_steps=1)).observe()
+
+
+def test_actor_receives_resource_window_rejection_without_losing_world_state(tmp_path: Path) -> None:
+    run_dir = tmp_path / "world"
+    run = PumpStationWorldRun.create_reference_system(
+        repository=PumpStationWorldRunRepository(run_dir),
+        run_id="resource-rejection-run",
+        episode_id="resource-rejection-episode",
+        world_branch_id="resource-rejection-branch",
+    )
+    host = PumpStationEpisodeHost(run_dir)
+    observation = host.observe()
+    verification = host.invoke(
+        WorldActorActionRequest(
+            request_id="resource-rejection-verification",
+            decision_id=observation.decision_id,
+            action_name="request_post_maintenance_verification",
+            arguments={
+                "reason": "Verify Pump A before other field work.",
+                "pump_id": "pump-a",
+                "backlog_item_id": "backlog-a-verification-001",
+            },
+        )
+    )
+    assert verification.next_observation is not None
+    advanced = host.invoke(
+        WorldActorActionRequest(
+            request_id="resource-rejection-continue",
+            decision_id=verification.next_observation.decision_id,
+            action_name="continue_operation",
+            arguments={"reason": "Continue until the verification process completes."},
+        )
+    )
+    assert advanced.next_observation is not None
+
+    rejected = host.invoke(
+        WorldActorActionRequest(
+            request_id="resource-rejection-clearance",
+            decision_id=advanced.next_observation.decision_id,
+            action_name="request_obstruction_clearance",
+            arguments={
+                "reason": "Request Pump B clearance before the current field window closes.",
+                "pump_id": "pump-b",
+                "inspection_evidence_id": "initial-b-inspection-accepted",
+                "backlog_item_id": "backlog-b-clearance-001",
+            },
+        )
+    )
+
+    assert rejected.status == "rejected"
+    assert rejected.task_receipt == {
+        "code": "resource-window",
+        "message": "resource-window: field-access-slot",
+    }
+    assert rejected.next_observation == advanced.next_observation
+    assert run.snapshot().sequence == 2
+    assert run.verify().valid
