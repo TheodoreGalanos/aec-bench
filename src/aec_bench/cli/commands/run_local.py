@@ -37,6 +37,7 @@ from aec_bench.meta_harness.llm_reviewer import (
     load_reviewer_config,
     run_workspace_reviewer,
 )
+from aec_bench.prime_agent.batch import PrimeExecutableNotFoundError, resolve_prime_executable
 
 # Output files we expect the adapter to produce
 _OUTPUT_FILES = [
@@ -51,6 +52,9 @@ _OUTPUT_FILES = [
     "normalisation_report.json",
     "composition_trace.json",
     "grounding_report.json",
+    "prime-events.jsonl",
+    "prime-stderr.log",
+    "prime-run.json",
 ]
 
 
@@ -111,6 +115,7 @@ _VERIFIER_FILES = [
 
 _VERIFIER_SIDE_EFFECT_ARTIFACT_DIR = Path("logs/verifier/artifacts")
 _REVIEWER_ARTIFACT_DIR = Path("logs/reviewer")
+_PRIME_SESSION_DIR = Path("logs/prime/sessions")
 _VERIFIER_RETRY_PROMPT = "verifier_retry_prompt.md"
 _VERIFIER_RETRY_TARGET_REWARD = 1.0
 _VERIFIER_SIDE_EFFECT_SUFFIXES = (
@@ -232,6 +237,9 @@ def _archive_verifier_retry_attempt(workspace: Path, attempt_name: str) -> Path:
         Path("agent_result.json"),
         Path("trajectory.jsonl"),
         Path("conversation.jsonl"),
+        Path("prime-events.jsonl"),
+        Path("prime-stderr.log"),
+        Path("prime-run.json"),
         Path("logs/verifier/reward.json"),
         Path("logs/verifier/details.json"),
         Path("logs/verifier/feedback.md"),
@@ -240,6 +248,10 @@ def _archive_verifier_retry_attempt(workspace: Path, attempt_name: str) -> Path:
         if not src.exists():
             continue
         shutil.copy2(src, archive_dir / src.name)
+
+    prime_sessions = workspace / _PRIME_SESSION_DIR
+    if prime_sessions.exists():
+        shutil.copytree(prime_sessions, archive_dir / "prime-sessions", dirs_exist_ok=True)
 
     artifact_dir = archive_dir / "artifacts"
     for src in sorted(workspace.iterdir()):
@@ -276,6 +288,7 @@ def _run_adapter(
     model: str,
     constitutional_model: str | None = None,
     instruction_override: str | None = None,
+    timeout: int = 1800,
 ) -> dict[str, object]:
     """Execute a task using the current local adapter builder.
 
@@ -323,14 +336,21 @@ def _run_adapter(
         ]
 
     # Execute
-    result = adapter.execute(
-        AdapterRequest(instruction=instruction, tools=tools),
-    )
+    request = AdapterRequest(instruction=instruction, tools=tools)
+    if adapter_kind == "prime-agent":
+        request = AdapterRequest(
+            instruction=instruction,
+            tools=tools,
+            configuration={"timeout_seconds": timeout},
+            output_path="output.md",
+            output_format="markdown",
+        )
+    result = adapter.execute(request)
 
     # Write output.md from adapter result if not already written
     output_path = Path(workspace, "output.md")
     output_source = "adapter"
-    if output_path.exists() and output_path.stat().st_size > 0:
+    if output_path.exists() and output_path.read_text(encoding="utf-8", errors="replace").strip():
         output_source = "direct_write"
     elif result.raw_output_text:
         output_path.write_text(result.raw_output_text)
@@ -339,12 +359,24 @@ def _run_adapter(
     agent_result_data: dict[str, object] = {
         "status": result.agent_output.status.value,
         "model": model,
+        "resolved_model": result.resolved_model,
         "adapter": adapter_kind,
-        "model_calls": result.usage_model_calls or 0,
-        "input_tokens": result.usage_input_tokens or 0,
-        "output_tokens": result.usage_output_tokens or 0,
-        "cache_read_tokens": result.usage_cache_read_tokens or 0,
-        "cache_write_tokens": result.usage_cache_write_tokens or 0,
+        "adapter_configuration": result.configuration_record,
+        "model_calls": result.usage_model_calls if adapter_kind == "prime-agent" else result.usage_model_calls or 0,
+        "input_tokens": result.usage_input_tokens if adapter_kind == "prime-agent" else result.usage_input_tokens or 0,
+        "output_tokens": result.usage_output_tokens
+        if adapter_kind == "prime-agent"
+        else result.usage_output_tokens or 0,
+        "cache_read_tokens": (
+            result.usage_cache_read_tokens if adapter_kind == "prime-agent" else result.usage_cache_read_tokens or 0
+        ),
+        "cache_write_tokens": (
+            result.usage_cache_write_tokens if adapter_kind == "prime-agent" else result.usage_cache_write_tokens or 0
+        ),
+        "turns_used": result.turns_used,
+        "max_turns": result.max_turns,
+        "failure_kind": result.failure_kind.value if result.failure_kind is not None else None,
+        "provider_error": result.provider_error,
         "output_source": output_source,
     }
 
@@ -370,8 +402,8 @@ def _report_results(
     console.print()
     console.print(f"[bold]Status:[/bold] {agent_result.get('status', 'unknown')}")
     console.print(
-        f"[bold]Tokens:[/bold] {agent_result.get('input_tokens', 0):,} in / "
-        f"{agent_result.get('output_tokens', 0):,} out"
+        f"[bold]Tokens:[/bold] {agent_result.get('input_tokens') or 0:,} in / "
+        f"{agent_result.get('output_tokens') or 0:,} out"
     )
     turns = agent_result.get("turns_used")
     if turns:
@@ -434,7 +466,31 @@ def _copy_output_files(
         for src in sorted(reviewer_src.rglob("*")):
             if src.is_file():
                 copied.append(str(src.relative_to(Path(workspace))))
+    prime_sessions_src = Path(workspace) / _PRIME_SESSION_DIR
+    if prime_sessions_src.exists():
+        prime_sessions_dest = out_path / _PRIME_SESSION_DIR
+        shutil.copytree(prime_sessions_src, prime_sessions_dest, dirs_exist_ok=True)
+        for src in sorted(prime_sessions_src.rglob("*")):
+            if src.is_file():
+                copied.append(str(src.relative_to(Path(workspace))))
     return copied
+
+
+def _require_adapter_runtime(adapter: str) -> None:
+    """Check only the runtime selected for this local execution."""
+    if adapter == "prime-agent":
+        try:
+            resolve_prime_executable("prime-agent")
+        except PrimeExecutableNotFoundError as exc:
+            typer.echo(
+                "Prime Agent executable was not found.\n"
+                "Install Prime Agent separately: "
+                "https://github.com/PrimeIntellect-ai/prime-agent#getting-started",
+                err=True,
+            )
+            raise typer.Exit(1) from exc
+        return
+    require_optional_extra("Local agent execution support", "local-agents", ("pydantic_ai",))
 
 
 def _run_verifier(*, workspace: str, output_file: str) -> float | None:
@@ -569,7 +625,7 @@ def run_local(
         "--adapter",
         "--harness",
         "-a",
-        help="Agent harness: rlm, direct, tool_loop, pydantic_ai, lambda-rlm (default: rlm)",
+        help="Agent harness: rlm, direct, tool_loop, pydantic_ai, lambda-rlm, prime-agent (default: rlm)",
     ),
     output_dir: str | None = typer.Option(
         None,
@@ -612,12 +668,14 @@ def run_local(
     """Run a task locally without Docker or Harbor.
 
     Sets up a temp workspace, copies task files, and runs the adapter
-    in-process. Uses pydantic-ai for LLM provider support.
+    through the selected adapter. Most built-in adapters use pydantic-ai;
+    prime-agent launches the separately installed upstream executable.
 
     Examples:
       aec-bench run-local tasks/electrical/voltage-drop -m gpt-4.1-mini --adapter direct
+      aec-bench run-local tasks/electrical/voltage-drop -m anthropic/model-id --adapter prime-agent
     """
-    require_optional_extra("Local agent execution support", "local-agents", ("pydantic_ai",))
+    _require_adapter_runtime(adapter)
     task_dir = Path(task_path).resolve()
     if not task_dir.is_dir():
         StructuredError(
@@ -667,6 +725,7 @@ def run_local(
             workspace=workspace,
             model=model,
             constitutional_model=constitutional_model,
+            timeout=timeout,
         )
 
         agent_seconds = time.monotonic() - agent_start
@@ -728,6 +787,7 @@ def run_local(
                 model=model,
                 constitutional_model=constitutional_model,
                 instruction_override=retry_instruction,
+                timeout=timeout,
             )
             retry_agent_seconds = time.monotonic() - retry_agent_start
             agent_seconds += retry_agent_seconds

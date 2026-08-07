@@ -34,7 +34,42 @@ ARTIFACT_FILENAMES: list[str] = [
     "symbolic_state.json",
     ".scratchpad.json",
     "model_reasoning.jsonl",
+    "prime-events.jsonl",
+    "prime-stderr.log",
+    "prime-run.json",
 ]
+
+ARTIFACT_DIRECTORIES: tuple[Path, ...] = (Path("logs/prime/sessions"),)
+
+
+def _optional_non_negative_int(payload: dict[str, Any], key: str) -> int | None:
+    value = payload.get(key)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def _estimated_cost_if_usage_known(
+    model: str,
+    *,
+    input_tokens: int | None,
+    output_tokens: int | None,
+    cache_read_tokens: int | None,
+    cache_write_tokens: int | None,
+) -> float | None:
+    if None in (input_tokens, output_tokens, cache_read_tokens, cache_write_tokens):
+        return None
+    assert input_tokens is not None
+    assert output_tokens is not None
+    assert cache_read_tokens is not None
+    assert cache_write_tokens is not None
+    return estimate_cost_usd(
+        model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
+    )
 
 
 def build_trial_record_from_workspace(
@@ -58,18 +93,18 @@ def build_trial_record_from_workspace(
     # --- agent_result.json ---------------------------------------------------
     agent_result_path = workspace_dir / "agent_result.json"
     agent_result: dict[str, Any] | None = None
-    tokens_in: int = 0
-    tokens_out: int = 0
-    cache_read: int = 0
-    cache_write: int = 0
+    tokens_in: int | None = None
+    tokens_out: int | None = None
+    cache_read: int | None = None
+    cache_write: int | None = None
     status_str: str = "error"
 
     if agent_result_path.exists():
         agent_result = json.loads(agent_result_path.read_text(encoding="utf-8"))
-        tokens_in = agent_result.get("input_tokens", 0)
-        tokens_out = agent_result.get("output_tokens", 0)
-        cache_read = agent_result.get("cache_read_tokens", 0)
-        cache_write = agent_result.get("cache_write_tokens", 0)
+        tokens_in = _optional_non_negative_int(agent_result, "input_tokens")
+        tokens_out = _optional_non_negative_int(agent_result, "output_tokens")
+        cache_read = _optional_non_negative_int(agent_result, "cache_read_tokens")
+        cache_write = _optional_non_negative_int(agent_result, "cache_write_tokens")
         status_str = agent_result.get("status", "error")
 
     # Legacy rlm_script.py writes "ok"; library adapters write AgentOutputStatus enum values.
@@ -116,8 +151,13 @@ def build_trial_record_from_workspace(
         trajectory_path_val = str(trajectory_file)
 
     # --- cost record ---------------------------------------------------------
-    cost_usd = estimate_cost_usd(
-        model,
+    recorded_model = (
+        str(agent_result.get("resolved_model") or agent_result.get("model") or model)
+        if agent_result is not None
+        else model
+    )
+    cost_usd = _estimated_cost_if_usage_known(
+        recorded_model,
         input_tokens=tokens_in,
         output_tokens=tokens_out,
         cache_read_tokens=cache_read,
@@ -125,9 +165,10 @@ def build_trial_record_from_workspace(
     )
 
     cost: CostRecord | None = None
-    if tokens_in or tokens_out or cache_read or cache_write:
+    model_calls = _optional_non_negative_int(agent_result, "model_calls") if agent_result is not None else None
+    if any(value is not None for value in (model_calls, tokens_in, tokens_out, cache_read, cache_write)):
         cost = CostRecord(
-            model_calls=agent_result.get("model_calls") if agent_result is not None else None,
+            model_calls=model_calls,
             tokens_in=tokens_in,
             tokens_out=tokens_out,
             cache_read_tokens=cache_read,
@@ -138,6 +179,10 @@ def build_trial_record_from_workspace(
     # --- timing --------------------------------------------------------------
     effective_timing = timing if timing is not None else TimingRecord(total_seconds=0.0)
 
+    adapter_configuration = agent_result.get("adapter_configuration", {}) if agent_result is not None else {}
+    safe_adapter_configuration = dict(adapter_configuration) if isinstance(adapter_configuration, dict) else {}
+    safe_adapter_configuration.update({"source": "run-local", "model_requested": model})
+
     return TrialRecord(
         trial_id=trial_id,
         experiment_id=experiment_id,
@@ -145,8 +190,8 @@ def build_trial_record_from_workspace(
         task=TaskReference(task_id=task_id, task_revision="local"),
         agent=AgentReference(
             adapter=adapter,
-            model=model,
-            configuration={"source": "run-local"},
+            model=recorded_model,
+            configuration=safe_adapter_configuration,
         ),
         environment=EnvironmentSnapshot(
             runtime_image="local",
@@ -162,7 +207,16 @@ def build_trial_record_from_workspace(
             ),
             conversation_path=conversation_path_val,
             trajectory_path=trajectory_path_val,
-            agent_result=None if agent_result is None else {"status": status_str},
+            agent_result=(
+                None
+                if agent_result is None
+                else {
+                    "status": status_str,
+                    "failure_kind": agent_result.get("failure_kind"),
+                    "provider_error": agent_result.get("provider_error"),
+                    "output_source": agent_result.get("output_source"),
+                }
+            ),
             terminated=agent_status is AgentOutputStatus.COMPLETED,
         ),
         evaluation=evaluation,
@@ -198,6 +252,18 @@ def copy_artifacts(
         if src.exists():
             shutil.copy2(src, artifact_dir / fname)
             copied.append(fname)
+    for relative_dir in ARTIFACT_DIRECTORIES:
+        source_dir = run_path / relative_dir
+        if not source_dir.exists():
+            continue
+        for src in sorted(source_dir.rglob("*")):
+            if not src.is_file():
+                continue
+            relative_file = src.relative_to(run_path)
+            dest = artifact_dir / relative_file
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+            copied.append(relative_file.as_posix())
     return copied
 
 
@@ -228,14 +294,15 @@ def build_trial_record(
     tasks_root = find_tasks_root(task_dir)
     task = load_task_definition(task_dir, tasks_root)
 
-    model: str = agent_result.get("model", "unknown")
+    requested_model: str = agent_result.get("model", "unknown")
+    model: str = agent_result.get("resolved_model") or requested_model
     adapter_kind: str = agent_result.get("adapter", "rlm")
-    input_tokens: int = agent_result.get("input_tokens", 0)
-    output_tokens: int = agent_result.get("output_tokens", 0)
-    cache_read: int = agent_result.get("cache_read_tokens", 0)
-    cache_write: int = agent_result.get("cache_write_tokens", 0)
+    input_tokens = _optional_non_negative_int(agent_result, "input_tokens")
+    output_tokens = _optional_non_negative_int(agent_result, "output_tokens")
+    cache_read = _optional_non_negative_int(agent_result, "cache_read_tokens")
+    cache_write = _optional_non_negative_int(agent_result, "cache_write_tokens")
 
-    cost = estimate_cost_usd(
+    cost = _estimated_cost_if_usage_known(
         model,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
@@ -265,6 +332,20 @@ def build_trial_record(
     trajectory = artifact_dir / "trajectory.jsonl"
     conversation = artifact_dir / "conversation.jsonl"
 
+    adapter_configuration = agent_result.get("adapter_configuration", {})
+    safe_adapter_configuration = dict(adapter_configuration) if isinstance(adapter_configuration, dict) else {}
+    safe_adapter_configuration.update(
+        {
+            "source": "import-local",
+            "run_dir": str(run_path),
+            "model_requested": requested_model,
+            "output_source": agent_result.get("output_source"),
+            "compaction_count": agent_result.get("compaction_count", 0),
+        }
+    )
+    model_calls = _optional_non_negative_int(agent_result, "model_calls")
+    has_usage = any(value is not None for value in (model_calls, input_tokens, output_tokens, cache_read, cache_write))
+
     return TrialRecord(
         trial_id=trial_id,
         experiment_id=experiment_id,
@@ -279,12 +360,7 @@ def build_trial_record(
             adapter=adapter_kind,
             model=model,
             adapter_revision=None,
-            configuration={
-                "source": "import-local",
-                "run_dir": str(run_path),
-                "output_source": agent_result.get("output_source"),
-                "compaction_count": agent_result.get("compaction_count", 0),
-            },
+            configuration=safe_adapter_configuration,
         ),
         environment=EnvironmentSnapshot(
             runtime_image="local",
@@ -312,6 +388,8 @@ def build_trial_record(
                 "harbor_status": status_str,
                 "output_source": agent_result.get("output_source"),
                 "compaction_count": agent_result.get("compaction_count", 0),
+                "failure_kind": agent_result.get("failure_kind"),
+                "provider_error": agent_result.get("provider_error"),
             },
             terminated=agent_status is AgentOutputStatus.COMPLETED,
         ),
@@ -330,13 +408,17 @@ def build_trial_record(
             setup_seconds=None,
             verification_seconds=None,
         ),
-        cost=CostRecord(
-            model_calls=agent_result.get("model_calls"),
-            tokens_in=input_tokens,
-            tokens_out=output_tokens,
-            cache_read_tokens=cache_read,
-            cache_write_tokens=cache_write,
-            estimated_cost_usd=cost,
+        cost=(
+            CostRecord(
+                model_calls=model_calls,
+                tokens_in=input_tokens,
+                tokens_out=output_tokens,
+                cache_read_tokens=cache_read,
+                cache_write_tokens=cache_write,
+                estimated_cost_usd=cost,
+            )
+            if has_usage
+            else None
         ),
         completeness=Completeness.PARTIAL,
     )
