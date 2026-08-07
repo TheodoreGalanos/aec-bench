@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ from aec_bench.prime_agent.acp import (
     run_prime_acp_session,
 )
 from aec_bench.prime_agent.batch import PRIME_AGENT_TESTED_VERSION
+from aec_bench.prime_agent.session_evidence import PrimeAcpLimits
 from aec_bench.prime_agent.world import (
     WORLD_ACTOR_CAPABILITY_ENV,
     WORLD_ACTOR_SOCKET_ENV,
@@ -39,8 +41,39 @@ if "--version" in sys.argv:
     print("prime-agent {PRIME_AGENT_TESTED_VERSION}")
     raise SystemExit(0)
 
-Path("observed-acp.json").write_text(json.dumps({{"argv": sys.argv[1:], "cwd": os.getcwd()}}))
+Path("observed-acp.json").write_text(json.dumps({{
+    "argv": sys.argv[1:],
+    "cwd": os.getcwd(),
+    "home": os.environ.get("HOME"),
+    "xdg_cache_home": os.environ.get("XDG_CACHE_HOME"),
+    "xdg_config_home": os.environ.get("XDG_CONFIG_HOME"),
+    "xdg_data_home": os.environ.get("XDG_DATA_HOME"),
+}}))
 scenario = os.environ.get("FAKE_ACP_SCENARIO", "success")
+session_dir = Path(sys.argv[sys.argv.index("--session-dir") + 1])
+session_file = session_dir / "root.jsonl"
+
+def append_session(event):
+    with session_file.open("a") as sink:
+        sink.write(json.dumps(event) + "\\n")
+
+def record_assistant():
+    append_session({{
+        "type": "message",
+        "id": "fake-assistant-1",
+        "message": {{
+            "role": "assistant",
+            "usage": {{
+                "input": 10,
+                "output": 5,
+                "cacheRead": 2,
+                "cacheWrite": 3,
+                "totalTokens": 20,
+                "cost": {{"total": 0.25000000000000003}},
+            }},
+        }},
+    }})
+
 sessions = 0
 for line in sys.stdin:
     request = json.loads(line)
@@ -56,6 +89,9 @@ for line in sys.stdin:
         print(json.dumps({{"jsonrpc": "2.0", "id": request["id"], "result": result}}), flush=True)
     elif method == "session/new":
         sessions += 1
+        append_session({{
+            "type": "session", "version": 3, "id": "prime-root", "rlmDepth": 0
+        }})
         print(json.dumps({{"jsonrpc": "2.0", "id": request["id"], "result": {{
             "sessionId": f"fake-session-{{sessions}}", "_meta": {{"unknownSessionKey": 7}}
         }}}}), flush=True)
@@ -67,6 +103,15 @@ for line in sys.stdin:
         if scenario == "malformed":
             print("not-json", flush=True)
             continue
+        record_assistant()
+        if scenario == "malformed-session":
+            with session_file.open("a") as sink:
+                sink.write("not-json\\n")
+        if scenario == "topology-refinement":
+            child_file = session_dir / "child.jsonl"
+            child_file.write_text(json.dumps({{
+                "type": "session", "version": 3, "id": "prime-child", "rlmDepth": 1
+            }}) + "\\n")
         if scenario == "world":
             import asyncio
             sys.path.insert(0, os.getcwd())
@@ -88,11 +133,18 @@ for line in sys.stdin:
                 "update": {{
                     "sessionUpdate": "agent_message_chunk",
                     "content": {{"type": "text", "text": "Working"}},
-                    "_meta": {{"unknownUpdateKey": "kept"}},
+                    "_meta": {{
+                        "unknownUpdateKey": "kept",
+                        **({{"ai.primeintellect.prime-agent": {{
+                            "refinement": {{"status": "complete", "summary": "kept raw"}}
+                        }}}} if scenario == "topology-refinement" else {{}}),
+                    }},
                 }},
                 "_meta": {{"unknownNotificationKey": True}},
             }},
         }}), flush=True)
+        if scenario == "budget":
+            time.sleep(0.2)
         print(json.dumps({{"jsonrpc": "2.0", "id": request["id"], "result": {{
             "stopReason": "end_turn", "_meta": {{"futurePromptMetadata": [1, 2, 3]}}
         }}}}), flush=True)
@@ -114,6 +166,15 @@ def _workspace(tmp_path: Path) -> tuple[Path, Path, Path]:
     skill = install_aec_world_skill(actor_workspace)
     evidence = tmp_path / "host-evidence"
     return actor_workspace, skill, evidence
+
+
+def _limits(*, wall_seconds: float = 5) -> PrimeAcpLimits:
+    return PrimeAcpLimits(
+        max_model_calls=10,
+        max_tokens=1_000,
+        max_cost_usd=Decimal("10"),
+        max_wall_seconds=wall_seconds,
+    )
 
 
 def test_builds_acp_command_with_only_the_explicit_skill(tmp_path: Path) -> None:
@@ -163,7 +224,7 @@ async def test_runs_one_acp_session_and_preserves_unknown_metadata(tmp_path: Pat
             WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
         },
         isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
-        timeout_seconds=5,
+        limits=_limits(),
         executable=str(_fake_prime_agent(tmp_path)),
         environment={**os.environ, "FAKE_SECRET_TOKEN": secret},
     )
@@ -177,6 +238,12 @@ async def test_runs_one_acp_session_and_preserves_unknown_metadata(tmp_path: Pat
     assert result.agent_name == "prime-agent"
     assert result.agent_capabilities is not None
     assert len(result.updates) == 1
+    assert result.usage.complete
+    assert result.usage.model_calls == 1
+    assert result.usage.total_tokens == 20
+    assert result.usage.cost_usd == Decimal("0.25")
+    assert result.topology.root_sessions == 1
+    assert result.topology.child_sessions == 0
     assert not result.benchmark_valid
     inbound = result.paths.inbound_file.read_text(encoding="utf-8")
     outbound = result.paths.outbound_file.read_text(encoding="utf-8")
@@ -191,7 +258,102 @@ async def test_runs_one_acp_session_and_preserves_unknown_metadata(tmp_path: Pat
     assert provenance["actor_principal_scope"] == "prime-session-composite"
     assert provenance["isolation"] == "development_same_user"
     assert provenance["benchmark_valid"] is False
+    assert provenance["runtime_home_scope"] == "actor-workspace"
+    assert provenance["usage"]["cost_usd"] == "0.25"
     assert "environment" not in provenance
+    observed = json.loads((actor_workspace / "observed-acp.json").read_text(encoding="utf-8"))
+    runtime_root = actor_workspace / ".prime-runtime"
+    assert observed["home"] == str(runtime_root / "home")
+    assert observed["xdg_cache_home"] == str(runtime_root / "cache")
+    assert observed["xdg_config_home"] == str(runtime_root / "config")
+    assert observed["xdg_data_home"] == str(runtime_root / "data")
+
+
+@pytest.mark.asyncio
+async def test_normalizes_child_topology_and_refinement_metadata(tmp_path: Path) -> None:
+    actor_workspace, skill, evidence = _workspace(tmp_path)
+    result = await run_prime_acp_session(
+        actor_workspace=actor_workspace,
+        evidence_directory=evidence,
+        skill_directory=skill,
+        instruction="Record evidence.",
+        model="anthropic/test",
+        actor_environment={
+            WORLD_ACTOR_SOCKET_ENV: "/private/tmp/scoped-actor.sock",
+            WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
+        },
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        limits=_limits(),
+        executable=str(_fake_prime_agent(tmp_path)),
+        environment={**os.environ, "FAKE_ACP_SCENARIO": "topology-refinement"},
+    )
+
+    assert result.topology.root_sessions == 1
+    assert result.topology.child_sessions == 1
+    assert result.refinement.events == 1
+    assert result.refinement.completed == 1
+    assert result.refinement.failed == 0
+    assert "kept raw" in result.paths.outbound_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("limits", "expected_reason"),
+    [
+        (PrimeAcpLimits(1, 1_000, Decimal("10"), 2), "max_model_calls"),
+        (PrimeAcpLimits(10, 20, Decimal("10"), 2), "max_tokens"),
+        (PrimeAcpLimits(10, 1_000, Decimal("0.25"), 2), "max_cost_usd"),
+    ],
+)
+async def test_usage_limit_cancels_the_active_prime_prompt(
+    tmp_path: Path,
+    limits: PrimeAcpLimits,
+    expected_reason: str,
+) -> None:
+    actor_workspace, skill, evidence = _workspace(tmp_path)
+    result = await run_prime_acp_session(
+        actor_workspace=actor_workspace,
+        evidence_directory=evidence,
+        skill_directory=skill,
+        instruction="Keep working.",
+        model="anthropic/test",
+        actor_environment={
+            WORLD_ACTOR_SOCKET_ENV: "/private/tmp/scoped-actor.sock",
+            WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
+        },
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        limits=limits,
+        executable=str(_fake_prime_agent(tmp_path)),
+        environment={**os.environ, "FAKE_ACP_SCENARIO": "budget"},
+    )
+
+    assert result.limit_reason == expected_reason
+    assert result.usage.model_calls == 1
+    assert '"method":"session/cancel"' in result.paths.inbound_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_fails_closed_when_prime_session_accounting_is_malformed(tmp_path: Path) -> None:
+    actor_workspace, skill, evidence = _workspace(tmp_path)
+    result = await run_prime_acp_session(
+        actor_workspace=actor_workspace,
+        evidence_directory=evidence,
+        skill_directory=skill,
+        instruction="Act once.",
+        model="anthropic/test",
+        actor_environment={
+            WORLD_ACTOR_SOCKET_ENV: "/private/tmp/scoped-actor.sock",
+            WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
+        },
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        limits=_limits(),
+        executable=str(_fake_prime_agent(tmp_path)),
+        environment={**os.environ, "FAKE_ACP_SCENARIO": "malformed-session"},
+    )
+
+    assert result.session_state == "failed"
+    assert result.error is not None
+    assert "malformed JSON" in result.error
 
 
 @pytest.mark.asyncio
@@ -209,7 +371,7 @@ async def test_fails_closed_on_malformed_or_unsupported_acp(tmp_path: Path, scen
             WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
         },
         isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
-        timeout_seconds=2,
+        limits=_limits(wall_seconds=2),
         executable=str(_fake_prime_agent(tmp_path)),
         environment={**os.environ, "FAKE_ACP_SCENARIO": scenario},
     )
@@ -233,7 +395,7 @@ async def test_timeout_cancels_then_reaps_the_prime_process(tmp_path: Path) -> N
             WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
         },
         isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
-        timeout_seconds=0.1,
+        limits=_limits(wall_seconds=0.5),
         executable=str(_fake_prime_agent(tmp_path)),
         environment={**os.environ, "FAKE_ACP_SCENARIO": "timeout"},
     )
@@ -258,7 +420,7 @@ async def test_process_exit_during_prompt_is_a_failed_session(tmp_path: Path) ->
             WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
         },
         isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
-        timeout_seconds=2,
+        limits=_limits(wall_seconds=2),
         executable=str(_fake_prime_agent(tmp_path)),
         environment={**os.environ, "FAKE_ACP_SCENARIO": "process-exit"},
     )
@@ -341,7 +503,7 @@ async def test_macos_sandboxed_acp_run_is_benchmark_valid(tmp_path: Path) -> Non
         },
         isolation=PrimeAcpIsolation.MACOS_SANDBOX,
         private_paths=(tmp_path / "private-world",),
-        timeout_seconds=2,
+        limits=_limits(wall_seconds=2),
         executable=str(_fake_prime_agent(tmp_path)),
         environment=os.environ,
     )

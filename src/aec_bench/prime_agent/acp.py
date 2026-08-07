@@ -25,6 +25,18 @@ from aec_bench.prime_agent.batch import (
     redact_prime_bytes,
     resolve_prime_executable,
 )
+from aec_bench.prime_agent.session_evidence import (
+    PrimeAcpLimits,
+    PrimeAcpRefinement,
+    PrimeAcpTopology,
+    PrimeAcpUsage,
+    PrimeSessionEvidenceError,
+    empty_usage,
+    read_session_evidence,
+    refinement_evidence,
+    usage_limit_reason,
+    wait_for_usage_limit,
+)
 
 _VERSION_PATTERN = re.compile(r"(?<!\d)(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)")
 _MAX_ACP_MESSAGE_BYTES = 16 * 1024 * 1024
@@ -78,6 +90,11 @@ class PrimeAcpRun:
     agent_name: str | None
     agent_version: str | None
     agent_capabilities: dict[str, Any] | None
+    limits: PrimeAcpLimits
+    usage: PrimeAcpUsage
+    topology: PrimeAcpTopology
+    refinement: PrimeAcpRefinement
+    limit_reason: str | None
     session_state: str
     stop_reason: str | None
     timed_out: bool
@@ -176,8 +193,8 @@ async def run_prime_acp_session(
     model: str,
     actor_environment: Mapping[str, str],
     isolation: PrimeAcpIsolation,
+    limits: PrimeAcpLimits,
     private_paths: Sequence[Path] = (),
-    timeout_seconds: float = 900,
     executable: str = "prime-agent",
     environment: Mapping[str, str] | None = None,
 ) -> PrimeAcpRun:
@@ -189,8 +206,6 @@ async def run_prime_acp_session(
     skill_directory = skill_directory.resolve()
     if not instruction.strip():
         raise ValueError("Prime ACP instruction must be non-empty")
-    if timeout_seconds <= 0:
-        raise ValueError("Prime ACP timeout must be positive")
     if not actor_workspace.is_dir() or not skill_directory.is_dir():
         raise FileNotFoundError("Prime actor workspace and explicit skill must exist")
     if _paths_overlap(actor_workspace, evidence_directory):
@@ -206,8 +221,13 @@ async def run_prime_acp_session(
 
     env = dict(os.environ if environment is None else environment)
     env.update(actor_environment)
+    runtime_home = actor_workspace / ".prime-runtime"
     env.update(
         {
+            "HOME": str(runtime_home / "home"),
+            "XDG_CACHE_HOME": str(runtime_home / "cache"),
+            "XDG_CONFIG_HOME": str(runtime_home / "config"),
+            "XDG_DATA_HOME": str(runtime_home / "data"),
             "PRIME_AGENT_CODING_AGENT_DIR": str(paths.state_dir),
             "PRIME_AGENT_SESSION_DIR": str(paths.session_dir),
             "PI_OFFLINE": "1",
@@ -244,9 +264,12 @@ async def run_prime_acp_session(
     redact_values = tuple(value for key, value in actor_environment.items() if "CAPABILITY" in key or "SOCKET" in key)
     started_at = datetime.now(UTC)
     started = time.monotonic()
+    deadline = started + limits.max_wall_seconds
     process: asyncio.subprocess.Process | None = None
     connection: Any = None
     stderr_task: asyncio.Task[None] | None = None
+    prompt_task: asyncio.Task[Any] | None = None
+    limit_task: asyncio.Task[str] | None = None
     session_id: str | None = None
     protocol_version: int | None = None
     agent_name: str | None = None
@@ -255,11 +278,18 @@ async def run_prime_acp_session(
     stop_reason: str | None = None
     updates: list[dict[str, Any]] = []
     timed_out = False
+    limit_reason: str | None = None
     error: str | None = None
     session_state = "failed"
     prime_version = "unknown"
     try:
-        prime_version = await _prime_version(command[: -len(base_command)], resolved_executable, actor_workspace, env)
+        prime_version = await _prime_version(
+            command[: -len(base_command)],
+            resolved_executable,
+            actor_workspace,
+            env,
+            timeout_seconds=min(_remaining_seconds(deadline), 10),
+        )
         process = await asyncio.create_subprocess_exec(
             *command,
             cwd=actor_workspace,
@@ -286,12 +316,13 @@ async def run_prime_acp_session(
         )
         client = _AecBenchAcpClient(updates)
         connection = acp.connect_to_agent(client, transport)
+        initialize_timeout = min(_remaining_seconds(deadline), 30)
         initialized = await asyncio.wait_for(
             connection.initialize(
                 protocol_version=acp.PROTOCOL_VERSION,
                 client_info=acp_schema.Implementation(name="aec-bench", version="0.1.0"),
             ),
-            timeout=min(timeout_seconds, 30),
+            timeout=initialize_timeout,
         )
         _validate_raw_initialize(transport.received_messages)
         _validate_initialize(initialized, acp.PROTOCOL_VERSION)
@@ -301,9 +332,10 @@ async def run_prime_acp_session(
         agent_capabilities = initialized.agent_capabilities.model_dump(
             mode="json", by_alias=True, exclude_none=True, warnings=False
         )
+        new_session_timeout = min(_remaining_seconds(deadline), 30)
         session = await asyncio.wait_for(
             connection.new_session(cwd=str(actor_workspace), additional_directories=[], mcp_servers=[]),
-            timeout=min(timeout_seconds, 30),
+            timeout=new_session_timeout,
         )
         if not isinstance(session.session_id, str) or not session.session_id.strip():
             raise PrimeAcpProtocolError("Prime ACP returned an empty session ID")
@@ -312,10 +344,30 @@ async def run_prime_acp_session(
             connection.prompt(session_id=session_id, prompt=[acp.text_block(instruction)]),
             name="prime-acp-prompt",
         )
-        try:
-            prompt = await asyncio.wait_for(asyncio.shield(prompt_task), timeout=timeout_seconds)
-        except TimeoutError:
+        limit_task = asyncio.create_task(
+            wait_for_usage_limit(paths.session_dir, limits),
+            name="prime-acp-usage-limits",
+        )
+        done, _pending = await asyncio.wait(
+            {prompt_task, limit_task},
+            timeout=_remaining_seconds(deadline),
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if prompt_task in done:
+            prompt = prompt_task.result()
+        elif limit_task in done:
+            limit_reason = limit_task.result()
+            await connection.cancel(session_id=session_id)
+            try:
+                prompt = await asyncio.wait_for(prompt_task, timeout=_CANCEL_GRACE_SECONDS)
+            except TimeoutError:
+                prompt_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await prompt_task
+                raise PrimeAcpProtocolError("Prime ACP prompt did not stop after limit cancellation") from None
+        else:
             timed_out = True
+            limit_reason = "max_wall_seconds"
             await connection.cancel(session_id=session_id)
             try:
                 prompt = await asyncio.wait_for(prompt_task, timeout=_CANCEL_GRACE_SECONDS)
@@ -324,15 +376,28 @@ async def run_prime_acp_session(
                 with contextlib.suppress(asyncio.CancelledError):
                     await prompt_task
                 raise PrimeAcpProtocolError("Prime ACP prompt did not stop after cancellation") from None
+        limit_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await limit_task
         stop_reason = str(prompt.stop_reason)
         if client.protocol_error is not None:
             raise client.protocol_error
         session_state = "cancelled" if stop_reason == "cancelled" or timed_out else "ended"
         await asyncio.wait_for(connection.close_session(session_id=session_id), timeout=10)
+    except TimeoutError as exc:
+        timed_out = True
+        limit_reason = "max_wall_seconds"
+        error = f"{type(exc).__name__}: Prime ACP wall-clock budget expired"
+        session_state = "cancelled" if session_id is not None else "failed"
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
         session_state = "cancelled" if timed_out else "failed"
     finally:
+        for task in (prompt_task, limit_task):
+            if task is not None and not task.done():
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
         if connection is not None:
             with contextlib.suppress(Exception):
                 await connection.close()
@@ -344,6 +409,20 @@ async def run_prime_acp_session(
         _redact_session_artifacts(paths.session_dir, env, redact_values)
         if sandbox_profile is not None:
             sandbox_profile.unlink(missing_ok=True)
+
+    usage = empty_usage()
+    topology = PrimeAcpTopology(root_sessions=0, child_sessions=0)
+    if session_id is not None:
+        try:
+            session_evidence = read_session_evidence(paths.session_dir, allow_partial=False)
+            assert session_evidence is not None
+            usage, topology = session_evidence
+        except PrimeSessionEvidenceError as exc:
+            error = error or f"{type(exc).__name__}: {exc}"
+            session_state = "failed"
+    refinement = refinement_evidence(updates)
+    if usage.complete:
+        limit_reason = limit_reason or usage_limit_reason(usage, limits)
 
     exit_code = process.returncode if process is not None else None
     if exit_code not in (None, 0) and not timed_out:
@@ -372,10 +451,20 @@ async def run_prime_acp_session(
         agent_name=agent_name,
         agent_version=agent_version,
         agent_capabilities=agent_capabilities,
+        limits=limits,
+        usage=usage,
+        topology=topology,
+        refinement=refinement,
+        limit_reason=limit_reason,
         session_state=session_state,
         stop_reason=stop_reason,
         timed_out=timed_out,
-        benchmark_valid=isolation is PrimeAcpIsolation.MACOS_SANDBOX and session_state != "failed",
+        benchmark_valid=(
+            isolation is PrimeAcpIsolation.MACOS_SANDBOX
+            and session_state != "failed"
+            and error is None
+            and usage.complete
+        ),
         isolation=isolation,
         updates=tuple(updates),
         error=error,
@@ -575,6 +664,8 @@ async def _prime_version(
     executable: Path,
     workspace: Path,
     environment: Mapping[str, str],
+    *,
+    timeout_seconds: float,
 ) -> str:
     process: asyncio.subprocess.Process | None = None
     try:
@@ -589,7 +680,7 @@ async def _prime_version(
             stderr=asyncio.subprocess.DEVNULL,
             start_new_session=os.name == "posix",
         )
-        stdout, _ = await asyncio.wait_for(process.communicate(), timeout=10)
+        stdout, _ = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
     except (OSError, TimeoutError):
         if process is not None:
             await _reap_process(process)
@@ -660,12 +751,40 @@ def _write_run_provenance(
         "agent_name": run.agent_name,
         "agent_version": run.agent_version,
         "agent_capabilities": run.agent_capabilities,
+        "limits": {
+            "max_model_calls": run.limits.max_model_calls,
+            "max_tokens": run.limits.max_tokens,
+            "max_cost_usd": str(run.limits.max_cost_usd),
+            "max_wall_seconds": run.limits.max_wall_seconds,
+        },
+        "usage": {
+            "complete": run.usage.complete,
+            "model_calls": run.usage.model_calls,
+            "input_tokens": run.usage.input_tokens,
+            "output_tokens": run.usage.output_tokens,
+            "cache_read_tokens": run.usage.cache_read_tokens,
+            "cache_write_tokens": run.usage.cache_write_tokens,
+            "total_tokens": run.usage.total_tokens,
+            "cost_usd": str(run.usage.cost_usd),
+        },
+        "topology": {
+            "root_sessions": run.topology.root_sessions,
+            "child_sessions": run.topology.child_sessions,
+        },
+        "refinement": {
+            "events": run.refinement.events,
+            "completed": run.refinement.completed,
+            "failed": run.refinement.failed,
+            "unknown": run.refinement.unknown,
+        },
+        "limit_reason": run.limit_reason,
         "session_state": run.session_state,
         "stop_reason": run.stop_reason,
         "timed_out": run.timed_out,
         "isolation": run.isolation,
         "benchmark_valid": run.benchmark_valid,
         "actor_principal_scope": "prime-session-composite",
+        "runtime_home_scope": "actor-workspace",
         "skill_sha256": _directory_digest(skill_directory),
         "update_count": len(run.updates),
         "error": run.error,
@@ -677,6 +796,13 @@ def _paths_overlap(first: Path, second: Path) -> bool:
     first = first.resolve()
     second = second.resolve()
     return first == second or first in second.parents or second in first.parents
+
+
+def _remaining_seconds(deadline: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError
+    return remaining
 
 
 def _sandbox_quote(path: Path) -> str:

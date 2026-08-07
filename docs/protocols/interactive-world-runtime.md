@@ -81,6 +81,21 @@ The Prime root process and its descendants receive the same scoped capability,
 so they form one composite actor principal. Per-child action attribution is not
 claimed without enforceable per-child capability scoping.
 
+The composed entry point requires positive host limits for world actions,
+model calls, aggregate tokens, aggregate provider cost, and elapsed wall time.
+The actor proxy counts distinct invoke request content while allowing an exact
+retry of the same request without another allowance. A changed request under an
+existing request ID is not an exact retry and still reaches the existing host
+conflict semantics when an allowance remains.
+
+AECBench reads every Prime session JSONL artifact for the composite principal.
+It cancels the active ACP prompt when a completed assistant response reaches a
+model-call, token, or cost limit. Provider usage is known only after a response,
+so that final response can cross the token or cost threshold. A provider request
+already in flight when the host cancels can also report usage. The wall limit
+covers ACP startup and prompting. Malformed, incomplete, missing, or
+unsupported session accounting fails closed.
+
 ## Host controls
 
 The installed control command parses a strict discriminated union for:
@@ -126,8 +141,15 @@ calling evaluation.
 
 Prime ACP evidence and actor transport evidence are secondary execution
 evidence. The pump repository remains canonical replay authority. The actor log
-contains only actor-visible requests, results, and errors; it excludes the
-capability secret, endpoint and repository paths, and hidden state.
+contains timestamps plus actor-visible requests, results, and errors. It also
+records malformed, unauthorized, and transport-level attempts using only a
+safe operation label. It excludes the capability secret, endpoint and
+repository paths, arbitrary malformed payload content, and hidden state.
+
+Prime HOME and XDG paths are trial-local under the actor workspace. The
+normalized Prime run evidence records configured limits, aggregate usage and
+cost, root/child session counts, refinement status counts, and any limit that
+ended the prompt. Unknown ACP metadata remains in the raw ACP evidence.
 
 Same-user Prime execution is development-only and cannot produce
 benchmark-valid evidence. The current benchmark-valid local path uses a macOS

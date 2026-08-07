@@ -13,6 +13,8 @@ import tempfile
 import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -26,6 +28,12 @@ from aec_bench.contracts.world_interface import (
     WorldInterfaceError,
 )
 from aec_bench.contracts.world_session import WorldSessionRequest, WorldSessionResult
+from aec_bench.prime_agent.acp import (
+    PrimeAcpIsolation,
+    PrimeAcpRun,
+    run_prime_acp_session,
+)
+from aec_bench.prime_agent.session_evidence import PrimeAcpLimits
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
     PumpStationEpisodeHost,
 )
@@ -41,7 +49,6 @@ from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_ru
 
 if TYPE_CHECKING:
     from aec_bench.contracts.evaluation_result import StewardshipEvaluation
-    from aec_bench.prime_agent.acp import PrimeAcpIsolation, PrimeAcpRun
     from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
         PumpStationCoupledVerificationReport,
     )
@@ -56,6 +63,30 @@ class PrimeWorldActorProxyError(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
+class PrimeWorldSessionLimits:
+    """Host limits for one composed Prime and interactive-world run."""
+
+    max_world_actions: int
+    max_model_calls: int
+    max_tokens: int
+    max_cost_usd: Decimal
+    max_wall_seconds: float
+
+    def __post_init__(self) -> None:
+        if self.max_world_actions < 1:
+            raise ValueError("Prime world max_world_actions must be positive")
+        self.acp_limits()
+
+    def acp_limits(self) -> PrimeAcpLimits:
+        return PrimeAcpLimits(
+            max_model_calls=self.max_model_calls,
+            max_tokens=self.max_tokens,
+            max_cost_usd=self.max_cost_usd,
+            max_wall_seconds=self.max_wall_seconds,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class PrimePumpWorldRun:
     """Separate Prime-session and canonical-world outcomes for one interactive trial."""
 
@@ -66,6 +97,9 @@ class PrimePumpWorldRun:
     verification: PumpStationCoupledVerificationReport
     evaluation: StewardshipEvaluation
     actor_transport_file: Path
+    run_file: Path
+    world_action_attempts: int
+    world_action_limit_reached: bool
     benchmark_valid: bool
 
 
@@ -93,17 +127,23 @@ class _ActorRequestHandler(socketserver.StreamRequestHandler):
     server: _ActorProxyServer
 
     def handle(self) -> None:
+        received_at = datetime.now(UTC)
         line = self.rfile.readline(_MAX_MESSAGE_BYTES + 1)
         if len(line) > _MAX_MESSAGE_BYTES:
-            self.server.owner._write_response(self.wfile, error=("request-too-large", "actor request is too large"))
+            self.server.owner._reject_transport(
+                self.wfile,
+                received_at=received_at,
+                error=("request-too-large", "actor request is too large"),
+            )
             return
         if not line or not line.endswith(b"\n"):
-            self.server.owner._write_response(
+            self.server.owner._reject_transport(
                 self.wfile,
+                received_at=received_at,
                 error=("transport-malformed", "actor request must be one line"),
             )
             return
-        self.server.owner._handle_request(line, self.wfile)
+        self.server.owner._handle_request(line, self.wfile, received_at=received_at)
 
 
 class _ActorProxyServer(_ThreadedUnixServer):
@@ -123,8 +163,11 @@ class PrimeWorldActorProxy:
         *,
         world_run_directory: Path,
         socket_directory: Path,
+        max_world_actions: int,
         evidence_file: Path | None = None,
     ) -> None:
+        if max_world_actions < 1:
+            raise ValueError("Prime world max_world_actions must be positive")
         self._world_run_directory = world_run_directory.resolve()
         requested_socket_directory = socket_directory.resolve()
         requested_socket_path = requested_socket_directory / "actor.sock"
@@ -137,6 +180,10 @@ class PrimeWorldActorProxy:
         )
         self._evidence_file = evidence_file.resolve() if evidence_file is not None else None
         self._host = PumpStationEpisodeHost(self._world_run_directory)
+        self._max_world_actions = max_world_actions
+        self._world_action_attempts = 0
+        self._world_action_limit_reached = False
+        self._world_action_requests: dict[str, str] = {}
         self._capability = secrets.token_urlsafe(32)
         self._socket_path = self._socket_directory / "actor.sock"
         self._server: _ActorProxyServer | None = None
@@ -181,6 +228,14 @@ class PrimeWorldActorProxy:
     def last_action_result(self) -> WorldActorActionResult | None:
         return self._last_action_result
 
+    @property
+    def world_action_attempts(self) -> int:
+        return self._world_action_attempts
+
+    @property
+    def world_action_limit_reached(self) -> bool:
+        return self._world_action_limit_reached
+
     def close(self) -> None:
         server, thread = self._server, self._thread
         self._server = None
@@ -201,30 +256,96 @@ class PrimeWorldActorProxy:
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
         self.close()
 
-    def _handle_request(self, line: bytes, writer: Any) -> None:
+    def _handle_request(self, line: bytes, writer: Any, *, received_at: datetime) -> None:
         request: ContinualWorldActorRequest | None = None
+        operation: str | None = None
         try:
             raw = json.loads(line)
+            operation = _safe_operation(raw)
             envelope = _ActorTransportRequest.model_validate(raw)
             if not hmac.compare_digest(envelope.capability, self._capability):
+                self._record(
+                    request=None,
+                    operation=operation,
+                    received_at=received_at,
+                    error={"code": "actor-unauthorized", "detail": "actor capability is invalid"},
+                )
                 self._write_response(writer, error=("actor-unauthorized", "actor capability is invalid"))
                 return
             request = envelope.request
+            operation = request.operation
+            if request.operation == "invoke" and not self._authorize_world_action(request):
+                response_error = ("world-action-budget-exhausted", "world action budget is exhausted")
+                error: dict[str, JsonValue] = {
+                    "code": response_error[0],
+                    "detail": response_error[1],
+                }
+                self._record(
+                    request=request,
+                    operation=operation,
+                    received_at=received_at,
+                    error=error,
+                )
+                self._write_response(writer, error=response_error)
+                return
             result = self._dispatch(request)
         except (UnicodeDecodeError, json.JSONDecodeError, ValidationError, TypeError, ValueError):
+            self._record(
+                request=None,
+                operation=operation,
+                received_at=received_at,
+                error={
+                    "code": "actor-request-invalid",
+                    "detail": "actor request does not match the contract",
+                },
+            )
             self._write_response(writer, error=("actor-request-invalid", "actor request does not match the contract"))
             return
         except WorldInterfaceError as exc:
-            self._record(request=request, error={"code": exc.code, "detail": exc.detail})
+            self._record(
+                request=request,
+                operation=operation,
+                received_at=received_at,
+                error={"code": exc.code, "detail": exc.detail},
+            )
             self._write_response(writer, error=(exc.code, exc.detail))
             return
         except Exception:
-            self._record(request=request, error={"code": "actor-proxy-failed", "detail": "host actor call failed"})
+            self._record(
+                request=request,
+                operation=operation,
+                received_at=received_at,
+                error={"code": "actor-proxy-failed", "detail": "host actor call failed"},
+            )
             self._write_response(writer, error=("actor-proxy-failed", "host actor call failed"))
             return
         payload = result.model_dump(mode="json")
-        self._record(request=request, result=payload)
+        self._record(request=request, operation=operation, received_at=received_at, result=payload)
         self._write_response(writer, result=payload)
+
+    def _reject_transport(self, writer: Any, *, received_at: datetime, error: tuple[str, str]) -> None:
+        self._record(
+            request=None,
+            operation=None,
+            received_at=received_at,
+            error={"code": error[0], "detail": error[1]},
+        )
+        self._write_response(writer, error=error)
+
+    def _authorize_world_action(self, request: ContinualWorldActorRequest) -> bool:
+        assert request.request_id is not None
+        fingerprint = request.model_dump_json()
+        with self._evidence_lock:
+            if self._world_action_requests.get(request.request_id) == fingerprint:
+                return True
+            self._world_action_attempts += 1
+            if self._world_action_attempts > self._max_world_actions:
+                self._world_action_limit_reached = True
+                return False
+            self._world_action_requests.setdefault(request.request_id, fingerprint)
+            if self._world_action_attempts == self._max_world_actions:
+                self._world_action_limit_reached = True
+            return True
 
     def _dispatch(self, request: ContinualWorldActorRequest) -> StrictModel:
         if request.operation == "capabilities":
@@ -249,6 +370,8 @@ class PrimeWorldActorProxy:
         self,
         *,
         request: ContinualWorldActorRequest | None,
+        operation: str | None,
+        received_at: datetime,
         result: dict[str, JsonValue] | None = None,
         error: dict[str, JsonValue] | None = None,
     ) -> None:
@@ -258,6 +381,8 @@ class PrimeWorldActorProxy:
             self._sequence += 1
             event: dict[str, JsonValue] = {
                 "sequence": self._sequence,
+                "received_at": received_at.isoformat(),
+                "operation": operation,
                 "request": request.model_dump(mode="json") if request is not None else None,
                 "result": result,
                 "error": error,
@@ -303,13 +428,11 @@ async def run_prime_pump_world_session(
     instruction: str,
     model: str,
     isolation: PrimeAcpIsolation,
-    timeout_seconds: float = 900,
+    limits: PrimeWorldSessionLimits,
     executable: str = "prime-agent",
     environment: Mapping[str, str] | None = None,
 ) -> PrimePumpWorldRun:
     """Compose Prime with the current pump world without changing task-owned runtime paths."""
-    from aec_bench.prime_agent.acp import run_prime_acp_session
-
     actor_workspace = actor_workspace.resolve()
     world_run_directory = world_run_directory.resolve()
     evidence_directory = evidence_directory.resolve()
@@ -322,6 +445,7 @@ async def run_prime_pump_world_session(
     proxy = PrimeWorldActorProxy(
         world_run_directory=world_run_directory,
         socket_directory=actor_workspace / ".actor",
+        max_world_actions=limits.max_world_actions,
         evidence_file=actor_transport_file,
     )
     world_session = proxy.open_world_session(session_request)
@@ -334,12 +458,14 @@ async def run_prime_pump_world_session(
             model=model,
             actor_environment=proxy.connection_environment(),
             isolation=isolation,
+            limits=limits.acp_limits(),
             private_paths=(world_run_directory, evidence_directory),
-            timeout_seconds=timeout_seconds,
             executable=executable,
             environment=environment,
         )
         last_action = proxy.last_action_result
+        world_action_attempts = proxy.world_action_attempts
+        world_action_limit_reached = proxy.world_action_limit_reached
 
     repository = PumpStationWorldRunRepository(world_run_directory)
     run = PumpStationWorldRun.resume_reference_system(
@@ -366,6 +492,33 @@ async def run_prime_pump_world_session(
         completion = "truncated"
     else:
         completion = "incomplete"
+    benchmark_valid = prime.benchmark_valid and verification.valid
+    run_file = evidence_directory / "prime-world-run.json"
+    run_file.write_text(
+        json.dumps(
+            {
+                "schema": "aecbench.prime-world-run.v1",
+                "limits": {
+                    "max_world_actions": limits.max_world_actions,
+                    "max_model_calls": limits.max_model_calls,
+                    "max_tokens": limits.max_tokens,
+                    "max_cost_usd": str(limits.max_cost_usd),
+                    "max_wall_seconds": limits.max_wall_seconds,
+                },
+                "world_action_attempts": world_action_attempts,
+                "world_action_limit_reached": world_action_limit_reached,
+                "prime_session_state": prime.session_state,
+                "prime_limit_reason": prime.limit_reason,
+                "world_state": world_state,
+                "completion": completion,
+                "benchmark_valid": benchmark_valid,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     return PrimePumpWorldRun(
         prime=prime,
         world_session=world_session,
@@ -374,7 +527,10 @@ async def run_prime_pump_world_session(
         verification=verification,
         evaluation=evaluation,
         actor_transport_file=actor_transport_file,
-        benchmark_valid=prime.benchmark_valid and verification.valid,
+        run_file=run_file,
+        world_action_attempts=world_action_attempts,
+        world_action_limit_reached=world_action_limit_reached,
+        benchmark_valid=benchmark_valid,
     )
 
 
@@ -382,3 +538,15 @@ def _paths_overlap(first: Path, second: Path) -> bool:
     first = first.resolve()
     second = second.resolve()
     return first == second or first in second.parents or second in first.parents
+
+
+def _safe_operation(value: Any) -> str | None:
+    if not isinstance(value, dict):
+        return None
+    request = value.get("request")
+    if not isinstance(request, dict):
+        return None
+    operation = request.get("operation")
+    if isinstance(operation, str) and operation in {"capabilities", "observe", "invoke"}:
+        return operation
+    return None
