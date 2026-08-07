@@ -14,6 +14,7 @@ import pytest
 
 from aec_bench.prime_agent.acp import (
     PrimeAcpIsolation,
+    PrimeAcpIsolationError,
     build_macos_sandbox_profile,
     build_prime_acp_command,
     run_prime_acp_session,
@@ -24,6 +25,7 @@ from aec_bench.prime_agent.world import (
     WORLD_ACTOR_CAPABILITY_ENV,
     WORLD_ACTOR_SOCKET_ENV,
     install_aec_world_skill,
+    install_pump_station_guidance_skill,
 )
 
 
@@ -185,7 +187,7 @@ def test_builds_acp_command_with_only_the_explicit_skill(tmp_path: Path) -> None
         model="anthropic/test",
         actor_workspace=actor_workspace,
         session_dir=actor_workspace / "sessions",
-        skill_directory=skill,
+        skill_directories=(skill,),
     )
 
     assert command == [
@@ -209,6 +211,25 @@ def test_builds_acp_command_with_only_the_explicit_skill(tmp_path: Path) -> None
     ]
 
 
+def test_builds_acp_command_with_ordered_explicit_skills(tmp_path: Path) -> None:
+    actor_workspace, skill, _ = _workspace(tmp_path)
+    guidance = install_pump_station_guidance_skill(actor_workspace)
+
+    command = build_prime_acp_command(
+        executable=Path("/opt/prime/bin/prime-agent"),
+        model="anthropic/test",
+        actor_workspace=actor_workspace,
+        session_dir=actor_workspace / "sessions",
+        skill_directories=(skill, guidance),
+    )
+
+    first_skill = command.index("--skill")
+    second_skill = command.index("--skill", first_skill + 1)
+    assert command[first_skill + 1] == str(skill)
+    assert command[second_skill + 1] == str(guidance)
+    assert command.count("--no-skills") == 1
+
+
 @pytest.mark.asyncio
 async def test_runs_one_acp_session_and_preserves_unknown_metadata(tmp_path: Path) -> None:
     actor_workspace, skill, evidence = _workspace(tmp_path)
@@ -216,7 +237,7 @@ async def test_runs_one_acp_session_and_preserves_unknown_metadata(tmp_path: Pat
     result = await run_prime_acp_session(
         actor_workspace=actor_workspace,
         evidence_directory=evidence,
-        skill_directory=skill,
+        skill_directories=(skill,),
         instruction="Use the current world actor until the task is complete.",
         model="anthropic/test",
         actor_environment={
@@ -260,7 +281,19 @@ async def test_runs_one_acp_session_and_preserves_unknown_metadata(tmp_path: Pat
     assert provenance["benchmark_valid"] is False
     assert provenance["runtime_home_scope"] == "actor-workspace"
     assert provenance["usage"]["cost_usd"] == "0.25"
+    assert provenance["acp_sdk_version"]
+    assert provenance["skills"] == [
+        {
+            "name": "aec-world",
+            "order": 0,
+            "sha256": provenance["skill_sha256"],
+        }
+    ]
+    assert str(skill) not in json.dumps(provenance)
+    assert "<skill:aec-world>" in provenance["command"]
     assert "environment" not in provenance
+    assert (evidence / "prime-session.jsonl").is_file()
+    assert "fake-assistant-1" in (evidence / "prime-session.jsonl").read_text(encoding="utf-8")
     observed = json.loads((actor_workspace / "observed-acp.json").read_text(encoding="utf-8"))
     runtime_root = actor_workspace / ".prime-runtime"
     assert observed["home"] == str(runtime_root / "home")
@@ -270,12 +303,68 @@ async def test_runs_one_acp_session_and_preserves_unknown_metadata(tmp_path: Pat
 
 
 @pytest.mark.asyncio
+async def test_rejects_missing_duplicate_external_and_overlapping_skills(tmp_path: Path) -> None:
+    actor_workspace, skill, evidence = _workspace(tmp_path)
+    duplicate = actor_workspace / ".alternate" / "aec-world"
+    duplicate.mkdir(parents=True)
+    (duplicate / "SKILL.md").write_text(
+        "---\nname: aec-world\ndescription: Duplicate test skill.\n---\n",
+        encoding="utf-8",
+    )
+    outer = actor_workspace / ".overlap" / "outer"
+    inner = outer / "inner"
+    inner.mkdir(parents=True)
+    (outer / "SKILL.md").write_text(
+        "---\nname: outer\ndescription: Outer test skill.\n---\n",
+        encoding="utf-8",
+    )
+    (inner / "SKILL.md").write_text(
+        "---\nname: inner\ndescription: Inner test skill.\n---\n",
+        encoding="utf-8",
+    )
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / "SKILL.md").write_text(
+        "---\nname: external\ndescription: External test skill.\n---\n",
+        encoding="utf-8",
+    )
+    executable = str(_fake_prime_agent(tmp_path))
+
+    async def run_with(skills: tuple[Path, ...], evidence_name: str) -> None:
+        await run_prime_acp_session(
+            actor_workspace=actor_workspace,
+            evidence_directory=evidence / evidence_name,
+            skill_directories=skills,
+            instruction="Act once.",
+            model="anthropic/test",
+            actor_environment={
+                WORLD_ACTOR_SOCKET_ENV: "/private/tmp/scoped-actor.sock",
+                WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
+            },
+            isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+            limits=_limits(),
+            executable=executable,
+            environment=os.environ,
+        )
+
+    with pytest.raises(FileNotFoundError, match="does not exist"):
+        await run_with((skill, actor_workspace / "missing"), "missing")
+    with pytest.raises(ValueError, match="duplicated"):
+        await run_with((skill, duplicate), "duplicate")
+    with pytest.raises(PrimeAcpIsolationError, match="under the actor workspace"):
+        await run_with((skill, external), "external")
+    with pytest.raises(PrimeAcpIsolationError, match="must not overlap"):
+        await run_with((outer, inner), "overlap")
+    assert not (actor_workspace / "observed-acp.json").exists()
+
+
+@pytest.mark.asyncio
 async def test_normalizes_child_topology_and_refinement_metadata(tmp_path: Path) -> None:
     actor_workspace, skill, evidence = _workspace(tmp_path)
     result = await run_prime_acp_session(
         actor_workspace=actor_workspace,
         evidence_directory=evidence,
-        skill_directory=skill,
+        skill_directories=(skill,),
         instruction="Record evidence.",
         model="anthropic/test",
         actor_environment={
@@ -294,6 +383,10 @@ async def test_normalizes_child_topology_and_refinement_metadata(tmp_path: Path)
     assert result.refinement.completed == 1
     assert result.refinement.failed == 0
     assert "kept raw" in result.paths.outbound_file.read_text(encoding="utf-8")
+    assert sorted(path.name for path in evidence.glob("prime-session*.jsonl")) == [
+        "prime-session-2.jsonl",
+        "prime-session.jsonl",
+    ]
 
 
 @pytest.mark.asyncio
@@ -314,7 +407,7 @@ async def test_usage_limit_cancels_the_active_prime_prompt(
     result = await run_prime_acp_session(
         actor_workspace=actor_workspace,
         evidence_directory=evidence,
-        skill_directory=skill,
+        skill_directories=(skill,),
         instruction="Keep working.",
         model="anthropic/test",
         actor_environment={
@@ -338,7 +431,7 @@ async def test_fails_closed_when_prime_session_accounting_is_malformed(tmp_path:
     result = await run_prime_acp_session(
         actor_workspace=actor_workspace,
         evidence_directory=evidence,
-        skill_directory=skill,
+        skill_directories=(skill,),
         instruction="Act once.",
         model="anthropic/test",
         actor_environment={
@@ -363,7 +456,7 @@ async def test_fails_closed_on_malformed_or_unsupported_acp(tmp_path: Path, scen
     result = await run_prime_acp_session(
         actor_workspace=actor_workspace,
         evidence_directory=evidence,
-        skill_directory=skill,
+        skill_directories=(skill,),
         instruction="Act once.",
         model="anthropic/test",
         actor_environment={
@@ -387,7 +480,7 @@ async def test_timeout_cancels_then_reaps_the_prime_process(tmp_path: Path) -> N
     result = await run_prime_acp_session(
         actor_workspace=actor_workspace,
         evidence_directory=evidence,
-        skill_directory=skill,
+        skill_directories=(skill,),
         instruction="Wait indefinitely.",
         model="anthropic/test",
         actor_environment={
@@ -412,7 +505,7 @@ async def test_process_exit_during_prompt_is_a_failed_session(tmp_path: Path) ->
     result = await run_prime_acp_session(
         actor_workspace=actor_workspace,
         evidence_directory=evidence,
-        skill_directory=skill,
+        skill_directories=(skill,),
         instruction="Act.",
         model="anthropic/test",
         actor_environment={
@@ -494,7 +587,7 @@ async def test_macos_sandboxed_acp_run_is_benchmark_valid(tmp_path: Path) -> Non
     result = await run_prime_acp_session(
         actor_workspace=actor_workspace,
         evidence_directory=evidence,
-        skill_directory=skill,
+        skill_directories=(skill,),
         instruction="End the turn.",
         model="anthropic/test",
         actor_environment={

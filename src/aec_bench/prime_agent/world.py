@@ -56,6 +56,11 @@ if TYPE_CHECKING:
 WORLD_ACTOR_SOCKET_ENV = "AEC_BENCH_WORLD_ACTOR_SOCKET"
 WORLD_ACTOR_CAPABILITY_ENV = "AEC_BENCH_WORLD_ACTOR_CAPABILITY_TOKEN"
 _MAX_MESSAGE_BYTES = 1024 * 1024
+PUMP_STATION_GUIDANCE_INSTRUCTION = (
+    "Before your first world action, load and follow the full `pump-station-guidance` skill. "
+    "Keep its compact state and exact action ledger throughout the episode. "
+    "Use its references when they help the current decision."
+)
 
 
 class PrimeWorldActorProxyError(RuntimeError):
@@ -408,15 +413,18 @@ class PrimeWorldActorProxy:
 def install_aec_world_skill(actor_workspace: Path) -> Path:
     """Install the packaged skill and importable client into one isolated actor workspace."""
     actor_workspace = actor_workspace.resolve()
-    source = Path(__file__).with_name("skills") / "aec-world"
-    skill_directory = actor_workspace / ".prime-skills" / "aec-world"
     package_directory = actor_workspace / "aec_world"
-    if skill_directory.exists() or package_directory.exists():
-        raise PrimeWorldActorProxyError("aec-world skill destination already exists")
-    skill_directory.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(source, skill_directory)
+    if package_directory.exists():
+        raise PrimeWorldActorProxyError("aec-world package destination already exists")
+    skill_directory = _install_packaged_skill(actor_workspace, "aec-world")
+    source = _packaged_skill_source("aec-world")
     shutil.copytree(source / "src" / "aec_world", package_directory)
     return skill_directory
+
+
+def install_pump_station_guidance_skill(actor_workspace: Path) -> Path:
+    """Install the packaged Markdown guidance into one isolated actor workspace."""
+    return _install_packaged_skill(actor_workspace.resolve(), "pump-station-guidance")
 
 
 async def run_prime_pump_world_session(
@@ -429,6 +437,7 @@ async def run_prime_pump_world_session(
     model: str,
     isolation: PrimeAcpIsolation,
     limits: PrimeWorldSessionLimits,
+    pump_station_guidance: bool = False,
     executable: str = "prime-agent",
     environment: Mapping[str, str] | None = None,
 ) -> PrimePumpWorldRun:
@@ -440,7 +449,11 @@ async def run_prime_pump_world_session(
         raise PrimeWorldActorProxyError("actor workspace must be separate from host world and evidence paths")
     actor_workspace.mkdir(parents=True, exist_ok=True)
     evidence_directory.mkdir(parents=True, exist_ok=False)
-    skill_directory = install_aec_world_skill(actor_workspace)
+    skill_directories = [install_aec_world_skill(actor_workspace)]
+    prime_instruction = instruction
+    if pump_station_guidance:
+        skill_directories.append(install_pump_station_guidance_skill(actor_workspace))
+        prime_instruction = instruction.rstrip() + "\n\n" + PUMP_STATION_GUIDANCE_INSTRUCTION + "\n"
     actor_transport_file = evidence_directory / "world-actor-transport.jsonl"
     proxy = PrimeWorldActorProxy(
         world_run_directory=world_run_directory,
@@ -453,8 +466,8 @@ async def run_prime_pump_world_session(
         prime = await run_prime_acp_session(
             actor_workspace=actor_workspace,
             evidence_directory=evidence_directory,
-            skill_directory=skill_directory,
-            instruction=instruction,
+            skill_directories=tuple(skill_directories),
+            instruction=prime_instruction,
             model=model,
             actor_environment=proxy.connection_environment(),
             isolation=isolation,
@@ -543,6 +556,23 @@ def _paths_overlap(first: Path, second: Path) -> bool:
     first = first.resolve()
     second = second.resolve()
     return first == second or first in second.parents or second in first.parents
+
+
+def _packaged_skill_source(name: str) -> Path:
+    source = Path(__file__).with_name("skills") / name
+    if not source.is_dir():
+        raise PrimeWorldActorProxyError(f"packaged Prime skill is missing: {name}")
+    return source
+
+
+def _install_packaged_skill(actor_workspace: Path, name: str) -> Path:
+    source = _packaged_skill_source(name)
+    skill_directory = actor_workspace / ".prime-skills" / name
+    if skill_directory.exists():
+        raise PrimeWorldActorProxyError(f"Prime skill destination already exists: {name}")
+    skill_directory.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, skill_directory)
+    return skill_directory
 
 
 def _safe_operation(value: Any) -> str | None:
