@@ -279,6 +279,7 @@ async def run_prime_acp_session(
     )
     command = list(base_command)
     sandbox_profile: Path | None = None
+    benchmark_isolation = isolation is PrimeAcpIsolation.MACOS_SANDBOX
     if isolation is PrimeAcpIsolation.MACOS_SANDBOX:
         if sys.platform != "darwin" or not Path("/usr/bin/sandbox-exec").is_file():
             raise PrimeAcpIsolationError("benchmark-valid Prime execution requires macOS sandbox-exec")
@@ -496,12 +497,7 @@ async def run_prime_acp_session(
         session_state=session_state,
         stop_reason=stop_reason,
         timed_out=timed_out,
-        benchmark_valid=(
-            isolation is PrimeAcpIsolation.MACOS_SANDBOX
-            and session_state != "failed"
-            and error is None
-            and usage.complete
-        ),
+        benchmark_valid=(benchmark_isolation and session_state != "failed" and error is None and usage.complete),
         isolation=isolation,
         updates=tuple(updates),
         error=error,
