@@ -194,6 +194,24 @@ await run_prime_pump_world_session(
 )
 ```
 
+The complete pump journey entry point is
+`aec_bench.prime_agent.world_journey.run_prime_pump_world_journey`. It reuses
+the bounded session runner. When Prime reaches an Operations boundary, the host
+closes Prime, applies at most one deterministic task-owned control, and starts a
+fresh ACP session at the exact new snapshot. All sessions use the same actor
+workspace and actor tenure, so Prime can continue from its own ledger and files.
+Prime runtime state is new for each session. World files, host-control details,
+and verifier data do not enter the actor workspace. An LLM does not choose or
+apply the host control.
+
+`PrimeJourneyLimits` applies one set of emergency limits to the complete
+journey. Each fresh session receives only the remaining world-action,
+model-call, token, cost, and wall-time allowance. A host control can follow only
+a clean Prime `end_turn` with no reached limit. The host writes a private atomic
+checkpoint before it applies a control. If the process stops after the world
+records that control, call the same entry point with `resume=True`; the world
+repository returns the exact durable result instead of applying it twice.
+
 Guided installs `aec-world` followed by `pump-station-guidance` and tells Prime
 to load the second skill before its first world action. The guidance teaches
 compact state, exact action accounting, rejection interpretation, and
@@ -202,9 +220,9 @@ world action, ledger append, compact-state update, and selected output in one
 notebook cell. It does not expose or coach Prime against host-side execution
 limits, and it does not contain a fixed plan, action sequence, or current
 instance solution. It is validated only against the current registered profile
-until a second profile supplies cross-profile evidence. Callers must also
-supply a `PrimeWorldSessionLimits` value with positive world-action, model-call,
-token, cost, and wall-clock emergency limits.
+until a second profile supplies cross-profile evidence. Bounded-session callers
+supply `PrimeWorldSessionLimits`. Journey callers supply `PrimeJourneyLimits`,
+which also limits session and host-control counts.
 
 Inside Prime, the available world calls are:
 

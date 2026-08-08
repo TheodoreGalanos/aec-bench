@@ -11,7 +11,7 @@ import shutil
 import socketserver
 import tempfile
 import threading
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -415,7 +415,10 @@ def install_aec_world_skill(actor_workspace: Path) -> Path:
     actor_workspace = actor_workspace.resolve()
     package_directory = actor_workspace / "aec_world"
     if package_directory.exists():
-        raise PrimeWorldActorProxyError("aec-world package destination already exists")
+        package_source = _packaged_skill_source("aec-world") / "src" / "aec_world"
+        if not _installed_tree_matches(package_source, package_directory):
+            raise PrimeWorldActorProxyError("aec-world package destination already exists with different content")
+        return _install_packaged_skill(actor_workspace, "aec-world")
     skill_directory = _install_packaged_skill(actor_workspace, "aec-world")
     source = _packaged_skill_source("aec-world")
     shutil.copytree(source / "src" / "aec_world", package_directory)
@@ -437,6 +440,8 @@ async def run_prime_pump_world_session(
     model: str,
     isolation: PrimeAcpIsolation,
     limits: PrimeWorldSessionLimits,
+    prime_runtime_directory: Path | None = None,
+    additional_private_paths: Sequence[Path] = (),
     pump_station_guidance: bool = False,
     executable: str = "prime-agent",
     environment: Mapping[str, str] | None = None,
@@ -472,7 +477,8 @@ async def run_prime_pump_world_session(
             actor_environment=proxy.connection_environment(),
             isolation=isolation,
             limits=limits.acp_limits(),
-            private_paths=(world_run_directory, evidence_directory),
+            runtime_directory=prime_runtime_directory,
+            private_paths=(world_run_directory, evidence_directory, *additional_private_paths),
             executable=executable,
             environment=environment,
         )
@@ -569,10 +575,30 @@ def _install_packaged_skill(actor_workspace: Path, name: str) -> Path:
     source = _packaged_skill_source(name)
     skill_directory = actor_workspace / ".prime-skills" / name
     if skill_directory.exists():
-        raise PrimeWorldActorProxyError(f"Prime skill destination already exists: {name}")
+        if not _installed_tree_matches(source, skill_directory):
+            raise PrimeWorldActorProxyError(f"Prime skill destination already exists with different content: {name}")
+        return skill_directory
     skill_directory.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source, skill_directory)
     return skill_directory
+
+
+def _installed_tree_matches(source: Path, destination: Path) -> bool:
+    if not destination.is_dir() or destination.is_symlink():
+        return False
+    if any(path.is_symlink() for path in destination.rglob("*")):
+        return False
+    expected = {
+        path.relative_to(source): path.read_bytes()
+        for path in source.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    }
+    installed = {path.relative_to(destination): path for path in destination.rglob("*") if path.is_file()}
+    if any(relative not in expected and "__pycache__" not in relative.parts for relative in installed):
+        return False
+    return all(
+        relative in installed and installed[relative].read_bytes() == content for relative, content in expected.items()
+    )
 
 
 def _safe_operation(value: Any) -> str | None:

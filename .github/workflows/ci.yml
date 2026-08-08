@@ -135,3 +135,62 @@ jobs:
           uv run mypy
           src/aec_bench/task_world_templates/hydraulics/
           src/aec_bench/task_world_templates/lifecycles/
+
+  prime-world-journey:
+    name: Prime world journey
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install locked Prime Agent dependencies
+        run: uv sync --frozen --extra prime-agent
+
+      - name: Run Prime world journey tests
+        run: >-
+          uv run pytest -q
+          tests/prime_agent/test_acp.py
+          tests/prime_agent/test_world.py
+          tests/prime_agent/test_world_journey.py
+          tests/task_world_templates/stewardship/wastewater_pump_station/test_bound_root_control_interface_envelope.py
+          tests/task_world_templates/stewardship/wastewater_pump_station/test_host_continuation.py
+          tests/task_world_templates/stewardship/wastewater_pump_station/test_reference_controller.py
+          tests/task_world_templates/stewardship/wastewater_pump_station/test_reference_system_journey.py
+          tests/task_world_templates/stewardship/wastewater_pump_station/test_root_control_capability_authority.py
+
+      - name: Check Prime world journey formatting
+        run: >-
+          uv run ruff format --check
+          src/aec_bench/prime_agent/acp.py
+          src/aec_bench/prime_agent/pump_journey_evidence.py
+          src/aec_bench/prime_agent/world.py
+          src/aec_bench/prime_agent/world_journey.py
+          src/aec_bench/task_world_templates/stewardship/wastewater_pump_station/host_continuation.py
+          tests/prime_agent/test_acp.py
+          tests/prime_agent/test_world.py
+          tests/prime_agent/test_world_journey.py
+          tests/task_world_templates/stewardship/wastewater_pump_station/test_host_continuation.py
+
+      - name: Check Prime world journey strict types
+        run: >-
+          uv run mypy
+          src/aec_bench/prime_agent/acp.py
+          src/aec_bench/prime_agent/pump_journey_evidence.py
+          src/aec_bench/prime_agent/world.py
+          src/aec_bench/prime_agent/world_journey.py
+          src/aec_bench/task_world_templates/stewardship/wastewater_pump_station/host_continuation.py
+          tests/prime_agent/test_acp.py
+          tests/prime_agent/test_world.py
+          tests/prime_agent/test_world_journey.py
+          tests/task_world_templates/stewardship/wastewater_pump_station/test_host_continuation.py

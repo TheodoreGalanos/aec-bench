@@ -164,21 +164,58 @@ records malformed, unauthorized, and transport-level attempts using only a
 safe operation label. It excludes the capability secret, endpoint and
 repository paths, arbitrary malformed payload content, and hidden state.
 
-Prime HOME and XDG paths are trial-local under the actor workspace. The
-normalized Prime run evidence records configured limits, aggregate usage and
-cost, root/child session counts, refinement status counts, and any limit that
-ended the prompt. Unknown ACP metadata remains in the raw ACP evidence.
+Prime HOME and XDG paths are trial-local under the actor workspace. A bounded
+session has one Prime runtime. A pump journey uses the same actor workspace for
+all actor-owned files, but gives every segment a fresh Prime runtime and ACP
+connection. The normalized Prime evidence records configured safeguards,
+aggregate usage and cost, root/child session counts, refinement status counts,
+and any safeguard that ended the prompt. Unknown ACP metadata remains in the
+raw ACP evidence.
 
-The current Prime composition is one bounded actor continuation. It invokes the
-task-owned pump evaluator with `evaluation_scope="bounded_continuation"`
-because Operations boundary reviews remain host controls and are not available
-through the Prime actor capability. The bounded scope changes only the
-terminal-stewardship availability gate. Verification, conservation, authority,
-evidence, and liability checks remain unchanged, and closing liabilities remain
-in the result. Evaluation validity therefore does not convert an active world
-or an incomplete or interrupted Prime session into a completed one. A
-`complete_journey` Prime treatment requires explicit host-owned control
-orchestration outside the composite actor principal.
+Journey safeguards cover the whole journey: session and host-control counts,
+world actions, model calls, tokens, provider cost, and elapsed wall time. A new
+Prime session receives only the remaining allowance. Completed response
+accounting can cross a token or cost limit, but that journey stops before any
+host control or later Prime session.
+
+The bounded Prime composition still runs one actor continuation and invokes the
+task-owned pump evaluator with `evaluation_scope="bounded_continuation"`.
+Operations reviews remain outside the Prime actor capability.
+
+The pump journey composition alternates bounded actor sessions with at most one
+task-owned Operations review. Prime is closed before the host selects or applies
+a control. The pump host policy reads the current canonical state, returns one
+exact bound control or no control, and does not call evaluation. The existing
+control implementation remains responsible for authority, accepted evidence,
+stale-state, restriction matching, and exact-retry checks. After a changing
+control, the next Prime segment opens with `RESUME` at the exact result snapshot.
+All segments keep the same actor tenure and form one composite actor principal.
+Only actor-owned workspace files and the next normal actor observation carry
+information between segments; host state, control payloads, and verifier data do
+not enter the actor workspace or continuation prompt.
+
+Host continuation is permitted only after Prime returns a clean `end_turn`, no
+Prime or host limit is reached, the actor-action limit remains open, and replay
+is valid. Cancellation, `max_tokens`, `max_turn_requests`, provider failure,
+protocol failure, incomplete session evidence, and an actor-action limit stop
+the journey without a host action.
+
+Before one selected host control, the coordinator atomically records its stable
+request identity and parent snapshot in a private checkpoint. On explicit
+resume, it reproduces the request from the unchanged parent or the canonical
+committed command. The world repository then applies, recovers, or exactly
+retries that request. The checkpoint records the canonical receipt and result
+snapshot before another Prime session starts. It contains no control payload,
+authority secret, host path, or hidden world state. A checkpoint that shows an
+unclosed Prime session cannot resume automatically.
+
+The task-owned pump status is separate from Prime session state and evaluation
+validity. The journey uses `evaluation_scope="complete_journey"` only after the
+pump status reports completion and canonical replay and verification pass. If
+the world remains active and no deterministic host control is eligible, the
+journey stops incomplete. It does not ask an LLM to choose a host control or
+silently start another actor session. Private emergency safeguards can stop a
+journey, but they cannot make it complete.
 
 Same-user Prime execution is development-only and cannot produce
 benchmark-valid evidence. The current benchmark-valid local path uses a macOS
@@ -196,6 +233,12 @@ completion and failure facts; `CostRecord` owns aggregate usage and estimated
 cost. Public reports select fields from these authorities rather than exposing
 state, verifier paths, provider configuration, or recovery data.
 
+`prime-world-journey.json` records the policy digest, journey safeguards,
+ordered session evidence, exact session-to-control-to-snapshot lineage, totals,
+and final status. Per-session evidence remains separate. The private journey
+checkpoint supports restart and does not replace the final manifest or world
+repository.
+
 | Entry point | Behaviour |
 | --- | --- |
 | Python catalogue | Resolve current build and profile registration. |
@@ -203,6 +246,7 @@ state, verifier paths, provider configuration, or recovery data.
 | `control-interface` | Invoke pump controls or explicit rollout composition. |
 | Harbor agent and import | Use the concrete pump transport and evaluator. |
 | Prime ACP Python entry | Run one Open or explicitly Guided Prime session against one scoped pump actor proxy. |
+| Prime pump journey Python entry | Compose bounded Prime sessions with exact task-owned host continuation until the pump world completes or cannot advance. |
 
 The boundary fails closed for unknown build or profile identity, stale
 decisions, unavailable actions, unauthorized controls, invalid rollout
@@ -218,6 +262,8 @@ successful transition or evaluation.
 - [separate-process actor resolution](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_actor_interface_transport_e2e.py)
 - [pump retry and recovery](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_registered_world_run_transitions.py)
 - [Prime actor proxy and world composition](../../tests/prime_agent/test_world.py)
+- [Prime pump journey composition](../../tests/prime_agent/test_world_journey.py)
+- [pump host continuation policy](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_host_continuation.py)
 - [Prime ACP lifecycle and isolation](../../tests/prime_agent/test_acp.py)
 - [Prime treatment and trajectory analysis](../../tests/prime_agent/test_trajectory.py)
 - [Harbor import](../../tests/harness/test_stewardship_harbor_import.py)
