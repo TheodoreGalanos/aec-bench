@@ -17,6 +17,7 @@ from typing import Any, cast
 import pytest
 
 from aec_bench.contracts.world_session import (
+    StewardshipStateSnapshotRef,
     WorldSessionExecutionKind,
     WorldSessionOpenMode,
     WorldSessionRequest,
@@ -27,6 +28,7 @@ from aec_bench.prime_agent.world import (
     WORLD_ACTOR_CAPABILITY_ENV,
     WORLD_ACTOR_SOCKET_ENV,
     PrimeWorldActorProxy,
+    PrimeWorldActorProxyError,
     PrimeWorldSessionLimits,
     install_aec_world_skill,
     install_pump_station_guidance_skill,
@@ -34,6 +36,9 @@ from aec_bench.prime_agent.world import (
 )
 from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
     PUMP_STATION_TASK_WORLD_ID,
+)
+from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
+    PumpStationWorldRunRepository,
 )
 
 
@@ -73,6 +78,20 @@ def _raw_call(socket_path: str, payload: dict[str, Any]) -> dict[str, Any]:
         client.sendall(json.dumps(payload).encode("utf-8") + b"\n")
         response = client.makefile("rb").readline()
     return cast(dict[str, Any], json.loads(response))
+
+
+def test_reused_world_skill_rejects_nested_symbolic_links(tmp_path: Path) -> None:
+    workspace = tmp_path / "actor-workspace"
+    workspace.mkdir()
+    install_aec_world_skill(workspace)
+    package_file = workspace / "aec_world" / "__init__.py"
+    matching_file = workspace / "matching.py"
+    matching_file.write_bytes(package_file.read_bytes())
+    package_file.unlink()
+    package_file.symlink_to(matching_file)
+
+    with pytest.raises(PrimeWorldActorProxyError, match="different content"):
+        install_aec_world_skill(workspace)
 
 
 @pytest.mark.asyncio
@@ -365,6 +384,74 @@ async def test_explicit_guided_treatment_adds_only_the_ordered_skill_and_instruc
     assert all(argument not in serialized_provenance for argument in skill_arguments)
     assert result.verification.valid
     assert result.evaluation.evaluation_scope == "bounded_continuation"
+
+
+@pytest.mark.asyncio
+async def test_repeated_prime_sessions_share_actor_files_but_not_prime_runtime(tmp_path: Path) -> None:
+    from tests.prime_agent.test_acp import _fake_prime_agent
+
+    actor_workspace = tmp_path / "actor"
+    world_directory = tmp_path / "private-world"
+    executable = str(_fake_prime_agent(tmp_path))
+    first_runtime = actor_workspace / ".prime-runtimes" / "segment-000"
+    first = await run_prime_pump_world_session(
+        actor_workspace=actor_workspace,
+        world_run_directory=world_directory,
+        evidence_directory=tmp_path / "host-evidence-000",
+        prime_runtime_directory=first_runtime,
+        session_request=_session_request(),
+        instruction="Advance the current world, then save your actor-owned state.",
+        model="anthropic/test",
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        limits=_limits(),
+        executable=executable,
+        environment={**os.environ, "FAKE_ACP_SCENARIO": "world", "FAKE_WORLD_REQUEST_ID": "segment-000-action"},
+    )
+    (actor_workspace / "state.json").write_text('{"retained":true}\n', encoding="utf-8")
+    first_observed = json.loads((actor_workspace / "observed-acp.json").read_text(encoding="utf-8"))
+
+    snapshot = PumpStationWorldRunRepository(world_directory).current_snapshot()
+    second_runtime = actor_workspace / ".prime-runtimes" / "segment-001"
+    second = await run_prime_pump_world_session(
+        actor_workspace=actor_workspace,
+        world_run_directory=world_directory,
+        evidence_directory=tmp_path / "host-evidence-001",
+        prime_runtime_directory=second_runtime,
+        session_request=WorldSessionRequest(
+            execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
+            open_mode=WorldSessionOpenMode.RESUME,
+            session_id="prime-session-001",
+            task_world_id=PUMP_STATION_TASK_WORLD_ID,
+            agent_tenure_id="prime-composite-actor",
+            run_id=snapshot.run_id,
+            episode_id=snapshot.episode_id,
+            world_branch_id=snapshot.world_branch_id,
+            start_snapshot=StewardshipStateSnapshotRef(
+                run_id=snapshot.run_id,
+                episode_id=snapshot.episode_id,
+                world_branch_id=snapshot.world_branch_id,
+                sequence=snapshot.sequence,
+                state_id=snapshot.state_id,
+                commit_id=snapshot.commit_id,
+            ),
+        ),
+        instruction="Continue from the actor-owned files and current observation.",
+        model="anthropic/test",
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        limits=_limits(),
+        executable=executable,
+        environment={**os.environ, "FAKE_ACP_SCENARIO": "world", "FAKE_WORLD_REQUEST_ID": "segment-001-action"},
+    )
+    second_observed = json.loads((actor_workspace / "observed-acp.json").read_text(encoding="utf-8"))
+
+    assert first.prime.session_state == second.prime.session_state == "ended"
+    assert first_observed["actor_state_exists"] is False
+    assert second_observed["actor_state_exists"] is True
+    assert Path(first_observed["home"]).is_relative_to(first_runtime)
+    assert Path(second_observed["home"]).is_relative_to(second_runtime)
+    assert first.prime.paths.state_dir != second.prime.paths.state_dir
+    assert first.prime.paths.session_dir != second.prime.paths.session_dir
+    assert (actor_workspace / "state.json").read_text(encoding="utf-8") == '{"retained":true}\n'
 
 
 @pytest.mark.asyncio

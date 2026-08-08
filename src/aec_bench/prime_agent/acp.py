@@ -108,10 +108,17 @@ class PrimeAcpRun:
     error: str | None
 
 
-def prime_acp_paths(actor_workspace: Path, evidence_directory: Path) -> PrimeAcpPaths:
+def prime_acp_paths(
+    actor_workspace: Path,
+    evidence_directory: Path,
+    *,
+    runtime_directory: Path | None = None,
+) -> PrimeAcpPaths:
     actor_workspace = actor_workspace.resolve()
     evidence_directory = evidence_directory.resolve()
-    prime_directory = actor_workspace / "logs" / "prime"
+    prime_directory = (
+        actor_workspace / "logs" / "prime" if runtime_directory is None else runtime_directory.resolve() / "prime"
+    )
     return PrimeAcpPaths(
         state_dir=prime_directory / "state",
         session_dir=prime_directory / "sessions",
@@ -198,6 +205,7 @@ async def run_prime_acp_session(
     actor_environment: Mapping[str, str],
     isolation: PrimeAcpIsolation,
     limits: PrimeAcpLimits,
+    runtime_directory: Path | None = None,
     private_paths: Sequence[Path] = (),
     executable: str = "prime-agent",
     environment: Mapping[str, str] | None = None,
@@ -207,6 +215,11 @@ async def run_prime_acp_session(
     acp_schema = importlib.import_module("acp.schema")
     actor_workspace = actor_workspace.resolve()
     evidence_directory = evidence_directory.resolve()
+    selected_runtime_directory = None if runtime_directory is None else runtime_directory.resolve()
+    if selected_runtime_directory is not None and (
+        selected_runtime_directory == actor_workspace or not selected_runtime_directory.is_relative_to(actor_workspace)
+    ):
+        raise PrimeAcpIsolationError("Prime runtime directory must be a child of the actor workspace")
     if any(directory.is_symlink() for directory in skill_directories):
         raise PrimeAcpIsolationError("Prime explicit skill directories must not be symbolic links")
     resolved_skill_directories = tuple(directory.resolve() for directory in skill_directories)
@@ -227,7 +240,11 @@ async def run_prime_acp_session(
         raise PrimeAcpIsolationError("host evidence directory must be outside the actor workspace")
 
     resolved_executable = resolve_prime_executable(executable)
-    paths = prime_acp_paths(actor_workspace, evidence_directory)
+    paths = prime_acp_paths(
+        actor_workspace,
+        evidence_directory,
+        runtime_directory=selected_runtime_directory,
+    )
     paths.state_dir.mkdir(parents=True, exist_ok=False)
     paths.session_dir.mkdir(parents=True, exist_ok=False)
     evidence_directory.mkdir(parents=True, exist_ok=True)
@@ -236,7 +253,11 @@ async def run_prime_acp_session(
 
     env = dict(os.environ if environment is None else environment)
     env.update(actor_environment)
-    runtime_home = actor_workspace / ".prime-runtime"
+    runtime_home = (
+        actor_workspace / ".prime-runtime"
+        if selected_runtime_directory is None
+        else selected_runtime_directory / "runtime-home"
+    )
     env.update(
         {
             "HOME": str(runtime_home / "home"),
@@ -258,6 +279,7 @@ async def run_prime_acp_session(
     )
     command = list(base_command)
     sandbox_profile: Path | None = None
+    benchmark_isolation = isolation is PrimeAcpIsolation.MACOS_SANDBOX
     if isolation is PrimeAcpIsolation.MACOS_SANDBOX:
         if sys.platform != "darwin" or not Path("/usr/bin/sandbox-exec").is_file():
             raise PrimeAcpIsolationError("benchmark-valid Prime execution requires macOS sandbox-exec")
@@ -475,12 +497,7 @@ async def run_prime_acp_session(
         session_state=session_state,
         stop_reason=stop_reason,
         timed_out=timed_out,
-        benchmark_valid=(
-            isolation is PrimeAcpIsolation.MACOS_SANDBOX
-            and session_state != "failed"
-            and error is None
-            and usage.complete
-        ),
+        benchmark_valid=(benchmark_isolation and session_state != "failed" and error is None and usage.complete),
         isolation=isolation,
         updates=tuple(updates),
         error=error,

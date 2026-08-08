@@ -50,6 +50,7 @@ Path("observed-acp.json").write_text(json.dumps({{
     "xdg_cache_home": os.environ.get("XDG_CACHE_HOME"),
     "xdg_config_home": os.environ.get("XDG_CONFIG_HOME"),
     "xdg_data_home": os.environ.get("XDG_DATA_HOME"),
+    "actor_state_exists": Path("state.json").is_file(),
 }}))
 scenario = os.environ.get("FAKE_ACP_SCENARIO", "success")
 session_dir = Path(sys.argv[sys.argv.index("--session-dir") + 1])
@@ -124,7 +125,7 @@ for line in sys.stdin:
                     "continue_operation",
                     {{"reason": "Advance the current world once."}},
                     decision_id=observation["decision_id"],
-                    request_id="fake-prime-world-action",
+                    request_id=os.environ.get("FAKE_WORLD_REQUEST_ID", "fake-prime-world-action"),
                 )
             asyncio.run(act())
         print(json.dumps({{
