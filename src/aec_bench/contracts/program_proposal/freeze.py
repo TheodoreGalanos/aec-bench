@@ -51,7 +51,7 @@ class ProposalFreezeBindings(Protocol):
 class ProposalFreeze(ContentAddressedModel):
     """Phase-neutral host freeze binding proposals to an optional evaluation cohort."""
 
-    schema_version: Literal["aecbench.evaluation-proposal-freeze.v2"] = "aecbench.evaluation-proposal-freeze.v2"
+    schema_version: Literal["aecbench.evaluation-proposal-freeze.v3"] = "aecbench.evaluation-proposal-freeze.v3"
     freeze_id: NonEmptyStr
     evaluation_plan_ref: EvaluationPlanRef
     evaluation_plan_candidate_manifest_sha256: str
@@ -59,7 +59,7 @@ class ProposalFreeze(ContentAddressedModel):
     structural_split_sha256: str
     selected_structural_item_sha256: str | None = None
     evaluation_cohort: EvaluationCohortBinding | None = None
-    selected_world_lineage_id: str
+    selected_review_lineage_id: str
     fixed_harness_sha256: str
     execution_profile_sha256: str | None = None
     operator_authority: OperatorAuthority
@@ -77,7 +77,7 @@ class ProposalFreeze(ContentAddressedModel):
     @field_validator(
         "evaluation_plan_candidate_manifest_sha256",
         "structural_split_sha256",
-        "selected_world_lineage_id",
+        "selected_review_lineage_id",
         "fixed_harness_sha256",
         "proposal_policy_sha256",
         "policy_checkpoint_sha256",

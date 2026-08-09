@@ -34,18 +34,18 @@ from aec_bench.contracts.harness_instance import (
 )
 from aec_bench.contracts.run_bundle import RunBundle
 from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext
+from aec_bench.harness.compilation import (
+    compile_execution_program,
+    compile_harness_instance,
+    compile_run_bundle,
+)
 from aec_bench.harness.execution_payload import (
     RuntimeExecutionAttestation,
     build_entrypoint_execution_bundle,
     execution_request_sha256,
 )
 from aec_bench.harness.harbor_dispatch import ENTRYPOINT_AGENT_RUNTIME_NAME
-from aec_bench.meta_harness.compilation import (
-    compile_execution_program,
-    compile_harness_instance,
-    compile_run_bundle,
-)
-from aec_bench.meta_harness.kernel_catalogue import (
+from aec_bench.harness.kernel_catalogue import (
     HarborBackend,
     KernelRuntimeRegistry,
     default_kernel_registry,

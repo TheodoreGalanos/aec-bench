@@ -1,4 +1,4 @@
-# ABOUTME: Computes SSC-03 drainage long-section, HGL, and road low-point metrics.
+# ABOUTME: Computes stormwater drainage long-section, HGL, and road low-point metrics.
 # ABOUTME: Combines pipe slope, Manning capacity, HGL, roadway spread, and equipment freeboard.
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def compute(
     allowable_spread_m: float,
     equipment_threshold_level_m: float,
 ) -> dict[str, float]:
-    """Compute deterministic SSC-03 road low-point HGL metrics."""
+    """Compute deterministic stormwater road low-point HGL metrics."""
     _require_positive(
         pipe_length_m=pipe_length_m,
         pipe_diameter_m=pipe_diameter_m,

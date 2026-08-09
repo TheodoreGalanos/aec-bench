@@ -1,5 +1,5 @@
 # ABOUTME: Imports canonical Harbor trial artifacts into generic TrialRecord contracts.
-# ABOUTME: Selects the two current execution-specific evidence readers directly.
+# ABOUTME: Accepts bounded-context evidence through one optional loader boundary.
 
 from __future__ import annotations
 
@@ -40,42 +40,23 @@ from aec_bench.harness.harbor_contract import (
     HarborTrialResult,
     read_harbor_trial_result,
 )
-from aec_bench.harness.harbor_dispatch import (
-    MORPH_BACKEND,
-    MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH,
-)
 from aec_bench.harness.harbor_importing.artifact_io import (
     normalize_artifact_path,
 )
 from aec_bench.harness.harbor_importing.contracts import (
     HarborImportError,
+    HarborImportEvidence,
+    HarborImportEvidenceLoader,
     ImportEvidenceContext,
     ImportEvidenceIntent,
-    execution_kind_from_context,
 )
 from aec_bench.harness.harbor_importing.output_commit import (
     verify_output_commit,
-)
-from aec_bench.harness.harbor_importing.proposal_evidence.api import (
-    load_proposal_import_evidence_for_context,
-)
-from aec_bench.harness.harbor_importing.proposal_evidence.contracts import (
-    PROPOSAL_EXECUTION_KIND,
-    ProposalHarborImportEvidence,
-)
-from aec_bench.harness.harbor_importing.stewardship import (
-    StewardshipHarborImportEvidence,
-    load_stewardship_import_evidence,
-)
-from aec_bench.harness.pump_station_harbor.export import (
-    PUMP_STATION_HARBOR_EXECUTION_KIND,
 )
 from aec_bench.harness.verifier_artifacts import (
     read_verifier_artifacts,
 )
 from aec_bench.tasks.loader import load_task_definition
-
-type HarborImportEvidence = ProposalHarborImportEvidence | StewardshipHarborImportEvidence
 
 
 @dataclass(frozen=True)
@@ -119,6 +100,7 @@ def import_harbor_job(
     repo_root: Path,
     experiment_id: str | None = None,
     dataset_id: str | None = None,
+    evidence_loader: HarborImportEvidenceLoader | None = None,
 ) -> list[TrialRecord]:
     """Import every canonical trial directory beneath one Harbor job."""
 
@@ -133,6 +115,7 @@ def import_harbor_job(
             repo_root=repo_root,
             experiment_id=experiment_id,
             dataset_id=dataset_id,
+            evidence_loader=evidence_loader,
         )
         for trial_dir in trial_dirs
     ]
@@ -171,6 +154,7 @@ def import_harbor_trial(
     repo_root: Path,
     experiment_id: str | None = None,
     dataset_id: str | None = None,
+    evidence_loader: HarborImportEvidenceLoader | None = None,
 ) -> TrialRecord:
     """Import one Harbor trial and any selected execution-kind evidence."""
 
@@ -186,6 +170,7 @@ def import_harbor_trial(
     import_evidence = _load_import_evidence(
         context=context,
         intent=ImportEvidenceIntent.TRIAL_RECORD,
+        evidence_loader=evidence_loader,
     )
     artifacts = _collect_trial_artifacts(context.trial_dir)
     expected_output_path = normalize_workspace_path(
@@ -277,13 +262,21 @@ def _load_import_evidence(
     *,
     context: ImportEvidenceContext,
     intent: ImportEvidenceIntent,
+    evidence_loader: HarborImportEvidenceLoader | None,
 ) -> HarborImportEvidence | None:
-    execution_kind = execution_kind_from_context(context)
-    if execution_kind == PROPOSAL_EXECUTION_KIND:
-        return load_proposal_import_evidence_for_context(context=context, intent=intent)
-    if execution_kind == PUMP_STATION_HARBOR_EXECUTION_KIND:
-        return load_stewardship_import_evidence(context=context, intent=intent)
-    return None
+    configuration = context.harbor_result.config.agent.kwargs
+    has_execution_kind = "execution_kind" in configuration
+    execution_kind = configuration.get("execution_kind")
+    if has_execution_kind and (not isinstance(execution_kind, str) or not execution_kind):
+        raise HarborImportError("Harbor execution_kind must be a non-empty string")
+    if evidence_loader is None:
+        if has_execution_kind:
+            raise HarborImportError(f"Harbor execution kind {execution_kind!r} requires an evidence loader")
+        return None
+    evidence = evidence_loader(context=context, intent=intent)
+    if has_execution_kind and evidence is None:
+        raise HarborImportError(f"evidence loader does not support Harbor execution kind {execution_kind!r}")
+    return evidence
 
 
 def _collect_trial_artifacts(
@@ -826,8 +819,6 @@ def _compute_backend(
     raw_backend = environment.kwargs.get("compute_backend")
     if isinstance(raw_backend, str) and raw_backend:
         return raw_backend
-    if environment.import_path == MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH:
-        return MORPH_BACKEND
     raise HarborImportError(
         "unable to resolve compute backend from Harbor result",
     )

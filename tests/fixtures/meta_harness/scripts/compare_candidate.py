@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from aec_bench.meta_harness.recipe import comparison_cli
+from aec_bench.experimentation.qualification.recipe import comparison_cli
 
 if __name__ == "__main__":
     raise SystemExit(comparison_cli())

@@ -36,12 +36,12 @@ output paths have been reviewed.
 
 ## 3. Fixed-K candidate search
 
-Use a strict, preregistered `FactorialExperimentSpec` when comparing fixed and
+Use a strict, preregistered `HarnessProgramStudySpec` when comparing fixed and
 candidate harnesses under matched budgets:
 
 ```bash
-uv run python -m aec_bench.meta_harness.factorial_experiment_cli \
-  --spec factorial-experiment.json \
+uv run python -m aec_bench.experimentation.qualification.harness_program_study_cli \
+  --spec harness-program-study.json \
   --project-root . \
   --repo-root . \
   --tasks-root tasks
@@ -55,14 +55,14 @@ declared by the spec. It has no implicit demo or mock execution mode.
 Run a preregistered paired repair:
 
 ```bash
-uv run python -m aec_bench.meta_harness.repair_cli \
+uv run python -m aec_bench.experimentation.qualification.repair_cli \
   --spec repair.json
 ```
 
 Run a complete adaptive cycle:
 
 ```bash
-uv run python -m aec_bench.meta_harness.adaptive_cycle_cli \
+uv run python -m aec_bench.experimentation.qualification.adaptive_cycle_cli \
   --spec adaptive-cycle.json
 ```
 

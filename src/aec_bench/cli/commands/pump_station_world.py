@@ -22,29 +22,29 @@ from aec_bench.contracts.continual_world import (
 )
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.contracts.world_interface import WorldActorActionRequest, WorldControlRequest
-from aec_bench.task_world_templates.continual.rollout_control import ContinualRolloutControl
-from aec_bench.task_world_templates.continual_catalogue import default_continual_world_catalogue
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_rollout_adapter import (
+from aec_bench.worlds.catalogue import default_continual_world_catalogue
+from aec_bench.worlds.runtime.rollout_control import ContinualRolloutControl
+from aec_bench.worlds.stewardship.wastewater_pump_station.continual_rollout_adapter import (
     PumpStationContinualWorldBranchPort,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import PumpStationEpisodeHost
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evaluation import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import PumpStationEpisodeHost
+from aec_bench.worlds.stewardship.wastewater_pump_station.evaluation import (
     evaluate_pump_station_reference_run,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_models import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.stewardship_models import (
     PumpStationBoundControlRequest,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationCoupledVerificationReport,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_control import PumpStationWorldControl
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.world_control import PumpStationWorldControl
+from aec_bench.worlds.stewardship.wastewater_pump_station.world_run import (
     PumpStationWorldRun,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
 )
 
@@ -259,7 +259,7 @@ def export_harbor_command(
     from aec_bench.harness.pump_station_harbor.export import (
         export_pump_station_harbor_task,
     )
-    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
+    from aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition import (
         pump_station_continual_world_definition,
     )
 
@@ -330,6 +330,7 @@ def run_harbor_command(
     extra = "execution,morph" if backend == "morph" else "execution"
     modules = ("harbor", "morphcloud") if backend == "morph" else ("harbor",)
     require_optional_extra("Harbor execution support", extra, modules)
+    from aec_bench.cli.harbor_environment import resolve_harbor_environment_binding
     from aec_bench.harness.pump_station_harbor.job import (
         run_pump_station_harbor_job,
     )
@@ -343,6 +344,7 @@ def run_harbor_command(
         backend=backend,
         model_name=model,
         max_turns=max_turns,
+        environment_binding=resolve_harbor_environment_binding(backend),
         execute=execute,
     )
     errors = [] if result.exit_code in (None, 0) else [f"local Harbor job failed with exit code {result.exit_code}"]
@@ -384,6 +386,7 @@ def import_harbor_trial_command(
 
     require_optional_extra("Harbor execution support", "execution", ("harbor",))
     from aec_bench.harness.harbor_importing.core import import_harbor_trial
+    from aec_bench.harness.pump_station_harbor.importing import load_pump_station_import_evidence
 
     started = time.monotonic()
     if record_path.exists():
@@ -391,6 +394,7 @@ def import_harbor_trial_command(
     record = import_harbor_trial(
         trial_dir=trial_dir,
         repo_root=repo_root,
+        evidence_loader=load_pump_station_import_evidence,
     )
     record_path.parent.mkdir(parents=True, exist_ok=True)
     record_path.write_text(

@@ -1,5 +1,5 @@
 # ABOUTME: Supplies a public-tool-only reference agent for Harbor lifecycle integration tests.
-# ABOUTME: Derives SSC-03 submissions from staged tool outputs without hidden or verifier imports.
+# ABOUTME: Derives stormwater submissions from staged tool outputs without hidden or verifier imports.
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ import re
 from collections.abc import Callable
 from typing import Any, cast
 
-from aec_bench.adapters.base import AdapterRequest, AdapterResult
-from aec_bench.adapters.transcript import TranscriptEntry, TranscriptEvent, TranscriptRole, initialize_transcript
+from aec_bench.adapters.base import AdapterRequest, AdapterResult, initialize_transcript
+from aec_bench.contracts.adapter_execution import TranscriptEntry, TranscriptEvent, TranscriptRole
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from agents.entrypoint_agent import EntrypointAgent
 

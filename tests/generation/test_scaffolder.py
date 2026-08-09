@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.contracts.task_world import TaskWorldProfile
+from aec_bench.contracts.task_review import TaskReviewProfile
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.templates.registry import load_template
 
@@ -47,7 +47,7 @@ def test_scaffold_creates_directory_structure(tmp_path: Path) -> None:
     expected_files = [
         "task.toml",
         "instruction.md",
-        "world.json",
+        "task-review.json",
         "environment/Dockerfile",
         "environment/system_prompt.md",
         "tests/test.sh",
@@ -58,10 +58,10 @@ def test_scaffold_creates_directory_structure(tmp_path: Path) -> None:
     for rel in expected_files:
         assert (instance_dir / rel).exists(), f"Expected file missing: {rel}"
 
-    world = TaskWorldProfile.model_validate_json((instance_dir / "world.json").read_text(encoding="utf-8"))
-    assert world.world_id.startswith("aec_bench.generated.ground.")
-    assert world.task_unit == "generated-task-instance"
-    assert world.logic_profile.closure_gates
+    review = TaskReviewProfile.model_validate_json((instance_dir / "task-review.json").read_text(encoding="utf-8"))
+    assert review.profile_id.startswith("aec_bench.generated.ground.")
+    assert review.task_unit == "generated-task-instance"
+    assert review.logic_profile.closure_gates
 
 
 # ---------------------------------------------------------------------------

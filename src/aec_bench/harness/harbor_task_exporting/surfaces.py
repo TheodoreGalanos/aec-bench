@@ -10,8 +10,9 @@ from pathlib import Path
 from typing import cast
 
 from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec, LifecycleTaskMetadata
-from aec_bench.meta_harness.evidence_lifecycle import prepare_evidence_checkpoint
-from aec_bench.task_world_templates.compiled_world import CompiledWorldEnvelope
+from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver
+from aec_bench.lifecycles.compiled import CompiledLifecycleEnvelope
+from aec_bench.lifecycles.runtime.lifecycle import prepare_evidence_checkpoint
 
 from .constants import (
     BASE_IMAGE,
@@ -25,7 +26,11 @@ from .stable_io import RegularFileSnapshot, directory_sha256, snapshot_text
 def stage_initial_context(package_dir: Path, destination: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="aec-bench-harbor-initial-") as raw_run:
         run_dir = Path(raw_run) / "run"
-        initial = prepare_evidence_checkpoint(Path(package_dir), run_dir)
+        initial = prepare_evidence_checkpoint(
+            Path(package_dir),
+            run_dir,
+            operation_resolver=lifecycle_operation_resolver(Path(package_dir), run_dir),
+        )
         workspace = Path(cast(str, initial["workspace"]))
         destination.mkdir(parents=True)
         for source in sorted(workspace.iterdir()):
@@ -60,12 +65,12 @@ def validate_canonical_agent_surface(
             raise ValueError("Harbor canonical agent surface contains undeclared lifecycle context")
 
 
-def task_toml_text(*, metadata: LifecycleTaskMetadata, envelope: CompiledWorldEnvelope) -> str:
+def task_toml_text(*, metadata: LifecycleTaskMetadata, envelope: CompiledLifecycleEnvelope) -> str:
     variant = envelope.variant_id or "unversioned"
     domain = metadata.discipline
-    tags = sorted({"compiled-world", "evidence-lifecycle", domain.lower().replace(" ", "-")})
+    tags = sorted({"compiled-lifecycle", "evidence-lifecycle", domain.lower().replace(" ", "-")})
     return (
-        "# ABOUTME: Harbor task metadata for one content-pinned compiled lifecycle world.\n"
+        "# ABOUTME: Harbor task metadata for one content-pinned compiled lifecycle.\n"
         "# ABOUTME: Declares a host-owned bridge and Harbor-owned independent reward.\n"
         'version = "1.0"\n\n'
         "[metadata]\n"
@@ -74,7 +79,6 @@ def task_toml_text(*, metadata: LifecycleTaskMetadata, envelope: CompiledWorldEn
         f"tags = {json.dumps(tags)}\n"
         f"domain = {json.dumps(domain)}\n"
         f"source_template_id = {json.dumps(envelope.template_id)}\n"
-        f"source_world_id = {json.dumps(envelope.world_id)}\n"
         f"source_lifecycle_id = {json.dumps(envelope.lifecycle_id)}\n"
         f"source_variant_id = {json.dumps(variant)}\n"
         f"source_package_sha256 = {json.dumps(envelope.package_sha256)}\n"

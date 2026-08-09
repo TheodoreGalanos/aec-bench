@@ -1,7 +1,7 @@
-# ABOUTME: Provides the installed public-calibration example for the SSC-03 evidence lifecycle.
+# ABOUTME: Provides the installed public-calibration example for the stormwater evidence lifecycle.
 # ABOUTME: Supports provider-free plan review before a real model and execution paths are selected.
 schema_version: "1"
-experiment_id: ssc03-public-calibration
+experiment_id: stormwater-public-calibration
 lifecycle_template_id: drainage-model-evidence-lifecycle-review
 study_design:
   interpretation: descriptive_calibration
@@ -22,8 +22,8 @@ agents:
     parameters:
       max_turns_per_session: 60
 repetitions: 1
-output_root: artefacts/ssc03-public-calibration/runs
-ledger_root: artefacts/ssc03-public-calibration/ledger
+output_root: artefacts/stormwater-public-calibration/runs
+ledger_root: artefacts/stormwater-public-calibration/ledger
 limits:
   max_trials: 16
   max_concurrency: 1

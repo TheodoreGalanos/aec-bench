@@ -10,7 +10,14 @@ import tempfile
 from pathlib import Path
 from typing import Any, cast
 
-from aec_bench.meta_harness.evidence_lifecycle import (
+from aec_bench.experimentation.lifecycle_studies.experiment import repository_provenance
+from aec_bench.harness.lifecycle_local import (
+    EvidenceLifecycleControlTool,
+    EvidenceLifecycleWorkspaceTool,
+)
+from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver, lifecycle_package_variant, verify_lifecycle
+from aec_bench.lifecycles.runtime.episode import LifecycleVisibilityPolicy
+from aec_bench.lifecycles.runtime.lifecycle import (
     evidence_lifecycle_package_identity,
     fail_checkpoint_attempt,
     load_evidence_lifecycle_spec,
@@ -18,20 +25,13 @@ from aec_bench.meta_harness.evidence_lifecycle import (
     prepare_evidence_checkpoint,
     read_evidence_lifecycle_state,
 )
-from aec_bench.meta_harness.evidence_lifecycle_episode import LifecycleVisibilityPolicy
-from aec_bench.meta_harness.evidence_lifecycle_experiment import repository_provenance
-from aec_bench.meta_harness.evidence_lifecycle_local import (
-    EvidenceLifecycleControlTool,
-    EvidenceLifecycleWorkspaceTool,
-)
-from aec_bench.meta_harness.evidence_lifecycle_state import CheckpointAttemptStatus
+from aec_bench.lifecycles.runtime.state import CheckpointAttemptStatus
 from aec_bench.prime_lab.lifecycle_exporter import (
     PrimeLifecycleExportManifest,
     PrimeLifecyclePackageRecord,
     PrimeLifecycleSourceProvenance,
     load_prime_lifecycle_manifest,
 )
-from aec_bench.task_world_templates.lifecycles import lifecycle_package_variant, verify_lifecycle
 
 _SYSTEM_PROMPT = """You are completing one staged AEC evidence lifecycle in a single persistent interaction.
 Use only the lifecycle workspace and control tools. Review the currently released evidence, write the active
@@ -160,9 +160,14 @@ async def aec_bench_lifecycle_reward(state: dict[str, Any]) -> float:
     record = PrimeLifecyclePackageRecord.model_validate(state.get("lifecycle_package"))
     _assert_source_provenance(source)
     _assert_package_identity(record)
-    lifecycle = read_evidence_lifecycle_state(package_dir, run_dir)
+    operation_resolver = lifecycle_operation_resolver(package_dir, run_dir)
+    lifecycle = read_evidence_lifecycle_state(
+        package_dir,
+        run_dir,
+        operation_resolver=operation_resolver,
+    )
     if lifecycle["status"] != "complete":
-        _close_incomplete_attempt(package_dir, run_dir, lifecycle)
+        _close_incomplete_attempt(package_dir, run_dir, lifecycle, operation_resolver=operation_resolver)
         state["lifecycle_reward_status"] = "incomplete"
         state["aec_bench_reward"] = 0.0
         return 0.0
@@ -239,11 +244,17 @@ def _build_environment_type(
             temporary = tempfile.TemporaryDirectory(prefix="aec-prime-lifecycle-")
             run_dir = Path(temporary.name) / "run"
             package_dir = Path(record.package_dir)
+            operation_resolver = lifecycle_operation_resolver(package_dir, run_dir)
             try:
-                initial = prepare_evidence_checkpoint(package_dir, run_dir)
+                initial = prepare_evidence_checkpoint(
+                    package_dir,
+                    run_dir,
+                    operation_resolver=operation_resolver,
+                )
                 open_checkpoint_attempt(
                     package_dir,
                     run_dir,
+                    operation_resolver=operation_resolver,
                     session_id=session_id,
                     execution_mode="persistent_context",
                 )
@@ -259,11 +270,13 @@ def _build_environment_type(
             state["lifecycle_workspace_tool"] = EvidenceLifecycleWorkspaceTool(
                 package_dir=package_dir,
                 run_dir=run_dir,
+                operation_resolver=operation_resolver,
                 visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
             )
             state["lifecycle_control_tool"] = EvidenceLifecycleControlTool(
                 package_dir=package_dir,
                 run_dir=run_dir,
+                operation_resolver=operation_resolver,
                 session_id=session_id,
             )
 
@@ -393,7 +406,6 @@ def _assert_package_identity(record: PrimeLifecyclePackageRecord) -> None:
     actual = evidence_lifecycle_package_identity(package_dir)
     expected = {
         "lifecycle_id": record.lifecycle_id,
-        "world_id": record.world_id,
         "spec_sha256": record.lifecycle_spec_sha256,
         "package_sha256": record.package_sha256,
     }
@@ -407,7 +419,13 @@ def _assert_package_identity(record: PrimeLifecyclePackageRecord) -> None:
         raise ValueError(f"lifecycle package identity drift: {package_dir}")
 
 
-def _close_incomplete_attempt(package_dir: Path, run_dir: Path, lifecycle: dict[str, Any]) -> None:
+def _close_incomplete_attempt(
+    package_dir: Path,
+    run_dir: Path,
+    lifecycle: dict[str, Any],
+    *,
+    operation_resolver: Any,
+) -> None:
     active_checkpoint_id = lifecycle.get("active_checkpoint_id")
     if not isinstance(active_checkpoint_id, str):
         return
@@ -428,6 +446,7 @@ def _close_incomplete_attempt(package_dir: Path, run_dir: Path, lifecycle: dict[
         fail_checkpoint_attempt(
             package_dir,
             run_dir,
+            operation_resolver=operation_resolver,
             session_id=session_id,
             failure_kind="rollout_incomplete",
         )

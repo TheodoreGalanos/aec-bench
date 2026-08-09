@@ -153,8 +153,7 @@ def _verify_base(*, python: Path, cli: Path, work: Path, env: dict[str, str]) ->
 
     pump_probe = ";".join(
         (
-            "from aec_bench.task_world_templates.stewardship.wastewater_pump_station.coupled_runtime "
-            "import initial_state, observe",
+            "from aec_bench.worlds.stewardship.wastewater_pump_station.coupled_runtime import initial_state, observe",
             "state=initial_state()",
             "view=observe(state)",
             "assert view.calendar_seconds == state.calendar_seconds",

@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any, cast
 
-from aec_bench.meta_harness.evidence_lifecycle import read_evidence_lifecycle_state
+from aec_bench.lifecycles.runtime.lifecycle import read_evidence_lifecycle_state
 
 
 def main() -> None:

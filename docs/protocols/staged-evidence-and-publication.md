@@ -89,6 +89,32 @@ The host publishes request identity before execution and validates result bytes
 before accepting candidate output. Failed candidate submissions remain with
 their owning attempt.
 
+### Prime checkpoint execution
+
+The hydraulic-review Prime composition implements the fresh-context episode port. It
+starts one fresh Prime ACP process for each checkpoint and gives it one scoped
+Unix-socket endpoint. The endpoint privately owns the lifecycle package, run,
+checkpoint, session, operation resolver, socket, and capability.
+
+Prime can use only these actor operations:
+
+- inspect endpoint capabilities and the current public checkpoint state;
+- list and read actor-visible lifecycle files;
+- execute one declared lifecycle operation; and
+- offer one checkpoint submission.
+
+The offer is not a lifecycle submission. After a clean Prime end turn, the
+host validates the offered bytes, writes the canonical submission, and uses the
+existing lifecycle coordinator to advance. Prime cannot select a package, run,
+checkpoint, verifier, branch, evaluation, or host control. Aggregate session,
+model-call, token, cost, and wall-time limits apply to the complete lifecycle.
+They do not reset at a checkpoint.
+
+Same-user execution is development evidence only. Benchmark-valid execution
+requires process and file isolation which prevents Prime from reading the
+lifecycle repository or host controls outside the scoped endpoint. The Prime
+root process and its descendants form one composite actor principal.
+
 ## Publication and recovery
 
 Lifecycle state, attempts, conditional actions, submissions, snapshots, and
@@ -165,15 +191,18 @@ effect claim merely because candidate scores differ.
 Authoritative implementations include:
 
 - [`EvidenceCheckpointSpec` and `ConditionalEvidenceSpec`](../../src/aec_bench/contracts/evidence_lifecycle.py)
-- [lifecycle coordination and recovery](../../src/aec_bench/meta_harness/evidence_lifecycle.py)
-- [episode request/result boundary](../../src/aec_bench/meta_harness/evidence_lifecycle_episode.py)
-- [conditional-evidence publication](../../src/aec_bench/meta_harness/evidence_request_store.py)
-- [calibration freeze](../../src/aec_bench/meta_harness/evidence_lifecycle_calibration.py)
-- [lifecycle trial finalization](../../src/aec_bench/meta_harness/evidence_lifecycle_trial_record.py)
+- [lifecycle coordination and recovery](../../src/aec_bench/lifecycles/runtime/lifecycle.py)
+- [episode request/result boundary](../../src/aec_bench/lifecycles/runtime/episode.py)
+- [hydraulic-review Prime endpoint](../../src/aec_bench/harness/hydraulic_review_prime/endpoint.py)
+- [hydraulic-review Prime lifecycle composition](../../src/aec_bench/harness/hydraulic_review_prime/lifecycle.py)
+- [conditional-evidence publication](../../src/aec_bench/lifecycles/runtime/request_store.py)
+- [calibration freeze](../../src/aec_bench/experimentation/lifecycle_studies/calibration.py)
+- [lifecycle trial finalization](../../src/aec_bench/experimentation/lifecycle_studies/trial_record.py)
 
 Focused proof includes:
 
-- [lifecycle state, publication, request, retry, branch, and recovery tests](../../tests/meta_harness/test_evidence_lifecycle.py)
-- [episode boundary and attempt-recovery tests](../../tests/meta_harness/test_evidence_lifecycle_episode.py)
-- [calibration and freeze tests](../../tests/meta_harness/test_evidence_lifecycle_calibration.py)
+- [lifecycle state, publication, request, retry, branch, and recovery tests](../../tests/lifecycles/runtime/test_lifecycle.py)
+- [episode boundary and attempt-recovery tests](../../tests/lifecycles/runtime/test_episode.py)
+- [hydraulic-review Prime endpoint and lifecycle tests](../../tests/harness/hydraulic_review_prime/)
+- [calibration and freeze tests](../../tests/experimentation/lifecycle_studies/test_calibration.py)
 - [trial-record completeness and visibility tests](../../tests/contracts/test_trial_record.py)

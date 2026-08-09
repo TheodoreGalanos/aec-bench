@@ -5,7 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from aec_bench.adapters.transcript import TranscriptEntry
+from aec_bench.contracts.adapter_execution import TranscriptEntry
 from aec_bench.contracts.jsonl import write_jsonl
 
 

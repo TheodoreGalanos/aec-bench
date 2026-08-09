@@ -11,7 +11,6 @@ from aec_bench.contracts.synthesis import (
     SynthesisOutput,
 )
 from aec_bench.synthesis.prompts import build_full_prompt
-from aec_bench.synthesis.tool_loop import synthesise_via_tool_loop
 
 # Rough conservative chars-per-token ratio for English + structured prompts.
 # Used only for pre-flight budget checks; actual tokenisation happens at the
@@ -64,6 +63,8 @@ def synthesise(
             raise ValueError(
                 "tool_loop synthesis requires `model` (pydantic-ai compatible)",
             )
+        from aec_bench.synthesis.tool_loop import synthesise_via_tool_loop
+
         return synthesise_via_tool_loop(input, model=model)
     if client is None:
         raise ValueError("plain synthesis requires `client`")

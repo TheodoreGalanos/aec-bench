@@ -1,4 +1,4 @@
-# ABOUTME: Exercises SSC-03 Harbor Trial orchestration through the production lifecycle bridge.
+# ABOUTME: Exercises stormwater Harbor Trial orchestration through the production lifecycle bridge.
 # ABOUTME: Proves integration phase ordering and verifier ownership without container claims.
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from aec_bench.harness.harbor_task_export import (
     HARBOR_LIFECYCLE_BRIDGE_MODE,
     export_compiled_lifecycle_harbor_task,
 )
-from aec_bench.task_world_templates.compiled_world import compile_lifecycle
+from aec_bench.lifecycles.compiled import compile_lifecycle
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
@@ -35,10 +35,10 @@ def test_harbor_trial_orchestrates_public_bridge_then_independent_verifier(tmp_p
     )
     exported = export_compiled_lifecycle_harbor_task(
         compiled,
-        tmp_path / "tasks" / "civil" / "ssc03-hydraulic-interaction",
+        tmp_path / "tasks" / "civil" / "stormwater-hydraulic-interaction",
         project_root=REPO_ROOT,
     )
-    trial_name = "ssc03-public-bridge"
+    trial_name = "stormwater-public-bridge"
     config = TrialConfig.model_validate(
         {
             "task": {"path": str(exported.task_dir)},
@@ -127,7 +127,7 @@ def test_harbor_trial_orchestrates_public_bridge_then_independent_verifier(tmp_p
         "import pathlib",
         ".__self__",
         "package_dir",
-        "ssc03_hydraulic_interaction_smoke",
-        "ssc03_hydraulic_interaction_verifier",
+        "stormwater_hydraulic_interaction_smoke",
+        "stormwater_hydraulic_interaction_verifier",
     ):
         assert forbidden_reference_capability not in reference_source

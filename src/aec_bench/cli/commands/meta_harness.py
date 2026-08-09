@@ -14,31 +14,28 @@ import yaml
 
 from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import emit, print_success
-from aec_bench.meta_harness.autonomy import AutonomyConfig, run_autonomous_process
-from aec_bench.meta_harness.evidence_lifecycle import (
-    branch_evidence_lifecycle,
-    prepare_evidence_checkpoint,
-    read_evidence_lifecycle_state,
-    revisit_evidence_checkpoint,
-    submit_evidence_checkpoint,
-)
-from aec_bench.meta_harness.evidence_lifecycle_ablation import (
+from aec_bench.evaluation.logic_profile import evaluate_logic_profile
+from aec_bench.experimentation.lifecycle_studies.ablation import (
     inspect_lifecycle_ablation_plan,
     load_lifecycle_ablation_manifest,
     run_lifecycle_ablation,
 )
-from aec_bench.meta_harness.evidence_lifecycle_calibration import (
+from aec_bench.experimentation.lifecycle_studies.calibration import (
     LifecycleCalibrationFreeze,
     write_lifecycle_calibration_freeze,
 )
-from aec_bench.meta_harness.evidence_lifecycle_local import (
+from aec_bench.experimentation.lifecycle_studies.experiment import record_lifecycle_experiment
+from aec_bench.experimentation.qualification.recipe import (
+    materialize_harness_comparison_example,
+    materialize_harness_comparison_recipe,
+    run_harness_comparison_from_files,
+)
+from aec_bench.harness.lifecycle_local import (
     LifecycleVisibilityPolicy,
     run_local_evidence_lifecycle_fresh_context,
     run_local_evidence_lifecycle_session,
 )
-from aec_bench.meta_harness.harbor_task import materialize_harbor_task_package
-from aec_bench.meta_harness.logic_profile import evaluate_logic_profile
-from aec_bench.meta_harness.model_runner import (
+from aec_bench.harness.model_execution.model_runner import (
     build_intake_model_run_plan,
     build_operation_model_run_plan,
     build_review_model_run_plan,
@@ -53,20 +50,24 @@ from aec_bench.meta_harness.model_runner import (
     run_review_models,
     run_world_generation_models,
 )
-from aec_bench.meta_harness.operation_orchestrator import run_operation_orchestrator
-from aec_bench.meta_harness.operation_profile import apply_world_operation
-from aec_bench.meta_harness.recipe import (
-    materialize_harness_comparison_example,
-    materialize_harness_comparison_recipe,
-    run_harness_comparison_from_files,
-)
-from aec_bench.meta_harness.world_process import (
+from aec_bench.harness.process_runtime.autonomy import AutonomyConfig, run_autonomous_process
+from aec_bench.harness.process_runtime.harbor_task import materialize_harbor_task_package
+from aec_bench.harness.process_runtime.operation_orchestrator import run_operation_orchestrator
+from aec_bench.harness.process_runtime.operation_profile import apply_world_operation
+from aec_bench.harness.process_runtime.world_process import (
     apply_governance_decision,
     build_problem_brief_request,
     build_world_generation_request,
 )
-from aec_bench.meta_harness.world_runtime import run_process
-from aec_bench.task_world_templates.lifecycles import verify_lifecycle
+from aec_bench.harness.process_runtime.world_runtime import run_process
+from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver, verify_lifecycle
+from aec_bench.lifecycles.runtime.lifecycle import (
+    branch_evidence_lifecycle,
+    prepare_evidence_checkpoint,
+    read_evidence_lifecycle_state,
+    revisit_evidence_checkpoint,
+    submit_evidence_checkpoint,
+)
 
 app = typer.Typer(help="Run meta-harness intake, world, operation, and governance processes.")
 
@@ -78,7 +79,11 @@ def lifecycle_start_command(
 ) -> None:
     """Release the next lifecycle checkpoint into its persistent workspace."""
     start = time.monotonic()
-    result = prepare_evidence_checkpoint(package, run_dir)
+    result = prepare_evidence_checkpoint(
+        package,
+        run_dir,
+        operation_resolver=lifecycle_operation_resolver(package, run_dir),
+    )
     emit("meta-harness lifecycle-start", result, start_time=start)
 
 
@@ -89,7 +94,11 @@ def lifecycle_submit_command(
 ) -> None:
     """Accept the active checkpoint submission without releasing future evidence."""
     start = time.monotonic()
-    result = submit_evidence_checkpoint(package, run_dir)
+    result = submit_evidence_checkpoint(
+        package,
+        run_dir,
+        operation_resolver=lifecycle_operation_resolver(package, run_dir),
+    )
     emit("meta-harness lifecycle-submit", result, start_time=start)
 
 
@@ -100,7 +109,11 @@ def lifecycle_status_command(
 ) -> None:
     """Read lifecycle state without advancing or accepting a checkpoint."""
     start = time.monotonic()
-    result = read_evidence_lifecycle_state(package, run_dir)
+    result = read_evidence_lifecycle_state(
+        package,
+        run_dir,
+        operation_resolver=lifecycle_operation_resolver(package, run_dir),
+    )
     emit("meta-harness lifecycle-status", result, start_time=start)
 
 
@@ -116,6 +129,7 @@ def lifecycle_revisit_command(
     result = revisit_evidence_checkpoint(
         package,
         run_dir,
+        operation_resolver=lifecycle_operation_resolver(package, run_dir),
         checkpoint_id=checkpoint_id,
         reason=reason,
     )
@@ -137,6 +151,7 @@ def lifecycle_branch_command(
         package,
         parent_run_dir,
         branch_run_dir,
+        operation_resolver=lifecycle_operation_resolver(package, parent_run_dir),
         checkpoint_id=checkpoint_id,
         branch_id=branch_id,
         reason=reason,
@@ -165,6 +180,7 @@ def lifecycle_run_local_command(
 ) -> None:
     """Run all lifecycle checkpoints locally, persistent by default."""
     start = time.monotonic()
+    operation_resolver = lifecycle_operation_resolver(package, run_dir)
     if mode == "persistent":
         selected_visibility = _lifecycle_visibility_policy(
             visibility_policy or LifecycleVisibilityPolicy.PERSISTENT_CONTEXT.value
@@ -178,6 +194,8 @@ def lifecycle_run_local_command(
             process_id=process_id,
             verifier=verify_lifecycle,
             visibility_policy=selected_visibility,
+            operation_resolver=operation_resolver,
+            run_recorder=record_lifecycle_experiment,
         )
     elif mode == "fresh-context":
         selected_visibility = _lifecycle_visibility_policy(
@@ -192,6 +210,8 @@ def lifecycle_run_local_command(
             process_id=process_id,
             verifier=verify_lifecycle,
             visibility_policy=selected_visibility,
+            operation_resolver=operation_resolver,
+            run_recorder=record_lifecycle_experiment,
         )
     else:
         raise typer.BadParameter("mode must be 'persistent' or 'fresh-context'", param_hint="--mode")

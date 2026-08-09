@@ -34,7 +34,7 @@ from aec_bench.adapters.rlm.scaffolding import ScaffoldingState
 from aec_bench.adapters.rlm.scratchpad import Scratchpad
 from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.adapters.rlm.tokens import TokenTracker, TurnMetrics
-from aec_bench.adapters.transcript import TranscriptEntry
+from aec_bench.contracts.adapter_execution import TranscriptEntry
 from aec_bench.contracts.advisor import AdvisorConfig
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.constitution import ConstitutionManifest

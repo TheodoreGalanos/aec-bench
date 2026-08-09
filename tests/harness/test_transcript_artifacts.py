@@ -3,7 +3,7 @@
 
 from pathlib import Path
 
-from aec_bench.adapters.transcript import TranscriptEntry, TranscriptEvent, TranscriptRole
+from aec_bench.contracts.adapter_execution import TranscriptEntry, TranscriptEvent, TranscriptRole
 from aec_bench.harness.transcript_artifacts import write_transcript_artifact
 
 

@@ -14,7 +14,7 @@ from aec_bench.adapters.base import (
     OutputCompletionAssistance,
     SerializedAdapterExecution,
 )
-from aec_bench.adapters.transcript import TranscriptEntry, TranscriptRole
+from aec_bench.contracts.adapter_execution import TranscriptEntry, TranscriptRole
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.harness.execution_payload import (
     AdapterRequestPayload,

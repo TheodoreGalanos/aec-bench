@@ -15,7 +15,7 @@ from harbor.models.environment_type import EnvironmentType  # type: ignore[impor
 from harbor.models.task.config import EnvironmentConfig  # type: ignore[import-untyped]
 from harbor.models.trial.paths import TrialPaths  # type: ignore[import-untyped]
 
-from aec_bench.harness.runtime_dependencies import RUNTIME_PYTHON_PACKAGES
+from aec_bench.contracts.execution_environment import RUNTIME_PYTHON_PACKAGES, HarborEnvironmentBinding
 from aec_bench.providers.morph_cloud import (
     MorphCloudOperations,
     MorphCommandResult,
@@ -28,6 +28,12 @@ REMOTE_TESTS_DIR = "/tests"
 MORPH_MIN_DISK_SIZE_MB = 8192
 PROJECT_SRC_DIR = Path(__file__).resolve().parents[1]
 ProvisionedT = TypeVar("ProvisionedT")
+MORPH_BACKEND = "morph"
+MORPH_HARBOR_ENVIRONMENT_BINDING = HarborEnvironmentBinding(
+    backend=MORPH_BACKEND,
+    import_path="aec_bench.providers.morph_harbor:MorphHarborEnvironment",
+    kwargs={"compute_backend": MORPH_BACKEND},
+)
 
 
 class MorphHarborOperations(Protocol):
@@ -121,7 +127,7 @@ class MorphHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
         trial_paths: TrialPaths,
         task_env_config: EnvironmentConfig,
         *,
-        compute_backend: str = "morph",
+        compute_backend: str = MORPH_BACKEND,
         operations: MorphHarborOperations | None = None,
         project_src_dir: Path = PROJECT_SRC_DIR,
         runtime_packages: tuple[str, ...] = RUNTIME_PYTHON_PACKAGES,

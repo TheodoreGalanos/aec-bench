@@ -11,8 +11,8 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from pydantic_ai.usage import UsageLimits
 
+import aec_bench.synthesis.tools as _tools
 from aec_bench.contracts.synthesis import SynthesisInput, SynthesisOutput
-from aec_bench.synthesis import tools as _tools
 from aec_bench.synthesis.prompts import (
     build_tool_loop_system_prompt,
     build_tool_loop_user_message,

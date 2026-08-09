@@ -9,13 +9,13 @@ from types import ModuleType
 
 from aec_bench.contracts.output_completion import OutputCompletionContract
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.contracts.task_world import (
+from aec_bench.contracts.task_review import (
     AgenticReviewProfile,
     ClosureGate,
     ConstructionGate,
     LogicProfile,
     OperationProfile,
-    TaskWorldProfile,
+    TaskReviewProfile,
 )
 from aec_bench.generation.cli_wrapper_gen import generate_cli_wrapper
 from aec_bench.generation.contracts import SampledInstance
@@ -262,23 +262,23 @@ def _write_instance_record(instance: SampledInstance, tests_dir: Path) -> None:
     (tests_dir / "instance.json").write_text(json.dumps(record, indent=2))
 
 
-def _generated_task_world_profile(
+def _generated_task_review_profile(
     config: TemplateConfig,
     instance: SampledInstance,
-) -> TaskWorldProfile:
-    """Return the strict sidecar shared by generation, review, and adaptive-harness lineage."""
-    world_segments = (
+) -> TaskReviewProfile:
+    """Return the strict review sidecar for a generated task instance."""
+    profile_segments = (
         config.meta.discipline,
         config.meta.category,
         config.meta.name,
         instance.instance_name,
     )
-    world_id = "aec_bench.generated." + ".".join(
+    profile_id = "aec_bench.generated." + ".".join(
         "".join(character.lower() if character.isalnum() else "-" for character in segment).strip("-")
-        for segment in world_segments
+        for segment in profile_segments
     )
-    return TaskWorldProfile(
-        world_id=world_id,
+    return TaskReviewProfile(
+        profile_id=profile_id,
         name=f"{config.meta.name}: {instance.instance_name}",
         task_unit="generated-task-instance",
         logic_profile=LogicProfile(
@@ -408,10 +408,10 @@ def scaffold_task_instance(
     (instance_dir / "tests" / "fixtures" / "golden_pass.md").write_text(golden_pass)
     (instance_dir / "tests" / "fixtures" / "golden_fail.md").write_text(golden_fail)
 
-    world_profile = _generated_task_world_profile(config, instance)
-    world_payload = world_profile.model_dump(mode="json", exclude_none=True)
-    (instance_dir / "world.json").write_text(
-        json.dumps(world_payload, indent=2, sort_keys=True) + "\n",
+    review_profile = _generated_task_review_profile(config, instance)
+    review_payload = review_profile.model_dump(mode="json", exclude_none=True)
+    (instance_dir / "task-review.json").write_text(
+        json.dumps(review_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 

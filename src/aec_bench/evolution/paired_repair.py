@@ -30,7 +30,7 @@ class RepairTrialOutcome(StrictModel):
     candidate_id: NonEmptyStr
     kernel_sha256: NonEmptyStr
     resource_sha256: NonEmptyStr
-    world_lineage_sha256: NonEmptyStr
+    review_lineage_sha256: NonEmptyStr
     reward: float
     complete: bool
     valid: bool
@@ -39,7 +39,7 @@ class RepairTrialOutcome(StrictModel):
     interference_score: float = Field(default=0.0, ge=0.0, le=1.0)
     guard_reward: float = Field(default=1.0, ge=0.0, le=1.0)
 
-    @field_validator("kernel_sha256", "resource_sha256", "world_lineage_sha256")
+    @field_validator("kernel_sha256", "resource_sha256", "review_lineage_sha256")
     @classmethod
     def validate_hash(cls, value: str) -> str:
         return ArtifactReference.validate_sha256(value)
@@ -69,7 +69,7 @@ class PairedRepairAttempt(StrictModel):
             _validate_block_identity(parent, child)
             _validate_kernel_identity(parent, child)
             _validate_resource_identity(parent, child)
-            _validate_world_lineage_identity(parent, child)
+            _validate_review_lineage_identity(parent, child)
         return self
 
 
@@ -306,9 +306,9 @@ def _validate_resource_identity(parent: RepairTrialOutcome, child: RepairTrialOu
         raise ValueError("parent and child resource identities must match")
 
 
-def _validate_world_lineage_identity(parent: RepairTrialOutcome, child: RepairTrialOutcome) -> None:
-    if parent.world_lineage_sha256 != child.world_lineage_sha256:
-        raise ValueError("parent and child world lineage identities must match")
+def _validate_review_lineage_identity(parent: RepairTrialOutcome, child: RepairTrialOutcome) -> None:
+    if parent.review_lineage_sha256 != child.review_lineage_sha256:
+        raise ValueError("parent and child review lineage identities must match")
 
 
 def _outcomes_by_block(outcomes: tuple[RepairTrialOutcome, ...]) -> dict[str, RepairTrialOutcome]:

@@ -130,6 +130,21 @@ class TestBuildEvolutionRunnerFromConfig:
         runner = build_evolution_runner_from_config(config=config)
         assert runner._workspace.manifest.name == "runner-test"
 
+    def test_accepts_report_writer_from_the_composition_root(self, tmp_path: Path) -> None:
+        ws_root = _scaffold_workspace(tmp_path / "ws")
+        config = EvolutionConfig(
+            workspace_path=str(ws_root),
+            models=EvolverModelConfig(classifier="haiku", evolver="sonnet"),
+            task_selector=TaskSelector(),
+        )
+
+        def write_report(workspace_root: Path) -> Path:
+            return workspace_root / "evolution-report.html"
+
+        runner = build_evolution_runner_from_config(config=config, report_writer=write_report)
+
+        assert runner._report_writer is write_report
+
 
 class TestBuildEvolutionRunnerRemoteExecution:
     """Tests remote evolution wiring without contacting a provider."""

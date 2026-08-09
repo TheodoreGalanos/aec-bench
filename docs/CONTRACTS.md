@@ -38,8 +38,8 @@ readable.
 | Prime package and evaluation integration | Prime integration | Current public task or lifecycle material becomes an independently installed package; hosted samples return as untrusted provider evidence | Public command and external package behavior; samples normalize into current records | [`exporter.py`](../src/aec_bench/prime_lab/exporter.py), [`lifecycle_exporter.py`](../src/aec_bench/prime_lab/lifecycle_exporter.py), and [`eval_import.py`](../src/aec_bench/prime_lab/eval_import.py) | External package and provider ingestion |
 | Artifact and evidence reference | Harness, ledger, and the producing domain | Filesystem or provider output becomes content-bound evidence | Protected when stored in a trial, dataset, freeze, or published record | `ArtifactReference` in [`trial_record.py`](../src/aec_bench/contracts/trial_record.py) and narrower owner-specific references | Persisted reference |
 | Visibility classification | Task ownership and evaluation policy | Material enters public, calibration, or holdout handling | Protected | `Visibility` in [`task_definition.py`](../src/aec_bench/contracts/task_definition.py) and visibility checks in persisted records | Persisted and policy-bearing |
-| Interactive-world registration and calls | Continual runtime and registered task worlds | An exact executable build/profile is resolved and an actor or host request reaches task-owned behavior | Current unversioned installed calls; task-owned persisted run records | [`continual_world.py`](../src/aec_bench/contracts/continual_world.py), [`world_interface.py`](../src/aec_bench/contracts/world_interface.py), the scoped Prime [`world.py`](../src/aec_bench/prime_agent/world.py) transport, and the [runtime protocol](protocols/interactive-world-runtime.md) | Internal, persisted, and installed JSON |
-| Pump functional core | Wastewater pump-station task | Typed pump actions change one canonical current state and observations and scores are derived from it | Ordinary task-owned dataclasses and direct callables | [`coupled_runtime.py`](../src/aec_bench/task_world_templates/stewardship/wastewater_pump_station/coupled_runtime.py), [`stewardship_models.py`](../src/aec_bench/task_world_templates/stewardship/wastewater_pump_station/stewardship_models.py), and task-owned [`evaluation.py`](../src/aec_bench/task_world_templates/stewardship/wastewater_pump_station/evaluation.py) | Internal |
+| Interactive-world registration and calls | Interactive-world runtime and registered task worlds | An exact executable build/profile is resolved and an actor or host request reaches task-owned behavior | Current unversioned installed calls; task-owned persisted run records | [`continual_world.py`](../src/aec_bench/contracts/continual_world.py), [`world_interface.py`](../src/aec_bench/contracts/world_interface.py), the scoped pump Prime [`actor_proxy.py`](../src/aec_bench/harness/pump_station_prime/actor_proxy.py) transport, and the [runtime protocol](protocols/interactive-world-runtime.md) | Internal, persisted, and installed JSON |
+| Pump functional core | Wastewater pump-station task | Typed pump actions change one canonical current state and observations and scores are derived from it | Ordinary task-owned dataclasses and direct callables | [`coupled_runtime.py`](../src/aec_bench/worlds/stewardship/wastewater_pump_station/coupled_runtime.py), [`stewardship_models.py`](../src/aec_bench/worlds/stewardship/wastewater_pump_station/stewardship_models.py), and task-owned [`evaluation.py`](../src/aec_bench/worlds/stewardship/wastewater_pump_station/evaluation.py) | Internal |
 
 ## Task specification
 
@@ -84,6 +84,11 @@ task-owned episode is represented by one verified `episode_artifact` reference;
 the shared trial record does not copy its snapshots, transitions, temporal
 facts, or replay model. Lifecycle request and run-state readers accept only the
 current shapes and do not migrate prior local run directories.
+
+A finite lifecycle uses `lifecycle_id` and checkpoint identity. It does not use
+`world_id`. A harness-program study groups exact task snapshots with
+`task_set_id` and `task_set_sha256`; these fields do not identify an interactive
+world.
 
 Trial records are append-only evidence once accepted. Internal builders and
 temporary run directories remain replaceable implementation.

@@ -30,7 +30,7 @@ from aec_bench.adapters.lambda_rlm.state import PlanState
 from aec_bench.adapters.rlm.client import RlmClient, RlmCompletionResponse, RlmMessage
 from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.adapters.runtime_limits import AdapterRuntimeLimitError, configured_positive_int
-from aec_bench.adapters.transcript import (
+from aec_bench.contracts.adapter_execution import (
     TokenUsage,
     TranscriptEntry,
     TranscriptEvent,

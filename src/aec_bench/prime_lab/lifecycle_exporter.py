@@ -19,15 +19,15 @@ from pydantic import Field, PositiveInt, field_validator, model_validator
 
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
-from aec_bench.meta_harness.evidence_lifecycle import (
+from aec_bench.experimentation.lifecycle_studies.experiment import repository_provenance
+from aec_bench.lifecycles.catalogue import (
+    lifecycle_package_variant,
+)
+from aec_bench.lifecycles.runtime.lifecycle import (
     evidence_lifecycle_package_identity,
     load_evidence_lifecycle_spec,
 )
-from aec_bench.meta_harness.evidence_lifecycle_experiment import repository_provenance
 from aec_bench.prime_lab.exporter import DEFAULT_PRIME_ENVIRONMENTS_DIR, normalise_environment_id
-from aec_bench.task_world_templates.lifecycles import (
-    lifecycle_package_variant,
-)
 
 
 class PrimeLifecycleSourceProvenance(StrictModel):
@@ -50,7 +50,6 @@ class PrimeLifecyclePackageRecord(StrictModel):
     variant_id: NonEmptyStr
     visibility: Literal["public"]
     lifecycle_id: NonEmptyStr
-    world_id: NonEmptyStr
     checkpoint_ids: tuple[NonEmptyStr, ...] = Field(min_length=1)
     initial_instruction: NonEmptyStr
     lifecycle_spec_sha256: NonEmptyStr
@@ -71,7 +70,7 @@ class PrimeLifecyclePackageRecord(StrictModel):
 
 
 class PrimeLifecycleExportManifest(StrictModel):
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["2"] = "2"
     environment_id: NonEmptyStr
     local_only: Literal[True] = True
     execution_mode: Literal["persistent_context"] = "persistent_context"
@@ -232,7 +231,6 @@ def _validated_public_package_record(package_dir: Path) -> PrimeLifecyclePackage
         variant_id=variant["variant_id"],
         visibility="public",
         lifecycle_id=identity["lifecycle_id"],
-        world_id=identity["world_id"],
         checkpoint_ids=tuple(checkpoint.checkpoint_id for checkpoint in spec.checkpoints),
         initial_instruction=instruction_path.read_text(encoding="utf-8"),
         lifecycle_spec_sha256=identity["spec_sha256"],

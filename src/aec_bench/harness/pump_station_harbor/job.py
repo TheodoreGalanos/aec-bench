@@ -6,6 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from aec_bench.contracts.execution_environment import HarborEnvironmentBinding
 from aec_bench.harness.harbor_dispatch import (
     HarborCommandExecutor,
     HarborDispatchResult,
@@ -20,7 +21,7 @@ from aec_bench.harness.pump_station_harbor.session import (
     PUMP_STATION_MODEL_CONTROLLER_MODE,
     PUMP_STATION_MODEL_MAX_TURNS,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
 
@@ -35,13 +36,14 @@ def build_pump_station_harbor_job_config(
     backend: str = "docker",
     model_name: str = PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
     max_turns: int = PUMP_STATION_MODEL_MAX_TURNS,
+    environment_binding: HarborEnvironmentBinding | None = None,
 ) -> dict[str, Any]:
     """Build one validated local Harbor configuration for the exported task."""
 
     task_root = Path(task_dir).resolve(strict=True)
     bridge = load_pump_station_harbor_bridge(task_root / "environment")
     validate_pump_station_harbor_backend(backend)
-    environment = harbor_environment_config(backend)
+    environment = harbor_environment_config(backend, environment_binding=environment_binding)
     model = model_name.strip()
     if not model:
         raise ValueError("pump-station Harbor model name is required")
@@ -103,6 +105,7 @@ def run_pump_station_harbor_job(
     backend: str = "docker",
     model_name: str = PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
     max_turns: int = PUMP_STATION_MODEL_MAX_TURNS,
+    environment_binding: HarborEnvironmentBinding | None = None,
     execute: bool = True,
     executor: HarborCommandExecutor | None = None,
 ) -> HarborDispatchResult:
@@ -118,6 +121,7 @@ def run_pump_station_harbor_job(
         backend=backend,
         model_name=model_name,
         max_turns=max_turns,
+        environment_binding=environment_binding,
     )
     return dispatch_harbor_config(
         config=config,

@@ -15,7 +15,7 @@ from typing import Protocol
 
 import pytest
 
-from aec_bench.ledger.immutable_artifact_store import (
+from aec_bench.ledger.immutable_byte_store import (
     ImmutableArtifactCollisionError,
     ImmutableArtifactConfinementError,
     ImmutableArtifactIntegrityError,
@@ -867,7 +867,7 @@ def test_unsafe_temporary_replacement_is_removed_only_from_final_name(
 
 
 def test_lower_store_has_no_meta_harness_or_task_dependency() -> None:
-    source = Path(__file__).parents[2] / "src" / "aec_bench" / "ledger" / "immutable_artifact_store.py"
+    source = Path(__file__).parents[2] / "src" / "aec_bench" / "ledger" / "immutable_byte_store.py"
     imported = _imported_modules(source)
 
     assert all(not module.startswith("aec_bench.contracts") for module in imported)

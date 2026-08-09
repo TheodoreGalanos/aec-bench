@@ -102,6 +102,7 @@ def evolve_run(
 
     require_optional_extra("Evolution execution support", "evolution,local-agents", ("numpy", "ribs", "pydantic_ai"))
 
+    from aec_bench.communication.evolution_report import write_evolution_report
     from aec_bench.evolution.config_loader import (
         load_evolution_config,
         resolve_task_dirs,
@@ -140,6 +141,7 @@ def evolve_run(
         runner = build_evolution_runner_from_config(
             config=config,
             tasks_root=tasks_root,
+            report_writer=write_evolution_report,
         )
         result = runner.run()
     except Exception as exc:

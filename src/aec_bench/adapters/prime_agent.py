@@ -5,8 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aec_bench.adapters.base import AdapterFailureKind, AdapterRequest, AdapterResult
-from aec_bench.adapters.transcript import initialize_transcript
+from aec_bench.adapters.base import AdapterFailureKind, AdapterRequest, AdapterResult, initialize_transcript
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.prime_agent.batch import PrimeExecutableNotFoundError, PrimeRun, run_prime_agent
 

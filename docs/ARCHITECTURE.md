@@ -81,7 +81,7 @@ accepts an action that changes task-owned state. Host controls use a separate
 authority surface. World state, action meaning, clocks, projections, events,
 and verifier logic remain with the task world.
 
-The current registered continual-world path provides:
+The current registered interactive-world path provides:
 
 - exact executable world builds and content-pinned profiles;
 - exact catalogue resolution for new work and recovery;
@@ -94,16 +94,16 @@ The current registered continual-world path provides:
 - harness-owned Harbor task integration and task-owned evaluation calls outside
   neutral world registration.
 
-The public composition root currently registers two real consumers: the
-wastewater pump-station stewardship world and the SSC-03 hydraulic interaction
-world. The task-neutral continual package imports neither concrete world. See
-the current [interactive-world runtime protocol](protocols/interactive-world-runtime.md).
+The public composition root currently registers the wastewater pump-station
+stewardship world. The task-neutral world runtime does not import that concrete
+world. See the current
+[interactive-world runtime protocol](protocols/interactive-world-runtime.md).
 
-Beneath those different orchestration paths, the continual runtime owns the
+Beneath those different orchestration paths, the world runtime owns the
 small accepted-transition and action-rejection values plus the episode shell.
 Initial state, actor observation, transition functions, outputs, and evaluation
-remain task-owned because the hydraulic and pump behaviors do not honestly
-share one public structural protocol.
+remain task-owned. A finite lifecycle or calculation does not become a world
+only because it also has state or ordered work.
 
 The pump world has one authoritative `PumpStationStewardshipState`. Its direct
 `initial_state`, `observe`, and typed `transition` functions own pump behavior;
@@ -138,9 +138,9 @@ analysis, error taxonomy, confidence, and task-specific evaluation extensions.
 Verifiers provide task-owned evidence. Reports, the TUI, and the web UI consume
 evaluation results; they do not define competing metrics.
 
-Cross-task model reviewing belongs to the meta-harness because it coordinates
-review jobs and their evidence. Task-specific evaluation, including wastewater
-pump stewardship scoring, remains with the task package.
+Cross-task model execution and review coordination belong to
+`harness/model_execution`. Task-specific evaluation, including wastewater pump
+stewardship scoring, remains with the task package.
 
 ### Durable artifacts
 
@@ -186,15 +186,32 @@ Provider errors, timeouts, missing output, and incomplete execution remain
 explicit failures. A transport cannot turn them into successful trials.
 
 The separate `prime_agent` integration runs the upstream Prime Agent executable
-directly. JSON mode adapts staged artifact tasks on the existing local path;
-ACP mode owns one persistent Prime process and a capability-scoped actor proxy
-for one bounded interactive segment. The pump journey composition can alternate
-these segments with exact, task-owned host controls. The proxy translates only
-the current actor request and result models. The pump world owns host-control
-eligibility and completion. A private journey checkpoint records coordination
-phase and canonical references for process recovery; it is not a second causal
-record. Task-world persistence, verification, evaluation, and Harbor paths
-remain owned by their existing layers.
+directly. JSON mode adapts staged artifact tasks on the existing local path.
+ACP mode owns the Prime process, protocol, isolation, explicit generic skills,
+and session evidence. `harness/pump_station_prime` owns the concrete pump actor
+proxy, bounded session, guided treatment, and journey composition. The pump
+journey can alternate fresh Prime sessions with exact task-owned host controls.
+The pump world owns host-control eligibility and completion. A private journey
+checkpoint records coordination phase and canonical references for process
+recovery; it is not a second causal record. Task-world persistence,
+verification, evaluation, and Harbor paths remain owned by their existing
+layers. Read-only treatment and trajectory analysis belongs to
+`experimentation/qualification`; it does not change canonical evaluation.
+
+`harness/hydraulic_review_prime` is a separate concrete composition for the
+stormwater hydraulic-review lifecycle. It starts one fresh Prime ACP session
+for each host-owned checkpoint.
+Its scoped endpoint exposes only actor-visible lifecycle files, declared
+operations, and one proposed submission. The existing lifecycle host validates
+and archives that proposal and controls checkpoint advance. Prime session
+state, lifecycle state, task verification, and benchmark validity remain
+separate authorities.
+
+The pump and hydraulic-review integrations share the generic Prime process and ACP
+boundary. They do not share a journey, endpoint, task action, completion, or
+verification abstraction. Two concrete integrations now make comparison
+possible, but the repository has not yet found a second shared semantic pattern
+that justifies more extraction.
 
 Local execution selects from one fixed set of adapter builders at the harness
 composition edge. Tests inject a builder callable directly; production does
@@ -221,7 +238,7 @@ Dependencies follow ownership, not a permanent numbered hierarchy:
 - Boundary contracts depend only on foundational validation and value
   utilities needed to define that boundary.
 - Task definitions and task worlds do not import adapters or providers.
-- Shared continual-world code does not import a concrete world.
+- Shared world-runtime code does not import a concrete world.
 - Adapters, providers, and compute backends translate outward-facing protocols.
 - Orchestration depends on task and execution boundaries without taking over
   task semantics.
@@ -248,13 +265,20 @@ to these stable surfaces:
 | Concern | Owner |
 | --- | --- |
 | Installed library and runtime behaviour | `src/aec_bench/` |
-| Task-template semantics and packaged task data | `src/aec_bench/task_world_templates/` |
+| Artifact-task template semantics and packaged task data | `src/aec_bench/templates/` |
+| Interactive-world runtime and concrete worlds | `src/aec_bench/worlds/` |
+| Finite staged lifecycles and concrete lifecycle definitions | `src/aec_bench/lifecycles/` |
+| Proposal, governance, qualification, and study policy | `src/aec_bench/experimentation/` |
 | Runnable benchmark task packages | `tasks/` |
 | Expert-authored task sources | `seeds/` |
 | Ready-to-use Harbor agents | `agents/` |
 | Maintained repository commands outside the installed API | `scripts/` |
 | Permanent tests and test support | `tests/` |
 | Current architecture, contracts, invariants, protocols, and guides | `docs/` |
+
+Domain calculations and technical verification stay with the task, template,
+lifecycle, or world that owns their meaning. Extract a shared domain package
+only after two real benchmark owners need the same stable behaviour.
 
 Research, planning, generated output, and local workspaces are not delivery
 surfaces. If the product needs a generator, certifier, migration command, or

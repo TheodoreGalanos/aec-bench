@@ -13,8 +13,8 @@ import aec_world
 catalogue = await aec_world.capabilities()
 observation = await aec_world.observe()
 result = await aec_world.invoke(
-    "inspect_pump",
-    {"pump_id": "P-102"},
+    "inspect_asset",
+    {"asset_id": "asset-1"},
     decision_id=observation["decision_id"],
 )
 ```

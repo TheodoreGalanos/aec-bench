@@ -1,10 +1,10 @@
-# ABOUTME: Defines the SSC-03 water-quality pollutant-load construction sediment template.
+# ABOUTME: Defines the stormwater water-quality pollutant-load construction sediment template.
 # ABOUTME: Pins one synthetic construction staging, pollutant, basin, and discharge source package.
 
 [meta]
 name = "water-quality-pollutant-load-construction-sediment-package"
-description = "SSC-03 construction runoff, pollutant load, sediment basin, and discharge metrics"
-long_description = "Calculates source-bound water-quality and construction sediment metrics from a deterministic SSC-03 task-owned source pack. The template combines runoff volume, pollutant load, removed and residual load, sediment basin volume, temporary discharge capacity, weir release, capture percentage, and an overall synthetic pass score."
+description = "stormwater construction runoff, pollutant load, sediment basin, and discharge metrics"
+long_description = "Calculates source-bound water-quality and construction sediment metrics from a deterministic stormwater task-owned source pack. The template combines runoff volume, pollutant load, removed and residual load, sediment basin volume, temporary discharge capacity, weir release, capture percentage, and an overall synthetic pass score."
 discipline = "civil"
 category = "water-quality-sediment"
 standards = ["construction sediment basin sizing", "pollutant load estimation", "temporary discharge review", "stormwater water-quality workflows"]
@@ -137,7 +137,7 @@ tolerance = 0.03
 description = "Pass score for basin volume, discharge, and capture checks"
 tolerance = 0.03
 
-[archetypes.ssc03_water_quality_sediment_case]
+[archetypes.stormwater_water_quality_sediment_case]
 description = "Water-quality pollutant-load and construction sediment case"
 disturbed_area_ha = {min = 2.4, max = 2.4}
 runoff_depth_mm = {min = 38.0, max = 38.0}
@@ -154,16 +154,16 @@ target_capture_percent = {min = 75.0, max = 75.0}
 site_contexts = ["construction-sediment", "water-quality-check"]
 
 [difficulty.easy]
-description = "All source-pack values given for the SSC-03 water-quality sediment package"
+description = "All source-pack values given for the stormwater water-quality sediment package"
 visibility = "all_given"
-archetypes = ["ssc03_water_quality_sediment_case"]
+archetypes = ["stormwater_water_quality_sediment_case"]
 
 [difficulty.medium]
-description = "All source-pack values given for the SSC-03 water-quality sediment package"
+description = "All source-pack values given for the stormwater water-quality sediment package"
 visibility = "all_given"
-archetypes = ["ssc03_water_quality_sediment_case"]
+archetypes = ["stormwater_water_quality_sediment_case"]
 
 [difficulty.hard]
-description = "All source-pack values given for the SSC-03 water-quality sediment package"
+description = "All source-pack values given for the stormwater water-quality sediment package"
 visibility = "all_given"
-archetypes = ["ssc03_water_quality_sediment_case"]
+archetypes = ["stormwater_water_quality_sediment_case"]

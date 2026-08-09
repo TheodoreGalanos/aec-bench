@@ -1,7 +1,7 @@
 # ABOUTME: Preregisters the public PR19 hydraulic campaign and deterministic condition selector.
 # ABOUTME: Uses ignored roots and a preregistered finite execution envelope for the public campaign.
 schema_version: "1"
-experiment_id: ssc03-hydraulic-public-calibration
+experiment_id: stormwater-hydraulic-public-calibration
 lifecycle_template_id: hydraulic-interaction-lifecycle-review
 study_design:
   interpretation: descriptive_calibration
@@ -18,14 +18,14 @@ variants:
 agents:
   - name: hydraulic-calibration-model
     adapter: tool_loop
-    # Set SSC03_CALIBRATION_MODEL_ID to one exact provider-routable model ID.
-    model: env:SSC03_CALIBRATION_MODEL_ID
+    # Set HYDRAULIC_REVIEW_CALIBRATION_MODEL_ID to one exact provider-routable model ID.
+    model: env:HYDRAULIC_REVIEW_CALIBRATION_MODEL_ID
     parameters:
       # Fresh conditions open three sessions; this remains a per-session limit.
       max_turns_per_session: 60
 repetitions: 1
-output_root: ../../../artefacts/ssc03-hydraulic-public-calibration/runs
-ledger_root: ../../../artefacts/ssc03-hydraulic-public-calibration/ledger
+output_root: ../../../artefacts/stormwater-hydraulic-public-calibration/runs
+ledger_root: ../../../artefacts/stormwater-hydraulic-public-calibration/ledger
 # Manual planning guards required by the selectable campaign contract.
 estimated_cost_per_trial_usd: 25.0
 limits:

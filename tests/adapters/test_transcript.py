@@ -1,7 +1,7 @@
 # ABOUTME: Tests for canonical adapter transcript records in aec-bench Python.
 # ABOUTME: Covers stable role, content, tool events, and token-usage capture.
 
-from aec_bench.adapters.transcript import (
+from aec_bench.contracts.adapter_execution import (
     TokenUsage,
     TranscriptEntry,
     TranscriptEvent,

@@ -83,11 +83,11 @@ from aec_bench.harness.harbor_task_exporting.surfaces import (
 from aec_bench.harness.harbor_task_exporting.surfaces import (
     test_script_text as _test_script,
 )
-from aec_bench.task_world_templates.compiled_world import (
-    CompiledLifecycleWorld,
-    CompiledWorldEnvelope,
+from aec_bench.lifecycles.catalogue import verify_lifecycle
+from aec_bench.lifecycles.compiled import (
+    CompiledLifecycle,
+    CompiledLifecycleEnvelope,
 )
-from aec_bench.task_world_templates.lifecycles import verify_lifecycle
 
 
 @dataclass(frozen=True)
@@ -103,14 +103,14 @@ class HarborLifecycleBridge:
 
     task_root: Path
     package_dir: Path
-    envelope: CompiledWorldEnvelope
+    envelope: CompiledLifecycleEnvelope
     manifest_sha256: str
     allowed_tools: tuple[str, ...]
     output_path: str
 
 
 def export_compiled_lifecycle_harbor_task(
-    compiled: CompiledLifecycleWorld,
+    compiled: CompiledLifecycle,
     task_dir: Path,
     *,
     project_root: Path,
@@ -184,7 +184,7 @@ def write_harbor_lifecycle_attestation(
 
 def _write_export(
     *,
-    compiled: CompiledLifecycleWorld,
+    compiled: CompiledLifecycle,
     metadata: LifecycleTaskMetadata,
     lifecycle: EvidenceLifecycleSpec,
     task_dir: Path,
@@ -198,7 +198,7 @@ def _write_export(
     runtime_dir.mkdir(parents=True)
 
     shutil.copytree(compiled.package_dir, verifier_package)
-    copied = CompiledLifecycleWorld(package_dir=verifier_package, envelope=compiled.envelope)
+    copied = CompiledLifecycle(package_dir=verifier_package, envelope=compiled.envelope)
     _validate_compiled_world(copied)
     _stage_initial_context(compiled.package_dir, initial_context)
 
@@ -292,8 +292,8 @@ def verify_exported_lifecycle_run(
     initial_context_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Run the task verifier as the sole reward authority after agent completion."""
-    envelope = CompiledWorldEnvelope.model_validate(_read_json(envelope_path))
-    compiled = CompiledLifecycleWorld(package_dir=Path(package_dir), envelope=envelope)
+    envelope = CompiledLifecycleEnvelope.model_validate(_read_json(envelope_path))
+    compiled = CompiledLifecycle(package_dir=Path(package_dir), envelope=envelope)
     source = _validate_compiled_world(compiled)
     validate_harbor_lifecycle_semantics(source.lifecycle)
     _validate_operation_surface(envelope)

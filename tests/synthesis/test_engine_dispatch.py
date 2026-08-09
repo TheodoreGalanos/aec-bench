@@ -60,7 +60,7 @@ class TestDispatch:
             tool_calls=({"tool": "get_candidate", "args": {}},),
         )
         with patch(
-            "aec_bench.synthesis.engine.synthesise_via_tool_loop",
+            "aec_bench.synthesis.tool_loop.synthesise_via_tool_loop",
             return_value=fake_output,
         ) as mock_driver:
             result = synthesise(_input("tool_loop"), model="test-model")

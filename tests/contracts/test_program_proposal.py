@@ -176,7 +176,7 @@ def _freeze() -> ProposalFreeze:
         evaluation_plan_candidate_manifest_sha256=manifest.content_sha256,
         structural_split_sha256=_sha("structural-split"),
         selected_structural_item_sha256=_sha("selected-structural-item"),
-        selected_world_lineage_id=_sha("selected-world-lineage"),
+        selected_review_lineage_id=_sha("selected-review-lineage"),
         fixed_harness_sha256=_sha("compiled-h0-host-binding"),
         operator_authority=operator_authority_for(
             "optimizer.zero-shot",
@@ -263,7 +263,7 @@ def test_structural_freeze_can_bind_an_execution_profile() -> None:
         }
     )
 
-    assert freeze.schema_version == "aecbench.evaluation-proposal-freeze.v2"
+    assert freeze.schema_version == "aecbench.evaluation-proposal-freeze.v3"
     assert freeze.execution_profile_sha256 == profile_sha256
     assert freeze.model_dump(mode="json")["execution_profile_sha256"] == profile_sha256
     assert freeze.content_sha256 != _freeze().content_sha256
@@ -272,7 +272,7 @@ def test_structural_freeze_can_bind_an_execution_profile() -> None:
 def test_generic_calibration_freeze_binds_one_evaluation_cohort() -> None:
     payload = _freeze().model_dump(mode="python", exclude={"content_sha256"})
     payload.update(
-        schema_version="aecbench.evaluation-proposal-freeze.v2",
+        schema_version="aecbench.evaluation-proposal-freeze.v3",
         split=OptimizationSplit.CALIBRATION,
         selected_structural_item_sha256=None,
         evaluation_cohort=EvaluationCohortBinding(
@@ -299,7 +299,7 @@ def _coordinates() -> tuple[MatchedEvaluationCoordinate, ...]:
             task_id="drainage-01",
             task_revision=_sha("task-revision"),
             split=OptimizationSplit.DEVELOPMENT,
-            world_lineage_id=_sha("selected-world-lineage"),
+            review_lineage_id=_sha("selected-review-lineage"),
             seed=11,
             repetition=0,
         ),
@@ -308,7 +308,7 @@ def _coordinates() -> tuple[MatchedEvaluationCoordinate, ...]:
             task_id="drainage-01",
             task_revision=_sha("task-revision"),
             split=OptimizationSplit.DEVELOPMENT,
-            world_lineage_id=_sha("selected-world-lineage"),
+            review_lineage_id=_sha("selected-review-lineage"),
             seed=22,
             repetition=0,
         ),
@@ -486,7 +486,7 @@ def test_problem_and_coordinate_revisions_are_exact_content_identities() -> None
             task_id="drainage-01",
             task_revision="semantic-r1",
             split=OptimizationSplit.DEVELOPMENT,
-            world_lineage_id="semantic-lineage",
+            review_lineage_id="semantic-lineage",
             seed=1,
             repetition=0,
         )
@@ -672,7 +672,7 @@ def test_proposal_freeze_rejects_plan_manifest_or_policy_drift() -> None:
         ProposalFreeze.model_validate(
             {
                 **base,
-                "selected_world_lineage_id": "semantic-label-is-not-lineage",
+                "selected_review_lineage_id": "semantic-label-is-not-lineage",
             }
         )
 
@@ -773,7 +773,7 @@ def test_study_requires_exact_kernel_h0_plan_budget_split_and_cross_product() ->
     (
         ("split", OptimizationSplit.TRAINING, "split"),
         ("task_id", "other-task", "task"),
-        ("world_lineage_id", _sha("other-lineage"), "world lineage"),
+        ("review_lineage_id", _sha("other-lineage"), "review lineage"),
     ),
 )
 def test_study_rejects_coordinate_drift(

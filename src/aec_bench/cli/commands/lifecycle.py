@@ -10,16 +10,17 @@ from pathlib import Path
 import typer
 
 from aec_bench.cli.output import emit, print_table
-from aec_bench.meta_harness.evidence_lifecycle import run_evidence_lifecycle
-from aec_bench.meta_harness.evidence_request_protocol import EvidenceLifecycleError
-from aec_bench.task_world_templates.lifecycles import (
+from aec_bench.lifecycles.catalogue import (
     lifecycle_definition,
+    lifecycle_operation_resolver,
     lifecycle_smoke_environment,
     lifecycle_template_ids,
     lifecycle_variant_ids,
     materialize_lifecycle,
     verify_lifecycle,
 )
+from aec_bench.lifecycles.runtime.lifecycle import run_evidence_lifecycle
+from aec_bench.lifecycles.runtime.request_protocol import EvidenceLifecycleError
 
 app = typer.Typer(help="Inspect and run staged evidence-lifecycle tasks.")
 
@@ -102,7 +103,12 @@ def run_smoke_command(
         environment = lifecycle_smoke_environment(template_id, package_dir)
         if environment is None:
             raise ValueError(f"lifecycle task {template_id!r} does not declare a smoke environment")
-        lifecycle = run_evidence_lifecycle(package_dir, run_dir, episode_environment=environment)
+        lifecycle = run_evidence_lifecycle(
+            package_dir,
+            run_dir,
+            episode_environment=environment,
+            operation_resolver=lifecycle_operation_resolver(package_dir, run_dir),
+        )
         verification = verify_lifecycle(package_dir, run_dir)
     except (EvidenceLifecycleError, json.JSONDecodeError, KeyError, OSError, ValueError) as exc:
         emit("task lifecycle run-smoke", None, errors=[str(exc)], start_time=start)

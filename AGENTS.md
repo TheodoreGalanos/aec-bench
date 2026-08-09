@@ -171,11 +171,15 @@ Before pull request completion, place each maintained artifact under its permane
 | Artifact | Permanent owner |
 |---|---|
 | Shared library or runtime behaviour | `src/aec_bench/` |
-| Task-template behaviour or data | `src/aec_bench/task_world_templates/<family>/` |
+| Task-template behaviour or data | `src/aec_bench/templates/<family>/` |
+| Shared engineering capability | `src/aec_bench/engineering/<family>/` |
+| Interactive world behaviour or data | `src/aec_bench/worlds/<family>/` |
+| Lifecycle behaviour or data | `src/aec_bench/lifecycles/<family>/` |
+| Maintained experiments and qualification | `src/aec_bench/experimentation/` |
 | Maintained repository command | `scripts/`, unless it is part of the installed API |
 | Permanent tests and test support | `tests/` |
 | Normative architecture and operating guidance | `docs/` |
-| Notes, experiments, generated evidence, and temporary output | Local ignored research or output storage |
+| Notes, generated evidence, and temporary output | Local ignored research or output storage |
 
 Do not deliver maintained code from a research, planning, output, or phase directory. A rarely run generator or certifier is maintained code when the current system needs it. The feature must still build, package, test, and run when local research and phase directories are absent.
 

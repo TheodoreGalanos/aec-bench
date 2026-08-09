@@ -1,4 +1,4 @@
-# ABOUTME: Computes SSC-03 outfall tailwater, flap-gate, and coastal boundary metrics.
+# ABOUTME: Computes stormwater outfall tailwater, flap-gate, and coastal boundary metrics.
 # ABOUTME: Combines Manning friction, flap-gate loss, submergence, HGL clearance, and freeboard.
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def compute(
     coastal_crest_level_m: float,
     required_coastal_freeboard_m: float,
 ) -> dict[str, float]:
-    """Compute deterministic SSC-03 outfall and coastal-boundary metrics."""
+    """Compute deterministic stormwater outfall and coastal-boundary metrics."""
     _require_positive(
         pipe_diameter_m=pipe_diameter_m,
         design_flow_m3_s=design_flow_m3_s,

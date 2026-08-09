@@ -27,7 +27,7 @@ from aec_bench.adapters.rlm.runtime_contracts import (
 from aec_bench.adapters.rlm.template import TemplateStatus
 from aec_bench.adapters.rlm.tokens import TurnMetrics
 from aec_bench.adapters.rlm.turn_execution import TurnExecution, TurnExecutionSurface
-from aec_bench.adapters.transcript import (
+from aec_bench.contracts.adapter_execution import (
     TokenUsage,
     TranscriptEntry,
     TranscriptEvent,

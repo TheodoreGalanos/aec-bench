@@ -18,7 +18,7 @@ from aec_bench.contracts.validators import NonEmptyStr
 
 
 class DeclaredStage(FrozenStrictModel):
-    """One reward-blind stage declared by a task-world package."""
+    """One reward-blind stage declared by a task-review profile."""
 
     stage_id: NonEmptyStr
     title: NonEmptyStr | None = None
@@ -37,7 +37,7 @@ class DeclaredStage(FrozenStrictModel):
 
 
 class DeclaredHandoff(FrozenStrictModel):
-    """One explicit stage-to-stage artifact route declared by a task world."""
+    """One explicit stage-to-stage artifact route declared by a task-review profile."""
 
     handoff_id: NonEmptyStr
     producer_stage_id: NonEmptyStr
@@ -71,17 +71,17 @@ class DeclaredStageRoute(FrozenStrictModel):
 
 
 class DeclaredStageGraph(ContentAddressedModel):
-    """Content-pinned executable projection of a task world's declared stage graph."""
+    """Content-pinned executable projection of a task-review profile's declared stage graph."""
 
-    schema_version: Literal["aecbench.declared-stage-graph.v1"] = "aecbench.declared-stage-graph.v1"
+    schema_version: Literal["aecbench.declared-stage-graph.v2"] = "aecbench.declared-stage-graph.v2"
     task_id: NonEmptyStr
-    world_package_sha256: str
+    review_sidecar_sha256: str
     stages: tuple[DeclaredStage, ...] = Field(min_length=1)
     handoffs: tuple[DeclaredHandoff, ...] = ()
 
-    @field_validator("world_package_sha256")
+    @field_validator("review_sidecar_sha256")
     @classmethod
-    def validate_world_package_sha256(cls, value: str) -> str:
+    def validate_review_sidecar_sha256(cls, value: str) -> str:
         return validate_sha256(value)
 
     @model_validator(mode="after")
@@ -318,7 +318,7 @@ class StageResourceEvidence(FrozenStrictModel):
 class StageExecutionReceipt(ContentAddressedModel):
     """Tamper-evident intermediate execution result kept outside the TrialRecord ledger."""
 
-    schema_version: Literal["aecbench.stage-execution-receipt.v1"] = "aecbench.stage-execution-receipt.v1"
+    schema_version: Literal["aecbench.stage-execution-receipt.v2"] = "aecbench.stage-execution-receipt.v2"
     bundle_id: NonEmptyStr
     bundle_sha256: str
     run_id: NonEmptyStr
@@ -328,7 +328,7 @@ class StageExecutionReceipt(ContentAddressedModel):
     attempt: int = Field(ge=1)
     task_id: NonEmptyStr
     task_package_sha256: str
-    world_package_sha256: str
+    review_sidecar_sha256: str
     stage_graph_sha256: str
     stage_id: NonEmptyStr
     context_manifest: ArtifactReference
@@ -345,7 +345,7 @@ class StageExecutionReceipt(ContentAddressedModel):
         "program_sha256",
         "operation_sha256",
         "task_package_sha256",
-        "world_package_sha256",
+        "review_sidecar_sha256",
         "stage_graph_sha256",
     )
     @classmethod
@@ -379,17 +379,17 @@ class StageExecutionReceipt(ContentAddressedModel):
 def declared_stage_graph_from_payload(
     *,
     task_id: str,
-    world_package_sha256: str,
+    review_sidecar_sha256: str,
     payload: dict[str, Any],
 ) -> DeclaredStageGraph | None:
-    """Build the closed stage graph projection from an already parsed world sidecar."""
+    """Build the closed stage graph projection from an already parsed task-review sidecar."""
     raw_stages = payload.get("stages")
     if raw_stages is None:
         return None
 
     return DeclaredStageGraph(
         task_id=task_id,
-        world_package_sha256=world_package_sha256,
+        review_sidecar_sha256=review_sidecar_sha256,
         stages=_declared_stages_from_payload(raw_stages),
         handoffs=_declared_handoffs_from_payload(payload.get("handoffs", ())),
     )
@@ -397,16 +397,16 @@ def declared_stage_graph_from_payload(
 
 def _declared_stages_from_payload(value: object) -> tuple[DeclaredStage, ...]:
     if not isinstance(value, list) or not value:
-        raise ValueError("declared task-world stages must be a non-empty list")
+        raise ValueError("declared task-review stages must be a non-empty list")
     return tuple(_declared_stage_from_payload(item) for item in value)
 
 
 def _declared_stage_from_payload(value: object) -> DeclaredStage:
     if not isinstance(value, dict):
-        raise ValueError("declared task-world stage must be a mapping")
+        raise ValueError("declared task-review stage must be a mapping")
     stage_id = value.get("id")
     if not isinstance(stage_id, str) or not stage_id.strip():
-        raise ValueError("declared task-world stage requires a non-empty id")
+        raise ValueError("declared task-review stage requires a non-empty id")
     return DeclaredStage(
         stage_id=stage_id,
         title=_optional_text(value.get("title")),
@@ -426,19 +426,19 @@ def _declared_stage_from_payload(value: object) -> DeclaredStage:
 
 def _declared_handoffs_from_payload(value: object) -> tuple[DeclaredHandoff, ...]:
     if not isinstance(value, list | tuple):
-        raise ValueError("declared task-world handoffs must be a list")
+        raise ValueError("declared task-review handoffs must be a list")
     return tuple(_declared_handoff_from_payload(item) for item in value)
 
 
 def _declared_handoff_from_payload(value: object) -> DeclaredHandoff:
     if not isinstance(value, dict):
-        raise ValueError("declared task-world handoff must be a mapping")
+        raise ValueError("declared task-review handoff must be a mapping")
     handoff_id = value.get("id")
     producer = value.get("producer_stage")
     if not isinstance(handoff_id, str) or not handoff_id.strip():
-        raise ValueError("declared task-world handoff requires a non-empty id")
+        raise ValueError("declared task-review handoff requires a non-empty id")
     if not isinstance(producer, str) or not producer.strip():
-        raise ValueError("declared task-world handoff requires a producer stage")
+        raise ValueError("declared task-review handoff requires a producer stage")
     return DeclaredHandoff(
         handoff_id=handoff_id,
         producer_stage_id=producer,

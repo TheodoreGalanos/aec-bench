@@ -27,12 +27,25 @@ from aec_bench.adapters.rlm.providers import (
 from aec_bench.adapters.runtime_limits import configured_positive_int, validate_runtime_limit_contract
 from aec_bench.agents.tools import inject_trajectory_writer
 from aec_bench.contracts.agent_output import AgentOutputStatus
+from aec_bench.contracts.execution_environment import PYDANTIC_AI_RUNTIME_VERSION, RUNTIME_PYTHON_PACKAGES
 from aec_bench.contracts.harness_instance import AgentBindingConfig
 from aec_bench.contracts.proposal_execution.session import ProposalSessionExecutionRef, ProposalSessionReceipt
 from aec_bench.contracts.proposal_execution_profile import (
     ProposalSchedulingSemantics,
 )
 from aec_bench.contracts.stage_execution import KernelInstructionOverride
+from aec_bench.experimentation.proposals.session_config import (
+    LoadedProposalSessionHostInputs,
+    load_proposal_session_host_inputs,
+)
+from aec_bench.experimentation.proposals.session_output import (
+    verified_proposal_final_output_path,
+)
+from aec_bench.experimentation.proposals.session_runtime import (
+    ProposalBackend,
+    build_proposal_session_execution_ref,
+    run_proposal_session,
+)
 from aec_bench.harness.execution_payload import build_entrypoint_execution_bundle, write_execution_bundle
 from aec_bench.harness.harbor_task_export import (
     HARBOR_LIFECYCLE_BRIDGE_MODE,
@@ -40,18 +53,7 @@ from aec_bench.harness.harbor_task_export import (
     load_harbor_lifecycle_bridge,
     write_harbor_lifecycle_attestation,
 )
-from aec_bench.harness.proposal_session_config import (
-    LoadedProposalSessionHostInputs,
-    load_proposal_session_host_inputs,
-)
-from aec_bench.harness.proposal_session_output import (
-    verified_proposal_final_output_path,
-)
-from aec_bench.harness.proposal_session_runtime import (
-    ProposalBackend,
-    build_proposal_session_execution_ref,
-    run_proposal_session,
-)
+from aec_bench.harness.lifecycle_local import run_local_evidence_lifecycle_session
 from aec_bench.harness.pump_station_harbor.export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
     PUMP_STATION_HARBOR_EXECUTION_KIND,
@@ -66,10 +68,8 @@ from aec_bench.harness.pump_station_harbor.session import (
     run_pump_station_model_session,
     run_pump_station_reference_session,
 )
-from aec_bench.harness.runtime_dependencies import PYDANTIC_AI_RUNTIME_VERSION, RUNTIME_PYTHON_PACKAGES
-from aec_bench.meta_harness.evidence_lifecycle_episode import LifecycleVisibilityPolicy
-from aec_bench.meta_harness.evidence_lifecycle_local import run_local_evidence_lifecycle_session
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+from aec_bench.lifecycles.runtime.episode import LifecycleVisibilityPolicy
+from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
 

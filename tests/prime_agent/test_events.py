@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from aec_bench.adapters.transcript import TranscriptEvent, TranscriptRole
+from aec_bench.contracts.adapter_execution import TranscriptEvent, TranscriptRole
 from aec_bench.prime_agent.events import (
     PrimeIncompleteEventStreamError,
     PrimeMalformedEventStreamError,

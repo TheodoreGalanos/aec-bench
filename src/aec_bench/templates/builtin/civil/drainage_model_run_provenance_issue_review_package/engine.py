@@ -1,4 +1,4 @@
-# ABOUTME: Engine for the SSC-03 drainage model-run provenance review package.
+# ABOUTME: Engine for the stormwater drainage model-run provenance review package.
 # ABOUTME: Renders temporal source packets and derives transition-aware verifier gold state.
 
 from __future__ import annotations

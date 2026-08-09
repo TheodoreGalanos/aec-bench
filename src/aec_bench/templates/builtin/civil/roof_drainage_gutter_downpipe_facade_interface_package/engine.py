@@ -1,4 +1,4 @@
-# ABOUTME: Computes SSC-03/SSC-09 roof drainage, downpipe, overflow, and facade interface metrics.
+# ABOUTME: Computes roof drainage, downpipe, overflow, and facade interface metrics.
 # ABOUTME: Combines roof runoff, gutter/downpipe capacity, overflow route, freeboard, and fixing pressure.
 
 from __future__ import annotations

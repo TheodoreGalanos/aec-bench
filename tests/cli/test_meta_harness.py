@@ -11,8 +11,8 @@ import yaml
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
-from aec_bench.task_world_templates.lifecycles.ssc03_drainage_model import (
-    materialize_ssc03_evidence_lifecycle,
+from aec_bench.lifecycles.stormwater_design.drainage_model import (
+    materialize_drainage_model_lifecycle,
 )
 
 runner = CliRunner()
@@ -125,7 +125,7 @@ def test_meta_harness_lifecycle_ablation_rejects_ignored_agent_parameter(tmp_pat
 
 
 def test_meta_harness_lifecycle_commands_prepare_submit_and_report_state(tmp_path: Path) -> None:
-    package = materialize_ssc03_evidence_lifecycle(tmp_path / "package")
+    package = materialize_drainage_model_lifecycle(tmp_path / "package")
     run_dir = tmp_path / "run"
     gold = json.loads((package / "hidden" / "gold-submissions.json").read_text(encoding="utf-8"))
 
@@ -199,7 +199,7 @@ def test_meta_harness_lifecycle_commands_prepare_submit_and_report_state(tmp_pat
 
 
 def test_meta_harness_lifecycle_branch_creates_isolated_derived_run(tmp_path: Path) -> None:
-    package = materialize_ssc03_evidence_lifecycle(tmp_path / "package")
+    package = materialize_drainage_model_lifecycle(tmp_path / "package")
     parent_run = tmp_path / "parent-run"
     branch_run = tmp_path / "branch-run"
     gold = json.loads((package / "hidden" / "gold-submissions.json").read_text(encoding="utf-8"))
@@ -268,7 +268,7 @@ def test_meta_harness_lifecycle_branch_creates_isolated_derived_run(tmp_path: Pa
 
 
 def test_meta_harness_lifecycle_run_local_defaults_to_persistent_session(tmp_path: Path, monkeypatch) -> None:
-    package = materialize_ssc03_evidence_lifecycle(tmp_path / "package")
+    package = materialize_drainage_model_lifecycle(tmp_path / "package")
     captured: dict[str, object] = {}
 
     def fake_session(**kwargs):
@@ -310,7 +310,7 @@ def test_meta_harness_lifecycle_run_local_uses_normalized_fresh_context_runner(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    package = materialize_ssc03_evidence_lifecycle(tmp_path / "package")
+    package = materialize_drainage_model_lifecycle(tmp_path / "package")
     captured: dict[str, object] = {}
 
     def fake_fresh_context(**kwargs):

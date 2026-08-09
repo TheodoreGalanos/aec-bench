@@ -1,12 +1,15 @@
-# ABOUTME: Defines current Harbor import context and the two supported evidence intents.
-# ABOUTME: Keeps execution-kind dispatch concrete at the serialized import boundary.
+# ABOUTME: Defines the generic Harbor import context and execution-evidence boundary.
+# ABOUTME: Lets bounded contexts supply evidence without importing them into the harness.
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Any, Protocol
 
+from aec_bench.contracts.evaluation_result import EvaluationResult
+from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.harness.harbor_contract import HarborTrialResult
 
 
@@ -29,6 +32,40 @@ class ImportEvidenceContext:
     repo_root: Path
     task_instance_dir: Path
     harbor_result: HarborTrialResult
+
+
+class HarborImportEvidence(Protocol):
+    """Portable evidence that one bounded execution adds to a Harbor import."""
+
+    @property
+    def adapter_name(self) -> str: ...
+
+    @property
+    def artifacts(self) -> tuple[ArtifactReference, ...]: ...
+
+    @property
+    def episode_artifact(self) -> ArtifactReference | None: ...
+
+    def sanitize_agent_configuration(
+        self,
+        configuration: dict[str, Any],
+    ) -> dict[str, Any]: ...
+
+    def augment_evaluation(
+        self,
+        evaluation: EvaluationResult,
+    ) -> EvaluationResult: ...
+
+
+class HarborImportEvidenceLoader(Protocol):
+    """Load optional bounded-context evidence for one Harbor import."""
+
+    def __call__(
+        self,
+        *,
+        context: ImportEvidenceContext,
+        intent: ImportEvidenceIntent,
+    ) -> HarborImportEvidence | None: ...
 
 
 def execution_kind_from_context(context: ImportEvidenceContext) -> str | None:

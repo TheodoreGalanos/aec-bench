@@ -30,7 +30,7 @@ from aec_bench.harness.local_runtime import (
     stage_verifier_assets,
     unstage_verifier_assets,
 )
-from aec_bench.meta_harness.llm_reviewer import (
+from aec_bench.harness.model_execution.llm_reviewer import (
     ReviewerEndpointConfig,
     ReviewerRunConfig,
     ReviewerRunResult,

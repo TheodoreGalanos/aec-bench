@@ -12,6 +12,7 @@ import pytest
 import yaml  # type: ignore[import-untyped]
 from harbor.models.job.config import JobConfig  # type: ignore[import-untyped]
 
+from aec_bench.contracts.execution_environment import HarborEnvironmentBinding
 from aec_bench.contracts.experiment_manifest import (
     AgentConfig,
     ComputeConfig,
@@ -21,30 +22,36 @@ from aec_bench.contracts.experiment_manifest import (
     TaskSelector,
 )
 from aec_bench.contracts.harness_instance import AgentBindingConfig
+from aec_bench.experimentation.proposals.harbor import (
+    ProposalHarborDispatchInput,
+    build_proposal_harbor_job_config,
+)
+from aec_bench.experimentation.proposals.program_compilation import (
+    ProposalRunSessionBundle,
+)
+from aec_bench.experimentation.proposals.session_config import (
+    ProposalSessionHostConfig,
+)
+from aec_bench.experimentation.proposals.task_package import (
+    ProposalTaskPackageManifest,
+)
 from aec_bench.harness.harbor_dispatch import (
-    MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH,
     HarborDispatchError,
     HarborExperimentDispatcher,
-    ProposalHarborDispatchInput,
     SubprocessHarborExecutor,
     build_harbor_entrypoint_execution_bundle,
     build_harbor_job_config,
-    build_proposal_harbor_job_config,
-)
-from aec_bench.harness.proposal_session_config import (
-    ProposalSessionHostConfig,
-)
-from aec_bench.harness.proposal_task_package import (
-    ProposalTaskPackageManifest,
-)
-from aec_bench.meta_harness.program_proposal_compilation import (
-    ProposalRunSessionBundle,
 )
 from aec_bench.tasks.loader import load_task_definition
 from tests.support.task_factories import make_task_definition
 
 _PROPOSAL_MORPH_ENVIRONMENT_IMPORT_PATH = (
-    "aec_bench.providers.proposal_morph.environment:ProposalMorphHarborEnvironment"
+    "aec_bench.experimentation.proposals.morph.environment:ProposalMorphHarborEnvironment"
+)
+_MORPH_ENVIRONMENT_BINDING = HarborEnvironmentBinding(
+    backend="morph",
+    import_path="aec_bench.providers.morph_harbor:MorphHarborEnvironment",
+    kwargs={"compute_backend": "morph"},
 )
 
 
@@ -60,24 +67,29 @@ class FakeExecutor:
 
 
 def test_task_worlds_and_episode_shell_do_not_import_execution_sdks() -> None:
-    source_root = Path(__file__).resolve().parents[2] / "src" / "aec_bench" / "task_world_templates"
+    package_root = Path(__file__).resolve().parents[2] / "src" / "aec_bench"
+    source_roots = (
+        package_root / "lifecycles",
+        package_root / "worlds",
+    )
     forbidden_roots = {"harbor", "modal", "morphcloud"}
     offenders: list[str] = []
-    for source_path in sorted(source_root.rglob("*.py")):
-        tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
-        imported_roots = {
-            module.split(".", maxsplit=1)[0]
-            for node in ast.walk(tree)
-            for module in (
-                [alias.name for alias in node.names]
-                if isinstance(node, ast.Import)
-                else [node.module]
-                if isinstance(node, ast.ImportFrom) and node.module is not None
-                else []
-            )
-        }
-        if imported_roots & forbidden_roots:
-            offenders.append(source_path.relative_to(source_root).as_posix())
+    for source_root in source_roots:
+        for source_path in sorted(source_root.rglob("*.py")):
+            tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+            imported_roots = {
+                module.split(".", maxsplit=1)[0]
+                for node in ast.walk(tree)
+                for module in (
+                    [alias.name for alias in node.names]
+                    if isinstance(node, ast.Import)
+                    else [node.module]
+                    if isinstance(node, ast.ImportFrom) and node.module is not None
+                    else []
+                )
+            }
+            if imported_roots & forbidden_roots:
+                offenders.append(source_path.relative_to(package_root).as_posix())
 
     assert offenders == []
 
@@ -406,10 +418,14 @@ def test_build_harbor_job_config_maps_morph_to_import_path_environment() -> None
     )
     tasks = [make_task_definition(task_id="mechanical/heat-load/alpha")]
 
-    config = build_harbor_job_config(manifest=manifest, tasks=tasks)
+    config = build_harbor_job_config(
+        manifest=manifest,
+        tasks=tasks,
+        environment_binding=_MORPH_ENVIRONMENT_BINDING,
+    )
 
     assert "type" not in config["environment"]
-    assert config["environment"]["import_path"] == MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH
+    assert config["environment"]["import_path"] == _MORPH_ENVIRONMENT_BINDING.import_path
     assert config["environment"]["kwargs"]["compute_backend"] == "morph"
 
 
@@ -423,11 +439,31 @@ def test_build_harbor_job_config_for_morph_validates_as_harbor_config() -> None:
     )
     tasks = [make_task_definition(task_id="mechanical/heat-load/alpha")]
 
-    config = build_harbor_job_config(manifest=manifest, tasks=tasks)
+    config = build_harbor_job_config(
+        manifest=manifest,
+        tasks=tasks,
+        environment_binding=_MORPH_ENVIRONMENT_BINDING,
+    )
 
     parsed = JobConfig.model_validate(config)
-    assert parsed.environment.import_path == MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH
+    assert parsed.environment.import_path == _MORPH_ENVIRONMENT_BINDING.import_path
     assert parsed.environment.type is None
+
+
+def test_build_harbor_job_config_requires_binding_for_custom_backend() -> None:
+    manifest = ExperimentManifest(
+        experiment_id="experiment-001",
+        name="Custom dispatch config",
+        tasks=TaskSelector(domains=["mechanical"]),
+        agents=[AgentConfig(name="tool-loop", adapter="tool_loop", model="claude-sonnet-4-6")],
+        compute=ComputeConfig(backend="morph"),
+    )
+
+    with pytest.raises(HarborDispatchError, match="requires an environment binding"):
+        build_harbor_job_config(
+            manifest=manifest,
+            tasks=[make_task_definition(task_id="mechanical/heat-load/alpha")],
+        )
 
 
 def test_dispatcher_writes_yaml_and_executes_harbor_command(tmp_path: Path) -> None:
@@ -577,7 +613,7 @@ def _proposal_dispatch_input(
     tmp_path: Path,
 ) -> tuple[ProposalHarborDispatchInput, ProposalRunSessionBundle]:
     fixture_module = importlib.import_module(
-        "tests.harness.test_proposal_session_config",
+        "tests.experimentation.proposals.test_session_config",
     )
     host_fixture = cast(
         Callable[

@@ -1,4 +1,4 @@
-# ABOUTME: Computes SSC-03 sewer/storm pipe gradient and capacity repair metrics.
+# ABOUTME: Computes stormwater sewer/storm pipe gradient and capacity repair metrics.
 # ABOUTME: Combines invert consistency, Manning capacity, velocity, cover, and repair checks.
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def compute(
     minimum_velocity_m_s: float,
     maximum_velocity_m_s: float,
 ) -> dict[str, float]:
-    """Compute deterministic SSC-03 pipe repair metrics."""
+    """Compute deterministic stormwater pipe repair metrics."""
     _require_positive(
         pipe_length_m=pipe_length_m,
         pipe_diameter_m=pipe_diameter_m,

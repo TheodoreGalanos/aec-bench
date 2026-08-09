@@ -223,7 +223,6 @@ class EvidenceCheckpointSpec(StrictModel):
 
 class EvidenceLifecycleSpec(StrictModel):
     lifecycle_id: NonEmptyStr
-    world_id: NonEmptyStr
     checkpoints: list[EvidenceCheckpointSpec] = Field(min_length=1)
 
     @model_validator(mode="after")

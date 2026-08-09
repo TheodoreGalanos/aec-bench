@@ -20,12 +20,13 @@ from aec_bench.prime_agent.acp import (
     run_prime_acp_session,
 )
 from aec_bench.prime_agent.batch import PRIME_AGENT_TESTED_VERSION
+from aec_bench.prime_agent.refinement import PrimeRefinementMode, empty_refinement_candidate
 from aec_bench.prime_agent.session_evidence import PrimeAcpLimits
-from aec_bench.prime_agent.world import (
+from aec_bench.prime_agent.skills import (
     WORLD_ACTOR_CAPABILITY_ENV,
     WORLD_ACTOR_SOCKET_ENV,
     install_aec_world_skill,
-    install_pump_station_guidance_skill,
+    install_prime_skill,
 )
 
 
@@ -51,6 +52,11 @@ Path("observed-acp.json").write_text(json.dumps({{
     "xdg_config_home": os.environ.get("XDG_CONFIG_HOME"),
     "xdg_data_home": os.environ.get("XDG_DATA_HOME"),
     "actor_state_exists": Path("state.json").is_file(),
+    "refinement_candidate": (
+        json.loads((Path(os.environ["PRIME_AGENT_CODING_AGENT_DIR"]) / "harness" / "harness_state.json").read_text())
+        if (Path(os.environ["PRIME_AGENT_CODING_AGENT_DIR"]) / "harness" / "harness_state.json").is_file()
+        else None
+    ),
 }}))
 scenario = os.environ.get("FAKE_ACP_SCENARIO", "success")
 session_dir = Path(sys.argv[sys.argv.index("--session-dir") + 1])
@@ -76,6 +82,40 @@ def record_assistant():
             }},
         }},
     }})
+
+def harness_entry(kind, entry_id, scope):
+    reference = (
+        {{
+            "type": "python",
+            "import": "aec_world",
+            "callable": "observe",
+            "call_pattern": "await aec_world.observe()",
+        }}
+        if kind == "skill"
+        else {{}}
+    )
+    return {{
+        "id": entry_id,
+        "kind": kind,
+        "title": f"{{kind}} title",
+        "content": f"Use the {{kind}} refinement.",
+        "path": "pump/stewardship",
+        "scope": scope,
+        "reference": reference,
+        "arguments": {{}},
+        "metadata": {{"scope": scope}},
+        "source": "refine",
+        "created_at": "2026-08-09T00:00:00Z",
+        "updated_at": "2026-08-09T00:00:00Z",
+        "version": 1,
+    }}
+
+def write_harness(path, entries):
+    grouped = {{kind: {{}} for kind in ("prompt", "memory", "skill", "subagent")}}
+    for entry in entries:
+        grouped[entry["kind"]][entry["id"]] = entry
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({{"schema": 1, "entries": grouped, "refinements": []}}) + "\\n")
 
 sessions = 0
 for line in sys.stdin:
@@ -107,6 +147,25 @@ for line in sys.stdin:
             print("not-json", flush=True)
             continue
         record_assistant()
+        if scenario in {{"full-refinement", "candidate-drift"}}:
+            local_entries = [
+                harness_entry("prompt", "compact-actions", "local"),
+                harness_entry("memory", "actor-boundary", "local"),
+            ]
+            if scenario == "candidate-drift":
+                local_entries = [harness_entry("memory", "unexpected-change", "local")]
+            write_harness(
+                session_dir.parent / "session-artifacts" / "prime-root" / "harness" / "harness_state.json",
+                local_entries,
+            )
+            if scenario == "full-refinement":
+                write_harness(
+                    Path(os.environ["PRIME_AGENT_CODING_AGENT_DIR"]) / "harness" / "harness_state.json",
+                    [
+                        harness_entry("skill", "observe-current-world", "global"),
+                        harness_entry("subagent", "evidence-reviewer", "global"),
+                    ],
+                )
         if scenario == "malformed-session":
             with session_file.open("a") as sink:
                 sink.write("not-json\\n")
@@ -140,7 +199,7 @@ for line in sys.stdin:
                         "unknownUpdateKey": "kept",
                         **({{"ai.primeintellect.prime-agent": {{
                             "refinement": {{"status": "complete", "summary": "kept raw"}}
-                        }}}} if scenario == "topology-refinement" else {{}}),
+                        }}}} if scenario in {{"topology-refinement", "full-refinement", "candidate-drift"}} else {{}}),
                     }},
                 }},
                 "_meta": {{"unknownNotificationKey": True}},
@@ -165,7 +224,7 @@ for line in sys.stdin:
 
 def _workspace(tmp_path: Path) -> tuple[Path, Path, Path]:
     actor_workspace = tmp_path / "actor"
-    actor_workspace.mkdir()
+    actor_workspace.mkdir(parents=True)
     skill = install_aec_world_skill(actor_workspace)
     evidence = tmp_path / "host-evidence"
     return actor_workspace, skill, evidence
@@ -214,20 +273,23 @@ def test_builds_acp_command_with_only_the_explicit_skill(tmp_path: Path) -> None
 
 def test_builds_acp_command_with_ordered_explicit_skills(tmp_path: Path) -> None:
     actor_workspace, skill, _ = _workspace(tmp_path)
-    guidance = install_pump_station_guidance_skill(actor_workspace)
+    second_source = tmp_path / "second-skill"
+    second_source.mkdir()
+    (second_source / "SKILL.md").write_text("---\nname: second-skill\n---\n", encoding="utf-8")
+    second_skill_path = install_prime_skill(actor_workspace, second_source)
 
     command = build_prime_acp_command(
         executable=Path("/opt/prime/bin/prime-agent"),
         model="anthropic/test",
         actor_workspace=actor_workspace,
         session_dir=actor_workspace / "sessions",
-        skill_directories=(skill, guidance),
+        skill_directories=(skill, second_skill_path),
     )
 
     first_skill = command.index("--skill")
     second_skill = command.index("--skill", first_skill + 1)
     assert command[first_skill + 1] == str(skill)
-    assert command[second_skill + 1] == str(guidance)
+    assert command[second_skill + 1] == str(second_skill_path)
     assert command.count("--no-skills") == 1
 
 
@@ -242,8 +304,8 @@ async def test_runs_one_acp_session_and_preserves_unknown_metadata(tmp_path: Pat
         instruction="Use the current world actor until the task is complete.",
         model="anthropic/test",
         actor_environment={
-            WORLD_ACTOR_SOCKET_ENV: "/private/tmp/scoped-actor.sock",
-            WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
+            "AEC_BENCH_TEST_SOCKET": "/private/tmp/scoped-actor.sock",
+            "AEC_BENCH_TEST_CAPABILITY": "scoped-capability-secret",
         },
         isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
         limits=_limits(),
@@ -391,6 +453,126 @@ async def test_normalizes_child_topology_and_refinement_metadata(tmp_path: Path)
 
 
 @pytest.mark.asyncio
+async def test_discovers_all_prime_refinement_kinds_without_cross_run_state(tmp_path: Path) -> None:
+    actor_workspace, skill, evidence = _workspace(tmp_path)
+    result = await run_prime_acp_session(
+        actor_workspace=actor_workspace,
+        evidence_directory=evidence,
+        skill_directories=(skill,),
+        instruction="Refine the useful harness state.",
+        model="anthropic/test",
+        actor_environment={
+            WORLD_ACTOR_SOCKET_ENV: "/private/tmp/scoped-actor.sock",
+            WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
+        },
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        limits=_limits(),
+        refinement_mode=PrimeRefinementMode.DISCOVER,
+        executable=str(_fake_prime_agent(tmp_path)),
+        environment={**os.environ, "FAKE_ACP_SCENARIO": "full-refinement"},
+    )
+
+    assert result.session_state == "ended"
+    assert result.refinement_harness.changed
+    assert result.refinement_harness.portable
+    assert {entry.kind.value for entry in result.refinement_harness.candidate.entries} == {
+        "prompt",
+        "memory",
+        "skill",
+        "subagent",
+    }
+    assert {entry.scope.value for entry in result.refinement_harness.candidate.entries} == {
+        "local",
+        "global",
+    }
+    assert {entry.kind.value for entry in result.refinement_harness.global_candidate.entries} == {
+        "skill",
+        "subagent",
+    }
+    assert (evidence / "prime-harness-global.json").is_file()
+    assert (evidence / "prime-harness-local-001.json").is_file()
+    change = json.loads((evidence / "prime-refinement-change.json").read_text(encoding="utf-8"))
+    assert change["candidate"]["content_sha256"] == result.refinement_harness.candidate.content_sha256
+    assert change["portable"] is True
+
+
+@pytest.mark.asyncio
+async def test_loads_one_fixed_refinement_candidate_before_prime_starts(tmp_path: Path) -> None:
+    discovery_workspace, discovery_skill, discovery_evidence = _workspace(tmp_path / "discovery")
+    discovered = await run_prime_acp_session(
+        actor_workspace=discovery_workspace,
+        evidence_directory=discovery_evidence,
+        skill_directories=(discovery_skill,),
+        instruction="Discover one candidate.",
+        model="anthropic/test",
+        actor_environment={
+            WORLD_ACTOR_SOCKET_ENV: "/private/tmp/scoped-actor.sock",
+            WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
+        },
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        limits=_limits(),
+        refinement_mode=PrimeRefinementMode.DISCOVER,
+        executable=str(_fake_prime_agent(tmp_path / "discovery")),
+        environment={**os.environ, "FAKE_ACP_SCENARIO": "full-refinement"},
+    )
+    candidate = discovered.refinement_harness.candidate
+
+    actor_workspace, skill, evidence = _workspace(tmp_path / "candidate")
+    result = await run_prime_acp_session(
+        actor_workspace=actor_workspace,
+        evidence_directory=evidence,
+        skill_directories=(skill,),
+        instruction="Run with the fixed candidate.",
+        model="anthropic/test",
+        actor_environment={
+            WORLD_ACTOR_SOCKET_ENV: "/private/tmp/scoped-actor.sock",
+            WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
+        },
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        limits=_limits(),
+        refinement_mode=PrimeRefinementMode.CANDIDATE,
+        refinement_candidate=candidate,
+        executable=str(_fake_prime_agent(tmp_path / "candidate")),
+        environment=os.environ,
+    )
+
+    observed = json.loads((actor_workspace / "observed-acp.json").read_text(encoding="utf-8"))
+    installed = observed["refinement_candidate"]["entries"]
+    assert sum(len(entries) for entries in installed.values()) == 4
+    assert result.session_state == "ended"
+    assert not result.refinement_harness.changed
+    assert not result.refinement_harness.drifted
+    assert result.refinement_harness.candidate.content_sha256 == candidate.content_sha256
+
+
+@pytest.mark.asyncio
+async def test_fixed_candidate_fails_when_prime_refines_during_comparison(tmp_path: Path) -> None:
+    actor_workspace, skill, evidence = _workspace(tmp_path)
+    result = await run_prime_acp_session(
+        actor_workspace=actor_workspace,
+        evidence_directory=evidence,
+        skill_directories=(skill,),
+        instruction="Do not change the fixed candidate.",
+        model="anthropic/test",
+        actor_environment={
+            WORLD_ACTOR_SOCKET_ENV: "/private/tmp/scoped-actor.sock",
+            WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
+        },
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        limits=_limits(),
+        refinement_mode=PrimeRefinementMode.CANDIDATE,
+        refinement_candidate=empty_refinement_candidate(),
+        executable=str(_fake_prime_agent(tmp_path)),
+        environment={**os.environ, "FAKE_ACP_SCENARIO": "candidate-drift"},
+    )
+
+    assert result.session_state == "failed"
+    assert result.refinement_harness.drifted
+    assert "fixed_candidate_changed" in result.refinement_harness.issues
+    assert result.error == "Prime refinement candidate changed during a fixed candidate run"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("limits", "expected_reason"),
     [
@@ -535,7 +717,7 @@ def test_macos_profile_denies_repo_and_private_world_but_allows_scoped_actor(tmp
     profile = build_macos_sandbox_profile(
         actor_workspace=actor_workspace,
         executable=executable,
-        actor_socket=socket_path,
+        scoped_socket=socket_path,
         private_paths=(world,),
     )
 
@@ -557,7 +739,7 @@ def test_macos_profile_enforces_the_filesystem_boundary(tmp_path: Path) -> None:
         build_macos_sandbox_profile(
             actor_workspace=actor_workspace,
             executable=executable,
-            actor_socket=tmp_path / "socket" / "actor.sock",
+            scoped_socket=tmp_path / "socket" / "actor.sock",
             private_paths=(),
         ),
         encoding="utf-8",
@@ -596,6 +778,7 @@ async def test_macos_sandboxed_acp_run_is_benchmark_valid(tmp_path: Path) -> Non
             WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
         },
         isolation=PrimeAcpIsolation.MACOS_SANDBOX,
+        scoped_socket=tmp_path / "socket" / "actor.sock",
         private_paths=(tmp_path / "private-world",),
         limits=_limits(wall_seconds=2),
         executable=str(_fake_prime_agent(tmp_path)),

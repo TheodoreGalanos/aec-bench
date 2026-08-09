@@ -1,4 +1,4 @@
-# ABOUTME: Tests the SSC-03 detention outlet HGL built-in task template.
+# ABOUTME: Tests the stormwater detention outlet HGL built-in task template.
 # ABOUTME: Covers discovery, deterministic stormwater metrics, and generated verifier output.
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ EXPECTED_METRICS = {
 }
 
 
-def _sample_ssc03_instance(tmp_path: Path) -> Path:
+def _sample_stormwater_instance(tmp_path: Path) -> Path:
     loaded_template = load_template(TEMPLATE_DIR)
     template_dir = loaded_template.path
     instance = sample_instance(loaded_template, difficulty_name="easy", seed=54, instance_index=0)
@@ -71,7 +71,7 @@ def test_engine_reproduces_task_owned_source_pack_metrics() -> None:
 
 
 def test_generated_instance_contains_source_bound_instruction(tmp_path: Path) -> None:
-    instance_dir = _sample_ssc03_instance(tmp_path)
+    instance_dir = _sample_stormwater_instance(tmp_path)
     instruction = (instance_dir / "instruction.md").read_text(encoding="utf-8")
 
     for required_text in [
@@ -90,7 +90,7 @@ def test_generated_instance_contains_source_bound_instruction(tmp_path: Path) ->
 
 
 def test_generated_verifier_scores_golden_pass_at_one(tmp_path: Path) -> None:
-    instance_dir = _sample_ssc03_instance(tmp_path)
+    instance_dir = _sample_stormwater_instance(tmp_path)
     golden_pass = instance_dir / "tests" / "fixtures" / "golden_pass.md"
     reward_file = tmp_path / "reward.json"
 

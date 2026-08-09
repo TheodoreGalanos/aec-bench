@@ -1,9 +1,9 @@
-# ABOUTME: Parameter ranges for the SSC-03 model-run provenance review package.
+# ABOUTME: Parameter ranges for the stormwater model-run provenance review package.
 # ABOUTME: Samples report evidence, propagation deltas, and hidden packet defects.
 
 [meta]
 name = "drainage-model-run-provenance-issue-review-package"
-description = "SSC-03 review of drainage model-run provenance and downstream claim propagation"
+description = "stormwater review of drainage model-run provenance and downstream claim propagation"
 long_description = "Review a generated drainage-model evidence packet across governing input revisions, model manifest, run register, report, and downstream design memo; determine which state governs and whether the package is ready to issue."
 discipline = "civil"
 category = "drainage-review"

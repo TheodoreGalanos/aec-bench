@@ -40,32 +40,36 @@ The installed package groups code by responsibility:
   contract symbols.
 - Task loading, templates, generation, and datasets own authoring, compilation,
   deterministic generation, and benchmark snapshot identity.
-- Task-world templates own executable world semantics and packaged world data.
-- Adapters, agents, providers, and harness code own model execution and compute
-  integration without taking over task semantics.
-- The continual-world package owns task-neutral registration, the episode
-  shell, optional rollout orchestration, and shared durability surfaces. The
-  external catalogue is its composition root; concrete actor, provider, and
-  evaluation calls remain with their owners.
+- Tasks, templates, lifecycles, and worlds keep the calculations and technical
+  verifiers that define their own benchmark behaviour. Extract shared domain
+  code only when two real owners use the same stable behaviour.
+- `worlds` owns interactive-world runtime behavior, concrete world semantics,
+  and packaged world data. `worlds/catalogue.py` is the composition root and
+  does not move task behavior into the shared runtime.
+- `lifecycles` owns finite staged progression, checkpoint operation protocols,
+  concrete lifecycle definitions, and lifecycle compilation.
+- Adapters, agents, providers, and `harness` own model execution, process
+  coordination, and compute integration without taking over task semantics.
 - Evaluation owns scoring, validity interpretation, diagnostics, and
   task-specific evaluation extensions.
 - Ledger and artifact modules own persistence and retrieval mechanics.
 - CLI, TUI, web, communication, and export modules present or compose lower
   layers.
-- Meta-harness and evolution modules own their explicit research and
-  orchestration workflows without making ignored research files runtime inputs.
+- `experimentation` owns proposals, governance, qualification, lifecycle
+  studies, and maintained research experiments. The public `meta-harness` CLI
+  composes these owners; there is no matching umbrella source package.
 
 See [Architecture](ARCHITECTURE.md) for current flows and dependency direction.
 
 ## Task-owned world code
 
-Reusable interactive-world boundaries live under
-`src/aec_bench/task_world_templates/continual/`. Concrete state, action,
-control, event, projection, physics, and verifier semantics live under their
-task-world family. The composition catalogue may import concrete definitions;
-the task-neutral continual package must not.
+Reusable interactive-world behavior lives under
+`src/aec_bench/worlds/runtime/`. Concrete state, action, control, event,
+projection, physics, and verifier semantics live under their world family.
+`src/aec_bench/worlds/catalogue.py` may import concrete definitions; the
+task-neutral runtime must not.
 
-Do not move a pump, hydraulic, or other task field into the shared runtime to
+Do not move a pump or other task field into the shared runtime to
 avoid passing an opaque task-owned value through its registered port.
 
 ## Test ownership

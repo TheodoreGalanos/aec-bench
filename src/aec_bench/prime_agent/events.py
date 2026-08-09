@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 from pydantic import StrictInt, ValidationError, field_validator
 
-from aec_bench.adapters.transcript import (
+from aec_bench.contracts.adapter_execution import (
     TokenUsage,
     TranscriptEntry,
     TranscriptEvent,

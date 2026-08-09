@@ -1,4 +1,4 @@
-# ABOUTME: Tests the SSC-03 drainage model-run provenance issue-review package.
+# ABOUTME: Tests the stormwater drainage model-run provenance issue-review package.
 # ABOUTME: Covers source-only closure, temporal transitions, variants, and stage-gated verification.
 
 from __future__ import annotations
@@ -13,12 +13,12 @@ from typing import Any, cast
 
 import pytest
 
+from aec_bench.experimentation.governance.applicability import profile_task_applicability
 from aec_bench.generation.contracts import SampledInstance
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
-from aec_bench.meta_harness.applicability import profile_task_applicability
-from aec_bench.meta_harness.declared_task_surface import project_declared_task_surface
-from aec_bench.meta_harness.kernel_catalogue import default_kernel_registry
+from aec_bench.harness.compilation.task_surface import project_declared_task_surface
+from aec_bench.harness.kernel_catalogue import default_kernel_registry
 from aec_bench.tasks.loader import load_task_definition
 from aec_bench.templates.contracts import TemplateConfig
 from aec_bench.templates.registry import LoadedTemplate, discover_templates, load_template
@@ -253,7 +253,9 @@ def test_checked_stage1_program_recovery_pair_is_distinct_synthetic_long_horizon
     instance_payloads = tuple(
         json.loads((task_dir / "tests" / "instance.json").read_text(encoding="utf-8")) for task_dir in task_dirs
     )
-    world_payloads = tuple(json.loads((task_dir / "world.json").read_text(encoding="utf-8")) for task_dir in task_dirs)
+    review_payloads = tuple(
+        json.loads((task_dir / "task-review.json").read_text(encoding="utf-8")) for task_dir in task_dirs
+    )
 
     assert [payload["seed"] for payload in instance_payloads] == [7_301, 7_301]
     assert [payload["difficulty"] for payload in instance_payloads] == ["hard", "hard"]
@@ -262,14 +264,14 @@ def test_checked_stage1_program_recovery_pair_is_distinct_synthetic_long_horizon
         "stale_catchment_revision",
     ]
     assert len({payload["instance_name"] for payload in instance_payloads}) == 2
-    assert all("template_id" not in payload for payload in world_payloads)
+    assert all("template_id" not in payload for payload in review_payloads)
     test_scripts = tuple((task_dir / "tests" / "test.sh").read_text(encoding="utf-8") for task_dir in task_dirs)
     assert all('python3 "$SCRIPT_DIR/verify.py"' in script for script in test_scripts)
     assert all("/workspace/tests/verify.py" not in script for script in test_scripts)
     assert all("python3 /tests/verify.py" not in script for script in test_scripts)
-    assert all("stages" not in payload for payload in world_payloads)
-    assert all("handoffs" not in payload for payload in world_payloads)
-    assert all("branch_decisions" not in payload for payload in world_payloads)
+    assert all("stages" not in payload for payload in review_payloads)
+    assert all("handoffs" not in payload for payload in review_payloads)
+    assert all("branch_decisions" not in payload for payload in review_payloads)
 
     scores = tuple(
         (
@@ -281,10 +283,10 @@ def test_checked_stage1_program_recovery_pair_is_distinct_synthetic_long_horizon
     assert scores == ((0.31, 1.0), (0.21, 1.0))
 
 
-def test_generated_world_is_an_opaque_atomic_task(tmp_path: Path) -> None:
+def test_generated_task_review_has_no_declared_stage_graph(tmp_path: Path) -> None:
     instance_dir, _ground_truth = _scaffold_variant(tmp_path, "downstream_memo_stale_report")
 
-    world_payload = json.loads((instance_dir / "world.json").read_text(encoding="utf-8"))
+    review_payload = json.loads((instance_dir / "task-review.json").read_text(encoding="utf-8"))
     task = load_task_definition(instance_dir, tmp_path)
     surface = project_declared_task_surface(task=task, task_dir=instance_dir)
     applicability = profile_task_applicability(
@@ -293,7 +295,7 @@ def test_generated_world_is_an_opaque_atomic_task(tmp_path: Path) -> None:
         registry=default_kernel_registry(),
     )
 
-    assert set(world_payload) == {"world_id", "name", "task_unit", "logic_profile", "operation_profile"}
+    assert set(review_payload) == {"profile_id", "name", "task_unit", "logic_profile", "operation_profile"}
     assert surface.topology_basis == "opaque_atomic"
     assert surface.canonical_nodes == ("task",)
     assert surface.branch_count == 0

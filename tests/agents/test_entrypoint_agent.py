@@ -26,10 +26,10 @@ from aec_bench.harness.pump_station_harbor.session import (
 from aec_bench.harness.pump_station_harbor.verifier import (
     verify_pump_station_harbor_run,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition import (
     pump_station_continual_world_definition,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
 from agents.entrypoint_agent import (
@@ -102,13 +102,13 @@ def test_entrypoint_agent_calls_the_pump_harbor_owner_without_a_neutral_provider
         module
         for module in imported_modules
         if module.startswith("aec_bench.harness.pump_station_harbor")
-        or module == ("aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller")
+        or module == ("aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller")
     )
 
     assert set(pump_imports) == {
         "aec_bench.harness.pump_station_harbor.export",
         "aec_bench.harness.pump_station_harbor.session",
-        "aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller",
+        "aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller",
     }
 
 

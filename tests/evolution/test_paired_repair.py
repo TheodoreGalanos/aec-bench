@@ -332,7 +332,7 @@ def _outcome(
         candidate_id=candidate_id,
         kernel_sha256=_sha("kernel"),
         resource_sha256=_sha("resource"),
-        world_lineage_sha256=_sha(f"world:{block_id}"),
+        review_lineage_sha256=_sha(f"review:{block_id}"),
         reward=reward,
         complete=True,
         valid=True,

@@ -1,7 +1,7 @@
-# Public calibration sweep for the SSC-03 staged evidence lifecycle.
+# Public calibration sweep for the stormwater staged evidence lifecycle.
 # Provider seeds and parallel execution are deliberately unsupported in this version.
 schema_version: "1"
-experiment_id: ssc03-public-calibration
+experiment_id: stormwater-public-calibration
 lifecycle_template_id: drainage-model-evidence-lifecycle-review
 study_design:
   interpretation: descriptive_calibration
@@ -20,11 +20,11 @@ agents:
     adapter: tool_loop
     model: claude-sonnet-4-6
     parameters:
-      # Fresh SSC-03 conditions can open three sessions before retries; this is not a total-trial budget.
+      # Fresh stormwater conditions can open three sessions before retries; this is not a total-trial budget.
       max_turns_per_session: 60
 repetitions: 1
-output_root: ../../../artefacts/ssc03-public-calibration/runs
-ledger_root: ../../../artefacts/ssc03-public-calibration/ledger
+output_root: ../../../artefacts/stormwater-public-calibration/runs
+ledger_root: ../../../artefacts/stormwater-public-calibration/ledger
 limits:
   max_trials: 16
   max_concurrency: 1

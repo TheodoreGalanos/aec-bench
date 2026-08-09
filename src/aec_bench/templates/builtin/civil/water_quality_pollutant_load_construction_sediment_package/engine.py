@@ -1,4 +1,4 @@
-# ABOUTME: Computes SSC-03 water-quality, pollutant-load, and sediment basin metrics.
+# ABOUTME: Computes stormwater water-quality, pollutant-load, and sediment basin metrics.
 # ABOUTME: Combines runoff volume, pollutant load, basin sizing, temporary discharge, and capture checks.
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ def compute(
     outlet_weir_head_m: float,
     target_capture_percent: float,
 ) -> dict[str, float]:
-    """Compute deterministic SSC-03 water-quality and sediment metrics."""
+    """Compute deterministic stormwater water-quality and sediment metrics."""
     _require_positive(
         disturbed_area_ha=disturbed_area_ha,
         runoff_depth_mm=runoff_depth_mm,

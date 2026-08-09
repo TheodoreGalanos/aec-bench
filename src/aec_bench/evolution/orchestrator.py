@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 
 from aec_bench.contracts.evolution import (
     EvolutionConfig,
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 # Callable type: takes a workspace snapshot and a batch size, returns trial records.
 SolveFn = Callable[[WorkspaceSnapshot, int], list[TrialRecord]]
+ReportWriter = Callable[[Path], Path]
 
 
 class EvolutionOrchestrator:
@@ -46,12 +48,14 @@ class EvolutionOrchestrator:
         solve_fn: SolveFn,
         config: EvolutionConfig,
         strategy: SelectionStrategy | None = None,
+        report_writer: ReportWriter | None = None,
     ) -> None:
         self._workspace = workspace
         self._engine = engine
         self._solve_fn = solve_fn
         self._config = config
         self._strategy = strategy or HillClimbStrategy()
+        self._report_writer = report_writer
 
     def run(self) -> EvolutionResult:
         """Run the evolution loop and return the aggregated result."""
@@ -278,16 +282,10 @@ class EvolutionOrchestrator:
 
     def _write_report(self) -> None:
         """Generate and write the evolution HTML report to the workspace."""
+        if self._report_writer is None:
+            return
         try:
-            from aec_bench.communication.evolution_report import (
-                render_evolution_report_html,
-            )
-            from aec_bench.evolution.report_data import build_evolution_report_data
-
-            data = build_evolution_report_data(self._workspace.root)
-            html = render_evolution_report_html(data)
-            report_path = self._workspace.root / "evolution-report.html"
-            report_path.write_text(html, encoding="utf-8")
+            report_path = self._report_writer(self._workspace.root)
             logger.info("Evolution report written to %s", report_path)
         except Exception:
             logger.warning("Failed to generate evolution report", exc_info=True)

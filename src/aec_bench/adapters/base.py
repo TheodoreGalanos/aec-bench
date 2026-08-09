@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol
 
-from aec_bench.adapters.transcript import TranscriptEntry
+from aec_bench.contracts.adapter_execution import TranscriptEntry, TranscriptRole
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.output_completion import OutputCommitAttestation
 from aec_bench.contracts.task_definition import ToolSpec
@@ -89,6 +89,15 @@ class AdapterRequest:
     configuration: dict[str, Any] = field(default_factory=dict)
     output_path: str = "/workspace/output.jsonl"
     output_format: str = "jsonl"
+
+
+def initialize_transcript(request: AdapterRequest) -> list[TranscriptEntry]:
+    """Build the opening transcript entries from an adapter request."""
+    transcript: list[TranscriptEntry] = []
+    if request.system_prompt is not None:
+        transcript.append(TranscriptEntry(role=TranscriptRole.SYSTEM, content=request.system_prompt))
+    transcript.append(TranscriptEntry(role=TranscriptRole.USER, content=request.instruction))
+    return transcript
 
 
 @dataclass(frozen=True)

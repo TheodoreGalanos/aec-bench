@@ -8,7 +8,9 @@ import argparse
 import json
 from pathlib import Path
 
-from aec_bench.prime_agent.trajectory import analyze_prime_world_trial
+from aec_bench.experimentation.qualification.pump_station_prime_trajectory import (
+    analyze_pump_station_prime_trial,
+)
 
 
 def main() -> None:
@@ -24,7 +26,7 @@ def main() -> None:
     args = parser.parse_args()
 
     analyses = [
-        analyze_prime_world_trial(
+        analyze_pump_station_prime_trial(
             directory,
             large_output_threshold_chars=args.large_output_threshold_chars,
         ).model_dump(mode="json")

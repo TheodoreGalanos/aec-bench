@@ -30,33 +30,34 @@ from aec_bench.harness.pump_station_harbor.export import (
     export_pump_station_harbor_task,
     load_pump_station_harbor_bridge,
 )
-from aec_bench.task_world_templates.continual.rollout_control import ContinualRolloutControl
-from aec_bench.task_world_templates.continual.rollout_repository import ContinualRolloutRepository
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
+from aec_bench.harness.pump_station_harbor.importing import load_pump_station_import_evidence
+from aec_bench.worlds.runtime.rollout_control import ContinualRolloutControl
+from aec_bench.worlds.runtime.rollout_repository import ContinualRolloutRepository
+from aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition import (
     pump_station_continual_world_definition,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_rollout_adapter import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.continual_rollout_adapter import (
     PumpStationContinualWorldBranchPort,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import (
     PumpStationEpisodeHost,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evaluation import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.evaluation import (
     evaluate_pump_station_reference_run,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.world_run import (
     PumpStationWorldRun,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_models import (
     PumpStationStateSnapshotRef,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_serialization import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_serialization import (
     pump_station_artifact_id,
 )
 
@@ -330,7 +331,11 @@ def test_local_harbor_trial_resumes_one_rollout_child_for_one_bounded_actor_acti
     assert _tree_bytes(sibling_root) == sibling_before
     assert sibling_ref.initial_snapshot.sequence == selected_ref.initial_snapshot.sequence
 
-    record = import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
+    record = import_harbor_trial(
+        trial_dir=trial_dir,
+        repo_root=repo_root,
+        evidence_loader=load_pump_station_import_evidence,
+    )
     assert record.evaluation.stewardship is not None
     assert record.evaluation.stewardship.evaluation_scope == "bounded_continuation"
     assert record.evaluation.stewardship.valid is True

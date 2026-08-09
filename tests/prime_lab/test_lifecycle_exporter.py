@@ -17,13 +17,13 @@ import pytest
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
-from aec_bench.meta_harness.evidence_lifecycle import prepare_evidence_checkpoint
+from aec_bench.lifecycles.catalogue import materialize_lifecycle
+from aec_bench.lifecycles.runtime.lifecycle import prepare_evidence_checkpoint
 from aec_bench.prime_lab.lifecycle_environment import load_local_lifecycle_environment
 from aec_bench.prime_lab.lifecycle_exporter import (
     PrimeLifecycleExportConfig,
     export_prime_lifecycle_environment,
 )
-from aec_bench.task_world_templates.lifecycles import materialize_lifecycle
 
 TEMPLATE_ID = "drainage-model-evidence-lifecycle-review"
 INTERACTION_TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
@@ -42,7 +42,7 @@ def test_lifecycle_export_references_registered_public_packages_without_copying(
 
     result = export_prime_lifecycle_environment(
         PrimeLifecycleExportConfig(
-            name="ssc03-local-lifecycle",
+            name="stormwater-local-lifecycle",
             package_dirs=packages,
             output_dir=tmp_path / "environments",
             max_turns=60,
@@ -88,7 +88,7 @@ def test_lifecycle_export_references_registered_public_packages_without_copying(
 def test_lifecycle_export_is_deterministic_and_preserves_existing_output_on_rejection(tmp_path: Path) -> None:
     package = _materialize(tmp_path / "package", PUBLIC_VARIANTS[0])
     config = PrimeLifecycleExportConfig(
-        name="ssc03-deterministic",
+        name="stormwater-deterministic",
         package_dirs=(package,),
         output_dir=tmp_path / "environments",
     )
@@ -107,7 +107,7 @@ def test_lifecycle_export_is_deterministic_and_preserves_existing_output_on_reje
     with pytest.raises(ValueError, match="registered public lifecycle variant"):
         export_prime_lifecycle_environment(
             PrimeLifecycleExportConfig(
-                name="ssc03-deterministic",
+                name="stormwater-deterministic",
                 package_dirs=(invalid,),
                 output_dir=tmp_path / "environments",
             )
@@ -247,7 +247,7 @@ def test_generated_lifecycle_environment_loads_outside_repo_root(tmp_path: Path)
     package = _materialize(tmp_path / "package", PUBLIC_VARIANTS[0])
     result = export_prime_lifecycle_environment(
         PrimeLifecycleExportConfig(
-            name="ssc03-outside-import",
+            name="stormwater-outside-import",
             package_dirs=(package,),
             output_dir=tmp_path / "environments",
             max_turns=17,
@@ -282,7 +282,7 @@ def test_generated_lifecycle_environment_loads_outside_repo_root(tmp_path: Path)
             str(result.package_dir / ".venv" / "bin" / "python"),
             "-c",
             (
-                "from ssc03_outside_import import load_environment; "
+                "from stormwater_outside_import import load_environment; "
                 "env = load_environment(); "
                 "print(type(env).__name__, len(env.dataset), env.max_turns, "
                 "env.execution_mode, env.memory_visibility_policy)"
@@ -303,7 +303,7 @@ def test_generated_lifecycle_rollout_advances_all_checkpoints_in_one_persistent_
     package = _materialize(tmp_path / "package", PUBLIC_VARIANTS[0])
     result = export_prime_lifecycle_environment(
         PrimeLifecycleExportConfig(
-            name="ssc03-gold-lifecycle",
+            name="stormwater-gold-lifecycle",
             package_dirs=(package,),
             output_dir=tmp_path / "environments",
         )
@@ -373,7 +373,7 @@ def test_generated_lifecycle_rollout_exposes_conditional_evidence_only_for_capab
     _add_conditional_evidence(package)
     result = export_prime_lifecycle_environment(
         PrimeLifecycleExportConfig(
-            name="ssc03-conditional-lifecycle",
+            name="stormwater-conditional-lifecycle",
             package_dirs=(package,),
             output_dir=tmp_path / "environments",
         )
@@ -450,7 +450,7 @@ def test_generated_lifecycle_rollout_executes_hydraulic_operation_with_public_sc
     current_source = _read_json(identity_run / "workspace" / "hydraulics" / "current-source.json")
     result = export_prime_lifecycle_environment(
         PrimeLifecycleExportConfig(
-            name="ssc03-hydraulic-operation-lifecycle",
+            name="stormwater-hydraulic-operation-lifecycle",
             package_dirs=(package,),
             output_dir=tmp_path / "environments",
         )
@@ -515,7 +515,7 @@ def test_lifecycle_reward_is_task_owned_and_only_runs_at_terminal_state(tmp_path
     package = _materialize(tmp_path / "package", PUBLIC_VARIANTS[0])
     result = export_prime_lifecycle_environment(
         PrimeLifecycleExportConfig(
-            name="ssc03-task-owned-reward",
+            name="stormwater-task-owned-reward",
             package_dirs=(package,),
             output_dir=tmp_path / "environments",
         )
@@ -577,7 +577,7 @@ def test_generated_lifecycle_environment_rejects_path_escape_and_package_hash_dr
     package = _materialize(tmp_path / "package", PUBLIC_VARIANTS[0])
     result = export_prime_lifecycle_environment(
         PrimeLifecycleExportConfig(
-            name="ssc03-hash-drift",
+            name="stormwater-hash-drift",
             package_dirs=(package,),
             output_dir=tmp_path / "environments",
         )
@@ -634,7 +634,7 @@ def test_generated_lifecycle_environment_rechecks_source_provenance_at_setup(tmp
     package = _materialize(tmp_path / "package", PUBLIC_VARIANTS[0])
     result = export_prime_lifecycle_environment(
         PrimeLifecycleExportConfig(
-            name="ssc03-source-drift",
+            name="stormwater-source-drift",
             package_dirs=(package,),
             output_dir=tmp_path / "environments",
             aec_bench_root=source_root,
@@ -663,7 +663,7 @@ def test_prime_export_lifecycle_cli_writes_local_only_manifest(tmp_path: Path) -
         "prime",
         "export-lifecycle",
         "--name",
-        "ssc03-cli-lifecycle",
+        "stormwater-cli-lifecycle",
         "--output-dir",
         str(tmp_path / "environments"),
         "--max-turns",
@@ -711,7 +711,7 @@ def _add_conditional_evidence(package: Path) -> None:
     _write_json(
         package / "hidden" / "evidence-request-resolutions.json",
         {
-            "schema_version": "1",
+            "schema_version": "2",
             "lifecycle_id": lifecycle["lifecycle_id"],
             "resolutions": [
                 {
