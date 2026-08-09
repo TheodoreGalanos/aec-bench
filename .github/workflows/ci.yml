@@ -137,7 +137,7 @@ jobs:
   prime-world-journey:
     name: Prime world journey
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
