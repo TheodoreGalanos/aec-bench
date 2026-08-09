@@ -8,7 +8,7 @@
 | Class | Guide |
 | Status | Current |
 | Audience | Task and interactive-world contributors |
-| Owner | Task-world owners and continual-world maintainers |
+| Owner | Task, world, and lifecycle owners |
 
 Choose the task family before changing code.
 
@@ -59,7 +59,7 @@ sequence around it.
 | Retry | None | Decision freshness and request correlation |
 
 Shared transitions use
-[`Transition` and `ActionRejected`](../src/aec_bench/task_world_templates/continual/world_logic.py).
+[`Transition` and `ActionRejected`](../src/aec_bench/worlds/runtime/world_logic.py).
 There is no required world base class, universal protocol, or global action
 union.
 
@@ -70,13 +70,16 @@ with the task. Validate untrusted JSON or files at their real boundary. Do not
 put episode IDs, opaque decisions, step indexes, repository paths, provider
 metadata, or content digests in domain state.
 
-SSC-03 is the minimum real example:
+The pump station is the current registered example:
 
-- [`contracts.py`](../src/aec_bench/task_world_templates/hydraulics/contracts.py)
-  owns its task inputs and actor-facing values;
-- [`kernel.py`](../src/aec_bench/task_world_templates/hydraulics/kernel.py)
-  owns its state, observation, transition, and evaluation functions; and
-- its functional core has no session, recorder, rollout, or provider type.
+- [`stewardship_models.py`](../src/aec_bench/worlds/stewardship/wastewater_pump_station/stewardship_models.py)
+  owns its authoritative task state;
+- [`coupled_runtime.py`](../src/aec_bench/worlds/stewardship/wastewater_pump_station/coupled_runtime.py)
+  owns task transitions and actor observations; and
+- [`evaluation.py`](../src/aec_bench/worlds/stewardship/wastewater_pump_station/evaluation.py)
+  owns task evaluation.
+
+Its functional core has no session, recorder, rollout, or provider type.
 
 Use ordinary dataclasses, enums, tuples, or validated boundary values. Live
 in-process values do not need schema versions or content hashes.
@@ -94,9 +97,9 @@ evidence must never enter the actor view.
 ### 3. Register once
 
 A registered world supplies a
-[`ContinualWorldDefinition`](../src/aec_bench/task_world_templates/continual/definition.py)
+[`ContinualWorldDefinition`](../src/aec_bench/worlds/runtime/definition.py)
 with build identity, profile references, and a profile loader. Add it once to
-[`default_continual_world_catalogue`](../src/aec_bench/task_world_templates/continual_catalogue.py).
+[`default_continual_world_catalogue`](../src/aec_bench/worlds/catalogue.py).
 
 A minimum contribution normally changes only the task-owned implementation,
 its tests, and the catalogue composition root. It does not require episode,
@@ -105,14 +108,14 @@ actor-contract, provider, recorder, rollout, or persistence changes.
 ### 4. Prove the owning boundaries
 
 Use
-[`assert_world_conformance`](../tests/task_world_templates/continual/world_conformance.py)
+[`assert_world_conformance`](../tests/worlds/world_conformance.py)
 for deterministic initialization and observation, safe rejection,
 deterministic accepted transitions, optional boundary round trips, evaluation,
 and terminal rejection. Add task-owned reference or property tests for
 engineering behaviour that can change benchmark outcomes.
 
 Decision freshness, recorder ordering, limits, and truncation belong to the
-existing [episode tests](../tests/task_world_templates/continual/test_episode.py),
+existing [episode tests](../tests/worlds/runtime/test_episode.py),
 not every world test suite.
 
 ## Optional capabilities
@@ -125,7 +128,7 @@ placeholder ports.
 | Host controls | Installed control boundary and task values | Omit |
 | Durable recovery | Recorder and task persistence edge | Omit |
 | Snapshot, branch, and rollout | Explicit branch implementation and rollout owner | Omit |
-| Staged evidence | Evidence-lifecycle owner | Omit |
+| Staged evidence | Lifecycle owner | Omit |
 | Harbor or provider packaging | Outward task adapter | Omit |
 
 The wastewater pump station is the advanced example. Its controls, durable
@@ -136,8 +139,8 @@ the [interactive-world runtime protocol](protocols/interactive-world-runtime.md)
 ## Local proof
 
 ```bash
-uv run pytest tests/task_world_templates/continual/test_hydraulic_world_conformance.py -q
-uv run pytest tests/task_world_templates/continual/test_episode.py -q
+uv run pytest tests/worlds/test_pump_station_world_conformance.py -q
+uv run pytest tests/worlds/runtime/test_episode.py -q
 uv run ruff check <changed-python-paths>
 uv run ruff format --check <changed-python-paths>
 uv run mypy <changed-production-boundary>

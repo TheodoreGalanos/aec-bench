@@ -31,21 +31,21 @@ class EvaluationCohortPurpose(StrEnum):
 class EvaluationTaskIdentity(ContentAddressedModel):
     """One public task identity paired with its hidden evaluation lineage."""
 
-    schema_version: Literal["aecbench.evaluation-task-identity.v2"] = "aecbench.evaluation-task-identity.v2"
+    schema_version: Literal["aecbench.evaluation-task-identity.v3"] = "aecbench.evaluation-task-identity.v3"
     task_id: NonEmptyStr
     public_snapshot: TaskSnapshotRef
     public_task_snapshot_sha256: str
     sealed_task_package_sha256: str
-    world_lineage_id: str
-    world_package_sha256: str
-    topology_signature_sha256: str
+    review_lineage_id: str
+    review_sidecar_sha256: str
+    declared_surface_sha256: str
 
     @field_validator(
         "public_task_snapshot_sha256",
         "sealed_task_package_sha256",
-        "world_lineage_id",
-        "world_package_sha256",
-        "topology_signature_sha256",
+        "review_lineage_id",
+        "review_sidecar_sha256",
+        "declared_surface_sha256",
     )
     @classmethod
     def validate_hashes(cls, value: str) -> str:
@@ -55,8 +55,8 @@ class EvaluationTaskIdentity(ContentAddressedModel):
     def validate_public_identity(self) -> Self:
         if self.public_snapshot.task_id != self.task_id:
             raise ValueError("evaluation task id must match its public snapshot")
-        if self.public_snapshot.world is not None:
-            raise ValueError("evaluation public snapshot cannot contain a task world")
+        if self.public_snapshot.task_review is not None:
+            raise ValueError("evaluation public snapshot cannot contain a task review")
         expected = canonical_content_sha256(
             {
                 "task_id": self.public_snapshot.task_id,
@@ -70,8 +70,8 @@ class EvaluationTaskIdentity(ContentAddressedModel):
             )
         if self.public_snapshot.package_sha256 == self.sealed_task_package_sha256:
             raise ValueError("evaluation public and sealed task packages must be distinct")
-        if self.world_lineage_id != self.world_package_sha256:
-            raise ValueError("evaluation world lineage must match its exact world package")
+        if self.review_lineage_id != self.review_sidecar_sha256:
+            raise ValueError("evaluation review lineage must match its exact task-review sidecar")
         return self
 
 
@@ -135,8 +135,8 @@ class EvaluationCohortManifest(ContentAddressedModel):
                 tuple(item.task.sealed_task_package_sha256 for item in value),
             ),
             (
-                "world lineage identities",
-                tuple(item.task.world_lineage_id for item in value),
+                "review lineage identities",
+                tuple(item.task.review_lineage_id for item in value),
             ),
         )
         for label, identities in identity_fields:

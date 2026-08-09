@@ -11,7 +11,7 @@ from aec_bench.contracts.evolution import EvolutionConfig, TaskGenerateConfig, W
 from aec_bench.evolution.backends.local import SolveFn, make_local_solve_fn, make_stub_solve_fn
 from aec_bench.evolution.engine import AECEvolutionEngine
 from aec_bench.evolution.llm import build_evolution_llm_clients
-from aec_bench.evolution.orchestrator import EvolutionOrchestrator
+from aec_bench.evolution.orchestrator import EvolutionOrchestrator, ReportWriter
 from aec_bench.evolution.workspace import Workspace
 
 _log = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ def build_evolution_runner(
     model: str,
     adapter: str = "rlm",
     timeout: int = 1800,
+    report_writer: ReportWriter | None = None,
 ) -> EvolutionOrchestrator:
     """Assemble a fully-wired EvolutionOrchestrator ready to call .run().
 
@@ -77,6 +78,7 @@ def build_evolution_runner(
         solve_fn=solve_fn,
         config=config,
         strategy=strategy,
+        report_writer=report_writer,
     )
 
 
@@ -84,6 +86,7 @@ def build_evolution_runner_from_config(
     *,
     config: EvolutionConfig,
     tasks_root: Path | None = None,
+    report_writer: ReportWriter | None = None,
 ) -> EvolutionOrchestrator:
     """Assemble a fully-wired EvolutionOrchestrator from a single EvolutionConfig.
 
@@ -168,6 +171,7 @@ def build_evolution_runner_from_config(
         solve_fn=solve_fn,
         config=config,
         strategy=strategy,
+        report_writer=report_writer,
     )
 
 

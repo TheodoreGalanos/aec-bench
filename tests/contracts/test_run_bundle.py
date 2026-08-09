@@ -39,8 +39,8 @@ from aec_bench.contracts.run_bundle import (
     HarborRunPayload,
     RunBundle,
     RunTarget,
+    TaskReviewSnapshotRef,
     TaskSnapshotRef,
-    WorldSnapshotRef,
 )
 from aec_bench.contracts.task_definition import Visibility
 
@@ -240,31 +240,58 @@ def test_run_bundle_binds_fixed_kernel_harness_program_and_task_snapshots() -> N
         )
 
 
-def test_task_snapshot_can_pin_a_compiled_world_without_template_imports() -> None:
-    world = WorldSnapshotRef(
-        world_id="bridge-review-lifecycle",
-        world_envelope_sha256="1" * 64,
-        world_package_sha256="2" * 64,
-        topology_signature_sha256="3" * 64,
+def test_task_snapshot_can_pin_a_task_review_without_template_imports() -> None:
+    task_review = TaskReviewSnapshotRef(
+        profile_id="bridge-review-lifecycle",
+        review_profile_sha256="1" * 64,
+        review_sidecar_sha256="2" * 64,
+        declared_surface_sha256="3" * 64,
         visibility=Visibility.PUBLIC,
     )
     snapshot = TaskSnapshotRef(
         task_id="civil/review/bridge-alpha",
         definition_sha256="4" * 64,
         package_sha256="5" * 64,
-        world=world,
+        task_review=task_review,
     )
 
-    assert snapshot.world == world
-    assert snapshot.world.visibility is Visibility.PUBLIC
+    assert snapshot.task_review == task_review
+    assert snapshot.task_review.visibility is Visibility.PUBLIC
+    assert set(snapshot.task_review.model_dump(mode="json")) == {
+        "profile_id",
+        "review_profile_sha256",
+        "review_sidecar_sha256",
+        "declared_surface_sha256",
+        "visibility",
+    }
+    assert "task_review" in snapshot.model_dump(mode="json")
+    assert "world" not in snapshot.model_dump(mode="json")
 
     with pytest.raises(ValidationError, match="SHA-256"):
-        WorldSnapshotRef(
-            world_id="invalid-world",
-            world_envelope_sha256="not-a-hash",
-            world_package_sha256="2" * 64,
-            topology_signature_sha256="3" * 64,
+        TaskReviewSnapshotRef(
+            profile_id="invalid-review",
+            review_profile_sha256="not-a-hash",
+            review_sidecar_sha256="2" * 64,
+            declared_surface_sha256="3" * 64,
             visibility=Visibility.PUBLIC,
+        )
+
+
+def test_task_snapshot_rejects_pre_cutover_world_fields() -> None:
+    with pytest.raises(ValidationError):
+        TaskSnapshotRef.model_validate(
+            {
+                "task_id": "civil/review/bridge-alpha",
+                "definition_sha256": "4" * 64,
+                "package_sha256": "5" * 64,
+                "world": {
+                    "world_id": "bridge-review-lifecycle",
+                    "world_envelope_sha256": "1" * 64,
+                    "world_package_sha256": "2" * 64,
+                    "topology_signature_sha256": "3" * 64,
+                    "visibility": "public",
+                },
+            }
         )
 
 

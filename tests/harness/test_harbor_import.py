@@ -20,33 +20,34 @@ from aec_bench.contracts.output_completion import (
 from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import Completeness
+from aec_bench.experimentation.proposals.harbor_import.api import (
+    import_proposal_harbor_trial,
+    load_proposal_harbor_candidate_failure_evidence,
+    load_proposal_harbor_import_evidence,
+)
+from aec_bench.experimentation.proposals.program_compilation import (
+    ProposalRunSessionBundle,
+)
+from aec_bench.experimentation.proposals.runtime_archive import build_proposal_runtime_archive
+from aec_bench.experimentation.proposals.session_config import (
+    ProposalSessionHostConfig,
+    load_proposal_session_host_inputs,
+)
+from aec_bench.experimentation.proposals.session_runtime import (
+    build_proposal_session_execution_ref,
+    run_proposal_session,
+)
+from aec_bench.experimentation.proposals.task_package import (
+    ProposalTaskPackageIdentity,
+    build_proposal_task_package,
+)
 from aec_bench.harness.harbor_importing.contracts import HarborImportError
 from aec_bench.harness.harbor_importing.core import (
     import_harbor_job,
     import_harbor_trial,
     iter_harbor_trial_dirs,
 )
-from aec_bench.harness.harbor_importing.proposal_evidence.api import (
-    load_proposal_harbor_candidate_failure_evidence,
-    load_proposal_harbor_import_evidence,
-)
-from aec_bench.harness.proposal_runtime_archive import build_proposal_runtime_archive
-from aec_bench.harness.proposal_session_config import (
-    ProposalSessionHostConfig,
-    load_proposal_session_host_inputs,
-)
-from aec_bench.harness.proposal_session_runtime import (
-    build_proposal_session_execution_ref,
-    run_proposal_session,
-)
-from aec_bench.harness.proposal_task_package import (
-    ProposalTaskPackageIdentity,
-    build_proposal_task_package,
-)
-from aec_bench.meta_harness.program_proposal_compilation import (
-    ProposalRunSessionBundle,
-)
-from tests.harness.test_proposal_session import (
+from tests.experimentation.proposals.test_session import (
     _compiled_rlm_commit_bundle,
     _evaluation_coordinate,
     _proposal_model,
@@ -130,6 +131,17 @@ def test_import_current_entrypoint_result_preserves_failure_evidence(tmp_path: P
     assert not record.outputs.terminated
     assert not record.outputs.truncated
     assert record.outputs.final_reason == "provider_error"
+
+
+def test_import_harbor_trial_requires_loader_for_explicit_execution_kind(tmp_path: Path) -> None:
+    repo_root, trial_dir = _write_current_entrypoint_trial(tmp_path)
+    result_path = trial_dir / "result.json"
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    payload["config"]["agent"]["kwargs"]["execution_kind"] = "custom_session"
+    result_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(HarborImportError, match="requires an evidence loader"):
+        import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
 
 
 def test_import_current_entrypoint_result_preserves_typed_completion_reason(tmp_path: Path) -> None:
@@ -426,7 +438,7 @@ def test_import_lifecycle_bridge_uses_runtime_lifecycle_status_without_flat_outp
     assert record.outputs.agent_result["bridge_mode"] == "host_evidence_lifecycle.v1"
 
 
-def test_import_harbor_trial_derives_morph_backend_from_import_path_environment(tmp_path: Path) -> None:
+def test_import_harbor_trial_derives_custom_backend_from_environment_metadata(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     task_dir = repo_root / "tasks" / "mechanical" / "heat-load" / "alpha"
     trial_dir = repo_root / "jobs" / "job-001" / "trial-morph"
@@ -527,7 +539,7 @@ def test_import_proposal_session_requires_complete_isolation_evidence(
 ) -> None:
     repo_root, trial_dir, expected = _write_proposal_harbor_trial(tmp_path)
 
-    record = import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
+    record = import_proposal_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
     evidence = load_proposal_harbor_import_evidence(
         trial_dir=trial_dir,
         repo_root=repo_root,
@@ -590,7 +602,7 @@ def test_import_proposal_session_rejects_missing_required_evidence(
     (trial_dir / relative_path).unlink()
 
     with pytest.raises(HarborImportError, match=error):
-        import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
+        import_proposal_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
 
 
 @pytest.mark.parametrize(
@@ -621,7 +633,7 @@ def test_import_proposal_session_rejects_physical_or_causal_lineage_tamper(
         target.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(HarborImportError):
-        import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
+        import_proposal_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
 
 
 def test_import_proposal_session_rejects_evidence_through_symlinked_parent(
@@ -633,7 +645,7 @@ def test_import_proposal_session_rejects_evidence_through_symlinked_parent(
     (trial_dir / "agent").symlink_to(outside_agent, target_is_directory=True)
 
     with pytest.raises(HarborImportError, match="escapes the Harbor trial boundary"):
-        import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
+        import_proposal_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
 
 
 def test_import_candidate_failure_never_fabricates_trial_record(
@@ -646,7 +658,7 @@ def test_import_candidate_failure_never_fabricates_trial_record(
 
     assert expected["trial_record_permitted"] is False
     with pytest.raises(HarborImportError, match="does not permit TrialRecord"):
-        import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
+        import_proposal_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
 
 
 def test_load_proposal_candidate_failure_evidence_reconciles_isolation_boundary(
@@ -1253,7 +1265,7 @@ def _write_proposal_result(
                 },
             },
             "environment": {
-                "import_path": ("aec_bench.providers.proposal_morph.environment:ProposalMorphHarborEnvironment"),
+                "import_path": ("aec_bench.experimentation.proposals.morph.environment:ProposalMorphHarborEnvironment"),
                 "kwargs": {
                     "compute_backend": "morph",
                     "runtime_archive_path": host_config.runtime_archive_path,

@@ -1,5 +1,5 @@
 # ABOUTME: Tests least-privilege Harbor export of content-pinned lifecycle worlds.
-# ABOUTME: Proves SSC-03 integration staging, provenance, verifier isolation, and fail-closed semantics.
+# ABOUTME: Proves stormwater integration staging, provenance, verifier isolation, and fail-closed semantics.
 
 from __future__ import annotations
 
@@ -25,15 +25,15 @@ from aec_bench.harness.harbor_task_export import (
     write_harbor_lifecycle_attestation,
 )
 from aec_bench.harness.harbor_task_exporting import bridge as harbor_bridge_module
-from aec_bench.harness.harbor_task_exporting import stable_io
+from aec_bench.harness.harbor_task_exporting import runtime_wheel, stable_io
 from aec_bench.harness.harbor_task_exporting.stable_io import RegularFileSnapshot
-from aec_bench.meta_harness.evidence_lifecycle import run_evidence_lifecycle
-from aec_bench.task_world_templates.compiled_world import (
-    CompiledLifecycleWorld,
-    CompiledWorldEnvelope,
+from aec_bench.lifecycles.catalogue import lifecycle_definition, lifecycle_smoke_environment
+from aec_bench.lifecycles.compiled import (
+    CompiledLifecycle,
+    CompiledLifecycleEnvelope,
     compile_lifecycle,
 )
-from aec_bench.task_world_templates.lifecycles import lifecycle_definition, lifecycle_smoke_environment
+from aec_bench.lifecycles.runtime.lifecycle import run_evidence_lifecycle
 from aec_bench.tasks.registry import TaskRegistry
 from aec_bench.tasks.validator import validate_task
 
@@ -58,14 +58,14 @@ def _directory_sha256(path: Path) -> str:
     ).hexdigest()
 
 
-def _export_ssc03(tmp_path: Path) -> tuple[CompiledLifecycleWorld, ExportedHarborTask, Path]:
+def _export_stormwater(tmp_path: Path) -> tuple[CompiledLifecycle, ExportedHarborTask, Path]:
     compiled = compile_lifecycle(
         TEMPLATE_ID,
         tmp_path / "compiled",
         variant_id="administrative_no_op",
     )
     tasks_root = tmp_path / "tasks"
-    task_dir = tasks_root / "civil" / "ssc03-hydraulic-interaction"
+    task_dir = tasks_root / "civil" / "stormwater-hydraulic-interaction"
     exported = export_compiled_lifecycle_harbor_task(
         compiled,
         task_dir,
@@ -74,14 +74,28 @@ def _export_ssc03(tmp_path: Path) -> tuple[CompiledLifecycleWorld, ExportedHarbo
     return compiled, exported, tasks_root
 
 
-def test_ssc03_export_is_loadable_staged_and_verifier_isolated(tmp_path: Path) -> None:
-    compiled, exported, tasks_root = _export_ssc03(tmp_path)
+def test_verifier_runtime_source_ignores_local_frontend_dependencies(tmp_path: Path) -> None:
+    package_root = tmp_path / "aec_bench"
+    source = package_root / "runtime.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+    frontend_dependency = package_root / "web" / "frontend" / "node_modules" / ".bin" / "tool"
+    frontend_dependency.parent.mkdir(parents=True)
+    frontend_dependency.symlink_to(source)
+
+    payloads = runtime_wheel._canonical_source_payloads(package_root)
+
+    assert payloads == [("aec_bench/runtime.py", b"VALUE = 1\n")]
+
+
+def test_stormwater_export_is_loadable_staged_and_verifier_isolated(tmp_path: Path) -> None:
+    compiled, exported, tasks_root = _export_stormwater(tmp_path)
     task_dir = exported.task_dir
 
     registry = TaskRegistry(tasks_root)
     registry.reload()
     assert registry.load_errors == []
-    task = registry.get("civil/ssc03-hydraulic-interaction")
+    task = registry.get("civil/stormwater-hydraulic-interaction")
     assert task is not None
     assert task.environment.dockerfile == "environment/Dockerfile"
     assert task.verifier.script == "tests/test.sh"
@@ -141,8 +155,8 @@ def test_ssc03_export_is_loadable_staged_and_verifier_isolated(tmp_path: Path) -
     agent_surface = b"\n".join(
         path.read_bytes() for path in sorted((task_dir / "environment").rglob("*")) if path.is_file()
     )
-    assert b"build_ssc03_hydraulic_smoke_environment" not in agent_surface
-    assert b"verify_ssc03_hydraulic_interaction_lifecycle" not in agent_surface
+    assert b"build_hydraulic_review_smoke_environment" not in agent_surface
+    assert b"verify_hydraulic_review_lifecycle" not in agent_surface
     assert b"administrative_no_op" not in agent_surface
     with ZipFile(exported.verifier_runtime_wheel_path) as verifier_runtime:
         assert "aec_bench/harness/harbor_task_export.py" in verifier_runtime.namelist()
@@ -155,7 +169,7 @@ def test_ssc03_export_is_loadable_staged_and_verifier_isolated(tmp_path: Path) -
 
 
 def test_bridge_validation_fails_closed_before_execution_on_provenance_drift(tmp_path: Path) -> None:
-    _, exported, _ = _export_ssc03(tmp_path)
+    _, exported, _ = _export_stormwater(tmp_path)
     initial_instruction = exported.task_dir / "environment" / "context" / "initial" / "instruction.md"
     initial_instruction.write_text("tampered\n", encoding="utf-8")
 
@@ -164,7 +178,7 @@ def test_bridge_validation_fails_closed_before_execution_on_provenance_drift(tmp
 
 
 def test_bridge_rejects_coordinated_agent_surface_and_manifest_replacement(tmp_path: Path) -> None:
-    _, exported, _ = _export_ssc03(tmp_path)
+    _, exported, _ = _export_stormwater(tmp_path)
     initial_context = exported.task_dir / "environment" / "context" / "initial"
     (initial_context / "future-release.json").write_text('{"future": true}\n', encoding="utf-8")
     instruction = exported.task_dir / "instruction.md"
@@ -185,14 +199,14 @@ def test_bridge_rejects_coordinated_agent_surface_and_manifest_replacement(tmp_p
 
 
 def test_bridge_validation_binds_hidden_manifest_and_harbor_security_contract(tmp_path: Path) -> None:
-    _, exported, _ = _export_ssc03(tmp_path)
+    _, exported, _ = _export_stormwater(tmp_path)
     hidden_manifest = exported.task_dir / "tests" / "compiled-world-export.json"
     hidden_manifest.write_text("{}\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="hidden export manifest does not match"):
         load_harbor_lifecycle_bridge(exported.task_dir / "environment")
 
-    _, second, _ = _export_ssc03(tmp_path / "security")
+    _, second, _ = _export_stormwater(tmp_path / "security")
     task_toml = second.task_dir / "task.toml"
     task_toml.write_text(
         task_toml.read_text(encoding="utf-8").replace("allow_internet = false", "allow_internet = true"),
@@ -207,7 +221,7 @@ def test_bridge_validation_binds_hidden_manifest_and_harbor_security_contract(tm
     with pytest.raises(ValueError, match="security contract"):
         load_harbor_lifecycle_bridge(second.task_dir / "environment")
 
-    _, third, _ = _export_ssc03(tmp_path / "verifier-script")
+    _, third, _ = _export_stormwater(tmp_path / "verifier-script")
     test_script = third.task_dir / "tests" / "test.sh"
     test_script.write_text(test_script.read_text(encoding="utf-8") + "echo bypass\n", encoding="utf-8")
     manifest = json.loads(third.manifest_path.read_text(encoding="utf-8"))
@@ -221,7 +235,7 @@ def test_bridge_validation_binds_hidden_manifest_and_harbor_security_contract(tm
 
 
 def test_bridge_rejects_coordinated_verifier_runtime_and_manifest_replacement(tmp_path: Path) -> None:
-    _, exported, _ = _export_ssc03(tmp_path)
+    _, exported, _ = _export_stormwater(tmp_path)
     synthetic_path = "aec_bench/harness/harbor_task_export.py"
     synthetic_source = b"def synthetic_reward_bypass(): return 1.0\n"
     with ZipFile(exported.verifier_runtime_wheel_path, "w") as wheel:
@@ -264,14 +278,14 @@ def test_bridge_rejects_manifest_replacement_after_validation(
     manifest_relative_path: str,
     expected_label: str,
 ) -> None:
-    _, exported, _ = _export_ssc03(tmp_path)
+    _, exported, _ = _export_stormwater(tmp_path)
     manifest_path = exported.task_dir / manifest_relative_path
     validate_source_identity = harbor_bridge_module.validate_source_identity
 
     def replace_manifest_after_source_validation(
         *,
         source: dict[str, Any],
-        envelope: CompiledWorldEnvelope,
+        envelope: CompiledLifecycleEnvelope,
     ) -> None:
         validate_source_identity(source=source, envelope=envelope)
         manifest_path.write_text("{}\n", encoding="utf-8")
@@ -290,7 +304,7 @@ def test_bridge_rejects_runtime_wheel_replacement_after_canonical_validation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _, exported, _ = _export_ssc03(tmp_path)
+    _, exported, _ = _export_stormwater(tmp_path)
     validate_runtime_wheel = harbor_bridge_module.validate_verifier_runtime_wheel
 
     def replace_runtime_after_validation(
@@ -385,12 +399,12 @@ def test_repeated_export_is_content_deterministic(tmp_path: Path) -> None:
     )
     first_from_snapshot = export_compiled_lifecycle_harbor_task(
         compiled,
-        tmp_path / "snapshot-tasks" / "civil" / "ssc03-hydraulic-interaction",
+        tmp_path / "snapshot-tasks" / "civil" / "stormwater-hydraulic-interaction",
         project_root=project_snapshot,
     )
     second = export_compiled_lifecycle_harbor_task(
         compiled,
-        tmp_path / "second-tasks" / "civil" / "ssc03-hydraulic-interaction",
+        tmp_path / "second-tasks" / "civil" / "stormwater-hydraulic-interaction",
         project_root=project_snapshot,
     )
 
@@ -406,7 +420,7 @@ def test_repeated_export_is_content_deterministic(tmp_path: Path) -> None:
 
 
 def test_independent_verifier_uses_hidden_package_only_after_agent_phase(tmp_path: Path) -> None:
-    compiled, exported, _ = _export_ssc03(tmp_path)
+    compiled, exported, _ = _export_stormwater(tmp_path)
     verifier_package = exported.task_dir / "tests" / "compiled-world"
     run_dir = tmp_path / "reference-run"
     environment = lifecycle_smoke_environment(TEMPLATE_ID, verifier_package)
@@ -438,7 +452,7 @@ def test_independent_verifier_uses_hidden_package_only_after_agent_phase(tmp_pat
 
 
 def test_independent_verifier_rejects_missing_or_drifted_bridge_attestation(tmp_path: Path) -> None:
-    _, exported, _ = _export_ssc03(tmp_path)
+    _, exported, _ = _export_stormwater(tmp_path)
     verifier_package = exported.task_dir / "tests" / "compiled-world"
     run_dir = tmp_path / "reference-run"
     environment = lifecycle_smoke_environment(TEMPLATE_ID, verifier_package)
@@ -470,7 +484,7 @@ def test_independent_verifier_rejects_missing_or_drifted_bridge_attestation(tmp_
 
 
 def test_verifier_rejects_hidden_package_or_runtime_drift(tmp_path: Path) -> None:
-    _, exported, _ = _export_ssc03(tmp_path)
+    _, exported, _ = _export_stormwater(tmp_path)
     package = exported.task_dir / "tests" / "compiled-world"
     (package / "README.md").write_text("tampered\n", encoding="utf-8")
 

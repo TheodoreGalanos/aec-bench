@@ -245,7 +245,6 @@ class LifecycleExecutionRecord(StrictModel):
 
 class LifecycleTrialProvenance(StrictModel):
     lifecycle_id: NonEmptyStr
-    world_id: NonEmptyStr
     spec_sha256: NonEmptyStr
     package_sha256: NonEmptyStr
     repository_commit: NonEmptyStr
@@ -332,20 +331,20 @@ class MetaHarnessTrialProvenance(StrictModel):
     bundle_id: NonEmptyStr
     bundle_sha256: NonEmptyStr
     parent_bundle_id: NonEmptyStr | None = None
-    world_package_sha256: NonEmptyStr
-    topology_signature_sha256: NonEmptyStr
+    review_sidecar_sha256: NonEmptyStr
+    declared_surface_sha256: NonEmptyStr
     harness_generator_sha256: NonEmptyStr
     program_generator_sha256: NonEmptyStr
     split: Literal["discovery", "repair_gate", "calibration", "holdout"]
     repetition: PositiveInt
     execution_seed: int | None = None
     execution_seed_semantics: Literal["paired_repetition_label_only"] = "paired_repetition_label_only"
-    factorial_cell: Literal["h0_p0", "hx_p0", "h0_px", "hx_px"] | None = None
+    harness_program_cell: Literal["h0_p0", "hx_p0", "h0_px", "hx_px"] | None = None
     paired_block_id: NonEmptyStr | None = None
     repair_attempt_id: NonEmptyStr | None = None
     repair_iteration: NonNegativeInt | None = None
     candidate_manifest: ArtifactReference
-    factorial_plan: ArtifactReference | None = None
+    harness_program_plan: ArtifactReference | None = None
     repair_decision: ArtifactReference | None = None
     motif_ids: tuple[NonEmptyStr, ...] = ()
     evaluation_plan_ref: EvaluationPlanRef | None = None
@@ -356,8 +355,8 @@ class MetaHarnessTrialProvenance(StrictModel):
         "harness_sha256",
         "program_sha256",
         "bundle_sha256",
-        "world_package_sha256",
-        "topology_signature_sha256",
+        "review_sidecar_sha256",
+        "declared_surface_sha256",
         "harness_generator_sha256",
         "program_generator_sha256",
     )
@@ -374,11 +373,11 @@ class MetaHarnessTrialProvenance(StrictModel):
 
     @model_validator(mode="after")
     def validate_study_lineage(self) -> "MetaHarnessTrialProvenance":
-        factorial_fields = (self.factorial_cell, self.paired_block_id, self.factorial_plan)
-        if any(item is not None for item in factorial_fields) and not all(
-            item is not None for item in factorial_fields
+        harness_program_fields = (self.harness_program_cell, self.paired_block_id, self.harness_program_plan)
+        if any(item is not None for item in harness_program_fields) and not all(
+            item is not None for item in harness_program_fields
         ):
-            raise ValueError("factorial cell, paired block, and factorial plan must be provided together")
+            raise ValueError("harness-program cell, paired block, and plan must be provided together")
         repair_fields = (self.repair_attempt_id, self.repair_iteration, self.repair_decision)
         if any(item is not None for item in repair_fields) and not all(item is not None for item in repair_fields):
             raise ValueError("repair attempt, iteration, and decision must be provided together")
@@ -549,7 +548,7 @@ def _validate_meta_harness_bindings(record: TrialRecord) -> None:
     _validate_meta_harness_artifact_bindings(record, provenance)
     if (
         record.lifecycle_provenance is not None
-        and record.lifecycle_provenance.package_sha256 != provenance.world_package_sha256
+        and record.lifecycle_provenance.package_sha256 != provenance.review_sidecar_sha256
     ):
         raise ValueError("lifecycle and meta-harness package hashes must agree")
 
@@ -572,7 +571,7 @@ def _validate_meta_harness_artifact_bindings(
         return
     bound_artifacts = (
         provenance.candidate_manifest,
-        provenance.factorial_plan,
+        provenance.harness_program_plan,
         provenance.repair_decision,
     )
     if any(artifact is not None and artifact not in record.outputs.artifacts for artifact in bound_artifacts):

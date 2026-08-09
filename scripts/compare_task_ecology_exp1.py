@@ -9,13 +9,11 @@ from pathlib import Path
 
 import yaml
 
-from aec_bench.experiments.task_ecology_benchmark import summarise_benchmark_runs
+from aec_bench.experimentation.task_ecology.benchmark import summarise_benchmark_runs
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Compare task-ecology Experiment 1 evolution arms."
-    )
+    parser = argparse.ArgumentParser(description="Compare task-ecology Experiment 1 evolution arms.")
     parser.add_argument(
         "--config-dir",
         type=Path,

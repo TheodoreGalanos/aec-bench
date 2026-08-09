@@ -9,14 +9,12 @@ from pathlib import Path
 import typer
 import yaml
 
-from aec_bench.cli.commands.hydraulic_world import app as hydraulic_world_app
 from aec_bench.cli.commands.lifecycle import app as lifecycle_app
 from aec_bench.cli.commands.pump_station_world import app as pump_station_world_app
 from aec_bench.cli.output import console, emit
 
 app = typer.Typer(help="Task management commands.")
 app.add_typer(lifecycle_app, name="lifecycle")
-app.add_typer(hydraulic_world_app, name="hydraulic-world")
 app.add_typer(pump_station_world_app, name="pump-station-world")
 
 _SEVERITY_ICONS = {"error": "[red]✗[/red]", "warning": "[yellow]⚠[/yellow]", "info": "[dim]✓[/dim]"}

@@ -91,19 +91,21 @@ def validate_verifier_runtime_wheel(
 
 
 def _canonical_source_payloads(package_root: Path) -> list[tuple[str, bytes]]:
-    unsafe_links = [path for path in sorted(Path(package_root).rglob("*")) if path.is_symlink()]
+    root = Path(package_root)
+    candidates = [path for path in sorted(root.rglob("*")) if not _is_local_frontend_dependency(path, root=root)]
+    unsafe_links = [path for path in candidates if path.is_symlink()]
     if unsafe_links:
         raise ValueError(f"canonical aec-bench source package contains a symbolic link: {unsafe_links[0]}")
     source_files = [
         path
-        for path in sorted(Path(package_root).rglob("*"))
+        for path in candidates
         if path.is_file() and "__pycache__" not in path.parts and path.suffix not in {".pyc", ".pyo"}
     ]
     if not source_files:
         raise ValueError("canonical aec-bench source package is empty")
     return [
         (
-            path.relative_to(Path(package_root).parent).as_posix(),
+            path.relative_to(root.parent).as_posix(),
             read_stable_regular_file(
                 path,
                 label=f"canonical verifier source {path.relative_to(package_root)}",
@@ -112,6 +114,10 @@ def _canonical_source_payloads(package_root: Path) -> list[tuple[str, bytes]]:
         )
         for path in source_files
     ]
+
+
+def _is_local_frontend_dependency(path: Path, *, root: Path) -> bool:
+    return path.relative_to(root).parts[:3] == ("web", "frontend", "node_modules")
 
 
 def _source_tree_sha256(source_payloads: list[tuple[str, bytes]]) -> str:

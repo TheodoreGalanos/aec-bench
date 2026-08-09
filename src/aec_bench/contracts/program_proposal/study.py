@@ -28,16 +28,16 @@ from aec_bench.contracts.validators import NonEmptyStr
 class MatchedEvaluationCoordinate(ContentAddressedModel):
     """One task-lineage-seed repetition shared by every candidate in a study."""
 
-    schema_version: Literal["aecbench.matched-evaluation-coordinate.v1"] = "aecbench.matched-evaluation-coordinate.v1"
+    schema_version: Literal["aecbench.matched-evaluation-coordinate.v2"] = "aecbench.matched-evaluation-coordinate.v2"
     coordinate_id: NonEmptyStr
     task_id: NonEmptyStr
     task_revision: NonEmptyStr
     split: OptimizationSplit
-    world_lineage_id: NonEmptyStr
+    review_lineage_id: NonEmptyStr
     seed: int = Field(ge=0)
     repetition: int = Field(ge=0)
 
-    @field_validator("task_revision", "world_lineage_id")
+    @field_validator("task_revision", "review_lineage_id")
     @classmethod
     def validate_snapshot_hashes(cls, value: str) -> str:
         return validate_sha256(value)
@@ -113,7 +113,7 @@ class ProgramCandidateStudy(ContentAddressedModel):
                 coordinate.task_id,
                 coordinate.task_revision,
                 coordinate.split,
-                coordinate.world_lineage_id,
+                coordinate.review_lineage_id,
                 coordinate.seed,
                 coordinate.repetition,
             )
@@ -342,8 +342,8 @@ def _validate_study_coordinates(study: ProgramCandidateStudy) -> None:
             raise ValueError("matched coordinate split does not match proposal freeze")
         if coordinate.task_id != view.task_id or coordinate.task_revision != view.task_revision:
             raise ValueError("matched coordinate task does not match problem view")
-        if coordinate.world_lineage_id != study.proposal_freeze.selected_world_lineage_id:
-            raise ValueError("matched coordinate world lineage does not match proposal freeze")
+        if coordinate.review_lineage_id != study.proposal_freeze.selected_review_lineage_id:
+            raise ValueError("matched coordinate review lineage does not match proposal freeze")
 
 
 def _validate_study_evidence_coverage(study: ProgramCandidateStudy) -> None:

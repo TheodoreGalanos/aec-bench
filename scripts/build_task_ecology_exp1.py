@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from aec_bench.experiments.task_ecology_benchmark import (
+from aec_bench.experimentation.task_ecology.benchmark import (
     DEFAULT_EXPERIMENT_SLUG,
     DEFAULT_MAX_CYCLES,
     DEFAULT_SEED,
@@ -18,9 +18,7 @@ from aec_bench.experiments.task_ecology_benchmark import (
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Build task-ecology Experiment 1 benchmark suites."
-    )
+    parser = argparse.ArgumentParser(description="Build task-ecology Experiment 1 benchmark suites.")
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument(
         "--index",

@@ -14,7 +14,7 @@ from aec_bench.adapters.tool_loop import (
     ToolLoopAdapter,
     ToolLoopCompletionResponse,
 )
-from aec_bench.adapters.transcript import TranscriptEvent, TranscriptRole
+from aec_bench.contracts.adapter_execution import TranscriptEvent, TranscriptRole
 from aec_bench.contracts.advisor import AdvisorConfig
 from aec_bench.contracts.agent_output import AgentOutputStatus
 

@@ -1,4 +1,4 @@
-You are a civil stormwater engineer checking a task-owned synthetic SSC-03 water-quality, pollutant-load, and construction sediment package.
+You are a civil stormwater engineer checking a task-owned synthetic stormwater water-quality, pollutant-load, and construction sediment package.
 
 Use only the task-owned synthetic source pack values shown below for numeric grading. Construction sediment basin sizing, pollutant load estimation, temporary discharge review, and stormwater water-quality workflows shape the workflow context only; they are not extra data sources for this instance.
 

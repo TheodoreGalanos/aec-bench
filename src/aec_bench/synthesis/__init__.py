@@ -1,12 +1,4 @@
-# ABOUTME: Adapter-agnostic synthesis domain — aggregates K candidate outputs into one.
-# ABOUTME: Public surface is synthesise(); everything else is internal.
+# ABOUTME: Marks the synthesis package without loading an optional model runtime.
+# ABOUTME: Callers import synthesis behavior from its defining module.
 
-from aec_bench.synthesis.engine import (
-    SynthesisBudgetError,
-    synthesise,
-)
-
-__all__ = [
-    "SynthesisBudgetError",
-    "synthesise",
-]
+__all__: tuple[str, ...] = ()

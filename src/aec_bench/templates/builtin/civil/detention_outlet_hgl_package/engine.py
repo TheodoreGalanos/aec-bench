@@ -1,4 +1,4 @@
-# ABOUTME: Computes SSC-03 detention, outlet-control, and HGL package metrics.
+# ABOUTME: Computes stormwater detention, outlet-control, and HGL package metrics.
 # ABOUTME: Combines Rational Method runoff, storage, orifice/weir, freeboard, and HGL checks.
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ def compute(
     outlet_loss_m: float,
     downstream_rim_elevation_m: float,
 ) -> dict[str, float]:
-    """Compute detention outlet and HGL metrics for the SSC-03 source pack."""
+    """Compute detention outlet and HGL metrics for the stormwater source pack."""
     _require_positive(
         catchment_area_ha=catchment_area_ha,
         rainfall_intensity_mm_h=rainfall_intensity_mm_h,

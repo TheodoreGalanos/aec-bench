@@ -1,4 +1,4 @@
-You are a civil drainage engineer checking a task-owned synthetic SSC-03 sewer/storm pipe gradient and capacity repair package.
+You are a civil drainage engineer checking a task-owned synthetic stormwater sewer/storm pipe gradient and capacity repair package.
 
 Use only the task-owned synthetic source pack values shown below for numeric grading. Manning pipe capacity, pipe invert schedule review, storm pipe repair workflows, and gravity pipe velocity checks shape the workflow context only; they are not extra data sources for this instance.
 

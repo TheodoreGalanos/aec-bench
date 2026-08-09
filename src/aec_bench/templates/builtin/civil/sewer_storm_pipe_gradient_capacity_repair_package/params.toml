@@ -1,10 +1,10 @@
-# ABOUTME: Defines the SSC-03 sewer/storm pipe gradient and capacity repair template.
+# ABOUTME: Defines the stormwater sewer/storm pipe gradient and capacity repair template.
 # ABOUTME: Pins one synthetic pipe schedule, invert, long-section, and repair criteria source package.
 
 [meta]
 name = "sewer-storm-pipe-gradient-capacity-repair-package"
-description = "SSC-03 pipe slope, invert conflict, Manning capacity, velocity, and cover metrics"
-long_description = "Calculates source-bound sewer/storm pipe repair metrics from a deterministic SSC-03 task-owned source pack. The template combines scheduled and long-section slopes, invert conflict, Manning capacity, velocity margins, pipe cover, and an overall synthetic pass score."
+description = "stormwater pipe slope, invert conflict, Manning capacity, velocity, and cover metrics"
+long_description = "Calculates source-bound sewer/storm pipe repair metrics from a deterministic stormwater task-owned source pack. The template combines scheduled and long-section slopes, invert conflict, Manning capacity, velocity margins, pipe cover, and an overall synthetic pass score."
 discipline = "civil"
 category = "pipe-gradient-repair"
 standards = ["Manning pipe capacity", "pipe invert schedule review", "storm pipe repair workflows", "gravity pipe velocity checks"]
@@ -145,7 +145,7 @@ tolerance = 0.03
 description = "Pass score for invert, capacity, velocity, and cover checks"
 tolerance = 0.03
 
-[archetypes.ssc03_pipe_gradient_repair_case]
+[archetypes.stormwater_pipe_gradient_repair_case]
 description = "Sewer/storm pipe gradient and capacity repair case"
 scheduled_upstream_invert_m = {min = 18.42, max = 18.42}
 scheduled_downstream_invert_m = {min = 17.94, max = 17.94}
@@ -163,16 +163,16 @@ maximum_velocity_m_s = {min = 3.0, max = 3.0}
 site_contexts = ["pipe-gradient", "capacity-repair-check"]
 
 [difficulty.easy]
-description = "All source-pack values given for the SSC-03 pipe gradient repair package"
+description = "All source-pack values given for the stormwater pipe gradient repair package"
 visibility = "all_given"
-archetypes = ["ssc03_pipe_gradient_repair_case"]
+archetypes = ["stormwater_pipe_gradient_repair_case"]
 
 [difficulty.medium]
-description = "All source-pack values given for the SSC-03 pipe gradient repair package"
+description = "All source-pack values given for the stormwater pipe gradient repair package"
 visibility = "all_given"
-archetypes = ["ssc03_pipe_gradient_repair_case"]
+archetypes = ["stormwater_pipe_gradient_repair_case"]
 
 [difficulty.hard]
-description = "All source-pack values given for the SSC-03 pipe gradient repair package"
+description = "All source-pack values given for the stormwater pipe gradient repair package"
 visibility = "all_given"
-archetypes = ["ssc03_pipe_gradient_repair_case"]
+archetypes = ["stormwater_pipe_gradient_repair_case"]

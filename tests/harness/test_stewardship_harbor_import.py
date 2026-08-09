@@ -17,14 +17,15 @@ from aec_bench.harness.pump_station_harbor.export import (
     export_pump_station_harbor_task,
     load_pump_station_harbor_bridge,
 )
+from aec_bench.harness.pump_station_harbor.importing import load_pump_station_import_evidence
 from aec_bench.harness.pump_station_harbor.session import (
     CompletedPumpStationReferenceSession,
     run_pump_station_reference_session,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition import (
     pump_station_continual_world_definition,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
 
@@ -134,6 +135,7 @@ def test_verified_world_session_imports_and_reloads_exact_trial_record(
     record = import_harbor_trial(
         trial_dir=trial_dir,
         repo_root=repo_root,
+        evidence_loader=load_pump_station_import_evidence,
     )
     reloaded = TrialRecord.model_validate_json(record.model_dump_json())
 
@@ -178,6 +180,7 @@ def test_registered_world_session_imports_through_the_current_run(
     record = import_harbor_trial(
         trial_dir=trial_dir,
         repo_root=repo_root,
+        evidence_loader=load_pump_station_import_evidence,
     )
     reloaded = TrialRecord.model_validate_json(record.model_dump_json())
 
@@ -205,4 +208,5 @@ def test_stewardship_import_rejects_changed_world_artifact(
         import_harbor_trial(
             trial_dir=trial_dir,
             repo_root=repo_root,
+            evidence_loader=load_pump_station_import_evidence,
         )

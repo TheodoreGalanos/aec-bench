@@ -1,10 +1,10 @@
-# ABOUTME: Defines the SSC-03 drainage long-section HGL road low-point template.
+# ABOUTME: Defines the stormwater drainage long-section HGL road low-point template.
 # ABOUTME: Pins one synthetic road profile, pit/pipe, HGL, and equipment source package.
 
 [meta]
 name = "drainage-long-section-hgl-road-low-point-package"
-description = "SSC-03 drainage long-section, HGL, spread, and road low-point metrics"
-long_description = "Calculates source-bound road low-point drainage metrics from a deterministic SSC-03 task-owned source pack. The template combines pipe slope, Manning capacity, HGL, low-point freeboard, roadway spread, equipment freeboard, and an overall synthetic pass score."
+description = "stormwater drainage long-section, HGL, spread, and road low-point metrics"
+long_description = "Calculates source-bound road low-point drainage metrics from a deterministic stormwater task-owned source pack. The template combines pipe slope, Manning capacity, HGL, low-point freeboard, roadway spread, equipment freeboard, and an overall synthetic pass score."
 discipline = "civil"
 category = "drainage-hgl-road-low-point"
 standards = ["FHWA HEC-22", "Manning drainage calculations", "road low-point drainage review", "stormwater HGL workflows"]
@@ -158,7 +158,7 @@ tolerance = 0.03
 description = "Pass score for capacity, HGL, spread, and equipment freeboard checks"
 tolerance = 0.03
 
-[archetypes.ssc03_low_point_hgl_case]
+[archetypes.stormwater_low_point_hgl_case]
 description = "Road low-point HGL and spread case"
 upstream_invert_m = {min = 22.15, max = 22.15}
 downstream_invert_m = {min = 21.65, max = 21.65}
@@ -177,16 +177,16 @@ equipment_threshold_level_m = {min = 23.05, max = 23.05}
 site_contexts = ["road-low-point", "drainage-hgl-check"]
 
 [difficulty.easy]
-description = "All source-pack values given for the SSC-03 road low-point HGL package"
+description = "All source-pack values given for the stormwater road low-point HGL package"
 visibility = "all_given"
-archetypes = ["ssc03_low_point_hgl_case"]
+archetypes = ["stormwater_low_point_hgl_case"]
 
 [difficulty.medium]
-description = "All source-pack values given for the SSC-03 road low-point HGL package"
+description = "All source-pack values given for the stormwater road low-point HGL package"
 visibility = "all_given"
-archetypes = ["ssc03_low_point_hgl_case"]
+archetypes = ["stormwater_low_point_hgl_case"]
 
 [difficulty.hard]
-description = "All source-pack values given for the SSC-03 road low-point HGL package"
+description = "All source-pack values given for the stormwater road low-point HGL package"
 visibility = "all_given"
-archetypes = ["ssc03_low_point_hgl_case"]
+archetypes = ["stormwater_low_point_hgl_case"]

@@ -30,27 +30,27 @@ from aec_bench.harness.harbor_task_exporting.stable_io import (
     directory_sha256,
     file_sha256,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.actor_interface import (
     PUMP_STATION_ACTOR_ACTION_NAMES,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition import (
     PumpStationContinualProfile,
     pump_station_continual_world_definition,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_rollout_adapter import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.continual_rollout_adapter import (
     validate_pump_station_rollout_child_run,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import (
     PUMP_STATION_TASK_WORLD_ID,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_models import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.reference_package_models import (
     ReferencePackage,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_reader import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.reference_package_reader import (
     bundled_reference_package_root,
     load_reference_package,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_system import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.reference_system import (
     PumpStationReferenceSystem,
     bundled_reference_system_root,
     load_reference_system,

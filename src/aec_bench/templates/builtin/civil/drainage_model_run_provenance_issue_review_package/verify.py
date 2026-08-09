@@ -1,4 +1,4 @@
-# ABOUTME: Stage-gated verifier for the SSC-03 model-run provenance review package.
+# ABOUTME: Stage-gated verifier for the stormwater model-run provenance review package.
 # ABOUTME: Grades revision tracing, state transitions, linkage, readiness, and claim boundaries.
 
 import argparse

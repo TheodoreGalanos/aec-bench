@@ -155,7 +155,7 @@ def _validate_session_execution_binding(
         coordinate.task_id != freeze.problem_view.task_id
         or coordinate.task_revision != freeze.problem_view.task_revision
         or coordinate.split is not freeze.split
-        or coordinate.world_lineage_id != freeze.selected_world_lineage_id
+        or coordinate.review_lineage_id != freeze.selected_review_lineage_id
     ):
         raise ValueError(
             "proposal execution evaluation coordinate does not bind the compiled task, split, and world",

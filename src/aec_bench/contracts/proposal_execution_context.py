@@ -35,6 +35,7 @@ class ScopedSourceMaterialization(FrozenStrictModel):
         forbidden_names = {
             "expected_answer.json",
             "structured_answer.json",
+            "task-review.json",
             "task.toml",
             "world.json",
         }

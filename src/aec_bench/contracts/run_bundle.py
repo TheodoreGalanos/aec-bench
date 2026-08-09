@@ -41,20 +41,20 @@ class RunTarget(StrEnum):
     HARBOR = "harbor"
 
 
-class WorldSnapshotRef(FrozenStrictModel):
-    """Template-agnostic identity for a compiled task-world lifecycle envelope."""
+class TaskReviewSnapshotRef(FrozenStrictModel):
+    """Content-pinned identity for one task-review profile and its declared surface."""
 
-    world_id: NonEmptyStr
-    world_envelope_sha256: str
-    world_package_sha256: str
-    topology_signature_sha256: str
+    profile_id: NonEmptyStr
+    review_profile_sha256: str
+    review_sidecar_sha256: str
+    declared_surface_sha256: str
     visibility: Visibility
     stage_graph: DeclaredStageGraph | None = None
 
     @field_validator(
-        "world_envelope_sha256",
-        "world_package_sha256",
-        "topology_signature_sha256",
+        "review_profile_sha256",
+        "review_sidecar_sha256",
+        "declared_surface_sha256",
     )
     @classmethod
     def validate_sha256_fields(cls, value: str) -> str:
@@ -62,18 +62,18 @@ class WorldSnapshotRef(FrozenStrictModel):
 
     @model_validator(mode="after")
     def validate_stage_graph(self) -> Self:
-        if self.stage_graph is not None and self.stage_graph.world_package_sha256 != self.world_package_sha256:
-            raise ValueError("declared stage graph does not match world package bytes")
+        if self.stage_graph is not None and self.stage_graph.review_sidecar_sha256 != self.review_sidecar_sha256:
+            raise ValueError("declared stage graph does not match task-review sidecar bytes")
         return self
 
     @model_serializer(mode="wrap")
-    def serialize_world_snapshot(
+    def serialize_task_review_snapshot(
         self,
         handler: SerializerFunctionWrapHandler,
     ) -> dict[str, object]:
         payload = handler(self)
         if not isinstance(payload, dict):
-            raise TypeError("world snapshot serialization must produce an object")
+            raise TypeError("task-review snapshot serialization must produce an object")
         if self.stage_graph is None:
             payload.pop("stage_graph", None)
         return payload
@@ -85,7 +85,7 @@ class TaskSnapshotRef(FrozenStrictModel):
     task_id: NonEmptyStr
     definition_sha256: str
     package_sha256: str
-    world: WorldSnapshotRef | None = None
+    task_review: TaskReviewSnapshotRef | None = None
 
     @field_validator("definition_sha256", "package_sha256")
     @classmethod
@@ -93,11 +93,11 @@ class TaskSnapshotRef(FrozenStrictModel):
         return validate_sha256(value)
 
     @model_validator(mode="after")
-    def validate_world_task(self) -> Self:
+    def validate_task_review(self) -> Self:
         if (
-            self.world is not None
-            and self.world.stage_graph is not None
-            and self.world.stage_graph.task_id != self.task_id
+            self.task_review is not None
+            and self.task_review.stage_graph is not None
+            and self.task_review.stage_graph.task_id != self.task_id
         ):
             raise ValueError("declared stage graph does not match task snapshot id")
         return self

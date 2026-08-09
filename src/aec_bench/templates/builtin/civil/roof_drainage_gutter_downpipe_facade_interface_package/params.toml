@@ -1,10 +1,10 @@
-# ABOUTME: Defines the SSC-03/SSC-09 roof drainage gutter/downpipe facade-interface template.
+# ABOUTME: Defines the roof drainage gutter/downpipe facade-interface template.
 # ABOUTME: Pins one synthetic roof catchment, gutter, downpipe, overflow, and facade source package.
 
 [meta]
 name = "roof-drainage-gutter-downpipe-facade-interface-package"
-description = "SSC-03/SSC-09 roof runoff, gutter/downpipe capacity, overflow, and facade interface metrics"
-long_description = "Calculates source-bound roof drainage metrics from deterministic SSC-03 and SSC-09 task-owned source packs. The template combines roof runoff, gutter capacity margin, downpipe capacity margin, overflow route capacity, parapet freeboard, facade fixing pressure margin, and an overall synthetic pass score."
+description = "roof runoff, gutter/downpipe capacity, overflow, and facade interface metrics"
+long_description = "Calculates source-bound roof drainage metrics from deterministic stormwater and SSC-09 task-owned source packs. The template combines roof runoff, gutter capacity margin, downpipe capacity margin, overflow route capacity, parapet freeboard, facade fixing pressure margin, and an overall synthetic pass score."
 discipline = "civil"
 category = "roof-drainage"
 standards = ["AS/NZS 3500.3-style roof drainage workflows", "gutter and downpipe sizing", "roof overflow review", "facade interface coordination"]
@@ -136,7 +136,7 @@ tolerance = 0.03
 description = "Pass score for roof drainage and facade interface checks"
 tolerance = 0.03
 
-[archetypes.ssc03_roof_drainage_case]
+[archetypes.stormwater_roof_drainage_case]
 description = "Roof gutter/downpipe and facade interface case"
 roof_catchment_area_m2 = {min = 1280.0, max = 1280.0}
 rainfall_intensity_mm_h = {min = 165.0, max = 165.0}
@@ -154,16 +154,16 @@ fixing_allowable_pressure_kpa = {min = 2.1, max = 2.1}
 site_contexts = ["roof-drainage", "facade-interface-check"]
 
 [difficulty.easy]
-description = "All source-pack values given for the SSC-03 roof drainage package"
+description = "All source-pack values given for the stormwater roof drainage package"
 visibility = "all_given"
-archetypes = ["ssc03_roof_drainage_case"]
+archetypes = ["stormwater_roof_drainage_case"]
 
 [difficulty.medium]
-description = "All source-pack values given for the SSC-03 roof drainage package"
+description = "All source-pack values given for the stormwater roof drainage package"
 visibility = "all_given"
-archetypes = ["ssc03_roof_drainage_case"]
+archetypes = ["stormwater_roof_drainage_case"]
 
 [difficulty.hard]
-description = "All source-pack values given for the SSC-03 roof drainage package"
+description = "All source-pack values given for the stormwater roof drainage package"
 visibility = "all_given"
-archetypes = ["ssc03_roof_drainage_case"]
+archetypes = ["stormwater_roof_drainage_case"]

@@ -4,10 +4,21 @@
 from __future__ import annotations
 
 import html
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from aec_bench.evolution.report_data import CycleReport, EvolutionReportData
+
+
+def write_evolution_report(workspace_root: Path) -> Path:
+    """Write the current evolution report and return its path."""
+    from aec_bench.evolution.report_data import build_evolution_report_data
+
+    report_path = Path(workspace_root) / "evolution-report.html"
+    data = build_evolution_report_data(Path(workspace_root))
+    report_path.write_text(render_evolution_report_html(data), encoding="utf-8")
+    return report_path
 
 
 def render_evolution_report_html(data: EvolutionReportData) -> str:

@@ -14,7 +14,7 @@ from aec_bench.contracts.continual_world import (
     ContinualWorldProfileRef,
     WorldBuildRef,
 )
-from aec_bench.task_world_templates.continual.definition import ContinualWorldDefinition, LoadedContinualWorldProfile
+from aec_bench.worlds.runtime.definition import ContinualWorldDefinition, LoadedContinualWorldProfile
 
 
 def _profile(profile_id: str, *, task_world_id: str = "world-a", digest: str = "a" * 64) -> ContinualWorldProfileRef:

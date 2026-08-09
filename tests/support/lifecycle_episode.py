@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from aec_bench.meta_harness.evidence_lifecycle_episode import (
+from aec_bench.lifecycles.runtime.episode import (
     InProcessLifecycleEpisodeEnvironment,
     LifecycleEpisodeRequest,
     LifecycleEpisodeResult,

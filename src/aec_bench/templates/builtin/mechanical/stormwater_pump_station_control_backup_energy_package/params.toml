@@ -1,10 +1,10 @@
-# ABOUTME: Defines the SSC-03 stormwater pump control and backup-energy template.
+# ABOUTME: Defines the stormwater stormwater pump control and backup-energy template.
 # ABOUTME: Pins one synthetic wet-well, pump, rising-main, controls, and energy source package.
 
 [meta]
 name = "stormwater-pump-station-control-backup-energy-package"
-description = "SSC-03 stormwater pump capacity, rising-main, controls, and backup-energy metrics"
-long_description = "Calculates source-bound stormwater pump station metrics from a deterministic SSC-03 task-owned source pack. The template combines pump capacity, Hazen-Williams rising-main loss, hydraulic and motor power, control load, backup energy, wet-well freeboard, and an overall synthetic pass score."
+description = "stormwater stormwater pump capacity, rising-main, controls, and backup-energy metrics"
+long_description = "Calculates source-bound stormwater pump station metrics from a deterministic stormwater task-owned source pack. The template combines pump capacity, Hazen-Williams rising-main loss, hydraulic and motor power, control load, backup energy, wet-well freeboard, and an overall synthetic pass score."
 discipline = "mechanical"
 category = "stormwater-pump-control"
 standards = ["Hazen-Williams hydraulic calculations", "stormwater pump station controls", "pump duty power workflows", "backup energy sizing"]
@@ -179,7 +179,7 @@ tolerance = 0.03
 description = "Pass score for pump capacity, backup energy, and wet-well freeboard checks"
 tolerance = 0.03
 
-[archetypes.ssc03_pump_control_energy_case]
+[archetypes.stormwater_pump_control_energy_case]
 description = "Stormwater pump station control and backup-energy case"
 pump_capacity_l_s = {min = 72.0, max = 72.0}
 pump_count = {min = 2.0, max = 2.0}
@@ -201,16 +201,16 @@ minimum_wetwell_freeboard_m = {min = 0.45, max = 0.45}
 site_contexts = ["stormwater-pump-station", "backup-energy-check"]
 
 [difficulty.easy]
-description = "All source-pack values given for the SSC-03 pump control backup-energy package"
+description = "All source-pack values given for the stormwater pump control backup-energy package"
 visibility = "all_given"
-archetypes = ["ssc03_pump_control_energy_case"]
+archetypes = ["stormwater_pump_control_energy_case"]
 
 [difficulty.medium]
-description = "All source-pack values given for the SSC-03 pump control backup-energy package"
+description = "All source-pack values given for the stormwater pump control backup-energy package"
 visibility = "all_given"
-archetypes = ["ssc03_pump_control_energy_case"]
+archetypes = ["stormwater_pump_control_energy_case"]
 
 [difficulty.hard]
-description = "All source-pack values given for the SSC-03 pump control backup-energy package"
+description = "All source-pack values given for the stormwater pump control backup-energy package"
 visibility = "all_given"
-archetypes = ["ssc03_pump_control_energy_case"]
+archetypes = ["stormwater_pump_control_energy_case"]

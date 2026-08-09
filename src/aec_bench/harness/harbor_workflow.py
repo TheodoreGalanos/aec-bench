@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from aec_bench.contracts.execution_environment import HarborEnvironmentBinding
 from aec_bench.contracts.experiment_manifest import ExperimentManifest
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.contracts.trial_record import TrialRecord
@@ -18,14 +19,14 @@ from aec_bench.harness.harbor_dispatch import (
     HarborDispatchResult,
     HarborExperimentDispatcher,
 )
-from aec_bench.harness.progress_tracker import WorkflowProgressSnapshot, WorkflowProgressTracker
-from aec_bench.harness.scheduler import build_trial_plan, select_manifest_tasks
-from aec_bench.meta_harness.llm_reviewer import (
+from aec_bench.harness.model_execution.llm_reviewer import (
     ReviewerJobResult,
     ReviewerRunConfig,
     reviewer_config_from_manifest,
     run_harbor_job_reviewer,
 )
+from aec_bench.harness.progress_tracker import WorkflowProgressSnapshot, WorkflowProgressTracker
+from aec_bench.harness.scheduler import build_trial_plan, select_manifest_tasks
 from aec_bench.tasks.registry import TaskRegistry
 
 
@@ -69,6 +70,7 @@ class SynchronousHarborWorkflow:
         record_transform: Callable[[TrialRecord], TrialRecord] | None = None,
         resolved_tasks: tuple[TaskDefinition, ...] | None = None,
         task_path_overrides: Mapping[str, Path] | None = None,
+        environment_binding: HarborEnvironmentBinding | None = None,
     ) -> HarborWorkflowResult:
         dispatch = self.dispatch_only(
             manifest=manifest,
@@ -77,6 +79,7 @@ class SynchronousHarborWorkflow:
             progress_callback=progress_callback,
             resolved_tasks=resolved_tasks,
             task_path_overrides=task_path_overrides,
+            environment_binding=environment_binding,
         )
         return self.import_dispatched(
             manifest=manifest,
@@ -151,6 +154,7 @@ class SynchronousHarborWorkflow:
         progress_callback: Callable[[WorkflowProgressSnapshot], None] | None = None,
         resolved_tasks: tuple[TaskDefinition, ...] | None = None,
         task_path_overrides: Mapping[str, Path] | None = None,
+        environment_binding: HarborEnvironmentBinding | None = None,
     ) -> HarborDispatchOnlyResult:
         """Dispatch exact Harbor tasks and locate their job without importing trial evidence."""
 
@@ -180,6 +184,7 @@ class SynchronousHarborWorkflow:
             tasks=selected_tasks,
             config_path=config_path,
             task_path_overrides=task_path_overrides,
+            environment_binding=environment_binding,
             executor=executor,
             execute=True,
         )

@@ -58,12 +58,12 @@ from aec_bench.evolution.repair_lifecycle import (
     VerifiedRepairRun,
     run_repair_loop,
 )
-from aec_bench.meta_harness.compilation import (
+from aec_bench.harness.compilation import (
     compile_execution_program,
     compile_harness_instance,
     compile_run_bundle,
 )
-from aec_bench.meta_harness.kernel_catalogue import KernelRuntimeRegistry, default_kernel_registry
+from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry, default_kernel_registry
 
 
 @pytest.mark.parametrize(
@@ -569,7 +569,7 @@ class _DeterministicWorkflow:
                     candidate_id=candidate.candidate_id,
                     kernel_sha256=candidate.harness.kernel_ref.content_sha256,
                     resource_sha256=snapshots[task_id].package_sha256,
-                    world_lineage_sha256=_world_lineage_sha256(snapshots[task_id]),
+                    review_lineage_sha256=_review_lineage_sha256(snapshots[task_id]),
                     reward=reward,
                     complete=True,
                     valid=True,
@@ -904,6 +904,6 @@ def _sha(label: str) -> str:
     return hashlib.sha256(label.encode()).hexdigest()
 
 
-def _world_lineage_sha256(snapshot: TaskSnapshotRef) -> str:
-    world = snapshot.world
-    return str(world.world_package_sha256 if world is not None else snapshot.package_sha256)
+def _review_lineage_sha256(snapshot: TaskSnapshotRef) -> str:
+    task_review = snapshot.task_review
+    return str(task_review.review_sidecar_sha256 if task_review is not None else snapshot.package_sha256)

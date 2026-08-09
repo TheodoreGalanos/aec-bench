@@ -29,6 +29,14 @@ from aec_bench.prime_agent.batch import (
     redact_prime_bytes,
     resolve_prime_executable,
 )
+from aec_bench.prime_agent.refinement import (
+    PrimeRefinementCandidate,
+    PrimeRefinementEvidence,
+    PrimeRefinementMode,
+    capture_refinement_evidence,
+    install_refinement_candidate,
+    validate_refinement_request,
+)
 from aec_bench.prime_agent.session_evidence import (
     PrimeAcpLimits,
     PrimeAcpRefinement,
@@ -98,6 +106,7 @@ class PrimeAcpRun:
     usage: PrimeAcpUsage
     topology: PrimeAcpTopology
     refinement: PrimeAcpRefinement
+    refinement_harness: PrimeRefinementEvidence
     limit_reason: str | None
     session_state: str
     stop_reason: str | None
@@ -163,13 +172,13 @@ def build_macos_sandbox_profile(
     *,
     actor_workspace: Path,
     executable: Path,
-    actor_socket: Path,
+    scoped_socket: Path,
     private_paths: Sequence[Path],
 ) -> str:
     """Create the narrow local macOS profile used for benchmark-valid Prime execution."""
     actor_workspace = actor_workspace.resolve()
     executable = executable.resolve()
-    actor_socket = actor_socket.resolve()
+    scoped_socket = scoped_socket.resolve()
     repository_root = Path(__file__).resolve().parents[3]
     protected = {repository_root, *(path.resolve() for path in private_paths)}
     if any(_paths_overlap(actor_workspace, path) for path in protected):
@@ -189,7 +198,7 @@ def build_macos_sandbox_profile(
         [
             f"(allow file-read* file-write* (subpath {_sandbox_quote(actor_workspace)}))",
             f"(allow file-read* (subpath {_sandbox_quote(install_root)}))",
-            f"(allow file-read* file-write* (subpath {_sandbox_quote(actor_socket.parent)}))",
+            f"(allow file-read* file-write* (subpath {_sandbox_quote(scoped_socket.parent)}))",
         ]
     )
     return "\n".join(rules) + "\n"
@@ -205,12 +214,16 @@ async def run_prime_acp_session(
     actor_environment: Mapping[str, str],
     isolation: PrimeAcpIsolation,
     limits: PrimeAcpLimits,
+    scoped_socket: Path | None = None,
     runtime_directory: Path | None = None,
     private_paths: Sequence[Path] = (),
+    refinement_mode: PrimeRefinementMode = PrimeRefinementMode.CAPTURE,
+    refinement_candidate: PrimeRefinementCandidate | None = None,
     executable: str = "prime-agent",
     environment: Mapping[str, str] | None = None,
 ) -> PrimeAcpRun:
     """Run one Prime root session and its descendants as one composite actor principal."""
+    validate_refinement_request(refinement_mode, refinement_candidate)
     acp = _load_acp()
     acp_schema = importlib.import_module("acp.schema")
     actor_workspace = actor_workspace.resolve()
@@ -247,6 +260,8 @@ async def run_prime_acp_session(
     )
     paths.state_dir.mkdir(parents=True, exist_ok=False)
     paths.session_dir.mkdir(parents=True, exist_ok=False)
+    if refinement_candidate is not None:
+        install_refinement_candidate(paths.state_dir, refinement_candidate)
     evidence_directory.mkdir(parents=True, exist_ok=True)
     for evidence_file in (paths.inbound_file, paths.outbound_file, paths.stderr_file):
         evidence_file.write_bytes(b"")
@@ -283,13 +298,12 @@ async def run_prime_acp_session(
     if isolation is PrimeAcpIsolation.MACOS_SANDBOX:
         if sys.platform != "darwin" or not Path("/usr/bin/sandbox-exec").is_file():
             raise PrimeAcpIsolationError("benchmark-valid Prime execution requires macOS sandbox-exec")
-        socket_value = actor_environment.get("AEC_BENCH_WORLD_ACTOR_SOCKET")
-        if not socket_value:
+        if scoped_socket is None:
             raise PrimeAcpIsolationError("benchmark-valid Prime execution requires the scoped actor socket")
         profile = build_macos_sandbox_profile(
             actor_workspace=actor_workspace,
             executable=resolved_executable,
-            actor_socket=Path(socket_value),
+            scoped_socket=scoped_socket,
             private_paths=private_paths,
         )
         sandbox_profile = evidence_directory / ".prime-sandbox.sb"
@@ -448,6 +462,22 @@ async def run_prime_acp_session(
         if sandbox_profile is not None:
             sandbox_profile.unlink(missing_ok=True)
 
+    refinement_harness = capture_refinement_evidence(
+        mode=refinement_mode,
+        state_directory=paths.state_dir,
+        session_directory=paths.session_dir,
+        evidence_directory=evidence_directory,
+        base=refinement_candidate,
+        environment=env,
+        redact_values=(
+            *redact_values,
+            str(actor_workspace),
+            str(evidence_directory),
+            str(paths.state_dir),
+            str(paths.session_dir),
+        ),
+    )
+
     usage = empty_usage()
     topology = PrimeAcpTopology(root_sessions=0, child_sessions=0)
     if session_id is not None:
@@ -459,6 +489,9 @@ async def run_prime_acp_session(
             error = error or f"{type(exc).__name__}: {exc}"
             session_state = "failed"
     refinement = refinement_evidence(updates)
+    if refinement_mode is PrimeRefinementMode.CANDIDATE and (refinement.events > 0 or refinement_harness.drifted):
+        session_state = "failed"
+        error = error or "Prime refinement candidate changed during a fixed candidate run"
     if usage.complete:
         limit_reason = limit_reason or usage_limit_reason(usage, limits)
 
@@ -493,6 +526,7 @@ async def run_prime_acp_session(
         usage=usage,
         topology=topology,
         refinement=refinement,
+        refinement_harness=refinement_harness,
         limit_reason=limit_reason,
         session_state=session_state,
         stop_reason=stop_reason,
@@ -817,6 +851,15 @@ def _write_run_provenance(
             "completed": run.refinement.completed,
             "failed": run.refinement.failed,
             "unknown": run.refinement.unknown,
+            "mode": run.refinement_harness.mode,
+            "candidate_sha256": run.refinement_harness.candidate.content_sha256,
+            "global_candidate_sha256": run.refinement_harness.global_candidate.content_sha256,
+            "source_count": len(run.refinement_harness.sources),
+            "portable": run.refinement_harness.portable,
+            "issues": list(run.refinement_harness.issues),
+            "changed": run.refinement_harness.changed,
+            "drifted": run.refinement_harness.drifted,
+            "change_file": run.refinement_harness.change_file,
         },
         "limit_reason": run.limit_reason,
         "session_state": run.session_state,

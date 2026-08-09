@@ -1,4 +1,4 @@
-You are a civil drainage engineer checking a task-owned synthetic SSC-03 outfall tailwater, flap-gate, and coastal boundary package.
+You are a civil drainage engineer checking a task-owned synthetic stormwater outfall tailwater, flap-gate, and coastal boundary package.
 
 Use only the task-owned synthetic source pack values shown below for numeric grading. Manning pipe hydraulics, flap-gate headloss checks, outfall tailwater workflows, and coastal boundary coordination shape the workflow context only; they are not extra data sources for this instance.
 

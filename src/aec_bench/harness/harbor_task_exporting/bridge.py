@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import Any, cast
 
 from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec, LifecycleTaskMetadata
-from aec_bench.task_world_templates.compiled_world import (
-    CompiledLifecycleWorld,
-    CompiledWorldEnvelope,
-    build_compiled_world_envelope,
+from aec_bench.lifecycles.catalogue import lifecycle_definition
+from aec_bench.lifecycles.compiled import (
+    CompiledLifecycle,
+    CompiledLifecycleEnvelope,
+    build_compiled_lifecycle_envelope,
 )
-from aec_bench.task_world_templates.lifecycles import lifecycle_definition
 
 from .constants import (
     ATTESTATION_FILENAME,
@@ -57,7 +57,7 @@ class ValidatedCompiledWorld:
 class BridgeLoadResult:
     task_root: Path
     package_dir: Path
-    envelope: CompiledWorldEnvelope
+    envelope: CompiledLifecycleEnvelope
     manifest_sha256: str
     allowed_tools: tuple[str, ...]
 
@@ -71,7 +71,7 @@ class _BridgeManifest:
 
 @dataclass(frozen=True)
 class _BridgeSource:
-    envelope: CompiledWorldEnvelope
+    envelope: CompiledLifecycleEnvelope
     package_dir: Path
     compiled: ValidatedCompiledWorld
 
@@ -137,14 +137,14 @@ def load_bridge(environment_dir: Path) -> BridgeLoadResult:
     )
 
 
-def validate_compiled_world(compiled: CompiledLifecycleWorld) -> ValidatedCompiledWorld:
+def validate_compiled_world(compiled: CompiledLifecycle) -> ValidatedCompiledWorld:
     package = Path(compiled.package_dir)
     metadata = LifecycleTaskMetadata.model_validate(_read_json_object(package / "template.json"))
     lifecycle = EvidenceLifecycleSpec.model_validate(_read_json_object(package / "lifecycle.json"))
     definition = lifecycle_definition(compiled.envelope.template_id)
     if metadata != definition.metadata or lifecycle != definition.lifecycle:
         raise ValueError("compiled world contracts do not match the current lifecycle task")
-    rebuilt = build_compiled_world_envelope(
+    rebuilt = build_compiled_lifecycle_envelope(
         template_id=metadata.template_id,
         package_dir=package,
         requested_variant_id=compiled.envelope.variant_id,
@@ -155,7 +155,7 @@ def validate_compiled_world(compiled: CompiledLifecycleWorld) -> ValidatedCompil
     return ValidatedCompiledWorld(metadata=metadata, lifecycle=lifecycle)
 
 
-def validate_operation_surface(envelope: CompiledWorldEnvelope) -> None:
+def validate_operation_surface(envelope: CompiledLifecycleEnvelope) -> None:
     if envelope.visibility != "public":
         raise ValueError("Harbor lifecycle export refuses non-public compiled worlds")
     if (
@@ -225,7 +225,7 @@ def validated_manifest_shape(manifest: dict[str, Any]) -> dict[str, Any]:
     return manifest
 
 
-def validate_source_identity(*, source: dict[str, Any], envelope: CompiledWorldEnvelope) -> None:
+def validate_source_identity(*, source: dict[str, Any], envelope: CompiledLifecycleEnvelope) -> None:
     envelope_payload = envelope.model_dump(mode="json")
     if source["envelope"] != envelope_payload or source["envelope_sha256"] != canonical_sha256(envelope_payload):
         raise ValueError("export manifest does not match the compiled world envelope")
@@ -236,7 +236,7 @@ def validate_source_identity(*, source: dict[str, Any], envelope: CompiledWorldE
 def validate_bridge_attestation(
     *,
     run_dir: Path,
-    envelope: CompiledWorldEnvelope,
+    envelope: CompiledLifecycleEnvelope,
     manifest_sha256: str,
 ) -> None:
     attestation_path = Path(run_dir) / ATTESTATION_FILENAME
@@ -290,9 +290,9 @@ def _load_bridge_manifest(task_root: Path) -> _BridgeManifest:
 
 def _load_bridge_source(*, task_root: Path, manifest: dict[str, Any]) -> _BridgeSource:
     source = cast(dict[str, Any], manifest["source"])
-    envelope = CompiledWorldEnvelope.model_validate(source["envelope"])
+    envelope = CompiledLifecycleEnvelope.model_validate(source["envelope"])
     package_dir = _task_relative_path(task_root, source["package"], expected_root="tests")
-    compiled = CompiledLifecycleWorld(package_dir=package_dir, envelope=envelope)
+    compiled = CompiledLifecycle(package_dir=package_dir, envelope=envelope)
     validated = validate_compiled_world(compiled)
     validate_harbor_lifecycle_semantics(validated.lifecycle)
     validate_operation_surface(envelope)
@@ -383,7 +383,7 @@ def _validate_harbor_authority(
     *,
     task_root: Path,
     metadata: LifecycleTaskMetadata,
-    envelope: CompiledWorldEnvelope,
+    envelope: CompiledLifecycleEnvelope,
     harbor: dict[str, Any],
     runtime_wheel: Path,
 ) -> tuple[RegularFileSnapshot, RegularFileSnapshot]:

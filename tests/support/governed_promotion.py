@@ -33,15 +33,15 @@ from aec_bench.contracts.evaluation_outcome import (
     ValidityEvaluation,
 )
 from aec_bench.contracts.evaluation_plane import CriticRef, CriticRole, EvaluationPlanRef
-from aec_bench.meta_harness.authority_ledger import AuthorityLedger, StoredAuthorityEvent
-from aec_bench.meta_harness.governance_gate import issue_governed_promotion
-from aec_bench.meta_harness.motif_assurance import (
+from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger, StoredAuthorityEvent
+from aec_bench.experimentation.governance.governance_gate import issue_governed_promotion
+from aec_bench.experimentation.governance.motif_assurance import (
     MotifAssurancePin,
     MotifAssuranceSnapshot,
     motif_subject_sha256,
 )
-from aec_bench.meta_harness.motifs import HarnessProgramMotif
-from aec_bench.meta_harness.standing_monitors import (
+from aec_bench.experimentation.governance.motifs import HarnessProgramMotif
+from aec_bench.experimentation.governance.standing_monitors import (
     CanaryCommitment,
     CanaryKind,
     CanaryObservation,

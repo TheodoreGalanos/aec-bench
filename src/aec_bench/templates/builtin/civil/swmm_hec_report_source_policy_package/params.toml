@@ -1,10 +1,10 @@
-# ABOUTME: Defines the SSC-03 SWMM/HEC report source-policy template.
+# ABOUTME: Defines the stormwater SWMM/HEC report source-policy template.
 # ABOUTME: Pins one synthetic model, report, result, hash, and negative-case source package.
 
 [meta]
 name = "swmm-hec-report-source-policy-package"
-description = "SSC-03 model/report object matching, hash, continuity, and source-policy metrics"
-long_description = "Calculates source-bound model/report source-policy metrics from a deterministic SSC-03 task-owned source pack. The template combines model/report object matching, hash completeness, manual/model peak delta, continuity error margin, outlet row counts, negative-case capture, unresolved source conflicts, and an overall synthetic pass score."
+description = "stormwater model/report object matching, hash, continuity, and source-policy metrics"
+long_description = "Calculates source-bound model/report source-policy metrics from a deterministic stormwater task-owned source pack. The template combines model/report object matching, hash completeness, manual/model peak delta, continuity error margin, outlet row counts, negative-case capture, unresolved source conflicts, and an overall synthetic pass score."
 discipline = "civil"
 category = "model-source-policy"
 standards = ["EPA SWMM report workflows", "HEC-style model report review", "source manifest hashing", "negative-case verification"]
@@ -181,7 +181,7 @@ tolerance = 0.03
 description = "Pass score for model/report source-policy checks"
 tolerance = 0.03
 
-[archetypes.ssc03_model_source_policy_case]
+[archetypes.stormwater_model_source_policy_case]
 description = "SWMM/HEC-style report output and source-policy case"
 model_subcatchment_count = {min = 14.0, max = 14.0}
 report_subcatchment_count = {min = 14.0, max = 14.0}
@@ -204,16 +204,16 @@ unresolved_source_conflicts = {min = 0.0, max = 0.0}
 site_contexts = ["swmm-hec-report", "source-policy-check"]
 
 [difficulty.easy]
-description = "All source-pack values given for the SSC-03 source-policy package"
+description = "All source-pack values given for the stormwater source-policy package"
 visibility = "all_given"
-archetypes = ["ssc03_model_source_policy_case"]
+archetypes = ["stormwater_model_source_policy_case"]
 
 [difficulty.medium]
-description = "All source-pack values given for the SSC-03 source-policy package"
+description = "All source-pack values given for the stormwater source-policy package"
 visibility = "all_given"
-archetypes = ["ssc03_model_source_policy_case"]
+archetypes = ["stormwater_model_source_policy_case"]
 
 [difficulty.hard]
-description = "All source-pack values given for the SSC-03 source-policy package"
+description = "All source-pack values given for the stormwater source-policy package"
 visibility = "all_given"
-archetypes = ["ssc03_model_source_policy_case"]
+archetypes = ["stormwater_model_source_policy_case"]

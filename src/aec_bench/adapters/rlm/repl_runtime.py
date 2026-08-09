@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from aec_bench.adapters.advisor_usage import AdvisorUsageAccumulator
+from aec_bench.adapters.base import initialize_transcript
 from aec_bench.adapters.rlm.client import RlmMessage, ToolCapableRlmClient
 from aec_bench.adapters.rlm.context_filter import ContextFilter
 from aec_bench.adapters.rlm.engine import ReplEnvironment
@@ -41,7 +42,7 @@ from aec_bench.adapters.rlm.subcall_log import SubcallLog
 from aec_bench.adapters.rlm.subcall_registry import build_subcall_functions
 from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.adapters.rlm.tokens import TokenTracker
-from aec_bench.adapters.transcript import TranscriptEntry, initialize_transcript
+from aec_bench.contracts.adapter_execution import TranscriptEntry
 from aec_bench.contracts.advisor import AdvisorRequest, AdvisorResponse
 from aec_bench.contracts.constitution import (
     EarnedAutonomyParams,

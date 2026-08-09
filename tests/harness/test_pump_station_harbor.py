@@ -27,17 +27,17 @@ from aec_bench.harness.pump_station_harbor.session import (
 from aec_bench.harness.pump_station_harbor.verifier import (
     verify_pump_station_harbor_run,
 )
-from aec_bench.task_world_templates.continual_catalogue import default_continual_world_catalogue
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
+from aec_bench.worlds.catalogue import default_continual_world_catalogue
+from aec_bench.worlds.stewardship.wastewater_pump_station.actor_interface import (
     PUMP_STATION_ACTOR_ACTION_NAMES,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition import (
     pump_station_continual_world_definition,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import (
     PUMP_STATION_TASK_WORLD_ID,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
 

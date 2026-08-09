@@ -17,7 +17,7 @@ from aec_bench.harness.harbor_task_export import (
     ExportedHarborTask,
     export_compiled_lifecycle_harbor_task,
 )
-from aec_bench.task_world_templates.compiled_world import compile_lifecycle
+from aec_bench.lifecycles.compiled import compile_lifecycle
 from agents.entrypoint_agent import EntrypointAgent
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -81,7 +81,7 @@ def _export_task(tmp_path: Path) -> ExportedHarborTask:
     )
     return export_compiled_lifecycle_harbor_task(
         compiled,
-        tmp_path / "tasks" / "civil" / "ssc03",
+        tmp_path / "tasks" / "civil" / "stormwater",
         project_root=REPO_ROOT,
     )
 

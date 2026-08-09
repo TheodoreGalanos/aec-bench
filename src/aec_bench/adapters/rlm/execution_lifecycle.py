@@ -26,7 +26,7 @@ from aec_bench.adapters.rlm.runtime_contracts import (
     RlmRuntimeConfig,
 )
 from aec_bench.adapters.rlm.turn_runtime import TurnProcessor
-from aec_bench.adapters.transcript import TokenUsage, TranscriptEntry, TranscriptRole
+from aec_bench.contracts.adapter_execution import TokenUsage, TranscriptEntry, TranscriptRole
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.pricing import estimate_cost_usd
 

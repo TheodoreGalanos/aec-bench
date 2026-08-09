@@ -8,7 +8,7 @@ from aec_bench.adapters.base import (
     AdapterResult,
     OutputCompletionAssistance,
 )
-from aec_bench.adapters.transcript import TranscriptEntry, TranscriptRole
+from aec_bench.contracts.adapter_execution import TranscriptEntry, TranscriptRole
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.trial_record import (

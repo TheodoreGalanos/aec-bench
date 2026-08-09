@@ -19,7 +19,7 @@ from aec_bench.adapters.base import (
     OutputCompletionAssistance,
     SerializedAdapterExecution,
 )
-from aec_bench.adapters.transcript import (
+from aec_bench.contracts.adapter_execution import (
     TokenUsage,
     TranscriptEntry,
     TranscriptEvent,

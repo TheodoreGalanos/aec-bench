@@ -133,8 +133,7 @@ def build_complete_lifecycle_record(
     if output_artifact_fields is None:
         output_artifact_fields = ("invocation_manifest", *provenance_fields)
     lifecycle_provenance: dict[str, object] = {
-        "lifecycle_id": "ssc03.drainage-model-evidence-lifecycle",
-        "world_id": "aec.task_world.composite.drainage-model-evidence-lifecycle-review.v1",
+        "lifecycle_id": "stormwater.drainage-model-evidence-lifecycle",
         "spec_sha256": "8" * 64,
         "package_sha256": "9" * 64,
         "repository_commit": "a" * 40,
@@ -143,7 +142,7 @@ def build_complete_lifecycle_record(
         "runtime_provider": "anthropic",
         "runtime_distributions": ("anthropic==1.0.0", "pydantic-ai-slim==1.0.0"),
         "runtime_dependency_sha256": "c" * 64,
-        "verifier_qualified_name": "aec_bench.verify_ssc03",
+        "verifier_qualified_name": "aec_bench.verify_stormwater",
         "verifier_source_sha256": "d" * 64,
         "invocation_manifest": artifacts["invocation_manifest"],
     }
@@ -151,7 +150,7 @@ def build_complete_lifecycle_record(
 
     return build_trial_record(
         task=TaskReference(
-            task_id="drainage/ssc03/lifecycle",
+            task_id="drainage/stormwater/lifecycle",
             task_revision="git-sha-task",
             visibility=visibility,
         ),
@@ -327,8 +326,7 @@ def test_trial_record_accepts_typed_lifecycle_execution_and_provenance() -> None
             ],
         ),
         lifecycle_provenance=LifecycleTrialProvenance(
-            lifecycle_id="ssc03.drainage-model-evidence-lifecycle",
-            world_id="aec.task_world.composite.drainage-model-evidence-lifecycle-review.v1",
+            lifecycle_id="stormwater.drainage-model-evidence-lifecycle",
             spec_sha256="b" * 64,
             package_sha256="c" * 64,
             repository_commit="d" * 40,
@@ -337,7 +335,7 @@ def test_trial_record_accepts_typed_lifecycle_execution_and_provenance() -> None
             runtime_provider="anthropic",
             runtime_distributions=("anthropic==1.0.0", "pydantic-ai-slim==1.0.0"),
             runtime_dependency_sha256="1" * 64,
-            verifier_qualified_name="aec_bench.verify_ssc03",
+            verifier_qualified_name="aec_bench.verify_stormwater",
             verifier_source_sha256="f" * 64,
             invocation_manifest=invocation_manifest,
             invocation_index=invocation_index,
@@ -385,7 +383,6 @@ def test_complete_lifecycle_record_requires_hashed_output_artifacts() -> None:
             },
             lifecycle_provenance={
                 "lifecycle_id": "lifecycle.demo",
-                "world_id": "world.demo",
                 "spec_sha256": "a" * 64,
                 "package_sha256": "b" * 64,
                 "repository_commit": "c" * 40,
@@ -470,7 +467,7 @@ def test_complete_lifecycle_record_requires_every_bound_reference_in_output_arti
 
 def test_trial_record_accepts_complete_meta_harness_lineage() -> None:
     candidate_manifest = _artifact("meta_harness_candidate", "candidate.json", "1")
-    factorial_plan = _artifact("meta_harness_factorial_plan", "factorial-plan.json", "2")
+    harness_program_plan = _artifact("meta_harness_harness_program_plan", "harness-program-plan.json", "2")
     repair_decision = _artifact("meta_harness_repair_decision", "repair-decision.json", "3")
     record = build_trial_record(
         task=TaskReference(
@@ -484,11 +481,11 @@ def test_trial_record_accepts_complete_meta_harness_lineage() -> None:
                 output_path="/workspace/output.jsonl",
                 output_format="jsonl",
             ),
-            artifacts=[candidate_manifest, factorial_plan, repair_decision],
+            artifacts=[candidate_manifest, harness_program_plan, repair_decision],
         ),
         meta_harness_provenance=_meta_harness_provenance(
             candidate_manifest=candidate_manifest,
-            factorial_plan=factorial_plan,
+            harness_program_plan=harness_program_plan,
             repair_decision=repair_decision,
         ),
     )
@@ -496,7 +493,7 @@ def test_trial_record_accepts_complete_meta_harness_lineage() -> None:
     restored = TrialRecord.model_validate(record.model_dump(mode="json"))
 
     assert restored.meta_harness_provenance is not None
-    assert restored.meta_harness_provenance.factorial_cell == "hx_px"
+    assert restored.meta_harness_provenance.harness_program_cell == "hx_px"
     assert restored.meta_harness_provenance.motif_ids == ("motif.alpha", "motif.beta")
 
 
@@ -515,7 +512,7 @@ def test_complete_meta_harness_record_requires_bound_artifacts() -> None:
             ),
             meta_harness_provenance=_meta_harness_provenance(
                 candidate_manifest=candidate_manifest,
-                factorial_cell=None,
+                harness_program_cell=None,
                 paired_block_id=None,
                 repair_attempt_id=None,
                 repair_iteration=None,
@@ -581,7 +578,7 @@ def test_trial_record_binds_one_completed_proposal_session_and_cleanup() -> None
         ),
         meta_harness_provenance=_meta_harness_provenance(
             candidate_manifest=candidate_manifest,
-            factorial_cell=None,
+            harness_program_cell=None,
             paired_block_id=None,
             repair_attempt_id=None,
             repair_iteration=None,
@@ -645,7 +642,7 @@ def test_trial_record_rejects_unbound_proposal_session_artifact() -> None:
             ),
             meta_harness_provenance=_meta_harness_provenance(
                 candidate_manifest=candidate_manifest,
-                factorial_cell=None,
+                harness_program_cell=None,
                 paired_block_id=None,
                 repair_attempt_id=None,
                 repair_iteration=None,
@@ -654,7 +651,7 @@ def test_trial_record_rejects_unbound_proposal_session_artifact() -> None:
         )
 
 
-def test_holdout_meta_harness_trial_rejects_repair_and_factorial_visibility_mismatch() -> None:
+def test_holdout_meta_harness_trial_rejects_repair_and_harness_program_visibility_mismatch() -> None:
     candidate_manifest = _artifact("meta_harness_candidate", "candidate.json", "1")
     repair_decision = _artifact("meta_harness_repair_decision", "repair-decision.json", "3")
 
@@ -671,9 +668,9 @@ def test_holdout_meta_harness_trial_rejects_repair_and_factorial_visibility_mism
                 repair_attempt_id="repair.1",
                 repair_decision=repair_decision,
                 repair_iteration=1,
-                factorial_cell=None,
+                harness_program_cell=None,
                 paired_block_id=None,
-                factorial_plan=None,
+                harness_program_plan=None,
             ),
         )
 
@@ -695,7 +692,7 @@ def test_holdout_meta_harness_trial_rejects_repair_and_factorial_visibility_mism
             meta_harness_provenance=_meta_harness_provenance(
                 split="calibration",
                 candidate_manifest=candidate_manifest,
-                factorial_cell=None,
+                harness_program_cell=None,
                 paired_block_id=None,
                 repair_attempt_id=None,
                 repair_iteration=None,
@@ -743,7 +740,6 @@ def test_lifecycle_and_meta_harness_package_hashes_must_agree() -> None:
             ),
             lifecycle_provenance=LifecycleTrialProvenance(
                 lifecycle_id="lifecycle.demo",
-                world_id="world.demo",
                 spec_sha256="a" * 64,
                 package_sha256="b" * 64,
                 repository_commit="c" * 40,
@@ -761,8 +757,8 @@ def test_lifecycle_and_meta_harness_package_hashes_must_agree() -> None:
             ),
             meta_harness_provenance=_meta_harness_provenance(
                 candidate_manifest=candidate_manifest,
-                world_package_sha256="9" * 64,
-                factorial_cell=None,
+                review_sidecar_sha256="9" * 64,
+                harness_program_cell=None,
                 paired_block_id=None,
                 repair_attempt_id=None,
                 repair_iteration=None,
@@ -887,10 +883,10 @@ def _meta_harness_provenance(
     *,
     candidate_manifest: ArtifactReference,
     split: Literal["discovery", "repair_gate", "calibration", "holdout"] = "repair_gate",
-    world_package_sha256: str = "b" * 64,
-    factorial_cell: Literal["h0_p0", "hx_p0", "h0_px", "hx_px"] | None = "hx_px",
+    review_sidecar_sha256: str = "b" * 64,
+    harness_program_cell: Literal["h0_p0", "hx_p0", "h0_px", "hx_px"] | None = "hx_px",
     paired_block_id: str | None = "block.1",
-    factorial_plan: ArtifactReference | None = None,
+    harness_program_plan: ArtifactReference | None = None,
     repair_attempt_id: str | None = "repair.1",
     repair_decision: ArtifactReference | None = None,
     repair_iteration: int | None = 1,
@@ -908,18 +904,18 @@ def _meta_harness_provenance(
         bundle_id="bundle.1",
         bundle_sha256="e" * 64,
         parent_bundle_id="bundle.parent",
-        world_package_sha256=world_package_sha256,
-        topology_signature_sha256="f" * 64,
+        review_sidecar_sha256=review_sidecar_sha256,
+        declared_surface_sha256="f" * 64,
         harness_generator_sha256="1" * 64,
         program_generator_sha256="2" * 64,
         split=split,
         repetition=1,
-        factorial_cell=factorial_cell,
+        harness_program_cell=harness_program_cell,
         paired_block_id=paired_block_id,
         repair_attempt_id=repair_attempt_id,
         repair_iteration=repair_iteration,
         candidate_manifest=candidate_manifest,
-        factorial_plan=factorial_plan,
+        harness_program_plan=harness_program_plan,
         repair_decision=repair_decision,
         motif_ids=("motif.alpha", "motif.beta"),
         proposal_session=proposal_session,
@@ -930,7 +926,7 @@ def test_meta_harness_provenance_accepts_opaque_evaluation_plan_ref_and_loads_le
     candidate = _artifact("meta-harness-candidate-manifest", "/tmp/candidate.json", "a")
     current = _meta_harness_provenance(
         candidate_manifest=candidate,
-        factorial_plan=_artifact("meta-harness-factorial-plan", "/tmp/factorial.json", "b"),
+        harness_program_plan=_artifact("meta-harness-harness-program-plan", "/tmp/harness-program.json", "b"),
         repair_decision=_artifact("meta-harness-repair-decision", "/tmp/repair.json", "c"),
     )
     legacy_payload = current.model_dump(mode="json")

@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from aec_bench.meta_harness.llm_reviewer import (
+from aec_bench.harness.model_execution.llm_reviewer import (
     ReviewerEndpointConfig,
     ReviewerRunConfig,
     run_harbor_job_reviewer,

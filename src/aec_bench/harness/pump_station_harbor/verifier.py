@@ -24,39 +24,39 @@ from aec_bench.harness.pump_station_harbor.export import (
     PUMP_STATION_HARBOR_EXECUTION_KIND,
     is_pump_station_harbor_inventory_artifact,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.actor_interface import (
     PUMP_STATION_ACTOR_ACTION_NAMES,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_definition import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition import (
     pump_station_continual_world_definition,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_rollout_adapter import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.continual_rollout_adapter import (
     validate_pump_station_rollout_child_run,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import (
     PUMP_STATION_TASK_WORLD_ID,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.evaluation import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.evaluation import (
     evaluate_pump_station_reference_run,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_package_reader import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.reference_package_reader import (
     load_reference_package,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_system import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.reference_system import (
     load_reference_system,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.temporal_evidence import (
     TemporalEvidenceRepository,
     verify_temporal_evidence_repository,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import PumpStationWorldRun
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.world_run import PumpStationWorldRun
+from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_serialization import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_serialization import (
     pump_station_artifact_id,
 )
 

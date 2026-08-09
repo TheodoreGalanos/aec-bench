@@ -178,7 +178,8 @@ pip install "aec-bench[prime-agent]"
 ```
 
 The maintained async Python entry point is
-`aec_bench.prime_agent.world.run_prime_pump_world_session`. It receives a
+`aec_bench.harness.pump_station_prime.session.run_pump_station_prime_session`.
+It receives a
 host-selected `WorldSessionRequest`, launches one Prime ACP process for one
 session, and supplies the resolved objective in the initial prompt. By default,
 it installs only the generic `aec-world` skill. This is the Open treatment:
@@ -188,14 +189,15 @@ actor capability, with no task-family method or external plan.
 The caller can select the experimental Guided treatment explicitly:
 
 ```python
-await run_prime_pump_world_session(
+await run_pump_station_prime_session(
     ...,
     pump_station_guidance=True,
 )
 ```
 
 The complete pump journey entry point is
-`aec_bench.prime_agent.world_journey.run_prime_pump_world_journey`. It reuses
+`aec_bench.harness.pump_station_prime.journey.run_pump_station_prime_journey`.
+It reuses
 the bounded session runner. When Prime reaches an Operations boundary, the host
 closes Prime, applies at most one deterministic task-owned control, and starts a
 fresh ACP session at the exact new snapshot. All sessions use the same actor
@@ -204,13 +206,36 @@ Prime runtime state is new for each session. World files, host-control details,
 and verifier data do not enter the actor workspace. An LLM does not choose or
 apply the host control.
 
-`PrimeJourneyLimits` applies one set of emergency limits to the complete
+`PumpStationPrimeJourneyLimits` applies one set of emergency limits to the complete
 journey. Each fresh session receives only the remaining world-action,
 model-call, token, cost, and wall-time allowance. A host control can follow only
 a clean Prime `end_turn` with no reached limit. The host writes a private atomic
 checkpoint before it applies a control. If the process stops after the world
 records that control, call the same entry point with `resume=True`; the world
 repository returns the exact durable result instead of applying it twice.
+
+Prime refinement policy is explicit:
+
+- `capture` is the default. It preserves refinement metadata and safe harness
+  evidence but does not carry a change to another Prime session.
+- `discover` allows Prime to use `/refine`. It captures prompt, memory, skill,
+  and subagent entries with their local or global scope. Only portable global
+  entries continue to the next fresh session in the same journey.
+- `candidate` installs one exact candidate in every fresh session. A new
+  refinement event or a changed candidate fails the session, so the comparison
+  treatment cannot change itself.
+
+These modes do not change the world repository. Loading a Prime candidate is
+not world replay. Canonical command replay and verification stay task-owned.
+Prime state remains isolated for each journey and cannot change ambient Prime
+state or another benchmark run.
+
+The first qualification entry point is
+`aec_bench.experimentation.qualification.prime_refinement.run_prime_refinement_qualification`.
+It runs clean empty-harness and fixed-candidate journeys on pump profiles RS1
+and RS2 by default. It records the existing task-owned evaluation for each
+cell and pairs the results. Its decision stays `pending`; it does not accept,
+promote, or materialize a candidate.
 
 Guided installs `aec-world` followed by `pump-station-guidance` and tells Prime
 to load the second skill before its first world action. The guidance teaches
@@ -219,10 +244,17 @@ pump-station decision checks. Its current protocol tells Prime to combine each
 world action, ledger append, compact-state update, and selected output in one
 notebook cell. It does not expose or coach Prime against host-side execution
 limits, and it does not contain a fixed plan, action sequence, or current
-instance solution. It is validated only against the current registered profile
-until a second profile supplies cross-profile evidence. Bounded-session callers
-supply `PrimeWorldSessionLimits`. Journey callers supply `PrimeJourneyLimits`,
-which also limits session and host-control counts.
+instance solution. The world runtime and reference controller are validated
+against two registered pump profiles. Guided treatment evidence still comes
+from RS1 until a guided RS2 model study is run. Bounded-session callers supply
+`PumpStationPrimeSessionLimits`. Journey callers supply
+`PumpStationPrimeJourneyLimits`, which also limits session and host-control
+counts.
+
+The pump world keeps RS1 as its default profile. RS2 uses the same station,
+opening condition, service demand, evidence, actor interface, and evaluation.
+Its second maintenance window is 10 hours, and its third window starts after a
+six-hour gap. This makes Pump B verification wait for the third window.
 
 Inside Prime, the available world calls are:
 

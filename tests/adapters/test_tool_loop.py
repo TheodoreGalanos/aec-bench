@@ -14,7 +14,7 @@ from aec_bench.adapters.tool_loop import (
     ToolLoopRequest,
     replay_tool_loop_client_from_payload,
 )
-from aec_bench.adapters.transcript import TranscriptEvent, TranscriptRole
+from aec_bench.contracts.adapter_execution import TranscriptEvent, TranscriptRole
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.task_definition import ToolSpec
 

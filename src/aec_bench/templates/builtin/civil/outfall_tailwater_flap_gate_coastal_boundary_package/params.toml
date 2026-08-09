@@ -1,10 +1,10 @@
-# ABOUTME: Defines the SSC-03 outfall tailwater flap-gate coastal-boundary template.
+# ABOUTME: Defines the stormwater outfall tailwater flap-gate coastal-boundary template.
 # ABOUTME: Pins one synthetic outfall, tide, flap-gate, and upstream HGL source package.
 
 [meta]
 name = "outfall-tailwater-flap-gate-coastal-boundary-package"
-description = "SSC-03 outfall tailwater, flap-gate loss, HGL, and coastal freeboard metrics"
-long_description = "Calculates source-bound outfall tailwater metrics from a deterministic SSC-03 task-owned source pack. The template combines pipe velocity, Manning friction, flap-gate headloss, upstream HGL, outfall submergence, HGL clearance, coastal freeboard margin, and an overall synthetic pass score."
+description = "stormwater outfall tailwater, flap-gate loss, HGL, and coastal freeboard metrics"
+long_description = "Calculates source-bound outfall tailwater metrics from a deterministic stormwater task-owned source pack. The template combines pipe velocity, Manning friction, flap-gate headloss, upstream HGL, outfall submergence, HGL clearance, coastal freeboard margin, and an overall synthetic pass score."
 discipline = "civil"
 category = "outfall-tailwater"
 standards = ["Manning pipe hydraulics", "flap-gate headloss checks", "outfall tailwater workflows", "coastal boundary coordination"]
@@ -132,7 +132,7 @@ tolerance = 0.03
 description = "Pass score for HGL and coastal freeboard checks"
 tolerance = 0.03
 
-[archetypes.ssc03_outfall_tailwater_case]
+[archetypes.stormwater_outfall_tailwater_case]
 description = "Outfall tailwater and flap-gate case"
 pipe_diameter_m = {min = 0.9, max = 0.9}
 design_flow_m3_s = {min = 0.72, max = 0.72}
@@ -149,16 +149,16 @@ required_coastal_freeboard_m = {min = 0.45, max = 0.45}
 site_contexts = ["outfall-tailwater", "flap-gate-hgl-check"]
 
 [difficulty.easy]
-description = "All source-pack values given for the SSC-03 outfall tailwater package"
+description = "All source-pack values given for the stormwater outfall tailwater package"
 visibility = "all_given"
-archetypes = ["ssc03_outfall_tailwater_case"]
+archetypes = ["stormwater_outfall_tailwater_case"]
 
 [difficulty.medium]
-description = "All source-pack values given for the SSC-03 outfall tailwater package"
+description = "All source-pack values given for the stormwater outfall tailwater package"
 visibility = "all_given"
-archetypes = ["ssc03_outfall_tailwater_case"]
+archetypes = ["stormwater_outfall_tailwater_case"]
 
 [difficulty.hard]
-description = "All source-pack values given for the SSC-03 outfall tailwater package"
+description = "All source-pack values given for the stormwater outfall tailwater package"
 visibility = "all_given"
-archetypes = ["ssc03_outfall_tailwater_case"]
+archetypes = ["stormwater_outfall_tailwater_case"]

@@ -11,13 +11,13 @@ from aec_bench.adapters.base import (
     SerializedAdapterExecution,
     SerializedClientSpec,
     client_spec_to_payload,
+    initialize_transcript,
 )
 from aec_bench.adapters.config import record_effective_configuration, resolve_model_alias
-from aec_bench.adapters.transcript import (
+from aec_bench.contracts.adapter_execution import (
     TokenUsage,
     TranscriptEntry,
     TranscriptRole,
-    initialize_transcript,
 )
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 

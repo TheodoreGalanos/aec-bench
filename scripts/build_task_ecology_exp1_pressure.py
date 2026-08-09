@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from aec_bench.experiments.task_ecology_benchmark import (
+from aec_bench.experimentation.task_ecology.benchmark import (
     DEFAULT_MAX_CYCLES,
     load_pressure_task_patterns,
     write_pressure_benchmark_configs,
@@ -17,18 +17,14 @@ from aec_bench.experiments.task_ecology_benchmark import (
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Build pressure-only task-ecology Experiment 1 configs."
-    )
+    parser = argparse.ArgumentParser(description="Build pressure-only task-ecology Experiment 1 configs.")
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--source-experiment", default="task-ecology-exp1")
     parser.add_argument("--pressure-experiment", default="task-ecology-exp1-pressure")
     parser.add_argument(
         "--baseline-summary",
         type=Path,
-        default=Path(
-            "artefacts/task-ecology-exp1-baseline/20260515-simple-1run/summary.yaml"
-        ),
+        default=Path("artefacts/task-ecology-exp1-baseline/20260515-simple-1run/summary.yaml"),
     )
     parser.add_argument("--threshold", type=float, default=0.85)
     parser.add_argument("--batch-size", type=int, default=5)
@@ -60,9 +56,7 @@ def main() -> None:
         "source_experiment": args.source_experiment,
         "baseline_summary": str(summary_path.relative_to(repo_root)),
         "score_threshold": args.threshold,
-        "task_counts": {
-            suite: len(task_ids) for suite, task_ids in sorted(pressure_patterns.items())
-        },
+        "task_counts": {suite: len(task_ids) for suite, task_ids in sorted(pressure_patterns.items())},
         "configs": [path.relative_to(repo_root).as_posix() for path in config_paths],
         "run_commands": run_commands,
     }

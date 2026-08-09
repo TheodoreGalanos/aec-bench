@@ -104,10 +104,11 @@ def test_synchronous_workflow_uses_exact_prevalidated_tasks_without_registry_res
         tasks,
         config_path,
         task_path_overrides=None,
+        environment_binding=None,
         executor=None,
         execute=True,
     ):
-        del self, task_path_overrides, executor, execute
+        del self, task_path_overrides, environment_binding, executor, execute
         captured["dispatch_tasks"] = tasks
         (jobs_root / "exact-job").mkdir()
         return HarborDispatchResult(

@@ -441,7 +441,7 @@ def _freeze(
         evaluation_plan_candidate_manifest_sha256=manifest.content_sha256,
         structural_split_sha256=_sha("structural-split"),
         selected_structural_item_sha256=_sha("structural-item"),
-        selected_world_lineage_id=_sha("world-lineage"),
+        selected_review_lineage_id=_sha("review-lineage"),
         fixed_harness_sha256=_sha("compiled-h0"),
         operator_authority=operator_authority_for(
             "optimizer.phase9",
@@ -866,7 +866,7 @@ def _session_execution() -> ProposalSessionExecutionRef:
             task_id=freeze.problem_view.task_id,
             task_revision=freeze.problem_view.task_revision,
             split=freeze.split,
-            world_lineage_id=freeze.selected_world_lineage_id,
+            review_lineage_id=freeze.selected_review_lineage_id,
             seed=3101,
             repetition=1,
         ),
@@ -1016,6 +1016,7 @@ def test_source_manifest_binds_exact_public_sources_scopes_and_safe_paths() -> N
     for unsafe in (
         "/tmp/report.pdf",
         "../report.pdf",
+        "task-review.json",
         "world.json",
         "hidden/case.json",
         "tests/case.json",

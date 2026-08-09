@@ -40,7 +40,7 @@ from aec_bench.evolution.repair_lifecycle import (
     RepairPairingSpec,
     RepairProgramTemplate,
 )
-from aec_bench.meta_harness.adaptive_diagnosis import (
+from aec_bench.experimentation.qualification.adaptive_diagnosis import (
     AdaptiveDiagnosisConfiguration,
     AdaptiveDiagnosisPolicy,
     HarnessAgentCapabilityDiagnosisRule,
@@ -48,9 +48,9 @@ from aec_bench.meta_harness.adaptive_diagnosis import (
     ProgramCoalesceTaskBatchDiagnosisRule,
     ProgramMaxTotalAttemptsDiagnosisRule,
 )
-from aec_bench.meta_harness.kernel_catalogue import HarborBackend, default_kernel_registry
-from aec_bench.meta_harness.repair_run import RepairRunSpec, prepare_repair_run_spec
-from aec_bench.meta_harness.repair_runtime import RepairEvidenceUsePolicy, RepairVerifierPolicy
+from aec_bench.experimentation.qualification.repair_run import RepairRunSpec, prepare_repair_run_spec
+from aec_bench.experimentation.qualification.repair_runtime import RepairEvidenceUsePolicy, RepairVerifierPolicy
+from aec_bench.harness.kernel_catalogue import HarborBackend, default_kernel_registry
 
 DEFAULT_TASK_ID = (
     "civil/drainage-review/drainage-model-run-provenance-issue-review-package/"

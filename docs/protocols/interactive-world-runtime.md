@@ -172,6 +172,21 @@ aggregate usage and cost, root/child session counts, refinement status counts,
 and any safeguard that ended the prompt. Unknown ACP metadata remains in the
 raw ACP evidence.
 
+Prime harness treatment is also explicit. `capture` preserves redacted raw
+harness files and normalized evidence without carrying a change. `discover`
+allows `/refine` and accepts prompt, memory, skill, and subagent entries with
+local or global scope. A local entry ends with its Prime session. A portable
+global entry can continue only inside the same AECBench journey. `candidate`
+loads one content-bound candidate into every fresh session and fails if Prime
+emits a new refinement event or changes the installed state. Unknown kinds,
+malformed state, conflicting entries, host paths, redacted content, and invalid
+skill references make a discovered candidate non-portable. Raw evidence stays
+available for inspection.
+
+Candidate loading is not command replay. The task-owned repository remains the
+only command replay authority. Prime harness state is isolated from ambient
+Prime state and from all other benchmark runs.
+
 Journey safeguards cover the whole journey: session and host-control counts,
 world actions, model calls, tokens, provider cost, and elapsed wall time. A new
 Prime session receives only the remaining allowance. Completed response
@@ -239,6 +254,15 @@ and final status. Per-session evidence remains separate. The private journey
 checkpoint supports restart and does not replace the final manifest or world
 repository.
 
+`run_prime_refinement_qualification` creates independent empty-harness and
+fixed-candidate journey cells. It uses RS1 and RS2 by default, with the same
+instruction, model, isolation, guidance setting, and limits in both treatments.
+Every cell has a new actor workspace, world repository, Prime runtime, and
+evidence directory. The qualification report contains content-bound candidate,
+journey, verification, evaluation, usage, and contrast evidence. Its decision
+is `pending`. Qualification does not grant promotion authority and does not
+change a task, skill package, world, verifier, or evaluator.
+
 | Entry point | Behaviour |
 | --- | --- |
 | Python catalogue | Resolve current build and profile registration. |
@@ -247,6 +271,7 @@ repository.
 | Harbor agent and import | Use the concrete pump transport and evaluator. |
 | Prime ACP Python entry | Run one Open or explicitly Guided Prime session against one scoped pump actor proxy. |
 | Prime pump journey Python entry | Compose bounded Prime sessions with exact task-owned host continuation until the pump world completes or cannot advance. |
+| Prime refinement qualification Python entry | Compare one fixed candidate with an empty harness on independent RS1 and RS2 journeys without automatic promotion. |
 
 The boundary fails closed for unknown build or profile identity, stale
 decisions, unavailable actions, unauthorized controls, invalid rollout
@@ -256,14 +281,15 @@ successful transition or evaluation.
 
 ## Proof
 
-- [catalogue registration](../../tests/task_world_templates/continual/test_catalogue.py)
-- [episode state and recorder semantics](../../tests/task_world_templates/continual/test_episode.py)
-- [world conformance](../../tests/task_world_templates/continual/test_hydraulic_world_conformance.py)
-- [separate-process actor resolution](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_actor_interface_transport_e2e.py)
-- [pump retry and recovery](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_registered_world_run_transitions.py)
-- [Prime actor proxy and world composition](../../tests/prime_agent/test_world.py)
-- [Prime pump journey composition](../../tests/prime_agent/test_world_journey.py)
-- [pump host continuation policy](../../tests/task_world_templates/stewardship/wastewater_pump_station/test_host_continuation.py)
+- [catalogue registration](../../tests/worlds/test_catalogue.py)
+- [episode state and recorder semantics](../../tests/worlds/runtime/test_episode.py)
+- [world conformance](../../tests/worlds/test_pump_station_world_conformance.py)
+- [separate-process actor resolution](../../tests/worlds/stewardship/wastewater_pump_station/test_actor_interface_transport_e2e.py)
+- [pump retry and recovery](../../tests/worlds/stewardship/wastewater_pump_station/test_registered_world_run_transitions.py)
+- [Prime actor proxy and pump session composition](../../tests/harness/pump_station_prime/test_session.py)
+- [Prime pump journey composition](../../tests/harness/pump_station_prime/test_journey.py)
+- [pump host continuation policy](../../tests/worlds/stewardship/wastewater_pump_station/test_host_continuation.py)
 - [Prime ACP lifecycle and isolation](../../tests/prime_agent/test_acp.py)
-- [Prime treatment and trajectory analysis](../../tests/prime_agent/test_trajectory.py)
+- [Prime treatment and trajectory analysis](../../tests/experimentation/qualification/test_pump_station_prime_trajectory.py)
+- [Prime refinement capture and qualification](../../tests/experimentation/qualification/test_prime_refinement.py)
 - [Harbor import](../../tests/harness/test_stewardship_harbor_import.py)

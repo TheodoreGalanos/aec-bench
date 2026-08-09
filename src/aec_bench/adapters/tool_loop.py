@@ -15,16 +15,16 @@ from aec_bench.adapters.base import (
     SerializedAdapterExecution,
     SerializedClientSpec,
     client_spec_to_payload,
+    initialize_transcript,
 )
 from aec_bench.adapters.config import record_effective_configuration, resolve_model_alias
 from aec_bench.adapters.rlm.client import RlmClient
 from aec_bench.adapters.runtime_limits import configured_positive_int
-from aec_bench.adapters.transcript import (
+from aec_bench.contracts.adapter_execution import (
     TokenUsage,
     TranscriptEntry,
     TranscriptEvent,
     TranscriptRole,
-    initialize_transcript,
 )
 from aec_bench.contracts.advisor import AdvisorConfig, AdvisorRequest
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus

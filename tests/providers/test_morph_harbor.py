@@ -15,9 +15,15 @@ import pytest
 from harbor.models.task.config import EnvironmentConfig  # type: ignore[import-untyped]
 from harbor.models.trial.paths import TrialPaths  # type: ignore[import-untyped]
 
-from aec_bench.harness.runtime_dependencies import RUNTIME_PYTHON_PACKAGES
+from aec_bench.contracts.execution_environment import RUNTIME_PYTHON_PACKAGES
 from aec_bench.providers.morph_cloud import MorphCloudOperations, MorphCommandResult
-from aec_bench.providers.morph_harbor import MorphHarborEnvironment
+from aec_bench.providers.morph_harbor import MORPH_HARBOR_ENVIRONMENT_BINDING, MorphHarborEnvironment
+
+
+def test_morph_harbor_implements_the_neutral_environment_binding() -> None:
+    assert MORPH_HARBOR_ENVIRONMENT_BINDING.backend == "morph"
+    assert MORPH_HARBOR_ENVIRONMENT_BINDING.import_path == ("aec_bench.providers.morph_harbor:MorphHarborEnvironment")
+    assert MORPH_HARBOR_ENVIRONMENT_BINDING.kwargs == {"compute_backend": "morph"}
 
 
 def test_morph_runtime_packages_are_exactly_pinned_to_the_kernel_environment() -> None:

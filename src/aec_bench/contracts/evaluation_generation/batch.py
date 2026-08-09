@@ -148,12 +148,12 @@ class TaskCandidatePlan(ContentAddressedModel):
         expected_task_identity = (
             task.task_id,
             task.public_snapshot.definition_sha256,
-            task.world_lineage_id,
+            task.review_lineage_id,
         )
         if (
             coordinate.task_id,
             coordinate.task_revision,
-            coordinate.world_lineage_id,
+            coordinate.review_lineage_id,
         ) != expected_task_identity:
             raise ValueError(
                 "candidate task plan coordinate differs from its cohort task",
@@ -228,7 +228,7 @@ class EvaluationBatchPlan(ContentAddressedModel):
             ),
             (
                 "world identities",
-                tuple(item.cohort_task.task.world_lineage_id for item in value),
+                tuple(item.cohort_task.task.review_lineage_id for item in value),
             ),
             (
                 "schedule identities",

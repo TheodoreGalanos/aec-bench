@@ -1,4 +1,4 @@
-# ABOUTME: Computes SSC-03 stormwater pump control and backup-energy metrics.
+# ABOUTME: Computes stormwater stormwater pump control and backup-energy metrics.
 # ABOUTME: Combines pump capacity, rising-main losses, power, battery autonomy, and wet-well freeboard.
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def compute(
     access_level_m: float,
     minimum_wetwell_freeboard_m: float,
 ) -> dict[str, float]:
-    """Compute deterministic SSC-03 stormwater pump station metrics."""
+    """Compute deterministic stormwater stormwater pump station metrics."""
     _require_positive(
         pump_capacity_l_s=pump_capacity_l_s,
         pump_count=pump_count,

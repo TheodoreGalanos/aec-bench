@@ -1,7 +1,7 @@
 [meta]
 name = "detention-outlet-hgl-package"
-description = "SSC-03 detention, outlet-control, and HGL stormwater metrics"
-long_description = "Calculates source-bound stormwater detention and outlet-control metrics from a deterministic SSC-03 task-owned source pack. The template combines Rational Method peak flow, simplified triangular-hydrograph detention storage, basin storage volume, orifice release, emergency weir release, freeboard, downstream HGL clearance, and an overall synthetic pass score."
+description = "stormwater detention, outlet-control, and HGL stormwater metrics"
+long_description = "Calculates source-bound stormwater detention and outlet-control metrics from a deterministic stormwater task-owned source pack. The template combines Rational Method peak flow, simplified triangular-hydrograph detention storage, basin storage volume, orifice release, emergency weir release, freeboard, downstream HGL clearance, and an overall synthetic pass score."
 discipline = "civil"
 category = "stormwater-detention"
 standards = ["EPA SWMM", "FHWA HEC-22", "HEC-HMS", "stormwater detention outlet workflows"]
@@ -226,7 +226,7 @@ tolerance = 0.03
 description = "Pass score for the task-owned storage, outlet, freeboard, and HGL checks"
 tolerance = 0.03
 
-[archetypes.ssc03_detention_outlet_case]
+[archetypes.stormwater_detention_outlet_case]
 description = "Stormwater detention basin with controlled orifice, emergency weir, freeboard, and HGL clearance"
 catchment_area_ha = {min = 6.4, max = 6.4}
 runoff_coefficient = {min = 0.72, max = 0.72}
@@ -253,16 +253,16 @@ downstream_rim_elevation_m = {min = 41.65, max = 41.65}
 site_contexts = ["detention-outlet-hgl", "stormwater-storage-control-check"]
 
 [difficulty.easy]
-description = "All source-pack values given for the SSC-03 detention outlet HGL package"
+description = "All source-pack values given for the stormwater detention outlet HGL package"
 visibility = "all_given"
-archetypes = ["ssc03_detention_outlet_case"]
+archetypes = ["stormwater_detention_outlet_case"]
 
 [difficulty.medium]
-description = "All source-pack values given for the SSC-03 detention outlet HGL package"
+description = "All source-pack values given for the stormwater detention outlet HGL package"
 visibility = "all_given"
-archetypes = ["ssc03_detention_outlet_case"]
+archetypes = ["stormwater_detention_outlet_case"]
 
 [difficulty.hard]
-description = "All source-pack values given for the SSC-03 detention outlet HGL package"
+description = "All source-pack values given for the stormwater detention outlet HGL package"
 visibility = "all_given"
-archetypes = ["ssc03_detention_outlet_case"]
+archetypes = ["stormwater_detention_outlet_case"]

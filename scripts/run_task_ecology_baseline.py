@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from aec_bench.experiments.task_ecology_baseline import (
+from aec_bench.experimentation.task_ecology.baseline import (
     DEFAULT_BASELINE_ADAPTER,
     DEFAULT_BASELINE_MODEL,
     DEFAULT_EXPERIMENT_ID,
@@ -26,9 +26,7 @@ def main() -> None:
 
     load_dotenv()
 
-    parser = argparse.ArgumentParser(
-        description="Run a one-pass local baseline over generated task-ecology tasks."
-    )
+    parser = argparse.ArgumentParser(description="Run a one-pass local baseline over generated task-ecology tasks.")
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--experiment", default="task-ecology-exp1")
     parser.add_argument("--model", default=DEFAULT_BASELINE_MODEL)
@@ -68,9 +66,7 @@ def main() -> None:
         return
 
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-    output_dir = args.output_dir or (
-        repo_root / "artefacts" / DEFAULT_EXPERIMENT_ID / timestamp
-    )
+    output_dir = args.output_dir or (repo_root / "artefacts" / DEFAULT_EXPERIMENT_ID / timestamp)
     try:
         summary = run_baseline_dataset(
             tasks=tasks,

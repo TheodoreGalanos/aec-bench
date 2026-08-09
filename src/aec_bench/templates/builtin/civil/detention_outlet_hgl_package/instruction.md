@@ -1,4 +1,4 @@
-You are a civil drainage engineer checking a task-owned synthetic SSC-03 detention, outlet-control, and HGL package for one stormwater design event.
+You are a civil drainage engineer checking a task-owned synthetic stormwater detention, outlet-control, and HGL package for one stormwater design event.
 
 Use only the task-owned synthetic source pack values shown below for numeric grading. External EPA SWMM, FHWA HEC-22, and HEC-HMS routes shape the workflow context only; they are not extra data sources for this instance.
 

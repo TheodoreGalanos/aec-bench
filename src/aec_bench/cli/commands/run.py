@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 from aec_bench.cli.commands.config import resolve_path
 from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import console, emit, print_success
-from aec_bench.meta_harness.llm_reviewer import (
+from aec_bench.harness.model_execution.llm_reviewer import (
     ReviewerEndpointConfig,
     ReviewerRunConfig,
     load_reviewer_config,
@@ -231,7 +231,7 @@ def _execute_manifest(
         extras += ",local-agents"
     require_optional_extra("Experiment execution support", extras, modules)
 
-    from aec_bench.harness.harbor_dispatch import HARBOR_RUN_BACKENDS
+    from aec_bench.cli.harbor_environment import HARBOR_RUN_BACKENDS, resolve_harbor_environment_binding
     from aec_bench.harness.scheduler import build_trial_plan, select_manifest_tasks
     from aec_bench.tasks.registry import TaskRegistry
 
@@ -326,6 +326,7 @@ def _execute_manifest(
         config_path=project_root / f".aec-bench-{manifest.experiment_id}.yaml",
         progress_callback=_progress,
         reviewer_config=reviewer_config,
+        environment_binding=resolve_harbor_environment_binding(manifest.compute.backend),
     )
 
     result_data = {

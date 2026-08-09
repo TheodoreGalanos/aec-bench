@@ -54,9 +54,12 @@ authority.
 | [Contracts](CONTRACTS.md) | Normative | Current | Boundary owners and consumers | Owning domains |
 | [Invariants](INVARIANTS.md) | Normative | Normative | All contributors | Benchmark governance |
 | [Project structure](PROJECT_STRUCTURE.md) | Guide | Current | Contributors and agents | Repository maintainers |
-| [World authoring](world-authoring.md) | Guide | Current | Task and interactive-world contributors | Task-world owners and continual-world maintainers |
-| [Interactive-world runtime](protocols/interactive-world-runtime.md) | Protocol | Current | World, runtime, and transport contributors | Continual-world runtime and registered worlds |
-| [Staged evidence and publication](protocols/staged-evidence-and-publication.md) | Protocol | Current | Lifecycle and evaluation contributors | Evidence-lifecycle host |
+| [World authoring](world-authoring.md) | Guide | Current | Task and interactive-world contributors | Task, engineering, world, and lifecycle owners |
+| [Interactive-world runtime](protocols/interactive-world-runtime.md) | Protocol | Current | World, runtime, and transport contributors | World runtime and registered worlds |
+| [Staged evidence and publication](protocols/staged-evidence-and-publication.md) | Protocol | Current | Lifecycle and evaluation contributors | Lifecycle runtime and task owners |
+| [Prime and interactive-world boundary study](plans/prime-world-boundary-study.md) | Plan | Historical | Prime, harness, and task-world contributors | Repository maintainers |
+| [Repository architecture study](plans/repository-architecture-study.md) | Plan | Historical | Repository maintainers and subsystem owners | Repository maintainers |
+| [Repository architecture alignment implementation](plans/repository-architecture-implementation.md) | Plan | Historical | Repository maintainers and subsystem owners | Repository maintainers |
 | [Documentation agent guide](AGENTS.md) | Guide | Current | Coding agents editing this directory | Repository maintainers |
 
 ## Repository design docs and public docs

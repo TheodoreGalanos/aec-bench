@@ -10,7 +10,7 @@ from aec_bench.adapters.direct import (
     DirectCompletionResponse,
     ReplayDirectClient,
 )
-from aec_bench.adapters.transcript import TranscriptRole
+from aec_bench.contracts.adapter_execution import TranscriptRole
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.trial_record import AgentReference
 

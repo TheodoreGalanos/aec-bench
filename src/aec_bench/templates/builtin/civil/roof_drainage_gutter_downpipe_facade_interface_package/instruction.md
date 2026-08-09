@@ -4,12 +4,12 @@ Use only the task-owned synthetic source pack values shown below for numeric gra
 
 ## Scene
 
-- SSC-03 product family: `SSC-03-LH-04`
-- SSC-03 roof catchment markup: `ROOF-SSC03-004`
-- SSC-03 gutter and downpipe schedule: `GUTTER-SSC03-004`
-- SSC-03 facade/parapet section: `FACADE-SSC03-004`
-- SSC-03 rainfall table: `RAIN-SSC03-004`
-- SSC-03 roof drainage memo: `MEMO-SSC03-004`
+- stormwater product family: `SSC-03-LH-04`
+- stormwater roof catchment markup: `ROOF-SSC03-004`
+- stormwater gutter and downpipe schedule: `GUTTER-SSC03-004`
+- stormwater facade/parapet section: `FACADE-SSC03-004`
+- stormwater rainfall table: `RAIN-SSC03-004`
+- stormwater roof drainage memo: `MEMO-SSC03-004`
 - SSC-09 product family: `SSC-09-LH-07`
 - SSC-09 roof fall plan: `ROOF-09-FALL-07`
 - SSC-09 gutter repair schedule: `GUTTER-09-REPAIR-07`

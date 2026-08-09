@@ -1,4 +1,4 @@
-You are a civil stormwater modeller checking a task-owned synthetic SSC-03 SWMM/HEC-style report output and source-policy package.
+You are a civil stormwater modeller checking a task-owned synthetic stormwater SWMM/HEC-style report output and source-policy package.
 
 Use only the task-owned synthetic source pack values shown below for numeric grading. EPA SWMM report workflows, HEC-style model report review, source manifest hashing, and negative-case verification shape the workflow context only; they are not extra data sources for this instance.
 

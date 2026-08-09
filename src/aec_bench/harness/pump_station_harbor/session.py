@@ -30,34 +30,34 @@ from aec_bench.harness.pump_station_harbor.export import (
     PumpStationHarborBridge,
     is_pump_station_harbor_inventory_artifact,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.actor_interface import (
+from aec_bench.trajectory.writer import TrajectoryWriter
+from aec_bench.worlds.stewardship.wastewater_pump_station.actor_interface import (
     PUMP_STATION_ACTOR_ACTION_NAMES,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.continual_rollout_adapter import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.continual_rollout_adapter import (
     validate_pump_station_rollout_child_run,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.episode_runtime import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import (
     PUMP_STATION_TASK_WORLD_ID,
     PumpStationEpisodeHost,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.reference_controller import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
     run_pump_station_reference_controller,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.stewardship_verifier import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationCoupledVerificationReport,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.temporal_evidence import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.temporal_evidence import (
     TemporalEvidenceCapability,
     TemporalEvidenceRepository,
     TemporalEvidenceVerificationReport,
     verify_temporal_evidence_repository,
 )
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run import PumpStationWorldRun
-from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_repository import (
+from aec_bench.worlds.stewardship.wastewater_pump_station.world_run import PumpStationWorldRun
+from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
 )
-from aec_bench.trajectory.writer import TrajectoryWriter
 
 PUMP_STATION_MODEL_CONTROLLER_MODE = "model"
 PUMP_STATION_MODEL_MAX_TURNS = 90
@@ -543,7 +543,7 @@ def _shared_snapshot(snapshot: Any) -> StewardshipStateSnapshotRef:
 
 
 def _private_snapshot(snapshot: StewardshipStateSnapshotRef) -> Any:
-    from aec_bench.task_world_templates.stewardship.wastewater_pump_station.world_run_models import (
+    from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_models import (
         PumpStationStateSnapshotRef,
     )
 

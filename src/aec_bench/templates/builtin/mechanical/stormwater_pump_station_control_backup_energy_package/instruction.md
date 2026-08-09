@@ -1,4 +1,4 @@
-You are a mechanical stormwater pump-station engineer checking a task-owned synthetic SSC-03 pump control and backup-energy package.
+You are a mechanical stormwater pump-station engineer checking a task-owned synthetic stormwater pump control and backup-energy package.
 
 Use only the task-owned synthetic source pack values shown below for numeric grading. Hazen-Williams hydraulic calculations, stormwater pump station controls, pump duty power workflows, and backup energy sizing shape the workflow context only; they are not extra data sources for this instance.
 

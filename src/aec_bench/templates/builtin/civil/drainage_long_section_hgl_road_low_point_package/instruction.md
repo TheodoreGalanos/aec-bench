@@ -1,4 +1,4 @@
-You are a civil drainage engineer checking a task-owned synthetic SSC-03 drainage long-section, HGL, and road low-point package.
+You are a civil drainage engineer checking a task-owned synthetic stormwater drainage long-section, HGL, and road low-point package.
 
 Use only the task-owned synthetic source pack values shown below for numeric grading. FHWA HEC-22, Manning drainage calculations, road low-point drainage review, and stormwater HGL workflows shape the workflow context only; they are not extra data sources for this instance.
 

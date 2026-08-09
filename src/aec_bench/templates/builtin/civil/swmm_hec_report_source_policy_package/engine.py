@@ -1,4 +1,4 @@
-# ABOUTME: Computes SSC-03 SWMM/HEC report source-policy metrics.
+# ABOUTME: Computes stormwater SWMM/HEC report source-policy metrics.
 # ABOUTME: Combines model/report object matching, hash completeness, peak deltas, continuity, and negative cases.
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def compute(
     captured_negative_cases: float,
     unresolved_source_conflicts: float,
 ) -> dict[str, float]:
-    """Compute deterministic SSC-03 report and source-policy metrics."""
+    """Compute deterministic stormwater report and source-policy metrics."""
     _require_positive(
         model_subcatchment_count=model_subcatchment_count,
         report_subcatchment_count=report_subcatchment_count,

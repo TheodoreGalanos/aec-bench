@@ -15,8 +15,7 @@ def internal_source_closure(
     dynamic_paths: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     """Return every internal Python source reachable from the supplied owned paths."""
-    source_root = project_root / "src"
-    path_by_module, module_by_path, package_modules = _module_index(source_root)
+    path_by_module, module_by_path, package_modules, source_by_path = _module_index(project_root)
     pending = deque((*seed_paths, *dynamic_paths))
     closure: set[str] = set()
 
@@ -28,7 +27,14 @@ def internal_source_closure(
         module_name = module_by_path.get(inventory_path)
         if module_name is None:
             continue
-        source_path = source_root / inventory_path
+        for package_path in _package_source_paths(
+            module_name,
+            path_by_module=path_by_module,
+            package_modules=package_modules,
+        ):
+            if package_path not in closure:
+                pending.append(package_path)
+        source_path = source_by_path[inventory_path]
         imported_modules = _internal_imports(
             source_path=source_path,
             module_name=module_name,
@@ -47,21 +53,42 @@ def internal_source_closure(
 
 
 def _module_index(
-    source_root: Path,
-) -> tuple[dict[str, str], dict[str, str], set[str]]:
+    project_root: Path,
+) -> tuple[dict[str, str], dict[str, str], set[str], dict[str, Path]]:
     path_by_module: dict[str, str] = {}
     module_by_path: dict[str, str] = {}
     package_modules: set[str] = set()
-    for source_path in sorted((source_root / "aec_bench").rglob("*.py")):
-        relative_path = source_path.relative_to(source_root).as_posix()
-        module_parts = list(source_path.relative_to(source_root).with_suffix("").parts)
-        if module_parts[-1] == "__init__":
-            module_parts.pop()
-            package_modules.add(".".join(module_parts))
-        module_name = ".".join(module_parts)
-        path_by_module[module_name] = relative_path
-        module_by_path[relative_path] = module_name
-    return path_by_module, module_by_path, package_modules
+    source_by_path: dict[str, Path] = {}
+    source_roots = (
+        (project_root / "src" / "aec_bench", project_root / "src"),
+        (project_root / "agents", project_root),
+    )
+    for search_root, module_root in source_roots:
+        for source_path in sorted(search_root.rglob("*.py")):
+            relative_path = source_path.relative_to(module_root).as_posix()
+            module_parts = list(source_path.relative_to(module_root).with_suffix("").parts)
+            if module_parts[-1] == "__init__":
+                module_parts.pop()
+                package_modules.add(".".join(module_parts))
+            module_name = ".".join(module_parts)
+            path_by_module[module_name] = relative_path
+            module_by_path[relative_path] = module_name
+            source_by_path[relative_path] = source_path
+    return path_by_module, module_by_path, package_modules, source_by_path
+
+
+def _package_source_paths(
+    module_name: str,
+    *,
+    path_by_module: dict[str, str],
+    package_modules: set[str],
+) -> tuple[str, ...]:
+    parts = module_name.split(".")
+    return tuple(
+        path_by_module[candidate]
+        for end in range(1, len(parts))
+        if (candidate := ".".join(parts[:end])) in package_modules
+    )
 
 
 def _internal_imports(
@@ -84,7 +111,7 @@ def _import_source_paths(
     path_by_module: dict[str, str],
     package_modules: set[str],
 ) -> tuple[str, ...]:
-    if not module_name.startswith("aec_bench"):
+    if not _is_internal_module(module_name):
         return ()
     parts = module_name.split(".")
     source_paths: list[str] = []
@@ -111,7 +138,7 @@ class _ImportCollector(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Import(self, node: ast.Import) -> None:
-        self.modules.update(alias.name for alias in node.names if alias.name.startswith("aec_bench"))
+        self.modules.update(alias.name for alias in node.names if _is_internal_module(alias.name))
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         base_module = _resolve_import_from(
@@ -119,7 +146,7 @@ class _ImportCollector(ast.NodeVisitor):
             module=node.module,
             level=node.level,
         )
-        if not base_module.startswith("aec_bench"):
+        if not _is_internal_module(base_module):
             return
         self.modules.add(base_module)
         self.modules.update(f"{base_module}.{alias.name}" for alias in node.names if alias.name != "*")
@@ -128,7 +155,7 @@ class _ImportCollector(ast.NodeVisitor):
         if _is_import_module_call(node.func) and node.args:
             module_arg = node.args[0]
             if isinstance(module_arg, ast.Constant) and isinstance(module_arg.value, str):
-                if module_arg.value.startswith("aec_bench"):
+                if _is_internal_module(module_arg.value):
                     self.modules.add(module_arg.value)
         self.generic_visit(node)
 
@@ -170,4 +197,13 @@ def _is_import_module_call(node: ast.expr) -> bool:
         and isinstance(node.value, ast.Name)
         and node.value.id == "importlib"
         and node.attr == "import_module"
+    )
+
+
+def _is_internal_module(module_name: str) -> bool:
+    return (
+        module_name == "aec_bench"
+        or module_name.startswith("aec_bench.")
+        or module_name == "agents"
+        or module_name.startswith("agents.")
     )

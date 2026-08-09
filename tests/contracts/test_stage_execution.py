@@ -37,7 +37,7 @@ def _artifact(path: Path, *, kind: str, digest: str) -> ArtifactReference:
 def _stage_graph() -> DeclaredStageGraph:
     return DeclaredStageGraph(
         task_id="civil/review/drainage",
-        world_package_sha256="a" * 64,
+        review_sidecar_sha256="a" * 64,
         stages=(
             DeclaredStage(
                 stage_id="inventory",
@@ -74,6 +74,7 @@ def _stage_graph() -> DeclaredStageGraph:
 def test_declared_stage_graph_derives_content_addressed_routes_and_required_outputs() -> None:
     graph = _stage_graph()
 
+    assert graph.schema_version == "aecbench.declared-stage-graph.v2"
     assert graph.topological_order == ("inventory", "authority", "decision")
     assert graph.predecessor_stage_ids("authority") == ("inventory",)
     assert graph.predecessor_stage_ids("decision") == ("inventory", "authority")
@@ -83,12 +84,22 @@ def test_declared_stage_graph_derives_content_addressed_routes_and_required_outp
     assert graph.required_output_ids("decision") == ("readiness_decision",)
     assert len(graph.content_sha256) == 64
 
+    pre_cutover = graph.model_dump(mode="json", exclude={"content_sha256"})
+    pre_cutover["world_package_sha256"] = pre_cutover.pop("review_sidecar_sha256")
+    with pytest.raises(ValidationError):
+        DeclaredStageGraph.model_validate(pre_cutover)
+
+    pre_cutover_version = graph.model_dump(mode="json", exclude={"content_sha256"})
+    pre_cutover_version["schema_version"] = "aecbench.declared-stage-graph.v1"
+    with pytest.raises(ValidationError):
+        DeclaredStageGraph.model_validate(pre_cutover_version)
+
 
 def test_declared_stage_graph_rejects_cycles_and_ambiguous_producers() -> None:
     with pytest.raises(ValidationError, match="declared stage graph must be acyclic"):
         DeclaredStageGraph(
             task_id="civil/review/cycle",
-            world_package_sha256="a" * 64,
+            review_sidecar_sha256="a" * 64,
             stages=(
                 DeclaredStage(stage_id="a", consumes=("from_b",), produces=("from_a",)),
                 DeclaredStage(stage_id="b", consumes=("from_a",), produces=("from_b",)),
@@ -98,7 +109,7 @@ def test_declared_stage_graph_rejects_cycles_and_ambiguous_producers() -> None:
     with pytest.raises(ValidationError, match="declared stage outputs must have one producer"):
         DeclaredStageGraph(
             task_id="civil/review/ambiguous",
-            world_package_sha256="a" * 64,
+            review_sidecar_sha256="a" * 64,
             stages=(
                 DeclaredStage(stage_id="a", produces=("shared",)),
                 DeclaredStage(stage_id="b", produces=("shared",)),
@@ -110,7 +121,7 @@ def test_declared_stage_graph_payload_decoder_preserves_declared_field_order() -
     with pytest.raises(ValueError, match="declared stage text must be non-empty when supplied"):
         declared_stage_graph_from_payload(
             task_id="civil/review/drainage",
-            world_package_sha256="a" * 64,
+            review_sidecar_sha256="a" * 64,
             payload={
                 "stages": [
                     {
@@ -126,7 +137,7 @@ def test_declared_stage_graph_payload_decoder_preserves_declared_field_order() -
     with pytest.raises(ValueError, match="stage consumes must be a list"):
         declared_stage_graph_from_payload(
             task_id="civil/review/drainage",
-            world_package_sha256="a" * 64,
+            review_sidecar_sha256="a" * 64,
             payload={
                 "stages": [
                     {
@@ -140,17 +151,17 @@ def test_declared_stage_graph_payload_decoder_preserves_declared_field_order() -
 
 
 def test_declared_stage_graph_payload_decoder_preserves_collection_order() -> None:
-    with pytest.raises(ValueError, match="declared task-world stage must be a mapping"):
+    with pytest.raises(ValueError, match="declared task-review stage must be a mapping"):
         declared_stage_graph_from_payload(
             task_id="civil/review/drainage",
-            world_package_sha256="a" * 64,
+            review_sidecar_sha256="a" * 64,
             payload={"stages": [None], "handoffs": "not-a-list"},
         )
 
-    with pytest.raises(ValueError, match="declared task-world handoff requires a non-empty id"):
+    with pytest.raises(ValueError, match="declared task-review handoff requires a non-empty id"):
         declared_stage_graph_from_payload(
             task_id="civil/review/drainage",
-            world_package_sha256="a" * 64,
+            review_sidecar_sha256="a" * 64,
             payload={
                 "stages": [{"id": "inventory"}],
                 "handoffs": [{"id": "", "producer_stage": ""}],
@@ -161,7 +172,7 @@ def test_declared_stage_graph_payload_decoder_preserves_collection_order() -> No
 def test_declared_stage_graph_payload_decoder_preserves_content_identity() -> None:
     decoded = declared_stage_graph_from_payload(
         task_id="civil/review/drainage",
-        world_package_sha256="a" * 64,
+        review_sidecar_sha256="a" * 64,
         payload={
             "stages": [
                 {
@@ -190,7 +201,7 @@ def test_declared_stage_graph_payload_decoder_preserves_content_identity() -> No
     )
     expected = DeclaredStageGraph(
         task_id="civil/review/drainage",
-        world_package_sha256="a" * 64,
+        review_sidecar_sha256="a" * 64,
         stages=(
             DeclaredStage(
                 stage_id="inventory",
@@ -225,7 +236,7 @@ def test_declared_stage_graph_payload_decoder_ignores_handoffs_without_stages() 
     assert (
         declared_stage_graph_from_payload(
             task_id="civil/review/drainage",
-            world_package_sha256="a" * 64,
+            review_sidecar_sha256="a" * 64,
             payload={"handoffs": "not-a-list"},
         )
         is None
@@ -265,7 +276,7 @@ def test_stage_output_and_receipt_bind_exact_context_and_physical_artifacts(tmp_
         attempt=1,
         task_id=graph.task_id,
         task_package_sha256="7" * 64,
-        world_package_sha256=graph.world_package_sha256,
+        review_sidecar_sha256=graph.review_sidecar_sha256,
         stage_graph_sha256=graph.content_sha256,
         stage_id="authority",
         context_manifest=_artifact(
@@ -292,9 +303,20 @@ def test_stage_output_and_receipt_bind_exact_context_and_physical_artifacts(tmp_
 
     assert parsed.content_sha256
     assert context.content_sha256
+    assert receipt.schema_version == "aecbench.stage-execution-receipt.v2"
     assert receipt.content_sha256
     assert receipt.upstream_receipts == (upstream,)
     assert receipt.resources.tokens_in == 1_200
+
+    pre_cutover = receipt.model_dump(mode="json", exclude={"content_sha256"})
+    pre_cutover["world_package_sha256"] = pre_cutover.pop("review_sidecar_sha256")
+    with pytest.raises(ValidationError):
+        StageExecutionReceipt.model_validate(pre_cutover)
+
+    pre_cutover_version = receipt.model_dump(mode="json", exclude={"content_sha256"})
+    pre_cutover_version["schema_version"] = "aecbench.stage-execution-receipt.v1"
+    with pytest.raises(ValidationError):
+        StageExecutionReceipt.model_validate(pre_cutover_version)
 
 
 def test_stage_output_nested_containers_are_immutable_without_changing_identity() -> None:
