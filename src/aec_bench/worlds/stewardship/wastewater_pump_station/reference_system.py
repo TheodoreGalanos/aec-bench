@@ -48,6 +48,7 @@ _HOST_EVENT_TYPES = frozenset(
         "service_requirement_change",
     }
 )
+_EXECUTION_METADATA_FIELDS = frozenset({"harbor_versions", "record_versions"})
 
 
 class PumpStationReferenceSystemError(ValueError):
@@ -98,6 +99,7 @@ class PumpStationReferenceSystem:
 
     descriptor_id: str
     descriptor_content_id: str
+    profile_content_id: str
     station_data_profile_id: str
     descriptor: MappingProxyType[str, Any]
     opening_state: MappingProxyType[str, Any]
@@ -107,6 +109,16 @@ class PumpStationReferenceSystem:
 
 def _reference_system_base() -> Path:
     return Path(__file__).with_name("reference_system")
+
+
+def pump_station_profile_content_id(descriptor: Mapping[str, Any]) -> str:
+    """Identify task-owned scenario meaning without execution or record metadata."""
+
+    profile = {
+        field_name: value for field_name, value in descriptor.items() if field_name not in _EXECUTION_METADATA_FIELDS
+    }
+    payload = json.dumps(profile, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _read_artifact(path: Path, expected_sha256: str | None = None) -> tuple[dict[str, Any], bytes]:
@@ -291,6 +303,7 @@ def load_reference_system(
     return PumpStationReferenceSystem(
         descriptor_id=reference_system_id,
         descriptor_content_id=hashlib.sha256(descriptor_raw).hexdigest(),
+        profile_content_id=pump_station_profile_content_id(descriptor),
         station_data_profile_id=station_profile_id,
         descriptor=cast(MappingProxyType[str, Any], _freeze(descriptor)),
         opening_state=cast(MappingProxyType[str, Any], _freeze(opening)),
