@@ -3,6 +3,8 @@
 
 from pathlib import Path
 
+from aec_bench.contracts.world_interface import WorldActorActionRequest
+from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import PumpStationEpisodeHost
 from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
     run_pump_station_reference_controller,
@@ -57,6 +59,22 @@ def test_reference_controller_runs_one_canonical_journey_without_a_handover_tran
     assert len(report.conservation.liabilities.discharged_ids) == 4
     assert len(report.conservation.liabilities.closing_ids) == 1
     assert report.replayed_transition_ids == tuple(step.transition.receipt.transition_id for step in steps)
+
+    host = PumpStationEpisodeHost(tmp_path / "run")
+    observation = host.observe()
+    rejected = host.invoke(
+        WorldActorActionRequest(
+            request_id="continue-past-horizon",
+            decision_id=observation.decision_id,
+            action_name="continue_operation",
+            arguments={"reason": "Advance only if another declared event is actor-visible."},
+        )
+    )
+
+    assert rejected.status == "rejected"
+    assert rejected.task_receipt == {"code": "no-next-event", "message": "no-next-event: 223200"}
+    assert rejected.next_observation == observation
+    assert result.run.snapshot() == result.end_snapshot
 
 
 def test_reference_controller_waits_for_rs2_third_window_and_finishes_validly(tmp_path: Path) -> None:

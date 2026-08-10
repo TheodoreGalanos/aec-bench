@@ -114,6 +114,7 @@ artifacts = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/aec_bench"]
 artifacts = [
+    "/src/aec_bench/harness/pump_station_prime/skills/**",
     "/src/aec_bench/web/frontend/dist/**",
 ]
 

@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
+
+from aec_bench.prime_agent.batch import resolve_prime_executable
 
 WORLD_ACTOR_SOCKET_ENV = "AEC_BENCH_WORLD_ACTOR_SOCKET"
 WORLD_ACTOR_CAPABILITY_ENV = "AEC_BENCH_WORLD_ACTOR_CAPABILITY_TOKEN"
@@ -16,22 +19,30 @@ class PrimeSkillInstallError(RuntimeError):
 
 def install_aec_world_skill(actor_workspace: Path) -> Path:
     """Install the generic actor skill and importable client in one workspace."""
-    actor_workspace = actor_workspace.resolve()
-    source = Path(__file__).with_name("skills") / "aec-world"
-    package_source = source / "src" / "aec_world"
-    package_directory = actor_workspace / "aec_world"
-    if package_directory.exists():
-        if not _installed_tree_matches(package_source, package_directory):
-            raise PrimeSkillInstallError("aec-world package destination already exists with different content")
-        return install_prime_skill(actor_workspace, source)
-    skill_directory = install_prime_skill(actor_workspace, source)
-    shutil.copytree(package_source, package_directory)
-    return skill_directory
+    return _install_importable_skill(actor_workspace, skill_name="aec-world", package_name="aec_world")
+
+
+def install_aec_actor_ledger_skill(actor_workspace: Path) -> Path:
+    """Install the optional structured actor-ledger capability."""
+    return _install_importable_skill(
+        actor_workspace,
+        skill_name="aec-actor-ledger",
+        package_name="aec_actor_ledger",
+    )
 
 
 def install_prime_refine_skill(actor_workspace: Path) -> Path:
     """Install Prime's agent-callable refinement bridge for a discovery run."""
-    source = Path(__file__).with_name("skills") / "refine"
+    source = Path(__file__).with_name("skill_packages") / "refine"
+    return install_prime_skill(actor_workspace, source)
+
+
+def install_prime_bundled_skill(actor_workspace: Path, *, executable: str, skill_name: str) -> Path:
+    """Copy one skill from the selected upstream Prime installation into the actor workspace."""
+    if skill_name not in {"agent-message", "agent-observe"}:
+        raise ValueError(f"unsupported Prime bundled skill: {skill_name}")
+    resolved_executable = resolve_prime_executable(executable)
+    source = _find_prime_bundled_skill(resolved_executable, skill_name)
     return install_prime_skill(actor_workspace, source)
 
 
@@ -51,6 +62,39 @@ def install_prime_skill(actor_workspace: Path, source: Path) -> Path:
     skill_directory.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source, skill_directory)
     return skill_directory
+
+
+def _install_importable_skill(actor_workspace: Path, *, skill_name: str, package_name: str) -> Path:
+    actor_workspace = actor_workspace.resolve()
+    source = Path(__file__).with_name("skill_packages") / skill_name
+    package_source = source / "src" / package_name
+    package_directory = actor_workspace / package_name
+    if package_directory.exists():
+        if not _installed_tree_matches(package_source, package_directory):
+            raise PrimeSkillInstallError(f"{skill_name} package destination already exists with different content")
+        return install_prime_skill(actor_workspace, source)
+    skill_directory = install_prime_skill(actor_workspace, source)
+    shutil.copytree(package_source, package_directory)
+    return skill_directory
+
+
+def _find_prime_bundled_skill(executable: Path, skill_name: str) -> Path:
+    for directory in executable.parents:
+        package_file = directory / "package.json"
+        if not package_file.is_file():
+            continue
+        try:
+            package = json.loads(package_file.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(package, dict) or package.get("name") != "prime-agent":
+            continue
+        for skills_directory in (directory / "dist" / "skills", directory / "skills"):
+            source = skills_directory / skill_name
+            if (source / "SKILL.md").is_file():
+                return source
+        break
+    raise PrimeSkillInstallError(f"installed Prime Agent does not contain its {skill_name} skill")
 
 
 def _installed_tree_matches(source: Path, destination: Path) -> bool:

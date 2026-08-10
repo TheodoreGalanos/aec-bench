@@ -93,6 +93,7 @@ async def run_pump_station_prime_journey(
     isolation: PrimeAcpIsolation,
     limits: PumpStationPrimeJourneyLimits,
     pump_station_guidance: bool = False,
+    actor_ledger_plan: bool = False,
     refinement_mode: PrimeRefinementMode = PrimeRefinementMode.CAPTURE,
     refinement_candidate: PrimeRefinementCandidate | None = None,
     resume: bool = False,
@@ -100,6 +101,8 @@ async def run_pump_station_prime_journey(
     environment: Mapping[str, str] | None = None,
 ) -> PumpStationPrimeJourneyRun:
     """Run clean Prime sessions and exact pump-owned host continuation."""
+    if pump_station_guidance and actor_ledger_plan:
+        raise ValueError("Prime pump treatment must be open, guided, or planned")
     validate_refinement_request(refinement_mode, refinement_candidate)
     actor_workspace = actor_workspace.resolve()
     world_run_directory = world_run_directory.resolve()
@@ -116,6 +119,7 @@ async def run_pump_station_prime_journey(
         isolation=isolation,
         limits=limits,
         guided=pump_station_guidance,
+        planned=actor_ledger_plan,
         refinement_mode=refinement_mode,
         refinement_candidate=refinement_candidate,
         executable=executable,
@@ -163,6 +167,7 @@ async def run_pump_station_prime_journey(
             model=model,
             isolation=isolation,
             pump_station_guidance=pump_station_guidance,
+            actor_ledger_plan=actor_ledger_plan,
             world_run_directory=world_run_directory,
             evidence_directory=evidence_directory,
             checkpoint_file=checkpoint_file,
@@ -209,6 +214,7 @@ async def run_pump_station_prime_journey(
                 isolation=isolation,
                 limits=_remaining_session_limits(checkpoint, limits),
                 pump_station_guidance=pump_station_guidance,
+                actor_ledger_plan=actor_ledger_plan,
                 refinement_mode=refinement_mode,
                 refinement_candidate=checkpoint.refinement_candidate,
                 executable=executable,
@@ -425,6 +431,7 @@ def _finish(
     model: str,
     isolation: PrimeAcpIsolation,
     pump_station_guidance: bool,
+    actor_ledger_plan: bool,
     world_run_directory: Path,
     evidence_directory: Path,
     checkpoint_file: Path,
@@ -446,6 +453,7 @@ def _finish(
         model=model,
         isolation=isolation,
         pump_station_guidance=pump_station_guidance,
+        actor_ledger_plan=actor_ledger_plan,
         world_run_directory=world_run_directory,
         evidence_directory=evidence_directory,
     )
@@ -503,6 +511,7 @@ def _write_run_evidence(
     model: str,
     isolation: PrimeAcpIsolation,
     pump_station_guidance: bool,
+    actor_ledger_plan: bool,
     world_run_directory: Path,
     evidence_directory: Path,
 ) -> None:
@@ -519,7 +528,7 @@ def _write_run_evidence(
         "config_id": checkpoint.config_id,
         "instruction_sha256": hashlib.sha256(instruction.encode("utf-8")).hexdigest(),
         "model_requested": model,
-        "treatment": "guided" if pump_station_guidance else "open",
+        "treatment": "guided" if pump_station_guidance else "planned" if actor_ledger_plan else "open",
         "refinement": {
             "mode": (checkpoint.segments[0].refinement_mode if checkpoint.segments else PrimeRefinementMode.CAPTURE),
             "candidate_sha256": (

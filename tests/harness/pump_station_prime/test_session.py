@@ -24,6 +24,7 @@ from aec_bench.contracts.world_session import (
 )
 from aec_bench.harness.pump_station_prime.actor_proxy import PumpStationPrimeActorProxy
 from aec_bench.harness.pump_station_prime.session import (
+    ACTOR_LEDGER_PLAN_INSTRUCTION,
     PUMP_STATION_GUIDANCE_INSTRUCTION,
     PumpStationPrimeSessionLimits,
     install_pump_station_guidance_skill,
@@ -35,7 +36,9 @@ from aec_bench.prime_agent.skills import (
     WORLD_ACTOR_CAPABILITY_ENV,
     WORLD_ACTOR_SOCKET_ENV,
     PrimeSkillInstallError,
+    install_aec_actor_ledger_skill,
     install_aec_world_skill,
+    install_prime_bundled_skill,
 )
 from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import (
     PUMP_STATION_TASK_WORLD_ID,
@@ -73,6 +76,31 @@ def _load_skill(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.syspath_prepend(str(workspace))
     sys.modules.pop("aec_world", None)
     return importlib.import_module("aec_world")
+
+
+def _load_actor_ledger_skill(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    install_aec_actor_ledger_skill(workspace)
+    monkeypatch.syspath_prepend(str(workspace))
+    sys.modules.pop("aec_actor_ledger", None)
+    return importlib.import_module("aec_actor_ledger")
+
+
+def _fake_prime_agent_with_bundled_skills(tmp_path: Path) -> Path:
+    from tests.prime_agent.test_acp import _fake_prime_agent
+
+    package_root = tmp_path / "fake-prime-package"
+    bundle_directory = package_root / "dist" / "bundle"
+    bundle_directory.mkdir(parents=True)
+    executable = _fake_prime_agent(bundle_directory)
+    (package_root / "package.json").write_text(json.dumps({"name": "prime-agent"}), encoding="utf-8")
+    for skill_name in ("agent-message", "agent-observe"):
+        skill_directory = package_root / "dist" / "skills" / skill_name
+        skill_directory.mkdir(parents=True)
+        (skill_directory / "SKILL.md").write_text(
+            f"---\nname: {skill_name}\ndescription: Test {skill_name}.\n---\n",
+            encoding="utf-8",
+        )
+    return executable
 
 
 def _raw_call(socket_path: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -209,6 +237,109 @@ async def test_scoped_proxy_preserves_actor_semantics_and_redacted_transport_evi
 
 
 @pytest.mark.asyncio
+async def test_actor_ledger_records_exact_attempts_without_adding_world_authority(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    world_directory = tmp_path / "private-world"
+    actor_workspace = tmp_path / "actor-workspace"
+    actor_workspace.mkdir()
+    _load_skill(actor_workspace, monkeypatch)
+    ledger = _load_actor_ledger_skill(actor_workspace, monkeypatch)
+    proxy = PumpStationPrimeActorProxy(
+        world_run_directory=world_directory,
+        socket_directory=actor_workspace / ".actor",
+        max_world_actions=20,
+        evidence_file=tmp_path / "host-evidence" / "actor-transport.jsonl",
+    )
+    proxy.open_world_session(_session_request())
+
+    with proxy:
+        environment = proxy.connection_environment()
+        monkeypatch.setenv(WORLD_ACTOR_SOCKET_ENV, environment[WORLD_ACTOR_SOCKET_ENV])
+        monkeypatch.setenv(WORLD_ACTOR_CAPABILITY_ENV, environment[WORLD_ACTOR_CAPABILITY_ENV])
+        monkeypatch.chdir(actor_workspace)
+
+        observed = await ledger.observe()
+        datetime_matches = ledger.search("current_datetime")
+        backlog = ledger.window("view.ranked_backlog", limit=2)
+        with pytest.raises(ValueError, match="between 1 and 10"):
+            ledger.window("view.ranked_backlog", limit=11)
+        applied = await ledger.invoke(
+            "continue_operation",
+            {"reason": "Advance to the next actor-visible event."},
+            expected_result="The world advances or returns the current blocker.",
+            request_id="planned-action-1",
+        )
+        failed = await ledger.invoke(
+            "not_a_world_action",
+            {},
+            expected_result="The world rejects the unknown action.",
+            request_id="planned-action-2",
+        )
+
+    entries = ledger.entries(limit=2)
+    assert set(observed) == {"decision_id", "view"}
+    assert len(json.dumps(observed)) <= 4_000
+    assert datetime_matches["matches"][0]["path"] == "view.current_datetime"
+    assert 1 <= backlog["returned"] <= 2
+    assert backlog["items"][0]["index"] == 0
+    assert len(json.dumps(backlog)) <= 4_000
+    assert applied["status"] == "applied"
+    assert set(applied["observation"]) == {"decision_id", "view"}
+    assert len(json.dumps(applied)) <= 4_000
+    assert failed["status"] == "failed"
+    assert failed["error"] == {
+        "code": "unknown-actor-action",
+        "detail": "not_a_world_action",
+    }
+    assert [entry["request_id"] for entry in entries["entries"]] == ["planned-action-1", "planned-action-2"]
+    assert entries["entries"][1]["error"] == failed["error"]
+    assert entries["truncated"] is False
+    assert ledger.latest()["decision_id"] == applied["observation"]["decision_id"]
+    stored = (actor_workspace / ".aec-actor-ledger" / "actions.jsonl").read_text(encoding="utf-8")
+    stored_entries = [json.loads(line) for line in stored.splitlines()]
+    assert stored_entries[0]["result"]["next_observation"]["view"]["ranked_backlog"]
+    assert environment[WORLD_ACTOR_CAPABILITY_ENV] not in stored
+    assert str(world_directory) not in stored
+
+
+def test_actor_ledger_never_returns_one_large_saved_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    actor_workspace = tmp_path / "actor-workspace"
+    actor_workspace.mkdir()
+    _load_skill(actor_workspace, monkeypatch)
+    ledger = _load_actor_ledger_skill(actor_workspace, monkeypatch)
+    monkeypatch.chdir(actor_workspace)
+    store = actor_workspace / ".aec-actor-ledger"
+    store.mkdir()
+    (store / "state.json").write_text(
+        json.dumps(
+            {
+                "decision_id": "current-decision",
+                "view": {
+                    "large": [{"name": f"item-{index}", "text": "x" * 10_000} for index in range(20)],
+                    "y" * 10_000: "z" * 10_000,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    latest = ledger.latest()
+    search = ledger.search("item-", path="view.large", limit=10)
+    long_key_search = ledger.search("yyyy", limit=1)
+    window = ledger.window("view.large", limit=10)
+
+    assert latest["view"]["values"][0] == {"key": "large", "value": {"type": "array", "items": 20}}
+    assert search["returned"] == 10
+    assert search["truncated"] is True
+    assert long_key_search["matches"][0]["path"].endswith("...")
+    assert window["returned"] == 10
+    assert window["truncated"] is True
+    assert all(len(json.dumps(result)) <= 4_000 for result in (latest, search, long_key_search, window))
+
+
+@pytest.mark.asyncio
 async def test_world_action_budget_preserves_exact_retry_and_blocks_a_new_action(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -307,6 +438,7 @@ def test_packaged_pump_guidance_is_markdown_only_and_contains_no_instance_plan(t
 
     parameters = inspect.signature(run_pump_station_prime_session).parameters
     assert parameters["pump_station_guidance"].default is False
+    assert parameters["actor_ledger_plan"].default is False
     assert "skill_directory" not in parameters
     assert "skill_directories" not in parameters
 
@@ -389,6 +521,81 @@ async def test_explicit_guided_treatment_adds_only_the_ordered_skill_and_instruc
     assert all(argument not in serialized_provenance for argument in skill_arguments)
     assert result.verification.valid
     assert result.evaluation.evaluation_scope == "bounded_continuation"
+
+
+@pytest.mark.asyncio
+async def test_explicit_planned_treatment_adds_bounded_ledger_and_child_coordination(tmp_path: Path) -> None:
+    executable = _fake_prime_agent_with_bundled_skills(tmp_path)
+    result = await run_pump_station_prime_session(
+        actor_workspace=tmp_path / "actor",
+        world_run_directory=tmp_path / "private-world",
+        evidence_directory=tmp_path / "host-evidence",
+        session_request=_session_request(),
+        instruction="Advance the current world, then end the turn.",
+        model="anthropic/test",
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        limits=_limits(),
+        actor_ledger_plan=True,
+        executable=str(executable),
+        environment={**os.environ, "FAKE_ACP_SCENARIO": "world"},
+    )
+
+    observed = json.loads((tmp_path / "actor" / "observed-acp.json").read_text(encoding="utf-8"))
+    skill_arguments = [
+        observed["argv"][index + 1] for index, argument in enumerate(observed["argv"]) if argument == "--skill"
+    ]
+    assert [Path(argument).name for argument in skill_arguments] == [
+        "aec-world",
+        "aec-actor-ledger",
+        "agent-message",
+        "agent-observe",
+    ]
+    assert (tmp_path / "actor" / "aec_actor_ledger" / "__init__.py").is_file()
+    assert (tmp_path / "actor" / ".prime-skills" / "agent-message" / "SKILL.md").is_file()
+    assert (tmp_path / "actor" / ".prime-skills" / "agent-observe" / "SKILL.md").is_file()
+    inbound = result.prime.paths.inbound_file.read_text(encoding="utf-8")
+    assert ACTOR_LEDGER_PLAN_INSTRUCTION in inbound
+    assert "bounded search and window" in inbound
+    assert "one actor principal" in inbound
+    assert PUMP_STATION_GUIDANCE_INSTRUCTION not in inbound
+    provenance = json.loads(result.prime.paths.run_file.read_text(encoding="utf-8"))
+    assert [skill["name"] for skill in provenance["skills"]] == [
+        "aec-world",
+        "aec-actor-ledger",
+        "agent-message",
+        "agent-observe",
+    ]
+    assert not (tmp_path / "actor" / ".prime-skills" / "pump-station-guidance").exists()
+
+
+def test_prime_bundled_skill_install_fails_closed_for_a_missing_skill(tmp_path: Path) -> None:
+    package_root = tmp_path / "prime-package"
+    executable_directory = package_root / "dist" / "bundle"
+    executable_directory.mkdir(parents=True)
+    executable = executable_directory / "prime-agent"
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    executable.chmod(0o755)
+    (package_root / "package.json").write_text(json.dumps({"name": "prime-agent"}), encoding="utf-8")
+
+    with pytest.raises(PrimeSkillInstallError, match="does not contain its agent-message skill"):
+        install_prime_bundled_skill(tmp_path / "actor", executable=str(executable), skill_name="agent-message")
+
+
+@pytest.mark.asyncio
+async def test_prime_session_rejects_combined_guided_and_planned_treatments(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="open, guided, or planned"):
+        await run_pump_station_prime_session(
+            actor_workspace=tmp_path / "actor",
+            world_run_directory=tmp_path / "private-world",
+            evidence_directory=tmp_path / "host-evidence",
+            session_request=_session_request(),
+            instruction="Do the task.",
+            model="anthropic/test",
+            isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+            limits=_limits(),
+            pump_station_guidance=True,
+            actor_ledger_plan=True,
+        )
 
 
 @pytest.mark.asyncio

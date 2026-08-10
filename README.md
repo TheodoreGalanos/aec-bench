@@ -195,6 +195,22 @@ await run_pump_station_prime_session(
 )
 ```
 
+The caller can instead select the experimental Planned treatment:
+
+```python
+await run_pump_station_prime_session(
+    ...,
+    actor_ledger_plan=True,
+)
+```
+
+Planned keeps exact actor-visible observations and action results in the actor
+workspace, but returns only compact Python results. Prime can use bounded search
+and window calls to inspect that saved data. Planned also loads Prime's
+`agent-message` and bounded, read-only `agent-observe` skills so child sessions
+can return compact findings. The root and all children still share one actor
+capability and form one composite actor principal.
+
 The complete pump journey entry point is
 `aec_bench.harness.pump_station_prime.journey.run_pump_station_prime_journey`.
 It reuses
@@ -250,6 +266,12 @@ from RS1 until a guided RS2 model study is run. Bounded-session callers supply
 `PumpStationPrimeSessionLimits`. Journey callers supply
 `PumpStationPrimeJourneyLimits`, which also limits session and host-control
 counts.
+
+Planned installs `aec-world` and `aec-actor-ledger`, followed by the selected
+Prime installation's `agent-message` and `agent-observe` skills. AECBench copies
+these explicit skills into the isolated actor workspace and records their order
+and content digests. Planned does not add observations, world actions, child
+authority, host controls, or evaluator information.
 
 The pump world keeps RS1 as its default profile. RS2 uses the same station,
 opening condition, service demand, evidence, actor interface, and evaluation.
