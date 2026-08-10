@@ -15,7 +15,13 @@ from aec_bench.harness.pump_station_prime.actor_proxy import PumpStationPrimeAct
 from aec_bench.prime_agent.acp import PrimeAcpIsolation, PrimeAcpRun, run_prime_acp_session
 from aec_bench.prime_agent.refinement import PrimeRefinementCandidate, PrimeRefinementMode
 from aec_bench.prime_agent.session_evidence import PrimeAcpLimits
-from aec_bench.prime_agent.skills import install_aec_world_skill, install_prime_refine_skill, install_prime_skill
+from aec_bench.prime_agent.skills import (
+    install_aec_actor_ledger_skill,
+    install_aec_world_skill,
+    install_prime_bundled_skill,
+    install_prime_refine_skill,
+    install_prime_skill,
+)
 from aec_bench.worlds.stewardship.wastewater_pump_station.evaluation import (
     evaluate_pump_station_reference_run,
 )
@@ -36,6 +42,14 @@ PUMP_STATION_GUIDANCE_INSTRUCTION = (
     "Before your first world action, load and follow the full `pump-station-guidance` skill. "
     "Keep its compact state and exact action ledger throughout the episode. "
     "Use its references when they help the current decision."
+)
+ACTOR_LEDGER_PLAN_INSTRUCTION = (
+    "Before your first world action, load and use the full `aec-actor-ledger` skill. "
+    "Use its compact results and bounded search and window calls instead of printing full saved state. "
+    "Before you delegate work, load and use the full `agent-message` and `agent-observe` skills. "
+    "Use bounded child message previews and ask children to return compact findings. "
+    "The root and all children are one actor principal. You still choose every action and argument from current "
+    "actor-visible evidence."
 )
 
 
@@ -103,12 +117,15 @@ async def run_pump_station_prime_session(
     prime_runtime_directory: Path | None = None,
     additional_private_paths: Sequence[Path] = (),
     pump_station_guidance: bool = False,
+    actor_ledger_plan: bool = False,
     refinement_mode: PrimeRefinementMode = PrimeRefinementMode.CAPTURE,
     refinement_candidate: PrimeRefinementCandidate | None = None,
     executable: str = "prime-agent",
     environment: Mapping[str, str] | None = None,
 ) -> PumpStationPrimeSessionRun:
     """Run Prime against one scoped pump actor without changing the world runtime."""
+    if pump_station_guidance and actor_ledger_plan:
+        raise ValueError("Prime pump treatment must be open, guided, or planned")
     actor_workspace = actor_workspace.resolve()
     world_run_directory = world_run_directory.resolve()
     evidence_directory = evidence_directory.resolve()
@@ -123,6 +140,13 @@ async def run_pump_station_prime_session(
     if pump_station_guidance:
         skill_directories.append(install_pump_station_guidance_skill(actor_workspace))
         prime_instruction = instruction.rstrip() + "\n\n" + PUMP_STATION_GUIDANCE_INSTRUCTION + "\n"
+    elif actor_ledger_plan:
+        skill_directories.append(install_aec_actor_ledger_skill(actor_workspace))
+        skill_directories.extend(
+            install_prime_bundled_skill(actor_workspace, executable=executable, skill_name=skill_name)
+            for skill_name in ("agent-message", "agent-observe")
+        )
+        prime_instruction = instruction.rstrip() + "\n\n" + ACTOR_LEDGER_PLAN_INSTRUCTION + "\n"
     actor_transport_file = evidence_directory / "world-actor-transport.jsonl"
     proxy = PumpStationPrimeActorProxy(
         world_run_directory=world_run_directory,

@@ -1098,6 +1098,7 @@ def _next_event_time(state: PumpStationStewardshipState, schedule: PumpStationEv
         and process.due_at_calendar_seconds > state.calendar_seconds
     )
     candidates.extend(value[0] for value in _runtime_boundary_candidates(state))
+    candidates = [value for value in candidates if value < state.disclosed_through_calendar_seconds]
     if not candidates:
         _fail("no-next-event", str(state.calendar_seconds))
     return min(candidates)

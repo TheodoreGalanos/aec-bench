@@ -86,11 +86,14 @@ extensions, prompt templates, themes, and context files remain disabled. Open
 installs only `aec-world`. The optional Guided pump treatment installs
 `aec-world` followed by `pump-station-guidance` and adds one instruction to load
 the guidance before the first world action. The caller selects Guided
-explicitly; task, world, profile, and model identities do not route it. Both
-skills are copied under the isolated actor workspace before Prime starts.
-Selected skill names, order, and content digests are normalized in
+explicitly; task, world, profile, and model identities do not route it. The
+optional Planned treatment installs `aec-world`, `aec-actor-ledger`, and the
+selected Prime installation's `agent-message` and `agent-observe` skills. It
+tells Prime to use bounded ledger results and bounded child-session previews.
+All selected skills are copied under the isolated actor workspace before Prime
+starts. Selected skill names, order, and content digests are normalized in
 `prime-run.json` without retaining their host paths. Retained session evidence
-separately shows whether Prime completed the guidance read.
+separately shows whether Prime completed required skill reads.
 
 The `pump-station-guidance` treatment asks Prime to combine each actor
 invocation, ledger append, compact-state update, and selected output in one
@@ -98,6 +101,14 @@ notebook cell. Host-side emergency limits are not included in the guidance or
 added instruction. The guidance does not select actions, add actor observations,
 expose verifier state, or change world and evaluation rules. Its content digest
 in `prime-run.json` identifies the exact guidance used by a retained run.
+
+The `aec-actor-ledger` treatment keeps the exact current observation and action
+records in the actor workspace. Its Python calls return only compact summaries.
+`search()` returns bounded path matches, and `window()` returns a bounded part
+of one actor-visible object or array. Prime's `agent-message` skill lets child
+sessions return compact findings. `agent-observe` gives bounded, read-only child
+message previews. These skills do not add world data or authority. The root and
+all descendants remain one composite actor principal.
 
 The composed entry point requires positive host limits for world actions,
 model calls, aggregate tokens, aggregate provider cost, and elapsed wall time.
@@ -277,7 +288,7 @@ change a task, skill package, world, verifier, or evaluator.
 | `actor-interface` | Invoke the pump episode host with current actor JSON. |
 | `control-interface` | Invoke pump controls or explicit rollout composition. |
 | Harbor agent and import | Use the concrete pump transport and evaluator. |
-| Prime ACP Python entry | Run one Open or explicitly Guided Prime session against one scoped pump actor proxy. |
+| Prime ACP Python entry | Run one Open, Guided, or Planned Prime session against one scoped pump actor proxy. |
 | Prime pump journey Python entry | Compose bounded Prime sessions with exact task-owned host continuation until the pump world completes or cannot advance. |
 | Prime refinement qualification Python entry | Compare one fixed candidate with an empty harness on independent RS1 and RS2 journeys without automatic promotion. |
 

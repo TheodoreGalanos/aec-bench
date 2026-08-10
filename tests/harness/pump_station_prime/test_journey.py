@@ -729,7 +729,7 @@ async def test_session_limit_stops_before_host_control(tmp_path: Path, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_open_and_guided_journeys_use_the_same_host_policy(
+async def test_open_guided_and_planned_journeys_use_the_same_host_policy(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -743,8 +743,11 @@ async def test_open_and_guided_journeys_use_the_same_host_policy(
 
     monkeypatch.setattr(journey_module, "run_pump_station_prime_session", no_progress_runner)
     digests: list[str] = []
-    for guided in (False, True):
-        name = "guided" if guided else "open"
+    for name, guided, planned in (
+        ("open", False, False),
+        ("guided", True, False),
+        ("planned", False, True),
+    ):
         result = await run_pump_station_prime_journey(
             actor_workspace=tmp_path / f"actor-{name}",
             world_run_directory=tmp_path / f"world-{name}",
@@ -755,12 +758,14 @@ async def test_open_and_guided_journeys_use_the_same_host_policy(
             isolation=PrimeAcpIsolation.MACOS_SANDBOX,
             limits=_journey_limits(),
             pump_station_guidance=guided,
+            actor_ledger_plan=planned,
         )
         evidence = json.loads(result.run_file.read_text(encoding="utf-8"))
         assert evidence["treatment"] == name
         digests.append(str(evidence["host_policy_sha256"]))
 
-    assert [call["pump_station_guidance"] for call in calls] == [False, True]
+    assert [call["pump_station_guidance"] for call in calls] == [False, True, False]
+    assert [call["actor_ledger_plan"] for call in calls] == [False, False, True]
     assert len(set(digests)) == 1
 
 

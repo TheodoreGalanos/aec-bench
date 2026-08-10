@@ -35,6 +35,8 @@ def test_wheel_build_targets_aec_bench_package() -> None:
     wheel = config["tool"]["hatch"]["build"]["targets"]["wheel"]
 
     assert wheel["packages"] == ["src/aec_bench"]
+    assert "/src/aec_bench/harness/pump_station_prime/skills/**" in wheel["artifacts"]
+    assert Path("src/aec_bench/prime_agent/skill_packages/__init__.py").is_file()
 
 
 def test_tui_mascot_asset_is_available_for_package_builds() -> None:
