@@ -9,7 +9,7 @@ Create a versioned, immutable benchmark dataset through guided discovery and con
 
 ## When to Use
 
-- User runs `/create-dataset`
+- User explicitly invokes Create Dataset
 - User asks to "create a dataset", "build a benchmark", "freeze tasks into a dataset"
 - User wants to publish a benchmark or create a reproducible evaluation set
 
@@ -140,7 +140,7 @@ After successful creation, suggest:
 >
 > - **Run an experiment:** `aec-bench run --config experiment.yaml` (reference this dataset in the tasks section)
 > - **Export for sharing:** `aec-bench dataset export <name> --output <name>.tar.gz`
-> - **Configure an experiment:** `/configure-experiment` (will discover this dataset)
+> - **Configure an experiment:** invoke Configure Experiment, which will discover this dataset
 
 Show how to reference the dataset in an experiment config:
 
@@ -161,5 +161,5 @@ compute:
 - Always verify integrity after creation with `aec-bench dataset validate`
 - Suggest meaningful names — avoid generic names like "test" or "dataset1"
 - Default seed to 42 for reproducibility unless the user specifies otherwise
-- If the user has no templates, suggest running `/create-template` first
-- If the user has no tasks and no templates, suggest `/add-task` first
+- If the user has no templates, suggest Create Template first
+- If the user has no tasks and no templates, suggest Add Task first

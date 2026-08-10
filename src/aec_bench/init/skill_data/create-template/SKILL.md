@@ -11,13 +11,13 @@ This skill is part of the aec-bench task generation framework. It automates the 
 
 ## When to Use
 
-- User runs `/create-template <path_to_source_task.json>`
+- User explicitly invokes Create Template with a `source_task.json` path
 - User asks to "create a template from this seed" or "convert this seed to a template"
 - User wants to add a new benchmark task type to the generation framework
 
 ## Input
 
-The skill accepts a path to a `source_task.json` file. These seed files are found under `tasks/` (old-style, from ngnbench imports) or `seeds/` (enhanced, produced by `/add-task`) and contain:
+The skill accepts a path to a `source_task.json` file. These seed files are found under `tasks/` (old-style, from ngnbench imports) or `seeds/` (enhanced, produced by Add Task) and contain:
 
 ```json
 {
@@ -36,7 +36,7 @@ The skill accepts a path to a `source_task.json` file. These seed files are foun
 }
 ```
 
-Enhanced seeds (produced by `/add-task`) may include structured inputs/outputs and additional context:
+Enhanced seeds (produced by Add Task) may include structured inputs/outputs and additional context:
 
 ```json
 {

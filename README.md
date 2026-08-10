@@ -610,24 +610,25 @@ Agent skills are portable workflow contracts. They can be implemented as native
 skills, slash commands, prompts, or task recipes in Claude Code, Codex, Copilot,
 or another agent environment.
 
-| Skill | Command | Purpose |
-|-------|---------|---------|
-| **Add Task** | `/add-task` | Interview-driven seed creation from expert description |
-| **Configure Experiment** | `/configure-experiment` | Select tasks, agents, models, and execution settings for a validated experiment manifest |
-| **Create Dataset** | `/create-dataset` | Build and verify a reproducible dataset from templates or existing tasks |
-| **Create Template** | `/create-template <seed-path>` | Build a generation template from a seed file |
-| **Hardening Pass** | `/hardening-pass <path>` | Quality-gate a template or task instance before benchmarking |
-| **Domain Check** | `/domain-check` | Verify architectural invariants before publishing or committing |
-| **Meta-Harness** | `/meta-harness` | Design or compare a harness candidate from task prose and run evidence |
+| Skill | Claude Code | Codex | Purpose |
+|-------|-------------|-------|---------|
+| **Add Task** | `/add-task` | `$add-task` | Interview-driven seed creation from expert description |
+| **Configure Experiment** | `/configure-experiment` | `$configure-experiment` | Select tasks, agents, models, and execution settings for a validated experiment manifest |
+| **Create Dataset** | `/create-dataset` | `$create-dataset` | Build and verify a reproducible dataset from templates or existing tasks |
+| **Create Template** | `/create-template <seed-path>` | `$create-template <seed-path>` | Build a generation template from a seed file |
+| **Hardening Pass** | `/hardening-pass <path>` | `$hardening-pass <path>` | Quality-gate a template or task instance before benchmarking |
+| **Domain Check** | `/domain-check` | `$domain-check` | Verify architectural invariants before publishing or committing |
+| **Meta-Harness** | `/meta-harness` | `$meta-harness` | Design or compare a harness candidate from task prose and run evidence |
 
-`aec-bench init` installs the packaged skills into `.claude/skills/`. Run
-`aec-bench init --update-skills` in an existing project to refresh the packaged
-copies without replacing user-added skills.
+`aec-bench init` installs the packaged skills into `.claude/skills/` for Claude
+Code and `.agents/skills/` for Codex. Run `aec-bench init --update-skills` in an
+existing project to refresh both packaged copies without removing other skill
+directories.
 
-**Typical flow:** `/add-task` produces an expert-authored seed. For a
-parameterisable task, `/create-template` builds the generation template and
-`/hardening-pass` checks it before benchmark use. `/create-dataset` freezes a
-reproducible selection, then `/configure-experiment` prepares the run.
+**Typical flow:** Add Task produces an expert-authored seed. For a
+parameterisable task, Create Template builds the generation template and
+Hardening Pass checks it before benchmark use. Create Dataset freezes a
+reproducible selection, then Configure Experiment prepares the run.
 
 ## Harbor Agent
 
@@ -662,7 +663,7 @@ disciplines. The catalogue changes frequently, so use
 src/aec_bench/          # Library source
 tests/                  # Regression test suite
 tasks/                  # Benchmark task seeds and instances
-seeds/                  # Expert-created seed files (from /add-task)
+seeds/                  # Expert-created seed files (from Add Task)
 agents/                 # Ready-to-use default agent implementations
 scripts/                # Utility scripts for local maintenance workflows
 docs/                   # Repository-owned architecture, contracts, and invariants

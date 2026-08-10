@@ -9,7 +9,7 @@ Build a valid `experiment.yaml` by discovering what's in your project, guiding y
 
 ## When to Use
 
-- User runs `/configure-experiment`
+- User explicitly invokes Configure Experiment
 - User asks to "set up an experiment", "configure a run", "plan a benchmark"
 - User wants to create or modify an experiment.yaml
 
@@ -91,7 +91,7 @@ After selection, show the count:
 
 If zero tasks match, warn and let them re-select.
 
-> **Tip:** Consider creating a dataset with `/create-dataset` to make this selection reproducible.
+> **Tip:** Consider creating a dataset with Create Dataset to make this selection reproducible.
 
 ### Step 3 — Agent Configuration
 

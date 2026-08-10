@@ -48,7 +48,7 @@ def init_project(
         return ScaffoldResult(
             created=True,
             project_root=target,
-            messages=("Skills updated.",),
+            messages=("Skills updated in .claude/skills/ and .agents/skills/.",),
         )
 
     # Full scaffold: directories, config files, skills.
@@ -65,7 +65,7 @@ def init_project(
     messages.append("Wrote .gitignore")
 
     copy_skills(target)
-    messages.append("Copied skills to .claude/skills/")
+    messages.append("Copied skills to .claude/skills/ and .agents/skills/")
 
     # Optionally generate one example task instance.
     if generate_example:
@@ -107,7 +107,7 @@ def init_project(
 
 def init_command(
     directory: Path = typer.Argument(Path("."), help="Target directory"),
-    update_skills: bool = typer.Option(False, "--update-skills", help="Refresh skills only"),
+    update_skills: bool = typer.Option(False, "--update-skills", help="Refresh skills in supported locations"),
     force: bool = typer.Option(False, "--force", help="Overwrite config files"),
     no_example: bool = typer.Option(False, "--no-example", help="Skip example generation"),
 ) -> None:

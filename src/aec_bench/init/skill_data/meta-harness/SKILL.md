@@ -28,7 +28,7 @@ harness was learned or that an agent generalised.
 
 ## When to Use
 
-- User runs `/meta-harness` or asks to create a harness from task prose.
+- User explicitly invokes Meta-Harness or asks to create a harness from task prose.
 - User wants to compare a candidate harness against an existing task, world, or experiment.
 - User suspects the verifier, schema, artifacts, or review language is missing a real edge case.
 
