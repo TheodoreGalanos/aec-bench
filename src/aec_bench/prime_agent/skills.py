@@ -29,6 +29,12 @@ def install_aec_world_skill(actor_workspace: Path) -> Path:
     return skill_directory
 
 
+def install_prime_refine_skill(actor_workspace: Path) -> Path:
+    """Install Prime's agent-callable refinement bridge for a discovery run."""
+    source = Path(__file__).with_name("skills") / "refine"
+    return install_prime_skill(actor_workspace, source)
+
+
 def install_prime_skill(actor_workspace: Path, source: Path) -> Path:
     """Install one explicit packaged skill without using ambient discovery."""
     actor_workspace = actor_workspace.resolve()

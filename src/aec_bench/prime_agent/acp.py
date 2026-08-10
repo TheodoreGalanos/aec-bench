@@ -260,6 +260,11 @@ async def run_prime_acp_session(
     )
     paths.state_dir.mkdir(parents=True, exist_ok=False)
     paths.session_dir.mkdir(parents=True, exist_ok=False)
+    if refinement_mode is PrimeRefinementMode.CANDIDATE:
+        (paths.state_dir / "settings.json").write_text(
+            json.dumps({"autoRefine": {"enabled": False}}, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     if refinement_candidate is not None:
         install_refinement_candidate(paths.state_dir, refinement_candidate)
     evidence_directory.mkdir(parents=True, exist_ok=True)

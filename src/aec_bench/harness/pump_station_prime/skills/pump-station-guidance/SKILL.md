@@ -3,14 +3,15 @@ name: pump-station-guidance
 description: Use compact state, exact action accounting, and pump-station stewardship checks in an AECBench world.
 metadata:
   status: experimental
-  validation: current-profile-only
+  validation: two-reference-profiles
 ---
 
 # Pump-station guidance
 
 guidance_id: aecbench.pump-station-guidance
 
-This skill is experimental. It has evidence from one registered profile only. It does not supply a solution plan.
+This skill is experimental. It has qualification evidence from two registered reference profiles. It does not supply a
+solution plan.
 
 The task objective and actor authority remain in the initial prompt and the `aec-world` skill. Use only the available actor operations.
 
@@ -50,6 +51,9 @@ evidence.
 - Distinguish process conflict, resource window, outage capacity, backlog binding, evidence binding, stale decision, and action-argument errors.
 - Check required service through the full duration of field work.
 - Distinguish run eligibility from assurance for outage planning.
+- Qualified `/refine` lesson: after a `planned-outage-capacity` rejection, do not repeat the same inspection until the
+  current actor-visible state shows new non-target assurance or other relevant world evidence. Run eligibility alone is
+  not assurance for outage planning.
 - Search documentary evidence only when the current decision needs documentary content.
 - After `NO_ACCESSIBLE_RESULT`, do not make an equivalent search unless the information set or query scope changes.
 - Identify work that depends on a host-owned decision. Do not seek another control path.

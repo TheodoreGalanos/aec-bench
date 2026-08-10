@@ -37,6 +37,10 @@ An applied result advances the causal state. A rejected result normally leaves t
 
 Do not repeat a rejected request until a relevant state fact, decision ID, argument, or evidence binding changes.
 
+After a `planned-outage-capacity` rejection, do not repeat the same inspection until the current actor-visible state
+shows new non-target assurance through the full work duration or other relevant world evidence. A non-target pump that
+is only run eligible does not provide assurance for outage planning.
+
 ## 5. Limit documentary search
 
 Search only for content needed by the current decision. After `NO_ACCESSIBLE_RESULT`, stop the equivalent search. Search again only when the query scope or available information changes.

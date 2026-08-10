@@ -30,6 +30,7 @@ from aec_bench.harness.pump_station_prime.session import (
     run_pump_station_prime_session,
 )
 from aec_bench.prime_agent.acp import PrimeAcpIsolation
+from aec_bench.prime_agent.refinement import PrimeRefinementMode
 from aec_bench.prime_agent.skills import (
     WORLD_ACTOR_CAPABILITY_ENV,
     WORLD_ACTOR_SOCKET_ENV,
@@ -282,8 +283,10 @@ def test_packaged_pump_guidance_is_markdown_only_and_contains_no_instance_plan(t
 
     assert files == ["SKILL.md", "references/compact-state.md", "references/decision-method.md"]
     assert "guidance_id: aecbench.pump-station-guidance" in text
-    assert "current-profile-only" in text
+    assert "two-reference-profiles" in text
     assert "NO_ACCESSIBLE_RESULT" in text
+    assert "after a `planned-outage-capacity` rejection" in text
+    assert "Run eligibility alone is" in text
     assert "exact ledger" in text
     assert "one IPython cell for each `invoke` attempt" in text
     assert "not an action-selection rule" in text
@@ -386,6 +389,33 @@ async def test_explicit_guided_treatment_adds_only_the_ordered_skill_and_instruc
     assert all(argument not in serialized_provenance for argument in skill_arguments)
     assert result.verification.valid
     assert result.evaluation.evaluation_scope == "bounded_continuation"
+
+
+@pytest.mark.asyncio
+async def test_discovery_mode_adds_prime_refine_skill(tmp_path: Path) -> None:
+    from tests.prime_agent.test_acp import _fake_prime_agent
+
+    result = await run_pump_station_prime_session(
+        actor_workspace=tmp_path / "actor",
+        world_run_directory=tmp_path / "private-world",
+        evidence_directory=tmp_path / "host-evidence",
+        session_request=_session_request(),
+        instruction="Advance the current world and refine only an evidence-backed lesson.",
+        model="anthropic/test",
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        limits=_limits(),
+        refinement_mode=PrimeRefinementMode.DISCOVER,
+        executable=str(_fake_prime_agent(tmp_path)),
+        environment={**os.environ, "FAKE_ACP_SCENARIO": "world"},
+    )
+
+    observed = json.loads((tmp_path / "actor" / "observed-acp.json").read_text(encoding="utf-8"))
+    skill_arguments = [
+        observed["argv"][index + 1] for index, argument in enumerate(observed["argv"]) if argument == "--skill"
+    ]
+    assert [Path(argument).name for argument in skill_arguments] == ["aec-world", "refine"]
+    provenance = json.loads(result.prime.paths.run_file.read_text(encoding="utf-8"))
+    assert [skill["name"] for skill in provenance["skills"]] == ["aec-world", "refine"]
 
 
 @pytest.mark.asyncio
