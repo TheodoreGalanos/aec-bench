@@ -1,44 +1,16 @@
-# ABOUTME: Defines the small current boundary for registered continual-world calls and rollout records.
-# ABOUTME: Keeps live values unversioned while preserving hashes only for exact executable or stored artifacts.
+# ABOUTME: Defines installed calls and optional persistent records for continual World capabilities.
+# ABOUTME: Keeps these capabilities separate from the minimum Interactive World identity contract.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from enum import StrEnum
 from typing import Annotated, Literal, Self
 
 from pydantic import Field, JsonValue, field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
-
-
-@dataclass(frozen=True, slots=True)
-class ContinualWorldProfileRef:
-    """Exact identity of one task-owned continual-world profile."""
-
-    task_world_id: str
-    profile_id: str
-    profile_content_sha256: str
-
-    def __post_init__(self) -> None:
-        if not self.task_world_id.strip() or not self.profile_id.strip():
-            raise ValueError("continual-world profile identity values must be non-empty")
-        validate_sha256(self.profile_content_sha256)
-
-
-@dataclass(frozen=True, slots=True)
-class WorldBuildRef:
-    """Exact executable artifact selected for one registered world."""
-
-    task_world_id: str
-    entry_point: str
-    artifact_sha256: str
-
-    def __post_init__(self) -> None:
-        if not self.task_world_id.strip() or not self.entry_point.strip():
-            raise ValueError("world-build identity values must be non-empty")
-        validate_sha256(self.artifact_sha256)
 
 
 class ContinualWorldActorRequest(FrozenStrictModel):
@@ -150,7 +122,7 @@ class ContinualRolloutGroupRequest(ContentAddressedModel):
     task_world_id: NonEmptyStr
     authority_id: NonEmptyStr
     world_build: WorldBuildRef
-    profile_ref: ContinualWorldProfileRef
+    profile_ref: InteractiveWorldProfileRef
     parent_manifest_content_sha256: str
     parent_snapshot: ContinualWorldSnapshotRef
     origin_verification_content_sha256: str
@@ -234,7 +206,7 @@ class ContinualRolloutLineage(ContentAddressedModel):
     group_id: NonEmptyStr
     task_world_id: NonEmptyStr
     world_build: WorldBuildRef
-    profile_ref: ContinualWorldProfileRef
+    profile_ref: InteractiveWorldProfileRef
     request_content_sha256: str
     parent_manifest_content_sha256: str
     parent_snapshot: ContinualWorldSnapshotRef

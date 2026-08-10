@@ -65,7 +65,7 @@ def test_metrics_v2_projection_does_not_invent_v3_operation_fields() -> None:
 def test_operation_metrics_count_operation_outcomes_and_budget(tmp_path: Path) -> None:
     package, run_dir, completed = _operation_run(tmp_path)
     del package
-    current_source = _read_json(run_dir / "workspace" / "hydraulics" / "current-source.json")
+    current_source = _read_json(run_dir / "workspace" / "operations" / "current-source.json")
     reused = execute_lifecycle_operation(
         tmp_path / "package",
         run_dir,
@@ -156,7 +156,7 @@ def test_operation_protocol_and_transactions_are_manifest_bound(tmp_path: Path) 
     assert any(path.startswith(f"lifecycle_operations/{action_id}/artifacts/") for path in declared)
     assert any(f"/operations/{action_id}/" in path for path in declared)
     assert "workspace/checkpoints/baseline_analysis/operations.json" in declared
-    assert "workspace/hydraulics/current-source.json" in declared
+    assert "workspace/operations/current-source.json" in declared
     from aec_bench.experimentation.lifecycle_studies.trial_record import _validate_metrics_against_run
 
     state = _read_json(run_dir / "state.json")
@@ -324,7 +324,7 @@ def test_snapshotted_operation_state_rejects_tampered_operation_request(tmp_path
 
 def test_completed_operation_snapshot_preserves_each_checkpoint_source_identity(tmp_path: Path) -> None:
     package, run_dir, baseline_action = _operation_run(tmp_path)
-    baseline_source = _read_json(run_dir / "workspace" / "hydraulics" / "current-source.json")
+    baseline_source = _read_json(run_dir / "workspace" / "operations" / "current-source.json")
     _write_submission(
         run_dir,
         "baseline_analysis",
@@ -356,7 +356,7 @@ def test_completed_operation_snapshot_preserves_each_checkpoint_source_identity(
         reason="Activate the declared tailwater revision.",
         session_id="revision.session-001",
     )
-    revision_source = _read_json(run_dir / "workspace" / "hydraulics" / "current-source.json")
+    revision_source = _read_json(run_dir / "workspace" / "operations" / "current-source.json")
     retained_hydrology = execute_lifecycle_operation(
         package,
         run_dir,
@@ -423,7 +423,7 @@ def test_completed_operation_snapshot_preserves_each_checkpoint_source_identity(
 
 def test_snapshotted_operation_state_rejects_current_source_from_a_different_package(tmp_path: Path) -> None:
     package, run_dir, baseline_action = _operation_run(tmp_path)
-    baseline_source = _read_json(run_dir / "workspace" / "hydraulics" / "current-source.json")
+    baseline_source = _read_json(run_dir / "workspace" / "operations" / "current-source.json")
     _write_submission(
         run_dir,
         "baseline_analysis",
@@ -491,7 +491,7 @@ def test_snapshotted_operation_state_runs_exact_live_resolver_replay(
 
 def test_operation_snapshot_recomputes_rejected_operation_projection(tmp_path: Path) -> None:
     package, run_dir, _completed = _operation_run(tmp_path)
-    current_source = _read_json(run_dir / "workspace" / "hydraulics" / "current-source.json")
+    current_source = _read_json(run_dir / "workspace" / "operations" / "current-source.json")
     rejected = execute_lifecycle_operation(
         package,
         run_dir,
@@ -512,7 +512,7 @@ def test_operation_snapshot_recomputes_rejected_operation_projection(tmp_path: P
 
 def test_operation_snapshot_resolves_reuse_to_exact_prior_completed_action(tmp_path: Path) -> None:
     package, run_dir, hydrology = _operation_run(tmp_path)
-    current_source = _read_json(run_dir / "workspace" / "hydraulics" / "current-source.json")
+    current_source = _read_json(run_dir / "workspace" / "operations" / "current-source.json")
     detention = execute_lifecycle_operation(
         package,
         run_dir,
@@ -563,7 +563,7 @@ def _operation_run(tmp_path: Path) -> tuple[Path, Path, dict[str, object]]:
         session_id="baseline.session-001",
         execution_mode="persistent_context",
     )
-    current_source = _read_json(run_dir / "workspace" / "hydraulics" / "current-source.json")
+    current_source = _read_json(run_dir / "workspace" / "operations" / "current-source.json")
     action = execute_lifecycle_operation(
         package,
         run_dir,

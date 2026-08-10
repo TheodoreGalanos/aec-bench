@@ -131,7 +131,7 @@ class _PublicToolLifecycleAdapter:
                         "replacement_decision_id": str(candidate["decision_id"]),
                     }
                 )
-        current_source = self._read_json("hydraulics/current-source.json")
+        current_source = self._read_json("operations/current-source.json")
         submission = {
             "checkpoint_id": checkpoint_id,
             "revision_id": current_source["revision_id"],
@@ -302,7 +302,7 @@ class _PublicToolLifecycleAdapter:
         return result
 
     def _visible_source_sha256(self) -> str:
-        return str(self._read_json("hydraulics/current-source.json")["visible_source_state_sha256"])
+        return str(self._read_json("operations/current-source.json")["visible_source_state_sha256"])
 
     def _read_json(self, path: str) -> dict[str, Any]:
         payload = json.loads(self._read_text(path))

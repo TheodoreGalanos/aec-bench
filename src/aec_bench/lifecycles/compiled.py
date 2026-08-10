@@ -116,7 +116,7 @@ def build_compiled_lifecycle_envelope(
 
 
 def source_tree_artifact_sha256(paths: tuple[Path, ...]) -> str:
-    """Hash a stable manifest of exact Python source-file bytes."""
+    """Hash a stable manifest of exact task and runtime source bytes."""
     source_root = Path(__file__).resolve().parents[1]
     manifest: dict[str, str] = {}
     for selected in paths:

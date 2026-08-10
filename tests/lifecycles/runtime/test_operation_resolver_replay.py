@@ -57,7 +57,7 @@ def _run_bytes(run: Path) -> dict[str, bytes]:
 
 
 def _visible_source_sha256(run: Path) -> str:
-    source = _read_json(run / "workspace" / "hydraulics" / "current-source.json")
+    source = _read_json(run / "workspace" / "operations" / "current-source.json")
     return str(source["visible_source_state_sha256"])
 
 

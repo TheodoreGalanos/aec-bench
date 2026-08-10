@@ -5,11 +5,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from aec_bench.prime_agent.events import PRIME_EVENT_STREAM_VERSIONS
 
@@ -54,6 +54,32 @@ class PrimeAcpUsage:
     cache_write_tokens: int
     total_tokens: int
     cost_usd: Decimal
+
+
+class _PrimeAcpUsageValues(Protocol):
+    @property
+    def complete(self) -> bool: ...
+
+    @property
+    def model_calls(self) -> int: ...
+
+    @property
+    def input_tokens(self) -> int: ...
+
+    @property
+    def output_tokens(self) -> int: ...
+
+    @property
+    def cache_read_tokens(self) -> int: ...
+
+    @property
+    def cache_write_tokens(self) -> int: ...
+
+    @property
+    def total_tokens(self) -> int: ...
+
+    @property
+    def cost_usd(self) -> Decimal: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,6 +218,35 @@ def empty_usage() -> PrimeAcpUsage:
         total_tokens=0,
         cost_usd=Decimal(0),
     )
+
+
+def aggregate_acp_usage(usages: Iterable[_PrimeAcpUsageValues]) -> PrimeAcpUsage:
+    """Combine completed Prime-session accounting without changing its meaning."""
+    items = tuple(usages)
+    return PrimeAcpUsage(
+        complete=bool(items) and all(item.complete for item in items),
+        model_calls=sum(item.model_calls for item in items),
+        input_tokens=sum(item.input_tokens for item in items),
+        output_tokens=sum(item.output_tokens for item in items),
+        cache_read_tokens=sum(item.cache_read_tokens for item in items),
+        cache_write_tokens=sum(item.cache_write_tokens for item in items),
+        total_tokens=sum(item.total_tokens for item in items),
+        cost_usd=sum((item.cost_usd for item in items), start=Decimal(0)),
+    )
+
+
+def acp_usage_payload(usage: PrimeAcpUsage) -> dict[str, bool | int | str]:
+    """Return the stable JSON values used by composed Prime-run evidence."""
+    return {
+        "complete": usage.complete,
+        "model_calls": usage.model_calls,
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "cache_read_tokens": usage.cache_read_tokens,
+        "cache_write_tokens": usage.cache_write_tokens,
+        "total_tokens": usage.total_tokens,
+        "cost_usd": str(usage.cost_usd),
+    }
 
 
 def refinement_evidence(updates: Sequence[dict[str, Any]]) -> PrimeAcpRefinement:

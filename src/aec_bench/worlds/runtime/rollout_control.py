@@ -21,7 +21,7 @@ from aec_bench.worlds.runtime.branch_port import (
     ContinualWorldBranchPort,
     VerifiedContinualWorldBranchOrigin,
 )
-from aec_bench.worlds.runtime.definition import ContinualWorldDefinition
+from aec_bench.worlds.runtime.definition import InteractiveWorldDefinition
 from aec_bench.worlds.runtime.rollout_repository import (
     ContinualRolloutError,
     ContinualRolloutRepository,
@@ -33,7 +33,7 @@ class ContinualRolloutControl:
 
     def __init__(
         self,
-        definition: ContinualWorldDefinition,
+        definition: InteractiveWorldDefinition,
         branch_port: ContinualWorldBranchPort,
         *,
         parent_run_root: Path,

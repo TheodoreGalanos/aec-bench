@@ -9,7 +9,7 @@ from typing import Self
 
 from pydantic import JsonValue, model_validator
 
-from aec_bench.contracts.continual_world import ContinualWorldProfileRef
+from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 from aec_bench.contracts.world_interface import (
     WorldControlCapabilityCatalogue,
@@ -113,7 +113,7 @@ class PumpStationWorldControl:
         repository_root: Path,
         *,
         authorised_principal_ids: tuple[str, ...],
-        profile_ref: ContinualWorldProfileRef | None = None,
+        profile_ref: InteractiveWorldProfileRef | None = None,
         package_root: Path | None = None,
     ) -> None:
         if not authorised_principal_ids or any(not item.strip() for item in authorised_principal_ids):

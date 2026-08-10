@@ -12,10 +12,9 @@ from aec_bench.contracts.continual_world import (
     ContinualRolloutChildRequest,
     ContinualRolloutChildRunRef,
     ContinualRolloutGroupRequest,
-    ContinualWorldProfileRef,
     ContinualWorldSnapshotRef,
-    WorldBuildRef,
 )
+from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
 from aec_bench.ledger.immutable_byte_store import ImmutableByteStore
 from aec_bench.worlds.runtime.branch_port import (
     ContinualWorldBranchMaterialization,
@@ -75,7 +74,7 @@ def validate_pump_station_rollout_child_run(
     rollout_child_ref: ContinualRolloutChildRunRef,
     *,
     world_build: WorldBuildRef,
-    profile_ref: ContinualWorldProfileRef,
+    profile_ref: InteractiveWorldProfileRef,
     request: ContinualRolloutGroupRequest | None = None,
     child: ContinualRolloutChildRequest | None = None,
     shared_receipt: ContinualRolloutChildReceipt | None = None,

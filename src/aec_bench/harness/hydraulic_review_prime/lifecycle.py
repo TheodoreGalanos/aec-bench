@@ -43,7 +43,12 @@ from aec_bench.lifecycles.stormwater_design.hydraulic_review import (
 )
 from aec_bench.prime_agent.acp import PrimeAcpIsolation, PrimeAcpRun, run_prime_acp_session
 from aec_bench.prime_agent.batch import resolve_prime_executable
-from aec_bench.prime_agent.session_evidence import PrimeAcpLimits, PrimeAcpUsage
+from aec_bench.prime_agent.session_evidence import (
+    PrimeAcpLimits,
+    PrimeAcpUsage,
+    acp_usage_payload,
+    aggregate_acp_usage,
+)
 from aec_bench.prime_agent.skills import PrimeSkillInstallError, install_prime_skill
 
 type PrimeSessionRunner = Callable[..., Coroutine[Any, Any, PrimeAcpRun]]
@@ -374,7 +379,7 @@ class HydraulicReviewPrimeLifecycleEnvironment:
 
     def _remaining_limits(self, run_dir: Path) -> PrimeAcpLimits:
         attempts = self._load_attempts(run_dir, require_complete_usage=True)
-        usage = _aggregate_usage(attempts)
+        usage = aggregate_acp_usage(item.usage for item in attempts)
         elapsed = sum(item.elapsed_seconds for item in attempts)
         if len(attempts) >= self.limits.max_sessions:
             raise LifecycleEpisodeEnvironmentFailure("max_sessions", "Prime lifecycle session limit is exhausted")
@@ -495,7 +500,7 @@ class HydraulicReviewPrimeLifecycleEnvironment:
         if not configuration.is_file():
             raise HydraulicReviewPrimeLifecycleRecoveryError("Prime lifecycle configuration is missing")
         attempts = self._load_attempts(run, require_complete_usage=False)
-        usage = _aggregate_usage(attempts)
+        usage = aggregate_acp_usage(item.usage for item in attempts)
         payload = {
             "schema_version": "1",
             "configuration": "prime/configuration.json",
@@ -504,7 +509,7 @@ class HydraulicReviewPrimeLifecycleEnvironment:
             "failure_kind": failure_kind,
             "isolation": self.isolation.value,
             "limits": _limits_payload(self.limits),
-            "usage": _usage_payload(usage),
+            "usage": acp_usage_payload(usage),
             "elapsed_seconds": sum(item.elapsed_seconds for item in attempts),
             "topology": {
                 "root_sessions": sum(item.topology.root_sessions for item in attempts),
@@ -620,7 +625,11 @@ def _prime_instruction(request: LifecycleEpisodeRequest) -> str:
         "Complete only the active hydraulic-review lifecycle checkpoint. Load and follow the full "
         "`hydraulic-review` skill before the first operation. Use the scoped client to inspect evidence, "
         "execute declared operations, and "
-        "offer one complete checkpoint submission. End the turn after the offer is accepted.\n\n" + request.instruction
+        "offer one complete checkpoint submission. Paths that start with `workspace/` are lifecycle paths, not "
+        "files in your process working directory. Remove the `workspace/` prefix and read them with "
+        "`hydraulic_review.read_file()`. Do not use Python filesystem calls to find lifecycle evidence. If the "
+        "first IPython cell fails because the kernel is still starting, retry `import hydraulic_review` once "
+        "before any other action. End the turn after the offer is accepted.\n\n" + request.instruction
     )
 
 
@@ -660,32 +669,6 @@ def _usage_evidence(usage: PrimeAcpUsage) -> _UsageEvidence:
         total_tokens=usage.total_tokens,
         cost_usd=usage.cost_usd,
     )
-
-
-def _aggregate_usage(attempts: Sequence[_AttemptEvidence]) -> PrimeAcpUsage:
-    return PrimeAcpUsage(
-        complete=bool(attempts) and all(item.usage.complete for item in attempts),
-        model_calls=sum(item.usage.model_calls for item in attempts),
-        input_tokens=sum(item.usage.input_tokens for item in attempts),
-        output_tokens=sum(item.usage.output_tokens for item in attempts),
-        cache_read_tokens=sum(item.usage.cache_read_tokens for item in attempts),
-        cache_write_tokens=sum(item.usage.cache_write_tokens for item in attempts),
-        total_tokens=sum(item.usage.total_tokens for item in attempts),
-        cost_usd=sum((item.usage.cost_usd for item in attempts), start=Decimal(0)),
-    )
-
-
-def _usage_payload(usage: PrimeAcpUsage) -> dict[str, Any]:
-    return {
-        "complete": usage.complete,
-        "model_calls": usage.model_calls,
-        "input_tokens": usage.input_tokens,
-        "output_tokens": usage.output_tokens,
-        "cache_read_tokens": usage.cache_read_tokens,
-        "cache_write_tokens": usage.cache_write_tokens,
-        "total_tokens": usage.total_tokens,
-        "cost_usd": str(usage.cost_usd),
-    }
 
 
 def _limits_payload(limits: HydraulicReviewPrimeLifecycleLimits) -> dict[str, Any]:

@@ -1,4 +1,4 @@
-# ABOUTME: Tests current unversioned continual-world build, profile, and installed command values.
+# ABOUTME: Tests Interactive World identity and current installed continual command values.
 # ABOUTME: Rejects invalid artifact hashes, mixed ownership, stale profiles, and operation payload bags.
 
 from __future__ import annotations
@@ -11,14 +11,18 @@ from pydantic import TypeAdapter, ValidationError
 from aec_bench.contracts.continual_world import (
     ContinualControlCapabilitiesRequest,
     ContinualWorldControlRequest,
-    ContinualWorldProfileRef,
-    WorldBuildRef,
 )
-from aec_bench.worlds.runtime.definition import ContinualWorldDefinition, LoadedContinualWorldProfile
+from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
+from aec_bench.worlds.runtime.definition import InteractiveWorldDefinition, LoadedInteractiveWorldProfile
 
 
-def _profile(profile_id: str, *, task_world_id: str = "world-a", digest: str = "a" * 64) -> ContinualWorldProfileRef:
-    return ContinualWorldProfileRef(
+def _profile(
+    profile_id: str,
+    *,
+    task_world_id: str = "world-a",
+    digest: str = "a" * 64,
+) -> InteractiveWorldProfileRef:
+    return InteractiveWorldProfileRef(
         task_world_id=task_world_id,
         profile_id=profile_id,
         profile_content_sha256=digest,
@@ -33,11 +37,11 @@ def _build(*, task_world_id: str = "world-a", digest: str = "b" * 64) -> WorldBu
     )
 
 
-def _definition(*profiles: ContinualWorldProfileRef) -> ContinualWorldDefinition:
-    return ContinualWorldDefinition(
+def _definition(*profiles: InteractiveWorldProfileRef) -> InteractiveWorldDefinition:
+    return InteractiveWorldDefinition(
         build=_build(),
         profiles=profiles,
-        profile_loader=lambda reference: LoadedContinualWorldProfile(reference=reference, value=object()),
+        profile_loader=lambda reference: LoadedInteractiveWorldProfile(reference=reference, value=object()),
     )
 
 

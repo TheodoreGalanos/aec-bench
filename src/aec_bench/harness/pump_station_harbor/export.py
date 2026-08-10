@@ -15,9 +15,8 @@ from pydantic import TypeAdapter
 
 from aec_bench.contracts.continual_world import (
     ContinualRolloutChildRunRef,
-    ContinualWorldProfileRef,
-    WorldBuildRef,
 )
+from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
 from aec_bench.harness.harbor_task_exporting.constants import (
     BASE_IMAGE,
     RUNTIME_DEPENDENCIES,
@@ -120,14 +119,14 @@ class PumpStationHarborBridge:
     task_world_id: str
     bridge_mode: str
     world_build: WorldBuildRef
-    profile_ref: ContinualWorldProfileRef
+    profile_ref: InteractiveWorldProfileRef
     reference_system_root: Path
     initial_run_root: Path | None
     rollout_child_ref: ContinualRolloutChildRunRef | None
 
 
 def _export_authority(
-    profile_ref: ContinualWorldProfileRef | None,
+    profile_ref: InteractiveWorldProfileRef | None,
 ) -> tuple[ReferencePackage, PumpStationReferenceSystem | None]:
     definition = pump_station_continual_world_definition()
     if profile_ref is None:
@@ -144,7 +143,7 @@ def export_pump_station_harbor_task(
     task_dir: Path,
     *,
     project_root: Path,
-    profile_ref: ContinualWorldProfileRef | None = None,
+    profile_ref: InteractiveWorldProfileRef | None = None,
     initial_run_root: Path | None = None,
     rollout_child_ref: ContinualRolloutChildRunRef | None = None,
 ) -> ExportedPumpStationHarborTask:
@@ -220,7 +219,7 @@ def load_pump_station_harbor_bridge(
     world_build = TypeAdapter(WorldBuildRef).validate_python(manifest["world_build"])
     if world_build != definition.ref:
         raise ValueError("pump-station Harbor build is not registered")
-    profile_ref = TypeAdapter(ContinualWorldProfileRef).validate_python(manifest["continual_profile"])
+    profile_ref = TypeAdapter(InteractiveWorldProfileRef).validate_python(manifest["continual_profile"])
     if profile_ref not in definition.profiles:
         raise ValueError("pump-station Harbor profile is not registered")
     reference_payload = _mapping(manifest["reference_system"], "reference_system")
@@ -342,7 +341,7 @@ def _write_export(
     task_dir: Path,
     project_root: Path,
     package: ReferencePackage,
-    profile_ref: ContinualWorldProfileRef | None,
+    profile_ref: InteractiveWorldProfileRef | None,
     reference_system: PumpStationReferenceSystem | None,
     initial_run_root: Path | None,
     rollout_child_ref: ContinualRolloutChildRunRef | None,
@@ -450,7 +449,7 @@ def _export_manifest(
     task_dir: Path,
     package: ReferencePackage,
     package_dir: Path,
-    profile_ref: ContinualWorldProfileRef | None,
+    profile_ref: InteractiveWorldProfileRef | None,
     reference_system: PumpStationReferenceSystem | None,
     reference_system_dir: Path | None,
     initial_run_dir: Path | None,

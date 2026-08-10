@@ -18,7 +18,7 @@ from aec_bench.lifecycles.runtime.state import (
     LifecycleOperationDisposition,
     LifecycleOperationOutcome,
 )
-from aec_bench.lifecycles.stormwater_design.hydraulic_review_verifier import (
+from aec_bench.lifecycles.stormwater_design.hydraulic_evidence import (
     CALCULATION_OPERATION_IDS,
     SCENARIO_IDS,
     ClaimBoundary,
@@ -28,14 +28,14 @@ from aec_bench.lifecycles.stormwater_design.hydraulic_review_verifier import (
     RunReference,
     ScenarioDecision,
     ScenarioEvidence,
-    _expected_readiness,
-    _gate,
-    _mapping_failures,
-    _read_json,
-    _scenario_evidence,
-    _selected_actions,
-    _sha256,
-    _transaction_failures,
+    expected_readiness,
+    file_sha256,
+    load_scenario_evidence,
+    mapping_failures,
+    operation_transaction_failures,
+    read_json_object,
+    select_operation_actions,
+    verification_gate,
 )
 from aec_bench.lifecycles.stormwater_design.hydraulics.interventions import (
     HydraulicInterventionId,
@@ -133,13 +133,13 @@ def verify_hydraulic_intervention_lifecycle(package_dir: Path, run_dir: Path) ->
         for checkpoint in state["checkpoint_runs"]
         for action in (LifecycleOperationActionRecord.model_validate(item) for item in checkpoint["operation_actions"])
     }
-    problem_selected, problem_selection_failures = _selected_actions(
+    problem_selected, problem_selection_failures = select_operation_actions(
         problem.selected_operations,
         actions,
         checkpoint_id="problem_analysis",
         expected_operation_ids=set(CALCULATION_OPERATION_IDS),
     )
-    intervention_selected, intervention_selection_failures = _selected_actions(
+    intervention_selected, intervention_selection_failures = select_operation_actions(
         intervention.selected_operations,
         actions,
         checkpoint_id="intervention_analysis",
@@ -157,11 +157,11 @@ def verify_hydraulic_intervention_lifecycle(package_dir: Path, run_dir: Path) ->
         intervention_selected,
     )
     operation_failures = problem_selection_failures + intervention_selection_failures
-    operation_failures.extend(_transaction_failures(run, actions.values()))
+    operation_failures.extend(operation_transaction_failures(run, actions.values()))
     selective_failures = _selective_recomputation_failures(problem_selected, intervention_selected)
 
-    problem_evidence, problem_evidence_failures = _scenario_evidence(package, run, problem_selected)
-    intervention_evidence, intervention_evidence_failures = _scenario_evidence(
+    problem_evidence, problem_evidence_failures = load_scenario_evidence(package, run, problem_selected)
+    intervention_evidence, intervention_evidence_failures = load_scenario_evidence(
         package,
         run,
         intervention_selected,
@@ -200,7 +200,7 @@ def verify_hydraulic_intervention_lifecycle(package_dir: Path, run_dir: Path) ->
     }
     run_failures = _scenario_mapping_failures("run_reference", closeout.run_reference, expected_runs)
     report_failures = _scenario_mapping_failures("report_reference", closeout.report_reference, expected_reports)
-    readiness = _expected_readiness(expected_intervention_decisions)
+    readiness = expected_readiness(expected_intervention_decisions)
     memo_failures = _memo_failures(
         closeout,
         expected_runs,
@@ -219,17 +219,17 @@ def verify_hydraulic_intervention_lifecycle(package_dir: Path, run_dir: Path) ->
     claim_failures = _claim_failures(problem, selection, intervention, closeout)
 
     gates = {
-        "checkpoint_contract": _gate(checkpoint_failures),
-        "selection_grounding": _gate(selection_failures),
-        "operation_evidence_integrity": _gate(operation_failures),
-        "selective_recomputation": _gate(selective_failures),
-        "decision_update": _gate(decision_failures),
-        "intervention_effectiveness": _gate(effectiveness_failures),
-        "run_propagation": _gate(run_failures),
-        "report_propagation": _gate(report_failures),
-        "memo_propagation": _gate(memo_failures),
-        "final_readiness": _gate(readiness_failures),
-        "claim_boundary": _gate(claim_failures),
+        "checkpoint_contract": verification_gate(checkpoint_failures),
+        "selection_grounding": verification_gate(selection_failures),
+        "operation_evidence_integrity": verification_gate(operation_failures),
+        "selective_recomputation": verification_gate(selective_failures),
+        "decision_update": verification_gate(decision_failures),
+        "intervention_effectiveness": verification_gate(effectiveness_failures),
+        "run_propagation": verification_gate(run_failures),
+        "report_propagation": verification_gate(report_failures),
+        "memo_propagation": verification_gate(memo_failures),
+        "final_readiness": verification_gate(readiness_failures),
+        "claim_boundary": verification_gate(claim_failures),
     }
     passed = all(gate["passed"] for gate in gates.values())
     reward = _reward(gates)
@@ -245,7 +245,7 @@ def verify_hydraulic_intervention_lifecycle(package_dir: Path, run_dir: Path) ->
 
 def _invalid_contract_result(message: str) -> dict[str, Any]:
     gates = {
-        gate_id: _gate([message if gate_id == "checkpoint_contract" else "checkpoint contract unavailable"])
+        gate_id: verification_gate([message if gate_id == "checkpoint_contract" else "checkpoint contract unavailable"])
         for gate_id in GATE_IDS
     }
     return {
@@ -330,9 +330,9 @@ def _selection_failures(
         / "source"
         / "source-state.json"
     )
-    if source_action.physical_source_state_before_sha256 != _sha256(problem_source):
+    if source_action.physical_source_state_before_sha256 != file_sha256(problem_source):
         failures.append("intervention_analysis.physical_source_before")
-    if source_action.physical_source_state_after_sha256 != _sha256(option_source):
+    if source_action.physical_source_state_after_sha256 != file_sha256(option_source):
         failures.append("intervention_analysis.physical_source_after")
     if (
         source_action.outcome != LifecycleOperationOutcome.COMPLETED
@@ -340,11 +340,13 @@ def _selection_failures(
         or source_action.budget_consumed != 1
     ):
         failures.append("intervention_analysis.source_intervention_activation")
-    identity = _read_json(run / "lifecycle_operations" / source_action.action_id / "artifacts" / "source-identity.json")
+    identity = read_json_object(
+        run / "lifecycle_operations" / source_action.action_id / "artifacts" / "source-identity.json"
+    )
     selection_path = run / "episodes" / "intervention_selection" / "submission.json"
     if identity.get("selected_intervention_id") != intervention_id:
         failures.append("intervention_analysis.source_identity.intervention")
-    if identity.get("selection_submission_sha256") != _sha256(selection_path):
+    if identity.get("selection_submission_sha256") != file_sha256(selection_path):
         failures.append("intervention_analysis.source_identity.selection")
     return failures
 
@@ -446,7 +448,7 @@ def _scenario_mapping_failures(
     failures: list[str] = []
     if set(actual) != set(SCENARIO_IDS):
         failures.append(f"closeout_review.{label}.scenarios")
-    failures.extend(_mapping_failures(label, actual, expected))
+    failures.extend(mapping_failures(label, actual, expected))
     return failures
 
 
@@ -493,9 +495,9 @@ def _readiness_failures(
         failures.append("problem_analysis.readiness_evidence.scenarios")
     if set(intervention_decisions) != set(SCENARIO_IDS):
         failures.append("intervention_analysis.readiness_evidence.scenarios")
-    if problem.readiness_decision != _expected_readiness(problem_decisions):
+    if problem.readiness_decision != expected_readiness(problem_decisions):
         failures.append("problem_analysis.readiness_decision")
-    expected_intervention = _expected_readiness(intervention_decisions)
+    expected_intervention = expected_readiness(intervention_decisions)
     if intervention.readiness_decision != expected_intervention:
         failures.append("intervention_analysis.readiness_decision")
     if closeout.readiness_decision != expected_intervention:

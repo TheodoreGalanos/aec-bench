@@ -51,14 +51,14 @@ def _prepare(tmp_path: Path) -> tuple[Path, Path, str]:
         session_id="baseline.session-001",
         execution_mode="persistent_context",
     )
-    identity = _read_json(run / "workspace" / "hydraulics" / "current-source.json")
+    identity = _read_json(run / "workspace" / "operations" / "current-source.json")
     return package, run, str(identity["visible_source_state_sha256"])
 
 
 def test_prepare_publishes_source_bound_operation_catalogue(tmp_path: Path) -> None:
     _package, run, visible_source_sha256 = _prepare(tmp_path)
     catalogue = _read_json(run / "workspace" / "checkpoints" / "baseline_analysis" / "operations.json")
-    source = _read_json(run / "workspace" / "hydraulics" / "current-source.json")
+    source = _read_json(run / "workspace" / "operations" / "current-source.json")
 
     assert catalogue["checkpoint_id"] == "baseline_analysis"
     assert catalogue["operation_budget"] == 6
@@ -393,10 +393,10 @@ def test_execute_rejects_symlinked_workspace_projection_ancestor(tmp_path: Path)
 def test_read_only_current_source_resolver_matches_published_projection(tmp_path: Path) -> None:
     package, run, _visible_source_sha256 = _prepare(tmp_path)
     state = EvidenceLifecycleRunState.model_validate(_read_json(run / "state.json"))
-    before = _read_json(run / "workspace" / "hydraulics" / "current-source.json")
+    before = _read_json(run / "workspace" / "operations" / "current-source.json")
 
     source = resolve_lifecycle_operation_current_source(state, _resolver(package, run))
 
     assert source.visible_source_state_sha256 == before["visible_source_state_sha256"]
     assert source.physical_source_state_sha256 == before["physical_source_state_sha256"]
-    assert _read_json(run / "workspace" / "hydraulics" / "current-source.json") == before
+    assert _read_json(run / "workspace" / "operations" / "current-source.json") == before

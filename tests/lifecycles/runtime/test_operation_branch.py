@@ -57,7 +57,7 @@ def _open(package: Path, run: Path, session_id: str) -> None:
 
 
 def _execute(package: Path, run: Path, operation_id: str, session_id: str) -> dict[str, object]:
-    source = _read_json(run / "workspace" / "hydraulics" / "current-source.json")
+    source = _read_json(run / "workspace" / "operations" / "current-source.json")
     return execute_lifecycle_operation(
         package,
         run,
@@ -96,7 +96,7 @@ def _parent_through_revision(tmp_path: Path) -> tuple[Path, Path]:
 def test_branch_preserves_operation_budgets_actions_transactions_and_source(tmp_path: Path) -> None:
     package, parent = _parent_through_revision(tmp_path)
     branch_run = tmp_path / "branch"
-    parent_source = _read_json(parent / "workspace" / "hydraulics" / "current-source.json")
+    parent_source = _read_json(parent / "workspace" / "operations" / "current-source.json")
 
     branch = branch_evidence_lifecycle(
         package,
@@ -128,7 +128,7 @@ def test_branch_preserves_operation_budgets_actions_transactions_and_source(tmp_
         _read_json(branch_run / "lifecycle_operations" / "operation-000002" / "action.json")
         == revision["operation_actions"][0]
     )
-    assert _read_json(branch_run / "workspace" / "hydraulics" / "current-source.json") == parent_source
+    assert _read_json(branch_run / "workspace" / "operations" / "current-source.json") == parent_source
     assert _read_json(branch_run / "workspace/checkpoints/baseline_analysis/operations.json") == _read_json(
         parent / "workspace/checkpoints/baseline_analysis/operations.json"
     )

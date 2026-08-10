@@ -150,6 +150,13 @@ ownership, session state, and archived bytes validate. Complete lifecycle
 - verifier result and snapshotted output artifacts; and
 - the canonical ledger path and completeness state.
 
+`CompiledLifecycleEnvelope.executable_artifact_sha256` binds the shared
+lifecycle contracts, progression runtime, evidence-storage helpers, lifecycle
+evaluation, and the selected task's materialisation, task data, calculations,
+operations, and verification. Smoke actors, provider integrations, and
+experiment drivers are separate execution evidence and are not part of this
+task executable identity.
+
 An adapter mismatch, unresolved provider identity, incomplete checkpoint,
 missing artifact, or identity drift makes the trial failed or partial. It is not
 evidence for the requested condition.
@@ -193,6 +200,7 @@ Authoritative implementations include:
 - [`EvidenceCheckpointSpec` and `ConditionalEvidenceSpec`](../../src/aec_bench/contracts/evidence_lifecycle.py)
 - [lifecycle coordination and recovery](../../src/aec_bench/lifecycles/runtime/lifecycle.py)
 - [episode request/result boundary](../../src/aec_bench/lifecycles/runtime/episode.py)
+- [structural facade submittal lifecycle](../../src/aec_bench/lifecycles/structural_review/facade_submittal.py)
 - [hydraulic-review Prime endpoint](../../src/aec_bench/harness/hydraulic_review_prime/endpoint.py)
 - [hydraulic-review Prime lifecycle composition](../../src/aec_bench/harness/hydraulic_review_prime/lifecycle.py)
 - [conditional-evidence publication](../../src/aec_bench/lifecycles/runtime/request_store.py)
@@ -201,6 +209,8 @@ Authoritative implementations include:
 
 Focused proof includes:
 
+- [registered lifecycle conformance](../../tests/lifecycles/test_lifecycle_conformance.py)
+- [structural facade lifecycle behaviour](../../tests/lifecycles/structural_review/test_facade_submittal.py)
 - [lifecycle state, publication, request, retry, branch, and recovery tests](../../tests/lifecycles/runtime/test_lifecycle.py)
 - [episode boundary and attempt-recovery tests](../../tests/lifecycles/runtime/test_episode.py)
 - [hydraulic-review Prime endpoint and lifecycle tests](../../tests/harness/hydraulic_review_prime/)

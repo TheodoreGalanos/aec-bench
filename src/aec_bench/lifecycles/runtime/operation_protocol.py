@@ -8,7 +8,7 @@ import hashlib
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 
 from aec_bench.contracts.evidence_lifecycle import (
@@ -35,12 +35,15 @@ _LIFECYCLE_OPERATION_PROTOCOL: dict[str, Any] = {
     "catalog_path": "workspace/checkpoints/<checkpoint_id>/operations.json",
     "canonical_transaction_path": "lifecycle_operations/<action_id>",
     "workspace_projection_path": "workspace/inbox/<checkpoint_id>/operations/<action_id>",
+    "current_source_path": "workspace/operations/current-source.json",
     "budget_rule": "completed_operations_consume_one",
     "reuse_rule": "already_current_consumes_zero_and_reuses_original_artifacts",
     "rejection_rule": "typed_rejections_consume_zero_and_publish_no_result",
     "call_validation_rule": "malformed_or_blank_arguments_fail_without_lifecycle_action",
     "authority_rule": "environment_produces_evidence_only_and_never_reward_or_verifier_results",
 }
+CURRENT_SOURCE_WORKSPACE_PATH = PurePosixPath("operations/current-source.json")
+CURRENT_SOURCE_RUN_PATH = PurePosixPath("workspace") / CURRENT_SOURCE_WORKSPACE_PATH
 _LIFECYCLE_OPERATION_ARGUMENTS = (
     "checkpoint_id",
     "operation_id",

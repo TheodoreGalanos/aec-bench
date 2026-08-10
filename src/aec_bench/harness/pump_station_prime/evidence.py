@@ -143,19 +143,6 @@ def journey_config_id(
     return hashlib.sha256(encoded).hexdigest()
 
 
-def aggregate_usage(segments: tuple[PumpStationPrimeJourneySegment, ...]) -> PrimeAcpUsage:
-    return PrimeAcpUsage(
-        complete=bool(segments) and all(segment.usage.complete for segment in segments),
-        model_calls=sum(segment.usage.model_calls for segment in segments),
-        input_tokens=sum(segment.usage.input_tokens for segment in segments),
-        output_tokens=sum(segment.usage.output_tokens for segment in segments),
-        cache_read_tokens=sum(segment.usage.cache_read_tokens for segment in segments),
-        cache_write_tokens=sum(segment.usage.cache_write_tokens for segment in segments),
-        total_tokens=sum(segment.usage.total_tokens for segment in segments),
-        cost_usd=sum((segment.usage.cost_usd for segment in segments), start=Decimal(0)),
-    )
-
-
 def elapsed_seconds(checkpoint: PumpStationPrimeJourneyCheckpoint) -> float:
     end = checkpoint.finished_at or datetime.now(UTC)
     return max(0.0, (end - checkpoint.started_at).total_seconds())
@@ -170,19 +157,6 @@ def limit_payload(limits: PumpStationPrimeJourneyLimits) -> dict[str, int | floa
         "max_tokens": limits.max_tokens,
         "max_cost_usd": str(limits.max_cost_usd),
         "max_wall_seconds": limits.max_wall_seconds,
-    }
-
-
-def usage_payload(usage: PrimeAcpUsage) -> dict[str, bool | int | str]:
-    return {
-        "complete": usage.complete,
-        "model_calls": usage.model_calls,
-        "input_tokens": usage.input_tokens,
-        "output_tokens": usage.output_tokens,
-        "cache_read_tokens": usage.cache_read_tokens,
-        "cache_write_tokens": usage.cache_write_tokens,
-        "total_tokens": usage.total_tokens,
-        "cost_usd": str(usage.cost_usd),
     }
 
 

@@ -26,7 +26,10 @@ from aec_bench.lifecycles.runtime.lifecycle import (
     load_evidence_lifecycle_spec,
     validate_evidence_checkpoint_submission,
 )
-from aec_bench.lifecycles.runtime.operation_protocol import LifecycleOperationResolver
+from aec_bench.lifecycles.runtime.operation_protocol import (
+    CURRENT_SOURCE_WORKSPACE_PATH,
+    LifecycleOperationResolver,
+)
 
 HYDRAULIC_REVIEW_SOCKET_ENV = "AEC_BENCH_HYDRAULIC_REVIEW_SOCKET"
 HYDRAULIC_REVIEW_CAPABILITY_ENV = "AEC_BENCH_HYDRAULIC_REVIEW_CAPABILITY_TOKEN"
@@ -368,8 +371,8 @@ class HydraulicReviewPrimeLifecycleEndpoint:
         root = parts[0]
         if root == "instruction.md":
             return len(parts) == 1
-        if root == "hydraulics":
-            return len(parts) == 1 or (len(parts) == 2 and parts[1] == "current-source.json")
+        if root == CURRENT_SOURCE_WORKSPACE_PATH.parts[0]:
+            return len(parts) == 1 or parts == CURRENT_SOURCE_WORKSPACE_PATH.parts
         visible_checkpoints = {self._request.checkpoint_id, *self._request.completed_checkpoint_ids}
         if root == "inbox":
             return len(parts) == 1 or (len(parts) >= 2 and parts[1] in visible_checkpoints)

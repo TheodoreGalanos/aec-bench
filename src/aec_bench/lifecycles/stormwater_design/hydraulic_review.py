@@ -311,15 +311,15 @@ def _submission_contract(checkpoint: EvidenceCheckpointSpec) -> str:
     top_level_fields = "\n".join(f"- `{field}`" for field in checkpoint.required_submission_fields)
     selected_operations = {
         "baseline_analysis": """Use `visible_source_state_sha256` from
-`workspace/hydraulics/current-source.json`. `selected_operations` is the exact map from every required baseline
+`workspace/operations/current-source.json`. `selected_operations` is the exact map from every required baseline
 operation ID to the action ID returned for this checkpoint.
 """,
         "revision_analysis": """Use `visible_source_state_sha256` from
-`workspace/hydraulics/current-source.json`. `selected_operations` includes the source-revision action and every
+`workspace/operations/current-source.json`. `selected_operations` includes the source-revision action and every
 required revision operation. Use each current-checkpoint action ID even when its outcome is `already_current`.
 """,
         "closeout_review": """Use `visible_source_state_sha256` from
-`workspace/hydraulics/current-source.json`. Execute no new operation at closeout. Preserve the revision checkpoint's
+`workspace/operations/current-source.json`. Execute no new operation at closeout. Preserve the revision checkpoint's
 `selected_operations` map exactly.
 """,
     }

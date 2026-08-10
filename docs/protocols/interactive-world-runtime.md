@@ -13,12 +13,12 @@ actor shape and no historical runtime dispatcher.
 
 ## Registration and ownership
 
-`ContinualWorldDefinition` contains executable `WorldBuildRef` identity,
+`InteractiveWorldDefinition` contains executable `WorldBuildRef` identity,
 content-pinned profile references, and the task-owned profile loader.
 `WorldBuildRef.artifact_sha256` identifies a stable manifest of exact source
 bytes. It is not a general application ID.
 
-`ContinualWorldCatalogue` resolves a definition by world ID or exact build
+`InteractiveWorldCatalogue` resolves a definition by world ID or exact build
 reference. It does not register execution, evaluation, providers, Harbor, or
 branch implementations. Those capabilities are composed by their owners.
 

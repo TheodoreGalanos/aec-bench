@@ -1,4 +1,4 @@
-# ABOUTME: Direct composition for the three current evidence-lifecycle tasks.
+# ABOUTME: Direct composition for the current evidence-lifecycle tasks.
 # ABOUTME: Resolves task-owned callables without string entrypoints or capability adapters.
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from aec_bench.lifecycles.stormwater_design import (
     hydraulic_review_smoke,
     hydraulic_review_variants,
 )
+from aec_bench.lifecycles.structural_review import facade_submittal
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,27 +33,64 @@ class _LifecycleDefinition:
     lifecycle: EvidenceLifecycleSpec
     materializer: Callable[..., Path]
     verifier: Callable[[Path, Path], dict[str, Any]]
-    source_paths: tuple[Path, ...]
-    package_validator: Callable[[Path], dict[str, Any]] | None = None
+    executable_source_roots: tuple[Path, ...]
+    variant_validator: Callable[[Path], dict[str, Any]] | None = None
     variant_ids: Callable[[], tuple[str, ...]] | None = None
     variant_metadata: Callable[[str], Any] | None = None
     operation_resolver: Callable[[Path, Path], LifecycleOperationResolver] | None = None
     smoke_environment: Callable[[Path], LifecycleEpisodeEnvironment] | None = None
 
 
+_AEC_BENCH_ROOT = Path(__file__).resolve().parents[1]
+_STORMWATER_ROOT = Path(drainage_model.__file__).resolve().parent
+_STRUCTURAL_REVIEW_ROOT = Path(facade_submittal.__file__).resolve().parent
+_FACADE_TEMPLATE_ROOT = (
+    _AEC_BENCH_ROOT / "templates" / "builtin" / "structural" / "facade_submittal_source_policy_package"
+)
+_SHARED_EXECUTABLE_SOURCE_ROOTS = (
+    Path(__file__).resolve(),
+    _AEC_BENCH_ROOT / "contracts" / "evidence_lifecycle.py",
+    _AEC_BENCH_ROOT / "contracts" / "lifecycle_evaluation.py",
+    _AEC_BENCH_ROOT / "contracts" / "trial_record.py",
+    _AEC_BENCH_ROOT / "contracts" / "validators.py",
+    _AEC_BENCH_ROOT / "evaluation" / "lifecycle.py",
+    _AEC_BENCH_ROOT / "ledger" / "durability.py",
+    _AEC_BENCH_ROOT / "ledger" / "immutable_byte_store.py",
+    _AEC_BENCH_ROOT / "ledger" / "local_lock.py",
+    _AEC_BENCH_ROOT / "ledger" / "process_log.py",
+    _AEC_BENCH_ROOT / "lifecycles" / "__init__.py",
+    _AEC_BENCH_ROOT / "lifecycles" / "runtime",
+)
+
+
 _DEFINITIONS = {
     definition.metadata.template_id: definition
     for definition in (
+        _LifecycleDefinition(
+            metadata=facade_submittal.METADATA,
+            lifecycle=facade_submittal.LIFECYCLE,
+            materializer=facade_submittal.materialize_facade_submittal_lifecycle,
+            verifier=facade_submittal.verify_facade_submittal_lifecycle,
+            executable_source_roots=(
+                *_SHARED_EXECUTABLE_SOURCE_ROOTS,
+                _STRUCTURAL_REVIEW_ROOT / "__init__.py",
+                Path(facade_submittal.__file__),
+                _FACADE_TEMPLATE_ROOT / "engine.py",
+                _FACADE_TEMPLATE_ROOT / "params.toml",
+            ),
+        ),
         _LifecycleDefinition(
             metadata=drainage_model.METADATA,
             lifecycle=drainage_model.LIFECYCLE,
             materializer=drainage_model.materialize_drainage_model_lifecycle,
             verifier=drainage_model.verify_drainage_model_lifecycle,
-            source_paths=(
+            executable_source_roots=(
+                *_SHARED_EXECUTABLE_SOURCE_ROOTS,
+                _STORMWATER_ROOT / "__init__.py",
                 Path(drainage_model.__file__),
                 Path(drainage_variants.__file__),
             ),
-            package_validator=drainage_model.validated_drainage_model_variant,
+            variant_validator=drainage_model.validated_drainage_model_variant,
             variant_ids=drainage_variants.list_drainage_model_variant_ids,
             variant_metadata=drainage_variants.get_drainage_model_variant,
         ),
@@ -61,12 +99,17 @@ _DEFINITIONS = {
             lifecycle=hydraulic_review.LIFECYCLE,
             materializer=hydraulic_review.materialize_hydraulic_review_lifecycle,
             verifier=hydraulic_review.verify_hydraulic_review_lifecycle,
-            source_paths=(
+            executable_source_roots=(
+                *_SHARED_EXECUTABLE_SOURCE_ROOTS,
+                _STORMWATER_ROOT / "__init__.py",
                 Path(hydraulic_review.__file__),
                 Path(hydraulic_review_variants.__file__),
-                Path(hydraulic_review_smoke.__file__),
+                _STORMWATER_ROOT / "hydraulic_evidence.py",
+                _STORMWATER_ROOT / "hydraulic_operations.py",
+                _STORMWATER_ROOT / "hydraulic_review_verifier.py",
+                _STORMWATER_ROOT / "hydraulics",
             ),
-            package_validator=hydraulic_review.validated_hydraulic_review_variant,
+            variant_validator=hydraulic_review.validated_hydraulic_review_variant,
             variant_ids=hydraulic_review_variants.list_hydraulic_review_variant_ids,
             variant_metadata=hydraulic_review_variants.get_hydraulic_review_variant,
             operation_resolver=hydraulic_review.build_hydraulic_operation_resolver,
@@ -77,9 +120,15 @@ _DEFINITIONS = {
             lifecycle=design_response.LIFECYCLE,
             materializer=design_response.materialize_hydraulic_design_response_lifecycle,
             verifier=design_response.verify_hydraulic_design_response_lifecycle,
-            source_paths=(
+            executable_source_roots=(
+                *_SHARED_EXECUTABLE_SOURCE_ROOTS,
+                _STORMWATER_ROOT / "__init__.py",
                 Path(design_response.__file__),
-                Path(design_response_smoke.__file__),
+                _STORMWATER_ROOT / "design_response_operations.py",
+                _STORMWATER_ROOT / "design_response_verifier.py",
+                _STORMWATER_ROOT / "hydraulic_evidence.py",
+                _STORMWATER_ROOT / "hydraulic_operations.py",
+                _STORMWATER_ROOT / "hydraulics",
             ),
             operation_resolver=design_response.build_hydraulic_design_response_resolver,
             smoke_environment=design_response_smoke.build_hydraulic_design_response_smoke_environment,
@@ -102,7 +151,7 @@ def lifecycle_definition(template_id: str) -> _LifecycleDefinition:
 
 @cache
 def lifecycle_executable_artifact_sha256(template_id: str) -> str:
-    return source_tree_artifact_sha256(lifecycle_definition(template_id).source_paths)
+    return source_tree_artifact_sha256(lifecycle_definition(template_id).executable_source_roots)
 
 
 def lifecycle_variant_ids(template_id: str) -> tuple[str, ...]:
@@ -138,7 +187,7 @@ def lifecycle_package_variant(package_dir: Path) -> dict[str, Any] | None:
         return None
     metadata = LifecycleTaskMetadata.model_validate(_read_json(metadata_path))
     try:
-        validator = lifecycle_definition(metadata.template_id).package_validator
+        validator = lifecycle_definition(metadata.template_id).variant_validator
     except KeyError:
         return None
     return None if validator is None else validator(package)

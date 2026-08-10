@@ -5,101 +5,16 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import Field, model_validator
-
-from aec_bench.contracts.validators import NonEmptyStr, StrictModel
+from aec_bench.contracts.lifecycle_evaluation import (
+    LifecycleSemanticMetrics,
+    LifecycleSemanticStateAccuracy,
+    LifecycleSemanticTransitionMetrics,
+    LifecycleSemanticTransitionSummary,
+)
 
 _MISSING = object()
-
-
-class LifecycleSemanticStateAccuracy(StrictModel):
-    correct_atoms: int = Field(ge=0)
-    total_atoms: int = Field(ge=0)
-    accuracy: float | None = Field(default=None, ge=0.0, le=1.0)
-
-    @model_validator(mode="after")
-    def validate_support(self) -> LifecycleSemanticStateAccuracy:
-        if self.correct_atoms > self.total_atoms:
-            raise ValueError("correct_atoms cannot exceed total_atoms")
-        _validate_rate(self.accuracy, self.correct_atoms, self.total_atoms, "accuracy")
-        return self
-
-
-class LifecycleSemanticTransitionSummary(StrictModel):
-    expected_update_count: int = Field(ge=0)
-    actual_update_count: int = Field(ge=0)
-    aligned_update_count: int = Field(ge=0)
-    updated_to_expected_count: int = Field(ge=0)
-    acquired_update_count: int = Field(ge=0)
-    unsupported_update_count: int = Field(ge=0)
-    stable_correct_before_count: int = Field(ge=0)
-    retained_count: int = Field(ge=0)
-    interference_count: int = Field(ge=0)
-    acquisition: float | None = Field(default=None, ge=0.0, le=1.0)
-    update_precision: float | None = Field(default=None, ge=0.0, le=1.0)
-    update_recall: float | None = Field(default=None, ge=0.0, le=1.0)
-    update_f1: float | None = Field(default=None, ge=0.0, le=1.0)
-    retention: float | None = Field(default=None, ge=0.0, le=1.0)
-    interference: float | None = Field(default=None, ge=0.0, le=1.0)
-
-    @model_validator(mode="after")
-    def validate_counts_and_support(self) -> LifecycleSemanticTransitionSummary:
-        if self.aligned_update_count > self.actual_update_count:
-            raise ValueError("aligned_update_count cannot exceed actual_update_count")
-        if self.updated_to_expected_count > self.expected_update_count:
-            raise ValueError("updated_to_expected_count cannot exceed expected_update_count")
-        if self.acquired_update_count > self.updated_to_expected_count:
-            raise ValueError("acquired_update_count cannot exceed updated_to_expected_count")
-        if self.unsupported_update_count != self.actual_update_count - self.aligned_update_count:
-            raise ValueError("unsupported_update_count must equal actual updates minus aligned updates")
-        if self.retained_count + self.interference_count != self.stable_correct_before_count:
-            raise ValueError("retained and interference counts must partition stable prior-correct atoms")
-        _validate_rate(self.acquisition, self.acquired_update_count, self.expected_update_count, "acquisition")
-        _validate_rate(self.update_precision, self.aligned_update_count, self.actual_update_count, "update_precision")
-        _validate_rate(
-            self.update_recall,
-            self.updated_to_expected_count,
-            self.expected_update_count,
-            "update_recall",
-        )
-        expected_f1 = _f1(self.update_precision, self.update_recall)
-        if self.update_f1 != expected_f1:
-            raise ValueError("update_f1 must match update precision and recall")
-        _validate_rate(self.retention, self.retained_count, self.stable_correct_before_count, "retention")
-        _validate_rate(
-            self.interference,
-            self.interference_count,
-            self.stable_correct_before_count,
-            "interference",
-        )
-        return self
-
-
-class LifecycleSemanticTransitionMetrics(LifecycleSemanticTransitionSummary):
-    from_checkpoint_id: NonEmptyStr
-    to_checkpoint_id: NonEmptyStr
-
-
-class LifecycleSemanticMetrics(StrictModel):
-    schema_version: Literal["1"] = "1"
-    initial_checkpoint_id: NonEmptyStr
-    initial: LifecycleSemanticStateAccuracy
-    transitions: list[LifecycleSemanticTransitionMetrics]
-    aggregate: LifecycleSemanticTransitionSummary
-
-    @model_validator(mode="after")
-    def validate_transition_chain(self) -> LifecycleSemanticMetrics:
-        previous = self.initial_checkpoint_id
-        for transition in self.transitions:
-            if transition.from_checkpoint_id != previous:
-                raise ValueError("semantic transitions must form one contiguous checkpoint chain")
-            previous = transition.to_checkpoint_id
-        expected_aggregate = _aggregate(self.transitions)
-        if self.aggregate != expected_aggregate:
-            raise ValueError("semantic aggregate must equal the sum of its transitions")
-        return self
 
 
 def score_semantic_transitions(
@@ -300,9 +215,3 @@ def _f1(precision: float | None, recall: float | None) -> float | None:
     if precision + recall == 0.0:
         return 0.0
     return round(2 * precision * recall / (precision + recall), 6)
-
-
-def _validate_rate(value: float | None, numerator: int, denominator: int, field_name: str) -> None:
-    expected = _rate(numerator, denominator)
-    if value != expected:
-        raise ValueError(f"{field_name} must match its numerator and denominator")

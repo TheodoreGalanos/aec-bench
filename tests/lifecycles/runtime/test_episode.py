@@ -180,7 +180,7 @@ def test_current_episode_request_binds_and_persists_public_operation_state(tmp_p
         session_id="baseline.session-001",
         execution_mode="persistent_context",
     )
-    current_source_path = run_dir / "workspace" / "hydraulics" / "current-source.json"
+    current_source_path = run_dir / "workspace" / "operations" / "current-source.json"
     current_source = _read_json(current_source_path)
     action = execute_lifecycle_operation(
         package,
@@ -249,7 +249,7 @@ def test_current_closeout_binds_prior_operation_evidence_without_offering_operat
         session_id="baseline.session-001",
         execution_mode="persistent_context",
     )
-    current_source = _read_json(run_dir / "workspace" / "hydraulics" / "current-source.json")
+    current_source = _read_json(run_dir / "workspace" / "operations" / "current-source.json")
     action = execute_lifecycle_operation(
         package,
         run_dir,

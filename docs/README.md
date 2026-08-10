@@ -57,6 +57,7 @@ authority.
 | [World authoring](world-authoring.md) | Guide | Current | Task and interactive-world contributors | Task, engineering, world, and lifecycle owners |
 | [Interactive-world runtime](protocols/interactive-world-runtime.md) | Protocol | Current | World, runtime, and transport contributors | World runtime and registered worlds |
 | [Staged evidence and publication](protocols/staged-evidence-and-publication.md) | Protocol | Current | Lifecycle and evaluation contributors | Lifecycle runtime and task owners |
+| [Environment category contract plan](plans/environment-category-contracts.md) | Plan | Historical | World, lifecycle, task, and runtime contributors | Repository maintainers |
 | [Prime and interactive-world boundary study](plans/prime-world-boundary-study.md) | Plan | Historical | Prime, harness, and task-world contributors | Repository maintainers |
 | [Repository architecture study](plans/repository-architecture-study.md) | Plan | Historical | Repository maintainers and subsystem owners | Repository maintainers |
 | [Repository architecture alignment implementation](plans/repository-architecture-implementation.md) | Plan | Historical | Repository maintainers and subsystem owners | Repository maintainers |

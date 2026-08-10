@@ -15,6 +15,7 @@ from aec_bench.contracts.evidence_lifecycle import EvidenceCheckpointSpec, Evide
 from aec_bench.ledger.durability import fsync_directory, fsync_tree, mkdir_durable
 from aec_bench.ledger.process_log import append_ledger_entry
 from aec_bench.lifecycles.runtime.operation_protocol import (
+    CURRENT_SOURCE_WORKSPACE_PATH,
     LifecycleOperationPlan,
     LifecycleOperationPrerequisiteError,
     LifecycleOperationResolver,
@@ -193,7 +194,7 @@ def _write_current_source_projection(
     state: EvidenceLifecycleRunState,
 ) -> LifecycleOperationSourceContext:
     source = resolver.current_source(_all_operation_actions(state))
-    destination = _workspace(run_dir) / "hydraulics" / "current-source.json"
+    destination = _workspace(run_dir) / CURRENT_SOURCE_WORKSPACE_PATH
     _assert_run_path_not_symlinked(run_dir, destination, label="operation current-source projection")
     _write_json_atomic_durable(
         destination,

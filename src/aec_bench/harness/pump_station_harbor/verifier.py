@@ -15,9 +15,8 @@ from pydantic import TypeAdapter
 
 from aec_bench.contracts.continual_world import (
     ContinualRolloutChildRunRef,
-    ContinualWorldProfileRef,
-    WorldBuildRef,
 )
+from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
 from aec_bench.contracts.world_session import StewardshipStateSnapshotRef, WorldSessionRequest, WorldSessionResult
 from aec_bench.harness.harbor_task_exporting.stable_io import directory_sha256, file_sha256
 from aec_bench.harness.pump_station_harbor.export import (
@@ -80,7 +79,7 @@ def verify_pump_station_harbor_run(
         raise ValueError("pump-station Harbor export identity differs")
     definition = pump_station_continual_world_definition()
     world_build = TypeAdapter(WorldBuildRef).validate_python(manifest.get("world_build"))
-    profile_ref = TypeAdapter(ContinualWorldProfileRef).validate_python(manifest.get("continual_profile"))
+    profile_ref = TypeAdapter(InteractiveWorldProfileRef).validate_python(manifest.get("continual_profile"))
     if world_build != definition.ref or profile_ref not in definition.profiles:
         raise ValueError("pump-station Harbor profile is not registered")
     _verify_export_authority(
@@ -197,7 +196,7 @@ def _verify_export_authority(
     manifest: dict[str, Any],
     package_dir: Path,
     reference_system_dir: Path | None,
-    profile_ref: ContinualWorldProfileRef,
+    profile_ref: InteractiveWorldProfileRef,
     verifier_runtime_path: Path | None,
 ) -> None:
     if reference_system_dir is None or verifier_runtime_path is None:
@@ -229,7 +228,7 @@ def _verify_initial_run(
     manifest: dict[str, Any],
     initial_run_dir: Path | None,
     world_build: WorldBuildRef,
-    profile_ref: ContinualWorldProfileRef,
+    profile_ref: InteractiveWorldProfileRef,
 ) -> ContinualRolloutChildRunRef | None:
     payload = manifest.get("initial_run")
     if payload is None:

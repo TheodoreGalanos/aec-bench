@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
-from aec_bench.contracts.continual_world import ContinualWorldProfileRef, WorldBuildRef
+from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
 from aec_bench.worlds.runtime.definition import (
-    ContinualWorldDefinition,
-    LoadedContinualWorldProfile,
+    InteractiveWorldDefinition,
+    LoadedInteractiveWorldProfile,
     source_tree_world_build,
 )
 from aec_bench.worlds.stewardship.wastewater_pump_station import reference_package_reader
@@ -50,7 +50,7 @@ class PumpStationContinualProfile:
     opening_state: PumpStationStewardshipState
 
 
-def pump_station_profile_ref(profile: LoadedContinualWorldProfile) -> ContinualWorldProfileRef:
+def pump_station_profile_ref(profile: LoadedInteractiveWorldProfile) -> InteractiveWorldProfileRef:
     """Validate and return the exact current pump profile reference."""
 
     profile_value = profile.value
@@ -81,12 +81,12 @@ def _validated_profile_data(reference_system_id: str) -> tuple[PumpStationRefere
     return system, package
 
 
-def _load_pump_station_profile(reference: ContinualWorldProfileRef) -> LoadedContinualWorldProfile:
+def _load_pump_station_profile(reference: InteractiveWorldProfileRef) -> LoadedInteractiveWorldProfile:
     system, package = _validated_profile_data(reference.profile_id)
     task_world_id = str(system.descriptor.get("task_world_id"))
     if task_world_id != reference.task_world_id or system.descriptor_content_id != reference.profile_content_sha256:
         raise ValueError("pump continual-world profile content differs")
-    return LoadedContinualWorldProfile(
+    return LoadedInteractiveWorldProfile(
         reference=reference,
         value=PumpStationContinualProfile(
             reference_system=system,
@@ -108,6 +108,7 @@ def _pump_station_world_build() -> WorldBuildRef:
         ),
         roots=(
             Path(__file__).resolve().parent,
+            source_root / "contracts" / "interactive_world.py",
             source_root / "contracts" / "continual_world.py",
             source_root / "contracts" / "harness_kernel.py",
             source_root / "contracts" / "world_interface.py",
@@ -116,9 +117,9 @@ def _pump_station_world_build() -> WorldBuildRef:
     )
 
 
-def _profile_ref(reference_system_id: str) -> ContinualWorldProfileRef:
+def _profile_ref(reference_system_id: str) -> InteractiveWorldProfileRef:
     system, _ = _validated_profile_data(reference_system_id)
-    return ContinualWorldProfileRef(
+    return InteractiveWorldProfileRef(
         task_world_id=PUMP_STATION_TASK_WORLD_ID,
         profile_id=system.descriptor_id,
         profile_content_sha256=system.descriptor_content_id,
@@ -126,11 +127,11 @@ def _profile_ref(reference_system_id: str) -> ContinualWorldProfileRef:
 
 
 @cache
-def pump_station_continual_world_definition() -> ContinualWorldDefinition:
+def pump_station_continual_world_definition() -> InteractiveWorldDefinition:
     """Return the current pump definition and its bundled scenario profiles."""
 
     profiles = tuple(_profile_ref(reference_system_id) for reference_system_id in list_reference_system_ids())
-    return ContinualWorldDefinition(
+    return InteractiveWorldDefinition(
         build=_pump_station_world_build(),
         profiles=profiles,
         profile_loader=_load_pump_station_profile,

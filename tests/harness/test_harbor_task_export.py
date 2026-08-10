@@ -146,7 +146,7 @@ def test_stormwater_export_is_loadable_staged_and_verifier_isolated(tmp_path: Pa
     assert (initial / "instruction.md").is_file()
     assert (initial / "inbox" / "baseline_analysis" / "notice.md").is_file()
     assert (initial / "checkpoints" / "baseline_analysis" / "operations.json").is_file()
-    assert (initial / "hydraulics" / "current-source.json").is_file()
+    assert (initial / "operations" / "current-source.json").is_file()
     assert not (initial / "inbox" / "revision_analysis").exists()
     assert not (task_dir / "environment" / "runtime").exists()
     assert (task_dir / "tests" / "compiled-world" / "hidden").is_dir()
@@ -413,9 +413,9 @@ def test_repeated_export_is_content_deterministic(tmp_path: Path) -> None:
         first_from_snapshot.verifier_runtime_wheel_path.read_bytes() == second.verifier_runtime_wheel_path.read_bytes()
     )
     assert (
-        first_from_snapshot.task_dir / "environment" / "context" / "initial" / "hydraulics" / "current-source.json"
+        first_from_snapshot.task_dir / "environment" / "context" / "initial" / "operations" / "current-source.json"
     ).read_bytes() == (
-        second.task_dir / "environment" / "context" / "initial" / "hydraulics" / "current-source.json"
+        second.task_dir / "environment" / "context" / "initial" / "operations" / "current-source.json"
     ).read_bytes()
 
 
