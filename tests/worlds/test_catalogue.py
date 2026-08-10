@@ -1,4 +1,4 @@
-# ABOUTME: Tests the task-neutral catalogue for persistent causal worlds.
+# ABOUTME: Tests the task-neutral catalogue for registered Interactive Worlds.
 # ABOUTME: Proves exact pump-world build and profile dispatch without lifecycle registrations.
 
 from __future__ import annotations
@@ -8,8 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from aec_bench.contracts.continual_world import ContinualWorldProfileRef, WorldBuildRef
-from aec_bench.worlds.catalogue import ContinualWorldCatalogue, default_continual_world_catalogue
+from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
+from aec_bench.worlds.catalogue import InteractiveWorldCatalogue, default_interactive_world_catalogue
+from aec_bench.worlds.monitoring.dam_seepage.definition import (
+    DamSeepageProfile,
+    dam_seepage_world_definition,
+)
+from aec_bench.worlds.monitoring.dam_seepage.world import DAM_SEEPAGE_TASK_WORLD_ID
 from aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition import (
     PumpStationContinualProfile,
     pump_station_continual_world_definition,
@@ -34,18 +39,18 @@ def test_catalogue_rejects_duplicate_world_id() -> None:
     definition = pump_station_continual_world_definition()
 
     with pytest.raises(ValueError, match="task world ids must be unique"):
-        ContinualWorldCatalogue(definitions=(definition, definition))
+        InteractiveWorldCatalogue(definitions=(definition, definition))
 
 
 def test_catalogue_resolves_exact_content_pinned_definition() -> None:
-    catalogue = default_continual_world_catalogue()
+    catalogue = default_interactive_world_catalogue()
     definition = catalogue.get(PUMP_STATION_TASK_WORLD_ID)
 
     assert catalogue.resolve(definition.ref) is definition
 
 
 def test_catalogue_rejects_stale_definition_reference() -> None:
-    catalogue = default_continual_world_catalogue()
+    catalogue = default_interactive_world_catalogue()
     definition = catalogue.get(PUMP_STATION_TASK_WORLD_ID)
     stale = WorldBuildRef(
         task_world_id=definition.ref.task_world_id,
@@ -60,7 +65,7 @@ def test_catalogue_rejects_stale_definition_reference() -> None:
 def test_definition_rejects_stale_profile_reference() -> None:
     definition = pump_station_continual_world_definition()
     current = definition.profile_ref(PUMP_STATION_REFERENCE_SYSTEM_ID)
-    stale = ContinualWorldProfileRef(
+    stale = InteractiveWorldProfileRef(
         task_world_id=current.task_world_id,
         profile_id=current.profile_id,
         profile_content_sha256="f" * 64,
@@ -73,7 +78,7 @@ def test_definition_rejects_stale_profile_reference() -> None:
 def test_definition_rejects_profile_from_another_world() -> None:
     definition = pump_station_continual_world_definition()
     current = definition.profile_ref(PUMP_STATION_REFERENCE_SYSTEM_ID)
-    foreign = ContinualWorldProfileRef(
+    foreign = InteractiveWorldProfileRef(
         task_world_id="another-world",
         profile_id=current.profile_id,
         profile_content_sha256=current.profile_content_sha256,
@@ -84,16 +89,16 @@ def test_definition_rejects_profile_from_another_world() -> None:
 
 
 def test_catalogue_rejects_unknown_world_and_profile() -> None:
-    catalogue = default_continual_world_catalogue()
+    catalogue = default_interactive_world_catalogue()
     definition = catalogue.get(PUMP_STATION_TASK_WORLD_ID)
 
-    with pytest.raises(KeyError, match="unknown continual task world"):
+    with pytest.raises(KeyError, match="unknown Interactive World"):
         catalogue.get("unknown-world")
-    with pytest.raises(KeyError, match="unknown continual-world profile"):
+    with pytest.raises(KeyError, match="unknown Interactive World profile"):
         definition.profile_ref("unknown-profile")
 
 
-def test_continual_core_does_not_import_concrete_world_packages() -> None:
+def test_interactive_world_core_does_not_import_concrete_world_packages() -> None:
     package_root = Path(__file__).parents[2] / "src" / "aec_bench" / "worlds" / "runtime"
     forbidden_fragments = ("stewardship", "lifecycles", "hydraulics", "cli", "harbor")
 
@@ -111,12 +116,25 @@ def test_continual_core_does_not_import_concrete_world_packages() -> None:
     }
 
 
-def test_default_catalogue_registers_only_the_pump_world() -> None:
-    catalogue = default_continual_world_catalogue()
+def test_default_catalogue_registers_current_worlds() -> None:
+    catalogue = default_interactive_world_catalogue()
 
     assert tuple(reference.task_world_id for reference in catalogue.list_definition_refs()) == (
+        DAM_SEEPAGE_TASK_WORLD_ID,
         PUMP_STATION_TASK_WORLD_ID,
     )
+
+
+def test_dam_seepage_definition_loads_content_pinned_profile() -> None:
+    definition = dam_seepage_world_definition()
+    reference = definition.profiles[0]
+
+    loaded = definition.load_profile(reference)
+
+    assert loaded.reference == reference
+    assert isinstance(loaded.value, DamSeepageProfile)
+    assert loaded.value.scenario.task_world_id == DAM_SEEPAGE_TASK_WORLD_ID
+    assert loaded.value.opening_state.scenario is loaded.value.scenario
 
 
 @pytest.mark.parametrize(

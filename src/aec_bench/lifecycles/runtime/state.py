@@ -10,7 +10,6 @@ from typing import Literal
 from pydantic import Field, NonNegativeInt, PositiveInt, field_validator, model_validator
 
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
-from aec_bench.evaluation.lifecycle import LifecycleSemanticMetrics
 
 
 class LifecycleRunStatus(StrEnum):
@@ -465,28 +464,3 @@ class EvidenceLifecycleRunState(StrictModel):
             if checkpoint.checkpoint_id == checkpoint_id:
                 return checkpoint
         raise KeyError(checkpoint_id)
-
-
-class LifecycleGateResult(StrictModel):
-    passed: bool
-    score: float = Field(ge=0.0, le=1.0)
-    failures: list[str] = Field(default_factory=list)
-
-
-class LifecycleVerificationResult(StrictModel):
-    template_id: str | None = None
-    lifecycle_id: NonEmptyStr
-    overall: Literal["pass", "fail", "incomplete"]
-    passed: bool
-    reward: float = Field(ge=0.0, le=1.0)
-    gates: dict[str, LifecycleGateResult] = Field(min_length=1)
-    semantic_metrics: LifecycleSemanticMetrics | None = None
-
-    @model_validator(mode="after")
-    def validate_outcome_consistency(self) -> LifecycleVerificationResult:
-        gates_pass = all(gate.passed for gate in self.gates.values())
-        if self.passed != (self.overall == "pass"):
-            raise ValueError("passed must agree with overall")
-        if self.passed != gates_pass:
-            raise ValueError("passed must agree with verifier gates")
-        return self

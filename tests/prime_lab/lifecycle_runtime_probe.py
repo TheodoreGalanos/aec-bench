@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any, cast
 
+from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver
 from aec_bench.lifecycles.runtime.lifecycle import read_evidence_lifecycle_state
 
 
@@ -71,7 +72,11 @@ def main() -> None:
 
         package_dir = Path(cast(str, state["package_dir"]))
         run_dir = Path(cast(str, state["run_dir"]))
-        lifecycle = read_evidence_lifecycle_state(package_dir, run_dir)
+        lifecycle = read_evidence_lifecycle_state(
+            package_dir,
+            run_dir,
+            operation_resolver=lifecycle_operation_resolver(package_dir, run_dir),
+        )
         result = {
             "responses": responses,
             "reward": reward,

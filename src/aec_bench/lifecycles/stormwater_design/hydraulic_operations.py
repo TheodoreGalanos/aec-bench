@@ -55,7 +55,7 @@ class HydraulicOperationResolver:
     def __init__(self, package_dir: Path, run_dir: Path) -> None:
         self.package_dir = Path(package_dir)
         self.run_dir = Path(run_dir)
-        self._manifest = _read_json(self.package_dir / "hidden" / "lifecycle-operation-resolutions.json")
+        self._manifest = read_json_object(self.package_dir / "hidden" / "lifecycle-operation-resolutions.json")
         self._resolutions = {item["operation_id"]: item for item in self._manifest["operations"]}
         self._operation_specs = _load_operation_specs(self.package_dir / "lifecycle.json")
         if set(self._resolutions) != set(self._operation_specs):
@@ -96,7 +96,7 @@ class HydraulicOperationResolver:
         )
         revision_id = str(self._manifest["variant_id"]) if activated is not None else "baseline"
         package = self._revision if activated is not None else self._baseline
-        return _source_context(package, revision_id=revision_id)
+        return hydraulic_source_context(package, revision_id=revision_id)
 
     def plan(
         self,
@@ -120,7 +120,7 @@ class HydraulicOperationResolver:
     ) -> LifecycleOperationPlan:
         """Plan the calibration lifecycle's one fixed source revision."""
         del actions
-        source_after = _source_context(self._revision, revision_id=str(self._manifest["variant_id"]))
+        source_after = hydraulic_source_context(self._revision, revision_id=str(self._manifest["variant_id"]))
         payload = {
             "schema_version": "1",
             "operation_id": operation.operation_id,
@@ -143,10 +143,10 @@ class HydraulicOperationResolver:
 
     def _write_source_transition_artifacts(self, plan: LifecycleOperationPlan, artifact_dir: Path) -> None:
         """Publish the selected source state and its bounded visible identity."""
-        _write_json(artifact_dir / "source-state.json", plan.source_after.source_state)
-        _write_json(
+        write_json_object(artifact_dir / "source-state.json", plan.source_after.source_state)
+        write_json_object(
             artifact_dir / "source-identity.json",
-            _source_identity_payload(plan.source_after),
+            hydraulic_source_identity_payload(plan.source_after),
         )
 
     def _plan_operation(
@@ -201,7 +201,7 @@ class HydraulicOperationResolver:
                 "kind": operation.kind,
                 "catchments": source_before.source_state["payload"]["catchments"],
                 "scenario": scenario,
-                "engine": _read_json(source_before.package_dir / "engine" / "identity.json"),
+                "engine": read_json_object(source_before.package_dir / "engine" / "identity.json"),
             }
             disposition = LifecycleOperationDisposition.COMPUTED
             visible_artifacts = ("hydrology.json",)
@@ -224,7 +224,7 @@ class HydraulicOperationResolver:
                 "outlet": source_before.source_state["payload"]["outlet"],
                 "network": source_before.source_state["payload"]["network"],
                 "criteria": source_before.source_state["payload"]["criteria"],
-                "engine": _read_json(source_before.package_dir / "engine" / "identity.json"),
+                "engine": read_json_object(source_before.package_dir / "engine" / "identity.json"),
             }
             disposition = LifecycleOperationDisposition.COMPUTED
             visible_artifacts = ("detention-outlet.json",)
@@ -285,7 +285,7 @@ class HydraulicOperationResolver:
                 }
                 for index in range(duration // time_step)
             ]
-            _write_json(
+            write_json_object(
                 artifact_dir / "hydrology.json",
                 {
                     "schema_version": "1",
@@ -308,10 +308,10 @@ class HydraulicOperationResolver:
                 artifact_dir / "hydraulic-run",
                 request,
             )
-            result = _read_json(hydraulic_run / "results.json")
+            result = read_json_object(hydraulic_run / "results.json")
             detention_criteria, _network_criteria = _partition_criteria(result["criteria"])
             run_manifest_sha256 = _sha256(hydraulic_run / "run-manifest.json")
-            _write_json(
+            write_json_object(
                 artifact_dir / "detention-outlet.json",
                 {
                     "schema_version": "1",
@@ -337,11 +337,11 @@ class HydraulicOperationResolver:
         if plan.operation_kind == "run_network_hgl":
             detention_action_id = str(plan.payload["detention_action_id"])
             detention_root = self.run_dir / "lifecycle_operations" / detention_action_id / "artifacts"
-            result = _read_json(detention_root / "hydraulic-run" / "results.json")
+            result = read_json_object(detention_root / "hydraulic-run" / "results.json")
             _detention_criteria, network_criteria = _partition_criteria(result["criteria"])
             run_manifest_sha256 = _sha256(detention_root / "hydraulic-run" / "run-manifest.json")
             report = detention_root / "hydraulic-run" / "report.md"
-            _write_json(
+            write_json_object(
                 artifact_dir / "network-hgl.json",
                 {
                     "schema_version": "1",
@@ -376,7 +376,7 @@ def _action_by_id(
 
 
 def _load_operation_specs(path: Path) -> dict[str, LifecycleOperationSpec]:
-    lifecycle = EvidenceLifecycleSpec.model_validate(_read_json(path))
+    lifecycle = EvidenceLifecycleSpec.model_validate(read_json_object(path))
     declared_operations = [
         operation
         for checkpoint in lifecycle.checkpoints
@@ -407,9 +407,9 @@ def _load_operation_specs(path: Path) -> dict[str, LifecycleOperationSpec]:
     return operation_specs
 
 
-def _source_context(package_dir: Path, *, revision_id: str) -> LifecycleOperationSourceContext:
+def hydraulic_source_context(package_dir: Path, *, revision_id: str) -> LifecycleOperationSourceContext:
     source_path = package_dir / "source" / "source-state.json"
-    source = _read_json(source_path)
+    source = read_json_object(source_path)
     physical_sha256 = _sha256(source_path)
     visible_sha256 = canonical_json_sha256(
         {
@@ -427,7 +427,7 @@ def _source_context(package_dir: Path, *, revision_id: str) -> LifecycleOperatio
     )
 
 
-def _source_identity_payload(source: LifecycleOperationSourceContext) -> dict[str, Any]:
+def hydraulic_source_identity_payload(source: LifecycleOperationSourceContext) -> dict[str, Any]:
     return {
         "schema_version": "1",
         "revision_id": source.revision_id,
@@ -472,12 +472,12 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _write_json(path: Path, payload: Any) -> None:
+def write_json_object(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _read_json(path: Path) -> dict[str, Any]:
+def read_json_object(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise EvidenceLifecycleError(f"expected JSON object: {path}")

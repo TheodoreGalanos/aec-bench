@@ -1,5 +1,5 @@
 # ABOUTME: CLI commands for current staged evidence-lifecycle tasks.
-# ABOUTME: Materializes, inspects, runs, and verifies the three task-owned definitions.
+# ABOUTME: Materializes, inspects, runs, and verifies the task-owned definitions.
 
 from __future__ import annotations
 

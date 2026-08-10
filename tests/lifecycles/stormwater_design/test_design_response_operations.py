@@ -37,7 +37,7 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _visible_source_sha256(run: Path) -> str:
-    return str(_read_json(run / "workspace" / "hydraulics" / "current-source.json")["visible_source_state_sha256"])
+    return str(_read_json(run / "workspace" / "operations" / "current-source.json")["visible_source_state_sha256"])
 
 
 def _execute(
@@ -150,7 +150,7 @@ def test_archived_selection_controls_source_and_selective_recomputation(
     context = prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     assert context["checkpoint_id"] == "intervention_analysis"
     problem_source_sha256 = str(
-        _read_json(run / "workspace" / "hydraulics" / "current-source.json")["physical_source_state_sha256"]
+        _read_json(run / "workspace" / "operations" / "current-source.json")["physical_source_state_sha256"]
     )
     session_id = "intervention.session-001"
     open_checkpoint_attempt(

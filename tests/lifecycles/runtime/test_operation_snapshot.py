@@ -62,7 +62,7 @@ def _open(package: Path, run_dir: Path, session_id: str) -> None:
 
 
 def _execute(package: Path, run_dir: Path, operation_id: str, session_id: str) -> dict[str, Any]:
-    source = _read_json(run_dir / "workspace" / "hydraulics" / "current-source.json")
+    source = _read_json(run_dir / "workspace" / "operations" / "current-source.json")
     state = _read_json(run_dir / "state.json")
     return execute_lifecycle_operation(
         package,
@@ -160,7 +160,7 @@ def test_snapshot_accepts_admin_no_op_catalogue_using_cumulative_history(tmp_pat
 @pytest.mark.parametrize("tamper", ["source_state", "revision_id"])
 def test_snapshot_self_binds_current_source_content_and_revision(tmp_path: Path, tamper: str) -> None:
     package, run_dir, _activation = _admin_revision_after_activation(tmp_path)
-    current_path = run_dir / "workspace/hydraulics/current-source.json"
+    current_path = run_dir / "workspace/operations/current-source.json"
     current = _read_json(current_path)
     if tamper == "source_state":
         current["source_state"]["payload"]["catchments"][0]["area_ha"] = 999.0
@@ -176,7 +176,7 @@ def test_snapshot_self_binds_current_source_content_and_revision(tmp_path: Path,
 def test_snapshot_can_require_resolver_derived_current_source(tmp_path: Path) -> None:
     package, run_dir, _activation = _admin_revision_after_activation(tmp_path)
     current = LifecycleOperationCurrentSource.model_validate(
-        _read_json(run_dir / "workspace/hydraulics/current-source.json")
+        _read_json(run_dir / "workspace/operations/current-source.json")
     )
     expected = current.model_copy(update={"revision_id": "different_revision"})
     state, spec = _state(package, run_dir)
@@ -240,7 +240,7 @@ def test_run_state_replays_declared_checkpoint_budget(tmp_path: Path) -> None:
 def test_snapshot_rejects_implausible_stale_source_rejection(tmp_path: Path) -> None:
     package, run_dir = _materialize(tmp_path, variant_id="tailwater_revision")
     _open(package, run_dir, "baseline.session-001")
-    current = _read_json(run_dir / "workspace/hydraulics/current-source.json")
+    current = _read_json(run_dir / "workspace/operations/current-source.json")
     rejected = execute_lifecycle_operation(
         package,
         run_dir,
@@ -279,7 +279,7 @@ def test_snapshot_rejects_implausible_stale_source_rejection(tmp_path: Path) -> 
 def test_snapshot_rejects_implausible_budget_rejection(tmp_path: Path) -> None:
     package, run_dir = _materialize(tmp_path, variant_id="tailwater_revision")
     _open(package, run_dir, "baseline.session-001")
-    current = _read_json(run_dir / "workspace/hydraulics/current-source.json")
+    current = _read_json(run_dir / "workspace/operations/current-source.json")
     rejected = execute_lifecycle_operation(
         package,
         run_dir,

@@ -28,9 +28,10 @@ def test_task_lifecycle_lists_only_current_task_definitions() -> None:
     assert envelope["command"] == "task lifecycle list"
     data = envelope["data"]
     assert isinstance(data, dict)
-    assert data["count"] == 3
+    assert data["count"] == 4
     assert {item["template_id"] for item in data["lifecycles"]} == {
         "drainage-model-evidence-lifecycle-review",
+        "facade-submittal-review-lifecycle",
         "hydraulic-design-response-lifecycle-review",
         "hydraulic-interaction-lifecycle-review",
     }

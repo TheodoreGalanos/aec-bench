@@ -82,7 +82,7 @@ def _prepare(tmp_path: Path) -> tuple[Path, Path, str]:
         session_id="baseline.session-001",
         execution_mode="persistent_context",
     )
-    source = _read_json(run / "workspace" / "hydraulics" / "current-source.json")
+    source = _read_json(run / "workspace" / "operations" / "current-source.json")
     return package, run, str(source["visible_source_state_sha256"])
 
 

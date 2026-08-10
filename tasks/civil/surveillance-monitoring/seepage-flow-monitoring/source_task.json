@@ -11,8 +11,9 @@
     "description": "Evaluate seepage flow measurements against historical trends and action thresholds",
     "complexity": "low",
     "standards": [
-      "USACE ER 1110-2-110",
-      "FEMA Dam Instrumentation Manual"
+      "USACE EM 1110-2-1908",
+      "FEMA P-1032, Evaluation and Monitoring of Seepage and Internal Erosion",
+      "Dams Safety NSW Guideline - Operations and maintenance plans"
     ],
     "inputs": [
       "Seepage flow time-series",

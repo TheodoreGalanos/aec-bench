@@ -115,7 +115,7 @@ def test_entrypoint_agent_calls_the_pump_harbor_owner_without_a_neutral_provider
 def test_entrypoint_agent_has_no_neutral_world_provider_or_compatibility_layer() -> None:
     source = ENTRYPOINT_AGENT_PATH.read_text(encoding="utf-8")
 
-    assert "default_continual_world_catalogue" not in source
+    assert "default_interactive_world_catalogue" not in source
     assert "resolve_harbor" not in source
     assert "ContinualWorldHarborPort" not in source
     assert "execution_port" not in source

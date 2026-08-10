@@ -17,7 +17,7 @@ import pytest
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
-from aec_bench.lifecycles.catalogue import materialize_lifecycle
+from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver, materialize_lifecycle
 from aec_bench.lifecycles.runtime.lifecycle import prepare_evidence_checkpoint
 from aec_bench.prime_lab.lifecycle_environment import load_local_lifecycle_environment
 from aec_bench.prime_lab.lifecycle_exporter import (
@@ -446,8 +446,12 @@ def test_generated_lifecycle_rollout_executes_hydraulic_operation_with_public_sc
         variant_id="tailwater_revision",
     )
     identity_run = tmp_path / "identity-run"
-    prepare_evidence_checkpoint(package, identity_run)
-    current_source = _read_json(identity_run / "workspace" / "hydraulics" / "current-source.json")
+    prepare_evidence_checkpoint(
+        package,
+        identity_run,
+        operation_resolver=lifecycle_operation_resolver(package, identity_run),
+    )
+    current_source = _read_json(identity_run / "workspace" / "operations" / "current-source.json")
     result = export_prime_lifecycle_environment(
         PrimeLifecycleExportConfig(
             name="stormwater-hydraulic-operation-lifecycle",
@@ -456,10 +460,10 @@ def test_generated_lifecycle_rollout_executes_hydraulic_operation_with_public_sc
         )
     )
     actions = [
-        {"name": "list_workspace", "arguments": {"path": "hydraulics"}},
+        {"name": "list_workspace", "arguments": {"path": "operations"}},
         {
             "name": "read_workspace_file",
-            "arguments": {"path": "hydraulics/current-source.json"},
+            "arguments": {"path": "operations/current-source.json"},
         },
         {
             "name": "execute_operation",
@@ -490,7 +494,7 @@ def test_generated_lifecycle_rollout_executes_hydraulic_operation_with_public_sc
     responses = cast(list[dict[str, Any]], probe["responses"])
     assert responses[0]["payload"] == {
         "status": "ok",
-        "path": "hydraulics",
+        "path": "operations",
         "entries": ["current-source.json"],
     }
     operation = responses[2]["payload"]
@@ -507,7 +511,7 @@ def test_generated_lifecycle_rollout_executes_hydraulic_operation_with_public_sc
         "visible_source_state_sha256",
         "reason",
     }
-    assert "workspace/hydraulics/current-source.json" in probe["run_files"]
+    assert "workspace/operations/current-source.json" in probe["run_files"]
     assert "workspace/inbox/baseline_analysis/operations/operation-000001/hydrology.json" in probe["run_files"]
 
 

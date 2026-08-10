@@ -1825,7 +1825,7 @@ def _upgrade_to_operation_snapshot(
         )
         if execute_operation_action and checkpoint_number == 1:
             current_source = json.loads(
-                (run_root / "workspace" / "hydraulics" / "current-source.json").read_text(encoding="utf-8")
+                (run_root / "workspace" / "operations" / "current-source.json").read_text(encoding="utf-8")
             )
             execute_lifecycle_operation(
                 package_root,
@@ -2205,7 +2205,7 @@ def _snapshot_artifact_kind(relative: Path) -> str:
         return "lifecycle_package"
     if path.startswith("run/workspace/checkpoints/") and path.endswith("/operations.json"):
         return "lifecycle_operation_catalog"
-    if path == "run/workspace/hydraulics/current-source.json":
+    if path == "run/workspace/operations/current-source.json":
         return "lifecycle_operation_current_source"
     return "lifecycle_run_artifact"
 
@@ -2304,7 +2304,7 @@ def _forge_operation_current_source(written: _WrittenRecord) -> None:
     assert record.lifecycle_provenance is not None
     manifest_path = ledger_root / record.lifecycle_provenance.invocation_manifest.path
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["outputs"]["artifacts"]["workspace/hydraulics/current-source.json"] = source_reference.sha256
+    manifest["outputs"]["artifacts"]["workspace/operations/current-source.json"] = source_reference.sha256
     manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
     _rehash_operation_manifest_metadata(written, record, manifest_path=manifest_path)
 

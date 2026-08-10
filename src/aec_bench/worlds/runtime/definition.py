@@ -9,35 +9,35 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from aec_bench.contracts.continual_world import ContinualWorldProfileRef, WorldBuildRef
+from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
 
 
 @dataclass(frozen=True)
-class LoadedContinualWorldProfile:
+class LoadedInteractiveWorldProfile:
     """One exact profile reference and its task-owned validated value."""
 
-    reference: ContinualWorldProfileRef
+    reference: InteractiveWorldProfileRef
     value: object
 
 
 @dataclass(frozen=True)
-class ContinualWorldDefinition:
+class InteractiveWorldDefinition:
     """One registered executable build and its current supported profiles."""
 
     build: WorldBuildRef
-    profiles: tuple[ContinualWorldProfileRef, ...]
-    profile_loader: Callable[[ContinualWorldProfileRef], LoadedContinualWorldProfile]
+    profiles: tuple[InteractiveWorldProfileRef, ...]
+    profile_loader: Callable[[InteractiveWorldProfileRef], LoadedInteractiveWorldProfile]
 
     def __post_init__(self) -> None:
         if not self.profiles:
-            raise ValueError("continual-world definition requires at least one profile")
+            raise ValueError("Interactive World definition requires at least one profile")
         if any(profile.task_world_id != self.build.task_world_id for profile in self.profiles):
-            raise ValueError("continual-world profiles must belong to the same task world")
+            raise ValueError("Interactive World profiles must belong to the same task world")
         profile_ids = tuple(profile.profile_id for profile in self.profiles)
         if len(profile_ids) != len(set(profile_ids)):
-            raise ValueError("continual-world profile identities must be distinct")
+            raise ValueError("Interactive World profile identities must be distinct")
         if profile_ids != tuple(sorted(profile_ids)):
-            raise ValueError("continual-world profiles must use stable order")
+            raise ValueError("Interactive World profiles must use stable order")
 
     @property
     def ref(self) -> WorldBuildRef:
@@ -45,19 +45,19 @@ class ContinualWorldDefinition:
 
         return self.build
 
-    def profile_ref(self, profile_id: str) -> ContinualWorldProfileRef:
+    def profile_ref(self, profile_id: str) -> InteractiveWorldProfileRef:
         """Resolve one supported profile by its exact current identity."""
 
         for profile in self.profiles:
             if profile.profile_id == profile_id:
                 return profile
-        raise KeyError(f"unknown continual-world profile: {profile_id}")
+        raise KeyError(f"unknown Interactive World profile: {profile_id}")
 
-    def load_profile(self, reference: ContinualWorldProfileRef) -> LoadedContinualWorldProfile:
+    def load_profile(self, reference: InteractiveWorldProfileRef) -> LoadedInteractiveWorldProfile:
         """Validate and load only a profile declared by this exact build."""
 
         if reference.task_world_id != self.build.task_world_id:
-            raise ValueError("continual-world profile belongs to another task world")
+            raise ValueError("Interactive World profile belongs to another task world")
         current = self.profile_ref(reference.profile_id)
         if reference != current:
             raise ValueError(f"content-pinned profile does not match: {reference.profile_id}")

@@ -7,10 +7,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import TYPE_CHECKING, NoReturn
 
-from aec_bench.contracts.continual_world import (
-    ContinualWorldProfileRef,
-    WorldBuildRef,
-)
+from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
 from aec_bench.worlds.stewardship.wastewater_pump_station.coupled_runtime import (
     PumpStationCoupledWorldError,
     apply_control,
@@ -300,7 +297,7 @@ class PumpStationWorldRun:
         return self._world_build(self._manifest)
 
     @property
-    def continual_profile_ref(self) -> ContinualWorldProfileRef:
+    def continual_profile_ref(self) -> InteractiveWorldProfileRef:
         return self._profile_ref(self._manifest)
 
     @property
@@ -439,7 +436,7 @@ class PumpStationWorldRun:
         reference_system_id: str,
     ) -> tuple[
         WorldBuildRef,
-        ContinualWorldProfileRef,
+        InteractiveWorldProfileRef,
         PumpStationContinualProfile,
     ]:
         from aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition import (
@@ -466,7 +463,7 @@ class PumpStationWorldRun:
     def _reference_system_manifest(
         *,
         world_build: WorldBuildRef,
-        profile_ref: ContinualWorldProfileRef,
+        profile_ref: InteractiveWorldProfileRef,
         profile: PumpStationContinualProfile,
         bundle: TemporalEvidenceBundle,
         run_id: str,
@@ -650,9 +647,9 @@ class PumpStationWorldRun:
             _fail("world-run-identity", f"definition reference differs: {error}")
 
     @staticmethod
-    def _profile_ref(manifest: PumpStationRegisteredWorldRunManifest) -> ContinualWorldProfileRef:
+    def _profile_ref(manifest: PumpStationRegisteredWorldRunManifest) -> InteractiveWorldProfileRef:
         try:
-            return ContinualWorldProfileRef(
+            return InteractiveWorldProfileRef(
                 task_world_id=manifest.task_world_id,
                 profile_id=manifest.continual_profile_id,
                 profile_content_sha256=manifest.continual_profile_content_sha256,

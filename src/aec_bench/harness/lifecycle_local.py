@@ -47,7 +47,10 @@ from aec_bench.lifecycles.runtime.lifecycle import (
     validate_evidence_checkpoint_submission,
     validate_lifecycle_verification,
 )
-from aec_bench.lifecycles.runtime.operation_protocol import LifecycleOperationResolver
+from aec_bench.lifecycles.runtime.operation_protocol import (
+    CURRENT_SOURCE_WORKSPACE_PATH,
+    LifecycleOperationResolver,
+)
 from aec_bench.trajectory.writer import TrajectoryWriter
 
 
@@ -288,8 +291,8 @@ class EvidenceLifecycleWorkspaceTool:
         root = parts[0]
         if root == "instruction.md":
             return len(parts) == 1
-        if root == "hydraulics":
-            return len(parts) == 1 or (len(parts) == 2 and parts[1] == "current-source.json")
+        if root == CURRENT_SOURCE_WORKSPACE_PATH.parts[0]:
+            return len(parts) == 1 or parts == CURRENT_SOURCE_WORKSPACE_PATH.parts
         if self.visibility_policy in {
             LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
             LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
@@ -1051,7 +1054,8 @@ def _persistent_session_instruction(
     if supports_lifecycle_operations:
         conditional_guidance += (
             "Before submitting, check whether checkpoints/<checkpoint_id>/operations.json exists. When it does, "
-            "read it with hydraulics/current-source.json. Use execute_operation with the current visible source "
+            f"read it with {CURRENT_SOURCE_WORKSPACE_PATH.as_posix()}. Use execute_operation with the current "
+            "visible source "
             "hash for declared calculations or source activation; the remaining budget is finite. Read the "
             "returned workspace artifacts before deciding.\n"
         )
@@ -1114,7 +1118,8 @@ def _workspace_policy(
         policy += (
             " Declared source-bound calculations and source activation run only through execute_operation. "
             "When the active checkpoint provides an operations catalogue, use it with the current hash in "
-            "hydraulics/current-source.json. Operation results are evidence, not verification or reward."
+            f"{CURRENT_SOURCE_WORKSPACE_PATH.as_posix()}. Operation results are evidence, not verification or "
+            "reward."
         )
     if persistent:
         policy += (

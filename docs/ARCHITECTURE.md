@@ -81,21 +81,18 @@ accepts an action that changes task-owned state. Host controls use a separate
 authority surface. World state, action meaning, clocks, projections, events,
 and verifier logic remain with the task world.
 
-The current registered interactive-world path provides:
+The registered interactive-world minimum provides:
 
 - exact executable world builds and content-pinned profiles;
-- exact catalogue resolution for new work and recovery;
-- one unversioned opaque-decision actor boundary;
-- a separate strict host-control boundary;
-- private task-owned callable composition;
-- shared chosen-point rollout orchestration through an explicitly supplied
-  branch capability;
-- task-neutral local durability primitives; and
-- harness-owned Harbor task integration and task-owned evaluation calls outside
-  neutral world registration.
+- exact catalogue resolution;
+- private task-owned state, observation, action, transition, and evaluation
+  functions;
+- shared accepted-transition and rejection values; and
+- the task-neutral episode shell for decisions, recording, limits, termination,
+  and truncation.
 
-The public composition root currently registers the wastewater pump-station
-stewardship world. The task-neutral world runtime does not import that concrete
+The composition root registers wastewater pump-station stewardship and dam
+seepage monitoring. The task-neutral world runtime imports neither concrete
 world. See the current
 [interactive-world runtime protocol](protocols/interactive-world-runtime.md).
 
@@ -105,11 +102,11 @@ Initial state, actor observation, transition functions, outputs, and evaluation
 remain task-owned. A finite lifecycle or calculation does not become a world
 only because it also has state or ordered work.
 
-The pump world has one authoritative `PumpStationStewardshipState`. Its direct
-`initial_state`, `observe`, and typed `transition` functions own pump behavior;
-the pump task package owns its direct evaluator. The episode shell owns step
-advancement and opaque decisions, while the pump persistence edge stores only
-the current typed command, receipt, state, commit, and selected pointer.
+The pump world adds installed actor and host-control boundaries, persistence,
+recovery, branching, rollouts, temporal evidence, and provider integrations.
+Those are optional pump capabilities, not part of the World minimum. The dam
+seepage task uses the same functional and episode boundaries without those
+capabilities.
 
 Interactive worlds and artifact tasks meet at the experiment and evidence
 layers. An interactive world does not need to pretend that each action is a

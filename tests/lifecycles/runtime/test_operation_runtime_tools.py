@@ -86,22 +86,22 @@ def test_control_tool_executes_one_source_bound_operation_without_host_identity_
     )
 
     root = json.loads(workspace.list_workspace("."))
-    hydraulics = json.loads(workspace.list_workspace("hydraulics"))
-    source = json.loads(workspace.read_workspace_file("hydraulics/current-source.json"))
+    operations = json.loads(workspace.list_workspace("operations"))
+    source = json.loads(workspace.read_workspace_file("operations/current-source.json"))
     source_payload = json.loads(source["content"])
 
-    assert "hydraulics" in root["entries"]
-    assert hydraulics == {
+    assert "operations" in root["entries"]
+    assert operations == {
         "status": "ok",
-        "path": "hydraulics",
+        "path": "operations",
         "entries": ["current-source.json"],
     }
     assert source["status"] == "ok"
     assert source_payload["revision_id"] == "baseline"
-    undisclosed = json.loads(workspace.read_workspace_file("hydraulics/not-model-visible.json"))
+    undisclosed = json.loads(workspace.read_workspace_file("operations/not-model-visible.json"))
     assert undisclosed == {
         "status": "rejected",
-        "error": "workspace path is not agent-readable: hydraulics/not-model-visible.json",
+        "error": "workspace path is not agent-readable: operations/not-model-visible.json",
     }
 
     blank = json.loads(
@@ -332,7 +332,7 @@ class _OperationExercisingRegistry:
                     )
                     checkpoint_id = str(lifecycle["active_checkpoint_id"])
                 if registry.operation_response is None:
-                    source_response = json.loads(tool_map["read_workspace_file"]("hydraulics/current-source.json"))
+                    source_response = json.loads(tool_map["read_workspace_file"]("operations/current-source.json"))
                     source = json.loads(source_response["content"])
                     registry.operation_response = json.loads(
                         tool_map["execute_operation"](

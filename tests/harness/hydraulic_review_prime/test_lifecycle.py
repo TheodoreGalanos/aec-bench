@@ -252,6 +252,8 @@ def test_three_fresh_prime_sessions_complete_the_real_lifecycle_with_aggregate_u
     assert [call["limits"].max_tokens for call in calls] == [1_000, 980, 960]
     assert [call["limits"].max_cost_usd for call in calls] == [Decimal("5"), Decimal("4.75"), Decimal("4.50")]
     assert [call["limits"].max_wall_seconds for call in calls] == [30, 29, 28]
+    assert all("read them with `hydraulic_review.read_file()`" in call["instruction"] for call in calls)
+    assert all("retry `import hydraulic_review` once" in call["instruction"] for call in calls)
     assert "verification" not in result.prime
     assert "reward" not in result.prime
     assert all(Path(item["prime_run"]).is_absolute() is False for item in result.prime["attempts"])

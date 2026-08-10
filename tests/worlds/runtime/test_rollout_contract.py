@@ -15,10 +15,9 @@ from aec_bench.contracts.continual_world import (
     ContinualRolloutGroupState,
     ContinualRolloutGroupStatus,
     ContinualRolloutLineage,
-    ContinualWorldProfileRef,
     ContinualWorldSnapshotRef,
-    WorldBuildRef,
 )
+from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
 
 
 def _snapshot() -> ContinualWorldSnapshotRef:
@@ -43,7 +42,7 @@ def _request(**updates: object) -> ContinualRolloutGroupRequest:
             entry_point="example.world:definition",
             artifact_sha256="a" * 64,
         ),
-        "profile_ref": ContinualWorldProfileRef(
+        "profile_ref": InteractiveWorldProfileRef(
             task_world_id="world.example",
             profile_id="profile.example",
             profile_content_sha256="b" * 64,

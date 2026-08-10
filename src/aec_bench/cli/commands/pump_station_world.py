@@ -22,7 +22,7 @@ from aec_bench.contracts.continual_world import (
 )
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.contracts.world_interface import WorldActorActionRequest, WorldControlRequest
-from aec_bench.worlds.catalogue import default_continual_world_catalogue
+from aec_bench.worlds.catalogue import default_interactive_world_catalogue
 from aec_bench.worlds.runtime.rollout_control import ContinualRolloutControl
 from aec_bench.worlds.stewardship.wastewater_pump_station.continual_rollout_adapter import (
     PumpStationContinualWorldBranchPort,
@@ -147,7 +147,7 @@ def control_interface_command(
     )
     if request_authority_id != host_authority_id:
         raise ValueError("control authority differs from the host authority")
-    catalogue = default_continual_world_catalogue()
+    catalogue = default_interactive_world_catalogue()
     repository = PumpStationWorldRunRepository(run_dir)
     run = PumpStationWorldRun.resume_reference_system(repository=repository, snapshot=repository.current_snapshot())
     definition = catalogue.resolve(run.world_build)

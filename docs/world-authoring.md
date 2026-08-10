@@ -70,7 +70,7 @@ with the task. Validate untrusted JSON or files at their real boundary. Do not
 put episode IDs, opaque decisions, step indexes, repository paths, provider
 metadata, or content digests in domain state.
 
-The pump station is the current registered example:
+The current registered examples are:
 
 - [`stewardship_models.py`](../src/aec_bench/worlds/stewardship/wastewater_pump_station/stewardship_models.py)
   owns its authoritative task state;
@@ -78,8 +78,11 @@ The pump station is the current registered example:
   owns task transitions and actor observations; and
 - [`evaluation.py`](../src/aec_bench/worlds/stewardship/wastewater_pump_station/evaluation.py)
   owns task evaluation.
+- [`dam_seepage/world.py`](../src/aec_bench/worlds/monitoring/dam_seepage/world.py)
+  owns a separate monitoring state, evidence actions, actor observation, and
+  evaluation without pump persistence or controls.
 
-Its functional core has no session, recorder, rollout, or provider type.
+Both functional cores have no session, recorder, rollout, or provider type.
 
 Use ordinary dataclasses, enums, tuples, or validated boundary values. Live
 in-process values do not need schema versions or content hashes.
@@ -97,9 +100,9 @@ evidence must never enter the actor view.
 ### 3. Register once
 
 A registered world supplies a
-[`ContinualWorldDefinition`](../src/aec_bench/worlds/runtime/definition.py)
+[`InteractiveWorldDefinition`](../src/aec_bench/worlds/runtime/definition.py)
 with build identity, profile references, and a profile loader. Add it once to
-[`default_continual_world_catalogue`](../src/aec_bench/worlds/catalogue.py).
+[`default_interactive_world_catalogue`](../src/aec_bench/worlds/catalogue.py).
 
 A minimum contribution normally changes only the task-owned implementation,
 its tests, and the catalogue composition root. It does not require episode,
@@ -139,6 +142,7 @@ the [interactive-world runtime protocol](protocols/interactive-world-runtime.md)
 ## Local proof
 
 ```bash
+uv run pytest tests/worlds/monitoring/dam_seepage/test_world.py -q
 uv run pytest tests/worlds/test_pump_station_world_conformance.py -q
 uv run pytest tests/worlds/runtime/test_episode.py -q
 uv run ruff check <changed-python-paths>

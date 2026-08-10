@@ -25,6 +25,7 @@ from aec_bench.lifecycles.runtime.lifecycle import (
     prepare_evidence_checkpoint,
     read_evidence_lifecycle_state,
 )
+from aec_bench.lifecycles.runtime.operation_protocol import CURRENT_SOURCE_WORKSPACE_PATH
 from aec_bench.lifecycles.runtime.state import CheckpointAttemptStatus
 from aec_bench.prime_lab.lifecycle_exporter import (
     PrimeLifecycleExportManifest,
@@ -209,7 +210,8 @@ def _build_environment_type(
             if supports_lifecycle_operations:
                 system_prompt += (
                     " When the active checkpoint provides operations.json, inspect it with "
-                    "hydraulics/current-source.json. Use execute_operation for declared calculations or source "
+                    f"{CURRENT_SOURCE_WORKSPACE_PATH.as_posix()}. Use execute_operation for declared calculations "
+                    "or source "
                     "activation, then inspect the returned workspace evidence. Operation output is not "
                     "verification or reward."
                 )

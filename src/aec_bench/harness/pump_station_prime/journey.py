@@ -29,7 +29,7 @@ from aec_bench.prime_agent.refinement import (
     PrimeRefinementMode,
     validate_refinement_request,
 )
-from aec_bench.prime_agent.session_evidence import PrimeAcpUsage
+from aec_bench.prime_agent.session_evidence import PrimeAcpUsage, acp_usage_payload, aggregate_acp_usage
 from aec_bench.worlds.stewardship.wastewater_pump_station import host_continuation as pump_host
 from aec_bench.worlds.stewardship.wastewater_pump_station.evaluation import (
     evaluate_pump_station_reference_run,
@@ -472,7 +472,7 @@ def _result(
         run,
         evaluation_scope="complete_journey" if world_state == "completed" else "bounded_continuation",
     )
-    usage = journey_evidence.aggregate_usage(checkpoint.segments)
+    usage = aggregate_acp_usage(segment.usage for segment in checkpoint.segments)
     return PumpStationPrimeJourneyRun(
         segments=checkpoint.segments,
         host_controls=checkpoint.host_controls,
@@ -507,7 +507,7 @@ def _write_run_evidence(
     evidence_directory: Path,
 ) -> None:
     run = _resume_verified_run(world_run_directory)
-    usage = journey_evidence.aggregate_usage(checkpoint.segments)
+    usage = aggregate_acp_usage(segment.usage for segment in checkpoint.segments)
     final_snapshot = _shared_snapshot(run.snapshot())
     evaluation_scope: Literal["complete_journey", "bounded_continuation"] = (
         "complete_journey" if checkpoint.world_state == "completed" else "bounded_continuation"
@@ -535,7 +535,7 @@ def _write_run_evidence(
         "initial_snapshot": checkpoint.segments[0].start_snapshot.model_dump(mode="json"),
         "segments": [segment.model_dump(mode="json") for segment in checkpoint.segments],
         "host_controls": [control.model_dump(mode="json") for control in checkpoint.host_controls],
-        "totals": journey_evidence.usage_payload(usage),
+        "totals": acp_usage_payload(usage),
         "elapsed_seconds": journey_evidence.elapsed_seconds(checkpoint),
         "world_action_attempts": sum(segment.world_action_attempts for segment in checkpoint.segments),
         "world_state": checkpoint.world_state,
@@ -557,7 +557,7 @@ def _journey_limit_reason(
     checkpoint: journey_evidence.PumpStationPrimeJourneyCheckpoint,
     limits: PumpStationPrimeJourneyLimits,
 ) -> str | None:
-    usage = journey_evidence.aggregate_usage(checkpoint.segments)
+    usage = aggregate_acp_usage(segment.usage for segment in checkpoint.segments)
     if len(checkpoint.segments) >= limits.max_sessions:
         return "max_sessions"
     if sum(segment.world_action_attempts for segment in checkpoint.segments) >= limits.max_world_actions:
@@ -577,7 +577,7 @@ def _remaining_session_limits(
     checkpoint: journey_evidence.PumpStationPrimeJourneyCheckpoint,
     limits: PumpStationPrimeJourneyLimits,
 ) -> PumpStationPrimeSessionLimits:
-    usage = journey_evidence.aggregate_usage(checkpoint.segments)
+    usage = aggregate_acp_usage(segment.usage for segment in checkpoint.segments)
     return PumpStationPrimeSessionLimits(
         max_world_actions=limits.max_world_actions
         - sum(segment.world_action_attempts for segment in checkpoint.segments),

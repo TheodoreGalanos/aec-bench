@@ -1,4 +1,4 @@
-# ABOUTME: Owns one live continual-world state, decision sequence, limits, and recorder calls.
+# ABOUTME: Owns one live Interactive World state, decision sequence, limits, and recorder calls.
 # ABOUTME: Keeps task transition meaning, persistence layout, evaluation, and provider behavior outside the shell.
 
 from __future__ import annotations
@@ -8,7 +8,6 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from decimal import Decimal
 from enum import StrEnum
 from typing import Protocol
 
@@ -29,28 +28,12 @@ class EpisodeFinishedError(RuntimeError):
 class EpisodeLimits:
     max_steps: int | None = None
     max_wall_seconds: float | None = None
-    max_tokens: int | None = None
-    max_cost: Decimal | None = None
 
     def __post_init__(self) -> None:
         if self.max_steps is not None and self.max_steps < 1:
             raise ValueError("episode max_steps must be positive")
         if self.max_wall_seconds is not None and self.max_wall_seconds <= 0:
             raise ValueError("episode max_wall_seconds must be positive")
-        if self.max_tokens is not None and self.max_tokens < 1:
-            raise ValueError("episode max_tokens must be positive")
-        if self.max_cost is not None and self.max_cost <= 0:
-            raise ValueError("episode max_cost must be positive")
-
-
-@dataclass(frozen=True, slots=True)
-class EpisodeUsage:
-    tokens: int = 0
-    cost: Decimal = Decimal(0)
-
-    def __post_init__(self) -> None:
-        if self.tokens < 0 or self.cost < 0:
-            raise ValueError("episode usage must be non-negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,7 +165,6 @@ class Episode[StateT, ObservationT, ActionT, OutputT, ActionsT]:
         limits: EpisodeLimits | None = None,
         step_index: int = 0,
         decision_id: str | None = None,
-        usage: EpisodeUsage | None = None,
         decision_id_factory: Callable[[StateT, int], str] | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -197,7 +179,6 @@ class Episode[StateT, ObservationT, ActionT, OutputT, ActionsT]:
         self._recorder = recorder
         self._limits = limits or EpisodeLimits()
         self._step_index = step_index
-        self._usage = usage or EpisodeUsage()
         self._decision_id_factory = decision_id_factory or (lambda _state, _step: secrets.token_urlsafe(24))
         self._decision_id = decision_id or self._next_decision_id(state, step_index)
         self._decision: Decision[ObservationT, ActionsT] | None = None
@@ -219,10 +200,6 @@ class Episode[StateT, ObservationT, ActionT, OutputT, ActionsT]:
     @property
     def status(self) -> EpisodeStatus:
         return self._status
-
-    @property
-    def usage(self) -> EpisodeUsage:
-        return self._usage
 
     def current_decision(self) -> Decision[ObservationT, ActionsT]:
         with self._lock:
@@ -294,34 +271,6 @@ class Episode[StateT, ObservationT, ActionT, OutputT, ActionsT]:
                     reason=None,
                 )
             return self._accept(decision, submission.action, transition)
-
-    def add_usage(
-        self,
-        *,
-        tokens: int = 0,
-        cost: Decimal = Decimal(0),
-    ) -> StepReply[ObservationT, ActionsT, OutputT] | None:
-        with self._lock:
-            self._usage = EpisodeUsage(
-                tokens=self._usage.tokens + tokens,
-                cost=self._usage.cost + cost,
-            )
-            limited = self._limit_reason()
-            if limited is None:
-                return None
-            self._finish(EpisodeStatus.TRUNCATED, limited)
-            return self._reply(reason=limited)
-
-    def cancel(self, reason: str) -> StepReply[ObservationT, ActionsT, OutputT]:
-        with self._lock:
-            if self._status is EpisodeStatus.ACTIVE:
-                self._finish(EpisodeStatus.TRUNCATED, self._require_reason(reason))
-            return self._reply(reason=self._reason)
-
-    def close(self) -> None:
-        with self._lock:
-            if self._status is EpisodeStatus.ACTIVE:
-                self._finish(EpisodeStatus.TRUNCATED, "episode closed by host")
 
     def _accept(
         self,
@@ -413,10 +362,6 @@ class Episode[StateT, ObservationT, ActionT, OutputT, ActionsT]:
             and self._clock() - self._opened_at >= self._limits.max_wall_seconds
         ):
             return "wall-clock limit reached"
-        if self._limits.max_tokens is not None and self._usage.tokens >= self._limits.max_tokens:
-            return "token limit reached"
-        if self._limits.max_cost is not None and self._usage.cost >= self._limits.max_cost:
-            return "cost limit reached"
         return None
 
     def _reply(self, *, reason: str | None) -> StepReply[ObservationT, ActionsT, OutputT]:
@@ -434,11 +379,4 @@ class Episode[StateT, ObservationT, ActionT, OutputT, ActionsT]:
         value = self._decision_id_factory(state, step_index)
         if not value.strip():
             raise ValueError("decision ID factory returned an empty value")
-        return value
-
-    @staticmethod
-    def _require_reason(reason: str) -> str:
-        value = reason.strip()
-        if not value:
-            raise ValueError("episode cancellation reason must not be empty")
         return value

@@ -42,6 +42,7 @@ def test_drainage_model_lifecycle_definition_is_owned_by_the_task() -> None:
 def test_every_lifecycle_template_has_one_executable_registration() -> None:
     assert lifecycle_template_ids() == {
         "drainage-model-evidence-lifecycle-review",
+        "facade-submittal-review-lifecycle",
         "hydraulic-design-response-lifecycle-review",
         "hydraulic-interaction-lifecycle-review",
     }

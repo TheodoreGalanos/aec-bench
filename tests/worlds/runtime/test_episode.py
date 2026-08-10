@@ -2,7 +2,6 @@
 # ABOUTME: Proves rejected actions and recorder failures cannot advance live episode state.
 
 from collections.abc import Iterator
-from decimal import Decimal
 
 import pytest
 
@@ -108,28 +107,6 @@ def test_world_termination_and_host_truncation_are_distinct() -> None:
         truncated.current_decision()
 
 
-@pytest.mark.parametrize(
-    ("limits", "usage", "reason"),
-    (
-        (EpisodeLimits(max_tokens=10), {"tokens": 10}, "token limit reached"),
-        (EpisodeLimits(max_cost=Decimal("1.5")), {"cost": Decimal("1.5")}, "cost limit reached"),
-    ),
-)
-def test_reported_usage_truncates_at_the_configured_limit(
-    limits: EpisodeLimits,
-    usage: dict[str, object],
-    reason: str,
-) -> None:
-    episode, _ = _episode(limits=limits)
-    episode.current_decision()
-
-    reply = episode.add_usage(**usage)  # type: ignore[arg-type]
-
-    assert reply is not None
-    assert reply.truncated
-    assert reply.reason == reason
-
-
 def test_wall_clock_limit_is_checked_before_exposing_a_decision() -> None:
     episode, recorder = _episode(
         limits=EpisodeLimits(max_wall_seconds=1),
@@ -179,17 +156,3 @@ def test_finished_recorder_failure_prevents_terminal_state_advance() -> None:
     assert episode.step_index == 0
     assert episode.status is EpisodeStatus.ACTIVE
     assert episode.current_decision() == decision
-
-
-def test_cancel_and_close_are_idempotent_truncations() -> None:
-    episode, recorder = _episode()
-    episode.current_decision()
-
-    first = episode.cancel("operator cancelled")
-    second = episode.cancel("ignored replacement")
-    episode.close()
-
-    assert first.truncated and second.truncated
-    assert first.reason == second.reason == "operator cancelled"
-    assert recorder.finished is not None
-    assert recorder.finished.reason == "operator cancelled"

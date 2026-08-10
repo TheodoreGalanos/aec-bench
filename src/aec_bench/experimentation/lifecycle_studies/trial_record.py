@@ -1429,7 +1429,7 @@ def _artifact_kind(relative: Path) -> str:
         return "lifecycle_operation_artifact"
     if path.endswith("/operations.json"):
         return "lifecycle_operation_catalog"
-    if path == "run/workspace/hydraulics/current-source.json":
+    if path == "run/workspace/operations/current-source.json":
         return "lifecycle_operation_current_source"
     if path.startswith("run/workspace/inbox/") and "/operations/" in path:
         return "lifecycle_operation_projection"

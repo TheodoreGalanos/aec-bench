@@ -33,7 +33,7 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _visible_sha(run: Path) -> str:
-    return str(_read_json(run / "workspace" / "hydraulics" / "current-source.json")["visible_source_state_sha256"])
+    return str(_read_json(run / "workspace" / "operations" / "current-source.json")["visible_source_state_sha256"])
 
 
 def _execute(

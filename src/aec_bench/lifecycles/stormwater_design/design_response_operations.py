@@ -21,10 +21,10 @@ from aec_bench.lifecycles.runtime.state import (
 )
 from aec_bench.lifecycles.stormwater_design.hydraulic_operations import (
     HydraulicOperationResolver,
-    _read_json,
-    _source_context,
-    _source_identity_payload,
-    _write_json,
+    hydraulic_source_context,
+    hydraulic_source_identity_payload,
+    read_json_object,
+    write_json_object,
 )
 from aec_bench.lifecycles.stormwater_design.hydraulics.identity import canonical_json_sha256
 
@@ -68,9 +68,9 @@ class HydraulicDesignResponseResolver(HydraulicOperationResolver):
             None,
         )
         if activated is None:
-            return _source_context(self._problem, revision_id="problem")
+            return hydraulic_source_context(self._problem, revision_id="problem")
         intervention_id, _selection_sha256 = self._validated_selection()
-        return _source_context(self._interventions[intervention_id], revision_id=intervention_id)
+        return hydraulic_source_context(self._interventions[intervention_id], revision_id=intervention_id)
 
     def _plan_source_transition(
         self,
@@ -84,7 +84,7 @@ class HydraulicDesignResponseResolver(HydraulicOperationResolver):
         if resolution.get("selection_checkpoint_id") != _SELECTION_CHECKPOINT_ID:
             raise EvidenceLifecycleError("intervention operation does not bind the selection checkpoint")
         intervention_id, selection_sha256 = self._validated_selection()
-        source_after = _source_context(self._interventions[intervention_id], revision_id=intervention_id)
+        source_after = hydraulic_source_context(self._interventions[intervention_id], revision_id=intervention_id)
         payload = {
             "schema_version": "1",
             "operation_id": operation.operation_id,
@@ -108,8 +108,8 @@ class HydraulicDesignResponseResolver(HydraulicOperationResolver):
         )
 
     def _write_source_transition_artifacts(self, plan: LifecycleOperationPlan, artifact_dir: Path) -> None:
-        _write_json(artifact_dir / "source-state.json", plan.source_after.source_state)
-        identity = _source_identity_payload(plan.source_after)
+        write_json_object(artifact_dir / "source-state.json", plan.source_after.source_state)
+        identity = hydraulic_source_identity_payload(plan.source_after)
         identity.update(
             {
                 "selected_intervention_id": plan.payload["selected_intervention_id"],
@@ -117,20 +117,20 @@ class HydraulicDesignResponseResolver(HydraulicOperationResolver):
                 "selection_submission_sha256": plan.payload["selection_submission_sha256"],
             }
         )
-        _write_json(artifact_dir / "source-identity.json", identity)
+        write_json_object(artifact_dir / "source-identity.json", identity)
 
     def _validated_selection(self) -> tuple[str, str]:
         selection_path = self.run_dir / "episodes" / _SELECTION_CHECKPOINT_ID / "submission.json"
         if not selection_path.is_file():
             raise EvidenceLifecycleError("archived intervention selection is unavailable")
-        selection = _read_json(selection_path)
+        selection = read_json_object(selection_path)
         intervention_id = selection.get("selected_intervention_id")
         if not isinstance(intervention_id, str) or intervention_id not in self._interventions:
             raise EvidenceLifecycleError("archived intervention selection is not declared")
         selection_basis = selection.get("selection_basis")
         if not isinstance(selection_basis, str) or not selection_basis.strip():
             raise EvidenceLifecycleError("archived intervention selection basis is blank")
-        problem = _source_context(self._problem, revision_id="problem")
+        problem = hydraulic_source_context(self._problem, revision_id="problem")
         if selection.get("visible_source_state_sha256") != problem.visible_source_state_sha256:
             raise EvidenceLifecycleError("archived intervention selection does not bind the problem source")
         return intervention_id, hashlib.sha256(selection_path.read_bytes()).hexdigest()

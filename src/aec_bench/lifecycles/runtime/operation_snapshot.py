@@ -15,6 +15,7 @@ from aec_bench.lifecycles.runtime.episode import (
     LifecycleOperationCurrentSource,
 )
 from aec_bench.lifecycles.runtime.operation_protocol import (
+    CURRENT_SOURCE_RUN_PATH,
     lifecycle_operation_source_identity,
     lifecycle_operation_source_state_bytes,
     validate_lifecycle_operation_run_state,
@@ -37,7 +38,7 @@ def expected_lifecycle_operation_run_artifact_paths(
     supports_operations = any(checkpoint.conditional_operations is not None for checkpoint in spec.checkpoints)
     expected: set[str] = set()
     if supports_operations and any(checkpoint.status.value != "pending" for checkpoint in state.checkpoint_runs):
-        expected.add("workspace/hydraulics/current-source.json")
+        expected.add(CURRENT_SOURCE_RUN_PATH.as_posix())
     checkpoint_specs = {checkpoint.checkpoint_id: checkpoint for checkpoint in spec.checkpoints}
     for checkpoint in state.checkpoint_runs:
         checkpoint_spec = checkpoint_specs[checkpoint.checkpoint_id]
@@ -68,7 +69,7 @@ def is_lifecycle_operation_run_artifact_path(relative: str) -> bool:
         path.parts[:1] == ("lifecycle_operations",)
         or (path.parts[:2] == ("workspace", "inbox") and "operations" in path.parts[2:])
         or (path.parts[:2] == ("workspace", "checkpoints") and path.name == "operations.json")
-        or path.parts == ("workspace", "hydraulics", "current-source.json")
+        or path.parts == CURRENT_SOURCE_RUN_PATH.parts
     )
 
 
@@ -124,7 +125,7 @@ def validate_lifecycle_operation_snapshot_payloads(
     if not supports_operations:
         return
 
-    current_source_path = "workspace/hydraulics/current-source.json"
+    current_source_path = CURRENT_SOURCE_RUN_PATH.as_posix()
     current_source: LifecycleOperationCurrentSource | None = None
     if current_source_path in expected:
         current_source = LifecycleOperationCurrentSource.model_validate(

@@ -18,10 +18,10 @@ from aec_bench.contracts.evidence_lifecycle import (
     EvidenceLifecycleSpec,
     LifecycleTaskMetadata,
 )
+from aec_bench.contracts.lifecycle_evaluation import LifecycleSemanticMetrics, LifecycleVerificationResult
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import ArtifactReference, Completeness, TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
-from aec_bench.evaluation.lifecycle import LifecycleSemanticMetrics
 from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
     LifecycleAblationManifest,
     LifecycleAblationPlan,
@@ -65,7 +65,6 @@ from aec_bench.lifecycles.runtime.request_protocol import (
 )
 from aec_bench.lifecycles.runtime.state import (
     EvidenceLifecycleRunState,
-    LifecycleVerificationResult,
 )
 
 

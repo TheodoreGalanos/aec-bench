@@ -24,9 +24,7 @@ from aec_bench.lifecycles.stormwater_design.design_response_smoke import (
 from aec_bench.lifecycles.stormwater_design.design_response_verifier import (
     _invalid_contract_result,
 )
-from aec_bench.lifecycles.stormwater_design.hydraulic_review_smoke import (
-    _run_references,
-)
+from aec_bench.lifecycles.stormwater_design.hydraulic_smoke import run_references
 from tests.support.lifecycle_episode import deterministic_episode_environment
 from tests.support.lifecycle_operations import resolve_operation_runtime
 
@@ -222,7 +220,7 @@ def test_omitting_the_failing_major_chain_cannot_bypass_the_reward_cap(tmp_path:
             return {"status": "completed"}
 
         intervention = _read_json(run / "episodes" / "intervention_analysis" / "submission.json")
-        run_reference, report_reference = _run_references(
+        run_reference, report_reference = run_references(
             package,
             run,
             full_selected,

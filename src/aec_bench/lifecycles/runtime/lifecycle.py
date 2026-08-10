@@ -17,6 +17,7 @@ from typing import Any, Literal
 from pydantic import ValidationError
 
 from aec_bench.contracts.evidence_lifecycle import EvidenceCheckpointSpec, EvidenceLifecycleSpec
+from aec_bench.contracts.lifecycle_evaluation import LifecycleVerificationResult
 from aec_bench.ledger.durability import fsync_directory, fsync_tree, mkdir_durable
 from aec_bench.ledger.immutable_byte_store import ImmutableArtifactStoreError, ImmutableByteStore
 from aec_bench.ledger.local_lock import exclusive_local_file_lock
@@ -32,6 +33,7 @@ from aec_bench.lifecycles.runtime.episode import (
     validate_episode_result_identity,
 )
 from aec_bench.lifecycles.runtime.operation_protocol import (
+    CURRENT_SOURCE_WORKSPACE_PATH,
     LifecycleOperationResolver,
     validate_lifecycle_operation_run_state,
 )
@@ -98,7 +100,6 @@ from aec_bench.lifecycles.runtime.state import (
     LifecycleBranchRecord,
     LifecycleRunStatus,
     LifecycleTransitionKind,
-    LifecycleVerificationResult,
 )
 
 LifecycleVerifier = Callable[[Path, Path], dict[str, Any] | LifecycleVerificationResult]
@@ -2074,7 +2075,7 @@ def _checkpoint_context(
     if catalog is not None:
         context["evidence_request_catalog"] = catalog
     operation_catalog_path = workspace / "checkpoints" / checkpoint.checkpoint_id / "operations.json"
-    current_source_path = workspace / "hydraulics" / "current-source.json"
+    current_source_path = workspace / CURRENT_SOURCE_WORKSPACE_PATH
     if current_source_path.is_file():
         context["current_source"] = _read_json(current_source_path)
     if operation_catalog_path.is_file():

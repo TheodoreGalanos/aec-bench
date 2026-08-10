@@ -23,10 +23,10 @@ from urllib.parse import unquote, urlparse
 
 from pydantic import Field, NonNegativeFloat, NonNegativeInt, PositiveInt
 
+from aec_bench.contracts.lifecycle_evaluation import LifecycleSemanticMetrics
 from aec_bench.contracts.pricing import estimate_cost_usd
 from aec_bench.contracts.trajectory import read_trajectory
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
-from aec_bench.evaluation.lifecycle import LifecycleSemanticMetrics
 from aec_bench.ledger.durability import (
     fsync_directory as _fsync_directory,
 )
@@ -879,7 +879,7 @@ def _run_artifact_hashes(run_dir: Path) -> dict[str, str]:
             relative.parts[:1] == ("lifecycle_operations",)
             or (relative.parts[:2] == ("workspace", "inbox") and "operations" in relative.parts[2:])
             or (relative.parts[:2] == ("workspace", "checkpoints") and path.name == "operations.json")
-            or relative.parts == ("workspace", "hydraulics", "current-source.json")
+            or relative.parts == ("workspace", "operations", "current-source.json")
         )
         if (
             path.is_file()

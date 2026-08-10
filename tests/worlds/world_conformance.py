@@ -37,6 +37,9 @@ def assert_world_conformance[StateT, ObservationT, ActionT, OutputT, EvaluationT
     rejection = transition(initial, invalid_action)
     assert isinstance(rejection, ActionRejected)
     assert initial == state_before_rejection
+    observation_after_rejection = observe(initial)
+    assert observation_after_rejection == observation
+    assert_observation_safe(observation_after_rejection)
 
     first_state = initial
     repeated_state = repeated_initial
