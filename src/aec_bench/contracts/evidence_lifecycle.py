@@ -222,11 +222,13 @@ class EvidenceCheckpointSpec(StrictModel):
 
 
 class EvidenceLifecycleSpec(StrictModel):
+    """Current ordered staged-evidence subtype, not the finite-lifecycle minimum."""
+
     lifecycle_id: NonEmptyStr
     checkpoints: list[EvidenceCheckpointSpec] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def validate_checkpoint_graph(self) -> EvidenceLifecycleSpec:
+    def validate_ordered_checkpoints(self) -> EvidenceLifecycleSpec:
         checkpoint_ids = [checkpoint.checkpoint_id for checkpoint in self.checkpoints]
         if len(checkpoint_ids) != len(set(checkpoint_ids)):
             raise ValueError("checkpoint ids must be unique")

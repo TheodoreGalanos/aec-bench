@@ -215,7 +215,7 @@ def _verify_export_authority(
         reference.descriptor_id != reference_payload.get("descriptor_id")
         or reference.descriptor_content_id != reference_payload.get("descriptor_content_id")
         or directory_sha256(reference_system_dir) != reference_payload.get("directory_sha256")
-        or reference.descriptor_content_id != profile_ref.profile_content_sha256
+        or reference.profile_content_id != profile_ref.profile_content_sha256
     ):
         raise ValueError("pump-station Harbor reference-system evidence differs")
     verifier_payload = _mapping(manifest.get("verifier"), "verifier")

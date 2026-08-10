@@ -679,3 +679,62 @@ use the same finite progression without a task-specific runtime branch.
 
 This six-stage plan is complete. Any later installed actor boundary for a
 non-pump World or saved pump-record cutover is a separate design change.
+
+## Closeout evidence
+
+The [import-graph evidence](../../tests/fixtures/architecture/import-graph-0126f007.json)
+is pinned to merge commit `0126f007a33597d9519f46ce12078de84fabcbe1`.
+It contains the full top-level package graph, module cycles for any top-level
+cycle, composition-root back-imports, optional dependency leakage, source-tree
+identity, and the isolated base-wheel import smoke. It found no top-level
+strongly connected component, back-import, or optional dependency leak. The
+base-wheel smoke passed.
+
+The
+[parent-versus-head regression report](../../tests/fixtures/architecture/regression-delta-d3fc70e5-7f2084e6.json)
+compares parent `d3fc70e57727bad4266eaee57f0143bef199ab85` with head
+`7f2084e6bbecee993929c498f17804348b866767`. Both commits ran with:
+
+```text
+PYTHONPATH=<worktree>/src python -m pytest tests -q --tb=no \
+  --import-mode=importlib --junitxml=<result.xml>
+```
+
+The explicit import mode was needed because the historical commits contain
+test files with the same base name in different folders. The current pytest
+configuration now selects this mode by default.
+
+The parent result was 7,460 passed, 92 failed, and 21 skipped from 7,573
+tests. The head result was 7,480 passed, 92 failed, and 21 skipped from 7,593
+tests. All 92 failures were retained from the parent. The head added no new
+failure and removed no existing failure.
+
+The retained failures remain active tests; they are not hidden or skipped by
+this closeout. Their main owners and removal conditions are:
+
+- contracts and experimentation own stale compatibility, schema, call-shape,
+  and generated-identity expectations; remove this baseline when those tests
+  are replaced or updated to the one current interface;
+- lifecycle, Harbor, Prime, and Prime Lab integration owners must supply the
+  current explicit operation resolver and supported transport boundary; remove
+  their baseline entries when those integrations use the current contract; and
+- harness and Prime security tests that require local sockets or macOS sandbox
+  execution must run in an environment that permits those operations; remove
+  those baseline entries when the required security boundary is available.
+
+The exact retained test identities stay in the regression report. A later
+change must compare against that evidence instead of treating the present
+failures as new or silently dropping them.
+
+The following bounded debts remain deliberate:
+
+- installed sessions, controls, persistence, and rollouts remain optional
+  stewardship capabilities with one real World consumer;
+- `EvaluationResult.stewardship` remains a frozen persisted-format exception;
+- conditional evidence remains experimental and has no registered lifecycle
+  consumer;
+- Prime journeys remain concrete until a second persistent Interactive World
+  proves the same continuation semantics; and
+- the v1 pump reference package and default reader route remain certified for
+  retained readers, while registered pump profiles explicitly use the v2
+  three-pump package.

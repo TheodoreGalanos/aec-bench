@@ -79,6 +79,20 @@ rollouts, multiple actors, staged evidence, provider integration, and
 multi-session journeys are optional capabilities. A World does not acquire
 them only because another World uses them.
 
+The current installed `world_session.py` request and the host-control part of
+`world_interface.py` are stewardship-only capabilities. Their run, episode,
+branch, and snapshot values are not the minimum Interactive World contract and
+must not be imposed on the dam task or another non-persistent World. Keep these
+contracts unchanged until a second installed persistent World proves the same
+semantics and an approved persisted-record cutover exists.
+
+World profile identity covers task-owned scenario meaning and causal inputs.
+World build identity covers executable transition, observation, and related
+task semantics. Agent, model, provider, Harbor, and integration configuration
+belong to execution evidence. Changing execution metadata alone must not
+change a world profile identity. Changing a causal profile input or executable
+world source must change the applicable profile or build identity.
+
 ## Task instance and revision identity
 
 `ResolvedTaskInstance` joins a validated task definition to the paths used by
@@ -116,6 +130,12 @@ contract.
 
 The current implementation uses the staged-evidence subtype described in
 [Staged evidence and publication](protocols/staged-evidence-and-publication.md).
+`EvidenceCheckpointSpec.depends_on` is only an earlier-checkpoint acceptance
+precondition inside the declared list order. It does not provide graph
+scheduling, branching, or parallel execution. Conditional evidence is an
+experimental staged-evidence capability with no registered task consumer.
+The current restriction against mixing conditional evidence and operations is
+host implementation policy for this subtype, not finite-lifecycle meaning.
 
 ## Trial and episode records
 
@@ -158,6 +178,13 @@ competing result.
 
 Task-specific verifier details can remain in their owning evidence artifact
 while the common evaluation envelope reports the normalized result.
+
+The current `EvaluationResult.stewardship` field is a frozen persisted-format
+exception for pump records. It is not a template for adding dam, facade, or
+hydraulic fields to the shared envelope. New task-specific details stay in a
+typed owner-specific evidence artifact and enter the common result through its
+normalized fields and evidence reference. Moving the stewardship field needs
+an approved persisted-record migration.
 
 Lifecycle verification records are boundary contracts. Lifecycle progression
 can validate and store them without importing scoring policy from

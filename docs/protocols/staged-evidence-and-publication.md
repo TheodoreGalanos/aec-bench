@@ -30,7 +30,10 @@ evidence paths, invoke the verifier, or write reward.
 
 `EvidenceCheckpointSpec` declares the public checkpoint order, instruction and
 release material, submission destination, required top-level fields, and
-optional conditional evidence.
+optional conditional evidence. Its `depends_on` values can refer only to
+earlier checkpoints and act as acceptance preconditions. The runtime still
+selects the next item in the declared list; it does not schedule a general
+graph.
 
 By default, submissions can contain additional task fields. When
 `allow_additional_submission_fields` is false, the declared required field set
@@ -41,6 +44,12 @@ A submitted checkpoint is immutable within its run. Revising accepted content
 requires a derived branch with explicit lineage.
 
 ## Conditional evidence
+
+Conditional evidence is an experimental staged-evidence capability. It is
+covered by protocol tests, but no registered lifecycle currently uses it. The
+current host also prevents one lifecycle from mixing conditional evidence and
+conditional operations. That restriction is current subtype policy, not a
+general finite-lifecycle rule.
 
 `ConditionalEvidenceSpec` publishes a finite request budget and a closed
 catalogue of safe request IDs, descriptions, and same-checkpoint prerequisites.

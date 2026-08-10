@@ -1,0 +1,187 @@
+{
+  "composition_root_back_imports": [],
+  "git_commit": "0126f007a33597d9519f46ce12078de84fabcbe1",
+  "minimal_install_import_smoke": {
+    "command": "uv build --wheel; verify_wheel_profiles.py --profile base",
+    "status": "passed"
+  },
+  "module_count": 1492,
+  "module_cycles_within_top_level_components": {},
+  "optional_dependency_leakage": [],
+  "schema_version": "1",
+  "source_tree_sha256": "cbbcaa1cd6391fb9b70f0934161d520e86a5499585fbd817fed873b6c56f40d4",
+  "top_level_package_graph": {
+    "adapters": [
+      "contracts",
+      "prime_agent",
+      "providers",
+      "synthesis",
+      "templates"
+    ],
+    "agents": [],
+    "cli": [
+      "adapters",
+      "communication",
+      "config",
+      "contracts",
+      "dataset",
+      "evaluation",
+      "evolution",
+      "experimentation",
+      "generation",
+      "harness",
+      "images",
+      "init",
+      "ledger",
+      "lifecycles",
+      "prime_agent",
+      "prime_lab",
+      "providers",
+      "remediation",
+      "search",
+      "tasks",
+      "templates",
+      "trajectory",
+      "tui",
+      "web",
+      "worlds"
+    ],
+    "communication": [
+      "contracts",
+      "evaluation",
+      "evolution",
+      "ledger",
+      "tasks"
+    ],
+    "config": [],
+    "contracts": [],
+    "dataset": [
+      "contracts"
+    ],
+    "evaluation": [
+      "config",
+      "contracts"
+    ],
+    "evolution": [
+      "adapters",
+      "contracts",
+      "evaluation",
+      "generation",
+      "harness",
+      "providers",
+      "tasks",
+      "templates",
+      "trajectory"
+    ],
+    "experimentation": [
+      "adapters",
+      "contracts",
+      "evaluation",
+      "evolution",
+      "generation",
+      "harness",
+      "ledger",
+      "lifecycles",
+      "prime_agent",
+      "providers",
+      "tasks",
+      "templates",
+      "worlds"
+    ],
+    "feedback": [
+      "contracts",
+      "ledger",
+      "tasks"
+    ],
+    "generation": [
+      "contracts",
+      "images",
+      "templates"
+    ],
+    "harness": [
+      "adapters",
+      "config",
+      "contracts",
+      "dataset",
+      "evaluation",
+      "ledger",
+      "lifecycles",
+      "prime_agent",
+      "tasks",
+      "trajectory",
+      "worlds"
+    ],
+    "images": [],
+    "init": [],
+    "ledger": [
+      "contracts"
+    ],
+    "lifecycles": [
+      "contracts",
+      "evaluation",
+      "ledger",
+      "templates"
+    ],
+    "prime_agent": [
+      "contracts"
+    ],
+    "prime_lab": [
+      "contracts",
+      "dataset",
+      "experimentation",
+      "harness",
+      "ledger",
+      "lifecycles",
+      "tasks"
+    ],
+    "providers": [
+      "contracts"
+    ],
+    "remediation": [
+      "adapters",
+      "contracts"
+    ],
+    "search": [
+      "tasks",
+      "templates"
+    ],
+    "synthesis": [
+      "contracts"
+    ],
+    "tasks": [
+      "contracts",
+      "templates"
+    ],
+    "templates": [
+      "contracts"
+    ],
+    "trajectory": [],
+    "tui": [
+      "communication",
+      "config",
+      "contracts",
+      "dataset",
+      "evaluation",
+      "feedback",
+      "ledger",
+      "tasks",
+      "templates"
+    ],
+    "web": [
+      "communication",
+      "contracts",
+      "dataset",
+      "evaluation",
+      "evolution",
+      "feedback",
+      "ledger",
+      "search",
+      "templates"
+    ],
+    "worlds": [
+      "contracts",
+      "ledger"
+    ]
+  },
+  "top_level_strongly_connected_components": []
+}

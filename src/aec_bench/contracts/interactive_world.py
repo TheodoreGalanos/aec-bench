@@ -10,7 +10,7 @@ from aec_bench.contracts.harness_kernel import validate_sha256
 
 @dataclass(frozen=True, slots=True)
 class InteractiveWorldProfileRef:
-    """Exact identity of one task-owned Interactive World profile."""
+    """Exact task-owned scenario identity, excluding execution integration configuration."""
 
     task_world_id: str
     profile_id: str

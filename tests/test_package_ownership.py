@@ -12,11 +12,11 @@ from pathlib import Path
 import pytest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-NEUTRAL_ROOTS = (
-    REPOSITORY_ROOT / "src" / "aec_bench" / "contracts",
-    REPOSITORY_ROOT / "src" / "aec_bench" / "lifecycles",
-    REPOSITORY_ROOT / "src" / "aec_bench" / "worlds",
-)
+SOURCE_ROOT = REPOSITORY_ROOT / "src" / "aec_bench"
+CONTRACT_ROOT = SOURCE_ROOT / "contracts"
+LIFECYCLE_ROOT = SOURCE_ROOT / "lifecycles"
+WORLD_ROOT = SOURCE_ROOT / "worlds"
+NEUTRAL_ROOTS = (CONTRACT_ROOT, LIFECYCLE_ROOT, WORLD_ROOT)
 OPTIONAL_RUNTIME_ROOTS = {
     "acp",
     "anthropic",
@@ -29,6 +29,17 @@ OPTIONAL_RUNTIME_ROOTS = {
     "pydantic_ai",
     "verifiers",
 }
+FORBIDDEN_TASK_DOMAIN_PREFIXES = (
+    "aec_bench.adapters",
+    "aec_bench.cli",
+    "aec_bench.experimentation",
+    "aec_bench.harness",
+    "aec_bench.prime_agent",
+    "aec_bench.prime_lab",
+    "aec_bench.providers",
+    "aec_bench.tui",
+    "aec_bench.web",
+)
 
 
 def _top_level_imports(source_path: Path) -> set[str]:
@@ -57,6 +68,16 @@ def _aec_bench_imports(source_path: Path) -> set[str]:
     return imported
 
 
+def test_expected_architecture_roots_exist_and_contain_python_sources() -> None:
+    missing_or_empty = [
+        str(root.relative_to(REPOSITORY_ROOT))
+        for root in NEUTRAL_ROOTS
+        if not root.is_dir() or not any(root.rglob("*.py"))
+    ]
+
+    assert missing_or_empty == []
+
+
 def test_neutral_contracts_and_domains_do_not_import_optional_runtimes() -> None:
     violations = {
         str(source_path.relative_to(REPOSITORY_ROOT)): sorted(imported)
@@ -69,20 +90,80 @@ def test_neutral_contracts_and_domains_do_not_import_optional_runtimes() -> None
 
 
 @pytest.mark.parametrize("owner", ("lifecycles", "worlds"))
-def test_task_domains_do_not_import_provider_adapters(owner: str) -> None:
-    domain_root = REPOSITORY_ROOT / "src" / "aec_bench" / owner
-    violations: list[str] = []
-    for source_path in domain_root.rglob("*.py"):
-        tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
-        for node in ast.walk(tree):
-            module = node.module if isinstance(node, ast.ImportFrom) else None
-            names = [alias.name for alias in node.names] if isinstance(node, ast.Import) else []
-            if (module and module.startswith("aec_bench.providers")) or any(
-                name.startswith("aec_bench.providers") for name in names
-            ):
-                violations.append(str(source_path.relative_to(REPOSITORY_ROOT)))
+def test_task_domains_do_not_import_execution_integrations(owner: str) -> None:
+    domain_root = SOURCE_ROOT / owner
+    violations = {
+        str(source_path.relative_to(REPOSITORY_ROOT)): sorted(
+            module for module in _aec_bench_imports(source_path) if module.startswith(FORBIDDEN_TASK_DOMAIN_PREFIXES)
+        )
+        for source_path in domain_root.rglob("*.py")
+        if any(module.startswith(FORBIDDEN_TASK_DOMAIN_PREFIXES) for module in _aec_bench_imports(source_path))
+    }
 
-    assert sorted(set(violations)) == []
+    assert violations == {}
+
+
+@pytest.mark.parametrize(
+    ("runtime_root", "forbidden_prefixes"),
+    (
+        (
+            WORLD_ROOT / "runtime",
+            (
+                "aec_bench.worlds.catalogue",
+                "aec_bench.worlds.monitoring",
+                "aec_bench.worlds.stewardship",
+            ),
+        ),
+        (
+            LIFECYCLE_ROOT / "runtime",
+            (
+                "aec_bench.lifecycles.catalogue",
+                "aec_bench.lifecycles.stormwater_design",
+                "aec_bench.lifecycles.structural_review",
+            ),
+        ),
+    ),
+)
+def test_shared_environment_runtimes_do_not_import_composition_or_concrete_owners(
+    runtime_root: Path,
+    forbidden_prefixes: tuple[str, ...],
+) -> None:
+    assert runtime_root.is_dir()
+    violations = {
+        str(source_path.relative_to(REPOSITORY_ROOT)): sorted(
+            module for module in _aec_bench_imports(source_path) if module.startswith(forbidden_prefixes)
+        )
+        for source_path in runtime_root.rglob("*.py")
+        if any(module.startswith(forbidden_prefixes) for module in _aec_bench_imports(source_path))
+    }
+
+    assert violations == {}
+
+
+@pytest.mark.parametrize(
+    ("concrete_roots", "catalogue_prefix"),
+    (
+        ((WORLD_ROOT / "monitoring", WORLD_ROOT / "stewardship"), "aec_bench.worlds.catalogue"),
+        (
+            (LIFECYCLE_ROOT / "stormwater_design", LIFECYCLE_ROOT / "structural_review"),
+            "aec_bench.lifecycles.catalogue",
+        ),
+    ),
+)
+def test_concrete_environment_owners_do_not_import_their_composition_catalogue(
+    concrete_roots: tuple[Path, ...],
+    catalogue_prefix: str,
+) -> None:
+    violations = {
+        str(source_path.relative_to(REPOSITORY_ROOT)): sorted(
+            module for module in _aec_bench_imports(source_path) if module.startswith(catalogue_prefix)
+        )
+        for root in concrete_roots
+        for source_path in root.rglob("*.py")
+        if any(module.startswith(catalogue_prefix) for module in _aec_bench_imports(source_path))
+    }
+
+    assert violations == {}
 
 
 def test_contracts_do_not_import_implementation_owners() -> None:
@@ -251,24 +332,22 @@ def test_retired_umbrella_packages_have_no_python_sources() -> None:
     assert remaining == []
 
 
-def test_source_owners_have_no_reciprocal_dependencies_below_composition_roots() -> None:
-    package_root = REPOSITORY_ROOT / "src" / "aec_bench"
-    composition_roots = {
-        package_root / "worlds" / "catalogue.py",
-    }
-    edges: set[tuple[str, str]] = set()
-    for source_path in package_root.rglob("*.py"):
-        if source_path in composition_roots:
-            continue
-        source_owner = source_path.relative_to(package_root).parts[0]
-        for module in _aec_bench_imports(source_path):
-            parts = module.split(".")
-            if len(parts) > 1 and parts[1] != source_owner:
-                edges.add((source_owner, parts[1]))
+def test_package_dependency_audit_rejects_owner_cycles_and_boundary_leaks() -> None:
+    audit = subprocess.run(
+        [
+            sys.executable,
+            str(REPOSITORY_ROOT / "scripts" / "audit_package_dependencies.py"),
+            "--repository-root",
+            str(REPOSITORY_ROOT),
+            "--check",
+        ],
+        cwd=REPOSITORY_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
 
-    reciprocal = {tuple(sorted((source, target))) for source, target in edges if (target, source) in edges}
-
-    assert reciprocal == set()
+    assert audit.returncode == 0, audit.stdout + audit.stderr
 
 
 @pytest.mark.parametrize(

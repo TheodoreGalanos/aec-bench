@@ -15,6 +15,7 @@ from aec_bench.worlds.monitoring.dam_seepage.definition import (
     dam_seepage_world_definition,
 )
 from aec_bench.worlds.monitoring.dam_seepage.world import DAM_SEEPAGE_TASK_WORLD_ID
+from aec_bench.worlds.runtime.definition import source_tree_world_build
 from aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition import (
     PumpStationContinualProfile,
     pump_station_continual_world_definition,
@@ -60,6 +61,31 @@ def test_catalogue_rejects_stale_definition_reference() -> None:
 
     with pytest.raises(ValueError, match="world build does not match"):
         catalogue.resolve(stale)
+
+
+def test_world_build_identity_changes_with_executable_source_content(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime_root = Path(__file__).parents[2] / "src" / "aec_bench" / "worlds" / "runtime"
+    definition_path = runtime_root / "definition.py"
+    baseline = source_tree_world_build(
+        task_world_id="identity-test-world",
+        entry_point="identity:test",
+        roots=(definition_path,),
+    )
+
+    original_read_bytes = Path.read_bytes
+
+    def read_changed_source(path: Path) -> bytes:
+        content = original_read_bytes(path)
+        return content + b"\n# changed executable rule\n" if path == definition_path else content
+
+    monkeypatch.setattr(Path, "read_bytes", read_changed_source)
+    changed = source_tree_world_build(
+        task_world_id="identity-test-world",
+        entry_point="identity:test",
+        roots=(definition_path,),
+    )
+
+    assert baseline.artifact_sha256 != changed.artifact_sha256
 
 
 def test_definition_rejects_stale_profile_reference() -> None:
@@ -149,6 +175,7 @@ def test_pump_definition_loads_each_content_pinned_profile(profile_id: str) -> N
 
     assert loaded.reference == reference
     assert isinstance(loaded.value, PumpStationContinualProfile)
+    assert reference.profile_content_sha256 == loaded.value.reference_system.profile_content_id
     station_binding = loaded.value.reference_system.descriptor["station_data"]
     assert loaded.value.station_package.package_content_id == station_binding["package_content_id"]
     assert isinstance(loaded.value.model, PumpStationCoupledModel)

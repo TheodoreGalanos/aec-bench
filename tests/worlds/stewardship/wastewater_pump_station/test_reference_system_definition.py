@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import json
 import shutil
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -22,6 +24,7 @@ from aec_bench.worlds.stewardship.wastewater_pump_station.reference_system impor
     bundled_reference_system_root,
     list_reference_system_ids,
     load_reference_system,
+    pump_station_profile_content_id,
 )
 
 
@@ -72,6 +75,24 @@ def test_rs2_changes_only_the_declared_maintenance_window_conditions() -> None:
         "verification_version",
     ):
         assert rs1.descriptor[field_name] == rs2.descriptor[field_name]
+
+
+def test_profile_identity_excludes_execution_metadata_but_includes_causal_inputs() -> None:
+    descriptor = json.loads((bundled_reference_system_root() / "descriptor.json").read_text(encoding="utf-8"))
+    original = pump_station_profile_content_id(descriptor)
+
+    execution_only = deepcopy(descriptor)
+    execution_only["harbor_versions"]["run"] = "another-harbor-runner"
+    execution_only["record_versions"]["state"] = "another-record-format"
+    assert pump_station_profile_content_id(execution_only) == original
+
+    observation_policy = deepcopy(descriptor)
+    observation_policy["actor_projection_policy"] = "another-observation-policy"
+    assert pump_station_profile_content_id(observation_policy) != original
+
+    causal_input = deepcopy(descriptor)
+    causal_input["opening_state"]["content_sha256"] = "f" * 64
+    assert pump_station_profile_content_id(causal_input) != original
 
 
 def test_unknown_reference_system_or_changed_artifact_fails_closed(tmp_path: Path) -> None:

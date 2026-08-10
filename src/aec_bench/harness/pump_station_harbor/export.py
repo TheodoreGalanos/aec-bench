@@ -234,7 +234,7 @@ def load_pump_station_harbor_bridge(
         reference_system.descriptor_id != reference_payload["descriptor_id"]
         or reference_system.descriptor_content_id != reference_payload["descriptor_content_id"]
         or directory_sha256(reference_system_root) != reference_payload["directory_sha256"]
-        or reference_system.descriptor_content_id != profile_ref.profile_content_sha256
+        or reference_system.profile_content_id != profile_ref.profile_content_sha256
     ):
         raise ValueError("pump-station Harbor reference system differs from the export")
     initial_run_root: Path | None = None

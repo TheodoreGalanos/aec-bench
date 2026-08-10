@@ -60,7 +60,7 @@ def pump_station_profile_ref(profile: LoadedInteractiveWorldProfile) -> Interact
     if (
         reference.task_world_id != PUMP_STATION_TASK_WORLD_ID
         or reference.profile_id != profile_value.reference_system.descriptor_id
-        or profile_value.reference_system.descriptor_content_id != reference.profile_content_sha256
+        or profile_value.reference_system.profile_content_id != reference.profile_content_sha256
         or profile_value.station_package.profile_id != profile_value.reference_system.station_data_profile_id
     ):
         raise ValueError("registered pump profile content differs")
@@ -84,7 +84,7 @@ def _validated_profile_data(reference_system_id: str) -> tuple[PumpStationRefere
 def _load_pump_station_profile(reference: InteractiveWorldProfileRef) -> LoadedInteractiveWorldProfile:
     system, package = _validated_profile_data(reference.profile_id)
     task_world_id = str(system.descriptor.get("task_world_id"))
-    if task_world_id != reference.task_world_id or system.descriptor_content_id != reference.profile_content_sha256:
+    if task_world_id != reference.task_world_id or system.profile_content_id != reference.profile_content_sha256:
         raise ValueError("pump continual-world profile content differs")
     return LoadedInteractiveWorldProfile(
         reference=reference,
@@ -122,7 +122,7 @@ def _profile_ref(reference_system_id: str) -> InteractiveWorldProfileRef:
     return InteractiveWorldProfileRef(
         task_world_id=PUMP_STATION_TASK_WORLD_ID,
         profile_id=system.descriptor_id,
-        profile_content_sha256=system.descriptor_content_id,
+        profile_content_sha256=system.profile_content_id,
     )
 
 

@@ -141,6 +141,14 @@ The repository has no historical pump runtime selector, writer, migration, or
 decoder. Static task-package readers verify their own current artifacts; they
 do not require an older executable runtime.
 
+The pump reference-package reader supports two certified packages for different
+reasons. Its no-argument route keeps the accepted `AU-NSW-LH-SYN-SPS-v1`
+package and exact bytes available to existing readers. The registered pump
+profiles explicitly load `AU-NSW-LH-SYN-SPS-v2`, which is the current
+three-pump package used by the executable World. These routes are deliberate.
+Removing the v1 package or changing the default route needs a separate audit of
+external readers and retained evidence.
+
 ## Optional capabilities
 
 Branching and rollout exist only when the caller supplies a concrete branch
@@ -286,6 +294,7 @@ successful transition or evaluation.
 - [world conformance](../../tests/worlds/test_pump_station_world_conformance.py)
 - [separate-process actor resolution](../../tests/worlds/stewardship/wastewater_pump_station/test_actor_interface_transport_e2e.py)
 - [pump retry and recovery](../../tests/worlds/stewardship/wastewater_pump_station/test_registered_world_run_transitions.py)
+- [pump v1 and v2 certified reference-package routes](../../tests/worlds/stewardship/wastewater_pump_station/test_reference_system_package.py)
 - [Prime actor proxy and pump session composition](../../tests/harness/pump_station_prime/test_session.py)
 - [Prime pump journey composition](../../tests/harness/pump_station_prime/test_journey.py)
 - [pump host continuation policy](../../tests/worlds/stewardship/wastewater_pump_station/test_host_continuation.py)
