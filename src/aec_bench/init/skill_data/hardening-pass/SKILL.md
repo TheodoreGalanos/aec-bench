@@ -11,7 +11,7 @@ A template hardening catches formula and parameter issues before you generate in
 
 ## When to Use
 
-- After creating a template with `/create-template`
+- After creating a template with Create Template
 - After manually authoring a task instance
 - Before running a template's generated instances through Harbor for the first time
 - When reviewing someone else's template or task
@@ -25,8 +25,8 @@ The skill accepts a path to either:
 - **A task instance directory** (detected by presence of `task.toml`)
 
 ```
-/hardening-pass src/aec_bench/templates/builtin/ground/terzaghi_bearing_capacity/
-/hardening-pass tasks/mechanical/heat-load/audit-office-building/brisbane-8rm/
+src/aec_bench/templates/builtin/ground/terzaghi_bearing_capacity/
+tasks/mechanical/heat-load/audit-office-building/brisbane-8rm/
 ```
 
 If no path is provided, ask the user what they want to harden.

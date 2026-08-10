@@ -18,7 +18,7 @@ Source: `templates/builtin/ground/terzaghi_bearing_capacity/engine.py`
 <!-- PATTERN: ABOUTME HEADER
 Every code file in this repo MUST start with exactly two comment lines beginning with
 "# ABOUTME: ". The first line states what the module IS. The second line states what it
-DOES. This is a hard rule from CLAUDE.md — grep relies on it.
+DOES. `AGENTS.md` defines this repository rule.
 -->
 
 ```python

@@ -18,6 +18,11 @@ _PACKAGED_SKILLS: tuple[str, ...] = (
     "meta-harness",
 )
 
+_SKILL_INSTALL_ROOTS: tuple[Path, ...] = (
+    Path(".claude/skills"),
+    Path(".agents/skills"),
+)
+
 _SCAFFOLD_DIRS: tuple[str, ...] = (
     "tasks",
     "seeds",
@@ -195,21 +200,22 @@ def _locate_bundled_source(package_name: str, fallback_dir: str) -> Path | None:
 
 
 def copy_skills(target: Path) -> None:
-    """Copy packaged skills into ``<target>/.claude/skills/``.
+    """Copy packaged skills into each supported project skill directory.
 
-    Only the packaged skill directories are written. User-added skill
-    directories are left untouched.
+    Only the packaged skill directories are written. Skill directories with
+    other names are left untouched.
     """
-    source = _locate_bundled_source("aec_bench.init.skill_data", ".claude/skills")
+    source = _locate_bundled_source("aec_bench.init.skill_data", "src/aec_bench/init/skill_data")
     if source is None:
         return
 
-    dest_root = target / ".claude" / "skills"
-    dest_root.mkdir(parents=True, exist_ok=True)
+    for relative_root in _SKILL_INSTALL_ROOTS:
+        dest_root = target / relative_root
+        dest_root.mkdir(parents=True, exist_ok=True)
 
-    for skill_name in _PACKAGED_SKILLS:
-        src_dir = source / skill_name
-        if not src_dir.is_dir():
-            continue
-        dest_dir = dest_root / skill_name
-        shutil.copytree(src_dir, dest_dir, dirs_exist_ok=True)
+        for skill_name in _PACKAGED_SKILLS:
+            src_dir = source / skill_name
+            if not src_dir.is_dir():
+                continue
+            dest_dir = dest_root / skill_name
+            shutil.copytree(src_dir, dest_dir, dirs_exist_ok=True)

@@ -2,7 +2,7 @@
 
 A task is **parameterisable** when it can be turned into a reusable generation
 template -- a `compute()` function that accepts typed inputs, runs a closed-form
-calculation, and returns numeric outputs. The `/create-template` skill builds
+calculation, and returns numeric outputs. The Create Template skill builds
 these templates automatically.
 
 Five criteria must ALL pass. If any single criterion fails, the task requires
@@ -111,7 +111,7 @@ intermediate human decisions.
 
 | All 5 pass? | Path |
 |-------------|------|
-| **Yes** | Task is **parameterisable**. Hand the seed to `/create-template` to generate `engine.py`, `params.toml`, and `instruction.md`. |
+| **Yes** | Task is **parameterisable**. Hand the seed to Create Template to generate `engine.py`, `params.toml`, and `instruction.md`. |
 | **No** | Task needs **manual authoring**. See `manual-task-guidance.md` for the required file structure. |
 
 Record the assessment in the seed file's `feasibility` block so downstream

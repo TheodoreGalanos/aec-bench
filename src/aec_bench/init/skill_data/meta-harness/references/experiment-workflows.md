@@ -16,7 +16,16 @@ This is deterministic and makes no model, Harbor, Morph, Modal, or cloud call.
 
 ## 2. Evidence-lifecycle ablation
 
-After `aec-bench init`, copy the installed example:
+After `aec-bench init`, copy the example from the installed `meta-harness`
+skill directory. Choose the command for your agent harness.
+
+For Codex:
+
+```bash
+cp .agents/skills/meta-harness/examples/lifecycle-ablation.yaml experiment.yaml
+```
+
+For Claude Code:
 
 ```bash
 cp .claude/skills/meta-harness/examples/lifecycle-ablation.yaml experiment.yaml

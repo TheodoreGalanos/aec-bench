@@ -1,7 +1,7 @@
 # Seed File Schema Reference
 
 The seed file is a JSON document that captures a benchmark task idea in enough
-detail for downstream tooling (`/create-template` for parameterisable tasks, or
+detail for downstream tooling (Create Template for parameterisable tasks, or
 manual authoring for everything else). Two origin styles exist: **expert** seeds
 (rich, structured inputs/outputs) and **ngnbench** seeds (flat string lists
 imported from legacy inventories). Both are valid.

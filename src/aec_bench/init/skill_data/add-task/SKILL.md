@@ -9,7 +9,7 @@ Create a structured benchmark task seed (`source_task.json`) from an expert's de
 
 ## When to Use
 
-- User runs `/add-task` or `/add-task <description>`
+- User explicitly invokes Add Task, with or without a description
 - User asks to "add a task", "create a task", "define a new benchmark task"
 - User describes an engineering calculation they want to benchmark
 
@@ -107,9 +107,9 @@ If ALL 5 criteria pass:
    - `source`: all collected fields using structured format for inputs/outputs
    - `feasibility`: the assessment results (parameterisable: true, all 5 criteria: true)
 3. Tell the expert: "Seed saved to `seeds/<discipline>/<task-id>/source_task.json`"
-4. Offer: "This task is parameterisable — I can create a generation template from it right now using `/create-template`. Want me to proceed?"
-5. If the expert accepts, run: `/create-template seeds/<discipline>/<task-id>/source_task.json`
-6. If declined, say: "No worries — you can run `/create-template seeds/<discipline>/<task-id>/source_task.json` any time."
+4. Offer: "This task is parameterisable — I can create a generation template from it right now using Create Template. Want me to proceed?"
+5. If the expert accepts, invoke Create Template with `seeds/<discipline>/<task-id>/source_task.json`.
+6. If declined, say: "No worries — you can invoke Create Template with `seeds/<discipline>/<task-id>/source_task.json` any time."
 
 ### Step 5b — Non-Parameterisable Path
 

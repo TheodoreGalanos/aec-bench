@@ -16,6 +16,15 @@ from aec_bench.init.scaffold import (
 )
 
 
+def _packaged_skill_tree(root: Path) -> dict[Path, bytes]:
+    return {
+        path.relative_to(root): path.read_bytes()
+        for skill_name in _PACKAGED_SKILLS
+        for path in (root / skill_name).rglob("*")
+        if path.is_file()
+    }
+
+
 def test_create_scaffold_creates_directories(tmp_path: Path) -> None:
     result = create_scaffold(tmp_path)
 
@@ -87,23 +96,34 @@ def test_write_gitignore_creates_file(tmp_path: Path) -> None:
 def test_copy_skills_creates_skill_dirs(tmp_path: Path) -> None:
     copy_skills(tmp_path)
 
-    skills_dir = tmp_path / ".claude" / "skills"
-    assert skills_dir.is_dir()
-    assert {path.name for path in skills_dir.iterdir() if path.is_dir()} == set(_PACKAGED_SKILLS)
-    assert all((skills_dir / skill_name / "SKILL.md").is_file() for skill_name in _PACKAGED_SKILLS)
-    assert (skills_dir / "meta-harness" / "references" / "experiment-workflows.md").exists()
-    assert (skills_dir / "meta-harness" / "examples" / "lifecycle-ablation.yaml").exists()
+    source_root = Path(__file__).resolve().parents[2] / "src" / "aec_bench" / "init" / "skill_data"
+    expected_tree = _packaged_skill_tree(source_root)
+    installed_trees: list[dict[Path, bytes]] = []
+    for relative_root in (Path(".claude/skills"), Path(".agents/skills")):
+        skills_dir = tmp_path / relative_root
+        assert skills_dir.is_dir()
+        assert {path.name for path in skills_dir.iterdir() if path.is_dir()} == set(_PACKAGED_SKILLS)
+        assert all((skills_dir / skill_name / "SKILL.md").is_file() for skill_name in _PACKAGED_SKILLS)
+        assert (skills_dir / "meta-harness" / "references" / "experiment-workflows.md").exists()
+        assert (skills_dir / "meta-harness" / "examples" / "lifecycle-ablation.yaml").exists()
+        installed_trees.append(_packaged_skill_tree(skills_dir))
+    assert installed_trees == [expected_tree, expected_tree]
 
 
-def test_copy_skills_preserves_user_added_skills(tmp_path: Path) -> None:
-    user_skill = tmp_path / ".claude" / "skills" / "my-custom-skill"
-    user_skill.mkdir(parents=True)
-    (user_skill / "SKILL.md").write_text("custom", encoding="utf-8")
+def test_copy_skills_preserves_skill_directories_with_other_names(tmp_path: Path) -> None:
+    user_skills = [
+        tmp_path / relative_root / "my-custom-skill"
+        for relative_root in (Path(".claude/skills"), Path(".agents/skills"))
+    ]
+    for user_skill in user_skills:
+        user_skill.mkdir(parents=True)
+        (user_skill / "SKILL.md").write_text("custom", encoding="utf-8")
 
     copy_skills(tmp_path)
 
-    assert (user_skill / "SKILL.md").read_text(encoding="utf-8") == "custom"
-    assert (tmp_path / ".claude" / "skills" / "add-task" / "SKILL.md").exists()
+    for user_skill in user_skills:
+        assert (user_skill / "SKILL.md").read_text(encoding="utf-8") == "custom"
+        assert (user_skill.parent / "add-task" / "SKILL.md").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +141,8 @@ def test_init_project_creates_full_scaffold(tmp_path: Path) -> None:
     assert (tmp_path / "tasks").is_dir()
     assert (tmp_path / "seeds").is_dir()
     assert (tmp_path / ".claude" / "skills" / "add-task" / "SKILL.md").exists()
+    assert (tmp_path / ".agents" / "skills" / "add-task" / "SKILL.md").exists()
+    assert "Copied skills to .claude/skills/ and .agents/skills/" in result.messages
 
 
 def test_init_project_detects_existing(tmp_path: Path) -> None:
@@ -141,11 +163,29 @@ def test_init_project_force_recreates_config(tmp_path: Path) -> None:
 def test_init_project_update_skills_only(tmp_path: Path) -> None:
     # First init
     init_project(target=tmp_path, generate_example=False)
-    # Modify a skill
-    skill_path = tmp_path / ".claude" / "skills" / "add-task" / "SKILL.md"
-    skill_path.write_text("modified", encoding="utf-8")
+    # Modify both installed copies of one packaged skill.
+    skill_paths = [
+        tmp_path / relative_root / "add-task" / "SKILL.md"
+        for relative_root in (Path(".claude/skills"), Path(".agents/skills"))
+    ]
+    for skill_path in skill_paths:
+        skill_path.write_text("modified", encoding="utf-8")
 
     # Update skills
     result = init_project(target=tmp_path, update_skills=True)
     assert result.created
-    assert skill_path.read_text(encoding="utf-8") != "modified"
+    assert all(skill_path.read_text(encoding="utf-8") != "modified" for skill_path in skill_paths)
+
+
+def test_init_project_update_skills_adds_codex_skills_to_existing_project(tmp_path: Path) -> None:
+    (tmp_path / "aec-bench.toml").write_text("[project]\n", encoding="utf-8")
+    old_claude_skill = tmp_path / ".claude" / "skills" / "add-task" / "SKILL.md"
+    old_claude_skill.parent.mkdir(parents=True)
+    old_claude_skill.write_text("old packaged copy", encoding="utf-8")
+
+    result = init_project(target=tmp_path, update_skills=True)
+
+    assert result.created
+    assert old_claude_skill.read_text(encoding="utf-8") != "old packaged copy"
+    assert (tmp_path / ".agents" / "skills" / "add-task" / "SKILL.md").is_file()
+    assert result.messages == ("Skills updated in .claude/skills/ and .agents/skills/.",)

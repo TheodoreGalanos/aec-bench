@@ -42,6 +42,20 @@ def test_readme_lists_every_packaged_skill() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
 
     assert all(f"/{skill_name}`" in readme or f"/{skill_name} " in readme for skill_name in _PACKAGED_SKILLS)
+    assert all(f"${skill_name}`" in readme or f"${skill_name} " in readme for skill_name in _PACKAGED_SKILLS)
+
+
+def test_packaged_skills_use_harness_neutral_invocation_text() -> None:
+    slash_invocation = re.compile(
+        rf"(?<![A-Za-z0-9_.-])/(?:{'|'.join(re.escape(name) for name in _PACKAGED_SKILLS)})\b"
+    )
+    offenders = {
+        str(path): slash_invocation.findall(path.read_text(encoding="utf-8"))
+        for path in SKILL_ROOT.rglob("*.md")
+        if slash_invocation.search(path.read_text(encoding="utf-8"))
+    }
+
+    assert offenders == {}
 
 
 def test_configure_experiment_skill_lists_every_harbor_backend() -> None:
