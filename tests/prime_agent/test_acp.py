@@ -57,6 +57,11 @@ Path("observed-acp.json").write_text(json.dumps({{
         if (Path(os.environ["PRIME_AGENT_CODING_AGENT_DIR"]) / "harness" / "harness_state.json").is_file()
         else None
     ),
+    "settings": (
+        json.loads((Path(os.environ["PRIME_AGENT_CODING_AGENT_DIR"]) / "settings.json").read_text())
+        if (Path(os.environ["PRIME_AGENT_CODING_AGENT_DIR"]) / "settings.json").is_file()
+        else None
+    ),
 }}))
 scenario = os.environ.get("FAKE_ACP_SCENARIO", "success")
 session_dir = Path(sys.argv[sys.argv.index("--session-dir") + 1])
@@ -539,6 +544,7 @@ async def test_loads_one_fixed_refinement_candidate_before_prime_starts(tmp_path
     observed = json.loads((actor_workspace / "observed-acp.json").read_text(encoding="utf-8"))
     installed = observed["refinement_candidate"]["entries"]
     assert sum(len(entries) for entries in installed.values()) == 4
+    assert observed["settings"] == {"autoRefine": {"enabled": False}}
     assert result.session_state == "ended"
     assert not result.refinement_harness.changed
     assert not result.refinement_harness.drifted
@@ -570,6 +576,31 @@ async def test_fixed_candidate_fails_when_prime_refines_during_comparison(tmp_pa
     assert result.refinement_harness.drifted
     assert "fixed_candidate_changed" in result.refinement_harness.issues
     assert result.error == "Prime refinement candidate changed during a fixed candidate run"
+
+
+@pytest.mark.asyncio
+async def test_discovery_keeps_prime_automatic_refinement_enabled(tmp_path: Path) -> None:
+    actor_workspace, skill, evidence = _workspace(tmp_path)
+    result = await run_prime_acp_session(
+        actor_workspace=actor_workspace,
+        evidence_directory=evidence,
+        skill_directories=(skill,),
+        instruction="Discover a useful candidate.",
+        model="anthropic/test",
+        actor_environment={
+            WORLD_ACTOR_SOCKET_ENV: "/private/tmp/scoped-actor.sock",
+            WORLD_ACTOR_CAPABILITY_ENV: "scoped-capability-secret",
+        },
+        isolation=PrimeAcpIsolation.DEVELOPMENT_SAME_USER,
+        limits=_limits(),
+        refinement_mode=PrimeRefinementMode.DISCOVER,
+        executable=str(_fake_prime_agent(tmp_path)),
+        environment=os.environ,
+    )
+
+    observed = json.loads((actor_workspace / "observed-acp.json").read_text(encoding="utf-8"))
+    assert observed["settings"] is None
+    assert result.session_state == "ended"
 
 
 @pytest.mark.asyncio

@@ -15,7 +15,7 @@ from aec_bench.harness.pump_station_prime.actor_proxy import PumpStationPrimeAct
 from aec_bench.prime_agent.acp import PrimeAcpIsolation, PrimeAcpRun, run_prime_acp_session
 from aec_bench.prime_agent.refinement import PrimeRefinementCandidate, PrimeRefinementMode
 from aec_bench.prime_agent.session_evidence import PrimeAcpLimits
-from aec_bench.prime_agent.skills import install_aec_world_skill, install_prime_skill
+from aec_bench.prime_agent.skills import install_aec_world_skill, install_prime_refine_skill, install_prime_skill
 from aec_bench.worlds.stewardship.wastewater_pump_station.evaluation import (
     evaluate_pump_station_reference_run,
 )
@@ -117,6 +117,8 @@ async def run_pump_station_prime_session(
     actor_workspace.mkdir(parents=True, exist_ok=True)
     evidence_directory.mkdir(parents=True, exist_ok=False)
     skill_directories = [install_aec_world_skill(actor_workspace)]
+    if refinement_mode is PrimeRefinementMode.DISCOVER:
+        skill_directories.append(install_prime_refine_skill(actor_workspace))
     prime_instruction = instruction
     if pump_station_guidance:
         skill_directories.append(install_pump_station_guidance_skill(actor_workspace))
