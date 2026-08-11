@@ -22,9 +22,8 @@ from aec_bench.contracts.world_session import (
     WorldSessionOpenMode,
     WorldSessionRequest,
 )
-from aec_bench.harness.pump_station_prime.actor_proxy import PumpStationPrimeActorProxy
+from aec_bench.harness.prime_actor_endpoint import PrimeActorEndpoint
 from aec_bench.harness.pump_station_prime.session import (
-    ACTOR_LEDGER_PLAN_INSTRUCTION,
     PUMP_STATION_GUIDANCE_INSTRUCTION,
     PumpStationPrimeSessionLimits,
     install_pump_station_guidance_skill,
@@ -33,15 +32,18 @@ from aec_bench.harness.pump_station_prime.session import (
 from aec_bench.prime_agent.acp import PrimeAcpIsolation
 from aec_bench.prime_agent.refinement import PrimeRefinementMode
 from aec_bench.prime_agent.skills import (
+    ACTOR_LEDGER_PLAN_INSTRUCTION,
     WORLD_ACTOR_CAPABILITY_ENV,
     WORLD_ACTOR_SOCKET_ENV,
     PrimeSkillInstallError,
     install_aec_actor_ledger_skill,
     install_aec_world_skill,
     install_prime_bundled_skill,
+    install_prime_skill,
 )
 from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import (
     PUMP_STATION_TASK_WORLD_ID,
+    PumpStationEpisodeHost,
 )
 from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
@@ -68,6 +70,23 @@ def _limits(*, max_world_actions: int = 20) -> PumpStationPrimeSessionLimits:
         max_tokens=1_000,
         max_cost_usd=Decimal("10"),
         max_wall_seconds=5,
+    )
+
+
+def _endpoint(
+    *,
+    world_directory: Path,
+    socket_directory: Path,
+    max_world_actions: int,
+    evidence_file: Path,
+) -> PrimeActorEndpoint:
+    host = PumpStationEpisodeHost(world_directory)
+    host.open(_session_request())
+    return PrimeActorEndpoint(
+        host=host,
+        socket_directory=socket_directory,
+        max_world_actions=max_world_actions,
+        evidence_file=evidence_file,
     )
 
 
@@ -125,8 +144,23 @@ def test_reused_world_skill_rejects_nested_symbolic_links(tmp_path: Path) -> Non
         install_aec_world_skill(workspace)
 
 
+def test_reused_skill_ignores_local_python_cache_files(tmp_path: Path) -> None:
+    source = tmp_path / "source" / "test-skill"
+    source.mkdir(parents=True)
+    (source / "SKILL.md").write_text("---\nname: test-skill\n---\n", encoding="utf-8")
+    installed = install_prime_skill(tmp_path / "actor", source)
+    source_cache = source / "__pycache__"
+    installed_cache = installed / "__pycache__"
+    source_cache.mkdir()
+    installed_cache.mkdir()
+    (source_cache / "module.pyc").write_bytes(b"source cache")
+    (installed_cache / "module.pyc").write_bytes(b"actor cache")
+
+    assert install_prime_skill(tmp_path / "actor", source) == installed
+
+
 @pytest.mark.asyncio
-async def test_scoped_proxy_preserves_actor_semantics_and_redacted_transport_evidence(
+async def test_scoped_endpoint_preserves_actor_semantics_and_redacted_transport_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -135,16 +169,15 @@ async def test_scoped_proxy_preserves_actor_semantics_and_redacted_transport_evi
     actor_workspace.mkdir()
     evidence_file = tmp_path / "host-evidence" / "actor-transport.jsonl"
     client = _load_skill(actor_workspace, monkeypatch)
-    proxy = PumpStationPrimeActorProxy(
-        world_run_directory=world_directory,
+    endpoint = _endpoint(
+        world_directory=world_directory,
         socket_directory=actor_workspace / ".actor",
         max_world_actions=20,
         evidence_file=evidence_file,
     )
-    proxy.open_world_session(_session_request())
 
-    with proxy:
-        environment = proxy.connection_environment()
+    with endpoint:
+        environment = endpoint.connection_environment()
         monkeypatch.setenv(WORLD_ACTOR_SOCKET_ENV, environment[WORLD_ACTOR_SOCKET_ENV])
         monkeypatch.setenv(WORLD_ACTOR_CAPABILITY_ENV, environment[WORLD_ACTOR_CAPABILITY_ENV])
 
@@ -246,16 +279,15 @@ async def test_actor_ledger_records_exact_attempts_without_adding_world_authorit
     actor_workspace.mkdir()
     _load_skill(actor_workspace, monkeypatch)
     ledger = _load_actor_ledger_skill(actor_workspace, monkeypatch)
-    proxy = PumpStationPrimeActorProxy(
-        world_run_directory=world_directory,
+    endpoint = _endpoint(
+        world_directory=world_directory,
         socket_directory=actor_workspace / ".actor",
         max_world_actions=20,
         evidence_file=tmp_path / "host-evidence" / "actor-transport.jsonl",
     )
-    proxy.open_world_session(_session_request())
 
-    with proxy:
-        environment = proxy.connection_environment()
+    with endpoint:
+        environment = endpoint.connection_environment()
         monkeypatch.setenv(WORLD_ACTOR_SOCKET_ENV, environment[WORLD_ACTOR_SOCKET_ENV])
         monkeypatch.setenv(WORLD_ACTOR_CAPABILITY_ENV, environment[WORLD_ACTOR_CAPABILITY_ENV])
         monkeypatch.chdir(actor_workspace)
@@ -349,16 +381,15 @@ async def test_world_action_budget_preserves_exact_retry_and_blocks_a_new_action
     actor_workspace.mkdir()
     evidence_file = tmp_path / "host-evidence" / "actor-transport.jsonl"
     client = _load_skill(actor_workspace, monkeypatch)
-    proxy = PumpStationPrimeActorProxy(
-        world_run_directory=world_directory,
+    endpoint = _endpoint(
+        world_directory=world_directory,
         socket_directory=actor_workspace / ".actor",
         max_world_actions=1,
         evidence_file=evidence_file,
     )
-    proxy.open_world_session(_session_request())
 
-    with proxy:
-        environment = proxy.connection_environment()
+    with endpoint:
+        environment = endpoint.connection_environment()
         monkeypatch.setenv(WORLD_ACTOR_SOCKET_ENV, environment[WORLD_ACTOR_SOCKET_ENV])
         monkeypatch.setenv(WORLD_ACTOR_CAPABILITY_ENV, environment[WORLD_ACTOR_CAPABILITY_ENV])
         observation = await client.observe()
@@ -383,8 +414,8 @@ async def test_world_action_budget_preserves_exact_retry_and_blocks_a_new_action
                 request_id="action-2",
             )
 
-    assert proxy.world_action_attempts == 2
-    assert proxy.world_action_limit_reached
+    assert endpoint.world_action_attempts == 2
+    assert endpoint.world_action_limit_reached
     events = [json.loads(line) for line in evidence_file.read_text(encoding="utf-8").splitlines()]
     assert events[-1]["error"]["code"] == "world-action-budget-exhausted"
 
@@ -695,7 +726,7 @@ async def test_repeated_prime_sessions_share_actor_files_but_not_prime_runtime(t
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(sys.platform != "darwin", reason="macOS Seatbelt boundary")
-async def test_sandboxed_prime_reaches_world_only_through_the_scoped_proxy(tmp_path: Path) -> None:
+async def test_sandboxed_prime_reaches_world_only_through_the_scoped_endpoint(tmp_path: Path) -> None:
     from tests.prime_agent.test_acp import _fake_prime_agent
 
     result = await run_pump_station_prime_session(

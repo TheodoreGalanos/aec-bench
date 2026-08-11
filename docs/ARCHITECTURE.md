@@ -185,15 +185,24 @@ explicit failures. A transport cannot turn them into successful trials.
 The separate `prime_agent` integration runs the upstream Prime Agent executable
 directly. JSON mode adapts staged artifact tasks on the existing local path.
 ACP mode owns the Prime process, protocol, isolation, explicit generic skills,
-and session evidence. `harness/pump_station_prime` owns the concrete pump actor
-proxy, bounded session, guided treatment, and journey composition. The pump
-journey can alternate fresh Prime sessions with exact task-owned host controls.
+and session evidence. `harness/prime_actor_endpoint.py` owns the capability-
+scoped transport shared by Prime pump and dam sessions. It routes only the
+installed world actor calls and does not interpret world state.
+`harness/pump_station_prime` owns the concrete pump bounded session, guided
+treatment, and journey composition. The pump journey can alternate fresh Prime
+sessions with exact task-owned host controls.
 The pump world owns host-control eligibility and completion. A private journey
 checkpoint records coordination phase and canonical references for process
 recovery; it is not a second causal record. Task-world persistence,
 verification, evaluation, and Harbor paths remain owned by their existing
 layers. Read-only treatment and trajectory analysis belongs to
 `experimentation/qualification`; it does not change canonical evaluation.
+
+`harness/dam_seepage_prime` owns one concrete bounded Prime composition for the
+dam monitoring world. It binds the existing in-memory episode to the same
+installed actor request and result models, then runs task evaluation only after
+the endpoint closes. It does not add pump persistence, host controls, journey
+continuation, or a second dam evaluation.
 
 `harness/hydraulic_review_prime` is a separate concrete composition for the
 stormwater hydraulic-review lifecycle. It starts one fresh Prime ACP session
@@ -204,11 +213,13 @@ and archives that proposal and controls checkpoint advance. Prime session
 state, lifecycle state, task verification, and benchmark validity remain
 separate authorities.
 
-The pump and hydraulic-review integrations share the generic Prime process and ACP
-boundary. They do not share a journey, endpoint, task action, completion, or
-verification abstraction. Two concrete integrations now make comparison
-possible, but the repository has not yet found a second shared semantic pattern
-that justifies more extraction.
+The pump, dam, and hydraulic-review integrations share the generic Prime process
+and ACP boundary. The two worlds also share the installed `aec-world` client,
+actor request and result models, and Open or Planned skill composition. Their
+world hosts, persistence, continuation, action meaning, replay, and evaluation
+stay task-owned. The hydraulic-review lifecycle has a different scoped file and
+submission boundary. These concrete integrations now support comparison, but
+they do not justify one shared journey or task-semantics abstraction.
 
 Local execution selects from one fixed set of adapter builders at the harness
 composition edge. Tests inject a builder callable directly; production does

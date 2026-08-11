@@ -11,6 +11,14 @@ from aec_bench.prime_agent.batch import resolve_prime_executable
 
 WORLD_ACTOR_SOCKET_ENV = "AEC_BENCH_WORLD_ACTOR_SOCKET"
 WORLD_ACTOR_CAPABILITY_ENV = "AEC_BENCH_WORLD_ACTOR_CAPABILITY_TOKEN"
+ACTOR_LEDGER_PLAN_INSTRUCTION = (
+    "Before your first world action, load and use the full `aec-actor-ledger` skill. "
+    "Use its compact results and bounded search and window calls instead of printing full saved state. "
+    "Before you delegate work, load and use the full `agent-message` and `agent-observe` skills. "
+    "Use bounded child message previews and ask children to return compact findings. "
+    "The root and all children are one actor principal. You still choose every action and argument from current "
+    "actor-visible evidence."
+)
 
 
 class PrimeSkillInstallError(RuntimeError):
@@ -44,6 +52,17 @@ def install_prime_bundled_skill(actor_workspace: Path, *, executable: str, skill
     resolved_executable = resolve_prime_executable(executable)
     source = _find_prime_bundled_skill(resolved_executable, skill_name)
     return install_prime_skill(actor_workspace, source)
+
+
+def install_actor_ledger_plan_skills(actor_workspace: Path, *, executable: str) -> tuple[Path, ...]:
+    """Install the shared bounded-ledger and optional child-coordination capability."""
+    return (
+        install_aec_actor_ledger_skill(actor_workspace),
+        *(
+            install_prime_bundled_skill(actor_workspace, executable=executable, skill_name=skill_name)
+            for skill_name in ("agent-message", "agent-observe")
+        ),
+    )
 
 
 def install_prime_skill(actor_workspace: Path, source: Path) -> Path:
@@ -105,7 +124,7 @@ def _installed_tree_matches(source: Path, destination: Path) -> bool:
     expected = {
         path.relative_to(source): path.read_bytes()
         for path in source.rglob("*")
-        if path.is_file() and not path.is_symlink()
+        if path.is_file() and not path.is_symlink() and "__pycache__" not in path.relative_to(source).parts
     }
     installed = {path.relative_to(destination): path for path in destination.rglob("*") if path.is_file()}
     if any(relative not in expected and "__pycache__" not in relative.parts for relative in installed):

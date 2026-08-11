@@ -11,17 +11,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from aec_bench.contracts.world_session import WorldSessionRequest, WorldSessionResult
-from aec_bench.harness.pump_station_prime.actor_proxy import PumpStationPrimeActorProxy
+from aec_bench.harness.prime_actor_endpoint import PrimeActorEndpoint
 from aec_bench.prime_agent.acp import PrimeAcpIsolation, PrimeAcpRun, run_prime_acp_session
 from aec_bench.prime_agent.refinement import PrimeRefinementCandidate, PrimeRefinementMode
 from aec_bench.prime_agent.session_evidence import PrimeAcpLimits
 from aec_bench.prime_agent.skills import (
-    install_aec_actor_ledger_skill,
+    ACTOR_LEDGER_PLAN_INSTRUCTION,
+    install_actor_ledger_plan_skills,
     install_aec_world_skill,
-    install_prime_bundled_skill,
     install_prime_refine_skill,
     install_prime_skill,
 )
+from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import PumpStationEpisodeHost
 from aec_bench.worlds.stewardship.wastewater_pump_station.evaluation import (
     evaluate_pump_station_reference_run,
 )
@@ -42,14 +43,6 @@ PUMP_STATION_GUIDANCE_INSTRUCTION = (
     "Before your first world action, load and follow the full `pump-station-guidance` skill. "
     "Keep its compact state and exact action ledger throughout the episode. "
     "Use its references when they help the current decision."
-)
-ACTOR_LEDGER_PLAN_INSTRUCTION = (
-    "Before your first world action, load and use the full `aec-actor-ledger` skill. "
-    "Use its compact results and bounded search and window calls instead of printing full saved state. "
-    "Before you delegate work, load and use the full `agent-message` and `agent-observe` skills. "
-    "Use bounded child message previews and ask children to return compact findings. "
-    "The root and all children are one actor principal. You still choose every action and argument from current "
-    "actor-visible evidence."
 )
 
 
@@ -141,29 +134,26 @@ async def run_pump_station_prime_session(
         skill_directories.append(install_pump_station_guidance_skill(actor_workspace))
         prime_instruction = instruction.rstrip() + "\n\n" + PUMP_STATION_GUIDANCE_INSTRUCTION + "\n"
     elif actor_ledger_plan:
-        skill_directories.append(install_aec_actor_ledger_skill(actor_workspace))
-        skill_directories.extend(
-            install_prime_bundled_skill(actor_workspace, executable=executable, skill_name=skill_name)
-            for skill_name in ("agent-message", "agent-observe")
-        )
+        skill_directories.extend(install_actor_ledger_plan_skills(actor_workspace, executable=executable))
         prime_instruction = instruction.rstrip() + "\n\n" + ACTOR_LEDGER_PLAN_INSTRUCTION + "\n"
     actor_transport_file = evidence_directory / "world-actor-transport.jsonl"
-    proxy = PumpStationPrimeActorProxy(
-        world_run_directory=world_run_directory,
+    host = PumpStationEpisodeHost(world_run_directory)
+    world_session = host.open(session_request)
+    endpoint = PrimeActorEndpoint(
+        host=host,
         socket_directory=actor_workspace / ".actor",
         max_world_actions=limits.max_world_actions,
         evidence_file=actor_transport_file,
     )
-    world_session = proxy.open_world_session(session_request)
-    with proxy:
+    with endpoint:
         prime = await run_prime_acp_session(
             actor_workspace=actor_workspace,
             evidence_directory=evidence_directory,
             skill_directories=tuple(skill_directories),
             instruction=prime_instruction,
             model=model,
-            actor_environment=proxy.connection_environment(),
-            scoped_socket=proxy.socket_path,
+            actor_environment=endpoint.connection_environment(),
+            scoped_socket=endpoint.socket_path,
             isolation=isolation,
             limits=limits.acp_limits(),
             runtime_directory=prime_runtime_directory,
@@ -173,9 +163,9 @@ async def run_pump_station_prime_session(
             executable=executable,
             environment=environment,
         )
-        last_action = proxy.last_action_result
-        world_action_attempts = proxy.world_action_attempts
-        world_action_limit_reached = proxy.world_action_limit_reached
+        last_action = endpoint.last_action_result
+        world_action_attempts = endpoint.world_action_attempts
+        world_action_limit_reached = endpoint.world_action_limit_reached
 
     repository = PumpStationWorldRunRepository(world_run_directory)
     run = PumpStationWorldRun.resume_reference_system(

@@ -69,13 +69,14 @@ coordinator. A selected-state change makes the prior decision stale. Exact
 retries require the same request identity and command content.
 
 Prime interactive sessions use an additional host-owned, single-episode
-transport around the same `PumpStationEpisodeHost`. A random capability and a
-Unix-domain socket authorize one strict `ContinualWorldActorRequest`; the proxy
-returns the existing actor result models. The remote request has no run,
-episode, branch, profile, actor, tenure, evaluation, verification, rollout, or
-host-control selector. The proxy owns the world repository path and closes with
-the Prime ACP session. Stale-decision and exact-retry decisions therefore remain
-inside the existing episode host.
+transport. A random capability and a Unix-domain socket authorize one strict
+`ContinualWorldActorRequest`; the endpoint returns the existing actor result
+models. The remote request has no run, episode, branch, profile, actor, tenure,
+evaluation, verification, rollout, or host-control selector. The shared endpoint
+receives one task-owned episode host. The pump host owns its world repository
+path. The dam host owns one in-memory dam episode. The endpoint closes with its
+Prime ACP session. Stale-decision and exact-retry decisions remain inside the
+task episode host.
 
 The Prime root process and its descendants receive the same scoped capability,
 so they form one composite actor principal. Per-child action attribution is not
@@ -83,7 +84,7 @@ claimed without enforceable per-child capability scoping.
 
 The composition selects explicit skills in caller order while ambient skills,
 extensions, prompt templates, themes, and context files remain disabled. Open
-installs only `aec-world`. The optional Guided pump treatment installs
+installs only `aec-world` for the pump and dam entries. The optional Guided pump treatment installs
 `aec-world` followed by `pump-station-guidance` and adds one instruction to load
 the guidance before the first world action. The caller selects Guided
 explicitly; task, world, profile, and model identities do not route it. The
@@ -112,10 +113,10 @@ all descendants remain one composite actor principal.
 
 The composed entry point requires positive host limits for world actions,
 model calls, aggregate tokens, aggregate provider cost, and elapsed wall time.
-The actor proxy counts distinct invoke request content while allowing an exact
-retry of the same request without another allowance. A changed request under an
-existing request ID is not an exact retry and still reaches the existing host
-conflict semantics when an allowance remains.
+The Prime actor endpoint counts distinct invoke request content while allowing
+an exact retry of the same request without another allowance. A changed request
+under an existing request ID is not an exact retry and still reaches the
+existing host conflict semantics when an allowance remains.
 
 AECBench reads every Prime session JSONL artifact for the composite principal.
 It cancels the active ACP prompt when a completed assistant response reaches a
@@ -216,6 +217,12 @@ The bounded Prime composition still runs one actor continuation and invokes the
 task-owned pump evaluator with `evaluation_scope="bounded_continuation"`.
 Operations reviews remain outside the Prime actor capability.
 
+The bounded dam composition runs one actor episode with no host continuation.
+After the endpoint closes, it replays the accepted typed action records from the
+exact registered opening state and calls the existing dam evaluator. Prime
+session completion, dam episode completion, replay validity, and task success
+remain separate facts.
+
 The pump journey composition alternates bounded actor sessions with at most one
 task-owned Operations review. Prime is closed before the host selects or applies
 a control. The pump host policy reads the current canonical state, returns one
@@ -288,7 +295,8 @@ change a task, skill package, world, verifier, or evaluator.
 | `actor-interface` | Invoke the pump episode host with current actor JSON. |
 | `control-interface` | Invoke pump controls or explicit rollout composition. |
 | Harbor agent and import | Use the concrete pump transport and evaluator. |
-| Prime ACP Python entry | Run one Open, Guided, or Planned Prime session against one scoped pump actor proxy. |
+| Prime ACP Python entry | Run one Open, Guided, or Planned Prime session against one scoped pump actor host. |
+| Prime dam Python entry | Run one Open or Planned Prime session against one scoped dam episode. |
 | Prime pump journey Python entry | Compose bounded Prime sessions with exact task-owned host continuation until the pump world completes or cannot advance. |
 | Prime refinement qualification Python entry | Compare one fixed candidate with an empty harness on independent RS1 and RS2 journeys without automatic promotion. |
 
@@ -306,7 +314,9 @@ successful transition or evaluation.
 - [separate-process actor resolution](../../tests/worlds/stewardship/wastewater_pump_station/test_actor_interface_transport_e2e.py)
 - [pump retry and recovery](../../tests/worlds/stewardship/wastewater_pump_station/test_registered_world_run_transitions.py)
 - [pump v1 and v2 certified reference-package routes](../../tests/worlds/stewardship/wastewater_pump_station/test_reference_system_package.py)
-- [Prime actor proxy and pump session composition](../../tests/harness/pump_station_prime/test_session.py)
+- [Prime actor endpoint and pump session composition](../../tests/harness/pump_station_prime/test_session.py)
+- [dam episode actor semantics](../../tests/worlds/monitoring/dam_seepage/test_episode_runtime.py)
+- [Prime dam endpoint and session composition](../../tests/harness/dam_seepage_prime/test_session.py)
 - [Prime pump journey composition](../../tests/harness/pump_station_prime/test_journey.py)
 - [pump host continuation policy](../../tests/worlds/stewardship/wastewater_pump_station/test_host_continuation.py)
 - [Prime ACP lifecycle and isolation](../../tests/prime_agent/test_acp.py)
