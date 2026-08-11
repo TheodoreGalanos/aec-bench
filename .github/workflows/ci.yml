@@ -159,8 +159,10 @@ jobs:
         run: >-
           uv run pytest -q
           tests/prime_agent/test_acp.py
+          tests/harness/dam_seepage_prime/test_session.py
           tests/harness/pump_station_prime/test_session.py
           tests/harness/pump_station_prime/test_journey.py
+          tests/worlds/monitoring/dam_seepage/test_episode_runtime.py
           tests/worlds/stewardship/wastewater_pump_station/test_bound_root_control_interface_envelope.py
           tests/worlds/stewardship/wastewater_pump_station/test_host_continuation.py
           tests/worlds/stewardship/wastewater_pump_station/test_reference_controller.py
@@ -172,12 +174,14 @@ jobs:
           uv run ruff format --check
           src/aec_bench/prime_agent/acp.py
           src/aec_bench/prime_agent/skills.py
-          src/aec_bench/harness/pump_station_prime/actor_proxy.py
+          src/aec_bench/harness/prime_actor_endpoint.py
+          src/aec_bench/harness/dam_seepage_prime/
           src/aec_bench/harness/pump_station_prime/evidence.py
           src/aec_bench/harness/pump_station_prime/session.py
           src/aec_bench/harness/pump_station_prime/journey.py
           src/aec_bench/worlds/stewardship/wastewater_pump_station/host_continuation.py
           tests/prime_agent/test_acp.py
+          tests/harness/dam_seepage_prime/
           tests/harness/pump_station_prime/test_session.py
           tests/harness/pump_station_prime/test_journey.py
           tests/worlds/stewardship/wastewater_pump_station/test_host_continuation.py
@@ -187,12 +191,14 @@ jobs:
           uv run mypy
           src/aec_bench/prime_agent/acp.py
           src/aec_bench/prime_agent/skills.py
-          src/aec_bench/harness/pump_station_prime/actor_proxy.py
+          src/aec_bench/harness/prime_actor_endpoint.py
+          src/aec_bench/harness/dam_seepage_prime/
           src/aec_bench/harness/pump_station_prime/evidence.py
           src/aec_bench/harness/pump_station_prime/session.py
           src/aec_bench/harness/pump_station_prime/journey.py
           src/aec_bench/worlds/stewardship/wastewater_pump_station/host_continuation.py
           tests/prime_agent/test_acp.py
+          tests/harness/dam_seepage_prime/
           tests/harness/pump_station_prime/test_session.py
           tests/harness/pump_station_prime/test_journey.py
           tests/worlds/stewardship/wastewater_pump_station/test_host_continuation.py

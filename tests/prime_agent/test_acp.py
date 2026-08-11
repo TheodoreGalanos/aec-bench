@@ -184,13 +184,24 @@ for line in sys.stdin:
             sys.path.insert(0, os.getcwd())
             import aec_world
             async def act():
-                observation = await aec_world.observe()
-                await aec_world.invoke(
-                    "continue_operation",
-                    {{"reason": "Advance the current world once."}},
-                    decision_id=observation["decision_id"],
-                    request_id=os.environ.get("FAKE_WORLD_REQUEST_ID", "fake-prime-world-action"),
+                configured = os.environ.get("FAKE_WORLD_ACTIONS")
+                actions = (
+                    json.loads(configured)
+                    if configured
+                    else [{{
+                        "action_name": "continue_operation",
+                        "arguments": {{"reason": "Advance the current world once."}},
+                        "request_id": os.environ.get("FAKE_WORLD_REQUEST_ID", "fake-prime-world-action"),
+                    }}]
                 )
+                for index, action in enumerate(actions):
+                    observation = await aec_world.observe()
+                    await aec_world.invoke(
+                        action["action_name"],
+                        action.get("arguments", {{}}),
+                        decision_id=observation["decision_id"],
+                        request_id=action.get("request_id", f"fake-prime-world-action-{{index + 1}}"),
+                    )
             asyncio.run(act())
         print(json.dumps({{
             "jsonrpc": "2.0",

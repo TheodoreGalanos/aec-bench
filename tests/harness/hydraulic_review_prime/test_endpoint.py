@@ -84,7 +84,7 @@ async def test_installed_client_uses_all_six_calls_and_preserves_operation_ident
             "offer_submission",
         ]
         assert observation["checkpoint_id"] == "baseline_analysis"
-        assert {"checkpoints", "hydraulics", "inbox", "instruction.md"}.issubset(files["entries"])
+        assert {"checkpoints", "inbox", "instruction.md", "operations"}.issubset(files["entries"])
         assert instruction["content"] == case.request.instruction
         assert operation["operation_id"] == "hydrology.design-10yr"
         assert artifact["path"] == operation["artifacts"][0]["path"]

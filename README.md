@@ -177,14 +177,23 @@ pip install "aec-bench[prime-agent]"
 # Install upstream Prime Agent separately so prime-agent is on PATH.
 ```
 
-The maintained async Python entry point is
-`aec_bench.harness.pump_station_prime.session.run_pump_station_prime_session`.
-It receives a
-host-selected `WorldSessionRequest`, launches one Prime ACP process for one
-session, and supplies the resolved objective in the initial prompt. By default,
-it installs only the generic `aec-world` skill. This is the Open treatment:
-Prime receives the objective, actor-visible starting material, and generic
-actor capability, with no task-family method or external plan.
+The maintained async Python entries are:
+
+- `aec_bench.harness.pump_station_prime.session.run_pump_station_prime_session`;
+  and
+- `aec_bench.harness.dam_seepage_prime.session.run_dam_seepage_prime_session`.
+
+Each entry launches one Prime ACP process and supplies the task objective in the
+initial prompt. By default, it installs only the generic `aec-world` skill.
+This is the Open treatment: Prime receives the objective, actor-visible
+starting material, and generic actor capability, with no task-family method or
+external plan.
+
+The pump entry receives a host-selected `WorldSessionRequest`. The dam entry
+receives one exact registered `InteractiveWorldProfileRef`. The dam task is one
+bounded episode. It has no host control, journey, branch, or durable world
+repository. After Prime closes, the host replays the accepted typed actions and
+runs the existing dam evaluation outside the actor endpoint.
 
 The caller can select the experimental Guided treatment explicitly:
 
@@ -210,6 +219,9 @@ and window calls to inspect that saved data. Planned also loads Prime's
 `agent-message` and bounded, read-only `agent-observe` skills so child sessions
 can return compact findings. The root and all children still share one actor
 capability and form one composite actor principal.
+
+Open and Planned are available for both maintained world entries. Guided is a
+pump-only treatment.
 
 The complete pump journey entry point is
 `aec_bench.harness.pump_station_prime.journey.run_pump_station_prime_journey`.
@@ -290,14 +302,16 @@ await aec_world.invoke(
 )
 ```
 
-The host-owned actor proxy privately binds one pump-world repository and exposes
-only `capabilities`, `observe`, and `invoke`. Prime never receives a world run
-directory or host-control selector. The Prime root session and all descendants
-share one capability and are therefore one composite AECBench actor principal;
-this integration does not claim that only the root process can invoke actions.
-The host rejects new world actions after the configured allowance. An exact
-retry of the same request remains available and does not consume another
-allowance, so the installed actor retry contract stays authoritative.
+The shared Prime actor endpoint exposes only `capabilities`, `observe`, and
+`invoke`. It connects to one task-owned pump or dam episode host. The pump host
+privately binds its world repository; the dam host owns one in-memory episode.
+Prime never receives a world run directory or host-control selector. The Prime
+root session and all descendants share one capability and are therefore one
+composite AECBench actor principal; this integration does not claim that only
+the root process can invoke actions. The endpoint rejects new world actions
+after the configured allowance. An exact retry of the same request remains
+available and does not consume another allowance, so the task host's retry
+contract stays authoritative.
 
 AECBench monitors all Prime session artifacts for the composite principal and
 cancels the active ACP prompt when a model-call, aggregate-token, or aggregate-
@@ -336,6 +350,11 @@ transport attempt without recording the socket capability, host paths, or
 hidden state. Trial-local Prime HOME/XDG directories, configuration, sessions,
 workspace files, and refinement artifacts are isolated and are not promoted to
 another run.
+
+The dam entry writes `prime-dam-seepage-run.json` instead of
+`prime-world-run.json`. It records exact build and profile identity, the Open or
+Planned treatment, accepted actions, Prime and world completion, replay
+validity, and the separate task evaluation.
 
 `PrimeAcpIsolation.DEVELOPMENT_SAME_USER` is explicitly non-benchmark-valid
 development evidence because Prime has the current user's OS permissions.

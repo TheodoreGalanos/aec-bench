@@ -1,5 +1,5 @@
-# ABOUTME: Exposes one host-owned pump-station episode through a capability-scoped actor socket.
-# ABOUTME: Keeps run identity, host controls, hidden state, and replay authority outside Prime.
+# ABOUTME: Connects one Prime process to one Interactive World actor host.
+# ABOUTME: Owns scoped transport, action limits, and safe evidence without interpreting world state.
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import tempfile
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import JsonValue, ValidationError
 
@@ -21,43 +21,54 @@ from aec_bench.contracts.validators import StrictModel
 from aec_bench.contracts.world_interface import (
     WorldActorActionRequest,
     WorldActorActionResult,
+    WorldActorCapabilityCatalogue,
+    WorldActorObservation,
     WorldInterfaceError,
 )
-from aec_bench.contracts.world_session import WorldSessionRequest, WorldSessionResult
 from aec_bench.prime_agent.skills import WORLD_ACTOR_CAPABILITY_ENV, WORLD_ACTOR_SOCKET_ENV
-from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import (
-    PumpStationEpisodeHost,
-)
 
 _MAX_MESSAGE_BYTES = 1024 * 1024
 
 
-class PumpStationPrimeActorProxyError(RuntimeError):
-    """Raised when the scoped pump actor transport cannot be used safely."""
+class _WorldActorHost(Protocol):
+    """The existing actor surface supplied by one concrete world."""
+
+    def capabilities(self) -> WorldActorCapabilityCatalogue: ...
+
+    def observe(self) -> WorldActorObservation: ...
+
+    def invoke(self, request: WorldActorActionRequest) -> WorldActorActionResult: ...
 
 
-class _ActorTransportRequest(StrictModel):
+class PrimeActorEndpointError(RuntimeError):
+    """Raised when the scoped Prime actor endpoint cannot operate safely."""
+
+
+class _TransportRequest(StrictModel):
     capability: str
     request: ContinualWorldActorRequest
 
 
-class _ActorTransportError(StrictModel):
+class _TransportError(StrictModel):
     code: str
     detail: str
 
 
-class _ActorTransportResponse(StrictModel):
+class _TransportResponse(StrictModel):
     result: dict[str, JsonValue] | None = None
-    error: _ActorTransportError | None = None
+    error: _TransportError | None = None
 
 
 class _ThreadedUnixServer(socketserver.ThreadingUnixStreamServer):
-    daemon_threads = True
+    # Closure must wait for every actor request. A late request must not change
+    # world state after the Prime session has ended.
+    daemon_threads = False
+    block_on_close = True
     allow_reuse_address = False
 
 
-class _ActorRequestHandler(socketserver.StreamRequestHandler):
-    server: _ActorProxyServer
+class _RequestHandler(socketserver.StreamRequestHandler):
+    server: _EndpointServer
 
     def handle(self) -> None:
         received_at = datetime.now(UTC)
@@ -79,86 +90,48 @@ class _ActorRequestHandler(socketserver.StreamRequestHandler):
         self.server.owner._handle_request(line, self.wfile, received_at=received_at)
 
 
-class _ActorProxyServer(_ThreadedUnixServer):
-    owner: PumpStationPrimeActorProxy
+class _EndpointServer(_ThreadedUnixServer):
+    owner: PrimeActorEndpoint
 
 
-class PumpStationPrimeActorProxy:
-    """Expose one pump episode through its installed actor operations.
-
-    The socket capability is scoped to the full Prime session. Prime's root
-    process and its descendants form one composite AECBench actor principal.
-    """
+class PrimeActorEndpoint:
+    """Expose one world actor host to one composite Prime actor."""
 
     def __init__(
         self,
         *,
-        world_run_directory: Path,
+        host: _WorldActorHost,
         socket_directory: Path,
         max_world_actions: int,
-        evidence_file: Path | None = None,
+        evidence_file: Path,
     ) -> None:
         if max_world_actions < 1:
             raise ValueError("Prime world max_world_actions must be positive")
-        self._world_run_directory = world_run_directory.resolve()
         requested_socket_directory = socket_directory.resolve()
-        requested_socket_path = requested_socket_directory / "actor.sock"
-        self._owns_socket_directory = len(os.fsencode(requested_socket_path)) > 100
-        short_socket_root = Path("/private/tmp") if Path("/private/tmp").is_dir() else Path("/tmp")
+        requested_socket = requested_socket_directory / "actor.sock"
+        self._owns_socket_directory = len(os.fsencode(requested_socket)) > 100
+        short_root = Path("/private/tmp") if Path("/private/tmp").is_dir() else Path("/tmp")
         self._socket_directory = (
-            Path(tempfile.mkdtemp(prefix="aecbench-actor-", dir=short_socket_root)).resolve()
+            Path(tempfile.mkdtemp(prefix="aecbench-prime-actor-", dir=short_root)).resolve()
             if self._owns_socket_directory
             else requested_socket_directory
         )
-        self._evidence_file = evidence_file.resolve() if evidence_file is not None else None
-        self._host = PumpStationEpisodeHost(self._world_run_directory)
+        self._socket_path = self._socket_directory / "actor.sock"
+        self._host = host
         self._max_world_actions = max_world_actions
+        self._evidence_file = evidence_file.resolve()
+        self._capability = secrets.token_urlsafe(32)
+        self._server: _EndpointServer | None = None
+        self._thread: threading.Thread | None = None
+        self._lock = threading.Lock()
+        self._sequence = 0
         self._world_action_attempts = 0
         self._world_action_limit_reached = False
         self._world_action_requests: dict[str, str] = {}
-        self._capability = secrets.token_urlsafe(32)
-        self._socket_path = self._socket_directory / "actor.sock"
-        self._server: _ActorProxyServer | None = None
-        self._thread: threading.Thread | None = None
-        self._evidence_lock = threading.Lock()
-        self._sequence = 0
         self._last_action_result: WorldActorActionResult | None = None
-
-    def open_world_session(self, request: WorldSessionRequest) -> WorldSessionResult:
-        """Open the host-selected episode before Prime receives actor access."""
-        if self._server is not None:
-            raise PumpStationPrimeActorProxyError("world session cannot be opened after the actor endpoint starts")
-        return self._host.open(request)
-
-    def start(self) -> None:
-        if self._server is not None:
-            raise PumpStationPrimeActorProxyError("actor proxy is already running")
-        self._socket_directory.mkdir(parents=True, exist_ok=True)
-        self._socket_directory.chmod(0o700)
-        if self._socket_path.exists() or self._socket_path.is_symlink():
-            raise PumpStationPrimeActorProxyError("actor socket path already exists")
-        if self._evidence_file is not None:
-            self._evidence_file.parent.mkdir(parents=True, exist_ok=True)
-            self._evidence_file.write_bytes(b"")
-        server = _ActorProxyServer(str(self._socket_path), _ActorRequestHandler)
-        self._socket_path.chmod(0o600)
-        server.owner = self
-        self._server = server
-        self._thread = threading.Thread(target=server.serve_forever, name="aec-world-actor-proxy", daemon=True)
-        self._thread.start()
-
-    def connection_environment(self) -> dict[str, str]:
-        """Return the two opaque values required by the packaged actor client."""
-        if self._server is None:
-            raise PumpStationPrimeActorProxyError("actor proxy is not running")
-        return {
-            WORLD_ACTOR_SOCKET_ENV: str(self._socket_path),
-            WORLD_ACTOR_CAPABILITY_ENV: self._capability,
-        }
 
     @property
     def socket_path(self) -> Path:
-        """Return the scoped endpoint path for process isolation."""
         return self._socket_path
 
     @property
@@ -173,6 +146,22 @@ class PumpStationPrimeActorProxy:
     def world_action_limit_reached(self) -> bool:
         return self._world_action_limit_reached
 
+    def start(self) -> None:
+        if self._server is not None:
+            raise PrimeActorEndpointError("Prime actor endpoint is already running")
+        self._socket_directory.mkdir(parents=True, exist_ok=True)
+        self._socket_directory.chmod(0o700)
+        if self._socket_path.exists() or self._socket_path.is_symlink():
+            raise PrimeActorEndpointError("Prime actor socket path already exists")
+        self._evidence_file.parent.mkdir(parents=True, exist_ok=True)
+        self._evidence_file.write_bytes(b"")
+        server = _EndpointServer(str(self._socket_path), _RequestHandler)
+        self._socket_path.chmod(0o600)
+        server.owner = self
+        self._server = server
+        self._thread = threading.Thread(target=server.serve_forever, name="prime-actor-endpoint", daemon=True)
+        self._thread.start()
+
     def close(self) -> None:
         server, thread = self._server, self._thread
         self._server = None
@@ -186,7 +175,15 @@ class PumpStationPrimeActorProxy:
         if self._owns_socket_directory:
             self._socket_directory.rmdir()
 
-    def __enter__(self) -> PumpStationPrimeActorProxy:
+    def connection_environment(self) -> dict[str, str]:
+        if self._server is None:
+            raise PrimeActorEndpointError("Prime actor endpoint is not running")
+        return {
+            WORLD_ACTOR_SOCKET_ENV: str(self._socket_path),
+            WORLD_ACTOR_CAPABILITY_ENV: self._capability,
+        }
+
+    def __enter__(self) -> PrimeActorEndpoint:
         self.start()
         return self
 
@@ -199,7 +196,7 @@ class PumpStationPrimeActorProxy:
         try:
             raw = json.loads(line)
             operation = _safe_operation(raw)
-            envelope = _ActorTransportRequest.model_validate(raw)
+            envelope = _TransportRequest.model_validate(raw)
             if not hmac.compare_digest(envelope.capability, self._capability):
                 self._record(
                     request=None,
@@ -212,14 +209,14 @@ class PumpStationPrimeActorProxy:
             request = envelope.request
             operation = request.operation
             if request.operation == "invoke" and not self._authorize_world_action(request):
-                response_error = ("world-action-budget-exhausted", "world action budget is exhausted")
+                error = ("world-action-budget-exhausted", "world action budget is exhausted")
                 self._record(
                     request=request,
                     operation=operation,
                     received_at=received_at,
-                    error={"code": response_error[0], "detail": response_error[1]},
+                    error={"code": error[0], "detail": error[1]},
                 )
-                self._write_response(writer, error=response_error)
+                self._write_response(writer, error=error)
                 return
             result = self._dispatch(request)
         except (UnicodeDecodeError, json.JSONDecodeError, ValidationError, TypeError, ValueError):
@@ -231,41 +228,32 @@ class PumpStationPrimeActorProxy:
             )
             self._write_response(writer, error=("actor-request-invalid", "actor request does not match the contract"))
             return
-        except WorldInterfaceError as exc:
+        except WorldInterfaceError as error:
             self._record(
                 request=request,
                 operation=operation,
                 received_at=received_at,
-                error={"code": exc.code, "detail": exc.detail},
+                error={"code": error.code, "detail": error.detail},
             )
-            self._write_response(writer, error=(exc.code, exc.detail))
+            self._write_response(writer, error=(error.code, error.detail))
             return
         except Exception:
             self._record(
                 request=request,
                 operation=operation,
                 received_at=received_at,
-                error={"code": "actor-proxy-failed", "detail": "host actor call failed"},
+                error={"code": "actor-endpoint-failed", "detail": "host actor call failed"},
             )
-            self._write_response(writer, error=("actor-proxy-failed", "host actor call failed"))
+            self._write_response(writer, error=("actor-endpoint-failed", "host actor call failed"))
             return
         payload = result.model_dump(mode="json")
         self._record(request=request, operation=operation, received_at=received_at, result=payload)
         self._write_response(writer, result=payload)
 
-    def _reject_transport(self, writer: Any, *, received_at: datetime, error: tuple[str, str]) -> None:
-        self._record(
-            request=None,
-            operation=None,
-            received_at=received_at,
-            error={"code": error[0], "detail": error[1]},
-        )
-        self._write_response(writer, error=error)
-
     def _authorize_world_action(self, request: ContinualWorldActorRequest) -> bool:
         assert request.request_id is not None
         fingerprint = request.model_dump_json()
-        with self._evidence_lock:
+        with self._lock:
             if self._world_action_requests.get(request.request_id) == fingerprint:
                 return True
             self._world_action_attempts += 1
@@ -286,15 +274,26 @@ class PumpStationPrimeActorProxy:
         assert request.decision_id is not None
         assert request.action_name is not None
         assert request.arguments is not None
-        action = WorldActorActionRequest(
-            request_id=request.request_id,
-            decision_id=request.decision_id,
-            action_name=request.action_name,
-            arguments=request.arguments,
+        result = self._host.invoke(
+            WorldActorActionRequest(
+                request_id=request.request_id,
+                decision_id=request.decision_id,
+                action_name=request.action_name,
+                arguments=request.arguments,
+            )
         )
-        result = self._host.invoke(action)
-        self._last_action_result = result
+        with self._lock:
+            self._last_action_result = result
         return result
+
+    def _reject_transport(self, writer: Any, *, received_at: datetime, error: tuple[str, str]) -> None:
+        self._record(
+            request=None,
+            operation=None,
+            received_at=received_at,
+            error={"code": error[0], "detail": error[1]},
+        )
+        self._write_response(writer, error=error)
 
     def _record(
         self,
@@ -305,9 +304,7 @@ class PumpStationPrimeActorProxy:
         result: dict[str, JsonValue] | None = None,
         error: dict[str, JsonValue] | None = None,
     ) -> None:
-        if self._evidence_file is None:
-            return
-        with self._evidence_lock:
+        with self._lock:
             self._sequence += 1
             event: dict[str, JsonValue] = {
                 "sequence": self._sequence,
@@ -327,9 +324,9 @@ class PumpStationPrimeActorProxy:
         result: dict[str, JsonValue] | None = None,
         error: tuple[str, str] | None = None,
     ) -> None:
-        response = _ActorTransportResponse(
+        response = _TransportResponse(
             result=result,
-            error=None if error is None else _ActorTransportError(code=error[0], detail=error[1]),
+            error=None if error is None else _TransportError(code=error[0], detail=error[1]),
         )
         writer.write(response.model_dump_json(exclude_none=True).encode("utf-8") + b"\n")
         writer.flush()
@@ -342,6 +339,7 @@ def _safe_operation(value: Any) -> str | None:
     if not isinstance(request, dict):
         return None
     operation = request.get("operation")
-    if isinstance(operation, str) and operation in {"capabilities", "observe", "invoke"}:
-        return operation
-    return None
+    return operation if operation in {"capabilities", "observe", "invoke"} else None
+
+
+__all__ = ["PrimeActorEndpoint", "PrimeActorEndpointError"]
