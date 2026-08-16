@@ -15,7 +15,7 @@ import pytest
 from harbor.models.task.config import EnvironmentConfig  # type: ignore[import-untyped]
 from harbor.models.trial.paths import TrialPaths  # type: ignore[import-untyped]
 
-from aec_bench.contracts.execution_environment import RUNTIME_PYTHON_PACKAGES
+from aec_bench.contracts.execution_environment import PYDANTIC_RUNTIME_VERSION, RUNTIME_PYTHON_PACKAGES
 from aec_bench.providers.morph_cloud import MorphCloudOperations, MorphCommandResult
 from aec_bench.providers.morph_harbor import MORPH_HARBOR_ENVIRONMENT_BINDING, MorphHarborEnvironment
 
@@ -28,7 +28,7 @@ def test_morph_harbor_implements_the_neutral_environment_binding() -> None:
 
 def test_morph_runtime_packages_are_exactly_pinned_to_the_kernel_environment() -> None:
     assert RUNTIME_PYTHON_PACKAGES == (
-        "pydantic==2.11.10",
+        f"pydantic=={PYDANTIC_RUNTIME_VERSION}",
         "pydantic-ai[anthropic,bedrock,openai]==1.60.0",
         "boto3==1.42.73",
         "botocore==1.42.73",
@@ -63,21 +63,27 @@ def test_morph_harbor_environment_starts_runtime_snapshot(tmp_path: Path) -> Non
             "workspace_dir": "/workspace",
             "logs_dir": "/logs",
             "tests_dir": "/tests",
+            "allow_internet": True,
         }
     ]
 
 
 def test_morph_harbor_environment_accepts_disabled_internet(tmp_path: Path) -> None:
+    operations = FakeMorphHarborOperations()
+    task_env_config = _environment_config(allow_internet=False)
     environment = MorphHarborEnvironment(
         environment_dir=_write_environment(tmp_path),
         environment_name="pump-station",
         session_id="trial-001",
         trial_paths=TrialPaths(tmp_path / "trial"),
-        task_env_config=_environment_config(allow_internet=False),
-        operations=FakeMorphHarborOperations(),
+        task_env_config=task_env_config,
+        network_policy=task_env_config.resolve_baseline(),
+        operations=operations,
     )
 
-    assert environment.can_disable_internet is True
+    assert environment.capabilities.disable_internet is True
+    _run(environment.start(force_build=False))
+    assert operations.started_containers[0]["allow_internet"] is False
 
 
 @pytest.mark.parametrize(
@@ -126,6 +132,27 @@ def test_morph_harbor_environment_exec_returns_harbor_exec_result(tmp_path: Path
         "env": {"ABC": "123"},
         "timeout_seconds": 30,
     }
+
+
+def test_morph_harbor_environment_honours_harbor_command_user(tmp_path: Path) -> None:
+    operations = FakeMorphHarborOperations()
+    environment = MorphHarborEnvironment(
+        environment_dir=_write_environment(tmp_path),
+        environment_name="heat-load-alpha",
+        session_id="trial-001",
+        trial_paths=TrialPaths(tmp_path / "trial"),
+        task_env_config=_environment_config(),
+        operations=operations,
+    )
+    _run(environment.start(force_build=False))
+
+    _run(environment.exec("python3 --version", user="root"))
+
+    assert operations.commands[-1]["command"] == (
+        "bash",
+        "-lc",
+        "su root -s /bin/bash -c 'python3 --version'",
+    )
 
 
 def test_morph_harbor_environment_uploads_and_downloads_files(tmp_path: Path) -> None:
@@ -357,18 +384,19 @@ def _environment_config(
     storage_mb: int = 10240,
     allow_internet: bool = True,
 ) -> EnvironmentConfig:
-    return EnvironmentConfig.model_construct(
-        build_timeout_sec=600.0,
-        docker_image=None,
-        cpus=1,
-        memory_mb=2048,
-        storage_mb=storage_mb,
-        gpus=0,
-        gpu_types=None,
-        allow_internet=allow_internet,
-        mcp_servers=[],
-        memory=None,
-        storage=None,
+    return EnvironmentConfig.model_validate(
+        {
+            "build_timeout_sec": 600.0,
+            "docker_image": None,
+            "cpus": 1,
+            "memory_mb": 2048,
+            "storage_mb": storage_mb,
+            "gpus": 0,
+            "gpu_types": None,
+            "network_mode": "public" if allow_internet else "no-network",
+            "allowed_hosts": None,
+            "mcp_servers": [],
+        }
     )
 
 
@@ -464,6 +492,7 @@ class FakeMorphHarborOperations:
         workspace_dir: str,
         logs_dir: str,
         tests_dir: str,
+        allow_internet: bool,
     ) -> None:
         self._block_start("container")
         if self.fail_start_container:
@@ -474,6 +503,7 @@ class FakeMorphHarborOperations:
                 "workspace_dir": workspace_dir,
                 "logs_dir": logs_dir,
                 "tests_dir": tests_dir,
+                "allow_internet": allow_internet,
             }
         )
 

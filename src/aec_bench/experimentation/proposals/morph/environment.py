@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import shlex
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from harbor.environments.base import BaseEnvironment, ExecResult  # type: ignore[import-untyped]
+from harbor.environments.capabilities import EnvironmentCapabilities  # type: ignore[import-untyped]
 from harbor.models.environment_type import EnvironmentType  # type: ignore[import-untyped]
 from harbor.models.task.config import EnvironmentConfig  # type: ignore[import-untyped]
 from harbor.models.trial.paths import TrialPaths  # type: ignore[import-untyped]
@@ -177,16 +179,8 @@ class ProposalMorphHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
         return EnvironmentType.DOCKER
 
     @property
-    def is_mounted(self) -> bool:
-        return False
-
-    @property
-    def supports_gpus(self) -> bool:
-        return False
-
-    @property
-    def can_disable_internet(self) -> bool:
-        return False
+    def capabilities(self) -> EnvironmentCapabilities:
+        return EnvironmentCapabilities()
 
     @property
     def _environment_definition_path(self) -> Path:
@@ -561,11 +555,11 @@ class ProposalMorphHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
                 raise FileNotFoundError(f"directory not found in proposal Morph environment: {source}")
             extract_archive(archive_bytes=archive, target_dir=Path(target_dir))
 
-    async def is_dir(self, path: str) -> bool:
+    async def is_dir(self, path: str, user: str | int | None = None) -> bool:
         source = _validated_remote_path(path)
         if source == _PROPOSAL_SESSION_ROOT and self._phase is _BoundaryPhase.VERIFIER:
             return any(remote_path.startswith(f"{_PROPOSAL_SESSION_ROOT}/") for remote_path in self._sealed_artifacts)
-        return bool(await super().is_dir(source))
+        return bool(await super().is_dir(source, user=user))
 
     async def exec(
         self,
@@ -573,16 +567,25 @@ class ProposalMorphHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
         cwd: str | None = None,
         env: dict[str, str] | None = None,
         timeout_sec: int | None = None,
+        user: str | int | None = None,
     ) -> ExecResult:
         async with self._io_lock:
             state = self._require_active()
+            effective_user = self._resolve_user(user)
+            if effective_user is not None:
+                user_arg = (
+                    f"$(getent passwd {effective_user} | cut -d: -f1)"
+                    if isinstance(effective_user, int)
+                    else shlex.quote(effective_user)
+                )
+                command = f"su {user_arg} -s /bin/bash -c {shlex.quote(command)}"
             result = await _run_transition_call(
                 partial(
                     self._operations.run_container_command_result,
                     instance=state.instance,
                     command=("bash", "-lc", command),
                     workdir=cwd,
-                    env=env,
+                    env=self._merge_env(env),
                     timeout_seconds=timeout_sec,
                 )
             )

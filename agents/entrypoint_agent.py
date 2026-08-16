@@ -12,22 +12,25 @@ import shlex
 import tarfile
 import tempfile
 from collections.abc import Mapping
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
 from harbor.agents.base import BaseAgent
 
-from aec_bench.adapters.local_registry import detect_direct_provider
+from aec_bench.adapters.deepseek_harness.config import DEEPSEEK_HARNESS_VERSION
+from aec_bench.adapters.provider_routing import provider_environment, provider_for_execution
 from aec_bench.adapters.rlm.providers import (
-    detect_provider,
     preflight_pydantic_model_configuration,
     resolve_pydantic_provider,
 )
 from aec_bench.adapters.runtime_limits import configured_positive_int, validate_runtime_limit_contract
 from aec_bench.agents.tools import inject_trajectory_writer
 from aec_bench.contracts.agent_output import AgentOutputStatus
-from aec_bench.contracts.execution_environment import PYDANTIC_AI_RUNTIME_VERSION, RUNTIME_PYTHON_PACKAGES
+from aec_bench.contracts.execution_environment import (
+    PYDANTIC_AI_RUNTIME_VERSION,
+    PYDANTIC_RUNTIME_VERSION,
+    RUNTIME_PYTHON_PACKAGES,
+)
 from aec_bench.contracts.harness_instance import AgentBindingConfig
 from aec_bench.contracts.proposal_execution.session import ProposalSessionExecutionRef, ProposalSessionReceipt
 from aec_bench.contracts.proposal_execution_profile import (
@@ -53,7 +56,10 @@ from aec_bench.harness.harbor_task_export import (
     load_harbor_lifecycle_bridge,
     write_harbor_lifecycle_attestation,
 )
-from aec_bench.harness.lifecycle_local import run_local_evidence_lifecycle_session
+from aec_bench.harness.lifecycle_local import (
+    DEFAULT_DEEPSEEK_LIFECYCLE_MAX_TOKENS,
+    run_local_evidence_lifecycle_session,
+)
 from aec_bench.harness.pump_station_harbor.export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
     PUMP_STATION_HARBOR_EXECUTION_KIND,
@@ -62,12 +68,14 @@ from aec_bench.harness.pump_station_harbor.export import (
 )
 from aec_bench.harness.pump_station_harbor.session import (
     PUMP_STATION_MODEL_CONTROLLER_MODE,
+    PUMP_STATION_MODEL_MAX_TOKENS,
     PUMP_STATION_MODEL_MAX_TURNS,
     CompletedPumpStationModelSession,
     CompletedPumpStationReferenceSession,
     run_pump_station_model_session,
     run_pump_station_reference_session,
 )
+from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver
 from aec_bench.lifecycles.runtime.episode import LifecycleVisibilityPolicy
 from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
@@ -83,51 +91,20 @@ _PROPOSAL_RUNTIME_ARCHIVE_REMOTE_PATH = f"{_SHARED_REMOTE_DIR}/proposal-runtime.
 _PROPOSAL_SESSION_REMOTE_ROOT = "/workspace/proposal-session"
 _LIBRARY_REMOTE_PATH = "/opt/aec_bench/aec_bench"
 _RESULT_REMOTE_PATH = "/workspace/agent_result.json"
+_RUNTIME_VENV = "/opt/aec-bench-venv"
+_RUNTIME_PYTHON = f"{_RUNTIME_VENV}/bin/python"
 
 
 def _source_archive_filter(member: tarfile.TarInfo) -> tarfile.TarInfo | None:
     member_path = Path(member.name)
-    if "__pycache__" in member_path.parts or member_path.suffix in {".pyc", ".pyo"}:
+    if (
+        "__pycache__" in member_path.parts
+        or "node_modules" in member_path.parts
+        or member_path.suffix in {".pyc", ".pyo"}
+    ):
         return None
     return member
 
-
-@dataclass(frozen=True)
-class _ProviderEnvironmentCapability:
-    required: tuple[str, ...]
-    optional: tuple[str, ...] = ()
-    required_one_of: tuple[tuple[str, ...], ...] = ()
-
-
-_PROVIDER_ENVIRONMENT_CAPABILITIES = {
-    "anthropic": _ProviderEnvironmentCapability(required=("ANTHROPIC_API_KEY",)),
-    "azure": _ProviderEnvironmentCapability(
-        required=("AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"),
-        optional=("AZURE_OPENAI_API_VERSION",),
-    ),
-    "bedrock": _ProviderEnvironmentCapability(
-        required=("AWS_BEARER_TOKEN_BEDROCK",),
-        required_one_of=(("AWS_REGION", "AWS_DEFAULT_REGION"),),
-    ),
-    "openai": _ProviderEnvironmentCapability(required=("OPENAI_API_KEY",)),
-    "together": _ProviderEnvironmentCapability(required=("TOGETHER_API_KEY",)),
-}
-
-_CLIENT_PROVIDER = {
-    "anthropic_api": "anthropic",
-    "azure_openai_chat": "azure",
-    "replay": None,
-    "together_chat": "together",
-}
-
-_CLIENT_ENVIRONMENT_FIELDS = {
-    "anthropic_api": {"api_key_env": "ANTHROPIC_API_KEY"},
-    "azure_openai_chat": {
-        "api_key_env": "AZURE_OPENAI_API_KEY",
-        "endpoint_env": "AZURE_OPENAI_ENDPOINT",
-    },
-    "together_chat": {"api_key_env": "TOGETHER_API_KEY"},
-}
 
 _HOST_MODEL_PROVIDER_ENVIRONMENT_NAMES = {
     "anthropic": ("ANTHROPIC_API_KEY",),
@@ -186,6 +163,7 @@ class EntrypointAgent(BaseAgent):
         )
         # Harbor passes AgentConfig.parameters as kwargs
         self._params: dict[str, Any] = kwargs
+        self._runtime_python = "python3"
         self._lifecycle_bridge: HarborLifecycleBridge | None = None
         self._proposal_inputs: LoadedProposalSessionHostInputs | None = None
         self._world_session_bridge: PumpStationHarborBridge | None = None
@@ -251,17 +229,38 @@ class EntrypointAgent(BaseAgent):
                 f"stdout: {extracted.stdout}\nstderr: {extracted.stderr}"
             )
 
-        # 3. Install the pinned runtime if pydantic_ai is absent or the wrong version
-        check = await environment.exec(
-            'python3 -c "import pydantic_ai; from importlib.metadata import version; '
-            f"raise SystemExit(version('pydantic-ai') != '{PYDANTIC_AI_RUNTIME_VERSION}')\""
+        # 3. Install the pinned runtime in an isolated environment when the task image does not supply it.
+        runtime_check = (
+            "from importlib.metadata import version;"
+            f"raise SystemExit(version('pydantic') != '{PYDANTIC_RUNTIME_VERSION}' or "
+            f"version('pydantic-ai') != '{PYDANTIC_AI_RUNTIME_VERSION}')"
         )
+        runtime_packages = list(RUNTIME_PYTHON_PACKAGES)
+        if self._params.get("adapter") == "deepseek_harness":
+            runtime_check += (
+                f";expected='{DEEPSEEK_HARNESS_VERSION}';"
+                "raise SystemExit(version('deepseek-harness-sdk') != expected or "
+                "version('deepseek-harness-runtime-bin') != expected)"
+            )
+            runtime_packages.append(f"deepseek-harness-sdk=={DEEPSEEK_HARNESS_VERSION}")
+        check = await environment.exec(f"{self._runtime_python} -c {shlex.quote(runtime_check)}")
         if check.return_code != 0:
-            packages = " ".join(f'"{package}"' for package in RUNTIME_PYTHON_PACKAGES)
-            installed = await environment.exec(f"pip install --no-cache-dir {packages}")
+            prepared_runtime = await environment.exec(
+                f"python3 -m venv {_RUNTIME_VENV} || "
+                "(apt-get update && apt-get install -y --no-install-recommends python3-venv && "
+                f"rm -rf /var/lib/apt/lists/* && python3 -m venv {_RUNTIME_VENV})"
+            )
+            if prepared_runtime.return_code != 0:
+                raise RuntimeError(
+                    "Failed to prepare the isolated aec-bench runtime in sandbox.\n"
+                    f"stdout: {prepared_runtime.stdout}\nstderr: {prepared_runtime.stderr}"
+                )
+            self._runtime_python = _RUNTIME_PYTHON
+            packages = " ".join(shlex.quote(package) for package in runtime_packages)
+            installed = await environment.exec(f"{self._runtime_python} -m pip install --no-cache-dir {packages}")
             if installed.return_code != 0:
                 raise RuntimeError(
-                    "Failed to install pinned aec-bench runtime in sandbox.\n"
+                    "Failed to install the pinned aec-bench runtime in sandbox.\n"
                     f"stdout: {installed.stdout}\nstderr: {installed.stderr}"
                 )
 
@@ -418,14 +417,32 @@ class EntrypointAgent(BaseAgent):
         # Execute the entrypoint in the container
         cmd = (
             f"PYTHONPATH=/opt/aec_bench:$PYTHONPATH "
-            f"python3 -m aec_bench.harness.execution_entrypoint "
+            f"{shlex.quote(self._runtime_python)} -m aec_bench.harness.execution_entrypoint "
             f"--bundle {_BUNDLE_REMOTE_PATH} "
             f"--result {_RESULT_REMOTE_PATH}"
         )
         exec_kwargs: dict[str, Any] = {"timeout_sec": timeout_sec}
         if provider_environment:
             exec_kwargs["env"] = provider_environment
-        exec_result = await environment.exec(cmd, **exec_kwargs)
+        try:
+            exec_result = await environment.exec(cmd, **exec_kwargs)
+        finally:
+            if adapter_kind == "deepseek_harness":
+                try:
+                    evidence_result = await environment.exec(
+                        "if [ -d /workspace/logs/deepseek-harness ]; then "
+                        "mkdir -p /logs/agent/deepseek-harness && "
+                        "cp -a /workspace/logs/deepseek-harness/. /logs/agent/deepseek-harness/; "
+                        "fi",
+                        timeout_sec=min(timeout_sec, 60),
+                    )
+                    if evidence_result.return_code != 0:
+                        self.logger.warning("Failed to publish DeepSeek Harness evidence to Harbor agent logs")
+                except Exception:
+                    self.logger.warning(
+                        "Failed to publish DeepSeek Harness evidence to Harbor agent logs",
+                        exc_info=True,
+                    )
 
         # Read result and populate context
         try:
@@ -567,8 +584,8 @@ class EntrypointAgent(BaseAgent):
         if mode != HARBOR_LIFECYCLE_BRIDGE_MODE:
             raise ValueError(f"unsupported lifecycle bridge mode: {mode!r}")
         adapter_kind = self._params.get("adapter", "tool_loop")
-        if adapter_kind not in {"tool_loop", "pydantic_ai"}:
-            raise ValueError("host-owned lifecycle bridge requires a native tool-loop adapter")
+        if adapter_kind not in {"deepseek_harness", "tool_loop", "pydantic_ai"}:
+            raise ValueError("host-owned lifecycle bridge requires a supported tool-capable adapter")
         if "client" in self._params:
             raise ValueError("host-owned lifecycle bridge does not accept serialized clients")
         if "tools" in self._params:
@@ -577,11 +594,17 @@ class EntrypointAgent(BaseAgent):
             raise ValueError("host-owned lifecycle bridge owns its system prompt")
         if self._params.get("extra_env") not in (None, {}):
             raise ValueError("host-owned lifecycle bridge does not accept agent-supplied environment variables")
-        allowed = {"adapter", "extra_env", "lifecycle_bridge", "max_turns", "timeout_sec"}
+        allowed = {"adapter", "extra_env", "lifecycle_bridge", "max_tokens", "max_turns", "timeout_sec"}
         unknown = sorted(set(self._params) - allowed)
         if unknown:
             raise ValueError(f"unsupported host-owned lifecycle configuration: {', '.join(unknown)}")
         validate_runtime_limit_contract(adapter_kind=str(adapter_kind), configuration=self._params)
+        if adapter_kind == "deepseek_harness":
+            if "max_turns" in self._params:
+                raise ValueError("deepseek_harness lifecycle runs cannot enforce max_turns")
+            configured_positive_int(self._params, "max_tokens")
+        elif "max_tokens" in self._params:
+            raise ValueError("max_tokens is supported only for deepseek_harness lifecycle runs")
         _reject_serialized_provider_secrets(self._params)
 
     def _lifecycle_adapter_builder(self) -> Any:
@@ -615,6 +638,10 @@ class EntrypointAgent(BaseAgent):
             client_payload=None,
         )
         max_turns = configured_positive_int(self._params, "max_turns") or 60
+        max_tokens = configured_positive_int(self._params, "max_tokens")
+        timeout_sec = configured_positive_int(self._params, "timeout_sec")
+        if adapter_kind == "deepseek_harness" and max_tokens is None:
+            max_tokens = DEFAULT_DEEPSEEK_LIFECYCLE_MAX_TOKENS
 
         with tempfile.TemporaryDirectory(prefix="aec-bench-harbor-lifecycle-") as raw_run:
             run_dir = Path(raw_run) / "lifecycle-run"
@@ -627,9 +654,12 @@ class EntrypointAgent(BaseAgent):
                     verifier=None,
                     adapter_kind=adapter_kind,
                     max_turns=max_turns,
+                    max_tokens=max_tokens,
+                    timeout_sec=timeout_sec,
                     process_id="harbor.lifecycle",
                     adapter_builder=self._lifecycle_adapter_builder(),
                     visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
+                    operation_resolver=lifecycle_operation_resolver(current_bridge.package_dir, run_dir),
                     require_adapter_identity_match=True,
                 )
             except Exception as exc:
@@ -665,8 +695,9 @@ class EntrypointAgent(BaseAgent):
         execution_kind = str(self._params.get("execution_kind") or "").strip()
         if execution_kind != PUMP_STATION_HARBOR_EXECUTION_KIND:
             raise ValueError(f"unsupported world-session execution kind: {execution_kind}")
-        if self._params.get("adapter") != "tool_loop":
-            raise ValueError("continual-world session requires the tool_loop adapter")
+        adapter_kind = str(self._params.get("adapter", "tool_loop"))
+        if adapter_kind not in {"deepseek_harness", "tool_loop"}:
+            raise ValueError("continual-world session requires a supported tool-capable adapter")
         if self._params.get("extra_env") not in (None, {}):
             raise ValueError("continual-world session does not accept environment variables")
         if "client" in self._params:
@@ -679,16 +710,24 @@ class EntrypointAgent(BaseAgent):
             "adapter",
             "execution_kind",
             "extra_env",
+            "max_tokens",
             "max_turns",
+            "timeout_sec",
             "world_session",
         }
         unknown = sorted(set(self._params) - allowed)
         if unknown:
             raise ValueError("unsupported continual-world session configuration: " + ", ".join(unknown))
         validate_runtime_limit_contract(
-            adapter_kind="tool_loop",
+            adapter_kind=adapter_kind,
             configuration=self._params,
         )
+        if adapter_kind == "deepseek_harness":
+            if "max_turns" in self._params:
+                raise ValueError("deepseek_harness world sessions cannot enforce max_turns")
+            configured_positive_int(self._params, "max_tokens")
+        elif "max_tokens" in self._params or "timeout_sec" in self._params:
+            raise ValueError("max_tokens and timeout_sec are supported only for deepseek_harness world sessions")
         _reject_serialized_provider_secrets(self._params)
         session = self._params.get("world_session")
         if not isinstance(session, dict) or session.get("bridge_mode") != PUMP_STATION_HARBOR_BRIDGE_MODE:
@@ -728,10 +767,24 @@ class EntrypointAgent(BaseAgent):
         if not session_identity:
             raise RuntimeError("continual-world Harbor environment has no session identity")
 
+        adapter_kind = str(self._params.get("adapter", "tool_loop"))
         model = str(self.model_name or "")
         uses_provider = model != PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
-        provider_environment = _host_model_provider_environment(model) if uses_provider else {}
+        if not uses_provider:
+            provider_environment = {}
+        elif adapter_kind == "deepseek_harness":
+            provider_environment = _provider_environment(
+                adapter_kind=adapter_kind,
+                model_name=model,
+                client_payload=None,
+            )
+        else:
+            provider_environment = _host_model_provider_environment(model)
         max_turns = configured_positive_int(self._params, "max_turns") or PUMP_STATION_MODEL_MAX_TURNS
+        max_tokens = configured_positive_int(self._params, "max_tokens")
+        timeout_sec = configured_positive_int(self._params, "timeout_sec")
+        if adapter_kind == "deepseek_harness" and max_tokens is None:
+            max_tokens = PUMP_STATION_MODEL_MAX_TOKENS
         with tempfile.TemporaryDirectory(prefix="aec-bench-continual-world-harbor-") as raw_run:
             staging = Path(raw_run)
             output_dir = staging / "world-session"
@@ -744,7 +797,10 @@ class EntrypointAgent(BaseAgent):
                         output_dir=output_dir,
                         session_identity=session_identity,
                         model=model,
+                        adapter_kind=adapter_kind,
                         max_turns=max_turns,
+                        max_tokens=max_tokens,
+                        timeout_sec=timeout_sec,
                         adapter_builder=self._lifecycle_adapter_builder(),
                     )
                     adapter_result = completed.adapter_result
@@ -755,9 +811,13 @@ class EntrypointAgent(BaseAgent):
                     session_status = (
                         "completed"
                         if adapter_result.agent_output.status is AgentOutputStatus.COMPLETED
+                        and completed.journey_status.value == "completed"
                         and completed.verification.valid
                         else "incomplete"
                     )
+                    world_segment_count = completed.segment_count
+                    world_host_control_count = completed.host_control_count
+                    world_stop_reason = completed.stop_reason
                     output_file = output_dir / "output.md"
                 else:
                     completed = await asyncio.to_thread(
@@ -776,11 +836,14 @@ class EntrypointAgent(BaseAgent):
                     resolved_model = PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
                     completed_session_id = completed.request.session_id
                     session_status = "completed"
+                    world_segment_count = 0
+                    world_host_control_count = 0
+                    world_stop_reason = "reference-controller"
             except Exception as exc:
                 if not uses_provider:
                     raise
                 context.metadata = {
-                    "adapter_name": "tool_loop",
+                    "adapter_name": adapter_kind,
                     "bridge_mode": current_bridge.bridge_mode,
                     "bridge_manifest_sha256": current_bridge.export_manifest_sha256,
                     "error": _redact_environment_values(
@@ -815,7 +878,7 @@ class EntrypointAgent(BaseAgent):
         context.n_input_tokens = input_tokens
         context.n_output_tokens = output_tokens
         context.metadata = {
-            "adapter_name": "tool_loop",
+            "adapter_name": adapter_result.adapter_name if uses_provider else "reference_controller",
             "bridge_mode": current_bridge.bridge_mode,
             "bridge_manifest_sha256": current_bridge.export_manifest_sha256,
             "execution_kind": current_bridge.execution_kind,
@@ -824,6 +887,9 @@ class EntrypointAgent(BaseAgent):
             "reward_owner": "harbor_verifier",
             "world_session_id": completed_session_id,
             "world_session_status": session_status,
+            "world_segment_count": world_segment_count,
+            "world_host_control_count": world_host_control_count,
+            "world_stop_reason": world_stop_reason,
         }
 
 
@@ -907,72 +973,12 @@ def _provider_environment(
     client_payload: Any,
     host_environment: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
-    provider = _provider_for_execution(
+    provider = provider_for_execution(
         adapter_kind=adapter_kind,
         model_name=model_name,
         client_payload=client_payload,
     )
-    if provider is None:
-        return {}
-
-    capability = _PROVIDER_ENVIRONMENT_CAPABILITIES[provider]
-    source = os.environ if host_environment is None else host_environment
-    missing = [name for name in capability.required if not source.get(name, "").strip()]
-    missing_alternatives = [
-        names for names in capability.required_one_of if not any(source.get(name, "").strip() for name in names)
-    ]
-    if missing or missing_alternatives:
-        requirements = [*missing, *("one of " + ", ".join(names) for names in missing_alternatives)]
-        raise RuntimeError(
-            f"required provider environment configuration is not set for {provider}: " + "; ".join(requirements)
-        )
-
-    approved_names = (
-        *capability.required,
-        *capability.optional,
-        *(name for names in capability.required_one_of for name in names),
-    )
-    return {name: source[name] for name in approved_names if source.get(name, "").strip()}
-
-
-def _provider_for_execution(
-    *,
-    adapter_kind: str,
-    model_name: str,
-    client_payload: Any,
-) -> str | None:
-    if isinstance(client_payload, dict):
-        client_kind = client_payload.get("client_kind")
-        if not isinstance(client_kind, str):
-            return None
-        _validate_client_environment_fields(client_kind, client_payload.get("payload", {}))
-        return _CLIENT_PROVIDER.get(client_kind)
-
-    if adapter_kind == "direct":
-        return detect_direct_provider(model_name)
-
-    detected = detect_provider(model_name)
-    if detected != "auto":
-        return detected
-    provider_prefix = model_name.partition(":")[0].strip().lower()
-    return {
-        "anthropic": "anthropic",
-        "azure": "azure",
-        "openai": "openai",
-    }.get(provider_prefix)
-
-
-def _validate_client_environment_fields(client_kind: str, payload: Any) -> None:
-    approved_fields = _CLIENT_ENVIRONMENT_FIELDS.get(client_kind, {})
-    if not isinstance(payload, dict):
-        return
-    for field_name, approved_name in approved_fields.items():
-        requested_name = payload.get(field_name, approved_name)
-        if requested_name != approved_name:
-            raise ValueError(
-                f"host environment name {requested_name!r} is not approved for client kind {client_kind!r}; "
-                f"use {approved_name!r}"
-            )
+    return provider_environment(provider, host_environment=host_environment)
 
 
 def _reject_serialized_provider_secrets(value: Any, *, path: str = "configuration") -> None:

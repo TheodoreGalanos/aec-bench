@@ -12,7 +12,16 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from harbor.environments.base import BaseEnvironment, ExecResult  # type: ignore[import-untyped]
+from harbor.environments.capabilities import EnvironmentCapabilities  # type: ignore[import-untyped]
 from harbor.models.environment_type import EnvironmentType  # type: ignore[import-untyped]
+from harbor.models.trial.config import TrialConfig  # type: ignore[import-untyped]
+from harbor.models.trial.result import TrialResult  # type: ignore[import-untyped]
+from harbor.trial.trial import Trial  # type: ignore[import-untyped]
+
+
+async def run_harbor_trial(config: TrialConfig) -> TrialResult:
+    trial = await Trial.create(config)
+    return await trial.run()
 
 
 class LocalFilesystemHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
@@ -23,16 +32,8 @@ class LocalFilesystemHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
         return EnvironmentType.DOCKER
 
     @property
-    def is_mounted(self) -> bool:
-        return False
-
-    @property
-    def supports_gpus(self) -> bool:
-        return False
-
-    @property
-    def can_disable_internet(self) -> bool:
-        return True
+    def capabilities(self) -> EnvironmentCapabilities:
+        return EnvironmentCapabilities(disable_internet=True)
 
     @property
     def _root(self) -> Path:
@@ -50,7 +51,7 @@ class LocalFilesystemHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
         del force_build
         if self._root.exists():
             raise FileExistsError(f"local Harbor environment already exists: {self._root}")
-        for relative in ("workspace", "logs/agent", "logs/verifier"):
+        for relative in ("workspace", "logs/agent", "logs/verifier", "logs/artifacts"):
             (self._root / relative).mkdir(parents=True, exist_ok=True)
         context = self.environment_dir / "context"
         if context.is_dir():
@@ -98,11 +99,13 @@ class LocalFilesystemHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
         cwd: str | None = None,
         env: dict[str, str] | None = None,
         timeout_sec: int | None = None,
+        user: str | int | None = None,
     ) -> ExecResult:
+        del user  # This host-only test environment cannot change process identity safely.
         rewritten = self._rewrite_command(command)
         process_environment = dict(os.environ)
         process_environment.pop("PYTHONPATH", None)
-        process_environment.update(env or {})
+        process_environment.update(self._merge_env(env) or {})
         process_environment.update(self._verifier_environment())
         working_directory = self._remote_path(cwd or "/workspace")
         self._record("exec", command=command, verifier_uploaded=(self._root / "tests").is_dir())

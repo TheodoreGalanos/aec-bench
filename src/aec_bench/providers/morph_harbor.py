@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import shlex
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from functools import partial
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
 from harbor.environments.base import BaseEnvironment, ExecResult  # type: ignore[import-untyped]
+from harbor.environments.capabilities import EnvironmentCapabilities  # type: ignore[import-untyped]
 from harbor.models.environment_type import EnvironmentType  # type: ignore[import-untyped]
 from harbor.models.task.config import EnvironmentConfig  # type: ignore[import-untyped]
 from harbor.models.trial.paths import TrialPaths  # type: ignore[import-untyped]
@@ -55,6 +57,7 @@ class MorphHarborOperations(Protocol):
         workspace_dir: str,
         logs_dir: str,
         tests_dir: str,
+        allow_internet: bool,
     ) -> None: ...
 
     def run_container_command_result(
@@ -156,16 +159,8 @@ class MorphHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
         return EnvironmentType.DOCKER
 
     @property
-    def is_mounted(self) -> bool:
-        return False
-
-    @property
-    def supports_gpus(self) -> bool:
-        return False
-
-    @property
-    def can_disable_internet(self) -> bool:
-        return True
+    def capabilities(self) -> EnvironmentCapabilities:
+        return EnvironmentCapabilities(disable_internet=True)
 
     @property
     def _environment_definition_path(self) -> Path:
@@ -223,6 +218,7 @@ class MorphHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
                     workspace_dir=REMOTE_WORKSPACE_DIR,
                     logs_dir=REMOTE_LOGS_DIR,
                     tests_dir=REMOTE_TESTS_DIR,
+                    allow_internet=self._network_is_public,
                 ),
                 label="trial-container start",
                 cancel_cleanup=cleanup_cancelled_container,
@@ -352,13 +348,22 @@ class MorphHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
         cwd: str | None = None,
         env: dict[str, str] | None = None,
         timeout_sec: int | None = None,
+        user: str | int | None = None,
     ) -> ExecResult:
+        effective_user = self._resolve_user(user)
+        if effective_user is not None:
+            user_arg = (
+                f"$(getent passwd {effective_user} | cut -d: -f1)"
+                if isinstance(effective_user, int)
+                else shlex.quote(effective_user)
+            )
+            command = f"su {user_arg} -s /bin/bash -c {shlex.quote(command)}"
         result = await asyncio.to_thread(
             self._operations.run_container_command_result,
             instance=self._require_instance(),
             command=("bash", "-lc", command),
             workdir=cwd,
-            env=env,
+            env=self._merge_env(env),
             timeout_seconds=timeout_sec,
         )
         return ExecResult(

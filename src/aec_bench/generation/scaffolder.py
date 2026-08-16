@@ -98,7 +98,7 @@ build_timeout_sec = 600.0
 cpus = 1
 memory_mb = 2048
 storage_mb = 5120
-allow_internet = true
+network_mode = "public"
 
 [generation]
 origin = "generated"

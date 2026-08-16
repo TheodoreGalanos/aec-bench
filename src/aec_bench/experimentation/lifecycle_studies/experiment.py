@@ -273,6 +273,18 @@ def record_lifecycle_experiment(
             **lifecycle_operation_protocol_identity(),
             "tool_schema_sha256": hashlib.sha256(tool_schema_payload).hexdigest(),
         }
+    execution_manifest = {
+        "mode": agent["execution_mode"],
+        "memory_visibility_policy": agent["memory_visibility_policy"],
+        "session_count": len(agent.get("sessions", [])),
+        "status": agent["status"],
+        "checkpoint_seconds": metrics.checkpoint_seconds,
+        "whole_run_seconds": metrics.whole_run_seconds,
+    }
+    if "max_turns_per_session" in agent:
+        execution_manifest["max_turns_per_session"] = agent["max_turns_per_session"]
+    if "limits" in agent:
+        execution_manifest["limits"] = agent["limits"]
     manifest = LifecycleExperimentManifest(
         experiment_id=experiment_id,
         created_at=datetime.now(UTC).isoformat(),
@@ -301,15 +313,7 @@ def record_lifecycle_experiment(
             ],
             "provider_environment": _provider_environment(),
         },
-        execution={
-            "mode": agent["execution_mode"],
-            "memory_visibility_policy": agent["memory_visibility_policy"],
-            "max_turns_per_session": agent["max_turns_per_session"],
-            "session_count": len(agent.get("sessions", [])),
-            "status": agent["status"],
-            "checkpoint_seconds": metrics.checkpoint_seconds,
-            "whole_run_seconds": metrics.whole_run_seconds,
-        },
+        execution=execution_manifest,
         interaction=interaction,
         outputs={
             "verification.json": _sha256(verification_path),
@@ -490,7 +494,7 @@ def runtime_dependency_provenance(
     search_paths: tuple[Path, ...] | None = None,
 ) -> dict[str, Any]:
     """Hash the realized runtime distributions used by one lifecycle condition."""
-    if adapter_kind not in {"in_process", "tool_loop", "pydantic_ai"}:
+    if adapter_kind not in {"deepseek_harness", "in_process", "tool_loop", "pydantic_ai"}:
         raise ValueError(f"unsupported lifecycle runtime adapter: {adapter_kind}")
 
     provider = _resolve_runtime_provider(adapter_kind, model_name)
@@ -551,6 +555,11 @@ def _runtime_distribution_closure(
 ) -> dict[str, set[str]]:
     if adapter_kind == "in_process":
         seeds: dict[str, set[str]] = {"pydantic": set(), "pyyaml": set()}
+    elif adapter_kind == "deepseek_harness":
+        seeds = {
+            "deepseek-harness-runtime-bin": set(),
+            "deepseek-harness-sdk": set(),
+        }
     else:
         provider_extras, provider_distributions = _runtime_provider_dependencies(provider)
         seeds = {
@@ -584,6 +593,11 @@ def _runtime_distribution_closure(
 def _resolve_runtime_provider(adapter_kind: str, model_name: str) -> str:
     if adapter_kind == "in_process":
         return "in_process"
+    if adapter_kind == "deepseek_harness":
+        provider = model_name.partition(":")[0].strip().lower()
+        if provider not in {"azure", "deepseek"}:
+            raise ValueError(f"unsupported DeepSeek lifecycle provider: {provider or model_name}")
+        return provider
     from aec_bench.adapters.rlm.providers import resolve_pydantic_provider
 
     provider = resolve_pydantic_provider(model_name)

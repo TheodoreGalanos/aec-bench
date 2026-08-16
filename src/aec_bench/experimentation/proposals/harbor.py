@@ -107,11 +107,8 @@ def build_proposal_harbor_job_config(
             {"type": "min"},
             {"type": "max"},
         ],
-        "orchestrator": {
-            "type": "local",
-            "n_concurrent_trials": 1,
-            "quiet": False,
-        },
+        "n_concurrent_trials": 1,
+        "quiet": False,
         "environment": {
             "import_path": PROPOSAL_MORPH_HARBOR_ENVIRONMENT_IMPORT_PATH,
             "force_build": False,

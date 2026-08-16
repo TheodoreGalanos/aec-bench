@@ -505,7 +505,7 @@ build_timeout_sec = 456
 cpus = 2
 memory_mb = 3072
 storage_mb = 6144
-allow_internet = true
+network_mode = "public"
 """.strip()
         + "\n",
         encoding="utf-8",

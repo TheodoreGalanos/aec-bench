@@ -231,6 +231,7 @@ class MorphCloudOperations:
         workspace_dir: str,
         logs_dir: str,
         tests_dir: str = "/tests",
+        allow_internet: bool,
     ) -> None:
         self._run_host_command(
             instance,
@@ -246,6 +247,7 @@ class MorphCloudOperations:
             instance,
             f"docker rm -f {shlex.quote(self.trial_container_name)} >/dev/null 2>&1 || true",
         )
+        network_options: tuple[str, ...] = () if allow_internet else ("--network", "none")
         self._run_host_command(
             instance,
             shlex.join(
@@ -281,8 +283,7 @@ class MorphCloudOperations:
                     f"{logs_dir}:{logs_dir}",
                     "--volume",
                     f"{tests_dir}:{tests_dir}",
-                    "--network",
-                    "none",
+                    *network_options,
                     self.runtime_image_name,
                     "sleep",
                     "infinity",

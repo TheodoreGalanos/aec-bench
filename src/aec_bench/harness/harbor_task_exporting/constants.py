@@ -24,8 +24,8 @@ BASE_TOOLS = (
 BASE_IMAGE = "python:3.13-slim-bookworm@sha256:9d7f287598e1a5a978c015ee176d8216435aaf335ed69ac3c38dd1bbb10e8d64"
 RUNTIME_DEPENDENCIES = (
     "annotated-types==0.7.0",
-    "pydantic-core==2.33.2",
-    "pydantic==2.11.10",
+    "pydantic-core==2.46.4",
+    "pydantic==2.13.4",
     "typing-extensions==4.15.0",
     "typing-inspection==0.4.2",
 )

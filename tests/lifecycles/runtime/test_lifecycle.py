@@ -2072,6 +2072,38 @@ def test_local_runners_return_the_same_normalized_evidence_schema(tmp_path: Path
     }
 
 
+def test_persistent_deepseek_lifecycle_uses_only_enforceable_limits(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+    registry = _LifecycleSessionRegistry(package=package, run_dir=run_dir)
+
+    result = run_local_evidence_lifecycle_session(
+        package_dir=package,
+        run_dir=run_dir,
+        model="azure:deepseek-v4-flash",
+        adapter_kind="deepseek_harness",
+        max_turns=99,
+        max_tokens=4096,
+        timeout_sec=120,
+        adapter_builder=registry.build,
+        verifier=lambda _package, _run: {
+            "lifecycle_id": "lifecycle.demo",
+            "reward": 1.0,
+            "overall": "pass",
+            "passed": True,
+            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
+        },
+    )
+
+    assert registry.configuration == {"max_tokens": 4096, "timeout_sec": 120}
+    agent = result["evidence"]["agent"]
+    assert "max_turns_per_session" not in agent
+    assert agent["limits"] == {"max_output_tokens_per_call": 4096, "timeout_sec": 120}
+    session = agent["sessions"][0]
+    assert "max_turns" not in session
+    assert session["limits"] == agent["limits"]
+
+
 @pytest.mark.parametrize("execution_mode", ["persistent_context", "fresh_context"])
 def test_local_runners_forward_an_explicit_experiment_recorder(
     tmp_path: Path,
@@ -3375,6 +3407,7 @@ class _LifecycleSessionRegistry:
         self.system_prompt = ""
         self.enable_bash: bool | None = None
         self.request_tool_names: list[str] = []
+        self.configuration: dict[str, int] = {}
 
     def build(self, *, native_tools, enable_bash=True, **_kwargs):
         self.build_count += 1
@@ -3389,6 +3422,7 @@ class _LifecycleSessionRegistry:
                 registry.instruction = request.instruction
                 registry.system_prompt = request.system_prompt
                 registry.request_tool_names = [tool.name for tool in request.tools]
+                registry.configuration = request.configuration
                 while True:
                     state = read_evidence_lifecycle_state(registry.package, registry.run_dir)
                     checkpoint_id = state["active_checkpoint_id"]

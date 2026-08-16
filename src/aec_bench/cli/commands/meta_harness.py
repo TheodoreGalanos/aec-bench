@@ -32,6 +32,7 @@ from aec_bench.experimentation.qualification.recipe import (
 )
 from aec_bench.harness.lifecycle_local import (
     LifecycleVisibilityPolicy,
+    recover_completed_persistent_lifecycle_session,
     run_local_evidence_lifecycle_fresh_context,
     run_local_evidence_lifecycle_session,
 )
@@ -172,6 +173,18 @@ def lifecycle_run_local_command(
     ),
     process_id: str = typer.Option("process.lifecycle", "--process-id", help="Parent meta-harness process id"),
     max_turns: int = typer.Option(60, "--max-turns", min=1, help="Maximum model requests per model session"),
+    max_tokens: int | None = typer.Option(
+        None,
+        "--max-tokens",
+        min=1,
+        help="DeepSeek maximum output tokens per model request; defaults to 8192",
+    ),
+    timeout_sec: int | None = typer.Option(
+        None,
+        "--timeout-sec",
+        min=1,
+        help="DeepSeek whole-session timeout in seconds; defaults to 1800",
+    ),
     visibility_policy: str | None = typer.Option(
         None,
         "--visibility-policy",
@@ -185,12 +198,23 @@ def lifecycle_run_local_command(
         selected_visibility = _lifecycle_visibility_policy(
             visibility_policy or LifecycleVisibilityPolicy.PERSISTENT_CONTEXT.value
         )
-        result = run_local_evidence_lifecycle_session(
+        lifecycle_runner: Callable[..., dict[str, Any]] = run_local_evidence_lifecycle_session
+        if (run_dir / "state.json").is_file():
+            existing = read_evidence_lifecycle_state(
+                package,
+                run_dir,
+                operation_resolver=operation_resolver,
+            )
+            if existing["status"] == "complete":
+                lifecycle_runner = recover_completed_persistent_lifecycle_session
+        result = lifecycle_runner(
             package_dir=package,
             run_dir=run_dir,
             model=model,
             adapter_kind=adapter,
             max_turns=max_turns,
+            max_tokens=max_tokens,
+            timeout_sec=timeout_sec,
             process_id=process_id,
             verifier=verify_lifecycle,
             visibility_policy=selected_visibility,
@@ -198,6 +222,11 @@ def lifecycle_run_local_command(
             run_recorder=record_lifecycle_experiment,
         )
     elif mode == "fresh-context":
+        if adapter == "deepseek_harness":
+            raise typer.BadParameter(
+                "deepseek_harness lifecycle execution currently requires persistent mode",
+                param_hint="--mode",
+            )
         selected_visibility = _lifecycle_visibility_policy(
             visibility_policy or LifecycleVisibilityPolicy.ARTIFACT_MEMORY.value
         )

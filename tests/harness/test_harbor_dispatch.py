@@ -120,7 +120,9 @@ def test_build_harbor_job_config_uses_precise_task_paths() -> None:
     config = build_harbor_job_config(manifest=manifest, tasks=tasks)
 
     assert config["jobs_dir"] == "jobs"
-    assert config["orchestrator"]["n_concurrent_trials"] == 2
+    assert config["n_concurrent_trials"] == 2
+    assert config["quiet"] is False
+    assert "orchestrator" not in config
     assert config["environment"]["type"] == "modal"
     assert config["agents"][0]["import_path"] == "agents.entrypoint_agent:EntrypointAgent"
     assert config["tasks"] == [
@@ -383,6 +385,32 @@ def test_entrypoint_request_prediction_includes_harbor_agent_environment_default
         "max_turns": 32,
         "prompt_cache": False,
     }
+
+
+def test_normal_harbor_agent_configuration_selects_the_deepseek_baseline() -> None:
+    agent = AgentConfig(
+        name="deepseek-baseline",
+        adapter="deepseek_harness",
+        model="deepseek:deepseek-chat",
+        parameters={"max_tokens": 4096, "timeout_sec": 1800},
+    )
+
+    bundle = build_harbor_entrypoint_execution_bundle(
+        agent=agent,
+        instruction="Write the requested artifact.",
+    )
+
+    assert bundle.execution.adapter_kind == "deepseek_harness"
+    assert bundle.execution.resolved_model == "deepseek:deepseek-chat"
+    assert bundle.execution.payload == {"provider": "deepseek"}
+    assert bundle.request.configuration == {
+        "adapter": "deepseek_harness",
+        "extra_env": {},
+        "max_tokens": 4096,
+        "timeout_sec": 1800,
+    }
+    assert "output_completion_commit" not in bundle.request.configuration
+    assert "output_completion_contract" not in bundle.request.configuration
 
 
 def test_experiment_manifest_accepts_reviewer_config() -> None:

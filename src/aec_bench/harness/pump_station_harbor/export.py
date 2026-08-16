@@ -615,7 +615,7 @@ def _task_toml_text(
         "cpus = 2\n"
         "memory_mb = 4096\n"
         "storage_mb = 10240\n"
-        "allow_internet = false\n"
+        'network_mode = "no-network"\n'
     )
 
 

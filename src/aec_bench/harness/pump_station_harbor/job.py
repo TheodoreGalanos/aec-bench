@@ -19,6 +19,7 @@ from aec_bench.harness.pump_station_harbor.export import (
 )
 from aec_bench.harness.pump_station_harbor.session import (
     PUMP_STATION_MODEL_CONTROLLER_MODE,
+    PUMP_STATION_MODEL_MAX_TOKENS,
     PUMP_STATION_MODEL_MAX_TURNS,
 )
 from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
@@ -35,7 +36,10 @@ def build_pump_station_harbor_job_config(
     jobs_dir: Path,
     backend: str = "docker",
     model_name: str = PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
+    adapter: str = "tool_loop",
     max_turns: int = PUMP_STATION_MODEL_MAX_TURNS,
+    max_tokens: int | None = None,
+    timeout_sec: int | None = None,
     environment_binding: HarborEnvironmentBinding | None = None,
 ) -> dict[str, Any]:
     """Build one validated local Harbor configuration for the exported task."""
@@ -50,27 +54,39 @@ def build_pump_station_harbor_job_config(
     if max_turns < 1:
         raise ValueError("pump-station Harbor max turns must be positive")
     reference_controller = model == PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
+    adapter_kind = "tool_loop" if reference_controller else adapter.strip()
+    if adapter_kind not in {"deepseek_harness", "tool_loop"}:
+        raise ValueError(f"unsupported pump-station Harbor adapter: {adapter_kind}")
     world_session = {"bridge_mode": bridge.bridge_mode}
     agent_kwargs: dict[str, Any] = {
-        "adapter": "tool_loop",
+        "adapter": adapter_kind,
         "execution_kind": bridge.execution_kind,
         "world_session": world_session,
     }
     agent_name = "pump-station-reference-controller"
     if not reference_controller:
         agent_name = "pump-station-model-controller"
-        agent_kwargs["max_turns"] = max_turns
+        if adapter_kind == "deepseek_harness":
+            resolved_max_tokens = PUMP_STATION_MODEL_MAX_TOKENS if max_tokens is None else max_tokens
+            if isinstance(resolved_max_tokens, bool) or resolved_max_tokens <= 0:
+                raise ValueError("pump-station Harbor max tokens must be positive")
+            agent_kwargs["max_tokens"] = resolved_max_tokens
+            if timeout_sec is not None:
+                if isinstance(timeout_sec, bool) or timeout_sec <= 0:
+                    raise ValueError("pump-station Harbor timeout must be positive")
+                agent_kwargs["timeout_sec"] = timeout_sec
+        else:
+            if max_tokens is not None or timeout_sec is not None:
+                raise ValueError("max_tokens and timeout_sec require the deepseek_harness adapter")
+            agent_kwargs["max_turns"] = max_turns
         world_session["controller"] = PUMP_STATION_MODEL_CONTROLLER_MODE
     config: dict[str, Any] = {
         "job_name": (f"wastewater-pump-station-{'reference' if reference_controller else 'model'}-{backend}"),
         "jobs_dir": str(Path(jobs_dir).resolve()),
         "n_attempts": 1,
         "timeout_multiplier": 1.0,
-        "orchestrator": {
-            "type": "local",
-            "n_concurrent_trials": 1,
-            "quiet": False,
-        },
+        "n_concurrent_trials": 1,
+        "quiet": False,
         "environment": environment,
         "agents": [
             {
@@ -104,7 +120,10 @@ def run_pump_station_harbor_job(
     config_path: Path,
     backend: str = "docker",
     model_name: str = PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
+    adapter: str = "tool_loop",
     max_turns: int = PUMP_STATION_MODEL_MAX_TURNS,
+    max_tokens: int | None = None,
+    timeout_sec: int | None = None,
     environment_binding: HarborEnvironmentBinding | None = None,
     execute: bool = True,
     executor: HarborCommandExecutor | None = None,
@@ -120,7 +139,10 @@ def run_pump_station_harbor_job(
         jobs_dir=jobs_dir,
         backend=backend,
         model_name=model_name,
+        adapter=adapter,
         max_turns=max_turns,
+        max_tokens=max_tokens,
+        timeout_sec=timeout_sec,
         environment_binding=environment_binding,
     )
     return dispatch_harbor_config(

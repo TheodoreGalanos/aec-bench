@@ -10,9 +10,10 @@ from pydantic import Field
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 
 PYDANTIC_AI_RUNTIME_VERSION = "1.60.0"
+PYDANTIC_RUNTIME_VERSION = "2.13.4"
 
 RUNTIME_PYTHON_PACKAGES = (
-    "pydantic==2.11.10",
+    f"pydantic=={PYDANTIC_RUNTIME_VERSION}",
     f"pydantic-ai[anthropic,bedrock,openai]=={PYDANTIC_AI_RUNTIME_VERSION}",
     "boto3==1.42.73",
     "botocore==1.42.73",

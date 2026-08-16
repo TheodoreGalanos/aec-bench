@@ -6,13 +6,16 @@ from pydantic import ValidationError
 
 from aec_bench.contracts.execution_environment import (
     PYDANTIC_AI_RUNTIME_VERSION,
+    PYDANTIC_RUNTIME_VERSION,
     RUNTIME_PYTHON_PACKAGES,
     HarborEnvironmentBinding,
 )
 
 
 def test_runtime_packages_pin_the_declared_model_runtime() -> None:
+    assert PYDANTIC_RUNTIME_VERSION == "2.13.4"
     assert PYDANTIC_AI_RUNTIME_VERSION == "1.60.0"
+    assert f"pydantic=={PYDANTIC_RUNTIME_VERSION}" in RUNTIME_PYTHON_PACKAGES
     assert f"pydantic-ai[anthropic,bedrock,openai]=={PYDANTIC_AI_RUNTIME_VERSION}" in RUNTIME_PYTHON_PACKAGES
 
 

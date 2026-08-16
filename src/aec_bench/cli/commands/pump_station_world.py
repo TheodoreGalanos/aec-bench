@@ -51,6 +51,7 @@ from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository i
 app = typer.Typer(help="Run the synthetic wastewater pump-station stewardship world.")
 _DEFAULT_REFERENCE_CONTROLLER_ID = PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
 _DEFAULT_MODEL_MAX_TURNS = 90
+_DEFAULT_MODEL_MAX_TOKENS = 8192
 
 
 def _model_payload(value: object) -> dict[str, object]:
@@ -311,13 +312,30 @@ def run_harbor_command(
     model: str = typer.Option(
         _DEFAULT_REFERENCE_CONTROLLER_ID,
         "--model",
-        help="Reference controller ID or Bedrock model name",
+        help="Reference controller ID or provider-qualified model name",
+    ),
+    adapter: str = typer.Option(
+        "tool_loop",
+        "--adapter",
+        help="Model adapter: tool_loop or deepseek_harness",
     ),
     max_turns: int = typer.Option(
         _DEFAULT_MODEL_MAX_TURNS,
         "--max-turns",
         min=1,
         help="Maximum model requests for a model-controlled session",
+    ),
+    max_tokens: int = typer.Option(
+        _DEFAULT_MODEL_MAX_TOKENS,
+        "--max-tokens",
+        min=1,
+        help="Maximum output tokens per DeepSeek Harness model request",
+    ),
+    timeout_sec: int | None = typer.Option(
+        None,
+        "--timeout-sec",
+        min=1,
+        help="Whole-process timeout for a DeepSeek Harness session",
     ),
     execute: bool = typer.Option(
         True,
@@ -343,7 +361,10 @@ def run_harbor_command(
         config_path=config_path,
         backend=backend,
         model_name=model,
+        adapter=adapter,
         max_turns=max_turns,
+        max_tokens=max_tokens if adapter == "deepseek_harness" else None,
+        timeout_sec=timeout_sec,
         environment_binding=resolve_harbor_environment_binding(backend),
         execute=execute,
     )
@@ -355,7 +376,12 @@ def run_harbor_command(
             "command": list(result.command),
             "backend": backend,
             "model": model,
-            "max_turns": max_turns,
+            "adapter": adapter,
+            "limits": (
+                {"max_tokens": max_tokens, "timeout_sec": timeout_sec}
+                if adapter == "deepseek_harness"
+                else {"max_turns": max_turns}
+            ),
             "executed": execute,
             "exit_code": result.exit_code,
         },

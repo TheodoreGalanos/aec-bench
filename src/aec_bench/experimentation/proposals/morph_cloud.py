@@ -331,6 +331,7 @@ class ProposalMorphCloudOperations(MorphCloudOperations):
             workspace_dir=workspace_dir,
             logs_dir=logs_dir,
             tests_dir=tests_dir,
+            allow_internet=False,
         )
         return self.trial_container_identity(instance=instance)
 
