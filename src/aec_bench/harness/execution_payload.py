@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 
 from aec_bench.adapters.base import (
     AdapterCompletionReason,
@@ -19,6 +19,7 @@ from aec_bench.adapters.base import (
     OutputCompletionAssistance,
     SerializedAdapterExecution,
 )
+from aec_bench.adapters.provider_routing import provider_for_execution
 from aec_bench.contracts.adapter_execution import (
     TokenUsage,
     TranscriptEntry,
@@ -46,11 +47,14 @@ class RuntimeExecutionAttestation(ContentAddressedModel):
     requested_model: NonEmptyStr
     resolved_model: NonEmptyStr
     execution_request_sha256: str
+    evidence_manifest_sha256: str | None = Field(default=None, exclude_if=lambda value: value is None)
     meta_harness_context: MetaHarnessTrajectoryContext | None = None
 
-    @field_validator("execution_request_sha256")
+    @field_validator("execution_request_sha256", "evidence_manifest_sha256")
     @classmethod
-    def validate_request_hash(cls, value: str) -> str:
+    def validate_bound_hash(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         return validate_sha256(value)
 
 
@@ -90,6 +94,13 @@ def build_entrypoint_execution_bundle(
     client_payload = configuration.get("client")
     if isinstance(client_payload, dict):
         execution_payload["client"] = client_payload
+    provider = provider_for_execution(
+        adapter_kind=adapter_kind,
+        model_name=model_name,
+        client_payload=client_payload,
+    )
+    if provider is not None:
+        execution_payload["provider"] = provider
     return ExecutionBundle(
         execution=SerializedAdapterExecution(
             adapter_kind=adapter_kind,
@@ -301,6 +312,10 @@ def build_runtime_execution_attestation(
         requested_model=bundle.execution.resolved_model,
         resolved_model=result.resolved_model,
         execution_request_sha256=execution_request_sha256(bundle),
+        evidence_manifest_sha256=cast(
+            str | None,
+            result.configuration_record.get("evidence_manifest_sha256"),
+        ),
         meta_harness_context=context,
     )
 

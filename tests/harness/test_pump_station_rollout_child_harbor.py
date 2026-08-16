@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 from harbor.models.trial.config import TrialConfig  # type: ignore[import-untyped]
-from harbor.trial.trial import Trial  # type: ignore[import-untyped]
 
 from aec_bench.contracts.continual_world import (
     ContinualRolloutChildRequest,
@@ -60,6 +59,7 @@ from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository i
 from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_serialization import (
     pump_station_artifact_id,
 )
+from tests.support.harbor_local_environment import run_harbor_trial
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _INITIAL_RUN_PATH = "tests/initial-world-run"
@@ -270,7 +270,7 @@ def test_local_harbor_trial_resumes_one_rollout_child_for_one_bounded_actor_acti
         }
     )
 
-    result = asyncio.run(Trial(config).run())
+    result = asyncio.run(run_harbor_trial(config))
 
     assert result.exception_info is None
     assert result.agent_result is not None

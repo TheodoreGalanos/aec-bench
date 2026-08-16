@@ -10,6 +10,7 @@ import platform
 import shutil
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -338,6 +339,36 @@ def test_runtime_dependency_provenance_resolves_explicit_openai_provider(tmp_pat
     assert before["provider"] == "openai"
     assert "openai==1.0.0" in before["distributions"]
     assert before["dependency_inventory_sha256"] != after["dependency_inventory_sha256"]
+
+
+def test_runtime_dependency_provenance_records_deepseek_harness_distributions(tmp_path: Path) -> None:
+    site_packages = tmp_path / "site-packages"
+    for distribution_name, package_name in (
+        ("deepseek-harness-sdk", "deepseek_harness"),
+        ("deepseek-harness-runtime-bin", "deepseek_harness_runtime_bin"),
+    ):
+        package = site_packages / package_name / "__init__.py"
+        package.parent.mkdir(parents=True)
+        package.write_text(f"BEHAVIOR = '{distribution_name}-baseline'\n", encoding="utf-8")
+        metadata_dir = site_packages / f"{package_name}-0.1.0rc6.dist-info"
+        metadata_dir.mkdir()
+        (metadata_dir / "METADATA").write_text(
+            f"Name: {distribution_name}\nVersion: 0.1.0rc6\n",
+            encoding="utf-8",
+        )
+        (metadata_dir / "RECORD").write_text(f"{package_name}/__init__.py,,\n", encoding="utf-8")
+
+    provenance = experiment_runtime.runtime_dependency_provenance(
+        adapter_kind="deepseek_harness",
+        model_name="azure:gpt-4.1-mini-standard",
+        search_paths=(site_packages,),
+    )
+
+    assert provenance["provider"] == "azure"
+    assert provenance["distributions"] == [
+        "deepseek-harness-runtime-bin==0.1.0rc6",
+        "deepseek-harness-sdk==0.1.0rc6",
+    ]
 
 
 def test_runtime_dependency_provenance_uses_first_distribution_search_path(tmp_path: Path) -> None:
@@ -1253,12 +1284,15 @@ def test_concurrent_finalization_repairs_shared_index_without_lost_entries(tmp_p
             adapter_builder=_GoldFreshRegistry(package, resolved_model=trial.agent.model).build,
             verifier=verify_lifecycle,
             visibility_policy=trial.memory_visibility_policy,
-            sweep_context=LifecycleExperimentSweepContext(
-                sweep_experiment_id=manifest.experiment_id,
-                planned_trial_id=trial.trial_id,
-                plan_sha256=plan.plan_sha256,
-                condition_id=f"{trial.execution_mode.value}__{trial.memory_visibility_policy.value}",
-                repetition=trial.repetition,
+            run_recorder=partial(
+                experiment_runtime.record_lifecycle_experiment,
+                sweep_context=LifecycleExperimentSweepContext(
+                    sweep_experiment_id=manifest.experiment_id,
+                    planned_trial_id=trial.trial_id,
+                    plan_sha256=plan.plan_sha256,
+                    condition_id=f"{trial.execution_mode.value}__{trial.memory_visibility_policy.value}",
+                    repetition=trial.repetition,
+                ),
             ),
         )
         prepared.append((trial, package, run_dir))
@@ -2170,12 +2204,15 @@ def _recorded_trial(
         adapter_builder=_GoldFreshRegistry(package, resolved_model=trial.agent.model).build,
         verifier=verify_lifecycle,
         visibility_policy=trial.memory_visibility_policy,
-        sweep_context=LifecycleExperimentSweepContext(
-            sweep_experiment_id=manifest.experiment_id,
-            planned_trial_id=trial.trial_id,
-            plan_sha256=build_lifecycle_ablation_plan(manifest).plan_sha256,
-            condition_id=f"{trial.execution_mode.value}__{trial.memory_visibility_policy.value}",
-            repetition=trial.repetition,
+        run_recorder=partial(
+            experiment_runtime.record_lifecycle_experiment,
+            sweep_context=LifecycleExperimentSweepContext(
+                sweep_experiment_id=manifest.experiment_id,
+                planned_trial_id=trial.trial_id,
+                plan_sha256=build_lifecycle_ablation_plan(manifest).plan_sha256,
+                condition_id=f"{trial.execution_mode.value}__{trial.memory_visibility_policy.value}",
+                repetition=trial.repetition,
+            ),
         ),
     )
     return manifest, trial, package, run_dir
@@ -2227,12 +2264,15 @@ def _conditional_recorded_trial(
         adapter_builder=_ConditionalGoldFreshRegistry(package).build,
         verifier=lifecycle_verifier(TEMPLATE_ID),
         visibility_policy=trial.memory_visibility_policy,
-        sweep_context=LifecycleExperimentSweepContext(
-            sweep_experiment_id=manifest.experiment_id,
-            planned_trial_id=trial.trial_id,
-            plan_sha256=plan.plan_sha256,
-            condition_id=f"{trial.execution_mode.value}__{trial.memory_visibility_policy.value}",
-            repetition=trial.repetition,
+        run_recorder=partial(
+            experiment_runtime.record_lifecycle_experiment,
+            sweep_context=LifecycleExperimentSweepContext(
+                sweep_experiment_id=manifest.experiment_id,
+                planned_trial_id=trial.trial_id,
+                plan_sha256=plan.plan_sha256,
+                condition_id=f"{trial.execution_mode.value}__{trial.memory_visibility_policy.value}",
+                repetition=trial.repetition,
+            ),
         ),
     )
     return manifest, trial, package, run_dir

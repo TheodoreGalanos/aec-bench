@@ -159,11 +159,8 @@ def build_harbor_job_config(
         "n_attempts": manifest.repetitions,
         "timeout_multiplier": 1.0,
         "metrics": [{"type": "mean"}, {"type": "min"}, {"type": "max"}],
-        "orchestrator": {
-            "type": "local",
-            "n_concurrent_trials": int(manifest.compute.resource_limits.get("n_concurrent_trials", 1)),
-            "quiet": False,
-        },
+        "n_concurrent_trials": int(manifest.compute.resource_limits.get("n_concurrent_trials", 1)),
+        "quiet": False,
         "environment": harbor_environment_config(
             manifest.compute.backend,
             environment_binding=environment_binding,

@@ -273,6 +273,9 @@ def test_archive_physically_excludes_forbidden_trees_and_cache_files(tmp_path: P
     for path in forbidden_files:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"forbidden")
+    local_dependency = package_root / "adapters" / "plugin" / "node_modules" / ".bin" / "tool"
+    local_dependency.parent.mkdir(parents=True)
+    local_dependency.symlink_to(package_root / "adapters" / "probe.py")
 
     result = build_proposal_runtime_archive(
         package_root=package_root,
@@ -281,6 +284,7 @@ def test_archive_physically_excludes_forbidden_trees_and_cache_files(tmp_path: P
 
     assert not any(member.startswith(prefix) for member in result.members for prefix in _FORBIDDEN_PREFIXES)
     assert not any("__pycache__" in Path(member).parts for member in result.members)
+    assert not any("node_modules" in Path(member).parts for member in result.members)
 
 
 def test_archive_rejects_symbolic_links_on_the_allowlisted_surface(tmp_path: Path) -> None:

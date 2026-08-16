@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from aec_bench.contracts.execution_environment import PYDANTIC_RUNTIME_VERSION
 from aec_bench.contracts.stage_execution import KernelInstructionOverride
 from aec_bench.harness.pump_station_harbor.export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
@@ -37,6 +38,7 @@ from agents.entrypoint_agent import (
     _LIBRARY_ARCHIVE_REMOTE_PATH,
     _LIBRARY_SOURCE,
     _RESULT_REMOTE_PATH,
+    _RUNTIME_PYTHON,
     EntrypointAgent,
     _host_model_provider_environment,
 )
@@ -174,8 +176,11 @@ def test_setup_uploads_library_source(tmp_path: Path) -> None:
     assert _LIBRARY_ARCHIVE_REMOTE_PATH.startswith("/workspace/.aec-bench/")
     assert _LIBRARY_SOURCE.name == "aec_bench"
     assert "./__init__.py" in archived_names
+    assert "./adapters/deepseek_harness/plugin/dist/index.js" in archived_names
+    assert "./adapters/deepseek_harness/plugin/dist/tools.js" in archived_names
     assert archived_init == [(_LIBRARY_SOURCE / "__init__.py").read_bytes()]
     assert not any("__pycache__" in name for name in archived_names)
+    assert not any("node_modules" in name for name in archived_names)
     assert not any(name.endswith((".pyc", ".pyo")) for name in archived_names)
     assert any(_LIBRARY_ARCHIVE_REMOTE_PATH in call.args[0] for call in env.exec.await_args_list)
 
@@ -204,20 +209,20 @@ def test_setup_reports_archive_extraction_failure(tmp_path: Path) -> None:
     assert not any("pip install" in call.args[0] for call in env.exec.await_args_list)
 
 
-def test_setup_installs_pip_deps_when_pydantic_ai_missing(tmp_path: Path) -> None:
-    """setup() should pip install when pydantic_ai is not importable."""
+def test_setup_installs_pinned_runtime_in_isolated_environment(tmp_path: Path) -> None:
+    """setup() should create an isolated runtime when the task image lacks the pinned packages."""
     agent = EntrypointAgent(logs_dir=tmp_path, model_name="test")
     env = _make_environment()
 
     # python3 --version: OK
-    # pydantic_ai import: fails (return_code=1)
-    # pip install: OK
+    # Pinned runtime version check: fails (return_code=1)
+    # venv preparation and package installation: OK
     # trajectory writer injection: handled by patch
 
     async def exec_side_effect(cmd: str, **kwargs: Any) -> MagicMock:
         if "python3 --version" in cmd:
             return _make_exec_result(return_code=0, stdout="Python 3.13")
-        if "import pydantic_ai" in cmd:
+        if "pydantic-ai" in cmd and "pip install" not in cmd:
             return _make_exec_result(return_code=1, stderr="ModuleNotFoundError")
         if "pip install" in cmd:
             return _make_exec_result(return_code=0)
@@ -232,7 +237,11 @@ def test_setup_installs_pip_deps_when_pydantic_ai_missing(tmp_path: Path) -> Non
     # Find the pip install call
     pip_calls = [c for c in env.exec.call_args_list if "pip install" in str(c)]
     assert len(pip_calls) == 1, f"Expected one pip install call, got: {env.exec.call_args_list}"
-    assert '"pydantic-ai[anthropic,bedrock,openai]==1.60.0"' in pip_calls[0].args[0]
+    assert pip_calls[0].args[0].startswith(f"{_RUNTIME_PYTHON} -m pip install --no-cache-dir ")
+    assert f"pydantic=={PYDANTIC_RUNTIME_VERSION}" in pip_calls[0].args[0]
+    assert "'pydantic-ai[anthropic,bedrock,openai]==1.60.0'" in pip_calls[0].args[0]
+    assert any("python3 -m venv /opt/aec-bench-venv" in call.args[0] for call in env.exec.call_args_list)
+    assert agent._runtime_python == _RUNTIME_PYTHON
 
 
 def test_setup_reports_pip_install_failure(tmp_path: Path) -> None:
@@ -241,7 +250,7 @@ def test_setup_reports_pip_install_failure(tmp_path: Path) -> None:
     env = _make_environment()
 
     async def exec_side_effect(cmd: str, **kwargs: Any) -> MagicMock:
-        if "import pydantic_ai" in cmd:
+        if "pydantic-ai" in cmd and "pip install" not in cmd:
             return _make_exec_result(return_code=1, stderr="runtime version mismatch")
         if "pip install" in cmd:
             return _make_exec_result(return_code=1, stderr="package resolution failed")
@@ -274,6 +283,57 @@ def test_setup_skips_pip_when_pydantic_ai_available(tmp_path: Path) -> None:
 
     pip_calls = [c for c in env.exec.call_args_list if "pip install" in str(c)]
     assert len(pip_calls) == 0, f"No pip install expected, got: {pip_calls}"
+
+
+def test_setup_installs_the_pinned_deepseek_runtime_for_the_selected_adapter(tmp_path: Path) -> None:
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="deepseek-chat",
+        adapter="deepseek_harness",
+    )
+    env = _make_environment()
+
+    async def exec_side_effect(cmd: str, **kwargs: Any) -> MagicMock:
+        if "deepseek-harness-sdk" in cmd and "pip install" not in cmd:
+            return _make_exec_result(return_code=1, stderr="ModuleNotFoundError")
+        return _make_exec_result(return_code=0, stdout="OK")
+
+    env.exec = AsyncMock(side_effect=exec_side_effect)
+
+    with patch("agents.entrypoint_agent.inject_trajectory_writer", new_callable=AsyncMock):
+        asyncio.run(agent.setup(env))
+
+    pip_calls = [call for call in env.exec.call_args_list if "pip install" in call.args[0]]
+    assert len(pip_calls) == 1
+    assert "deepseek-harness-sdk==0.1.0rc6" in pip_calls[0].args[0]
+    assert f"pydantic=={PYDANTIC_RUNTIME_VERSION}" in pip_calls[0].args[0]
+    assert "'pydantic-ai[anthropic,bedrock,openai]==1.60.0'" in pip_calls[0].args[0]
+
+
+def test_setup_reports_deepseek_runtime_install_failure(tmp_path: Path) -> None:
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="deepseek-chat",
+        adapter="deepseek_harness",
+    )
+    env = _make_environment()
+
+    async def exec_side_effect(cmd: str, **kwargs: Any) -> MagicMock:
+        if "deepseek-harness-sdk" in cmd and "pip install" not in cmd:
+            return _make_exec_result(return_code=1, stderr="runtime version mismatch")
+        if "pip install" in cmd:
+            return _make_exec_result(return_code=1, stderr="DeepSeek package resolution failed")
+        return _make_exec_result(return_code=0)
+
+    env.exec = AsyncMock(side_effect=exec_side_effect)
+
+    with (
+        patch("agents.entrypoint_agent.inject_trajectory_writer", new_callable=AsyncMock) as inject,
+        pytest.raises(RuntimeError, match="DeepSeek package resolution failed"),
+    ):
+        asyncio.run(agent.setup(env))
+
+    inject.assert_not_awaited()
 
 
 def test_setup_injects_trajectory_writer(tmp_path: Path) -> None:
@@ -376,6 +436,45 @@ def test_world_session_entrypoint_accepts_bedrock_model_controller(
     agent._validate_world_session_configuration()
 
 
+def test_world_session_entrypoint_accepts_deepseek_with_enforceable_limits(
+    tmp_path: Path,
+) -> None:
+    agent = EntrypointAgent(
+        logs_dir=tmp_path / "logs",
+        model_name="azure:gpt-4.1-mini-standard",
+        adapter="deepseek_harness",
+        execution_kind="stewardship_world_session",
+        extra_env={},
+        max_tokens=4096,
+        timeout_sec=600,
+        world_session={
+            "bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE,
+            "controller": PUMP_STATION_MODEL_CONTROLLER_MODE,
+        },
+    )
+
+    agent._validate_world_session_configuration()
+
+
+def test_world_session_entrypoint_rejects_false_deepseek_turn_limit(
+    tmp_path: Path,
+) -> None:
+    agent = EntrypointAgent(
+        logs_dir=tmp_path / "logs",
+        model_name="azure:gpt-4.1-mini-standard",
+        adapter="deepseek_harness",
+        execution_kind="stewardship_world_session",
+        max_turns=30,
+        world_session={
+            "bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE,
+            "controller": PUMP_STATION_MODEL_CONTROLLER_MODE,
+        },
+    )
+
+    with pytest.raises(ValueError, match="cannot enforce max_turns"):
+        agent._validate_world_session_configuration()
+
+
 def test_world_session_host_model_preflight_accepts_aws_profile(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -459,6 +558,29 @@ def test_run_writes_bundle_and_executes(tmp_path: Path, monkeypatch: Any) -> Non
     assert context.metadata["stop_reason"] == "iteration_cap"
     assert context.metadata["turns_used"] == 8
     assert context.metadata["max_turns"] == 8
+
+
+def test_run_uses_the_isolated_runtime_prepared_during_setup(tmp_path: Path) -> None:
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="replay-direct",
+        adapter="direct",
+        client={"client_kind": "replay", "payload": {"output_text": "done"}},
+    )
+    agent._runtime_python = _RUNTIME_PYTHON
+    env = _make_environment()
+    context = MagicMock(metadata={})
+    env.exec.return_value = _make_exec_result(return_code=0)
+
+    async def fake_download(source: str, target: Any) -> None:
+        Path(target).write_text(json.dumps({"adapter_name": "direct"}), encoding="utf-8")
+
+    env.download_file = AsyncMock(side_effect=fake_download)
+
+    asyncio.run(agent.run("Produce the artifact", env, context))
+
+    entrypoint_call = next(call for call in env.exec.call_args_list if "execution_entrypoint" in call.args[0])
+    assert f"{_RUNTIME_PYTHON} -m aec_bench.harness.execution_entrypoint" in entrypoint_call.args[0]
 
 
 def test_run_surfaces_adapter_completion_reason_in_harbor_metadata(tmp_path: Path) -> None:
@@ -955,6 +1077,140 @@ def test_model_selected_bedrock_direct_provider_receives_only_bedrock_runtime_co
         "AWS_BEARER_TOKEN_BEDROCK": "bedrock-secret-marker",
         "AWS_REGION": "ap-southeast-2",
     }
+
+
+def test_deepseek_adapter_records_azure_and_receives_only_its_runtime_configuration(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "azure-secret-marker")
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://foundry.example/openai/v1")
+    monkeypatch.delenv("AZURE_OPENAI_API_VERSION", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "unselected-anthropic-secret")
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="azure:deepseek-chat",
+        adapter="deepseek_harness",
+        timeout_sec=30,
+    )
+    env = _make_environment()
+    context = MagicMock(metadata={})
+    env.exec.return_value = _make_exec_result(return_code=0)
+    captured_bundles: list[dict[str, Any]] = []
+
+    async def capture_upload(local_path: str, remote_path: str) -> None:
+        if remote_path == _BUNDLE_REMOTE_PATH:
+            captured_bundles.append(json.loads(Path(local_path).read_text(encoding="utf-8")))
+
+    async def fake_download(source: str, target: Any) -> None:
+        Path(target).write_text(json.dumps({"adapter_name": "entrypoint"}), encoding="utf-8")
+
+    env.download_file = AsyncMock(side_effect=fake_download)
+    env.upload_file = AsyncMock(side_effect=capture_upload)
+
+    asyncio.run(agent.run("Write the requested artifact.", env, context))
+
+    entrypoint_call = next(call for call in env.exec.call_args_list if "execution_entrypoint" in call.args[0])
+    assert entrypoint_call.kwargs["env"] == {
+        "AZURE_OPENAI_API_KEY": "azure-secret-marker",
+        "AZURE_OPENAI_ENDPOINT": "https://foundry.example/openai/v1",
+    }
+    assert captured_bundles[0]["execution"]["payload"]["provider"] == "azure"
+
+
+def test_deepseek_adapter_publishes_runtime_evidence_to_harbor_agent_logs(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "azure-secret-marker")
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://foundry.example/openai/v1")
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="azure:deepseek-chat",
+        adapter="deepseek_harness",
+        timeout_sec=30,
+    )
+    env = _make_environment()
+    context = MagicMock(metadata={})
+    env.exec.return_value = _make_exec_result(return_code=0)
+
+    async def fake_download(source: str, target: Any) -> None:
+        Path(target).write_text(
+            json.dumps(
+                {
+                    "adapter_name": "entrypoint",
+                    "failure_kind": "provider_error",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    env.download_file = AsyncMock(side_effect=fake_download)
+
+    asyncio.run(agent.run("Write the requested artifact.", env, context))
+
+    evidence_call = next(call for call in env.exec.call_args_list if "/logs/agent/deepseek-harness" in call.args[0])
+    assert "/workspace/logs/deepseek-harness" in evidence_call.args[0]
+    assert evidence_call.kwargs == {"timeout_sec": 30}
+
+
+def test_deepseek_adapter_records_deepseek_and_receives_only_its_runtime_configuration(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "deepseek-secret-marker")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://gateway.example/deepseek")
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "unselected-azure-secret")
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://unselected.example/openai/v1")
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="deepseek:deepseek-chat",
+        adapter="deepseek_harness",
+        timeout_sec=30,
+    )
+    env = _make_environment()
+    context = MagicMock(metadata={})
+    env.exec.return_value = _make_exec_result(return_code=0)
+    captured_bundles: list[dict[str, Any]] = []
+
+    async def capture_upload(local_path: str, remote_path: str) -> None:
+        if remote_path == _BUNDLE_REMOTE_PATH:
+            captured_bundles.append(json.loads(Path(local_path).read_text(encoding="utf-8")))
+
+    async def fake_download(source: str, target: Any) -> None:
+        Path(target).write_text(json.dumps({"adapter_name": "entrypoint"}), encoding="utf-8")
+
+    env.upload_file = AsyncMock(side_effect=capture_upload)
+    env.download_file = AsyncMock(side_effect=fake_download)
+
+    asyncio.run(agent.run("Write the requested artifact.", env, context))
+
+    entrypoint_call = next(call for call in env.exec.call_args_list if "execution_entrypoint" in call.args[0])
+    assert entrypoint_call.kwargs["env"] == {
+        "DEEPSEEK_API_KEY": "deepseek-secret-marker",
+        "DEEPSEEK_BASE_URL": "https://gateway.example/deepseek",
+    }
+    assert captured_bundles[0]["execution"]["payload"]["provider"] == "deepseek"
+
+
+def test_deepseek_adapter_requires_its_provider_credential_before_bundle_upload(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://foundry.example/openai/v1")
+    agent = EntrypointAgent(
+        logs_dir=tmp_path,
+        model_name="azure:deepseek-chat",
+        adapter="deepseek_harness",
+    )
+    env = _make_environment()
+
+    with pytest.raises(RuntimeError, match="AZURE_OPENAI_API_KEY"):
+        asyncio.run(agent.run("Write the requested artifact.", env, MagicMock()))
+
+    env.upload_file.assert_not_awaited()
+    env.exec.assert_not_awaited()
 
 
 def test_missing_required_provider_credential_fails_before_bundle_upload(

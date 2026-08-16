@@ -21,6 +21,7 @@ class Profile:
 PROFILES = {
     "base": Profile(None, ()),
     "execution": Profile("execution", ("harbor",)),
+    "deepseek-harness": Profile("deepseek-harness", ("deepseek_harness",)),
     "morph": Profile("execution,morph", ("harbor", "morphcloud.api")),
     "local-agents": Profile(
         "local-agents",
@@ -32,10 +33,11 @@ PROFILES = {
     "tui": Profile("tui", ("PIL", "rich_pixels", "textual")),
     "evolution": Profile("evolution,local-agents", ("numpy", "pydantic_ai", "ribs")),
     "combined": Profile(
-        "execution,morph,local-agents,prime,prime-agent,webui,tui,evolution",
+        "execution,deepseek-harness,morph,local-agents,prime,prime-agent,webui,tui,evolution",
         (
             "PIL",
             "acp",
+            "deepseek_harness",
             "fastapi",
             "harbor",
             "morphcloud",

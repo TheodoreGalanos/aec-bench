@@ -306,6 +306,45 @@ def test_meta_harness_lifecycle_run_local_defaults_to_persistent_session(tmp_pat
     assert fresh_runner.call_count == 0
 
 
+def test_meta_harness_lifecycle_run_local_forwards_deepseek_limits(tmp_path: Path, monkeypatch) -> None:
+    package = materialize_drainage_model_lifecycle(tmp_path / "package")
+    captured: dict[str, object] = {}
+
+    def fake_session(**kwargs):
+        captured.update(kwargs)
+        return {"run_id": "process.lifecycle.demo", "evidence": {"score": {"reward": 0.5}}}
+
+    monkeypatch.setattr(
+        "aec_bench.cli.commands.meta_harness.run_local_evidence_lifecycle_session",
+        fake_session,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "meta-harness",
+            "lifecycle-run-local",
+            "--package",
+            str(package),
+            "--run-dir",
+            str(tmp_path / "run"),
+            "--model",
+            "azure:deepseek-v4-flash",
+            "--adapter",
+            "deepseek_harness",
+            "--max-tokens",
+            "4096",
+            "--timeout-sec",
+            "120",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["max_tokens"] == 4096
+    assert captured["timeout_sec"] == 120
+
+
 def test_meta_harness_lifecycle_run_local_uses_normalized_fresh_context_runner(
     tmp_path: Path,
     monkeypatch,

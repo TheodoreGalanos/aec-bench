@@ -9,13 +9,13 @@ from pathlib import Path
 from typing import Any, cast
 
 from harbor.models.trial.config import TrialConfig  # type: ignore[import-untyped]
-from harbor.trial.trial import Trial  # type: ignore[import-untyped]
 
 from aec_bench.harness.harbor_task_export import (
     HARBOR_LIFECYCLE_BRIDGE_MODE,
     export_compiled_lifecycle_harbor_task,
 )
 from aec_bench.lifecycles.compiled import compile_lifecycle
+from tests.support.harbor_local_environment import run_harbor_trial
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
@@ -60,7 +60,7 @@ def test_harbor_trial_orchestrates_public_bridge_then_independent_verifier(tmp_p
         }
     )
 
-    result = asyncio.run(Trial(config).run())
+    result = asyncio.run(run_harbor_trial(config))
 
     assert result.exception_info is None
     assert result.agent_result is not None
@@ -76,7 +76,10 @@ def test_harbor_trial_orchestrates_public_bridge_then_independent_verifier(tmp_p
         for line in (trial_dir / "environment-operations.jsonl").read_text(encoding="utf-8").splitlines()
     ]
     uploads = [event for event in operations if event["event"] == "upload_dir"]
-    assert [event["target"] for event in uploads] == ["/workspace/lifecycle-run", "/tests"]
+    upload_targets = [event["target"] for event in uploads]
+    assert upload_targets[0] == "/workspace/lifecycle-run"
+    assert upload_targets[-1] == "/tests"
+    assert upload_targets.count("/tests") == 1
     assert not any("/opt/aec_bench" in str(event) for event in operations)
     tests_upload_index = next(index for index, event in enumerate(operations) if event.get("target") == "/tests")
     run_upload_index = next(
@@ -111,8 +114,8 @@ def test_harbor_trial_orchestrates_public_bridge_then_independent_verifier(tmp_p
     assert "FROM --platform=linux/amd64 python:3.13-slim-bookworm@sha256:" in dockerfile
     requirements = (
         "annotated-types==0.7.0",
-        "pydantic-core==2.33.2",
-        "pydantic==2.11.10",
+        "pydantic-core==2.46.4",
+        "pydantic==2.13.4",
         "typing-extensions==4.15.0",
         "typing-inspection==0.4.2",
     )

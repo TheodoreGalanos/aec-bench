@@ -390,7 +390,8 @@ class _SourceTaskConfig:
     memory_mb: int
     storage_mb: int
     gpus: int
-    allow_internet: bool
+    network_mode: str
+    allowed_hosts: tuple[str, ...]
 
 
 def _read_source_task_config(task_dir: Path) -> _SourceTaskConfig:
@@ -407,19 +408,20 @@ def _read_source_task_config(task_dir: Path) -> _SourceTaskConfig:
     }
     if any(isinstance(value, bool) or value <= 0 for value in numeric_values.values()):
         raise ProposalTaskPackageError("source task timeout values must be positive")
-    resource_values = {
+    required_resource_values = {
         "cpus": config.environment.cpus,
         "memory_mb": config.environment.memory_mb,
         "storage_mb": config.environment.storage_mb,
-        "gpus": config.environment.gpus,
     }
     if (
-        any(isinstance(value, bool) or not isinstance(value, int) for value in resource_values.values())
+        any(isinstance(value, bool) or not isinstance(value, int) for value in required_resource_values.values())
         or config.environment.cpus <= 0
         or config.environment.memory_mb <= 0
         or config.environment.storage_mb <= 0
-        or config.environment.gpus < 0
     ):
+        raise ProposalTaskPackageError("source task environment resources are invalid")
+    gpus = config.environment.gpus
+    if gpus is not None and (isinstance(gpus, bool) or not isinstance(gpus, int) or gpus < 0):
         raise ProposalTaskPackageError("source task environment resources are invalid")
     return _SourceTaskConfig(
         agent_timeout_sec=float(config.agent.timeout_sec),
@@ -428,8 +430,9 @@ def _read_source_task_config(task_dir: Path) -> _SourceTaskConfig:
         cpus=config.environment.cpus,
         memory_mb=config.environment.memory_mb,
         storage_mb=config.environment.storage_mb,
-        gpus=config.environment.gpus,
-        allow_internet=config.environment.allow_internet,
+        gpus=gpus or 0,
+        network_mode=config.environment.network_mode.value,
+        allowed_hosts=tuple(config.environment.allowed_hosts or ()),
     )
 
 
@@ -549,7 +552,9 @@ def _sanitized_task_toml(
     source_config: _SourceTaskConfig,
 ) -> str:
     visibility = json.dumps(identity.visibility.value)
-    allow_internet = "true" if source_config.allow_internet else "false"
+    allowed_hosts = (
+        f"allowed_hosts = {json.dumps(list(source_config.allowed_hosts))}\n" if source_config.allowed_hosts else ""
+    )
     return (
         'version = "1.0"\n\n'
         "[metadata]\n"
@@ -567,7 +572,8 @@ def _sanitized_task_toml(
         f"memory_mb = {source_config.memory_mb}\n"
         f"storage_mb = {source_config.storage_mb}\n"
         f"gpus = {source_config.gpus}\n"
-        f"allow_internet = {allow_internet}\n"
+        f"network_mode = {json.dumps(source_config.network_mode)}\n"
+        f"{allowed_hosts}"
     )
 
 

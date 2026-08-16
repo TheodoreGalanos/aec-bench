@@ -56,6 +56,7 @@ _OUTPUT_FILES = [
     "prime-stderr.log",
     "prime-run.json",
 ]
+_DEEPSEEK_HARNESS_EVIDENCE_DIR = Path("logs/deepseek-harness")
 
 
 def load_canonical_refs(task_toml_path: Path) -> CanonicalRefSet:
@@ -289,6 +290,7 @@ def _run_adapter(
     constitutional_model: str | None = None,
     instruction_override: str | None = None,
     timeout: int = 1800,
+    max_tokens: int | None = None,
 ) -> dict[str, object]:
     """Execute a task using the current local adapter builder.
 
@@ -342,6 +344,17 @@ def _run_adapter(
             instruction=instruction,
             tools=tools,
             configuration={"timeout_seconds": timeout},
+            output_path="output.md",
+            output_format="markdown",
+        )
+    elif adapter_kind == "deepseek_harness":
+        configuration: dict[str, object] = {"timeout_sec": timeout}
+        if max_tokens is not None:
+            configuration["max_tokens"] = max_tokens
+        request = AdapterRequest(
+            instruction=instruction,
+            tools=tools,
+            configuration=configuration,
             output_path="output.md",
             output_format="markdown",
         )
@@ -473,11 +486,25 @@ def _copy_output_files(
         for src in sorted(prime_sessions_src.rglob("*")):
             if src.is_file():
                 copied.append(str(src.relative_to(Path(workspace))))
+    deepseek_evidence_src = Path(workspace) / _DEEPSEEK_HARNESS_EVIDENCE_DIR
+    if deepseek_evidence_src.exists():
+        deepseek_evidence_dest = out_path / _DEEPSEEK_HARNESS_EVIDENCE_DIR
+        shutil.copytree(deepseek_evidence_src, deepseek_evidence_dest, dirs_exist_ok=True)
+        for src in sorted(deepseek_evidence_src.rglob("*")):
+            if src.is_file():
+                copied.append(str(src.relative_to(Path(workspace))))
     return copied
 
 
 def _require_adapter_runtime(adapter: str) -> None:
     """Check only the runtime selected for this local execution."""
+    if adapter == "deepseek_harness":
+        require_optional_extra(
+            "DeepSeek Harness execution support",
+            "deepseek-harness",
+            ("deepseek_harness",),
+        )
+        return
     if adapter == "prime-agent":
         try:
             resolve_prime_executable("prime-agent")
@@ -625,7 +652,10 @@ def run_local(
         "--adapter",
         "--harness",
         "-a",
-        help="Agent harness: rlm, direct, tool_loop, pydantic_ai, lambda-rlm, prime-agent (default: rlm)",
+        help=(
+            "Agent harness: rlm, direct, tool_loop, pydantic_ai, lambda-rlm, "
+            "prime-agent, deepseek_harness (default: rlm)"
+        ),
     ),
     output_dir: str | None = typer.Option(
         None,
@@ -634,6 +664,10 @@ def run_local(
         help="Output directory (default: task_path/_local_runs/<timestamp>)",
     ),
     timeout: int = typer.Option(1800, "--timeout", "-t", help="Timeout in seconds (default: 30 minutes)"),
+    max_tokens: Annotated[
+        int | None,
+        typer.Option("--max-tokens", min=1, help="Maximum output tokens for adapters that support this limit"),
+    ] = None,
     keep_workspace: bool = typer.Option(False, "--keep-workspace", help="Don't delete temp workspace after run"),
     no_verify: Annotated[bool, typer.Option("--no-verify", help="Skip verifier execution after the agent run")] = False,
     no_import: Annotated[bool, typer.Option("--no-import", help="Skip auto-import of results into the ledger")] = False,
@@ -669,11 +703,13 @@ def run_local(
 
     Sets up a temp workspace, copies task files, and runs the adapter
     through the selected adapter. Most built-in adapters use pydantic-ai;
-    prime-agent launches the separately installed upstream executable.
+    prime-agent launches the separately installed upstream executable;
+    deepseek_harness launches the qualified official Harness runtime.
 
     Examples:
       aec-bench run-local tasks/electrical/voltage-drop -m gpt-4.1-mini --adapter direct
       aec-bench run-local tasks/electrical/voltage-drop -m anthropic/model-id --adapter prime-agent
+      aec-bench run-local tasks/electrical/voltage-drop -m azure:deployment --adapter deepseek_harness
     """
     _require_adapter_runtime(adapter)
     task_dir = Path(task_path).resolve()
@@ -726,6 +762,7 @@ def run_local(
             model=model,
             constitutional_model=constitutional_model,
             timeout=timeout,
+            max_tokens=max_tokens,
         )
 
         agent_seconds = time.monotonic() - agent_start
@@ -788,6 +825,7 @@ def run_local(
                 constitutional_model=constitutional_model,
                 instruction_override=retry_instruction,
                 timeout=timeout,
+                max_tokens=max_tokens,
             )
             retry_agent_seconds = time.monotonic() - retry_agent_start
             agent_seconds += retry_agent_seconds

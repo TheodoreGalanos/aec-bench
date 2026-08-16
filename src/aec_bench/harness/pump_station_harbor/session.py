@@ -7,7 +7,7 @@ import hashlib
 import json
 import shutil
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -15,6 +15,7 @@ from pydantic import JsonValue
 
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
 from aec_bench.adapters.local_registry import build_local_adapter
+from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.contracts.world_interface import WorldActorActionRequest
 from aec_bench.contracts.world_session import (
@@ -41,6 +42,11 @@ from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import
     PUMP_STATION_TASK_WORLD_ID,
     PumpStationEpisodeHost,
 )
+from aec_bench.worlds.stewardship.wastewater_pump_station.host_continuation import (
+    PUMP_STATION_OPERATIONS_AUTHORITY_ID,
+    PumpStationJourneyStatus,
+    resolve_pump_station_host_continuation,
+)
 from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
     run_pump_station_reference_controller,
@@ -54,6 +60,7 @@ from aec_bench.worlds.stewardship.wastewater_pump_station.temporal_evidence impo
     TemporalEvidenceVerificationReport,
     verify_temporal_evidence_repository,
 )
+from aec_bench.worlds.stewardship.wastewater_pump_station.world_control import PumpStationWorldControl
 from aec_bench.worlds.stewardship.wastewater_pump_station.world_run import PumpStationWorldRun
 from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
@@ -61,6 +68,8 @@ from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository i
 
 PUMP_STATION_MODEL_CONTROLLER_MODE = "model"
 PUMP_STATION_MODEL_MAX_TURNS = 90
+PUMP_STATION_MODEL_MAX_TOKENS = 8192
+_PUMP_STATION_MODEL_MAX_SEGMENTS = 8
 
 
 @dataclass(frozen=True)
@@ -82,6 +91,10 @@ class CompletedPumpStationModelSession:
     verification: PumpStationCoupledVerificationReport
     adapter_result: AdapterResult
     output_dir: Path
+    journey_status: PumpStationJourneyStatus
+    stop_reason: str
+    segment_count: int
+    host_control_count: int
 
 
 class _PumpStationActorTools:
@@ -342,7 +355,10 @@ def run_pump_station_model_session(
     output_dir: Path,
     session_identity: str,
     model: str,
+    adapter_kind: str = "tool_loop",
     max_turns: int = PUMP_STATION_MODEL_MAX_TURNS,
+    max_tokens: int | None = None,
+    timeout_sec: int | None = None,
     adapter_builder: Callable[..., Any] | None = None,
 ) -> CompletedPumpStationModelSession:
     """Let a model act through the registered actor boundary and persist accepted steps."""
@@ -351,8 +367,25 @@ def run_pump_station_model_session(
     model_name = model.strip()
     if not model_name:
         raise ValueError("pump-station model episode requires a model")
+    if adapter_kind not in {"deepseek_harness", "tool_loop"}:
+        raise ValueError(f"unsupported pump-station model adapter: {adapter_kind}")
     if max_turns < 1:
         raise ValueError("pump-station model episode max turns must be positive")
+    request_configuration: dict[str, int]
+    if adapter_kind == "deepseek_harness":
+        resolved_max_tokens = PUMP_STATION_MODEL_MAX_TOKENS if max_tokens is None else max_tokens
+        request_configuration = {"max_tokens": resolved_max_tokens}
+        if timeout_sec is not None:
+            request_configuration["timeout_sec"] = timeout_sec
+        for name, value in request_configuration.items():
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError(f"{name} must be a positive integer")
+    else:
+        if max_tokens is not None:
+            raise ValueError("max_tokens is supported only for deepseek_harness pump-station sessions")
+        if timeout_sec is not None:
+            raise ValueError("timeout_sec is supported only for deepseek_harness pump-station sessions")
+        request_configuration = {"max_turns": max_turns}
     destination = _create_destination(output_dir)
     repository_root = destination / "world-run"
     request = _start_request(identity, bridge)
@@ -363,44 +396,88 @@ def run_pump_station_model_session(
     else:
         started = host.open(request)
         start = _private_snapshot(started.snapshot)
-    tools = _PumpStationActorTools(host)
     trajectory = TrajectoryWriter(path=str(destination / "trajectory.jsonl"))
+    adapter_results: list[AdapterResult] = []
+    host_control_count = 0
+    journey_status = PumpStationJourneyStatus.ACTIVE
+    stop_reason = "max-segments"
     try:
         resolved_builder = adapter_builder or build_local_adapter
-        adapter = resolved_builder(
-            adapter_kind="tool_loop",
-            model_name=model_name,
-            workspace=str(destination),
-            trajectory_writer=trajectory,
-            native_tools=tools.native_tools,
-            enable_bash=False,
+        control = PumpStationWorldControl(
+            repository_root,
+            authorised_principal_ids=(PUMP_STATION_OPERATIONS_AUTHORITY_ID,),
         )
-        adapter_result = adapter.execute(
-            AdapterRequest(
-                instruction=(
-                    "Observe the three-pump station. Use only current visible identifiers and the declared tools. "
-                    "Take supported stewardship actions, explain each reason in plain language, and stop with a "
-                    "short factual summary. Search documentary evidence only when it helps the current decision."
-                ),
-                system_prompt=(
-                    "You are the accountable wastewater pump-station steward. Do not infer latent state, hidden "
-                    "events, another branch, verifier expectations, or a prescribed action sequence."
-                ),
-                tools=list(tools.tool_specs),
-                configuration={"max_turns": max_turns},
-                output_path=str(destination / "output.md"),
-                output_format="markdown",
+        for _segment_index in range(_PUMP_STATION_MODEL_MAX_SEGMENTS):
+            tools = _PumpStationActorTools(host)
+            adapter = resolved_builder(
+                adapter_kind=adapter_kind,
+                model_name=model_name,
+                workspace=str(destination),
+                trajectory_writer=trajectory,
+                native_tools=tools.native_tools,
+                enable_bash=False,
             )
-        )
+            segment_result = adapter.execute(
+                AdapterRequest(
+                    instruction=_model_segment_instruction(),
+                    system_prompt=(
+                        "You are the accountable wastewater pump-station steward. Do not infer latent state, hidden "
+                        "events, another branch, verifier expectations, or a prescribed action sequence."
+                    ),
+                    tools=list(tools.tool_specs),
+                    configuration=request_configuration,
+                    output_path=str(destination / "output.md"),
+                    output_format="markdown",
+                )
+            )
+            adapter_results.append(segment_result)
+            if segment_result.agent_output.status is not AgentOutputStatus.COMPLETED:
+                stop_reason = f"adapter-{segment_result.agent_output.status.value}"
+                break
+            current = PumpStationWorldRun.resume_reference_system(
+                repository=PumpStationWorldRunRepository(repository_root),
+                snapshot=PumpStationWorldRunRepository(repository_root).current_snapshot(),
+            )
+            decision = resolve_pump_station_host_continuation(current)
+            journey_status = decision.status
+            stop_reason = decision.reason
+            if decision.status is PumpStationJourneyStatus.COMPLETED:
+                break
+            if decision.control_request is None or bridge.rollout_child_ref is not None:
+                break
+            control.execute(decision.control_request)
+            host_control_count += 1
+            current = PumpStationWorldRun.resume_reference_system(
+                repository=PumpStationWorldRunRepository(repository_root),
+                snapshot=PumpStationWorldRunRepository(repository_root).current_snapshot(),
+            )
+            journey_status = resolve_pump_station_host_continuation(current).status
+            if journey_status is PumpStationJourneyStatus.COMPLETED:
+                stop_reason = "declared-terminal-state"
+                break
     finally:
         trajectory.close()
+    if not adapter_results:
+        raise RuntimeError("pump-station model journey produced no adapter segment")
+    adapter_result = _aggregate_adapter_results(
+        adapter_results,
+        journey_status=journey_status,
+        stop_reason=stop_reason,
+        host_control_count=host_control_count,
+    )
     repository = PumpStationWorldRunRepository(repository_root)
     end = repository.current_snapshot()
     evidence_request, result = _episode_evidence(repository_root, identity, start, end)
     run = PumpStationWorldRun.resume_reference_system(repository=repository, snapshot=end)
     verification = run.verify()
     temporal_verification = _verify_temporal(run)
-    _write_model_evidence(destination, adapter_result, model_name, max_turns)
+    _write_model_evidence(
+        destination,
+        adapter_result,
+        model_name,
+        adapter_kind=adapter_kind,
+        request_configuration=request_configuration,
+    )
     _write_session_evidence(destination, evidence_request, result, verification)
     _write_json(destination / "temporal-verification-report.json", temporal_verification.model_dump(mode="json"))
     _write_json(
@@ -408,7 +485,7 @@ def run_pump_station_model_session(
         _artifact_inventory(
             bridge=bridge,
             output_dir=destination,
-            controller_id=model_name,
+            controller_id=adapter_result.resolved_model,
             start_snapshot=evidence_request.start_snapshot.model_dump(mode="json")
             if evidence_request.start_snapshot
             else {},
@@ -422,6 +499,62 @@ def run_pump_station_model_session(
         verification,
         adapter_result,
         destination,
+        journey_status,
+        stop_reason,
+        len(adapter_results),
+        host_control_count,
+    )
+
+
+def _model_segment_instruction() -> str:
+    return (
+        "Observe the three-pump station. Use only current visible identifiers and the declared tools. "
+        "Manage the station until the next host-authority boundary or the declared terminal state. After each action, "
+        "use its next_observation or observe again. When work is active or the next decision is in the future, use "
+        "continue_operation to advance to the next declared decision event. Do not stop only because one action was "
+        "accepted. Retry visible unfinished work after conflicting work completes or resources become available. "
+        "Continue while a visible process, backlog item, obligation, restriction, outage, or service requirement needs "
+        "another supported action. Explain each reason in plain language, then stop with a short factual summary. "
+        "Search documentary evidence only when it helps the current decision."
+    )
+
+
+def _aggregate_adapter_results(
+    results: list[AdapterResult],
+    *,
+    journey_status: PumpStationJourneyStatus,
+    stop_reason: str,
+    host_control_count: int,
+) -> AdapterResult:
+    last = results[-1]
+    complete = journey_status is PumpStationJourneyStatus.COMPLETED
+    if complete:
+        status = AgentOutputStatus.COMPLETED
+    elif last.agent_output.status is AgentOutputStatus.COMPLETED:
+        status = AgentOutputStatus.PARTIAL
+    else:
+        status = last.agent_output.status
+    summaries = [result.raw_output_text for result in results if result.raw_output_text]
+    configuration = dict(last.configuration_record)
+    configuration.update(
+        {
+            "world_segment_count": len(results),
+            "world_host_control_count": host_control_count,
+            "world_journey_status": journey_status.value,
+            "world_stop_reason": stop_reason,
+        }
+    )
+    return replace(
+        last,
+        configuration_record=configuration,
+        agent_output=last.agent_output.model_copy(update={"status": status}),
+        turns_used=sum(result.turns_used or 0 for result in results),
+        raw_output_text="\n\n".join(summaries),
+        usage_model_calls=sum(result.usage_model_calls or 0 for result in results),
+        usage_input_tokens=sum(result.usage_input_tokens or 0 for result in results),
+        usage_output_tokens=sum(result.usage_output_tokens or 0 for result in results),
+        usage_cache_read_tokens=sum(result.usage_cache_read_tokens or 0 for result in results),
+        usage_cache_write_tokens=sum(result.usage_cache_write_tokens or 0 for result in results),
     )
 
 
@@ -635,7 +768,9 @@ def _write_model_evidence(
     destination: Path,
     adapter_result: AdapterResult,
     model: str,
-    max_turns: int,
+    *,
+    adapter_kind: str,
+    request_configuration: dict[str, int],
 ) -> None:
     (destination / "output.md").write_text(adapter_result.raw_output_text or "", encoding="utf-8")
     _write_json(
@@ -643,11 +778,11 @@ def _write_model_evidence(
         {
             "status": adapter_result.agent_output.status.value,
             "model": model,
-            "adapter": "tool_loop",
+            "adapter": adapter_kind,
             "adapter_name": adapter_result.adapter_name,
             "resolved_model": adapter_result.resolved_model,
             "configuration_record": adapter_result.configuration_record,
-            "max_turns": max_turns,
+            "limits": request_configuration,
             "turns_used": adapter_result.turns_used,
             "model_calls": adapter_result.usage_model_calls or 0,
             "input_tokens": adapter_result.usage_input_tokens or 0,
@@ -690,6 +825,7 @@ __all__ = (
     "CompletedPumpStationReferenceSession",
     "PUMP_STATION_MODEL_CONTROLLER_MODE",
     "PUMP_STATION_MODEL_MAX_TURNS",
+    "PUMP_STATION_MODEL_MAX_TOKENS",
     "run_pump_station_model_session",
     "run_pump_station_reference_session",
 )

@@ -13,6 +13,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Protocol, cast
 
 from aec_bench.adapters.base import AdapterRequest
+from aec_bench.adapters.deepseek_harness.config import DEFAULT_TIMEOUT_SECONDS
 from aec_bench.adapters.local_registry import build_local_adapter
 from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.contracts.trajectory import read_trajectory
@@ -52,6 +53,8 @@ from aec_bench.lifecycles.runtime.operation_protocol import (
     LifecycleOperationResolver,
 )
 from aec_bench.trajectory.writer import TrajectoryWriter
+
+DEFAULT_DEEPSEEK_LIFECYCLE_MAX_TOKENS = 8192
 
 
 class LifecycleRunRecorder(Protocol):
@@ -320,6 +323,8 @@ def run_local_evidence_lifecycle_session(
     verifier: Any | None,
     adapter_kind: str = "tool_loop",
     max_turns: int = 60,
+    max_tokens: int | None = None,
+    timeout_sec: int | None = None,
     process_id: str = "process.lifecycle",
     adapter_builder: Callable[..., Any] | None = None,
     visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
@@ -329,11 +334,17 @@ def run_local_evidence_lifecycle_session(
     run_authorization_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Run all checkpoints in one adapter execution, optionally leaving reward to an external verifier."""
-    if adapter_kind not in {"tool_loop", "pydantic_ai"}:
-        raise ValueError("persistent evidence lifecycles require a native tool-loop adapter")
+    if adapter_kind not in {"deepseek_harness", "tool_loop", "pydantic_ai"}:
+        raise ValueError("persistent evidence lifecycles require a supported tool-capable adapter")
     if visibility_policy != LifecycleVisibilityPolicy.PERSISTENT_CONTEXT:
         raise ValueError("persistent sessions require persistent_context visibility")
 
+    request_configuration = _lifecycle_request_configuration(
+        adapter_kind=adapter_kind,
+        max_turns=max_turns,
+        max_tokens=max_tokens,
+        timeout_sec=timeout_sec,
+    )
     package = Path(package_dir)
     run = Path(run_dir)
     initial = prepare_evidence_checkpoint(
@@ -456,7 +467,7 @@ def run_local_evidence_lifecycle_session(
                     supports_lifecycle_operations=supports_lifecycle_operations,
                 ),
                 tools=tool_specs,
-                configuration={"max_turns": max_turns},
+                configuration=request_configuration,
                 output_path=str(Path(initial["workspace"]) / "output.md"),
                 output_format="markdown",
             )
@@ -477,24 +488,35 @@ def run_local_evidence_lifecycle_session(
             provider_error=str(exc),
             memory_visibility_policy=visibility_policy.value,
         )
+        _apply_deepseek_lifecycle_limits(
+            failed_agent_result,
+            adapter_kind=adapter_kind,
+            request_configuration=request_configuration,
+        )
         lifecycle = read_evidence_lifecycle_state(package, run, operation_resolver=operation_resolver)
         failed_agent_result["checkpoint_ids"] = _session_checkpoint_ids(lifecycle, session_id)
         _write_json(session_dir / "agent_result.json", failed_agent_result)
+        agent_evidence = _normalized_agent_evidence(
+            model=model,
+            adapter_kind=adapter_kind,
+            execution_mode="persistent_context",
+            memory_visibility_policy=visibility_policy.value,
+            max_turns=max_turns,
+            sessions=_persistent_context_sessions(run),
+            lifecycle=lifecycle,
+        )
+        _apply_deepseek_lifecycle_limits(
+            agent_evidence,
+            adapter_kind=adapter_kind,
+            request_configuration=request_configuration,
+        )
         _build_local_task_run(
             package=package,
             run=run,
             process_id=process_id,
             lifecycle=lifecycle,
             verifier=verifier,
-            agent=_normalized_agent_evidence(
-                model=model,
-                adapter_kind=adapter_kind,
-                execution_mode="persistent_context",
-                memory_visibility_policy=visibility_policy.value,
-                max_turns=max_turns,
-                sessions=_persistent_context_sessions(run),
-                lifecycle=lifecycle,
-            ),
+            agent=agent_evidence,
             run_recorder=run_recorder,
         )
         raise
@@ -508,6 +530,11 @@ def run_local_evidence_lifecycle_session(
         max_turns=max_turns,
         session_id=session_id,
         memory_visibility_policy=visibility_policy.value,
+    )
+    _apply_deepseek_lifecycle_limits(
+        agent_result,
+        adapter_kind=adapter_kind,
+        request_configuration=request_configuration,
     )
     returned_failure = (
         "adapter_identity_mismatch"
@@ -545,21 +572,27 @@ def run_local_evidence_lifecycle_session(
     if result.raw_output_text:
         (session_dir / "raw_output.md").write_text(result.raw_output_text, encoding="utf-8")
 
+    agent_evidence = _normalized_agent_evidence(
+        model=model,
+        adapter_kind=adapter_kind,
+        execution_mode="persistent_context",
+        memory_visibility_policy=visibility_policy.value,
+        max_turns=max_turns,
+        sessions=_persistent_context_sessions(run),
+        lifecycle=lifecycle,
+    )
+    _apply_deepseek_lifecycle_limits(
+        agent_evidence,
+        adapter_kind=adapter_kind,
+        request_configuration=request_configuration,
+    )
     return _build_local_task_run(
         package=package,
         run=run,
         process_id=process_id,
         lifecycle=lifecycle,
         verifier=verifier,
-        agent=_normalized_agent_evidence(
-            model=model,
-            adapter_kind=adapter_kind,
-            execution_mode="persistent_context",
-            memory_visibility_policy=visibility_policy.value,
-            max_turns=max_turns,
-            sessions=_persistent_context_sessions(run),
-            lifecycle=lifecycle,
-        ),
+        agent=agent_evidence,
         run_recorder=run_recorder,
     )
 
@@ -667,12 +700,20 @@ def recover_completed_persistent_lifecycle_session(
     verifier: Any,
     adapter_kind: str,
     max_turns: int,
+    max_tokens: int | None = None,
+    timeout_sec: int | None = None,
     process_id: str,
     visibility_policy: LifecycleVisibilityPolicy,
     operation_resolver: LifecycleOperationResolver | None = None,
     run_recorder: LifecycleRunRecorder | None = None,
 ) -> dict[str, Any]:
     """Seal a complete persistent crash and publish an unscored canonical invocation."""
+    request_configuration = _lifecycle_request_configuration(
+        adapter_kind=adapter_kind,
+        max_turns=max_turns,
+        max_tokens=max_tokens,
+        timeout_sec=timeout_sec,
+    )
     package = Path(package_dir)
     run = Path(run_dir)
     lifecycle = validate_completed_persistent_lifecycle_recovery(
@@ -689,21 +730,27 @@ def recover_completed_persistent_lifecycle_session(
         execution_mode="persistent_context",
         memory_visibility_policy=visibility_policy.value,
     )
+    agent_evidence = _normalized_agent_evidence(
+        model=model,
+        adapter_kind=adapter_kind,
+        execution_mode="persistent_context",
+        memory_visibility_policy=visibility_policy.value,
+        max_turns=max_turns,
+        sessions=_persistent_context_sessions(run),
+        lifecycle=lifecycle,
+    )
+    _apply_deepseek_lifecycle_limits(
+        agent_evidence,
+        adapter_kind=adapter_kind,
+        request_configuration=request_configuration,
+    )
     return _build_local_task_run(
         package=package,
         run=run,
         process_id=process_id,
         lifecycle=lifecycle,
         verifier=verifier,
-        agent=_normalized_agent_evidence(
-            model=model,
-            adapter_kind=adapter_kind,
-            execution_mode="persistent_context",
-            memory_visibility_policy=visibility_policy.value,
-            max_turns=max_turns,
-            sessions=_persistent_context_sessions(run),
-            lifecycle=lifecycle,
-        ),
+        agent=agent_evidence,
         run_recorder=run_recorder,
     )
 
@@ -1209,6 +1256,47 @@ def _agent_result(
         "failure_kind": _enum_value(result.failure_kind),
         "provider_error": result.provider_error,
     }
+
+
+def _lifecycle_request_configuration(
+    *,
+    adapter_kind: str,
+    max_turns: int,
+    max_tokens: int | None,
+    timeout_sec: int | None,
+) -> dict[str, int]:
+    """Return only limits that the selected adapter can enforce."""
+    if adapter_kind != "deepseek_harness":
+        return {"max_turns": max_turns}
+    resolved_max_tokens = max_tokens or DEFAULT_DEEPSEEK_LIFECYCLE_MAX_TOKENS
+    resolved_timeout = timeout_sec or DEFAULT_TIMEOUT_SECONDS
+    for name, value in (("max_tokens", resolved_max_tokens), ("timeout_sec", resolved_timeout)):
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    return {"max_tokens": resolved_max_tokens, "timeout_sec": resolved_timeout}
+
+
+def _apply_deepseek_lifecycle_limits(
+    payload: dict[str, Any],
+    *,
+    adapter_kind: str,
+    request_configuration: Mapping[str, int],
+) -> None:
+    """Remove false turn-limit claims from DeepSeek lifecycle evidence."""
+    if adapter_kind != "deepseek_harness":
+        return
+    payload.pop("max_turns", None)
+    payload.pop("max_turns_per_session", None)
+    payload["limits"] = {
+        "max_output_tokens_per_call": request_configuration["max_tokens"],
+        "timeout_sec": request_configuration["timeout_sec"],
+    }
+    configuration = payload.get("configuration_record")
+    if isinstance(configuration, dict):
+        normalized_configuration = dict(configuration)
+        normalized_configuration.pop("max_turns", None)
+        normalized_configuration.update(request_configuration)
+        payload["configuration_record"] = normalized_configuration
 
 
 def _episode_result_agent_payload(

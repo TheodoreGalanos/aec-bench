@@ -37,6 +37,7 @@ readable.
 | Lifecycle verification | Lifecycle verification and evaluation | Canonical accepted lifecycle evidence becomes gates and optional semantic diagnostics | Internal until carried by a protected trial or published result | [`LifecycleVerificationResult`](../src/aec_bench/contracts/lifecycle_evaluation.py) | Internal result; persisted when referenced by trial evidence |
 | Dataset manifest and identity | Dataset generation and storage | A set of task bytes becomes a named benchmark snapshot | Protected when published; content identity is authoritative | [`DatasetManifest`](../src/aec_bench/contracts/dataset.py) and dataset hashing/storage | Persisted and publishable |
 | Adapter and Harbor execution | Adapters and harness | Harness input crosses into local model execution or the supported Harbor workflow and returns untrusted output | Internal adapter values; Harbor result documents are lenient ingestion boundaries | [`AdapterRequest` and `AdapterResult`](../src/aec_bench/adapters/base.py), the [Harbor workflow](../src/aec_bench/harness/harbor_workflow.py), and [Harbor ingestion models](../src/aec_bench/harness/harbor_contract.py) | Internal, cross-process, and external |
+| Output completion and explicit commit | Adapter infrastructure and task contract | A fixed candidate artifact becomes structurally complete and, when required, bound by exact bytes | Versioned when persisted in trial evidence; adapter integration is internal | [`OutputCompletionContract` and `OutputCommitAttestation`](../src/aec_bench/contracts/output_completion.py) plus the shared [commit authority](../src/aec_bench/adapters/output_commit.py) | Request configuration, adapter result, and persisted attestation |
 | Prime package and evaluation integration | Prime integration | Current public task or lifecycle material becomes an independently installed package; hosted samples return as untrusted provider evidence | Public command and external package behavior; samples normalize into current records | [`exporter.py`](../src/aec_bench/prime_lab/exporter.py), [`lifecycle_exporter.py`](../src/aec_bench/prime_lab/lifecycle_exporter.py), and [`eval_import.py`](../src/aec_bench/prime_lab/eval_import.py) | External package and provider ingestion |
 | Artifact and evidence reference | Harness, ledger, and the producing domain | Filesystem or provider output becomes content-bound evidence | Protected when stored in a trial, dataset, freeze, or published record | `ArtifactReference` in [`trial_record.py`](../src/aec_bench/contracts/trial_record.py) and narrower owner-specific references | Persisted reference |
 | Visibility classification | Task ownership and evaluation policy | Material enters public, calibration, or holdout handling | Protected | `Visibility` in [`task_definition.py`](../src/aec_bench/contracts/task_definition.py) and visibility checks in persisted records | Persisted and policy-bearing |
@@ -234,6 +235,89 @@ remain `EvaluationResult` authority.
 Adapter-only extraction metadata must not become task-semantic output. The
 lambda-RLM `__confidence__` key is reserved for extraction confidence and is
 removed before semantic payloads reach generation, persistence, or review.
+
+The DeepSeek Harness adapter qualifies two limits. `timeout_sec` caps the whole
+AEC-owned worker process group. On timeout, the runtime retires that process
+group. A positive `max_tokens` value caps output for each conversation-model
+request through the official SDK. A provider `max-tokens` terminal reason maps
+to partial output and a token-budget stop; it cannot map to success. The
+composition and runtime evidence record both configured values.
+
+The adapter rejects `max_turns`, `max_tool_calls`, and `max_context_tokens`.
+The current public Harness hooks cannot both stop these operations at the exact
+boundary and retain a typed budget terminal reason. These limits remain
+unsupported until that full contract can be enforced and recorded.
+
+Each DeepSeek trial writes one validated evidence manifest. The manifest keeps
+the adapter, model, installed SDK and runtime versions, limits, execution
+status, composition modes, optional plugins, and redaction actions readable.
+Each retained artifact has one SHA-256 entry in that manifest. Summary fields
+do not duplicate artifact hashes. `RuntimeExecutionAttestation` binds the
+manifest SHA-256 when the adapter provides one; attestations from other
+adapters keep their existing shape.
+
+The model identifier must use `provider:model`. `azure:` requires
+`AZURE_OPENAI_API_KEY` and `AZURE_OPENAI_ENDPOINT`; the runtime normalizes the
+endpoint to `/openai/v1`. `deepseek:` requires `DEEPSEEK_API_KEY` and uses
+`DEEPSEEK_BASE_URL` when set or the public DeepSeek API otherwise. The shared
+entrypoint records the provider name in the execution payload and never
+serializes the credential. The Azure profile uses the Harness `azure` route
+through the generic provider plugin and omits DeepSeek-only reasoning fields.
+The DeepSeek profile uses `deepseek-official`. Evidence records the external
+provider and internal Harness route separately.
+
+The Harbor child receives only the selected provider environment. The worker
+then maps that configuration to `DSH_API_KEY` and `DSH_BASE_URL` and inherits
+only those private values, locale, path, certificate values, and AEC-owned
+runtime variables. Evidence records inherited variable names and a
+credential-free provider endpoint, not secret values. Redaction changes only
+owned runtime evidence. Its audit records file paths, categories, and
+replacement counts. It does not change the candidate output.
+
+The qualified DeepSeek compatibility conditions are:
+
+| Treatment | AEC identity | DeepSeek identity | Optional plugin | Qualification proof |
+| --- | --- | --- | --- | --- |
+| Baseline | Installed AEC package version in the manifest | Exact SDK pin from `pyproject.toml`; worker requires the runtime distribution to match | None | Keyless real-composition suite |
+| Native tool gateway | Same | Same | `@aec-bench/dsh-tools` with the exact per-run callable names and JSON schemas | Authenticated endpoint tests plus lifecycle and pump-world boundary tests |
+| Explicit output commit | Same | Same | Named, versioned build copied into the trial evidence | Keyless rejection, repair, acceptance, and stability suite |
+
+The manifest states that resolved composition and resolved tool-surface dumps
+are unavailable. The pinned SDK path does not expose them. The adapter retains
+the exact Cordis input and does not claim stronger evidence.
+
+For native-tool runs, the manifest records the exact tool names and copied
+plugin artifact. The AEC endpoint derives parameter schemas from fully
+annotated callables, validates each JSON request with those annotations, and
+executes only the per-run mapping. The provider plugin cannot add shell access,
+world host controls, verification, or reward authority.
+
+## Output completion and explicit commit
+
+`OutputCompletionContract` is a task-owned, reward-blind structural contract
+for the fixed expected output path. The current supported format is
+`markdown_final_fenced_json`. It checks the final JSON block and its required
+top-level keys. It does not check correctness, reward, hidden tests, or verifier
+results.
+
+The shared adapter commit authority safely reads the fixed path without
+following symbolic links, limits the accepted file size, requires UTF-8,
+compares the initial artifact, evaluates the declared structure, and binds the
+accepted bytes in `OutputCommitAttestation`. It also revalidates the artifact
+after acceptance so a later mutation cannot retain commit authority.
+
+Adapter-specific code owns how an agent requests commitment. The RLM adapter
+owns `COMMIT_OUTPUT()` injection, reminders, and turn-state integration. For a
+DeepSeek Harness trial that requires commitment, the adapter exposes the shared
+authority through an authenticated trial-local Unix socket. Its optional
+`aec_commit_output` Cordis tool takes no arguments and concludes the Harness
+turn only after that authority accepts the fixed artifact. The endpoint does
+not accept an output path from the model, and its evidence does not retain the
+capability token. A rejected call is nonterminal and can be repaired.
+
+The shared authority and the DeepSeek transport do not run task verification.
+Harbor ingestion independently checks a persisted attestation against the
+collected artifact and task contract before it trusts the claim.
 
 ## Artifact and evidence references
 

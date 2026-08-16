@@ -393,8 +393,40 @@ def _build_prime_agent(
     )
 
 
+def _build_deepseek_harness(
+    *,
+    model_name: str,
+    workspace: str,
+    native_tools: list[Callable[..., str]] | None = None,
+    **_kwargs: Any,
+) -> Any:
+    """Build the official DeepSeek Harness adapter through its shared runtime."""
+    from aec_bench.adapters.deepseek_harness import DeepSeekHarnessAdapter
+    from aec_bench.adapters.deepseek_harness.config import DeepSeekHarnessSettings
+
+    provider = model_name.partition(":")[0].strip().lower()
+    settings = DeepSeekHarnessSettings.from_execution_payload(
+        model_name=model_name,
+        payload={"provider": provider},
+    )
+    tool_gateway: dict[str, Callable[..., str]] = {}
+    for tool in native_tools or []:
+        name = getattr(tool, "__name__", "")
+        if not name:
+            raise ValueError("DeepSeek native tools must have a stable callable name")
+        if name in tool_gateway:
+            raise ValueError(f"duplicate DeepSeek native tool: {name}")
+        tool_gateway[name] = tool
+    return DeepSeekHarnessAdapter(
+        settings=settings,
+        workspace=workspace,
+        native_tools=tool_gateway,
+    )
+
+
 # Default builder registry
 _DEFAULT_BUILDERS: dict[str, AdapterBuilder] = {
+    "deepseek_harness": _build_deepseek_harness,
     "rlm": _build_rlm,
     "direct": _build_direct,
     "lambda-rlm": _build_lambda_rlm,

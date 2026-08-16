@@ -345,6 +345,8 @@ def _collect_runtime_tree(
         raise ProposalRuntimeArchiveError(f"allowlisted runtime tree is not a directory: {source_root}")
     for source in sorted(source_root.rglob("*")):
         relative_path = PurePosixPath(source.relative_to(package_root).as_posix())
+        if "node_modules" in relative_path.parts:
+            continue
         if source.is_symlink():
             raise ProposalRuntimeArchiveError(f"allowlisted runtime surface contains a symbolic link: {relative_path}")
         if source.is_dir():

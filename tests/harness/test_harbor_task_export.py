@@ -27,7 +27,11 @@ from aec_bench.harness.harbor_task_export import (
 from aec_bench.harness.harbor_task_exporting import bridge as harbor_bridge_module
 from aec_bench.harness.harbor_task_exporting import runtime_wheel, stable_io
 from aec_bench.harness.harbor_task_exporting.stable_io import RegularFileSnapshot
-from aec_bench.lifecycles.catalogue import lifecycle_definition, lifecycle_smoke_environment
+from aec_bench.lifecycles.catalogue import (
+    lifecycle_definition,
+    lifecycle_operation_resolver,
+    lifecycle_smoke_environment,
+)
 from aec_bench.lifecycles.compiled import (
     CompiledLifecycle,
     CompiledLifecycleEnvelope,
@@ -82,6 +86,9 @@ def test_verifier_runtime_source_ignores_local_frontend_dependencies(tmp_path: P
     frontend_dependency = package_root / "web" / "frontend" / "node_modules" / ".bin" / "tool"
     frontend_dependency.parent.mkdir(parents=True)
     frontend_dependency.symlink_to(source)
+    plugin_dependency = package_root / "adapters" / "plugin" / "node_modules" / ".bin" / "tool"
+    plugin_dependency.parent.mkdir(parents=True)
+    plugin_dependency.symlink_to(source)
 
     payloads = runtime_wheel._canonical_source_payloads(package_root)
 
@@ -100,7 +107,7 @@ def test_stormwater_export_is_loadable_staged_and_verifier_isolated(tmp_path: Pa
     assert task.environment.dockerfile == "environment/Dockerfile"
     assert task.verifier.script == "tests/test.sh"
     assert task.verifier.expected_output_path == "/workspace/lifecycle-run"
-    assert HarborTask(task_dir).paths.is_valid()
+    assert HarborTask.is_valid_dir(task_dir)
     validation = validate_task(task_dir, tasks_root=tasks_root)
     assert validation.passed
     assert validation.findings == []
@@ -209,7 +216,10 @@ def test_bridge_validation_binds_hidden_manifest_and_harbor_security_contract(tm
     _, second, _ = _export_stormwater(tmp_path / "security")
     task_toml = second.task_dir / "task.toml"
     task_toml.write_text(
-        task_toml.read_text(encoding="utf-8").replace("allow_internet = false", "allow_internet = true"),
+        task_toml.read_text(encoding="utf-8").replace(
+            'network_mode = "no-network"',
+            'network_mode = "public"',
+        ),
         encoding="utf-8",
     )
     manifest = json.loads(second.manifest_path.read_text(encoding="utf-8"))
@@ -425,7 +435,12 @@ def test_independent_verifier_uses_hidden_package_only_after_agent_phase(tmp_pat
     run_dir = tmp_path / "reference-run"
     environment = lifecycle_smoke_environment(TEMPLATE_ID, verifier_package)
     assert environment is not None
-    run_evidence_lifecycle(verifier_package, run_dir, episode_environment=environment)
+    run_evidence_lifecycle(
+        verifier_package,
+        run_dir,
+        episode_environment=environment,
+        operation_resolver=lifecycle_operation_resolver(verifier_package, run_dir),
+    )
     write_harbor_lifecycle_attestation(
         run_dir,
         load_harbor_lifecycle_bridge(exported.task_dir / "environment"),
@@ -457,7 +472,12 @@ def test_independent_verifier_rejects_missing_or_drifted_bridge_attestation(tmp_
     run_dir = tmp_path / "reference-run"
     environment = lifecycle_smoke_environment(TEMPLATE_ID, verifier_package)
     assert environment is not None
-    run_evidence_lifecycle(verifier_package, run_dir, episode_environment=environment)
+    run_evidence_lifecycle(
+        verifier_package,
+        run_dir,
+        episode_environment=environment,
+        operation_resolver=lifecycle_operation_resolver(verifier_package, run_dir),
+    )
 
     verifier_arguments = {
         "package_dir": verifier_package,

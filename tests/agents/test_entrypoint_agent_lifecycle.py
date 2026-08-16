@@ -122,7 +122,7 @@ def test_lifecycle_setup_rejects_provenance_drift_before_sandbox_or_model_access
         ({"client": {"client_kind": "replay", "payload": {}}}, "does not accept serialized clients"),
         ({"tools": []}, "owns its exact tool allowlist"),
         ({"system_prompt": "override"}, "owns its system prompt"),
-        ({"adapter": "rlm"}, "requires a native tool-loop adapter"),
+        ({"adapter": "rlm"}, "requires a supported tool-capable adapter"),
     ],
 )
 def test_lifecycle_setup_rejects_configuration_that_can_bypass_bridge(
@@ -143,6 +143,34 @@ def test_lifecycle_setup_rejects_configuration_that_can_bypass_bridge(
     )
 
     with pytest.raises(ValueError, match=message):
+        asyncio.run(agent.setup(_NoSandboxAccessEnvironment(exported.task_dir / "environment")))
+
+
+def test_lifecycle_setup_accepts_deepseek_with_enforceable_limits(tmp_path: Path) -> None:
+    exported = _export_task(tmp_path)
+    agent = EntrypointAgent(
+        logs_dir=tmp_path / "logs",
+        model_name="azure:deepseek-v4-flash",
+        lifecycle_bridge=HARBOR_LIFECYCLE_BRIDGE_MODE,
+        adapter="deepseek_harness",
+        max_tokens=8192,
+        timeout_sec=1800,
+    )
+
+    asyncio.run(agent.setup(_NoSandboxAccessEnvironment(exported.task_dir / "environment")))
+
+
+def test_lifecycle_setup_rejects_false_deepseek_turn_limit(tmp_path: Path) -> None:
+    exported = _export_task(tmp_path)
+    agent = EntrypointAgent(
+        logs_dir=tmp_path / "logs",
+        model_name="azure:deepseek-v4-flash",
+        lifecycle_bridge=HARBOR_LIFECYCLE_BRIDGE_MODE,
+        adapter="deepseek_harness",
+        max_turns=60,
+    )
+
+    with pytest.raises(ValueError, match="cannot enforce max_turns"):
         asyncio.run(agent.setup(_NoSandboxAccessEnvironment(exported.task_dir / "environment")))
 
 

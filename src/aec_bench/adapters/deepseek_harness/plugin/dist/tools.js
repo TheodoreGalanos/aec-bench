@@ -1,0 +1,165 @@
+import { createConnection } from 'node:net';
+export const name = '@aec-bench/dsh-tools';
+export const inject = ['tools'];
+export const TOOL_GATEWAY_PROTOCOL = 'aec-bench/deepseek-tools/1';
+const SOCKET_ENV = 'DSH_TOOLS_SOCKET';
+const TOKEN_ENV = 'DSH_TOOLS_TOKEN';
+const MANIFEST_ENV = 'DSH_TOOLS';
+const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+const REQUEST_TIMEOUT_MS = 120_000;
+export function apply(ctx) {
+    const config = readConfig(process.env);
+    delete process.env[SOCKET_ENV];
+    delete process.env[TOKEN_ENV];
+    delete process.env[MANIFEST_ENV];
+    for (const tool of config.tools)
+        ctx.tools.register(createGatewayTool(config, tool));
+}
+export function readConfig(environment) {
+    const socketPath = environment[SOCKET_ENV];
+    const capability = environment[TOKEN_ENV];
+    const manifestValue = environment[MANIFEST_ENV];
+    if (socketPath === undefined || socketPath.length === 0)
+        throw new Error(`${SOCKET_ENV} is required`);
+    if (capability === undefined || capability.length === 0)
+        throw new Error(`${TOKEN_ENV} is required`);
+    if (manifestValue === undefined || manifestValue.length === 0)
+        throw new Error(`${MANIFEST_ENV} is required`);
+    let parsed;
+    try {
+        parsed = JSON.parse(manifestValue);
+    }
+    catch {
+        throw new Error(`${MANIFEST_ENV} must contain a JSON array`);
+    }
+    if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isToolManifest)) {
+        throw new Error(`${MANIFEST_ENV} contains an invalid tool manifest`);
+    }
+    const names = parsed.map(tool => tool.name);
+    if (new Set(names).size !== names.length)
+        throw new Error(`${MANIFEST_ENV} contains duplicate tools`);
+    return { socketPath, capability, tools: parsed };
+}
+export function createGatewayTool(config, tool) {
+    return {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+        output: {
+            schema: { type: 'object', additionalProperties: true },
+            render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+        },
+        async execute(args, exec) {
+            const agent = exec.agent;
+            if (agent === undefined)
+                throw new Error(`${tool.name} requires an active agent`);
+            const response = await requestGatewayTool(config, tool.name, asArguments(args), {
+                sessionId: agent.id,
+                toolCallId: String(exec.callId),
+                modelTurn: currentModelTurn(agent.session.events),
+            }, exec.signal);
+            if (response.status === 'error')
+                return { status: 'error', error: response.error };
+            const result = response.result ?? { status: 'error', error: { code: 'missing_result' } };
+            if (tool.name === 'submit_checkpoint' && result['status'] === 'complete')
+                exec.concludeTurn();
+            return result;
+        },
+    };
+}
+export function currentModelTurn(events) {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+        const event = events[index];
+        if (event?.type !== 'step/start')
+            continue;
+        const step = event.data?.['step'];
+        if (typeof step === 'number' && Number.isSafeInteger(step) && step > 0)
+            return step;
+    }
+    throw new Error('tool gateway could not resolve the current model turn');
+}
+export async function requestGatewayTool(config, toolName, argumentsValue, identity, signal) {
+    if (signal.aborted)
+        throw new Error('tool request cancelled');
+    const payload = JSON.stringify({
+        protocol: TOOL_GATEWAY_PROTOCOL,
+        capability: config.capability,
+        request_id: `dsh:${identity.sessionId}:${identity.toolCallId}`,
+        tool: toolName,
+        arguments: argumentsValue,
+        metadata: {
+            deepseek_session_id: identity.sessionId,
+            deepseek_tool_call_id: identity.toolCallId,
+            aec_model_turn: identity.modelTurn,
+        },
+    }) + '\n';
+    return new Promise((resolve, reject) => {
+        const socket = createConnection(config.socketPath);
+        let settled = false;
+        let received = Buffer.alloc(0);
+        const finish = (error, response) => {
+            if (settled)
+                return;
+            settled = true;
+            signal.removeEventListener('abort', cancel);
+            socket.destroy();
+            if (error !== null)
+                reject(error);
+            else if (response !== undefined)
+                resolve(response);
+        };
+        const cancel = () => finish(new Error('tool request cancelled'));
+        signal.addEventListener('abort', cancel, { once: true });
+        if (signal.aborted) {
+            cancel();
+            return;
+        }
+        socket.setTimeout(REQUEST_TIMEOUT_MS, () => finish(new Error('tool request timed out')));
+        socket.once('connect', () => socket.write(payload));
+        socket.on('data', chunk => {
+            received = Buffer.concat([received, chunk]);
+            if (received.length > MAX_RESPONSE_BYTES) {
+                finish(new Error('tool response is too large'));
+                return;
+            }
+            const newline = received.indexOf(0x0a);
+            if (newline < 0)
+                return;
+            try {
+                finish(null, parseResponse(received.subarray(0, newline).toString('utf8')));
+            }
+            catch (error) {
+                finish(error instanceof Error ? error : new Error('invalid tool response'));
+            }
+        });
+        socket.once('error', error => finish(error));
+        socket.once('end', () => {
+            if (!settled)
+                finish(new Error('tool authority closed without a response'));
+        });
+    });
+}
+function parseResponse(value) {
+    const parsed = JSON.parse(value);
+    if (typeof parsed !== 'object' || parsed === null)
+        throw new Error('tool response must be an object');
+    const response = parsed;
+    if (response.protocol !== TOOL_GATEWAY_PROTOCOL || (response.status !== 'ok' && response.status !== 'error')) {
+        throw new Error('tool response protocol is invalid');
+    }
+    return response;
+}
+function isToolManifest(value) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value))
+        return false;
+    const manifest = value;
+    return typeof manifest.name === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(manifest.name)
+        && typeof manifest.description === 'string' && manifest.description.length > 0
+        && typeof manifest.parameters === 'object' && manifest.parameters !== null && !Array.isArray(manifest.parameters);
+}
+function asArguments(value) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        throw new Error('tool arguments must be an object');
+    }
+    return value;
+}

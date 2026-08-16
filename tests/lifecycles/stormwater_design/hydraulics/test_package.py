@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import platform
+import sys
 from pathlib import Path
 from typing import Any, cast
 
@@ -32,28 +33,28 @@ from aec_bench.lifecycles.stormwater_design.hydraulics.verifier import build_ver
 
 SOURCE_ID = "stormwater-detention-network"
 CANONICAL_RUNTIME_DEPENDENCIES = {
-    "pydantic": "2.11.10",
+    "pydantic": "2.13.4",
     "python_cache_tag": "cpython-313",
     "python_implementation": "CPython",
-    "python_version": "3.13.2",
+    "python_version": "3.13",
 }
 EXPECTED_MAJOR_PACKAGE_MANIFEST = {
     "artifact_sha256": {
-        "README.md": "2ba094a3f6de26e168023e910705fc089dcfaaefdeec1fdd8079e7e3432210dc",
-        "engine/identity.json": "acc960f15c8152746e38df61026395fdde1ccf0d3484976756606cebf73f77ab",
-        "source/source-state.json": "7e361a26f66854e79bfcc9ddeb4cee023b6f2edeacce1ba9a38bdf953253f4c4",
+        "README.md": "c1ea5b92714284ffe9b1a7d47012b59b181da2fbe2bcc0656577b98d9fe49c6c",
+        "engine/identity.json": "17072c0f9adca5c2cf53b7681545c100803e4e57c64bff75dd2281add24b3022",
+        "source/source-state.json": "6cc479c4f576a4d8cacc397c0a1cafad0c2018f3cbee9260854a1bfff15e67e6",
     },
-    "package_sha256": "115c5efaf30458799b2836859d7da49bca83b5d3f8724d1fcd5979dbe99d675c",
+    "package_sha256": "6d0a1e918731f944f8df03133ed8f8d533e51820aaea11e5add0e1da95d11712",
     "schema_version": "1",
     "source_id": SOURCE_ID,
 }
 EXPECTED_MAJOR_RUN_ARTIFACTS = {
-    "report.md": "366f149ca4a4a631c4c10e71915895fdba118062ea6ade8b42f2f208cae77c91",
-    "request.json": "28ad0d85386c13a186ae7b66be8921e6b4c29d52a631694a33d48468a2093078",
-    "results.json": "a608a7daa38d41072ea426d6c1384aa71fe09e813144ff8132d8e85193ef2152",
-    "timeseries.json": "d3e6538e8ffbce6e1317d85da79be945dddc8839cbc507b6928ec00eb284a611",
+    "report.md": "8277395a52cd3e71e8446a835dc18d79e00e0623e5ef627ea5851163a3bee11d",
+    "request.json": "b8674f2476d2f18e30ed20af5358c76711dd4981d46957c35a31b56728cdac5e",
+    "results.json": "af606a0d441309326ec2a362cdb36f2aa7c6fdc8ad20188106fc8d47ff4dbe8c",
+    "timeseries.json": "e4550922e5609ad5b69f36be73b914edf9a563d60663de7060877080612f34b7",
 }
-EXPECTED_MAJOR_RUN_ID = "hydraulic-a13fde0a31ca0cbe6e324a0fc5ceb4d3e555828d2f6ff9ba0cfd341e363cc8f7"
+EXPECTED_MAJOR_RUN_ID = "hydraulic-b77482d8e48620e8bee81067896bdac4d459c65e90240813a07cd01349a137c5"
 
 
 def _tree_bytes(root: Path) -> dict[str, bytes]:
@@ -127,9 +128,19 @@ def test_engine_identity_binds_source_inventory_and_runtime_dependencies(tmp_pat
         "python_implementation",
         "python_version",
     }
-    assert identity["runtime_dependencies"]["python_version"] == platform.python_version()
+    assert identity["runtime_dependencies"]["python_version"] == f"{sys.version_info.major}.{sys.version_info.minor}"
     assert identity["implementation_sha256"] == canonical_json_sha256(identity["source_inventory_sha256"])
     assert identity["runtime_dependency_sha256"] == canonical_json_sha256(identity["runtime_dependencies"])
+
+
+def test_engine_identity_does_not_depend_on_python_patch_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = materialize_hydraulic_package(build_source_state(), tmp_path / "first")
+    monkeypatch.setattr(platform, "python_version", lambda: "3.13.99")
+    second = materialize_hydraulic_package(build_source_state(), tmp_path / "second")
+
+    assert (first / "engine" / "identity.json").read_bytes() == (second / "engine" / "identity.json").read_bytes()
 
 
 def test_major_run_contains_named_hydraulic_outputs_and_passes_criteria(tmp_path: Path) -> None:

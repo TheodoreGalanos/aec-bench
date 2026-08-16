@@ -66,7 +66,8 @@ def _engine_identity() -> HydraulicEngineIdentity:
         "pydantic": importlib.metadata.version("pydantic"),
         "python_cache_tag": sys.implementation.cache_tag or "unknown",
         "python_implementation": platform.python_implementation(),
-        "python_version": platform.python_version(),
+        # Host execution and the isolated verifier can use different patch releases of the supported Python line.
+        "python_version": f"{sys.version_info.major}.{sys.version_info.minor}",
     }
     return HydraulicEngineIdentity(
         source_inventory_sha256=source_inventory,

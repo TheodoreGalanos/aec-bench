@@ -157,6 +157,13 @@ tags = ["adaptive"]
 [agent]
 timeout_sec = 300
 
+[environment]
+build_timeout_sec = 600
+cpus = 1
+memory_mb = 2048
+storage_mb = 5120
+network_mode = "public"
+
 [[environment.tools]]
 name = "bash"
 source = "environment/tools/bash.sh"

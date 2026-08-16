@@ -7,11 +7,13 @@ import asyncio
 import json
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 import pytest
 from harbor.models.trial.config import TrialConfig  # type: ignore[import-untyped]
-from harbor.trial.trial import Trial  # type: ignore[import-untyped]
 
+from aec_bench.adapters.base import AdapterRequest, AdapterResult
+from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.harness.pump_station_harbor.export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
     PUMP_STATION_HARBOR_EXECUTION_KIND,
@@ -22,6 +24,7 @@ from aec_bench.harness.pump_station_harbor.job import (
     build_pump_station_harbor_job_config,
 )
 from aec_bench.harness.pump_station_harbor.session import (
+    run_pump_station_model_session,
     run_pump_station_reference_session,
 )
 from aec_bench.harness.pump_station_harbor.verifier import (
@@ -40,6 +43,11 @@ from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import
 from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
+from aec_bench.worlds.stewardship.wastewater_pump_station.world_run import PumpStationWorldRun
+from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository import (
+    PumpStationWorldRunRepository,
+)
+from tests.support.harbor_local_environment import run_harbor_trial
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -75,6 +83,39 @@ def test_registered_profile_export_uses_the_canonical_harbor_bridge(
         "bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE,
         "controller": "model",
     }
+
+
+def test_registered_profile_builds_a_deepseek_world_session_without_a_false_turn_limit(
+    tmp_path: Path,
+) -> None:
+    exported = export_pump_station_harbor_task(
+        tmp_path / "task",
+        project_root=PROJECT_ROOT,
+        profile_ref=pump_station_continual_world_definition().profiles[0],
+    )
+
+    config = build_pump_station_harbor_job_config(
+        task_dir=exported.task_dir,
+        jobs_dir=tmp_path / "jobs",
+        backend="modal",
+        model_name="azure:gpt-4.1-mini-standard",
+        adapter="deepseek_harness",
+        max_tokens=4096,
+        timeout_sec=600,
+    )
+
+    kwargs = config["agents"][0]["kwargs"]
+    assert kwargs == {
+        "adapter": "deepseek_harness",
+        "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
+        "max_tokens": 4096,
+        "timeout_sec": 600,
+        "world_session": {
+            "bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE,
+            "controller": "model",
+        },
+    }
+    assert "max_turns" not in kwargs
 
 
 def test_registered_reference_session_uses_standard_evidence_and_replays_offline(
@@ -129,6 +170,176 @@ def test_registered_reference_session_uses_standard_evidence_and_replays_offline
         )
 
 
+def test_deepseek_model_session_receives_only_actor_tools_and_token_limits(tmp_path: Path) -> None:
+    exported = export_pump_station_harbor_task(
+        tmp_path / "task",
+        project_root=PROJECT_ROOT,
+        profile_ref=pump_station_continual_world_definition().profiles[0],
+    )
+    bridge = load_pump_station_harbor_bridge(exported.task_dir / "environment")
+    captured: dict[str, object] = {}
+
+    class FakeAdapter:
+        def execute(self, request: AdapterRequest) -> AdapterResult:
+            captured["request"] = request
+            return AdapterResult(
+                adapter_name="deepseek_harness",
+                resolved_model="gpt-4.1-mini-standard",
+                configuration_record=dict(request.configuration),
+                agent_output=AgentOutput(
+                    status=AgentOutputStatus.COMPLETED,
+                    output_path=request.output_path,
+                    output_format=request.output_format,
+                ),
+                transcript=[],
+                turns_used=1,
+                raw_output_text="Observed the current pump-station state.",
+                usage_model_calls=1,
+            )
+
+    def build_adapter(**kwargs: object) -> FakeAdapter:
+        captured["builder"] = kwargs
+        return FakeAdapter()
+
+    completed = run_pump_station_model_session(
+        bridge=bridge,
+        output_dir=tmp_path / "world-session",
+        session_identity="deepseek-world",
+        model="azure:gpt-4.1-mini-standard",
+        adapter_kind="deepseek_harness",
+        max_tokens=4096,
+        timeout_sec=600,
+        adapter_builder=build_adapter,
+    )
+
+    builder = captured["builder"]
+    assert isinstance(builder, dict)
+    assert builder["adapter_kind"] == "deepseek_harness"
+    assert builder["enable_bash"] is False
+    native_tools = builder["native_tools"]
+    assert isinstance(native_tools, tuple)
+    assert tuple(tool.__name__ for tool in native_tools) == (
+        "observe_pump_station",
+        *PUMP_STATION_ACTOR_ACTION_NAMES,
+    )
+    request = captured["request"]
+    assert isinstance(request, AdapterRequest)
+    assert request.configuration == {"max_tokens": 4096, "timeout_sec": 600}
+    assert "max_turns" not in request.configuration
+    assert completed.adapter_result.adapter_name == "deepseek_harness"
+    evidence = json.loads((completed.output_dir / "agent-result.json").read_text(encoding="utf-8"))
+    assert evidence["adapter"] == "deepseek_harness"
+    assert evidence["limits"] == {"max_tokens": 4096, "timeout_sec": 600}
+    inventory = json.loads((completed.output_dir / "artifact-inventory.json").read_text(encoding="utf-8"))
+    assert inventory["controller_id"] == "gpt-4.1-mini-standard"
+    assert "Do not stop only because one action was accepted" in request.instruction
+
+
+def test_model_journey_applies_host_authority_between_adapter_segments(tmp_path: Path) -> None:
+    exported = export_pump_station_harbor_task(
+        tmp_path / "task",
+        project_root=PROJECT_ROOT,
+        profile_ref=pump_station_continual_world_definition().profiles[0],
+    )
+    bridge = load_pump_station_harbor_bridge(exported.task_dir / "environment")
+    builds: list[dict[str, object]] = []
+
+    class FakeAdapter:
+        def __init__(self, native_tools: tuple[Any, ...], segment_index: int) -> None:
+            self._tools = {tool.__name__: tool for tool in native_tools}
+            self._segment_index = segment_index
+
+        def execute(self, request: AdapterRequest) -> AdapterResult:
+            if self._segment_index == 0:
+                self._tools["request_post_maintenance_verification"](
+                    request_id="verification-a",
+                    reason="Complete the visible verification obligation.",
+                    pump_id="pump-a",
+                    backlog_item_id="backlog-a-verification-001",
+                )
+                self._tools["continue_operation"](
+                    request_id="continue-to-verification",
+                    reason="Advance to the next declared decision event.",
+                )
+            return AdapterResult(
+                adapter_name="deepseek_harness",
+                resolved_model="gpt-4.1-mini-standard",
+                configuration_record=dict(request.configuration),
+                agent_output=AgentOutput(
+                    status=AgentOutputStatus.COMPLETED,
+                    output_path=request.output_path,
+                    output_format=request.output_format,
+                ),
+                transcript=[],
+                turns_used=1,
+                raw_output_text=f"Segment {self._segment_index} ended.",
+                usage_model_calls=1,
+            )
+
+    def build_adapter(**kwargs: object) -> FakeAdapter:
+        builds.append(kwargs)
+        native_tools = kwargs["native_tools"]
+        assert isinstance(native_tools, tuple)
+        return FakeAdapter(native_tools, len(builds) - 1)
+
+    completed = run_pump_station_model_session(
+        bridge=bridge,
+        output_dir=tmp_path / "world-session",
+        session_identity="host-continuation",
+        model="azure:gpt-4.1-mini-standard",
+        adapter_kind="deepseek_harness",
+        max_tokens=4096,
+        adapter_builder=build_adapter,
+    )
+
+    assert completed.segment_count == 2
+    assert completed.host_control_count == 1
+    assert completed.stop_reason == "actor-or-external-progress-required"
+    assert completed.adapter_result.agent_output.status is AgentOutputStatus.PARTIAL
+    assert completed.adapter_result.configuration_record["world_host_control_count"] == 1
+    repository = PumpStationWorldRunRepository(completed.output_dir / "world-run")
+    run = PumpStationWorldRun.resume_reference_system(repository=repository, snapshot=repository.current_snapshot())
+    assert "restriction-a-run-in-001" not in run.state.active_restriction_ids
+
+
+def test_model_session_preserves_adapter_failure_status(tmp_path: Path) -> None:
+    exported = export_pump_station_harbor_task(
+        tmp_path / "task",
+        project_root=PROJECT_ROOT,
+        profile_ref=pump_station_continual_world_definition().profiles[0],
+    )
+    bridge = load_pump_station_harbor_bridge(exported.task_dir / "environment")
+
+    class FailedAdapter:
+        def execute(self, request: AdapterRequest) -> AdapterResult:
+            return AdapterResult(
+                adapter_name="deepseek_harness",
+                resolved_model="gpt-4.1-mini-standard",
+                configuration_record=dict(request.configuration),
+                agent_output=AgentOutput(
+                    status=AgentOutputStatus.FAILED,
+                    output_path=request.output_path,
+                    output_format=request.output_format,
+                ),
+                transcript=[],
+                raw_output_text="The model request failed.",
+            )
+
+    completed = run_pump_station_model_session(
+        bridge=bridge,
+        output_dir=tmp_path / "world-session",
+        session_identity="failed-adapter",
+        model="azure:gpt-4.1-mini-standard",
+        adapter_kind="deepseek_harness",
+        max_tokens=4096,
+        adapter_builder=lambda **_: FailedAdapter(),
+    )
+
+    assert completed.segment_count == 1
+    assert completed.stop_reason == "adapter-failed"
+    assert completed.adapter_result.agent_output.status is AgentOutputStatus.FAILED
+
+
 def test_registered_profile_runs_through_the_real_local_harbor_entrypoint(
     tmp_path: Path,
 ) -> None:
@@ -176,7 +387,7 @@ def test_registered_profile_runs_through_the_real_local_harbor_entrypoint(
         }
     )
 
-    result = asyncio.run(Trial(config).run())
+    result = asyncio.run(run_harbor_trial(config))
 
     assert result.exception_info is None
     assert result.agent_result is not None

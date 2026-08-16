@@ -33,7 +33,7 @@ def run_experiment(
         "tool_loop",
         "--adapter",
         "--harness",
-        help="Agent harness: tool_loop, pydantic_ai, direct, rlm, lambda-rlm",
+        help="Agent harness: tool_loop, pydantic_ai, direct, rlm, lambda-rlm, deepseek_harness",
     ),
     backend: str = typer.Option(
         "modal",

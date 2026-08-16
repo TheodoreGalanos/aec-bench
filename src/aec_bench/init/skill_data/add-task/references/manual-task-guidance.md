@@ -63,7 +63,7 @@ timeout_sec = 120.0
 extensions = ["multimodal"]    # optional — generates Dockerfile from extensions
 cpus = 1
 memory_mb = 2048
-allow_internet = true
+network_mode = "public"
 
 # Optional: declare tools available to the agent
 [[environment.tools]]

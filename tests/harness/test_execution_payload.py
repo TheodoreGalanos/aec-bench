@@ -19,7 +19,9 @@ from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.harness.execution_payload import (
     AdapterRequestPayload,
     ExecutionBundle,
+    RuntimeExecutionAttestation,
     build_entrypoint_execution_bundle,
+    build_runtime_execution_attestation,
     execution_request_sha256,
     read_execution_bundle,
     read_execution_result,
@@ -93,6 +95,37 @@ def test_entrypoint_execution_bundle_canonically_materializes_harbor_inputs() ->
     assert execution_request_sha256(bundle) == execution_request_sha256(repeated)
 
 
+@pytest.mark.parametrize(
+    ("model_name", "provider"),
+    [
+        ("azure:deepseek-v4-flash", "azure"),
+        ("deepseek:deepseek-v4-flash", "deepseek"),
+    ],
+)
+def test_entrypoint_execution_bundle_records_the_selected_deepseek_provider(
+    model_name: str,
+    provider: str,
+) -> None:
+    bundle = build_entrypoint_execution_bundle(
+        instruction="Solve the exact task.",
+        adapter_name="entrypoint",
+        model_name=model_name,
+        harbor_kwargs={"adapter": "deepseek_harness"},
+    )
+
+    assert bundle.execution.payload == {"provider": provider}
+
+
+def test_entrypoint_execution_bundle_rejects_an_implicit_deepseek_provider() -> None:
+    with pytest.raises(ValueError, match="provider:model"):
+        build_entrypoint_execution_bundle(
+            instruction="Solve the exact task.",
+            adapter_name="entrypoint",
+            model_name="deepseek-v4-flash",
+            harbor_kwargs={"adapter": "deepseek_harness"},
+        )
+
+
 def test_execution_result_roundtrips_through_json(tmp_path: Path) -> None:
     result = AdapterResult(
         adapter_name="tool_loop",
@@ -123,6 +156,49 @@ def test_execution_result_roundtrips_through_json(tmp_path: Path) -> None:
     loaded = read_execution_result(path)
 
     assert loaded == result
+
+
+def test_runtime_attestation_binds_adapter_evidence_manifest_without_changing_legacy_shape() -> None:
+    bundle = ExecutionBundle(
+        execution=SerializedAdapterExecution(
+            adapter_kind="deepseek_harness",
+            adapter_name="deepseek-treatment",
+            resolved_model="deepseek-v4-flash",
+        ),
+        request=AdapterRequestPayload(
+            instruction="Inspect the task.",
+            system_prompt=None,
+            tools=[],
+            configuration={},
+            output_path="/workspace/output.md",
+            output_format="markdown",
+        ),
+    )
+    result = AdapterResult(
+        adapter_name="deepseek-treatment",
+        resolved_model="deepseek-v4-flash",
+        configuration_record={"evidence_manifest_sha256": "a" * 64},
+        agent_output=AgentOutput(
+            status=AgentOutputStatus.COMPLETED,
+            output_path="/workspace/output.md",
+            output_format="markdown",
+        ),
+        transcript=[],
+    )
+
+    attestation = build_runtime_execution_attestation(bundle=bundle, result=result)
+    legacy = RuntimeExecutionAttestation(
+        adapter_kind="direct",
+        adapter_name="direct",
+        requested_model="model",
+        resolved_model="model",
+        execution_request_sha256="b" * 64,
+    )
+
+    assert attestation.evidence_manifest_sha256 == "a" * 64
+    assert attestation.model_dump(mode="json")["evidence_manifest_sha256"] == "a" * 64
+    assert "evidence_manifest_sha256" not in legacy.model_dump(mode="json")
+    assert RuntimeExecutionAttestation.model_validate(legacy.model_dump(mode="json")) == legacy
 
 
 def test_execution_result_roundtrips_typed_completion_reason(tmp_path: Path) -> None:

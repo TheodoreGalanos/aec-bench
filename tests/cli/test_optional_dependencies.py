@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 import typer
 
+from aec_bench.adapters.deepseek_harness.config import DEEPSEEK_HARNESS_VERSION
 from aec_bench.cli import optional_dependencies
 from aec_bench.providers import morph_cloud
 
@@ -20,6 +21,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 OPTIONAL_IMPORT_ROOTS = {
     "PIL",
     "acp",
+    "deepseek_harness",
     "fastapi",
     "harbor",
     "morphcloud",
@@ -52,6 +54,7 @@ def test_dependency_groups_have_one_named_feature_owner() -> None:
     extras = {name: _requirement_names(requirements) for name, requirements in project["optional-dependencies"].items()}
     assert extras == {
         "execution": {"harbor"},
+        "deepseek-harness": {"deepseek-harness-sdk"},
         "morph": {"morphcloud"},
         "local-agents": {"boto3", "botocore", "httpx", "pydantic-ai"},
         "prime": {"packaging", "prime", "verifiers"},
@@ -60,6 +63,8 @@ def test_dependency_groups_have_one_named_feature_owner() -> None:
         "evolution": {"numpy", "ribs"},
         "prime-agent": {"agent-client-protocol"},
     }
+    assert project["optional-dependencies"]["execution"] == ["harbor[modal]>=0.15,<0.16"]
+    assert project["optional-dependencies"]["deepseek-harness"] == [f"deepseek-harness-sdk=={DEEPSEEK_HARNESS_VERSION}"]
 
 
 def test_cli_startup_does_not_import_optional_feature_families() -> None:

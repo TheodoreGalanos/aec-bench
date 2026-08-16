@@ -73,6 +73,7 @@ def test_morph_cloud_operations_mounts_harbor_verifier_tests() -> None:
         workspace_dir="/workspace",
         logs_dir="/logs",
         tests_dir="/tests",
+        allow_internet=False,
     )
 
     commands = [command for command, _timeout in instance.commands]
@@ -81,6 +82,23 @@ def test_morph_cloud_operations_mounts_harbor_verifier_tests() -> None:
     assert "cp -a /workspace/. /aec-bench-host-workspace/" in commands[2]
     assert "--network none" in commands[3]
     assert "--volume /tests:/tests" in commands[3]
+
+
+def test_morph_cloud_operations_allows_internet_for_enabled_harbor_task() -> None:
+    instance = FakeMorphInstance()
+    operations = MorphCloudOperations()
+
+    operations.start_trial_container(
+        instance=instance,
+        workspace_dir="/workspace",
+        logs_dir="/logs",
+        tests_dir="/tests",
+        allow_internet=True,
+    )
+
+    commands = [command for command, _timeout in instance.commands]
+    assert "--network none" in commands[2]
+    assert "--network none" not in commands[3]
 
 
 def test_morph_runtime_dockerfile_installs_packages_in_virtual_environment() -> None:
