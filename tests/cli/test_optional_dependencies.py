@@ -24,6 +24,7 @@ OPTIONAL_IMPORT_ROOTS = {
     "deepseek_harness",
     "fastapi",
     "harbor",
+    "jsonschema",
     "morphcloud",
     "numpy",
     "pydantic_ai",
@@ -54,7 +55,7 @@ def test_dependency_groups_have_one_named_feature_owner() -> None:
     extras = {name: _requirement_names(requirements) for name, requirements in project["optional-dependencies"].items()}
     assert extras == {
         "execution": {"harbor"},
-        "deepseek-harness": {"deepseek-harness-sdk"},
+        "deepseek-harness": {"deepseek-harness-sdk", "jsonschema"},
         "morph": {"morphcloud"},
         "local-agents": {"boto3", "botocore", "httpx", "pydantic-ai"},
         "prime": {"packaging", "prime", "verifiers"},
@@ -64,7 +65,10 @@ def test_dependency_groups_have_one_named_feature_owner() -> None:
         "prime-agent": {"agent-client-protocol"},
     }
     assert project["optional-dependencies"]["execution"] == ["harbor[modal]>=0.15,<0.16"]
-    assert project["optional-dependencies"]["deepseek-harness"] == [f"deepseek-harness-sdk=={DEEPSEEK_HARNESS_VERSION}"]
+    assert project["optional-dependencies"]["deepseek-harness"] == [
+        f"deepseek-harness-sdk=={DEEPSEEK_HARNESS_VERSION}",
+        "jsonschema>=4.26,<5",
+    ]
 
 
 def test_cli_startup_does_not_import_optional_feature_families() -> None:
