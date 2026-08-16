@@ -51,6 +51,7 @@ class TestLocalAdapterBuilder:
         assert "tool_loop" in kinds
         assert "pydantic_ai" in kinds
         assert "prime-agent" in kinds
+        assert "deepseek_harness" in kinds
 
     def test_unknown_adapter_raises(self) -> None:
         with pytest.raises(ValueError, match="nonexistent"):
@@ -133,6 +134,63 @@ class TestBuildPrimeAgent:
 
         assert adapter.adapter_name() == "prime-agent"
         assert adapter.resolved_model() == "anthropic/test-model"
+
+
+class TestBuildDeepSeekHarness:
+    """Tests for selecting the official DeepSeek Harness runtime locally."""
+
+    def test_build_deepseek_harness_uses_the_shared_adapter(self, tmp_path: Path) -> None:
+        adapter = build_local_adapter(
+            adapter_kind="deepseek_harness",
+            model_name="azure:test-deployment",
+            workspace=str(tmp_path),
+        )
+
+        assert adapter.adapter_name() == "deepseek_harness"
+        assert adapter.resolved_model() == "test-deployment"
+
+    def test_build_deepseek_harness_forwards_named_native_tools(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_adapter(**kwargs: object) -> MagicMock:
+            captured.update(kwargs)
+            return MagicMock()
+
+        def submit_checkpoint(checkpoint_id: str) -> str:
+            return checkpoint_id
+
+        monkeypatch.setattr("aec_bench.adapters.deepseek_harness.DeepSeekHarnessAdapter", fake_adapter)
+
+        build_local_adapter(
+            adapter_kind="deepseek_harness",
+            model_name="azure:test-deployment",
+            workspace=str(tmp_path),
+            native_tools=[submit_checkpoint],
+        )
+
+        assert captured["native_tools"] == {"submit_checkpoint": submit_checkpoint}
+
+    def test_build_deepseek_harness_rejects_duplicate_native_tool_names(self, tmp_path: Path) -> None:
+        def first(checkpoint_id: str) -> str:
+            return checkpoint_id
+
+        def second(checkpoint_id: str) -> str:
+            return checkpoint_id
+
+        first.__name__ = "submit_checkpoint"
+        second.__name__ = "submit_checkpoint"
+
+        with pytest.raises(ValueError, match="duplicate DeepSeek native tool"):
+            build_local_adapter(
+                adapter_kind="deepseek_harness",
+                model_name="azure:test-deployment",
+                workspace=str(tmp_path),
+                native_tools=[first, second],
+            )
 
 
 class TestBuildAdapterAliases:

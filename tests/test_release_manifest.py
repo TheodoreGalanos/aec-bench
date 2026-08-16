@@ -28,6 +28,7 @@ def test_sdist_manifest_is_release_scoped() -> None:
         "/tasks/generated",
         "/workspaces",
     }.issubset(set(sdist["exclude"]))
+    assert "/src/aec_bench/adapters/deepseek_harness/plugin/dist/**" in sdist["artifacts"]
 
 
 def test_wheel_build_targets_aec_bench_package() -> None:
@@ -36,6 +37,8 @@ def test_wheel_build_targets_aec_bench_package() -> None:
 
     assert wheel["packages"] == ["src/aec_bench"]
     assert "/src/aec_bench/harness/pump_station_prime/skills/**" in wheel["artifacts"]
+    assert "/src/aec_bench/adapters/deepseek_harness/plugin/dist/**" in wheel["artifacts"]
+    assert "/src/aec_bench/adapters/deepseek_harness/plugin/src" in wheel["exclude"]
     assert Path("src/aec_bench/prime_agent/skill_packages/__init__.py").is_file()
 
 

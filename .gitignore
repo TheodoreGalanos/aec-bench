@@ -3,6 +3,9 @@ __pycache__/
 *.py[oc]
 build/
 dist/
+!src/aec_bench/adapters/deepseek_harness/plugin/dist/
+!src/aec_bench/adapters/deepseek_harness/plugin/dist/index.js
+!src/aec_bench/adapters/deepseek_harness/plugin/dist/tools.js
 wheels/
 *.egg-info
 

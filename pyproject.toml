@@ -32,7 +32,8 @@ dev = [
 ]
 
 [project.optional-dependencies]
-execution = ["harbor>=0.1.45"]
+execution = ["harbor[modal]>=0.15,<0.16"]
+deepseek-harness = ["deepseek-harness-sdk==0.1.0rc6"]
 morph = ["morphcloud>=0.1.111"]
 local-agents = [
     "boto3>=1.42,<2",
@@ -108,12 +109,22 @@ exclude = [
     "/workspaces",
 ]
 artifacts = [
+    "/src/aec_bench/adapters/deepseek_harness/plugin/dist/**",
     "/src/aec_bench/web/frontend/dist/**",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/aec_bench"]
+exclude = [
+    "/src/aec_bench/adapters/deepseek_harness/plugin/README.md",
+    "/src/aec_bench/adapters/deepseek_harness/plugin/package-lock.json",
+    "/src/aec_bench/adapters/deepseek_harness/plugin/package.json",
+    "/src/aec_bench/adapters/deepseek_harness/plugin/src",
+    "/src/aec_bench/adapters/deepseek_harness/plugin/test",
+    "/src/aec_bench/adapters/deepseek_harness/plugin/tsconfig.json",
+]
 artifacts = [
+    "/src/aec_bench/adapters/deepseek_harness/plugin/dist/**",
     "/src/aec_bench/harness/pump_station_prime/skills/**",
     "/src/aec_bench/web/frontend/dist/**",
 ]

@@ -1,5 +1,5 @@
 # ABOUTME: Backend-side adapter execution entrypoint for sandboxed aec-bench runs.
-# ABOUTME: Dispatches serialized bundles to direct, tool-loop, RLM, and lambda-RLM drivers.
+# ABOUTME: Dispatches serialized bundles to direct, tool-loop, RLM, lambda-RLM, and DeepSeek drivers.
 
 import argparse
 from collections.abc import Callable
@@ -338,16 +338,22 @@ def default_execution_driver_registry(*, workspace_dir: Path) -> ExecutionDriver
         client_registry=client_registry,
     )
     lambda_rlm_driver = LambdaRlmExecutionDriver(workspace_dir=workspace_dir)
-    return ExecutionDriverRegistry(
-        drivers={
-            "direct": direct_driver,
-            "tool_loop": tool_loop_driver,
-            "pydantic_ai": tool_loop_driver,
-            "rlm": RlmExecutionDriver(workspace_dir=workspace_dir),
-            "lambda-rlm": lambda_rlm_driver,
-            "lambda_rlm": lambda_rlm_driver,
-        }
-    )
+    drivers: dict[str, ExecutionDriver] = {
+        "direct": direct_driver,
+        "tool_loop": tool_loop_driver,
+        "pydantic_ai": tool_loop_driver,
+        "rlm": RlmExecutionDriver(workspace_dir=workspace_dir),
+        "lambda-rlm": lambda_rlm_driver,
+        "lambda_rlm": lambda_rlm_driver,
+    }
+    try:
+        from aec_bench.harness.deepseek_harness_driver import DeepSeekHarnessExecutionDriver
+    except ModuleNotFoundError as exc:
+        if exc.name != "aec_bench.harness.deepseek_harness_driver":
+            raise
+    else:
+        drivers["deepseek_harness"] = DeepSeekHarnessExecutionDriver(workspace_dir=workspace_dir)
+    return ExecutionDriverRegistry(drivers=drivers)
 
 
 def _materialize_raw_output(*, bundle: ExecutionBundle, result: AdapterResult) -> None:

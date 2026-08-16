@@ -62,6 +62,15 @@ def test_existing_adapter_preflight_still_requires_local_agents_extra(monkeypatc
     assert calls == [("Local agent execution support", "local-agents", ("pydantic_ai",))]
 
 
+def test_deepseek_preflight_requires_only_the_deepseek_extra(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[object, ...]] = []
+    monkeypatch.setattr(run_local_module, "require_optional_extra", lambda *args, **_kwargs: calls.append(args))
+
+    _require_adapter_runtime("deepseek_harness")
+
+    assert calls == [("DeepSeek Harness execution support", "deepseek-harness", ("deepseek_harness",))]
+
+
 def test_missing_prime_executable_reports_separate_install(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -119,6 +128,52 @@ def test_prime_adapter_receives_run_local_timeout(monkeypatch: pytest.MonkeyPatc
     )
 
     assert observed == {"configuration": {"timeout_seconds": 37}, "output_path": "output.md"}
+    assert result["status"] == "completed"
+
+
+def test_deepseek_adapter_receives_run_local_limits(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from aec_bench.adapters.base import AdapterResult
+    from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
+
+    (tmp_path / "instruction.md").write_text("Write output.md", encoding="utf-8")
+    observed: dict[str, object] = {}
+
+    class FakeAdapter:
+        def execute(self, request):  # noqa: ANN001
+            observed["configuration"] = request.configuration
+            observed["output_path"] = request.output_path
+            observed["output_format"] = request.output_format
+            return AdapterResult(
+                adapter_name="deepseek_harness",
+                resolved_model="test-deployment",
+                configuration_record={},
+                agent_output=AgentOutput(
+                    status=AgentOutputStatus.COMPLETED,
+                    output_path=request.output_path,
+                    output_format=request.output_format,
+                ),
+                transcript=[],
+                raw_output_text="Done",
+            )
+
+    monkeypatch.setattr(
+        "aec_bench.adapters.local_registry.build_local_adapter",
+        lambda **_kwargs: FakeAdapter(),
+    )
+
+    result = _run_adapter(
+        adapter_kind="deepseek_harness",
+        workspace=str(tmp_path),
+        model="azure:test-deployment",
+        timeout=37,
+        max_tokens=128,
+    )
+
+    assert observed == {
+        "configuration": {"timeout_sec": 37, "max_tokens": 128},
+        "output_path": "output.md",
+        "output_format": "markdown",
+    }
     assert result["status"] == "completed"
 
 
@@ -800,6 +855,18 @@ class TestCopyOutputFiles:
         assert "output.md" in copied
         assert "trajectory.jsonl" in copied
         assert (out_path / "output.md").read_text() == "partial output"
+
+    def test_copies_deepseek_harness_evidence(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        evidence = workspace / "logs" / "deepseek-harness" / "run-test"
+        evidence.mkdir(parents=True)
+        (evidence / "stderr.log").write_text("provider failure", encoding="utf-8")
+        out_path = tmp_path / "results"
+
+        copied = _copy_output_files(str(workspace), out_path)
+
+        assert copied == ["logs/deepseek-harness/run-test/stderr.log"]
+        assert (out_path / "logs" / "deepseek-harness" / "run-test" / "stderr.log").read_text() == ("provider failure")
 
     def test_skips_missing_files(self, tmp_path: Path) -> None:
         workspace = tmp_path / "workspace"
