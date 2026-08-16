@@ -2104,6 +2104,65 @@ def test_persistent_deepseek_lifecycle_uses_only_enforceable_limits(tmp_path: Pa
     assert session["limits"] == agent["limits"]
 
 
+def test_completed_lifecycle_remains_authoritative_when_deepseek_has_no_candidate_output(tmp_path: Path) -> None:
+    package = _write_package(tmp_path / "package")
+    run_dir = tmp_path / "run"
+
+    def build_adapter(*, native_tools, **_kwargs):
+        submit_checkpoint = next(tool for tool in native_tools if tool.__name__ == "submit_checkpoint")
+
+        class _Adapter:
+            def execute(self, _request):
+                while True:
+                    state = read_evidence_lifecycle_state(package, run_dir)
+                    checkpoint_id = state["active_checkpoint_id"]
+                    if checkpoint_id is None:
+                        break
+                    _write_json(
+                        run_dir / "workspace" / "submissions" / f"{checkpoint_id}.json",
+                        {"checkpoint_id": checkpoint_id},
+                    )
+                    if json.loads(submit_checkpoint(checkpoint_id))["status"] == "complete":
+                        break
+                return SimpleNamespace(
+                    adapter_name="deepseek_harness",
+                    resolved_model="deepseek-v4-flash",
+                    configuration_record={},
+                    agent_output=SimpleNamespace(status=SimpleNamespace(value="partial")),
+                    transcript=[],
+                    raw_output_text=None,
+                    provider_error=None,
+                    failure_kind=SimpleNamespace(value="missing_output"),
+                    usage_input_tokens=10,
+                    usage_output_tokens=2,
+                    usage_cache_read_tokens=0,
+                    usage_cache_write_tokens=0,
+                )
+
+        return _Adapter()
+
+    result = run_local_evidence_lifecycle_session(
+        package_dir=package,
+        run_dir=run_dir,
+        model="azure:deepseek-v4-flash",
+        adapter_kind="deepseek_harness",
+        max_tokens=4096,
+        adapter_builder=build_adapter,
+        verifier=lambda _package, _run: {
+            "lifecycle_id": "lifecycle.demo",
+            "reward": 1.0,
+            "overall": "pass",
+            "passed": True,
+            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
+        },
+    )
+
+    assert result["evidence"]["lifecycle"]["status"] == "complete"
+    session = result["evidence"]["agent"]["sessions"][0]
+    assert session["status"] == "partial"
+    assert session["failure_kind"] == "missing_output"
+
+
 @pytest.mark.parametrize("execution_mode", ["persistent_context", "fresh_context"])
 def test_local_runners_forward_an_explicit_experiment_recorder(
     tmp_path: Path,

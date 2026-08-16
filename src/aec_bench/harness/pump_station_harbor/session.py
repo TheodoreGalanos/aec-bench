@@ -9,7 +9,7 @@ import shutil
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import JsonValue
 
@@ -65,6 +65,9 @@ from aec_bench.worlds.stewardship.wastewater_pump_station.world_run import PumpS
 from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
 )
+
+if TYPE_CHECKING:
+    from aec_bench.adapters.deepseek_harness.tool_gateway import NativeToolDefinition
 
 PUMP_STATION_MODEL_CONTROLLER_MODE = "model"
 PUMP_STATION_MODEL_MAX_TURNS = 90
@@ -133,6 +136,130 @@ class _PumpStationActorTools:
             self.request_condition_check,
             self.search_evidence,
             self.fetch_evidence,
+        )
+
+    @property
+    def native_tool_definitions(self) -> tuple[NativeToolDefinition, ...]:
+        """Return explicit DeepSeek schemas with infrastructure-owned request identity."""
+        string = {"type": "string"}
+        nullable_string = {"anyOf": [{"type": "string"}, {"type": "null"}]}
+        return (
+            self._definition("observe_pump_station", self.observe_pump_station, {}),
+            self._definition("continue_operation", self.continue_operation, {"reason": string}, ("reason",)),
+            self._definition(
+                "request_duty_assignment",
+                self.request_duty_assignment,
+                {
+                    "reason": string,
+                    "ordered_pump_ids": {"type": "array", "items": string},
+                    "source_outage_id": nullable_string,
+                    "source_backlog_item_id": nullable_string,
+                },
+                ("reason", "ordered_pump_ids"),
+            ),
+            self._definition(
+                "request_inspection",
+                self.request_inspection,
+                {"reason": string, "pump_id": string, "backlog_item_id": string},
+                ("reason", "pump_id", "backlog_item_id"),
+            ),
+            self._definition(
+                "request_obstruction_clearance",
+                self.request_obstruction_clearance,
+                {
+                    "reason": string,
+                    "pump_id": string,
+                    "backlog_item_id": string,
+                    "inspection_evidence_id": string,
+                },
+                ("reason", "pump_id", "backlog_item_id", "inspection_evidence_id"),
+            ),
+            self._definition(
+                "request_functional_check",
+                self.request_functional_check,
+                {"reason": string, "pump_id": string, "backlog_item_id": string},
+                ("reason", "pump_id", "backlog_item_id"),
+            ),
+            self._definition(
+                "request_provisional_return",
+                self.request_provisional_return,
+                {"reason": string, "pump_id": string, "functional_check_evidence_id": string},
+                ("reason", "pump_id", "functional_check_evidence_id"),
+            ),
+            self._definition(
+                "request_provisional_closure",
+                self.request_provisional_closure,
+                {"reason": string, "work_order_id": string},
+                ("reason", "work_order_id"),
+            ),
+            self._definition(
+                "request_post_maintenance_verification",
+                self.request_post_maintenance_verification,
+                {"reason": string, "pump_id": string, "backlog_item_id": string},
+                ("reason", "pump_id", "backlog_item_id"),
+            ),
+            self._definition(
+                "resume_process",
+                self.resume_process,
+                {"reason": string, "process_id": string},
+                ("reason", "process_id"),
+            ),
+            self._definition(
+                "cancel_process",
+                self.cancel_process,
+                {"reason": string, "process_id": string},
+                ("reason", "process_id"),
+            ),
+            self._definition(
+                "request_dependency_waiver",
+                self.request_dependency_waiver,
+                {"reason": string, "process_id": string, "dependency_id": string, "evidence_id": string},
+                ("reason", "process_id", "dependency_id", "evidence_id"),
+            ),
+            self._definition(
+                "request_condition_check",
+                self.request_condition_check,
+                {"reason": string, "pump_id": string},
+                ("reason", "pump_id"),
+            ),
+            self._definition(
+                "search_evidence",
+                self.search_evidence,
+                {
+                    "query": string,
+                    "scope": {"type": "string", "default": "all"},
+                    "limit": {"type": "integer", "default": 5},
+                },
+                ("query",),
+            ),
+            self._definition(
+                "fetch_evidence",
+                self.fetch_evidence,
+                {"reference": string},
+                ("reference",),
+            ),
+        )
+
+    @staticmethod
+    def _definition(
+        name: str,
+        function: Callable[..., str],
+        properties: dict[str, Any],
+        required: tuple[str, ...] = (),
+    ) -> NativeToolDefinition:
+        from aec_bench.adapters.deepseek_harness.tool_gateway import json_native_tool_definition
+
+        return json_native_tool_definition(
+            name=name,
+            description=function.__doc__ or name.replace("_", " "),
+            parameters_schema={
+                "type": "object",
+                "properties": properties,
+                "required": list(required),
+                "additionalProperties": False,
+            },
+            function=function,
+            trusted_request_argument=None if name == "observe_pump_station" else "request_id",
         )
 
     def observe_pump_station(self) -> str:
@@ -415,6 +542,7 @@ def run_pump_station_model_session(
                 workspace=str(destination),
                 trajectory_writer=trajectory,
                 native_tools=tools.native_tools,
+                native_tool_definitions=(tools.native_tool_definitions if adapter_kind == "deepseek_harness" else None),
                 enable_bash=False,
             )
             segment_result = adapter.execute(

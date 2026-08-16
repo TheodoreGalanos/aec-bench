@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 
@@ -32,7 +32,7 @@ from aec_bench.adapters.deepseek_harness.runtime import (
     DeepSeekHarnessRuntimeTimeout,
     DeepSeekRuntime,
 )
-from aec_bench.adapters.deepseek_harness.tool_gateway import NativeTool
+from aec_bench.adapters.deepseek_harness.tool_gateway import NativeToolDefinition
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 
 
@@ -45,12 +45,12 @@ class DeepSeekHarnessAdapter:
         settings: DeepSeekHarnessSettings,
         workspace: str | Path,
         runtime: DeepSeekRuntime | None = None,
-        native_tools: Mapping[str, NativeTool] | None = None,
+        native_tools: Sequence[NativeToolDefinition] | None = None,
         adapter_name: str = "deepseek_harness",
     ) -> None:
         self._settings = settings
         self._workspace = Path(workspace).resolve()
-        self._native_tool_names = frozenset((native_tools or {}).keys())
+        self._native_tool_names = frozenset(tool.name for tool in native_tools or ())
         self._runtime = runtime or DeepSeekHarnessProcessRuntime(
             settings=settings,
             workspace=self._workspace,
@@ -81,7 +81,10 @@ class DeepSeekHarnessAdapter:
         direct_output = _has_direct_output(self._workspace, resolved_request.output_path)
         status, failure_kind, stop_reason, error = _outcome(
             run,
-            candidate_available=bool(self._native_tool_names) or direct_output or bool(run.final_response),
+            candidate_available=(
+                direct_output or bool(run.final_response.strip()) or run.completion_commit is not None
+            ),
+            native_tool_activity=bool(self._native_tool_names) and run.projection.tool_calls_completed > 0,
         )
         raw_output_text = None if direct_output else run.final_response
         completion_commit = run.completion_commit if status is AgentOutputStatus.COMPLETED else None
@@ -170,12 +173,13 @@ def _outcome(
     run: DeepSeekHarnessRun,
     *,
     candidate_available: bool,
+    native_tool_activity: bool,
 ) -> tuple[AgentOutputStatus, AdapterFailureKind | None, AdapterStopReason | None, str | None]:
     finish_reason = run.finish_reason or run.projection.last_turn_end_reason
     if finish_reason == "completed" and run.projection.idle_seen:
         if not candidate_available:
             return (
-                AgentOutputStatus.EMPTY,
+                AgentOutputStatus.PARTIAL if native_tool_activity else AgentOutputStatus.EMPTY,
                 AdapterFailureKind.MISSING_OUTPUT,
                 None,
                 "DeepSeek Harness completed without a candidate output",
@@ -229,6 +233,13 @@ def _configuration_record(settings: DeepSeekHarnessSettings, run: DeepSeekHarnes
     }
     if run.evidence_manifest_sha256 is not None:
         record["evidence_manifest_sha256"] = run.evidence_manifest_sha256
+    if run.tool_gateway_close_report is not None:
+        record["tool_gateway_close"] = {
+            "quiescent": run.tool_gateway_close_report.quiescent,
+            "unsettled_request_ids": list(run.tool_gateway_close_report.unsettled_request_ids),
+            "unknown_outcome_request_ids": list(run.tool_gateway_close_report.unknown_outcome_request_ids),
+            "closed_at": run.tool_gateway_close_report.closed_at.isoformat(),
+        }
     for field_name in (
         "root_events_path",
         "sessions_path",

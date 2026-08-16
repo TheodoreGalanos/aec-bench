@@ -279,7 +279,7 @@ The qualified DeepSeek compatibility conditions are:
 | Treatment | AEC identity | DeepSeek identity | Optional plugin | Qualification proof |
 | --- | --- | --- | --- | --- |
 | Baseline | Installed AEC package version in the manifest | Exact SDK pin from `pyproject.toml`; worker requires the runtime distribution to match | None | Keyless real-composition suite |
-| Native tool gateway | Same | Same | `@aec-bench/dsh-tools` with the exact per-run callable names and JSON schemas | Authenticated endpoint tests plus lifecycle and pump-world boundary tests |
+| Native tool gateway | Same | Same | `@aec-bench/dsh-tools` protocol v2 with exact `NativeToolDefinition` names and JSON schemas | Authenticated endpoint tests plus lifecycle and pump-world boundary tests |
 | Explicit output commit | Same | Same | Named, versioned build copied into the trial evidence | Keyless rejection, repair, acceptance, and stability suite |
 
 The manifest states that resolved composition and resolved tool-surface dumps
@@ -287,10 +287,22 @@ are unavailable. The pinned SDK path does not expose them. The adapter retains
 the exact Cordis input and does not claim stronger evidence.
 
 For native-tool runs, the manifest records the exact tool names and copied
-plugin artifact. The AEC endpoint derives parameter schemas from fully
-annotated callables, validates each JSON request with those annotations, and
-executes only the per-run mapping. The provider plugin cannot add shell access,
-world host controls, verification, or reward authority.
+plugin artifact. The AEC host supplies each model-facing parameter schema
+explicitly through `NativeToolDefinition`. The endpoint validates requests
+against that schema and gives the handler a hidden `NativeToolInvocation` with
+the DeepSeek session, tool-call, turn, generation, cancellation, and trusted
+request identity. A world action uses that trusted identity; the model-facing
+schema cannot supply or replace it.
+
+The handler returns `NativeToolResponse`. Only its generic `conclude-turn`
+disposition can conclude the current model turn; the plugin does not inspect a
+tool name or task result field. Cancellation crosses the socket into a
+cooperative handler token. Endpoint close has a deadline and records either a
+quiescent close or the unsettled and unknown request identities. A
+non-quiescent close cannot produce a completed adapter result. The sealed close
+record prevents late handler output from changing finalized evidence. The
+provider plugin cannot add shell access, world host controls, verification, or
+reward authority.
 
 ## Output completion and explicit commit
 

@@ -23,7 +23,7 @@ DEEPSEEK_HARNESS_VERSION = "0.1.0rc6"
 OUTPUT_COMMIT_PLUGIN_ID = "@aec-bench/dsh-output-commit"
 OUTPUT_COMMIT_PLUGIN_VERSION = "0.1.0"
 TOOL_GATEWAY_PLUGIN_ID = "@aec-bench/dsh-tools"
-TOOL_GATEWAY_PLUGIN_VERSION = "0.1.0"
+TOOL_GATEWAY_PLUGIN_VERSION = "0.2.0"
 _MAX_SAFE_INTEGER = 2**53 - 1
 _HARNESS_PROVIDER_ROUTES: dict[str, HarnessProviderRoute] = {
     "azure": "azure",

@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,7 @@ from aec_bench.adapters.deepseek_harness.runtime import (
     DeepSeekHarnessRuntimeTimeout,
     build_deepseek_worker_environment,
 )
+from aec_bench.adapters.deepseek_harness.tool_gateway import json_native_tool_definition
 from aec_bench.contracts.task_definition import ToolSpec
 
 
@@ -454,9 +456,9 @@ assert [tool["name"] for tool in manifest] == ["list_workspace"]
 capability = os.environ["DSH_TOOLS_TOKEN"]
 print(f"capability={capability}")
 payload = {
-    "protocol": "aec-bench/deepseek-tools/1",
+    "protocol": "aec-bench/deepseek-tools/2",
     "capability": capability,
-    "request_id": "dsh:root:tool-1",
+    "operation": "invoke",
     "tool": "list_workspace",
     "arguments": {"path": "inbox"},
     "metadata": {
@@ -500,7 +502,19 @@ result_path.write_text(json.dumps({
         settings=_settings(tmp_path),
         workspace=tmp_path,
         worker_command=(sys.executable, str(worker)),
-        native_tools={"list_workspace": list_workspace},
+        native_tools=(
+            json_native_tool_definition(
+                name="list_workspace",
+                description="List files",
+                parameters_schema={
+                    "type": "object",
+                    "properties": {"path": {"type": "string", "default": ""}},
+                    "required": [],
+                    "additionalProperties": False,
+                },
+                function=list_workspace,
+            ),
+        ),
     )
     request = AdapterRequest(
         instruction="Review the lifecycle",
@@ -516,7 +530,11 @@ result_path.write_text(json.dumps({
     evidence = runtime.paths.tool_gateway_evidence.read_text(encoding="utf-8")
     assert "DSH_TOOLS_TOKEN" not in evidence
     assert "keyless-test-token" not in evidence
-    assert json.loads(evidence)["tool"] == "list_workspace"
+    invocation = next(
+        json.loads(line) for line in evidence.splitlines() if json.loads(line)["record_type"] == "invocation"
+    )
+    assert invocation["tool"] == "list_workspace"
+    assert invocation["request_id"] == "dsh:root:tool-1"
     composition = json.loads(runtime.paths.composition.read_text(encoding="utf-8"))
     assert composition["native_tools"] == ["list_workspace"]
     assert composition["environment"]["secret_names"] == ["DSH_API_KEY", "DSH_TOOLS_TOKEN"]
@@ -527,12 +545,106 @@ result_path.write_text(json.dumps({
             "artifact_path": "plugins/tools/index.js",
             "plugin_id": "@aec-bench/dsh-tools",
             "role": "native_tools",
-            "version": "0.1.0",
+            "version": "0.2.0",
         }
     ]
     assert {"tool_gateway_evidence", "optional_plugin"}.issubset(
         {artifact["role"] for artifact in manifest["artifacts"]}
     )
+
+
+def test_runtime_rejects_completion_after_nonquiescent_tool_close(tmp_path: Path) -> None:
+    started = threading.Event()
+    release = threading.Event()
+
+    def hang() -> str:
+        started.set()
+        release.wait(5)
+        return json.dumps({"status": "late"})
+
+    worker = _write_worker(
+        tmp_path / "unsettled_tool_worker.py",
+        """
+payload = {
+    "protocol": "aec-bench/deepseek-tools/2",
+    "capability": os.environ["DSH_TOOLS_TOKEN"],
+    "operation": "invoke",
+    "tool": "hang",
+    "arguments": {},
+    "metadata": {
+        "deepseek_session_id": "root",
+        "deepseek_tool_call_id": "hanging-tool",
+        "aec_model_turn": 1,
+    },
+}
+client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+client.connect(os.environ["DSH_TOOLS_SOCKET"])
+client.sendall(json.dumps(payload).encode() + b"\\n")
+time.sleep(0.1)
+client.close()
+notifications = [
+    {"method": "session.event", "params": {"sessionId": "root", "event": {
+        "type": "step/start", "seq": 1, "time": 1, "data": {"turn": 1, "step": 1},
+    }}},
+    {"method": "session.event", "params": {"sessionId": "root", "event": {
+        "type": "tool/call", "seq": 2, "time": 2,
+        "data": {"callId": "hanging-tool", "name": "hang", "arguments": {}},
+    }}},
+    {"method": "session.event", "params": {"sessionId": "root", "event": {
+        "type": "turn/end", "seq": 3, "time": 3,
+        "data": {"turn": 1, "reason": {"kind": "completed"}},
+    }}},
+    {"method": "session.status", "params": {"sessionId": "root", "status": "idle"}},
+]
+notifications_path.write_text("".join(json.dumps(item) + "\\n" for item in notifications))
+result_path.write_text(json.dumps({
+    "session_id": "root",
+    "final_response": "claimed completion",
+    "finish_reason": "completed",
+    "sdk_version": "fake-sdk",
+    "runtime_distribution_version": "fake-runtime",
+    "runtime_reported_version": None,
+}))
+""".strip(),
+    )
+    runtime = DeepSeekHarnessProcessRuntime(
+        settings=_settings(tmp_path),
+        workspace=tmp_path,
+        worker_command=(sys.executable, str(worker)),
+        native_tools=(
+            json_native_tool_definition(
+                name="hang",
+                description="Hang",
+                parameters_schema={
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": False,
+                },
+                function=hang,
+            ),
+        ),
+        tool_gateway_close_timeout_seconds=0.01,
+    )
+
+    try:
+        with pytest.raises(DeepSeekHarnessRuntimeError, match="unsettled requests: dsh:root:hanging-tool"):
+            runtime.run(
+                AdapterRequest(
+                    instruction="Call the hanging tool",
+                    tools=[ToolSpec(name="hang", source="builtin", description="Hang")],
+                    configuration={"timeout_sec": 5, "max_tokens": 512},
+                )
+            )
+    finally:
+        release.set()
+
+    assert started.is_set()
+    runtime_record = json.loads(runtime.paths.runtime_record.read_text(encoding="utf-8"))
+    assert runtime_record["status"] == "failed"
+    assert runtime_record["tool_gateway_close"]["quiescent"] is False
+    assert runtime_record["tool_gateway_close"]["unknown_outcome_request_ids"] == ["dsh:root:hanging-tool"]
+    verify_deepseek_evidence_manifest(runtime.paths.manifest)
 
 
 def test_runtime_invalidates_an_output_mutated_after_commit(tmp_path: Path) -> None:

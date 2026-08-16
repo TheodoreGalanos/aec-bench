@@ -17,6 +17,10 @@ import pytest
 from aec_bench.adapters.base import AdapterRequest, SerializedAdapterExecution
 from aec_bench.adapters.deepseek_harness import DeepSeekHarnessAdapter
 from aec_bench.adapters.deepseek_harness.config import DeepSeekHarnessSettings
+from aec_bench.adapters.deepseek_harness.tool_gateway import (
+    NativeToolDisposition,
+    json_native_tool_definition,
+)
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.harness.deepseek_harness_driver import DeepSeekHarnessExecutionDriver
@@ -415,7 +419,24 @@ def test_real_sdk_lifecycle_composition_exposes_only_the_gateway_tools(
         result = DeepSeekHarnessAdapter(
             settings=_azure_settings(),
             workspace=tmp_path,
-            native_tools={"submit_checkpoint": submit_checkpoint},
+            native_tools=(
+                json_native_tool_definition(
+                    name="submit_checkpoint",
+                    description="Submit checkpoint",
+                    parameters_schema={
+                        "type": "object",
+                        "properties": {"checkpoint_id": {"type": "string"}},
+                        "required": ["checkpoint_id"],
+                        "additionalProperties": False,
+                    },
+                    function=submit_checkpoint,
+                    disposition=lambda result: (
+                        NativeToolDisposition.CONCLUDE_TURN
+                        if isinstance(result, dict) and result.get("status") == "complete"
+                        else NativeToolDisposition.CONTINUE
+                    ),
+                ),
+            ),
         ).execute(
             AdapterRequest(
                 instruction="Submit the completed lifecycle checkpoint.",
@@ -436,7 +457,7 @@ def test_real_sdk_lifecycle_composition_exposes_only_the_gateway_tools(
         server.server_close()
         thread.join(timeout=5)
 
-    assert result.agent_output.status is AgentOutputStatus.COMPLETED
+    assert result.agent_output.status is AgentOutputStatus.PARTIAL
     assert calls == ["closeout_review"]
     assert len(_KeylessDeepSeekHandler.requests) == 1
     advertised_tools = {tool["function"]["name"] for tool in _KeylessDeepSeekHandler.requests[0]["body"]["tools"]}

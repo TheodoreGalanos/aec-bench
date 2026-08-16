@@ -196,9 +196,12 @@ provider evidence. It binds the single manifest digest into the existing AEC
 runtime execution attestation.
 
 The optional `@aec-bench/dsh-tools` Cordis plugin is a transport gateway, not a
-tool authority. The AEC host supplies one exact per-run manifest from typed
-Python callables. The plugin registers those JSON schemas and forwards calls to
-an authenticated trial-local Unix socket. Lifecycle state, world state,
+tool authority. The AEC host supplies one exact per-run manifest from explicit
+`NativeToolDefinition` values. The plugin registers those JSON schemas and
+forwards calls to an authenticated trial-local Unix socket. The endpoint owns
+trusted invocation identity, cancellation propagation, generic turn
+disposition, generation finalization, and bounded close reporting. It does not
+infer candidate output from tool availability. Lifecycle state, world state,
 effects, host controls, verification, and reward stay with their existing AEC
 owners. The pump-station Harbor journey can alternate fresh DeepSeek model
 segments with the same deterministic task-owned Operations controls used by

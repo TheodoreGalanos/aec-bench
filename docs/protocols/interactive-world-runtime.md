@@ -62,6 +62,12 @@ is not content-addressed:
 | Request ID, action, and arguments | Repository lock, selected pointer, and persistence transaction |
 | Receipt and next observation | Verifier-only and recovery data |
 
+The DeepSeek native-tool facade does not expose the installed request ID as a
+model argument. Its authenticated gateway derives one stable ID from the
+DeepSeek session and tool-call identity, then supplies that ID when the pump
+wrapper creates `WorldActorActionRequest`. This changes transport presentation,
+not the task-owned retry, conflict, state-transition, or evidence semantics.
+
 The pump actor command resolves the selected run from `--run-dir` on every
 call. The repository lock and selected pointer support concurrent and
 separate-process calls without a public binding or in-memory session

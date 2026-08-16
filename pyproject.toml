@@ -33,7 +33,10 @@ dev = [
 
 [project.optional-dependencies]
 execution = ["harbor[modal]>=0.15,<0.16"]
-deepseek-harness = ["deepseek-harness-sdk==0.1.0rc6"]
+deepseek-harness = [
+    "deepseek-harness-sdk==0.1.0rc6",
+    "jsonschema>=4.26,<5",
+]
 morph = ["morphcloud>=0.1.111"]
 local-agents = [
     "boto3>=1.42,<2",

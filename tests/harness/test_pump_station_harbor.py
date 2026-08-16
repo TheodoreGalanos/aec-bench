@@ -222,6 +222,13 @@ def test_deepseek_model_session_receives_only_actor_tools_and_token_limits(tmp_p
         "observe_pump_station",
         *PUMP_STATION_ACTOR_ACTION_NAMES,
     )
+    native_tool_definitions = builder["native_tool_definitions"]
+    assert isinstance(native_tool_definitions, tuple)
+    assert tuple(definition.name for definition in native_tool_definitions) == (
+        "observe_pump_station",
+        *PUMP_STATION_ACTOR_ACTION_NAMES,
+    )
+    assert all("request_id" not in definition.parameters_schema["properties"] for definition in native_tool_definitions)
     request = captured["request"]
     assert isinstance(request, AdapterRequest)
     assert request.configuration == {"max_tokens": 4096, "timeout_sec": 600}

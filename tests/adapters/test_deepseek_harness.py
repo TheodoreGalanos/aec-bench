@@ -17,9 +17,14 @@ from aec_bench.adapters.deepseek_harness.runtime import (
     DeepSeekHarnessRuntimeError,
     DeepSeekHarnessRuntimeTimeout,
 )
+from aec_bench.adapters.deepseek_harness.tool_gateway import (
+    NativeToolDefinition,
+    NativeToolResponse,
+)
 from aec_bench.adapters.output_commit import build_output_commit_attestation
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.output_completion import OutputCommitAttestation, OutputCompletionContract
+from aec_bench.contracts.task_definition import ToolSpec
 
 
 class _Runtime:
@@ -199,6 +204,39 @@ def test_normal_idle_without_a_candidate_is_missing_output(tmp_path: Path) -> No
     assert result.failure_kind is AdapterFailureKind.MISSING_OUTPUT
     assert result.completion_reason is None
     assert result.transcript[0].content == "You are a software engineering agent."
+
+
+def test_native_tool_catalogue_does_not_create_candidate_output(tmp_path: Path) -> None:
+    runtime = _Runtime(_run(tmp_path, finish_reason="completed", final_response=""))
+
+    adapter = DeepSeekHarnessAdapter(
+        settings=_settings(tmp_path),
+        workspace=tmp_path,
+        runtime=runtime,
+        native_tools=(
+            NativeToolDefinition(
+                name="observe_state",
+                description="Observe state",
+                parameters_schema={
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": False,
+                },
+                handler=lambda _invocation, _arguments: NativeToolResponse(result={"status": "observed"}),
+            ),
+        ),
+    )
+
+    result = adapter.execute(
+        AdapterRequest(
+            instruction="Observe the task",
+            tools=[ToolSpec(name="observe_state", source="builtin", description="Observe state")],
+        )
+    )
+
+    assert result.agent_output.status is AgentOutputStatus.EMPTY
+    assert result.failure_kind is AdapterFailureKind.MISSING_OUTPUT
 
 
 def test_only_an_accepted_commit_maps_to_output_contract_committed(tmp_path: Path) -> None:

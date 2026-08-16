@@ -1,7 +1,7 @@
 import { createConnection } from 'node:net';
 export const name = '@aec-bench/dsh-tools';
 export const inject = ['tools'];
-export const TOOL_GATEWAY_PROTOCOL = 'aec-bench/deepseek-tools/1';
+export const TOOL_GATEWAY_PROTOCOL = 'aec-bench/deepseek-tools/2';
 const SOCKET_ENV = 'DSH_TOOLS_SOCKET';
 const TOKEN_ENV = 'DSH_TOOLS_TOKEN';
 const MANIFEST_ENV = 'DSH_TOOLS';
@@ -46,7 +46,7 @@ export function createGatewayTool(config, tool) {
         description: tool.description,
         parameters: tool.parameters,
         output: {
-            schema: { type: 'object', additionalProperties: true },
+            schema: {},
             render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
         },
         async execute(args, exec) {
@@ -60,8 +60,11 @@ export function createGatewayTool(config, tool) {
             }, exec.signal);
             if (response.status === 'error')
                 return { status: 'error', error: response.error };
+            if (response.disposition !== 'continue' && response.disposition !== 'conclude-turn') {
+                throw new Error('tool response disposition is invalid');
+            }
             const result = response.result ?? { status: 'error', error: { code: 'missing_result' } };
-            if (tool.name === 'submit_checkpoint' && result['status'] === 'complete')
+            if (response.disposition === 'conclude-turn')
                 exec.concludeTurn();
             return result;
         },
@@ -79,12 +82,14 @@ export function currentModelTurn(events) {
     throw new Error('tool gateway could not resolve the current model turn');
 }
 export async function requestGatewayTool(config, toolName, argumentsValue, identity, signal) {
-    if (signal.aborted)
+    if (signal.aborted) {
+        await requestGatewayCancellation(config, identity).catch(() => undefined);
         throw new Error('tool request cancelled');
+    }
     const payload = JSON.stringify({
         protocol: TOOL_GATEWAY_PROTOCOL,
         capability: config.capability,
-        request_id: `dsh:${identity.sessionId}:${identity.toolCallId}`,
+        operation: 'invoke',
         tool: toolName,
         arguments: argumentsValue,
         metadata: {
@@ -108,7 +113,14 @@ export async function requestGatewayTool(config, toolName, argumentsValue, ident
             else if (response !== undefined)
                 resolve(response);
         };
-        const cancel = () => finish(new Error('tool request cancelled'));
+        const cancel = () => {
+            if (settled)
+                return;
+            settled = true;
+            signal.removeEventListener('abort', cancel);
+            socket.destroy();
+            void requestGatewayCancellation(config, identity).then(() => reject(new Error('tool request cancelled')), () => reject(new Error('tool request cancelled')));
+        };
         signal.addEventListener('abort', cancel, { once: true });
         if (signal.aborted) {
             cancel();
@@ -139,6 +151,56 @@ export async function requestGatewayTool(config, toolName, argumentsValue, ident
         });
     });
 }
+export async function requestGatewayCancellation(config, identity) {
+    const payload = JSON.stringify({
+        protocol: TOOL_GATEWAY_PROTOCOL,
+        capability: config.capability,
+        operation: 'cancel',
+        metadata: {
+            deepseek_session_id: identity.sessionId,
+            deepseek_tool_call_id: identity.toolCallId,
+            aec_model_turn: identity.modelTurn,
+        },
+    }) + '\n';
+    return new Promise((resolve, reject) => {
+        const socket = createConnection(config.socketPath);
+        let settled = false;
+        let received = Buffer.alloc(0);
+        const finish = (error, response) => {
+            if (settled)
+                return;
+            settled = true;
+            socket.destroy();
+            if (error !== null)
+                reject(error);
+            else if (response !== undefined)
+                resolve(response);
+        };
+        socket.setTimeout(REQUEST_TIMEOUT_MS, () => finish(new Error('tool cancellation request timed out')));
+        socket.once('connect', () => socket.write(payload));
+        socket.on('data', chunk => {
+            received = Buffer.concat([received, chunk]);
+            if (received.length > MAX_RESPONSE_BYTES) {
+                finish(new Error('tool cancellation response is too large'));
+                return;
+            }
+            const newline = received.indexOf(0x0a);
+            if (newline < 0)
+                return;
+            try {
+                finish(null, parseResponse(received.subarray(0, newline).toString('utf8')));
+            }
+            catch (error) {
+                finish(error instanceof Error ? error : new Error('invalid tool cancellation response'));
+            }
+        });
+        socket.once('error', error => finish(error));
+        socket.once('end', () => {
+            if (!settled)
+                finish(new Error('tool authority closed without a cancellation response'));
+        });
+    });
+}
 function parseResponse(value) {
     const parsed = JSON.parse(value);
     if (typeof parsed !== 'object' || parsed === null)
@@ -146,6 +208,11 @@ function parseResponse(value) {
     const response = parsed;
     if (response.protocol !== TOOL_GATEWAY_PROTOCOL || (response.status !== 'ok' && response.status !== 'error')) {
         throw new Error('tool response protocol is invalid');
+    }
+    if (response.disposition !== undefined
+        && response.disposition !== 'continue'
+        && response.disposition !== 'conclude-turn') {
+        throw new Error('tool response disposition is invalid');
     }
     return response;
 }

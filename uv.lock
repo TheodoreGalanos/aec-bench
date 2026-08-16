@@ -27,6 +27,7 @@ dependencies = [
 [package.optional-dependencies]
 deepseek-harness = [
     { name = "deepseek-harness-sdk" },
+    { name = "jsonschema" },
 ]
 evolution = [
     { name = "numpy" },
@@ -87,6 +88,7 @@ requires-dist = [
     { name = "harbor", extras = ["modal"], marker = "extra == 'execution'", specifier = ">=0.15,<0.16" },
     { name = "httpx", marker = "extra == 'local-agents'", specifier = ">=0.28,<1" },
     { name = "jinja2", specifier = ">=3.1,<4" },
+    { name = "jsonschema", marker = "extra == 'deepseek-harness'", specifier = ">=4.26,<5" },
     { name = "morphcloud", marker = "extra == 'morph'", specifier = ">=0.1.111" },
     { name = "numpy", marker = "extra == 'evolution'", specifier = ">=2.4,<3" },
     { name = "packaging", marker = "extra == 'prime'", specifier = ">=25,<26" },
