@@ -182,6 +182,47 @@ provider-neutral execution model or a Prime-specific record authority.
 Provider errors, timeouts, missing output, and incomplete execution remain
 explicit failures. A transport cannot turn them into successful trials.
 
+DeepSeek Harness subagents are disabled. Before they can be enabled, the
+adapter must maintain one trial-scoped aggregate across the root session and
+all descendant sessions. This aggregate must cover model and tool calls,
+input, output, and cache tokens, and cost. The runtime must enforce a limit
+before the next affected operation, propagate cancellation to descendants,
+and retain complete child evidence. Root-session counters are not aggregate
+trial evidence.
+
+The DeepSeek adapter owns its trial manifest, runtime-file redaction, and
+optional plugin copy. The execution entrypoint does not interpret that
+provider evidence. It binds the single manifest digest into the existing AEC
+runtime execution attestation.
+
+The optional `@aec-bench/dsh-tools` Cordis plugin is a transport gateway, not a
+tool authority. The AEC host supplies one exact per-run manifest from typed
+Python callables. The plugin registers those JSON schemas and forwards calls to
+an authenticated trial-local Unix socket. Lifecycle state, world state,
+effects, host controls, verification, and reward stay with their existing AEC
+owners. The pump-station Harbor journey can alternate fresh DeepSeek model
+segments with the same deterministic task-owned Operations controls used by
+the Prime pump journey.
+
+The shared adapter entrypoint owns provider selection and host credential
+allowlisting. A DeepSeek Harness model uses `provider:model`, and the selected
+provider is stored in the non-secret execution payload. The Harbor agent passes
+only that provider's approved environment values. The DeepSeek worker maps
+them to private Cordis names and records the selected provider in trial
+evidence. The worker selects one provider-specific Cordis profile. Azure uses
+the generic Harness provider plugin on an OpenAI-compatible `azure` route.
+DeepSeek uses the `deepseek-official` route. This keeps provider-specific wire
+fields with the plugin that owns that protocol.
+
+Provider-neutral adapter infrastructure owns safe output-commit evaluation,
+exact-byte attestation, and post-commit stability checks. An adapter owns only
+its model-visible commit surface and turn integration. The RLM adapter owns the
+`COMMIT_OUTPUT()` command and reminders. The DeepSeek Harness adapter owns the
+authenticated trial-local endpoint and the optional `aec_commit_output` Cordis
+tool. Neither adapter owns a separate structural evaluator or attestation
+implementation. Accepted commitment proves the public output structure and
+exact bytes, not verifier success or reward.
+
 The separate `prime_agent` integration runs the upstream Prime Agent executable
 directly. JSON mode adapts staged artifact tasks on the existing local path.
 ACP mode owns the Prime process, protocol, isolation, explicit generic skills,

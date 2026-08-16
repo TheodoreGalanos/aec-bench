@@ -115,13 +115,14 @@ depend on wall-clock time.
 ### Run Experiments
 
 Install `aec-bench[execution]` before using Harbor. Add the `morph` extra for a
-Morph Cloud backend. The provider-backed adapters on the separate `run-local`
-path require `aec-bench[local-agents]`. The `prime-agent` adapter instead uses a
-separately installed Prime Agent executable.
+Morph Cloud backend. Add the `deepseek-harness` extra for the DeepSeek Harness
+adapter. The provider-backed adapters on the separate `run-local` path require
+`aec-bench[local-agents]`. The `prime-agent` adapter instead uses a separately
+installed Prime Agent executable.
 
 ```bash
 # Run a single task path against a model
-uv run aec-bench run tasks/ground/shallow-foundations --model "<model-id>"
+uv run aec-bench run tasks/electrical/voltage-drop --model "<model-id>"
 
 # Run from an experiment config
 uv run aec-bench run --config experiment.yaml --tasks-root tasks/
@@ -137,6 +138,138 @@ uv run aec-bench run tasks/electrical/pf-droop --model "<model-id>" --backend mo
 Remote runs use the same synchronous Harbor dispatch-and-import workflow and
 produce current `TrialRecord` ledger entries. `aec-bench run-local` remains the
 separate no-Harbor path for local execution.
+
+#### DeepSeek Harness adapter (experimental)
+
+The DeepSeek Harness adapter uses the shared Harbor entrypoint and its provider
+selection boundary. It does not add a provider-specific Harbor agent or
+command. The model uses the existing `provider:model` form. The current
+qualified routes are `azure:<deployment>` and `deepseek:<model>`. Azure uses
+the Harness generic provider adapter with an OpenAI-compatible route. DeepSeek
+uses the Harness `deepseek-official` wire adapter.
+Install the execution and adapter extras, set the selected provider values in
+`.env`, and select `deepseek_harness` in an ordinary experiment manifest:
+
+```bash
+uv sync --extra execution --extra deepseek-harness
+```
+
+```dotenv
+AZURE_OPENAI_ENDPOINT="https://<resource>.openai.azure.com"
+AZURE_OPENAI_API_KEY="<provider-key>"
+```
+
+```yaml
+experiment_id: deepseek-baseline
+name: DeepSeek Harness baseline
+tasks:
+  include_patterns: ["electrical/voltage-drop"]
+agents:
+  - name: deepseek-baseline
+    adapter: deepseek_harness
+    model: "azure:<deployment-name>"
+    parameters:
+      timeout_sec: 1800
+      max_tokens: 8192
+compute:
+  backend: docker
+repetitions: 1
+```
+
+Run it with `uv run aec-bench run --config experiment.yaml --tasks-root tasks`.
+For local debugging, use the same adapter without Harbor or Docker:
+
+```bash
+uv run aec-bench run-local tasks/electrical/voltage-drop \
+  --adapter deepseek_harness \
+  --model "azure:<deployment-name>" \
+  --timeout 600 \
+  --max-tokens 8192 \
+  --keep-workspace
+```
+
+Local results retain the redacted Harness evidence under
+`logs/deepseek-harness/`, including `stderr.log` on failure.
+The provider prefix selects one credential route:
+
+| Prefix | Required environment | Endpoint behavior |
+| --- | --- | --- |
+| `azure:` | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` | Accepts an Azure resource root or `/openai/v1` URL and normalizes it to the v1 route |
+| `deepseek:` | `DEEPSEEK_API_KEY` | Uses `DEEPSEEK_BASE_URL` when set, or the public DeepSeek API |
+
+The shared entrypoint records the selected provider in the execution bundle,
+but does not serialize credentials. It passes only the selected provider's
+approved environment values. The worker maps them to the private
+`DSH_API_KEY` and `DSH_BASE_URL` names used by Cordis. It installs the qualified
+DeepSeek SDK and runtime in the trial environment if they are absent.
+
+The provider prefix selects both the approved host environment and the Harness
+LLM route. Azure uses the internal `azure` route and does not send DeepSeek-only
+`thinking` or `reasoning_effort` fields. DeepSeek uses `deepseek-official` for
+the upstream DeepSeek protocol. Trial evidence records both identities.
+
+The baseline, native-tool, and explicit-commit modes are separate treatments:
+
+| Condition | AEC-authored DeepSeek surface | Completion rule |
+| --- | --- | --- |
+| Baseline | None | Normal Harness completion and candidate collection |
+| Native tools | `@aec-bench/dsh-tools` with the exact AEC-owned tool manifest | The owning lifecycle or world runtime decides completion |
+| Explicit commit | `aec_commit_output` only | The task contract accepts and binds the exact output bytes |
+
+Explicit commit is capability-gated. Set `output_completion_commit: true` only
+with a matching task-owned `output_completion_contract`. The current supported
+contract format is `markdown_final_fenced_json`, and its output path must be
+`/workspace/output.md` for Harbor runs. The adapter loads the commit plugin only
+for that request. It does not use the plugin as a task verifier.
+
+```yaml
+parameters:
+  output_completion_commit: true
+  output_completion_contract:
+    schema_version: aecbench.output-completion-contract.v1
+    output_path: /workspace/output.md
+    format: markdown_final_fenced_json
+    required_top_level_keys: [findings, summary]
+    require_single_final_json_block: true
+```
+
+The current support boundary is:
+
+- artifact and workspace tasks that use the stock DeepSeek coding tools;
+- finite evidence lifecycles and the registered pump-station Harbor world through
+  exact AEC-owned native tool gateways;
+- exact whole-trial `timeout_sec` and per-model-request `max_tokens` limits;
+- raw session evidence, readable treatment evidence, and optional exact-byte
+  output commitment;
+- no general task-tool translation, arbitrary interactive-world bridge,
+  subagents, workflows, or code mode;
+- no exact `max_turns`, `max_tool_calls`, or `max_context_tokens` enforcement;
+- no network-isolation guarantee from the adapter. Use the selected disposable
+  Harbor environment as the external security boundary.
+
+The qualified SDK and runtime version is `0.1.0rc6`. Startup fails if the SDK
+and bundled runtime versions differ. The keyless integration suite checks both
+provider routes, the protocol, and the cleanup path. It does not establish a
+model-quality or cost comparison against direct, tool-loop, or RLM treatments.
+
+Run the registered pump-station world through DeepSeek Harness and Harbor:
+
+```bash
+uv run aec-bench task pump-station-world run-harbor \
+  --task-dir /path/to/exported-pump-task \
+  --project-root . \
+  --jobs-dir jobs/pump-deepseek \
+  --config-path jobs/pump-deepseek.yaml \
+  --backend modal \
+  --adapter deepseek_harness \
+  --model "azure:<deployment-name>" \
+  --max-tokens 8192 \
+  --timeout-sec 1800
+```
+
+The model sees actor observations and actor actions only. The task-owned host
+can apply its deterministic Operations controls between model segments. Harbor
+independently replays the final world run and owns reward.
 
 #### Prime Agent local adapter
 
