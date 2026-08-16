@@ -545,7 +545,7 @@ def test_output_commit_rejects_an_unchanged_preexisting_artifact(tmp_path: Path)
     first_tool_result = next(
         entry.content for entry in result.transcript if entry.tool_name == "repl" and "unchanged" in entry.content
     )
-    assert "unchanged" in first_tool_result
+    assert "COMMIT_OUTPUT rejected: output is unchanged from the start of this run." in first_tool_result
 
 
 def test_output_commit_revalidates_the_artifact_after_the_repl_block(tmp_path: Path) -> None:
