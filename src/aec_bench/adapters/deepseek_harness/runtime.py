@@ -13,7 +13,7 @@ import subprocess
 import sys
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -66,7 +66,8 @@ from aec_bench.adapters.deepseek_harness.tool_gateway import (
     TOOL_GATEWAY_MANIFEST_ENV,
     TOOL_GATEWAY_SOCKET_ENV,
     TOOL_GATEWAY_TOKEN_ENV,
-    NativeTool,
+    EndpointCloseReport,
+    NativeToolDefinition,
     ToolGatewayEndpoint,
 )
 from aec_bench.adapters.output_commit import read_output_completion_content, validate_stable_output_commit
@@ -160,6 +161,7 @@ class DeepSeekHarnessRun:
     cordis_path: Path | None = None
     commit_evidence_path: Path | None = None
     tool_gateway_evidence_path: Path | None = None
+    tool_gateway_close_report: EndpointCloseReport | None = None
 
 
 class DeepSeekHarnessProcessRuntime:
@@ -171,7 +173,8 @@ class DeepSeekHarnessProcessRuntime:
         settings: DeepSeekHarnessSettings,
         workspace: Path,
         worker_command: tuple[str, ...] | None = None,
-        native_tools: Mapping[str, NativeTool] | None = None,
+        native_tools: Sequence[NativeToolDefinition] | None = None,
+        tool_gateway_close_timeout_seconds: float = 5.0,
     ) -> None:
         self.settings = settings
         self.workspace = workspace.resolve()
@@ -180,7 +183,9 @@ class DeepSeekHarnessProcessRuntime:
             "-m",
             "aec_bench.adapters.deepseek_harness.worker",
         )
-        self.native_tools = dict(native_tools or {})
+        self.native_tools = tuple(native_tools or ())
+        self.native_tool_names = tuple(sorted(tool.name for tool in self.native_tools))
+        self.tool_gateway_close_timeout_seconds = tool_gateway_close_timeout_seconds
         self.paths = _deepseek_paths(self.workspace, trial_id=f"run-{uuid.uuid4().hex}")
         self._has_run = False
 
@@ -188,7 +193,7 @@ class DeepSeekHarnessProcessRuntime:
         if self._has_run:
             raise DeepSeekHarnessRuntimeError("one DeepSeek Harness runtime instance can execute only one trial")
         self._has_run = True
-        native_tool_names = frozenset(self.native_tools)
+        native_tool_names = frozenset(self.native_tool_names)
         validate_deepseek_request(request, native_tool_names=native_tool_names)
         contract, commit_required = deepseek_output_commit_configuration(request)
         timeout_seconds = request_timeout_seconds(request)
@@ -221,10 +226,24 @@ class DeepSeekHarnessProcessRuntime:
 
         commit_endpoint = self._commit_endpoint(contract, commit_required=commit_required)
         tool_gateway = self._tool_gateway()
-        for endpoint in (commit_endpoint, tool_gateway):
-            if endpoint is not None:
-                endpoint.start()
-                environment.update(endpoint.connection_environment())
+        commit_endpoint_started = False
+        tool_gateway_started = False
+        try:
+            if commit_endpoint is not None:
+                commit_endpoint.start()
+                commit_endpoint_started = True
+                environment.update(commit_endpoint.connection_environment())
+            if tool_gateway is not None:
+                tool_gateway.start()
+                tool_gateway_started = True
+                environment.update(tool_gateway.connection_environment())
+        except BaseException:
+            if tool_gateway_started and tool_gateway is not None:
+                tool_gateway.close()
+            if commit_endpoint_started and commit_endpoint is not None:
+                commit_endpoint.close()
+            self._retire_transient_directories()
+            raise
         command = (
             *self.worker_command,
             str(self.paths.request),
@@ -233,6 +252,7 @@ class DeepSeekHarnessProcessRuntime:
         )
         started_at = datetime.now(UTC)
         timed_out = False
+        tool_gateway_close_report: EndpointCloseReport | None = None
         try:
             with self.paths.stderr.open("w", encoding="utf-8") as stderr:
                 process = subprocess.Popen(
@@ -253,13 +273,33 @@ class DeepSeekHarnessProcessRuntime:
                 else:
                     _stop_process_group(process)
         finally:
-            for endpoint in (commit_endpoint, tool_gateway):
-                if endpoint is not None:
-                    endpoint.close()
-            self._retire_transient_directories()
+            try:
+                if commit_endpoint_started and commit_endpoint is not None:
+                    commit_endpoint.close()
+            finally:
+                try:
+                    if tool_gateway_started and tool_gateway is not None:
+                        tool_gateway_close_report = tool_gateway.close()
+                finally:
+                    self._retire_transient_directories()
 
         finished_at = datetime.now(UTC)
         self._redact_secret_values(environment)
+        if tool_gateway_close_report is not None and not tool_gateway_close_report.quiescent:
+            unsettled = ", ".join(tool_gateway_close_report.unsettled_request_ids)
+            error = f"DeepSeek native tool endpoint closed with unsettled requests: {unsettled}"
+            self._write_failure_evidence(
+                error=error,
+                exit_code=process.returncode,
+                timeout_seconds=timeout_seconds,
+                max_tokens=max_tokens,
+                commit_required=commit_required,
+                plugins=plugins,
+                started_at=started_at,
+                finished_at=finished_at,
+                tool_gateway_close_report=tool_gateway_close_report,
+            )
+            raise DeepSeekHarnessRuntimeError(error)
         if timed_out:
             error = f"DeepSeek Harness exceeded timeout_sec={timeout_seconds}"
             self._write_failure_evidence(
@@ -350,6 +390,7 @@ class DeepSeekHarnessProcessRuntime:
             projection=projection,
             started_at=started_at,
             finished_at=finished_at,
+            tool_gateway_close_report=tool_gateway_close_report,
         )
         return DeepSeekHarnessRun(
             session_id=worker_result.session_id,
@@ -368,7 +409,7 @@ class DeepSeekHarnessProcessRuntime:
             stderr_path=self.paths.stderr,
             evidence_manifest_sha256=_file_sha256(self.paths.manifest),
             optional_plugins=plugins,
-            native_tools=tuple(sorted(self.native_tools)),
+            native_tools=self.native_tool_names,
             root_events_path=self.paths.root_events,
             sessions_path=self.paths.sessions,
             manifest_path=self.paths.manifest,
@@ -377,6 +418,7 @@ class DeepSeekHarnessProcessRuntime:
             cordis_path=self.paths.cordis_input,
             commit_evidence_path=self.paths.commit_evidence if commit_required else None,
             tool_gateway_evidence_path=(self.paths.tool_gateway_evidence if self.native_tools else None),
+            tool_gateway_close_report=tool_gateway_close_report,
         )
 
     def _tool_gateway(self) -> ToolGatewayEndpoint | None:
@@ -385,6 +427,7 @@ class DeepSeekHarnessProcessRuntime:
         return ToolGatewayEndpoint(
             tools=self.native_tools,
             evidence_path=self.paths.tool_gateway_evidence,
+            close_timeout_seconds=self.tool_gateway_close_timeout_seconds,
         )
 
     def _commit_endpoint(
@@ -538,7 +581,7 @@ class DeepSeekHarnessProcessRuntime:
                     timeout_seconds=request_timeout_seconds(request),
                     max_tokens=request_max_tokens(request),
                     output_commit_required=commit_required,
-                    native_tools=tuple(sorted(self.native_tools)),
+                    native_tools=self.native_tool_names,
                 ),
                 "environment": {
                     "owned_names": sorted(owned_names),
@@ -614,6 +657,7 @@ class DeepSeekHarnessProcessRuntime:
         projection: DeepSeekRunProjection,
         started_at: datetime,
         finished_at: datetime,
+        tool_gateway_close_report: EndpointCloseReport | None,
     ) -> None:
         _write_root_events(self.paths.root_events, worker_result.session_id, notifications)
         _write_json(
@@ -633,6 +677,7 @@ class DeepSeekHarnessProcessRuntime:
                 "output_commit_mode": "required" if commit_required else "disabled",
                 "output_commit_accepted": completion_commit is not None,
                 "output_commit_error": commit_error,
+                "tool_gateway_close": _close_report_payload(tool_gateway_close_report),
             },
         )
         _write_evidence_manifest(
@@ -645,7 +690,7 @@ class DeepSeekHarnessProcessRuntime:
             timeout_seconds=timeout_seconds,
             max_tokens=max_tokens,
             commit_required=commit_required,
-            native_tools=tuple(sorted(self.native_tools)),
+            native_tools=self.native_tool_names,
             plugins=plugins,
             started_at=started_at,
             finished_at=finished_at,
@@ -662,6 +707,7 @@ class DeepSeekHarnessProcessRuntime:
         plugins: tuple[DeepSeekPluginIdentity, ...],
         started_at: datetime,
         finished_at: datetime,
+        tool_gateway_close_report: EndpointCloseReport | None = None,
     ) -> None:
         try:
             notifications = _read_notifications(self.paths.notifications) if self.paths.notifications.is_file() else []
@@ -681,6 +727,7 @@ class DeepSeekHarnessProcessRuntime:
                 "process_group_retired": True,
                 "timeout_sec": timeout_seconds,
                 "max_tokens": max_tokens,
+                "tool_gateway_close": _close_report_payload(tool_gateway_close_report),
             },
         )
         _write_evidence_manifest(
@@ -693,7 +740,7 @@ class DeepSeekHarnessProcessRuntime:
             timeout_seconds=timeout_seconds,
             max_tokens=max_tokens,
             commit_required=commit_required,
-            native_tools=tuple(sorted(self.native_tools)),
+            native_tools=self.native_tool_names,
             plugins=plugins,
             started_at=started_at,
             finished_at=finished_at,
@@ -734,6 +781,17 @@ def build_deepseek_worker_environment(
     if commit_environment is not None:
         environment.update(commit_environment)
     return environment
+
+
+def _close_report_payload(report: EndpointCloseReport | None) -> dict[str, Any] | None:
+    if report is None:
+        return None
+    return {
+        "quiescent": report.quiescent,
+        "unsettled_request_ids": list(report.unsettled_request_ids),
+        "unknown_outcome_request_ids": list(report.unknown_outcome_request_ids),
+        "closed_at": report.closed_at.isoformat(),
+    }
 
 
 def _worker_request_payload(

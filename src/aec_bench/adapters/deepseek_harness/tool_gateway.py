@@ -1,41 +1,154 @@
 # ABOUTME: Exposes one exact AEC-owned native tool surface on an authenticated Unix socket.
-# ABOUTME: Keeps tool state and effects in AEC while DeepSeek presents model-facing JSON schemas.
+# ABOUTME: Supplies trusted invocation identity, cancellation, dispositions, and bounded close evidence.
 
 from __future__ import annotations
 
 import hashlib
 import hmac
-import inspect
 import json
 import os
+import re
 import secrets
 import socketserver
 import tempfile
 import threading
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+import time
+import uuid
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Literal, cast, get_type_hints
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, create_model
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError, ValidationError
+from pydantic import Field, JsonValue
 
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 
-TOOL_GATEWAY_PROTOCOL = "aec-bench/deepseek-tools/1"
+TOOL_GATEWAY_PROTOCOL = "aec-bench/deepseek-tools/2"
 TOOL_GATEWAY_SOCKET_ENV = "DSH_TOOLS_SOCKET"
 TOOL_GATEWAY_TOKEN_ENV = "DSH_TOOLS_TOKEN"
 TOOL_GATEWAY_MANIFEST_ENV = "DSH_TOOLS"
 _MAX_REQUEST_BYTES = 1024 * 1024
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+_TOOL_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 
-NativeTool = Callable[..., str]
+
+class NativeToolDisposition(StrEnum):
+    """Tell the provider loop whether the current model turn can continue."""
+
+    CONTINUE = "continue"
+    CONCLUDE_TURN = "conclude-turn"
+
+
+class NativeCancellation:
+    """Expose cooperative cancellation to one synchronous AEC handler."""
+
+    def __init__(self) -> None:
+        self._event = threading.Event()
+        self._lock = threading.Lock()
+        self._requested_at: datetime | None = None
+
+    @property
+    def cancelled(self) -> bool:
+        return self._event.is_set()
+
+    @property
+    def requested_at(self) -> datetime | None:
+        with self._lock:
+            return self._requested_at
+
+    def wait(self, timeout: float | None = None) -> bool:
+        """Wait until cancellation or the optional timeout."""
+        return self._event.wait(timeout)
+
+    def _cancel(self) -> datetime:
+        with self._lock:
+            if self._requested_at is None:
+                self._requested_at = datetime.now(UTC)
+            requested_at = self._requested_at
+        self._event.set()
+        return requested_at
+
+
+@dataclass(frozen=True)
+class NativeToolInvocation:
+    """AEC-created identity and lifecycle state hidden from the model schema."""
+
+    request_id: str
+    deepseek_session_id: str
+    deepseek_tool_call_id: str
+    model_turn: int
+    tool_name: str
+    generation_id: str
+    admitted_at: datetime
+    cancellation: NativeCancellation
+
+
+@dataclass(frozen=True)
+class NativeToolResponse:
+    """Return one JSON result and generic provider-loop disposition."""
+
+    result: JsonValue
+    disposition: NativeToolDisposition = NativeToolDisposition.CONTINUE
+
+
+NativeToolHandler = Callable[[NativeToolInvocation, Mapping[str, JsonValue]], NativeToolResponse]
+
+
+@dataclass(frozen=True)
+class NativeToolDefinition:
+    """Define the exact model-facing schema and its AEC-owned handler."""
+
+    name: str
+    description: str
+    parameters_schema: dict[str, Any]
+    handler: NativeToolHandler
+
+
+def json_native_tool_definition(
+    *,
+    name: str,
+    description: str,
+    parameters_schema: dict[str, Any],
+    function: Callable[..., str],
+    trusted_request_argument: str | None = None,
+    disposition: Callable[[JsonValue], NativeToolDisposition] | None = None,
+) -> NativeToolDefinition:
+    """Bind an existing JSON-returning AEC method to one explicit model schema."""
+
+    def handle(invocation: NativeToolInvocation, arguments: Mapping[str, JsonValue]) -> NativeToolResponse:
+        call_arguments = dict(arguments)
+        if trusted_request_argument is not None:
+            call_arguments[trusted_request_argument] = invocation.request_id
+        result = json.loads(function(**call_arguments))
+        resolved_disposition = disposition(result) if disposition is not None else NativeToolDisposition.CONTINUE
+        return NativeToolResponse(result=result, disposition=resolved_disposition)
+
+    return NativeToolDefinition(
+        name=name,
+        description=description,
+        parameters_schema=parameters_schema,
+        handler=handle,
+    )
+
+
+@dataclass(frozen=True)
+class EndpointCloseReport:
+    """State whether every admitted operation settled before the close deadline."""
+
+    quiescent: bool
+    unsettled_request_ids: tuple[str, ...]
+    unknown_outcome_request_ids: tuple[str, ...]
+    closed_at: datetime
 
 
 @dataclass(frozen=True)
 class _ToolBinding:
-    function: NativeTool
-    arguments_model: type[BaseModel]
+    definition: NativeToolDefinition
+    validator: Draft202012Validator
     manifest: dict[str, Any]
 
 
@@ -45,18 +158,36 @@ class _ToolMetadata(StrictModel):
     aec_model_turn: int = Field(ge=1)
 
 
-class _ToolRequest(StrictModel):
-    protocol: Literal["aec-bench/deepseek-tools/1"]
+class _ToolInvocationRequest(StrictModel):
+    protocol: Literal["aec-bench/deepseek-tools/2"]
     capability: NonEmptyStr
-    request_id: NonEmptyStr
+    operation: Literal["invoke"]
     tool: NonEmptyStr
-    arguments: dict[str, Any]
+    arguments: dict[str, JsonValue]
     metadata: _ToolMetadata
 
 
+class _ToolCancellationRequest(StrictModel):
+    protocol: Literal["aec-bench/deepseek-tools/2"]
+    capability: NonEmptyStr
+    operation: Literal["cancel"]
+    metadata: _ToolMetadata
+
+
+@dataclass
+class _AdmittedInvocation:
+    fingerprint: str
+    invocation: NativeToolInvocation
+    arguments: dict[str, JsonValue]
+    dispatched_at: datetime | None = None
+    completed_at: datetime | None = None
+    response: dict[str, Any] | None = None
+    done: threading.Event = field(default_factory=threading.Event)
+
+
 class _ThreadingUnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
-    daemon_threads = False
-    block_on_close = True
+    daemon_threads = True
+    block_on_close = False
     allow_reuse_address = False
 
 
@@ -107,33 +238,48 @@ class ToolGatewayEndpoint:
     def __init__(
         self,
         *,
-        tools: Mapping[str, NativeTool],
+        tools: Sequence[NativeToolDefinition],
         evidence_path: Path,
         capability_token: str | None = None,
         client_timeout_seconds: float = 120.0,
+        close_timeout_seconds: float = 5.0,
+        generation_id: str | None = None,
     ) -> None:
         if not tools:
             raise ValueError("tool gateway requires at least one tool")
-        self._bindings = {name: _tool_binding(name, tool) for name, tool in tools.items()}
-        self.tools = dict(tools)
+        if client_timeout_seconds <= 0:
+            raise ValueError("tool gateway client timeout must be positive")
+        if close_timeout_seconds < 0:
+            raise ValueError("tool gateway close timeout must not be negative")
+        self._bindings = _tool_bindings(tools)
+        self.tools = tuple(binding.definition for binding in self._bindings.values())
         self.evidence_path = evidence_path
         self._capability_token = capability_token or secrets.token_urlsafe(32)
         self.client_timeout_seconds = client_timeout_seconds
+        self.close_timeout_seconds = close_timeout_seconds
+        self.generation_id = generation_id or f"tool-gateway-{uuid.uuid4().hex}"
         self._lock = threading.Lock()
+        self._condition = threading.Condition(self._lock)
+        self._evidence_lock = threading.Lock()
+        self._evidence_finalized = False
         self._responses: dict[str, tuple[str, dict[str, Any]]] = {}
+        self._active: dict[str, _AdmittedInvocation] = {}
+        self._cancelled_before_dispatch: set[str] = set()
         self._server: _ToolServer | None = None
         self._thread: threading.Thread | None = None
         self._socket_directory: Path | None = None
         self._socket_path: Path | None = None
         self._closing = False
+        self._generation_finalized = False
+        self._close_report: EndpointCloseReport | None = None
 
     def start(self) -> None:
         """Create the private socket and start accepting bounded requests."""
         with self._lock:
             if self._server is not None:
-                raise RuntimeError("lifecycle tool endpoint is already started")
+                raise RuntimeError("native tool endpoint is already started")
             if self._closing:
-                raise RuntimeError("lifecycle tool endpoint is closed")
+                raise RuntimeError("native tool endpoint is closed")
             socket_directory = Path(tempfile.mkdtemp(prefix="aec-dsh-tools-"))
             os.chmod(socket_directory, 0o700)
             socket_path = socket_directory / "tools.sock"
@@ -151,21 +297,45 @@ class ToolGatewayEndpoint:
             self._thread = thread
             thread.start()
 
-    def close(self) -> None:
-        """Stop acceptance, wait for active handlers, and remove the owned socket."""
-        with self._lock:
+    def close(self, *, timeout_seconds: float | None = None) -> EndpointCloseReport:
+        """Stop acceptance and report whether admitted handlers became quiescent."""
+        deadline_seconds = self.close_timeout_seconds if timeout_seconds is None else timeout_seconds
+        if deadline_seconds < 0:
+            raise ValueError("tool gateway close timeout must not be negative")
+        with self._condition:
+            if self._close_report is not None:
+                return self._close_report
             if self._closing:
-                return
+                while self._close_report is None:
+                    self._condition.wait()
+                return self._close_report
             self._closing = True
+            self._generation_finalized = True
             server = self._server
             thread = self._thread
             socket_path = self._socket_path
             socket_directory = self._socket_directory
+            for active in self._active.values():
+                active.invocation.cancellation._cancel()
+
         if server is not None:
             server.shutdown()
             server.server_close()
         if thread is not None:
             thread.join()
+
+        deadline = time.monotonic() + deadline_seconds
+        with self._condition:
+            while self._active:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                self._condition.wait(remaining)
+            unsettled = tuple(sorted(self._active))
+            unknown = tuple(
+                request_id for request_id in unsettled if self._active[request_id].dispatched_at is not None
+            )
+
         if socket_path is not None:
             socket_path.unlink(missing_ok=True)
         if socket_directory is not None:
@@ -174,11 +344,35 @@ class ToolGatewayEndpoint:
             except FileNotFoundError:
                 pass
 
+        report = EndpointCloseReport(
+            quiescent=not unsettled,
+            unsettled_request_ids=unsettled,
+            unknown_outcome_request_ids=unknown,
+            closed_at=datetime.now(UTC),
+        )
+        self._append_evidence(
+            {
+                "record_type": "close",
+                "protocol": TOOL_GATEWAY_PROTOCOL,
+                "generation_id": self.generation_id,
+                "closed_at": report.closed_at.isoformat(),
+                "quiescent": report.quiescent,
+                "unsettled_request_ids": list(report.unsettled_request_ids),
+                "unknown_outcome_request_ids": list(report.unknown_outcome_request_ids),
+                "late_results_after_close_are_ignored": True,
+            },
+            finalize=True,
+        )
+        with self._condition:
+            self._close_report = report
+            self._condition.notify_all()
+        return report
+
     def connection_environment(self) -> Mapping[str, str]:
-        """Return private runtime connection values and the exact enabled tool names."""
+        """Return private runtime connection values and the exact enabled tool manifest."""
         with self._lock:
             if self._socket_path is None or self._closing:
-                raise RuntimeError("lifecycle tool endpoint is not active")
+                raise RuntimeError("native tool endpoint is not active")
             return {
                 TOOL_GATEWAY_SOCKET_ENV: str(self._socket_path),
                 TOOL_GATEWAY_TOKEN_ENV: self._capability_token,
@@ -191,115 +385,354 @@ class ToolGatewayEndpoint:
 
     def _handle_payload(self, payload: bytes) -> dict[str, Any]:
         try:
-            request = _ToolRequest.model_validate_json(payload)
-        except ValueError:
+            raw = json.loads(payload)
+            if not isinstance(raw, dict):
+                raise ValueError
+            operation = raw.get("operation")
+            if operation == "invoke":
+                request: _ToolInvocationRequest | _ToolCancellationRequest = _ToolInvocationRequest.model_validate(raw)
+            elif operation == "cancel":
+                request = _ToolCancellationRequest.model_validate(raw)
+            else:
+                raise ValueError
+        except (TypeError, ValueError, json.JSONDecodeError):
             return _error_response("invalid_request", "Tool request is invalid.")
         if not hmac.compare_digest(request.capability, self._capability_token):
             return _error_response("unauthorized", "Tool authorization failed.")
+        if isinstance(request, _ToolCancellationRequest):
+            return self._cancel(request)
+        return self._invoke(request)
+
+    def _invoke(self, request: _ToolInvocationRequest) -> dict[str, Any]:
+        request_id = _trusted_request_id(request.metadata)
+        binding = self._bindings.get(request.tool)
+        if binding is None:
+            response = _error_response("tool_not_allowed", f"Tool is not enabled: {request.tool}")
+            self._append_unadmitted_evidence(request, request_id=request_id, response=response)
+            return response
+        try:
+            binding.validator.validate(request.arguments)
+        except ValidationError as exc:
+            response = _error_response("invalid_arguments", exc.message)
+            self._append_unadmitted_evidence(request, request_id=request_id, response=response)
+            return response
 
         fingerprint = _request_fingerprint(request)
+        owner = False
         with self._lock:
-            previous = self._responses.get(request.request_id)
+            previous = self._responses.get(request_id)
             if previous is not None:
                 previous_fingerprint, previous_response = previous
                 if previous_fingerprint != fingerprint:
                     response = _error_response(
                         "request_id_conflict",
-                        "Tool request_id was reused with a different call.",
+                        "Trusted tool request identity was reused with a different call.",
                     )
-                    self._append_evidence(request, response, idempotent_replay=False)
+                    self._append_duplicate_evidence(request, request_id, response, duplicate_of=request_id)
                     return response
-                self._append_evidence(request, previous_response, idempotent_replay=True)
+                self._append_duplicate_evidence(request, request_id, previous_response, duplicate_of=request_id)
                 return previous_response
-            if self._closing:
-                response = _error_response("endpoint_closing", "Lifecycle tool authority is closing.")
+
+            active = self._active.get(request_id)
+            if active is not None:
+                if active.fingerprint != fingerprint:
+                    response = _error_response(
+                        "request_id_conflict",
+                        "Trusted tool request identity was reused with a different call.",
+                    )
+                    self._append_duplicate_evidence(request, request_id, response, duplicate_of=request_id)
+                    return response
+            elif request_id in self._cancelled_before_dispatch:
+                response = _error_response("request_cancelled", "Tool request was cancelled before dispatch.")
+                self._append_unadmitted_evidence(request, request_id=request_id, response=response, cancelled=True)
+                return response
+            elif self._closing:
+                response = _error_response("endpoint_closing", "Native tool authority is closing.")
+                self._append_unadmitted_evidence(request, request_id=request_id, response=response)
+                return response
             else:
-                response = self._execute(request)
-            self._responses[request.request_id] = (fingerprint, response)
-            self._append_evidence(request, response, idempotent_replay=False)
+                admitted_at = datetime.now(UTC)
+                invocation = NativeToolInvocation(
+                    request_id=request_id,
+                    deepseek_session_id=request.metadata.deepseek_session_id,
+                    deepseek_tool_call_id=request.metadata.deepseek_tool_call_id,
+                    model_turn=request.metadata.aec_model_turn,
+                    tool_name=request.tool,
+                    generation_id=self.generation_id,
+                    admitted_at=admitted_at,
+                    cancellation=NativeCancellation(),
+                )
+                active = _AdmittedInvocation(
+                    fingerprint=fingerprint,
+                    invocation=invocation,
+                    arguments=dict(request.arguments),
+                )
+                self._active[request_id] = active
+                owner = True
+
+        if not owner:
+            if not active.done.wait(self.client_timeout_seconds):
+                response = _error_response("request_in_progress", "The identical tool request is still running.")
+                self._append_duplicate_evidence(request, request_id, response, duplicate_of=request_id)
+                return response
+            response = active.response or _error_response("unknown_outcome", "The tool request outcome is unknown.")
+            self._append_duplicate_evidence(request, request_id, response, duplicate_of=request_id)
             return response
 
-    def _execute(self, request: _ToolRequest) -> dict[str, Any]:
-        binding = self._bindings.get(request.tool)
-        if binding is None:
-            return _error_response("tool_not_allowed", f"Tool is not enabled: {request.tool}")
-        try:
-            arguments = binding.arguments_model.model_validate_json(json.dumps(request.arguments))
-            inspect.signature(binding.function).bind(**arguments.model_dump())
-            raw_result = binding.function(**arguments.model_dump())
-            result = json.loads(raw_result)
-            if not isinstance(result, dict):
-                raise ValueError("tool result must be a JSON object")
-        except (TypeError, ValueError, json.JSONDecodeError) as exc:
-            return _error_response("invalid_arguments", str(exc))
-        except Exception:
-            return _error_response("tool_failed", "Lifecycle tool execution failed.")
-        return {"protocol": TOOL_GATEWAY_PROTOCOL, "status": "ok", "result": result}
+        return self._execute(binding, request, active)
 
-    def _append_evidence(
+    def _execute(
         self,
-        request: _ToolRequest,
+        binding: _ToolBinding,
+        request: _ToolInvocationRequest,
+        active: _AdmittedInvocation,
+    ) -> dict[str, Any]:
+        request_id = active.invocation.request_id
+        with self._lock:
+            cancelled_before_dispatch = active.invocation.cancellation.cancelled
+            if not cancelled_before_dispatch:
+                active.dispatched_at = datetime.now(UTC)
+        if cancelled_before_dispatch:
+            response = _error_response("request_cancelled", "Tool request was cancelled before dispatch.")
+            outcome = "not-dispatched"
+            raw_result: JsonValue | None = None
+            disposition: NativeToolDisposition | None = None
+        else:
+            try:
+                tool_response = binding.definition.handler(active.invocation, active.arguments)
+                if not isinstance(tool_response, NativeToolResponse):
+                    raise TypeError("native tool handler must return NativeToolResponse")
+                json.dumps(tool_response.result, allow_nan=False)
+                response = {
+                    "protocol": TOOL_GATEWAY_PROTOCOL,
+                    "status": "ok",
+                    "result": tool_response.result,
+                    "disposition": tool_response.disposition.value,
+                }
+                raw_result = tool_response.result
+                disposition = tool_response.disposition
+                outcome = "completed"
+            except (TypeError, ValueError) as exc:
+                response = _error_response("invalid_result", str(exc))
+                raw_result = None
+                disposition = None
+                outcome = "completed"
+            except Exception:
+                response = _error_response("tool_failed", "Native tool execution failed.")
+                raw_result = None
+                disposition = None
+                outcome = "completed"
+
+        completed_at = datetime.now(UTC)
+        with self._condition:
+            active.completed_at = completed_at
+            stale = self._generation_finalized
+            if stale:
+                transport_response = _error_response(
+                    "generation_finalized",
+                    "Tool result arrived after endpoint finalization began.",
+                )
+                active.response = transport_response
+            else:
+                active.response = response
+                self._responses[request_id] = (active.fingerprint, response)
+                transport_response = response
+            self._active.pop(request_id, None)
+            active.done.set()
+            self._condition.notify_all()
+
+        self._append_invocation_evidence(
+            request,
+            active,
+            response=response,
+            result=raw_result,
+            disposition=disposition,
+            outcome=outcome,
+            stale=stale,
+        )
+        return transport_response
+
+    def _cancel(self, request: _ToolCancellationRequest) -> dict[str, Any]:
+        request_id = _trusted_request_id(request.metadata)
+        occurred_at = datetime.now(UTC)
+        with self._lock:
+            completed = request_id in self._responses
+            active = self._active.get(request_id)
+            if completed:
+                outcome = "completed"
+            elif active is None:
+                self._cancelled_before_dispatch.add(request_id)
+                outcome = "not-dispatched"
+            else:
+                active.invocation.cancellation._cancel()
+                outcome = "unknown" if active.dispatched_at is not None else "not-dispatched"
+        response = {
+            "protocol": TOOL_GATEWAY_PROTOCOL,
+            "status": "ok",
+            "result": {"outcome": outcome},
+        }
+        self._append_evidence(
+            {
+                "record_type": "cancellation",
+                "protocol": TOOL_GATEWAY_PROTOCOL,
+                "generation_id": self.generation_id,
+                "request_id": request_id,
+                "deepseek_session_id": request.metadata.deepseek_session_id,
+                "deepseek_tool_call_id": request.metadata.deepseek_tool_call_id,
+                "model_turn": request.metadata.aec_model_turn,
+                "occurred_at": occurred_at.isoformat(),
+                "outcome": outcome,
+            }
+        )
+        return response
+
+    def _append_invocation_evidence(
+        self,
+        request: _ToolInvocationRequest,
+        active: _AdmittedInvocation,
+        *,
+        response: dict[str, Any],
+        result: JsonValue | None,
+        disposition: NativeToolDisposition | None,
+        outcome: str,
+        stale: bool,
+    ) -> None:
+        cancellation_requested_at = active.invocation.cancellation.requested_at
+        self._append_evidence(
+            {
+                "record_type": "invocation",
+                "protocol": TOOL_GATEWAY_PROTOCOL,
+                "generation_id": self.generation_id,
+                "request_id": active.invocation.request_id,
+                "deepseek_session_id": request.metadata.deepseek_session_id,
+                "deepseek_tool_call_id": request.metadata.deepseek_tool_call_id,
+                "model_turn": request.metadata.aec_model_turn,
+                "tool": request.tool,
+                "arguments_sha256": _json_sha256(request.arguments),
+                "admitted_at": active.invocation.admitted_at.isoformat(),
+                "dispatched_at": active.dispatched_at.isoformat() if active.dispatched_at is not None else None,
+                "cancellation_requested_at": (
+                    cancellation_requested_at.isoformat() if cancellation_requested_at is not None else None
+                ),
+                "completed_at": active.completed_at.isoformat() if active.completed_at is not None else None,
+                "result_sha256": _json_sha256(result) if result is not None else None,
+                "error_code": _response_error_code(response),
+                "disposition": disposition.value if disposition is not None else None,
+                "duplicate_of": None,
+                "outcome": outcome,
+                "stale_ignored": stale,
+            }
+        )
+
+    def _append_unadmitted_evidence(
+        self,
+        request: _ToolInvocationRequest,
+        *,
+        request_id: str,
+        response: dict[str, Any],
+        cancelled: bool = False,
+    ) -> None:
+        occurred_at = datetime.now(UTC)
+        self._append_evidence(
+            {
+                "record_type": "invocation",
+                "protocol": TOOL_GATEWAY_PROTOCOL,
+                "generation_id": self.generation_id,
+                "request_id": request_id,
+                "deepseek_session_id": request.metadata.deepseek_session_id,
+                "deepseek_tool_call_id": request.metadata.deepseek_tool_call_id,
+                "model_turn": request.metadata.aec_model_turn,
+                "tool": request.tool,
+                "arguments_sha256": _json_sha256(request.arguments),
+                "admitted_at": None,
+                "dispatched_at": None,
+                "cancellation_requested_at": occurred_at.isoformat() if cancelled else None,
+                "completed_at": occurred_at.isoformat(),
+                "result_sha256": None,
+                "error_code": _response_error_code(response),
+                "disposition": None,
+                "duplicate_of": None,
+                "outcome": "not-dispatched",
+                "stale_ignored": False,
+            }
+        )
+
+    def _append_duplicate_evidence(
+        self,
+        request: _ToolInvocationRequest,
+        request_id: str,
         response: dict[str, Any],
         *,
-        idempotent_replay: bool,
+        duplicate_of: str,
     ) -> None:
+        self._append_evidence(
+            {
+                "record_type": "duplicate",
+                "protocol": TOOL_GATEWAY_PROTOCOL,
+                "generation_id": self.generation_id,
+                "request_id": request_id,
+                "deepseek_session_id": request.metadata.deepseek_session_id,
+                "deepseek_tool_call_id": request.metadata.deepseek_tool_call_id,
+                "model_turn": request.metadata.aec_model_turn,
+                "tool": request.tool,
+                "arguments_sha256": _json_sha256(request.arguments),
+                "occurred_at": datetime.now(UTC).isoformat(),
+                "error_code": _response_error_code(response),
+                "duplicate_of": duplicate_of,
+            }
+        )
+
+    def _append_evidence(self, record: Mapping[str, Any], *, finalize: bool = False) -> None:
         self.evidence_path.parent.mkdir(parents=True, exist_ok=True)
-        record = {
-            "protocol": TOOL_GATEWAY_PROTOCOL,
-            "occurred_at": datetime.now(UTC).isoformat(),
-            "request_id": request.request_id,
-            "tool": request.tool,
-            "arguments_sha256": hashlib.sha256(
-                json.dumps(request.arguments, sort_keys=True, separators=(",", ":")).encode("utf-8")
-            ).hexdigest(),
-            "metadata": request.metadata.model_dump(mode="json"),
-            "response_status": response.get("status"),
-            "response_error_code": (
-                response.get("error", {}).get("code") if isinstance(response.get("error"), dict) else None
-            ),
-            "idempotent_replay": idempotent_replay,
-        }
-        with self.evidence_path.open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(record, sort_keys=True) + "\n")
-            stream.flush()
-            os.fsync(stream.fileno())
+        with self._evidence_lock:
+            if self._evidence_finalized:
+                return
+            with self.evidence_path.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps(record, sort_keys=True) + "\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            if finalize:
+                self._evidence_finalized = True
 
 
-def _tool_binding(name: str, tool: NativeTool) -> _ToolBinding:
-    if not name or name != getattr(tool, "__name__", None):
-        raise ValueError("tool gateway names must match stable callable names")
-    fields: dict[str, tuple[Any, Any]] = {}
-    type_hints = get_type_hints(tool)
-    for parameter in inspect.signature(tool).parameters.values():
-        if parameter.kind not in {parameter.POSITIONAL_OR_KEYWORD, parameter.KEYWORD_ONLY}:
-            raise ValueError(f"tool gateway does not support parameter kind for {name}.{parameter.name}")
-        annotation = type_hints.get(parameter.name)
-        if annotation is None:
-            raise ValueError(f"tool gateway requires an annotation for {name}.{parameter.name}")
-        default = ... if parameter.default is inspect.Parameter.empty else parameter.default
-        fields[parameter.name] = (annotation, default)
-    model_factory = cast(Any, create_model)
-    arguments_model = cast(
-        type[BaseModel],
-        model_factory(
-            f"{''.join(part.title() for part in name.split('_'))}Arguments",
-            __base__=StrictModel,
-            **fields,
-        ),
-    )
-    parameters = arguments_model.model_json_schema()
-    parameters.pop("title", None)
-    description = inspect.getdoc(tool) or name.replace("_", " ")
-    return _ToolBinding(
-        function=tool,
-        arguments_model=arguments_model,
-        manifest={"name": name, "description": description, "parameters": parameters},
-    )
+def _tool_bindings(tools: Sequence[NativeToolDefinition]) -> dict[str, _ToolBinding]:
+    bindings: dict[str, _ToolBinding] = {}
+    for definition in tools:
+        if not _TOOL_NAME.fullmatch(definition.name):
+            raise ValueError(f"invalid native tool name: {definition.name!r}")
+        if not definition.description.strip():
+            raise ValueError(f"native tool description must not be blank: {definition.name}")
+        if definition.name in bindings:
+            raise ValueError(f"duplicate native tool: {definition.name}")
+        try:
+            Draft202012Validator.check_schema(definition.parameters_schema)
+        except SchemaError as exc:
+            raise ValueError(f"invalid parameter schema for native tool {definition.name}: {exc.message}") from exc
+        schema = json.loads(json.dumps(definition.parameters_schema, sort_keys=True))
+        bindings[definition.name] = _ToolBinding(
+            definition=definition,
+            validator=Draft202012Validator(schema),
+            manifest={"name": definition.name, "description": definition.description, "parameters": schema},
+        )
+    return bindings
 
 
-def _request_fingerprint(request: _ToolRequest) -> str:
-    payload = request.model_dump(mode="json", exclude={"capability"})
-    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+def _trusted_request_id(metadata: _ToolMetadata) -> str:
+    return f"dsh:{metadata.deepseek_session_id}:{metadata.deepseek_tool_call_id}"
+
+
+def _request_fingerprint(request: _ToolInvocationRequest) -> str:
+    return _json_sha256(request.model_dump(mode="json", exclude={"capability"}))
+
+
+def _json_sha256(value: Any) -> str:
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _response_error_code(response: Mapping[str, Any]) -> str | None:
+    error = response.get("error")
+    return str(error.get("code")) if isinstance(error, dict) and error.get("code") is not None else None
 
 
 def _error_response(code: str, message: str) -> dict[str, Any]:

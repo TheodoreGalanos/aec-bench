@@ -9,6 +9,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from aec_bench.adapters.deepseek_harness.tool_gateway import (
+    NativeToolDefinition,
+    NativeToolResponse,
+)
 from aec_bench.adapters.local_registry import (
     available_local_adapters,
     build_local_adapter,
@@ -163,6 +167,13 @@ class TestBuildDeepSeekHarness:
         def submit_checkpoint(checkpoint_id: str) -> str:
             return checkpoint_id
 
+        definition = NativeToolDefinition(
+            name="submit_checkpoint",
+            description="Submit checkpoint",
+            parameters_schema={"type": "object"},
+            handler=lambda _invocation, _arguments: NativeToolResponse(result={"status": "complete"}),
+        )
+
         monkeypatch.setattr("aec_bench.adapters.deepseek_harness.DeepSeekHarnessAdapter", fake_adapter)
 
         build_local_adapter(
@@ -170,26 +181,31 @@ class TestBuildDeepSeekHarness:
             model_name="azure:test-deployment",
             workspace=str(tmp_path),
             native_tools=[submit_checkpoint],
+            native_tool_definitions=[definition],
         )
 
-        assert captured["native_tools"] == {"submit_checkpoint": submit_checkpoint}
+        assert captured["native_tools"] == (definition,)
 
     def test_build_deepseek_harness_rejects_duplicate_native_tool_names(self, tmp_path: Path) -> None:
-        def first(checkpoint_id: str) -> str:
-            return checkpoint_id
-
-        def second(checkpoint_id: str) -> str:
-            return checkpoint_id
-
-        first.__name__ = "submit_checkpoint"
-        second.__name__ = "submit_checkpoint"
+        first = NativeToolDefinition(
+            name="submit_checkpoint",
+            description="Submit checkpoint",
+            parameters_schema={"type": "object"},
+            handler=lambda _invocation, _arguments: NativeToolResponse(result={}),
+        )
+        second = NativeToolDefinition(
+            name="submit_checkpoint",
+            description="Submit checkpoint again",
+            parameters_schema={"type": "object"},
+            handler=lambda _invocation, _arguments: NativeToolResponse(result={}),
+        )
 
         with pytest.raises(ValueError, match="duplicate DeepSeek native tool"):
             build_local_adapter(
                 adapter_kind="deepseek_harness",
                 model_name="azure:test-deployment",
                 workspace=str(tmp_path),
-                native_tools=[first, second],
+                native_tool_definitions=[first, second],
             )
 
 

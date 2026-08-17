@@ -21,7 +21,10 @@ class Profile:
 PROFILES = {
     "base": Profile(None, ()),
     "execution": Profile("execution", ("harbor",)),
-    "deepseek-harness": Profile("deepseek-harness", ("deepseek_harness",)),
+    "deepseek-harness": Profile(
+        "deepseek-harness",
+        ("aec_bench.adapters.deepseek_harness", "deepseek_harness", "jsonschema"),
+    ),
     "morph": Profile("execution,morph", ("harbor", "morphcloud.api")),
     "local-agents": Profile(
         "local-agents",
@@ -55,6 +58,7 @@ OPTIONAL_BASE_MODULES = (
     "acp",
     "fastapi",
     "harbor",
+    "jsonschema",
     "morphcloud",
     "numpy",
     "pydantic_ai",

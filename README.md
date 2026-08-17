@@ -216,6 +216,14 @@ The baseline, native-tool, and explicit-commit modes are separate treatments:
 | Native tools | `@aec-bench/dsh-tools` with the exact AEC-owned tool manifest | The owning lifecycle or world runtime decides completion |
 | Explicit commit | `aec_commit_output` only | The task contract accepts and binds the exact output bytes |
 
+Native-tool availability does not create candidate output. The adapter needs a
+nonempty declared artifact, a nonempty assistant response, or an accepted and
+revalidated output commit. A lifecycle or world can still record its own valid
+episode outcome when the adapter remains partial because it has no candidate
+output. The native gateway derives request identity from the DeepSeek session
+and tool call, keeps that identity out of the model schema, and records an
+explicit quiescent or unsettled close result.
+
 Explicit commit is capability-gated. Set `output_completion_commit: true` only
 with a matching task-owned `output_completion_contract`. The current supported
 contract format is `markdown_final_fenced_json`, and its output path must be

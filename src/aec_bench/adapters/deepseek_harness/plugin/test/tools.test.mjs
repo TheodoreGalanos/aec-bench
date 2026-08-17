@@ -52,6 +52,7 @@ async function withEndpoint(response, action) {
   const directory = await mkdtemp(join(tmpdir(), 'aec-dsh-tools-test-'))
   const socketPath = join(directory, 'tools.sock')
   let request
+  const requests = []
   const server = createServer(client => {
     let payload = ''
     client.setEncoding('utf8')
@@ -59,7 +60,14 @@ async function withEndpoint(response, action) {
       payload += chunk
       if (!payload.includes('\n')) return
       request = JSON.parse(payload.slice(0, payload.indexOf('\n')))
-      if (response !== undefined) client.end(`${JSON.stringify(response)}\n`)
+      requests.push(request)
+      if (request.operation === 'cancel') {
+        client.end(`${JSON.stringify({
+          protocol: TOOL_GATEWAY_PROTOCOL,
+          status: 'ok',
+          result: { outcome: 'unknown' },
+        })}\n`)
+      } else if (response !== undefined) client.end(`${JSON.stringify(response)}\n`)
     })
   })
   await new Promise((resolve, reject) => {
@@ -67,7 +75,7 @@ async function withEndpoint(response, action) {
     server.listen(socketPath, resolve)
   })
   try {
-    await action({ socketPath, request: () => request })
+    await action({ socketPath, request: () => request, requests: () => requests })
   } finally {
     await new Promise(resolve => server.close(resolve))
     await rm(directory, { recursive: true, force: true })
@@ -86,22 +94,28 @@ function execution(concludeTurn) {
   }
 }
 
-test('terminal checkpoint submission concludes the DeepSeek turn', async () => {
-  const completed = { protocol: TOOL_GATEWAY_PROTOCOL, status: 'ok', result: { status: 'complete' } }
+test('generic conclude-turn disposition concludes for any tool name', async () => {
+  const completed = {
+    protocol: TOOL_GATEWAY_PROTOCOL,
+    status: 'ok',
+    result: { status: 'observed' },
+    disposition: 'conclude-turn',
+  }
   await withEndpoint(completed, async endpoint => {
     let conclusions = 0
     const tool = createGatewayTool(
-      { socketPath: endpoint.socketPath, capability: 'secret', tools: [submitTool] },
-      submitTool,
+      { socketPath: endpoint.socketPath, capability: 'secret', tools: [readTool] },
+      readTool,
     )
 
-    const result = await tool.execute({ checkpoint_id: 'decision' }, execution(() => { conclusions += 1 }))
+    const result = await tool.execute({ path: 'instruction.md' }, execution(() => { conclusions += 1 }))
 
-    assert.deepEqual(result, { status: 'complete' })
+    assert.deepEqual(result, { status: 'observed' })
     assert.equal(conclusions, 1)
-    assert.equal(endpoint.request().tool, 'submit_checkpoint')
-    assert.deepEqual(endpoint.request().arguments, { checkpoint_id: 'decision' })
-    assert.equal(endpoint.request().request_id, 'dsh:root-session:tool-2')
+    assert.equal(endpoint.request().tool, 'read_workspace_file')
+    assert.deepEqual(endpoint.request().arguments, { path: 'instruction.md' })
+    assert.equal(endpoint.request().operation, 'invoke')
+    assert.equal('request_id' in endpoint.request(), false)
   })
 })
 
@@ -116,7 +130,12 @@ test('world tool uses the supplied tuple schema and keeps the turn active', asyn
       additionalProperties: false,
     },
   }
-  const accepted = { protocol: TOOL_GATEWAY_PROTOCOL, status: 'ok', result: { status: 'accepted' } }
+  const accepted = {
+    protocol: TOOL_GATEWAY_PROTOCOL,
+    status: 'ok',
+    result: { status: 'accepted' },
+    disposition: 'continue',
+  }
   await withEndpoint(accepted, async endpoint => {
     let conclusions = 0
     const tool = createGatewayTool(
@@ -135,6 +154,26 @@ test('world tool uses the supplied tuple schema and keeps the turn active', asyn
   })
 })
 
+test('generic JSON result can be a scalar', async () => {
+  const completed = {
+    protocol: TOOL_GATEWAY_PROTOCOL,
+    status: 'ok',
+    result: 'observed',
+    disposition: 'continue',
+  }
+  await withEndpoint(completed, async endpoint => {
+    const tool = createGatewayTool(
+      { socketPath: endpoint.socketPath, capability: 'secret', tools: [readTool] },
+      readTool,
+    )
+
+    const result = await tool.execute({ path: 'instruction.md' }, execution(() => assert.fail('unexpected conclusion')))
+
+    assert.equal(result, 'observed')
+    assert.deepEqual(tool.output.schema, {})
+  })
+})
+
 test('cancellation closes an in-flight tool request', async () => {
   await withEndpoint(undefined, async endpoint => {
     const controller = new AbortController()
@@ -148,5 +187,6 @@ test('cancellation closes an in-flight tool request', async () => {
     controller.abort()
 
     await assert.rejects(pending, /cancelled/)
+    assert.equal(endpoint.requests().some(request => request.operation === 'cancel'), true)
   })
 })

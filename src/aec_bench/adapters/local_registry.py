@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from aec_bench.adapters.deepseek_harness.tool_gateway import NativeToolDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -398,29 +401,32 @@ def _build_deepseek_harness(
     model_name: str,
     workspace: str,
     native_tools: list[Callable[..., str]] | None = None,
+    native_tool_definitions: Sequence[NativeToolDefinition] | None = None,
     **_kwargs: Any,
 ) -> Any:
     """Build the official DeepSeek Harness adapter through its shared runtime."""
     from aec_bench.adapters.deepseek_harness import DeepSeekHarnessAdapter
     from aec_bench.adapters.deepseek_harness.config import DeepSeekHarnessSettings
+    from aec_bench.adapters.deepseek_harness.tool_gateway import NativeToolDefinition
 
     provider = model_name.partition(":")[0].strip().lower()
     settings = DeepSeekHarnessSettings.from_execution_payload(
         model_name=model_name,
         payload={"provider": provider},
     )
-    tool_gateway: dict[str, Callable[..., str]] = {}
-    for tool in native_tools or []:
-        name = getattr(tool, "__name__", "")
-        if not name:
-            raise ValueError("DeepSeek native tools must have a stable callable name")
-        if name in tool_gateway:
-            raise ValueError(f"duplicate DeepSeek native tool: {name}")
-        tool_gateway[name] = tool
+    definitions = tuple(native_tool_definitions or ())
+    if native_tools and not definitions:
+        raise ValueError("DeepSeek native tools require explicit NativeToolDefinition values")
+    if not all(isinstance(definition, NativeToolDefinition) for definition in definitions):
+        raise TypeError("DeepSeek native tool definitions must be NativeToolDefinition values")
+    names = [definition.name for definition in definitions]
+    if len(names) != len(set(names)):
+        duplicate = next(name for name in names if names.count(name) > 1)
+        raise ValueError(f"duplicate DeepSeek native tool: {duplicate}")
     return DeepSeekHarnessAdapter(
         settings=settings,
         workspace=workspace,
-        native_tools=tool_gateway,
+        native_tools=definitions,
     )
 
 

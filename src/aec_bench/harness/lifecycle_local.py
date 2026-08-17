@@ -10,7 +10,9 @@ import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
+
+from pydantic import JsonValue
 
 from aec_bench.adapters.base import AdapterRequest
 from aec_bench.adapters.deepseek_harness.config import DEFAULT_TIMEOUT_SECONDS
@@ -53,6 +55,9 @@ from aec_bench.lifecycles.runtime.operation_protocol import (
     LifecycleOperationResolver,
 )
 from aec_bench.trajectory.writer import TrajectoryWriter
+
+if TYPE_CHECKING:
+    from aec_bench.adapters.deepseek_harness.tool_gateway import NativeToolDefinition, NativeToolDisposition
 
 DEFAULT_DEEPSEEK_LIFECYCLE_MAX_TOKENS = 8192
 
@@ -315,6 +320,117 @@ class EvidenceLifecycleWorkspaceTool:
         return bool(parts[1] == state["active_checkpoint_id"])
 
 
+def _deepseek_lifecycle_tool_definitions(
+    *,
+    control: EvidenceLifecycleControlTool,
+    workspace: EvidenceLifecycleWorkspaceTool,
+    supports_evidence_requests: bool,
+    supports_lifecycle_operations: bool,
+    include_completion_tools: bool,
+) -> tuple[NativeToolDefinition, ...]:
+    from aec_bench.adapters.deepseek_harness.tool_gateway import json_native_tool_definition
+
+    definitions = [
+        json_native_tool_definition(
+            name="list_workspace",
+            description="List one visible lifecycle workspace directory.",
+            parameters_schema=_tool_parameters({"path": {"type": "string", "default": "."}}),
+            function=workspace.list_workspace,
+        ),
+        json_native_tool_definition(
+            name="read_workspace_file",
+            description="Read one released or persisted lifecycle workspace file.",
+            parameters_schema=_tool_parameters({"path": {"type": "string"}}, required=("path",)),
+            function=workspace.read_workspace_file,
+        ),
+        json_native_tool_definition(
+            name="write_checkpoint_submission",
+            description="Write the active checkpoint JSON submission.",
+            parameters_schema=_tool_parameters(
+                {"checkpoint_id": {"type": "string"}, "content": {"type": "string"}},
+                required=("checkpoint_id", "content"),
+            ),
+            function=workspace.write_checkpoint_submission,
+        ),
+    ]
+    if supports_evidence_requests:
+        definitions.append(
+            json_native_tool_definition(
+                name="request_evidence",
+                description="Request one declared evidence packet within the active checkpoint budget.",
+                parameters_schema=_tool_parameters(
+                    {"checkpoint_id": {"type": "string"}, "reason": {"type": "string"}},
+                    required=("checkpoint_id", "reason"),
+                ),
+                function=control.request_evidence,
+                trusted_request_argument="request_id",
+            )
+        )
+    if supports_lifecycle_operations:
+        definitions.append(
+            json_native_tool_definition(
+                name="execute_operation",
+                description="Execute one declared operation against the current visible source state.",
+                parameters_schema=_tool_parameters(
+                    {
+                        "checkpoint_id": {"type": "string"},
+                        "operation_id": {"type": "string"},
+                        "visible_source_state_sha256": {"type": "string"},
+                        "reason": {"type": "string"},
+                    },
+                    required=("checkpoint_id", "operation_id", "visible_source_state_sha256", "reason"),
+                ),
+                function=control.execute_operation,
+            )
+        )
+    if include_completion_tools:
+        definitions.extend(
+            (
+                json_native_tool_definition(
+                    name="submit_checkpoint",
+                    description="Archive the active checkpoint and release the next evidence packet.",
+                    parameters_schema=_tool_parameters(
+                        {"checkpoint_id": {"type": "string"}},
+                        required=("checkpoint_id",),
+                    ),
+                    function=control.submit_checkpoint,
+                    disposition=_checkpoint_disposition,
+                ),
+                json_native_tool_definition(
+                    name="revisit_checkpoint",
+                    description="Inspect and log an immutable prior checkpoint without rewinding the run.",
+                    parameters_schema=_tool_parameters(
+                        {"checkpoint_id": {"type": "string"}, "reason": {"type": "string"}},
+                        required=("checkpoint_id", "reason"),
+                    ),
+                    function=control.revisit_checkpoint,
+                ),
+            )
+        )
+    return tuple(definitions)
+
+
+def _checkpoint_disposition(result: JsonValue) -> NativeToolDisposition:
+    from aec_bench.adapters.deepseek_harness.tool_gateway import NativeToolDisposition
+
+    if isinstance(result, dict) and result.get("status") == "complete":
+        return NativeToolDisposition.CONCLUDE_TURN
+    return NativeToolDisposition.CONTINUE
+
+
+def _tool_parameters(
+    properties: dict[str, Any],
+    *,
+    required: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(required),
+        "additionalProperties": False,
+    }
+
+
 def run_local_evidence_lifecycle_session(
     *,
     package_dir: Path,
@@ -450,6 +566,17 @@ def run_local_evidence_lifecycle_session(
             workspace=initial["workspace"],
             trajectory_writer=trajectory_writer,
             native_tools=native_tools,
+            native_tool_definitions=(
+                _deepseek_lifecycle_tool_definitions(
+                    control=control,
+                    workspace=workspace_tool,
+                    supports_evidence_requests=supports_evidence_requests,
+                    supports_lifecycle_operations=supports_lifecycle_operations,
+                    include_completion_tools=True,
+                )
+                if adapter_kind == "deepseek_harness"
+                else None
+            ),
             enable_bash=False,
         )
         result = adapter.execute(
@@ -536,15 +663,22 @@ def run_local_evidence_lifecycle_session(
         adapter_kind=adapter_kind,
         request_configuration=request_configuration,
     )
+    lifecycle = read_evidence_lifecycle_state(package, run, operation_resolver=operation_resolver)
     returned_failure = (
         "adapter_identity_mismatch"
         if require_adapter_identity_match and agent_result["adapter_name"] != adapter_kind
         else _adapter_failure_kind(result)
     )
+    if (
+        adapter_kind == "deepseek_harness"
+        and returned_failure == "missing_output"
+        and _enum_value(result.agent_output.status) == "partial"
+        and lifecycle["status"] == "complete"
+    ):
+        returned_failure = None
     if returned_failure is not None:
         agent_result["status"] = "failed"
         agent_result["failure_kind"] = returned_failure
-    lifecycle = read_evidence_lifecycle_state(package, run, operation_resolver=operation_resolver)
     if returned_failure is not None and lifecycle["active_checkpoint_id"] is not None:
         fail_checkpoint_attempt(
             package,
@@ -980,6 +1114,17 @@ class LocalEvidenceLifecycleEpisodeEnvironment:
                 workspace=request.workspace,
                 trajectory_writer=trajectory_writer,
                 native_tools=native_tools,
+                native_tool_definitions=(
+                    _deepseek_lifecycle_tool_definitions(
+                        control=control,
+                        workspace=workspace_tool,
+                        supports_evidence_requests=supports_evidence_requests,
+                        supports_lifecycle_operations=supports_lifecycle_operations,
+                        include_completion_tools=False,
+                    )
+                    if self.adapter_kind == "deepseek_harness"
+                    else None
+                ),
                 enable_bash=False,
             )
             adapter_result = adapter.execute(
