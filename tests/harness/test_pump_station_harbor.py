@@ -14,6 +14,7 @@ import pytest
 from harbor.models.trial.config import TrialConfig  # type: ignore[import-untyped]
 
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
+from aec_bench.adapters.deepseek_harness.native_world_tools import WORLD_OBSERVE_TOOL_NAME
 from aec_bench.adapters.deepseek_harness.tool_gateway import (
     NativeCancellation,
     NativeToolInvocation,
@@ -45,6 +46,7 @@ from aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition i
 )
 from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import (
     PUMP_STATION_TASK_WORLD_ID,
+    PumpStationEpisodeHost,
 )
 from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
@@ -206,8 +208,8 @@ def test_deepseek_model_session_receives_only_actor_tools_and_token_limits(tmp_p
 
         def execute(self, request: AdapterRequest) -> AdapterResult:
             captured["request"] = request
-            observation = self._definitions["observe_pump_station"].handler(
-                _native_invocation("dsh:session-1:observe-1", "observe_pump_station"),
+            observation = self._definitions[WORLD_OBSERVE_TOOL_NAME].handler(
+                _native_invocation("dsh:session-1:observe-1", WORLD_OBSERVE_TOOL_NAME),
                 {},
             )
             captured["observation"] = observation.result
@@ -247,18 +249,18 @@ def test_deepseek_model_session_receives_only_actor_tools_and_token_limits(tmp_p
     assert isinstance(builder, dict)
     assert builder["adapter_kind"] == "deepseek_harness"
     assert builder["enable_bash"] is False
-    native_tools = builder["native_tools"]
-    assert isinstance(native_tools, tuple)
-    assert tuple(tool.__name__ for tool in native_tools) == (
-        "observe_pump_station",
-        *PUMP_STATION_ACTOR_ACTION_NAMES,
-    )
+    assert builder["native_tools"] is None
     native_tool_definitions = builder["native_tool_definitions"]
     assert isinstance(native_tool_definitions, tuple)
     assert tuple(definition.name for definition in native_tool_definitions) == (
-        "observe_pump_station",
-        *PUMP_STATION_ACTOR_ACTION_NAMES,
+        WORLD_OBSERVE_TOOL_NAME,
+        *sorted(PUMP_STATION_ACTOR_ACTION_NAMES),
     )
+    catalogue = PumpStationEpisodeHost(tmp_path / "catalogue-host").capabilities()
+    catalogue_schemas = {action.name: action.input_schema for action in catalogue.actions}
+    assert {
+        definition.name: definition.parameters_schema for definition in native_tool_definitions[1:]
+    } == catalogue_schemas
     assert all("request_id" not in definition.parameters_schema["properties"] for definition in native_tool_definitions)
     assert all(
         definition.request_semantics is NativeToolRequestSemantics.HANDLER_AUTHORITY
@@ -275,18 +277,98 @@ def test_deepseek_model_session_receives_only_actor_tools_and_token_limits(tmp_p
     assert evidence["limits"] == {"max_tokens": 4096, "timeout_sec": 600}
     inventory = json.loads((completed.output_dir / "artifact-inventory.json").read_text(encoding="utf-8"))
     assert inventory["controller_id"] == "gpt-4.1-mini-standard"
-    assert "actor-invocation-evidence.jsonl" in {artifact["path"] for artifact in inventory["artifacts"]}
+    inventory_paths = {artifact["path"] for artifact in inventory["artifacts"]}
+    assert "actor-invocation-evidence.jsonl" in inventory_paths
+    assert "native-world-tool-surface.json" in inventory_paths
     authority_record = completed.adapter_result.configuration_record["actor_invocation_authority"]
     assert authority_record["actor_principal_id"] == "actor.deepseek-world"
     assert authority_record["max_world_actions"] == 90
     assert authority_record["world_action_count"] == 0
     assert authority_record["close"]["complete"] is True
+    surface_record = json.loads((completed.output_dir / "native-world-tool-surface.json").read_text(encoding="utf-8"))
+    assert surface_record["catalogue_sha256"] == authority_record["catalogue_sha256"]
+    assert surface_record["action_mapping"] == [
+        {"catalogue_action": action_name, "public_tool": action_name}
+        for action_name in sorted(PUMP_STATION_ACTOR_ACTION_NAMES)
+    ]
+    assert completed.adapter_result.configuration_record["native_world_tools"] == {
+        "catalogue_sha256": surface_record["catalogue_sha256"],
+        "public_tool_surface_sha256": surface_record["public_tool_surface_sha256"],
+        "evidence_path": "native-world-tool-surface.json",
+        "presentation_mode": "deepseek-native",
+    }
     actor_evidence = [
         json.loads(line)
         for line in (completed.output_dir / "actor-invocation-evidence.jsonl").read_text(encoding="utf-8").splitlines()
     ]
-    assert [record["record_type"] for record in actor_evidence] == ["header", "observe", "close"]
+    assert [record["record_type"] for record in actor_evidence] == [
+        "header",
+        "capabilities",
+        "capabilities",
+        "observe",
+        "close",
+    ]
     assert "Do not stop only because one action was accepted" in request.instruction
+
+
+def test_tool_loop_model_session_uses_catalogue_compiled_pydantic_tools(tmp_path: Path) -> None:
+    exported = export_pump_station_harbor_task(
+        tmp_path / "task",
+        project_root=PROJECT_ROOT,
+        profile_ref=pump_station_continual_world_definition().profiles[0],
+    )
+    bridge = load_pump_station_harbor_bridge(exported.task_dir / "environment")
+    captured: dict[str, object] = {}
+
+    class FakeAdapter:
+        def execute(self, request: AdapterRequest) -> AdapterResult:
+            captured["request"] = request
+            return AdapterResult(
+                adapter_name="tool_loop",
+                resolved_model="gpt-4.1-mini-standard",
+                configuration_record=dict(request.configuration),
+                agent_output=AgentOutput(
+                    status=AgentOutputStatus.COMPLETED,
+                    output_path=request.output_path,
+                    output_format=request.output_format,
+                ),
+                transcript=[],
+                turns_used=1,
+                raw_output_text="Observed no action requirement.",
+                usage_model_calls=1,
+            )
+
+    def build_adapter(**kwargs: object) -> FakeAdapter:
+        captured["builder"] = kwargs
+        return FakeAdapter()
+
+    run_pump_station_model_session(
+        bridge=bridge,
+        output_dir=tmp_path / "world-session",
+        session_identity="tool-loop-world",
+        model="azure:gpt-4.1-mini-standard",
+        adapter_kind="tool_loop",
+        max_turns=4,
+        adapter_builder=build_adapter,
+    )
+
+    builder = captured["builder"]
+    assert isinstance(builder, dict)
+    assert builder["native_tool_definitions"] is None
+    native_tools = builder["native_tools"]
+    assert isinstance(native_tools, tuple)
+    assert tuple(tool.name for tool in native_tools) == (
+        WORLD_OBSERVE_TOOL_NAME,
+        *sorted(PUMP_STATION_ACTOR_ACTION_NAMES),
+    )
+    catalogue = PumpStationEpisodeHost(tmp_path / "catalogue-host").capabilities()
+    assert {tool.name: tool.function_schema.json_schema for tool in native_tools[1:]} == {
+        action.name: action.input_schema for action in catalogue.actions
+    }
+    assert all("request_id" not in tool.function_schema.json_schema.get("properties", {}) for tool in native_tools)
+    request = captured["request"]
+    assert isinstance(request, AdapterRequest)
+    assert request.configuration == {"max_turns": 4}
 
 
 def test_model_journey_shares_actor_authority_across_segments_and_stops_at_budget(tmp_path: Path) -> None:
@@ -305,6 +387,10 @@ def test_model_journey_shares_actor_authority_across_segments_and_stops_at_budge
 
         def execute(self, request: AdapterRequest) -> AdapterResult:
             if self._segment_index == 0:
+                observation = self._definitions[WORLD_OBSERVE_TOOL_NAME].handler(
+                    _native_invocation("dsh:session-1:observe-before-actions", WORLD_OBSERVE_TOOL_NAME),
+                    {},
+                )
                 verification = self._definitions["request_post_maintenance_verification"].handler(
                     _native_invocation("dsh:session-1:verification-a", "request_post_maintenance_verification"),
                     {
@@ -317,6 +403,7 @@ def test_model_journey_shares_actor_authority_across_segments_and_stops_at_budge
                     _native_invocation("dsh:session-1:continue-to-verification", "continue_operation"),
                     {"reason": "Advance to the next declared decision event."},
                 )
+                assert isinstance(observation.result, dict)
                 assert isinstance(verification.result, dict)
                 assert isinstance(continued.result, dict)
                 assert verification.result["status"] == "applied"

@@ -6,19 +6,23 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
-
-from pydantic import JsonValue
+from typing import Any, cast
 
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
-from aec_bench.adapters.deepseek_harness.native_world_tools import NativeWorldToolTransport
+from aec_bench.adapters.deepseek_harness.native_world_tools import (
+    WORLD_OBSERVE_DESCRIPTION,
+    WORLD_OBSERVE_TOOL_NAME,
+    compile_world_native_tools,
+    native_world_tool_surface_record,
+)
 from aec_bench.adapters.local_registry import build_local_adapter
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.task_definition import ToolSpec
-from aec_bench.contracts.world_interface import WorldActorActionRequest
+from aec_bench.contracts.world_interface import WorldActorActionRequest, WorldActorCapabilityCatalogue
 from aec_bench.contracts.world_session import (
     StewardshipStateSnapshotRef,
     WorldSessionExecutionKind,
@@ -73,9 +77,6 @@ from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository i
     PumpStationWorldRunRepository,
 )
 
-if TYPE_CHECKING:
-    from aec_bench.adapters.deepseek_harness.tool_gateway import NativeToolDefinition
-
 PUMP_STATION_MODEL_CONTROLLER_MODE = "model"
 PUMP_STATION_MODEL_MAX_TURNS = 90
 PUMP_STATION_MODEL_MAX_TOKENS = 8192
@@ -109,332 +110,61 @@ class CompletedPumpStationModelSession:
     host_control_count: int
 
 
-class _PumpStationActorTools:
-    """Translate provider-native tool calls into the one installed actor boundary."""
+def _world_tool_specs(catalogue: WorldActorCapabilityCatalogue) -> tuple[ToolSpec, ...]:
+    return (
+        ToolSpec(name=WORLD_OBSERVE_TOOL_NAME, source="builtin", description=WORLD_OBSERVE_DESCRIPTION),
+        *(
+            ToolSpec(name=action.name, source="builtin", description=action.description)
+            for action in sorted(catalogue.actions, key=lambda action: action.name)
+        ),
+    )
 
-    def __init__(self, authority: ActorInvocationAuthority) -> None:
-        self._authority = authority
-        self._native_world_transport = NativeWorldToolTransport(authority)
 
-    @property
-    def tool_specs(self) -> tuple[ToolSpec, ...]:
-        methods = self.native_tools
-        return tuple(
-            ToolSpec(
-                name=method.__name__,
-                source="builtin",
-                description=method.__doc__ or method.__name__.replace("_", " "),
-            )
-            for method in methods
-        )
+def _compile_tool_loop_world_tools(
+    authority: ActorInvocationAuthority,
+    catalogue: WorldActorCapabilityCatalogue,
+) -> tuple[Any, ...]:
+    """Compile the frozen catalogue into explicit PydanticAI tools."""
+    from pydantic_ai import Tool
 
-    @property
-    def native_tools(self) -> tuple[Callable[..., str], ...]:
-        return (
-            self.observe_pump_station,
-            self.continue_operation,
-            self.request_duty_assignment,
-            self.request_inspection,
-            self.request_obstruction_clearance,
-            self.request_functional_check,
-            self.request_provisional_return,
-            self.request_provisional_closure,
-            self.request_post_maintenance_verification,
-            self.resume_process,
-            self.cancel_process,
-            self.request_dependency_waiver,
-            self.request_condition_check,
-            self.search_evidence,
-            self.fetch_evidence,
-        )
-
-    @property
-    def native_tool_definitions(self) -> tuple[NativeToolDefinition, ...]:
-        """Return explicit DeepSeek schemas with infrastructure-owned request identity."""
-        string = {"type": "string"}
-        nullable_string = {"anyOf": [{"type": "string"}, {"type": "null"}]}
-        return (
-            self._definition("observe_pump_station", self.observe_pump_station, {}),
-            self._definition("continue_operation", self.continue_operation, {"reason": string}, ("reason",)),
-            self._definition(
-                "request_duty_assignment",
-                self.request_duty_assignment,
-                {
-                    "reason": string,
-                    "ordered_pump_ids": {"type": "array", "items": string},
-                    "source_outage_id": nullable_string,
-                    "source_backlog_item_id": nullable_string,
-                },
-                ("reason", "ordered_pump_ids"),
-            ),
-            self._definition(
-                "request_inspection",
-                self.request_inspection,
-                {"reason": string, "pump_id": string, "backlog_item_id": string},
-                ("reason", "pump_id", "backlog_item_id"),
-            ),
-            self._definition(
-                "request_obstruction_clearance",
-                self.request_obstruction_clearance,
-                {
-                    "reason": string,
-                    "pump_id": string,
-                    "backlog_item_id": string,
-                    "inspection_evidence_id": string,
-                },
-                ("reason", "pump_id", "backlog_item_id", "inspection_evidence_id"),
-            ),
-            self._definition(
-                "request_functional_check",
-                self.request_functional_check,
-                {"reason": string, "pump_id": string, "backlog_item_id": string},
-                ("reason", "pump_id", "backlog_item_id"),
-            ),
-            self._definition(
-                "request_provisional_return",
-                self.request_provisional_return,
-                {"reason": string, "pump_id": string, "functional_check_evidence_id": string},
-                ("reason", "pump_id", "functional_check_evidence_id"),
-            ),
-            self._definition(
-                "request_provisional_closure",
-                self.request_provisional_closure,
-                {"reason": string, "work_order_id": string},
-                ("reason", "work_order_id"),
-            ),
-            self._definition(
-                "request_post_maintenance_verification",
-                self.request_post_maintenance_verification,
-                {"reason": string, "pump_id": string, "backlog_item_id": string},
-                ("reason", "pump_id", "backlog_item_id"),
-            ),
-            self._definition(
-                "resume_process",
-                self.resume_process,
-                {"reason": string, "process_id": string},
-                ("reason", "process_id"),
-            ),
-            self._definition(
-                "cancel_process",
-                self.cancel_process,
-                {"reason": string, "process_id": string},
-                ("reason", "process_id"),
-            ),
-            self._definition(
-                "request_dependency_waiver",
-                self.request_dependency_waiver,
-                {"reason": string, "process_id": string, "dependency_id": string, "evidence_id": string},
-                ("reason", "process_id", "dependency_id", "evidence_id"),
-            ),
-            self._definition(
-                "request_condition_check",
-                self.request_condition_check,
-                {"reason": string, "pump_id": string},
-                ("reason", "pump_id"),
-            ),
-            self._definition(
-                "search_evidence",
-                self.search_evidence,
-                {
-                    "query": string,
-                    "scope": {"type": "string", "default": "all"},
-                    "limit": {"type": "integer", "default": 5},
-                },
-                ("query",),
-            ),
-            self._definition(
-                "fetch_evidence",
-                self.fetch_evidence,
-                {"reference": string},
-                ("reference",),
-            ),
-        )
-
-    def _definition(
-        self,
-        name: str,
-        function: Callable[..., str],
-        properties: dict[str, Any],
-        required: tuple[str, ...] = (),
-    ) -> NativeToolDefinition:
-        parameters_schema = {
-            "type": "object",
-            "properties": properties,
-            "required": list(required),
-            "additionalProperties": False,
-        }
-        definition_factory = (
-            self._native_world_transport.observation_definition
-            if name == "observe_pump_station"
-            else self._native_world_transport.action_definition
-        )
-        return definition_factory(
-            name=name,
-            description=function.__doc__ or name.replace("_", " "),
-            parameters_schema=parameters_schema,
-        )
-
-    def observe_pump_station(self) -> str:
-        """Read the complete current actor view without latent or future state."""
-        observation = self._authority.observe(correlation=ActorCorrelation())
+    def observe() -> str:
+        observation = authority.observe(correlation=ActorCorrelation())
         return json.dumps(observation.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
-    def _invoke(self, request_id: str, action_name: str, arguments: dict[str, JsonValue]) -> str:
-        outcome = self._authority.invoke_current(
-            request_id=request_id,
-            action_name=action_name,
-            arguments=arguments,
-            transport=_PUMP_STATION_TOOL_LOOP_TRANSPORT,
-            correlation=ActorCorrelation(transport_request_id=request_id),
+    def action_handler(action_name: str) -> Callable[..., str]:
+        def invoke(**arguments: Any) -> str:
+            request_id = f"tool-loop:{uuid.uuid4().hex}"
+            outcome = authority.invoke_current(
+                request_id=request_id,
+                action_name=action_name,
+                arguments=arguments,
+                transport=_PUMP_STATION_TOOL_LOOP_TRANSPORT,
+                correlation=ActorCorrelation(transport_request_id=request_id),
+            )
+            return json.dumps(outcome.result.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+
+        return invoke
+
+    tools: list[Any] = [
+        Tool.from_schema(
+            observe,
+            name=WORLD_OBSERVE_TOOL_NAME,
+            description=WORLD_OBSERVE_DESCRIPTION,
+            json_schema={"type": "object", "properties": {}, "additionalProperties": False},
+            sequential=True,
         )
-        return json.dumps(outcome.result.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
-
-    def continue_operation(self, request_id: str, reason: str) -> str:
-        """Continue the permitted operating mode to the next declared decision event."""
-        return self._invoke(request_id, "continue_operation", {"reason": reason})
-
-    def request_duty_assignment(
-        self,
-        request_id: str,
-        reason: str,
-        ordered_pump_ids: tuple[str, ...],
-        source_outage_id: str | None = None,
-        source_backlog_item_id: str | None = None,
-    ) -> str:
-        """Request an ordered assignment of eligible pumps to declared service."""
-        arguments: dict[str, JsonValue] = {
-            "reason": reason,
-            "ordered_pump_ids": list(ordered_pump_ids),
-        }
-        if source_outage_id is not None:
-            arguments["source_outage_id"] = source_outage_id
-        if source_backlog_item_id is not None:
-            arguments["source_backlog_item_id"] = source_backlog_item_id
-        return self._invoke(request_id, "request_duty_assignment", arguments)
-
-    def request_inspection(self, request_id: str, reason: str, pump_id: str, backlog_item_id: str) -> str:
-        """Request a scheduled inspection of one named pump."""
-        return self._invoke(
-            request_id,
-            "request_inspection",
-            {"reason": reason, "pump_id": pump_id, "backlog_item_id": backlog_item_id},
+    ]
+    tools.extend(
+        Tool.from_schema(
+            action_handler(action.name),
+            name=action.name,
+            description=action.description,
+            json_schema=action.input_schema,
+            sequential=True,
         )
-
-    def request_obstruction_clearance(
-        self,
-        request_id: str,
-        reason: str,
-        pump_id: str,
-        backlog_item_id: str,
-        inspection_evidence_id: str,
-    ) -> str:
-        """Request clearance against named inspection evidence."""
-        return self._invoke(
-            request_id,
-            "request_obstruction_clearance",
-            {
-                "reason": reason,
-                "pump_id": pump_id,
-                "backlog_item_id": backlog_item_id,
-                "inspection_evidence_id": inspection_evidence_id,
-            },
-        )
-
-    def request_functional_check(self, request_id: str, reason: str, pump_id: str, backlog_item_id: str) -> str:
-        """Request one controlled functional check for a named pump."""
-        return self._invoke(
-            request_id,
-            "request_functional_check",
-            {"reason": reason, "pump_id": pump_id, "backlog_item_id": backlog_item_id},
-        )
-
-    def request_provisional_return(
-        self,
-        request_id: str,
-        reason: str,
-        pump_id: str,
-        functional_check_evidence_id: str,
-    ) -> str:
-        """Request return against accepted functional-check evidence."""
-        return self._invoke(
-            request_id,
-            "request_provisional_return",
-            {
-                "reason": reason,
-                "pump_id": pump_id,
-                "functional_check_evidence_id": functional_check_evidence_id,
-            },
-        )
-
-    def request_provisional_closure(self, request_id: str, reason: str, work_order_id: str) -> str:
-        """Request administrative closure while operational duties remain open."""
-        return self._invoke(
-            request_id,
-            "request_provisional_closure",
-            {"reason": reason, "work_order_id": work_order_id},
-        )
-
-    def request_post_maintenance_verification(
-        self,
-        request_id: str,
-        reason: str,
-        pump_id: str,
-        backlog_item_id: str,
-    ) -> str:
-        """Request independent post-maintenance verification."""
-        return self._invoke(
-            request_id,
-            "request_post_maintenance_verification",
-            {"reason": reason, "pump_id": pump_id, "backlog_item_id": backlog_item_id},
-        )
-
-    def resume_process(self, request_id: str, reason: str, process_id: str) -> str:
-        """Resume blocked or suspended work after dependency checks."""
-        return self._invoke(request_id, "resume_process", {"reason": reason, "process_id": process_id})
-
-    def cancel_process(self, request_id: str, reason: str, process_id: str) -> str:
-        """Cancel live work and release unused reservations."""
-        return self._invoke(request_id, "cancel_process", {"reason": reason, "process_id": process_id})
-
-    def request_dependency_waiver(
-        self,
-        request_id: str,
-        reason: str,
-        process_id: str,
-        dependency_id: str,
-        evidence_id: str,
-    ) -> str:
-        """Request one narrow dependency waiver with named evidence."""
-        return self._invoke(
-            request_id,
-            "request_dependency_waiver",
-            {
-                "reason": reason,
-                "process_id": process_id,
-                "dependency_id": dependency_id,
-                "evidence_id": evidence_id,
-            },
-        )
-
-    def request_condition_check(self, request_id: str, reason: str, pump_id: str) -> str:
-        """Request one sensor-based condition check for a named pump."""
-        return self._invoke(
-            request_id,
-            "request_condition_check",
-            {"reason": reason, "pump_id": pump_id},
-        )
-
-    def search_evidence(self, request_id: str, query: str, scope: str = "all", limit: int = 5) -> str:
-        """Search the documentary evidence available to this actor now."""
-        return self._invoke(
-            request_id,
-            "search_evidence",
-            {"query": query, "scope": scope, "limit": limit},
-        )
-
-    def fetch_evidence(self, request_id: str, reference: str) -> str:
-        """Fetch content through an opaque reference from an earlier search."""
-        return self._invoke(request_id, "fetch_evidence", {"reference": reference})
+        for action in sorted(catalogue.actions, key=lambda action: action.name)
+    )
+    return tuple(tools)
 
 
 def run_pump_station_reference_session(
@@ -549,25 +279,46 @@ def run_pump_station_model_session(
     authority.start()
     trajectory = TrajectoryWriter(path=str(destination / "trajectory.jsonl"))
     adapter_results: list[AdapterResult] = []
+    native_world_surface: dict[str, Any] | None = None
     host_control_count = 0
     journey_status = PumpStationJourneyStatus.ACTIVE
     stop_reason = "max-segments"
     authority_close_report: AuthorityCloseReport | None = None
     try:
+        catalogue = authority.capabilities(correlation=ActorCorrelation())
+        if tuple(action.name for action in catalogue.actions) != bridge.allowed_tools:
+            raise ValueError("pump-station bridge tools differ from the frozen actor catalogue")
+        tool_specs = _world_tool_specs(catalogue)
         resolved_builder = adapter_builder or build_local_adapter
         control = PumpStationWorldControl(
             repository_root,
             authorised_principal_ids=(PUMP_STATION_OPERATIONS_AUTHORITY_ID,),
         )
         for _segment_index in range(_PUMP_STATION_MODEL_MAX_SEGMENTS):
-            tools = _PumpStationActorTools(authority)
+            if adapter_kind == "deepseek_harness":
+                native_tool_definitions = compile_world_native_tools(authority=authority, catalogue=catalogue)
+                segment_surface = native_world_tool_surface_record(
+                    catalogue=catalogue,
+                    definitions=native_tool_definitions,
+                )
+                if native_world_surface is None:
+                    native_world_surface = segment_surface
+                    _write_json(destination / "native-world-tool-surface.json", native_world_surface)
+                elif (
+                    segment_surface["public_tool_surface_sha256"] != native_world_surface["public_tool_surface_sha256"]
+                ):
+                    raise RuntimeError("DeepSeek native world tool surface changed between model segments")
+                native_tools = None
+            else:
+                native_tool_definitions = None
+                native_tools = _compile_tool_loop_world_tools(authority, catalogue)
             adapter = resolved_builder(
                 adapter_kind=adapter_kind,
                 model_name=model_name,
                 workspace=str(destination),
                 trajectory_writer=trajectory,
-                native_tools=tools.native_tools,
-                native_tool_definitions=(tools.native_tool_definitions if adapter_kind == "deepseek_harness" else None),
+                native_tools=native_tools,
+                native_tool_definitions=native_tool_definitions,
                 enable_bash=False,
             )
             segment_result = adapter.execute(
@@ -577,7 +328,7 @@ def run_pump_station_model_session(
                         "You are the accountable wastewater pump-station steward. Do not infer latent state, hidden "
                         "events, another branch, verifier expectations, or a prescribed action sequence."
                     ),
-                    tools=list(tools.tool_specs),
+                    tools=list(tool_specs),
                     configuration=request_configuration,
                     output_path=str(destination / "output.md"),
                     output_format="markdown",
@@ -642,6 +393,13 @@ def run_pump_station_model_session(
             "closed_at": authority_close_report.closed_at.isoformat(),
         },
     }
+    if native_world_surface is not None:
+        adapter_configuration["native_world_tools"] = {
+            "catalogue_sha256": native_world_surface["catalogue_sha256"],
+            "public_tool_surface_sha256": native_world_surface["public_tool_surface_sha256"],
+            "evidence_path": "native-world-tool-surface.json",
+            "presentation_mode": "deepseek-native",
+        }
     adapter_result = replace(adapter_result, configuration_record=adapter_configuration)
     repository = PumpStationWorldRunRepository(repository_root)
     end = repository.current_snapshot()

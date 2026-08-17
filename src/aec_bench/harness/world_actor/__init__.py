@@ -15,6 +15,8 @@ from aec_bench.harness.world_actor.authority import (
     ActorTurnDisposition,
     AuthorityCloseReport,
     WorldActorHost,
+    actor_catalogue_sha256,
+    canonical_actor_catalogue,
 )
 from aec_bench.harness.world_actor.client_bundle import (
     InstalledClient,
@@ -58,5 +60,7 @@ __all__ = [
     "WorldActorEndpointError",
     "WorldActorEndpointLifecycle",
     "WorldActorHost",
+    "actor_catalogue_sha256",
+    "canonical_actor_catalogue",
     "install_world_actor_client",
 ]
