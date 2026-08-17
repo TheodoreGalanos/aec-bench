@@ -1,0 +1,103 @@
+{
+  "schema": "aec-bench/deepseek-qualification/1",
+  "matrix_id": "deepseek-harness-0.1.0rc6-initial",
+  "qualification_date": "2026-08-17",
+  "aec_bench_version": "0.1.0",
+  "aec_bench_revision": "60aea77ed8768ab20725bac536ce2b0cc9a51898",
+  "rows": [
+    {
+      "provider_route": "azure",
+      "sdk_version": "0.1.0rc6",
+      "runtime_version": "0.1.0rc6",
+      "status": "partial",
+      "features": {
+        "keyless_protocol": {
+          "status": "passed",
+          "evidence": [
+            "tests/deepseek_harness/test_sdk_integration.py::test_real_sdk_composition_reaches_keyless_model_endpoint"
+          ]
+        },
+        "live_basic": {
+          "status": "not-run",
+          "reason": "No retained credentialed Azure baseline bundle is committed."
+        },
+        "live_tool_call": {
+          "status": "not-run",
+          "reason": "No retained credentialed Azure tool-call bundle is committed."
+        },
+        "live_output_commit": {
+          "status": "not-run",
+          "reason": "No retained credentialed Azure output-commit bundle is committed."
+        },
+        "live_world_episode": {
+          "status": "not-run",
+          "reason": "No retained credentialed Azure world-episode bundle is committed."
+        },
+        "max_token_terminal": {
+          "status": "passed",
+          "evidence": [
+            "tests/deepseek_harness/test_sdk_integration.py::test_real_sdk_enforces_max_tokens_and_maps_truncation"
+          ]
+        },
+        "timeout_cleanup": {
+          "status": "passed",
+          "evidence": [
+            "tests/deepseek_harness/test_runtime.py::test_timeout_terminates_the_worker_process_group"
+          ]
+        },
+        "evidence_redaction": {
+          "status": "passed",
+          "evidence": [
+            "tests/deepseek_harness/test_sdk_integration.py::test_real_sdk_composition_writes_the_requested_workspace_artifact"
+          ]
+        }
+      }
+    },
+    {
+      "provider_route": "deepseek-official",
+      "sdk_version": "0.1.0rc6",
+      "runtime_version": "0.1.0rc6",
+      "status": "partial",
+      "features": {
+        "keyless_protocol": {
+          "status": "passed",
+          "evidence": [
+            "tests/deepseek_harness/test_sdk_integration.py::test_real_sdk_composition_uses_the_selected_deepseek_provider"
+          ]
+        },
+        "live_basic": {
+          "status": "not-run",
+          "reason": "The official DeepSeek route has no retained credentialed baseline bundle."
+        },
+        "live_tool_call": {
+          "status": "not-run",
+          "reason": "The official DeepSeek route has no retained credentialed tool-call bundle."
+        },
+        "live_output_commit": {
+          "status": "not-run",
+          "reason": "The official DeepSeek route has no retained credentialed output-commit bundle."
+        },
+        "live_world_episode": {
+          "status": "not-run",
+          "reason": "The official DeepSeek route has no retained credentialed world-episode bundle."
+        },
+        "max_token_terminal": {
+          "status": "not-run",
+          "reason": "The official DeepSeek route has no retained credentialed max-token bundle."
+        },
+        "timeout_cleanup": {
+          "status": "passed",
+          "evidence": [
+            "tests/deepseek_harness/test_runtime.py::test_timeout_terminates_the_worker_process_group"
+          ]
+        },
+        "evidence_redaction": {
+          "status": "passed",
+          "evidence": [
+            "tests/deepseek_harness/test_runtime.py::test_process_runtime_collects_a_keyless_fake_worker_result"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -51,16 +51,26 @@ from aec_bench.adapters.deepseek_harness.events import (
     reduce_deepseek_notifications,
 )
 from aec_bench.adapters.deepseek_harness.evidence import (
+    DeepSeekActorToolEvidence,
     DeepSeekAdapterIdentity,
+    DeepSeekAttestationLevel,
+    DeepSeekCompositionAttestation,
     DeepSeekCompositionIdentity,
     DeepSeekEvidenceArtifact,
     DeepSeekEvidenceManifest,
+    DeepSeekEvidenceReference,
     DeepSeekExecutionIdentity,
     DeepSeekModelIdentity,
     DeepSeekPluginIdentity,
+    DeepSeekQualificationIdentity,
     DeepSeekRedactedFile,
     DeepSeekRedactionAudit,
     verify_deepseek_evidence_manifest,
+)
+from aec_bench.adapters.deepseek_harness.native_world_tools import DeepSeekNativeWorldEvidence
+from aec_bench.adapters.deepseek_harness.qualification import (
+    deepseek_qualification_matrix_path,
+    load_deepseek_qualification_matrix,
 )
 from aec_bench.adapters.deepseek_harness.tool_gateway import (
     TOOL_GATEWAY_MANIFEST_ENV,
@@ -69,6 +79,7 @@ from aec_bench.adapters.deepseek_harness.tool_gateway import (
     EndpointCloseReport,
     NativeToolDefinition,
     ToolGatewayEndpoint,
+    native_tool_manifest,
 )
 from aec_bench.adapters.output_commit import read_output_completion_content, validate_stable_output_commit
 from aec_bench.contracts.output_completion import OutputCommitAttestation, OutputCompletionContract
@@ -124,11 +135,16 @@ class DeepSeekHarnessPaths:
     runtime_record: Path
     composition: Path
     manifest: Path
+    qualification_reference: Path
     redaction_audit: Path
     commit_evidence: Path
     tool_gateway_evidence: Path
     output_commit_plugin: Path
     tool_gateway_plugin: Path
+    plugin_package_lock: Path
+    native_world_surface: Path
+    actor_authority_evidence: Path
+    actor_correlation: Path
     home: Path
     temporary: Path
     sessions: Path
@@ -174,6 +190,7 @@ class DeepSeekHarnessProcessRuntime:
         workspace: Path,
         worker_command: tuple[str, ...] | None = None,
         native_tools: Sequence[NativeToolDefinition] | None = None,
+        native_world_evidence: DeepSeekNativeWorldEvidence | None = None,
         tool_gateway_close_timeout_seconds: float = 5.0,
     ) -> None:
         self.settings = settings
@@ -185,6 +202,13 @@ class DeepSeekHarnessProcessRuntime:
         )
         self.native_tools = tuple(native_tools or ())
         self.native_tool_names = tuple(sorted(tool.name for tool in self.native_tools))
+        self.native_world_evidence = native_world_evidence
+        if self.native_world_evidence is not None and not self.native_tools:
+            raise ValueError("native world evidence requires native tool definitions")
+        if self.native_world_evidence is not None and tuple(self.native_world_evidence.surface_record["tools"]) != (
+            native_tool_manifest(self.native_tools)
+        ):
+            raise ValueError("native world evidence does not match the configured native tool definitions")
         self.tool_gateway_close_timeout_seconds = tool_gateway_close_timeout_seconds
         self.paths = _deepseek_paths(self.workspace, trial_id=f"run-{uuid.uuid4().hex}")
         self._has_run = False
@@ -508,13 +532,27 @@ class DeepSeekHarnessProcessRuntime:
         _contract, commit_required = deepseek_output_commit_configuration(request)
         system_prompt = deepseek_system_prompt(request)
         self.paths.system_prompt.write_text(system_prompt, encoding="utf-8")
+        shutil.copyfile(deepseek_qualification_matrix_path(), self.paths.qualification_reference)
         cordis_template = (
             tool_gateway_cordis_template(self.settings.provider)
             if self.native_tools
             else baseline_cordis_template(self.settings.provider)
         )
         shutil.copyfile(cordis_template, self.paths.cordis_input)
+        if self.native_world_evidence is not None:
+            _write_json(self.paths.native_world_surface, self.native_world_evidence.surface_record)
         plugins: list[DeepSeekPluginIdentity] = []
+        plugin_lock_source = Path(__file__).parent / "plugin" / "package-lock.json"
+        if (commit_required or self.native_tools) and (
+            plugin_lock_source.is_symlink() or not plugin_lock_source.is_file()
+        ):
+            raise DeepSeekHarnessRuntimeError(f"DeepSeek plugin package lock is missing: {plugin_lock_source}")
+        if commit_required or self.native_tools:
+            self.paths.plugin_package_lock.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(plugin_lock_source, self.paths.plugin_package_lock)
+        plugin_lock_sha256 = (
+            _file_sha256(self.paths.plugin_package_lock) if self.paths.plugin_package_lock.is_file() else None
+        )
         if commit_required:
             source_plugin = output_commit_plugin_path().resolve()
             if not source_plugin.is_file():
@@ -531,6 +569,9 @@ class DeepSeekHarnessProcessRuntime:
                     version=OUTPUT_COMMIT_PLUGIN_VERSION,
                     role="output_commit",
                     artifact_path=self.paths.output_commit_plugin.relative_to(self.paths.root).as_posix(),
+                    artifact_sha256=_file_sha256(self.paths.output_commit_plugin),
+                    package_lock_path=self.paths.plugin_package_lock.relative_to(self.paths.root).as_posix(),
+                    package_lock_sha256=cast(str, plugin_lock_sha256),
                 )
             )
         if self.native_tools:
@@ -548,6 +589,9 @@ class DeepSeekHarnessProcessRuntime:
                     version=TOOL_GATEWAY_PLUGIN_VERSION,
                     role="native_tools",
                     artifact_path=self.paths.tool_gateway_plugin.relative_to(self.paths.root).as_posix(),
+                    artifact_sha256=_file_sha256(self.paths.tool_gateway_plugin),
+                    package_lock_path=self.paths.plugin_package_lock.relative_to(self.paths.root).as_posix(),
+                    package_lock_sha256=cast(str, plugin_lock_sha256),
                 )
             )
         return tuple(plugins)
@@ -576,6 +620,7 @@ class DeepSeekHarnessProcessRuntime:
         _write_json(
             self.paths.composition,
             {
+                "schema": "aec-bench/deepseek-declared-composition/1",
                 **treatment_record(
                     self.settings,
                     timeout_seconds=request_timeout_seconds(request),
@@ -590,8 +635,10 @@ class DeepSeekHarnessProcessRuntime:
                     "secret_names": secret_names,
                 },
                 "plugins": [plugin.model_dump(mode="json") for plugin in plugins],
-                "resolved_composition_available": False,
-                "resolved_tool_surface_available": False,
+                "cordis_sha256": _file_sha256(self.paths.cordis_input),
+                "system_prompt_sha256": _file_sha256(self.paths.system_prompt),
+                "aec_native_tool_manifest": list(native_tool_manifest(self.native_tools)),
+                "aec_native_tool_manifest_sha256": _json_sha256(native_tool_manifest(self.native_tools)),
             },
         )
 
@@ -692,6 +739,7 @@ class DeepSeekHarnessProcessRuntime:
             commit_required=commit_required,
             native_tools=self.native_tool_names,
             plugins=plugins,
+            native_world_evidence=self.native_world_evidence,
             started_at=started_at,
             finished_at=finished_at,
         )
@@ -742,6 +790,7 @@ class DeepSeekHarnessProcessRuntime:
             commit_required=commit_required,
             native_tools=self.native_tool_names,
             plugins=plugins,
+            native_world_evidence=self.native_world_evidence,
             started_at=started_at,
             finished_at=finished_at,
         )
@@ -828,11 +877,16 @@ def _deepseek_paths(workspace: Path, *, trial_id: str) -> DeepSeekHarnessPaths:
         runtime_record=root / "runtime.json",
         composition=root / "composition.json",
         manifest=root / "evidence-manifest.json",
+        qualification_reference=root / "qualification-reference.json",
         redaction_audit=root / "redaction-audit.json",
         commit_evidence=root / "output-commit-evidence.jsonl",
         tool_gateway_evidence=root / "tool-gateway-evidence.jsonl",
         output_commit_plugin=root / "plugins" / "output-commit" / "index.js",
         tool_gateway_plugin=root / "plugins" / "tools" / "index.js",
+        plugin_package_lock=root / "plugins" / "package-lock.json",
+        native_world_surface=root / "native-world-tool-surface.json",
+        actor_authority_evidence=root / "actor-invocation-evidence.jsonl",
+        actor_correlation=root / "actor-correlation.jsonl",
         home=root / "runtime-home",
         temporary=root / "tmp",
         sessions=root / "sessions",
@@ -914,9 +968,12 @@ def _write_evidence_manifest(
     commit_required: bool,
     native_tools: tuple[str, ...],
     plugins: tuple[DeepSeekPluginIdentity, ...],
+    native_world_evidence: DeepSeekNativeWorldEvidence | None,
     started_at: datetime,
     finished_at: datetime,
 ) -> None:
+    if native_world_evidence is not None:
+        _write_actor_evidence_snapshot(paths, native_world_evidence)
     artifacts: list[DeepSeekEvidenceArtifact] = []
     roles = {
         paths.request: "worker_request",
@@ -928,11 +985,16 @@ def _write_evidence_manifest(
         paths.cordis_input: "cordis_input",
         paths.runtime_record: "runtime_identity",
         paths.composition: "composition_identity",
+        paths.qualification_reference: "qualification_matrix",
         paths.redaction_audit: "redaction_audit",
         paths.commit_evidence: "output_commit_evidence",
         paths.tool_gateway_evidence: "tool_gateway_evidence",
         paths.output_commit_plugin: "optional_plugin",
         paths.tool_gateway_plugin: "optional_plugin",
+        paths.plugin_package_lock: "plugin_package_lock",
+        paths.native_world_surface: "native_world_tool_surface",
+        paths.actor_authority_evidence: "actor_authority_evidence",
+        paths.actor_correlation: "actor_correlation",
     }
     for session_path in sorted(paths.sessions.rglob("*.jsonl")):
         roles[session_path] = "deepseek_session_jsonl"
@@ -956,11 +1018,45 @@ def _write_evidence_manifest(
         if worker_result is not None
         else _distribution_version("deepseek-harness-runtime-bin")
     )
+    artifact_by_role = {artifact.role: artifact for artifact in artifacts}
+    declared_references = tuple(
+        _artifact_reference(artifact_by_role[role])
+        for role in ("composition_identity", "cordis_input", "system_prompt")
+    )
+    matrix = load_deepseek_qualification_matrix(paths.qualification_reference)
+    provider_route = harness_provider_route(settings.provider)
+    qualification_row = matrix.row_for(provider_route)
+    source_revision, source_revision_reason = _aec_bench_source_revision()
+    version_matches = (
+        qualification_row.sdk_version == sdk_version
+        and qualification_row.runtime_version == runtime_distribution_version
+        and matrix.aec_bench_version == _distribution_version("aec-bench")
+        and matrix.aec_bench_revision == source_revision
+    )
+    qualification_status: Literal["partial", "qualified", "unqualified"] = qualification_row.status
+    if not version_matches:
+        qualification_status = "unqualified"
+    actor_native_tools: DeepSeekActorToolEvidence | None = None
+    if native_world_evidence is not None:
+        surface = native_world_evidence.surface_record
+        actor_native_tools = DeepSeekActorToolEvidence(
+            task_world_id=cast(str, surface["task_world_id"]),
+            actor_catalogue_sha256=cast(str, surface["catalogue_sha256"]),
+            public_native_tool_surface_sha256=cast(str, surface["public_tool_surface_sha256"]),
+            presentation_mode="deepseek-native",
+            actor_authority_scope="segment-snapshot",
+            mapping=_artifact_reference(artifact_by_role["native_world_tool_surface"]),
+            actor_authority=_artifact_reference(artifact_by_role["actor_authority_evidence"]),
+            correlation=_artifact_reference(artifact_by_role["actor_correlation"]),
+        )
     manifest = DeepSeekEvidenceManifest(
+        schema="aec-bench/deepseek-evidence/2",
         trial_id=paths.root.name,
         generated_at=finished_at,
         adapter=DeepSeekAdapterIdentity(
             aec_bench_version=_distribution_version("aec-bench"),
+            aec_bench_revision=source_revision,
+            aec_bench_revision_reason=source_revision_reason,
             python_sdk_version=sdk_version,
             runtime_distribution_version=runtime_distribution_version,
             runtime_reported_version=(worker_result.runtime_reported_version if worker_result is not None else None),
@@ -968,6 +1064,25 @@ def _write_evidence_manifest(
         composition=DeepSeekCompositionIdentity(
             output_commit_mode="required" if commit_required else "disabled",
             native_tools=native_tools,
+        ),
+        attestation=DeepSeekCompositionAttestation(
+            declared=DeepSeekAttestationLevel(status="complete", artifacts=declared_references),
+            resolved_runtime=DeepSeekAttestationLevel(
+                status="unavailable",
+                reason="deepseek-harness-sdk-does-not-expose-resolved-runtime-composition",
+            ),
+            model_visible=DeepSeekAttestationLevel(
+                status="unavailable",
+                reason="deepseek-harness-sdk-does-not-expose-the-complete-model-visible-request-surface",
+            ),
+        ),
+        qualification=DeepSeekQualificationIdentity(
+            matrix_id=matrix.matrix_id,
+            matrix=_artifact_reference(artifact_by_role["qualification_matrix"]),
+            provider_route=provider_route,
+            status=qualification_status,
+            live_qualified=qualification_status == "qualified",
+            qualified_features=qualification_row.passed_features if version_matches else (),
         ),
         model=DeepSeekModelIdentity(
             provider=settings.provider,
@@ -1000,10 +1115,11 @@ def _write_evidence_manifest(
             process_group_retired=True,
         ),
         plugins=plugins,
+        actor_native_tools=actor_native_tools,
         redaction_audit_path=paths.redaction_audit.relative_to(paths.root).as_posix(),
         artifacts=tuple(artifacts),
     )
-    _write_json(paths.manifest, manifest.model_dump(mode="json"))
+    _write_json(paths.manifest, manifest.model_dump(mode="json", by_alias=True))
     try:
         verify_deepseek_evidence_manifest(paths.manifest)
     except ValueError as exc:
@@ -1015,6 +1131,102 @@ def _distribution_version(name: str) -> str:
         return importlib.metadata.version(name)
     except importlib.metadata.PackageNotFoundError:
         return "not-installed"
+
+
+def _aec_bench_source_revision() -> tuple[str | None, str | None]:
+    repository_root = Path(__file__).resolve().parents[4]
+    try:
+        status = subprocess.run(
+            ("git", "status", "--porcelain"),
+            cwd=repository_root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if status.stdout.strip():
+            return None, "aec-bench-source-tree-is-not-a-clean-git-revision"
+        revision = subprocess.run(
+            ("git", "rev-parse", "HEAD"),
+            cwd=repository_root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        ).stdout.strip()
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return None, "aec-bench-source-revision-is-unavailable"
+    if not revision:
+        return None, "aec-bench-source-revision-is-unavailable"
+    return revision, None
+
+
+def _artifact_reference(artifact: DeepSeekEvidenceArtifact) -> DeepSeekEvidenceReference:
+    return DeepSeekEvidenceReference(path=artifact.path, sha256=artifact.sha256)
+
+
+def _write_actor_evidence_snapshot(
+    paths: DeepSeekHarnessPaths,
+    native_world_evidence: DeepSeekNativeWorldEvidence,
+) -> None:
+    source = native_world_evidence.actor_authority_evidence_path
+    if source.is_symlink() or not source.is_file():
+        raise DeepSeekHarnessRuntimeError("actor authority evidence is unavailable at manifest finalization")
+    shutil.copyfile(source, paths.actor_authority_evidence)
+    actor_records = _read_jsonl_objects(paths.actor_authority_evidence)
+    gateway_records = _read_jsonl_objects(paths.tool_gateway_evidence) if paths.tool_gateway_evidence.is_file() else []
+    correlations: list[dict[str, Any]] = []
+    for gateway in gateway_records:
+        if gateway.get("record_type") != "invocation":
+            continue
+        session_id = gateway.get("deepseek_session_id")
+        tool_call_id = gateway.get("deepseek_tool_call_id")
+        request_id = gateway.get("request_id")
+        if not all(isinstance(value, str) and value for value in (session_id, tool_call_id, request_id)):
+            continue
+        actor_sequences = []
+        for actor in actor_records:
+            correlation = actor.get("correlation")
+            if not isinstance(correlation, dict):
+                continue
+            if (
+                correlation.get("provider_session_id") == session_id
+                and correlation.get("provider_tool_call_id") == tool_call_id
+                and correlation.get("transport_request_id") == request_id
+            ):
+                sequence = actor.get("sequence")
+                if isinstance(sequence, int):
+                    actor_sequences.append(sequence)
+        correlations.append(
+            {
+                "schema": "aec-bench/actor-correlation/1",
+                "request_id": request_id,
+                "deepseek_session_id": session_id,
+                "deepseek_tool_call_id": tool_call_id,
+                "model_turn": gateway.get("model_turn"),
+                "tool": gateway.get("tool"),
+                "actor_evidence_sequences": sorted(actor_sequences),
+            }
+        )
+    paths.actor_correlation.write_text(
+        "".join(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n" for record in correlations),
+        encoding="utf-8",
+    )
+
+
+def _read_jsonl_objects(path: Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise DeepSeekHarnessRuntimeError(f"invalid JSONL evidence at {path.name}:{line_number}") from exc
+        if not isinstance(value, dict):
+            raise DeepSeekHarnessRuntimeError(f"JSONL evidence must contain objects at {path.name}:{line_number}")
+        records.append(cast(dict[str, Any], value))
+    return records
 
 
 def _projection_session_id(projection: DeepSeekRunProjection | None) -> str | None:
@@ -1087,6 +1299,11 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _json_sha256(value: Any) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _stop_process_group(process: subprocess.Popen[str]) -> None:

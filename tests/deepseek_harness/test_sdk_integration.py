@@ -595,15 +595,15 @@ def test_real_sdk_output_commit_plugin_accepts_and_concludes_the_turn(
     assert "aec_commit_output" in advertised_tools
     assert result.configuration_record["output_commit_mode"] == "required"
     assert result.configuration_record["plugin_free_baseline"] is False
-    manifest_plugins = [
-        {
-            "artifact_path": "plugins/output-commit/index.js",
-            "plugin_id": "@aec-bench/dsh-output-commit",
-            "role": "output_commit",
-            "version": "0.1.0",
-        }
-    ]
-    assert result.configuration_record["optional_plugins"] == manifest_plugins
+    manifest_plugins = result.configuration_record["optional_plugins"]
+    assert len(manifest_plugins) == 1
+    assert manifest_plugins[0]["artifact_path"] == "plugins/output-commit/index.js"
+    assert manifest_plugins[0]["package_lock_path"] == "plugins/package-lock.json"
+    assert manifest_plugins[0]["plugin_id"] == "@aec-bench/dsh-output-commit"
+    assert manifest_plugins[0]["role"] == "output_commit"
+    assert manifest_plugins[0]["version"] == "0.1.0"
+    assert len(manifest_plugins[0]["artifact_sha256"]) == 64
+    assert len(manifest_plugins[0]["package_lock_sha256"]) == 64
     manifest_path = Path(result.configuration_record["manifest_path"])
     assert json.loads(manifest_path.read_text(encoding="utf-8"))["plugins"] == manifest_plugins
     commit_evidence = Path(result.configuration_record["commit_evidence_path"]).read_text(encoding="utf-8")

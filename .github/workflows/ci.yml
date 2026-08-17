@@ -205,3 +205,56 @@ jobs:
           tests/harness/pump_station_prime/test_session.py
           tests/harness/pump_station_prime/test_journey.py
           tests/worlds/stewardship/wastewater_pump_station/test_host_continuation.py
+
+  deepseek-release-qualification:
+    name: DeepSeek release qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: src/aec_bench/adapters/deepseek_harness/plugin/package-lock.json
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install all-extras dependency profile
+        run: uv sync --frozen --all-extras
+
+      - name: Collect the complete Python suite
+        run: uv run pytest --collect-only -q tests/
+
+      - name: Run focused DeepSeek qualification gates
+        run: >-
+          uv run pytest -q
+          tests/deepseek_harness/
+          tests/harness/world_actor/test_provider_conformance.py
+          tests/harness/test_pump_station_harbor.py
+
+      - name: Install the locked DeepSeek plugin toolchain
+        working-directory: src/aec_bench/adapters/deepseek_harness/plugin
+        run: npm ci
+
+      - name: Test the DeepSeek plugins
+        working-directory: src/aec_bench/adapters/deepseek_harness/plugin
+        run: npm test
+
+      - name: Rebuild the DeepSeek plugins
+        working-directory: src/aec_bench/adapters/deepseek_harness/plugin
+        run: npm run build
+
+      - name: Verify reproducible plugin artifacts
+        run: git diff --exit-code -- src/aec_bench/adapters/deepseek_harness/plugin/dist/
