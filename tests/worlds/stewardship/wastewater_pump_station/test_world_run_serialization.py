@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from aec_bench.contracts.world_interface import WorldActorActionRequest
+from aec_bench.worlds.stewardship.wastewater_pump_station import world_run_serialization
 from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import (
     PumpStationEpisodeHost,
 )
@@ -51,6 +52,20 @@ def test_current_state_round_trips_as_canonical_task_json(tmp_path: Path) -> Non
     assert restored == run.state
     assert pump_station_artifact_bytes(restored) == payload
     assert payload.endswith(b"\n")
+
+
+def test_current_state_resolves_each_dataclass_type_once(tmp_path: Path) -> None:
+    run = _run(tmp_path / "run")
+    payload = pump_station_artifact_bytes(run.state)
+    resolver = world_run_serialization._dataclass_type_hints
+    resolver.cache_clear()
+
+    restored = load_pump_station_artifact(payload, PumpStationStewardshipState)
+    cache_info = resolver.cache_info()
+
+    assert restored == run.state
+    assert cache_info.hits > 0
+    assert cache_info.misses == cache_info.currsize
 
 
 def test_current_state_rejects_unknown_fields_types_and_numbers(tmp_path: Path) -> None:
