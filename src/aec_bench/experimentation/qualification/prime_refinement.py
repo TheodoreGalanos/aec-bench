@@ -109,7 +109,7 @@ class PrimeRefinementQualificationObservation(ContentAddressedModel):
     evaluation: StewardshipEvaluation
     usage: PrimeAcpUsage
     elapsed_seconds: float
-    world_action_attempts: int
+    world_action_count: int
 
     @field_validator("candidate_sha256", "host_policy_sha256")
     @classmethod
@@ -120,7 +120,7 @@ class PrimeRefinementQualificationObservation(ContentAddressedModel):
     def validate_counts(self) -> Self:
         if self.order < 0 or self.repetition < 1:
             raise ValueError("Prime refinement observation order and repetition are out of range")
-        if self.elapsed_seconds < 0 or self.world_action_attempts < 0:
+        if self.elapsed_seconds < 0 or self.world_action_count < 0:
             raise ValueError("Prime refinement observation counts must not be negative")
         return self
 
@@ -425,5 +425,5 @@ def _observation(
         evaluation=result.evaluation,
         usage=result.usage,
         elapsed_seconds=result.elapsed_seconds,
-        world_action_attempts=result.world_action_attempts,
+        world_action_count=result.world_action_count,
     )

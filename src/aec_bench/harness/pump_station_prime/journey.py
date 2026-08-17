@@ -76,7 +76,7 @@ class PumpStationPrimeJourneyRun:
     evaluation: StewardshipEvaluation
     usage: PrimeAcpUsage
     elapsed_seconds: float
-    world_action_attempts: int
+    world_action_count: int
     run_file: Path
     benchmark_valid: bool
     refinement_candidate: PrimeRefinementCandidate | None
@@ -388,7 +388,7 @@ def _segment_summary(
         completion=segment.completion,
         usage=segment.prime.usage,
         elapsed_seconds=segment.prime.elapsed_seconds,
-        world_action_attempts=segment.world_action_attempts,
+        world_action_count=segment.world_action_count,
         world_action_limit_reached=segment.world_action_limit_reached,
         benchmark_valid=segment.benchmark_valid,
         refinement_mode=segment.prime.refinement_harness.mode,
@@ -492,7 +492,7 @@ def _result(
         evaluation=evaluation,
         usage=usage,
         elapsed_seconds=journey_evidence.elapsed_seconds(checkpoint),
-        world_action_attempts=sum(segment.world_action_attempts for segment in checkpoint.segments),
+        world_action_count=sum(segment.world_action_count for segment in checkpoint.segments),
         run_file=evidence_directory / journey_evidence.RUN_NAME,
         benchmark_valid=(
             bool(checkpoint.segments)
@@ -546,7 +546,7 @@ def _write_run_evidence(
         "host_controls": [control.model_dump(mode="json") for control in checkpoint.host_controls],
         "totals": acp_usage_payload(usage),
         "elapsed_seconds": journey_evidence.elapsed_seconds(checkpoint),
-        "world_action_attempts": sum(segment.world_action_attempts for segment in checkpoint.segments),
+        "world_action_count": sum(segment.world_action_count for segment in checkpoint.segments),
         "world_state": checkpoint.world_state,
         "completion": checkpoint.completion,
         "stop_reason": checkpoint.stop_reason,
@@ -569,7 +569,7 @@ def _journey_limit_reason(
     usage = aggregate_acp_usage(segment.usage for segment in checkpoint.segments)
     if len(checkpoint.segments) >= limits.max_sessions:
         return "max_sessions"
-    if sum(segment.world_action_attempts for segment in checkpoint.segments) >= limits.max_world_actions:
+    if sum(segment.world_action_count for segment in checkpoint.segments) >= limits.max_world_actions:
         return "max_world_actions"
     if usage.model_calls >= limits.max_model_calls:
         return "max_model_calls"
@@ -588,8 +588,7 @@ def _remaining_session_limits(
 ) -> PumpStationPrimeSessionLimits:
     usage = aggregate_acp_usage(segment.usage for segment in checkpoint.segments)
     return PumpStationPrimeSessionLimits(
-        max_world_actions=limits.max_world_actions
-        - sum(segment.world_action_attempts for segment in checkpoint.segments),
+        max_world_actions=limits.max_world_actions - sum(segment.world_action_count for segment in checkpoint.segments),
         max_model_calls=limits.max_model_calls - usage.model_calls,
         max_tokens=limits.max_tokens - usage.total_tokens,
         max_cost_usd=limits.max_cost_usd - usage.cost_usd,

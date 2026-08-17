@@ -73,7 +73,7 @@ class PumpStationPrimeJourneySegment(FrozenStrictModel):
     completion: NonEmptyStr
     usage: PrimeAcpUsage
     elapsed_seconds: float
-    world_action_attempts: int
+    world_action_count: int
     world_action_limit_reached: bool
     benchmark_valid: bool
     refinement_mode: PrimeRefinementMode

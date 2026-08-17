@@ -128,7 +128,7 @@ async def test_qualifies_one_candidate_in_clean_fixed_treatment_cells(
                 cost_usd=Decimal("0.10"),
             ),
             elapsed_seconds=1.0,
-            world_action_attempts=0,
+            world_action_count=0,
             run_file=run_file,
             benchmark_valid=True,
             refinement_candidate=cast(PrimeRefinementCandidate, kwargs["refinement_candidate"]),

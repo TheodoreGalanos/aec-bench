@@ -16,6 +16,23 @@ from aec_bench.harness.world_actor.authority import (
     AuthorityCloseReport,
     WorldActorHost,
 )
+from aec_bench.harness.world_actor.client_bundle import (
+    InstalledClient,
+    WorldActorClientInstallError,
+    install_world_actor_client,
+)
+from aec_bench.harness.world_actor.endpoint import (
+    WorldActorEndpoint,
+    WorldActorEndpointCloseReport,
+    WorldActorEndpointError,
+    WorldActorEndpointLifecycle,
+)
+from aec_bench.harness.world_actor.protocol import (
+    WORLD_ACTOR_CAPABILITY_ENV,
+    WORLD_ACTOR_PROTOCOL,
+    WORLD_ACTOR_PROTOCOL_ENV,
+    WORLD_ACTOR_SOCKET_ENV,
+)
 
 __all__ = [
     "ACTOR_INVOCATION_EVIDENCE_SCHEMA",
@@ -30,5 +47,16 @@ __all__ = [
     "ActorInvocationRequest",
     "ActorTurnDisposition",
     "AuthorityCloseReport",
+    "InstalledClient",
+    "WORLD_ACTOR_CAPABILITY_ENV",
+    "WORLD_ACTOR_PROTOCOL",
+    "WORLD_ACTOR_PROTOCOL_ENV",
+    "WORLD_ACTOR_SOCKET_ENV",
+    "WorldActorClientInstallError",
+    "WorldActorEndpoint",
+    "WorldActorEndpointCloseReport",
+    "WorldActorEndpointError",
+    "WorldActorEndpointLifecycle",
     "WorldActorHost",
+    "install_world_actor_client",
 ]

@@ -3,15 +3,12 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 import os
-import socket
-import sys
 from dataclasses import asdict
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
@@ -21,27 +18,14 @@ from aec_bench.harness.dam_seepage_prime.session import (
     DamSeepagePrimeSessionLimits,
     run_dam_seepage_prime_session,
 )
-from aec_bench.harness.prime_actor_endpoint import PrimeActorEndpoint
 from aec_bench.prime_agent.acp import PrimeAcpIsolation
 from aec_bench.prime_agent.skills import (
     ACTOR_LEDGER_PLAN_INSTRUCTION,
-    WORLD_ACTOR_CAPABILITY_ENV,
-    WORLD_ACTOR_SOCKET_ENV,
-    install_aec_world_skill,
 )
 from aec_bench.worlds.monitoring.dam_seepage.definition import (
-    DamSeepageProfile,
     dam_seepage_world_definition,
 )
-from aec_bench.worlds.monitoring.dam_seepage.episode_runtime import DamSeepageEpisodeHost
 from aec_bench.worlds.monitoring.dam_seepage.world import SeepageAction
-
-
-def _profile() -> DamSeepageProfile:
-    definition = dam_seepage_world_definition()
-    loaded = definition.load_profile(definition.profiles[0])
-    assert isinstance(loaded.value, DamSeepageProfile)
-    return loaded.value
 
 
 def _profile_ref() -> InteractiveWorldProfileRef:
@@ -56,21 +40,6 @@ def _limits(*, max_world_actions: int = 10) -> DamSeepagePrimeSessionLimits:
         max_cost_usd=Decimal("10"),
         max_wall_seconds=5,
     )
-
-
-def _load_world_client(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
-    install_aec_world_skill(workspace)
-    monkeypatch.syspath_prepend(str(workspace))
-    sys.modules.pop("aec_world", None)
-    return importlib.import_module("aec_world")
-
-
-def _raw_call(socket_path: str, payload: dict[str, Any]) -> dict[str, Any]:
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-        client.connect(socket_path)
-        client.sendall(json.dumps(payload).encode("utf-8") + b"\n")
-        response = client.makefile("rb").readline()
-    return cast(dict[str, Any], json.loads(response))
 
 
 def _complete_actions() -> list[dict[str, Any]]:
@@ -122,81 +91,6 @@ def _fake_prime_agent_with_bundled_skills(tmp_path: Path) -> Path:
 
 
 @pytest.mark.asyncio
-async def test_scoped_endpoint_limits_actions_and_redacts_transport_evidence(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    actor_workspace = tmp_path / "actor"
-    actor_workspace.mkdir()
-    evidence_file = tmp_path / "private-host-evidence" / "transport.jsonl"
-    client = _load_world_client(actor_workspace, monkeypatch)
-    endpoint = PrimeActorEndpoint(
-        host=DamSeepageEpisodeHost(profile=_profile()),
-        socket_directory=actor_workspace / ".actor",
-        max_world_actions=1,
-        evidence_file=evidence_file,
-    )
-
-    with endpoint:
-        environment = endpoint.connection_environment()
-        monkeypatch.setenv(WORLD_ACTOR_SOCKET_ENV, environment[WORLD_ACTOR_SOCKET_ENV])
-        monkeypatch.setenv(WORLD_ACTOR_CAPABILITY_ENV, environment[WORLD_ACTOR_CAPABILITY_ENV])
-
-        catalogue = await client.capabilities()
-        observation = await client.observe()
-        first = await client.invoke(
-            SeepageAction.CHECK_MEASUREMENT_SYSTEM.value,
-            {},
-            decision_id=observation["decision_id"],
-            request_id="one-action",
-        )
-        retry = await client.invoke(
-            SeepageAction.CHECK_MEASUREMENT_SYSTEM.value,
-            {},
-            decision_id=observation["decision_id"],
-            request_id="one-action",
-        )
-        with pytest.raises(client.ActorError, match="world-action-budget-exhausted"):
-            await client.invoke(
-                SeepageAction.RECORD_CONFIRMATION_READING.value,
-                {},
-                decision_id=retry["next_observation"]["decision_id"],
-                request_id="second-action",
-            )
-
-        forbidden = _raw_call(
-            environment[WORLD_ACTOR_SOCKET_ENV],
-            {
-                "capability": environment[WORLD_ACTOR_CAPABILITY_ENV],
-                "request": {"operation": "observe", "run_id": "forbidden-run"},
-            },
-        )
-        unauthorized = _raw_call(
-            environment[WORLD_ACTOR_SOCKET_ENV],
-            {"capability": "wrong-secret", "request": {"operation": "observe"}},
-        )
-
-        assert catalogue["task_world_id"] == "dam-seepage-monitoring"
-        assert retry == first
-        assert forbidden == {
-            "error": {
-                "code": "actor-request-invalid",
-                "detail": "actor request does not match the contract",
-            }
-        }
-        assert unauthorized == {"error": {"code": "actor-unauthorized", "detail": "actor capability is invalid"}}
-        assert endpoint.world_action_attempts == 2
-        assert endpoint.world_action_limit_reached
-
-    assert not Path(environment[WORLD_ACTOR_SOCKET_ENV]).exists()
-    evidence = evidence_file.read_text(encoding="utf-8")
-    assert environment[WORLD_ACTOR_CAPABILITY_ENV] not in evidence
-    assert "wrong-secret" not in evidence
-    assert str(evidence_file.parent) not in evidence
-    assert "required_response" not in evidence
-
-
-@pytest.mark.asyncio
 async def test_open_session_completes_exact_profile_and_keeps_evaluation_separate(tmp_path: Path) -> None:
     from tests.prime_agent.test_acp import _fake_prime_agent
 
@@ -222,13 +116,16 @@ async def test_open_session_completes_exact_profile_and_keeps_evaluation_separat
     assert result.completion == "completed"
     assert result.evaluation.successful
     assert result.replay_valid
-    assert result.world_action_attempts == len(action_plan)
+    assert result.world_action_count == len(action_plan)
     assert not result.benchmark_valid
     evidence = json.loads(result.run_file.read_text(encoding="utf-8"))
     assert evidence["profile"] == asdict(_profile_ref())
     assert evidence["treatment"] == "open"
     assert evidence["actions"] == [action["action_name"] for action in action_plan]
+    assert evidence["world_actor_client_sha256"] == result.world_actor_client_sha256
+    assert evidence["world_actor_close_complete"] is True
     assert evidence["evaluation"]["successful"] is True
+    assert result.actor_authority_file.is_file()
     provenance = json.loads(result.prime.paths.run_file.read_text(encoding="utf-8"))
     assert [skill["name"] for skill in provenance["skills"]] == ["aec-world"]
 

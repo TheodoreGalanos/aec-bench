@@ -13,7 +13,12 @@ from typing import cast
 from pydantic import JsonValue, TypeAdapter
 
 from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
-from aec_bench.harness.prime_actor_endpoint import PrimeActorEndpoint
+from aec_bench.harness.world_actor import (
+    ActorInvocationAuthority,
+    ActorInvocationAuthorityConfig,
+    WorldActorEndpoint,
+    install_world_actor_client,
+)
 from aec_bench.prime_agent.acp import PrimeAcpIsolation, PrimeAcpRun, run_prime_acp_session
 from aec_bench.prime_agent.session_evidence import PrimeAcpLimits
 from aec_bench.prime_agent.skills import (
@@ -77,8 +82,10 @@ class DamSeepagePrimeSessionRun:
     evaluation: SeepageEvaluation
     replay_valid: bool
     actor_transport_file: Path
+    actor_authority_file: Path
     run_file: Path
-    world_action_attempts: int
+    world_actor_client_sha256: str
+    world_action_count: int
     world_action_limit_reached: bool
     benchmark_valid: bool
 
@@ -112,6 +119,7 @@ async def run_dam_seepage_prime_session(
 
     actor_workspace.mkdir(parents=True, exist_ok=True)
     evidence_directory.mkdir(parents=True, exist_ok=False)
+    installed_client = install_world_actor_client(actor_workspace)
     skill_directories = [install_aec_world_skill(actor_workspace)]
     prime_instruction = instruction
     if actor_ledger_plan:
@@ -120,10 +128,18 @@ async def run_dam_seepage_prime_session(
 
     host = DamSeepageEpisodeHost(profile=profile)
     actor_transport_file = evidence_directory / "world-actor-transport.jsonl"
-    endpoint = PrimeActorEndpoint(
+    actor_authority_file = evidence_directory / "world-actor-authority.jsonl"
+    authority = ActorInvocationAuthority(
         host=host,
+        config=ActorInvocationAuthorityConfig(
+            actor_principal_id="actor.prime-process-composite",
+            max_world_actions=limits.max_world_actions,
+            evidence_path=actor_authority_file,
+        ),
+    )
+    endpoint = WorldActorEndpoint(
+        authority=authority,
         socket_directory=actor_workspace / ".actor",
-        max_world_actions=limits.max_world_actions,
         evidence_file=actor_transport_file,
     )
     with endpoint:
@@ -142,14 +158,15 @@ async def run_dam_seepage_prime_session(
             executable=executable,
             environment=environment,
         )
-        world_action_attempts = endpoint.world_action_attempts
+        world_action_count = endpoint.world_action_count
         world_action_limit_reached = endpoint.world_action_limit_reached
+    close_report = endpoint.close()
 
     evaluation = evaluate(host.state)
     replay_valid = _replay_valid(profile=profile, host=host, evaluation=evaluation)
     world_state = _world_state(host.status)
     completion = _completion(prime=prime, world_state=world_state, replay_valid=replay_valid)
-    benchmark_valid = prime.benchmark_valid and replay_valid
+    benchmark_valid = prime.benchmark_valid and replay_valid and close_report.complete
     evaluation_payload = _EVALUATION_ADAPTER.dump_python(evaluation, mode="json")
     if not isinstance(evaluation_payload, dict):
         raise RuntimeError("dam seepage evaluation did not serialize to an object")
@@ -168,8 +185,10 @@ async def run_dam_seepage_prime_session(
                     "max_wall_seconds": limits.max_wall_seconds,
                 },
                 "actions": [step.action.value for step in host.recorder.steps],
-                "world_action_attempts": world_action_attempts,
+                "world_actor_client_sha256": installed_client.content_sha256,
+                "world_action_count": world_action_count,
                 "world_action_limit_reached": world_action_limit_reached,
+                "world_actor_close_complete": close_report.complete,
                 "prime_session_state": prime.session_state,
                 "prime_limit_reason": prime.limit_reason,
                 "world_state": world_state,
@@ -193,8 +212,10 @@ async def run_dam_seepage_prime_session(
         evaluation=evaluation,
         replay_valid=replay_valid,
         actor_transport_file=actor_transport_file,
+        actor_authority_file=actor_authority_file,
         run_file=run_file,
-        world_action_attempts=world_action_attempts,
+        world_actor_client_sha256=installed_client.content_sha256,
+        world_action_count=world_action_count,
         world_action_limit_reached=world_action_limit_reached,
         benchmark_valid=benchmark_valid,
     )

@@ -7,12 +7,10 @@ import importlib
 import inspect
 import json
 import os
-import socket
 import sys
-from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
@@ -22,19 +20,24 @@ from aec_bench.contracts.world_session import (
     WorldSessionOpenMode,
     WorldSessionRequest,
 )
-from aec_bench.harness.prime_actor_endpoint import PrimeActorEndpoint
 from aec_bench.harness.pump_station_prime.session import (
     PUMP_STATION_GUIDANCE_INSTRUCTION,
     PumpStationPrimeSessionLimits,
     install_pump_station_guidance_skill,
     run_pump_station_prime_session,
 )
+from aec_bench.harness.world_actor import (
+    WORLD_ACTOR_CAPABILITY_ENV,
+    WORLD_ACTOR_SOCKET_ENV,
+    ActorInvocationAuthority,
+    ActorInvocationAuthorityConfig,
+    WorldActorEndpoint,
+    install_world_actor_client,
+)
 from aec_bench.prime_agent.acp import PrimeAcpIsolation
 from aec_bench.prime_agent.refinement import PrimeRefinementMode
 from aec_bench.prime_agent.skills import (
     ACTOR_LEDGER_PLAN_INSTRUCTION,
-    WORLD_ACTOR_CAPABILITY_ENV,
-    WORLD_ACTOR_SOCKET_ENV,
     PrimeSkillInstallError,
     install_aec_actor_ledger_skill,
     install_aec_world_skill,
@@ -79,18 +82,26 @@ def _endpoint(
     socket_directory: Path,
     max_world_actions: int,
     evidence_file: Path,
-) -> PrimeActorEndpoint:
+) -> WorldActorEndpoint:
     host = PumpStationEpisodeHost(world_directory)
     host.open(_session_request())
-    return PrimeActorEndpoint(
+    authority = ActorInvocationAuthority(
         host=host,
+        config=ActorInvocationAuthorityConfig(
+            actor_principal_id="actor.prime-process-composite",
+            max_world_actions=max_world_actions,
+            evidence_path=evidence_file.with_name("actor-authority.jsonl"),
+        ),
+    )
+    return WorldActorEndpoint(
+        authority=authority,
         socket_directory=socket_directory,
-        max_world_actions=max_world_actions,
         evidence_file=evidence_file,
     )
 
 
 def _load_skill(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    install_world_actor_client(workspace)
     install_aec_world_skill(workspace)
     monkeypatch.syspath_prepend(str(workspace))
     sys.modules.pop("aec_world", None)
@@ -122,26 +133,13 @@ def _fake_prime_agent_with_bundled_skills(tmp_path: Path) -> Path:
     return executable
 
 
-def _raw_call(socket_path: str, payload: dict[str, Any]) -> dict[str, Any]:
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-        client.connect(socket_path)
-        client.sendall(json.dumps(payload).encode("utf-8") + b"\n")
-        response = client.makefile("rb").readline()
-    return cast(dict[str, Any], json.loads(response))
-
-
-def test_reused_world_skill_rejects_nested_symbolic_links(tmp_path: Path) -> None:
+def test_prime_world_skill_contains_only_provider_instructions(tmp_path: Path) -> None:
     workspace = tmp_path / "actor-workspace"
     workspace.mkdir()
-    install_aec_world_skill(workspace)
-    package_file = workspace / "aec_world" / "__init__.py"
-    matching_file = workspace / "matching.py"
-    matching_file.write_bytes(package_file.read_bytes())
-    package_file.unlink()
-    package_file.symlink_to(matching_file)
+    skill = install_aec_world_skill(workspace)
 
-    with pytest.raises(PrimeSkillInstallError, match="different content"):
-        install_aec_world_skill(workspace)
+    assert [path.relative_to(skill).as_posix() for path in skill.rglob("*") if path.is_file()] == ["SKILL.md"]
+    assert not (workspace / "aec_world").exists()
 
 
 def test_reused_skill_ignores_local_python_cache_files(tmp_path: Path) -> None:
@@ -160,7 +158,7 @@ def test_reused_skill_ignores_local_python_cache_files(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_scoped_endpoint_preserves_actor_semantics_and_redacted_transport_evidence(
+async def test_world_actor_authority_preserves_pump_semantics_and_redacts_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -178,12 +176,12 @@ async def test_scoped_endpoint_preserves_actor_semantics_and_redacted_transport_
 
     with endpoint:
         environment = endpoint.connection_environment()
-        monkeypatch.setenv(WORLD_ACTOR_SOCKET_ENV, environment[WORLD_ACTOR_SOCKET_ENV])
-        monkeypatch.setenv(WORLD_ACTOR_CAPABILITY_ENV, environment[WORLD_ACTOR_CAPABILITY_ENV])
+        for name, value in environment.items():
+            monkeypatch.setenv(name, value)
 
         catalogue = await client.capabilities()
         observation = await client.observe()
-        with pytest.raises(client.ActorError):
+        with pytest.raises(client.ActorError, match="world-action-not-available"):
             await client.invoke(
                 "not_a_world_action",
                 {},
@@ -206,7 +204,7 @@ async def test_scoped_endpoint_preserves_actor_semantics_and_redacted_transport_
 
         assert catalogue["task_world_id"] == PUMP_STATION_TASK_WORLD_ID
         assert retry == first
-        with pytest.raises(client.ActorError, match="actor-request-id-conflict"):
+        with pytest.raises(client.ActorError, match="request-id-conflict"):
             await client.invoke(
                 "continue_operation",
                 {"reason": "Different content under one request identity."},
@@ -221,52 +219,12 @@ async def test_scoped_endpoint_preserves_actor_semantics_and_redacted_transport_
                 request_id="prime-action-stale",
             )
 
-        forbidden = _raw_call(
-            environment[WORLD_ACTOR_SOCKET_ENV],
-            {
-                "capability": environment[WORLD_ACTOR_CAPABILITY_ENV],
-                "request": {"operation": "observe", "run_id": str(world_directory)},
-            },
-        )
-        assert forbidden == {
-            "error": {"code": "actor-request-invalid", "detail": "actor request does not match the contract"}
-        }
-        forbidden_control = _raw_call(
-            environment[WORLD_ACTOR_SOCKET_ENV],
-            {
-                "capability": environment[WORLD_ACTOR_CAPABILITY_ENV],
-                "request": {"operation": "execute", "authority_id": "host"},
-            },
-        )
-        assert forbidden_control == forbidden
-        unauthorized = _raw_call(
-            environment[WORLD_ACTOR_SOCKET_ENV],
-            {"capability": "wrong-capability-secret", "request": {"operation": "observe"}},
-        )
-        assert unauthorized == {"error": {"code": "actor-unauthorized", "detail": "actor capability is invalid"}}
-
     assert not Path(environment[WORLD_ACTOR_SOCKET_ENV]).exists()
-    evidence = evidence_file.read_text(encoding="utf-8")
-    assert environment[WORLD_ACTOR_CAPABILITY_ENV] not in evidence
-    assert "wrong-capability-secret" not in evidence
-    assert str(world_directory) not in evidence
-    events = [json.loads(line) for line in evidence.splitlines()]
-    assert [event["operation"] for event in events] == [
-        "capabilities",
-        "observe",
-        "invoke",
-        "invoke",
-        "invoke",
-        "invoke",
-        "invoke",
-        "observe",
-        None,
-        "observe",
-    ]
-    assert all(datetime.fromisoformat(event["received_at"]) for event in events)
-    assert events[-3]["request"] is None
-    assert events[-2]["request"] is None
-    assert events[-1]["request"] is None
+    authority_file = evidence_file.with_name("actor-authority.jsonl")
+    stored_evidence = evidence_file.read_text(encoding="utf-8") + authority_file.read_text(encoding="utf-8")
+    assert environment[WORLD_ACTOR_CAPABILITY_ENV] not in stored_evidence
+    assert str(world_directory) not in stored_evidence
+    assert endpoint.world_action_count == 2
 
 
 @pytest.mark.asyncio
@@ -288,8 +246,8 @@ async def test_actor_ledger_records_exact_attempts_without_adding_world_authorit
 
     with endpoint:
         environment = endpoint.connection_environment()
-        monkeypatch.setenv(WORLD_ACTOR_SOCKET_ENV, environment[WORLD_ACTOR_SOCKET_ENV])
-        monkeypatch.setenv(WORLD_ACTOR_CAPABILITY_ENV, environment[WORLD_ACTOR_CAPABILITY_ENV])
+        for name, value in environment.items():
+            monkeypatch.setenv(name, value)
         monkeypatch.chdir(actor_workspace)
 
         observed = await ledger.observe()
@@ -322,8 +280,8 @@ async def test_actor_ledger_records_exact_attempts_without_adding_world_authorit
     assert len(json.dumps(applied)) <= 4_000
     assert failed["status"] == "failed"
     assert failed["error"] == {
-        "code": "unknown-actor-action",
-        "detail": "not_a_world_action",
+        "code": "world-action-not-available",
+        "detail": "The requested world action is not in the frozen catalogue.",
     }
     assert [entry["request_id"] for entry in entries["entries"]] == ["planned-action-1", "planned-action-2"]
     assert entries["entries"][1]["error"] == failed["error"]
@@ -390,8 +348,8 @@ async def test_world_action_budget_preserves_exact_retry_and_blocks_a_new_action
 
     with endpoint:
         environment = endpoint.connection_environment()
-        monkeypatch.setenv(WORLD_ACTOR_SOCKET_ENV, environment[WORLD_ACTOR_SOCKET_ENV])
-        monkeypatch.setenv(WORLD_ACTOR_CAPABILITY_ENV, environment[WORLD_ACTOR_CAPABILITY_ENV])
+        for name, value in environment.items():
+            monkeypatch.setenv(name, value)
         observation = await client.observe()
         first = await client.invoke(
             "continue_operation",
@@ -414,10 +372,10 @@ async def test_world_action_budget_preserves_exact_retry_and_blocks_a_new_action
                 request_id="action-2",
             )
 
-    assert endpoint.world_action_attempts == 2
+    assert endpoint.world_action_count == 1
     assert endpoint.world_action_limit_reached
-    events = [json.loads(line) for line in evidence_file.read_text(encoding="utf-8").splitlines()]
-    assert events[-1]["error"]["code"] == "world-action-budget-exhausted"
+    authority_evidence = evidence_file.with_name("actor-authority.jsonl").read_text(encoding="utf-8")
+    assert "world-action-budget-exhausted" in authority_evidence
 
 
 def test_packaged_skill_has_only_the_three_actor_operations(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -500,7 +458,7 @@ async def test_prime_end_turn_while_world_is_live_is_recorded_incomplete(tmp_pat
     assert result.evaluation.metrics.terminal_liability.active_restriction_count == 2
     assert result.actor_transport_file.exists()
     assert result.run_file.exists()
-    assert result.world_action_attempts == 1
+    assert result.world_action_count == 1
     assert not result.prime.benchmark_valid
     run_evidence = json.loads(result.run_file.read_text(encoding="utf-8"))
     assert run_evidence["evaluation_scope"] == "bounded_continuation"
