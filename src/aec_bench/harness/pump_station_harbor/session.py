@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, cast
 from pydantic import JsonValue
 
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
+from aec_bench.adapters.deepseek_harness.native_world_tools import NativeWorldToolTransport
 from aec_bench.adapters.local_registry import build_local_adapter
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.task_definition import ToolSpec
@@ -30,6 +31,12 @@ from aec_bench.harness.pump_station_harbor.export import (
     PUMP_STATION_HARBOR_EXECUTION_KIND,
     PumpStationHarborBridge,
     is_pump_station_harbor_inventory_artifact,
+)
+from aec_bench.harness.world_actor import (
+    ActorCorrelation,
+    ActorInvocationAuthority,
+    ActorInvocationAuthorityConfig,
+    AuthorityCloseReport,
 )
 from aec_bench.trajectory.writer import TrajectoryWriter
 from aec_bench.worlds.stewardship.wastewater_pump_station.actor_interface import (
@@ -72,7 +79,9 @@ if TYPE_CHECKING:
 PUMP_STATION_MODEL_CONTROLLER_MODE = "model"
 PUMP_STATION_MODEL_MAX_TURNS = 90
 PUMP_STATION_MODEL_MAX_TOKENS = 8192
+PUMP_STATION_MODEL_MAX_WORLD_ACTIONS = 90
 _PUMP_STATION_MODEL_MAX_SEGMENTS = 8
+_PUMP_STATION_TOOL_LOOP_TRANSPORT = "python-tool-loop"
 
 
 @dataclass(frozen=True)
@@ -103,8 +112,9 @@ class CompletedPumpStationModelSession:
 class _PumpStationActorTools:
     """Translate provider-native tool calls into the one installed actor boundary."""
 
-    def __init__(self, host: PumpStationEpisodeHost) -> None:
-        self._host = host
+    def __init__(self, authority: ActorInvocationAuthority) -> None:
+        self._authority = authority
+        self._native_world_transport = NativeWorldToolTransport(authority)
 
     @property
     def tool_specs(self) -> tuple[ToolSpec, ...]:
@@ -240,43 +250,44 @@ class _PumpStationActorTools:
             ),
         )
 
-    @staticmethod
     def _definition(
+        self,
         name: str,
         function: Callable[..., str],
         properties: dict[str, Any],
         required: tuple[str, ...] = (),
     ) -> NativeToolDefinition:
-        from aec_bench.adapters.deepseek_harness.tool_gateway import json_native_tool_definition
-
-        return json_native_tool_definition(
+        parameters_schema = {
+            "type": "object",
+            "properties": properties,
+            "required": list(required),
+            "additionalProperties": False,
+        }
+        definition_factory = (
+            self._native_world_transport.observation_definition
+            if name == "observe_pump_station"
+            else self._native_world_transport.action_definition
+        )
+        return definition_factory(
             name=name,
             description=function.__doc__ or name.replace("_", " "),
-            parameters_schema={
-                "type": "object",
-                "properties": properties,
-                "required": list(required),
-                "additionalProperties": False,
-            },
-            function=function,
-            trusted_request_argument=None if name == "observe_pump_station" else "request_id",
+            parameters_schema=parameters_schema,
         )
 
     def observe_pump_station(self) -> str:
         """Read the complete current actor view without latent or future state."""
-        return json.dumps(self._host.observe().model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+        observation = self._authority.observe(correlation=ActorCorrelation())
+        return json.dumps(observation.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
     def _invoke(self, request_id: str, action_name: str, arguments: dict[str, JsonValue]) -> str:
-        observation = self._host.observe()
-        result = self._host.invoke(
-            WorldActorActionRequest(
-                request_id=request_id,
-                decision_id=observation.decision_id,
-                action_name=action_name,
-                arguments=arguments,
-            )
+        outcome = self._authority.invoke_current(
+            request_id=request_id,
+            action_name=action_name,
+            arguments=arguments,
+            transport=_PUMP_STATION_TOOL_LOOP_TRANSPORT,
+            correlation=ActorCorrelation(transport_request_id=request_id),
         )
-        return json.dumps(result.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+        return json.dumps(outcome.result.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
     def continue_operation(self, request_id: str, reason: str) -> str:
         """Continue the permitted operating mode to the next declared decision event."""
@@ -484,6 +495,7 @@ def run_pump_station_model_session(
     model: str,
     adapter_kind: str = "tool_loop",
     max_turns: int = PUMP_STATION_MODEL_MAX_TURNS,
+    max_world_actions: int = PUMP_STATION_MODEL_MAX_WORLD_ACTIONS,
     max_tokens: int | None = None,
     timeout_sec: int | None = None,
     adapter_builder: Callable[..., Any] | None = None,
@@ -498,6 +510,8 @@ def run_pump_station_model_session(
         raise ValueError(f"unsupported pump-station model adapter: {adapter_kind}")
     if max_turns < 1:
         raise ValueError("pump-station model episode max turns must be positive")
+    if isinstance(max_world_actions, bool) or max_world_actions < 1:
+        raise ValueError("pump-station model episode world action budget must be positive")
     request_configuration: dict[str, int]
     if adapter_kind == "deepseek_harness":
         resolved_max_tokens = PUMP_STATION_MODEL_MAX_TOKENS if max_tokens is None else max_tokens
@@ -523,11 +537,22 @@ def run_pump_station_model_session(
     else:
         started = host.open(request)
         start = _private_snapshot(started.snapshot)
+    authority = ActorInvocationAuthority(
+        host=host,
+        config=ActorInvocationAuthorityConfig(
+            authority_id=f"actor-authority.{identity}",
+            actor_principal_id=f"actor.{identity}",
+            max_world_actions=max_world_actions,
+            evidence_path=destination / "actor-invocation-evidence.jsonl",
+        ),
+    )
+    authority.start()
     trajectory = TrajectoryWriter(path=str(destination / "trajectory.jsonl"))
     adapter_results: list[AdapterResult] = []
     host_control_count = 0
     journey_status = PumpStationJourneyStatus.ACTIVE
     stop_reason = "max-segments"
+    authority_close_report: AuthorityCloseReport | None = None
     try:
         resolved_builder = adapter_builder or build_local_adapter
         control = PumpStationWorldControl(
@@ -535,7 +560,7 @@ def run_pump_station_model_session(
             authorised_principal_ids=(PUMP_STATION_OPERATIONS_AUTHORITY_ID,),
         )
         for _segment_index in range(_PUMP_STATION_MODEL_MAX_SEGMENTS):
-            tools = _PumpStationActorTools(host)
+            tools = _PumpStationActorTools(authority)
             adapter = resolved_builder(
                 adapter_kind=adapter_kind,
                 model_name=model_name,
@@ -571,6 +596,9 @@ def run_pump_station_model_session(
             stop_reason = decision.reason
             if decision.status is PumpStationJourneyStatus.COMPLETED:
                 break
+            if authority.world_action_limit_reached:
+                stop_reason = "max-world-actions"
+                break
             if decision.control_request is None or bridge.rollout_child_ref is not None:
                 break
             control.execute(decision.control_request)
@@ -584,7 +612,12 @@ def run_pump_station_model_session(
                 stop_reason = "declared-terminal-state"
                 break
     finally:
-        trajectory.close()
+        try:
+            trajectory.close()
+        finally:
+            authority_close_report = authority.close()
+    if not authority_close_report.complete:
+        raise RuntimeError("pump-station actor invocation authority did not close completely")
     if not adapter_results:
         raise RuntimeError("pump-station model journey produced no adapter segment")
     adapter_result = _aggregate_adapter_results(
@@ -593,6 +626,23 @@ def run_pump_station_model_session(
         stop_reason=stop_reason,
         host_control_count=host_control_count,
     )
+    adapter_configuration = dict(adapter_result.configuration_record)
+    adapter_configuration["actor_invocation_authority"] = {
+        "authority_id": authority.authority_id,
+        "actor_principal_id": authority.config.actor_principal_id,
+        "catalogue_sha256": authority.catalogue_hash,
+        "max_world_actions": authority.config.max_world_actions,
+        "world_action_count": authority.world_action_count,
+        "evidence_path": "actor-invocation-evidence.jsonl",
+        "close": {
+            "quiescent": authority_close_report.quiescent,
+            "complete": authority_close_report.complete,
+            "unsettled_request_ids": list(authority_close_report.unsettled_request_ids),
+            "unknown_outcome_request_ids": list(authority_close_report.unknown_outcome_request_ids),
+            "closed_at": authority_close_report.closed_at.isoformat(),
+        },
+    }
+    adapter_result = replace(adapter_result, configuration_record=adapter_configuration)
     repository = PumpStationWorldRunRepository(repository_root)
     end = repository.current_snapshot()
     evidence_request, result = _episode_evidence(repository_root, identity, start, end)
@@ -954,6 +1004,7 @@ __all__ = (
     "PUMP_STATION_MODEL_CONTROLLER_MODE",
     "PUMP_STATION_MODEL_MAX_TURNS",
     "PUMP_STATION_MODEL_MAX_TOKENS",
+    "PUMP_STATION_MODEL_MAX_WORLD_ACTIONS",
     "run_pump_station_model_session",
     "run_pump_station_reference_session",
 )

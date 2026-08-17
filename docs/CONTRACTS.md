@@ -294,6 +294,14 @@ the DeepSeek session, tool-call, turn, generation, cancellation, and trusted
 request identity. A world action uses that trusted identity; the model-facing
 schema cannot supply or replace it.
 
+`NativeToolRequestSemantics` identifies the component that owns logical
+request admission. The gateway owns replay for generic non-world tools. A
+world definition uses `handler-authority`: the gateway validates and forwards
+each exact retry, while `ActorInvocationAuthority` owns the actor principal,
+frozen catalogue identity, request fingerprint and table, action budget, total
+dispatch order, terminal latch, and semantic evidence. A transport correlation
+does not change logical world-action identity.
+
 The handler returns `NativeToolResponse`. Only its generic `conclude-turn`
 disposition can conclude the current model turn; the plugin does not inspect a
 tool name or task result field. Cancellation crosses the socket into a
@@ -303,6 +311,13 @@ non-quiescent close cannot produce a completed adapter result. The sealed close
 record prevents late handler output from changing finalized evidence. The
 provider plugin cannot add shell access, world host controls, verification, or
 reward authority.
+
+The actor authority closes separately from the native transport. It records a
+versioned append-only JSONL stream for the full trial actor, including all model
+segments. A non-quiescent or unknown authority outcome blocks a complete
+pump-station trial record. The task-owned world repository remains the
+transition and replay authority; the actor stream records admission and
+dispatch semantics at the actor boundary.
 
 ## Output completion and explicit commit
 

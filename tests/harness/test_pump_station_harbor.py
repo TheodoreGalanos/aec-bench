@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,11 @@ import pytest
 from harbor.models.trial.config import TrialConfig  # type: ignore[import-untyped]
 
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
+from aec_bench.adapters.deepseek_harness.tool_gateway import (
+    NativeCancellation,
+    NativeToolInvocation,
+    NativeToolRequestSemantics,
+)
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.harness.pump_station_harbor.export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
@@ -50,6 +56,19 @@ from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository i
 from tests.support.harbor_local_environment import run_harbor_trial
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _native_invocation(request_id: str, tool_name: str) -> NativeToolInvocation:
+    return NativeToolInvocation(
+        request_id=request_id,
+        deepseek_session_id="session-1",
+        deepseek_tool_call_id=request_id,
+        model_turn=1,
+        tool_name=tool_name,
+        generation_id="generation-1",
+        admitted_at=datetime.now(UTC),
+        cancellation=NativeCancellation(),
+    )
 
 
 def test_registered_profile_export_uses_the_canonical_harbor_bridge(
@@ -100,6 +119,7 @@ def test_registered_profile_builds_a_deepseek_world_session_without_a_false_turn
         backend="modal",
         model_name="azure:gpt-4.1-mini-standard",
         adapter="deepseek_harness",
+        max_world_actions=17,
         max_tokens=4096,
         timeout_sec=600,
     )
@@ -109,6 +129,7 @@ def test_registered_profile_builds_a_deepseek_world_session_without_a_false_turn
         "adapter": "deepseek_harness",
         "execution_kind": PUMP_STATION_HARBOR_EXECUTION_KIND,
         "max_tokens": 4096,
+        "max_world_actions": 17,
         "timeout_sec": 600,
         "world_session": {
             "bridge_mode": PUMP_STATION_HARBOR_BRIDGE_MODE,
@@ -180,8 +201,16 @@ def test_deepseek_model_session_receives_only_actor_tools_and_token_limits(tmp_p
     captured: dict[str, object] = {}
 
     class FakeAdapter:
+        def __init__(self, native_tool_definitions: tuple[Any, ...]) -> None:
+            self._definitions = {definition.name: definition for definition in native_tool_definitions}
+
         def execute(self, request: AdapterRequest) -> AdapterResult:
             captured["request"] = request
+            observation = self._definitions["observe_pump_station"].handler(
+                _native_invocation("dsh:session-1:observe-1", "observe_pump_station"),
+                {},
+            )
+            captured["observation"] = observation.result
             return AdapterResult(
                 adapter_name="deepseek_harness",
                 resolved_model="gpt-4.1-mini-standard",
@@ -199,7 +228,9 @@ def test_deepseek_model_session_receives_only_actor_tools_and_token_limits(tmp_p
 
     def build_adapter(**kwargs: object) -> FakeAdapter:
         captured["builder"] = kwargs
-        return FakeAdapter()
+        definitions = kwargs["native_tool_definitions"]
+        assert isinstance(definitions, tuple)
+        return FakeAdapter(definitions)
 
     completed = run_pump_station_model_session(
         bridge=bridge,
@@ -229,6 +260,11 @@ def test_deepseek_model_session_receives_only_actor_tools_and_token_limits(tmp_p
         *PUMP_STATION_ACTOR_ACTION_NAMES,
     )
     assert all("request_id" not in definition.parameters_schema["properties"] for definition in native_tool_definitions)
+    assert all(
+        definition.request_semantics is NativeToolRequestSemantics.HANDLER_AUTHORITY
+        for definition in native_tool_definitions
+    )
+    assert isinstance(captured["observation"], dict)
     request = captured["request"]
     assert isinstance(request, AdapterRequest)
     assert request.configuration == {"max_tokens": 4096, "timeout_sec": 600}
@@ -239,10 +275,21 @@ def test_deepseek_model_session_receives_only_actor_tools_and_token_limits(tmp_p
     assert evidence["limits"] == {"max_tokens": 4096, "timeout_sec": 600}
     inventory = json.loads((completed.output_dir / "artifact-inventory.json").read_text(encoding="utf-8"))
     assert inventory["controller_id"] == "gpt-4.1-mini-standard"
+    assert "actor-invocation-evidence.jsonl" in {artifact["path"] for artifact in inventory["artifacts"]}
+    authority_record = completed.adapter_result.configuration_record["actor_invocation_authority"]
+    assert authority_record["actor_principal_id"] == "actor.deepseek-world"
+    assert authority_record["max_world_actions"] == 90
+    assert authority_record["world_action_count"] == 0
+    assert authority_record["close"]["complete"] is True
+    actor_evidence = [
+        json.loads(line)
+        for line in (completed.output_dir / "actor-invocation-evidence.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert [record["record_type"] for record in actor_evidence] == ["header", "observe", "close"]
     assert "Do not stop only because one action was accepted" in request.instruction
 
 
-def test_model_journey_applies_host_authority_between_adapter_segments(tmp_path: Path) -> None:
+def test_model_journey_shares_actor_authority_across_segments_and_stops_at_budget(tmp_path: Path) -> None:
     exported = export_pump_station_harbor_task(
         tmp_path / "task",
         project_root=PROJECT_ROOT,
@@ -252,22 +299,28 @@ def test_model_journey_applies_host_authority_between_adapter_segments(tmp_path:
     builds: list[dict[str, object]] = []
 
     class FakeAdapter:
-        def __init__(self, native_tools: tuple[Any, ...], segment_index: int) -> None:
-            self._tools = {tool.__name__: tool for tool in native_tools}
+        def __init__(self, native_tool_definitions: tuple[Any, ...], segment_index: int) -> None:
+            self._definitions = {definition.name: definition for definition in native_tool_definitions}
             self._segment_index = segment_index
 
         def execute(self, request: AdapterRequest) -> AdapterResult:
             if self._segment_index == 0:
-                self._tools["request_post_maintenance_verification"](
-                    request_id="verification-a",
-                    reason="Complete the visible verification obligation.",
-                    pump_id="pump-a",
-                    backlog_item_id="backlog-a-verification-001",
+                verification = self._definitions["request_post_maintenance_verification"].handler(
+                    _native_invocation("dsh:session-1:verification-a", "request_post_maintenance_verification"),
+                    {
+                        "reason": "Complete the visible verification obligation.",
+                        "pump_id": "pump-a",
+                        "backlog_item_id": "backlog-a-verification-001",
+                    },
                 )
-                self._tools["continue_operation"](
-                    request_id="continue-to-verification",
-                    reason="Advance to the next declared decision event.",
+                continued = self._definitions["continue_operation"].handler(
+                    _native_invocation("dsh:session-1:continue-to-verification", "continue_operation"),
+                    {"reason": "Advance to the next declared decision event."},
                 )
+                assert isinstance(verification.result, dict)
+                assert isinstance(continued.result, dict)
+                assert verification.result["status"] == "applied"
+                assert continued.result["status"] == "applied"
             return AdapterResult(
                 adapter_name="deepseek_harness",
                 resolved_model="gpt-4.1-mini-standard",
@@ -285,9 +338,9 @@ def test_model_journey_applies_host_authority_between_adapter_segments(tmp_path:
 
     def build_adapter(**kwargs: object) -> FakeAdapter:
         builds.append(kwargs)
-        native_tools = kwargs["native_tools"]
-        assert isinstance(native_tools, tuple)
-        return FakeAdapter(native_tools, len(builds) - 1)
+        native_tool_definitions = kwargs["native_tool_definitions"]
+        assert isinstance(native_tool_definitions, tuple)
+        return FakeAdapter(native_tool_definitions, len(builds) - 1)
 
     completed = run_pump_station_model_session(
         bridge=bridge,
@@ -304,9 +357,43 @@ def test_model_journey_applies_host_authority_between_adapter_segments(tmp_path:
     assert completed.stop_reason == "actor-or-external-progress-required"
     assert completed.adapter_result.agent_output.status is AgentOutputStatus.PARTIAL
     assert completed.adapter_result.configuration_record["world_host_control_count"] == 1
+    authority_record = completed.adapter_result.configuration_record["actor_invocation_authority"]
+    assert authority_record["world_action_count"] == 2
+    assert authority_record["close"]["complete"] is True
+    actor_evidence = [
+        json.loads(line)
+        for line in (completed.output_dir / "actor-invocation-evidence.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    dispatches = [record for record in actor_evidence if record["record_type"] == "dispatch"]
+    assert [record["action_sequence"] for record in dispatches] == [1, 2]
     repository = PumpStationWorldRunRepository(completed.output_dir / "world-run")
     run = PumpStationWorldRun.resume_reference_system(repository=repository, snapshot=repository.current_snapshot())
     assert "restriction-a-run-in-001" not in run.state.active_restriction_ids
+
+    bounded_builds: list[dict[str, object]] = []
+
+    def build_bounded_adapter(**kwargs: object) -> FakeAdapter:
+        bounded_builds.append(kwargs)
+        native_tool_definitions = kwargs["native_tool_definitions"]
+        assert isinstance(native_tool_definitions, tuple)
+        return FakeAdapter(native_tool_definitions, len(bounded_builds) - 1)
+
+    bounded = run_pump_station_model_session(
+        bridge=bridge,
+        output_dir=tmp_path / "bounded-world-session",
+        session_identity="bounded-host-continuation",
+        model="azure:gpt-4.1-mini-standard",
+        adapter_kind="deepseek_harness",
+        max_world_actions=2,
+        max_tokens=4096,
+        adapter_builder=build_bounded_adapter,
+    )
+
+    assert bounded.segment_count == 1
+    assert bounded.host_control_count == 0
+    assert bounded.stop_reason == "max-world-actions"
+    bounded_authority = bounded.adapter_result.configuration_record["actor_invocation_authority"]
+    assert bounded_authority["world_action_count"] == 2
 
 
 def test_model_session_preserves_adapter_failure_status(tmp_path: Path) -> None:

@@ -200,12 +200,15 @@ tool authority. The AEC host supplies one exact per-run manifest from explicit
 `NativeToolDefinition` values. The plugin registers those JSON schemas and
 forwards calls to an authenticated trial-local Unix socket. The endpoint owns
 trusted invocation identity, cancellation propagation, generic turn
-disposition, generation finalization, and bounded close reporting. It does not
-infer candidate output from tool availability. Lifecycle state, world state,
-effects, host controls, verification, and reward stay with their existing AEC
-owners. The pump-station Harbor journey can alternate fresh DeepSeek model
-segments with the same deterministic task-owned Operations controls used by
-the Prime pump journey.
+disposition, generation finalization, and bounded transport close reporting.
+For generic non-world tools, it also owns request replay. World definitions use
+`NativeWorldToolTransport` and delegate logical request admission, replay,
+budget, action order, terminal state, and semantic evidence to one trial-wide
+`ActorInvocationAuthority`. The authority depends only on the provider-neutral
+world host contract. It has no host-control, verification, evaluation, or
+reward access. The pump-station Harbor journey can alternate fresh DeepSeek
+model segments with the same authority instance and the deterministic
+task-owned Operations controls used by the Prime pump journey.
 
 The shared adapter entrypoint owns provider selection and host credential
 allowlisting. A DeepSeek Harness model uses `provider:model`, and the selected

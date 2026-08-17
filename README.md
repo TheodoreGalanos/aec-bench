@@ -246,7 +246,8 @@ The current support boundary is:
 - artifact and workspace tasks that use the stock DeepSeek coding tools;
 - finite evidence lifecycles and the registered pump-station Harbor world through
   exact AEC-owned native tool gateways;
-- exact whole-trial `timeout_sec` and per-model-request `max_tokens` limits;
+- an exact whole-trial actor-action budget, whole-process `timeout_sec`, and
+  per-model-request `max_tokens` limit;
 - raw session evidence, readable treatment evidence, and optional exact-byte
   output commitment;
 - no general task-tool translation, arbitrary interactive-world bridge,
@@ -271,13 +272,17 @@ uv run aec-bench task pump-station-world run-harbor \
   --backend modal \
   --adapter deepseek_harness \
   --model "azure:<deployment-name>" \
+  --max-world-actions 90 \
   --max-tokens 8192 \
   --timeout-sec 1800
 ```
 
-The model sees actor observations and actor actions only. The task-owned host
-can apply its deterministic Operations controls between model segments. Harbor
-independently replays the final world run and owns reward.
+The model sees actor observations and actor actions only. One trial-wide actor
+authority owns request replay, action order, the action budget, terminal state,
+and semantic actor evidence across all model segments. The task-owned host can
+apply its deterministic Operations controls between segments while the action
+budget remains open. Harbor independently replays the final world run and owns
+reward.
 
 #### Prime Agent local adapter
 

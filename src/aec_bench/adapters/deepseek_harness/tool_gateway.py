@@ -43,6 +43,13 @@ class NativeToolDisposition(StrEnum):
     CONCLUDE_TURN = "conclude-turn"
 
 
+class NativeToolRequestSemantics(StrEnum):
+    """Select the one component that owns logical request admission and replay."""
+
+    GATEWAY = "gateway"
+    HANDLER_AUTHORITY = "handler-authority"
+
+
 class NativeCancellation:
     """Expose cooperative cancellation to one synchronous AEC handler."""
 
@@ -106,6 +113,7 @@ class NativeToolDefinition:
     description: str
     parameters_schema: dict[str, Any]
     handler: NativeToolHandler
+    request_semantics: NativeToolRequestSemantics = NativeToolRequestSemantics.GATEWAY
 
 
 def json_native_tool_definition(
@@ -179,6 +187,7 @@ class _AdmittedInvocation:
     fingerprint: str
     invocation: NativeToolInvocation
     arguments: dict[str, JsonValue]
+    request_semantics: NativeToolRequestSemantics
     dispatched_at: datetime | None = None
     completed_at: datetime | None = None
     response: dict[str, Any] | None = None
@@ -264,6 +273,8 @@ class ToolGatewayEndpoint:
         self._evidence_finalized = False
         self._responses: dict[str, tuple[str, dict[str, Any]]] = {}
         self._active: dict[str, _AdmittedInvocation] = {}
+        self._handler_authority_active: dict[str, list[_AdmittedInvocation]] = {}
+        self._handler_authority_completed: set[str] = set()
         self._cancelled_before_dispatch: set[str] = set()
         self._server: _ToolServer | None = None
         self._thread: threading.Thread | None = None
@@ -315,7 +326,7 @@ class ToolGatewayEndpoint:
             thread = self._thread
             socket_path = self._socket_path
             socket_directory = self._socket_directory
-            for active in self._active.values():
+            for active in self._all_active_locked():
                 active.invocation.cancellation._cancel()
 
         if server is not None:
@@ -326,15 +337,13 @@ class ToolGatewayEndpoint:
 
         deadline = time.monotonic() + deadline_seconds
         with self._condition:
-            while self._active:
+            while self._has_active_locked():
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     break
                 self._condition.wait(remaining)
-            unsettled = tuple(sorted(self._active))
-            unknown = tuple(
-                request_id for request_id in unsettled if self._active[request_id].dispatched_at is not None
-            )
+            unsettled = tuple(sorted(self._active_request_ids_locked()))
+            unknown = tuple(sorted(self._unknown_active_request_ids_locked()))
 
         if socket_path is not None:
             socket_path.unlink(missing_ok=True)
@@ -418,6 +427,8 @@ class ToolGatewayEndpoint:
             return response
 
         fingerprint = _request_fingerprint(request)
+        if binding.definition.request_semantics is NativeToolRequestSemantics.HANDLER_AUTHORITY:
+            return self._invoke_handler_authority(binding, request, request_id=request_id, fingerprint=fingerprint)
         owner = False
         with self._lock:
             previous = self._responses.get(request_id)
@@ -466,6 +477,7 @@ class ToolGatewayEndpoint:
                     fingerprint=fingerprint,
                     invocation=invocation,
                     arguments=dict(request.arguments),
+                    request_semantics=NativeToolRequestSemantics.GATEWAY,
                 )
                 self._active[request_id] = active
                 owner = True
@@ -479,6 +491,42 @@ class ToolGatewayEndpoint:
             self._append_duplicate_evidence(request, request_id, response, duplicate_of=request_id)
             return response
 
+        return self._execute(binding, request, active)
+
+    def _invoke_handler_authority(
+        self,
+        binding: _ToolBinding,
+        request: _ToolInvocationRequest,
+        *,
+        request_id: str,
+        fingerprint: str,
+    ) -> dict[str, Any]:
+        with self._lock:
+            if request_id in self._cancelled_before_dispatch:
+                response = _error_response("request_cancelled", "Tool request was cancelled before dispatch.")
+                self._append_unadmitted_evidence(request, request_id=request_id, response=response, cancelled=True)
+                return response
+            if self._closing:
+                response = _error_response("endpoint_closing", "Native tool transport is closing.")
+                self._append_unadmitted_evidence(request, request_id=request_id, response=response)
+                return response
+            invocation = NativeToolInvocation(
+                request_id=request_id,
+                deepseek_session_id=request.metadata.deepseek_session_id,
+                deepseek_tool_call_id=request.metadata.deepseek_tool_call_id,
+                model_turn=request.metadata.aec_model_turn,
+                tool_name=request.tool,
+                generation_id=self.generation_id,
+                admitted_at=datetime.now(UTC),
+                cancellation=NativeCancellation(),
+            )
+            active = _AdmittedInvocation(
+                fingerprint=fingerprint,
+                invocation=invocation,
+                arguments=dict(request.arguments),
+                request_semantics=NativeToolRequestSemantics.HANDLER_AUTHORITY,
+            )
+            self._handler_authority_active.setdefault(request_id, []).append(active)
         return self._execute(binding, request, active)
 
     def _execute(
@@ -535,9 +583,19 @@ class ToolGatewayEndpoint:
                 active.response = transport_response
             else:
                 active.response = response
-                self._responses[request_id] = (active.fingerprint, response)
+                if active.request_semantics is NativeToolRequestSemantics.GATEWAY:
+                    self._responses[request_id] = (active.fingerprint, response)
+                else:
+                    self._handler_authority_completed.add(request_id)
                 transport_response = response
-            self._active.pop(request_id, None)
+            if active.request_semantics is NativeToolRequestSemantics.GATEWAY:
+                self._active.pop(request_id, None)
+            else:
+                remaining = [item for item in self._handler_authority_active.get(request_id, ()) if item is not active]
+                if remaining:
+                    self._handler_authority_active[request_id] = remaining
+                else:
+                    self._handler_authority_active.pop(request_id, None)
             active.done.set()
             self._condition.notify_all()
 
@@ -556,16 +614,21 @@ class ToolGatewayEndpoint:
         request_id = _trusted_request_id(request.metadata)
         occurred_at = datetime.now(UTC)
         with self._lock:
-            completed = request_id in self._responses
+            completed = request_id in self._responses or request_id in self._handler_authority_completed
             active = self._active.get(request_id)
+            handler_authority_active = self._handler_authority_active.get(request_id, ())
+            active_items = (*handler_authority_active, active) if active is not None else handler_authority_active
+            for item in active_items:
+                item.invocation.cancellation._cancel()
             if completed:
                 outcome = "completed"
-            elif active is None:
+            elif not active_items:
                 self._cancelled_before_dispatch.add(request_id)
                 outcome = "not-dispatched"
             else:
-                active.invocation.cancellation._cancel()
-                outcome = "unknown" if active.dispatched_at is not None else "not-dispatched"
+                outcome = (
+                    "unknown" if any(item.dispatched_at is not None for item in active_items) else "not-dispatched"
+                )
         response = {
             "protocol": TOOL_GATEWAY_PROTOCOL,
             "status": "ok",
@@ -608,6 +671,7 @@ class ToolGatewayEndpoint:
                 "deepseek_tool_call_id": request.metadata.deepseek_tool_call_id,
                 "model_turn": request.metadata.aec_model_turn,
                 "tool": request.tool,
+                "request_semantics": active.request_semantics.value,
                 "arguments_sha256": _json_sha256(request.arguments),
                 "admitted_at": active.invocation.admitted_at.isoformat(),
                 "dispatched_at": active.dispatched_at.isoformat() if active.dispatched_at is not None else None,
@@ -623,6 +687,27 @@ class ToolGatewayEndpoint:
                 "stale_ignored": stale,
             }
         )
+
+    def _all_active_locked(self) -> tuple[_AdmittedInvocation, ...]:
+        return (
+            *self._active.values(),
+            *(item for items in self._handler_authority_active.values() for item in items),
+        )
+
+    def _has_active_locked(self) -> bool:
+        return bool(self._active or self._handler_authority_active)
+
+    def _active_request_ids_locked(self) -> set[str]:
+        return {*self._active, *self._handler_authority_active}
+
+    def _unknown_active_request_ids_locked(self) -> set[str]:
+        unknown = {request_id for request_id, active in self._active.items() if active.dispatched_at is not None}
+        unknown.update(
+            request_id
+            for request_id, active_items in self._handler_authority_active.items()
+            if any(active.dispatched_at is not None for active in active_items)
+        )
+        return unknown
 
     def _append_unadmitted_evidence(
         self,
