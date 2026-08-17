@@ -248,13 +248,29 @@ The current public Harness hooks cannot both stop these operations at the exact
 boundary and retain a typed budget terminal reason. These limits remain
 unsupported until that full contract can be enforced and recorded.
 
-Each DeepSeek trial writes one validated evidence manifest. The manifest keeps
-the adapter, model, installed SDK and runtime versions, limits, execution
-status, composition modes, optional plugins, and redaction actions readable.
-Each retained artifact has one SHA-256 entry in that manifest. Summary fields
-do not duplicate artifact hashes. `RuntimeExecutionAttestation` binds the
-manifest SHA-256 when the adapter provides one; attestations from other
-adapters keep their existing shape.
+Each DeepSeek trial writes one `aec-bench/deepseek-evidence/2` manifest. The
+manifest keeps the adapter, model, exact installed SDK and runtime versions,
+AEC source revision status, limits, execution status, composition modes,
+optional plugins, qualification reference, and redaction actions readable.
+Each retained artifact has one SHA-256 entry. An attestation or qualification
+reference repeats the path and hash so that its claim is content-bound.
+`RuntimeExecutionAttestation` binds the manifest SHA-256 when the adapter
+provides one. Attestations from other adapters keep their existing shape.
+
+The manifest has three composition attestation levels:
+
+- `declared` identifies the exact AEC composition, Cordis input, and system
+  prompt that AEC supplied before launch;
+- `resolved_runtime` identifies the composition that the active DeepSeek
+  runtime resolved;
+- `model_visible` identifies the complete prompt, history, tool, parameter,
+  and dynamic context surface for model requests.
+
+Each level is `complete`, `partial`, or `unavailable`. A `complete` level must
+reference retained artifacts. An `unavailable` level must give a reason and
+must not reference inferred artifacts. Unknown future fields survive manifest
+read and write. The importer does not accept the superseded internal v1
+manifest as v2.
 
 The model identifier must use `provider:model`. `azure:` requires
 `AZURE_OPENAI_API_KEY` and `AZURE_OPENAI_ENDPOINT`; the runtime normalizes the
@@ -274,17 +290,37 @@ credential-free provider endpoint, not secret values. Redaction changes only
 owned runtime evidence. Its audit records file paths, categories, and
 replacement counts. It does not change the candidate output.
 
-The qualified DeepSeek compatibility conditions are:
+The package owns one versioned provider and feature matrix at
+`src/aec_bench/adapters/deepseek_harness/profiles/qualification-matrix.json`.
+Each row records the AEC revision, SDK version, runtime version, provider route,
+qualification date, and the evidence or reason for each feature cell. Keyless
+protocol proof and credentialed live-provider proof are different cells. A
+provider route is `qualified` only when every required cell passed for the
+exact version set. A trial with a different or unavailable source revision is
+`unqualified`, even when its protocol tests passed.
 
-| Treatment | AEC identity | DeepSeek identity | Optional plugin | Qualification proof |
-| --- | --- | --- | --- | --- |
-| Baseline | Installed AEC package version in the manifest | Exact SDK pin from `pyproject.toml`; worker requires the runtime distribution to match | None | Keyless real-composition suite |
-| Native tool gateway | Same | Same | `@aec-bench/dsh-tools` protocol v2 with exact `NativeToolDefinition` names and JSON schemas | Authenticated endpoint tests plus lifecycle and pump-world boundary tests |
-| Explicit output commit | Same | Same | Named, versioned build copied into the trial evidence | Keyless rejection, repair, acceptance, and stability suite |
+The initial matrix records both the Azure and official DeepSeek routes as
+`partial`. It does not claim retained live-provider evidence. Release owners
+must add content-addressed live evidence before they change either route to
+`qualified`.
 
-The manifest states that resolved composition and resolved tool-surface dumps
-are unavailable. The pinned SDK path does not expose them. The adapter retains
-the exact Cordis input and does not claim stronger evidence.
+The pinned SDK path does not expose a canonical resolved composition or the
+complete model-visible request surface. The manifest records both levels as
+`unavailable` with a reason. The exact Cordis input, system prompt, AEC native
+tool manifest, plugin build, and plugin package lock remain declared evidence.
+They do not become resolved-runtime or model-visible evidence.
+
+The supported dependency profiles are:
+
+| Profile | Installation | Required check |
+| --- | --- | --- |
+| `core` | `uv sync --frozen` | Public CLI, optional-boundary, and core lint gates |
+| `all-adapters` | `uv sync --frozen --extra execution --extra deepseek-harness --extra morph --extra local-agents --extra prime --extra prime-agent` | Adapter suites collect and run without undeclared imports |
+| `all-extras` | `uv sync --frozen --all-extras` | `uv run pytest --collect-only -q tests/` has no collection errors |
+| `release-qualification` | `all-extras` plus the locked DeepSeek Node toolchain | Focused DeepSeek, actor-conformance, pump-world, plugin test, and reproducible plugin-build gates pass |
+
+The release CI job implements the last two rows. It does not use provider
+credentials and cannot satisfy a live-provider matrix cell.
 
 For native-tool runs, the manifest records the exact tool names and copied
 plugin artifact. Generic tools supply an explicit `NativeToolDefinition`.
@@ -354,8 +390,13 @@ dispatch semantics at the actor boundary.
 A DeepSeek native world trial also retains
 `native-world-tool-surface.json`. This record contains the complete canonical
 catalogue, the action-to-public-tool mapping, the exact model-facing tool
-manifest, the catalogue SHA-256, and the public tool-surface SHA-256. The
-treatment record identifies the presentation mode as `deepseek-native`.
+manifest, the catalogue SHA-256, and the public tool-surface SHA-256. Each
+segment manifest also binds a `segment-snapshot` of
+`actor-invocation-evidence.jsonl` and `actor-correlation.jsonl`. The
+correlation artifact maps DeepSeek session and tool-call identities to the
+matching actor evidence sequences. The complete session-owned actor stream is
+final only after the shared authority closes. The treatment record identifies
+the presentation mode as `deepseek-native`.
 Deterministic conformance tests run the same stale, accepted, duplicate,
 conflict, and terminal script through `WorldActorEndpoint` and the compiled
 DeepSeek tools. They compare shared authority and world semantics, not

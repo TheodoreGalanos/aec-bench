@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from aec_bench.adapters.deepseek_harness.native_world_tools import DeepSeekNativeWorldEvidence
     from aec_bench.adapters.deepseek_harness.tool_gateway import NativeToolDefinition
 
 logger = logging.getLogger(__name__)
@@ -402,6 +403,7 @@ def _build_deepseek_harness(
     workspace: str,
     native_tools: list[Callable[..., str]] | None = None,
     native_tool_definitions: Sequence[NativeToolDefinition] | None = None,
+    native_world_evidence: DeepSeekNativeWorldEvidence | None = None,
     **_kwargs: Any,
 ) -> Any:
     """Build the official DeepSeek Harness adapter through its shared runtime."""
@@ -427,6 +429,7 @@ def _build_deepseek_harness(
         settings=settings,
         workspace=workspace,
         native_tools=definitions,
+        native_world_evidence=native_world_evidence,
     )
 
 

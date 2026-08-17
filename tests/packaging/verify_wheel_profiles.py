@@ -179,7 +179,22 @@ def _verify_profile(
 ) -> None:
     imports = ";".join(f"import {module}" for module in profile.imports)
     _run([str(python), "-I", "-c", imports], cwd=work, env=env)
-    if name == "prime":
+    if name == "deepseek-harness":
+        _run(
+            [
+                str(python),
+                "-I",
+                "-c",
+                (
+                    "from aec_bench.adapters.deepseek_harness.qualification import "
+                    "load_deepseek_qualification_matrix; "
+                    "matrix=load_deepseek_qualification_matrix(); assert len(matrix.rows) == 2"
+                ),
+            ],
+            cwd=work,
+            env=env,
+        )
+    elif name == "prime":
         _run([str(_command(python.parents[1], "prime")), "--version"], cwd=work, env=env, expected="0.6.2")
     elif name == "webui":
         _run(

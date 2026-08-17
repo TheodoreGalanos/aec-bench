@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -14,14 +15,18 @@ import pytest
 from aec_bench.adapters.base import AdapterRequest
 from aec_bench.adapters.deepseek_harness import runtime as deepseek_runtime
 from aec_bench.adapters.deepseek_harness.config import DeepSeekHarnessSettings
-from aec_bench.adapters.deepseek_harness.evidence import verify_deepseek_evidence_manifest
+from aec_bench.adapters.deepseek_harness.evidence import (
+    DeepSeekEvidenceManifest,
+    verify_deepseek_evidence_manifest,
+)
+from aec_bench.adapters.deepseek_harness.native_world_tools import DeepSeekNativeWorldEvidence
 from aec_bench.adapters.deepseek_harness.runtime import (
     DeepSeekHarnessProcessRuntime,
     DeepSeekHarnessRuntimeError,
     DeepSeekHarnessRuntimeTimeout,
     build_deepseek_worker_environment,
 )
-from aec_bench.adapters.deepseek_harness.tool_gateway import json_native_tool_definition
+from aec_bench.adapters.deepseek_harness.tool_gateway import json_native_tool_definition, native_tool_manifest
 from aec_bench.contracts.task_definition import ToolSpec
 
 
@@ -275,15 +280,16 @@ result_path.write_text(json.dumps({
     assert result.manifest_path is not None
     assert result.manifest_path.is_file()
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-    assert manifest["schema_version"] == "aecbench.deepseek-evidence-manifest.v1"
+    assert manifest["schema"] == "aec-bench/deepseek-evidence/2"
     assert manifest["trial_id"] == runtime.paths.root.name
-    assert manifest["adapter"] == {
-        "kind": "deepseek_harness",
-        "aec_bench_version": "0.1.0",
-        "python_sdk_version": "fake-sdk",
-        "runtime_distribution_version": "fake-runtime",
-        "runtime_reported_version": None,
-    }
+    assert manifest["adapter"]["kind"] == "deepseek_harness"
+    assert manifest["adapter"]["aec_bench_version"] == "0.1.0"
+    assert manifest["adapter"]["python_sdk_version"] == "fake-sdk"
+    assert manifest["adapter"]["runtime_distribution_version"] == "fake-runtime"
+    assert manifest["adapter"]["runtime_reported_version"] is None
+    assert (manifest["adapter"]["aec_bench_revision"] is None) != (
+        manifest["adapter"]["aec_bench_revision_reason"] is None
+    )
     assert manifest["model"] == {
         "provider": "azure",
         "harness_route": "azure",
@@ -296,12 +302,29 @@ result_path.write_text(json.dumps({
     assert manifest["execution"]["max_tokens"] == 17
     assert manifest["execution"]["process_group_retired"] is True
     assert manifest["plugins"] == []
-    assert manifest["composition"]["resolved_composition_available"] is False
-    assert manifest["composition"]["resolved_tool_surface_available"] is False
+    assert manifest["attestation"]["declared"]["status"] == "complete"
+    assert manifest["attestation"]["resolved_runtime"] == {
+        "status": "unavailable",
+        "artifacts": [],
+        "reason": "deepseek-harness-sdk-does-not-expose-resolved-runtime-composition",
+    }
+    assert manifest["attestation"]["model_visible"]["status"] == "unavailable"
+    assert manifest["qualification"] == {
+        "matrix_id": "deepseek-harness-0.1.0rc6-initial",
+        "matrix": {
+            "path": "qualification-reference.json",
+            "sha256": deepseek_runtime._file_sha256(runtime.paths.qualification_reference),
+        },
+        "provider_route": "azure",
+        "status": "unqualified",
+        "live_qualified": False,
+        "qualified_features": [],
+    }
     roles = {artifact["role"] for artifact in manifest["artifacts"]}
     assert {
         "all_session_notifications",
         "composition_identity",
+        "qualification_matrix",
         "redaction_audit",
         "runtime_identity",
     }.issubset(roles)
@@ -319,12 +342,13 @@ result_path.write_text(json.dumps({
     assert "must-be-redacted" not in redaction_text
     composition = json.loads(runtime.paths.composition.read_text(encoding="utf-8"))
     runtime_record = json.loads(runtime.paths.runtime_record.read_text(encoding="utf-8"))
-    assert "schema_version" not in composition
+    assert composition["schema"] == "aec-bench/deepseek-declared-composition/1"
     assert "qualified_source_revision" not in composition
     assert "sdk_version" not in composition
     assert "schema_version" not in runtime_record
     assert composition["timeout_sec"] == 5
     assert composition["max_tokens"] == 17
+    assert composition["aec_native_tool_manifest"] == []
     assert composition["environment"]["secret_names"] == ["DSH_API_KEY"]
     assert composition["environment"]["passthrough_names"]
     assert "DSH_API_KEY" not in composition["environment"]["passthrough_names"]
@@ -333,6 +357,18 @@ result_path.write_text(json.dumps({
     assert runtime_record["timeout_sec"] == 5
     assert runtime_record["max_tokens"] == 17
     assert result.evidence_manifest_sha256 is not None
+
+    future_payload = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    future_payload["future_manifest_field"] = {"retained": True}
+    future_payload["attestation"]["declared"]["future_level_field"] = "retained"
+    imported = DeepSeekEvidenceManifest.model_validate(future_payload).model_dump(mode="json", by_alias=True)
+    assert imported["future_manifest_field"] == {"retained": True}
+    assert imported["attestation"]["declared"]["future_level_field"] == "retained"
+    legacy_payload = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    legacy_payload["schema_version"] = "aecbench.deepseek-evidence-manifest.v1"
+    del legacy_payload["schema"]
+    with pytest.raises(ValueError, match="schema"):
+        DeepSeekEvidenceManifest.model_validate(legacy_payload)
 
     with pytest.raises(DeepSeekHarnessRuntimeError, match="only one trial"):
         runtime.run(AdapterRequest(instruction="Do the work again", configuration={"timeout_sec": 5}))
@@ -426,6 +462,9 @@ result_path.write_text(json.dumps({
     assert composition["plugins"] == [
         {
             "artifact_path": "plugins/output-commit/index.js",
+            "artifact_sha256": deepseek_runtime._file_sha256(runtime.paths.output_commit_plugin),
+            "package_lock_path": "plugins/package-lock.json",
+            "package_lock_sha256": deepseek_runtime._file_sha256(runtime.paths.plugin_package_lock),
             "plugin_id": "@aec-bench/dsh-output-commit",
             "role": "output_commit",
             "version": "0.1.0",
@@ -436,6 +475,13 @@ result_path.write_text(json.dumps({
         {artifact["role"] for artifact in manifest["artifacts"]}
     )
     assert manifest["plugins"] == composition["plugins"]
+    assert manifest["plugins"][0]["artifact_sha256"] == deepseek_runtime._file_sha256(
+        runtime.paths.output_commit_plugin
+    )
+    assert manifest["plugins"][0]["package_lock_path"] == "plugins/package-lock.json"
+    assert manifest["plugins"][0]["package_lock_sha256"] == deepseek_runtime._file_sha256(
+        runtime.paths.plugin_package_lock
+    )
 
 
 def test_runtime_binds_exact_native_tools_and_records_secret_free_evidence(tmp_path: Path) -> None:
@@ -498,22 +544,57 @@ result_path.write_text(json.dumps({
 }))
 """.strip(),
     )
+    definition = json_native_tool_definition(
+        name="list_workspace",
+        description="List files",
+        parameters_schema={
+            "type": "object",
+            "properties": {"path": {"type": "string", "default": ""}},
+            "required": [],
+            "additionalProperties": False,
+        },
+        function=list_workspace,
+    )
+    tool_manifest = native_tool_manifest((definition,))
+    action_mapping = ({"catalogue_action": "list_workspace", "public_tool": "list_workspace"},)
+    surface_identity = {"action_mapping": action_mapping, "tools": tool_manifest}
+    public_surface_sha256 = hashlib.sha256(
+        json.dumps(surface_identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    actor_evidence_path = tmp_path / "actor-invocation-evidence.jsonl"
+    actor_evidence_path.write_text(
+        json.dumps(
+            {
+                "sequence": 7,
+                "record_type": "request-admitted",
+                "request_id": "dsh:root:tool-1",
+                "correlation": {
+                    "transport_request_id": "dsh:root:tool-1",
+                    "provider_session_id": "root",
+                    "provider_tool_call_id": "tool-1",
+                    "model_turn": 1,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     runtime = DeepSeekHarnessProcessRuntime(
         settings=_settings(tmp_path),
         workspace=tmp_path,
         worker_command=(sys.executable, str(worker)),
-        native_tools=(
-            json_native_tool_definition(
-                name="list_workspace",
-                description="List files",
-                parameters_schema={
-                    "type": "object",
-                    "properties": {"path": {"type": "string", "default": ""}},
-                    "required": [],
-                    "additionalProperties": False,
-                },
-                function=list_workspace,
-            ),
+        native_tools=(definition,),
+        native_world_evidence=DeepSeekNativeWorldEvidence(
+            surface_record={
+                "schema": "aec-bench/native-world-tool-surface/1",
+                "task_world_id": "test/list-workspace",
+                "catalogue_sha256": "a" * 64,
+                "public_tool_surface_sha256": public_surface_sha256,
+                "catalogue": {},
+                "action_mapping": action_mapping,
+                "tools": tool_manifest,
+            },
+            actor_authority_evidence_path=actor_evidence_path,
         ),
     )
     request = AdapterRequest(
@@ -540,17 +621,32 @@ result_path.write_text(json.dumps({
     assert composition["environment"]["secret_names"] == ["DSH_API_KEY", "DSH_TOOLS_TOKEN"]
     manifest = json.loads(runtime.paths.manifest.read_text(encoding="utf-8"))
     assert manifest["composition"]["native_tools"] == ["list_workspace"]
-    assert manifest["plugins"] == [
-        {
-            "artifact_path": "plugins/tools/index.js",
-            "plugin_id": "@aec-bench/dsh-tools",
-            "role": "native_tools",
-            "version": "0.2.0",
-        }
-    ]
-    assert {"tool_gateway_evidence", "optional_plugin"}.issubset(
-        {artifact["role"] for artifact in manifest["artifacts"]}
-    )
+    assert manifest["actor_native_tools"]["task_world_id"] == "test/list-workspace"
+    assert manifest["actor_native_tools"]["actor_catalogue_sha256"] == "a" * 64
+    assert manifest["actor_native_tools"]["public_native_tool_surface_sha256"] == public_surface_sha256
+    assert manifest["actor_native_tools"]["presentation_mode"] == "deepseek-native"
+    assert manifest["actor_native_tools"]["actor_authority_scope"] == "segment-snapshot"
+    correlation = [json.loads(line) for line in runtime.paths.actor_correlation.read_text().splitlines()]
+    assert correlation[0]["request_id"] == "dsh:root:tool-1"
+    assert correlation[0]["actor_evidence_sequences"] == [7]
+    assert len(manifest["plugins"]) == 1
+    assert manifest["plugins"][0] == {
+        "artifact_path": "plugins/tools/index.js",
+        "artifact_sha256": deepseek_runtime._file_sha256(runtime.paths.tool_gateway_plugin),
+        "package_lock_path": "plugins/package-lock.json",
+        "package_lock_sha256": deepseek_runtime._file_sha256(runtime.paths.plugin_package_lock),
+        "plugin_id": "@aec-bench/dsh-tools",
+        "role": "native_tools",
+        "version": "0.2.0",
+    }
+    assert {
+        "actor_authority_evidence",
+        "actor_correlation",
+        "native_world_tool_surface",
+        "tool_gateway_evidence",
+        "optional_plugin",
+        "plugin_package_lock",
+    }.issubset({artifact["role"] for artifact in manifest["artifacts"]})
 
 
 def test_runtime_rejects_completion_after_nonquiescent_tool_close(tmp_path: Path) -> None:

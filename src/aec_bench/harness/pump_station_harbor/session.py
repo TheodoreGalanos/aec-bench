@@ -16,6 +16,7 @@ from aec_bench.adapters.base import AdapterRequest, AdapterResult
 from aec_bench.adapters.deepseek_harness.native_world_tools import (
     WORLD_OBSERVE_DESCRIPTION,
     WORLD_OBSERVE_TOOL_NAME,
+    DeepSeekNativeWorldEvidence,
     compile_world_native_tools,
     native_world_tool_surface_record,
 )
@@ -309,9 +310,14 @@ def run_pump_station_model_session(
                 ):
                     raise RuntimeError("DeepSeek native world tool surface changed between model segments")
                 native_tools = None
+                native_world_evidence = DeepSeekNativeWorldEvidence(
+                    surface_record=segment_surface,
+                    actor_authority_evidence_path=authority.config.evidence_path,
+                )
             else:
                 native_tool_definitions = None
                 native_tools = _compile_tool_loop_world_tools(authority, catalogue)
+                native_world_evidence = None
             adapter = resolved_builder(
                 adapter_kind=adapter_kind,
                 model_name=model_name,
@@ -319,6 +325,7 @@ def run_pump_station_model_session(
                 trajectory_writer=trajectory,
                 native_tools=native_tools,
                 native_tool_definitions=native_tool_definitions,
+                native_world_evidence=native_world_evidence,
                 enable_bash=False,
             )
             segment_result = adapter.execute(

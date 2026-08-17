@@ -8,6 +8,7 @@ import json
 import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator
@@ -76,6 +77,39 @@ _INFRASTRUCTURE_ARGUMENTS = frozenset({"request_id", "decision_id"})
 class _CursorRequest:
     decision_id: str
     completion_applied: bool = False
+
+
+@dataclass(frozen=True)
+class DeepSeekNativeWorldEvidence:
+    """Supply task-owned world identity and actor evidence to one DeepSeek run."""
+
+    surface_record: dict[str, Any]
+    actor_authority_evidence_path: Path
+
+    def __post_init__(self) -> None:
+        surface = _canonical_json(self.surface_record)
+        if surface.get("schema") != NATIVE_WORLD_TOOL_SURFACE_SCHEMA:
+            raise ValueError("native world evidence requires the current tool-surface schema")
+        for name in ("task_world_id", "catalogue_sha256", "public_tool_surface_sha256"):
+            value = surface.get(name)
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"native world evidence requires {name}")
+        for name in ("catalogue_sha256", "public_tool_surface_sha256"):
+            value = surface[name]
+            if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+                raise ValueError(f"native world evidence requires a canonical {name}")
+        surface_identity = {
+            "action_mapping": surface.get("action_mapping"),
+            "tools": surface.get("tools"),
+        }
+        if _json_sha256(surface_identity) != surface["public_tool_surface_sha256"]:
+            raise ValueError("native world evidence public tool-surface hash does not match its content")
+        source_path = Path(self.actor_authority_evidence_path)
+        if source_path.is_symlink() or not source_path.is_file():
+            raise ValueError("native world evidence requires a regular actor authority evidence file")
+        evidence_path = source_path.resolve()
+        object.__setattr__(self, "surface_record", surface)
+        object.__setattr__(self, "actor_authority_evidence_path", evidence_path)
 
 
 class NativeWorldToolTransport:
@@ -398,6 +432,7 @@ __all__ = [
     "NATIVE_WORLD_TRANSPORT",
     "WORLD_OBSERVE_DESCRIPTION",
     "WORLD_OBSERVE_TOOL_NAME",
+    "DeepSeekNativeWorldEvidence",
     "NativeWorldToolTransport",
     "compile_world_native_tools",
     "native_world_tool_surface_record",

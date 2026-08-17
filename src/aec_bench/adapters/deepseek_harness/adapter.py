@@ -25,6 +25,7 @@ from aec_bench.adapters.deepseek_harness.config import (
     treatment_record,
     validate_deepseek_request,
 )
+from aec_bench.adapters.deepseek_harness.native_world_tools import DeepSeekNativeWorldEvidence
 from aec_bench.adapters.deepseek_harness.runtime import (
     DeepSeekHarnessProcessRuntime,
     DeepSeekHarnessRun,
@@ -46,6 +47,7 @@ class DeepSeekHarnessAdapter:
         workspace: str | Path,
         runtime: DeepSeekRuntime | None = None,
         native_tools: Sequence[NativeToolDefinition] | None = None,
+        native_world_evidence: DeepSeekNativeWorldEvidence | None = None,
         adapter_name: str = "deepseek_harness",
     ) -> None:
         self._settings = settings
@@ -55,6 +57,7 @@ class DeepSeekHarnessAdapter:
             settings=settings,
             workspace=self._workspace,
             native_tools=native_tools,
+            native_world_evidence=native_world_evidence,
         )
         self._adapter_name = adapter_name
 
