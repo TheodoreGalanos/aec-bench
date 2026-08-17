@@ -146,6 +146,7 @@ def _invocation(request_id: str, tool_name: str) -> NativeToolInvocation:
 
 def _prime_script(tmp_path: Path) -> dict[str, Any]:
     host = _ConformanceHost()
+    (tmp_path / "prime").mkdir()
     authority = _authority(tmp_path, host, "prime")
     endpoint = WorldActorEndpoint(
         authority=authority,
