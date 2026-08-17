@@ -52,6 +52,7 @@ app = typer.Typer(help="Run the synthetic wastewater pump-station stewardship wo
 _DEFAULT_REFERENCE_CONTROLLER_ID = PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
 _DEFAULT_MODEL_MAX_TURNS = 90
 _DEFAULT_MODEL_MAX_TOKENS = 8192
+_DEFAULT_MODEL_MAX_WORLD_ACTIONS = 90
 
 
 def _model_payload(value: object) -> dict[str, object]:
@@ -325,6 +326,12 @@ def run_harbor_command(
         min=1,
         help="Maximum model requests for a model-controlled session",
     ),
+    max_world_actions: int = typer.Option(
+        _DEFAULT_MODEL_MAX_WORLD_ACTIONS,
+        "--max-world-actions",
+        min=1,
+        help="Maximum actor world actions across all model segments",
+    ),
     max_tokens: int = typer.Option(
         _DEFAULT_MODEL_MAX_TOKENS,
         "--max-tokens",
@@ -363,6 +370,7 @@ def run_harbor_command(
         model_name=model,
         adapter=adapter,
         max_turns=max_turns,
+        max_world_actions=max_world_actions,
         max_tokens=max_tokens if adapter == "deepseek_harness" else None,
         timeout_sec=timeout_sec,
         environment_binding=resolve_harbor_environment_binding(backend),
@@ -378,9 +386,13 @@ def run_harbor_command(
             "model": model,
             "adapter": adapter,
             "limits": (
-                {"max_tokens": max_tokens, "timeout_sec": timeout_sec}
+                {
+                    "max_world_actions": max_world_actions,
+                    "max_tokens": max_tokens,
+                    "timeout_sec": timeout_sec,
+                }
                 if adapter == "deepseek_harness"
-                else {"max_turns": max_turns}
+                else {"max_world_actions": max_world_actions, "max_turns": max_turns}
             ),
             "executed": execute,
             "exit_code": result.exit_code,

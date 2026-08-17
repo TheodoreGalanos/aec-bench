@@ -21,6 +21,7 @@ from aec_bench.harness.pump_station_harbor.session import (
     PUMP_STATION_MODEL_CONTROLLER_MODE,
     PUMP_STATION_MODEL_MAX_TOKENS,
     PUMP_STATION_MODEL_MAX_TURNS,
+    PUMP_STATION_MODEL_MAX_WORLD_ACTIONS,
 )
 from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
@@ -38,6 +39,7 @@ def build_pump_station_harbor_job_config(
     model_name: str = PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
     adapter: str = "tool_loop",
     max_turns: int = PUMP_STATION_MODEL_MAX_TURNS,
+    max_world_actions: int = PUMP_STATION_MODEL_MAX_WORLD_ACTIONS,
     max_tokens: int | None = None,
     timeout_sec: int | None = None,
     environment_binding: HarborEnvironmentBinding | None = None,
@@ -53,6 +55,8 @@ def build_pump_station_harbor_job_config(
         raise ValueError("pump-station Harbor model name is required")
     if max_turns < 1:
         raise ValueError("pump-station Harbor max turns must be positive")
+    if isinstance(max_world_actions, bool) or max_world_actions < 1:
+        raise ValueError("pump-station Harbor world action budget must be positive")
     reference_controller = model == PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID
     adapter_kind = "tool_loop" if reference_controller else adapter.strip()
     if adapter_kind not in {"deepseek_harness", "tool_loop"}:
@@ -66,6 +70,7 @@ def build_pump_station_harbor_job_config(
     agent_name = "pump-station-reference-controller"
     if not reference_controller:
         agent_name = "pump-station-model-controller"
+        agent_kwargs["max_world_actions"] = max_world_actions
         if adapter_kind == "deepseek_harness":
             resolved_max_tokens = PUMP_STATION_MODEL_MAX_TOKENS if max_tokens is None else max_tokens
             if isinstance(resolved_max_tokens, bool) or resolved_max_tokens <= 0:
@@ -122,6 +127,7 @@ def run_pump_station_harbor_job(
     model_name: str = PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
     adapter: str = "tool_loop",
     max_turns: int = PUMP_STATION_MODEL_MAX_TURNS,
+    max_world_actions: int = PUMP_STATION_MODEL_MAX_WORLD_ACTIONS,
     max_tokens: int | None = None,
     timeout_sec: int | None = None,
     environment_binding: HarborEnvironmentBinding | None = None,
@@ -141,6 +147,7 @@ def run_pump_station_harbor_job(
         model_name=model_name,
         adapter=adapter,
         max_turns=max_turns,
+        max_world_actions=max_world_actions,
         max_tokens=max_tokens,
         timeout_sec=timeout_sec,
         environment_binding=environment_binding,

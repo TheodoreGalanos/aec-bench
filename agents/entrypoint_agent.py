@@ -70,6 +70,7 @@ from aec_bench.harness.pump_station_harbor.session import (
     PUMP_STATION_MODEL_CONTROLLER_MODE,
     PUMP_STATION_MODEL_MAX_TOKENS,
     PUMP_STATION_MODEL_MAX_TURNS,
+    PUMP_STATION_MODEL_MAX_WORLD_ACTIONS,
     CompletedPumpStationModelSession,
     CompletedPumpStationReferenceSession,
     run_pump_station_model_session,
@@ -781,6 +782,9 @@ class EntrypointAgent(BaseAgent):
         else:
             provider_environment = _host_model_provider_environment(model)
         max_turns = configured_positive_int(self._params, "max_turns") or PUMP_STATION_MODEL_MAX_TURNS
+        max_world_actions = (
+            configured_positive_int(self._params, "max_world_actions") or PUMP_STATION_MODEL_MAX_WORLD_ACTIONS
+        )
         max_tokens = configured_positive_int(self._params, "max_tokens")
         timeout_sec = configured_positive_int(self._params, "timeout_sec")
         if adapter_kind == "deepseek_harness" and max_tokens is None:
@@ -799,6 +803,7 @@ class EntrypointAgent(BaseAgent):
                         model=model,
                         adapter_kind=adapter_kind,
                         max_turns=max_turns,
+                        max_world_actions=max_world_actions,
                         max_tokens=max_tokens,
                         timeout_sec=timeout_sec,
                         adapter_builder=self._lifecycle_adapter_builder(),

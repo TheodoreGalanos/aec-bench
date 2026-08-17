@@ -64,9 +64,13 @@ is not content-addressed:
 
 The DeepSeek native-tool facade does not expose the installed request ID as a
 model argument. Its authenticated gateway derives one stable ID from the
-DeepSeek session and tool-call identity, then supplies that ID when the pump
-wrapper creates `WorldActorActionRequest`. This changes transport presentation,
-not the task-owned retry, conflict, state-transition, or evidence semantics.
+DeepSeek session and tool-call identity. `NativeWorldToolTransport` supplies
+that ID to one trial-wide `ActorInvocationAuthority`. The authority captures
+the current opaque decision for a new request and retains it for exact retries.
+It owns request conflicts, one action budget, total dispatch order, the terminal
+latch, and actor-boundary evidence. This changes transport presentation, not
+task-owned state-transition or receipt semantics. Generic non-world native
+tools keep their request replay in `ToolGatewayEndpoint`.
 
 The pump actor command resolves the selected run from `--run-dir` on every
 call. The repository lock and selected pointer support concurrent and
@@ -183,12 +187,16 @@ Harbor uses the concrete pump integration. The neutral world definition has no
 provider or Harbor port. Harbor import verifies durable pump evidence before
 calling evaluation.
 
-Prime ACP evidence and actor transport evidence are secondary execution
-evidence. The pump repository remains canonical replay authority. The actor log
-contains timestamps plus actor-visible requests, results, and errors. It also
-records malformed, unauthorized, and transport-level attempts using only a
-safe operation label. It excludes the capability secret, endpoint and
-repository paths, arbitrary malformed payload content, and hidden state.
+Prime ACP evidence, actor transport evidence, and DeepSeek actor-invocation
+evidence are secondary execution evidence. The pump repository remains
+canonical replay authority. The Prime actor log contains timestamps plus
+actor-visible requests, results, and errors. It also records malformed,
+unauthorized, and transport-level attempts using only a safe operation label.
+It excludes the capability secret, endpoint and repository paths, arbitrary
+malformed payload content, and hidden state. The DeepSeek semantic actor stream
+contains ordered digests, request identity, action sequence, budget movement,
+terminal state, and close state. It excludes raw arguments, opaque decisions,
+provider credentials, and host-only state.
 
 Prime HOME and XDG paths are trial-local under the actor workspace. A bounded
 session has one Prime runtime. A pump journey uses the same actor workspace for

@@ -17,6 +17,7 @@ from aec_bench.adapters.deepseek_harness.tool_gateway import (
     NativeToolDefinition,
     NativeToolDisposition,
     NativeToolInvocation,
+    NativeToolRequestSemantics,
     NativeToolResponse,
     ToolGatewayEndpoint,
 )
@@ -93,6 +94,54 @@ def test_endpoint_uses_explicit_schema_hidden_identity_and_exact_replay(tmp_path
     assert invocation["result_sha256"] is not None
     assert duplicate["duplicate_of"] == "dsh:root:tool-1"
     assert all("private-capability" not in json.dumps(item) for item in evidence)
+
+
+def test_handler_authority_receives_exact_retries_without_gateway_replay(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    def authority_managed(
+        invocation: NativeToolInvocation,
+        _arguments: Mapping[str, JsonValue],
+    ) -> NativeToolResponse:
+        calls.append(invocation.request_id)
+        return NativeToolResponse(result={"call_count": len(calls)})
+
+    evidence_path = tmp_path / "tool-gateway-evidence.jsonl"
+    endpoint = ToolGatewayEndpoint(
+        tools=(
+            NativeToolDefinition(
+                name="world_action",
+                description="world action",
+                parameters_schema={
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": False,
+                },
+                handler=authority_managed,
+                request_semantics=NativeToolRequestSemantics.HANDLER_AUTHORITY,
+            ),
+        ),
+        evidence_path=evidence_path,
+        capability_token="private-capability",
+    )
+    endpoint.start()
+    try:
+        payload = _request(endpoint, tool_call_id="world-1", tool_name="world_action", arguments={})
+        first = _exchange(endpoint, payload)
+        second = _exchange(endpoint, payload)
+    finally:
+        close_report = endpoint.close()
+
+    assert first["result"] == {"call_count": 1}
+    assert second["result"] == {"call_count": 2}
+    assert calls == ["dsh:root:world-1", "dsh:root:world-1"]
+    assert close_report.quiescent is True
+    evidence = _evidence(evidence_path)
+    invocations = [item for item in evidence if item["record_type"] == "invocation"]
+    assert len(invocations) == 2
+    assert {item["request_semantics"] for item in invocations} == {"handler-authority"}
+    assert not any(item["record_type"] == "duplicate" for item in evidence)
 
 
 def test_endpoint_rejects_unauthorised_unknown_invalid_and_conflicting_requests(tmp_path: Path) -> None:
