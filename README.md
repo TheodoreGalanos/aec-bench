@@ -448,16 +448,29 @@ await aec_world.invoke(
 )
 ```
 
-The shared Prime actor endpoint exposes only `capabilities`, `observe`, and
-`invoke`. It connects to one task-owned pump or dam episode host. The pump host
-privately binds its world repository; the dam host owns one in-memory episode.
-Prime never receives a world run directory or host-control selector. The Prime
-root session and all descendants share one capability and are therefore one
-composite AECBench actor principal; this integration does not claim that only
-the root process can invoke actions. The endpoint rejects new world actions
-after the configured allowance. An exact retry of the same request remains
-available and does not consume another allowance, so the task host's retry
-contract stays authoritative.
+The provider-neutral `WorldActorEndpoint` exposes only `capabilities`,
+`observe`, and `invoke` through local protocol `aec-bench/world-actor/1`. It
+connects to one task-owned pump or dam episode host. The pump host privately
+binds its world repository; the dam host owns one in-memory episode. Prime never
+receives a world run directory or host-control selector.
+
+AECBench stages one standard-library `aec_world` client in the actor workspace.
+The Prime `aec-world` skill contains only Prime-specific instructions. The same
+client also has a JSON command interface:
+
+```text
+python -m aec_world capabilities
+python -m aec_world observe
+python -m aec_world invoke --action <name> --decision-id <id> --arguments-json '<json>'
+```
+
+The Prime root session and all descendants share one capability and are one
+composite AECBench actor principal. `ActorInvocationAuthority` owns request
+identity, exact retries, action order, the action budget, terminal state, and
+semantic actor evidence. An exact retry uses the same request ID and does not
+consume another allowance. If the client reports an `unknown` outcome, do not
+submit the action under a new request ID. Endpoint or authority close that is
+not complete prevents complete trial finalization.
 
 AECBench monitors all Prime session artifacts for the composite principal and
 cancels the active ACP prompt when a model-call, aggregate-token, or aggregate-

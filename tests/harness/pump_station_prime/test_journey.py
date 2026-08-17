@@ -343,6 +343,8 @@ def _fake_segment_result(
     evidence_directory.mkdir(parents=True, exist_ok=True)
     actor_transport = evidence_directory / "world-actor-transport.jsonl"
     actor_transport.write_text("", encoding="utf-8")
+    actor_authority = evidence_directory / "world-actor-authority.jsonl"
+    actor_authority.write_text("", encoding="utf-8")
     run_file = evidence_directory / "prime-world-run.json"
     run_file.write_text("{}\n", encoding="utf-8")
     prime = _fake_prime_run(
@@ -366,8 +368,10 @@ def _fake_segment_result(
         verification=verification,
         evaluation=evaluate_pump_station_reference_run(run, evaluation_scope="bounded_continuation"),
         actor_transport_file=actor_transport,
+        actor_authority_file=actor_authority,
         run_file=run_file,
-        world_action_attempts=action_count,
+        world_actor_client_sha256="0" * 64,
+        world_action_count=action_count,
         world_action_limit_reached=world_action_limit_reached,
         benchmark_valid=True,
     )

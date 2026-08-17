@@ -47,13 +47,20 @@ repository location, or content digest. See the
 
 ## Actor boundary
 
-`ContinualWorldActorRequest` is the current unversioned installed request. It
-is not content-addressed:
+Process-based actors use local protocol `aec-bench/world-actor/1`. Each
+connection carries one UTF-8 JSON request plus newline and receives one JSON
+response plus newline. The outer request contains the required protocol,
+transport request ID, capability, and one strict operation:
 
 - `capabilities` and `observe` carry no action;
-- `invoke` carries a request ID, opaque decision ID, task-owned action name,
-  and strict arguments; and
-- session, definition, profile, and actor-binding fields are not actor input.
+- `invoke` carries a logical request ID, opaque decision ID, task-owned action
+  name, and strict arguments; and
+- session, definition, profile, actor-binding, host-control, verification, and
+  evaluation fields are not actor input.
+
+The endpoint rejects an envelope without the protocol version. Transport
+request identity is only correlation. It does not change logical action
+identity.
 
 | Actor-visible | Host-only |
 | --- | --- |
@@ -62,15 +69,27 @@ is not content-addressed:
 | Request ID, action, and arguments | Repository lock, selected pointer, and persistence transaction |
 | Receipt and next observation | Verifier-only and recovery data |
 
+`ActorInvocationAuthority` owns the composite actor principal, frozen
+capability catalogue, logical request conflicts and exact retries, one action
+budget, total dispatch order, terminal latch, and semantic actor evidence. It
+delegates task meaning to the bound world host. It does not own host controls,
+verification, evaluation, or reward.
+
+`WorldActorEndpoint` owns the local socket, capability, versioned framing,
+transport evidence, and close result. It delegates all action semantics to the
+authority. The standalone staged `aec_world` package supplies the async Python
+API and JSON command interface. It has no AECBench runtime dependency. It
+creates a logical request ID before connection and does not automatically retry
+an action. If an invoke response can have been lost after dispatch, it reports
+an `unknown` outcome and retains that request ID.
+
 The DeepSeek native-tool facade does not expose the installed request ID as a
 model argument. Its authenticated gateway derives one stable ID from the
 DeepSeek session and tool-call identity. `NativeWorldToolTransport` supplies
 that ID to one trial-wide `ActorInvocationAuthority`. The authority captures
 the current opaque decision for a new request and retains it for exact retries.
-It owns request conflicts, one action budget, total dispatch order, the terminal
-latch, and actor-boundary evidence. This changes transport presentation, not
-task-owned state-transition or receipt semantics. Generic non-world native
-tools keep their request replay in `ToolGatewayEndpoint`.
+Generic non-world native tools keep their request replay in
+`ToolGatewayEndpoint`.
 
 The pump actor command resolves the selected run from `--run-dir` on every
 call. The repository lock and selected pointer support concurrent and
@@ -78,15 +97,12 @@ separate-process calls without a public binding or in-memory session
 coordinator. A selected-state change makes the prior decision stale. Exact
 retries require the same request identity and command content.
 
-Prime interactive sessions use an additional host-owned, single-episode
-transport. A random capability and a Unix-domain socket authorize one strict
-`ContinualWorldActorRequest`; the endpoint returns the existing actor result
-models. The remote request has no run, episode, branch, profile, actor, tenure,
-evaluation, verification, rollout, or host-control selector. The shared endpoint
-receives one task-owned episode host. The pump host owns its world repository
-path. The dam host owns one in-memory dam episode. The endpoint closes with its
-Prime ACP session. Stale-decision and exact-retry decisions remain inside the
-task episode host.
+Prime interactive sessions stage the generic client and use
+`WorldActorEndpoint`. The shared endpoint receives one task-owned episode host.
+The pump host owns its world repository path. The dam host owns one in-memory
+dam episode. The endpoint and authority close with the Prime ACP session.
+Unsettled or unknown authority work makes close incomplete and prevents complete
+trial finalization.
 
 The Prime root process and its descendants receive the same scoped capability,
 so they form one composite actor principal. Per-child action attribution is not
@@ -123,10 +139,9 @@ all descendants remain one composite actor principal.
 
 The composed entry point requires positive host limits for world actions,
 model calls, aggregate tokens, aggregate provider cost, and elapsed wall time.
-The Prime actor endpoint counts distinct invoke request content while allowing
-an exact retry of the same request without another allowance. A changed request
-under an existing request ID is not an exact retry and still reaches the
-existing host conflict semantics when an allowance remains.
+The shared authority counts an admitted logical world action once. An exact
+retry of the same request ID and content returns the retained outcome without
+another allowance. Different content under the same request ID is a conflict.
 
 AECBench reads every Prime session JSONL artifact for the composite principal.
 It cancels the active ACP prompt when a completed assistant response reaches a
@@ -187,16 +202,15 @@ Harbor uses the concrete pump integration. The neutral world definition has no
 provider or Harbor port. Harbor import verifies durable pump evidence before
 calling evaluation.
 
-Prime ACP evidence, actor transport evidence, and DeepSeek actor-invocation
-evidence are secondary execution evidence. The pump repository remains
-canonical replay authority. The Prime actor log contains timestamps plus
-actor-visible requests, results, and errors. It also records malformed,
-unauthorized, and transport-level attempts using only a safe operation label.
-It excludes the capability secret, endpoint and repository paths, arbitrary
-malformed payload content, and hidden state. The DeepSeek semantic actor stream
-contains ordered digests, request identity, action sequence, budget movement,
-terminal state, and close state. It excludes raw arguments, opaque decisions,
-provider credentials, and host-only state.
+Prime ACP evidence, world actor transport evidence, and semantic
+actor-invocation evidence are secondary execution evidence. The pump repository
+remains canonical replay authority. Transport evidence contains safe operation
+labels, correlations, outcome classes, hashes, and close state. Semantic
+authority evidence contains ordered digests, request identity, action sequence,
+budget movement, terminal state, and close state. These streams exclude the
+capability secret, endpoint and repository paths, raw arguments, opaque
+decisions, arbitrary malformed payload content, provider credentials, and
+host-only state.
 
 Prime HOME and XDG paths are trial-local under the actor workspace. A bounded
 session has one Prime runtime. A pump journey uses the same actor workspace for
@@ -328,9 +342,10 @@ successful transition or evaluation.
 - [separate-process actor resolution](../../tests/worlds/stewardship/wastewater_pump_station/test_actor_interface_transport_e2e.py)
 - [pump retry and recovery](../../tests/worlds/stewardship/wastewater_pump_station/test_registered_world_run_transitions.py)
 - [pump v1 and v2 certified reference-package routes](../../tests/worlds/stewardship/wastewater_pump_station/test_reference_system_package.py)
-- [Prime actor endpoint and pump session composition](../../tests/harness/pump_station_prime/test_session.py)
+- [versioned world actor endpoint and staged client](../../tests/harness/world_actor/test_endpoint.py)
+- [Prime pump session composition](../../tests/harness/pump_station_prime/test_session.py)
 - [dam episode actor semantics](../../tests/worlds/monitoring/dam_seepage/test_episode_runtime.py)
-- [Prime dam endpoint and session composition](../../tests/harness/dam_seepage_prime/test_session.py)
+- [Prime dam session composition](../../tests/harness/dam_seepage_prime/test_session.py)
 - [Prime pump journey composition](../../tests/harness/pump_station_prime/test_journey.py)
 - [pump host continuation policy](../../tests/worlds/stewardship/wastewater_pump_station/test_host_continuation.py)
 - [Prime ACP lifecycle and isolation](../../tests/prime_agent/test_acp.py)

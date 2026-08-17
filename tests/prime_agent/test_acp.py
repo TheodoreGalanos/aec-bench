@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from aec_bench.harness.world_actor import WORLD_ACTOR_CAPABILITY_ENV, WORLD_ACTOR_SOCKET_ENV
 from aec_bench.prime_agent.acp import (
     PrimeAcpIsolation,
     PrimeAcpIsolationError,
@@ -23,8 +24,6 @@ from aec_bench.prime_agent.batch import PRIME_AGENT_TESTED_VERSION
 from aec_bench.prime_agent.refinement import PrimeRefinementMode, empty_refinement_candidate
 from aec_bench.prime_agent.session_evidence import PrimeAcpLimits
 from aec_bench.prime_agent.skills import (
-    WORLD_ACTOR_CAPABILITY_ENV,
-    WORLD_ACTOR_SOCKET_ENV,
     install_aec_world_skill,
     install_prime_skill,
 )

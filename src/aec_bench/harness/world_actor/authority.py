@@ -238,6 +238,18 @@ class ActorInvocationAuthority:
         with self._condition:
             return self._terminal
 
+    @property
+    def last_action_result(self) -> WorldActorActionResult | None:
+        """Return the latest completed world result without adding transport state."""
+        with self._condition:
+            completed = (
+                entry
+                for entry in self._requests.values()
+                if entry.result is not None and entry.state is _RequestState.COMPLETED
+            )
+            latest = max(completed, key=lambda entry: entry.action_sequence, default=None)
+            return None if latest is None else latest.result
+
     def start(self) -> None:
         """Freeze the task-owned catalogue and create the versioned evidence stream."""
         with self._condition:

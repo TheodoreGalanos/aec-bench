@@ -332,6 +332,53 @@ def test_retired_umbrella_packages_have_no_python_sources() -> None:
     assert remaining == []
 
 
+def test_removed_prime_actor_endpoint_and_embedded_client_have_no_residue() -> None:
+    removed_terms = (
+        "Prime" + "ActorEndpoint",
+        "Prime" + "ActorEndpointError",
+        "prime_actor_" + "endpoint.py",
+    )
+    scanned_roots = (
+        REPOSITORY_ROOT / "src",
+        REPOSITORY_ROOT / "tests",
+        REPOSITORY_ROOT / "docs",
+    )
+    this_test = Path(__file__).resolve()
+    violations = {
+        str(path.relative_to(REPOSITORY_ROOT)): sorted(term for term in removed_terms if term in text)
+        for root in scanned_roots
+        for path in root.rglob("*")
+        if path.is_file()
+        and path.resolve() != this_test
+        and path.suffix in {".md", ".py", ".toml"}
+        and (text := path.read_text(encoding="utf-8"))
+        and any(term in text for term in removed_terms)
+    }
+    prime_world_skill = SOURCE_ROOT / "prime_agent" / "skill_packages" / "aec-world"
+
+    assert violations == {}
+    assert sorted(
+        path.relative_to(prime_world_skill).as_posix() for path in prime_world_skill.rglob("*") if path.is_file()
+    ) == ["SKILL.md"]
+
+
+def test_generic_world_actor_boundary_has_no_prime_or_aec_runtime_client_dependency() -> None:
+    world_actor_root = SOURCE_ROOT / "harness" / "world_actor"
+    implementation_paths = tuple(world_actor_root.glob("*.py"))
+    provider_imports = {
+        str(path.relative_to(REPOSITORY_ROOT)): sorted(
+            module for module in _aec_bench_imports(path) if module.startswith("aec_bench.prime_agent")
+        )
+        for path in implementation_paths
+        if any(module.startswith("aec_bench.prime_agent") for module in _aec_bench_imports(path))
+    }
+    client_root = world_actor_root / "client_package" / "aec_world"
+    client_source = "\n".join(path.read_text(encoding="utf-8") for path in sorted(client_root.glob("*.py")))
+
+    assert provider_imports == {}
+    assert "aec_bench" not in client_source
+
+
 def test_package_dependency_audit_rejects_owner_cycles_and_boundary_leaks() -> None:
     audit = subprocess.run(
         [

@@ -9,8 +9,6 @@ from pathlib import Path
 
 from aec_bench.prime_agent.batch import resolve_prime_executable
 
-WORLD_ACTOR_SOCKET_ENV = "AEC_BENCH_WORLD_ACTOR_SOCKET"
-WORLD_ACTOR_CAPABILITY_ENV = "AEC_BENCH_WORLD_ACTOR_CAPABILITY_TOKEN"
 ACTOR_LEDGER_PLAN_INSTRUCTION = (
     "Before your first world action, load and use the full `aec-actor-ledger` skill. "
     "Use its compact results and bounded search and window calls instead of printing full saved state. "
@@ -26,8 +24,9 @@ class PrimeSkillInstallError(RuntimeError):
 
 
 def install_aec_world_skill(actor_workspace: Path) -> Path:
-    """Install the generic actor skill and importable client in one workspace."""
-    return _install_importable_skill(actor_workspace, skill_name="aec-world", package_name="aec_world")
+    """Install Prime-specific instructions for the generic world actor client."""
+    source = Path(__file__).with_name("skill_packages") / "aec-world"
+    return install_prime_skill(actor_workspace, source)
 
 
 def install_aec_actor_ledger_skill(actor_workspace: Path) -> Path:

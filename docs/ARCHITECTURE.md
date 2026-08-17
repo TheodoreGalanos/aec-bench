@@ -232,9 +232,11 @@ exact bytes, not verifier success or reward.
 The separate `prime_agent` integration runs the upstream Prime Agent executable
 directly. JSON mode adapts staged artifact tasks on the existing local path.
 ACP mode owns the Prime process, protocol, isolation, explicit generic skills,
-and session evidence. `harness/prime_actor_endpoint.py` owns the capability-
-scoped transport shared by Prime pump and dam sessions. It routes only the
-installed world actor calls and does not interpret world state.
+and session evidence. `harness/world_actor` owns the provider-neutral,
+capability-scoped `aec-bench/world-actor/1` transport, semantic invocation
+authority, and standalone staged client. The endpoint routes only installed
+world actor calls and does not interpret world state. Prime owns only its skill
+instructions and session composition.
 `harness/pump_station_prime` owns the concrete pump bounded session, guided
 treatment, and journey composition. The pump journey can alternate fresh Prime
 sessions with exact task-owned host controls.
@@ -246,9 +248,9 @@ layers. Read-only treatment and trajectory analysis belongs to
 `experimentation/qualification`; it does not change canonical evaluation.
 
 `harness/dam_seepage_prime` owns one concrete bounded Prime composition for the
-dam monitoring world. It binds the existing in-memory episode to the same
-installed actor request and result models, then runs task evaluation only after
-the endpoint closes. It does not add pump persistence, host controls, journey
+dam monitoring world. It binds the existing in-memory episode to the shared
+world actor authority, then runs task evaluation only after the endpoint closes
+completely. It does not add pump persistence, host controls, journey
 continuation, or a second dam evaluation.
 
 `harness/hydraulic_review_prime` is a separate concrete composition for the
@@ -261,8 +263,9 @@ state, lifecycle state, task verification, and benchmark validity remain
 separate authorities.
 
 The pump, dam, and hydraulic-review integrations share the generic Prime process
-and ACP boundary. The two worlds also share the installed `aec-world` client,
-actor request and result models, and Open or Planned skill composition. Their
+and ACP boundary. The two worlds also share the installed `aec_world` client,
+versioned transport, invocation authority, actor request and result models, and
+Open or Planned skill composition. Their
 world hosts, persistence, continuation, action meaning, replay, and evaluation
 stay task-owned. The hydraulic-review lifecycle has a different scoped file and
 submission boundary. These concrete integrations now support comparison, but

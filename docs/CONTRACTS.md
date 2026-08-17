@@ -42,7 +42,7 @@ readable.
 | Artifact and evidence reference | Harness, ledger, and the producing domain | Filesystem or provider output becomes content-bound evidence | Protected when stored in a trial, dataset, freeze, or published record | `ArtifactReference` in [`trial_record.py`](../src/aec_bench/contracts/trial_record.py) and narrower owner-specific references | Persisted reference |
 | Visibility classification | Task ownership and evaluation policy | Material enters public, calibration, or holdout handling | Protected | `Visibility` in [`task_definition.py`](../src/aec_bench/contracts/task_definition.py) and visibility checks in persisted records | Persisted and policy-bearing |
 | Interactive-world execution | Interactive-world runtime and registered task worlds | An exact build and profile become one task-owned state, observation, action, transition, and evaluation loop | Internal functional core; task-owned persisted records where a world adds persistence | [`interactive_world.py`](../src/aec_bench/contracts/interactive_world.py), [`world_logic.py`](../src/aec_bench/worlds/runtime/world_logic.py), [`episode.py`](../src/aec_bench/worlds/runtime/episode.py), [`catalogue.py`](../src/aec_bench/worlds/catalogue.py), and the task functions described in [World authoring](world-authoring.md) | Internal, with protected owner-specific extensions |
-| Installed world actor and host calls | Interactive-world runtime and concrete integration owners | An actor or host request crosses a process boundary and reaches the permitted task-owned authority | Current unversioned installed calls; pump-owned persisted run records | [`continual_world.py`](../src/aec_bench/contracts/continual_world.py), [`world_interface.py`](../src/aec_bench/contracts/world_interface.py), the scoped Prime [`prime_actor_endpoint.py`](../src/aec_bench/harness/prime_actor_endpoint.py) transport, and the [runtime protocol](protocols/interactive-world-runtime.md) | Internal, persisted, and installed JSON |
+| Installed world actor and host calls | Interactive-world runtime and concrete integration owners | An actor or host request crosses a process boundary and reaches the permitted task-owned authority | Versioned local actor protocol; pump-owned persisted run records | [`world_interface.py`](../src/aec_bench/contracts/world_interface.py), the shared [`world_actor`](../src/aec_bench/harness/world_actor/) authority, protocol, endpoint, and staged client, plus the [runtime protocol](protocols/interactive-world-runtime.md) | Internal, persisted, and installed JSON |
 
 ## Task specification
 
@@ -301,6 +301,22 @@ each exact retry, while `ActorInvocationAuthority` owns the actor principal,
 frozen catalogue identity, request fingerprint and table, action budget, total
 dispatch order, terminal latch, and semantic evidence. A transport correlation
 does not change logical world-action identity.
+
+`WorldActorEndpoint` exposes the same authority to a scoped local process. The
+outer request and response require protocol `aec-bench/world-actor/1` and one
+transport request ID. The authenticated Unix-socket transport accepts one
+UTF-8 JSON object plus newline, returns one JSON object plus newline, and then
+closes the connection. The actor cannot supply a run, profile, branch, host
+control, verifier, evaluation, or authority selector. An envelope without the
+protocol version is invalid.
+
+The standalone `aec_world` client uses only the Python standard library. It
+creates a logical action request ID before it opens the socket and does not
+automatically retry actions. A transport failure after an invoke can have an
+`unknown` outcome. Resolution must retain the same logical request ID. Client
+installation is content-addressed and rejects symbolic links or different
+existing content. Prime skill instructions are separate from this client
+source.
 
 The handler returns `NativeToolResponse`. Only its generic `conclude-turn`
 disposition can conclude the current model turn; the plugin does not inspect a
