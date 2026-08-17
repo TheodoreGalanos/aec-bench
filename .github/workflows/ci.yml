@@ -18,11 +18,26 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up Python 3.13.2
         uses: actions/setup-python@v6
         with:
           python-version: "3.13.2"
+
+      - name: Check provenance policy against pull-request base
+        if: github.event_name == 'pull_request'
+        env:
+          AEC_BENCH_BASE_REVISION: ${{ github.event.pull_request.base.sha }}
+        run: >-
+          python scripts/check_provenance_fields.py
+          --check
+          --base-revision "$AEC_BENCH_BASE_REVISION"
+
+      - name: Check provenance policy
+        if: github.event_name == 'workflow_dispatch'
+        run: python scripts/check_provenance_fields.py --check
 
       - name: Install uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
@@ -38,8 +53,34 @@ jobs:
       - name: Check optional dependency boundaries
         run: uv run pytest -q tests/cli/test_optional_dependencies.py
 
+      - name: Check provenance policy tests
+        run: >-
+          uv run pytest -q
+          tests/test_provenance_policy.py
+          tests/test_provenance_manifest_discovery.py
+          tests/docs/test_documentation_ownership.py
+
       - name: Check repository lint
-        run: uv run ruff check src/ tests/
+        run: >-
+          uv run ruff check
+          src/
+          tests/
+          scripts/check_provenance_fields.py
+
+      - name: Check provenance policy formatting
+        run: >-
+          uv run ruff format --check
+          scripts/check_provenance_fields.py
+          tests/test_provenance_policy.py
+          tests/test_provenance_manifest_discovery.py
+          tests/docs/test_documentation_ownership.py
+
+      - name: Check provenance policy strict types
+        run: >-
+          uv run mypy
+          scripts/check_provenance_fields.py
+          tests/test_provenance_policy.py
+          tests/test_provenance_manifest_discovery.py
 
   packaged-base:
     name: Provider-free wheel

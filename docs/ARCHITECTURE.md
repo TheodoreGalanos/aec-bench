@@ -171,6 +171,12 @@ Immutability is a property of accepted evidence, published datasets, and other
 named records. It is not a requirement that every internal object, service, or
 source file become a ledger event.
 
+The [provenance policy](PROVENANCE_POLICY.md) classifies source identity,
+artifact integrity, domain identity, compatibility, event time, commitments,
+and qualification fields. It is a contributor and review boundary, not a new
+runtime owner. Each domain and operational authority continues to own the
+evidence for the facts it controls.
+
 ### Provider integrations
 
 Adapters translate between the harness and agent execution. Compute backends

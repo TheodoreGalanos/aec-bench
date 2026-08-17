@@ -53,6 +53,7 @@ authority.
 | [Architecture](ARCHITECTURE.md) | Architecture | Current | Contributors and integrators | Repository maintainers |
 | [Contracts](CONTRACTS.md) | Normative | Current | Boundary owners and consumers | Owning domains |
 | [Invariants](INVARIANTS.md) | Normative | Normative | All contributors | Benchmark governance |
+| [Provenance policy](PROVENANCE_POLICY.md) | Normative | Current | Contributors adding persisted or public identity and evidence fields | Contracts and benchmark governance |
 | [Project structure](PROJECT_STRUCTURE.md) | Guide | Current | Contributors and agents | Repository maintainers |
 | [World authoring](world-authoring.md) | Guide | Current | Task and interactive-world contributors | Task, engineering, world, and lifecycle owners |
 | [Interactive-world runtime](protocols/interactive-world-runtime.md) | Protocol | Current | World, runtime, and transport contributors | World runtime and registered worlds |
