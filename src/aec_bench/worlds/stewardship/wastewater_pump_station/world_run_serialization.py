@@ -6,9 +6,11 @@ from __future__ import annotations
 import hashlib
 import json
 import types
+from collections.abc import Hashable
 from dataclasses import fields, is_dataclass
 from decimal import Decimal, InvalidOperation
 from enum import Enum
+from functools import cache
 from typing import Any, NoReturn, TypeVar, cast, get_args, get_origin, get_type_hints, overload
 
 from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_models import (
@@ -84,6 +86,11 @@ def _decode_union(value: object, expected: object) -> object:
     _fail("artifact-type", str(detail))
 
 
+@cache
+def _dataclass_type_hints(expected: Hashable) -> dict[str, object]:
+    return cast(dict[str, object], get_type_hints(cast(type[Any], expected)))
+
+
 def _decode_dataclass(value: object, expected: type[Any]) -> object:
     if not isinstance(value, dict):
         _fail("artifact-shape", f"{expected.__name__} must be an object")
@@ -92,7 +99,7 @@ def _decode_dataclass(value: object, expected: type[Any]) -> object:
     declared_fields = fields(expected)
     if set(value) != {"$type", *(field.name for field in declared_fields)}:
         _fail("artifact-shape", f"{expected.__name__} fields differ")
-    type_hints = cast(dict[str, object], get_type_hints(expected))
+    type_hints = _dataclass_type_hints(cast(Hashable, expected))
     decoded = {field.name: _decode(value[field.name], type_hints[field.name]) for field in declared_fields}
     try:
         return expected(**decoded)

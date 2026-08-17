@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   linux-smoke:
     name: Linux smoke
@@ -129,7 +133,7 @@ jobs:
         run: uv sync --frozen
 
       - name: Run interactive-world tests
-        run: uv run pytest -q tests/worlds/
+        run: uv run pytest -q --durations=25 tests/worlds/
 
       - name: Check owned formatting
         run: >-
@@ -198,18 +202,12 @@ jobs:
 
       - name: Run Prime world journey tests
         run: >-
-          uv run pytest -q
+          uv run pytest -q --durations=25
           tests/prime_agent/test_acp.py
           tests/harness/world_actor/
           tests/harness/dam_seepage_prime/test_session.py
           tests/harness/pump_station_prime/test_session.py
           tests/harness/pump_station_prime/test_journey.py
-          tests/worlds/monitoring/dam_seepage/test_episode_runtime.py
-          tests/worlds/stewardship/wastewater_pump_station/test_bound_root_control_interface_envelope.py
-          tests/worlds/stewardship/wastewater_pump_station/test_host_continuation.py
-          tests/worlds/stewardship/wastewater_pump_station/test_reference_controller.py
-          tests/worlds/stewardship/wastewater_pump_station/test_reference_system_journey.py
-          tests/worlds/stewardship/wastewater_pump_station/test_root_control_capability_authority.py
 
       - name: Check Prime world journey formatting
         run: >-
