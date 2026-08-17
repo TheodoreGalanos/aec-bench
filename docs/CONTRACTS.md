@@ -287,12 +287,20 @@ are unavailable. The pinned SDK path does not expose them. The adapter retains
 the exact Cordis input and does not claim stronger evidence.
 
 For native-tool runs, the manifest records the exact tool names and copied
-plugin artifact. The AEC host supplies each model-facing parameter schema
-explicitly through `NativeToolDefinition`. The endpoint validates requests
-against that schema and gives the handler a hidden `NativeToolInvocation` with
-the DeepSeek session, tool-call, turn, generation, cancellation, and trusted
-request identity. A world action uses that trusted identity; the model-facing
-schema cannot supply or replace it.
+plugin artifact. Generic tools supply an explicit `NativeToolDefinition`.
+Native world tools are compiled from the frozen
+`WorldActorCapabilityCatalogue`: each action keeps its exact name,
+description, and input schema, and `world_observe` is the one reserved
+observation tool. The compiler accepts object properties, required fields,
+boolean `additionalProperties`, scalar and array types, item schemas, enums,
+bounds, descriptions, and one nullable `anyOf` union. Other schema keywords
+fail before model execution; the compiler does not widen them.
+
+The native world action schema cannot contain `request_id` or `decision_id`.
+The endpoint validates task arguments and gives the handler a hidden
+`NativeToolInvocation` with the DeepSeek session, tool-call, turn, generation,
+cancellation, and trusted request identity. That trusted request identity is
+the logical world request ID.
 
 `NativeToolRequestSemantics` identifies the component that owns logical
 request admission. The gateway owns replay for generic non-world tools. A
@@ -301,6 +309,14 @@ each exact retry, while `ActorInvocationAuthority` owns the actor principal,
 frozen catalogue identity, request fingerprint and table, action budget, total
 dispatch order, terminal latch, and semantic evidence. A transport correlation
 does not change logical world-action identity.
+
+One DeepSeek transport instance owns one private decision cursor. A successful
+`world_observe` sets it without using the action budget. An action atomically
+consumes it and can replace it only with a `next_observation` returned to the
+model. A stale decision clears it. An unknown action outcome freezes new calls
+until exact reconciliation. A terminal or truncated result closes the cursor
+and returns the generic `conclude-turn` disposition. This cursor coordinates
+model-visible information; it is not world state.
 
 `WorldActorEndpoint` exposes the same authority to a scoped local process. The
 outer request and response require protocol `aec-bench/world-actor/1` and one
@@ -334,6 +350,16 @@ segments. A non-quiescent or unknown authority outcome blocks a complete
 pump-station trial record. The task-owned world repository remains the
 transition and replay authority; the actor stream records admission and
 dispatch semantics at the actor boundary.
+
+A DeepSeek native world trial also retains
+`native-world-tool-surface.json`. This record contains the complete canonical
+catalogue, the action-to-public-tool mapping, the exact model-facing tool
+manifest, the catalogue SHA-256, and the public tool-surface SHA-256. The
+treatment record identifies the presentation mode as `deepseek-native`.
+Deterministic conformance tests run the same stale, accepted, duplicate,
+conflict, and terminal script through `WorldActorEndpoint` and the compiled
+DeepSeek tools. They compare shared authority and world semantics, not
+provider-specific process events.
 
 ## Output completion and explicit commit
 

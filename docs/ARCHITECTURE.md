@@ -108,6 +108,13 @@ Those are optional pump capabilities, not part of the World minimum. The dam
 seepage task uses the same functional and episode boundaries without those
 capabilities.
 
+Provider composition owns how the frozen actor catalogue is presented. Prime
+uses `WorldActorEndpoint`. DeepSeek compiles the same catalogue into
+`world_observe` and exact native action tools. Both paths use one
+`ActorInvocationAuthority` contract for actor identity, admission, order,
+budget, replay, terminal state, and evidence. A task-world package does not
+define provider-specific action wrappers.
+
 Interactive worlds and artifact tasks meet at the experiment and evidence
 layers. An interactive world does not need to pretend that each action is a
 workspace submission, and an artifact task does not need a world-session API.

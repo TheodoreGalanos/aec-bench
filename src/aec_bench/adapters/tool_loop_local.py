@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -342,7 +342,7 @@ class PydanticAiToolLoopClient:
         advisor_config: AdvisorConfig | None = None,
         trajectory_writer: Any | None = None,
         stream_mode: str = "auto",
-        native_tools: list[Callable[..., str]] | None = None,
+        native_tools: Sequence[Any] | None = None,
         enable_bash: bool = True,
         cache: bool = True,
     ) -> None:
@@ -369,6 +369,7 @@ class PydanticAiToolLoopClient:
             system_prompt="",
             retries=2,
             model_settings=model_settings,
+            tools=list(native_tools or ()),
         )
         self._last_request_usages: tuple[tuple[int, int], ...] = ()
 
@@ -382,9 +383,6 @@ class PydanticAiToolLoopClient:
                 if result.error_message:
                     return f"Error: {result.error_message}"
                 return result.output_text
-
-        for native_tool in native_tools or []:
-            self._agent.tool_plain(native_tool)
 
         # Register advisor as a native tool when the advisor client + config are provided.
         # Mirrors Anthropic's native advisor tool shape: zero parameters, context is

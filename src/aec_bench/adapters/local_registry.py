@@ -290,7 +290,7 @@ def _build_tool_loop(
     workspace: str,
     client: Any | None = None,
     trajectory_writer: Any | None = None,
-    native_tools: list[Callable[..., str]] | None = None,
+    native_tools: Sequence[Any] | None = None,
     enable_bash: bool = True,
     cache: bool = True,
     adapter_name: str = "tool_loop",

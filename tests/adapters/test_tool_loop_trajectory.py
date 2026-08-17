@@ -177,10 +177,11 @@ class TestPydanticAiNativeTools:
         from aec_bench.adapters.tool_loop_local import PydanticAiToolLoopClient
 
         registered: list[str] = []
+        constructor_tools: list[object] = []
 
         class FakeAgent:
-            def __init__(self, *_args: Any, **_kwargs: Any) -> None:
-                pass
+            def __init__(self, *_args: Any, **kwargs: Any) -> None:
+                constructor_tools.extend(kwargs["tools"])
 
             def tool_plain(self, func=None, /, *, name=None, **_kwargs):
                 def register(callback):
@@ -212,7 +213,8 @@ class TestPydanticAiNativeTools:
             native_tools=[submit_checkpoint],
         )
 
-        assert registered == ["bash", "submit_checkpoint"]
+        assert constructor_tools == [submit_checkpoint]
+        assert registered == ["bash"]
 
     def test_pydantic_ai_client_can_disable_bash_for_confined_native_tools(
         self,
@@ -220,15 +222,11 @@ class TestPydanticAiNativeTools:
     ) -> None:
         from aec_bench.adapters.tool_loop_local import PydanticAiToolLoopClient
 
-        registered: list[str] = []
+        constructor_tools: list[object] = []
 
         class FakeAgent:
-            def __init__(self, *_args, **_kwargs) -> None:
-                pass
-
-            def tool_plain(self, tool):
-                registered.append(tool.__name__)
-                return tool
+            def __init__(self, *_args: Any, **kwargs: Any) -> None:
+                constructor_tools.extend(kwargs["tools"])
 
         def read_workspace_file(path: str) -> str:
             return path
@@ -254,4 +252,4 @@ class TestPydanticAiNativeTools:
             enable_bash=False,
         )
 
-        assert registered == ["read_workspace_file"]
+        assert constructor_tools == [read_workspace_file]

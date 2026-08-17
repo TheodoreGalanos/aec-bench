@@ -802,6 +802,12 @@ def _tool_bindings(tools: Sequence[NativeToolDefinition]) -> dict[str, _ToolBind
     return bindings
 
 
+def native_tool_manifest(tools: Sequence[NativeToolDefinition]) -> tuple[dict[str, Any], ...]:
+    """Validate tools and return the exact canonical model-facing manifest."""
+    bindings = _tool_bindings(tools)
+    return tuple(bindings[name].manifest for name in sorted(bindings))
+
+
 def _trusted_request_id(metadata: _ToolMetadata) -> str:
     return f"dsh:{metadata.deepseek_session_id}:{metadata.deepseek_tool_call_id}"
 

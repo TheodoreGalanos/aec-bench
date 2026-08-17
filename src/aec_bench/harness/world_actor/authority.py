@@ -256,7 +256,7 @@ class ActorInvocationAuthority:
             if self._lifecycle is not ActorInvocationLifecycle.CREATED:
                 raise RuntimeError("actor invocation authority can start only once")
         catalogue = self._host.capabilities()
-        catalogue_hash = _json_sha256(catalogue.model_dump(mode="json"))
+        catalogue_hash = actor_catalogue_sha256(catalogue)
         evidence_path = self.config.evidence_path
         evidence_path.parent.mkdir(parents=True, exist_ok=True)
         if evidence_path.exists() or evidence_path.is_symlink():
@@ -869,7 +869,7 @@ class ActorInvocationAuthority:
 
     def _require_catalogue_stable(self) -> None:
         current = self._host.capabilities()
-        current_hash = _json_sha256(current.model_dump(mode="json"))
+        current_hash = actor_catalogue_sha256(current)
         with self._condition:
             expected = self._catalogue_hash
         if current_hash != expected:
@@ -916,6 +916,21 @@ def _request_fingerprint(actor_principal_id: str, request: ActorInvocationReques
             "arguments": request.arguments,
         }
     )
+
+
+def canonical_actor_catalogue(catalogue: WorldActorCapabilityCatalogue) -> dict[str, Any]:
+    """Return the task catalogue with a stable action order and canonical JSON values."""
+    return {
+        "task_world_id": catalogue.task_world_id,
+        "actions": [
+            action.model_dump(mode="json") for action in sorted(catalogue.actions, key=lambda action: action.name)
+        ],
+    }
+
+
+def actor_catalogue_sha256(catalogue: WorldActorCapabilityCatalogue) -> str:
+    """Return one transport-neutral identity for a frozen actor catalogue."""
+    return _json_sha256(canonical_actor_catalogue(catalogue))
 
 
 def _json_bytes(value: Any) -> bytes:
