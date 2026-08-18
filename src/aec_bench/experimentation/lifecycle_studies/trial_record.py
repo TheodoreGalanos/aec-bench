@@ -13,32 +13,38 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Lock
 from typing import Any, Literal, cast
 
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
+from aec_bench.contracts.authority_evidence import AuthorityEvidenceKind
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trajectory import read_trajectory
 from aec_bench.contracts.trial_record import (
     AdaptationProvenance,
-    AgentReference,
+    AgentConfiguration,
     ArtifactReference,
-    Completeness,
+    AuthorityExpectation,
     CostRecord,
-    EnvironmentSnapshot,
-    FileReference,
-    InputRecord,
+    EvaluationStatus,
+    EvidenceStatus,
+    ExecutionEnvironmentRef,
+    ExecutionStatus,
+    GitSourceRef,
     LifecycleExecutionRecord,
     LifecycleSessionRecord,
     LifecycleTrialProvenance,
-    OutputRecord,
-    TaskReference,
+    ProviderRoute,
+    RunManifest,
     TimingRecord,
+    TrialInput,
+    TrialOutput,
     TrialRecord,
+    UnresolvedSourceRef,
 )
 from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
     LifecycleAblationManifest,
@@ -285,10 +291,6 @@ def _build_lifecycle_trial_record(
         raise ValueError("lifecycle experiment must contain package file hashes")
     if package_files != _tree_hashes(package):
         raise ValueError("lifecycle package files do not match canonical manifest")
-    input_files = [
-        FileReference(path=str(path), hash=str(digest), source="lifecycle_package")
-        for path, digest in sorted(package_files.items())
-    ]
     instruction = _lifecycle_instruction(package)
     execution_status = str(execution.get("status") or "failed")
     agent_status = AgentOutputStatus.COMPLETED if execution_status == "completed" else AgentOutputStatus.FAILED
@@ -309,15 +311,6 @@ def _build_lifecycle_trial_record(
     total_seconds = float(metrics.get("whole_run_seconds") or 0.0)
     created_at = str(experiment.get("created_at"))
     artifacts = list(artifact_references or [])
-    if artifacts:
-        input_files = [
-            FileReference(
-                path=_snapshotted_package_path(artifacts, item.path),
-                hash=item.hash,
-                source=item.path,
-            )
-            for item in input_files
-        ]
     invocation_manifest = next(
         (artifact for artifact in artifacts if artifact.kind == "lifecycle_manifest"),
         ArtifactReference(
@@ -387,19 +380,34 @@ def _build_lifecycle_trial_record(
     conversation_path = _single_path(conversation_refs, conversations)
     trajectory_path = _single_path(trajectory_refs, trajectories)
 
-    return TrialRecord(
-        trial_id=trial.trial_id,
+    started_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    run_id = ":".join(
+        (
+            manifest.experiment_id,
+            resolved_adapter,
+            resolved_model,
+            trial.execution_mode.value,
+            trial.memory_visibility_policy.value,
+        )
+    )
+    clean_git_source = (
+        repository_kind == "git"
+        and not bool(repository.get("dirty"))
+        and len(repository_commit) == 40
+        and all(character in "0123456789abcdef" for character in repository_commit)
+    )
+    run_manifest = RunManifest(
+        run_id=run_id,
         experiment_id=manifest.experiment_id,
-        timestamp=datetime.fromisoformat(created_at.replace("Z", "+00:00")),
-        task=TaskReference(
-            task_id=manifest.lifecycle_template_id,
-            task_revision=str(state["package_sha256"]),
-            visibility=task_visibility,
+        source=(
+            GitSourceRef(revision=repository_commit)
+            if clean_git_source
+            else UnresolvedSourceRef(reason="lifecycle source is dirty, non-Git, or lacks a full retained revision")
         ),
-        agent=AgentReference(
+        agent=AgentConfiguration(
             adapter=resolved_adapter,
             model=resolved_model,
-            adapter_revision=repository_commit,
+            adapter_revision=repository_commit if clean_git_source else None,
             configuration={
                 "agent_name": trial.agent.name,
                 "requested_model": trial.agent.model,
@@ -408,59 +416,68 @@ def _build_lifecycle_trial_record(
                 "variant_id": trial.variant_id,
                 "execution_mode": trial.execution_mode.value,
                 "memory_visibility_policy": trial.memory_visibility_policy.value,
-                "repetition": trial.repetition,
-                "manifest_sha256": selected_plan.manifest_sha256,
                 "plan_sha256": selected_plan.plan_sha256,
-                "resolved_models": model.get("resolved_models", []),
-                "session_configurations": model.get("session_configurations", []),
-                "lifecycle_experiment_id": experiment.get("experiment_id"),
-                "lifecycle_manifest_sha256": _sha256(invocation.manifest_path),
-                "package_sha256": state["package_sha256"],
             },
         ),
-        environment=EnvironmentSnapshot(
+        execution_environment=ExecutionEnvironmentRef(
             runtime_image=f"python:{python_version}",
             compute_backend="local",
-            tool_versions={
-                "aec_bench_commit": repository_commit,
-                "python": python_version,
-            },
+            tool_versions={"python": python_version},
         ),
-        inputs=InputRecord(
-            instruction=instruction,
-            input_files=input_files,
+        provider_route=ProviderRoute(
+            provider=trial.runtime_provenance.provider,
+            route=resolved_adapter,
         ),
-        outputs=OutputRecord(
-            agent_output=AgentOutput(
-                status=agent_status,
-                output_path=_artifact_output_root(trial, artifacts, run),
-                output_format="evidence_lifecycle",
-                error_message=None if agent_status is AgentOutputStatus.COMPLETED else "lifecycle execution failed",
+        expected_authorities=(
+            AuthorityExpectation(
+                authority_kind=AuthorityEvidenceKind.LIFECYCLE,
+                protocol="aec-bench/lifecycle-evidence/1",
             ),
-            raw_output_path=raw_output_path,
-            conversation_path=conversation_path,
-            trajectory_path=trajectory_path,
-            agent_result={
-                "lifecycle_experiment_id": experiment.get("experiment_id"),
-                "execution_status": execution_status,
-                "verification_path": (
-                    verification_reference.path
-                    if verification_reference is not None
-                    else str(invocation.verification_path)
-                ),
-                "metrics_path": metrics_reference.path
-                if metrics_reference is not None
-                else str(invocation.metrics_path),
-                "manifest_path": invocation_manifest.path,
-                "trajectories": trajectories,
-                "conversations": conversations,
-                "raw_outputs": raw_outputs,
-            },
-            artifacts=artifacts or None,
-            terminated=agent_status is AgentOutputStatus.COMPLETED,
-            truncated=agent_status is not AgentOutputStatus.COMPLETED,
-            final_reason=execution_status,
         ),
+    )
+    output = TrialOutput(
+        agent_output=AgentOutput(
+            status=agent_status,
+            output_path=_artifact_output_root(trial, artifacts, run),
+            output_format="evidence_lifecycle",
+            error_message=None if agent_status is AgentOutputStatus.COMPLETED else "lifecycle execution failed",
+        ),
+        agent_result={
+            "lifecycle_experiment_id": experiment.get("experiment_id"),
+            "execution_status": execution_status,
+            "verification_path": (
+                verification_reference.path if verification_reference is not None else str(invocation.verification_path)
+            ),
+            "metrics_path": metrics_reference.path if metrics_reference is not None else str(invocation.metrics_path),
+            "manifest_path": invocation_manifest.path,
+        },
+        terminated=agent_status is AgentOutputStatus.COMPLETED,
+        truncated=agent_status is not AgentOutputStatus.COMPLETED,
+        final_reason=execution_status,
+    ).bind_runtime_paths(
+        raw_output_path=raw_output_path,
+        conversation_path=conversation_path,
+        trajectory_path=trajectory_path,
+    )
+    record = TrialRecord(
+        trial_id=trial.trial_id,
+        run_id=run_id,
+        task_id=manifest.lifecycle_template_id,
+        attempt=trial.repetition,
+        execution_status=(
+            ExecutionStatus.COMPLETED if agent_status is AgentOutputStatus.COMPLETED else ExecutionStatus.FAILED
+        ),
+        evaluation_status=EvaluationStatus.COMPLETED,
+        evidence_status=EvidenceStatus.PENDING,
+        started_at=started_at,
+        completed_at=started_at + timedelta(seconds=total_seconds),
+        input=TrialInput(
+            instruction=instruction,
+            task_revision=str(state["package_sha256"]),
+            task_kind="lifecycle",
+            visibility=task_visibility,
+        ),
+        output=output,
         evaluation=EvaluationResult(
             reward=float(verification["reward"]),
             validity=ValidityCheck(
@@ -483,22 +500,36 @@ def _build_lifecycle_trial_record(
             **totals,
             estimated_cost_usd=metrics.get("estimated_cost_usd"),
         ),
-        adaptation=trial.adaptation,
-        lifecycle_execution=execution_record,
-        lifecycle_provenance=lifecycle_provenance,
-        completeness=(
-            Completeness.COMPLETE
-            if (
-                artifacts
-                and sessions
-                and all(session.resolved_model != "unresolved" for session in sessions)
-                and all(session.adapter != "unresolved" for session in sessions)
-                and repository.get("repository_kind") == "git"
-                and not bool(repository.get("dirty"))
-            )
-            else Completeness.PARTIAL
-        ),
     )
+    record.attach_extension("adaptation", trial.adaptation)
+    record.attach_extension("lifecycle_execution", execution_record)
+    record.attach_extension("lifecycle_provenance", lifecycle_provenance)
+    ledger_root = Path(manifest.ledger_root)
+    for index, artifact in enumerate(artifacts):
+        if artifact.path == invocation_manifest.path:
+            continue
+        path = Path(artifact.path)
+        if not path.is_absolute():
+            path = ledger_root / path
+        record.attach_artifact(
+            f"output:{artifact.kind}:{index}",
+            path,
+            media_type=artifact.media_type,
+            logical_path=artifact.path,
+        )
+    invocation_path = Path(invocation_manifest.path)
+    if not invocation_path.is_absolute():
+        invocation_path = ledger_root / invocation_path
+    record.attach_artifact(
+        f"authority:{AuthorityEvidenceKind.LIFECYCLE.value}:aec-bench/lifecycle-evidence/1",
+        invocation_path,
+        media_type=invocation_manifest.media_type,
+    )
+    for index, relative_path in enumerate(sorted(package_files)):
+        path = package / relative_path
+        if path.is_file():
+            record.attach_artifact(f"input:lifecycle_package:{index}", path, media_type=_artifact_media_type(path))
+    return record.bind_run_manifest(run_manifest)
 
 
 def finalize_lifecycle_trial_record(
@@ -546,18 +577,18 @@ def finalize_lifecycle_trial_record(
             final=artifact_dir,
             ledger_root=ledger_root,
         )
+        _fsync_tree(staging)
+        staging.replace(artifact_dir)
+        _fsync_directory(artifact_dir.parent)
         record = _build_lifecycle_trial_record(
             manifest=manifest,
             trial=trial,
-            package_dir=staging / "package",
-            run_dir=staging / "run",
+            package_dir=artifact_dir / "package",
+            run_dir=artifact_dir / "run",
             artifact_references=artifact_references,
             require_planned_paths=False,
             plan=None,
         )
-        _fsync_tree(staging)
-        staging.replace(artifact_dir)
-        _fsync_directory(artifact_dir.parent)
         return write_trial_record(ledger_root=ledger_root, record=record)
     except Exception:
         if staging.exists():
@@ -753,16 +784,94 @@ def _is_captured_string_annotation(annotation: ast.expr | None) -> bool:
 
 def _matches_historical_record(record: TrialRecord, expected: TrialRecord) -> bool:
     """Allow only the omitted visibility field used by records written before that field existed."""
-    if record == expected:
-        return True
-    if record.task.visibility is not None or "visibility" in record.task.model_fields_set:
+    if record.run_manifest != expected.run_manifest or record.evidence_status is not EvidenceStatus.VERIFIED:
         return False
-    legacy_expected = expected.model_copy(
-        update={
-            "task": expected.task.model_copy(update={"visibility": None}),
-        }
+    record_payload = _trial_semantic_payload(record)
+    expected_payload = _trial_semantic_payload(expected)
+    if record.input.visibility is None and "visibility" not in record.input.model_fields_set:
+        expected_payload["input"]["visibility"] = None
+    if record_payload != expected_payload:
+        return False
+    if (
+        record.adaptation != expected.adaptation
+        or record.lifecycle_execution != expected.lifecycle_execution
+        or record.lifecycle_provenance != expected.lifecycle_provenance
+    ):
+        return False
+    return _retained_artifact_identity(record) == _pending_artifact_identity(expected)
+
+
+def _trial_semantic_payload(record: TrialRecord) -> dict[str, Any]:
+    payload = record.model_dump(mode="json")
+    payload.pop("evidence_status", None)
+    payload.pop("authority_evidence", None)
+    payload.pop("extension_refs", None)
+    input_payload = cast(dict[str, Any], payload["input"])
+    input_payload.pop("input_files", None)
+    output_payload = cast(dict[str, Any] | None, payload.get("output"))
+    if output_payload is not None:
+        for field in ("raw_output", "conversation", "trajectory", "artifacts"):
+            output_payload.pop(field, None)
+    return payload
+
+
+def _retained_artifact_identity(record: TrialRecord) -> tuple[tuple[object, ...], ...]:
+    output = record.outputs
+    identities: list[tuple[object, ...]] = [
+        (
+            "output",
+            item.role,
+            item.logical_path,
+            item.artifact.sha256,
+            item.artifact.size_bytes,
+            item.artifact.media_type,
+        )
+        for item in output.artifacts
+    ]
+    identities.extend(
+        (
+            "authority",
+            item.authority_kind.value,
+            item.protocol,
+            item.artifact.sha256,
+            item.artifact.size_bytes,
+            item.artifact.media_type,
+        )
+        for item in record.authority_evidence
     )
-    return record == legacy_expected
+    identities.extend(
+        (
+            "input",
+            item.source,
+            item.artifact.sha256,
+            item.artifact.size_bytes,
+            item.artifact.media_type,
+        )
+        for item in record.input.input_files or ()
+    )
+    return tuple(sorted(identities, key=repr))
+
+
+def _pending_artifact_identity(record: TrialRecord) -> tuple[tuple[object, ...], ...]:
+    identities: list[tuple[object, ...]] = []
+    for role, (path, media_type, logical_path) in record.pending_artifacts.items():
+        payload = path.read_bytes()
+        semantic_role = role.removeprefix("output:")
+        if role.startswith("output:"):
+            semantic_role = semantic_role.rpartition(":")[0] or semantic_role
+        if not payload and semantic_role in {"conversation", "trajectory"}:
+            continue
+        digest = hashlib.sha256(payload).hexdigest()
+        size = len(payload)
+        if role.startswith("authority:"):
+            _, authority_kind, protocol = role.split(":", 2)
+            identities.append(("authority", authority_kind, protocol, digest, size, media_type))
+        elif role.startswith("input:"):
+            source = role.removeprefix("input:").partition(":")[0]
+            identities.append(("input", source or None, digest, size, media_type))
+        else:
+            identities.append(("output", semantic_role, logical_path, digest, size, media_type))
+    return tuple(sorted(identities, key=repr))
 
 
 def _record_from_snapshot(
@@ -1638,3 +1747,13 @@ def _tree_hashes(root: Path) -> dict[str, str]:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _artifact_media_type(path: Path) -> str:
+    if path.suffix == ".json":
+        return "application/json"
+    if path.suffix == ".jsonl":
+        return "application/x-ndjson"
+    if path.suffix in {".md", ".txt"}:
+        return "text/plain"
+    return "application/octet-stream"

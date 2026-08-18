@@ -1,102 +1,313 @@
-# ABOUTME: Contract models for append-only trial provenance in the aec-bench Python implementation.
-# ABOUTME: Defines nested execution, input, output, timing, and completeness for replayable records.
+# ABOUTME: Defines current run manifests and trial records with separate execution, evaluation, and evidence status.
+# ABOUTME: Keeps shared run identity and optional forensic artifacts outside each persisted trial record.
+
+from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal
+from pathlib import Path, PurePosixPath
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import (
-    Field,
-    NonNegativeFloat,
-    NonNegativeInt,
-    PositiveInt,
-    field_validator,
-    model_validator,
-)
+from pydantic import Field, NonNegativeFloat, NonNegativeInt, PositiveInt, PrivateAttr, field_validator, model_validator
 
 from aec_bench.contracts.agent_output import AgentOutput
-from aec_bench.contracts.evaluation_plane import EvaluationPlanRef
+from aec_bench.contracts.artifacts import ArtifactRef
+from aec_bench.contracts.authority_evidence import AuthorityEvidenceKind, AuthorityEvidenceRef
+from aec_bench.contracts.dataset import DatasetRef, dataset_reference_key
 from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.contracts.validators import NonEmptyStr, StrictModel, ensure_non_empty_string
+from aec_bench.contracts.trial_extensions import (
+    AdaptationProvenance,
+    ArtifactReference,
+    DerivationStepRecord,
+    LifecycleExecutionRecord,
+    LifecycleSessionRecord,
+    LifecycleTrialProvenance,
+    MetaHarnessTrialProvenance,
+    ProposalSessionTrialProvenance,
+)
+from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr, StrictModel
+
+type TrialTaskKind = Literal["artifact", "lifecycle", "world"]
 
 
-class Completeness(StrEnum):
-    COMPLETE = "complete"
-    PARTIAL = "partial"
+class ExecutionStatus(StrEnum):
+    PLANNED = "planned"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    INVALID = "invalid"
 
 
-class TaskReference(StrictModel):
-    task_id: NonEmptyStr
-    task_revision: NonEmptyStr
-    visibility: Visibility | None = None
+class EvaluationStatus(StrEnum):
+    NOT_REQUESTED = "not_requested"
+    PENDING = "pending"
+    COMPLETED = "completed"
+    INVALID = "invalid"
+    FAILED = "failed"
 
 
-class AgentReference(StrictModel):
+class EvidenceStatus(StrEnum):
+    NOT_REQUIRED = "not_required"
+    PENDING = "pending"
+    VERIFIED = "verified"
+    INCOMPLETE = "incomplete"
+    INVALID = "invalid"
+
+
+class GitSourceRef(FrozenStrictModel):
+    kind: Literal["git"] = "git"
+    revision: NonEmptyStr
+
+    @field_validator("revision")
+    @classmethod
+    def validate_revision(cls, value: str) -> str:
+        if len(value) != 40 or any(character not in "0123456789abcdef" for character in value):
+            raise ValueError("Git source revision must be a full lowercase 40-character commit")
+        return value
+
+
+class SnapshotSourceRef(FrozenStrictModel):
+    kind: Literal["snapshot"] = "snapshot"
+    artifact: ArtifactRef
+    base_revision: NonEmptyStr | None = None
+
+    @field_validator("base_revision")
+    @classmethod
+    def validate_base_revision(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return GitSourceRef.validate_revision(value)
+
+
+class UnresolvedSourceRef(FrozenStrictModel):
+    kind: Literal["unresolved"] = "unresolved"
+    reason: NonEmptyStr
+
+
+type SourceRef = Annotated[GitSourceRef | SnapshotSourceRef | UnresolvedSourceRef, Field(discriminator="kind")]
+
+
+class AgentConfiguration(FrozenStrictModel):
     adapter: NonEmptyStr
     model: NonEmptyStr
-    adapter_revision: str | None = None
+    adapter_revision: NonEmptyStr | None = None
     configuration: dict[str, Any] = Field(default_factory=dict)
 
 
-class EnvironmentSnapshot(StrictModel):
+AgentReference = AgentConfiguration
+
+
+class ExecutionEnvironmentRef(FrozenStrictModel):
     runtime_image: NonEmptyStr
     compute_backend: NonEmptyStr
     tool_versions: dict[str, str] | None = None
 
 
-class FileReference(StrictModel):
-    path: NonEmptyStr
-    hash: NonEmptyStr
-    source: str | None = None
+EnvironmentSnapshot = ExecutionEnvironmentRef
 
 
-class ArtifactReference(StrictModel):
-    kind: NonEmptyStr
-    path: NonEmptyStr
-    sha256: NonEmptyStr
-    media_type: NonEmptyStr
+class ProviderRoute(FrozenStrictModel):
+    provider: NonEmptyStr
+    route: NonEmptyStr
 
-    @field_validator("sha256")
+
+class EvaluationRegimeRef(FrozenStrictModel):
+    regime_id: NonEmptyStr
+    generation: NonEmptyStr
+
+
+class AuthorityExpectation(FrozenStrictModel):
+    authority_kind: AuthorityEvidenceKind
+    protocol: NonEmptyStr
+    required: bool = True
+
+
+class QualificationRequirement(FrozenStrictModel):
+    matrix_id: NonEmptyStr
+    provider_route: NonEmptyStr
+    feature: NonEmptyStr
+    evidence_level: Literal["keyless", "live"]
+
+
+class RunManifest(FrozenStrictModel):
+    schema_version: Literal[2] = 2
+    run_id: NonEmptyStr
+    experiment_id: NonEmptyStr
+    dataset: DatasetRef | None = None
+    source: SourceRef
+    agent: AgentConfiguration
+    execution_environment: ExecutionEnvironmentRef
+    provider_route: ProviderRoute
+    expected_authorities: tuple[AuthorityExpectation, ...] = ()
+    evaluation_regime: EvaluationRegimeRef | None = None
+    qualification: QualificationRequirement | None = None
+
+    @field_validator("expected_authorities")
     @classmethod
-    def validate_sha256(cls, value: str) -> str:
-        if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
-            raise ValueError("sha256 must contain 64 lowercase hexadecimal characters")
+    def validate_expected_authorities(
+        cls,
+        value: tuple[AuthorityExpectation, ...],
+    ) -> tuple[AuthorityExpectation, ...]:
+        keys = [(item.authority_kind, item.protocol) for item in value]
+        if len(keys) != len(set(keys)):
+            raise ValueError("expected authority identities must be unique")
         return value
 
-
-class InputRecord(StrictModel):
-    instruction: NonEmptyStr
-    system_prompt: str | None = None
-    input_files: list[FileReference] | None = None
-
-
-class OutputRecord(StrictModel):
-    agent_output: AgentOutput | None = None
-    raw_output_path: str | None = None
-    conversation_path: str | None = None
-    trajectory_path: str | None = None
-    agent_result: dict[str, Any] | None = None
-    artifacts: list[ArtifactReference] | None = None
-    terminated: bool = False
-    truncated: bool = False
-    final_reason: NonEmptyStr | None = None
-
     @model_validator(mode="after")
-    def validate_terminal_state(self) -> "OutputRecord":
-        if self.terminated and self.truncated:
-            raise ValueError("output cannot be both terminated and truncated")
+    def validate_qualification(self) -> Self:
+        if self.qualification is None:
+            return self
+        if self.qualification.provider_route != self.provider_route.route:
+            raise ValueError("qualification provider route must match the run provider route")
+        if not any(
+            item.required and item.authority_kind is AuthorityEvidenceKind.PROVIDER
+            for item in self.expected_authorities
+        ):
+            raise ValueError("qualification runs require provider evidence")
         return self
 
 
-class TimingRecord(StrictModel):
+class TaskReference(FrozenStrictModel):
+    task_id: NonEmptyStr
+    task_revision: NonEmptyStr
+    visibility: Visibility | None = None
+
+
+class FileReference(FrozenStrictModel):
+    artifact: ArtifactRef
+    source: NonEmptyStr | None = None
+
+    @property
+    def path(self) -> str:
+        return self.artifact.artifact_id
+
+    @property
+    def hash(self) -> str:
+        return self.artifact.sha256
+
+
+class TrialInput(FrozenStrictModel):
+    instruction: NonEmptyStr
+    task_revision: NonEmptyStr
+    task_kind: TrialTaskKind = "artifact"
+    visibility: Visibility | None = None
+    system_prompt: str | None = None
+    input_files: tuple[FileReference, ...] | None = None
+
+
+InputRecord = TrialInput
+
+
+class TrialArtifactRef(FrozenStrictModel):
+    role: NonEmptyStr
+    artifact: ArtifactRef
+    logical_path: NonEmptyStr | None = None
+
+    @field_validator("logical_path")
+    @classmethod
+    def validate_logical_path(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if "\\" in value:
+            raise ValueError("artifact logical_path must use forward slashes")
+        path = PurePosixPath(value)
+        if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+            raise ValueError("artifact logical_path must be a portable relative path")
+        return value
+
+    @property
+    def kind(self) -> str:
+        return self.role
+
+    @property
+    def path(self) -> str:
+        return self.logical_path or self.artifact.artifact_id
+
+    @property
+    def sha256(self) -> str:
+        return self.artifact.sha256
+
+    @property
+    def media_type(self) -> str:
+        return self.artifact.media_type
+
+
+class TrialOutput(StrictModel):
+    agent_output: AgentOutput | None = None
+    raw_output: ArtifactRef | None = None
+    conversation: ArtifactRef | None = None
+    trajectory: ArtifactRef | None = None
+    agent_result: dict[str, Any] | None = None
+    artifacts: tuple[TrialArtifactRef, ...] = ()
+    terminated: bool = False
+    truncated: bool = False
+    final_reason: NonEmptyStr | None = None
+    raw_output_path: str | None = Field(default=None, exclude=True)
+    conversation_path: str | None = Field(default=None, exclude=True)
+    trajectory_path: str | None = Field(default=None, exclude=True)
+
+    _artifact_root: Path | None = PrivateAttr(default=None)
+
+    @model_validator(mode="after")
+    def validate_terminal_state(self) -> Self:
+        if self.terminated and self.truncated:
+            raise ValueError("output cannot be both terminated and truncated")
+        declared = tuple(item for item in (self.raw_output, self.conversation, self.trajectory) if item is not None)
+        retained = {item.artifact for item in self.artifacts}
+        if any(item not in retained for item in declared):
+            raise ValueError("named output artifacts must be included in artifacts")
+        return self
+
+    def bind_artifact_root(self, root: Path) -> Self:
+        self._artifact_root = root
+        self.raw_output_path = self._path(self.raw_output) or self.raw_output_path
+        self.conversation_path = self._path(self.conversation) or self.conversation_path
+        self.trajectory_path = self._path(self.trajectory) or self.trajectory_path
+        return self
+
+    def bind_runtime_paths(
+        self,
+        *,
+        raw_output_path: str | None,
+        conversation_path: str | None,
+        trajectory_path: str | None,
+    ) -> Self:
+        self.raw_output_path = raw_output_path
+        self.conversation_path = conversation_path
+        self.trajectory_path = trajectory_path
+        return self
+
+    def artifact_path(self, role: str) -> str | None:
+        """Resolve one retained output artifact by its semantic role."""
+
+        match = next((item for item in self.artifacts if item.role == role), None)
+        if match is None:
+            return None
+        if self._artifact_root is None:
+            return match.artifact.artifact_id
+        return str(self._artifact_root / match.artifact.artifact_id)
+
+    def _path(self, artifact: ArtifactRef | None) -> str | None:
+        if artifact is None:
+            return None
+        if self._artifact_root is None:
+            return artifact.artifact_id
+        return str(self._artifact_root / artifact.artifact_id)
+
+
+OutputRecord = TrialOutput
+
+
+class TimingRecord(FrozenStrictModel):
     total_seconds: NonNegativeFloat
     agent_seconds: NonNegativeFloat | None = None
     setup_seconds: NonNegativeFloat | None = None
     verification_seconds: NonNegativeFloat | None = None
 
 
-class CostRecord(StrictModel):
+class CostRecord(FrozenStrictModel):
     model_calls: NonNegativeInt | None = None
     tokens_in: NonNegativeInt | None = None
     tokens_out: NonNegativeInt | None = None
@@ -108,475 +319,337 @@ class CostRecord(StrictModel):
     advisor_output_tokens: NonNegativeInt | None = None
 
 
-class DerivationStepRecord(StrictModel):
-    axis: NonEmptyStr
-    value: NonEmptyStr
-    parent_value: NonEmptyStr
-
-    @model_validator(mode="after")
-    def validate_change(self) -> "DerivationStepRecord":
-        if self.value == self.parent_value:
-            msg = "derivation step must change the parent value"
-            raise ValueError(msg)
-        return self
-
-
-class AdaptationProvenance(StrictModel):
-    family_id: NonEmptyStr
-    seed_task_id: NonEmptyStr
-    variation_key: NonEmptyStr
-    variation: dict[str, str]
-    derivation_lineage: list[DerivationStepRecord] = Field(default_factory=list)
-
-    @field_validator("variation")
-    @classmethod
-    def validate_variation(cls, value: dict[str, str]) -> dict[str, str]:
-        if not value:
-            msg = "variation must not be empty"
-            raise ValueError(msg)
-        for axis, axis_value in value.items():
-            ensure_non_empty_string(axis)
-            ensure_non_empty_string(axis_value)
-        return value
-
-    @model_validator(mode="after")
-    def validate_lineage(self) -> "AdaptationProvenance":
-        seen: set[str] = set()
-        for step in self.derivation_lineage:
-            if step.axis in seen:
-                msg = "derivation_lineage axes must be unique"
-                raise ValueError(msg)
-            seen.add(step.axis)
-            if step.axis not in self.variation:
-                msg = "derivation_lineage axis must exist in variation"
-                raise ValueError(msg)
-            if self.variation[step.axis] != step.value:
-                msg = "derivation_lineage value must match variation"
-                raise ValueError(msg)
-        return self
-
-
-class LifecycleSessionRecord(StrictModel):
-    session_id: NonEmptyStr
-    checkpoint_ids: list[NonEmptyStr] = Field(default_factory=list)
-    requested_adapter: NonEmptyStr | None = None
-    adapter: NonEmptyStr
-    resolved_model: NonEmptyStr
-    execution_mode: Literal["persistent_context", "fresh_context"] | None = None
-    memory_visibility_policy: (
-        Literal[
-            "persistent_context",
-            "artifact_memory",
-            "raw_evidence_only",
-            "current_release_only",
-        ]
-        | None
-    ) = None
-    configuration: dict[str, Any] = Field(default_factory=dict)
-    status: Literal["completed", "failed", "partial"]
-    input_tokens: NonNegativeInt = 0
-    output_tokens: NonNegativeInt = 0
-    cache_read_tokens: NonNegativeInt = 0
-    cache_write_tokens: NonNegativeInt = 0
-    failure_kind: str | None = None
-    provider_error: str | None = None
-    artifacts: list[ArtifactReference] = Field(default_factory=list)
-
-    @field_validator("checkpoint_ids")
-    @classmethod
-    def validate_checkpoint_ids(cls, value: list[str]) -> list[str]:
-        if len(value) != len(set(value)):
-            raise ValueError("session checkpoint ids must be unique")
-        return value
-
-
-class LifecycleExecutionRecord(StrictModel):
-    execution_mode: Literal["persistent_context", "fresh_context"]
-    memory_visibility_policy: Literal[
-        "persistent_context",
-        "artifact_memory",
-        "raw_evidence_only",
-        "current_release_only",
-    ]
-    max_turns_per_session: PositiveInt
-    status: Literal["completed", "failed", "partial"]
-    sessions: list[LifecycleSessionRecord] = Field(default_factory=list)
-
-    @field_validator("max_turns_per_session", mode="before")
-    @classmethod
-    def validate_strict_turn_limit(cls, value: object) -> object:
-        if not isinstance(value, int) or isinstance(value, bool) or value < 1:
-            raise ValueError("max_turns_per_session must be a positive integer")
-        return value
-
-    @model_validator(mode="after")
-    def validate_session_consistency(self) -> "LifecycleExecutionRecord":
-        if self.execution_mode == "persistent_context" and self.memory_visibility_policy != "persistent_context":
-            raise ValueError("persistent lifecycle execution requires persistent_context visibility")
-        if self.execution_mode == "fresh_context" and self.memory_visibility_policy == "persistent_context":
-            raise ValueError("fresh lifecycle execution cannot use persistent_context visibility")
-        resolved_models = {
-            session.resolved_model for session in self.sessions if session.resolved_model != "unresolved"
-        }
-        if len(resolved_models) > 1:
-            raise ValueError("resolved model must remain stable across lifecycle sessions")
-        if len({session.adapter for session in self.sessions if session.adapter != "unresolved"}) > 1:
-            raise ValueError("adapter must remain stable across lifecycle sessions")
-        session_ids = [session.session_id for session in self.sessions]
-        if len(session_ids) != len(set(session_ids)):
-            raise ValueError("lifecycle session ids must be unique")
-        if self.status == "completed" and (
-            not self.sessions or any(session.status != "completed" for session in self.sessions)
-        ):
-            raise ValueError("completed lifecycle execution requires completed sessions")
-        if any(
-            session.execution_mode is not None and session.execution_mode != self.execution_mode
-            for session in self.sessions
-        ):
-            raise ValueError("session execution mode must match lifecycle execution")
-        if any(
-            session.memory_visibility_policy is not None
-            and session.memory_visibility_policy != self.memory_visibility_policy
-            for session in self.sessions
-        ):
-            raise ValueError("session visibility policy must match lifecycle execution")
-        return self
-
-
-class LifecycleTrialProvenance(StrictModel):
-    lifecycle_id: NonEmptyStr
-    spec_sha256: NonEmptyStr
-    package_sha256: NonEmptyStr
-    repository_commit: NonEmptyStr
-    repository_kind: Literal["git", "source_tree"] = "git"
-    repository_dirty: bool
-    repository_dirty_digest: NonEmptyStr
-    runtime_provider: NonEmptyStr
-    runtime_distributions: tuple[NonEmptyStr, ...]
-    runtime_dependency_sha256: NonEmptyStr
-    verifier_qualified_name: NonEmptyStr
-    verifier_source_sha256: NonEmptyStr
-    invocation_manifest: ArtifactReference
-    invocation_index: ArtifactReference | None = None
-    ablation_manifest: ArtifactReference | None = None
-    ablation_plan: ArtifactReference | None = None
-
-    @field_validator(
-        "spec_sha256",
-        "package_sha256",
-        "repository_dirty_digest",
-        "runtime_dependency_sha256",
-        "verifier_source_sha256",
-    )
-    @classmethod
-    def validate_hashes(cls, value: str) -> str:
-        return ArtifactReference.validate_sha256(value)
-
-    @field_validator("runtime_distributions")
-    @classmethod
-    def validate_runtime_distributions(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        if not value:
-            raise ValueError("runtime dependency distributions are required")
-        if tuple(sorted(set(value))) != value:
-            raise ValueError("runtime dependency distributions must be sorted and unique")
-        return value
-
-
-class ProposalSessionTrialProvenance(StrictModel):
-    """Pre-import proposal-session evidence bound to exactly one TrialRecord."""
-
-    session_id: NonEmptyStr
-    candidate_id: NonEmptyStr
-    candidate_artifact_sha256: NonEmptyStr
-    proposal_graph_sha256: NonEmptyStr
-    compilation_sha256: NonEmptyStr
-    session_plan_sha256: NonEmptyStr
-    session_receipt: ArtifactReference
-    cleanup_receipt: ArtifactReference
-    task_package_manifest: ArtifactReference
-    runtime_archive_manifest: ArtifactReference
-    expected_trial_records: Literal[1]
-    trial_ordinal: Literal[1]
-
-    @field_validator(
-        "candidate_artifact_sha256",
-        "proposal_graph_sha256",
-        "compilation_sha256",
-        "session_plan_sha256",
-    )
-    @classmethod
-    def validate_hashes(cls, value: str) -> str:
-        return ArtifactReference.validate_sha256(value)
-
-    @property
-    def bound_artifacts(self) -> tuple[ArtifactReference, ...]:
-        """Return the complete pre-import proposal evidence set."""
-        return (
-            self.session_receipt,
-            self.cleanup_receipt,
-            self.task_package_manifest,
-            self.runtime_archive_manifest,
-        )
-
-
-class MetaHarnessTrialProvenance(StrictModel):
-    run_id: NonEmptyStr
-    policy_id: NonEmptyStr
-    kernel_id: NonEmptyStr
-    kernel_sha256: NonEmptyStr
-    harness_id: NonEmptyStr
-    harness_sha256: NonEmptyStr
-    program_id: NonEmptyStr
-    program_sha256: NonEmptyStr
-    bundle_id: NonEmptyStr
-    bundle_sha256: NonEmptyStr
-    parent_bundle_id: NonEmptyStr | None = None
-    review_sidecar_sha256: NonEmptyStr
-    declared_surface_sha256: NonEmptyStr
-    harness_generator_sha256: NonEmptyStr
-    program_generator_sha256: NonEmptyStr
-    split: Literal["discovery", "repair_gate", "calibration", "holdout"]
-    repetition: PositiveInt
-    execution_seed: int | None = None
-    execution_seed_semantics: Literal["paired_repetition_label_only"] = "paired_repetition_label_only"
-    harness_program_cell: Literal["h0_p0", "hx_p0", "h0_px", "hx_px"] | None = None
-    paired_block_id: NonEmptyStr | None = None
-    repair_attempt_id: NonEmptyStr | None = None
-    repair_iteration: NonNegativeInt | None = None
-    candidate_manifest: ArtifactReference
-    harness_program_plan: ArtifactReference | None = None
-    repair_decision: ArtifactReference | None = None
-    motif_ids: tuple[NonEmptyStr, ...] = ()
-    evaluation_plan_ref: EvaluationPlanRef | None = None
-    proposal_session: ProposalSessionTrialProvenance | None = None
-
-    @field_validator(
-        "kernel_sha256",
-        "harness_sha256",
-        "program_sha256",
-        "bundle_sha256",
-        "review_sidecar_sha256",
-        "declared_surface_sha256",
-        "harness_generator_sha256",
-        "program_generator_sha256",
-    )
-    @classmethod
-    def validate_hashes(cls, value: str) -> str:
-        return ArtifactReference.validate_sha256(value)
-
-    @field_validator("motif_ids")
-    @classmethod
-    def validate_motif_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        if tuple(sorted(set(value))) != value:
-            raise ValueError("motif ids must be sorted and unique")
-        return value
-
-    @model_validator(mode="after")
-    def validate_study_lineage(self) -> "MetaHarnessTrialProvenance":
-        harness_program_fields = (self.harness_program_cell, self.paired_block_id, self.harness_program_plan)
-        if any(item is not None for item in harness_program_fields) and not all(
-            item is not None for item in harness_program_fields
-        ):
-            raise ValueError("harness-program cell, paired block, and plan must be provided together")
-        repair_fields = (self.repair_attempt_id, self.repair_iteration, self.repair_decision)
-        if any(item is not None for item in repair_fields) and not all(item is not None for item in repair_fields):
-            raise ValueError("repair attempt, iteration, and decision must be provided together")
-        if self.split == "holdout" and any(item is not None for item in repair_fields):
-            raise ValueError("holdout meta-harness trials cannot contain repair provenance")
-        return self
+class TrialExtensionRef(FrozenStrictModel):
+    extension_kind: NonEmptyStr
+    artifact: ArtifactRef
 
 
 class TrialRecord(StrictModel):
+    schema_version: Literal[2] = 2
     trial_id: NonEmptyStr
-    experiment_id: NonEmptyStr
-    dataset_id: str | None = None  # Immutable transitional key; PRD-07 owns the typed TrialRecord migration.
-    timestamp: datetime
-    task: TaskReference
-    agent: AgentReference
-    environment: EnvironmentSnapshot
-    inputs: InputRecord
-    outputs: OutputRecord
-    evaluation: EvaluationResult
+    run_id: NonEmptyStr
+    task_id: NonEmptyStr
+    attempt: PositiveInt = 1
+    execution_status: ExecutionStatus
+    evaluation_status: EvaluationStatus
+    evidence_status: EvidenceStatus
+    started_at: datetime
+    completed_at: datetime | None = None
+    input: TrialInput
+    output: TrialOutput | None = None
+    evaluation: EvaluationResult | None = None
     timing: TimingRecord
     cost: CostRecord | None = None
-    adaptation: AdaptationProvenance | None = None
-    lifecycle_execution: LifecycleExecutionRecord | None = None
-    lifecycle_provenance: LifecycleTrialProvenance | None = None
-    episode_artifact: ArtifactReference | None = None
-    meta_harness_provenance: MetaHarnessTrialProvenance | None = None
-    completeness: Completeness
+    authority_evidence: tuple[AuthorityEvidenceRef, ...] = ()
+    provider_evidence: ArtifactRef | None = None
+    extension_refs: tuple[TrialExtensionRef, ...] = ()
+
+    _run_manifest: RunManifest | None = PrivateAttr(default=None)
+    _extension_values: dict[str, Any] = PrivateAttr(default_factory=dict)
+    _pending_artifacts: dict[str, tuple[Path, str, str | None]] = PrivateAttr(default_factory=dict)
+
+    @field_validator("started_at", "completed_at")
+    @classmethod
+    def validate_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("trial timestamps must include a timezone")
+        return value
+
+    @field_validator("authority_evidence")
+    @classmethod
+    def validate_authority_evidence(
+        cls,
+        value: tuple[AuthorityEvidenceRef, ...],
+    ) -> tuple[AuthorityEvidenceRef, ...]:
+        if any(item.authority_kind is AuthorityEvidenceKind.PROVIDER for item in value):
+            raise ValueError("provider evidence must use provider_evidence")
+        keys = [(item.authority_kind, item.protocol) for item in value]
+        if len(keys) != len(set(keys)):
+            raise ValueError("authority evidence identities must be unique")
+        return value
+
+    @field_validator("extension_refs")
+    @classmethod
+    def validate_extension_refs(cls, value: tuple[TrialExtensionRef, ...]) -> tuple[TrialExtensionRef, ...]:
+        kinds = [item.extension_kind for item in value]
+        if len(kinds) != len(set(kinds)):
+            raise ValueError("trial extension kinds must be unique")
+        return value
 
     @model_validator(mode="after")
-    def validate_completeness(self) -> "TrialRecord":
-        _validate_complete_trial_fields(self)
-        _validate_lifecycle_pair(self)
-        _validate_lifecycle_bindings(self)
-        _validate_episode_artifact(self)
-        _validate_meta_harness_bindings(self)
+    def validate_statuses(self) -> Self:
+        terminal = self.execution_status in {
+            ExecutionStatus.COMPLETED,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.CANCELLED,
+            ExecutionStatus.INVALID,
+        }
+        if terminal != (self.completed_at is not None):
+            raise ValueError("terminal execution status and completed_at must be present together")
+        if self.execution_status is ExecutionStatus.COMPLETED and self.output is None:
+            raise ValueError("completed execution requires an output")
+        if self.evaluation_status is EvaluationStatus.COMPLETED and self.evaluation is None:
+            raise ValueError("completed evaluation requires an evaluation result")
+        if self.evaluation_status in {EvaluationStatus.NOT_REQUESTED, EvaluationStatus.PENDING} and self.evaluation:
+            raise ValueError("not-requested or pending evaluation cannot include a result")
+        output_artifacts = set() if self.output is None else {item.artifact for item in self.output.artifacts}
+        authority_artifacts = {item.artifact for item in self.authority_evidence}
+        if output_artifacts & authority_artifacts:
+            raise ValueError("authority evidence must be referenced only through authority_evidence")
+        if self.provider_evidence is not None and self.provider_evidence in output_artifacts:
+            raise ValueError("provider evidence must be referenced only through provider_evidence")
+        elapsed = None if self.completed_at is None else (self.completed_at - self.started_at).total_seconds()
+        if elapsed is not None and abs(elapsed - self.timing.total_seconds) > 0.001:
+            raise ValueError("timing.total_seconds must match the trial timestamps")
         return self
 
+    def bind_run_manifest(self, manifest: RunManifest) -> Self:
+        if manifest.run_id != self.run_id:
+            raise ValueError("trial run_id does not match the run manifest")
+        self._run_manifest = manifest
+        self._validate_evidence_against_manifest()
+        return self
 
-def _validate_complete_trial_fields(record: TrialRecord) -> None:
-    if record.completeness is not Completeness.COMPLETE:
-        return
-    missing = _complete_trial_missing_fields(record)
-    if missing:
-        msg = f"complete trial record missing provenance fields: {', '.join(missing)}"
-        raise ValueError(msg)
+    def bind_artifact_root(self, root: Path) -> Self:
+        if self.output is not None:
+            self.output.bind_artifact_root(root)
+        return self
 
+    def attach_extension(self, extension_kind: str, value: Any) -> Self:
+        if not extension_kind.strip():
+            raise ValueError("extension_kind must not be blank")
+        if extension_kind in self._extension_values:
+            raise ValueError(f"trial extension already attached: {extension_kind}")
+        self._extension_values[extension_kind] = value
+        return self
 
-def _complete_trial_missing_fields(record: TrialRecord) -> list[str]:
-    missing: list[str] = []
-    if record.agent.adapter_revision is None:
-        missing.append("agent.adapter_revision")
-    if record.environment.tool_versions is None:
-        missing.append("environment.tool_versions")
-    if record.inputs.input_files is None:
-        missing.append("inputs.input_files")
-    if record.lifecycle_execution is not None or record.lifecycle_provenance is not None:
-        missing.extend(_complete_lifecycle_missing_fields(record))
-        if not record.outputs.artifacts:
-            missing.append("outputs.artifacts")
-    if record.episode_artifact is not None and not record.outputs.artifacts:
-        missing.append("episode artifact must be included in output artifacts")
-    if record.meta_harness_provenance is not None and not record.outputs.artifacts:
-        missing.append("meta-harness provenance must be included in output artifacts")
-    return missing
+    def attach_artifact(
+        self,
+        role: str,
+        path: Path,
+        *,
+        media_type: str,
+        logical_path: str | None = None,
+    ) -> Self:
+        if not role.strip():
+            raise ValueError("artifact role must not be blank")
+        selected_path = Path(path)
+        if role in self._pending_artifacts:
+            existing_path, existing_media_type, existing_logical_path = self._pending_artifacts[role]
+            if (
+                existing_media_type == media_type
+                and existing_logical_path == logical_path
+                and existing_path.is_file()
+                and selected_path.is_file()
+                and existing_path.read_bytes() == selected_path.read_bytes()
+            ):
+                return self
+            raise ValueError(f"trial artifact role already attached: {role}")
+        self._pending_artifacts[role] = (selected_path, media_type, logical_path)
+        if self.output is not None:
+            if role == "raw_output":
+                self.output.raw_output_path = str(selected_path)
+            elif role == "conversation":
+                self.output.conversation_path = str(selected_path)
+            elif role == "trajectory":
+                self.output.trajectory_path = str(selected_path)
+        return self
 
-
-def _complete_lifecycle_missing_fields(record: TrialRecord) -> list[str]:
-    missing: list[str] = []
-    if record.lifecycle_execution is None:
-        missing.append("lifecycle_execution")
-    if record.lifecycle_provenance is None:
-        missing.append("lifecycle_provenance")
-    if record.lifecycle_provenance is not None:
-        missing.extend(
-            _complete_lifecycle_provenance_missing_fields(
-                record.lifecycle_provenance,
-                record.task.visibility,
-            )
+    def _validate_evidence_against_manifest(self) -> None:
+        actual: set[tuple[AuthorityEvidenceKind, str]] = {
+            (item.authority_kind, item.protocol) for item in self.authority_evidence
+        }
+        required: set[tuple[AuthorityEvidenceKind, str]] = {
+            (item.authority_kind, item.protocol)
+            for item in self.run_manifest.expected_authorities
+            if item.required and item.authority_kind is not AuthorityEvidenceKind.PROVIDER
+        }
+        provider_required = any(
+            item.required and item.authority_kind is AuthorityEvidenceKind.PROVIDER
+            for item in self.run_manifest.expected_authorities
         )
-    if record.lifecycle_execution is not None:
-        missing.extend(_complete_lifecycle_execution_missing_fields(record.lifecycle_execution))
-    return missing
+        if self.evidence_status is EvidenceStatus.NOT_REQUIRED and (required or provider_required):
+            raise ValueError("evidence cannot be not_required when the run manifest requires evidence")
+        missing = required - actual
+        if self.evidence_status is EvidenceStatus.VERIFIED and missing:
+            raise ValueError("verified evidence is missing required authority references")
+        if self.evidence_status is EvidenceStatus.VERIFIED and provider_required and self.provider_evidence is None:
+            raise ValueError("verified evidence is missing required provider evidence")
+
+    @property
+    def run_manifest(self) -> RunManifest:
+        if self._run_manifest is None:
+            raise RuntimeError("TrialRecord is not bound to its RunManifest")
+        return self._run_manifest
+
+    @property
+    def experiment_id(self) -> str:
+        return self.run_manifest.experiment_id
+
+    @property
+    def dataset_id(self) -> str | None:
+        dataset = self.run_manifest.dataset
+        return None if dataset is None else dataset_reference_key(dataset)
+
+    @property
+    def timestamp(self) -> datetime:
+        return self.started_at
+
+    @property
+    def task(self) -> TaskReference:
+        return TaskReference(
+            task_id=self.task_id,
+            task_revision=self.input.task_revision,
+            visibility=self.input.visibility,
+        )
+
+    @property
+    def agent(self) -> AgentConfiguration:
+        return self.run_manifest.agent
+
+    @property
+    def environment(self) -> ExecutionEnvironmentRef:
+        return self.run_manifest.execution_environment
+
+    @property
+    def inputs(self) -> TrialInput:
+        return self.input
+
+    @property
+    def outputs(self) -> TrialOutput:
+        if self.output is None:
+            raise RuntimeError("TrialRecord has no execution output")
+        return self.output
+
+    @property
+    def pending_extensions(self) -> dict[str, Any]:
+        return dict(self._extension_values)
+
+    @property
+    def pending_artifacts(self) -> dict[str, tuple[Path, str, str | None]]:
+        return dict(self._pending_artifacts)
+
+    @property
+    def adaptation(self) -> AdaptationProvenance | None:
+        return self._extension_value("adaptation", AdaptationProvenance)
+
+    @property
+    def lifecycle_execution(self) -> LifecycleExecutionRecord | None:
+        return self._extension_value("lifecycle_execution", LifecycleExecutionRecord)
+
+    @property
+    def lifecycle_provenance(self) -> LifecycleTrialProvenance | None:
+        return self._extension_value("lifecycle_provenance", LifecycleTrialProvenance)
+
+    @property
+    def meta_harness_provenance(self) -> MetaHarnessTrialProvenance | None:
+        return self._extension_value("meta_harness_provenance", MetaHarnessTrialProvenance)
+
+    @property
+    def episode_artifact(self) -> ArtifactRef | None:
+        for item in self.authority_evidence:
+            if item.authority_kind is AuthorityEvidenceKind.WORLD:
+                return item.artifact
+        for extension in self.extension_refs:
+            if extension.extension_kind == "world_evidence":
+                return extension.artifact
+        return None
+
+    def _extension_value(self, kind: str, model_type: type[Any]) -> Any | None:
+        value = self._extension_values.get(kind)
+        if value is None:
+            return None
+        if isinstance(value, model_type):
+            return value
+        return model_type.model_validate(value)
 
 
-def _complete_lifecycle_provenance_missing_fields(
-    provenance: LifecycleTrialProvenance,
-    visibility: Visibility | None,
-) -> list[str]:
-    missing: list[str] = []
-    if provenance.repository_dirty:
-        missing.append("lifecycle_provenance.clean_repository")
-    if visibility is Visibility.HOLDOUT:
-        missing.append("lifecycle_provenance.public_visibility")
-    for field in ("invocation_index", "ablation_manifest", "ablation_plan"):
-        if getattr(provenance, field) is None:
-            missing.append(f"lifecycle_provenance.{field}")
-    return missing
+class PublicationPolicy(FrozenStrictModel):
+    policy_id: NonEmptyStr
+    require_evaluation: bool = True
+    require_evidence: bool = True
+    require_provider_evidence: bool = False
+    require_reconstructive_source: bool = True
+    require_dataset: bool = True
 
 
-def _complete_lifecycle_execution_missing_fields(
-    execution: LifecycleExecutionRecord,
-) -> list[str]:
-    missing: list[str] = []
-    if not execution.sessions:
-        missing.append("lifecycle_execution.sessions")
-    if any(not session.artifacts for session in execution.sessions):
-        missing.append("lifecycle_execution.sessions.artifacts")
-    if any(session.resolved_model == "unresolved" for session in execution.sessions):
-        missing.append("lifecycle_execution.sessions.resolved_model")
-    if any(session.adapter == "unresolved" for session in execution.sessions):
-        missing.append("lifecycle_execution.sessions.adapter")
-    return missing
+class PublicationEligibility(FrozenStrictModel):
+    eligible: bool
+    reasons: tuple[NonEmptyStr, ...] = ()
 
 
-def _validate_lifecycle_pair(record: TrialRecord) -> None:
-    if (record.lifecycle_execution is None) != (record.lifecycle_provenance is None):
-        raise ValueError("lifecycle execution and provenance must be provided together")
-
-
-def _validate_lifecycle_bindings(record: TrialRecord) -> None:
-    execution = record.lifecycle_execution
-    if execution is None:
-        return
-    _validate_lifecycle_agent_bindings(record, execution)
-    _validate_lifecycle_artifact_bindings(record)
-
-
-def _validate_lifecycle_agent_bindings(
+def derive_publication_eligibility(
     record: TrialRecord,
-    execution: LifecycleExecutionRecord,
-) -> None:
-    resolved_models = {
-        session.resolved_model for session in execution.sessions if session.resolved_model != "unresolved"
-    }
-    adapters = {session.adapter for session in execution.sessions if session.adapter != "unresolved"}
-    if resolved_models and resolved_models != {record.agent.model}:
-        raise ValueError("agent model must match the lifecycle resolved model")
-    if adapters and adapters != {record.agent.adapter}:
-        raise ValueError("agent adapter must match lifecycle sessions")
+    manifest: RunManifest,
+    policy: PublicationPolicy,
+) -> PublicationEligibility:
+    reasons: list[str] = []
+    if record.execution_status is not ExecutionStatus.COMPLETED:
+        reasons.append("execution_not_completed")
+    if policy.require_evaluation and record.evaluation_status is not EvaluationStatus.COMPLETED:
+        reasons.append("evaluation_not_completed")
+    required_evidence = any(item.required for item in manifest.expected_authorities)
+    if policy.require_evidence:
+        accepted_evidence_statuses = (
+            {EvidenceStatus.VERIFIED} if required_evidence else {EvidenceStatus.VERIFIED, EvidenceStatus.NOT_REQUIRED}
+        )
+        if record.evidence_status not in accepted_evidence_statuses:
+            reasons.append("evidence_not_verified")
+    if policy.require_provider_evidence and record.provider_evidence is None:
+        reasons.append("provider_evidence_missing")
+    if manifest.qualification is not None and record.evidence_status is not EvidenceStatus.VERIFIED:
+        reasons.append("qualification_evidence_level_not_verified")
+    if policy.require_reconstructive_source and isinstance(manifest.source, UnresolvedSourceRef):
+        reasons.append("source_not_reconstructive")
+    if policy.require_dataset and manifest.dataset is None:
+        reasons.append("dataset_missing")
+    if record.input.task_kind == "world":
+        has_actor_evidence = any(
+            item.authority_kind is AuthorityEvidenceKind.ACTOR_INVOCATION for item in record.authority_evidence
+        )
+        if not has_actor_evidence:
+            reasons.append("actor_authority_not_closed")
+    return PublicationEligibility(eligible=not reasons, reasons=tuple(reasons))
 
 
-def _validate_lifecycle_artifact_bindings(record: TrialRecord) -> None:
-    provenance = record.lifecycle_provenance
-    if not record.outputs.artifacts or provenance is None:
-        return
-    bound_artifacts = (
-        provenance.invocation_manifest,
-        provenance.invocation_index,
-        provenance.ablation_manifest,
-        provenance.ablation_plan,
-    )
-    if any(artifact is not None and artifact not in record.outputs.artifacts for artifact in bound_artifacts):
-        raise ValueError("lifecycle provenance must be included in output artifacts")
-
-
-def _validate_episode_artifact(record: TrialRecord) -> None:
-    if record.episode_artifact is None:
-        return
-    if record.outputs.artifacts is None or record.episode_artifact not in record.outputs.artifacts:
-        raise ValueError("episode artifact must be included in output artifacts")
-
-
-def _validate_meta_harness_bindings(record: TrialRecord) -> None:
-    provenance = record.meta_harness_provenance
-    if provenance is None:
-        return
-    _validate_meta_harness_visibility(record, provenance)
-    _validate_meta_harness_artifact_bindings(record, provenance)
-    if (
-        record.lifecycle_provenance is not None
-        and record.lifecycle_provenance.package_sha256 != provenance.review_sidecar_sha256
-    ):
-        raise ValueError("lifecycle and meta-harness package hashes must agree")
-
-
-def _validate_meta_harness_visibility(
-    record: TrialRecord,
-    provenance: MetaHarnessTrialProvenance,
-) -> None:
-    if provenance.split == "calibration" and record.task.visibility is not Visibility.PUBLIC:
-        raise ValueError("meta-harness calibration trials must be explicitly public")
-    if provenance.split == "holdout" and record.task.visibility is not Visibility.HOLDOUT:
-        raise ValueError("meta-harness holdout trials must be explicitly holdout")
-
-
-def _validate_meta_harness_artifact_bindings(
-    record: TrialRecord,
-    provenance: MetaHarnessTrialProvenance,
-) -> None:
-    if not record.outputs.artifacts:
-        return
-    bound_artifacts = (
-        provenance.candidate_manifest,
-        provenance.harness_program_plan,
-        provenance.repair_decision,
-    )
-    if any(artifact is not None and artifact not in record.outputs.artifacts for artifact in bound_artifacts):
-        raise ValueError("meta-harness provenance must be included in output artifacts")
-    if provenance.proposal_session is not None and any(
-        artifact not in record.outputs.artifacts for artifact in provenance.proposal_session.bound_artifacts
-    ):
-        raise ValueError("proposal session provenance must be included in output artifacts")
+__all__ = (
+    "AdaptationProvenance",
+    "AgentConfiguration",
+    "AgentReference",
+    "ArtifactReference",
+    "AuthorityExpectation",
+    "CostRecord",
+    "DerivationStepRecord",
+    "EnvironmentSnapshot",
+    "EvaluationRegimeRef",
+    "EvaluationStatus",
+    "EvidenceStatus",
+    "ExecutionEnvironmentRef",
+    "ExecutionStatus",
+    "FileReference",
+    "GitSourceRef",
+    "InputRecord",
+    "LifecycleExecutionRecord",
+    "LifecycleSessionRecord",
+    "LifecycleTrialProvenance",
+    "MetaHarnessTrialProvenance",
+    "OutputRecord",
+    "ProviderRoute",
+    "ProposalSessionTrialProvenance",
+    "PublicationEligibility",
+    "PublicationPolicy",
+    "QualificationRequirement",
+    "RunManifest",
+    "SnapshotSourceRef",
+    "SourceRef",
+    "TaskReference",
+    "TimingRecord",
+    "TrialArtifactRef",
+    "TrialExtensionRef",
+    "TrialInput",
+    "TrialOutput",
+    "TrialRecord",
+    "TrialTaskKind",
+    "UnresolvedSourceRef",
+    "derive_publication_eligibility",
+)

@@ -7,12 +7,14 @@ import json
 from pathlib import Path
 
 from aec_bench.contracts.agent_output import AgentOutputStatus
-from aec_bench.contracts.trial_record import Completeness
+from aec_bench.contracts.trial_record import EvidenceStatus, ExecutionStatus
 from aec_bench.harness.local_import import (
     build_trial_record,
     copy_artifacts,
     find_tasks_root,
 )
+from aec_bench.ledger.reader import read_trial_record
+from aec_bench.ledger.writer import write_trial_record_at
 
 
 def _create_task_dir(tmp_path: Path) -> Path:
@@ -157,7 +159,8 @@ class TestBuildTrialRecord:
         assert record.trial_id == "test-trial"
         assert record.experiment_id == "test-exp"
         assert record.dataset_id is None
-        assert record.completeness is Completeness.PARTIAL
+        assert record.execution_status is ExecutionStatus.COMPLETED
+        assert record.evidence_status is EvidenceStatus.NOT_REQUIRED
 
     def test_agent_reference(self, tmp_path: Path) -> None:
         task_dir = _create_task_dir(tmp_path)
@@ -299,9 +302,9 @@ class TestBuildTrialRecord:
 
         # Paths should be POSIX and relative to repo root
         assert record.outputs.trajectory_path is not None
-        assert record.outputs.trajectory_path.startswith("artifacts/")
+        assert Path(record.outputs.trajectory_path).is_relative_to(artifact_dir)
         assert record.outputs.raw_output_path is not None
-        assert record.outputs.raw_output_path.startswith("artifacts/")
+        assert Path(record.outputs.raw_output_path).is_relative_to(artifact_dir)
 
     def test_agent_result_metadata(self, tmp_path: Path) -> None:
         task_dir = _create_task_dir(tmp_path)
@@ -432,7 +435,7 @@ class TestSerializationRoundtrip:
         json_str = record.model_dump_json(indent=2)
         roundtripped = json.loads(json_str)
         assert roundtripped["trial_id"] == "trial"
-        assert roundtripped["experiment_id"] == "exp"
+        assert "experiment_id" not in roundtripped
 
     def test_record_validates_after_roundtrip(self, tmp_path: Path) -> None:
         task_dir = _create_task_dir(tmp_path)
@@ -449,9 +452,7 @@ class TestSerializationRoundtrip:
             repo_root=tmp_path,
         )
 
-        json_str = record.model_dump_json(indent=2)
-        from aec_bench.contracts.trial_record import TrialRecord
-
-        restored = TrialRecord.model_validate_json(json_str)
+        record_path = write_trial_record_at(path=tmp_path / "trial.json", record=record)
+        restored = read_trial_record(record_path)
         assert restored.trial_id == record.trial_id
         assert restored.agent.model == record.agent.model

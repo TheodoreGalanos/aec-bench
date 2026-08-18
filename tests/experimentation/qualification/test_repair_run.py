@@ -13,7 +13,7 @@ import pytest
 from pydantic import ValidationError
 
 from aec_bench.contracts.harness_kernel import KernelManifest
-from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
+from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.evolution.repair_lifecycle import (
     CompiledRepairCandidate,
     RepairLoopError,
@@ -42,6 +42,7 @@ from aec_bench.experimentation.qualification.repair_runtime import (
     StoredRepairArtifact,
 )
 from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry
+from aec_bench.ledger.reader import read_trial_record
 from tests.experimentation.qualification.test_repair_runtime import (
     ChildDispatchFailingHarborExecutor,
     RewardByTurnsHarborExecutor,
@@ -518,7 +519,10 @@ def test_new_attempt_repeats_complete_pair_after_interrupted_parent_under_same_r
     monkeypatch.setattr(RepairRuntime, "_verify", verify)
 
     first_record_bytes = {path: path.read_bytes() for path in sorted(fixture.workflow.ledger_root.rglob("*.json"))}
-    assert len(first_record_bytes) == 2
+    first_records = tuple(
+        read_trial_record(path) for path in sorted(fixture.workflow.ledger_root.rglob("trial-*.json"))
+    )
+    assert len(first_records) == 2
     assert first_executor.calls == [(17, 1), (29, 1)]
 
     second_request = first_spec.request.model_copy(update={"attempt_id": f"{first_spec.request.loop_id}.attempt-2"})
@@ -538,8 +542,7 @@ def test_new_attempt_repeats_complete_pair_after_interrupted_parent_under_same_r
     claim_paths = tuple(sorted((artifacts_root / "repair-attempt-claims").glob("*/claim.json")))
     completion_paths = tuple(path.with_name("completion.json") for path in claim_paths)
     records = tuple(
-        TrialRecord.model_validate_json(path.read_text(encoding="utf-8"))
-        for path in sorted(fixture.workflow.ledger_root.rglob("*.json"))
+        read_trial_record(path) for path in sorted(fixture.workflow.ledger_root.rglob("trial-*.json"))
     )
     assert second_result.result.status is RepairLoopStatus.ACCEPTED
     assert second_executor.calls == [(17, 1), (29, 1), (17, 2), (29, 2)]

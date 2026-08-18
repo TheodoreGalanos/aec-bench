@@ -13,6 +13,7 @@ import pytest
 from pydantic import ValidationError
 
 import aec_bench.experimentation.lifecycle_studies.experiment as experiment_runtime
+from aec_bench.contracts.authority_evidence import AuthorityEvidenceKind
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.evidence_lifecycle import EvidenceCheckpointSpec, EvidenceLifecycleSpec
 from aec_bench.contracts.experiment_manifest import AgentConfig
@@ -20,17 +21,22 @@ from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import (
     AgentReference,
     ArtifactReference,
-    Completeness,
+    AuthorityExpectation,
     EnvironmentSnapshot,
-    FileReference,
+    EvaluationStatus,
+    EvidenceStatus,
+    ExecutionStatus,
+    GitSourceRef,
     InputRecord,
     LifecycleExecutionRecord,
     LifecycleSessionRecord,
     LifecycleTrialProvenance,
     OutputRecord,
-    TaskReference,
+    ProviderRoute,
+    RunManifest,
     TimingRecord,
     TrialRecord,
+    UnresolvedSourceRef,
 )
 from aec_bench.evaluation.lifecycle import score_semantic_transitions
 from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
@@ -51,6 +57,8 @@ from aec_bench.experimentation.lifecycle_studies.transfer import (
     LifecycleTransferStudyDesign,
     build_lifecycle_transfer_evaluation,
 )
+from aec_bench.ledger.reader import read_trial_record
+from aec_bench.ledger.writer import write_trial_record
 from aec_bench.lifecycles.catalogue import (
     lifecycle_operation_resolver,
     lifecycle_package_variant,
@@ -121,12 +129,12 @@ def test_partial_holdout_cannot_stand_in_for_complete_target_evidence(
     assert result.calibration_support_count == 1
     assert result.eligible_target_count == 0
     assert result.mean_target_reward is None
-    assert result.target_results[0].reasons == ("record_incomplete",)
+    assert result.target_results[0].reasons == ("source_not_reconstructive",)
     assert result.target_results[0].verifier_reward is None
     assert result.target_results[0].verifier_validity is None
     assert result.target_results[0].semantic_diagnostics is None
     assert target.record_path.read_bytes() == target_bytes
-    assert TrialRecord.model_validate_json(target_bytes).evaluation.reward == 0.75
+    assert read_trial_record(target.record_path).evaluation.reward == 0.75
     serialized = result.model_dump(mode="json")
     assert "transfer_effect" not in serialized
     assert "winner" not in serialized
@@ -245,7 +253,7 @@ def test_target_package_must_be_distinct_from_every_supporting_calibration_packa
 
     assert result.status == "not_evaluable"
     assert result.target_results[0].reasons == (
-        "record_incomplete",
+        "source_not_reconstructive",
         "target_package_matches_calibration",
     )
     assert result.mean_target_reward is None
@@ -295,21 +303,20 @@ def test_target_package_must_be_distinct_from_any_integrity_valid_calibration_in
     assert "missing_task_visibility" in result.calibration_results[0].reasons
     assert result.status == "not_evaluable"
     assert result.target_results[0].reasons == (
-        "record_incomplete",
+        "source_not_reconstructive",
         "target_package_matches_calibration",
     )
 
 
 @pytest.mark.parametrize(
-    ("completeness", "verifier_completed", "expected_reason"),
+    ("verifier_completed", "expected_reason"),
     [
-        (Completeness.PARTIAL, True, "record_incomplete"),
-        (Completeness.PARTIAL, False, "verifier_incomplete"),
+        (True, "source_not_reconstructive"),
+        (False, "verifier_incomplete"),
     ],
 )
 def test_partial_or_unverified_target_is_not_evaluable(
     tmp_path: Path,
-    completeness: Completeness,
     verifier_completed: bool,
     expected_reason: str,
 ) -> None:
@@ -331,7 +338,7 @@ def test_partial_or_unverified_target_is_not_evaluable(
         package_sha256="b" * 64,
         reward=0.0,
         condition=condition,
-        completeness=completeness,
+        source_reconstructive=False,
         verifier_completed=verifier_completed,
     )
 
@@ -354,7 +361,7 @@ def test_partial_calibration_record_cannot_support_the_selected_condition(tmp_pa
         package_sha256="a" * 64,
         reward=1.0,
         condition=condition,
-        completeness=Completeness.PARTIAL,
+        source_reconstructive=False,
     )
     target = _write_record(
         tmp_path,
@@ -371,7 +378,7 @@ def test_partial_calibration_record_cannot_support_the_selected_condition(tmp_pa
     )
 
     assert result.calibration_support_count == 0
-    assert "record_incomplete" in result.calibration_results[0].reasons
+    assert "source_not_reconstructive" in result.calibration_results[0].reasons
     assert "no_public_calibration_support" in result.target_results[0].reasons
 
 
@@ -505,12 +512,12 @@ def test_transfer_evaluator_fully_validates_operation_operation_snapshot(
         assert result.status == "not_evaluable"
         assert result.target_results[0].reasons == (
             "no_public_calibration_support",
-            "record_incomplete",
+            "source_not_reconstructive",
         )
     else:
         assert result.calibration_results[0].reasons == ()
         assert result.status == "not_evaluable"
-        assert result.target_results[0].reasons == ("record_incomplete",)
+        assert result.target_results[0].reasons == ("source_not_reconstructive",)
 
 
 def test_transfer_evaluator_rejects_rehashed_malformed_operation_tool_schema(tmp_path: Path) -> None:
@@ -869,7 +876,7 @@ def test_transfer_evaluator_binds_operation_visibility_to_validated_package_vari
     )
 
     assert result.target_results[0].reasons == (
-        "record_incomplete",
+        "source_not_reconstructive",
         "snapshot_contract_invalid",
     )
     assert result.status == "not_evaluable"
@@ -949,7 +956,7 @@ def test_transfer_evaluator_recomputes_operation_package_and_spec_identities(
 
 @pytest.mark.parametrize(
     "tampered_field",
-    ["reward", "validity_errors", "completeness", "visibility", "package_sha256"],
+    ["reward", "validity_errors", "execution_status", "visibility", "package_sha256"],
 )
 def test_rehashed_record_fields_must_still_match_the_immutable_snapshot(
     tmp_path: Path,
@@ -964,8 +971,7 @@ def test_rehashed_record_fields_must_still_match_the_immutable_snapshot(
         package_sha256="a" * 64,
         reward=1.0,
         condition=condition,
-        completeness=(Completeness.PARTIAL if tampered_field == "completeness" else Completeness.COMPLETE),
-        repository_kind=("source_tree" if tampered_field == "completeness" else "git"),
+        source_reconstructive=True,
     )
     target = _write_record(
         tmp_path,
@@ -981,13 +987,12 @@ def test_rehashed_record_fields_must_still_match_the_immutable_snapshot(
         payload["evaluation"]["reward"] = 0.25
     elif tampered_field == "validity_errors":
         payload["evaluation"]["validity"]["errors"] = ["forged"]
-    elif tampered_field == "completeness":
-        payload["completeness"] = "complete"
+    elif tampered_field == "execution_status":
+        payload["execution_status"] = "failed"
     elif tampered_field == "visibility":
-        payload["task"]["visibility"] = None
+        payload["input"]["visibility"] = None
     else:
-        payload["task"]["task_revision"] = "b" * 64
-        payload["lifecycle_provenance"]["package_sha256"] = "b" * 64
+        payload["input"]["task_revision"] = "b" * 64
     calibration.record_path.write_text(json.dumps(payload), encoding="utf-8")
     reference = calibration.reference.model_copy(update={"sha256": _sha256(calibration.record_path)})
 
@@ -1136,7 +1141,7 @@ def test_incomplete_zero_reward_is_not_misreported_as_holdout_evidence(tmp_path:
     assert result.status == "not_evaluable"
     assert result.eligible_target_count == 0
     assert result.mean_target_reward is None
-    assert result.target_results[0].reasons == ("record_incomplete",)
+    assert result.target_results[0].reasons == ("source_not_reconstructive",)
     assert result.target_results[0].verifier_validity is None
 
 
@@ -1226,7 +1231,7 @@ def test_cloned_record_identity_cannot_reuse_one_immutable_invocation(tmp_path: 
     )
 
     assert result.eligible_target_count == 0
-    assert result.target_results[0].reasons == ("record_incomplete",)
+    assert result.target_results[0].reasons == ("source_not_reconstructive",)
     assert result.target_results[1].status == "not_evaluable"
     assert "snapshot_record_mismatch" in result.target_results[1].reasons
 
@@ -1446,7 +1451,7 @@ def _write_record(
     package_sha256: str,
     reward: float,
     condition: LifecycleTransferCondition,
-    completeness: Completeness | None = None,
+    source_reconstructive: bool | None = None,
     verifier_completed: bool = True,
     semantic_transition: dict[str, object] | None = None,
     repository_kind: Literal["git", "source_tree"] | None = None,
@@ -1454,12 +1459,10 @@ def _write_record(
     verification_lifecycle_id: str | None = None,
     verification_template_id: str = "drainage-model-evidence-lifecycle-review",
 ) -> _WrittenRecord:
-    record_completeness = completeness or (
-        Completeness.PARTIAL if visibility is Visibility.HOLDOUT else Completeness.COMPLETE
-    )
-    record_repository_kind = repository_kind or (
-        "source_tree" if record_completeness is Completeness.PARTIAL else "git"
-    )
+    reconstructive = visibility is Visibility.PUBLIC if source_reconstructive is None else source_reconstructive
+    record_repository_kind = repository_kind or ("git" if reconstructive else "source_tree")
+    source_revision = "a" * 40
+    repository_commit = source_revision if record_repository_kind == "git" else "source-tree"
     execution_mode: Literal["persistent_context", "fresh_context"] = LifecycleExecutionMode(
         condition.execution_mode
     ).value
@@ -1579,7 +1582,7 @@ def _write_record(
         "experiment_id": f"invocation-{trial_id}",
         "created_at": "2026-07-12T00:00:00+00:00",
         "repository": {
-            "commit": "commit-abc",
+            "commit": repository_commit,
             "repository_kind": record_repository_kind,
             "dirty": False,
             "dirty_digest": "4" * 64,
@@ -1678,42 +1681,51 @@ def _write_record(
         "semantic_transition": semantic_transition,
         "operational_metrics": {},
     }
-    record = TrialRecord(
-        trial_id=trial_id,
+    started_at = datetime(2026, 7, 12, tzinfo=UTC)
+    run_id = f"{experiment_id}:{condition.adapter}:{condition.model}:local"
+    manifest = RunManifest(
+        run_id=run_id,
         experiment_id=experiment_id,
-        timestamp=datetime(2026, 7, 12, tzinfo=UTC),
-        task=TaskReference(
-            task_id="drainage-model-evidence-lifecycle-review",
-            task_revision=package_sha256,
-            visibility=visibility,
+        source=(
+            GitSourceRef(revision=source_revision)
+            if reconstructive
+            else UnresolvedSourceRef(reason="test fixture omits reconstructive source bytes")
         ),
         agent=AgentReference(
             adapter=condition.adapter,
             model=condition.model,
-            adapter_revision="commit-abc",
+            adapter_revision=(source_revision if reconstructive else None),
             configuration={},
         ),
-        environment=EnvironmentSnapshot(
+        execution_environment=EnvironmentSnapshot(
             runtime_image="python:3.13",
             compute_backend="local",
-            tool_versions={"aec_bench": "commit-abc"},
+            tool_versions={"aec_bench": source_revision},
         ),
-        inputs=InputRecord(
+        provider_route=ProviderRoute(provider="local", route=condition.adapter),
+        expected_authorities=(
+            AuthorityExpectation(
+                authority_kind=AuthorityEvidenceKind.LIFECYCLE,
+                protocol="aec-bench/lifecycle-evidence/1",
+            ),
+        ),
+    )
+    record = TrialRecord(
+        trial_id=trial_id,
+        run_id=run_id,
+        task_id="drainage-model-evidence-lifecycle-review",
+        execution_status=ExecutionStatus.COMPLETED,
+        evaluation_status=EvaluationStatus.COMPLETED,
+        evidence_status=EvidenceStatus.PENDING,
+        started_at=started_at,
+        completed_at=started_at.replace(second=1),
+        input=InputRecord(
             instruction="Review the evolving evidence.",
-            input_files=[FileReference(path="input.json", hash="input-sha")],
+            task_revision=package_sha256,
+            task_kind="lifecycle",
+            visibility=visibility,
         ),
-        outputs=OutputRecord(
-            artifacts=[
-                snapshot,
-                state_reference,
-                metrics_reference,
-                lifecycle_spec_reference,
-                invocation,
-                invocation_index,
-                ablation_manifest,
-                ablation_plan,
-            ]
-        ),
+        output=OutputRecord(),
         evaluation=EvaluationResult(
             reward=reward,
             validity=ValidityCheck(
@@ -1725,7 +1737,10 @@ def _write_record(
             breakdown=breakdown,
         ),
         timing=TimingRecord(total_seconds=1.0),
-        lifecycle_execution=LifecycleExecutionRecord(
+    ).bind_run_manifest(manifest)
+    record.attach_extension(
+        "lifecycle_execution",
+        LifecycleExecutionRecord(
             execution_mode=execution_mode,
             memory_visibility_policy=memory_visibility_policy,
             max_turns_per_session=condition.max_turns_per_session,
@@ -1744,11 +1759,14 @@ def _write_record(
                 )
             ],
         ),
-        lifecycle_provenance=LifecycleTrialProvenance(
+    )
+    record.attach_extension(
+        "lifecycle_provenance",
+        LifecycleTrialProvenance(
             lifecycle_id=f"lifecycle-{trial_id}",
             spec_sha256=lifecycle_spec_sha256,
             package_sha256=package_sha256,
-            repository_commit="commit-abc",
+            repository_commit=repository_commit,
             repository_kind=record_repository_kind,
             repository_dirty=False,
             repository_dirty_digest="4" * 64,
@@ -1762,11 +1780,30 @@ def _write_record(
             ablation_manifest=ablation_manifest,
             ablation_plan=ablation_plan,
         ),
-        completeness=record_completeness,
     )
-    record_path = ledger_root / experiment_id / f"{trial_id}.json"
-    record_path.parent.mkdir(parents=True, exist_ok=True)
-    record_path.write_text(record.model_dump_json(indent=2), encoding="utf-8")
+    retained = (
+        snapshot,
+        state_reference,
+        metrics_reference,
+        lifecycle_spec_reference,
+        invocation,
+        invocation_index,
+        ablation_manifest,
+        ablation_plan,
+    )
+    for artifact in retained:
+        role = (
+            f"authority:{AuthorityEvidenceKind.LIFECYCLE.value}:aec-bench/lifecycle-evidence/1"
+            if artifact == invocation
+            else f"output:{artifact.kind}:{artifact.sha256}"
+        )
+        record.attach_artifact(
+            role,
+            ledger_root / artifact.path,
+            media_type=artifact.media_type,
+            logical_path=(None if artifact == invocation else artifact.path),
+        )
+    record_path = write_trial_record(ledger_root=ledger_root, record=record)
     return _WrittenRecord(
         reference=LifecycleTransferRecordReference(
             experiment_id=experiment_id,
@@ -1790,7 +1827,7 @@ def _upgrade_to_operation_snapshot(
     execute_operation_action: bool = False,
     manifest_visibility_override: Literal["public", "holdout"] | None = None,
 ) -> _WrittenRecord:
-    record = TrialRecord.model_validate_json(written.record_path.read_text(encoding="utf-8"))
+    record = read_trial_record(written.record_path)
     assert record.lifecycle_provenance is not None
     assert record.outputs.artifacts is not None
     ledger_root = written.record_path.parent.parent
@@ -2049,7 +2086,6 @@ def _upgrade_to_operation_snapshot(
     index_reference = reference_by_kind["lifecycle_invocation_index"]
     ablation_manifest_reference = reference_by_kind["lifecycle_ablation_manifest"]
     ablation_plan_reference = reference_by_kind["lifecycle_ablation_plan"]
-    outputs = record.outputs.model_copy(update={"artifacts": references})
     breakdown = dict(record.evaluation.breakdown or {})
     operational_metrics = dict(metrics_payload)
     operational_metrics.pop("semantic_transition", None)
@@ -2083,29 +2119,20 @@ def _upgrade_to_operation_snapshot(
     )
     updated = record.model_copy(
         update={
-            "task": record.task.model_copy(
-                update={
-                    "task_id": "hydraulic-interaction-lifecycle-review",
-                    "task_revision": package_sha256,
-                }
-            ),
-            "outputs": outputs,
+            "task_id": "hydraulic-interaction-lifecycle-review",
+            "input": record.input.model_copy(update={"task_revision": package_sha256}),
             "evaluation": evaluation,
-            "lifecycle_execution": execution,
-            "lifecycle_provenance": provenance,
         }
     )
-    written.record_path.write_text(updated.model_dump_json(indent=2), encoding="utf-8")
-    return _WrittenRecord(
-        reference=LifecycleTransferRecordReference(
-            experiment_id=updated.experiment_id,
-            trial_id=updated.trial_id,
-            ledger_path=str(written.record_path),
-            sha256=_sha256(written.record_path),
-        ),
-        record_path=written.record_path,
-        snapshot_path=verification_path,
+    _rewrite_trial_record(
+        written,
+        updated,
+        artifacts=references,
+        lifecycle_execution=execution,
+        lifecycle_provenance=provenance,
     )
+    written.snapshot_path = verification_path
+    return written
 
 
 def _operation_ablation_metadata(
@@ -2216,7 +2243,7 @@ def _mutate_operation_snapshot_inventory(
     namespace: Literal["package", "operation"],
     mutation: Literal["missing", "extra", "mismatched"],
 ) -> None:
-    record = TrialRecord.model_validate_json(written.record_path.read_text(encoding="utf-8"))
+    record = read_trial_record(written.record_path)
     assert record.outputs.artifacts is not None
     state_reference = next(artifact for artifact in record.outputs.artifacts if artifact.kind == "lifecycle_state")
     ledger_root = written.record_path.parent.parent
@@ -2232,9 +2259,15 @@ def _mutate_operation_snapshot_inventory(
         extra_relative = "lifecycle_operations/unexpected/action.json"
 
     if mutation == "missing":
-        artifacts = [artifact for artifact in record.outputs.artifacts if artifact.path != reference_path]
-        _write_trial_record(
-            written, record.model_copy(update={"outputs": record.outputs.model_copy(update={"artifacts": artifacts})})
+        artifacts = [
+            artifact
+            for artifact in _snapshot_references(record, ledger_root=ledger_root)
+            if artifact.path != reference_path
+        ]
+        _rewrite_trial_record(
+            written,
+            record,
+            artifacts=artifacts,
         )
         return
     if mutation == "extra":
@@ -2248,15 +2281,10 @@ def _mutate_operation_snapshot_inventory(
             sha256=_sha256(extra_path),
             media_type="application/json",
         )
-        _write_trial_record(
+        _rewrite_trial_record(
             written,
-            record.model_copy(
-                update={
-                    "outputs": record.outputs.model_copy(
-                        update={"artifacts": [*record.outputs.artifacts, extra_reference]}
-                    )
-                }
-            ),
+            record,
+            artifacts=[*_snapshot_references(record, ledger_root=ledger_root), extra_reference],
         )
         return
 
@@ -2273,7 +2301,7 @@ def _mutate_operation_snapshot_inventory(
 
 
 def _forge_operation_current_source(written: _WrittenRecord) -> None:
-    record = TrialRecord.model_validate_json(written.record_path.read_text(encoding="utf-8"))
+    record = read_trial_record(written.record_path)
     assert record.outputs.artifacts is not None
     assert record.lifecycle_provenance is not None
     ledger_root = written.record_path.parent.parent
@@ -2295,16 +2323,10 @@ def _forge_operation_current_source(written: _WrittenRecord) -> None:
         }
     )
     source_path.write_text(json.dumps(source, sort_keys=True), encoding="utf-8")
-    source_reference = source_reference.model_copy(update={"sha256": _sha256(source_path)})
-    artifacts = [
-        source_reference if artifact.kind == "lifecycle_operation_current_source" else artifact
-        for artifact in record.outputs.artifacts
-    ]
-    record = record.model_copy(update={"outputs": record.outputs.model_copy(update={"artifacts": artifacts})})
-    assert record.lifecycle_provenance is not None
+    source_sha256 = _sha256(source_path)
     manifest_path = ledger_root / record.lifecycle_provenance.invocation_manifest.path
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["outputs"]["artifacts"]["workspace/operations/current-source.json"] = source_reference.sha256
+    manifest["outputs"]["artifacts"]["workspace/operations/current-source.json"] = source_sha256
     manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
     _rehash_operation_manifest_metadata(written, record, manifest_path=manifest_path)
 
@@ -2312,7 +2334,7 @@ def _forge_operation_current_source(written: _WrittenRecord) -> None:
 def _forge_operation_spec_semantic_identity(
     written: _WrittenRecord,
 ) -> None:
-    record = TrialRecord.model_validate_json(written.record_path.read_text(encoding="utf-8"))
+    record = read_trial_record(written.record_path)
     assert record.outputs.artifacts is not None
     assert record.lifecycle_provenance is not None
     ledger_root = written.record_path.parent.parent
@@ -2323,7 +2345,7 @@ def _forge_operation_spec_semantic_identity(
     lifecycle = json.loads(lifecycle_path.read_text(encoding="utf-8"))
     lifecycle["lifecycle_id"] = "forged.lifecycle_id"
     lifecycle_path.write_text(json.dumps(lifecycle, sort_keys=True), encoding="utf-8")
-    lifecycle_reference = lifecycle_reference.model_copy(update={"sha256": _sha256(lifecycle_path)})
+    lifecycle_sha256 = _sha256(lifecycle_path)
     spec = EvidenceLifecycleSpec.model_validate(lifecycle)
     spec_sha256 = _canonical_sha256(spec.model_dump(mode="json", exclude_none=True))
     package_root = lifecycle_path.parent
@@ -2335,33 +2357,28 @@ def _forge_operation_spec_semantic_identity(
     state["lifecycle_spec_sha256"] = spec_sha256
     state["package_sha256"] = package_sha256
     state_path.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
-    state_reference = state_reference.model_copy(update={"sha256": _sha256(state_path)})
-    artifacts = [
-        lifecycle_reference
-        if artifact.path == lifecycle_reference.path
-        else state_reference
-        if artifact.kind == "lifecycle_state"
-        else artifact
-        for artifact in record.outputs.artifacts
-    ]
+    state_sha256 = _sha256(state_path)
     provenance = record.lifecycle_provenance.model_copy(
         update={"spec_sha256": spec_sha256, "package_sha256": package_sha256}
     )
     record = record.model_copy(
         update={
-            "task": record.task.model_copy(update={"task_revision": package_sha256}),
-            "outputs": record.outputs.model_copy(update={"artifacts": artifacts}),
-            "lifecycle_provenance": provenance,
+            "input": record.input.model_copy(update={"task_revision": package_sha256}),
         }
     )
     manifest_path = ledger_root / provenance.invocation_manifest.path
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["lifecycle"]["spec_sha256"] = spec_sha256
     manifest["lifecycle"]["package_sha256"] = package_sha256
-    manifest["lifecycle"]["package_files"]["lifecycle.json"] = lifecycle_reference.sha256
-    manifest["outputs"]["artifacts"]["state.json"] = state_reference.sha256
+    manifest["lifecycle"]["package_files"]["lifecycle.json"] = lifecycle_sha256
+    manifest["outputs"]["artifacts"]["state.json"] = state_sha256
     manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
-    _rehash_operation_manifest_metadata(written, record, manifest_path=manifest_path)
+    _rehash_operation_manifest_metadata(
+        written,
+        record,
+        manifest_path=manifest_path,
+        lifecycle_provenance=provenance,
+    )
 
 
 def _forge_operation_snapshot_metadata(
@@ -2369,7 +2386,7 @@ def _forge_operation_snapshot_metadata(
     *,
     metadata: Literal["seal", "sweep_manifest", "sweep_plan"],
 ) -> None:
-    record = TrialRecord.model_validate_json(written.record_path.read_text(encoding="utf-8"))
+    record = read_trial_record(written.record_path)
     assert record.outputs.artifacts is not None
     assert record.lifecycle_provenance is not None
     ledger_root = written.record_path.parent.parent
@@ -2388,29 +2405,29 @@ def _forge_operation_snapshot_metadata(
     else:
         payload = {"schema_version": "1", "bogus": metadata}
     path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
-    reference = reference.model_copy(update={"sha256": _sha256(path)})
-    artifacts = [reference if artifact.kind == kind else artifact for artifact in record.outputs.artifacts]
+    reference = ArtifactReference(
+        kind=reference.kind,
+        path=reference.path,
+        sha256=_sha256(path),
+        media_type=reference.media_type,
+    )
     provenance_updates: dict[str, object] = {}
     if metadata == "sweep_manifest":
         provenance_updates["ablation_manifest"] = reference
     elif metadata == "sweep_plan":
         provenance_updates["ablation_plan"] = reference
     provenance = record.lifecycle_provenance.model_copy(update=provenance_updates)
-    _write_trial_record(
+    _rewrite_trial_record(
         written,
-        record.model_copy(
-            update={
-                "outputs": record.outputs.model_copy(update={"artifacts": artifacts}),
-                "lifecycle_provenance": provenance,
-            }
-        ),
+        record,
+        lifecycle_provenance=provenance,
     )
 
 
 def _forge_operation_package_template(
     written: _WrittenRecord,
 ) -> None:
-    record = TrialRecord.model_validate_json(written.record_path.read_text(encoding="utf-8"))
+    record = read_trial_record(written.record_path)
     assert record.outputs.artifacts is not None
     assert record.lifecycle_provenance is not None
     ledger_root = written.record_path.parent.parent
@@ -2421,7 +2438,7 @@ def _forge_operation_package_template(
     template = json.loads(template_path.read_text(encoding="utf-8"))
     template["template_id"] = "forged-template-id"
     template_path.write_text(json.dumps(template, sort_keys=True), encoding="utf-8")
-    template_reference = template_reference.model_copy(update={"sha256": _sha256(template_path)})
+    template_sha256 = _sha256(template_path)
     package_sha256 = _package_sha256(template_path.parent)
 
     state_reference = next(artifact for artifact in record.outputs.artifacts if artifact.kind == "lifecycle_state")
@@ -2429,48 +2446,44 @@ def _forge_operation_package_template(
     state = json.loads(state_path.read_text(encoding="utf-8"))
     state["package_sha256"] = package_sha256
     state_path.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
-    state_reference = state_reference.model_copy(update={"sha256": _sha256(state_path)})
-    artifacts = [
-        template_reference
-        if artifact.path == template_reference.path
-        else state_reference
-        if artifact.kind == "lifecycle_state"
-        else artifact
-        for artifact in record.outputs.artifacts
-    ]
+    state_sha256 = _sha256(state_path)
     provenance = record.lifecycle_provenance.model_copy(update={"package_sha256": package_sha256})
     record = record.model_copy(
         update={
-            "task": record.task.model_copy(update={"task_revision": package_sha256}),
-            "outputs": record.outputs.model_copy(update={"artifacts": artifacts}),
-            "lifecycle_provenance": provenance,
+            "input": record.input.model_copy(update={"task_revision": package_sha256}),
         }
     )
-    record, plan_sha256 = _update_operation_plan_trial_identities(
+    provenance, plan_sha256 = _update_operation_plan_trial_identities(
         record,
+        provenance=provenance,
         ledger_root=ledger_root,
         updates={"package_sha256": package_sha256},
     )
     manifest_path = ledger_root / provenance.invocation_manifest.path
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["lifecycle"]["package_sha256"] = package_sha256
-    manifest["lifecycle"]["package_files"]["template.json"] = template_reference.sha256
-    manifest["outputs"]["artifacts"]["state.json"] = state_reference.sha256
+    manifest["lifecycle"]["package_files"]["template.json"] = template_sha256
+    manifest["outputs"]["artifacts"]["state.json"] = state_sha256
     manifest["sweep"]["plan_sha256"] = plan_sha256
     manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
-    _rehash_operation_manifest_metadata(written, record, manifest_path=manifest_path)
+    _rehash_operation_manifest_metadata(
+        written,
+        record,
+        manifest_path=manifest_path,
+        lifecycle_provenance=provenance,
+    )
 
 
 def _update_operation_plan_trial_identities(
     record: TrialRecord,
     *,
+    provenance: LifecycleTrialProvenance,
     ledger_root: Path,
     updates: dict[str, object],
-) -> tuple[TrialRecord, str]:
+) -> tuple[LifecycleTrialProvenance, str]:
     assert record.outputs.artifacts is not None
-    assert record.lifecycle_provenance is not None
-    assert record.lifecycle_provenance.ablation_plan is not None
-    reference = record.lifecycle_provenance.ablation_plan
+    assert provenance.ablation_plan is not None
+    reference = provenance.ablation_plan
     path = ledger_root / reference.path
     plan = json.loads(path.read_text(encoding="utf-8"))
     selected = next(trial for trial in plan["trials"] if trial["trial_id"] == record.trial_id)
@@ -2479,19 +2492,7 @@ def _update_operation_plan_trial_identities(
     plan["plan_sha256"] = _canonical_sha256(plan_payload)
     path.write_text(json.dumps(plan, sort_keys=True), encoding="utf-8")
     reference = reference.model_copy(update={"sha256": _sha256(path)})
-    artifacts = [
-        reference if artifact.kind == "lifecycle_ablation_plan" else artifact for artifact in record.outputs.artifacts
-    ]
-    provenance = record.lifecycle_provenance.model_copy(update={"ablation_plan": reference})
-    return (
-        record.model_copy(
-            update={
-                "outputs": record.outputs.model_copy(update={"artifacts": artifacts}),
-                "lifecycle_provenance": provenance,
-            }
-        ),
-        str(plan["plan_sha256"]),
-    )
+    return provenance.model_copy(update={"ablation_plan": reference}), str(plan["plan_sha256"])
 
 
 def _forge_operation_snapshot_identity(
@@ -2499,7 +2500,7 @@ def _forge_operation_snapshot_identity(
     *,
     identity: Literal["package", "spec"],
 ) -> None:
-    record = TrialRecord.model_validate_json(written.record_path.read_text(encoding="utf-8"))
+    record = read_trial_record(written.record_path)
     assert record.outputs.artifacts is not None
     assert record.lifecycle_provenance is not None
     ledger_root = written.record_path.parent.parent
@@ -2512,36 +2513,38 @@ def _forge_operation_snapshot_identity(
     manifest_field = "package_sha256" if identity == "package" else "spec_sha256"
     state[state_field] = forged_sha256
     state_path.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
-    state_reference = state_reference.model_copy(update={"sha256": _sha256(state_path)})
-    artifacts = [
-        state_reference if artifact.kind == "lifecycle_state" else artifact for artifact in record.outputs.artifacts
-    ]
+    state_sha256 = _sha256(state_path)
     provenance = record.lifecycle_provenance.model_copy(update={provenance_field: forged_sha256})
-    updates: dict[str, object] = {
-        "outputs": record.outputs.model_copy(update={"artifacts": artifacts}),
-        "lifecycle_provenance": provenance,
-    }
     if identity == "package":
-        updates["task"] = record.task.model_copy(update={"task_revision": forged_sha256})
-    record = record.model_copy(update=updates)
+        record = record.model_copy(update={"input": record.input.model_copy(update={"task_revision": forged_sha256})})
 
     manifest_path = ledger_root / provenance.invocation_manifest.path
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["lifecycle"][manifest_field] = forged_sha256
-    manifest["outputs"]["artifacts"]["state.json"] = state_reference.sha256
+    manifest["outputs"]["artifacts"]["state.json"] = state_sha256
     manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
-    _rehash_operation_manifest_metadata(written, record, manifest_path=manifest_path)
+    _rehash_operation_manifest_metadata(
+        written,
+        record,
+        manifest_path=manifest_path,
+        lifecycle_provenance=provenance,
+    )
 
 
-def _rehash_operation_manifest_metadata(written: _WrittenRecord, record: TrialRecord, *, manifest_path: Path) -> None:
+def _rehash_operation_manifest_metadata(
+    written: _WrittenRecord,
+    record: TrialRecord,
+    *,
+    manifest_path: Path,
+    lifecycle_provenance: LifecycleTrialProvenance | None = None,
+) -> None:
     assert record.outputs.artifacts is not None
-    assert record.lifecycle_provenance is not None
-    assert record.lifecycle_provenance.invocation_index is not None
+    provenance = lifecycle_provenance or record.lifecycle_provenance
+    assert provenance is not None
+    assert provenance.invocation_index is not None
     ledger_root = written.record_path.parent.parent
     replacements: dict[str, ArtifactReference] = {}
-    manifest_reference = record.lifecycle_provenance.invocation_manifest.model_copy(
-        update={"sha256": _sha256(manifest_path)}
-    )
+    manifest_reference = provenance.invocation_manifest.model_copy(update={"sha256": _sha256(manifest_path)})
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     replacements[manifest_reference.path] = manifest_reference
     for kind in ("lifecycle_invocation_index", "lifecycle_invocation_seal"):
@@ -2552,30 +2555,100 @@ def _rehash_operation_manifest_metadata(written: _WrittenRecord, record: TrialRe
         payload["sweep"] = manifest["sweep"]
         suffix = "\n" if kind == "lifecycle_invocation_index" else ""
         path.write_text(json.dumps(payload, sort_keys=True) + suffix, encoding="utf-8")
-        replacements[reference.path] = reference.model_copy(update={"sha256": _sha256(path)})
-    artifacts = [replacements.get(artifact.path, artifact) for artifact in record.outputs.artifacts]
-    provenance = record.lifecycle_provenance.model_copy(
+        replacements[reference.path] = ArtifactReference(
+            kind=reference.kind,
+            path=reference.path,
+            sha256=_sha256(path),
+            media_type=reference.media_type,
+        )
+    provenance = provenance.model_copy(
         update={
             "invocation_manifest": manifest_reference,
-            "invocation_index": replacements[record.lifecycle_provenance.invocation_index.path],
+            "invocation_index": replacements[provenance.invocation_index.path],
         }
     )
-    _write_trial_record(
+    _rewrite_trial_record(
         written,
-        record.model_copy(
-            update={
-                "outputs": record.outputs.model_copy(update={"artifacts": artifacts}),
-                "lifecycle_provenance": provenance,
-            }
-        ),
+        record,
+        lifecycle_provenance=provenance,
     )
 
 
-def _write_trial_record(written: _WrittenRecord, record: TrialRecord) -> None:
-    written.record_path.write_text(record.model_dump_json(indent=2), encoding="utf-8")
+def _snapshot_references(record: TrialRecord, *, ledger_root: Path) -> list[ArtifactReference]:
+    references = [
+        ArtifactReference(
+            kind=artifact.kind,
+            path=artifact.path,
+            sha256=_sha256(ledger_root / artifact.path),
+            media_type=artifact.media_type,
+        )
+        for artifact in record.outputs.artifacts
+    ]
+    provenance = record.lifecycle_provenance
+    if provenance is not None and all(artifact.path != provenance.invocation_manifest.path for artifact in references):
+        references.append(
+            provenance.invocation_manifest.model_copy(
+                update={"sha256": _sha256(ledger_root / provenance.invocation_manifest.path)}
+            )
+        )
+    return references
+
+
+def _rewrite_trial_record(
+    written: _WrittenRecord,
+    record: TrialRecord,
+    *,
+    artifacts: list[ArtifactReference] | None = None,
+    lifecycle_execution: LifecycleExecutionRecord | None = None,
+    lifecycle_provenance: LifecycleTrialProvenance | None = None,
+) -> None:
+    """Republish a forged fixture through the current exact-artifact contract."""
+
+    ledger_root = written.record_path.parent.parent
+    provenance = lifecycle_provenance or record.lifecycle_provenance
+    execution = lifecycle_execution or record.lifecycle_execution
+    references = _snapshot_references(record, ledger_root=ledger_root) if artifacts is None else artifacts
+    output = record.outputs.model_copy(
+        update={
+            "raw_output": None,
+            "conversation": None,
+            "trajectory": None,
+            "artifacts": (),
+        }
+    )
+    rewritten = TrialRecord.model_validate(
+        {
+            **record.model_dump(mode="python"),
+            "evidence_status": EvidenceStatus.PENDING,
+            "output": output,
+            "authority_evidence": (),
+            "extension_refs": (),
+        }
+    ).bind_run_manifest(record.run_manifest)
+    if execution is not None:
+        rewritten.attach_extension("lifecycle_execution", execution)
+    if provenance is not None:
+        rewritten.attach_extension("lifecycle_provenance", provenance)
+    for artifact in references:
+        source = ledger_root / artifact.path
+        if provenance is not None and artifact.path == provenance.invocation_manifest.path:
+            role = f"authority:{AuthorityEvidenceKind.LIFECYCLE.value}:aec-bench/lifecycle-evidence/1"
+            logical_path = None
+        else:
+            locator = hashlib.sha256(artifact.path.encode("utf-8")).hexdigest()[:12]
+            role = f"output:{artifact.kind}:{artifact.sha256}-{locator}"
+            logical_path = artifact.path
+        rewritten.attach_artifact(
+            role,
+            source,
+            media_type=artifact.media_type,
+            logical_path=logical_path,
+        )
+    written.record_path.unlink()
+    write_trial_record(ledger_root=ledger_root, record=rewritten)
     written.reference = LifecycleTransferRecordReference(
-        experiment_id=record.experiment_id,
-        trial_id=record.trial_id,
+        experiment_id=rewritten.experiment_id,
+        trial_id=rewritten.trial_id,
         ledger_path=str(written.record_path),
         sha256=_sha256(written.record_path),
     )

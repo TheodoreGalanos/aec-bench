@@ -20,7 +20,15 @@ from aec_bench.contracts.evidence_lifecycle import (
 )
 from aec_bench.contracts.lifecycle_evaluation import LifecycleSemanticMetrics, LifecycleVerificationResult
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.contracts.trial_record import ArtifactReference, Completeness, TrialRecord
+from aec_bench.contracts.trial_record import (
+    ArtifactReference,
+    EvaluationStatus,
+    ExecutionStatus,
+    PublicationPolicy,
+    TrialArtifactRef,
+    TrialRecord,
+    derive_publication_eligibility,
+)
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
     LifecycleAblationManifest,
@@ -31,6 +39,9 @@ from aec_bench.experimentation.lifecycle_studies.experiment import (
     LifecycleExperimentMetrics,
     lifecycle_experiment_metrics_payload,
 )
+from aec_bench.ledger.artifact_repository import ArtifactRepository
+from aec_bench.ledger.immutable_byte_store import ImmutableArtifactIntegrityError
+from aec_bench.ledger.reader import read_trial_record
 from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver, lifecycle_package_variant
 from aec_bench.lifecycles.runtime.episode import (
     LifecycleExecutionMode,
@@ -66,6 +77,8 @@ from aec_bench.lifecycles.runtime.request_protocol import (
 from aec_bench.lifecycles.runtime.state import (
     EvidenceLifecycleRunState,
 )
+
+type SnapshotReference = ArtifactReference | TrialArtifactRef
 
 
 class LifecycleTransferRecordReference(StrictModel):
@@ -270,8 +283,9 @@ def _build_lifecycle_transfer_evaluation(
         elif not supporting_records:
             reasons.append("no_public_calibration_support")
         normalized_reasons = _unique_reasons(reasons)
-        eligible = not normalized_reasons and loaded.record is not None
-        reward = loaded.record.evaluation.reward if eligible and loaded.record is not None else None
+        evaluation = loaded.record.evaluation if loaded.record is not None else None
+        eligible = not normalized_reasons and loaded.record is not None and evaluation is not None
+        reward = evaluation.reward if eligible and evaluation is not None else None
         if reward is not None:
             eligible_rewards.append(reward)
         target_results.append(
@@ -280,9 +294,7 @@ def _build_lifecycle_transfer_evaluation(
                 status="eligible" if eligible else "not_evaluable",
                 reasons=normalized_reasons,
                 verifier_reward=reward,
-                verifier_validity=(
-                    loaded.record.evaluation.validity if eligible and loaded.record is not None else None
-                ),
+                verifier_validity=(evaluation.validity if eligible and evaluation is not None else None),
                 semantic_diagnostics=semantic_diagnostics if eligible else None,
                 diagnostic_reasons=diagnostic_reasons,
             )
@@ -324,8 +336,8 @@ def _load_record(reference: LifecycleTransferRecordReference) -> _LoadedRecord:
         reasons.append("record_sha256_mismatch")
         return _LoadedRecord(record=None, reasons=_unique_reasons(reasons))
     try:
-        record = TrialRecord.model_validate_json(record_bytes)
-    except (ValidationError, ValueError):
+        record = read_trial_record(path, ledger_root=path.parent.parent)
+    except (ImmutableArtifactIntegrityError, OSError, RuntimeError, ValidationError, ValueError):
         reasons.append("record_invalid")
         return _LoadedRecord(record=None, reasons=_unique_reasons(reasons))
     if record.experiment_id != reference.experiment_id or record.trial_id != reference.trial_id:
@@ -339,44 +351,44 @@ def _load_record(reference: LifecycleTransferRecordReference) -> _LoadedRecord:
 
 
 def _load_artifacts(record: TrialRecord, *, ledger_root: Path) -> _LoadedArtifacts:
-    artifacts = record.outputs.artifacts
-    if not artifacts:
+    references = (
+        *((item.artifact, item.path) for item in record.outputs.artifacts),
+        *((item.artifact, None) for item in record.authority_evidence),
+    )
+    if not references:
         return _LoadedArtifacts(content_by_path={}, reasons=("immutable_snapshot_missing",))
     reasons: list[str] = []
     content_by_path: dict[str, bytes] = {}
     seen: set[str] = set()
-    root = ledger_root.resolve()
-    for artifact in artifacts:
-        if artifact.path in seen:
-            reasons.append("duplicate_artifact_reference")
+    repository = ArtifactRepository(ledger_root / "_artifacts")
+    content_by_sha256: dict[str, bytes] = {}
+    for artifact, logical_path in references:
+        if artifact.artifact_id in seen:
+            content = content_by_sha256[artifact.sha256]
+            if logical_path is not None:
+                content_by_path[logical_path] = content
             continue
-        seen.add(artifact.path)
-        relative = Path(artifact.path)
-        if relative.is_absolute() or ".." in relative.parts:
-            reasons.append("artifact_path_escapes_ledger")
-            continue
+        seen.add(artifact.artifact_id)
         try:
-            path = (root / relative).resolve()
-        except (OSError, ValueError):
-            reasons.append("artifact_unresolvable")
+            content = repository.read_bytes(artifact)
+        except ImmutableArtifactIntegrityError:
+            reasons.append("artifact_integrity_invalid")
             continue
-        try:
-            path.relative_to(root)
-        except ValueError:
-            reasons.append("artifact_path_escapes_ledger")
-            continue
-        try:
-            content = path.read_bytes()
-        except FileNotFoundError:
-            reasons.append("artifact_missing")
-            continue
-        except OSError:
-            reasons.append("artifact_unreadable")
-            continue
-        if hashlib.sha256(content).hexdigest() != artifact.sha256:
-            reasons.append("artifact_sha256_mismatch")
-            continue
-        content_by_path[artifact.path] = content
+        content_by_path[artifact.artifact_id] = content
+        if logical_path is not None:
+            content_by_path[logical_path] = content
+        content_by_sha256[artifact.sha256] = content
+    provenance = record.lifecycle_provenance
+    if provenance is not None:
+        legacy_references = (
+            provenance.invocation_manifest,
+            provenance.invocation_index,
+            provenance.ablation_manifest,
+            provenance.ablation_plan,
+        )
+        for reference in legacy_references:
+            if reference is not None and reference.sha256 in content_by_sha256:
+                content_by_path[reference.path] = content_by_sha256[reference.sha256]
     return _LoadedArtifacts(content_by_path=content_by_path, reasons=_unique_reasons(reasons))
 
 
@@ -387,8 +399,11 @@ def _snapshot_record_reasons(
 ) -> tuple[str, ...]:
     provenance = record.lifecycle_provenance
     execution = record.lifecycle_execution
+    evaluation = record.evaluation
     if provenance is None or execution is None:
         return ()
+    if evaluation is None:
+        return ("snapshot_record_mismatch",)
     verification_reference = _artifact_by_kind(record, "lifecycle_verification")
     metrics_reference = _artifact_by_kind(record, "lifecycle_metrics")
     state_reference = _artifact_by_kind(record, "lifecycle_state")
@@ -541,22 +556,9 @@ def _snapshot_record_reasons(
         verifier_completed=verifier_completed,
         errors=_verification_failures(verification_result),
     )
-    expected_completeness = (
-        Completeness.COMPLETE
-        if (
-            record.outputs.artifacts
-            and execution.sessions
-            and all(session.resolved_model != "unresolved" for session in execution.sessions)
-            and all(session.adapter != "unresolved" for session in execution.sessions)
-            and repository.get("repository_kind", "git") == "git"
-            and not bool(repository.get("dirty"))
-        )
-        else Completeness.PARTIAL
-    )
-
     record_visibility = record.task.visibility.value if record.task.visibility is not None else None
     snapshot_visibility = variant.get("visibility")
-    if record.task.visibility is None and "visibility" not in record.task.model_fields_set:
+    if record.input.visibility is None and "visibility" not in record.input.model_fields_set:
         snapshot_visibility = None
     expected_values = {
         "task_revision": lifecycle.get("package_sha256"),
@@ -581,7 +583,12 @@ def _snapshot_record_reasons(
         "execution_status": execution_snapshot.get("status"),
         "reward": verification_result.reward,
         "validity": expected_validity.model_dump(mode="json"),
-        "completeness": expected_completeness.value,
+        "trial_execution_status": (
+            ExecutionStatus.COMPLETED.value
+            if execution_snapshot.get("status") == "completed"
+            else ExecutionStatus.FAILED.value
+        ),
+        "trial_evaluation_status": EvaluationStatus.COMPLETED.value,
     }
     actual_values = {
         "task_revision": record.task.task_revision,
@@ -604,13 +611,14 @@ def _snapshot_record_reasons(
         "memory_visibility_policy": execution.memory_visibility_policy,
         "max_turns_per_session": execution.max_turns_per_session,
         "execution_status": execution.status,
-        "reward": record.evaluation.reward,
-        "validity": record.evaluation.validity.model_dump(mode="json"),
-        "completeness": record.completeness.value,
+        "reward": evaluation.reward,
+        "validity": evaluation.validity.model_dump(mode="json"),
+        "trial_execution_status": record.execution_status.value,
+        "trial_evaluation_status": record.evaluation_status.value,
     }
     if expected_values != actual_values:
         return ("snapshot_record_mismatch",)
-    breakdown = record.evaluation.breakdown if isinstance(record.evaluation.breakdown, dict) else {}
+    breakdown = evaluation.breakdown if isinstance(evaluation.breakdown, dict) else {}
     verification_gates = {gate_id: gate.model_dump(mode="json") for gate_id, gate in verification_result.gates.items()}
     if breakdown.get("lifecycle_gates") != verification_gates:
         return ("snapshot_record_mismatch",)
@@ -697,7 +705,7 @@ def _validate_operation_snapshot_reconciliation(
         "ablation_manifest": snapshot_prefix / "sweep" / "manifest.json",
         "ablation_plan": snapshot_prefix / "sweep" / "plan.json",
     }
-    expected_metadata_references = {
+    expected_metadata_references: dict[str, SnapshotReference] = {
         "manifest": provenance.invocation_manifest,
         "seal": seal_reference,
         "index": provenance.invocation_index,
@@ -708,12 +716,16 @@ def _validate_operation_snapshot_reconciliation(
         if _canonical_snapshot_path(reference.path) != canonical_metadata_paths[name]:
             raise ValueError(f"operation lifecycle {name} reference is outside the canonical snapshot layout")
 
-    actual_by_path: dict[PurePosixPath, ArtifactReference] = {}
+    actual_by_path: dict[PurePosixPath, SnapshotReference] = {}
     for reference in record.outputs.artifacts:
         path = _canonical_snapshot_path(reference.path)
         if path in actual_by_path:
             raise ValueError("operation lifecycle snapshot contains duplicate canonical artifact paths")
         actual_by_path[path] = reference
+    invocation_path = _canonical_snapshot_path(provenance.invocation_manifest.path)
+    if invocation_path in actual_by_path:
+        raise ValueError("authority evidence must not also be an output artifact")
+    actual_by_path[invocation_path] = provenance.invocation_manifest
     expected_hashes: dict[PurePosixPath, str] = {
         **{package_root / relative: digest for relative, digest in package_hashes.items()},
         **{run_root / relative: digest for relative, digest in run_hashes.items()},
@@ -735,7 +747,7 @@ def _validate_operation_snapshot_reconciliation(
     if any(actual_by_path[path].sha256 != digest for path, digest in expected_hashes.items()):
         raise ValueError("operation lifecycle snapshot artifact hashes do not match its canonical manifest")
     for name, reference in expected_metadata_references.items():
-        if actual_by_path[canonical_metadata_paths[name]] != reference:
+        if not _same_snapshot_reference(actual_by_path[canonical_metadata_paths[name]], reference):
             raise ValueError(f"operation lifecycle {name} reference does not match record provenance")
     if actual_by_path[state_path] != state_reference:
         raise ValueError("operation lifecycle state reference does not match the canonical run map")
@@ -791,11 +803,18 @@ def _validate_operation_snapshot_reconciliation(
     )
 
 
+def _same_snapshot_reference(actual: object, expected: object) -> bool:
+    return all(
+        getattr(actual, field, None) == getattr(expected, field, None)
+        for field in ("kind", "path", "sha256", "media_type")
+    )
+
+
 def _validate_operation_snapshot_metadata(
     record: TrialRecord,
     *,
     artifacts: dict[str, bytes],
-    references: dict[PurePosixPath, ArtifactReference],
+    references: dict[PurePosixPath, SnapshotReference],
     paths: dict[str, PurePosixPath],
     manifest: dict[str, object],
     lifecycle_variant: dict[str, object],
@@ -888,7 +907,7 @@ def _validate_operation_snapshot_metadata(
 def _snapshot_object_at(
     artifacts: dict[str, bytes],
     *,
-    references: dict[PurePosixPath, ArtifactReference],
+    references: dict[PurePosixPath, SnapshotReference],
     path: PurePosixPath,
 ) -> dict[str, object]:
     reference = references[path]
@@ -927,7 +946,7 @@ def _validated_snapshot_hash_map(value: object, *, label: str) -> dict[str, str]
 def _snapshot_content_map(
     artifacts: dict[str, bytes],
     *,
-    references: dict[PurePosixPath, ArtifactReference],
+    references: dict[PurePosixPath, SnapshotReference],
     root: PurePosixPath,
     declared: dict[str, str],
 ) -> dict[str, bytes]:
@@ -1002,6 +1021,9 @@ def _evidence_request_snapshot_reasons(
     metrics: LifecycleExperimentMetrics,
     snapshot: _LifecycleSnapshot | None = None,
 ) -> tuple[str, ...]:
+    evaluation = record.evaluation
+    if evaluation is None:
+        return ("snapshot_record_mismatch",)
     actions = [action for checkpoint in state.checkpoint_runs for action in checkpoint.evidence_request_actions]
     action_capable = any(checkpoint.conditional_evidence is not None for checkpoint in spec.checkpoints)
     interaction = manifest.get("interaction")
@@ -1050,7 +1072,7 @@ def _evidence_request_snapshot_reasons(
     metrics_payload = lifecycle_experiment_metrics_payload(metrics)
     if any(metrics_payload.get(field) != value for field, value in expected_metrics.items()):
         return ("snapshot_record_mismatch",)
-    breakdown = record.evaluation.breakdown if isinstance(record.evaluation.breakdown, dict) else {}
+    breakdown = evaluation.breakdown if isinstance(evaluation.breakdown, dict) else {}
     operational = dict(metrics_payload)
     operational.pop("semantic_transition", None)
     if breakdown.get("operational_metrics") != operational:
@@ -1150,6 +1172,9 @@ def _lifecycle_operation_snapshot_reasons(
     metrics: LifecycleExperimentMetrics,
     snapshot: _LifecycleSnapshot,
 ) -> tuple[str, ...]:
+    evaluation = record.evaluation
+    if evaluation is None:
+        return ("snapshot_record_mismatch",)
     actions = [action for checkpoint in state.checkpoint_runs for action in checkpoint.operation_actions]
     action_capable = any(checkpoint.conditional_operations is not None for checkpoint in spec.checkpoints)
     interaction = manifest.get("interaction")
@@ -1194,7 +1219,7 @@ def _lifecycle_operation_snapshot_reasons(
         metrics_payload.get(field) != value for field, value in expected_metrics.items()
     ):
         return ("snapshot_record_mismatch",)
-    breakdown = record.evaluation.breakdown if isinstance(record.evaluation.breakdown, dict) else {}
+    breakdown = evaluation.breakdown if isinstance(evaluation.breakdown, dict) else {}
     operational = dict(metrics_payload)
     operational.pop("semantic_transition", None)
     if breakdown.get("operational_metrics") != operational:
@@ -1238,17 +1263,17 @@ def _run_artifact_content(
     return artifacts.get(matches[0].path)
 
 
-def _artifact_by_kind(record: TrialRecord, kind: str) -> ArtifactReference | None:
+def _artifact_by_kind(record: TrialRecord, kind: str) -> TrialArtifactRef | None:
     matches = [artifact for artifact in record.outputs.artifacts or () if artifact.kind == kind]
     return matches[0] if len(matches) == 1 else None
 
 
-def _artifact_by_suffix(record: TrialRecord, suffix: str) -> ArtifactReference | None:
+def _artifact_by_suffix(record: TrialRecord, suffix: str) -> TrialArtifactRef | None:
     matches = [artifact for artifact in record.outputs.artifacts or () if artifact.path.endswith(suffix)]
     return matches[0] if len(matches) == 1 else None
 
 
-def _read_artifact_object(artifacts: dict[str, bytes], artifact: ArtifactReference) -> dict[str, object]:
+def _read_artifact_object(artifacts: dict[str, bytes], artifact: SnapshotReference) -> dict[str, object]:
     content = artifacts.get(artifact.path)
     if content is None:
         raise ValueError("snapshot artifact bytes are unavailable")
@@ -1264,9 +1289,15 @@ def _record_eligibility_reasons(record: TrialRecord, *, expected_visibility: Vis
         reasons.append("missing_task_visibility")
     elif record.task.visibility is not expected_visibility:
         reasons.append("calibration_not_public" if expected_visibility is Visibility.PUBLIC else "target_not_holdout")
-    if record.completeness is not Completeness.COMPLETE:
-        reasons.append("record_incomplete")
-    if not record.evaluation.validity.verifier_completed:
+    publication = derive_publication_eligibility(
+        record,
+        record.run_manifest,
+        PublicationPolicy(policy_id="lifecycle-transfer", require_dataset=False),
+    )
+    reasons.extend(publication.reasons)
+    if record.evaluation is None:
+        reasons.append("evaluation_missing")
+    elif not record.evaluation.validity.verifier_completed:
         reasons.append("verifier_incomplete")
     if record.lifecycle_execution is None:
         reasons.append("missing_lifecycle_execution")
@@ -1305,6 +1336,8 @@ def _condition_mismatch_reasons(
 
 
 def _semantic_diagnostics(record: TrialRecord) -> tuple[LifecycleSemanticMetrics | None, tuple[str, ...]]:
+    if record.evaluation is None:
+        return None, ("evaluation_missing",)
     breakdown = record.evaluation.breakdown
     semantic = breakdown.get("semantic_transition") if isinstance(breakdown, dict) else None
     if semantic is None:

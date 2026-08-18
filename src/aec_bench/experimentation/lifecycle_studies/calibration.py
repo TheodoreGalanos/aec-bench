@@ -15,7 +15,12 @@ from typing import Annotated, Any, Literal, cast
 from pydantic import Field, FiniteFloat, NonNegativeInt, PositiveInt, field_validator, model_validator
 
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.contracts.trial_record import ArtifactReference, Completeness, TrialRecord
+from aec_bench.contracts.trial_record import (
+    ArtifactReference,
+    PublicationPolicy,
+    TrialRecord,
+    derive_publication_eligibility,
+)
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
     LifecycleAblationManifest,
@@ -28,6 +33,7 @@ from aec_bench.experimentation.lifecycle_studies.trial_record import (
     validate_historical_lifecycle_ablation_record,
 )
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
+from aec_bench.ledger.reader import read_trial_record
 from aec_bench.lifecycles.runtime.episode import (
     LifecycleExecutionMode,
     LifecycleVisibilityPolicy,
@@ -414,8 +420,13 @@ def _candidate_results(
             record = loaded.record
             if record.task.visibility is not Visibility.PUBLIC:
                 reasons.append("record_not_explicitly_public")
-            if record.completeness is not Completeness.COMPLETE:
-                reasons.append("record_incomplete")
+            publication = derive_publication_eligibility(
+                record,
+                record.run_manifest,
+                PublicationPolicy(policy_id="lifecycle-calibration"),
+            )
+            if not publication.eligible:
+                reasons.extend(publication.reasons)
             execution = record.lifecycle_execution
             provenance = record.lifecycle_provenance
             if execution is None or execution.status != "completed":
@@ -424,7 +435,7 @@ def _candidate_results(
                 reasons.append("verifier_incomplete")
             if (
                 record.task.visibility is Visibility.PUBLIC
-                and record.completeness is Completeness.COMPLETE
+                and publication.eligible
                 and execution is not None
                 and execution.status == "completed"
                 and record.evaluation.validity.verifier_completed
@@ -596,7 +607,7 @@ def _read_record_once(path: Path) -> tuple[TrialRecord, LifecycleCalibrationReco
     ):
         raise ValueError("public calibration TrialRecord path is not canonical")
     content = candidate.read_bytes()
-    record = TrialRecord.model_validate_json(content)
+    record = read_trial_record(candidate, ledger_root=candidate.parent.parent)
     return record, LifecycleCalibrationRecordReference(
         experiment_id=record.experiment_id,
         trial_id=record.trial_id,

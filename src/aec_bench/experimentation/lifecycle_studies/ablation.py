@@ -35,6 +35,7 @@ from aec_bench.harness.lifecycle_local import (
     run_local_evidence_lifecycle_session,
     validate_completed_persistent_lifecycle_recovery,
 )
+from aec_bench.ledger.reader import read_trial_record
 from aec_bench.lifecycles.catalogue import (
     lifecycle_operation_resolver,
     lifecycle_package_variant,
@@ -134,7 +135,7 @@ def inspect_lifecycle_ablation_plan(manifest: LifecycleAblationManifest) -> dict
         artifact_dir = Path(manifest.ledger_root) / manifest.experiment_id / "_artifacts" / trial.trial_id
         if record_path.is_file():
             try:
-                record = TrialRecord.model_validate_json(record_path.read_text(encoding="utf-8"))
+                record = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
                 _validate_existing_record(record, manifest, trial)
             except (OSError, RuntimeError, ValueError) as exc:
                 status = "conflict"
@@ -248,7 +249,7 @@ def run_lifecycle_ablation(
     for trial in plan.trials:
         record_path = Path(trial.ledger_path)
         if record_path.is_file():
-            record = TrialRecord.model_validate_json(record_path.read_text(encoding="utf-8"))
+            record = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
             _validate_existing_record(record, manifest, trial)
             skipped += 1
             record_paths_by_trial[trial.trial_id] = str(record_path)
@@ -263,7 +264,7 @@ def run_lifecycle_ablation(
             )
             imported_orphans += 1
             record_paths_by_trial[trial.trial_id] = str(finalized)
-            record = TrialRecord.model_validate_json(finalized.read_text(encoding="utf-8"))
+            record = read_trial_record(finalized, ledger_root=Path(manifest.ledger_root))
             failed += int(_record_execution_failed(record))
             continue
         remaining.append(trial)
@@ -306,7 +307,7 @@ def run_lifecycle_ablation(
             )
             imported_orphans += 1
             record_paths_by_trial[trial.trial_id] = str(finalized)
-            record = TrialRecord.model_validate_json(finalized.read_text(encoding="utf-8"))
+            record = read_trial_record(finalized, ledger_root=Path(manifest.ledger_root))
             failed += int(_record_execution_failed(record))
             continue
 
@@ -354,7 +355,7 @@ def run_lifecycle_ablation(
             )
             imported_orphans += 1
             record_paths_by_trial[trial.trial_id] = str(finalized)
-            record = TrialRecord.model_validate_json(finalized.read_text(encoding="utf-8"))
+            record = read_trial_record(finalized, ledger_root=Path(manifest.ledger_root))
             failed += int(_record_execution_failed(record))
             continue
 
@@ -402,7 +403,7 @@ def run_lifecycle_ablation(
             run_dir=run_dir,
         )
         record_paths_by_trial[trial.trial_id] = str(finalized)
-        record = TrialRecord.model_validate_json(finalized.read_text(encoding="utf-8"))
+        record = read_trial_record(finalized, ledger_root=Path(manifest.ledger_root))
         failed += int(_record_execution_failed(record))
 
     from aec_bench.experimentation.lifecycle_studies.evaluation import write_lifecycle_ablation_evaluation

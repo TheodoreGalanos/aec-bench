@@ -164,20 +164,21 @@ run-bundle contracts remain plain domain models. Their joins use stable IDs,
 typed references, direct values, and named commitments. They do not calculate
 or carry a universal self-digest. A legacy compatibility reader validates old
 self-addressed JSON before it creates a plain current model.
-`TrialRecord` is the durable trial provenance envelope. A dataset manifest
-defines semantic task selection; one full Git reference or detached-bundle
-`ArtifactRef` identifies the immutable bytes used for execution. Evidence-lifecycle and world
-records add content-addressed artifacts where replay, recovery, or isolation
-requires them.
+`RunManifest` owns identity shared by all trials in one run. It records the
+dataset, source, agent, runtime, provider route, evaluation regime, and
+expected authorities once. `TrialRecord` references that identity by
+`run_id`, and records execution, evaluation, and evidence status separately.
+A full clean Git revision or source-snapshot `ArtifactRef` identifies the
+source used for publishable execution.
 
 `TrialRecord` references evidence authorities; it does not copy task-owned
-episode state or replay facts into a second shared model. `OutputRecord` owns
+episode state or replay facts into a second shared model. `TrialOutput` owns
 termination versus truncation and the final runtime reason. `CostRecord` owns
 aggregate model calls, token usage, cache usage, advisor usage, and estimated
-cost. A task-owned episode inventory can be attached through one verified
-`ArtifactReference`. The actor invocation authority returns one final
-`AuthorityEvidenceRef` after quiescent close; trial-record migration remains
-owned by the trial contract. Reports consume these canonical fields and never recover
+cost. Actor evidence and task-owned World or lifecycle evidence remain
+separate `AuthorityEvidenceRef` values. The actor invocation authority returns
+its one final reference after quiescent close. Optional subsystem detail uses
+typed extension artifacts. Reports consume these canonical fields and never recover
 aggregate usage from the open-ended provider metadata map.
 
 `trajectory.jsonl` is the current ordered interaction record for ordinary

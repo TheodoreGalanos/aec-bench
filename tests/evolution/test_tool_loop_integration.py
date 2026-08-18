@@ -13,20 +13,12 @@ from aec_bench.contracts.evolution import (
     ObservationEnrichment,
     TraceDigest,
 )
-from aec_bench.contracts.trial_record import (
-    AgentReference,
-    Completeness,
-    EnvironmentSnapshot,
-    InputRecord,
-    OutputRecord,
-    TaskReference,
-    TimingRecord,
-    TrialRecord,
-)
+from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evolution.analysis import GraduatedScope
 from aec_bench.evolution.evolver_tools import build_evolver_toolset
 from aec_bench.evolution.prompts import build_evolution_brief
 from aec_bench.evolution.structured_evolver import _SCOPE_ACTION_LIMITS
+from tests.support.trial_record_factories import make_trial_record
 
 # ---------------------------------------------------------------------------
 # Builders for realistic test data
@@ -38,25 +30,18 @@ def _make_trial_record(
     reward: float = 0.5,
     instruction: str = "Calculate the voltage drop for a 50A circuit.",
 ) -> TrialRecord:
-    """Build a minimal but valid TrialRecord using PARTIAL completeness."""
-    return TrialRecord(
+    """Build a minimal schema-2 TrialRecord for an evolution observation."""
+    return make_trial_record(
         trial_id=trial_id,
         experiment_id="exp-integration-test",
-        timestamp=datetime(2026, 3, 1, 12, 0, 0),
-        task=TaskReference(
-            task_id="electrical/voltage-drop/au-office-fitout",
-            task_revision="abc123",
-        ),
-        agent=AgentReference(
-            adapter="tool_loop",
-            model="anthropic:claude-haiku-3-5",
-        ),
-        environment=EnvironmentSnapshot(
-            runtime_image="ghcr.io/example/task:latest",
-            compute_backend="local",
-        ),
-        inputs=InputRecord(instruction=instruction),
-        outputs=OutputRecord(),
+        task={
+            "task_id": "electrical/voltage-drop/au-office-fitout",
+            "task_revision": "abc123",
+        },
+        agent={"adapter": "tool_loop", "model": "anthropic:claude-haiku-3-5"},
+        environment={"runtime_image": "ghcr.io/example/task:latest", "compute_backend": "local"},
+        input={"instruction": instruction, "task_revision": "abc123"},
+        output={},
         evaluation=EvaluationResult(
             reward=reward,
             validity=ValidityCheck(
@@ -65,8 +50,7 @@ def _make_trial_record(
                 verifier_completed=True,
             ),
         ),
-        timing=TimingRecord(total_seconds=42.0),
-        completeness=Completeness.PARTIAL,
+        timing={"total_seconds": 42.0},
     )
 
 

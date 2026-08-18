@@ -298,6 +298,7 @@ def _build_harbor_solve_fn(
     from aec_bench.contracts.trial_record import TrialRecord
     from aec_bench.evolution.backends.local import inject_snapshot_into_workspace
     from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
+    from aec_bench.ledger.reader import read_trial_record
     from aec_bench.tasks.loader import load_task_definition
 
     solver = config.solver
@@ -345,7 +346,7 @@ def _build_harbor_solve_fn(
                     task_path_overrides={task.task_id: task_dir.resolve()},
                 )
                 records.extend(
-                    TrialRecord.model_validate_json(path.read_text(encoding="utf-8"))
+                    read_trial_record(path, ledger_root=artifact_root / "ledger")
                     for path in result.import_result.ledger_paths
                 )
             except Exception:

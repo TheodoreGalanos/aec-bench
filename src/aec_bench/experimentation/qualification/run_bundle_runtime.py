@@ -22,8 +22,9 @@ from aec_bench.contracts.stage_execution import KernelInstructionOverride
 from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext
 from aec_bench.contracts.trial_record import (
     ArtifactReference,
-    Completeness,
+    EvaluationRegimeRef,
     MetaHarnessTrialProvenance,
+    RunManifest,
     TrialRecord,
 )
 from aec_bench.experimentation.governance.authority_ledger import (
@@ -105,6 +106,7 @@ from aec_bench.harness.program_execution import (
     OperationResult,
     execute_program,
 )
+from aec_bench.ledger.reader import read_trial_record
 
 
 def execute_run_bundle(
@@ -573,17 +575,33 @@ class _TrialLineageTransform:
             motif_ids=self._study.motif_ids,
             evaluation_plan_ref=self._study.evaluation_plan_ref,
         )
-        transformed = record.model_copy(
-            update={
-                "environment": record.environment.model_copy(
-                    update={"tool_versions": _bound_runtime_versions(self._bundle, snapshot, record)}
+        run_manifest = RunManifest.model_validate(
+            {
+                **record.run_manifest.model_dump(mode="python"),
+                "run_id": self._study.run_id,
+                "execution_environment": {
+                    **record.environment.model_dump(mode="python"),
+                    "tool_versions": _bound_runtime_versions(self._bundle, snapshot, record),
+                },
+                "evaluation_regime": (
+                    None
+                    if self._study.evaluation_plan_ref is None
+                    else EvaluationRegimeRef(
+                        regime_id=self._study.evaluation_plan_ref.plan_id,
+                        generation=self._study.evaluation_plan_ref.evaluation_generation,
+                    )
                 ),
-                "outputs": record.outputs.model_copy(update={"artifacts": artifacts}),
-                "meta_harness_provenance": provenance,
-                "completeness": Completeness.COMPLETE,
             }
         )
-        validated = TrialRecord.model_validate(transformed.model_dump(mode="python"))
+        validated = record.model_copy(update={"run_id": run_manifest.run_id})
+        validated.attach_extension("meta_harness_provenance", provenance)
+        for index, artifact in enumerate(artifacts):
+            validated.attach_artifact(
+                f"output:{artifact.kind}:{index}",
+                Path(artifact.path),
+                media_type=artifact.media_type,
+            )
+        validated.bind_run_manifest(run_manifest)
         enforce_runtime_harness_contracts(
             contracts=self._bundle.harness.contracts,
             record=validated,
@@ -901,14 +919,12 @@ def _bound_runtime_versions(
     snapshot: TaskSnapshotRef,
     record: TrialRecord,
 ) -> dict[str, str]:
-    """Bind every selected kernel primitive and the exact task package into execution provenance."""
+    """Bind shared kernel primitives without copying task identity into the run environment."""
+    del snapshot
     versions = dict(record.environment.tool_versions or {})
     expected = {
-        **{
-            f"kernel:{binding.capability_ref.capability_id}": binding.capability_ref.version
-            for binding in bundle.harness.bindings
-        },
-        "task-package": f"sha256:{snapshot.package_sha256}",
+        f"kernel:{binding.capability_ref.capability_id}": binding.capability_ref.version
+        for binding in bundle.harness.bindings
     }
     for name, version in expected.items():
         existing = versions.get(name)
@@ -953,7 +969,7 @@ def _safe_segment(value: str) -> str:
 def _trial_rewards(paths: tuple[Path, ...]) -> list[float]:
     rewards: list[float] = []
     for path in paths:
-        record = TrialRecord.model_validate_json(path.read_text(encoding="utf-8"))
+        record = read_trial_record(path, ledger_root=path.parents[1])
         if record.evaluation.reward is not None:
             rewards.append(float(record.evaluation.reward))
     return rewards

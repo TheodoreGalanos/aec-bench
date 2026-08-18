@@ -9,7 +9,7 @@ import re
 import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from pydantic import TypeAdapter
 
@@ -30,6 +30,8 @@ from aec_bench.ledger.immutable_artifact_store import (
     ImmutableArtifactIntegrityError,
     validate_evidence_root,
 )
+from aec_bench.ledger.reader import read_trial_record
+from aec_bench.ledger.writer import DuplicateTrialRecordError, write_trial_record
 
 
 def snapshot_evidence_artifacts(
@@ -227,46 +229,24 @@ def write_or_load_exact_trial_record(
     record: TrialRecord,
 ) -> Path:
     """Persist one TrialRecord or prove the existing first-writer bytes are exact."""
-    expected = ledger_root / record.experiment_id / f"{record.trial_id}.json"
-    encoded = record.model_dump_json(indent=2).encode("utf-8")
-    with translate_repository_errors(
-        label="proposal TrialRecord",
-        collision_message=None,
+    with translate_repository_errors(label="proposal TrialRecord"):
+        repository.relative_path(ledger_root)
+    try:
+        expected = write_trial_record(ledger_root=ledger_root, record=record)
+    except DuplicateTrialRecordError:
+        expected = ledger_root / record.experiment_id / f"{record.trial_id}.json"
+    try:
+        observed = read_trial_record(expected, ledger_root=ledger_root)
+    except (OSError, ValueError) as error:
+        raise ProposalTrialImportError("persisted proposal TrialRecord cannot be resumed") from error
+    if (
+        observed.model_dump(mode="python") != record.model_dump(mode="python")
+        or observed.run_manifest != record.run_manifest
     ):
-        relative_path = repository.relative_path(expected)
-    try:
-        repository.publish_bytes(
-            relative_path,
-            encoded,
-        )
-    except ImmutableArtifactCollisionError:
-        observed_bytes = load_repository_bytes(
-            repository=repository,
-            path=expected,
-            label="resumed proposal TrialRecord",
-        )
-    except (
-        ImmutableArtifactConfinementError,
-        ImmutableArtifactIntegrityError,
-    ) as error:
-        raise ProposalTrialImportError(
-            f"proposal TrialRecord cannot be persisted: {error}",
-        ) from error
-    else:
-        observed_bytes = encoded
-    try:
-        observed = TrialRecord.model_validate_json(
-            observed_bytes,
-        )
-    except ValueError as error:
-        raise ProposalTrialImportError(
-            "persisted proposal TrialRecord cannot be resumed",
-        ) from error
-    if observed != record:
         raise ProposalTrialImportError(
             "persisted proposal TrialRecord differs from the resumed import",
         )
-    return repository.root.joinpath(*PurePosixPath(relative_path).parts)
+    return expected
 
 
 def merge_artifacts(

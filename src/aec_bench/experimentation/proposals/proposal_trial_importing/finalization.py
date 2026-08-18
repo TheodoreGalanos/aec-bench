@@ -12,9 +12,11 @@ from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 from aec_bench.contracts.trial_record import (
     ArtifactReference,
-    Completeness,
+    EvaluationRegimeRef,
     MetaHarnessTrialProvenance,
     ProposalSessionTrialProvenance,
+    RunManifest,
+    TrialOutput,
     TrialRecord,
 )
 from aec_bench.experimentation.governance.authority_ledger import (
@@ -433,6 +435,8 @@ def _preserve_completed_evidence(
     artifacts_root: Path,
     persisted: PersistedProposalArtifacts,
 ) -> CompletedEvidenceArtifacts:
+    if imported.evaluation is None:
+        raise ProposalTrialImportError("completed proposal trial is missing evaluation")
     destination = object_root(artifacts_root, authorization)
     copied_evidence, copied_by_identity = snapshot_evidence_artifacts(
         repository=repository,
@@ -562,29 +566,45 @@ def _build_complete_trial_record(
         evaluation_plan_ref=freeze.evaluation_plan_ref,
         proposal_session=proposal_provenance,
     )
-    transformed = imported.model_copy(
-        update={
-            "environment": imported.environment.model_copy(
-                update={
-                    "tool_versions": bound_tool_versions(
-                        record=imported,
-                        authorization=authorization,
-                    ),
-                },
+    run_manifest = RunManifest.model_validate(
+        {
+            **imported.run_manifest.model_dump(mode="python"),
+            "run_id": authorization.dispatch.dispatch_id,
+            "execution_environment": {
+                **imported.environment.model_dump(mode="python"),
+                "tool_versions": bound_tool_versions(record=imported, authorization=authorization),
+            },
+            "evaluation_regime": EvaluationRegimeRef(
+                regime_id=freeze.evaluation_plan_ref.plan_id,
+                generation=freeze.evaluation_plan_ref.evaluation_generation,
             ),
-            "outputs": imported.outputs.model_copy(
-                update={
-                    "raw_output_path": completed.raw_output.path,
-                    "artifacts": completed.all_artifacts,
-                },
-            ),
-            "meta_harness_provenance": provenance,
-            "completeness": Completeness.COMPLETE,
-        },
+        }
     )
-    return TrialRecord.model_validate(
-        transformed.model_dump(mode="python"),
+    output = TrialOutput.model_validate(imported.outputs.model_dump(mode="python")).bind_runtime_paths(
+        raw_output_path=completed.raw_output.path,
+        conversation_path=imported.outputs.conversation_path,
+        trajectory_path=imported.outputs.trajectory_path,
     )
+    transformed = imported.model_copy(update={"run_id": run_manifest.run_id, "output": output})
+    transformed.attach_extension("meta_harness_provenance", provenance)
+    attached_artifacts: set[tuple[str, str]] = set()
+    for artifact in completed.all_artifacts:
+        identity = (artifact.kind, artifact.sha256)
+        if identity in attached_artifacts:
+            continue
+        attached_artifacts.add(identity)
+        transformed.attach_artifact(
+            f"output:{artifact.kind}:{artifact.sha256}",
+            Path(artifact.path),
+            media_type=artifact.media_type,
+        )
+    if "raw_output" not in transformed.pending_artifacts:
+        transformed.attach_artifact(
+            "raw_output",
+            Path(completed.raw_output.path),
+            media_type=completed.raw_output.media_type,
+        )
+    return transformed.bind_run_manifest(run_manifest)
 
 
 def _persist_scored_result(

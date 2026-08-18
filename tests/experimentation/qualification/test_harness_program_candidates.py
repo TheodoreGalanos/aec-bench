@@ -34,7 +34,6 @@ from aec_bench.contracts.harness_instance import (
     VerificationBindingConfig,
 )
 from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
-from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.experimentation.qualification.harness_program_study.candidates import (
     HarnessProgramCandidateRequest,
     MaterializedHarnessProgramCandidateSet,
@@ -47,6 +46,7 @@ from aec_bench.experimentation.qualification.run_bundle_runtime import MetaHarne
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry, default_kernel_registry
 from aec_bench.harness.program_execution import ProgramExecutionStatus
+from aec_bench.ledger.reader import read_trial_record
 from tests.support.adaptive_harness import (
     runtime_attestation_for_harbor_agent,
     write_adaptive_task,
@@ -311,7 +311,7 @@ def test_all_four_bundles_execute_through_the_real_run_bundle_runtime_seam(tmp_p
 
         assert execution.program.status is ProgramExecutionStatus.SUCCEEDED
         records = [
-            TrialRecord.model_validate_json(path.read_text(encoding="utf-8"))
+            read_trial_record(path)
             for invocation in execution.harbor_invocations
             for path in invocation.imported_trial_paths
         ]

@@ -45,13 +45,14 @@ particular:
   `LegacyContentAddressedModel` as explicit compatibility debt; its reader
   validates and removes `content_sha256` before it returns a plain migrated
   model;
-- `ArtifactRef` is the universal exact-byte store reference, while the
-  protected `TrialRecord` still uses `ArtifactReference` until its owning
-  migration;
-- the dataset owner now uses schema 2 with exact Git or detached-bundle
-  references; catalogue, trial, evaluation, and run-bundle contracts keep
-  their supported shapes until their owning changes are implemented;
-- no trial-record v2 or evaluation-regime bundle is introduced by this policy;
+- `ArtifactRef` is the universal exact-byte store reference, including for
+  current trial inputs, outputs, authority evidence, provider evidence, and
+  typed extensions;
+- the dataset and trial owners use schema 2 with exact source and artifact
+  references; evaluation and run-bundle contracts keep their supported shapes
+  until their owning changes are implemented;
+- `RunManifest` owns shared run identity and `TrialRecord` keeps
+  execution, evaluation, and evidence status separate;
 - current DeepSeek evidence v2 and the installed World actor protocols remain
   supported.
 
@@ -59,8 +60,8 @@ New code must not copy a legacy pattern only because the baseline contains it.
 
 Registration is not proof that every current consumer verifies a claim. The
 registry records known gaps without inventing checks that do not exist. These
-gaps currently include the lack of one universal byte-verifying reader for
-`ArtifactReference`, the lack of a production reader for the actor and World
+gaps currently include remaining extension-level `ArtifactReference` consumers, the
+lack of a production reader for the actor and World
 transport JSONL evidence, incomplete read-time verification of the runtime
 attestation evidence-manifest digest, and incomplete cross-artifact checks for
 some DeepSeek evidence-v2 claim bindings. A temporary exception must name its

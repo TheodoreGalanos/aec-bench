@@ -104,6 +104,7 @@ from aec_bench.harness.program_execution import (
     OperationExecutionStatus,
     ProgramExecutionStatus,
 )
+from aec_bench.ledger.reader import read_trial_record
 
 
 class RepairRuntime:
@@ -607,7 +608,7 @@ class RepairRuntime:
         paths = tuple(path for invocation in execution.harbor_invocations for path in invocation.imported_trial_paths)
         if len(paths) != len(set(paths)):
             raise ValueError("repair seed execution requires unique imported TrialRecords")
-        loaded = tuple((path, TrialRecord.model_validate_json(path.read_text(encoding="utf-8"))) for path in paths)
+        loaded = tuple((path, read_trial_record(path)) for path in paths)
         task_ids = tuple(record.task.task_id for _, record in loaded)
         if len(task_ids) != len(set(task_ids)):
             raise ValueError("repair seed execution requires at most one TrialRecord per task")

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from aec_bench.contracts.artifacts import ArtifactRef
-from aec_bench.contracts.dataset import BundleDatasetRef, dataset_reference_key
+from aec_bench.contracts.dataset import BundleDatasetRef
 from aec_bench.contracts.experiment_manifest import (
     AgentConfig,
     ComputeConfig,
@@ -19,13 +19,13 @@ from aec_bench.contracts.trial_record import (
     AgentReference,
     EnvironmentSnapshot,
     TaskReference,
-    TrialRecord,
 )
 from aec_bench.harness import experiment_runner as experiment_runner_module
 from aec_bench.harness.experiment_runner import (
     ExperimentImportMismatchError,
     HarborImportExperimentRunner,
 )
+from aec_bench.ledger.reader import read_trial_record
 from tests.support.trial_record_factories import make_trial_record
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -39,7 +39,6 @@ _skip_no_job_data = pytest.mark.skipif(
 
 
 def test_runner_transforms_records_before_validation_and_persistence(tmp_path: Path, monkeypatch) -> None:
-    """RunBundle provenance must be attached before a Harbor record enters the ledger."""
     task_id = "civil/calculation/adaptive"
     manifest = ExperimentManifest(
         experiment_id="adaptive-run",
@@ -77,7 +76,7 @@ def test_runner_transforms_records_before_validation_and_persistence(tmp_path: P
 
     def transform(imported):  # noqa: ANN001, ANN201
         transformed_trial_ids.append(imported.trial_id)
-        return imported.model_copy(update={"dataset_id": "run-bundle:bundle-sha"})
+        return imported.model_copy(update={"attempt": 2})
 
     runner = HarborImportExperimentRunner(
         repo_root=tmp_path,
@@ -92,7 +91,7 @@ def test_runner_transforms_records_before_validation_and_persistence(tmp_path: P
 
     assert transformed_trial_ids == [record.trial_id]
     saved = json.loads(result.output_paths[0].read_text(encoding="utf-8"))
-    assert saved["dataset_id"] == "run-bundle:bundle-sha"
+    assert saved["attempt"] == 2
 
 
 def test_runner_passes_only_the_exact_dataset_reference_to_import(tmp_path: Path, monkeypatch) -> None:
@@ -128,7 +127,7 @@ def test_runner_passes_only_the_exact_dataset_reference_to_import(tmp_path: Path
 
     runner.import_harbor_job(job_dir=tmp_path / "job", manifest=manifest)
 
-    assert captured["dataset_id"] == dataset_reference_key(reference)
+    assert captured["dataset"] == reference
 
 
 def test_runner_returns_replayable_paths_for_identical_duplicate_records(
@@ -188,9 +187,11 @@ def test_runner_returns_replayable_paths_for_identical_duplicate_records(
     assert replay.imported_trials == 0
     assert replay.duplicate_trials == 1
     assert replay.ledger_paths == first.output_paths
-    assert TrialRecord.model_validate_json(replay.ledger_paths[0].read_bytes()) == record
+    replayed = read_trial_record(replay.ledger_paths[0], ledger_root=tmp_path / "ledger")
+    assert replayed.model_dump(mode="json") == record.model_dump(mode="json")
+    assert replayed.run_manifest == record.run_manifest
 
-    conflicting_record = record.model_copy(update={"dataset_id": "different-dataset"})
+    conflicting_record = record.model_copy(update={"attempt": 2})
     monkeypatch.setattr(
         experiment_runner_module,
         "import_harbor_job",

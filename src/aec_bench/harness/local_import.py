@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 import shutil
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -13,16 +13,21 @@ from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.pricing import estimate_cost_usd
 from aec_bench.contracts.trial_record import (
-    AgentReference,
-    Completeness,
+    AgentConfiguration,
     CostRecord,
-    EnvironmentSnapshot,
-    InputRecord,
-    OutputRecord,
-    TaskReference,
+    EvaluationStatus,
+    EvidenceStatus,
+    ExecutionEnvironmentRef,
+    ExecutionStatus,
+    ProviderRoute,
+    RunManifest,
     TimingRecord,
+    TrialInput,
+    TrialOutput,
     TrialRecord,
+    UnresolvedSourceRef,
 )
+from aec_bench.harness.trial_record_builder import portable_agent_configuration
 from aec_bench.tasks.loader import load_task_definition
 
 # Artifact filenames we look for when copying from a local run directory.
@@ -180,33 +185,32 @@ def build_trial_record_from_workspace(
     effective_timing = timing if timing is not None else TimingRecord(total_seconds=0.0)
 
     adapter_configuration = agent_result.get("adapter_configuration", {}) if agent_result is not None else {}
-    safe_adapter_configuration = dict(adapter_configuration) if isinstance(adapter_configuration, dict) else {}
+    safe_adapter_configuration = (
+        portable_agent_configuration(adapter_configuration) if isinstance(adapter_configuration, dict) else {}
+    )
     safe_adapter_configuration.update({"source": "run-local", "model_requested": model})
 
-    return TrialRecord(
+    started_at = datetime.now(UTC)
+    run_id = f"{experiment_id}:{adapter}:{recorded_model}:local"
+    record = TrialRecord(
         trial_id=trial_id,
-        experiment_id=experiment_id,
-        timestamp=datetime.now(UTC),
-        task=TaskReference(task_id=task_id, task_revision="local"),
-        agent=AgentReference(
-            adapter=adapter,
-            model=recorded_model,
-            configuration=safe_adapter_configuration,
+        run_id=run_id,
+        task_id=task_id,
+        execution_status=(
+            ExecutionStatus.COMPLETED if agent_status is AgentOutputStatus.COMPLETED else ExecutionStatus.FAILED
         ),
-        environment=EnvironmentSnapshot(
-            runtime_image="local",
-            compute_backend="local",
-        ),
-        inputs=InputRecord(instruction=instruction),
-        outputs=OutputRecord(
+        evaluation_status=EvaluationStatus.COMPLETED,
+        evidence_status=EvidenceStatus.NOT_REQUIRED,
+        started_at=started_at,
+        completed_at=started_at + timedelta(seconds=effective_timing.total_seconds),
+        input=TrialInput(instruction=instruction, task_revision="local"),
+        output=TrialOutput(
             agent_output=AgentOutput(
                 status=agent_status,
                 output_path="output.md",
                 output_format="markdown",
                 error_message=None if agent_status == AgentOutputStatus.COMPLETED else status_str,
             ),
-            conversation_path=conversation_path_val,
-            trajectory_path=trajectory_path_val,
             agent_result=(
                 None
                 if agent_result is None
@@ -222,7 +226,31 @@ def build_trial_record_from_workspace(
         evaluation=evaluation,
         timing=effective_timing,
         cost=cost,
-        completeness=Completeness.PARTIAL,
+    )
+    if conversation_path_val is not None:
+        record.attach_artifact("conversation", Path(conversation_path_val), media_type="application/x-ndjson")
+    if trajectory_path_val is not None:
+        record.attach_artifact("trajectory", Path(trajectory_path_val), media_type="application/x-ndjson")
+    for role, filename in (("symbolic_state", "symbolic_state.json"), ("scratchpad", ".scratchpad.json")):
+        path = workspace_dir / filename
+        if path.is_file():
+            record.attach_artifact(role, path, media_type="application/json", logical_path=filename)
+    return record.bind_run_manifest(
+        RunManifest(
+            run_id=run_id,
+            experiment_id=experiment_id,
+            source=UnresolvedSourceRef(reason="local workspace source is not retained"),
+            agent=AgentConfiguration(
+                adapter=adapter,
+                model=recorded_model,
+                configuration=safe_adapter_configuration,
+            ),
+            execution_environment=ExecutionEnvironmentRef(
+                runtime_image="local",
+                compute_backend="local",
+            ),
+            provider_route=ProviderRoute(provider=adapter, route="local"),
+        )
     )
 
 
@@ -318,22 +346,14 @@ def build_trial_record(
         else AgentOutputStatus.FAILED
     )
 
-    # Build repo-root-relative POSIX paths for portability (same convention
-    # as the Harbor import).
-    def _rel_posix(p: Path) -> str | None:
-        if not p.exists():
-            return None
-        try:
-            return p.resolve().relative_to(repo_root.resolve()).as_posix()
-        except ValueError:
-            return str(p)
-
     output_md = artifact_dir / "output.md"
     trajectory = artifact_dir / "trajectory.jsonl"
     conversation = artifact_dir / "conversation.jsonl"
 
     adapter_configuration = agent_result.get("adapter_configuration", {})
-    safe_adapter_configuration = dict(adapter_configuration) if isinstance(adapter_configuration, dict) else {}
+    safe_adapter_configuration = (
+        portable_agent_configuration(adapter_configuration) if isinstance(adapter_configuration, dict) else {}
+    )
     safe_adapter_configuration.update(
         {
             "source": "import-local",
@@ -346,42 +366,37 @@ def build_trial_record(
     model_calls = _optional_non_negative_int(agent_result, "model_calls")
     has_usage = any(value is not None for value in (model_calls, input_tokens, output_tokens, cache_read, cache_write))
 
-    return TrialRecord(
+    started_at = datetime.now(UTC)
+    timing = TimingRecord(
+        total_seconds=0.0,
+        agent_seconds=None,
+        setup_seconds=None,
+        verification_seconds=None,
+    )
+    run_id = f"{experiment_id}:{adapter_kind}:{model}:local"
+    record = TrialRecord(
         trial_id=trial_id,
-        experiment_id=experiment_id,
-        dataset_id=None,
-        timestamp=datetime.now(UTC),
-        task=TaskReference(
-            task_id=task.task_id,
+        run_id=run_id,
+        task_id=task.task_id,
+        execution_status=(
+            ExecutionStatus.COMPLETED if agent_status is AgentOutputStatus.COMPLETED else ExecutionStatus.FAILED
+        ),
+        evaluation_status=EvaluationStatus.COMPLETED,
+        evidence_status=EvidenceStatus.NOT_REQUIRED,
+        started_at=started_at,
+        completed_at=started_at,
+        input=TrialInput(
+            instruction=task.instruction,
             task_revision="local",
             visibility=task.visibility,
         ),
-        agent=AgentReference(
-            adapter=adapter_kind,
-            model=model,
-            adapter_revision=None,
-            configuration=safe_adapter_configuration,
-        ),
-        environment=EnvironmentSnapshot(
-            runtime_image="local",
-            compute_backend="local",
-            tool_versions=None,
-        ),
-        inputs=InputRecord(
-            instruction=task.instruction,
-            system_prompt=None,
-            input_files=None,
-        ),
-        outputs=OutputRecord(
+        output=TrialOutput(
             agent_output=AgentOutput(
                 status=agent_status,
                 output_path="output.md",
                 output_format="markdown",
                 error_message=None if agent_status == AgentOutputStatus.COMPLETED else status_str,
             ),
-            raw_output_path=_rel_posix(output_md),
-            conversation_path=_rel_posix(conversation),
-            trajectory_path=_rel_posix(trajectory),
             agent_result={
                 "turns_used": agent_result.get("turns_used"),
                 "max_turns": agent_result.get("max_turns"),
@@ -402,12 +417,7 @@ def build_trial_record(
                 errors=["local run — not verified"],
             ),
         ),
-        timing=TimingRecord(
-            total_seconds=0.0,
-            agent_seconds=None,
-            setup_seconds=None,
-            verification_seconds=None,
-        ),
+        timing=timing,
         cost=(
             CostRecord(
                 model_calls=model_calls,
@@ -420,5 +430,32 @@ def build_trial_record(
             if has_usage
             else None
         ),
-        completeness=Completeness.PARTIAL,
+    )
+    for role, path, media_type in (
+        ("raw_output", output_md, "text/markdown"),
+        ("trajectory", trajectory, "application/x-ndjson"),
+        ("conversation", conversation, "application/x-ndjson"),
+    ):
+        if path.is_file():
+            record.attach_artifact(role, path, media_type=media_type)
+    for role, filename in (("symbolic_state", "symbolic_state.json"), ("scratchpad", ".scratchpad.json")):
+        path = artifact_dir / filename
+        if path.is_file():
+            record.attach_artifact(role, path, media_type="application/json", logical_path=filename)
+    return record.bind_run_manifest(
+        RunManifest(
+            run_id=run_id,
+            experiment_id=experiment_id,
+            source=UnresolvedSourceRef(reason="imported local run has no retained source snapshot"),
+            agent=AgentConfiguration(
+                adapter=adapter_kind,
+                model=model,
+                configuration=safe_adapter_configuration,
+            ),
+            execution_environment=ExecutionEnvironmentRef(
+                runtime_image="local",
+                compute_backend="local",
+            ),
+            provider_route=ProviderRoute(provider=adapter_kind, route="local"),
+        )
     )

@@ -77,6 +77,15 @@
       <dd>
         <Badge text={trial.adapter} />
       </dd>
+
+      <dt>Execution</dt>
+      <dd><Badge text={trial.execution_status} /></dd>
+
+      <dt>Evaluation</dt>
+      <dd><Badge text={trial.evaluation_status} /></dd>
+
+      <dt>Evidence</dt>
+      <dd><Badge text={trial.evidence_status} /></dd>
     </dl>
   </div>
 

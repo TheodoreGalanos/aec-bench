@@ -21,5 +21,11 @@ class ArtifactRef(FrozenStrictModel):
     size_bytes: PositiveInt
     media_type: NonEmptyStr
 
+    @property
+    def path(self) -> str:
+        """Return the repository locator for path-oriented consumers."""
+
+        return self.artifact_id
+
 
 __all__ = ("ArtifactRef", "Sha256")

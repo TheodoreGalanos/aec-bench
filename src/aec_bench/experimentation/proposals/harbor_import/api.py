@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from aec_bench.contracts.dataset import DatasetRef
 from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.harness.harbor_importing.contracts import (
@@ -38,7 +39,7 @@ def import_proposal_harbor_job(
     job_dir: Path,
     repo_root: Path,
     experiment_id: str | None = None,
-    dataset_id: str | None = None,
+    dataset: DatasetRef | None = None,
 ) -> list[TrialRecord]:
     """Import a Harbor job through the proposal evidence boundary."""
 
@@ -48,7 +49,7 @@ def import_proposal_harbor_job(
         job_dir=job_dir,
         repo_root=repo_root,
         experiment_id=experiment_id,
-        dataset_id=dataset_id,
+        dataset=dataset,
         evidence_loader=load_proposal_import_evidence_for_context,
     )
 
@@ -58,7 +59,7 @@ def import_proposal_harbor_trial(
     trial_dir: Path,
     repo_root: Path,
     experiment_id: str | None = None,
-    dataset_id: str | None = None,
+    dataset: DatasetRef | None = None,
 ) -> TrialRecord:
     """Import one Harbor trial through the proposal evidence boundary."""
 
@@ -68,7 +69,7 @@ def import_proposal_harbor_trial(
         trial_dir=trial_dir,
         repo_root=repo_root,
         experiment_id=experiment_id,
-        dataset_id=dataset_id,
+        dataset=dataset,
         evidence_loader=load_proposal_import_evidence_for_context,
     )
 

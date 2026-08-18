@@ -44,6 +44,9 @@ class TrialRowSchema(BaseModel):
     task_id: str
     model: str
     adapter: str
+    execution_status: str
+    evaluation_status: str
+    evidence_status: str
     compute_backend: str = ""
     discipline: str
     reward: float

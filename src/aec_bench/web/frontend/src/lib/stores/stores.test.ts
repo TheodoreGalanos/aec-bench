@@ -102,6 +102,9 @@ describe("viewerStore", () => {
         },
       ],
       is_rlm_trial: false,
+      execution_status: "completed",
+      evaluation_status: "completed",
+      evidence_status: "verified",
       adapter_type: "other",
       artefacts: [],
       annotation: null,
@@ -144,6 +147,9 @@ describe("viewerStore", () => {
         },
       ],
       is_rlm_trial: false,
+      execution_status: "completed",
+      evaluation_status: "completed",
+      evidence_status: "verified",
       adapter_type: "other",
       artefacts: [],
       annotation: null,
@@ -187,4 +193,3 @@ describe("viewerStore", () => {
     expect(state.stepMessages.size).toBe(0);
   });
 });
-
