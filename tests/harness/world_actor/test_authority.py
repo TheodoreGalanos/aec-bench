@@ -33,6 +33,8 @@ from aec_bench.harness.world_actor import (
     ActorInvocationRequest,
     ActorTurnDisposition,
 )
+from aec_bench.ledger.artifact_repository import ArtifactRepository
+from aec_bench.ledger.immutable_byte_store import ImmutableArtifactIntegrityError
 
 
 def _catalogue(*names: str) -> WorldActorCapabilityCatalogue:
@@ -549,6 +551,7 @@ def test_incomplete_close_retains_unknown_identity_and_ignores_late_result(tmp_p
     assert incomplete.lifecycle is ActorInvocationLifecycle.CLOSING
     assert incomplete.unsettled_request_ids == ("unsettled",)
     assert incomplete.unknown_outcome_request_ids == ("unsettled",)
+    assert incomplete.evidence_ref is None
     assert retry.value.code == "actor-invocation-outcome-unknown"
     assert retry.value.duplicate is True
     assert not outcomes
@@ -558,9 +561,40 @@ def test_incomplete_close_retains_unknown_identity_and_ignores_late_result(tmp_p
     assert settled.complete is False
     assert settled.lifecycle is ActorInvocationLifecycle.CLOSED
     assert settled.unknown_outcome_request_ids == ("unsettled",)
+    assert settled.evidence_ref is not None
     completion = next(item for item in _evidence(authority.config.evidence_path) if item["record_type"] == "completion")
     assert completion["late_ignored"] is True
     assert completion["error_code"] == "actor-invocation-outcome-unknown"
+
+
+def test_quiescent_close_seals_and_publishes_exact_authority_evidence(tmp_path: Path) -> None:
+    authority = _authority(tmp_path, _FakeWorldHost())
+    authority.invoke(_request("request-1"))
+
+    report = authority.close()
+    assert report.evidence_ref is not None
+    retained = ArtifactRepository(tmp_path).read_bytes(report.evidence_ref.artifact)
+    evidence_at_close = authority.config.evidence_path.read_bytes()
+
+    with pytest.raises(ActorInvocationError, match="actor-authority-closing"):
+        authority.invoke(_request("after-close"))
+
+    assert authority.config.evidence_path.read_bytes() == evidence_at_close
+    assert retained == evidence_at_close
+    assert authority.close().evidence_ref == report.evidence_ref
+
+
+def test_authority_evidence_reference_fails_closed_after_artifact_drift(tmp_path: Path) -> None:
+    authority = _authority(tmp_path, _FakeWorldHost())
+    report = authority.close()
+    assert report.evidence_ref is not None
+    repository = ArtifactRepository(tmp_path)
+    artifact = report.evidence_ref.artifact
+    artifact_path = repository.root.joinpath(*artifact.artifact_id.split("/"))
+    artifact_path.write_bytes(b"tampered\n")
+
+    with pytest.raises(ImmutableArtifactIntegrityError, match="digest|size"):
+        repository.read_bytes(artifact)
 
 
 def test_evidence_is_monotonic_content_bound_and_token_free(tmp_path: Path) -> None:

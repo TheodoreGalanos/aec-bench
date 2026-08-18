@@ -10,6 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from aec_bench.contracts.authority_evidence import AuthorityEvidenceRef
 from aec_bench.contracts.world_session import WorldSessionRequest, WorldSessionResult
 from aec_bench.harness.world_actor import (
     ActorInvocationAuthority,
@@ -91,6 +92,7 @@ class PumpStationPrimeSessionRun:
     evaluation: StewardshipEvaluation
     actor_transport_file: Path
     actor_authority_file: Path
+    actor_authority_evidence: AuthorityEvidenceRef | None
     run_file: Path
     world_actor_client_sha256: str
     world_action_count: int
@@ -183,6 +185,7 @@ async def run_pump_station_prime_session(
         world_action_count = endpoint.world_action_count
         world_action_limit_reached = endpoint.world_action_limit_reached
     close_report = endpoint.close()
+    actor_authority_evidence = close_report.authority.evidence_ref
 
     repository = PumpStationWorldRunRepository(world_run_directory)
     run = PumpStationWorldRun.resume_reference_system(
@@ -228,6 +231,9 @@ async def run_pump_station_prime_session(
                 "world_action_count": world_action_count,
                 "world_action_limit_reached": world_action_limit_reached,
                 "world_actor_close_complete": close_report.complete,
+                "actor_authority_evidence": (
+                    None if actor_authority_evidence is None else actor_authority_evidence.model_dump(mode="json")
+                ),
                 "prime_session_state": prime.session_state,
                 "prime_limit_reason": prime.limit_reason,
                 "world_state": world_state,
@@ -251,6 +257,7 @@ async def run_pump_station_prime_session(
         evaluation=evaluation,
         actor_transport_file=actor_transport_file,
         actor_authority_file=actor_authority_file,
+        actor_authority_evidence=actor_authority_evidence,
         run_file=run_file,
         world_actor_client_sha256=installed_client.content_sha256,
         world_action_count=world_action_count,

@@ -36,6 +36,7 @@ from aec_bench.harness.world_actor import (
     WorldActorEndpoint,
     actor_catalogue_sha256,
 )
+from aec_bench.ledger.artifact_repository import ArtifactRepository
 
 
 class _ConformanceHost:
@@ -195,6 +196,12 @@ def _prime_script(tmp_path: Path) -> dict[str, Any]:
             },
             8,
         )["result"]
+    close_report = endpoint.close().authority
+    assert close_report.evidence_ref is not None
+    assert (
+        ArtifactRepository(authority.config.evidence_path.parent).read_bytes(close_report.evidence_ref.artifact)
+        == authority.config.evidence_path.read_bytes()
+    )
     return _script_result(
         catalogue=catalogue,
         first_observation=first_observation,
@@ -231,7 +238,13 @@ def _deepseek_script(tmp_path: Path) -> dict[str, Any]:
     )
     assert terminal_response.disposition is NativeToolDisposition.CONCLUDE_TURN
     terminal = cast(dict[str, Any], terminal_response.result)
-    assert authority.close().complete is True
+    close_report = authority.close()
+    assert close_report.complete is True
+    assert close_report.evidence_ref is not None
+    assert (
+        ArtifactRepository(authority.config.evidence_path.parent).read_bytes(close_report.evidence_ref.artifact)
+        == authority.config.evidence_path.read_bytes()
+    )
     return _script_result(
         catalogue=host.catalogue.model_dump(mode="json"),
         first_observation=first_observation,
