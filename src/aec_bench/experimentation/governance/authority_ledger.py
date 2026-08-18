@@ -35,7 +35,7 @@ from aec_bench.contracts.evaluation_outcome import (
     CriticEvaluationOutcome,
     EvaluationOutcome,
 )
-from aec_bench.contracts.evaluation_plane import CriticSpec
+from aec_bench.contracts.evaluation_plane import Critic
 from aec_bench.contracts.harness_kernel import FrozenStrictModel, validate_sha256
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
@@ -113,8 +113,8 @@ class _BasisClaim(LegacyContentAddressedModel):
 
 _HUMAN_TRANSITION_ACTIONS = frozenset(
     {
-        AuthorityAction.RELEASE_CRITIC_GENERATION,
-        AuthorityAction.RETIRE_CRITIC_GENERATION,
+        AuthorityAction.RELEASE_CRITIC,
+        AuthorityAction.RETIRE_CRITIC,
         AuthorityAction.REVEAL_ACCEPTANCE_MANIFEST,
         AuthorityAction.CHANGE_KERNEL_VERSION,
     }
@@ -128,7 +128,7 @@ _HOST_PRINCIPAL_KINDS = frozenset(
 _DEFAULT_TYPED_BASIS_MODELS: dict[BasisKind, type[FrozenStrictModel]] = {
     BasisKind.ORIGIN: OriginStamp,
     BasisKind.AUTHORITY_EVENT: AuthorityEvent,
-    BasisKind.CRITIC_SPEC: CriticSpec,
+    BasisKind.CRITIC: Critic,
     BasisKind.EVALUATION_OUTCOME: EvaluationOutcome,
     BasisKind.CRITIC_EVALUATION_OUTCOME: CriticEvaluationOutcome,
     BasisKind.PROMOTION_MONITOR: PromotionMonitorAttestation,

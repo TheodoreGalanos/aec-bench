@@ -29,8 +29,8 @@ def verify_schedule(
         or schedule.kernel_ref != task_plan.kernel_ref
         or schedule.fixed_harness_ref != reference.fixed_harness_ref
         or schedule.fixed_harness_ref != task_plan.fixed_harness_ref
-        or schedule.evaluation_plan_ref != reference.evaluation_plan_ref
-        or schedule.evaluation_plan_ref != task_plan.evaluation_plan_ref
+        or schedule.evaluation_regime_ref != reference.evaluation_regime_ref
+        or schedule.evaluation_regime_ref != task_plan.evaluation_regime_ref
         or schedule.proposal_freeze.content_sha256 != reference.proposal_freeze_sha256
         or schedule.proposal_freeze.content_sha256 != task_plan.proposal_freeze_sha256
         or schedule.aggregate_budget != reference.aggregate_budget

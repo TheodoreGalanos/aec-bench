@@ -10,7 +10,7 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, FiniteFloat, NonNegativeInt, PositiveInt, field_validator, model_validator
 
 from aec_bench.contracts.authority import CriticEvaluationOutcomeIdentity
-from aec_bench.contracts.evaluation_plane import CriticRef, EvaluationPlanRef
+from aec_bench.contracts.evaluation_refs import CriticRef, EvaluationRegimeRef
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     KernelRef,
@@ -474,7 +474,7 @@ def _validate_valid_output(outcome: EvaluationOutcome) -> None:
 class CriticEvaluationOutcomeRef(FrozenStrictModel):
     """Stable identity for one critic result without repeating its artifact digest."""
 
-    evaluation_plan_ref: EvaluationPlanRef
+    evaluation_regime_ref: EvaluationRegimeRef
     critic: CriticRef
     candidate_sha256: str
 
@@ -488,7 +488,7 @@ class CriticEvaluationOutcome(FrozenStrictModel):
     """Critic-bound envelope around one evaluation outcome."""
 
     schema_version: Literal["aecbench.critic-evaluation-outcome.v1"] = "aecbench.critic-evaluation-outcome.v1"
-    evaluation_plan_ref: EvaluationPlanRef
+    evaluation_regime_ref: EvaluationRegimeRef
     critic: CriticRef
     execution_principal_id: NonEmptyStr
     critic_release_authority_event_id: NonEmptyStr
@@ -505,8 +505,8 @@ class CriticEvaluationOutcome(FrozenStrictModel):
 
     @model_validator(mode="after")
     def validate_critic_binding(self) -> Self:
-        if self.critic.compatibility_generation != self.evaluation_plan_ref.evaluation_generation:
-            raise ValueError("critic outcome generation differs from the evaluation plan")
+        if self.critic.regime != self.evaluation_regime_ref:
+            raise ValueError("critic outcome belongs to a different evaluation regime")
         return self
 
     @property
@@ -514,7 +514,7 @@ class CriticEvaluationOutcome(FrozenStrictModel):
         """Return the stable critic, plan, and candidate identity for this outcome."""
 
         return CriticEvaluationOutcomeRef(
-            evaluation_plan_ref=self.evaluation_plan_ref,
+            evaluation_regime_ref=self.evaluation_regime_ref,
             critic=self.critic,
             candidate_sha256=self.outcome.candidate_sha256,
         )
@@ -524,7 +524,7 @@ class CriticEvaluationOutcome(FrozenStrictModel):
         """Return the stable authority identity for this critic result."""
 
         return CriticEvaluationOutcomeIdentity(
-            evaluation_plan=self.evaluation_plan_ref.authority_identity,
-            critic_generation=self.critic.authority_identity,
+            evaluation_regime=self.evaluation_regime_ref,
+            critic=self.critic,
             candidate_sha256=self.outcome.candidate_sha256,
         )

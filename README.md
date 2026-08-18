@@ -709,6 +709,14 @@ uv run aec-bench evaluate -e experiment-001 --report report.html
 uv run aec-bench evaluate -e experiment-001 --model "<model-id>"
 ```
 
+Published evaluation regimes use one artifact reference as their compatibility
+identity. Inspect one regime or compare two regimes with semantic field paths:
+
+```bash
+uv run aec-bench evaluation regime show <artifact-id> --artifact-root <repository>
+uv run aec-bench evaluation regime diff <artifact-id-a> <artifact-id-b> --artifact-root <repository>
+```
+
 ### Reports
 
 ```bash

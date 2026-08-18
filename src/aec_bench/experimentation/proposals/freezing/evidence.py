@@ -15,7 +15,8 @@ from aec_bench.contracts.authority import (
 )
 from aec_bench.contracts.evaluation_plane import (
     CandidateManifestScope,
-    EvaluationPlan,
+    EvaluationAssignment,
+    EvaluationRegime,
 )
 from aec_bench.contracts.harness_instance import CompiledHarnessInstance
 from aec_bench.contracts.harness_kernel import FrozenStrictModel
@@ -43,8 +44,9 @@ def observe_input_basis(
     *,
     ledger: AuthorityLedger,
     scope: str,
-    evaluation_plan: EvaluationPlan,
-    evaluation_plan_candidate_scope: CandidateManifestScope | None,
+    evaluation_regime: EvaluationRegime,
+    evaluation_assignment: EvaluationAssignment,
+    evaluation_assignment_candidate_scope: CandidateManifestScope | None,
     operator: OperatorAuthority,
     structural_split: StructuralSplitManifest,
     leakage_audit: DecompositionLeakageAudit,
@@ -61,21 +63,29 @@ def observe_input_basis(
 ) -> ObservedInputBasis:
     """Observe all exact freeze inputs and return their basis join."""
 
-    plan = _observe_model(
+    regime = _observe_model(
         ledger=ledger,
-        artifact_id=(f"{scope}.evaluation-plan.{evaluation_plan.plan_id}"),
-        model=evaluation_plan,
+        artifact_id=(f"{scope}.evaluation-regime.{evaluation_regime.regime_id}"),
+        model=evaluation_regime,
         producer=host_policy,
         host_runtime=host_runtime,
-        operation_id="proposal-freeze.observe-evaluation-plan",
+        operation_id="proposal-freeze.observe-evaluation-regime",
+    )
+    assignment = _observe_model(
+        ledger=ledger,
+        artifact_id=(f"{scope}.evaluation-assignment.{evaluation_assignment.assignment_id}"),
+        model=evaluation_assignment,
+        producer=host_policy,
+        host_runtime=host_runtime,
+        operation_id="proposal-freeze.observe-evaluation-assignment",
     )
     candidate_scope = (
         None
-        if evaluation_plan_candidate_scope is None
+        if evaluation_assignment_candidate_scope is None
         else _observe_model(
             ledger=ledger,
-            artifact_id=(f"{scope}.candidate-manifest-scope.{evaluation_plan_candidate_scope.scope_id}"),
-            model=evaluation_plan_candidate_scope,
+            artifact_id=(f"{scope}.candidate-manifest-scope.{evaluation_assignment_candidate_scope.scope_id}"),
+            model=evaluation_assignment_candidate_scope,
             producer=host_policy,
             host_runtime=host_runtime,
             operation_id=("proposal-freeze.observe-candidate-manifest-scope"),
@@ -200,7 +210,8 @@ def observe_input_basis(
         )
     )
     stored = (
-        plan,
+        regime,
+        assignment,
         *((candidate_scope,) if candidate_scope is not None else ()),
         authority,
         structural,
@@ -215,8 +226,9 @@ def observe_input_basis(
         *((incumbent,) if incumbent is not None else ()),
     )
     return ObservedInputBasis(
-        evaluation_plan=plan.reference,
-        evaluation_plan_candidate_scope=(None if candidate_scope is None else candidate_scope.reference),
+        evaluation_regime=regime.reference,
+        evaluation_assignment=assignment.reference,
+        evaluation_assignment_candidate_scope=(None if candidate_scope is None else candidate_scope.reference),
         operator_authority=authority.reference,
         structural_split=structural.reference,
         leakage_audit=audit.reference,

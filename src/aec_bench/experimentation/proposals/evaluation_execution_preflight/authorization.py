@@ -5,10 +5,12 @@ from __future__ import annotations
 
 from aec_bench.contracts.evaluation_generation.batch import EvaluationBatchPlan
 from aec_bench.contracts.evaluation_plane import (
-    EvaluationPlan,
+    EvaluationAssignment,
+    EvaluationRegime,
     TaskVerifierSurfaceScope,
     task_verifier_surface_commitment,
 )
+from aec_bench.evaluation.regime import validate_evaluation_regime_ref
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.experimentation.proposals.evaluation_execution_preflight import (
     AuthorizedDispatchRef,
@@ -56,7 +58,8 @@ def prepare_execution_batch(
     schedule_closure: ScheduleClosure,
     compilation_closure: CompilationBatchClosure,
     monitor_closure: MonitorReadiness,
-    evaluation_plan: EvaluationPlan,
+    evaluation_regime: EvaluationRegime,
+    evaluation_assignment: EvaluationAssignment,
     task_verifier_scope: TaskVerifierSurfaceScope,
     ledger: AuthorityLedger,
     authorizations: tuple[GovernedProposalDispatchAuthorization, ...],
@@ -89,14 +92,16 @@ def prepare_execution_batch(
         batch=batch,
         authorizations=authorizations,
     )
-    evaluation, verifier_scope = _normalize_evaluation_surface(
-        evaluation_plan=evaluation_plan,
+    evaluation, assignment, verifier_scope = _normalize_evaluation_surface(
+        evaluation_regime=evaluation_regime,
+        evaluation_assignment=evaluation_assignment,
         task_verifier_scope=task_verifier_scope,
     )
     _verify_evaluation_surface(
         batch=batch,
         monitors=monitors,
-        evaluation_plan=evaluation,
+        evaluation_regime=evaluation,
+        evaluation_assignment=assignment,
         verifier_scope=verifier_scope,
     )
     replayed_dispatches = _replay_ready_authorizations(
@@ -208,13 +213,17 @@ def open_execution_gate(
 
 def _normalize_evaluation_surface(
     *,
-    evaluation_plan: EvaluationPlan,
+    evaluation_regime: EvaluationRegime,
+    evaluation_assignment: EvaluationAssignment,
     task_verifier_scope: TaskVerifierSurfaceScope,
-) -> tuple[EvaluationPlan, TaskVerifierSurfaceScope]:
+) -> tuple[EvaluationRegime, EvaluationAssignment, TaskVerifierSurfaceScope]:
     try:
         return (
-            EvaluationPlan.model_validate(
-                evaluation_plan.model_dump(mode="python"),
+            EvaluationRegime.model_validate(
+                evaluation_regime.model_dump(mode="python"),
+            ),
+            EvaluationAssignment.model_validate(
+                evaluation_assignment.model_dump(mode="python"),
             ),
             TaskVerifierSurfaceScope.model_validate(
                 task_verifier_scope.model_dump(mode="python"),
@@ -222,7 +231,7 @@ def _normalize_evaluation_surface(
         )
     except ValueError as error:
         raise EvaluationExecutionPreflightError(
-            f"evaluation or verifier surface is invalid: {error}",
+            f"evaluation regime, assignment, or verifier surface is invalid: {error}",
         ) from error
 
 
@@ -230,20 +239,26 @@ def _verify_evaluation_surface(
     *,
     batch: EvaluationBatchPlan,
     monitors: MonitorReadiness,
-    evaluation_plan: EvaluationPlan,
+    evaluation_regime: EvaluationRegime,
+    evaluation_assignment: EvaluationAssignment,
     verifier_scope: TaskVerifierSurfaceScope,
 ) -> None:
-    if evaluation_plan.ref != batch.evaluation_plan_ref:
+    if evaluation_assignment.regime != batch.evaluation_regime_ref:
         raise EvaluationExecutionPreflightError(
-            "full evaluation plan identity differs from the source batch",
+            "evaluation regime identity differs from the source batch",
         )
-    if evaluation_plan.task_verifier_sha256 != task_verifier_surface_commitment(verifier_scope):
+    try:
+        validate_evaluation_regime_ref(evaluation_regime, evaluation_assignment.regime)
+    except ValueError as error:
+        raise EvaluationExecutionPreflightError(str(error)) from error
+    if evaluation_assignment.task_verifier_commitment != task_verifier_surface_commitment(verifier_scope):
         raise EvaluationExecutionPreflightError(
-            "evaluation plan task verifier identity differs from the expected scope",
+            "evaluation assignment task verifier differs from the expected scope",
         )
-    if evaluation_plan.monitor_plan_sha256 != monitors.policy.content_sha256:
+    monitoring = evaluation_regime.monitoring_policy
+    if monitoring is None or monitoring.configuration.get("standing_policy") != monitors.policy.model_dump(mode="json"):
         raise EvaluationExecutionPreflightError(
-            "evaluation plan monitor identity differs from the closed monitor policy",
+            "evaluation regime monitoring policy differs from the closed monitor policy",
         )
 
 

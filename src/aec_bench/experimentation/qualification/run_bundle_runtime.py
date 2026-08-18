@@ -22,7 +22,6 @@ from aec_bench.contracts.stage_execution import KernelInstructionOverride
 from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext
 from aec_bench.contracts.trial_record import (
     ArtifactReference,
-    EvaluationRegimeRef,
     MetaHarnessTrialProvenance,
     RunManifest,
     TrialRecord,
@@ -573,7 +572,7 @@ class _TrialLineageTransform:
             harness_program_plan=self._study.harness_program_plan,
             repair_decision=self._study.repair_decision,
             motif_ids=self._study.motif_ids,
-            evaluation_plan_ref=self._study.evaluation_plan_ref,
+            evaluation_regime_ref=self._study.evaluation_regime_ref,
         )
         run_manifest = RunManifest.model_validate(
             {
@@ -584,12 +583,7 @@ class _TrialLineageTransform:
                     "tool_versions": _bound_runtime_versions(self._bundle, snapshot, record),
                 },
                 "evaluation_regime": (
-                    None
-                    if self._study.evaluation_plan_ref is None
-                    else EvaluationRegimeRef(
-                        regime_id=self._study.evaluation_plan_ref.plan_id,
-                        generation=self._study.evaluation_plan_ref.evaluation_generation,
-                    )
+                    None if self._study.evaluation_regime_ref is None else self._study.evaluation_regime_ref
                 ),
             }
         )

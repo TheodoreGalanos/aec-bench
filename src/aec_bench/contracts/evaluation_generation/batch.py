@@ -18,10 +18,8 @@ from aec_bench.contracts.evaluation_generation.spec import (
     EvaluationGenerationSpec,
     ProposalGenerationPolicy,
 )
-from aec_bench.contracts.evaluation_plane import (
-    EvaluationPlanAuthorityScope,
-    EvaluationPlanRef,
-)
+from aec_bench.contracts.evaluation_plane import EvaluationRegimeAuthorityScope
+from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import KernelRef, validate_sha256
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
@@ -53,7 +51,7 @@ class CandidateScheduleRef(LegacyContentAddressedModel):
     schedule_sha256: str
     kernel_ref: KernelRef
     fixed_harness_ref: HarnessInstanceRef
-    evaluation_plan_ref: EvaluationPlanRef
+    evaluation_regime_ref: EvaluationRegimeRef
     proposal_freeze_sha256: str
     aggregate_budget: HarnessBudget
     coordinate_sha256: str
@@ -113,7 +111,7 @@ class TaskCandidatePlan(LegacyContentAddressedModel):
     cohort_task: EvaluationCohortTask
     kernel_ref: KernelRef
     fixed_harness_ref: HarnessInstanceRef
-    evaluation_plan_ref: EvaluationPlanRef
+    evaluation_regime_ref: EvaluationRegimeRef
     proposal_policy_sha256: str
     runtime_archive_sha256: str
     monitor_policy_sha256: str
@@ -159,7 +157,7 @@ class TaskCandidatePlan(LegacyContentAddressedModel):
         if (
             schedule.kernel_ref != self.kernel_ref
             or schedule.fixed_harness_ref != self.fixed_harness_ref
-            or schedule.evaluation_plan_ref != self.evaluation_plan_ref
+            or schedule.evaluation_regime_ref != self.evaluation_regime_ref
             or schedule.aggregate_budget != self.aggregate_budget
             or schedule.proposal_freeze_sha256 != self.proposal_freeze_sha256
             or schedule.coordinate_sha256 != coordinate.content_sha256
@@ -180,8 +178,8 @@ class EvaluationBatchPlan(LegacyContentAddressedModel):
     cohort_binding: EvaluationCohortBinding
     kernel_ref: KernelRef
     fixed_harness_ref: HarnessInstanceRef
-    evaluation_plan_ref: EvaluationPlanRef
-    evaluation_authority_scope: EvaluationPlanAuthorityScope
+    evaluation_regime_ref: EvaluationRegimeRef
+    evaluation_authority_scope: EvaluationRegimeAuthorityScope
     proposal_policy: ProposalGenerationPolicy
     candidate_manifest_proposal_policy_sha256: str
     compilation_policies_sha256: str
@@ -273,13 +271,9 @@ class EvaluationBatchPlan(LegacyContentAddressedModel):
 
 def _validate_batch_scope(batch: EvaluationBatchPlan) -> None:
     validate_cohort_binding(batch.cohort, batch.cohort_binding)
-    if batch.evaluation_authority_scope.evaluation_plan_ref != batch.evaluation_plan_ref:
+    if batch.evaluation_authority_scope.regime != batch.evaluation_regime_ref:
         raise ValueError(
-            "evaluation batch critic authority differs from its evaluation plan",
-        )
-    if batch.cohort.evaluation_generation != batch.evaluation_plan_ref.evaluation_generation:
-        raise ValueError(
-            "evaluation batch cohort differs from its evaluation generation",
+            "evaluation batch critic authority differs from its evaluation regime",
         )
     if len(batch.task_plans) != batch.spec.task_count:
         raise ValueError(
@@ -327,7 +321,7 @@ def _validate_shared_task_bindings(
         task_plan.cohort_binding != batch.cohort_binding
         or task_plan.kernel_ref != batch.kernel_ref
         or task_plan.fixed_harness_ref != batch.fixed_harness_ref
-        or task_plan.evaluation_plan_ref != batch.evaluation_plan_ref
+        or task_plan.evaluation_regime_ref != batch.evaluation_regime_ref
         or task_plan.proposal_policy_sha256 != batch.candidate_manifest_proposal_policy_sha256
         or task_plan.runtime_archive_sha256 != batch.runtime_archive_sha256
         or task_plan.monitor_policy_sha256 != batch.monitor_policy_sha256

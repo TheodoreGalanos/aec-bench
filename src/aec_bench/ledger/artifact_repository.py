@@ -73,6 +73,20 @@ class ArtifactRepository:
             raise ImmutableArtifactIntegrityError(f"immutable artifact size mismatch at {ref.artifact_id}")
         return payload
 
+    def resolve_ref(self, *, artifact_id: str, media_type: str) -> ArtifactRef:
+        """Resolve one canonical artifact ID into a verified portable reference."""
+
+        digest = artifact_id.rsplit("/", maxsplit=1)[-1]
+        if artifact_id != _artifact_id(digest):
+            raise ImmutableArtifactIntegrityError("artifact ID is not a canonical SHA-256 locator")
+        payload = self._bytes.load_bytes(artifact_id, expected_sha256=digest)
+        return ArtifactRef(
+            artifact_id=artifact_id,
+            sha256=digest,
+            size_bytes=len(payload),
+            media_type=media_type,
+        )
+
 
 def canonical_model_bytes(value: BaseModel) -> bytes:
     """Encode one model as canonical UTF-8 JSON with one final newline."""

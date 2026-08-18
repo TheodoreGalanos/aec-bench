@@ -11,7 +11,6 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipalKind,
     BasisKind,
     BasisReference,
-    EvaluationPlanIdentity,
     MotifPromotionAssurance,
     MotifPromotionQualification,
     PromotionMonitorAttestation,
@@ -23,7 +22,7 @@ from aec_bench.contracts.evaluation_outcome import (
     EvaluationDisposition,
     EvaluationOutcome,
 )
-from aec_bench.contracts.evaluation_plane import CriticRole
+from aec_bench.contracts.evaluation_refs import CriticRole, EvaluationRegimeRef
 from aec_bench.contracts.harness_kernel import FrozenStrictModel, KernelRef
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
@@ -100,8 +99,8 @@ def issue_governed_promotion(
         )
     except ValueError as error:
         raise GovernedPromotionError(f"monitor gate blocked promotion: {error}") from error
-    if critic_outcome.evaluation_plan_ref.authority_identity != plan.evaluation_plan:
-        raise GovernedPromotionError("evaluation outcome and monitor plan do not bind the same evaluation plan")
+    if critic_outcome.evaluation_regime_ref.authority_identity != plan.evaluation_regime:
+        raise GovernedPromotionError("evaluation outcome and monitor plan do not bind the same evaluation regime")
     _assert_promotion_eligible(outcome)
     selected_motif, assurance = _resolve_motif_transition(
         action=action,
@@ -138,7 +137,7 @@ def issue_governed_promotion(
         monitor_basis_model=report,
         monitor_artifact_id=f"cycle-monitor-report.{cycle_id}",
         monitor_process_id="aecbench.standing-monitors",
-        evaluation_plan=critic_outcome.evaluation_plan_ref.authority_identity,
+        evaluation_regime=critic_outcome.evaluation_regime_ref.authority_identity,
         assurance_snapshot_sha256=assurance_snapshot_sha256,
         cycle_id=cycle_id,
         cycle_index=cycle_index,
@@ -179,7 +178,7 @@ def issue_governed_production_promotion(
         assert_current_production_cycle_monitor_envelope(
             envelope,
             policy=policy,
-            evaluation_plan=critic_outcome.evaluation_plan_ref.authority_identity,
+            evaluation_regime=critic_outcome.evaluation_regime_ref.authority_identity,
             cycle_id=cycle_id,
             cycle_index=cycle_index,
             assurance_snapshot_sha256=assurance_snapshot_sha256,
@@ -222,7 +221,7 @@ def issue_governed_production_promotion(
         monitor_basis_model=envelope,
         monitor_artifact_id=f"production-cycle-monitor-envelope.{cycle_id}",
         monitor_process_id="aecbench.production-cycle-monitors",
-        evaluation_plan=critic_outcome.evaluation_plan_ref.authority_identity,
+        evaluation_regime=critic_outcome.evaluation_regime_ref.authority_identity,
         assurance_snapshot_sha256=assurance_snapshot_sha256,
         cycle_id=cycle_id,
         cycle_index=cycle_index,
@@ -270,11 +269,11 @@ def _resolve_acceptance_outcome(
         raise GovernedPromotionError("acceptance outcome lacks exact runtime-observed critic provenance")
     release_event = release.event
     if (
-        release_event.action is not AuthorityAction.RELEASE_CRITIC_GENERATION
+        release_event.action is not AuthorityAction.RELEASE_CRITIC
         or release_event.decision is not AuthorityDecision.GRANTED
-        or release_event.critic_generation != critic_outcome.critic.authority_identity
+        or release_event.critic != critic_outcome.critic.authority_identity
     ):
-        raise GovernedPromotionError("acceptance outcome does not bind its exact released critic generation")
+        raise GovernedPromotionError("acceptance outcome does not bind its exact released regime critic")
     return stored, critic_outcome
 
 
@@ -423,9 +422,9 @@ def _resolve_current_motif_assurance(
     if (
         entry.kernel_ref != kernel_ref
         or entry.kernel_abi_sha256 != kernel_abi_sha256
-        or entry.critic_generation != critic_outcome.critic.authority_identity
+        or entry.critic != critic_outcome.critic.authority_identity
     ):
-        raise GovernedPromotionError("motif assurance does not bind the transition kernel and critic generation")
+        raise GovernedPromotionError("motif assurance does not bind the transition kernel and regime critic")
     assurance = MotifPromotionAssurance(
         motif_subject_sha256=selected.motif_subject_sha256,
         selected_motif_sha256=selected.selected_motif_sha256,
@@ -452,7 +451,7 @@ def _persist_governed_promotion(
     monitor_basis_model: FrozenStrictModel,
     monitor_artifact_id: str,
     monitor_process_id: str,
-    evaluation_plan: EvaluationPlanIdentity,
+    evaluation_regime: EvaluationRegimeRef,
     assurance_snapshot_sha256: str,
     cycle_id: str,
     cycle_index: int,
@@ -514,7 +513,7 @@ def _persist_governed_promotion(
     monitor_attestation = PromotionMonitorAttestation(
         monitor_basis_sha256=monitor_basis.reference.artifact_sha256,
         monitor_report_sha256=monitor_basis.reference.artifact_sha256,
-        evaluation_plan=evaluation_plan,
+        evaluation_regime=evaluation_regime,
         assurance_snapshot_sha256=assurance_snapshot_sha256,
         cycle_id=cycle_id,
         cycle_index=cycle_index,
@@ -577,9 +576,9 @@ def _persist_governed_promotion(
             promotion_lineage_sha256=resolved_lineage.content_sha256,
             promotion_monitor_attestation_sha256=(resolved_monitor_attestation.content_sha256),
             monitor_report_sha256=resolved_monitor_attestation.monitor_report_sha256,
-            evaluation_plan=resolved_outcome.evaluation_plan_ref.authority_identity,
+            evaluation_regime=resolved_outcome.evaluation_regime_ref.authority_identity,
             critic_release_authority_event_sha256=resolved_release.content_sha256,
-            critic_generation=resolved_outcome.critic.authority_identity,
+            critic=resolved_outcome.critic.authority_identity,
             kernel_ref=resolved_outcome.kernel_ref,
             kernel_abi_sha256=kernel_abi_sha256,
         )
@@ -623,11 +622,11 @@ def _persist_governed_promotion(
             *((qualification_basis.reference,) if qualification_basis is not None else ()),
         ),
         kernel_ref=kernel_ref,
-        critic_generation=critic_outcome.critic.authority_identity,
+        critic=critic_outcome.critic.authority_identity,
         reasons=("evaluation and current standing-monitor gates passed",),
         revalidation_triggers=(
             "assurance_snapshot_change",
-            "critic_generation_change",
+            "critic_change",
             "monitor_incident",
         ),
     )

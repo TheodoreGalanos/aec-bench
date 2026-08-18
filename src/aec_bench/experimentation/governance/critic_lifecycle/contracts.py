@@ -1,6 +1,5 @@
 # ABOUTME: Defines durable critic retirement, reveal, and audit-closure evidence contracts.
-# ABOUTME: Keeps governed critic lifecycle records content-addressed, canonical, and reloadable.
-
+# ABOUTME: Keeps governed critic lifecycle records canonical and reloadable under named commitments.
 
 from __future__ import annotations
 
@@ -11,25 +10,25 @@ from pydantic import field_validator
 
 from aec_bench.contracts.evaluation_plane import (
     AcceptanceManifestReveal,
-    CriticRef,
 )
+from aec_bench.contracts.evaluation_refs import CriticRef
 from aec_bench.contracts.harness_kernel import (
+    canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
-from aec_bench.contracts.validators import NonEmptyStr
+from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 from aec_bench.experimentation.governance.authority_ledger import (
     StoredAuthorityEvent,
     StoredBasis,
 )
 
 
-class CriticGenerationRetirement(LegacyContentAddressedModel):
+class CriticRetirement(FrozenStrictModel):
     """Human-signable retirement proposal binding one critic to its complete history."""
 
-    schema_version: Literal["aecbench.critic-generation-retirement.v1"] = "aecbench.critic-generation-retirement.v1"
+    schema_version: Literal["aecbench.critic-retirement.v2"] = "aecbench.critic-retirement.v2"
     retirement_id: NonEmptyStr
-    critic_generation: CriticRef
+    critic: CriticRef
     release_authority_event_sha256: str
     evaluation_outcome_sha256s: tuple[str, ...] = ()
     promotion_authority_event_sha256s: tuple[str, ...] = ()
@@ -54,11 +53,17 @@ class CriticGenerationRetirement(LegacyContentAddressedModel):
         return tuple(sorted(value))
 
 
+def critic_retirement_commitment(retirement: CriticRetirement) -> str:
+    """Return the named commitment used by retirement authority."""
+
+    return canonical_json_sha256(retirement.model_dump(mode="json"))
+
+
 @dataclass(frozen=True)
-class StoredCriticGenerationRetirement:
+class StoredCriticRetirement:
     """Retirement proposal, its durable evidence bytes, and exact authority event."""
 
-    retirement: CriticGenerationRetirement
+    retirement: CriticRetirement
     evidence: StoredBasis
     authority_event: StoredAuthorityEvent
 
@@ -69,13 +74,13 @@ class StoredAcceptanceManifestReveal:
 
     reveal: AcceptanceManifestReveal
     evidence: StoredBasis
-    retirement: CriticGenerationRetirement
+    retirement: CriticRetirement
     authority_event: StoredAuthorityEvent
 
 
 @dataclass(frozen=True)
 class AcceptanceAuditClosure:
-    """Exact retirement and reveal pair proving one acceptance generation is auditable."""
+    """Exact retirement and reveal pair proving one acceptance critic is auditable."""
 
-    retirement: StoredCriticGenerationRetirement
+    retirement: StoredCriticRetirement
     reveal: StoredAcceptanceManifestReveal

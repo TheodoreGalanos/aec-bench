@@ -11,7 +11,7 @@ from pydantic import TypeAdapter
 
 from aec_bench.contracts.commitments import canonical_json_sha256
 from aec_bench.contracts.evaluation_outcome import EvaluationOutcome
-from aec_bench.contracts.evaluation_plane import CriticSpec, EvaluationPlan
+from aec_bench.contracts.evaluation_plane import Critic, EvaluationRegime
 from aec_bench.contracts.execution_program import CompiledExecutionProgram, ExecutionProgram
 from aec_bench.contracts.harness_instance import CompiledHarnessInstance, HarnessRecipe
 from aec_bench.contracts.harness_kernel import KernelCapabilitySpec, KernelManifest
@@ -99,8 +99,8 @@ def test_legacy_reader_rejects_missing_or_corrupted_digest(
         CompiledHarnessInstance,
         ExecutionProgram,
         CompiledExecutionProgram,
-        CriticSpec,
-        EvaluationPlan,
+        Critic,
+        EvaluationRegime,
         EvaluationOutcome,
         RunBundle,
         TaskReviewSnapshotRef,

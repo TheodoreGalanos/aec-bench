@@ -13,13 +13,10 @@ from pydantic import JsonValue, TypeAdapter, field_validator
 from aec_bench.contracts.evaluation_plane import (
     AcceptanceManifestCommitment,
     AcceptanceManifestRevealRule,
-    CriticRole,
-    CriticSpec,
+    Critic,
 )
-from aec_bench.contracts.harness_kernel import (
-    canonical_json_sha256,
-    validate_sha256,
-)
+from aec_bench.contracts.evaluation_refs import CriticRole, EvaluationRegimeRef
+from aec_bench.contracts.harness_kernel import validate_sha256
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
@@ -37,7 +34,7 @@ class AcceptanceManifestEscrowError(RuntimeError):
 
 
 class AcceptanceManifestEscrowCollisionError(AcceptanceManifestEscrowError):
-    """Raised when one critic generation is rebound to different hidden bytes."""
+    """Raised when one regime critic is rebound to different hidden bytes."""
 
 
 class AcceptanceManifestEscrowConfinementError(AcceptanceManifestEscrowError):
@@ -54,8 +51,8 @@ class AcceptanceManifestEscrowPayload(LegacyContentAddressedModel):
     schema_version: Literal["aecbench.acceptance-manifest-escrow-payload.v1"] = (
         "aecbench.acceptance-manifest-escrow-payload.v1"
     )
+    evaluation_regime: EvaluationRegimeRef
     critic_id: NonEmptyStr
-    critic_version: NonEmptyStr
     case_manifest: JsonValue
     scoring_policy: JsonValue
     salt: NonEmptyStr
@@ -67,10 +64,10 @@ class AcceptanceManifestEscrowPublicationReceipt(LegacyContentAddressedModel):
     schema_version: Literal["aecbench.acceptance-manifest-escrow-publication.v1"] = (
         "aecbench.acceptance-manifest-escrow-publication.v1"
     )
+    evaluation_regime: EvaluationRegimeRef
     critic_id: NonEmptyStr
-    critic_version: NonEmptyStr
     payload_sha256: str
-    reveal_rule: AcceptanceManifestRevealRule = AcceptanceManifestRevealRule.ON_GENERATION_RETIREMENT
+    reveal_rule: AcceptanceManifestRevealRule = AcceptanceManifestRevealRule.ON_CRITIC_RETIREMENT
 
     @field_validator("payload_sha256")
     @classmethod
@@ -79,13 +76,13 @@ class AcceptanceManifestEscrowPublicationReceipt(LegacyContentAddressedModel):
 
 
 class _AcceptanceManifestEscrowClaim(LegacyContentAddressedModel):
-    """Exclusive logical binding from one critic generation to its escrow receipt."""
+    """Exclusive logical binding from one regime critic to its escrow receipt."""
 
     schema_version: Literal["aecbench.acceptance-manifest-escrow-claim.v1"] = (
         "aecbench.acceptance-manifest-escrow-claim.v1"
     )
+    evaluation_regime: EvaluationRegimeRef
     critic_id: NonEmptyStr
-    critic_version: NonEmptyStr
     publication_receipt_sha256: str
     payload_sha256: str
 
@@ -117,28 +114,28 @@ class StoredAcceptanceManifestEscrow:
 def escrow_acceptance_manifest(
     *,
     ledger: AuthorityLedger,
+    evaluation_regime: EvaluationRegimeRef,
     critic_id: str,
-    critic_version: str,
     case_manifest: JsonValue,
     scoring_policy: JsonValue,
     salt: str,
 ) -> StoredAcceptanceManifestEscrow:
     """Durably publish hidden material before returning its public commitment receipt."""
     payload = AcceptanceManifestEscrowPayload(
+        evaluation_regime=evaluation_regime,
         critic_id=critic_id,
-        critic_version=critic_version,
         case_manifest=case_manifest,
         scoring_policy=scoring_policy,
         salt=salt,
     )
     receipt = AcceptanceManifestEscrowPublicationReceipt(
+        evaluation_regime=evaluation_regime,
         critic_id=critic_id,
-        critic_version=critic_version,
         payload_sha256=payload.content_sha256,
     )
     claim = _AcceptanceManifestEscrowClaim(
+        evaluation_regime=evaluation_regime,
         critic_id=critic_id,
-        critic_version=critic_version,
         publication_receipt_sha256=receipt.content_sha256,
         payload_sha256=payload.content_sha256,
     )
@@ -159,22 +156,22 @@ def escrow_acceptance_manifest(
         try:
             repository.publish_logical_model(
                 collection="claims",
-                logical_identity=_claim_identity(critic_id, critic_version),
+                logical_identity=_claim_identity(evaluation_regime, critic_id),
                 filename="claim.json",
                 model=claim,
                 adapter=_CLAIM_ADAPTER,
             )
         except ImmutableArtifactCollisionError:
             raise AcceptanceManifestEscrowCollisionError(
-                "acceptance critic generation is already bound to different escrow material"
+                "acceptance regime critic is already bound to different escrow material"
             ) from None
     except ImmutableArtifactStoreError as error:
         _raise_escrow_store_error(error)
 
     return _load_claimed_escrow(
         repository=repository,
+        evaluation_regime=evaluation_regime,
         critic_id=critic_id,
-        critic_version=critic_version,
         expected_receipt_sha256=receipt.content_sha256,
     )
 
@@ -182,10 +179,11 @@ def escrow_acceptance_manifest(
 def load_acceptance_manifest_escrow(
     *,
     ledger: AuthorityLedger,
-    critic_spec: CriticSpec,
+    evaluation_regime: EvaluationRegimeRef,
+    critic: Critic,
 ) -> StoredAcceptanceManifestEscrow:
     """Reload and verify one critic's recoverable hidden material and public receipt."""
-    selected = CriticSpec.model_validate(critic_spec.model_dump(mode="python"))
+    selected = Critic.model_validate(critic.model_dump(mode="python"))
     commitment = selected.acceptance_manifest_commitment
     if selected.role is not CriticRole.ACCEPTANCE or commitment is None:
         raise AcceptanceManifestEscrowIntegrityError(
@@ -194,39 +192,29 @@ def load_acceptance_manifest_escrow(
     repository = _existing_escrow_repository(ledger)
     stored = _load_claimed_escrow(
         repository=repository,
+        evaluation_regime=evaluation_regime,
         critic_id=selected.critic_id,
-        critic_version=selected.version,
-        expected_receipt_sha256=commitment.publication_receipt_sha256,
+        expected_receipt_sha256=None,
     )
     expected_commitment = AcceptanceManifestCommitment.create(
         critic_id=selected.critic_id,
-        critic_version=selected.version,
         case_manifest=stored.payload.case_manifest,
         scoring_policy=stored.payload.scoring_policy,
         salt=stored.payload.salt,
-        publication_receipt_sha256=stored.publication_receipt.content_sha256,
     )
     if expected_commitment != commitment:
         raise AcceptanceManifestEscrowIntegrityError("persisted acceptance escrow does not match the critic commitment")
-    if canonical_json_sha256(stored.payload.case_manifest) != selected.case_manifest_sha256:
-        raise AcceptanceManifestEscrowIntegrityError(
-            "persisted acceptance case manifest does not match the critic spec"
-        )
-    if canonical_json_sha256(stored.payload.scoring_policy) != selected.rubric_policy_sha256:
-        raise AcceptanceManifestEscrowIntegrityError(
-            "persisted acceptance scoring policy does not match the critic spec"
-        )
     return stored
 
 
 def _load_claimed_escrow(
     *,
     repository: EvidenceRepository,
+    evaluation_regime: EvaluationRegimeRef,
     critic_id: str,
-    critic_version: str,
-    expected_receipt_sha256: str,
+    expected_receipt_sha256: str | None,
 ) -> StoredAcceptanceManifestEscrow:
-    claim_identity = _claim_identity(critic_id, critic_version)
+    claim_identity = _claim_identity(evaluation_regime, critic_id)
     claim_relative_path = repository.logical_model_path(
         collection="claims",
         logical_identity=claim_identity,
@@ -234,7 +222,7 @@ def _load_claimed_escrow(
     )
     if not repository.exists(claim_relative_path):
         raise AcceptanceManifestEscrowIntegrityError(
-            "acceptance manifest escrow was not published for this critic generation"
+            "acceptance manifest escrow was not published for this regime critic"
         )
     try:
         stored_claim = repository.load_logical_model(
@@ -246,9 +234,9 @@ def _load_claimed_escrow(
     except ImmutableArtifactStoreError as error:
         _raise_escrow_store_error(error)
     claim = stored_claim.model
-    if (claim.critic_id, claim.critic_version) != (critic_id, critic_version):
-        raise AcceptanceManifestEscrowIntegrityError("acceptance escrow claim does not match its critic generation")
-    if claim.publication_receipt_sha256 != expected_receipt_sha256:
+    if claim.evaluation_regime != evaluation_regime or claim.critic_id != critic_id:
+        raise AcceptanceManifestEscrowIntegrityError("acceptance escrow claim does not match its regime critic")
+    if expected_receipt_sha256 is not None and claim.publication_receipt_sha256 != expected_receipt_sha256:
         raise AcceptanceManifestEscrowIntegrityError(
             "acceptance escrow publication receipt does not match the critic commitment"
         )
@@ -262,9 +250,9 @@ def _load_claimed_escrow(
     except ImmutableArtifactStoreError as error:
         _raise_escrow_store_error(error)
     receipt = stored_receipt.model
-    if (receipt.critic_id, receipt.critic_version) != (critic_id, critic_version):
+    if receipt.evaluation_regime != evaluation_regime or receipt.critic_id != critic_id:
         raise AcceptanceManifestEscrowIntegrityError(
-            "acceptance escrow publication receipt does not match its critic generation"
+            "acceptance escrow publication receipt does not match its regime critic"
         )
     if receipt.payload_sha256 != claim.payload_sha256:
         raise AcceptanceManifestEscrowIntegrityError(
@@ -280,8 +268,8 @@ def _load_claimed_escrow(
     except ImmutableArtifactStoreError as error:
         _raise_escrow_store_error(error)
     payload = stored_payload.model
-    if (payload.critic_id, payload.critic_version) != (critic_id, critic_version):
-        raise AcceptanceManifestEscrowIntegrityError("acceptance escrow payload does not match its critic generation")
+    if payload.evaluation_regime != evaluation_regime or payload.critic_id != critic_id:
+        raise AcceptanceManifestEscrowIntegrityError("acceptance escrow payload does not match its regime critic")
     return StoredAcceptanceManifestEscrow(
         payload=payload,
         publication_receipt=receipt,
@@ -303,7 +291,7 @@ def _existing_escrow_repository(ledger: AuthorityLedger) -> EvidenceRepository:
     root = ledger.root / "acceptance-manifest-escrow"
     if not os.path.lexists(root):
         raise AcceptanceManifestEscrowIntegrityError(
-            "acceptance manifest escrow was not published for this critic generation"
+            "acceptance manifest escrow was not published for this regime critic"
         )
     try:
         return EvidenceRepository(root, host_private=True)
@@ -312,12 +300,12 @@ def _existing_escrow_repository(ledger: AuthorityLedger) -> EvidenceRepository:
 
 
 def _claim_identity(
+    evaluation_regime: EvaluationRegimeRef,
     critic_id: str,
-    critic_version: str,
 ) -> dict[str, JsonValue]:
     return {
+        "regime_artifact": evaluation_regime.artifact.sha256,
         "critic_id": critic_id,
-        "critic_version": critic_version,
     }
 
 

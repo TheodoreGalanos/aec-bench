@@ -11,7 +11,6 @@ import aec_bench.experimentation.governance.monitor_runtime as monitor_runtime_a
 from aec_bench.contracts.authority import (
     AuthorityPrincipal,
     AuthorityPrincipalKind,
-    EvaluationPlanIdentity,
 )
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.experimentation.governance.monitor_runtime import (
@@ -42,6 +41,7 @@ from aec_bench.experimentation.governance.standing_monitors import (
     default_forbidden_flow_rules,
     run_production_cycle_monitors,
 )
+from tests.support.evaluation_regimes import fake_regime_ref
 
 _PUBLIC_NAMES = {
     "CanaryLogicalProjectionConfiguration",
@@ -123,10 +123,7 @@ def _historical_contracts() -> Mapping[str, LegacyContentAddressedModel]:
     cycle = CycleMonitorPlan(
         cycle_id="cycle.contract-characterization",
         cycle_index=12,
-        evaluation_plan=EvaluationPlanIdentity(
-            plan_id="evaluation-plan",
-            evaluation_generation="evaluation-generation.1",
-        ),
+        evaluation_regime=fake_regime_ref(),
         standing_policy_sha256=policy.content_sha256,
         assurance_snapshot_sha256=_sha("assurance-snapshot"),
     )
@@ -354,20 +351,20 @@ def test_legacy_monitor_contract_hashes_and_bytes_are_stable() -> None:
     contracts = _historical_contracts()
 
     assert {name: model.content_sha256 for name, model in contracts.items()} == {
-        "canary_activation": "68f162069ad56237f6dbee1c29105a5b707c4ffea52f1206972ef05bd92078f2",
-        "canary_probe": "4e7631dbef3a126bde5a123d24e11c131c520610a3a068aa8b6cfef7b434e481",
-        "closure": "3c8f593bd892412ba23a3b18b49585a0fba7e7cdb0887aaa82e601d84e37cc56",
-        "configuration": "147840fe7f4d66c0c7bd1b4e19c4907ebb429258570a10fc114f1ec8595a2398",
-        "effect_permit": "bd0d316e2269e06e36c42ca6901b693225c121a7090394c912fe61565a39cdce",
-        "flow_activation": "0c48424f73eddad1af2444e59fd012888294bffaa3f7d32cfb5e7d11f9a43dbd",
-        "flow_probe": "fa9617af7839ab236755308912258bd52cc97e3c68007d81c41a678b32ca6f57",
-        "manifest": "7bb6472d35bfae5b266fcad38303876f2581bac24546b240d4c9e41bb670dee0",
+        "canary_activation": "f26d8db8ea3b1ee1a853d41d94b4432390102d8df567b6c3831ab32a0d15ec74",
+        "canary_probe": "481f7d59b7170daccb6bc14289868b0909c05735c18081f142b427579327987d",
+        "closure": "7dbcb5ec0834eab05006300dc0e3f15df833b34e8392db6334312a3e31883436",
+        "configuration": "26a1fd490f1f16eb2670af066535b278323a525675499b8a5d88432db0b7d071",
+        "effect_permit": "2605e347135110139b1702fec16adff0ec47b11a748cdf10e8630e9730556a59",
+        "flow_activation": "7ff919e8036448057971faf639efd66357ce1b6060fee2dc2bb3cb39ab2e1a82",
+        "flow_probe": "8962792f39f73f90e1f8dce9dfd4e70f480df0960f3e32783b48e8de52424d7d",
+        "manifest": "ccdfee88a16a5d3a70a3c06b5571541467d2ed6aa29044b1efcc18b5b24c6cde",
         "placement": "803522f9090a5a11c07f12d0017160128415234ca92d2771bd8528a5dfa17673",
-        "pre_effect_checkpoint": "044bb61ad34f70fd419ab38c5c33d12fc35f179111c525b863be6d9c4e592bbd",
-        "pre_effect_evidence": "582c1355f00296b86094077ec7fdac5455fccdceac12defd25c5a1d331d26171",
+        "pre_effect_checkpoint": "cd30227034067743826a637e4e72459c30e921d3bade5a90c8cfd44072179402",
+        "pre_effect_evidence": "a370daea778f11a792bd48f941303625aa8ca402f58e8d76e9d49d4aaac69b6e",
         "reference": "4a90fe58e0fa69c75d533e72e4affd1a9e07096772f4ff97e919e2a63625663d",
         "surface": "15b71aa7294a6dbfe562592bd2c1885a82b8a29c3b4a8dc3e62cc7b6ea6da53e",
-        "terminal_checkpoint": "702dde2891e106c9a30f0e0c9e01e12510765cde53d302c742d7ff481e8ed9ff",
+        "terminal_checkpoint": "ca672d2ddef99d1ae01bab88785149b950a7be87ab0091463277de2203847cb3",
     }
     for model in contracts.values():
         encoded = _canonical_bytes(model)

@@ -11,8 +11,8 @@ from pydantic import NonNegativeInt, field_validator, model_validator
 
 from aec_bench.contracts.evaluation_outcome import NonNegativeFiniteFloat
 from aec_bench.contracts.evaluation_plane import (
+    EvaluationBudget,
     EvaluationBudgetPartition,
-    EvaluationBudgetPlan,
 )
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
@@ -102,7 +102,7 @@ class GenerationEvaluationAccounting(LegacyContentAddressedModel):
         "aecbench.generation-evaluation-accounting.v1"
     )
     generation_id: NonEmptyStr
-    budget_plan: EvaluationBudgetPlan
+    budget: EvaluationBudget
     receipts: tuple[EvaluationWorkReceipt, ...]
     planes: tuple[EvaluationPlaneAccounting, ...]
     candidate_only_cumulative: EvaluationUsageTotals
@@ -153,7 +153,7 @@ class GenerationEvaluationAccounting(LegacyContentAddressedModel):
             _assert_within_budget(
                 plane=plane.plane,
                 totals=plane.totals,
-                budget=_budget_for_plane(self.budget_plan, plane.plane),
+                budget=_budget_for_plane(self.budget, plane.plane),
             )
 
         expected_views = {
@@ -196,14 +196,13 @@ class GenerationEvaluationAccounting(LegacyContentAddressedModel):
         cls,
         *,
         generation_id: str,
-        budget_plan: EvaluationBudgetPlan,
-        plane_receipt_batches: tuple[EvaluationPlaneReceiptBatch, ...],
+        budget: EvaluationBudget,
+        plane_receipts: tuple[EvaluationPlaneReceiptBatch, ...],
     ) -> GenerationEvaluationAccounting:
         """Derive a complete report while deduplicating shared receipt work."""
-        selected_budget = EvaluationBudgetPlan.model_validate(budget_plan.model_dump(mode="python"))
+        selected_budget = EvaluationBudget.model_validate(budget.model_dump(mode="python"))
         batches = tuple(
-            EvaluationPlaneReceiptBatch.model_validate(batch.model_dump(mode="python"))
-            for batch in plane_receipt_batches
+            EvaluationPlaneReceiptBatch.model_validate(batch.model_dump(mode="python")) for batch in plane_receipts
         )
         batch_planes = tuple(batch.plane for batch in batches)
         if len(batch_planes) != len(set(batch_planes)):
@@ -232,7 +231,7 @@ class GenerationEvaluationAccounting(LegacyContentAddressedModel):
         receipts = tuple(receipt_by_id.values())
         return cls(
             generation_id=generation_id,
-            budget_plan=selected_budget,
+            budget=selected_budget,
             receipts=receipts,
             planes=planes,
             candidate_only_cumulative=_totals_for_planes(
@@ -297,7 +296,7 @@ def _totals_for_planes(
 
 
 def _budget_for_plane(
-    plan: EvaluationBudgetPlan,
+    plan: EvaluationBudget,
     plane: EvaluationAccountingPlane,
 ) -> EvaluationBudgetPartition:
     budget_by_plane: dict[

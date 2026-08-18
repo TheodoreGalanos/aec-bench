@@ -23,12 +23,7 @@ from aec_bench.contracts.evaluation_outcome import (
     UtilityEvaluation,
     ValidityEvaluation,
 )
-from aec_bench.contracts.evaluation_plane import (
-    AcceptanceManifestCommitment,
-    CriticRef,
-    CriticRole,
-    EvaluationPlanRef,
-)
+from aec_bench.contracts.evaluation_refs import CriticRef, CriticRole
 from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.contracts.program_proposal.candidate import (
@@ -60,6 +55,7 @@ from aec_bench.experimentation.proposals.decomposition_optimization import (
     complete_program_candidate_study,
     load_decomposition_optimization_result,
 )
+from tests.support.evaluation_regimes import fake_regime_ref
 
 
 def _sha(label: str) -> str:
@@ -141,13 +137,12 @@ def _selection_rule() -> FrozenSelectionRule:
 
 def _development_critic(
     *,
-    compatibility_generation: str = "critic-generation-1",
+    regime_label: str = "phase-9",
 ) -> CriticRef:
     return CriticRef(
+        regime=fake_regime_ref(regime_id="regime.phase-9", label=regime_label),
         critic_id="critic.development",
-        version="1",
         role=CriticRole.DEVELOPMENT,
-        compatibility_generation=compatibility_generation,
     )
 
 
@@ -176,11 +171,7 @@ def _freeze() -> ProposalFreeze:
     )
     return ProposalFreeze(
         freeze_id="freeze.phase-9",
-        evaluation_plan_ref=EvaluationPlanRef(
-            plan_id="plan.phase-9",
-            evaluation_generation="critic-generation-1",
-        ),
-        evaluation_plan_candidate_manifest_sha256=manifest.content_sha256,
+        evaluation_regime_ref=fake_regime_ref(regime_id="regime.phase-9", label="phase-9"),
         structural_split_sha256=_sha("structural-split"),
         selected_structural_item_sha256=_sha("selected-structural-item"),
         selected_review_lineage_id=_sha("selected-review-lineage"),
@@ -247,7 +238,7 @@ def _schedule(
         coordinates=coordinates or _coordinates(),
         kernel_ref=freeze.problem_view.fixed_harness.kernel_ref,
         fixed_harness_ref=freeze.fixed_harness_ref,
-        evaluation_plan_ref=freeze.evaluation_plan_ref,
+        evaluation_regime_ref=freeze.evaluation_regime_ref,
         aggregate_budget=freeze.problem_view.fixed_harness.aggregate_budget,
     )
 
@@ -496,19 +487,16 @@ def test_schedule_is_order_invariant_and_rejects_binding_drift() -> None:
         "coordinates": _coordinates(),
         "kernel_ref": freeze.problem_view.fixed_harness.kernel_ref,
         "fixed_harness_ref": freeze.fixed_harness_ref,
-        "evaluation_plan_ref": freeze.evaluation_plan_ref,
+        "evaluation_regime_ref": freeze.evaluation_regime_ref,
         "aggregate_budget": freeze.problem_view.fixed_harness.aggregate_budget,
     }
     for field, value, message in (
         ("kernel_ref", KernelRef(kernel_id="wrong-kernel", version="1"), "kernel"),
         ("fixed_harness_ref", HarnessInstanceRef(instance_id="wrong-h0"), "fixed H0"),
         (
-            "evaluation_plan_ref",
-            EvaluationPlanRef(
-                plan_id="other",
-                evaluation_generation="critic-generation-1",
-            ),
-            "evaluation plan",
+            "evaluation_regime_ref",
+            fake_regime_ref(regime_id="other"),
+            "evaluation regime",
         ),
         ("aggregate_budget", HarnessBudget(), "aggregate budget"),
     ):
@@ -757,7 +745,7 @@ def test_produced_result_is_explicitly_development_selected_and_cannot_be_accept
 
     assert isinstance(result, DevelopmentSelectionResult)
     assert result.selection_regime.development_critic == critic
-    assert result.selection_regime.evaluation_plan_ref == schedule.evaluation_plan_ref
+    assert result.selection_regime.evaluation_regime_ref == schedule.evaluation_regime_ref
     assert result.selection_regime.selection_rule_sha256 == _selection_rule().content_sha256
     assert result.selection_regime.split is OptimizationSplit.DEVELOPMENT
     assert result.optimization_result.cycle.disposition is OptimizationDisposition.DEVELOPMENT_SELECTED
@@ -799,16 +787,9 @@ def test_development_selection_rejects_non_development_critic_or_generation() ->
         "selection_rule": _selection_rule(),
     }
     acceptance_critic = CriticRef(
+        regime=schedule.evaluation_regime_ref,
         critic_id="critic.acceptance",
-        version="1",
         role=CriticRole.ACCEPTANCE,
-        compatibility_generation=schedule.evaluation_plan_ref.evaluation_generation,
-        acceptance_manifest_commitment=AcceptanceManifestCommitment(
-            critic_id="critic.acceptance",
-            critic_version="1",
-            salted_commitment_sha256=_sha("acceptance-manifest"),
-            publication_receipt_sha256=_sha("acceptance-publication"),
-        ),
     )
 
     with pytest.raises(OptimizationExperimentError, match="development critic"):
@@ -816,11 +797,11 @@ def test_development_selection_rejects_non_development_critic_or_generation() ->
             **common,
             development_critic=acceptance_critic,
         )
-    with pytest.raises(OptimizationExperimentError, match="evaluation generation"):
+    with pytest.raises(OptimizationExperimentError, match="evaluation regime"):
         complete_decomposition_optimization_cycle(
             **common,
             development_critic=_development_critic(
-                compatibility_generation="different-generation",
+                regime_label="different-regime",
             ),
         )
 

@@ -21,7 +21,8 @@ from aec_bench.contracts.evaluation_generation.lifecycle import (
     GovernedBatchExecutionClosure,
     ProposalGenerationClosure,
 )
-from aec_bench.contracts.evaluation_plane import CriticRole
+from aec_bench.contracts.evaluation_refs import CriticRole
+from tests.support.evaluation_regimes import fake_regime_ref
 
 
 @dataclass(frozen=True)
@@ -181,8 +182,11 @@ def test_retirement_closure_requires_exact_cohort_and_critic_roles() -> None:
     )
     critic_retirements = tuple(
         EvaluationCriticRetirementRef(
-            role=role,
-            critic_generation_sha256=_sha(f"critic.{role.value}"),
+            critic={
+                "regime": fake_regime_ref(),
+                "critic_id": f"critic.{role.value}",
+                "role": role,
+            },
             retirement_authority_event_sha256=_sha(
                 f"authority.{role.value}",
             ),
@@ -223,7 +227,7 @@ def test_retirement_closure_requires_exact_cohort_and_critic_roles() -> None:
         CriticRole.DEVELOPMENT,
         CriticRole.ACCEPTANCE,
     )
-    assert tuple(item.role for item in retirement.critic_retirements) == (
+    assert tuple(item.critic.role for item in retirement.critic_retirements) == (
         CriticRole.DEVELOPMENT,
         CriticRole.ACCEPTANCE,
     )

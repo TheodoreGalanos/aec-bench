@@ -13,7 +13,8 @@ from aec_bench.contracts.authority import (
 )
 from aec_bench.contracts.evaluation_plane import (
     CandidateManifestScope,
-    EvaluationPlan,
+    EvaluationAssignment,
+    EvaluationRegime,
     candidate_manifest_scope_commitment,
 )
 from aec_bench.contracts.harness_instance import (
@@ -24,6 +25,7 @@ from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.program_proposal.candidate import CandidateGenerationManifest
 from aec_bench.contracts.program_proposal.problem import DecompositionLeakageAudit, DecompositionProblemView
 from aec_bench.contracts.program_proposal.types import OptimizationSplit, ProgramCandidateKind
+from aec_bench.evaluation.regime import validate_evaluation_regime_ref
 from aec_bench.experimentation.proposals.freezing.contracts import (
     GovernedProposalFreezeError,
     IncumbentArtifact,
@@ -62,8 +64,9 @@ def validate_principals(
 
 def validate_frozen_bindings(
     *,
-    evaluation_plan: EvaluationPlan,
-    evaluation_plan_candidate_scope: CandidateManifestScope | None,
+    evaluation_regime: EvaluationRegime,
+    evaluation_assignment: EvaluationAssignment,
+    evaluation_assignment_candidate_scope: CandidateManifestScope | None,
     structural_split: StructuralSplitManifest,
     split: OptimizationSplit,
     leakage_audit: DecompositionLeakageAudit,
@@ -79,20 +82,20 @@ def validate_frozen_bindings(
     """Validate every exact binding before constructing the proposal freeze."""
 
     _validate_problem_view_candidate_bindings(
-        evaluation_plan=evaluation_plan,
-        evaluation_plan_candidate_scope=evaluation_plan_candidate_scope,
+        evaluation_assignment=evaluation_assignment,
+        evaluation_assignment_candidate_scope=evaluation_assignment_candidate_scope,
         leakage_audit=leakage_audit,
         problem_view=problem_view,
         candidate_manifest=candidate_manifest,
     )
     _validate_evaluation_manifest_bindings(
-        evaluation_plan=evaluation_plan,
+        evaluation_regime=evaluation_regime,
+        evaluation_assignment=evaluation_assignment,
         structural_split=structural_split,
         fixed_harness=fixed_harness,
-        candidate_manifest=candidate_manifest,
     )
     _validate_harness_projection_bindings(
-        evaluation_plan=evaluation_plan,
+        evaluation_assignment=evaluation_assignment,
         problem_view=problem_view,
         fixed_harness=fixed_harness,
     )
@@ -120,8 +123,8 @@ def validate_frozen_bindings(
 
 def _validate_problem_view_candidate_bindings(
     *,
-    evaluation_plan: EvaluationPlan,
-    evaluation_plan_candidate_scope: CandidateManifestScope | None,
+    evaluation_assignment: EvaluationAssignment,
+    evaluation_assignment_candidate_scope: CandidateManifestScope | None,
     leakage_audit: DecompositionLeakageAudit,
     problem_view: DecompositionProblemView,
     candidate_manifest: CandidateGenerationManifest,
@@ -138,56 +141,52 @@ def _validate_problem_view_candidate_bindings(
         raise GovernedProposalFreezeError(
             "candidate manifest does not bind the exact problem view",
         )
-    if evaluation_plan_candidate_scope is None:
-        if evaluation_plan.candidate_manifest_sha256 != candidate_manifest.content_sha256:
+    if evaluation_assignment_candidate_scope is None:
+        if evaluation_assignment.candidate_manifest_commitment != candidate_manifest.content_sha256:
             raise GovernedProposalFreezeError(
-                "evaluation plan candidate manifest does not match the proposal manifest",
+                "evaluation assignment candidate manifest does not match the proposal manifest",
             )
         return
-    if evaluation_plan.candidate_manifest_sha256 != candidate_manifest_scope_commitment(
-        evaluation_plan_candidate_scope
+    if evaluation_assignment.candidate_manifest_commitment != candidate_manifest_scope_commitment(
+        evaluation_assignment_candidate_scope
     ):
         raise GovernedProposalFreezeError(
-            "evaluation plan candidate manifest does not match the candidate scope",
+            "evaluation assignment candidate manifest does not match the candidate scope",
         )
-    if candidate_manifest.content_sha256 not in evaluation_plan_candidate_scope.candidate_manifest_sha256s:
+    if candidate_manifest.content_sha256 not in evaluation_assignment_candidate_scope.candidate_manifest_sha256s:
         raise GovernedProposalFreezeError(
-            "proposal candidate manifest is not a member of the evaluation plan candidate scope",
+            "proposal candidate manifest is not a member of the evaluation assignment candidate scope",
         )
 
 
 def _validate_evaluation_manifest_bindings(
     *,
-    evaluation_plan: EvaluationPlan,
+    evaluation_regime: EvaluationRegime,
+    evaluation_assignment: EvaluationAssignment,
     structural_split: StructuralSplitManifest,
     fixed_harness: CompiledHarnessInstance,
-    candidate_manifest: CandidateGenerationManifest,
 ) -> None:
-    if evaluation_plan.split_manifest_sha256 != structural_split.content_sha256:
+    try:
+        validate_evaluation_regime_ref(evaluation_regime, evaluation_assignment.regime)
+    except ValueError as error:
+        raise GovernedProposalFreezeError(str(error)) from error
+    if evaluation_assignment.split_manifest_commitment != structural_split.content_sha256:
         raise GovernedProposalFreezeError(
-            "evaluation plan structural split does not match the supplied manifest",
+            "evaluation assignment structural split does not match the supplied manifest",
         )
-    if evaluation_plan.task_manifest_sha256 != structural_split.task_manifest_sha256:
+    if evaluation_assignment.task_manifest_commitment != structural_split.task_manifest_sha256:
         raise GovernedProposalFreezeError(
-            "evaluation plan task manifest does not match the selected task manifest",
+            "evaluation assignment task manifest does not match the selected task manifest",
         )
-    if evaluation_plan.kernel_ref != fixed_harness.kernel_ref:
+    if evaluation_assignment.kernel_ref != fixed_harness.kernel_ref:
         raise GovernedProposalFreezeError(
-            "evaluation plan kernel does not match the compiled fixed harness",
-        )
-    if evaluation_plan.stopping_policy_sha256 != candidate_manifest.stopping_policy_sha256:
-        raise GovernedProposalFreezeError(
-            "evaluation plan stopping policy does not match candidate generation",
-        )
-    if evaluation_plan.utility_policy_sha256 != candidate_manifest.selection_policy_sha256:
-        raise GovernedProposalFreezeError(
-            "evaluation plan utility policy does not match the preregistered selection policy",
+            "evaluation assignment kernel does not match the compiled fixed harness",
         )
 
 
 def _validate_harness_projection_bindings(
     *,
-    evaluation_plan: EvaluationPlan,
+    evaluation_assignment: EvaluationAssignment,
     problem_view: DecompositionProblemView,
     fixed_harness: CompiledHarnessInstance,
 ) -> None:
@@ -195,9 +194,9 @@ def _validate_harness_projection_bindings(
         raise GovernedProposalFreezeError(
             "problem-view kernel does not match the compiled fixed harness",
         )
-    if evaluation_plan.harness_policy_sha256 != problem_view.fixed_harness.harness_policy_sha256:
+    if evaluation_assignment.harness_policy_commitment != problem_view.fixed_harness.harness_policy_sha256:
         raise GovernedProposalFreezeError(
-            "evaluation plan harness policy does not match the problem view",
+            "evaluation assignment harness policy does not match the problem view",
         )
     if problem_view.fixed_harness.harness_policy_sha256 != fixed_harness_policy_sha256(fixed_harness):
         raise GovernedProposalFreezeError(

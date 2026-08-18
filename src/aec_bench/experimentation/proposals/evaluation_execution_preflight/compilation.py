@@ -183,7 +183,7 @@ def _order_compilation_results(
             or closed_result.proposal_freeze_sha256 != task_plan.proposal_freeze_sha256
             or closed_result.kernel_ref != task_plan.kernel_ref
             or closed_result.fixed_harness_ref != task_plan.fixed_harness_ref
-            or closed_result.evaluation_plan_ref != task_plan.evaluation_plan_ref
+            or closed_result.evaluation_regime_ref != task_plan.evaluation_regime_ref
             or closed_result.aggregate_budget != task_plan.aggregate_budget
         ):
             raise EvaluationExecutionPreflightError(

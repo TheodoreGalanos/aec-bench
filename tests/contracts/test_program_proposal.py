@@ -11,11 +11,8 @@ from pydantic import ValidationError
 
 from aec_bench.contracts.authority import OperatorRole, operator_authority_for
 from aec_bench.contracts.evaluation_generation.cohort import EvaluationCohortBinding
-from aec_bench.contracts.evaluation_plane import (
-    CandidateManifestScope,
-    EvaluationPlanRef,
-    candidate_manifest_scope_commitment,
-)
+from aec_bench.contracts.evaluation_plane import CandidateManifestScope
+from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
 from aec_bench.contracts.program_proposal.candidate import (
@@ -42,6 +39,7 @@ from aec_bench.contracts.program_proposal.types import (
     OptimizationSplit,
     ProgramCandidateKind,
 )
+from tests.support.evaluation_regimes import fake_regime_ref
 
 
 def _sha(label: str) -> str:
@@ -111,11 +109,8 @@ def _view() -> DecompositionProblemView:
     return DecompositionProblemView.model_validate(_view_payload())
 
 
-def _plan_ref(candidate_manifest_sha256: str) -> EvaluationPlanRef:
-    return EvaluationPlanRef(
-        plan_id=f"plan.phase-9.{candidate_manifest_sha256[:12]}",
-        evaluation_generation="critic-generation-1",
-    )
+def _regime_ref(*, label: str = "phase-9") -> EvaluationRegimeRef:
+    return fake_regime_ref(label=label, regime_id="regime.phase-9")
 
 
 def _manifest(view: DecompositionProblemView) -> CandidateGenerationManifest:
@@ -175,8 +170,7 @@ def _freeze() -> ProposalFreeze:
     manifest = _manifest(view)
     return ProposalFreeze(
         freeze_id="freeze.problem-01",
-        evaluation_plan_ref=_plan_ref(manifest.content_sha256),
-        evaluation_plan_candidate_manifest_sha256=manifest.content_sha256,
+        evaluation_regime_ref=_regime_ref(),
         structural_split_sha256=_sha("structural-split"),
         selected_structural_item_sha256=_sha("selected-structural-item"),
         selected_review_lineage_id=_sha("selected-review-lineage"),
@@ -211,16 +205,13 @@ def test_proposal_freeze_can_bind_one_member_of_a_multitask_candidate_scope() ->
         ),
     )
     payload = _freeze().model_dump(mode="python", exclude={"content_sha256"})
-    scope_commitment = candidate_manifest_scope_commitment(scope)
     payload.update(
-        evaluation_plan_ref=_plan_ref(scope_commitment),
-        evaluation_plan_candidate_manifest_sha256=scope_commitment,
-        evaluation_plan_candidate_scope=scope,
+        evaluation_assignment_candidate_scope=scope,
     )
 
     freeze = ProposalFreeze.model_validate(payload)
 
-    assert freeze.evaluation_plan_candidate_scope == scope
+    assert freeze.evaluation_assignment_candidate_scope == scope
     assert manifest.content_sha256 in scope.candidate_manifest_sha256s
 
     nonmember_scope = CandidateManifestScope(
@@ -228,9 +219,7 @@ def test_proposal_freeze_can_bind_one_member_of_a_multitask_candidate_scope() ->
         candidate_manifest_sha256s=(_sha("other-task-candidate-manifest"),),
     )
     payload.update(
-        evaluation_plan_ref=_plan_ref(candidate_manifest_scope_commitment(nonmember_scope)),
-        evaluation_plan_candidate_manifest_sha256=candidate_manifest_scope_commitment(nonmember_scope),
-        evaluation_plan_candidate_scope=nonmember_scope,
+        evaluation_assignment_candidate_scope=nonmember_scope,
     )
     with pytest.raises(ValidationError, match="candidate manifest is not a member"):
         ProposalFreeze.model_validate(payload)
@@ -380,7 +369,7 @@ def _study() -> ProgramCandidateStudy:
         study_id="study.problem-01",
         kernel_ref=freeze.problem_view.fixed_harness.kernel_ref,
         fixed_harness_ref=freeze.fixed_harness_ref,
-        evaluation_plan_ref=freeze.evaluation_plan_ref,
+        evaluation_regime_ref=freeze.evaluation_regime_ref,
         proposal_freeze=freeze,
         aggregate_budget=freeze.problem_view.fixed_harness.aggregate_budget,
         incumbent_candidate=incumbent,
@@ -497,7 +486,7 @@ def test_problem_and_coordinate_revisions_are_exact_content_identities() -> None
 @pytest.mark.parametrize(
     "leaking_key",
     [
-        "evaluation_plan",
+        "evaluation_regime",
         "world",
         "world_json",
         "graph",
@@ -642,17 +631,9 @@ def test_proposal_freeze_requires_performance_operator_and_exact_realized_set() 
         )
 
 
-def test_proposal_freeze_rejects_plan_manifest_or_policy_drift() -> None:
+def test_proposal_freeze_rejects_policy_drift() -> None:
     freeze = _freeze()
     base = freeze.model_dump(mode="json", exclude={"content_sha256"})
-
-    with pytest.raises(ValidationError, match="candidate manifest"):
-        ProposalFreeze.model_validate(
-            {
-                **base,
-                "evaluation_plan_candidate_manifest_sha256": _sha("different-manifest"),
-            }
-        )
 
     with pytest.raises(ValidationError, match="proposal policy"):
         ProposalFreeze.model_validate(
@@ -755,9 +736,9 @@ def test_study_requires_exact_kernel_h0_plan_budget_split_and_cross_product() ->
         ),
         ("aggregate_budget", HarnessBudget().model_dump(mode="json"), "aggregate budget"),
         (
-            "evaluation_plan_ref",
-            _plan_ref(_sha("other-candidate-manifest")).model_dump(mode="json"),
-            "evaluation plan",
+            "evaluation_regime_ref",
+            _regime_ref(label="other-regime").model_dump(mode="json"),
+            "evaluation regime",
         ),
     )
     for field, value, message in mutations:

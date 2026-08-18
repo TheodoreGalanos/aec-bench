@@ -62,8 +62,9 @@ class IncumbentArtifact:
 class ObservedInputBasis:
     """Internal join of exact input references and their complete origin closure."""
 
-    evaluation_plan: BasisReference
-    evaluation_plan_candidate_scope: BasisReference | None
+    evaluation_regime: BasisReference
+    evaluation_assignment: BasisReference
+    evaluation_assignment_candidate_scope: BasisReference | None
     operator_authority: BasisReference
     structural_split: BasisReference
     leakage_audit: BasisReference
@@ -90,8 +91,9 @@ class ProposalFreezeBasis(LegacyContentAddressedModel):
     """Complete reference set for the host-confined proposal-freeze evidence."""
 
     schema_version: Literal["aecbench.proposal-freeze-basis.v1"] = "aecbench.proposal-freeze-basis.v1"
-    evaluation_plan: BasisReference
-    evaluation_plan_candidate_scope: BasisReference | None = None
+    evaluation_regime: BasisReference
+    evaluation_assignment: BasisReference
+    evaluation_assignment_candidate_scope: BasisReference | None = None
     operator_authority: BasisReference
     structural_split: BasisReference
     leakage_audit: BasisReference
@@ -132,8 +134,8 @@ class ProposalFreezeBasis(LegacyContentAddressedModel):
             )
         if self.incumbent_artifact is None:
             payload.pop("incumbent_artifact", None)
-        if self.evaluation_plan_candidate_scope is None:
-            payload.pop("evaluation_plan_candidate_scope", None)
+        if self.evaluation_assignment_candidate_scope is None:
+            payload.pop("evaluation_assignment_candidate_scope", None)
         if self.execution_profile is None:
             payload.pop("execution_profile", None)
         return payload
@@ -166,7 +168,7 @@ class ProposalFreezeBasis(LegacyContentAddressedModel):
         optional = tuple(
             reference
             for reference in (
-                self.evaluation_plan_candidate_scope,
+                self.evaluation_assignment_candidate_scope,
                 self.execution_profile,
             )
             if reference is not None
@@ -174,7 +176,8 @@ class ProposalFreezeBasis(LegacyContentAddressedModel):
         return tuple(
             sorted(
                 (
-                    self.evaluation_plan,
+                    self.evaluation_regime,
+                    self.evaluation_assignment,
                     self.operator_authority,
                     self.structural_split,
                     *optional,
@@ -198,7 +201,7 @@ class ProposalFreezeBasis(LegacyContentAddressedModel):
 
 
 class GovernedProposalFreezeResult(LegacyContentAddressedModel):
-    """Host-side freeze authority without full evaluation-plan or proposal payloads."""
+    """Host-side freeze authority without full regime, assignment, or proposal payloads."""
 
     schema_version: Literal["aecbench.governed-proposal-freeze-result.v1"] = (
         "aecbench.governed-proposal-freeze-result.v1"

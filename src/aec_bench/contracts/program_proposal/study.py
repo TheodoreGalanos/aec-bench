@@ -7,7 +7,7 @@ from typing import Literal, Self
 
 from pydantic import Field, FiniteFloat, field_validator, model_validator
 
-from aec_bench.contracts.evaluation_plane import EvaluationPlanRef
+from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import KernelRef, validate_sha256
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
@@ -84,7 +84,7 @@ class ProgramCandidateStudy(LegacyContentAddressedModel):
     study_id: NonEmptyStr
     kernel_ref: KernelRef
     fixed_harness_ref: HarnessInstanceRef
-    evaluation_plan_ref: EvaluationPlanRef
+    evaluation_regime_ref: EvaluationRegimeRef
     proposal_freeze: ProposalFreeze
     aggregate_budget: HarnessBudget
     incumbent_candidate: ProgramCandidateRef
@@ -317,8 +317,8 @@ def _validate_study_harness_bindings(study: ProgramCandidateStudy) -> None:
         raise ValueError("study fixed H0 does not match the proposal freeze")
     if study.aggregate_budget != fixed_harness.aggregate_budget:
         raise ValueError("study aggregate budget does not match frozen H0")
-    if study.evaluation_plan_ref != study.proposal_freeze.evaluation_plan_ref:
-        raise ValueError("study evaluation plan does not match the proposal freeze")
+    if study.evaluation_regime_ref != study.proposal_freeze.evaluation_regime_ref:
+        raise ValueError("study evaluation regime does not match the proposal freeze")
 
 
 def _validate_study_incumbent(study: ProgramCandidateStudy) -> None:

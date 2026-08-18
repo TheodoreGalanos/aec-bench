@@ -442,7 +442,7 @@ def _derive_family(
             )
         if (
             observation.study_ref_sha256 != lineage.study_ref.content_sha256
-            or observation.evaluation_plan_ref != lineage.study_ref.evaluation_plan_ref
+            or observation.evaluation_regime_ref != lineage.study_ref.evaluation_regime_ref
         ):
             raise ValueError(
                 "program-necessity observation does not bind the exact lineage study and evaluation",

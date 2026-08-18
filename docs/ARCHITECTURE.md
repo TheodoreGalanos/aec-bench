@@ -150,6 +150,14 @@ analysis, error taxonomy, confidence, and task-specific evaluation extensions.
 Verifiers provide task-owned evidence. Reports, the TUI, and the web UI consume
 evaluation results; they do not define competing metrics.
 
+Evaluation also owns the public evaluation regime. One canonical
+`EvaluationRegimeEnvelope` embeds critics, budgets, and observable policies.
+`ArtifactRepository` publishes that envelope once, and its `ArtifactRef`
+digest is the compatibility identity used by runs, outcomes, monitors, and
+governance. Hidden candidate, split, verifier, and acceptance material stays in
+separate assignment or authority-owned escrow records. The regime can consume
+World evaluation evidence, but it does not own or reproduce World transitions.
+
 Cross-task model execution and review coordination belong to
 `harness/model_execution`. Task-specific evaluation, including wastewater pump
 stewardship scoring, remains with the task package.
@@ -159,6 +167,9 @@ stewardship scoring, remains with the task package.
 The ledger and artifact stores own persistence mechanics, integrity checks, and
 queries. `ArtifactRepository` publishes exact bytes and canonical model bytes
 as `ArtifactRef` values, then verifies ID, size, and digest on each read.
+An evaluation regime is one independently published canonical envelope. Its
+artifact digest replaces compatibility checks over policy and critic hash
+matrices.
 Kernel, Harness, execution-program, evaluation, stage, task-snapshot, and
 run-bundle contracts remain plain domain models. Their joins use stable IDs,
 typed references, direct values, and named commitments. They do not calculate

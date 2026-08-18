@@ -12,8 +12,7 @@ from pydantic import JsonValue
 
 from aec_bench.contracts.authority import (
     AuthorityPrincipalKind,
-    CriticGenerationIdentity,
-    EvaluationPlanIdentity,
+    CriticRef,
 )
 from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
@@ -58,6 +57,7 @@ from aec_bench.experimentation.governance.surface_guard import (
     SurfaceAccessDenied,
     SurfaceGuardConfinementError,
 )
+from tests.support.evaluation_regimes import fake_regime_ref
 
 
 def _sha(label: str) -> str:
@@ -68,11 +68,11 @@ def _kernel_ref() -> KernelRef:
     return KernelRef(kernel_id="test-kernel", version="1.0.0")
 
 
-def _critic_generation() -> CriticGenerationIdentity:
-    return CriticGenerationIdentity(
+def _critic() -> CriticRef:
+    return CriticRef(
+        regime=fake_regime_ref(),
         critic_id="critic.acceptance",
-        version="1",
-        compatibility_generation="critic-generation",
+        role="acceptance",
     )
 
 
@@ -120,9 +120,9 @@ def _revoked_snapshot(
         authority_event_sha256=_sha("canary-active-not-authority"),
         kernel_ref=_kernel_ref(),
         kernel_abi_sha256=_sha("kernel-generation"),
-        critic_generation=_critic_generation(),
+        critic=_critic(),
         applicability_sha256=_sha("applicability-generation"),
-        revalidation_triggers=("critic_generation_change",),
+        revalidation_triggers=("critic_change",),
     )
     revoked = MotifLifecycleEvent(
         event_id="monitor-canary.revoked",
@@ -133,9 +133,9 @@ def _revoked_snapshot(
         authority_event_sha256=_sha("canary-revoked-not-authority"),
         kernel_ref=_kernel_ref(),
         kernel_abi_sha256=_sha("kernel-generation"),
-        critic_generation=_critic_generation(),
+        critic=_critic(),
         applicability_sha256=_sha("applicability-generation"),
-        revalidation_triggers=("critic_generation_change",),
+        revalidation_triggers=("critic_change",),
     )
     return derive_motif_assurance_snapshot(MotifAssuranceLedger.create().append(active).append(revoked))
 
@@ -188,10 +188,7 @@ def _monitor_inputs(
     cycle = CycleMonitorPlan(
         cycle_id="cycle.instrumentation",
         cycle_index=1,
-        evaluation_plan=EvaluationPlanIdentity(
-            plan_id="evaluation-plan",
-            evaluation_generation="evaluation-generation.1",
-        ),
+        evaluation_regime=fake_regime_ref(),
         standing_policy_sha256=policy.content_sha256,
         assurance_snapshot_sha256=snapshot.content_sha256,
     )

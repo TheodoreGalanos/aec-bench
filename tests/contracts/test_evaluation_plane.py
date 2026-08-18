@@ -1,519 +1,295 @@
-# ABOUTME: Tests immutable evaluation identities, critic separation, budgets, and escrow reveal.
-# ABOUTME: Proves acceptance comparisons fail closed without exposing live hidden case manifests.
+# ABOUTME: Tests the single evaluation-regime identity and separate assignment commitments.
+# ABOUTME: Proves critic configuration is embedded while hidden acceptance content stays committed.
 
 from __future__ import annotations
-
-import hashlib
 
 import pytest
 from pydantic import JsonValue, ValidationError
 
+from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.evaluation_plane import (
     AcceptanceManifestCommitment,
     AcceptanceManifestReveal,
+    AcceptancePolicy,
+    ArtifactCriticSource,
+    CandidateManifestScope,
+    Critic,
     CriticFeedbackVisibility,
     CriticReleaseAuthorityRef,
-    CriticRole,
-    CriticSpec,
-    EvaluationBudgetPartition,
-    EvaluationBudgetPlan,
-    EvaluationPlan,
-    EvaluationPlanAuthorityScope,
-    EvaluationPlanRef,
+    EvaluationAssignment,
+    EvaluationRegime,
+    EvaluationRegimeAuthorityScope,
+    RepositoryCriticSource,
     TaskVerifierFileInventoryEntry,
     TaskVerifierSurface,
     TaskVerifierSurfaceScope,
-    assert_acceptance_compatible,
+    assert_evaluation_regimes_compatible,
+    candidate_manifest_scope_commitment,
     task_verifier_surface_commitment,
 )
-from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
+from aec_bench.contracts.evaluation_refs import CriticRole
+from aec_bench.contracts.harness_kernel import KernelRef
+from tests.support.evaluation_regimes import fake_regime_ref, make_regime, sha
 
 
-def _sha(label: str) -> str:
-    return hashlib.sha256(label.encode()).hexdigest()
+def test_regime_embeds_policies_without_nested_versions_or_component_hash_matrix() -> None:
+    regime = make_regime()
+    payload = regime.model_dump(mode="json")
 
-
-def _commitment(
-    *,
-    critic_id: str = "critic.acceptance",
-    critic_version: str = "1.0.0",
-) -> tuple[
-    AcceptanceManifestCommitment,
-    str,
-    dict[str, JsonValue],
-    dict[str, JsonValue],
-]:
-    salt = "retirement-escrow-salt"
-    cases: dict[str, JsonValue] = {
-        "case_ids": ["hidden-01", "hidden-02"],
-        "split": "acceptance",
-    }
-    scoring: dict[str, JsonValue] = {
-        "threshold": 0.8,
-        "denominator": "all_planned_cases",
-    }
-    commitment = AcceptanceManifestCommitment.create(
-        critic_id=critic_id,
-        critic_version=critic_version,
-        case_manifest=cases,
-        scoring_policy=scoring,
-        salt=salt,
-        publication_receipt_sha256=_sha("commitment-publication"),
-    )
-    return commitment, salt, cases, scoring
-
-
-def _critic(
-    role: CriticRole,
-    *,
-    case_label: str,
-    principal: str,
-    denominator_label: str = "all-planned-cases",
-    commitment: AcceptanceManifestCommitment | None = None,
-    case_manifest_sha256: str | None = None,
-    rubric_policy_sha256: str | None = None,
-) -> CriticSpec:
-    return CriticSpec(
-        critic_id=f"critic.{role.value}",
-        version="1.0.0",
-        role=role,
-        implementation_sha256=_sha("shared-deterministic-scoring"),
-        rubric_policy_sha256=rubric_policy_sha256 or _sha("shared-rubric"),
-        case_manifest_sha256=case_manifest_sha256 or _sha(case_label),
-        eligibility_policy_sha256=_sha("complete-evidence-only"),
-        denominator_policy_sha256=_sha(denominator_label),
-        threshold_policy_sha256=_sha("threshold"),
-        evidence_inclusion_policy_sha256=_sha("inclusion"),
-        runtime_environment_sha256=_sha("runtime"),
-        feedback_visibility=(
-            CriticFeedbackVisibility.VISIBLE if role is CriticRole.DEVELOPMENT else CriticFeedbackVisibility.HOST_ONLY
-        ),
-        execution_principal_id=principal,
-        compatibility_generation="evaluation-generation-1",
-        acceptance_manifest_commitment=commitment,
-    )
-
-
-def _budgets() -> EvaluationBudgetPlan:
-    partition = EvaluationBudgetPartition(
-        case_count=8,
-        max_attempts=8,
-        max_turns=32,
-        max_tokens=100_000,
-        max_cost_usd=1.0,
-        max_wall_time_seconds=600.0,
-    )
-    return EvaluationBudgetPlan(
-        proposal=partition,
-        execution=partition,
-        development=partition,
-        acceptance=partition,
-        red_team=partition,
-        monitor=partition,
-        audit=partition,
-    )
-
-
-def _plan(
-    *,
-    development: CriticSpec | None = None,
-    acceptance: CriticSpec | None = None,
-    task_verifier_sha256: str | None = None,
-) -> EvaluationPlan:
-    commitment, *_ = _commitment()
-    return EvaluationPlan(
-        plan_id="evaluation-plan.stage-9",
-        evaluation_generation="evaluation-generation-1",
-        kernel_ref=KernelRef(kernel_id="kernel.fixed", version="1.0.0"),
-        harness_policy_sha256=_sha("harness-policy"),
-        candidate_manifest_sha256=_sha("candidate-manifest"),
-        task_manifest_sha256=_sha("task-manifest"),
-        split_manifest_sha256=_sha("split-manifest"),
-        task_verifier_sha256=task_verifier_sha256 or _sha("task-verifier"),
-        development_critic=development
-        or _critic(
-            CriticRole.DEVELOPMENT,
-            case_label="development-cases",
-            principal="principal.dev",
-        ),
-        acceptance_critic=acceptance
-        or _critic(
-            CriticRole.ACCEPTANCE,
-            case_label="acceptance-cases",
-            principal="principal.accept",
-            commitment=commitment,
-        ),
-        red_team_critic=_critic(
-            CriticRole.RED_TEAM,
-            case_label="red-team-cases",
-            principal="principal.red",
-        ),
-        budgets=_budgets(),
-        integrity_policy_sha256=_sha("integrity-policy"),
-        utility_policy_sha256=_sha("utility-policy"),
-        selection_null_protocol_sha256=_sha("selection-null"),
-        anchor_calibration_policy_sha256=_sha("anchor-calibration"),
-        monitor_plan_sha256=_sha("monitor-plan"),
-        opening_policy_sha256=_sha("opening-policy"),
-        stopping_policy_sha256=_sha("stopping-policy"),
-        confirmatory_suite_sha256=_sha("confirmatory-suite"),
-        challenge_suite_sha256=_sha("challenge-suite"),
-    )
-
-
-def test_acceptance_critic_requires_salted_manifest_commitment() -> None:
-    with pytest.raises(ValidationError, match="acceptance critic requires"):
-        _critic(
-            CriticRole.ACCEPTANCE,
-            case_label="acceptance-cases",
-            principal="principal.accept",
-        )
-
-
-def test_shared_scoring_code_is_allowed_but_cases_and_principals_must_be_separate() -> None:
-    commitment, *_ = _commitment()
-    development = _critic(
-        CriticRole.DEVELOPMENT,
-        case_label="development-cases",
-        principal="principal.dev",
-    )
-    acceptance = _critic(
-        CriticRole.ACCEPTANCE,
-        case_label="acceptance-cases",
-        principal="principal.accept",
-        commitment=commitment,
-    )
-
-    plan = _plan(development=development, acceptance=acceptance)
-
-    assert plan.development_critic.implementation_sha256 == plan.acceptance_critic.implementation_sha256
-    assert plan.development_critic.case_manifest_sha256 != plan.acceptance_critic.case_manifest_sha256
-    assert plan.development_critic.execution_principal_id != plan.acceptance_critic.execution_principal_id
-
-    with pytest.raises(ValidationError, match="case manifests must be distinct"):
-        _plan(
-            development=development,
-            acceptance=_critic(
-                CriticRole.ACCEPTANCE,
-                case_label="development-cases",
-                principal="principal.accept",
-                commitment=commitment,
-            ),
-        )
-
-    with pytest.raises(ValidationError, match="execution principals must be distinct"):
-        _plan(
-            development=development,
-            acceptance=_critic(
-                CriticRole.ACCEPTANCE,
-                case_label="acceptance-cases",
-                principal="principal.dev",
-                commitment=commitment,
-            ),
-        )
-
-
-def test_acceptance_identity_changes_for_denominator_policy_and_comparison_fails_closed() -> None:
-    commitment, *_ = _commitment()
-    original = _plan()
-    changed = _plan(
-        acceptance=_critic(
-            CriticRole.ACCEPTANCE,
-            case_label="acceptance-cases",
-            principal="principal.accept",
-            denominator_label="eligible-only",
-            commitment=commitment,
-        )
-    )
-
-    assert original.acceptance_critic != changed.acceptance_critic
-    with pytest.raises(ValueError, match="acceptance critic identity"):
-        assert_acceptance_compatible(original, changed)
+    assert EvaluationRegime.model_validate(payload) == regime
+    assert "schema_version" not in str(payload)
+    assert "compatibility_generation" not in str(payload)
+    assert "critic_version" not in str(payload)
+    assert "implementation_sha256" not in str(payload)
+    assert "policy_sha256" not in str(payload)
+    assert payload["acceptance_policy"]["configuration"] == {"threshold": 0.8}
 
 
 @pytest.mark.parametrize(
-    ("field_name", "changed_value"),
-    [
-        ("implementation_sha256", _sha("different-implementation")),
-        ("rubric_policy_sha256", _sha("different-rubric")),
-        ("case_manifest_sha256", _sha("different-cases")),
-        ("eligibility_policy_sha256", _sha("different-eligibility")),
-        ("denominator_policy_sha256", _sha("different-denominator")),
-        ("threshold_policy_sha256", _sha("different-threshold")),
-        ("evidence_inclusion_policy_sha256", _sha("different-inclusion")),
-        ("runtime_environment_sha256", _sha("different-runtime")),
-        ("execution_principal_id", "principal.accept.replacement"),
-        ("compatibility_generation", "evaluation-generation-2"),
-        (
-            "parent_critic_ref",
-            _critic(
-                CriticRole.DEVELOPMENT,
-                case_label="parent-cases",
-                principal="principal.parent",
-            ).ref.model_dump(mode="json"),
-        ),
-    ],
+    "field",
+    ("schema_version", "content_sha256", "implementation_sha256", "published_at", "local_path"),
 )
-def test_every_acceptance_relevant_spec_change_creates_a_new_identity(
-    field_name: str,
-    changed_value: str,
-) -> None:
-    original = _plan().acceptance_critic
-    payload = original.model_dump(mode="json")
-    payload[field_name] = changed_value
-
-    changed = CriticSpec.model_validate(payload)
-
-    assert changed != original
+def test_regime_policy_rejects_nested_identity_and_diagnostic_metadata(field: str) -> None:
+    with pytest.raises(ValidationError, match="nonsemantic identity or metadata"):
+        AcceptancePolicy(policy_id="acceptance", configuration={"nested": {field: "not-semantic"}})
 
 
-def test_retired_acceptance_manifest_reveal_verifies_every_escrow_component() -> None:
-    commitment, salt, cases, scoring = _commitment()
-    acceptance = _critic(
-        CriticRole.ACCEPTANCE,
-        case_label="acceptance-cases",
-        principal="principal.accept",
-        commitment=commitment,
-        case_manifest_sha256=canonical_json_sha256(cases),
-        rubric_policy_sha256=canonical_json_sha256(scoring),
+def test_critic_has_one_stable_id_and_embedded_configuration() -> None:
+    critic = make_regime().critic(CriticRole.DEVELOPMENT)
+
+    assert critic.critic_id == "critic.development"
+    assert critic.configuration == {"rubric": "shared", "cases": ["public-01"]}
+    assert isinstance(critic.source, RepositoryCriticSource)
+    assert critic.source.source_revision == "1" * 40
+    assert set(critic.model_dump()) == {
+        "critic_id",
+        "role",
+        "source",
+        "configuration",
+        "feedback_visibility",
+        "execution_principal_id",
+        "acceptance_manifest_commitment",
+    }
+
+
+def test_repository_critic_source_requires_an_exact_git_revision() -> None:
+    with pytest.raises(ValidationError, match="40-character Git commit"):
+        RepositoryCriticSource(source_revision="main", entrypoint="aec_bench.evaluation.rubric_scorer")
+
+
+def test_external_critic_source_uses_one_artifact_reference() -> None:
+    artifact = ArtifactRef(
+        artifact_id=f"artifacts/sha256/{'a' * 2}/{'a' * 64}",
+        sha256="a" * 64,
+        size_bytes=100,
+        media_type="application/vnd.aec-bench.critic+python",
     )
-    reveal = AcceptanceManifestReveal.create(
-        critic_spec=acceptance,
+    source = ArtifactCriticSource(artifact=artifact)
+
+    assert source.model_dump() == {"kind": "artifact", "artifact": artifact.model_dump()}
+
+
+def test_acceptance_critic_requires_a_matching_salted_commitment() -> None:
+    with pytest.raises(ValidationError, match="acceptance critic requires"):
+        Critic(
+            critic_id="critic.acceptance",
+            role=CriticRole.ACCEPTANCE,
+            source=RepositoryCriticSource(
+                source_revision="1" * 40,
+                entrypoint="aec_bench.evaluation.rubric_scorer",
+            ),
+            feedback_visibility=CriticFeedbackVisibility.HOST_ONLY,
+            execution_principal_id="principal.acceptance",
+        )
+
+    wrong = AcceptanceManifestCommitment.create(
+        critic_id="critic.other",
+        case_manifest={"case_ids": ["hidden"]},
+        scoring_policy={"threshold": 1.0},
+        salt="random-salt",
+    )
+    with pytest.raises(ValidationError, match="identities must match"):
+        Critic(
+            critic_id="critic.acceptance",
+            role=CriticRole.ACCEPTANCE,
+            source=RepositoryCriticSource(
+                source_revision="1" * 40,
+                entrypoint="aec_bench.evaluation.rubric_scorer",
+            ),
+            feedback_visibility=CriticFeedbackVisibility.HOST_ONLY,
+            execution_principal_id="principal.acceptance",
+            acceptance_manifest_commitment=wrong,
+        )
+
+
+def test_acceptance_commitment_can_generate_a_host_only_random_salt() -> None:
+    commitment, salt = AcceptanceManifestCommitment.create_with_random_salt(
+        critic_id="critic.acceptance",
+        case_manifest={"case_ids": ["hidden"]},
+        scoring_policy={"threshold": 1.0},
+    )
+
+    assert len(salt) == 64
+    assert salt not in commitment.model_dump_json()
+    assert commitment == AcceptanceManifestCommitment.create(
+        critic_id="critic.acceptance",
+        case_manifest={"case_ids": ["hidden"]},
+        scoring_policy={"threshold": 1.0},
+        salt=salt,
+    )
+
+
+def test_acceptance_critic_rejects_hidden_case_or_scoring_configuration() -> None:
+    commitment = AcceptanceManifestCommitment.create(
+        critic_id="critic.acceptance",
+        case_manifest={"case_ids": ["hidden"]},
+        scoring_policy={"threshold": 1.0},
+        salt="random-salt",
+    )
+    with pytest.raises(ValidationError, match=r"hidden material at configuration\.case_manifest"):
+        Critic(
+            critic_id="critic.acceptance",
+            role=CriticRole.ACCEPTANCE,
+            source=RepositoryCriticSource(
+                source_revision="1" * 40,
+                entrypoint="aec_bench.evaluation.rubric_scorer",
+            ),
+            configuration={"case_manifest": {"case_ids": ["hidden"]}},
+            feedback_visibility=CriticFeedbackVisibility.HOST_ONLY,
+            execution_principal_id="principal.acceptance",
+            acceptance_manifest_commitment=commitment,
+        )
+
+
+def test_hidden_acceptance_content_is_absent_from_public_regime_and_reveal_verifies_it() -> None:
+    cases: JsonValue = {"case_ids": ["hidden-01", "hidden-02"], "split": "acceptance"}
+    scoring: JsonValue = {"threshold": 0.8, "denominator": "all_planned_cases"}
+    salt = "retirement-escrow-salt"
+    commitment = AcceptanceManifestCommitment.create(
+        critic_id="critic.acceptance",
         case_manifest=cases,
         scoring_policy=scoring,
         salt=salt,
-        retirement_authority_event_sha256=_sha("human-retirement-event"),
-        evaluation_outcome_sha256s=(_sha("outcome-2"), _sha("outcome-1")),
-        promotion_sha256s=(_sha("promotion-1"),),
     )
+    base = make_regime()
+    acceptance = base.critic(CriticRole.ACCEPTANCE).model_copy(update={"acceptance_manifest_commitment": commitment})
+    regime = base.model_copy(
+        update={
+            "critics": tuple(acceptance if critic.role is CriticRole.ACCEPTANCE else critic for critic in base.critics)
+        }
+    )
+    regime_ref = fake_regime_ref(regime_id=regime.regime_id)
 
-    assert reveal.critic_spec.acceptance_manifest_commitment == commitment
-    assert reveal.evaluation_outcome_sha256s == tuple(sorted((_sha("outcome-1"), _sha("outcome-2"))))
+    assert "hidden-01" not in str(regime.model_dump(mode="json"))
+    reveal = AcceptanceManifestReveal.create(
+        evaluation_regime=regime_ref,
+        critic=acceptance,
+        case_manifest=cases,
+        scoring_policy=scoring,
+        salt=salt,
+        retirement_authority_event_sha256=sha("retirement"),
+    )
+    assert reveal.case_manifest == cases
 
     with pytest.raises(ValidationError, match="salted commitment"):
         AcceptanceManifestReveal.create(
-            critic_spec=acceptance,
+            evaluation_regime=regime_ref,
+            critic=acceptance,
             case_manifest=cases,
             scoring_policy=scoring,
             salt="wrong-salt",
-            retirement_authority_event_sha256=_sha("human-retirement-event"),
-        )
-
-    with pytest.raises(ValidationError, match="case manifest"):
-        AcceptanceManifestReveal.create(
-            critic_spec=acceptance,
-            case_manifest={
-                "case_ids": ["different-hidden-case"],
-                "split": "acceptance",
-            },
-            scoring_policy=scoring,
-            salt=salt,
-            retirement_authority_event_sha256=_sha("human-retirement-event"),
-        )
-
-    with pytest.raises(ValidationError, match="scoring policy"):
-        AcceptanceManifestReveal.create(
-            critic_spec=acceptance,
-            case_manifest=cases,
-            scoring_policy={
-                "threshold": 0.1,
-                "denominator": "changed",
-            },
-            salt=salt,
-            retirement_authority_event_sha256=_sha("human-retirement-event"),
+            retirement_authority_event_sha256=sha("retirement"),
         )
 
 
-def test_evaluation_plan_and_budget_partitions_are_plain_immutable_values() -> None:
-    plan = _plan()
-    rebuilt = EvaluationPlan.model_validate(plan.model_dump(mode="json"))
+def test_one_artifact_digest_determines_compatibility_across_store_ids() -> None:
+    left = fake_regime_ref(label="same")
+    right = left.model_copy(
+        update={"artifact": left.artifact.model_copy(update={"artifact_id": f"mirror/{left.artifact.sha256}"})}
+    )
+    assert_evaluation_regimes_compatible(left, right)
 
-    assert rebuilt == plan
-    assert rebuilt.budgets.acceptance.case_count == 8
-    assert "content_sha256" not in rebuilt.model_dump(mode="json")
+    with pytest.raises(ValueError, match="artifacts do not match"):
+        assert_evaluation_regimes_compatible(left, fake_regime_ref(label="changed"))
 
 
-def test_evaluation_authority_scope_binds_replayable_role_specific_critic_releases() -> None:
-    plan = _plan()
-    releases = tuple(
-        CriticReleaseAuthorityRef(
-            critic=critic.ref,
-            authority_event_id=f"authority.release.{critic.role.value}",
-            authority_event_sha256=_sha(f"authority:{critic.role.value}"),
-        )
-        for critic in (
-            plan.acceptance_critic,
-            plan.development_critic,
-            plan.red_team_critic,
-        )
-        if critic is not None
+def test_candidate_and_split_bindings_are_outside_the_public_regime() -> None:
+    regime = make_regime()
+    ref = fake_regime_ref(regime_id=regime.regime_id)
+    assignment = EvaluationAssignment(
+        assignment_id="assignment.acceptance-01",
+        regime=ref,
+        kernel_ref=KernelRef(kernel_id="kernel.fixed", version="1"),
+        harness_policy_commitment=sha("harness"),
+        candidate_manifest_commitment=sha("candidate"),
+        task_manifest_commitment=sha("task"),
+        split_manifest_commitment=sha("split"),
+        task_verifier_commitment=sha("verifier"),
     )
 
-    scope = EvaluationPlanAuthorityScope(
-        scope_id="evaluation-authority.stage-9",
-        evaluation_plan_ref=plan.ref,
+    assert assignment.regime == ref
+    assert "candidate_manifest_commitment" not in regime.model_dump(mode="json")
+    assert "split_manifest_commitment" not in regime.model_dump(mode="json")
+
+
+def test_regime_authority_scope_binds_critic_releases_to_one_exact_regime() -> None:
+    regime = make_regime()
+    ref = fake_regime_ref(regime_id=regime.regime_id)
+    releases = tuple(
+        CriticReleaseAuthorityRef(
+            critic=critic.ref(ref),
+            authority_event_id=f"authority.release.{critic.role.value}",
+            authority_event_sha256=sha(f"authority:{critic.role.value}"),
+        )
+        for critic in regime.critics
+    )
+    scope = EvaluationRegimeAuthorityScope(
+        scope_id="evaluation-authority.standard",
+        regime=ref,
         critic_releases=releases,
     )
 
     assert tuple(item.critic.role for item in scope.critic_releases) == (
-        CriticRole.ACCEPTANCE,
         CriticRole.DEVELOPMENT,
-        CriticRole.RED_TEAM,
+        CriticRole.ACCEPTANCE,
     )
-    assert EvaluationPlanAuthorityScope.model_validate(scope.model_dump(mode="json")) == scope
-
-    duplicate_role = tuple(
-        (
-            releases[0].model_copy(
-                update={
-                    "authority_event_id": "authority.release.acceptance-duplicate",
-                    "authority_event_sha256": _sha("authority:acceptance-duplicate"),
-                }
-            )
-            if item.critic.role is CriticRole.DEVELOPMENT
-            else item
+    wrong_ref = fake_regime_ref(label="other", regime_id=regime.regime_id)
+    with pytest.raises(ValidationError, match="different evaluation regime"):
+        EvaluationRegimeAuthorityScope(
+            scope_id=scope.scope_id,
+            regime=ref,
+            critic_releases=(
+                releases[0].model_copy(update={"critic": releases[0].critic.model_copy(update={"regime": wrong_ref})}),
+                releases[1],
+            ),
         )
-        for item in releases
+
+
+def test_assignment_commitment_helpers_are_canonical() -> None:
+    candidate_scope = CandidateManifestScope(
+        scope_id="candidate-scope",
+        candidate_manifest_sha256s=(sha("candidate-b"), sha("candidate-a")),
     )
-    with pytest.raises(ValidationError, match="critic roles must be unique"):
-        EvaluationPlanAuthorityScope(
-            scope_id=scope.scope_id,
-            evaluation_plan_ref=plan.ref,
-            critic_releases=duplicate_role,
+    assert candidate_scope.candidate_manifest_sha256s == tuple(sorted(candidate_scope.candidate_manifest_sha256s))
+    assert candidate_manifest_scope_commitment(candidate_scope) == candidate_manifest_scope_commitment(
+        CandidateManifestScope(
+            scope_id="candidate-scope",
+            candidate_manifest_sha256s=tuple(reversed(candidate_scope.candidate_manifest_sha256s)),
         )
-
-    duplicate_event = tuple(
-        (
-            item.model_copy(
-                update={
-                    "authority_event_id": releases[0].authority_event_id,
-                    "authority_event_sha256": releases[0].authority_event_sha256,
-                }
-            )
-            if item.critic.role is CriticRole.DEVELOPMENT
-            else item
-        )
-        for item in releases
     )
-    with pytest.raises(ValidationError, match="authority events must be unique"):
-        EvaluationPlanAuthorityScope(
-            scope_id=scope.scope_id,
-            evaluation_plan_ref=plan.ref,
-            critic_releases=duplicate_event,
-        )
 
-    without_development = tuple(item for item in releases if item.critic.role is not CriticRole.DEVELOPMENT)
-    with pytest.raises(
-        ValidationError,
-        match="development and acceptance critic releases",
-    ):
-        EvaluationPlanAuthorityScope(
-            scope_id=scope.scope_id,
-            evaluation_plan_ref=plan.ref,
-            critic_releases=without_development,
-        )
-
-
-def test_task_verifier_surface_canonically_binds_only_verifier_file_inventory() -> None:
     surface = TaskVerifierSurface(
         task_id="civil/drainage/alpha",
-        task_revision=_sha("alpha-revision"),
-        source_task_package_sha256=_sha("alpha-public-package"),
-        sealed_task_package_sha256=_sha("alpha-sealed-package"),
+        task_revision=sha("revision"),
+        source_task_package_sha256=sha("public-package"),
         files=(
             TaskVerifierFileInventoryEntry(
-                path="tests/secret.json",
-                sha256=_sha("secret"),
-                byte_size=12,
-                role="sealed_verifier_only",
-            ),
-            TaskVerifierFileInventoryEntry(
                 path="tests/test.sh",
-                sha256=_sha("test-sh"),
+                sha256=sha("test"),
                 byte_size=24,
                 role="verifier_only",
             ),
         ),
     )
-    rebuilt = TaskVerifierSurface(
-        task_id=surface.task_id,
-        task_revision=surface.task_revision,
-        source_task_package_sha256=surface.source_task_package_sha256,
-        sealed_task_package_sha256=surface.sealed_task_package_sha256,
-        files=tuple(reversed(surface.files)),
-    )
-
-    assert tuple(item.path for item in surface.files) == (
-        "tests/secret.json",
-        "tests/test.sh",
-    )
-    assert rebuilt == surface
-    assert task_verifier_surface_commitment(rebuilt) == task_verifier_surface_commitment(surface)
-
-    with pytest.raises(ValidationError, match="sealed verifier files"):
-        TaskVerifierSurface(
-            task_id="civil/drainage/no-sealed-binding",
-            task_revision=_sha("revision"),
-            source_task_package_sha256=_sha("public-package"),
-            files=surface.files,
-        )
-
-
-def test_task_verifier_scope_is_order_independent_and_rejects_duplicate_tasks() -> None:
-    surfaces = tuple(
-        TaskVerifierSurface(
-            task_id=task_id,
-            task_revision=_sha(f"revision:{task_id}"),
-            source_task_package_sha256=_sha(f"public:{task_id}"),
-            files=(
-                TaskVerifierFileInventoryEntry(
-                    path="tests/test.sh",
-                    sha256=_sha(f"test:{task_id}"),
-                    byte_size=32,
-                    role="verifier_only",
-                ),
-            ),
-        )
-        for task_id in ("civil/drainage/beta", "civil/drainage/alpha")
-    )
-    scope = TaskVerifierSurfaceScope(
-        scope_id="verifiers.phase9.1a",
-        task_surfaces=surfaces,
-    )
-    rebuilt = TaskVerifierSurfaceScope(
-        scope_id=scope.scope_id,
-        task_surfaces=tuple(reversed(surfaces)),
-    )
-
-    assert tuple(surface.task_id for surface in scope.task_surfaces) == (
-        "civil/drainage/alpha",
-        "civil/drainage/beta",
-    )
-    assert rebuilt == scope
-    scope_commitment = task_verifier_surface_commitment(scope)
-    assert _plan(task_verifier_sha256=scope_commitment).task_verifier_sha256 == scope_commitment
-
-    with pytest.raises(ValidationError, match="task identities must be unique"):
-        TaskVerifierSurfaceScope(
-            scope_id=scope.scope_id,
-            task_surfaces=(scope.task_surfaces[0], scope.task_surfaces[0]),
-        )
-
-
-def test_public_refs_do_not_expose_hidden_manifest_or_execution_details() -> None:
-    plan = _plan()
-    acceptance = plan.acceptance_critic
-    critic_payload = acceptance.ref.model_dump(mode="json")
-    plan_payload = plan.ref.model_dump(mode="json")
-    public_commitment = acceptance.acceptance_manifest_commitment
-    assert public_commitment is not None
-    public_commitment_payload = public_commitment.model_dump(mode="json")
-
-    assert CriticSpec.model_validate(acceptance.model_dump(mode="json")) == acceptance
-    assert EvaluationPlanRef.model_validate(plan_payload) == plan.ref
-    assert acceptance.case_manifest_sha256 not in str(critic_payload)
-    assert acceptance.rubric_policy_sha256 not in str(critic_payload)
-    assert acceptance.execution_principal_id not in str(critic_payload)
-    assert acceptance.case_manifest_sha256 not in str(plan_payload)
-    assert "case_manifest_sha256" not in public_commitment_payload
-    assert "scoring_policy_sha256" not in public_commitment_payload
+    verifier_scope = TaskVerifierSurfaceScope(scope_id="verifiers", task_surfaces=(surface,))
+    assert task_verifier_surface_commitment(verifier_scope) == task_verifier_surface_commitment(verifier_scope)

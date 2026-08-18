@@ -8,7 +8,8 @@ from typing import Literal, Self
 
 from pydantic import Field, JsonValue, PositiveInt, field_validator, model_validator
 
-from aec_bench.contracts.authority import AuthorityPrincipal, AuthorityPrincipalKind, EvaluationPlanIdentity
+from aec_bench.contracts.authority import AuthorityPrincipal, AuthorityPrincipalKind
+from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     canonical_json_sha256,
@@ -255,7 +256,7 @@ class StandingMonitorPlan(LegacyContentAddressedModel):
     schema_version: Literal["aecbench.standing-monitor-plan.v1"] = "aecbench.standing-monitor-plan.v1"
     monitor_id: NonEmptyStr
     version: NonEmptyStr
-    evaluation_plan: EvaluationPlanIdentity
+    evaluation_regime: EvaluationRegimeRef
     canaries: tuple[CanaryCommitment, ...] = Field(min_length=1)
     forbidden_flow_rules: tuple[ForbiddenFlowRule, ...] = ()
     basis_replay_requirements: tuple[BasisReplayRequirement, ...] = ()
@@ -307,7 +308,7 @@ class StandingMonitorPlan(LegacyContentAddressedModel):
 
 
 class StandingMonitorPolicy(LegacyContentAddressedModel):
-    """Static production monitor surface pinned by an evaluation plan."""
+    """Static production monitor surface pinned by an evaluation regime."""
 
     schema_version: Literal["aecbench.standing-monitor-policy.v2"] = "aecbench.standing-monitor-policy.v2"
     monitor_id: NonEmptyStr
@@ -356,7 +357,7 @@ class CycleMonitorPlan(LegacyContentAddressedModel):
     schema_version: Literal["aecbench.cycle-monitor-plan.v2"] = "aecbench.cycle-monitor-plan.v2"
     cycle_id: NonEmptyStr
     cycle_index: int = Field(ge=0)
-    evaluation_plan: EvaluationPlanIdentity
+    evaluation_regime: EvaluationRegimeRef
     standing_policy_sha256: str
     assurance_snapshot_sha256: str
     basis_replay_requirements: tuple[BasisReplayRequirement, ...] = ()

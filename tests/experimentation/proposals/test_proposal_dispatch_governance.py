@@ -525,7 +525,7 @@ def _materialize_dispatch_fixture(
         coordinates=(evaluation_coordinate,),
         kernel_ref=compiled.compilation.kernel_ref,
         fixed_harness_ref=compiled.fixed_harness.ref,
-        evaluation_plan_ref=governed.freeze.evaluation_plan_ref,
+        evaluation_regime_ref=governed.freeze.evaluation_regime_ref,
         aggregate_budget=compiled.fixed_harness.budget,
     )
     execution_assignment = next(

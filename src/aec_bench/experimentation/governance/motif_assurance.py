@@ -12,9 +12,9 @@ from aec_bench.contracts.authority import (
     AuthorityAction,
     AuthorityDecision,
     BasisKind,
-    CriticGenerationIdentity,
     MotifPromotionQualification,
 )
+from aec_bench.contracts.evaluation_refs import CriticRef
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     KernelRef,
@@ -82,7 +82,7 @@ class MotifLifecycleEvent(LegacyContentAddressedModel):
     revalidation_basis_sha256: str | None = None
     kernel_ref: KernelRef
     kernel_abi_sha256: str
-    critic_generation: CriticGenerationIdentity | None = None
+    critic: CriticRef | None = None
     model_generation_sha256: str | None = None
     tool_generation_sha256: str | None = None
     applicability_sha256: str
@@ -119,7 +119,7 @@ class MotifAssuranceEntry(FrozenStrictModel):
     authority_event_sha256: str
     kernel_ref: KernelRef
     kernel_abi_sha256: str
-    critic_generation: CriticGenerationIdentity | None = None
+    critic: CriticRef | None = None
     model_generation_sha256: str | None = None
     tool_generation_sha256: str | None = None
     applicability_sha256: str
@@ -397,7 +397,7 @@ def derive_motif_assurance_snapshot(
             authority_event_sha256=event.authority_event_sha256,
             kernel_ref=event.kernel_ref,
             kernel_abi_sha256=event.kernel_abi_sha256,
-            critic_generation=event.critic_generation,
+            critic=event.critic,
             model_generation_sha256=event.model_generation_sha256,
             tool_generation_sha256=event.tool_generation_sha256,
             applicability_sha256=event.applicability_sha256,
@@ -483,7 +483,7 @@ def assert_assured_motif_selection_current(
         }
         or authority.subject_sha256 != selected.motif_subject_sha256
         or authority.kernel_ref != entry.kernel_ref
-        or (authority.critic_generation is not None and authority.critic_generation != entry.critic_generation)
+        or (authority.critic is not None and authority.critic != entry.critic)
     ):
         raise MotifAssuranceAuthorityError(
             "stale authority basis: exact assurance authority no longer scopes the selected subject"
@@ -577,7 +577,7 @@ def _apply_reusable_motif_promotion(
         or authority.action is not AuthorityAction.MOTIF_PROMOTION
         or authority.subject_sha256 != subject_sha256
         or authority.kernel_ref != qualification.kernel_ref
-        or authority.critic_generation != qualification.critic_generation
+        or authority.critic != qualification.critic
         or qualification.provisional_motif_sha256 != source.motif_sha256
         or qualification.motif_subject_sha256 != subject_sha256
         or qualification.kernel_abi_sha256 != source.kernel_abi_sha256
@@ -637,11 +637,11 @@ def _apply_transfer_validated_motif_promotion(
         or authority.subject_sha256 != subject_sha256
         or authority.kernel_ref != assurance_entry.kernel_ref
         or assurance_entry.kernel_abi_sha256 != source.kernel_abi_sha256
-        or authority.critic_generation != assurance_entry.critic_generation
+        or authority.critic != assurance_entry.critic
     ):
         raise MotifAssuranceAuthorityError(
             "transfer-validated promotion requires exact granted motif_state_change "
-            "authority for the assured subject, kernel, and critic generation"
+            "authority for the assured subject, kernel, and regime critic"
         )
     return apply_authorized_motif_promotion(
         source,
@@ -672,8 +672,8 @@ def append_authorized_motif_event(
         raise MotifAssuranceAuthorityError("motif lifecycle authority subject does not match the stable motif subject")
     if authority.kernel_ref != selected_event.kernel_ref:
         raise MotifAssuranceAuthorityError("motif lifecycle authority and event bind different kernels")
-    if authority.critic_generation is not None and authority.critic_generation != selected_event.critic_generation:
-        raise MotifAssuranceAuthorityError("motif lifecycle authority and event bind different critic generations")
+    if authority.critic is not None and authority.critic != selected_event.critic:
+        raise MotifAssuranceAuthorityError("motif lifecycle authority and event bind different regime critics")
     return selected_ledger.append(selected_event)
 
 

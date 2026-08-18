@@ -49,8 +49,9 @@ particular:
   current trial inputs, outputs, authority evidence, provider evidence, and
   typed extensions;
 - the dataset and trial owners use schema 2 with exact source and artifact
-  references; evaluation and run-bundle contracts keep their supported shapes
-  until their owning changes are implemented;
+  references; an evaluation regime uses one schema-1 envelope and one
+  `ArtifactRef` as its compatibility identity; run-bundle contracts keep their
+  supported shapes until their owning changes are implemented;
 - `RunManifest` owns shared run identity and `TrialRecord` keeps
   execution, evaluation, and evidence status separate;
 - current DeepSeek evidence v2 and the installed World actor protocols remain

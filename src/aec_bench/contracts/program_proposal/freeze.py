@@ -15,11 +15,8 @@ from pydantic import (
 
 from aec_bench.contracts.authority import OperatorAuthority, OperatorRole
 from aec_bench.contracts.evaluation_generation.cohort import EvaluationCohortBinding
-from aec_bench.contracts.evaluation_plane import (
-    CandidateManifestScope,
-    EvaluationPlanRef,
-    candidate_manifest_scope_commitment,
-)
+from aec_bench.contracts.evaluation_plane import CandidateManifestScope
+from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import validate_sha256
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
@@ -42,8 +39,7 @@ from aec_bench.contracts.validators import NonEmptyStr
 class ProposalFreezeBindings(Protocol):
     """Structural fields used by the current proposal-freeze validators."""
 
-    evaluation_plan_candidate_manifest_sha256: str
-    evaluation_plan_candidate_scope: CandidateManifestScope | None
+    evaluation_assignment_candidate_scope: CandidateManifestScope | None
     operator_authority: OperatorAuthority
     leakage_audit: DecompositionLeakageAudit
     problem_view: DecompositionProblemView
@@ -59,9 +55,8 @@ class ProposalFreeze(LegacyContentAddressedModel):
 
     schema_version: Literal["aecbench.evaluation-proposal-freeze.v3"] = "aecbench.evaluation-proposal-freeze.v3"
     freeze_id: NonEmptyStr
-    evaluation_plan_ref: EvaluationPlanRef
-    evaluation_plan_candidate_manifest_sha256: str
-    evaluation_plan_candidate_scope: CandidateManifestScope | None = None
+    evaluation_regime_ref: EvaluationRegimeRef
+    evaluation_assignment_candidate_scope: CandidateManifestScope | None = None
     structural_split_sha256: str
     selected_structural_item_sha256: str | None = None
     evaluation_cohort: EvaluationCohortBinding | None = None
@@ -81,7 +76,6 @@ class ProposalFreeze(LegacyContentAddressedModel):
     late_candidates_permitted: Literal[False]
 
     @field_validator(
-        "evaluation_plan_candidate_manifest_sha256",
         "structural_split_sha256",
         "selected_review_lineage_id",
         "proposal_policy_sha256",
@@ -120,7 +114,7 @@ class ProposalFreeze(LegacyContentAddressedModel):
         if not isinstance(payload, dict):
             raise TypeError("evaluation proposal freeze serialization must produce an object")
         for field_name in (
-            "evaluation_plan_candidate_scope",
+            "evaluation_assignment_candidate_scope",
             "selected_structural_item_sha256",
             "evaluation_cohort",
             "execution_profile_sha256",
@@ -164,15 +158,11 @@ def _validate_freeze_problem_view_bindings(
 def _validate_freeze_evaluation_manifest_binding(
     freeze: ProposalFreezeBindings,
 ) -> None:
-    scope = freeze.evaluation_plan_candidate_scope
+    scope = freeze.evaluation_assignment_candidate_scope
     if scope is None:
-        if freeze.evaluation_plan_candidate_manifest_sha256 != freeze.candidate_manifest.content_sha256:
-            raise ValueError("evaluation plan candidate manifest identity does not match the freeze")
         return
-    if freeze.evaluation_plan_candidate_manifest_sha256 != candidate_manifest_scope_commitment(scope):
-        raise ValueError("evaluation plan candidate scope identity does not match the freeze")
     if freeze.candidate_manifest.content_sha256 not in scope.candidate_manifest_sha256s:
-        raise ValueError("candidate manifest is not a member of the evaluation plan candidate scope")
+        raise ValueError("candidate manifest is not a member of the evaluation assignment candidate scope")
 
 
 def _validate_freeze_candidate_policy_bindings(

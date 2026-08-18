@@ -17,7 +17,6 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipalKind,
     BasisKind,
     BasisReference,
-    CriticGenerationIdentity,
     HumanAuthorityApproval,
     TaintLabel,
 )
@@ -31,6 +30,7 @@ from aec_bench.contracts.evaluation_outcome import (
     IntegrityEvaluation,
     ResourceCost,
 )
+from aec_bench.contracts.evaluation_refs import CriticRef, CriticRole
 from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
@@ -39,6 +39,7 @@ from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedgerIntegrityError,
     StoredBasis,
 )
+from tests.support.evaluation_regimes import fake_regime_ref
 
 
 def _sha(label: str) -> str:
@@ -98,32 +99,32 @@ def _critic_release_event(
     return AuthorityEvent(
         event_id=event_id,
         principal=principal,
-        action=AuthorityAction.RELEASE_CRITIC_GENERATION,
+        action=AuthorityAction.RELEASE_CRITIC,
         decision=AuthorityDecision.GRANTED,
         subject_id="critic.acceptance.v2",
         subject_sha256=_sha("critic.acceptance.v2"),
         basis=(basis,),
         kernel_ref=_kernel_ref(),
-        critic_generation=CriticGenerationIdentity(
+        critic=CriticRef(
+            regime=fake_regime_ref(),
             critic_id="critic.acceptance",
-            version="2",
-            compatibility_generation="critic-generation-v2",
+            role=CriticRole.ACCEPTANCE,
         ),
         reasons=(reason,),
-        revalidation_triggers=("critic_generation_change",),
+        revalidation_triggers=("critic_change",),
     )
 
 
 def _approval_bytes(
     *,
     approval_id: str,
-    reason: str = "approved exact acceptance critic generation",
+    reason: str = "approved exact acceptance regime critic",
     subject_sha256: str | None = None,
 ) -> bytes:
     approval = HumanAuthorityApproval(
         approval_id=approval_id,
         principal=_principal("human.theo", AuthorityPrincipalKind.HUMAN),
-        action=AuthorityAction.RELEASE_CRITIC_GENERATION,
+        action=AuthorityAction.RELEASE_CRITIC,
         subject_id="critic.acceptance.v2",
         subject_sha256=subject_sha256 or _sha("critic.acceptance.v2"),
         approved=True,
@@ -448,7 +449,7 @@ def test_human_critic_transition_requires_matching_host_observed_human_basis(
         artifact_id="approval.wrong-subject",
         content=_approval_bytes(
             approval_id="approval.wrong-subject",
-            subject_sha256=_sha("different-critic-generation"),
+            subject_sha256=_sha("different-regime-critic"),
         ),
         kind=BasisKind.HUMAN_APPROVAL,
         producer=human,

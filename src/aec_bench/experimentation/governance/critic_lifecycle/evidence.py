@@ -1,7 +1,6 @@
 # ABOUTME: Resolves and persists exact authority, critic, outcome, and lifecycle evidence.
 # ABOUTME: Centralizes governed authority, canonical-byte, historical-coverage, and ledger replay checks.
 
-
 from __future__ import annotations
 
 import json
@@ -18,13 +17,10 @@ from aec_bench.contracts.authority import (
     TaintLabel,
 )
 from aec_bench.contracts.evaluation_outcome import EvaluationOutcome
-from aec_bench.contracts.evaluation_plane import (
-    CriticRef,
-    CriticRole,
-    CriticSpec,
-    critic_spec_commitment,
-)
+from aec_bench.contracts.evaluation_plane import Critic, EvaluationRegime
+from aec_bench.contracts.evaluation_refs import CriticRef, CriticRole
 from aec_bench.contracts.harness_kernel import FrozenStrictModel
+from aec_bench.evaluation.regime import validate_evaluation_regime_ref
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerIntegrityError,
@@ -32,7 +28,7 @@ from aec_bench.experimentation.governance.authority_ledger import (
     StoredBasis,
 )
 
-from .contracts import CriticGenerationRetirement, StoredCriticGenerationRetirement
+from .contracts import CriticRetirement, StoredCriticRetirement, critic_retirement_commitment
 
 _PROMOTION_ACTIONS = frozenset(
     {
@@ -42,12 +38,12 @@ _PROMOTION_ACTIONS = frozenset(
 )
 
 
-def _critic_subject_id(critic_spec: CriticSpec) -> str:
-    return f"{critic_spec.critic_id}@{critic_spec.version}"
+def _critic_subject_id(critic: CriticRef) -> str:
+    return f"{critic.regime.regime_id}:{critic.critic_id}"
 
 
-def _reveal_subject_id(critic_spec: CriticSpec) -> str:
-    return f"{_critic_subject_id(critic_spec)}#acceptance-manifest-reveal"
+def _reveal_subject_id(critic: CriticRef) -> str:
+    return f"{_critic_subject_id(critic)}#acceptance-manifest-reveal"
 
 
 def _host_policy() -> AuthorityPrincipal:
@@ -64,8 +60,8 @@ def _host_runtime() -> AuthorityPrincipal:
     )
 
 
-def _require_acceptance_critic(critic_spec: CriticSpec) -> CriticSpec:
-    selected = CriticSpec.model_validate(critic_spec.model_dump(mode="python"))
+def _require_acceptance_critic(critic: Critic) -> Critic:
+    selected = Critic.model_validate(critic.model_dump(mode="python"))
     if selected.role is not CriticRole.ACCEPTANCE or selected.acceptance_manifest_commitment is None:
         raise AuthorityLedgerIntegrityError("critic lifecycle operation requires an escrowed acceptance critic")
     return selected
@@ -132,21 +128,21 @@ def _require_event_human_authority(
     raise AuthorityLedgerIntegrityError("critic lifecycle authority event lacks matching host-observed human authority")
 
 
-def _observe_critic_spec(
+def _observe_critic(
     *,
     ledger: AuthorityLedger,
-    critic_spec: CriticSpec,
+    critic: Critic,
     event_id: str,
     operation_id: str,
 ) -> StoredBasis:
     return ledger.observe_model_basis(
-        kind=BasisKind.CRITIC_SPEC,
+        kind=BasisKind.CRITIC,
         artifact_id=f"critic-spec.{event_id}",
-        model=critic_spec,
+        model=critic,
         producer=_host_policy(),
         producer_process_id="aecbench.critic-governance",
         observed_by=_host_runtime(),
-        channel="critic-generation",
+        channel="regime-critic",
         operation_id=operation_id,
         invocation_id=event_id,
         operation_taint=(TaintLabel.RUNTIME_OBSERVED,),
@@ -221,7 +217,8 @@ def _resolve_release_authority(
     *,
     ledger: AuthorityLedger,
     stored: StoredAuthorityEvent,
-    critic_spec: CriticSpec,
+    critic: Critic,
+    critic_ref: CriticRef,
 ) -> StoredAuthorityEvent:
     released = _resolve_exact_event(
         ledger=ledger,
@@ -229,11 +226,11 @@ def _resolve_release_authority(
     )
     event = released.event
     if (
-        event.action is not AuthorityAction.RELEASE_CRITIC_GENERATION
+        event.action is not AuthorityAction.RELEASE_CRITIC
         or event.decision is not AuthorityDecision.GRANTED
-        or event.subject_id != _critic_subject_id(critic_spec)
-        or event.subject_sha256 != critic_spec_commitment(critic_spec)
-        or event.critic_generation != critic_spec.ref.authority_identity
+        or event.subject_id != _critic_subject_id(critic_ref)
+        or event.subject_sha256 != critic_ref.regime.artifact.sha256
+        or event.critic != critic_ref
     ):
         raise AuthorityLedgerIntegrityError("release authority does not match the exact critic subject")
     _require_event_human_authority(
@@ -243,9 +240,21 @@ def _resolve_release_authority(
     if not _event_has_exact_critic_basis(
         ledger=ledger,
         event=event,
-        critic_spec=critic_spec,
+        critic=critic,
     ):
         raise AuthorityLedgerIntegrityError("release authority is missing the exact critic spec basis")
+    _, regime = _find_evidence_model(
+        ledger=ledger,
+        references=event.basis,
+        model_type=EvaluationRegime,
+        label="evaluation regime",
+    )
+    try:
+        validate_evaluation_regime_ref(regime, critic_ref.regime)
+    except ValueError as error:
+        raise AuthorityLedgerIntegrityError(str(error)) from error
+    if critic not in regime.critics:
+        raise AuthorityLedgerIntegrityError("release authority critic does not belong to its evaluation regime")
     return released
 
 
@@ -279,7 +288,7 @@ def _resolve_promotion_authorities(
     *,
     ledger: AuthorityLedger,
     events: tuple[StoredAuthorityEvent, ...],
-    critic_spec: CriticSpec,
+    critic_ref: CriticRef,
 ) -> tuple[tuple[StoredAuthorityEvent, ...], tuple[str, ...]]:
     resolved = tuple(
         sorted(
@@ -301,17 +310,15 @@ def _resolve_promotion_authorities(
         if (
             event.action not in _PROMOTION_ACTIONS
             or event.decision is not AuthorityDecision.GRANTED
-            or event.critic_generation != critic_spec.ref.authority_identity
+            or event.critic != critic_ref
         ):
-            raise AuthorityLedgerIntegrityError(
-                "historical promotion authority does not bind the exact critic generation"
-            )
+            raise AuthorityLedgerIntegrityError("historical promotion authority does not bind the exact regime critic")
     return resolved, digests
 
 
 def _require_historical_coverage(
     *,
-    retirement: CriticGenerationRetirement,
+    retirement: CriticRetirement,
     evaluation_outcome_sha256s: tuple[str, ...],
     promotion_authority_event_sha256s: tuple[str, ...],
 ) -> None:
@@ -325,12 +332,14 @@ def _require_historical_coverage(
 
 
 def _require_retirement_for_critic(
-    retirement: CriticGenerationRetirement,
-    critic_spec: CriticSpec,
+    retirement: CriticRetirement,
+    critic: Critic,
+    critic_ref: CriticRef,
 ) -> None:
     if (
-        retirement.retirement_id != f"{_critic_subject_id(critic_spec)}#retirement"
-        or retirement.critic_generation != critic_spec.ref
+        retirement.retirement_id != f"{_critic_subject_id(critic_ref)}#retirement"
+        or retirement.critic != critic_ref
+        or (critic.critic_id, critic.role) != (critic_ref.critic_id, critic_ref.role)
     ):
         raise AuthorityLedgerIntegrityError("critic retirement does not match the exact critic subject")
 
@@ -339,24 +348,24 @@ def _load_exact_retirement(
     *,
     ledger: AuthorityLedger,
     stored: StoredAuthorityEvent,
-) -> StoredCriticGenerationRetirement:
+) -> StoredCriticRetirement:
     authority = _resolve_exact_event(
         ledger=ledger,
         stored=stored,
     )
     event = authority.event
-    if event.action is not AuthorityAction.RETIRE_CRITIC_GENERATION or event.decision is not AuthorityDecision.GRANTED:
+    if event.action is not AuthorityAction.RETIRE_CRITIC or event.decision is not AuthorityDecision.GRANTED:
         raise AuthorityLedgerIntegrityError("acceptance reveal requires exact retirement authority")
     retirement_basis, retirement = _find_evidence_model(
         ledger=ledger,
         references=event.basis,
-        model_type=CriticGenerationRetirement,
-        label="critic generation retirement",
+        model_type=CriticRetirement,
+        label="critic retirement",
     )
     if (
         event.subject_id != retirement.retirement_id
-        or event.subject_sha256 != retirement.content_sha256
-        or event.critic_generation != retirement.critic_generation.authority_identity
+        or event.subject_sha256 != critic_retirement_commitment(retirement)
+        or event.critic != retirement.critic.authority_identity
     ):
         raise AuthorityLedgerIntegrityError("retirement authority does not match the exact critic subject")
     _require_event_human_authority(
@@ -366,14 +375,15 @@ def _load_exact_retirement(
     critic = _event_exact_critic(
         ledger=ledger,
         event=event,
-        critic_generation=retirement.critic_generation,
+        critic_ref=retirement.critic,
     )
-    _require_retirement_for_critic(retirement, critic)
+    _require_retirement_for_critic(retirement, critic, retirement.critic)
     release = ledger.resolve_authority_event_by_content(retirement.release_authority_event_sha256)
     released = _resolve_release_authority(
         ledger=ledger,
         stored=release,
-        critic_spec=critic,
+        critic=critic,
+        critic_ref=retirement.critic,
     )
     if not _event_has_exact_authority_basis(
         ledger=ledger,
@@ -388,14 +398,14 @@ def _load_exact_retirement(
     _, promotion_sha256s = _event_promotion_authorities(
         ledger=ledger,
         event=event,
-        critic_spec=critic,
+        critic_ref=retirement.critic,
     )
     if (
         retirement.evaluation_outcome_sha256s != outcome_sha256s
         or retirement.promotion_authority_event_sha256s != promotion_sha256s
     ):
         raise AuthorityLedgerIntegrityError("retirement authority is missing exact declared historical coverage")
-    return StoredCriticGenerationRetirement(
+    return StoredCriticRetirement(
         retirement=retirement,
         evidence=retirement_basis,
         authority_event=authority,
@@ -406,13 +416,13 @@ def _event_has_exact_critic_basis(
     *,
     ledger: AuthorityLedger,
     event: AuthorityEvent,
-    critic_spec: CriticSpec,
+    critic: Critic,
 ) -> bool:
     return any(
-        resolved == critic_spec
+        resolved == critic
         for reference in event.basis
-        if reference.kind is BasisKind.CRITIC_SPEC
-        for _, resolved in (ledger.resolve_model_basis(reference, CriticSpec),)
+        if reference.kind is BasisKind.CRITIC
+        for _, resolved in (ledger.resolve_model_basis(reference, Critic),)
     )
 
 
@@ -434,14 +444,14 @@ def _event_exact_critic(
     *,
     ledger: AuthorityLedger,
     event: AuthorityEvent,
-    critic_generation: CriticRef,
-) -> CriticSpec:
+    critic_ref: CriticRef,
+) -> Critic:
     critics = tuple(
-        critic
+        resolved_critic
         for reference in event.basis
-        if reference.kind is BasisKind.CRITIC_SPEC
-        for _, critic in (ledger.resolve_model_basis(reference, CriticSpec),)
-        if critic.ref == critic_generation
+        if reference.kind is BasisKind.CRITIC
+        for _, resolved_critic in (ledger.resolve_model_basis(reference, Critic),)
+        if (resolved_critic.critic_id, resolved_critic.role) == (critic_ref.critic_id, critic_ref.role)
     )
     if len(critics) != 1:
         raise AuthorityLedgerIntegrityError("critic lifecycle authority requires one exact critic spec basis")
@@ -464,7 +474,7 @@ def _event_promotion_authorities(
     *,
     ledger: AuthorityLedger,
     event: AuthorityEvent,
-    critic_spec: CriticSpec,
+    critic_ref: CriticRef,
 ) -> tuple[tuple[StoredAuthorityEvent, ...], tuple[str, ...]]:
     promotions: list[StoredAuthorityEvent] = []
     for reference in event.basis:
@@ -484,7 +494,7 @@ def _event_promotion_authorities(
     return _resolve_promotion_authorities(
         ledger=ledger,
         events=tuple(promotions),
-        critic_spec=critic_spec,
+        critic_ref=critic_ref,
     )
 
 

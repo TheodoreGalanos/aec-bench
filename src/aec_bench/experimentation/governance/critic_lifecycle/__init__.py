@@ -3,20 +3,20 @@
 
 from .contracts import (
     AcceptanceAuditClosure,
-    CriticGenerationRetirement,
+    CriticRetirement,
     StoredAcceptanceManifestReveal,
-    StoredCriticGenerationRetirement,
+    StoredCriticRetirement,
 )
 from .release import (
-    assert_critic_generation_released,
-    release_acceptance_critic_generation,
-    release_critic_generation,
+    assert_critic_released,
+    release_acceptance_critic,
+    release_critic,
 )
 from .retirement import (
-    load_critic_generation_retirement,
-    prepare_critic_generation_retirement,
-    retire_acceptance_critic_generation,
-    retire_critic_generation,
+    load_critic_retirement,
+    prepare_critic_retirement,
+    retire_acceptance_critic,
+    retire_critic,
 )
 from .reveal import (
     assert_acceptance_audit_closed,
@@ -27,18 +27,18 @@ from .reveal import (
 
 __all__ = [
     "AcceptanceAuditClosure",
-    "CriticGenerationRetirement",
+    "CriticRetirement",
     "StoredAcceptanceManifestReveal",
-    "StoredCriticGenerationRetirement",
+    "StoredCriticRetirement",
     "assert_acceptance_audit_closed",
-    "assert_critic_generation_released",
+    "assert_critic_released",
     "load_acceptance_manifest_reveal",
-    "load_critic_generation_retirement",
+    "load_critic_retirement",
     "prepare_acceptance_manifest_reveal",
-    "prepare_critic_generation_retirement",
-    "release_acceptance_critic_generation",
-    "release_critic_generation",
-    "retire_acceptance_critic_generation",
-    "retire_critic_generation",
+    "prepare_critic_retirement",
+    "release_acceptance_critic",
+    "release_critic",
+    "retire_acceptance_critic",
+    "retire_critic",
     "reveal_retired_acceptance_manifest",
 ]

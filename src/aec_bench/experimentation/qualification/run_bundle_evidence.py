@@ -27,7 +27,7 @@ from aec_bench.contracts.authority import (
     BasisKind,
     TaintLabel,
 )
-from aec_bench.contracts.evaluation_plane import EvaluationPlanRef
+from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     validate_sha256,
@@ -70,7 +70,7 @@ class MetaHarnessStudyContext(FrozenStrictModel):
     repair_iteration: NonNegativeInt | None = None
     repair_decision: ArtifactReference | None = None
     motif_ids: tuple[NonEmptyStr, ...] = ()
-    evaluation_plan_ref: EvaluationPlanRef | None = None
+    evaluation_regime_ref: EvaluationRegimeRef | None = None
 
     @field_validator("harness_generator_sha256", "program_generator_sha256")
     @classmethod
@@ -378,7 +378,7 @@ def record_scored_import_authority(
         reasons=("exact imported trials and invocation receipt persisted",),
         revalidation_triggers=(
             "basis_replay_due",
-            ("evaluation_plan_change" if study.evaluation_plan_ref is not None else "legacy_evidence_boundary"),
+            ("evaluation_regime_change" if study.evaluation_regime_ref is not None else "legacy_evidence_boundary"),
         ),
     )
     authority_event = ledger.issue_authority_event(event)

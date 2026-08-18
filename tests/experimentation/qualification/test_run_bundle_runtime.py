@@ -12,7 +12,6 @@ import yaml  # type: ignore[import-untyped]
 
 import aec_bench.harness.kernel_catalogue as kernel_catalogue
 from aec_bench.contracts.authority import AuthorityAction
-from aec_bench.contracts.evaluation_plane import EvaluationPlanRef
 from aec_bench.contracts.execution_program import (
     ActionNode,
     ExecutionProgram,
@@ -51,6 +50,7 @@ from tests.support.adaptive_harness import (
     runtime_attestation_for_harbor_agent,
     write_adaptive_task,
 )
+from tests.support.evaluation_regimes import fake_regime_ref
 
 
 class WritingHarborExecutor:
@@ -207,10 +207,7 @@ def test_execute_run_bundle_crosses_program_harbor_import_and_lineage_boundary(t
         tmp_path / "authority",
         candidate_roots=(tmp_path / "meta-harness-artifacts",),
     )
-    evaluation_plan_ref = EvaluationPlanRef(
-        plan_id="evaluation-plan.stage-9",
-        evaluation_generation="evaluation-generation-1",
-    )
+    evaluation_regime_ref = fake_regime_ref(regime_id="evaluation-regime.stage-9")
     registry = default_kernel_registry()
     batch_operation = bundle.harness.program_surface.operation("run_batch.v1")
     batch_definition = registry.operation_definition("run_batch.v1")
@@ -237,7 +234,7 @@ def test_execute_run_bundle_crosses_program_harbor_import_and_lineage_boundary(t
             split="discovery",
             execution_seed=91,
             motif_ids=("motif.serial-review",),
-            evaluation_plan_ref=evaluation_plan_ref,
+            evaluation_regime_ref=evaluation_regime_ref,
         ),
         executor=executor,
         authority_ledger=authority_ledger,
@@ -262,7 +259,7 @@ def test_execute_run_bundle_crosses_program_harbor_import_and_lineage_boundary(t
     assert provenance.execution_seed == 91
     assert provenance.execution_seed_semantics == "paired_repetition_label_only"
     assert provenance.motif_ids == ("motif.serial-review",)
-    assert provenance.evaluation_plan_ref == evaluation_plan_ref
+    assert provenance.evaluation_regime_ref == evaluation_regime_ref
     assert record.cost is not None
     assert record.cost.model_calls == 1
     assert record.cost.cache_read_tokens == 0
@@ -284,7 +281,7 @@ def test_execute_run_bundle_crosses_program_harbor_import_and_lineage_boundary(t
     assert candidate_payload["bundle"]["bundle_id"] == bundle.bundle_id
     assert "content_sha256" not in candidate_payload["bundle"]
     assert "target_settings" not in candidate_payload
-    assert evaluation_plan_ref.plan_id not in execution.candidate_manifest.path.read_text(encoding="utf-8")
+    assert evaluation_regime_ref.regime_id not in execution.candidate_manifest.path.read_text(encoding="utf-8")
 
     receipt_artifact = invocation.receipt
     assert receipt_artifact.path.parent.name == receipt_artifact.reference.sha256
@@ -297,7 +294,7 @@ def test_execute_run_bundle_crosses_program_harbor_import_and_lineage_boundary(t
     assert receipt.fanout_index is None
     assert receipt.experiment_id == invocation.experiment_id
     assert receipt.harbor_config.path.endswith("/harbor.yaml")
-    assert evaluation_plan_ref.plan_id not in Path(receipt.harbor_config.path).read_text(encoding="utf-8")
+    assert evaluation_regime_ref.regime_id not in Path(receipt.harbor_config.path).read_text(encoding="utf-8")
     assert receipt.job_dir == str(invocation.job_dir.resolve())
     assert {item.relative_path for item in receipt.job_files} == {
         path.relative_to(invocation.job_dir).as_posix() for path in invocation.job_dir.rglob("*") if path.is_file()
