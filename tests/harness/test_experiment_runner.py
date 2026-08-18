@@ -7,6 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from aec_bench.contracts.artifacts import ArtifactRef
+from aec_bench.contracts.dataset import BundleDatasetRef, dataset_reference_key
 from aec_bench.contracts.experiment_manifest import (
     AgentConfig,
     ComputeConfig,
@@ -91,6 +93,42 @@ def test_runner_transforms_records_before_validation_and_persistence(tmp_path: P
     assert transformed_trial_ids == [record.trial_id]
     saved = json.loads(result.output_paths[0].read_text(encoding="utf-8"))
     assert saved["dataset_id"] == "run-bundle:bundle-sha"
+
+
+def test_runner_passes_only_the_exact_dataset_reference_to_import(tmp_path: Path, monkeypatch) -> None:
+    reference = BundleDatasetRef(
+        dataset_id="core",
+        artifact=ArtifactRef(
+            artifact_id="sha256:" + "a" * 64,
+            sha256="a" * 64,
+            size_bytes=1,
+            media_type="application/vnd.aec-bench.dataset-bundle+tar+gzip",
+        ),
+    )
+    manifest = ExperimentManifest(
+        experiment_id="exact-dataset-run",
+        name="Exact dataset run",
+        tasks=TaskSelector(dataset=reference),
+        agents=[AgentConfig(name="agent", adapter="tool_loop", model="test-model")],
+        compute=ComputeConfig(backend="docker"),
+    )
+    captured: dict[str, object] = {}
+
+    def capture_import(**kwargs):  # noqa: ANN003, ANN202
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(experiment_runner_module, "import_harbor_job", capture_import)
+    monkeypatch.setattr(HarborImportExperimentRunner, "_selected_tasks", lambda _self, _manifest: [])
+    runner = HarborImportExperimentRunner(
+        repo_root=tmp_path,
+        tasks_root=tmp_path / "tasks",
+        ledger_root=tmp_path / "ledger",
+    )
+
+    runner.import_harbor_job(job_dir=tmp_path / "job", manifest=manifest)
+
+    assert captured["dataset_id"] == dataset_reference_key(reference)
 
 
 def test_runner_returns_replayable_paths_for_identical_duplicate_records(

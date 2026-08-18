@@ -3,46 +3,36 @@
 
 from __future__ import annotations
 
-import json
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from textual.app import App
 from textual.widgets import DataTable, Sparkline, Static
 
+from aec_bench.contracts.dataset import DatasetManifest, DatasetTaskEntry
+from aec_bench.dataset.storage import write_manifest
 from aec_bench.tui.screens.datasets import DatasetsScreen
 
 
 def _write_manifest(datasets_root: Path, name: str, version: str, task_count: int = 3) -> None:
-    """Write a minimal valid DatasetManifest to the expected directory."""
-    manifest_dir = datasets_root / name / version
-    manifest_dir.mkdir(parents=True, exist_ok=True)
-    tasks = [
-        {
-            "task_id": f"electrical/voltage-drop/inst-{i}",
-            "task_path": f"tasks/electrical/voltage-drop/inst-{i}",
-            "content_hash": f"hash-{i:04d}",
-            "domain": "electrical",
-            "difficulty": "medium",
-            "tags": ["voltage"],
-        }
-        for i in range(task_count)
-    ]
-    manifest = {
-        "name": name,
-        "version": version,
-        "content_hash": "abc123",
-        "description": {
-            "summary": f"Test dataset {name}",
-            "domains": ["electrical"],
-            "difficulty_distribution": {"easy": 1, "medium": 1, "hard": 1},
-        },
-        "created_at": datetime.now(UTC).isoformat(),
-        "tasks": tasks,
-        "source": {"method": "manual"},
-    }
-    (manifest_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    """Write a minimal schema-2 manifest; version is a fixture-only ID suffix."""
+
+    dataset_id = f"{name}-{version.replace('.', '-')}"
+    write_manifest(
+        datasets_root,
+        DatasetManifest(
+            dataset_id=dataset_id,
+            description=f"Test dataset {name}",
+            tasks=[
+                DatasetTaskEntry(
+                    task_id=f"electrical/voltage-drop/inst-{index}",
+                    path=f"tasks/electrical/voltage-drop/inst-{index}",
+                    task_kind="artifact",
+                )
+                for index in range(task_count)
+            ],
+        ),
+    )
 
 
 class DatasetsTestApp(App[None]):

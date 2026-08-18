@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from pathlib import Path
 
 from aec_bench.contracts.dataset import DatasetManifest
 from aec_bench.contracts.trial_record import TrialRecord
@@ -29,40 +28,23 @@ def render_dataset_card(
     all_records: dict[str, list[TrialRecord]],
 ) -> str:
     """Format a dataset summary card as Rich markup."""
-    desc = manifest.description
-    dataset_id = f"{manifest.name}@{manifest.version}"
+    dataset_id = manifest.dataset_id
     lines: list[str] = []
 
-    lines.append(f"[bold #D4A27F]{manifest.name}[/] [dim]v{manifest.version}[/]")
-    lines.append(f"[dim]{desc.summary}[/]")
+    lines.append(f"[bold #D4A27F]{manifest.dataset_id}[/]")
+    lines.append(f"[dim]{manifest.description}[/]")
     lines.append("")
-    lines.append(
-        f"  Tasks: [bold]{desc.task_count}[/]  "
-        f"Domains: [bold]{len(desc.domains)}[/]  "
-        f"Standards: [bold]{len(desc.standards)}[/]  "
-        f"Created: [dim]{manifest.created_at.strftime('%Y-%m-%d')}[/]"
-    )
+    lines.append(f"  Tasks: [bold]{len(manifest.tasks)}[/]")
     lines.append("")
 
-    if desc.domains:
-        lines.append("[bold]Domains[/]")
-        max_domain_count = (
-            max(sum(1 for t in manifest.tasks if t.domain == d) for d in desc.domains) if manifest.tasks else 1
-        )
-        for domain in desc.domains:
-            count = sum(1 for t in manifest.tasks if t.domain == domain)
-            bar = _horizontal_bar(count, max_domain_count, "#61AAF2")
-            lines.append(f"  {domain:>12}  {bar}")
-
-    if desc.difficulty_distribution:
-        lines.append("")
-        lines.append("[bold]Difficulty[/]")
-        max_diff = max(desc.difficulty_distribution.values()) if desc.difficulty_distribution else 1
-        diff_colors = {"easy": "#61AAF2", "medium": "#D4A27F", "hard": "#BF4D43"}
-        for diff, count in desc.difficulty_distribution.items():
-            color = diff_colors.get(diff, "#91918D")
-            bar = _horizontal_bar(count, max_diff, color)
-            lines.append(f"  {diff:>12}  {bar}")
+    kinds: dict[str, int] = {}
+    for task in manifest.tasks:
+        kinds[task.task_kind] = kinds.get(task.task_kind, 0) + 1
+    if kinds:
+        lines.append("[bold]Task kinds[/]")
+        maximum = max(kinds.values())
+        for kind, count in sorted(kinds.items()):
+            lines.append(f"  {kind:>12}  {_horizontal_bar(count, maximum, '#61AAF2')}")
 
     records = all_records.get(dataset_id, [])
     if records:
@@ -100,7 +82,7 @@ def render_experiment_card(
 
     agent_model = records[0].agent.model
     agent_adapter = records[0].agent.adapter
-    dataset_ref = f"{manifest.name}@{manifest.version}"
+    dataset_ref = manifest.dataset_id
 
     lines: list[str] = []
     lines.append(f"[bold #D4A27F]{experiment_id}[/]")
@@ -160,19 +142,12 @@ def render_tasks_detail(manifest: DatasetManifest) -> str:
     lines.append("[bold]Tasks[/]")
     lines.append("")
 
-    diff_colors = {"easy": "#61AAF2", "medium": "#D4A27F", "hard": "#BF4D43"}
-
-    header = f"  {'Task ID':<35} {'Domain':<12} {'Difficulty':<10} {'Hash':<14}"
+    header = f"  {'Task ID':<35} {'Kind':<12} {'Path':<30}"
     lines.append(f"[bold]{header}[/]")
     lines.append(f"  {'\u2500' * 75}")
 
     for task in manifest.tasks:
-        diff_color = diff_colors.get(task.difficulty, "#91918D")
-        lines.append(
-            f"  {task.task_id:<35} {task.domain:<12} "
-            f"[{diff_color}]{task.difficulty:<10}[/] "
-            f"[dim]{task.content_hash[:12]}[/]"
-        )
+        lines.append(f"  {task.task_id:<35} {task.task_kind:<12} [dim]{task.path:<30}[/]")
 
     return "\n".join(lines)
 
@@ -213,8 +188,8 @@ def _render_single_agent_results(
 
     for record in sorted(records, key=lambda r: r.task.task_id):
         task_entry = task_lookup.get(record.task.task_id)
-        domain = task_entry.domain if task_entry else "\u2014"
-        difficulty = task_entry.difficulty if task_entry else "\u2014"
+        domain = task_entry.task_kind if task_entry else "\u2014"
+        difficulty = "\u2014"
         diff_color = diff_colors.get(difficulty, "#91918D")
 
         reward = record.evaluation.reward
@@ -273,36 +248,5 @@ def _render_multi_agent_results(
         f"Overall: [{reward_style(overall_mean)}]{overall_mean:.3f}[/]  "
         f"Tokens: {total_tokens:,}"
     )
-
-    return "\n".join(lines)
-
-
-def render_integrity_detail(
-    manifest: DatasetManifest,
-    project_root: Path,
-) -> str:
-    """Format the integrity check detail pane as Rich markup."""
-    from aec_bench.dataset.integrity import verify_dataset_integrity
-
-    result = verify_dataset_integrity(manifest.tasks, project_root=project_root)
-
-    lines: list[str] = []
-    lines.append("[bold]Integrity Check[/]")
-    lines.append("")
-
-    if result.is_clean:
-        lines.append(f"[#61AAF2]\u2713 Clean[/] \u2014 {result.verified}/{len(manifest.tasks)} tasks verified")
-    else:
-        lines.append(f"[#BF4D43]\u2717 Issues found[/] \u2014 {result.verified}/{len(manifest.tasks)} verified")
-        if result.drifted:
-            lines.append("")
-            lines.append("[bold #D4A27F]Drifted tasks:[/]")
-            for task_id in result.drifted:
-                lines.append(f"  [#BF4D43]~[/] {task_id}")
-        if result.missing:
-            lines.append("")
-            lines.append("[bold #BF4D43]Missing tasks:[/]")
-            for task_id in result.missing:
-                lines.append(f"  [#BF4D43]\u2717[/] {task_id}")
 
     return "\n".join(lines)

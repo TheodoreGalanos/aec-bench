@@ -5,12 +5,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from aec_bench.contracts.dataset import (
-    DatasetDescription,
-    DatasetManifest,
-    DatasetSource,
-    DatasetTaskEntry,
-)
+from aec_bench.contracts.dataset import DatasetManifest, DatasetTaskEntry, dataset_reference_key
+from aec_bench.dataset.publication import publish_dataset
 from aec_bench.dataset.storage import write_manifest
 from aec_bench.ledger.writer import write_trial_record
 from aec_bench.web.app import create_app
@@ -32,27 +28,15 @@ def _make_manifest(
         tasks = [
             DatasetTaskEntry(
                 task_id=f"{name}/task-{i}",
-                task_path=f"tasks/{name}/task-{i}",
-                content_hash=f"hash-{name}-{i}",
-                domain=name.split("-")[0],
-                difficulty="medium",
-                tags=[],
+                path=f"tasks/{name}/task-{i}",
+                task_kind="artifact",
             )
             for i in range(1, task_count + 1)
         ]
     return DatasetManifest(
-        name=name,
-        version=version,
-        content_hash=f"sha256-{name}-{version}",
-        description=DatasetDescription(
-            summary=summary,
-            domains=domains or ["electrical"],
-            difficulty_distribution=difficulty_distribution or {"medium": task_count},
-            task_count=task_count,
-        ),
-        created_at="2026-03-01T00:00:00Z",
+        dataset_id=name,
+        description=summary,
         tasks=tasks,
-        source=DatasetSource(method="manual"),
     )
 
 
@@ -70,15 +54,32 @@ def _setup_env(
     datasets = tmp_path / "datasets"
     datasets.mkdir()
 
+    exact_references: dict[str, str] = {}
     if manifests:
         for manifest in manifests:
+            for task in manifest.tasks:
+                task_directory = tmp_path / task.path
+                task_directory.mkdir(parents=True)
+                (task_directory / "task.toml").write_text("[metadata]\n", encoding="utf-8")
             write_manifest(datasets, manifest)
+            publication = publish_dataset(
+                manifest=manifest,
+                datasets_root=datasets,
+                project_root=tmp_path,
+                label="1.0.0",
+            )
+            exact_references[f"{manifest.dataset_id}@1.0.0"] = dataset_reference_key(publication.dataset_ref)
 
     if trial_kwargs_list:
         for kwargs in trial_kwargs_list:
             write_trial_record(
                 ledger_root=ledger,
-                record=make_trial_record(**kwargs),
+                record=make_trial_record(
+                    **{
+                        **kwargs,
+                        "dataset_id": exact_references.get(kwargs.get("dataset_id"), kwargs.get("dataset_id")),
+                    }
+                ),
             )
 
     return TestClient(
@@ -116,7 +117,7 @@ def test_leaderboard_api_datasets_list(tmp_path: Path) -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert len(data["datasets"]) == 1
-    assert data["datasets"][0]["name"] == "electrical-only"
+    assert data["datasets"][0]["dataset_id"] == "electrical-only"
 
 
 def test_leaderboard_api_empty_ledger(tmp_path: Path) -> None:
@@ -148,7 +149,7 @@ def test_leaderboard_api_multiple_datasets(tmp_path: Path) -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert len(data["datasets"]) == 2
-    dataset_names = [d["name"] for d in data["datasets"]]
+    dataset_names = [d["dataset_id"] for d in data["datasets"]]
     assert "electrical-only" in dataset_names
     assert "civil-basic" in dataset_names
 
@@ -171,7 +172,7 @@ def test_leaderboard_api_dataset_url_param(tmp_path: Path) -> None:
 def test_leaderboard_api_model_ranking(tmp_path: Path) -> None:
     """Models should be ranked by mean reward descending in model_rows."""
     manifest = _make_manifest()
-    ds_id = f"{manifest.name}@{manifest.version}"
+    ds_id = f"{manifest.dataset_id}@1.0.0"
     client = _setup_env(
         tmp_path,
         manifests=[manifest],
@@ -259,7 +260,7 @@ def test_leaderboard_api_scorecard_includes_datasets(tmp_path: Path) -> None:
     resp = client.get("/api/leaderboard?view=scorecard")
     assert resp.status_code == 200
     data = resp.json()
-    dataset_names = [d["name"] for d in data["datasets"]]
+    dataset_names = [d["dataset_id"] for d in data["datasets"]]
     assert "electrical-only" in dataset_names
     assert "civil-basic" in dataset_names
 

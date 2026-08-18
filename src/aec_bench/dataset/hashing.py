@@ -1,5 +1,5 @@
-# ABOUTME: Content hashing for dataset integrity — per-task directories and manifest-level.
-# ABOUTME: Uses SHA256 over sorted file trees for deterministic, reproducible hashes.
+# ABOUTME: Computes retained task-tree digests for Prime packages and v1 migration.
+# ABOUTME: Schema-2 dataset identity uses Git commits or enclosing ArtifactRef values instead.
 
 from __future__ import annotations
 
@@ -34,14 +34,3 @@ def hash_task_directory(task_dir: Path) -> str:
         hasher.update(file_path.read_bytes())
 
     return hasher.hexdigest()
-
-
-def compute_manifest_hash(task_pairs: list[tuple[str, str]]) -> str:
-    """Compute SHA256 of sorted (task_id, content_hash) pairs.
-
-    This is the manifest-level content hash — changes if any task
-    is added, removed, or modified.
-    """
-    sorted_pairs = sorted(task_pairs)
-    content = "\n".join(f"{tid}:{thash}" for tid, thash in sorted_pairs)
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()

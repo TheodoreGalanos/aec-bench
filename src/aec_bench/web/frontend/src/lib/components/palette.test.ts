@@ -212,7 +212,7 @@ describe("SearchPalette — extended groups", () => {
     const spy = vi.spyOn(api, "fetchSearch").mockResolvedValueOnce({
       query: "a",
       template_results: [{ task_id: "electrical/one", discipline: "electrical", description: "", tags: [], standards: [] }] as any,
-      dataset_results: [{ name: "ds-one", version: "1", summary: "", task_count: 0, domains: [] }] as any,
+      dataset_results: [{ dataset_id: "ds-one", description: "", task_count: 0, labels: ["public"] }],
       trial_results: [{ trial_id: "t-one", experiment_id: "exp-a", task_id: "t/a", model: "m", reward: 1.0 }],
       experiment_results: [{ experiment_id: "exp-a", trial_count: 1, mean_reward: 1.0 }],
       workspace_results: [{ name: "ws-one", path: "ws-one", has_swarm: false }],

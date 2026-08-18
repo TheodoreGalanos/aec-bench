@@ -1,14 +1,21 @@
-# ABOUTME: CLI integration tests for creating versioned benchmark datasets.
-# ABOUTME: Covers task selection filters exposed by the dataset create command.
+# ABOUTME: Tests the schema-2 dataset create, publish, and config CLI workflow.
+# ABOUTME: Ensures human labels resolve to exact references before experiment YAML is written.
 
 from __future__ import annotations
 
+import gzip
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
+import yaml
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
+from aec_bench.contracts.dataset import BundleDatasetRef, DatasetManifest, DatasetPublication, DatasetTaskEntry
+from aec_bench.dataset.porter import DATASET_BUNDLE_MEDIA_TYPE, build_dataset_bundle
+from aec_bench.dataset.storage import write_publication
+from aec_bench.ledger.artifact_repository import ArtifactRepository
 
 runner = CliRunner()
 
@@ -25,10 +32,7 @@ def _make_task(project_root: Path, task_id: str, difficulty: str) -> None:
         "timeout_sec = 600\n",
         encoding="utf-8",
     )
-    (task_dir / "instruction.md").write_text(
-        "Solve the task and write the answer to `/workspace/output.md`.\n",
-        encoding="utf-8",
-    )
+    (task_dir / "instruction.md").write_text("Solve the task.\n", encoding="utf-8")
     tests_dir = task_dir / "tests"
     tests_dir.mkdir()
     (tests_dir / "test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -88,105 +92,111 @@ def _write_suite_output(project_root: Path) -> Path:
     return suite_output
 
 
-def test_dataset_create_filters_by_difficulty(tmp_path: Path, monkeypatch) -> None:
+def test_dataset_create_uses_stable_id_and_schema_2(tmp_path: Path, monkeypatch) -> None:
     _prepare_project(tmp_path)
     monkeypatch.chdir(tmp_path)
 
-    result = runner.invoke(
-        app,
-        [
-            "--json",
-            "dataset",
-            "create",
-            "--name",
-            "easy-only",
-            "--version",
-            "1.0.0",
-            "--difficulty",
-            "easy",
-        ],
-    )
+    result = runner.invoke(app, ["dataset", "create", "easy-only", "--difficulty", "easy"])
 
     assert result.exit_code == 0, result.output
-    manifest_path = tmp_path / "artefacts" / "datasets" / "easy-only" / "1.0.0" / "manifest.json"
+    manifest_path = tmp_path / "artefacts/datasets/manifests/easy-only/manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == 2
+    assert manifest["dataset_id"] == "easy-only"
     assert [task["task_id"] for task in manifest["tasks"]] == ["electrical/example/easy"]
-    assert manifest["description"]["difficulty_distribution"] == {"easy": 1}
+    assert not ({"version", "content_hash", "created_at"} & manifest.keys())
 
 
-def test_dataset_create_rejects_unknown_difficulty(tmp_path: Path, monkeypatch) -> None:
+def test_dataset_create_cannot_overwrite_stable_id(tmp_path: Path, monkeypatch) -> None:
     _prepare_project(tmp_path)
     monkeypatch.chdir(tmp_path)
+    assert runner.invoke(app, ["dataset", "create", "core"]).exit_code == 0
 
-    result = runner.invoke(
-        app,
-        [
-            "dataset",
-            "create",
-            "--name",
-            "bad-difficulty",
-            "--version",
-            "1.0.0",
-            "--difficulty",
-            "heroic",
-        ],
-    )
+    result = runner.invoke(app, ["dataset", "create", "core"])
 
     assert result.exit_code == 1
-    assert "unknown difficulty: heroic" in result.output
+    assert "already exists" in result.output
 
 
-def test_dataset_create_from_suite_output_freezes_exact_instances(tmp_path: Path, monkeypatch) -> None:
+def test_dataset_create_from_suite_output_keeps_only_replay_inputs(tmp_path: Path, monkeypatch) -> None:
     _prepare_project(tmp_path)
     suite_output = _write_suite_output(tmp_path)
     monkeypatch.chdir(tmp_path)
 
-    result = runner.invoke(
-        app,
-        [
-            "dataset",
-            "create",
-            "--name",
-            "from-suite",
-            "--version",
-            "1.0.0",
-            "--from-suite-output",
-            str(suite_output),
-        ],
-    )
+    result = runner.invoke(app, ["dataset", "create", "from-suite", "--from-suite-output", str(suite_output)])
 
     assert result.exit_code == 0, result.output
-    manifest_path = tmp_path / "artefacts" / "datasets" / "from-suite" / "1.0.0" / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = json.loads(
+        (tmp_path / "artefacts/datasets/manifests/from-suite/manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["generation"] == {"seed": 20260508, "config_ref": "suite.toml"}
     assert [task["task_id"] for task in manifest["tasks"]] == [
         "electrical/example/easy",
         "mechanical/example/hard",
     ]
-    assert manifest["source"]["method"] == "suite_config"
-    assert manifest["source"]["seed"] == 20260508
-    assert manifest["source"]["suite_config"]["suite_output"] == str(suite_output.resolve())
 
 
-def test_dataset_create_from_suite_output_rejects_selection_filters(tmp_path: Path, monkeypatch) -> None:
+def test_dataset_publish_then_config_persists_exact_reference(tmp_path: Path, monkeypatch) -> None:
     _prepare_project(tmp_path)
-    suite_output = _write_suite_output(tmp_path)
     monkeypatch.chdir(tmp_path)
+    assert runner.invoke(app, ["dataset", "create", "core", "--difficulty", "easy"]).exit_code == 0
+    published = runner.invoke(app, ["dataset", "publish", "core", "--label", "public-2026"])
+    output = tmp_path / "experiment.yaml"
 
-    result = runner.invoke(
+    configured = runner.invoke(
         app,
-        [
-            "dataset",
-            "create",
-            "--name",
-            "ambiguous",
-            "--version",
-            "1.0.0",
-            "--from-suite-output",
-            str(suite_output),
-            "--difficulty",
-            "easy",
-        ],
+        ["dataset", "config", "core@public-2026", "--model", "gpt-5", "--output", str(output)],
     )
 
+    assert published.exit_code == 0, published.output
+    assert configured.exit_code == 0, configured.output
+    dataset = yaml.safe_load(output.read_text(encoding="utf-8"))["tasks"]["dataset"]
+    assert dataset["kind"] == "bundle"
+    assert dataset["dataset_id"] == "core"
+    assert dataset["artifact"]["sha256"]
+    assert "latest" not in output.read_text(encoding="utf-8")
+
+
+def test_dataset_publish_rejects_latest_label(tmp_path: Path, monkeypatch) -> None:
+    _prepare_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    assert runner.invoke(app, ["dataset", "create", "core"]).exit_code == 0
+
+    result = runner.invoke(app, ["dataset", "publish", "core", "--label", "latest"])
+
     assert result.exit_code == 1
-    assert "--from-suite-output cannot be combined" in result.output
+    assert "latest is a mutable selector" in result.output
+
+
+def test_dataset_export_preserves_exact_detached_bundle_bytes(tmp_path: Path, monkeypatch) -> None:
+    _prepare_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    manifest = DatasetManifest(
+        dataset_id="core",
+        description="Core tasks",
+        tasks=(
+            DatasetTaskEntry(
+                task_id="electrical/example/easy",
+                path="tasks/electrical/example/easy",
+                task_kind="artifact",
+            ),
+        ),
+    )
+    normal = build_dataset_bundle(manifest=manifest, project_root=tmp_path)
+    noncanonical = gzip.compress(gzip.decompress(normal), mtime=7)
+    datasets_root = tmp_path / "artefacts" / "datasets"
+    artifact = ArtifactRepository(datasets_root / "artifacts").publish_bytes(
+        data=noncanonical,
+        media_type=DATASET_BUNDLE_MEDIA_TYPE,
+    )
+    reference = BundleDatasetRef(dataset_id="core", artifact=artifact)
+    write_publication(
+        datasets_root,
+        DatasetPublication(dataset_ref=reference, label="imported", published_at=datetime.now(UTC)),
+    )
+    output = tmp_path / "export.tar.gz"
+
+    result = runner.invoke(app, ["dataset", "export", "core@imported", "--output", str(output)])
+
+    assert result.exit_code == 0, result.output
+    assert output.read_bytes() == noncanonical

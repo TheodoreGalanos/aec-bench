@@ -74,7 +74,7 @@ def export_prime_lab(
     dataset: str | None = typer.Option(
         None,
         "--dataset",
-        help="Dataset name or name@version to export as a Prime task collection.",
+        help="Dataset ID or ID@label to export as a Prime task collection.",
     ),
     datasets_root: str | None = typer.Option(
         None,
@@ -190,7 +190,7 @@ def prime_push(
     dataset: str | None = typer.Option(
         None,
         "--dataset",
-        help="Dataset name or name@version to export and push as a Prime environment.",
+        help="Dataset ID or ID@label to export and push as a Prime environment.",
     ),
     datasets_root: str | None = typer.Option(
         None,
@@ -249,7 +249,7 @@ def prime_eval(
     dataset: str | None = typer.Option(
         None,
         "--dataset",
-        help="Dataset name or name@version to export and evaluate.",
+        help="Dataset ID or ID@label to export and evaluate.",
     ),
     datasets_root: str | None = typer.Option(
         None,
@@ -654,7 +654,7 @@ def prime_smoke(
     dataset: str | None = typer.Option(
         None,
         "--dataset",
-        help="Dataset name or name@version to export and smoke as a Prime task collection.",
+        help="Dataset ID or ID@label to export and smoke as a Prime task collection.",
     ),
     datasets_root: str | None = typer.Option(
         None,
@@ -767,18 +767,29 @@ def _select_prime_task_ids(
     if dataset is not None:
         if pattern or task:
             raise typer.BadParameter("--dataset cannot be combined with --task or --pattern")
-        from aec_bench.dataset.storage import resolve_dataset
+        from aec_bench.config import load_config
+        from aec_bench.contracts.dataset import BundleDatasetRef
+        from aec_bench.dataset.publication import resolve_dataset
 
         resolved_datasets_root = resolve_path("datasets_root", cli_override=datasets_root)
-        manifest = resolve_dataset(resolved_datasets_root, dataset)
-        if manifest is None:
-            raise typer.BadParameter(f"dataset not found: {dataset}")
+        config = load_config()
+        resolved = resolve_dataset(
+            datasets_root=resolved_datasets_root,
+            selector=dataset,
+            project_root=config.project_root,
+        )
+        if resolved is None:
+            raise typer.BadParameter(f"dataset publication not found: {dataset}")
         metadata = {
-            "name": manifest.name,
-            "version": manifest.version,
-            "content_hash": manifest.content_hash,
+            "dataset_id": resolved.manifest.dataset_id,
+            "reference_kind": resolved.reference.kind,
         }
-        return [entry.task_id for entry in manifest.tasks], metadata
+        if isinstance(resolved.reference, BundleDatasetRef):
+            metadata["artifact_sha256"] = resolved.reference.artifact.sha256
+        else:
+            metadata["source_revision"] = resolved.reference.source_revision
+            metadata["manifest_path"] = resolved.reference.manifest_path
+        return [entry.task_id for entry in resolved.manifest.tasks], metadata
 
     selected_ids = available_task_ids
     if pattern:

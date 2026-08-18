@@ -43,10 +43,10 @@ particular:
 - `ArtifactRef` is the universal exact-byte store reference, while the
   protected `TrialRecord` still uses `ArtifactReference` until its owning
   migration;
-- current catalogue, dataset, trial, evaluation, and run-bundle contracts keep
-  their existing supported shapes until their owning change is implemented;
-- no trial-record v2, dataset v2, catalogue v2, or evaluation-regime bundle is
-  introduced by this policy; and
+- the dataset owner now uses schema 2 with exact Git or detached-bundle
+  references; catalogue, trial, evaluation, and run-bundle contracts keep
+  their supported shapes until their owning changes are implemented;
+- no trial-record v2 or evaluation-regime bundle is introduced by this policy;
 - current DeepSeek evidence v2 and the installed World actor protocols remain
   supported.
 

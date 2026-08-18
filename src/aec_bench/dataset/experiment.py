@@ -7,6 +7,7 @@ from typing import Any
 
 import yaml
 
+from aec_bench.contracts.dataset import DatasetRef
 from aec_bench.contracts.experiment_manifest import (
     AgentConfig,
     ComputeConfig,
@@ -18,7 +19,7 @@ from aec_bench.contracts.task_definition import Difficulty
 
 def build_experiment_config(
     *,
-    dataset: str,
+    dataset: DatasetRef,
     agents: list[AgentConfig],
     compute: ComputeConfig,
     experiment_id: str | None = None,
@@ -32,14 +33,12 @@ def build_experiment_config(
     Pure function — no I/O, no side effects. The returned manifest can be
     serialised to YAML with write_experiment_yaml().
     """
-    # Derive experiment_id from dataset if not provided
     if experiment_id is None:
-        ds_name = dataset.split("@")[0]
         agent_slug = agents[0].model.replace(".", "").replace("-", "") if agents else "agent"
-        experiment_id = f"{ds_name}-{agent_slug}"
+        experiment_id = f"{dataset.dataset_id}-{agent_slug}"
 
     if name is None:
-        name = f"Evaluate on {dataset}"
+        name = f"Evaluate on {dataset.dataset_id}"
 
     selector = TaskSelector(
         dataset=dataset,
@@ -75,7 +74,7 @@ def write_experiment_yaml(manifest: ExperimentManifest, output_path: str | None 
 
     # Tasks section
     if manifest.tasks.dataset:
-        data["tasks"]["dataset"] = manifest.tasks.dataset
+        data["tasks"]["dataset"] = manifest.tasks.dataset.model_dump(mode="json")
     if manifest.tasks.include_patterns:
         data["tasks"]["include_patterns"] = manifest.tasks.include_patterns
     if manifest.tasks.domains:

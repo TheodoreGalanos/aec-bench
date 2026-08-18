@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from aec_bench.dataset.storage import list_datasets
+from aec_bench.dataset.storage import list_datasets, list_publications
 from aec_bench.evolution.report_data import discover_workspaces
 from aec_bench.ledger.reader import read_trial_records
 from aec_bench.search import SearchEntry, build_index_from_paths, search
@@ -108,22 +108,27 @@ def search_api(
 
     # Datasets (existing logic)
     manifests = list_datasets(settings.datasets_root)
+    publications = list_publications(settings.datasets_root)
+    labels_by_dataset: dict[str, list[str]] = {}
+    for publication in publications:
+        labels_by_dataset.setdefault(publication.dataset_ref.dataset_id, []).append(publication.label)
     dataset_matches = [
-        m for m in manifests if query_lower in m.name.lower() or query_lower in m.description.summary.lower()
+        manifest
+        for manifest in manifests
+        if query_lower in manifest.dataset_id.lower() or query_lower in manifest.description.lower()
     ]
     dataset_matches = sorted(
         dataset_matches,
-        key=lambda match: _text_rank(terms, match.name, match.description.summary),
+        key=lambda match: _text_rank(terms, match.dataset_id, match.description),
     )
     dataset_results = [
         {
-            "name": m.name,
-            "version": m.version,
-            "summary": m.description.summary,
-            "task_count": len(m.tasks),
-            "domains": m.description.domains,
+            "dataset_id": manifest.dataset_id,
+            "description": manifest.description,
+            "task_count": len(manifest.tasks),
+            "labels": sorted(labels_by_dataset.get(manifest.dataset_id, [])),
         }
-        for m in dataset_matches[:_GROUP_CAP]
+        for manifest in dataset_matches[:_GROUP_CAP]
     ]
 
     # Trials — load all records (mtime-cached) then filter

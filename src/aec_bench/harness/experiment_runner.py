@@ -5,6 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from aec_bench.contracts.dataset import dataset_reference_key
 from aec_bench.contracts.experiment_manifest import AgentConfig, ExperimentManifest
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.contracts.trial_record import TrialRecord
@@ -60,7 +61,7 @@ class HarborImportExperimentRunner:
             job_dir=job_dir,
             repo_root=self.repo_root,
             experiment_id=manifest.experiment_id,
-            dataset_id=manifest.tasks.dataset,
+            dataset_id=(dataset_reference_key(manifest.tasks.dataset) if manifest.tasks.dataset is not None else None),
         )
         records = [
             TrialRecord.model_validate(record if record_transform is None else record_transform(record))
@@ -139,7 +140,11 @@ class HarborImportExperimentRunner:
     def _selected_tasks(self, manifest: ExperimentManifest) -> list[TaskDefinition]:
         registry = TaskRegistry(tasks_root=self.tasks_root)
         registry.reload()
-        return select_manifest_tasks(registry.all(), manifest)
+        return select_manifest_tasks(
+            registry.all(),
+            manifest,
+            project_root=self.repo_root,
+        )
 
     def _agent_matches_manifest(
         self,

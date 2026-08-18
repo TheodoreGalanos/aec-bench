@@ -1,10 +1,10 @@
-# ABOUTME: Tests for dataset content hashing — per-task directory and manifest-level.
-# ABOUTME: Uses tmp_path fixtures to verify deterministic hash computation.
+# ABOUTME: Tests retained task-tree hashing used by Prime packages and v1 migration.
+# ABOUTME: Schema-2 datasets use enclosing artifact or Git identity instead.
 
 import shutil
 from pathlib import Path
 
-from aec_bench.dataset.hashing import compute_manifest_hash, hash_task_directory
+from aec_bench.dataset.hashing import hash_task_directory
 
 
 def test_hash_task_directory_basic(tmp_path: Path) -> None:
@@ -56,22 +56,3 @@ def test_hash_task_directory_handles_binary_files(tmp_path: Path) -> None:
     (task_dir / "drawing.pdf").write_bytes(b"%PDF-1.4 fake content")
     h = hash_task_directory(task_dir)
     assert len(h) == 64
-
-
-def test_compute_manifest_hash_deterministic() -> None:
-    pairs = [("electrical/voltage-drop", "abc123"), ("civil/rational-method", "def456")]
-    h1 = compute_manifest_hash(pairs)
-    h2 = compute_manifest_hash(pairs)
-    assert h1 == h2
-
-
-def test_compute_manifest_hash_order_independent() -> None:
-    pairs_a = [("electrical/voltage-drop", "abc123"), ("civil/rational-method", "def456")]
-    pairs_b = [("civil/rational-method", "def456"), ("electrical/voltage-drop", "abc123")]
-    assert compute_manifest_hash(pairs_a) == compute_manifest_hash(pairs_b)
-
-
-def test_compute_manifest_hash_changes_on_different_input() -> None:
-    pairs_a = [("a", "hash1")]
-    pairs_b = [("a", "hash2")]
-    assert compute_manifest_hash(pairs_a) != compute_manifest_hash(pairs_b)

@@ -141,7 +141,7 @@ async def test_async_loading_populates_experiment_table() -> None:
         DisciplineSummary("electrical", 75, 14),
         DisciplineSummary("civil", 88, 72),
     ]
-    datasets = [DatasetSummaryItem("my-suite", "1.0.0", 45)]
+    datasets = [DatasetSummaryItem("my-suite", 45)]
 
     app = _make_app()
     async with app.run_test() as pilot:
@@ -182,7 +182,7 @@ async def test_async_loading_updates_stat_cards() -> None:
         DisciplineSummary("electrical", 75, 14),
         DisciplineSummary("civil", 88, 72),
     ]
-    datasets = [DatasetSummaryItem("my-suite", "1.0.0", 45)]
+    datasets = [DatasetSummaryItem("my-suite", 45)]
 
     app = _make_app()
     async with app.run_test() as pilot:

@@ -9,6 +9,8 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
+from aec_bench.contracts.dataset import DatasetManifest, DatasetTaskEntry
+from aec_bench.dataset.publication import publish_dataset
 
 runner = CliRunner()
 
@@ -117,3 +119,55 @@ def test_run_dry_run_reports_reviewer_plan_from_config(tmp_path: Path) -> None:
     envelope = json.loads(result.output)
     assert envelope["data"]["reviewer"]["enabled"] is True
     assert envelope["data"]["reviewer"]["models"] == ["primary", "secondary"]
+
+
+def test_run_config_resolves_dataset_label_before_planning(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    task_dir = _write_minimal_task(tasks_root)
+    task_path = task_dir.relative_to(tmp_path).as_posix()
+    manifest = DatasetManifest(
+        dataset_id="core",
+        description="Core benchmark tasks",
+        tasks=(
+            DatasetTaskEntry(task_id=task_dir.relative_to(tasks_root).as_posix(), path=task_path, task_kind="artifact"),
+        ),
+    )
+    publish_dataset(
+        manifest=manifest,
+        datasets_root=tmp_path / "artefacts" / "datasets",
+        project_root=tmp_path,
+        label="public-2026",
+    )
+    config = tmp_path / "experiment.yaml"
+    config.write_text(
+        """\
+experiment_id: exact-dataset
+name: Exact dataset run
+tasks:
+  dataset: core@public-2026
+agents:
+  - name: test-agent
+    adapter: tool_loop
+    model: test-model
+compute:
+  backend: modal
+""",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "run",
+            "--config",
+            str(config),
+            "--tasks-root",
+            str(tasks_root),
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    envelope = json.loads(result.output)
+    assert envelope["data"]["selected_tasks"] == 1

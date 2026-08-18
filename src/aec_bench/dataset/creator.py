@@ -1,115 +1,67 @@
-# ABOUTME: Dataset creator — builds versioned manifest from task definitions on disk.
-# ABOUTME: Hashes each task directory, extracts description metadata, and writes to storage.
+# ABOUTME: Creates semantic schema-2 dataset manifests from validated task definitions.
+# ABOUTME: Fails on missing selected tasks and delegates immutable persistence to dataset storage.
 
 from __future__ import annotations
 
-import logging
-from collections import Counter
-from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 from aec_bench.contracts.dataset import (
-    DatasetDescription,
+    DatasetGeneration,
     DatasetManifest,
-    DatasetSource,
     DatasetTaskEntry,
+    DatasetTaskKind,
 )
 from aec_bench.contracts.task_definition import TaskDefinition
-from aec_bench.dataset.hashing import compute_manifest_hash, hash_task_directory
 from aec_bench.dataset.storage import write_manifest
 
-logger = logging.getLogger(__name__)
+_TASK_KINDS = {"artifact", "lifecycle", "world"}
 
 
-def _extract_standards(tasks: list[TaskDefinition]) -> list[str]:
-    """Collect unique standard references from task metadata."""
-    standards: set[str] = set()
-    for task in tasks:
-        standard = task.metadata.get("standard")
-        if isinstance(standard, str) and standard.strip():
-            standards.add(standard.strip())
-    return sorted(standards)
-
-
-def _build_description(
-    tasks: list[DatasetTaskEntry],
-    task_defs: list[TaskDefinition],
-    summary: str | None,
-    purpose: str | None,
-) -> DatasetDescription:
-    """Build structured description metadata from task entries and definitions."""
-    domains = sorted({entry.domain for entry in tasks})
-    difficulty_counts = Counter(entry.difficulty for entry in tasks)
-    standards = _extract_standards(task_defs)
-
-    return DatasetDescription(
-        summary=summary or f"Dataset with {len(tasks)} tasks",
-        purpose=purpose,
-        domains=domains,
-        difficulty_distribution=dict(difficulty_counts),
-        standards=standards,
-        task_count=len(tasks),
-    )
+def _task_kind(task: TaskDefinition) -> DatasetTaskKind:
+    raw = task.metadata.get("task_kind", "artifact")
+    if not isinstance(raw, str) or raw not in _TASK_KINDS:
+        raise ValueError(f"task {task.task_id} has unsupported task_kind: {raw!r}")
+    return cast(DatasetTaskKind, raw)
 
 
 def create_dataset_from_tasks(
-    name: str,
-    version: str,
+    *,
+    dataset_id: str,
     tasks: list[TaskDefinition],
     tasks_root: Path,
     datasets_root: Path,
-    source: DatasetSource,
-    summary: str | None = None,
-    purpose: str | None = None,
-    overwrite: bool = False,
+    description: str,
+    generation: DatasetGeneration | None = None,
 ) -> DatasetManifest:
-    """Create a dataset manifest from task definitions on disk.
+    """Create and immutably store one semantic dataset manifest."""
 
-    Hashes each task directory, builds description metadata from the tasks,
-    computes a manifest-level content hash, and writes the manifest to storage.
-    Tasks whose directories are missing on disk are logged and skipped.
-    """
-    task_entries: list[DatasetTaskEntry] = []
-    hash_pairs: list[tuple[str, str]] = []
-    included_defs: list[TaskDefinition] = []
-
-    for task_def in tasks:
-        task_dir = tasks_root / task_def.task_id
+    project_root = tasks_root.parent.resolve()
+    entries: list[DatasetTaskEntry] = []
+    for task in sorted(tasks, key=lambda item: item.task_id):
+        task_dir = (tasks_root / task.task_id).resolve()
         if not task_dir.is_dir():
-            logger.warning(
-                "skipping task %s — directory not found at %s",
-                task_def.task_id,
-                task_dir,
+            raise FileNotFoundError(f"selected task directory is missing: {task_dir}")
+        try:
+            relative_path = task_dir.relative_to(project_root).as_posix()
+        except ValueError as error:
+            raise ValueError(f"selected task is outside the project root: {task_dir}") from error
+        entries.append(
+            DatasetTaskEntry(
+                task_id=task.task_id,
+                path=relative_path,
+                task_kind=_task_kind(task),
             )
-            continue
-
-        content_hash = hash_task_directory(task_dir)
-        task_path = str(task_dir.relative_to(tasks_root.parent))
-
-        entry = DatasetTaskEntry(
-            task_id=task_def.task_id,
-            task_path=task_path,
-            content_hash=content_hash,
-            domain=task_def.domain,
-            difficulty=task_def.difficulty.value,
-            tags=list(task_def.tags),
         )
-        task_entries.append(entry)
-        hash_pairs.append((task_def.task_id, content_hash))
-        included_defs.append(task_def)
-
-    manifest_hash = compute_manifest_hash(hash_pairs)
-    description = _build_description(task_entries, included_defs, summary, purpose)
 
     manifest = DatasetManifest(
-        name=name,
-        version=version,
-        content_hash=manifest_hash,
+        dataset_id=dataset_id,
         description=description,
-        created_at=datetime.now(tz=UTC),
-        tasks=task_entries,
-        source=source,
+        tasks=tuple(entries),
+        generation=generation,
     )
-
-    write_manifest(datasets_root, manifest, overwrite=overwrite)
+    write_manifest(datasets_root, manifest)
     return manifest
+
+
+__all__ = ("create_dataset_from_tasks",)

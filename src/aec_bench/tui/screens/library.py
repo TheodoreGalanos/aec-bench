@@ -17,9 +17,9 @@ from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Footer, Static, Tree
 
-from aec_bench.contracts.dataset import DatasetManifest
+from aec_bench.contracts.dataset import DatasetManifest, dataset_reference_key
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.dataset.storage import list_datasets
+from aec_bench.dataset.storage import list_datasets, list_publications
 from aec_bench.ledger.reader import query_trial_records
 from aec_bench.tasks.library_export import LoadedSeed as LibrarySeed
 from aec_bench.tasks.library_export import load_seeds
@@ -590,8 +590,16 @@ class LibraryScreen(Screen[None]):
             dataset_manifests = list_datasets(self._datasets_root)
             if self._ledger_root is not None:
                 for m in dataset_manifests:
-                    dataset_id = f"{m.name}@{m.version}"
-                    records = query_trial_records(self._ledger_root, dataset_id=dataset_id)
+                    dataset_id = m.dataset_id
+                    reference_keys = {
+                        dataset_reference_key(publication.dataset_ref)
+                        for publication in list_publications(self._datasets_root, dataset_id=dataset_id)
+                    }
+                    records = [
+                        record
+                        for reference_key in sorted(reference_keys)
+                        for record in query_trial_records(self._ledger_root, dataset_id=reference_key)
+                    ]
                     if records:
                         dataset_records[dataset_id] = records
 
@@ -843,12 +851,12 @@ class LibraryScreen(Screen[None]):
             return
 
         for manifest in self._dataset_manifests:
-            dataset_id = f"{manifest.name}@{manifest.version}"
+            dataset_id = manifest.dataset_id
             n_tasks = len(manifest.tasks)
             records = self._dataset_records.get(dataset_id, [])
             n_experiments = len({r.experiment_id for r in records}) if records else 0
 
-            label = f"{manifest.name} v{manifest.version}  ({n_tasks} tasks)"
+            label = f"{manifest.dataset_id}  ({n_tasks} tasks)"
             if n_experiments:
                 label += f"  [{n_experiments} exp]"
 
@@ -856,7 +864,7 @@ class LibraryScreen(Screen[None]):
                 label,
                 data=LibraryNodeData(
                     kind="dataset",
-                    label=manifest.name,
+                    label=manifest.dataset_id,
                     dataset_id=dataset_id,
                 ),
             )
@@ -960,7 +968,7 @@ class LibraryScreen(Screen[None]):
             from aec_bench.tui.screens.dataset import render_dataset_card
 
             manifest = next(
-                (m for m in self._dataset_manifests if f"{m.name}@{m.version}" == data.dataset_id),
+                (m for m in self._dataset_manifests if m.dataset_id == data.dataset_id),
                 None,
             )
             if manifest is None:
@@ -971,7 +979,7 @@ class LibraryScreen(Screen[None]):
             from aec_bench.tui.screens.dataset import render_experiment_card
 
             manifest = next(
-                (m for m in self._dataset_manifests if f"{m.name}@{m.version}" == data.dataset_id),
+                (m for m in self._dataset_manifests if m.dataset_id == data.dataset_id),
                 None,
             )
             if manifest is None:
@@ -1033,7 +1041,7 @@ class LibraryScreen(Screen[None]):
         tree.action_cursor_up()
 
     def action_push_datasets(self) -> None:
-        """Push the Datasets screen for browsing versioned benchmark snapshots."""
+        """Push the Datasets screen for browsing benchmark datasets."""
         from aec_bench.tui.screens.datasets import DatasetsScreen
 
         self.app.push_screen(

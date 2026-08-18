@@ -29,10 +29,10 @@ const mockLeaderboardData = {
       adapter: "tool_loop",
       model: "claude-sonnet",
       overall: 0.85,
-      cells: { "bench-v1@1.0.0": { mean_reward: 0.85, trials: 20 } },
+      cells: { "bench-v1@public-2026": { mean_reward: 0.85, trials: 20 } },
     },
   ],
-  datasets: [{ name: "bench-v1", version: "1.0.0", summary: "Test dataset", task_count: 10, domains: ["electrical"] }],
+  datasets: [{ dataset_id: "bench-v1", label: "public-2026", description: "Test dataset", task_count: 10 }],
   selected_dataset: null,
 };
 
@@ -47,12 +47,10 @@ const emptyLeaderboardData = {
 const mockDatasetsData = {
   datasets: [
     {
-      name: "bench-v1",
-      version: "1.0.0",
-      summary: "First benchmark dataset",
+      dataset_id: "bench-v1",
+      description: "First benchmark dataset",
       task_count: 15,
-      domains: ["electrical", "civil"],
-      content_hash: "abc123def456abc123def456",
+      labels: ["public-2026"],
     },
   ],
   total_datasets: 1,
@@ -66,21 +64,21 @@ const emptyDatasetsData = {
 };
 
 const mockDatasetDetailData = {
-  name: "bench-v1",
-  version: "1.0.0",
-  summary: "First benchmark dataset",
-  content_hash: "abc123def456abc123def456abc123def456",
+  dataset_id: "bench-v1",
+  label: "public-2026",
+  description: "First benchmark dataset",
+  reference_kind: "bundle",
   task_count: 2,
-  domains: ["electrical"],
   tasks: [
-    { task_id: "electrical/voltage-drop", domain: "electrical", difficulty: "medium", tags: ["cable"] },
+    { task_id: "electrical/voltage-drop", path: "tasks/electrical/voltage-drop", task_kind: "artifact" },
   ],
   experiment_results: [
     { experiment_id: "exp-01", trial_count: 5, mean_reward: 0.8, reward_class: "reward-good", models: ["claude"] },
   ],
   integrity_results: [
-    { task_id: "electrical/voltage-drop", status: "verified", expected_hash: "abc123" },
+    { task_id: "electrical/voltage-drop", status: "verified" },
   ],
+  integrity_unexpected: [],
 };
 
 const mockLibraryData = {
@@ -131,11 +129,10 @@ const mockSearchData = {
   ],
   dataset_results: [
     {
-      name: "bench-v1",
-      version: "1.0.0",
-      summary: "Voltage benchmark",
+      dataset_id: "bench-v1",
+      description: "Voltage benchmark",
       task_count: 1,
-      domains: ["electrical"],
+      labels: ["public-2026"],
     },
   ],
   trial_results: [],
@@ -253,21 +250,21 @@ describe("DatasetDetail page", () => {
   });
 
   it("renders dataset name as heading", async () => {
-    render(DatasetDetail, { props: { name: "bench-v1", version: "1.0.0" } });
+    render(DatasetDetail, { props: { datasetId: "bench-v1", label: "public-2026" } });
     await waitFor(() => {
       expect(screen.getByText("bench-v1")).toBeInTheDocument();
     });
   });
 
   it("renders task ID in Tasks tab", async () => {
-    render(DatasetDetail, { props: { name: "bench-v1", version: "1.0.0" } });
+    render(DatasetDetail, { props: { datasetId: "bench-v1", label: "public-2026" } });
     await waitFor(() => {
       expect(screen.getByText("electrical/voltage-drop")).toBeInTheDocument();
     });
   });
 
   it("renders tab buttons", async () => {
-    render(DatasetDetail, { props: { name: "bench-v1", version: "1.0.0" } });
+    render(DatasetDetail, { props: { datasetId: "bench-v1", label: "public-2026" } });
     await waitFor(() => {
       expect(screen.getByText(/Tasks/)).toBeInTheDocument();
       expect(screen.getByText(/Results/)).toBeInTheDocument();
@@ -275,10 +272,10 @@ describe("DatasetDetail page", () => {
     });
   });
 
-  it("calls fetchDatasetDetail with name and version", async () => {
-    render(DatasetDetail, { props: { name: "bench-v1", version: "1.0.0" } });
+  it("calls fetchDatasetDetail with dataset ID and label", async () => {
+    render(DatasetDetail, { props: { datasetId: "bench-v1", label: "public-2026" } });
     await waitFor(() => {
-      expect(vi.mocked(api.fetchDatasetDetail)).toHaveBeenCalledWith("bench-v1", "1.0.0");
+      expect(vi.mocked(api.fetchDatasetDetail)).toHaveBeenCalledWith("bench-v1", "public-2026");
     });
   });
 });

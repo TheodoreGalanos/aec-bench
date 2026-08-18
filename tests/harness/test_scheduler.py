@@ -1,13 +1,12 @@
 # ABOUTME: Tests for manifest-driven trial planning and bounded batching in the harness.
 # ABOUTME: Verifies deterministic expansion across tasks, agents, repetitions, and concurrency.
 
-from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from aec_bench.contracts.dataset import (
-    DatasetDescription,
     DatasetManifest,
-    DatasetSource,
     DatasetTaskEntry,
 )
 from aec_bench.contracts.experiment_manifest import (
@@ -17,6 +16,7 @@ from aec_bench.contracts.experiment_manifest import (
     TaskSelector,
 )
 from aec_bench.contracts.task_definition import Difficulty
+from aec_bench.dataset.publication import publish_dataset
 from aec_bench.dataset.storage import write_manifest
 from aec_bench.harness.scheduler import (
     batch_planned_trials,
@@ -28,32 +28,21 @@ from tests.support.task_factories import make_task_definition
 
 def _make_dataset_manifest(
     name: str = "bench-suite",
-    version: str = "1.0.0",
     task_ids: list[str] | None = None,
 ) -> DatasetManifest:
     task_ids = task_ids or ["electrical/voltage-drop/instance-0"]
     tasks = [
         DatasetTaskEntry(
             task_id=tid,
-            task_path=tid,
-            content_hash=f"sha256-{'a' * 64}",
-            domain=tid.split("/")[0],
-            difficulty="medium",
+            path=f"tasks/{tid}",
+            task_kind="artifact",
         )
         for tid in task_ids
     ]
     return DatasetManifest(
-        name=name,
-        version=version,
-        content_hash="abc123" * 10 + "abcd",
-        description=DatasetDescription(
-            summary="Test dataset",
-            domains=[t.split("/")[0] for t in task_ids],
-            task_count=len(tasks),
-        ),
-        created_at=datetime(2025, 6, 1, tzinfo=UTC),
+        dataset_id=name,
+        description="Test dataset",
         tasks=tasks,
-        source=DatasetSource(method="manual"),
     )
 
 
@@ -132,39 +121,71 @@ def test_select_manifest_tasks_filters_by_dataset_when_set(tmp_path: Path) -> No
     ]
     dataset = _make_dataset_manifest(
         name="bench-suite",
-        version="1.0.0",
         task_ids=["electrical/voltage-drop/alpha"],
     )
-    write_manifest(tmp_path, dataset)
+    project_root = tmp_path / "project"
+    task_directory = project_root / "tasks/electrical/voltage-drop/alpha"
+    task_directory.mkdir(parents=True)
+    (task_directory / "task.toml").write_text("[metadata]\n", encoding="utf-8")
+    datasets_root = project_root / "datasets"
+    write_manifest(datasets_root, dataset)
+    publication = publish_dataset(
+        manifest=dataset,
+        datasets_root=datasets_root,
+        project_root=project_root,
+        label="public-2026",
+    )
     manifest = ExperimentManifest(
         experiment_id="experiment-001",
         name="Dataset filtered run",
-        tasks=TaskSelector(dataset="bench-suite@1.0.0"),
+        tasks=TaskSelector(dataset=publication.dataset_ref),
         agents=[AgentConfig(name="agent-a", adapter="tool_loop", model="gpt-5.4")],
         compute=ComputeConfig(backend="modal"),
     )
 
-    selected = select_manifest_tasks(tasks, manifest, datasets_root=tmp_path)
+    selected = select_manifest_tasks(
+        tasks,
+        manifest,
+        datasets_root=datasets_root,
+        project_root=project_root,
+    )
 
     assert [task.task_id for task in selected] == ["electrical/voltage-drop/alpha"]
 
 
-def test_select_manifest_tasks_dataset_unresolved_keeps_all_tasks(tmp_path: Path) -> None:
+def test_select_manifest_tasks_rejects_missing_registered_task(tmp_path: Path) -> None:
     tasks = [
         make_task_definition(task_id="electrical/voltage-drop/alpha", domain="electrical"),
         make_task_definition(task_id="electrical/voltage-drop/beta", domain="electrical"),
     ]
+    dataset = _make_dataset_manifest(task_ids=["electrical/voltage-drop/missing"])
+    project_root = tmp_path / "project"
+    task_directory = project_root / "tasks/electrical/voltage-drop/missing"
+    task_directory.mkdir(parents=True)
+    (task_directory / "task.toml").write_text("[metadata]\n", encoding="utf-8")
+    datasets_root = project_root / "datasets"
+    write_manifest(datasets_root, dataset)
+    publication = publish_dataset(
+        manifest=dataset,
+        datasets_root=datasets_root,
+        project_root=project_root,
+        label="public-2026",
+    )
     manifest = ExperimentManifest(
         experiment_id="experiment-001",
-        name="Missing dataset fallback",
-        tasks=TaskSelector(dataset="no-such-dataset@9.9.9"),
+        name="Missing task rejection",
+        tasks=TaskSelector(dataset=publication.dataset_ref),
         agents=[AgentConfig(name="agent-a", adapter="tool_loop", model="gpt-5.4")],
         compute=ComputeConfig(backend="modal"),
     )
 
-    selected = select_manifest_tasks(tasks, manifest, datasets_root=tmp_path)
-
-    assert len(selected) == 2
+    with pytest.raises(ValueError, match="not registered"):
+        select_manifest_tasks(
+            tasks,
+            manifest,
+            datasets_root=datasets_root,
+            project_root=project_root,
+        )
 
 
 def test_select_manifest_tasks_without_dataset_field_is_unchanged() -> None:

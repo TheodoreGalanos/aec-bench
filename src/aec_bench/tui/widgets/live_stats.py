@@ -34,8 +34,7 @@ class DisciplineSummary:
 class DatasetSummaryItem:
     """Basic identity and size for a dataset."""
 
-    name: str
-    version: str
+    dataset_id: str
     task_count: int
 
 
@@ -96,15 +95,14 @@ def build_disciplines_summary(
 def build_datasets_summary(
     datasets_root: Path | None,
 ) -> list[DatasetSummaryItem]:
-    """List datasets with name, version, and task count."""
+    """List datasets with stable identity and task count."""
     if datasets_root is None:
         return []
 
     manifests = list_datasets(datasets_root)
     return [
         DatasetSummaryItem(
-            name=m.name,
-            version=m.version,
+            dataset_id=m.dataset_id,
             task_count=len(m.tasks),
         )
         for m in manifests

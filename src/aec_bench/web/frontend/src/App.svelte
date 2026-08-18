@@ -163,7 +163,7 @@
     { pattern: "/library", label: "Library" },
     { pattern: "/library/:discipline/:templateId", label: "Library Detail" },
     { pattern: "/datasets", label: "Datasets" },
-    { pattern: "/datasets/:name/:version", label: "Dataset Detail" },
+    { pattern: "/datasets/:datasetId/:label", label: "Dataset Detail" },
     { pattern: "/search", label: "Search" },
     { pattern: "/review/queue", label: "Review Queue" },
     { pattern: "/review/trials/:trialId", label: "Review Trial" },
@@ -215,10 +215,10 @@
       />
     {:else if activeRoute?.pattern === "/datasets"}
       <Datasets />
-    {:else if activeRoute?.pattern === "/datasets/:name/:version"}
+    {:else if activeRoute?.pattern === "/datasets/:datasetId/:label"}
       <DatasetDetail
-        name={activeRoute.params.name}
-        version={activeRoute.params.version}
+        datasetId={activeRoute.params.datasetId}
+        label={activeRoute.params.label}
       />
     {:else if activeRoute?.pattern === "/search"}
       <Search />

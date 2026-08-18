@@ -1,70 +1,52 @@
-# ABOUTME: Tests for experiment config composition from dataset references.
-# ABOUTME: Pure function tests — ExperimentManifest in, YAML string out.
+# ABOUTME: Tests experiment configuration composed from exact dataset references.
+# ABOUTME: Ensures generated YAML persists immutable references and never human selectors.
+
+from pathlib import Path
 
 import yaml
 
+from aec_bench.contracts.artifacts import ArtifactRef
+from aec_bench.contracts.dataset import BundleDatasetRef
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.dataset.experiment import build_experiment_config, write_experiment_yaml
 
 
-def test_build_experiment_config_basic() -> None:
-    agents = [AgentConfig(name="test-agent", adapter="tool_loop", model="gpt-41-mini")]
-    compute = ComputeConfig(backend="modal")
-
-    manifest = build_experiment_config(
-        dataset="electrical-only@1.0.0",
-        agents=agents,
-        compute=compute,
+def _reference() -> BundleDatasetRef:
+    return BundleDatasetRef(
+        dataset_id="electrical-only",
+        artifact=ArtifactRef(
+            artifact_id="sha256:" + "a" * 64,
+            sha256="a" * 64,
+            size_bytes=100,
+            media_type="application/vnd.aec-bench.dataset-bundle+tar+gzip",
+        ),
     )
-    assert manifest.tasks.dataset == "electrical-only@1.0.0"
+
+
+def test_build_experiment_config_uses_stable_dataset_id_for_defaults() -> None:
+    manifest = build_experiment_config(
+        dataset=_reference(),
+        agents=[AgentConfig(name="test-agent", adapter="tool_loop", model="gpt-41-mini")],
+        compute=ComputeConfig(backend="modal"),
+    )
+
+    assert manifest.tasks.dataset == _reference()
     assert manifest.experiment_id == "electrical-only-gpt41mini"
-    assert manifest.name == "Evaluate on electrical-only@1.0.0"
-    assert len(manifest.agents) == 1
+    assert manifest.name == "Evaluate on electrical-only"
 
 
-def test_build_experiment_config_custom_id() -> None:
-    agents = [AgentConfig(name="a", adapter="tool_loop", model="m")]
-    compute = ComputeConfig(backend="modal")
-
+def test_write_experiment_yaml_persists_exact_reference(tmp_path: Path) -> None:
     manifest = build_experiment_config(
-        dataset="ds@1.0.0",
-        agents=agents,
-        compute=compute,
-        experiment_id="my-custom-id",
-        name="My experiment",
-    )
-    assert manifest.experiment_id == "my-custom-id"
-    assert manifest.name == "My experiment"
-
-
-def test_write_experiment_yaml_produces_valid_yaml() -> None:
-    agents = [AgentConfig(name="test-agent", adapter="tool_loop", model="gpt-41-mini")]
-    compute = ComputeConfig(backend="modal", resource_limits={"n_concurrent_trials": 2})
-
-    manifest = build_experiment_config(
-        dataset="electrical-only@1.0.0",
-        agents=agents,
-        compute=compute,
+        dataset=_reference(),
+        agents=[AgentConfig(name="test-agent", adapter="tool_loop", model="gpt-41-mini")],
+        compute=ComputeConfig(backend="modal", resource_limits={"n_concurrent_trials": 2}),
         repetitions=3,
     )
-
-    yaml_str = write_experiment_yaml(manifest)
-    parsed = yaml.safe_load(yaml_str)
-
-    assert parsed["tasks"]["dataset"] == "electrical-only@1.0.0"
-    assert parsed["agents"][0]["model"] == "gpt-41-mini"
-    assert parsed["compute"]["backend"] == "modal"
-    assert parsed["repetitions"] == 3
-
-
-def test_write_experiment_yaml_to_file(tmp_path) -> None:
-    agents = [AgentConfig(name="a", adapter="tool_loop", model="m")]
-    compute = ComputeConfig(backend="modal")
-    manifest = build_experiment_config(dataset="ds@1.0.0", agents=agents, compute=compute)
-
     output = tmp_path / "experiment.yaml"
-    write_experiment_yaml(manifest, output_path=str(output))
 
-    assert output.exists()
-    parsed = yaml.safe_load(output.read_text())
-    assert parsed["tasks"]["dataset"] == "ds@1.0.0"
+    yaml_text = write_experiment_yaml(manifest, output_path=str(output))
+    parsed = yaml.safe_load(yaml_text)
+
+    assert parsed["tasks"]["dataset"] == _reference().model_dump(mode="json")
+    assert yaml.safe_load(output.read_text(encoding="utf-8")) == parsed
+    assert "latest" not in yaml_text

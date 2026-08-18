@@ -16,12 +16,8 @@ import pytest
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
-from aec_bench.contracts.dataset import (
-    DatasetDescription,
-    DatasetManifest,
-    DatasetSource,
-    DatasetTaskEntry,
-)
+from aec_bench.contracts.dataset import DatasetManifest, DatasetTaskEntry
+from aec_bench.dataset.publication import publish_dataset
 from aec_bench.dataset.storage import write_manifest
 from aec_bench.prime_lab.classifier import PrimeHarnessKind, classify_prime_harness
 from aec_bench.prime_lab.exporter import (
@@ -42,33 +38,25 @@ def _write_dataset_manifest(
     version: str,
     task_ids: list[str],
 ) -> None:
-    from datetime import UTC, datetime
-
     manifest = DatasetManifest(
-        name=name,
-        version=version,
-        content_hash="dataset-hash",
-        description=DatasetDescription(
-            summary="Prime smoke dataset",
-            domains=["electrical"],
-            difficulty_distribution={"easy": len(task_ids)},
-            task_count=len(task_ids),
-        ),
-        created_at=datetime.now(UTC),
+        dataset_id=name,
+        description="Prime smoke dataset",
         tasks=[
             DatasetTaskEntry(
                 task_id=task_id,
-                task_path=f"tasks/{task_id}",
-                content_hash=f"hash-{index}",
-                domain="electrical",
-                difficulty="easy",
-                tags=["prime"],
+                path=f"tasks/{task_id}",
+                task_kind="artifact",
             )
-            for index, task_id in enumerate(task_ids)
+            for task_id in task_ids
         ],
-        source=DatasetSource(method="manual"),
     )
     write_manifest(datasets_root, manifest)
+    publish_dataset(
+        manifest=manifest,
+        datasets_root=datasets_root,
+        project_root=datasets_root.parent,
+        label=version,
+    )
 
 
 def _make_task(
@@ -623,9 +611,9 @@ def test_prime_export_cli_selects_dataset_tasks(tmp_path: Path) -> None:
     )
     assert '"task_id": "electrical/voltage-drop-a"' in environment_py
     assert '"task_id": "electrical/voltage-drop-b"' in environment_py
-    assert '"name": "prime-smoke-suite"' in environment_py
-    assert '"version": "0.1.0"' in environment_py
-    assert '"content_hash": "dataset-hash"' in environment_py
+    assert '"dataset_id": "prime-smoke-suite"' in environment_py
+    assert '"reference_kind": "bundle"' in environment_py
+    assert '"artifact_sha256":' in environment_py
 
 
 def test_prime_export_cli_rejects_dataset_with_task_filter(tmp_path: Path) -> None:
