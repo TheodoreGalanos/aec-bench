@@ -762,10 +762,12 @@ def test_legacy_relocation_preserves_existing_debt_but_rejects_added_fields(tmp_
         baseline_path,
     )
 
-    findings = {item["symbol"]: item for item in report["findings"]}
+    report_findings = cast(list[dict[str, Any]], report["findings"])
+    report_violations = cast(list[dict[str, Any]], report["violations"])
+    findings = {item["symbol"]: item for item in report_findings}
     assert findings[moved_symbol]["state"] == "legacy"
     assert any(
-        violation["code"] == "PROV001" and violation["symbol"] == added_symbol for violation in report["violations"]
+        violation["code"] == "PROV001" and violation["symbol"] == added_symbol for violation in report_violations
     )
     with pytest.raises(provenance.ProvenanceBaselineGrowthError, match="source_revision"):
         provenance.update_baseline(tmp_path, tmp_path / "provenance-registry.toml", baseline_path)
