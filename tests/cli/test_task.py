@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
@@ -123,8 +124,11 @@ class TestTaskGenome:
         )
 
         assert result.exit_code == 0
-        assert "deterministic_manifest:" in result.output
-        assert "instruction_sections:" in result.output
+        assert "extractor: deterministic-task-genome" in result.output
+        assert "genome:" in result.output
+        assert "evidence:" in result.output
+        assert "instruction_sections:" not in result.output
+        assert "verifier_files:" not in result.output
 
     def test_genome_batch_writes_engineering_catalogue(self, tmp_path: Path) -> None:
         tasks_root = tmp_path / "tasks"
@@ -150,6 +154,32 @@ class TestTaskGenome:
         assert not (output_dir / "generated" / "suite" / "electrical" / "demo.yaml").exists()
         assert (output_dir / "index.yaml").exists()
         assert "written: 2" in result.output
+
+    def test_genome_batch_retains_each_review_as_one_artifact_reference(self, tmp_path: Path) -> None:
+        tasks_root = tmp_path / "tasks"
+        _make_valid_named_task(tasks_root, "electrical", "voltage-drop")
+        output_dir = tmp_path / "task_genomes"
+
+        result = runner.invoke(
+            app,
+            [
+                "task",
+                "genome-batch",
+                str(tasks_root),
+                "--output-dir",
+                str(output_dir),
+                "--mode",
+                "evidence",
+            ],
+        )
+
+        assert result.exit_code == 0
+        index = yaml.safe_load((output_dir / "index.yaml").read_text(encoding="utf-8"))
+        entry = index["entries"][0]
+        assert entry["status"] == "extracted"
+        assert set(entry["review"]) == {"artifact_id", "sha256", "size_bytes", "media_type"}
+        assert (output_dir / "review_artifacts" / entry["review"]["artifact_id"]).is_file()
+        assert not (output_dir / "electrical" / "voltage-drop.yaml").exists()
 
     def test_genome_batch_can_include_generated_instances(self, tmp_path: Path) -> None:
         tasks_root = tmp_path / "tasks"
@@ -243,6 +273,8 @@ class TestTaskGenome:
         assert result.exit_code == 0
         assert (output_dir / "mechanical" / "velocity-check.yaml").exists()
         assert (output_dir / "index.yaml").exists()
+        index = yaml.safe_load((output_dir / "index.yaml").read_text(encoding="utf-8"))
+        assert index["entries"][0]["template_path"] == "templates/mechanical/velocity_check"
         assert "written: 1" in result.output
 
     def test_decomposition_template_batch_writes_decomposition_catalogue(
@@ -255,8 +287,6 @@ class TestTaskGenome:
         mechanical_dir.mkdir()
         (mechanical_dir / "velocity-check.yaml").write_text(
             "task_id: mechanical/velocity-check\n"
-            "source_task_path: src/aec_bench/templates/builtin/mechanical/velocity_check\n"
-            "status: extracted\n"
             "domain_frame:\n"
             "  discipline: mechanical\n"
             "  subdomain: pipe-hydraulics\n"
@@ -272,7 +302,6 @@ class TestTaskGenome:
             "  - id: explicit_range_check\n"
             "    type: threshold_decision\n"
             "    description: Solver must compare velocity against an explicit range.\n"
-            "    provenance: []\n"
             "output_contract:\n"
             "  format: markdown_with_json_block\n"
             "  required_fields: [velocity_m_s, velocity_within_range]\n"

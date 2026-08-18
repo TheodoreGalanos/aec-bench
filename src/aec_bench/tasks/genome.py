@@ -1,5 +1,5 @@
-# ABOUTME: Extracts task genome sidecar manifests from existing task directories.
-# ABOUTME: Uses deterministic parsers first and marks semantic fields for lite review.
+# ABOUTME: Extracts task genomes and snapshot-bound review evidence from task directories.
+# ABOUTME: Stores source locations instead of copying task, instruction, or verifier bytes.
 
 from __future__ import annotations
 
@@ -12,18 +12,22 @@ from typing import Any
 
 import yaml
 
+from aec_bench.contracts.artifacts import ArtifactRef
+from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.task_genome import (
+    TASK_GENOME_REVIEW_MEDIA_TYPE,
     DomainFrame,
     ExtractionSummary,
     InputBundle,
     OutputContract,
     PressurePoint,
-    ProvenanceRef,
     Scenario,
-    TaskGenomeEvidencePacket,
+    SourceSpan,
     TaskGenomeManifest,
+    TaskGenomeReview,
     VerifierContract,
 )
+from aec_bench.ledger.artifact_repository import ArtifactRepository
 from aec_bench.tasks.loader import load_task_definition
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
@@ -75,12 +79,8 @@ def extract_task_genome(task_dir: Path, tasks_root: Path) -> TaskGenomeManifest:
     if not pressure_points:
         missing_fields.append("pressure_points")
 
-    source_path = f"{tasks_root.name}/{task_dir.relative_to(tasks_root).as_posix()}"
-
     return TaskGenomeManifest(
         task_id=task.task_id,
-        source_task_path=source_path,
-        status="extracted",
         domain_frame=DomainFrame(
             discipline=task.domain,
             subdomain=_extract_subdomain(task.task_id, task.task_type, task.metadata),
@@ -119,31 +119,163 @@ def task_genome_to_yaml(manifest: TaskGenomeManifest) -> str:
     return yaml.safe_dump(payload, sort_keys=False, allow_unicode=False)
 
 
-def build_task_genome_evidence(task_dir: Path, tasks_root: Path) -> TaskGenomeEvidencePacket:
-    """Build a bounded evidence packet for LLM-driven task decomposition."""
+def build_task_genome_review(
+    task_dir: Path,
+    tasks_root: Path,
+    *,
+    task: TaskSnapshotRef,
+    extractor: str = "deterministic-task-genome",
+) -> TaskGenomeReview:
+    """Build a regenerable review that points to one exact task snapshot."""
     task_dir = task_dir.resolve()
     tasks_root = tasks_root.resolve()
-    deterministic_manifest = extract_task_genome(task_dir, tasks_root)
+    genome = extract_task_genome(task_dir, tasks_root)
+    if task.task_id != genome.task_id:
+        raise ValueError("task snapshot does not match the extracted task genome")
 
     instruction = (task_dir / "instruction.md").read_text(encoding="utf-8")
-    task_toml = _read_toml(task_dir / "task.toml")
-    verifier_files = _read_verifier_files(task_dir)
-
-    return TaskGenomeEvidencePacket(
-        task_id=deterministic_manifest.task_id,
-        source_task_path=deterministic_manifest.source_task_path,
-        deterministic_manifest=deterministic_manifest,
-        task_toml=task_toml,
-        instruction_sections=_parse_markdown_sections(instruction),
-        verifier_files=verifier_files,
-        artifact_paths=deterministic_manifest.input_bundle.artifacts,
+    return TaskGenomeReview(
+        task=task,
+        status="extracted",
+        extractor=extractor,
+        genome=genome,
+        evidence=_build_review_evidence(
+            task_dir=task_dir,
+            instruction=instruction,
+            verifier_script=genome.verifier_contract.script,
+        ),
     )
 
 
-def task_genome_evidence_to_yaml(packet: TaskGenomeEvidencePacket) -> str:
-    """Serialise an evidence packet as YAML for inspection or model prompts."""
-    payload = packet.model_dump(mode="json", exclude_none=True)
+def task_genome_review_to_yaml(review: TaskGenomeReview) -> str:
+    """Serialise a task genome review without embedding source bytes."""
+    payload = review.model_dump(mode="json", exclude_none=True)
     return yaml.safe_dump(payload, sort_keys=False, allow_unicode=False)
+
+
+def publish_task_genome_review(review: TaskGenomeReview, repository: ArtifactRepository) -> ArtifactRef:
+    """Retain one review as one content-bound artifact."""
+
+    return repository.publish_model(value=review, media_type=TASK_GENOME_REVIEW_MEDIA_TYPE)
+
+
+def load_task_genome_review(ref: ArtifactRef, repository: ArtifactRepository) -> TaskGenomeReview:
+    """Load and validate one retained task genome review."""
+
+    if ref.media_type != TASK_GENOME_REVIEW_MEDIA_TYPE:
+        raise ValueError(f"unsupported task genome review media type: {ref.media_type}")
+    return TaskGenomeReview.model_validate_json(repository.read_bytes(ref))
+
+
+def resolve_task_genome_evidence(
+    review: TaskGenomeReview,
+    *,
+    task_dir: Path,
+    current_task: TaskSnapshotRef,
+) -> dict[str, list[str]]:
+    """Resolve review excerpts only when the selected task snapshot is unchanged."""
+
+    if review.is_stale(current_task):
+        raise ValueError("task genome review is stale for the selected task snapshot")
+    root = task_dir.resolve()
+    resolved: dict[str, list[str]] = {}
+    for key, spans in review.evidence.items():
+        resolved[key] = [_resolve_source_span(root, span) for span in spans]
+    return resolved
+
+
+def _build_review_evidence(
+    *,
+    task_dir: Path,
+    instruction: str,
+    verifier_script: str | None,
+) -> dict[str, list[SourceSpan]]:
+    instruction_spans = _markdown_source_spans(instruction)
+    evidence: dict[str, list[SourceSpan]] = {
+        "task_configuration": [_source_file_span(task_dir, "task.toml")],
+        "instructions": list(instruction_spans.values()),
+    }
+
+    verifier_paths = _existing_source_paths(
+        task_dir,
+        [verifier_script, "tests/test.sh", "tests/verify.py", "tests/ground_truth.json", "validation_rules.toml"],
+    )
+    if verifier_paths:
+        evidence["verifier_contract"] = [_source_file_span(task_dir, path) for path in verifier_paths]
+    return evidence
+
+
+def _markdown_source_spans(text: str) -> dict[str, SourceSpan]:
+    matches = list(_HEADING_RE.finditer(text))
+    if not matches:
+        lines = text.splitlines()
+        return {
+            "body": SourceSpan(
+                path="instruction.md",
+                start_line=1 if lines else None,
+                end_line=len(lines) if lines else None,
+                section="body",
+            )
+        }
+
+    spans: dict[str, SourceSpan] = {}
+    for index, match in enumerate(matches):
+        key = _normalise_key(match.group(2))
+        start_line = text.count("\n", 0, match.start()) + 1
+        if index + 1 < len(matches):
+            end_line = text.count("\n", 0, matches[index + 1].start())
+        else:
+            end_line = max(start_line, len(text.splitlines()))
+        spans[key] = SourceSpan(
+            path="instruction.md",
+            start_line=start_line,
+            end_line=max(start_line, end_line),
+            section=match.group(2).strip(),
+        )
+    return spans
+
+
+def _source_file_span(
+    task_dir: Path,
+    relative_path: str,
+    *,
+    section: str | None = None,
+    signal: str | None = None,
+) -> SourceSpan:
+    path = task_dir / relative_path
+    line_count = len(path.read_text(encoding="utf-8").splitlines())
+    return SourceSpan(
+        path=relative_path,
+        start_line=1 if line_count else None,
+        end_line=line_count or None,
+        section=section,
+        signal=signal,
+    )
+
+
+def _existing_source_paths(task_dir: Path, candidates: list[str | None]) -> list[str]:
+    paths: list[str] = []
+    for candidate in candidates:
+        if candidate is None or candidate in paths:
+            continue
+        if (task_dir / candidate).is_file():
+            paths.append(candidate)
+    return paths
+
+
+def _resolve_source_span(task_dir: Path, span: SourceSpan) -> str:
+    path = (task_dir / span.path).resolve()
+    if not path.is_relative_to(task_dir):
+        raise ValueError(f"task genome evidence path escapes the task snapshot: {span.path}")
+    if not path.is_file():
+        raise ValueError(f"task genome evidence source does not exist: {span.path}")
+    text = path.read_text(encoding="utf-8")
+    if span.start_line is None or span.end_line is None:
+        return text
+    lines = text.splitlines()
+    if span.end_line > len(lines):
+        raise ValueError(f"task genome evidence span exceeds source lines: {span.path}")
+    return "\n".join(lines[span.start_line - 1 : span.end_line])
 
 
 def _read_toml(path: Path) -> dict[str, Any]:
@@ -162,16 +294,6 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"expected JSON object in {path}")
     return payload
-
-
-def _read_verifier_files(task_dir: Path) -> dict[str, str]:
-    verifier_files: dict[str, str] = {}
-    tests_dir = task_dir / "tests"
-    for name in ("test.sh", "verify.py", "ground_truth.json"):
-        path = tests_dir / name
-        if path.exists():
-            verifier_files[path.relative_to(task_dir).as_posix()] = path.read_text(encoding="utf-8")
-    return verifier_files
 
 
 def _parse_markdown_sections(text: str) -> dict[str, str]:
@@ -404,13 +526,6 @@ def _extract_pressure_points(
                     "Solver must preserve the impedance-method pressure rather than "
                     "falling back to a resistance-only shortcut."
                 ),
-                provenance=[
-                    ProvenanceRef(
-                        file="instruction.md",
-                        section="Constraints",
-                        signal="resistance-only shortcut excluded",
-                    )
-                ],
                 confidence="high",
             )
         )
@@ -421,13 +536,6 @@ def _extract_pressure_points(
                 id="no_external_lookup",
                 type="tool_constraint",
                 description="Solver must rely on supplied context and engineering knowledge.",
-                provenance=[
-                    ProvenanceRef(
-                        file="instruction.md",
-                        section="Constraints",
-                        signal="no internet",
-                    )
-                ],
                 confidence="high",
             )
         )
@@ -441,17 +549,16 @@ def _pressure_points_from_validation_rules(
 ) -> list[PressurePoint]:
     points: list[PressurePoint] = []
     for rule in validation_rules.get("global_rules", []):
-        points.append(_pressure_point_from_rule(rule, "global_rules"))
+        points.append(_pressure_point_from_rule(rule))
 
     for section in validation_rules.get("sections", []):
-        section_id = str(section.get("id", "section"))
         for rule in section.get("rules", []):
-            points.append(_pressure_point_from_rule(rule, f"section:{section_id}"))
+            points.append(_pressure_point_from_rule(rule))
 
     return points
 
 
-def _pressure_point_from_rule(rule: dict[str, Any], section: str) -> PressurePoint:
+def _pressure_point_from_rule(rule: dict[str, Any]) -> PressurePoint:
     rule_id = _normalise_key(str(rule.get("id", "validation_rule")))
     level = str(rule.get("level", "warning"))
     category = str(rule.get("category", "validation"))
@@ -459,13 +566,6 @@ def _pressure_point_from_rule(rule: dict[str, Any], section: str) -> PressurePoi
         id=rule_id,
         type=f"{category}_{level}",
         description=str(rule.get("text", rule_id)),
-        provenance=[
-            ProvenanceRef(
-                file="validation_rules.toml",
-                section=section,
-                signal=str(rule.get("pattern", rule_id)),
-            )
-        ],
         confidence="high",
     )
 

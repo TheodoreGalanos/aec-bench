@@ -1,11 +1,15 @@
-# ABOUTME: Contract models for task genome sidecar manifests.
-# ABOUTME: Describes decomposed task pressures with provenance and review metadata.
+# ABOUTME: Contract models for task genome decomposition and snapshot-bound review artifacts.
+# ABOUTME: Keeps derived review evidence separate from runnable task identity and source bytes.
 
-from typing import Any, Literal
+from __future__ import annotations
 
-from pydantic import Field, field_validator
+from typing import Any, Literal, Self
 
+from pydantic import Field, PositiveInt, field_validator, model_validator
+
+from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.validators import (
+    FrozenStrictModel,
     NonEmptyStr,
     StrictModel,
     ensure_optional_relative_path,
@@ -13,18 +17,38 @@ from aec_bench.contracts.validators import (
 )
 
 Confidence = Literal["high", "medium", "low"]
-TaskGenomeStatus = Literal["extracted", "needs_review"]
+TaskGenomeStatus = Literal["extracted", "needs_review", "reviewed"]
+TASK_GENOME_REVIEW_MEDIA_TYPE = "application/vnd.aec-bench.task-genome-review+json"
 
 
-class ProvenanceRef(StrictModel):
-    file: NonEmptyStr
+class SourceSpan(FrozenStrictModel):
+    """One source location resolved only through the review's task snapshot."""
+
+    path: NonEmptyStr
+    start_line: PositiveInt | None = None
+    end_line: PositiveInt | None = None
     section: str | None = None
     signal: str | None = None
 
-    @field_validator("file")
+    @field_validator("path")
     @classmethod
-    def validate_file(cls, value: str) -> str:
+    def validate_path(cls, value: str) -> str:
         return ensure_relative_path(value)
+
+    @field_validator("section", "signal")
+    @classmethod
+    def validate_optional_text(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("source span text must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def validate_line_range(self) -> Self:
+        if (self.start_line is None) != (self.end_line is None):
+            raise ValueError("source span must set both start_line and end_line")
+        if self.start_line is not None and self.end_line is not None and self.end_line < self.start_line:
+            raise ValueError("source span end_line must not precede start_line")
+        return self
 
 
 class DomainFrame(StrictModel):
@@ -54,9 +78,7 @@ class PressurePoint(StrictModel):
     id: NonEmptyStr
     type: NonEmptyStr
     description: NonEmptyStr
-    provenance: list[ProvenanceRef] = Field(default_factory=list)
     confidence: Confidence = "medium"
-    reviewed_by: NonEmptyStr = "deterministic_extractor"
 
 
 class OutputContract(StrictModel):
@@ -85,9 +107,9 @@ class ExtractionSummary(StrictModel):
 
 
 class TaskGenomeManifest(StrictModel):
+    """Derived semantic decomposition without a source locator or review state."""
+
     task_id: NonEmptyStr
-    source_task_path: NonEmptyStr
-    status: TaskGenomeStatus = "extracted"
     domain_frame: DomainFrame
     scenario: Scenario
     input_bundle: InputBundle
@@ -99,32 +121,53 @@ class TaskGenomeManifest(StrictModel):
     trajectory_affordances: dict[str, Any] = Field(default_factory=dict)
     extraction: ExtractionSummary
 
-    @field_validator("source_task_path")
+
+class TaskGenomeReview(FrozenStrictModel):
+    """Regenerable review evidence bound to one exact runnable task snapshot."""
+
+    task: TaskSnapshotRef
+    status: TaskGenomeStatus
+    extractor: NonEmptyStr
+    reviewer: NonEmptyStr | None = None
+    genome: TaskGenomeManifest
+    evidence: dict[NonEmptyStr, list[SourceSpan]]
+
+    @field_validator("evidence")
     @classmethod
-    def validate_source_task_path(cls, value: str) -> str:
-        return ensure_relative_path(value)
+    def validate_evidence(cls, value: dict[str, list[SourceSpan]]) -> dict[str, list[SourceSpan]]:
+        if not value:
+            raise ValueError("task genome review evidence must not be empty")
+        empty_keys = [key for key, spans in value.items() if not spans]
+        if empty_keys:
+            raise ValueError(f"task genome evidence entries must contain source spans: {', '.join(empty_keys)}")
+        return value
+
+    @model_validator(mode="after")
+    def validate_review(self) -> Self:
+        if self.task.task_id != self.genome.task_id:
+            raise ValueError("task genome review task does not match the genome task_id")
+        if self.status == "reviewed" and self.reviewer is None:
+            raise ValueError("reviewed task genome evidence must identify its reviewer")
+        return self
+
+    def is_stale(self, current_task: TaskSnapshotRef) -> bool:
+        """Return whether the selected task snapshot differs from this review."""
+
+        return self.task != current_task
 
 
-class TaskGenomeEvidencePacket(StrictModel):
-    task_id: NonEmptyStr
-    source_task_path: NonEmptyStr
-    deterministic_manifest: TaskGenomeManifest
-    task_toml: dict[str, Any] = Field(default_factory=dict)
-    instruction_sections: dict[str, str] = Field(default_factory=dict)
-    verifier_files: dict[str, str] = Field(default_factory=dict)
-    artifact_paths: list[str] = Field(default_factory=list)
-
-    @field_validator("source_task_path")
-    @classmethod
-    def validate_source_task_path(cls, value: str) -> str:
-        return ensure_relative_path(value)
-
-    @field_validator("verifier_files")
-    @classmethod
-    def validate_verifier_file_paths(cls, value: dict[str, str]) -> dict[str, str]:
-        return {ensure_relative_path(path): content for path, content in value.items()}
-
-    @field_validator("artifact_paths")
-    @classmethod
-    def validate_artifact_paths(cls, value: list[str]) -> list[str]:
-        return [ensure_relative_path(item) for item in value]
+__all__ = (
+    "TASK_GENOME_REVIEW_MEDIA_TYPE",
+    "Confidence",
+    "DomainFrame",
+    "ExtractionSummary",
+    "InputBundle",
+    "OutputContract",
+    "PressurePoint",
+    "Scenario",
+    "SourceSpan",
+    "TaskGenomeManifest",
+    "TaskGenomeReview",
+    "TaskGenomeStatus",
+    "VerifierContract",
+)

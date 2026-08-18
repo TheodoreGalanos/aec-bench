@@ -106,9 +106,9 @@ def genome_command(
         root = task_dir.parent
 
     from aec_bench.tasks.genome import (
-        build_task_genome_evidence,
+        build_task_genome_review,
         extract_task_genome,
-        task_genome_evidence_to_yaml,
+        task_genome_review_to_yaml,
         task_genome_to_yaml,
     )
 
@@ -117,20 +117,32 @@ def genome_command(
         typer.echo(task_genome_to_yaml(manifest))
         return
 
-    if mode == "evidence":
-        packet = build_task_genome_evidence(task_dir, root)
-        typer.echo(task_genome_evidence_to_yaml(packet))
-        return
+    if mode in {"evidence", "llm"}:
+        from aec_bench.harness.compilation.task_snapshot import build_task_snapshot
+        from aec_bench.tasks.loader import load_task_definition
 
-    if mode == "llm":
+        task_snapshot = build_task_snapshot(
+            task=load_task_definition(task_dir, root),
+            tasks_root=root,
+        )
+        review = build_task_genome_review(task_dir, root, task=task_snapshot)
+
+        if mode == "evidence":
+            typer.echo(task_genome_review_to_yaml(review))
+            return
+
         if not model:
             console.print("[red]--model is required when --mode llm[/red]")
             raise typer.Exit(1)
         from aec_bench.evolution.task_genome_decomposer import decompose_task_genome
 
-        packet = build_task_genome_evidence(task_dir, root)
-        manifest = decompose_task_genome(packet, model_name=model)
-        typer.echo(task_genome_to_yaml(manifest))
+        review = decompose_task_genome(
+            review,
+            task_dir=task_dir,
+            current_task=task_snapshot,
+            model_name=model,
+        )
+        typer.echo(task_genome_review_to_yaml(review))
         return
 
     console.print("[red]Invalid --mode. Expected heuristic, evidence, or llm.[/red]")
@@ -186,9 +198,9 @@ def genome_batch_command(
         raise typer.Exit(1)
 
     from aec_bench.tasks.genome import (
-        build_task_genome_evidence,
+        build_task_genome_review,
         extract_task_genome,
-        task_genome_evidence_to_yaml,
+        publish_task_genome_review,
         task_genome_to_yaml,
     )
     from aec_bench.tasks.loader import iter_task_instance_dirs
@@ -197,9 +209,15 @@ def genome_batch_command(
     destination = Path(output_dir).resolve()
     destination.mkdir(parents=True, exist_ok=True)
 
-    entries: list[dict[str, str]] = []
+    entries: list[dict[str, object]] = []
     skipped = 0
     errors: list[str] = []
+
+    review_repository = None
+    if mode in {"evidence", "llm"}:
+        from aec_bench.ledger.artifact_repository import ArtifactRepository
+
+        review_repository = ArtifactRepository(destination / "review_artifacts")
 
     for task_dir in iter_task_instance_dirs(root):
         relative_parts = task_dir.relative_to(root).parts
@@ -209,18 +227,34 @@ def genome_batch_command(
 
         try:
             if mode == "evidence":
-                packet = build_task_genome_evidence(task_dir, root)
-                manifest = packet.deterministic_manifest
-                body = task_genome_evidence_to_yaml(packet)
+                from aec_bench.harness.compilation.task_snapshot import build_task_snapshot
+                from aec_bench.tasks.loader import load_task_definition
+
+                task_snapshot = build_task_snapshot(
+                    task=load_task_definition(task_dir, root),
+                    tasks_root=root,
+                )
+                review = build_task_genome_review(task_dir, root, task=task_snapshot)
+                manifest = review.genome
             elif mode == "llm":
                 from aec_bench.evolution.task_genome_decomposer import decompose_task_genome
+                from aec_bench.harness.compilation.task_snapshot import build_task_snapshot
+                from aec_bench.tasks.loader import load_task_definition
 
-                packet = build_task_genome_evidence(task_dir, root)
-                manifest = decompose_task_genome(packet, model_name=model or "")
-                body = task_genome_to_yaml(manifest)
+                task_snapshot = build_task_snapshot(
+                    task=load_task_definition(task_dir, root),
+                    tasks_root=root,
+                )
+                review = build_task_genome_review(task_dir, root, task=task_snapshot)
+                review = decompose_task_genome(
+                    review,
+                    task_dir=task_dir,
+                    current_task=task_snapshot,
+                    model_name=model or "",
+                )
+                manifest = review.genome
             else:
                 manifest = extract_task_genome(task_dir, root)
-                body = task_genome_to_yaml(manifest)
         except Exception as exc:
             errors.append(f"{task_dir.relative_to(root).as_posix()}: {type(exc).__name__}: {exc}")
             continue
@@ -229,18 +263,27 @@ def genome_batch_command(
             skipped += 1
             continue
 
-        sidecar_path = _catalogue_sidecar_path(destination, manifest.task_id)
-        sidecar_path.parent.mkdir(parents=True, exist_ok=True)
-        sidecar_path.write_text(body, encoding="utf-8")
-
-        entries.append(
-            {
-                "task_id": manifest.task_id,
-                "domain": manifest.domain_frame.discipline,
-                "path": sidecar_path.relative_to(destination).as_posix(),
-                "status": manifest.status,
-            }
-        )
+        entry: dict[str, object] = {
+            "task_id": manifest.task_id,
+            "domain": manifest.domain_frame.discipline,
+        }
+        if mode in {"evidence", "llm"}:
+            if review_repository is None:
+                raise RuntimeError("task genome review repository is not configured")
+            review_ref = publish_task_genome_review(review, review_repository)
+            entry.update(
+                status=review.status,
+                review=review_ref.model_dump(mode="json"),
+            )
+        else:
+            sidecar_path = _catalogue_sidecar_path(destination, manifest.task_id)
+            sidecar_path.parent.mkdir(parents=True, exist_ok=True)
+            sidecar_path.write_text(task_genome_to_yaml(manifest), encoding="utf-8")
+            entry.update(
+                status="extracted",
+                path=sidecar_path.relative_to(destination).as_posix(),
+            )
+        entries.append(entry)
         if limit is not None and len(entries) >= limit:
             break
 
@@ -329,7 +372,8 @@ def genome_template_batch_command(
                 "task_id": manifest.task_id,
                 "domain": manifest.domain_frame.discipline,
                 "path": sidecar_path.relative_to(destination).as_posix(),
-                "status": manifest.status,
+                "status": "extracted",
+                "template_path": _relative_catalogue_path(template_dir, repo_root),
             }
         )
         if limit is not None and len(entries) >= limit:

@@ -129,6 +129,13 @@ templates, generators, and task-world compilers turn repository sources into
 validated runnable material. Task-family semantics stay with their task or
 template owner.
 
+Task-genome extraction creates derived review evidence. One task snapshot owns
+the source identity; relative source spans locate supporting material without
+copying task configuration, instructions, verifier source, or per-file hashes
+into the review. Review metadata and decomposition do not participate in task
+or dataset identity. The artifact repository stores a review only when a
+workflow needs durable review history.
+
 ### Experiment, trial, and episode orchestration
 
 The harness owns ordinary trial staging, backend execution, collection, and
