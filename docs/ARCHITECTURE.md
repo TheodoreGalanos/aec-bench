@@ -149,7 +149,9 @@ stewardship scoring, remains with the task package.
 ### Durable artifacts
 
 The ledger and artifact stores own persistence mechanics, integrity checks, and
-queries. `TrialRecord` is the durable trial provenance envelope. Dataset
+queries. `ArtifactRepository` publishes exact bytes and canonical model bytes
+as `ArtifactRef` values, then verifies ID, size, and digest on each read.
+`TrialRecord` is the durable trial provenance envelope. Dataset
 manifests identify immutable benchmark snapshots. Evidence-lifecycle and world
 records add content-addressed artifacts where replay, recovery, or isolation
 requires them.
@@ -159,7 +161,9 @@ episode state or replay facts into a second shared model. `OutputRecord` owns
 termination versus truncation and the final runtime reason. `CostRecord` owns
 aggregate model calls, token usage, cache usage, advisor usage, and estimated
 cost. A task-owned episode inventory can be attached through one verified
-`ArtifactReference`. Reports consume these canonical fields and never recover
+`ArtifactReference`. The actor invocation authority returns one final
+`AuthorityEvidenceRef` after quiescent close; trial-record migration remains
+owned by the trial contract. Reports consume these canonical fields and never recover
 aggregate usage from the open-ended provider metadata map.
 
 `trajectory.jsonl` is the current ordered interaction record for ordinary

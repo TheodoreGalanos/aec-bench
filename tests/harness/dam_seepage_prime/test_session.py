@@ -18,6 +18,7 @@ from aec_bench.harness.dam_seepage_prime.session import (
     DamSeepagePrimeSessionLimits,
     run_dam_seepage_prime_session,
 )
+from aec_bench.ledger.artifact_repository import ArtifactRepository
 from aec_bench.prime_agent.acp import PrimeAcpIsolation
 from aec_bench.prime_agent.skills import (
     ACTOR_LEDGER_PLAN_INSTRUCTION,
@@ -124,8 +125,14 @@ async def test_open_session_completes_exact_profile_and_keeps_evaluation_separat
     assert evidence["actions"] == [action["action_name"] for action in action_plan]
     assert evidence["world_actor_client_sha256"] == result.world_actor_client_sha256
     assert evidence["world_actor_close_complete"] is True
+    assert result.actor_authority_evidence is not None
+    assert evidence["actor_authority_evidence"] == result.actor_authority_evidence.model_dump(mode="json")
     assert evidence["evaluation"]["successful"] is True
     assert result.actor_authority_file.is_file()
+    assert (
+        ArtifactRepository(result.actor_authority_file.parent).read_bytes(result.actor_authority_evidence.artifact)
+        == result.actor_authority_file.read_bytes()
+    )
     provenance = json.loads(result.prime.paths.run_file.read_text(encoding="utf-8"))
     assert [skill["name"] for skill in provenance["skills"]] == ["aec-world"]
 

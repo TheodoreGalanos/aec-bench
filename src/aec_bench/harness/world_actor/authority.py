@@ -17,6 +17,11 @@ from typing import Any, Protocol
 
 from pydantic import Field, JsonValue
 
+from aec_bench.contracts.authority_evidence import (
+    ACTOR_INVOCATION_EVIDENCE_PROTOCOL,
+    AuthorityEvidenceKind,
+    AuthorityEvidenceRef,
+)
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 from aec_bench.contracts.world_interface import (
     WorldActorActionRequest,
@@ -25,9 +30,10 @@ from aec_bench.contracts.world_interface import (
     WorldActorObservation,
     WorldInterfaceError,
 )
+from aec_bench.ledger.artifact_repository import ArtifactRepository
 
 ACTOR_INVOCATION_SEMANTICS = "aec-bench/actor-invocation/1"
-ACTOR_INVOCATION_EVIDENCE_SCHEMA = "aec-bench/actor-invocation-evidence/1"
+ACTOR_INVOCATION_EVIDENCE_SCHEMA = ACTOR_INVOCATION_EVIDENCE_PROTOCOL
 
 
 class WorldActorHost(Protocol):
@@ -139,6 +145,7 @@ class AuthorityCloseReport:
     unknown_outcome_request_ids: tuple[str, ...]
     closed_at: datetime
     lifecycle: ActorInvocationLifecycle
+    evidence_ref: AuthorityEvidenceRef | None = None
 
 
 class ActorInvocationError(RuntimeError):
@@ -211,6 +218,7 @@ class ActorInvocationAuthority:
         self._terminal = False
         self._terminal_action_sequence: int | None = None
         self._evidence_sequence = 0
+        self._evidence_finalized = False
         self._successful_close_report: AuthorityCloseReport | None = None
 
     @property
@@ -530,21 +538,31 @@ class ActorInvocationAuthority:
                 closed_at=datetime.now(UTC),
                 lifecycle=self._lifecycle,
             )
+            close_record = {
+                "record_type": "close",
+                "closed_at": report.closed_at.isoformat(),
+                "lifecycle": report.lifecycle.value,
+                "quiescent": report.quiescent,
+                "complete": report.complete,
+                "unsettled_request_ids": list(report.unsettled_request_ids),
+                "unknown_outcome_request_ids": list(report.unknown_outcome_request_ids),
+                "budget_used": self._budget_used,
+                "terminal": self._terminal,
+            }
             if report.quiescent:
+                evidence_ref = self._finalize_evidence(close_record)
+                report = AuthorityCloseReport(
+                    quiescent=report.quiescent,
+                    complete=report.complete,
+                    unsettled_request_ids=report.unsettled_request_ids,
+                    unknown_outcome_request_ids=report.unknown_outcome_request_ids,
+                    closed_at=report.closed_at,
+                    lifecycle=report.lifecycle,
+                    evidence_ref=evidence_ref,
+                )
                 self._successful_close_report = report
-            self._append_evidence(
-                {
-                    "record_type": "close",
-                    "closed_at": report.closed_at.isoformat(),
-                    "lifecycle": report.lifecycle.value,
-                    "quiescent": report.quiescent,
-                    "complete": report.complete,
-                    "unsettled_request_ids": list(report.unsettled_request_ids),
-                    "unknown_outcome_request_ids": list(report.unknown_outcome_request_ids),
-                    "budget_used": self._budget_used,
-                    "terminal": self._terminal,
-                }
-            )
+            else:
+                self._append_evidence(close_record)
             return report
 
     def _dispatch(self, entry: _RequestEntry) -> ActorInvocationOutcome:
@@ -849,18 +867,44 @@ class ActorInvocationAuthority:
 
     def _append_evidence(self, record: dict[str, Any]) -> None:
         with self._evidence_lock:
-            self._evidence_sequence += 1
-            payload = {
-                "sequence": self._evidence_sequence,
-                "schema": ACTOR_INVOCATION_EVIDENCE_SCHEMA,
-                "authority_id": self.authority_id,
-                "actor_principal_id": self.config.actor_principal_id,
-                **record,
-            }
-            with self.config.evidence_path.open("a", encoding="utf-8") as stream:
-                stream.write(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
-                stream.flush()
-                os.fsync(stream.fileno())
+            if self._evidence_finalized:
+                return
+            self._append_evidence_locked(record)
+
+    def _finalize_evidence(self, close_record: dict[str, Any]) -> AuthorityEvidenceRef:
+        """Append the final close record, publish exact bytes, and seal the stream."""
+
+        with self._evidence_lock:
+            if self._evidence_finalized:
+                assert self._successful_close_report is not None
+                assert self._successful_close_report.evidence_ref is not None
+                return self._successful_close_report.evidence_ref
+            self._append_evidence_locked(close_record)
+            artifact = ArtifactRepository(self.config.evidence_path.parent).publish_bytes(
+                data=self.config.evidence_path.read_bytes(),
+                media_type="application/x-ndjson",
+            )
+            reference = AuthorityEvidenceRef(
+                authority_kind=AuthorityEvidenceKind.ACTOR_INVOCATION,
+                protocol=ACTOR_INVOCATION_EVIDENCE_SCHEMA,
+                artifact=artifact,
+            )
+            self._evidence_finalized = True
+            return reference
+
+    def _append_evidence_locked(self, record: dict[str, Any]) -> None:
+        self._evidence_sequence += 1
+        payload = {
+            "sequence": self._evidence_sequence,
+            "schema": ACTOR_INVOCATION_EVIDENCE_SCHEMA,
+            "authority_id": self.authority_id,
+            "actor_principal_id": self.config.actor_principal_id,
+            **record,
+        }
+        with self.config.evidence_path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
 
     def _require_readable(self) -> None:
         with self._condition:

@@ -39,7 +39,7 @@ readable.
 | Adapter and Harbor execution | Adapters and harness | Harness input crosses into local model execution or the supported Harbor workflow and returns untrusted output | Internal adapter values; Harbor result documents are lenient ingestion boundaries | [`AdapterRequest` and `AdapterResult`](../src/aec_bench/adapters/base.py), the [Harbor workflow](../src/aec_bench/harness/harbor_workflow.py), and [Harbor ingestion models](../src/aec_bench/harness/harbor_contract.py) | Internal, cross-process, and external |
 | Output completion and explicit commit | Adapter infrastructure and task contract | A fixed candidate artifact becomes structurally complete and, when required, bound by exact bytes | Versioned when persisted in trial evidence; adapter integration is internal | [`OutputCompletionContract` and `OutputCommitAttestation`](../src/aec_bench/contracts/output_completion.py) plus the shared [commit authority](../src/aec_bench/adapters/output_commit.py) | Request configuration, adapter result, and persisted attestation |
 | Prime package and evaluation integration | Prime integration | Current public task or lifecycle material becomes an independently installed package; hosted samples return as untrusted provider evidence | Public command and external package behavior; samples normalize into current records | [`exporter.py`](../src/aec_bench/prime_lab/exporter.py), [`lifecycle_exporter.py`](../src/aec_bench/prime_lab/lifecycle_exporter.py), and [`eval_import.py`](../src/aec_bench/prime_lab/eval_import.py) | External package and provider ingestion |
-| Artifact and evidence reference | Harness, ledger, and the producing domain | Filesystem or provider output becomes content-bound evidence | Protected when stored in a trial, dataset, freeze, or published record | `ArtifactReference` in [`trial_record.py`](../src/aec_bench/contracts/trial_record.py) and narrower owner-specific references | Persisted reference |
+| Artifact and evidence reference | Harness, ledger, and the producing domain | Filesystem or provider output becomes content-bound evidence | Protected when stored in a trial, dataset, freeze, or published record | `ArtifactRef` in [`artifacts.py`](../src/aec_bench/contracts/artifacts.py), `ArtifactReference` in [`trial_record.py`](../src/aec_bench/contracts/trial_record.py), and narrower owner-specific references | Persisted reference |
 | Visibility classification | Task ownership and evaluation policy | Material enters public, calibration, or holdout handling | Protected | `Visibility` in [`task_definition.py`](../src/aec_bench/contracts/task_definition.py) and visibility checks in persisted records | Persisted and policy-bearing |
 | Interactive-world execution | Interactive-world runtime and registered task worlds | An exact build and profile become one task-owned state, observation, action, transition, and evaluation loop | Internal functional core; task-owned persisted records where a world adds persistence | [`interactive_world.py`](../src/aec_bench/contracts/interactive_world.py), [`world_logic.py`](../src/aec_bench/worlds/runtime/world_logic.py), [`episode.py`](../src/aec_bench/worlds/runtime/episode.py), [`catalogue.py`](../src/aec_bench/worlds/catalogue.py), and the task functions described in [World authoring](world-authoring.md) | Internal, with protected owner-specific extensions |
 | Installed world actor and host calls | Interactive-world runtime and concrete integration owners | An actor or host request crosses a process boundary and reaches the permitted task-owned authority | Versioned local actor protocol; pump-owned persisted run records | [`world_interface.py`](../src/aec_bench/contracts/world_interface.py), the shared [`world_actor`](../src/aec_bench/harness/world_actor/) authority, protocol, endpoint, and staged client, plus the [runtime protocol](protocols/interactive-world-runtime.md) | Internal, persisted, and installed JSON |
@@ -431,9 +431,24 @@ collected artifact and task contract before it trusts the claim.
 
 ## Artifact and evidence references
 
-`ArtifactReference` binds kind, path, media type, and SHA-256 for evidence
-attached to a trial. Other domains use narrower references when they need extra
-identity, lineage, visibility, or authority fields.
+`ArtifactRef` binds a repository artifact ID, media type, byte size, and
+SHA-256 for independently retained bytes. `ArtifactRepository` derives the
+storage locator from the digest and verifies the locator, size, and digest on
+every read. Its canonical model encoding uses JSON field aliases, sorted object
+keys, stable set order, preserved list order, UTF-8, compact separators, and
+one final newline. It rejects non-finite numbers.
+
+The protected `TrialRecord` still uses `ArtifactReference`, which binds kind,
+path, media type, and SHA-256 for trial evidence. That current reference does
+not gain the new repository read guarantees until its owning format migration.
+Other domains use narrower references when they need extra identity, lineage,
+visibility, or authority fields.
+
+`AuthorityEvidenceRef` adds the authority kind and evidence protocol to one
+`ArtifactRef`. A quiescent `ActorInvocationAuthority` close returns one such
+reference for its final semantic evidence stream. An unsettled close does not
+publish a final reference. The existing DeepSeek evidence-v2 path remains
+supported during this conversion.
 
 A reference is valid only when the owning protocol verifies the referenced
 bytes and their relationship to the parent record. A path string alone is not

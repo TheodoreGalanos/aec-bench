@@ -40,12 +40,13 @@ This policy does not state that later provenance work is complete. In
 particular:
 
 - `ContentAddressedModel` and current self-addressed contracts still exist;
-- the current exact-byte reference is `ArtifactReference`, with narrower
-  owner-specific reference types where required;
+- `ArtifactRef` is the universal exact-byte store reference, while the
+  protected `TrialRecord` still uses `ArtifactReference` until its owning
+  migration;
 - current catalogue, dataset, trial, evaluation, and run-bundle contracts keep
   their existing supported shapes until their owning change is implemented;
-- no universal `ArtifactRef`, trial-record v2, dataset v2, catalogue v2, or
-  evaluation-regime bundle is introduced by this policy; and
+- no trial-record v2, dataset v2, catalogue v2, or evaluation-regime bundle is
+  introduced by this policy; and
 - current DeepSeek evidence v2 and the installed World actor protocols remain
   supported.
 
@@ -97,6 +98,8 @@ become the domain ID merely because the bytes can be serialized.
 
 Current fail-closed examples include:
 
+- `ArtifactRef.sha256`, which `ArtifactRepository` checks with the
+  digest-derived artifact ID and retained byte size on every read;
 - `DeepSeekEvidenceArtifact.sha256`, which is checked against the retained
   file bytes and size;
 - `ImmutableArtifact.sha256`, which the immutable byte store checks on read;
@@ -324,9 +327,10 @@ Unacceptable uses include:
 - a deterministic definition that contains the time it was serialized; and
 - a generic `content_hash` used without a named payload or consumer.
 
-The current `ArtifactReference` and owner-specific evidence references remain
-the contract authority until their owners deliberately replace them. This
-policy does not add a parallel reference type.
+New independently retained artifacts use `ArtifactRef`. The protected
+`ArtifactReference` and owner-specific evidence references remain in their
+current contracts until their owners deliberately migrate them. Do not add a
+second reference for bytes that already have one authoritative reference.
 
 ## Version and timestamp rules
 

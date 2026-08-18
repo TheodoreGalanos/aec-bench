@@ -22,6 +22,7 @@ from aec_bench.adapters.deepseek_harness.native_world_tools import (
 )
 from aec_bench.adapters.local_registry import build_local_adapter
 from aec_bench.contracts.agent_output import AgentOutputStatus
+from aec_bench.contracts.authority_evidence import AuthorityEvidenceRef
 from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.contracts.world_interface import WorldActorActionRequest, WorldActorCapabilityCatalogue
 from aec_bench.contracts.world_session import (
@@ -104,6 +105,7 @@ class CompletedPumpStationModelSession:
     result: WorldSessionResult
     verification: PumpStationCoupledVerificationReport
     adapter_result: AdapterResult
+    actor_authority_evidence: AuthorityEvidenceRef
     output_dir: Path
     journey_status: PumpStationJourneyStatus
     stop_reason: str
@@ -376,6 +378,9 @@ def run_pump_station_model_session(
             authority_close_report = authority.close()
     if not authority_close_report.complete:
         raise RuntimeError("pump-station actor invocation authority did not close completely")
+    actor_authority_evidence = authority_close_report.evidence_ref
+    if actor_authority_evidence is None:
+        raise RuntimeError("pump-station actor invocation authority did not publish final evidence")
     if not adapter_results:
         raise RuntimeError("pump-station model journey produced no adapter segment")
     adapter_result = _aggregate_adapter_results(
@@ -392,6 +397,7 @@ def run_pump_station_model_session(
         "max_world_actions": authority.config.max_world_actions,
         "world_action_count": authority.world_action_count,
         "evidence_path": "actor-invocation-evidence.jsonl",
+        "evidence_ref": actor_authority_evidence.model_dump(mode="json"),
         "close": {
             "quiescent": authority_close_report.quiescent,
             "complete": authority_close_report.complete,
@@ -441,6 +447,7 @@ def run_pump_station_model_session(
         result,
         verification,
         adapter_result,
+        actor_authority_evidence,
         destination,
         journey_status,
         stop_reason,

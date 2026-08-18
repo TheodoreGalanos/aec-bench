@@ -280,11 +280,13 @@ def test_deepseek_model_session_receives_only_actor_tools_and_token_limits(tmp_p
     inventory_paths = {artifact["path"] for artifact in inventory["artifacts"]}
     assert "actor-invocation-evidence.jsonl" in inventory_paths
     assert "native-world-tool-surface.json" in inventory_paths
+    assert completed.actor_authority_evidence.artifact.artifact_id in inventory_paths
     authority_record = completed.adapter_result.configuration_record["actor_invocation_authority"]
     assert authority_record["actor_principal_id"] == "actor.deepseek-world"
     assert authority_record["max_world_actions"] == 90
     assert authority_record["world_action_count"] == 0
     assert authority_record["close"]["complete"] is True
+    assert authority_record["evidence_ref"] == completed.actor_authority_evidence.model_dump(mode="json")
     surface_record = json.loads((completed.output_dir / "native-world-tool-surface.json").read_text(encoding="utf-8"))
     assert surface_record["catalogue_sha256"] == authority_record["catalogue_sha256"]
     assert surface_record["action_mapping"] == [

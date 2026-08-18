@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -13,6 +14,8 @@ from typing import Any, cast
 import pytest
 from pydantic import JsonValue
 
+from aec_bench.contracts.artifacts import ArtifactRef
+from aec_bench.contracts.authority_evidence import AuthorityEvidenceKind, AuthorityEvidenceRef
 from aec_bench.contracts.world_interface import WorldActorActionRequest
 from aec_bench.contracts.world_session import (
     StewardshipStateSnapshotRef,
@@ -344,7 +347,17 @@ def _fake_segment_result(
     actor_transport = evidence_directory / "world-actor-transport.jsonl"
     actor_transport.write_text("", encoding="utf-8")
     actor_authority = evidence_directory / "world-actor-authority.jsonl"
-    actor_authority.write_text("", encoding="utf-8")
+    actor_authority.write_text("{}\n", encoding="utf-8")
+    actor_authority_evidence = AuthorityEvidenceRef(
+        authority_kind=AuthorityEvidenceKind.ACTOR_INVOCATION,
+        protocol="aec-bench/actor-invocation-evidence/1",
+        artifact=ArtifactRef(
+            artifact_id="artifacts/sha256/ca/" + hashlib.sha256(b"{}\n").hexdigest(),
+            sha256=hashlib.sha256(b"{}\n").hexdigest(),
+            size_bytes=3,
+            media_type="application/x-ndjson",
+        ),
+    )
     run_file = evidence_directory / "prime-world-run.json"
     run_file.write_text("{}\n", encoding="utf-8")
     prime = _fake_prime_run(
@@ -369,6 +382,7 @@ def _fake_segment_result(
         evaluation=evaluate_pump_station_reference_run(run, evaluation_scope="bounded_continuation"),
         actor_transport_file=actor_transport,
         actor_authority_file=actor_authority,
+        actor_authority_evidence=actor_authority_evidence,
         run_file=run_file,
         world_actor_client_sha256="0" * 64,
         world_action_count=action_count,

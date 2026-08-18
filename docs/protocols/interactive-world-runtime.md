@@ -102,7 +102,11 @@ Prime interactive sessions stage the generic client and use
 The pump host owns its world repository path. The dam host owns one in-memory
 dam episode. The endpoint and authority close with the Prime ACP session.
 Unsettled or unknown authority work makes close incomplete and prevents complete
-trial finalization.
+trial finalization. A quiescent authority close appends the final close record,
+seals the semantic stream, and returns one `AuthorityEvidenceRef` to an
+immutable `ArtifactRef`. A non-quiescent close returns no final evidence
+reference. A later quiescent close can publish the final reference after all
+in-flight work settles.
 
 The Prime root process and its descendants receive the same scoped capability,
 so they form one composite actor principal. Per-child action attribution is not
@@ -212,6 +216,11 @@ capability secret, endpoint and repository paths, raw arguments, opaque
 decisions, arbitrary malformed payload content, provider credentials, and
 host-only state.
 
+Prime and Harbor session results retain the final actor-authority reference.
+The source JSONL path remains during the DeepSeek evidence-v2 compatibility
+period. The reference identifies the final immutable copy and does not replace
+the task-owned World repository as replay authority.
+
 Prime HOME and XDG paths are trial-local under the actor workspace. A bounded
 session has one Prime runtime. A pump journey uses the same actor workspace for
 all actor-owned files, but gives every segment a fresh Prime runtime and ACP
@@ -301,6 +310,10 @@ copying episode state into a second execution projection. `OutputRecord` owns
 completion and failure facts; `CostRecord` owns aggregate usage and estimated
 cost. Public reports select fields from these authorities rather than exposing
 state, verifier paths, provider configuration, or recovery data.
+
+The actor authority result exposes `AuthorityEvidenceRef` for the final
+semantic stream. The current `TrialRecord` does not yet have a dedicated field
+for this reference; its versioned migration owns that persisted change.
 
 `prime-world-journey.json` records the policy digest, journey safeguards,
 ordered session evidence, exact session-to-control-to-snapshot lineage, totals,
