@@ -1,11 +1,11 @@
 ---
 name: create-dataset
-description: Create a versioned benchmark dataset interactively. Discovers templates and tasks, guides selection and configuration, generates instances if needed, freezes into an immutable manifest, and verifies integrity. Use when the user wants to create, build, or publish a dataset.
+description: Create and publish a benchmark dataset interactively. Discovers templates and tasks, guides selection and configuration, generates instances if needed, creates a semantic manifest, publishes an immutable reference, and verifies integrity. Use when the user wants to create, build, or publish a dataset.
 ---
 
 # Create Dataset
 
-Create a versioned, immutable benchmark dataset through guided discovery and configuration. Datasets are the formal "this IS the benchmark" artifact that sits between template generation and experiment execution.
+Create a semantic dataset manifest and publish one immutable Git or detached-bundle reference through guided discovery and configuration.
 
 ## When to Use
 
@@ -83,15 +83,13 @@ Ask about difficulty distribution:
 
 Ask for dataset metadata:
 
-> **Dataset name?** (e.g., `aec-bench-electrical-v1`, `full-benchmark`)
+> **Dataset ID?** (e.g., `aec-bench-electrical`, `full-benchmark`)
 
-> **Version?** (e.g., `1.0.0`)
+> **Publication label?** (e.g., `public-2026`, `qualification-set`)
 
 > **One-line summary?** (e.g., "200 tasks across 5 AEC domains for AI agent evaluation")
 
-> **Purpose?** (optional — why does this dataset exist?)
-
-### Step 5 — Generate and Freeze
+### Step 5 — Generate, Create, and Publish
 
 Build a `suite.toml` from the user's selections:
 
@@ -118,18 +116,23 @@ Execute the pipeline:
 
 2. **Create the dataset manifest**:
    ```bash
-   aec-bench dataset create --from-suite-output <manifest_path> --name "<name>" --version "<version>" --summary "<summary>"
+   aec-bench dataset create "<dataset_id>" --from-suite-output <manifest_path> --description "<summary>"
    ```
    Use the `manifest_path` returned by `generate suite` for `<manifest_path>`.
 
-3. **Verify integrity**:
+3. **Publish an immutable bundle reference**:
    ```bash
-   aec-bench dataset validate <name>
+   aec-bench dataset publish <dataset_id> --label <label>
    ```
 
-4. **Show the result**:
+4. **Verify integrity**:
    ```bash
-   aec-bench dataset info <name>
+   aec-bench dataset validate <dataset_id>@<label>
+   ```
+
+5. **Show the result**:
+   ```bash
+   aec-bench dataset info <dataset_id>@<label>
    ```
 
 ### Step 6 — Next Steps
@@ -139,7 +142,7 @@ After successful creation, suggest:
 > Dataset created! Next steps:
 >
 > - **Run an experiment:** `aec-bench run --config experiment.yaml` (reference this dataset in the tasks section)
-> - **Export for sharing:** `aec-bench dataset export <name> --output <name>.tar.gz`
+> - **Export for sharing:** `aec-bench dataset export <dataset_id>@<label> --output <dataset_id>.tar.gz`
 > - **Configure an experiment:** invoke Configure Experiment, which will discover this dataset
 
 Show how to reference the dataset in an experiment config:
@@ -147,7 +150,7 @@ Show how to reference the dataset in an experiment config:
 ```yaml
 experiment_id: eval-sonnet-on-<name>
 tasks:
-  dataset: "<name>@<version>"
+  dataset: "<dataset_id>@<label>"
 agents:
   - name: sonnet-tool-loop
     adapter: tool_loop
@@ -158,7 +161,8 @@ compute:
 
 ## Key Rules
 
-- Always verify integrity after creation with `aec-bench dataset validate`
+- Always publish first, then verify the exact reference with `aec-bench dataset validate`
+- Never use `latest` as a publication label or persisted selector
 - Suggest meaningful names — avoid generic names like "test" or "dataset1"
 - Default seed to 42 for reproducibility unless the user specifies otherwise
 - If the user has no templates, suggest Create Template first

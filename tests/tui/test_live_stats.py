@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC
 from pathlib import Path
 
 import pytest
@@ -106,7 +105,7 @@ def test_build_disciplines_summary_empty(tmp_path: Path) -> None:
 
 
 def test_build_datasets_summary_lists_datasets(tmp_path: Path) -> None:
-    """Datasets are returned with name, version, task_count."""
+    """Datasets are returned with stable ID and task count."""
     from aec_bench.tui.widgets.live_stats import build_datasets_summary
 
     _write_dataset_manifest(tmp_path, "my-suite", "1.0.0", task_count=10)
@@ -115,8 +114,7 @@ def test_build_datasets_summary_lists_datasets(tmp_path: Path) -> None:
     result = build_datasets_summary(tmp_path)
 
     assert len(result) == 2
-    by_name = {d.name: d for d in result}
-    assert by_name["my-suite"].version == "1.0.0"
+    by_name = {dataset.dataset_id: dataset for dataset in result}
     assert by_name["my-suite"].task_count == 10
     assert by_name["other-suite"].task_count == 25
 
@@ -200,37 +198,20 @@ def _write_template(templates_root: Path, discipline: str, task_id: str) -> None
 
 
 def _write_dataset_manifest(datasets_root: Path, name: str, version: str, *, task_count: int) -> None:
-    """Write a minimal dataset manifest.json."""
-    from datetime import datetime
+    """Write a minimal schema-2 dataset manifest."""
 
-    manifest_dir = datasets_root / name / version
-    manifest_dir.mkdir(parents=True, exist_ok=True)
-    tasks = [
-        {
-            "task_id": f"task-{i}",
-            "task_path": f"tasks/test/task-{i}",
-            "content_hash": f"hash-{i}",
-            "domain": "test",
-            "difficulty": "medium",
-            "tags": [],
-        }
-        for i in range(task_count)
-    ]
-    manifest = {
-        "name": name,
-        "version": version,
-        "content_hash": "abc123",
-        "description": {
-            "summary": f"Test dataset {name}",
-            "purpose": "testing",
-            "standards": [],
-            "domains": ["test"],
-            "difficulty_distribution": {"medium": task_count},
-            "template_count": 0,
-            "task_count": task_count,
-        },
-        "created_at": datetime.now(UTC).isoformat(),
-        "tasks": tasks,
-        "source": {"method": "manual"},
-    }
-    (manifest_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    from aec_bench.contracts.dataset import DatasetManifest, DatasetTaskEntry
+    from aec_bench.dataset.storage import write_manifest
+
+    del version
+    write_manifest(
+        datasets_root,
+        DatasetManifest(
+            dataset_id=name,
+            description=f"Test dataset {name}",
+            tasks=[
+                DatasetTaskEntry(task_id=f"task-{index}", path=f"tasks/test/task-{index}", task_kind="artifact")
+                for index in range(task_count)
+            ],
+        ),
+    )

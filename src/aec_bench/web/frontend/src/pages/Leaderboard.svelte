@@ -68,8 +68,8 @@
             <tr>
               <th class="model-col-sc">Model</th>
               <th class="adapter-col-sc">Adapter</th>
-              {#each data.datasets as ds (ds.name + ds.version)}
-                <th class="dataset-col">{ds.name}<br /><span class="ds-version">v{ds.version}</span></th>
+              {#each data.datasets as ds (ds.dataset_id + ds.label)}
+                <th class="dataset-col">{ds.dataset_id}<br /><span class="ds-label">{ds.label}</span></th>
               {/each}
               <th class="overall-col">Overall</th>
             </tr>
@@ -87,8 +87,8 @@
                     <Badge text={row.adapter} />
                   {/if}
                 </td>
-                {#each data.datasets as ds (ds.name + ds.version)}
-                  {@const cell = row.cells[ds.name + "@" + ds.version]}
+                {#each data.datasets as ds (ds.dataset_id + ds.label)}
+                  {@const cell = row.cells[ds.dataset_id + "@" + ds.label]}
                   <td class="scorecard-cell">
                     {#if cell && cell.mean_reward !== null}
                       <RewardBadge reward={cell.mean_reward} size="sm" />
@@ -188,7 +188,7 @@
     line-height: 1.3;
   }
 
-  .ds-version {
+  .ds-label {
     font-weight: 400;
     font-size: 0.7rem;
     color: var(--text-3);

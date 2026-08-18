@@ -1,5 +1,5 @@
-# ABOUTME: Tests for dataset creator — builds manifests from task definitions on disk.
-# ABOUTME: Verifies description metadata extraction, hashing, and storage integration.
+# ABOUTME: Tests schema-2 dataset creation from validated task definitions.
+# ABOUTME: Ensures missing tasks fail and new writes contain no layered content identity.
 
 from __future__ import annotations
 
@@ -7,275 +7,120 @@ from pathlib import Path
 
 import pytest
 
-from aec_bench.contracts.dataset import DatasetManifest, DatasetSource
+from aec_bench.contracts.dataset import DatasetGeneration, DatasetManifest
 from aec_bench.contracts.task_definition import Difficulty
 from aec_bench.dataset.creator import create_dataset_from_tasks
 from aec_bench.dataset.storage import read_manifest
 from tests.support.task_factories import make_task_definition
 
 
-def _create_task_on_disk(
-    tasks_root: Path,
-    task_id: str,
-    domain: str = "electrical",
-    difficulty: str = "medium",
-) -> Path:
-    """Create a minimal task directory on disk for testing."""
+def _create_task_on_disk(tasks_root: Path, task_id: str) -> None:
     task_dir = tasks_root / task_id
     task_dir.mkdir(parents=True, exist_ok=True)
-    (task_dir / "task.toml").write_text(f'[metadata]\ndifficulty = "{difficulty}"')
-    (task_dir / "instruction.md").write_text(f"# Task {task_id}")
-    return task_dir
+    (task_dir / "task.toml").write_text('[metadata]\ndifficulty = "medium"\n', encoding="utf-8")
+    (task_dir / "instruction.md").write_text(f"# Task {task_id}\n", encoding="utf-8")
 
 
-class TestCreateDatasetFromTasks:
-    def test_creates_manifest_on_disk(self, tmp_path: Path) -> None:
-        tasks_root = tmp_path / "tasks"
-        datasets_root = tmp_path / "datasets"
-        task_id = "electrical/voltage-drop/instance-001"
+def test_create_writes_one_minimal_manifest(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    task_id = "electrical/voltage-drop/instance-001"
+    _create_task_on_disk(tasks_root, task_id)
+
+    manifest = create_dataset_from_tasks(
+        dataset_id="test-suite",
+        tasks=[make_task_definition(task_id=task_id, domain="electrical", difficulty=Difficulty.MEDIUM)],
+        tasks_root=tasks_root,
+        datasets_root=tmp_path / "datasets",
+        description="Test dataset",
+        generation=DatasetGeneration(seed=42, config_ref="suite.toml"),
+    )
+
+    assert isinstance(manifest, DatasetManifest)
+    assert manifest.dataset_id == "test-suite"
+    assert manifest.tasks[0].path == f"tasks/{task_id}"
+    assert manifest.tasks[0].task_kind == "artifact"
+    stored = read_manifest(tmp_path / "datasets" / "manifests" / "test-suite" / "manifest.json")
+    assert stored == manifest
+    payload = stored.model_dump(mode="json")
+    assert "version" not in payload
+    assert "content_hash" not in payload
+    assert "created_at" not in payload
+
+
+def test_create_orders_tasks_by_stable_task_id(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    for task_id in ("mechanical/task-b", "civil/task-a"):
         _create_task_on_disk(tasks_root, task_id)
 
-        task_def = make_task_definition(
-            task_id=task_id,
-            domain="electrical",
-            difficulty=Difficulty.MEDIUM,
-        )
-        source = DatasetSource(method="manual")
+    manifest = create_dataset_from_tasks(
+        dataset_id="ordered",
+        tasks=[
+            make_task_definition(task_id="mechanical/task-b", domain="mechanical"),
+            make_task_definition(task_id="civil/task-a", domain="civil"),
+        ],
+        tasks_root=tasks_root,
+        datasets_root=tmp_path / "datasets",
+        description="Ordered tasks",
+    )
 
-        manifest = create_dataset_from_tasks(
-            name="test-suite",
-            version="1.0.0",
-            tasks=[task_def],
-            tasks_root=tasks_root,
-            datasets_root=datasets_root,
-            source=source,
-            summary="Test dataset",
-        )
+    assert [task.task_id for task in manifest.tasks] == ["civil/task-a", "mechanical/task-b"]
 
-        assert isinstance(manifest, DatasetManifest)
-        manifest_path = datasets_root / "test-suite" / "1.0.0" / "manifest.json"
-        assert manifest_path.is_file()
 
-    def test_manifest_has_correct_metadata(self, tmp_path: Path) -> None:
-        tasks_root = tmp_path / "tasks"
-        datasets_root = tmp_path / "datasets"
+def test_create_uses_explicit_task_kind_metadata(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    task_id = "civil/pump-world"
+    _create_task_on_disk(tasks_root, task_id)
 
-        task_ids = [
-            ("electrical/vd/inst-1", "electrical", Difficulty.EASY),
-            ("electrical/vd/inst-2", "electrical", Difficulty.MEDIUM),
-            ("civil/rational/inst-1", "civil", Difficulty.HARD),
-        ]
-        task_defs = []
-        for tid, domain, diff in task_ids:
-            _create_task_on_disk(tasks_root, tid, domain=domain, difficulty=diff.value)
-            task_defs.append(
-                make_task_definition(
-                    task_id=tid,
-                    domain=domain,
-                    difficulty=diff,
-                    tags=["test"],
-                )
-            )
+    manifest = create_dataset_from_tasks(
+        dataset_id="worlds",
+        tasks=[make_task_definition(task_id=task_id, domain="civil", metadata={"task_kind": "world"})],
+        tasks_root=tasks_root,
+        datasets_root=tmp_path / "datasets",
+        description="World tasks",
+    )
 
-        source = DatasetSource(method="manual")
-        manifest = create_dataset_from_tasks(
-            name="multi-domain",
-            version="1.0.0",
-            tasks=task_defs,
-            tasks_root=tasks_root,
-            datasets_root=datasets_root,
-            source=source,
-            summary="Multi-domain test",
-            purpose="Test description building",
-        )
+    assert manifest.tasks[0].task_kind == "world"
 
-        assert manifest.name == "multi-domain"
-        assert manifest.version == "1.0.0"
-        assert manifest.description.task_count == 3
-        assert set(manifest.description.domains) == {"civil", "electrical"}
-        assert manifest.description.difficulty_distribution == {
-            "easy": 1,
-            "medium": 1,
-            "hard": 1,
-        }
-        assert manifest.description.summary == "Multi-domain test"
-        assert manifest.description.purpose == "Test description building"
 
-    def test_manifest_tasks_have_content_hashes(self, tmp_path: Path) -> None:
-        tasks_root = tmp_path / "tasks"
-        datasets_root = tmp_path / "datasets"
-        task_id = "electrical/vd/inst-1"
-        _create_task_on_disk(tasks_root, task_id)
-
-        task_def = make_task_definition(task_id=task_id, domain="electrical")
-        source = DatasetSource(method="manual")
-
-        manifest = create_dataset_from_tasks(
-            name="suite",
-            version="1.0.0",
-            tasks=[task_def],
-            tasks_root=tasks_root,
-            datasets_root=datasets_root,
-            source=source,
-        )
-
-        assert len(manifest.tasks) == 1
-        entry = manifest.tasks[0]
-        assert entry.task_id == task_id
-        assert len(entry.content_hash) == 64  # SHA256 hex digest
-
-    def test_manifest_content_hash_is_set(self, tmp_path: Path) -> None:
-        tasks_root = tmp_path / "tasks"
-        datasets_root = tmp_path / "datasets"
-        task_id = "electrical/vd/inst-1"
-        _create_task_on_disk(tasks_root, task_id)
-
-        task_def = make_task_definition(task_id=task_id, domain="electrical")
-        source = DatasetSource(method="manual")
-
-        manifest = create_dataset_from_tasks(
-            name="suite",
-            version="1.0.0",
-            tasks=[task_def],
-            tasks_root=tasks_root,
-            datasets_root=datasets_root,
-            source=source,
-        )
-
-        assert len(manifest.content_hash) == 64
-
-    def test_round_trip_through_storage(self, tmp_path: Path) -> None:
-        tasks_root = tmp_path / "tasks"
-        datasets_root = tmp_path / "datasets"
-        task_id = "electrical/vd/inst-1"
-        _create_task_on_disk(tasks_root, task_id)
-
-        task_def = make_task_definition(task_id=task_id, domain="electrical")
-        source = DatasetSource(method="manual")
-
-        manifest = create_dataset_from_tasks(
-            name="suite",
-            version="1.0.0",
-            tasks=[task_def],
-            tasks_root=tasks_root,
-            datasets_root=datasets_root,
-            source=source,
-        )
-
-        manifest_path = datasets_root / "suite" / "1.0.0" / "manifest.json"
-        loaded = read_manifest(manifest_path)
-        assert loaded.name == manifest.name
-        assert loaded.content_hash == manifest.content_hash
-        assert len(loaded.tasks) == len(manifest.tasks)
-
-    def test_overwrite_false_raises_on_duplicate(self, tmp_path: Path) -> None:
-        tasks_root = tmp_path / "tasks"
-        datasets_root = tmp_path / "datasets"
-        task_id = "electrical/vd/inst-1"
-        _create_task_on_disk(tasks_root, task_id)
-
-        task_def = make_task_definition(task_id=task_id, domain="electrical")
-        source = DatasetSource(method="manual")
-
+def test_create_fails_when_any_selected_task_directory_is_missing(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="selected task directory is missing"):
         create_dataset_from_tasks(
-            name="suite",
-            version="1.0.0",
-            tasks=[task_def],
-            tasks_root=tasks_root,
-            datasets_root=datasets_root,
-            source=source,
+            dataset_id="incomplete",
+            tasks=[make_task_definition(task_id="civil/missing", domain="civil")],
+            tasks_root=tmp_path / "tasks",
+            datasets_root=tmp_path / "datasets",
+            description="Must fail",
         )
 
-        with pytest.raises(FileExistsError):
-            create_dataset_from_tasks(
-                name="suite",
-                version="1.0.0",
-                tasks=[task_def],
-                tasks_root=tasks_root,
-                datasets_root=datasets_root,
-                source=source,
-            )
 
-    def test_overwrite_true_replaces_existing(self, tmp_path: Path) -> None:
-        tasks_root = tmp_path / "tasks"
-        datasets_root = tmp_path / "datasets"
-        task_id = "electrical/vd/inst-1"
-        _create_task_on_disk(tasks_root, task_id)
+def test_create_cannot_overwrite_an_existing_dataset_id(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    task_id = "civil/task-a"
+    _create_task_on_disk(tasks_root, task_id)
+    task = make_task_definition(task_id=task_id, domain="civil")
+    kwargs = {
+        "dataset_id": "immutable",
+        "tasks": [task],
+        "tasks_root": tasks_root,
+        "datasets_root": tmp_path / "datasets",
+        "description": "Immutable dataset",
+    }
+    create_dataset_from_tasks(**kwargs)
 
-        task_def = make_task_definition(task_id=task_id, domain="electrical")
-        source = DatasetSource(method="manual")
+    with pytest.raises(FileExistsError, match="already exists"):
+        create_dataset_from_tasks(**kwargs)
 
+
+def test_create_rejects_unknown_task_kind_instead_of_inventing_one(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    task_id = "civil/task-a"
+    _create_task_on_disk(tasks_root, task_id)
+
+    with pytest.raises(ValueError, match="task_kind"):
         create_dataset_from_tasks(
-            name="suite",
-            version="1.0.0",
-            tasks=[task_def],
+            dataset_id="bad-kind",
+            tasks=[make_task_definition(task_id=task_id, domain="civil", metadata={"task_kind": "mystery"})],
             tasks_root=tasks_root,
-            datasets_root=datasets_root,
-            source=source,
+            datasets_root=tmp_path / "datasets",
+            description="Bad kind",
         )
-
-        # Modify task content and recreate with overwrite
-        (tasks_root / task_id / "instruction.md").write_text("# Updated")
-
-        manifest = create_dataset_from_tasks(
-            name="suite",
-            version="1.0.0",
-            tasks=[task_def],
-            tasks_root=tasks_root,
-            datasets_root=datasets_root,
-            source=source,
-            overwrite=True,
-        )
-
-        manifest_path = datasets_root / "suite" / "1.0.0" / "manifest.json"
-        loaded = read_manifest(manifest_path)
-        assert loaded.content_hash == manifest.content_hash
-
-    def test_collects_standards_from_metadata(self, tmp_path: Path) -> None:
-        tasks_root = tmp_path / "tasks"
-        datasets_root = tmp_path / "datasets"
-        task_id = "electrical/vd/inst-1"
-        _create_task_on_disk(tasks_root, task_id)
-
-        task_def = make_task_definition(
-            task_id=task_id,
-            domain="electrical",
-            metadata={"standard": "AS3008", "jurisdiction": "au"},
-        )
-        source = DatasetSource(method="manual")
-
-        manifest = create_dataset_from_tasks(
-            name="suite",
-            version="1.0.0",
-            tasks=[task_def],
-            tasks_root=tasks_root,
-            datasets_root=datasets_root,
-            source=source,
-        )
-
-        assert "AS3008" in manifest.description.standards
-
-    def test_skips_tasks_with_missing_directories(self, tmp_path: Path) -> None:
-        tasks_root = tmp_path / "tasks"
-        datasets_root = tmp_path / "datasets"
-
-        # Create one task on disk, but reference two task definitions
-        real_id = "electrical/vd/inst-1"
-        _create_task_on_disk(tasks_root, real_id)
-        ghost_id = "electrical/vd/inst-ghost"
-
-        real_def = make_task_definition(task_id=real_id, domain="electrical")
-        ghost_def = make_task_definition(task_id=ghost_id, domain="electrical")
-        source = DatasetSource(method="manual")
-
-        manifest = create_dataset_from_tasks(
-            name="suite",
-            version="1.0.0",
-            tasks=[real_def, ghost_def],
-            tasks_root=tasks_root,
-            datasets_root=datasets_root,
-            source=source,
-        )
-
-        assert len(manifest.tasks) == 1
-        assert manifest.tasks[0].task_id == real_id

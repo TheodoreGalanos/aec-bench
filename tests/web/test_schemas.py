@@ -413,27 +413,26 @@ def test_leaderboard_response_with_model_rows() -> None:
     scorecard_row = ScorecardRowSchema(
         adapter="openai",
         model="gpt-4",
-        cells={"ds-v1@1.0.0": scorecard_cell},
+        cells={"core@public-2026": scorecard_cell},
         overall=0.7,
     )
     dataset_summary = DatasetSummarySchema(
-        name="ds-v1",
-        version="1.0.0",
-        summary="Test dataset",
+        dataset_id="core",
+        label="public-2026",
+        description="Test dataset",
         task_count=5,
-        domains=["electrical"],
     )
     response = LeaderboardResponse(
         model_rows=[row],
         is_scorecard=False,
         scorecard_rows=[scorecard_row],
         datasets=[dataset_summary],
-        selected_dataset="ds-v1@1.0.0",
+        selected_dataset="core@public-2026",
     )
     data = response.model_dump()
     assert len(data["model_rows"]) == 1
     assert data["is_scorecard"] is False
-    assert data["selected_dataset"] == "ds-v1@1.0.0"
+    assert data["selected_dataset"] == "core@public-2026"
 
 
 # ---------------------------------------------------------------------------
@@ -451,24 +450,21 @@ def test_datasets_list_response_empty() -> None:
 
 def test_dataset_list_item_schema_round_trips() -> None:
     item = DatasetListItemSchema(
-        name="benchmark-v1",
-        version="1.0.0",
-        summary="A test dataset",
+        dataset_id="benchmark",
+        description="A test dataset",
         task_count=10,
-        domains=["electrical", "civil"],
-        content_hash="abc123",
+        labels=["public-2026"],
     )
     data = item.model_dump()
-    assert data["name"] == "benchmark-v1"
-    assert data["content_hash"] == "abc123"
+    assert data["dataset_id"] == "benchmark"
+    assert data["labels"] == ["public-2026"]
 
 
 def test_dataset_detail_response_round_trips() -> None:
     task_entry = DatasetTaskEntrySchema(
         task_id="electrical/voltage-drop/instance-01",
-        domain="electrical",
-        difficulty="medium",
-        tags=["voltage", "cable"],
+        path="electrical/voltage-drop/instance-01",
+        task_kind="artifact",
     )
     exp_result = ExperimentResultSchema(
         experiment_id="exp-01",
@@ -480,21 +476,21 @@ def test_dataset_detail_response_round_trips() -> None:
     integrity = IntegrityResultSchema(
         task_id="electrical/voltage-drop/instance-01",
         status="verified",
-        expected_hash="abc123",
     )
     response = DatasetDetailResponse(
-        name="benchmark-v1",
-        version="1.0.0",
-        summary="A test dataset",
-        content_hash="abc123",
+        dataset_id="benchmark",
+        label="public-2026",
+        description="A test dataset",
+        reference_kind="bundle",
         task_count=1,
-        domains=["electrical"],
         tasks=[task_entry],
         experiment_results=[exp_result],
         integrity_results=[integrity],
+        integrity_unexpected=[],
     )
     data = response.model_dump()
-    assert data["name"] == "benchmark-v1"
+    assert data["dataset_id"] == "benchmark"
+    assert data["label"] == "public-2026"
     assert len(data["tasks"]) == 1
     assert len(data["experiment_results"]) == 1
 

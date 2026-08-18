@@ -4,6 +4,8 @@
 import pytest
 from pydantic import ValidationError
 
+from aec_bench.contracts.artifacts import ArtifactRef
+from aec_bench.contracts.dataset import BundleDatasetRef
 from aec_bench.contracts.experiment_manifest import (
     AgentConfig,
     ClientConfig,
@@ -157,16 +159,27 @@ def test_compute_config_rejects_blank_backend() -> None:
 # --- Round-trip serialization ---
 
 
-def test_task_selector_accepts_dataset_field() -> None:
-    selector = TaskSelector(dataset="my-suite@1.0.0")
+def _dataset_ref() -> BundleDatasetRef:
+    return BundleDatasetRef(
+        dataset_id="my-suite",
+        artifact=ArtifactRef(
+            artifact_id="sha256:" + "a" * 64,
+            sha256="a" * 64,
+            size_bytes=1,
+            media_type="application/vnd.aec-bench.dataset-bundle+tar+gzip",
+        ),
+    )
 
-    assert selector.dataset == "my-suite@1.0.0"
+
+def test_task_selector_accepts_exact_dataset_reference() -> None:
+    selector = TaskSelector(dataset=_dataset_ref())
+
+    assert selector.dataset == _dataset_ref()
 
 
-def test_task_selector_accepts_dataset_name_without_version() -> None:
-    selector = TaskSelector(dataset="my-suite")
-
-    assert selector.dataset == "my-suite"
+def test_task_selector_rejects_mutable_dataset_selector() -> None:
+    with pytest.raises(ValidationError):
+        TaskSelector(dataset="my-suite")
 
 
 def test_task_selector_defaults_dataset_to_none() -> None:

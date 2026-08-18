@@ -20,7 +20,7 @@ class ScreenEntry:
 SCREEN_ENTRIES: list[ScreenEntry] = [
     ScreenEntry("Dashboard", "dashboard", "Home screen with stats and sparklines", "D"),
     ScreenEntry("Library", "explore", "Browse tasks, templates, and instances", "E"),
-    ScreenEntry("Datasets", "explore", "Versioned benchmark snapshots", screen="datasets"),
+    ScreenEntry("Datasets", "explore", "Benchmark dataset publications", screen="datasets"),
     ScreenEntry("Leaderboard", "explore", "Model rankings across datasets", screen="leaderboard"),
     ScreenEntry("Triage", "review", "Filterable trial list with annotations", "R"),
     ScreenEntry(

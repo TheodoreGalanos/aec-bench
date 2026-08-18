@@ -189,12 +189,12 @@ export function fetchDatasetsList(): Promise<DatasetsListData> {
 }
 
 export function fetchDatasetDetail(
-  name: string,
-  version: string,
+  datasetId: string,
+  label: string,
   params?: { tab?: string },
 ): Promise<DatasetDetailData> {
   const qs = buildQuery({ tab: params?.tab });
-  return fetchJson<DatasetDetailData>(`/api/datasets/${name}/${version}${qs}`);
+  return fetchJson<DatasetDetailData>(`/api/datasets/${datasetId}/${label}${qs}`);
 }
 
 // ---------------------------------------------------------------------------

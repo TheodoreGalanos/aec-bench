@@ -1,5 +1,5 @@
-<!-- ABOUTME: Datasets list page showing versioned benchmark dataset cards with task counts and domains. -->
-<!-- ABOUTME: Fetches from /api/datasets; each card links to the dataset detail page. -->
+<!-- ABOUTME: Lists semantic datasets with task counts and human publication labels. -->
+<!-- ABOUTME: Links published datasets by label without showing routine integrity hashes. -->
 <script lang="ts">
   import { onMount } from "svelte";
   import { fetchDatasetsList } from "../lib/api";
@@ -21,7 +21,7 @@
   }
 
   function datasetHref(ds: DatasetListItem): string {
-    return `/datasets/${ds.name}/${ds.version}`;
+    return ds.labels.length > 0 ? `/datasets/${ds.dataset_id}/${ds.labels[0]}` : "/datasets";
   }
 </script>
 
@@ -56,38 +56,33 @@
   </Card>
 {:else}
   <div class="cards-grid">
-    {#each data.datasets as ds (ds.name + ds.version)}
+    {#each data.datasets as ds (ds.dataset_id)}
       <Card hoverable>
         <button
           class="dataset-card"
-          onclick={() => navigate(datasetHref(ds))}
+          onclick={() => ds.labels.length > 0 && navigate(datasetHref(ds))}
           type="button"
         >
           <div class="card-header">
-            <span class="ds-name">{ds.name}</span>
-            <span class="ds-version">v{ds.version}</span>
+            <span class="ds-name">{ds.dataset_id}</span>
+            <span class="ds-label">{ds.labels[0] ?? "draft"}</span>
           </div>
 
-          {#if ds.summary}
-            <p class="ds-summary">{ds.summary}</p>
+          {#if ds.description}
+            <p class="ds-summary">{ds.description}</p>
           {/if}
 
           <div class="card-meta">
             <span class="task-count">{ds.task_count} tasks</span>
           </div>
 
-          {#if ds.domains.length > 0}
+          {#if ds.labels.length > 1}
             <div class="domain-badges">
-              {#each ds.domains as domain (domain)}
-                <Badge text={domain} />
+              {#each ds.labels.slice(1) as label (label)}
+                <Badge text={label} />
               {/each}
             </div>
           {/if}
-
-          <div class="hash-row">
-            <span class="hash-label">SHA</span>
-            <span class="hash-value">{ds.content_hash.slice(0, 12)}…</span>
-          </div>
         </button>
       </Card>
     {/each}
@@ -146,7 +141,7 @@
     color: var(--text);
   }
 
-  .ds-version {
+  .ds-label {
     font-family: var(--font-mono);
     font-size: 0.78rem;
     color: var(--text-3);
@@ -180,28 +175,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
-  }
-
-  .hash-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    margin-top: auto;
-    padding-top: var(--space-xs);
-  }
-
-  .hash-label {
-    font-size: 0.65rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-3);
-  }
-
-  .hash-value {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--text-3);
   }
 
   .skeleton-card {

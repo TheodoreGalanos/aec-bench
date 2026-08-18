@@ -225,16 +225,16 @@ describe("fetchDatasetsList", () => {
 });
 
 describe("fetchDatasetDetail", () => {
-  it("calls the correct versioned URL", async () => {
+  it("calls the labelled publication URL", async () => {
     mockJsonResponse({});
-    await fetchDatasetDetail("my-ds", "1.0.0");
-    expect(mockFetch).toHaveBeenCalledWith("/api/datasets/my-ds/1.0.0");
+    await fetchDatasetDetail("my-ds", "public-2026");
+    expect(mockFetch).toHaveBeenCalledWith("/api/datasets/my-ds/public-2026");
   });
 
   it("includes tab param when provided", async () => {
     mockJsonResponse({});
-    await fetchDatasetDetail("my-ds", "1.0.0", { tab: "results" });
-    expect(mockFetch).toHaveBeenCalledWith("/api/datasets/my-ds/1.0.0?tab=results");
+    await fetchDatasetDetail("my-ds", "public-2026", { tab: "results" });
+    expect(mockFetch).toHaveBeenCalledWith("/api/datasets/my-ds/public-2026?tab=results");
   });
 });
 

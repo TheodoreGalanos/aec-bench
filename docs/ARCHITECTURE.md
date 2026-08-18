@@ -151,8 +151,9 @@ stewardship scoring, remains with the task package.
 The ledger and artifact stores own persistence mechanics, integrity checks, and
 queries. `ArtifactRepository` publishes exact bytes and canonical model bytes
 as `ArtifactRef` values, then verifies ID, size, and digest on each read.
-`TrialRecord` is the durable trial provenance envelope. Dataset
-manifests identify immutable benchmark snapshots. Evidence-lifecycle and world
+`TrialRecord` is the durable trial provenance envelope. A dataset manifest
+defines semantic task selection; one full Git reference or detached-bundle
+`ArtifactRef` identifies the immutable bytes used for execution. Evidence-lifecycle and world
 records add content-addressed artifacts where replay, recovery, or isolation
 requires them.
 

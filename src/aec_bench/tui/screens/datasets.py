@@ -1,5 +1,5 @@
-# ABOUTME: Datasets screen for browsing versioned benchmark dataset snapshots.
-# ABOUTME: DataTable listing with drill-down detail panel and difficulty sparkline.
+# ABOUTME: Datasets screen for browsing semantic dataset manifests by stable ID.
+# ABOUTME: Shows task selection and description without routine version or hash fields.
 
 from __future__ import annotations
 
@@ -22,44 +22,23 @@ from aec_bench.contracts.dataset import DatasetManifest
 
 def _render_dataset_detail(manifest: DatasetManifest) -> str:
     """Format the detail pane content for a highlighted dataset row."""
-    domains_str = ", ".join(manifest.description.domains) if manifest.description.domains else "-"
-    created_str = manifest.created_at.strftime("%Y-%m-%d")
-    content_hash = manifest.content_hash
-    hash_short = content_hash[:12] + "..." if len(content_hash) > 12 else content_hash
-
-    diff_dist = manifest.description.difficulty_distribution
-    diff_lines = []
-    if diff_dist:
-        for level, count in sorted(diff_dist.items()):
-            diff_lines.append(f"  {level}: {count}")
-
     lines = [
-        f"[bold]{manifest.name}@{manifest.version}[/bold]",
+        f"[bold]{manifest.dataset_id}[/bold]",
         "",
-        f"  Tasks:    {len(manifest.tasks)}",
-        f"  Domains:  {domains_str}",
-        f"  Created:  {created_str}",
-        f"  Hash:     {hash_short}",
+        f"  Tasks: {len(manifest.tasks)}",
+        "",
+        f"  [dim]{manifest.description}[/dim]",
     ]
-
-    if manifest.description.summary:
-        lines.extend(["", f"  [dim]{manifest.description.summary}[/dim]"])
-
-    if diff_lines:
-        lines.extend(["", "[bold]Difficulty Distribution:[/bold]", *diff_lines])
-
     return "\n".join(lines)
 
 
 def _difficulty_sparkline_data(manifest: DatasetManifest) -> list[float]:
-    """Extract sparkline-friendly data from difficulty distribution.
+    """Return task-kind counts in a stable order for the compact sparkline."""
 
-    Returns values in a stable sorted order of difficulty keys.
-    """
-    diff_dist = manifest.description.difficulty_distribution
-    if not diff_dist:
-        return []
-    return [float(v) for _, v in sorted(diff_dist.items())]
+    counts: dict[str, int] = {}
+    for task in manifest.tasks:
+        counts[task.task_kind] = counts.get(task.task_kind, 0) + 1
+    return [float(counts[key]) for key in sorted(counts)]
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +47,7 @@ def _difficulty_sparkline_data(manifest: DatasetManifest) -> list[float]:
 
 
 class DatasetsScreen(Screen[None]):
-    """Versioned benchmark dataset browser with DataTable and drill-down detail."""
+    """Benchmark dataset browser with DataTable and drill-down detail."""
 
     BINDINGS = [
         Binding("escape", "go_back", "Back", show=True),
@@ -143,10 +122,9 @@ class DatasetsScreen(Screen[None]):
     def on_mount(self) -> None:
         table = self.query_one("#datasets-table", DataTable)
         table.loading = True
-        table.add_column("Name", key="name")
-        table.add_column("Version", key="version")
+        table.add_column("Dataset", key="dataset")
         table.add_column("Tasks", key="tasks")
-        table.add_column("Domains", key="domains")
+        table.add_column("Description", key="description")
         self._load_datasets()
 
     @work(thread=True, exclusive=True)
@@ -180,15 +158,11 @@ class DatasetsScreen(Screen[None]):
         table.clear()
 
         for manifest in self._manifests:
-            domains = manifest.description.domains
-            domains_str = ", ".join(domains) if domains else "-"
-            row_key = f"{manifest.name}@{manifest.version}"
             table.add_row(
-                Text(manifest.name),
-                Text(manifest.version),
+                Text(manifest.dataset_id),
                 Text(str(len(manifest.tasks))),
-                Text(domains_str),
-                key=row_key,
+                Text(manifest.description),
+                key=manifest.dataset_id,
             )
 
     # ------------------------------------------------------------------

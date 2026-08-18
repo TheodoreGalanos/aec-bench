@@ -35,7 +35,7 @@ readable.
 | Trial and episode record | Harness and ledger | Execution, verifier, and artifact evidence becomes reportable benchmark evidence | Current persisted record; no retained historical reader | [`TrialRecord`](../src/aec_bench/contracts/trial_record.py) plus the owning episode or world protocol | Persisted and exportable |
 | Evaluation result | Evaluation | Verifier output and review evidence become reward, validity, and diagnostics | Protected as part of a persisted trial or published result | [`EvaluationResult`](../src/aec_bench/contracts/evaluation_result.py) | Persisted and externally reported |
 | Lifecycle verification | Lifecycle verification and evaluation | Canonical accepted lifecycle evidence becomes gates and optional semantic diagnostics | Internal until carried by a protected trial or published result | [`LifecycleVerificationResult`](../src/aec_bench/contracts/lifecycle_evaluation.py) | Internal result; persisted when referenced by trial evidence |
-| Dataset manifest and identity | Dataset generation and storage | A set of task bytes becomes a named benchmark snapshot | Protected when published; content identity is authoritative | [`DatasetManifest`](../src/aec_bench/contracts/dataset.py) and dataset hashing/storage | Persisted and publishable |
+| Dataset manifest and identity | Dataset generation and storage | A semantic task selection resolves to one exact Git source or detached bundle | Protected schema 2 and immutable references | [`DatasetManifest`, `RepositoryDatasetRef`, and `BundleDatasetRef`](../src/aec_bench/contracts/dataset.py) | Persisted and publishable |
 | Public library catalogue | Templates and tasks | Public template and seed source becomes one site-facing content document | Protected schema; the current writer emits schema 2 | [`LibraryCatalogue`](../src/aec_bench/contracts/library_catalogue.py) and [`library_export.py`](../src/aec_bench/tasks/library_export.py) | Public JSON export |
 | Adapter and Harbor execution | Adapters and harness | Harness input crosses into local model execution or the supported Harbor workflow and returns untrusted output | Internal adapter values; Harbor result documents are lenient ingestion boundaries | [`AdapterRequest` and `AdapterResult`](../src/aec_bench/adapters/base.py), the [Harbor workflow](../src/aec_bench/harness/harbor_workflow.py), and [Harbor ingestion models](../src/aec_bench/harness/harbor_contract.py) | Internal, cross-process, and external |
 | Output completion and explicit commit | Adapter infrastructure and task contract | A fixed candidate artifact becomes structurally complete and, when required, bound by exact bytes | Versioned when persisted in trial evidence; adapter integration is internal | [`OutputCompletionContract` and `OutputCommitAttestation`](../src/aec_bench/contracts/output_completion.py) plus the shared [commit authority](../src/aec_bench/adapters/output_commit.py) | Request configuration, adapter result, and persisted attestation |
@@ -123,8 +123,8 @@ Durable identity is recorded as content or source revision:
 
 - `TaskReference.task_revision` binds a trial to the task revision observed by
   its execution/import path;
-- `DatasetTaskEntry.content_hash` binds a dataset entry to task-directory
-  content; and
+- a dataset execution reference binds the selected tasks to a full Git commit
+  and manifest path, or to one verified detached-bundle `ArtifactRef`; and
 - world builds identify exact executable source artifacts, profiles identify
   exact task-owned data, and task-owned run records bind replay state.
 
@@ -214,14 +214,30 @@ contract package owns the validated result shape.
 
 ## Dataset manifests and immutable identity
 
-`DatasetManifest` binds a name and version to ordered task entries, source
-provenance, and a manifest content hash. Each task entry carries its own content
-hash. Validation recomputes those identities against task bytes.
+`DatasetManifest` schema 2 contains a stable `dataset_id`, a description, task
+IDs with portable repository-relative paths and task kinds, and optional
+generation replay inputs. It contains no human version, creation time,
+self-hash, per-task hash, provider route, or transport identity.
 
-A local manifest can be deliberately regenerated or overwritten through an
-explicit maintenance command. That creates different content identity. A
-published benchmark claim must cite the content hash, not rely on a mutable
-`name@version` label alone.
+A resolved dataset has exactly one authoritative identity:
+
+- `RepositoryDatasetRef` uses a full Git commit and manifest path. Publication
+  and execution reject dirty, untracked, ignored, or missing relevant paths.
+- `BundleDatasetRef` uses one `ArtifactRef` for a deterministic archive. The
+  digest is outside the bytes it authenticates. Readers reject traversal,
+  links, duplicate paths, missing tasks, and undeclared task content.
+
+`DatasetPublication` assigns a human label and real event time to an immutable
+reference. Labels support discovery only. Interactive `dataset_id` or
+`dataset_id@label` input resolves before execution; persisted experiment and
+trial data use only the exact reference or its documented transitional key.
+`latest` is not a persisted selector. Dataset manifests, references, bundles,
+and publication events cannot be overwritten.
+
+The named schema-1 migration reader reports `fully_verified`,
+`partially_verified`, or `invalid`. Only a fully verified manifest, including
+its historical top-level and declared task hashes, can become a schema-2
+publication.
 
 ## Provider request and result envelopes
 

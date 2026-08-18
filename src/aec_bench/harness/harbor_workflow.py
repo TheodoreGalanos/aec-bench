@@ -161,10 +161,21 @@ class SynchronousHarborWorkflow:
         if resolved_tasks is None:
             registry = TaskRegistry(tasks_root=self.tasks_root)
             registry.reload()
-            selected_tasks = select_manifest_tasks(registry.all(), manifest)
+            selected_tasks = select_manifest_tasks(
+                registry.all(),
+                manifest,
+                project_root=self.project_root,
+            )
         else:
             selected_tasks = list(resolved_tasks)
-            if select_manifest_tasks(selected_tasks, manifest) != selected_tasks:
+            if (
+                select_manifest_tasks(
+                    selected_tasks,
+                    manifest,
+                    project_root=self.project_root,
+                )
+                != selected_tasks
+            ):
                 raise HarborWorkflowError("prevalidated tasks do not satisfy the experiment manifest selector")
         planned_trials = build_trial_plan(manifest, selected_tasks)
         progress_tracker = WorkflowProgressTracker(

@@ -129,14 +129,14 @@ def _run_from_config(
 
     config_dir = config_path.parent.resolve()
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    resolved_tasks = resolve_path("tasks_root", cli_override=tasks_root)
+    raw = _resolve_interactive_dataset_alias(raw, project_root=resolved_tasks.parent)
 
     from aec_bench.contracts.experiment_manifest import ExperimentManifest
 
     manifest = ExperimentManifest.model_validate(raw)
     if no_verify:
         manifest = manifest.model_copy(update={"disable_verification": True})
-
-    resolved_tasks = resolve_path("tasks_root", cli_override=tasks_root)
 
     for agent in manifest.agents:
         if agent.system_prompt_file is not None:
@@ -250,7 +250,12 @@ def _execute_manifest(
 
     registry = TaskRegistry(tasks_root=tasks_root)
     registry.reload()
-    selected_tasks = select_manifest_tasks(registry.all(), manifest)
+    project_root = tasks_root.parent
+    selected_tasks = select_manifest_tasks(
+        registry.all(),
+        manifest,
+        project_root=project_root,
+    )
 
     if not selected_tasks:
         emit(
@@ -307,7 +312,6 @@ def _execute_manifest(
     from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 
     resolved_ledger = resolve_path("ledger_root")
-    project_root = tasks_root.parent
     jobs_root = project_root / "jobs"
 
     workflow = SynchronousHarborWorkflow(
@@ -341,6 +345,36 @@ def _execute_manifest(
         print_success(f"Completed: {d['imported']} trials imported into ledger")
 
     emit("run", result_data, start_time=start, human_renderer=_render_result)
+
+
+def _resolve_interactive_dataset_alias(raw: object, *, project_root: Path) -> object:
+    """Replace one user-facing dataset selector with its exact reference before validation."""
+
+    if not isinstance(raw, dict):
+        return raw
+    tasks = raw.get("tasks")
+    if not isinstance(tasks, dict):
+        return raw
+    selector = tasks.get("dataset")
+    if not isinstance(selector, str):
+        return raw
+
+    from aec_bench.config import load_config
+    from aec_bench.dataset.publication import resolve_dataset
+
+    config = load_config(project_root)
+    resolved = resolve_dataset(
+        datasets_root=config.datasets_root,
+        selector=selector,
+        project_root=project_root,
+    )
+    if resolved is None:
+        raise ValueError(f"dataset selector did not resolve to a publication: {selector}")
+    resolved_tasks = dict(tasks)
+    resolved_tasks["dataset"] = resolved.reference.model_dump(mode="json")
+    resolved_raw = dict(raw)
+    resolved_raw["tasks"] = resolved_tasks
+    return resolved_raw
 
 
 def _reviewer_config_from_cli(

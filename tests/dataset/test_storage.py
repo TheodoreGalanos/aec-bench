@@ -1,191 +1,132 @@
-# ABOUTME: Tests for dataset manifest storage — write, read, list, and resolve operations.
-# ABOUTME: Uses tmp_path fixtures to verify filesystem-backed manifest persistence.
+# ABOUTME: Tests immutable dataset manifest and publication-label storage.
+# ABOUTME: Proves interactive selectors resolve to exact references before execution.
 
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from aec_bench.contracts.dataset import (
-    DatasetDescription,
     DatasetManifest,
-    DatasetSource,
+    DatasetPublication,
     DatasetTaskEntry,
+    RepositoryDatasetRef,
 )
 from aec_bench.dataset.storage import (
     list_datasets,
+    list_publications,
+    manifest_path,
     read_manifest,
-    resolve_dataset,
+    resolve_dataset_reference,
     write_manifest,
+    write_publication,
 )
 
 
-def _make_manifest(
-    name: str = "test-suite",
-    version: str = "1.0.0",
-    task_count: int = 1,
-) -> DatasetManifest:
-    """Build a minimal valid manifest for testing."""
-    tasks = [
-        DatasetTaskEntry(
-            task_id=f"electrical/voltage-drop/instance-{i}",
-            task_path=f"electrical/voltage-drop/instance-{i}",
-            content_hash=f"sha256-{'a' * 60}{i:04d}",
-            domain="electrical",
-            difficulty="medium",
-            tags=["voltage-drop"],
-        )
-        for i in range(task_count)
-    ]
+def _manifest(dataset_id: str = "test-suite", task_count: int = 1) -> DatasetManifest:
     return DatasetManifest(
-        name=name,
-        version=version,
-        content_hash="abc123def456" * 5 + "abcd",
-        description=DatasetDescription(
-            summary="Test dataset for unit tests",
-            purpose="Verify storage round-trip",
-            domains=["electrical"],
-            difficulty_distribution={"medium": task_count},
-            task_count=task_count,
-        ),
-        created_at=datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC),
-        tasks=tasks,
-        source=DatasetSource(method="manual"),
+        dataset_id=dataset_id,
+        description="Test dataset",
+        tasks=[
+            DatasetTaskEntry(
+                task_id=f"task-{index}",
+                path=f"tasks/task-{index}",
+                task_kind="artifact",
+            )
+            for index in range(task_count)
+        ],
     )
 
 
-class TestWriteManifest:
-    def test_writes_manifest_to_correct_path(self, tmp_path: Path) -> None:
-        manifest = _make_manifest(name="my-suite", version="1.0.0")
-        result_path = write_manifest(tmp_path, manifest)
-
-        expected = tmp_path / "my-suite" / "1.0.0" / "manifest.json"
-        assert result_path == expected
-        assert result_path.is_file()
-
-    def test_written_manifest_is_valid_json(self, tmp_path: Path) -> None:
-        manifest = _make_manifest()
-        result_path = write_manifest(tmp_path, manifest)
-
-        data = json.loads(result_path.read_text(encoding="utf-8"))
-        assert data["name"] == "test-suite"
-        assert data["version"] == "1.0.0"
-        assert len(data["tasks"]) == 1
-
-    def test_raises_file_exists_error_without_overwrite(self, tmp_path: Path) -> None:
-        manifest = _make_manifest()
-        write_manifest(tmp_path, manifest)
-
-        with pytest.raises(FileExistsError, match="already exists"):
-            write_manifest(tmp_path, manifest)
-
-    def test_overwrite_replaces_existing(self, tmp_path: Path) -> None:
-        manifest_v1 = _make_manifest(task_count=1)
-        write_manifest(tmp_path, manifest_v1)
-
-        manifest_v2 = _make_manifest(task_count=2)
-        result_path = write_manifest(tmp_path, manifest_v2, overwrite=True)
-
-        data = json.loads(result_path.read_text(encoding="utf-8"))
-        assert len(data["tasks"]) == 2
-
-    def test_creates_parent_directories(self, tmp_path: Path) -> None:
-        deep_root = tmp_path / "artefacts" / "datasets"
-        manifest = _make_manifest()
-        result_path = write_manifest(deep_root, manifest)
-
-        assert result_path.is_file()
+def _publication(
+    dataset_id: str = "test-suite",
+    label: str = "public-2026",
+    *,
+    revision: str = "a" * 40,
+    published_at: datetime | None = None,
+) -> DatasetPublication:
+    return DatasetPublication(
+        dataset_ref=RepositoryDatasetRef(
+            dataset_id=dataset_id,
+            source_revision=revision,
+            manifest_path=f"datasets/{dataset_id}/manifest.json",
+        ),
+        label=label,
+        published_at=published_at or datetime(2026, 8, 18, tzinfo=UTC),
+    )
 
 
-class TestReadManifest:
-    def test_round_trip(self, tmp_path: Path) -> None:
-        original = _make_manifest()
-        result_path = write_manifest(tmp_path, original)
+def test_manifest_storage_uses_one_dataset_id_path_and_canonical_bytes(tmp_path: Path) -> None:
+    stored = write_manifest(tmp_path, _manifest())
 
-        loaded = read_manifest(result_path)
-        assert loaded.name == original.name
-        assert loaded.version == original.version
-        assert loaded.content_hash == original.content_hash
-        assert len(loaded.tasks) == len(original.tasks)
-
-    def test_raises_on_missing_file(self, tmp_path: Path) -> None:
-        missing = tmp_path / "no-such" / "manifest.json"
-        with pytest.raises(FileNotFoundError):
-            read_manifest(missing)
-
-    def test_raises_on_invalid_json(self, tmp_path: Path) -> None:
-        bad_file = tmp_path / "bad.json"
-        bad_file.write_text("not-json", encoding="utf-8")
-        with pytest.raises(Exception):  # noqa: B017
-            read_manifest(bad_file)
+    assert stored == tmp_path / "manifests" / "test-suite" / "manifest.json"
+    assert stored.read_bytes().endswith(b"\n")
+    assert json.loads(stored.read_bytes()) == _manifest().model_dump(mode="json")
+    assert read_manifest(stored) == _manifest()
 
 
-class TestListDatasets:
-    def test_empty_root(self, tmp_path: Path) -> None:
-        result = list_datasets(tmp_path)
-        assert result == []
+def test_manifest_publication_is_immutable(tmp_path: Path) -> None:
+    write_manifest(tmp_path, _manifest())
 
-    def test_finds_all_manifests(self, tmp_path: Path) -> None:
-        write_manifest(tmp_path, _make_manifest(name="alpha", version="1.0.0"))
-        write_manifest(tmp_path, _make_manifest(name="alpha", version="2.0.0"))
-        write_manifest(tmp_path, _make_manifest(name="beta", version="1.0.0"))
-
-        result = list_datasets(tmp_path)
-        assert len(result) == 3
-
-    def test_returns_valid_manifests(self, tmp_path: Path) -> None:
-        write_manifest(tmp_path, _make_manifest(name="suite", version="1.0.0"))
-        result = list_datasets(tmp_path)
-        assert all(isinstance(m, DatasetManifest) for m in result)
-
-    def test_skips_non_manifest_directories(self, tmp_path: Path) -> None:
-        (tmp_path / "random-dir").mkdir()
-        (tmp_path / "random-dir" / "notes.txt").write_text("not a manifest")
-        result = list_datasets(tmp_path)
-        assert result == []
-
-    def test_nonexistent_root_returns_empty(self, tmp_path: Path) -> None:
-        missing_root = tmp_path / "does-not-exist"
-        result = list_datasets(missing_root)
-        assert result == []
+    with pytest.raises(FileExistsError, match="already exists"):
+        write_manifest(tmp_path, _manifest(task_count=2))
 
 
-class TestResolveDataset:
-    def test_resolve_by_name_returns_latest_version(self, tmp_path: Path) -> None:
-        write_manifest(tmp_path, _make_manifest(name="suite", version="1.0.0"))
-        write_manifest(tmp_path, _make_manifest(name="suite", version="2.0.0"))
-        write_manifest(tmp_path, _make_manifest(name="suite", version="1.1.0"))
+def test_manifest_path_rejects_path_like_dataset_ids(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="dataset_id"):
+        manifest_path(tmp_path, "../outside")
 
-        result = resolve_dataset(tmp_path, "suite")
-        assert result is not None
-        assert result.version == "2.0.0"
 
-    def test_resolve_by_name_at_version(self, tmp_path: Path) -> None:
-        write_manifest(tmp_path, _make_manifest(name="suite", version="1.0.0"))
-        write_manifest(tmp_path, _make_manifest(name="suite", version="2.0.0"))
+def test_list_datasets_returns_only_schema_two_manifests(tmp_path: Path) -> None:
+    write_manifest(tmp_path, _manifest("beta"))
+    write_manifest(tmp_path, _manifest("alpha"))
+    (tmp_path / "other" / "old" / "1.0.0").mkdir(parents=True)
+    (tmp_path / "other" / "old" / "1.0.0" / "manifest.json").write_text("{}", encoding="utf-8")
 
-        result = resolve_dataset(tmp_path, "suite@1.0.0")
-        assert result is not None
-        assert result.version == "1.0.0"
+    assert [manifest.dataset_id for manifest in list_datasets(tmp_path)] == ["alpha", "beta"]
 
-    def test_resolve_missing_dataset_returns_none(self, tmp_path: Path) -> None:
-        result = resolve_dataset(tmp_path, "nonexistent")
-        assert result is None
 
-    def test_resolve_missing_version_returns_none(self, tmp_path: Path) -> None:
-        write_manifest(tmp_path, _make_manifest(name="suite", version="1.0.0"))
-        result = resolve_dataset(tmp_path, "suite@9.9.9")
-        assert result is None
+def test_publication_labels_are_immutable_records(tmp_path: Path) -> None:
+    publication = _publication()
+    path = write_publication(tmp_path, publication)
 
-    def test_semver_sorting_not_lexicographic(self, tmp_path: Path) -> None:
-        """Version 10.0.0 should sort higher than 2.0.0 (not lexicographically)."""
-        write_manifest(tmp_path, _make_manifest(name="suite", version="2.0.0"))
-        write_manifest(tmp_path, _make_manifest(name="suite", version="10.0.0"))
-        write_manifest(tmp_path, _make_manifest(name="suite", version="1.0.0"))
+    assert path == tmp_path / "publications" / "test-suite" / "public-2026.json"
+    assert list_publications(tmp_path, dataset_id="test-suite") == [publication]
+    with pytest.raises(FileExistsError, match="already exists"):
+        write_publication(tmp_path, _publication(revision="b" * 40))
 
-        result = resolve_dataset(tmp_path, "suite")
-        assert result is not None
-        assert result.version == "10.0.0"
+
+def test_exact_label_resolves_to_immutable_reference(tmp_path: Path) -> None:
+    publication = _publication()
+    write_publication(tmp_path, publication)
+
+    assert resolve_dataset_reference(tmp_path, "test-suite@public-2026") == publication.dataset_ref
+
+
+def test_plain_dataset_id_resolves_latest_publication_event_before_persistence(tmp_path: Path) -> None:
+    first = _publication(label="candidate", revision="a" * 40)
+    second = _publication(
+        label="public-2026",
+        revision="b" * 40,
+        published_at=first.published_at + timedelta(seconds=1),
+    )
+    write_publication(tmp_path, first)
+    write_publication(tmp_path, second)
+
+    assert resolve_dataset_reference(tmp_path, "test-suite") == second.dataset_ref
+
+
+def test_latest_selector_is_rejected_instead_of_becoming_persisted_identity(tmp_path: Path) -> None:
+    write_publication(tmp_path, _publication())
+
+    with pytest.raises(ValueError, match="latest"):
+        resolve_dataset_reference(tmp_path, "test-suite@latest")
+
+
+def test_unpublished_manifest_does_not_resolve_for_execution(tmp_path: Path) -> None:
+    write_manifest(tmp_path, _manifest())
+
+    assert resolve_dataset_reference(tmp_path, "test-suite") is None

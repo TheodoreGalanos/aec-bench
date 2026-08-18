@@ -389,7 +389,7 @@ class MetaHarnessTrialProvenance(StrictModel):
 class TrialRecord(StrictModel):
     trial_id: NonEmptyStr
     experiment_id: NonEmptyStr
-    dataset_id: str | None = None  # "name@version" or None for inline runs
+    dataset_id: str | None = None  # Immutable transitional key; PRD-07 owns the typed TrialRecord migration.
     timestamp: datetime
     task: TaskReference
     agent: AgentReference

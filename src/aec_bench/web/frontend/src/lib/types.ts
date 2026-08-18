@@ -74,7 +74,7 @@ export interface Annotation {
 export interface ViewerMeta {
   trial_id: string;
   experiment_id: string;
-  dataset_id?: string | null;          // "name@version" for dataset trials, null for inline runs
+  dataset_id?: string | null;          // Exact transitional dataset-reference key; null for inline runs.
   task_id: string;
   model: string;
   adapter: string;
@@ -144,11 +144,10 @@ export interface ScorecardRow {
 }
 
 export interface DatasetSummary {
-  name: string;
-  version: string;
-  summary: string;
+  dataset_id: string;
+  label: string;
+  description: string;
   task_count: number;
-  domains: string[];
 }
 
 export interface LeaderboardData {
@@ -164,12 +163,10 @@ export interface LeaderboardData {
 // ---------------------------------------------------------------------------
 
 export interface DatasetListItem {
-  name: string;
-  version: string;
-  summary: string;
+  dataset_id: string;
+  description: string;
   task_count: number;
-  domains: string[];
-  content_hash: string;
+  labels: string[];
 }
 
 export interface DatasetsListData {
@@ -180,9 +177,8 @@ export interface DatasetsListData {
 
 export interface DatasetTaskEntry {
   task_id: string;
-  domain: string;
-  difficulty: string;
-  tags: string[];
+  path: string;
+  task_kind: string;
 }
 
 export interface ExperimentResult {
@@ -196,19 +192,18 @@ export interface ExperimentResult {
 export interface IntegrityResult {
   task_id: string;
   status: string;
-  expected_hash: string;
 }
 
 export interface DatasetDetailData {
-  name: string;
-  version: string;
-  summary: string;
-  content_hash: string;
+  dataset_id: string;
+  label: string;
+  description: string;
+  reference_kind: string;
   task_count: number;
-  domains: string[];
   tasks: DatasetTaskEntry[];
   experiment_results: ExperimentResult[];
   integrity_results: IntegrityResult[];
+  integrity_unexpected: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -264,11 +259,10 @@ export interface TemplateSearchResult {
 }
 
 export interface DatasetSearchResult {
-  name: string;
-  version: string;
-  summary: string;
+  dataset_id: string;
+  description: string;
   task_count: number;
-  domains: string[];
+  labels: string[];
 }
 
 export interface ExperimentSearchResult {

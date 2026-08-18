@@ -386,7 +386,7 @@ class DashboardScreen(Screen[None]):
         skills = [
             ("/add-task", "interview-driven seed creation"),
             ("/create-template", "build generation template from seed"),
-            ("/create-dataset", "compose a versioned benchmark dataset"),
+            ("/create-dataset", "compose a benchmark dataset"),
             ("/configure-experiment", "set up an experiment config"),
             ("/hardening-pass", "quality-gate template or instance"),
             ("/domain-check", "verify architectural invariants"),

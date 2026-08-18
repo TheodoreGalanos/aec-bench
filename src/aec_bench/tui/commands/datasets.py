@@ -1,4 +1,4 @@
-# ABOUTME: DatasetProvider for the Command Palette — search datasets by name or version.
+# ABOUTME: DatasetProvider for the Command Palette searches stable dataset IDs and labels.
 # ABOUTME: Returns DatasetHit objects for fuzzy-matched dataset entries.
 
 from __future__ import annotations
@@ -9,8 +9,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class DatasetHit:
-    name: str
-    version: str
+    dataset_id: str
+    label: str | None = None
     task_count: int = 0
 
 
@@ -18,4 +18,4 @@ def search_datasets(entries: Sequence[DatasetHit], query: str) -> list[DatasetHi
     q = query.lower().strip()
     if not q:
         return list(entries)
-    return [e for e in entries if q in f"{e.name} {e.version}".lower()]
+    return [entry for entry in entries if q in f"{entry.dataset_id} {entry.label or ''}".lower()]

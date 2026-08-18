@@ -46,7 +46,10 @@
   }
 
   function datasetHref(result: DatasetSearchResult): string {
-    return `/datasets/${encodeURIComponent(result.name)}/${encodeURIComponent(result.version)}`;
+    const label = result.labels[0];
+    return label
+      ? `/datasets/${encodeURIComponent(result.dataset_id)}/${encodeURIComponent(label)}`
+      : "/datasets";
   }
 
   function experimentHref(result: ExperimentSearchResult): string {
@@ -147,17 +150,17 @@
                 type="button"
               >
                 <div class="result-header">
-                  <span class="result-id">{result.name}</span>
-                  <span class="result-version">v{result.version}</span>
+                  <span class="result-id">{result.dataset_id}</span>
+                  <span class="result-version">{result.labels[0] ?? "draft"}</span>
                   <span class="result-version">{result.task_count} tasks</span>
                 </div>
-                {#if result.summary}
-                  <p class="result-desc">{result.summary}</p>
+                {#if result.description}
+                  <p class="result-desc">{result.description}</p>
                 {/if}
-                {#if result.domains && result.domains.length > 0}
+                {#if result.labels.length > 1}
                   <div class="tag-row">
-                    {#each result.domains as domain (domain)}
-                      <Badge text={domain} />
+                    {#each result.labels.slice(1) as label (label)}
+                      <Badge text={label} />
                     {/each}
                   </div>
                 {/if}

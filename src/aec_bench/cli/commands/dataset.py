@@ -1,673 +1,487 @@
-# ABOUTME: CLI subcommands for creating, listing, and managing benchmark datasets.
-# ABOUTME: Wraps dataset.creator, dataset.storage, and dataset.integrity with terminal output.
+# ABOUTME: CLI commands for semantic dataset manifests and immutable publications.
+# ABOUTME: Resolves human labels to exact repository or bundle references before execution.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import typer
 
 from aec_bench.cli.commands.config import resolve_path
-from aec_bench.cli.output import (
-    console,
-    emit,
-    print_error,
-    print_success,
-    print_warning,
-)
+from aec_bench.cli.output import console, emit, print_error, print_success
 from aec_bench.contracts.task_definition import Difficulty
 
 if TYPE_CHECKING:
-    from aec_bench.contracts.dataset import DatasetSource
     from aec_bench.contracts.task_definition import TaskDefinition
-    from aec_bench.generation.dataset import SuiteOutput as SuiteOutputManifest
+    from aec_bench.generation.dataset import SuiteOutput
 
-app = typer.Typer(help="Create and manage versioned benchmark datasets.")
+app = typer.Typer(help="Create, publish, and inspect benchmark datasets.")
 
 
 @app.command("create")
 def create_dataset_cmd(
-    name: str = typer.Option(..., "--name", help="Dataset name"),
-    version: str = typer.Option(..., "--version", help="Dataset version (e.g. 1.0.0)"),
-    config: Path | None = typer.Option(None, "--config", "-c", help="Path to suite.toml (optional)"),
+    name: str = typer.Argument(help="Stable dataset ID"),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Generation config path"),
     from_suite_output: Path | None = typer.Option(
         None,
         "--from-suite-output",
-        help="Path to a generated suite dataset.json to freeze exactly",
+        help="Generated suite dataset.json whose exact task selection is used",
     ),
-    domain: list[str] | None = typer.Option(None, "--domain", "-d", help="Filter by domain (repeatable)"),
-    difficulty: list[str] | None = typer.Option(
-        None,
-        "--difficulty",
-        help="Filter by difficulty: easy, medium, or hard (repeatable)",
-    ),
-    pattern: list[str] | None = typer.Option(None, "--pattern", "-p", help="Include pattern (repeatable)"),
-    summary: str | None = typer.Option(None, "--summary", help="One-line description"),
-    purpose: str | None = typer.Option(None, "--purpose", help="Why this dataset exists"),
-    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing version"),
+    domain: list[str] | None = typer.Option(None, "--domain", "-d", help="Filter by domain"),
+    difficulty: list[str] | None = typer.Option(None, "--difficulty", help="Filter by difficulty"),
+    pattern: list[str] | None = typer.Option(None, "--pattern", "-p", help="Include task pattern"),
+    description: str | None = typer.Option(None, "--description", help="Dataset description"),
 ) -> None:
-    """Create a dataset by freezing tasks into a versioned manifest.
+    """Create one immutable schema-2 manifest from selected local tasks."""
 
-    Freeze exact generated suite output with --from-suite-output, or filter existing tasks
-    with --domain, --difficulty, and/or --pattern. Without filters, includes all tasks.
-
-    Examples:
-
-      aec-bench dataset create --name elec-v1 --version 1.0.0 --domain electrical
-
-      aec-bench dataset create --name easy-v1 --version 1.0.0 --difficulty easy
-
-      aec-bench dataset create --name suite-v1 --version 1.0.0 \\
-        --from-suite-output tasks/dataset.json
-
-      aec-bench dataset create --name bench-v1 --version 1.0.0 --pattern "electrical/*"
-    """
-    from aec_bench.contracts.dataset import DatasetSource
+    from aec_bench.contracts.dataset import DatasetGeneration
     from aec_bench.dataset.creator import create_dataset_from_tasks
     from aec_bench.tasks.registry import TaskRegistry
 
     tasks_root = resolve_path("tasks_root")
     datasets_root = resolve_path("datasets_root")
+    project_root = tasks_root.parent.resolve()
 
     if from_suite_output is not None and (config is not None or domain or difficulty or pattern):
         print_error("--from-suite-output cannot be combined with --config, --domain, --difficulty, or --pattern")
         raise typer.Exit(1)
 
-    if config is not None:
-        import tomllib
-
-        suite_raw = tomllib.loads(config.read_text(encoding="utf-8"))
-        source = DatasetSource(
-            method="suite_config",
-            suite_config=suite_raw,
-            seed=suite_raw.get("settings", {}).get("seed"),
-        )
-    else:
-        source = DatasetSource(method="manual")
-
+    generation: DatasetGeneration | None = None
     if from_suite_output is not None:
-        suite_manifest = _load_suite_output_manifest(from_suite_output)
-        all_tasks = _load_tasks_from_suite_output(from_suite_output, tasks_root, suite_manifest)
-        source = _source_from_suite_output(from_suite_output, suite_manifest)
+        suite = _load_suite_output_manifest(from_suite_output)
+        selected = _load_tasks_from_suite_output(from_suite_output, tasks_root, suite)
+        generation = DatasetGeneration(seed=suite.seed, config_ref=suite.config)
     else:
         registry = TaskRegistry(tasks_root=tasks_root)
         registry.reload()
-        all_tasks = registry.all()
+        selected = registry.all()
+        if config is not None:
+            import tomllib
 
-    # Apply filters using select_tasks — same function the experiment pipeline uses
+            config_path = config.resolve()
+            try:
+                config_ref = config_path.relative_to(project_root).as_posix()
+            except ValueError as error:
+                print_error("--config must be inside the project root")
+                raise typer.Exit(1) from error
+            raw_config = tomllib.loads(config_path.read_text(encoding="utf-8"))
+            seed = raw_config.get("settings", {}).get("seed")
+            generation = DatasetGeneration(seed=seed if isinstance(seed, int) else None, config_ref=config_ref)
+
     difficulties = _parse_difficulties(difficulty)
-
     if domain or difficulties or pattern:
         from aec_bench.tasks.selector import select_tasks
 
-        all_tasks = select_tasks(
-            all_tasks,
+        selected = select_tasks(
+            selected,
             domains=domain or None,
             difficulties=difficulties or None,
             include_patterns=pattern or None,
         )
-
-    if not all_tasks:
-        print_error("no tasks matched the filters — check --domain, --difficulty, and --pattern")
+    if not selected:
+        print_error("no tasks matched the dataset selection")
         raise typer.Exit(1)
 
     try:
         manifest = create_dataset_from_tasks(
-            name=name,
-            version=version,
-            tasks=all_tasks,
+            dataset_id=name,
+            tasks=selected,
             tasks_root=tasks_root,
             datasets_root=datasets_root,
-            source=source,
-            summary=summary,
-            purpose=purpose,
-            overwrite=overwrite,
+            description=description or f"Dataset {name}",
+            generation=generation,
         )
-    except FileExistsError as exc:
-        print_error(str(exc))
-        raise typer.Exit(1) from exc
+    except (FileExistsError, FileNotFoundError, ValueError) as error:
+        print_error(str(error))
+        raise typer.Exit(1) from error
 
-    print_success(
-        f"Created dataset {manifest.name}@{manifest.version} "
-        f"({manifest.description.task_count} tasks, hash: {manifest.content_hash[:12]})"
-    )
+    print_success(f"Created dataset {manifest.dataset_id} ({len(manifest.tasks)} tasks)")
 
 
-def _parse_difficulties(values: list[str] | None) -> list[Difficulty]:
-    if not values:
-        return []
+@app.command("publish")
+def publish_dataset_cmd(
+    name: str = typer.Argument(help="Stable dataset ID"),
+    label: str = typer.Option(..., "--label", help="Human discovery label"),
+    repository: bool = typer.Option(False, "--repository", help="Use the current Git commit instead of a bundle"),
+) -> None:
+    """Publish an exact immutable dataset reference under one new label."""
 
-    parsed: list[Difficulty] = []
-    for raw_value in values:
-        try:
-            parsed.append(Difficulty(raw_value))
-        except ValueError as exc:
-            allowed = ", ".join(difficulty.value for difficulty in Difficulty)
-            print_error(f"unknown difficulty: {raw_value}. Available: {allowed}")
-            raise typer.Exit(1) from exc
-    return parsed
+    from aec_bench.config import load_config
+    from aec_bench.dataset.publication import publish_dataset
+    from aec_bench.dataset.storage import read_manifest_by_id
 
-
-def _load_suite_output_manifest(suite_output: Path) -> SuiteOutputManifest:
-    from aec_bench.generation.dataset import SuiteOutput as SuiteOutputManifest
-
-    manifest_path = suite_output.resolve()
-    if not manifest_path.is_file():
-        print_error(f"suite output not found: {manifest_path}")
+    config = load_config()
+    manifest = read_manifest_by_id(config.datasets_root, name)
+    if manifest is None:
+        print_error(f"dataset manifest not found: {name}")
         raise typer.Exit(1)
-
     try:
-        return SuiteOutputManifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        print_error(f"failed to read suite output: {exc}")
-        raise typer.Exit(1) from exc
-
-
-def _load_tasks_from_suite_output(
-    suite_output: Path,
-    tasks_root: Path,
-    manifest: SuiteOutputManifest,
-) -> list[TaskDefinition]:
-    from aec_bench.tasks.loader import load_task_definition
-
-    manifest_path = suite_output.resolve()
-    suite_root = manifest_path.parent
-    resolved_tasks_root = tasks_root.resolve()
-    tasks: list[TaskDefinition] = []
-    for entry in manifest.instances:
-        task_dir = (suite_root / entry.path).resolve()
-        if not task_dir.is_dir():
-            print_error(f"suite output references missing task directory: {task_dir}")
-            raise typer.Exit(1)
-        try:
-            task_dir.relative_to(resolved_tasks_root)
-        except ValueError as exc:
-            print_error(
-                f"suite output task is outside tasks root: {task_dir}. "
-                f"Generate suites under {resolved_tasks_root} before freezing them."
-            )
-            raise typer.Exit(1) from exc
-        tasks.append(load_task_definition(task_dir, resolved_tasks_root))
-
-    return tasks
-
-
-def _source_from_suite_output(
-    suite_output: Path,
-    manifest: SuiteOutputManifest,
-) -> DatasetSource:
-    from aec_bench.contracts.dataset import DatasetSource
-
-    manifest_path = suite_output.resolve()
-    suite_data = manifest.model_dump(mode="json")
-    suite_data["suite_output"] = str(manifest_path)
-    return DatasetSource(
-        method="suite_config",
-        suite_config=suite_data,
-        seed=manifest.seed,
-    )
+        publication = publish_dataset(
+            manifest=manifest,
+            datasets_root=config.datasets_root,
+            project_root=config.project_root,
+            label=label,
+            repository=repository,
+        )
+    except (FileExistsError, FileNotFoundError, ValueError) as error:
+        print_error(str(error))
+        raise typer.Exit(1) from error
+    print_success(f"Published {name}@{label} as an immutable {publication.dataset_ref.kind} reference")
 
 
 @app.command("config")
 def dataset_config_cmd(
-    dataset_ref: str = typer.Argument(help="Dataset name or name@version"),
-    model: str = typer.Option(..., "--model", "-m", help="Model name (e.g. gpt-41-mini)"),
+    dataset_ref: str = typer.Argument(help="Dataset ID or ID@label"),
+    model: str = typer.Option(..., "--model", "-m", help="Model name"),
     adapter: str = typer.Option("tool_loop", "--adapter", "--harness", help="Agent harness"),
     backend: str = typer.Option("modal", "--backend", help="Compute backend"),
-    output: Path | None = typer.Option(None, "--output", "-o", help="Write to file (default: stdout)"),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Write to file instead of stdout"),
     repetitions: int = typer.Option(1, "--repetitions", "-n", help="Repetitions per task"),
 ) -> None:
-    """Generate an experiment.yaml from a dataset reference.
+    """Resolve a dataset label and write an experiment with the exact reference."""
 
-    Example:
-
-      aec-bench dataset config electrical-only@1.0.0 --model gpt-41-mini -o experiment.yaml
-    """
+    from aec_bench.config import load_config
     from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
     from aec_bench.dataset.experiment import build_experiment_config, write_experiment_yaml
-    from aec_bench.dataset.storage import resolve_dataset
+    from aec_bench.dataset.publication import resolve_dataset
 
-    # Verify dataset exists
-    datasets_root = resolve_path("datasets_root")
-    resolved = resolve_dataset(datasets_root, dataset_ref)
+    config = load_config()
+    resolved = resolve_dataset(
+        datasets_root=config.datasets_root,
+        selector=dataset_ref,
+        project_root=config.project_root,
+    )
     if resolved is None:
-        print_error(f"Dataset {dataset_ref} not found")
+        print_error(f"dataset publication not found: {dataset_ref}")
         raise typer.Exit(1)
 
-    # Use the resolved name@version for the reference
-    full_ref = f"{resolved.name}@{resolved.version}"
-
-    agent_name = f"{adapter}-{model.split('-')[0]}"
-    agents = [AgentConfig(name=agent_name, adapter=adapter, model=model)]
-    compute = ComputeConfig(backend=backend, resource_limits={"n_concurrent_trials": 1})
-
     manifest = build_experiment_config(
-        dataset=full_ref,
-        agents=agents,
-        compute=compute,
+        dataset=resolved.reference,
+        agents=[AgentConfig(name=f"{adapter}-{model.split('-')[0]}", adapter=adapter, model=model)],
+        compute=ComputeConfig(backend=backend, resource_limits={"n_concurrent_trials": 1}),
         repetitions=repetitions,
     )
-
-    yaml_str = write_experiment_yaml(manifest, output_path=str(output) if output else None)
-
-    if output:
-        print_success(f"Wrote experiment config to {output}")
+    yaml_text = write_experiment_yaml(manifest, output_path=str(output) if output else None)
+    if output is None:
+        console.print(yaml_text)
     else:
-        console.print(yaml_str)
+        print_success(f"Wrote experiment config to {output}")
 
 
 @app.command("list")
 def list_datasets_cmd(
     datasets_root: str | None = typer.Option(None, "--datasets-root", help="Datasets directory"),
 ) -> None:
-    """List all datasets and their versions.
+    """List stable dataset IDs, task counts, and publication labels."""
 
-    Returns: list of datasets, each with name, version, task_count, domains,
-    content_hash, created_at.
-
-    Examples:
-      aec-bench dataset list
-      aec-bench --json dataset list | jq '.data[].name'
-    """
-    import time
-
-    from aec_bench.dataset.storage import list_datasets
+    from aec_bench.dataset.storage import list_datasets, list_publications
 
     start = time.monotonic()
-    resolved_root = resolve_path("datasets_root", cli_override=datasets_root)
-    manifests = list_datasets(resolved_root)
-
-    if not manifests:
-        emit("dataset list", [], start_time=start, human_renderer=_render_dataset_list)
-        return
-
+    root = resolve_path("datasets_root", cli_override=datasets_root)
+    labels: dict[str, list[str]] = {}
+    for publication in list_publications(root):
+        labels.setdefault(publication.dataset_ref.dataset_id, []).append(publication.label)
     data = [
         {
-            "name": m.name,
-            "version": m.version,
-            "task_count": m.description.task_count,
-            "domains": m.description.domains,
-            "content_hash": m.content_hash[:12],
-            "created_at": m.created_at.isoformat(),
+            "dataset_id": manifest.dataset_id,
+            "description": manifest.description,
+            "task_count": len(manifest.tasks),
+            "labels": sorted(labels.get(manifest.dataset_id, [])),
         }
-        for m in manifests
+        for manifest in list_datasets(root)
     ]
-
     emit("dataset list", data, start_time=start, human_renderer=_render_dataset_list)
 
 
 def _render_dataset_list(data: list[dict[str, Any]]) -> None:
-    """Human renderer for dataset list output."""
     if not data:
         console.print("[dim]No datasets found.[/dim]")
         return
-
     from rich.table import Table
 
     table = Table(title=f"Datasets ({len(data)} total)")
-    table.add_column("Name", style="bold")
-    table.add_column("Version")
+    table.add_column("Dataset", style="bold")
     table.add_column("Tasks", justify="right")
-    table.add_column("Domains")
-    table.add_column("Hash", style="dim")
-    table.add_column("Created", style="dim")
-
-    for m in data:
+    table.add_column("Labels")
+    table.add_column("Description")
+    for item in data:
         table.add_row(
-            m["name"],
-            m["version"],
-            str(m["task_count"]),
-            ", ".join(m["domains"]),
-            m["content_hash"],
-            m["created_at"],
+            item["dataset_id"],
+            str(item["task_count"]),
+            ", ".join(item["labels"]) or "—",
+            item["description"],
         )
-
     console.print(table)
 
 
 @app.command("info")
-def dataset_info(
-    reference: str = typer.Argument(help="Dataset name or name@version"),
-) -> None:
-    """Show dataset description and integrity status.
-
-    Returns: name, version, summary, purpose, task_count, template_count,
-    domains, standards, difficulty_distribution, created_at, content_hash,
-    integrity (verified, total, drifted, missing, is_clean).
-
-    Examples:
-      aec-bench dataset info electrical-only@1.0.0
-      aec-bench --json dataset info electrical-only | jq '.data.integrity'
-    """
-    import time
+def dataset_info(reference: str = typer.Argument(help="Dataset ID or ID@label")) -> None:
+    """Show semantic content and exact-reference integrity for a publication."""
 
     from aec_bench.config import load_config
-    from aec_bench.dataset.integrity import verify_dataset_integrity
-    from aec_bench.dataset.storage import resolve_dataset
+    from aec_bench.dataset.publication import resolve_dataset, verify_resolved_dataset
 
     start = time.monotonic()
-    datasets_root = resolve_path("datasets_root")
-    manifest = resolve_dataset(datasets_root, reference)
-    if manifest is None:
-        emit(
-            "dataset info",
-            data=None,
-            errors=[f"dataset not found: {reference}"],
-            start_time=start,
-        )
+    config = load_config()
+    resolved = resolve_dataset(
+        datasets_root=config.datasets_root,
+        selector=reference,
+        project_root=config.project_root,
+    )
+    if resolved is None:
+        emit("dataset info", None, errors=[f"dataset publication not found: {reference}"], start_time=start)
         return
+    integrity = verify_resolved_dataset(
+        resolved,
+        datasets_root=config.datasets_root,
+        project_root=config.project_root,
+    )
+    data = _dataset_info_data(resolved.reference.kind, resolved.manifest, integrity)
+    emit(
+        "dataset info",
+        data,
+        errors=None if integrity.is_clean else ["dataset materialisation failed integrity verification"],
+        start_time=start,
+        human_renderer=_render_dataset_info,
+    )
 
-    desc = manifest.description
-    project_root = load_config().project_root
-    integrity = verify_dataset_integrity(manifest.tasks, project_root=project_root)
 
-    info_dict: dict[str, object] = {
-        "name": manifest.name,
-        "version": manifest.version,
-        "summary": desc.summary,
-        "purpose": desc.purpose,
-        "task_count": desc.task_count,
-        "template_count": desc.template_count,
-        "domains": desc.domains,
-        "standards": desc.standards,
-        "difficulty_distribution": desc.difficulty_distribution,
-        "created_at": manifest.created_at.isoformat(),
-        "content_hash": manifest.content_hash,
+def _dataset_info_data(kind: str, manifest: Any, integrity: Any) -> dict[str, Any]:
+    return {
+        "dataset_id": manifest.dataset_id,
+        "description": manifest.description,
+        "task_count": len(manifest.tasks),
+        "task_ids": [task.task_id for task in manifest.tasks],
+        "reference_kind": kind,
         "integrity": {
             "verified": integrity.verified,
-            "total": len(manifest.tasks),
-            "drifted": list(integrity.drifted),
             "missing": list(integrity.missing),
+            "modified": list(integrity.modified),
+            "unexpected": list(integrity.unexpected),
             "is_clean": integrity.is_clean,
         },
     }
 
-    integrity_errors: list[str] = []
-    if not integrity.is_clean:
-        parts: list[str] = []
-        if integrity.drifted:
-            parts.append(f"{len(integrity.drifted)} drifted")
-        if integrity.missing:
-            parts.append(f"{len(integrity.missing)} missing")
-        integrity_errors.append(", ".join(parts))
 
-    def _render(data: dict[str, Any]) -> None:
-        console.print(f"[bold]{data['name']}[/bold] v{data['version']}")
-        console.print(f"  {data['summary']}")
-        if data.get("purpose"):
-            console.print(f"  [dim]Purpose:[/dim] {data['purpose']}")
-        console.print(f"  [dim]Domains:[/dim] {', '.join(data['domains'])}")
-        console.print(f"  [dim]Tasks:[/dim] {data['task_count']}")
-        console.print(f"  [dim]Templates:[/dim] {data['template_count']}")
-        if data.get("standards"):
-            console.print(f"  [dim]Standards:[/dim] {', '.join(data['standards'])}")
-        console.print(f"  [dim]Difficulty:[/dim] {data['difficulty_distribution']}")
-        console.print(f"  [dim]Hash:[/dim] {data['content_hash'][:16]}...")
-        console.print(f"  [dim]Created:[/dim] {data['created_at']}")
-
-        integ = data["integrity"]
-        if integ["is_clean"]:
-            print_success(f"Integrity: {integ['verified']}/{integ['total']} tasks verified")
-        else:
-            if integ["drifted"]:
-                print_warning(f"Drifted: {', '.join(integ['drifted'])}")
-            if integ["missing"]:
-                print_warning(f"Missing: {', '.join(integ['missing'])}")
-
-    emit(
-        "dataset info",
-        info_dict,
-        errors=integrity_errors or None,
-        start_time=start,
-        human_renderer=_render,
-    )
+def _render_dataset_info(data: dict[str, Any]) -> None:
+    console.print(f"[bold]{data['dataset_id']}[/bold]")
+    console.print(f"  {data['description']}")
+    console.print(f"  [dim]Tasks:[/dim] {data['task_count']}")
+    console.print(f"  [dim]Reference:[/dim] {data['reference_kind']}")
+    integrity = data["integrity"]
+    if integrity["is_clean"]:
+        print_success(f"Integrity: {integrity['verified']}/{data['task_count']} tasks verified")
+    else:
+        print_error("Dataset materialisation is not clean")
 
 
 @app.command("export")
 def export_dataset_cmd(
-    reference: str = typer.Argument(help="Dataset name or name@version"),
-    output: Path = typer.Option(..., "--output", "-o", help="Output archive path (.tar.gz)"),
+    reference: str = typer.Argument(help="Dataset ID or ID@label"),
+    output: Path = typer.Option(..., "--output", "-o", help="Output archive path"),
 ) -> None:
-    """Export a dataset as a portable archive."""
+    """Export one resolved dataset as a deterministic detached bundle."""
+
     from aec_bench.config import load_config
+    from aec_bench.contracts.dataset import BundleDatasetRef
     from aec_bench.dataset.porter import export_dataset
-    from aec_bench.dataset.storage import resolve_dataset
+    from aec_bench.dataset.publication import resolve_dataset, verify_resolved_dataset
+    from aec_bench.ledger.artifact_repository import ArtifactRepository
 
-    datasets_root = resolve_path("datasets_root")
-    manifest = resolve_dataset(datasets_root, reference)
-    if manifest is None:
-        print_error(f"dataset not found: {reference}")
+    config = load_config()
+    resolved = resolve_dataset(
+        datasets_root=config.datasets_root,
+        selector=reference,
+        project_root=config.project_root,
+    )
+    if resolved is None:
+        print_error(f"dataset publication not found: {reference}")
         raise typer.Exit(1)
-
-    project_root = load_config().project_root
-    export_dataset(manifest=manifest, project_root=project_root, output_path=output)
-    print_success(f"Exported {manifest.name}@{manifest.version} to {output}")
+    integrity = verify_resolved_dataset(
+        resolved,
+        datasets_root=config.datasets_root,
+        project_root=config.project_root,
+    )
+    if not integrity.is_clean:
+        print_error("dataset materialisation failed integrity verification")
+        raise typer.Exit(1)
+    try:
+        if output.exists():
+            raise FileExistsError(f"dataset export already exists: {output}")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(resolved.reference, BundleDatasetRef):
+            payload = ArtifactRepository(config.datasets_root / "artifacts").read_bytes(resolved.reference.artifact)
+            output.write_bytes(payload)
+        else:
+            export_dataset(manifest=resolved.manifest, project_root=config.project_root, output_path=output)
+    except (FileExistsError, FileNotFoundError, ValueError) as error:
+        print_error(str(error))
+        raise typer.Exit(1) from error
+    print_success(f"Exported {resolved.manifest.dataset_id} to {output}")
 
 
 @app.command("import")
-def import_dataset_cmd(
-    archive: Path = typer.Argument(help="Path to dataset archive (.tar.gz)"),
-) -> None:
-    """Import a dataset from a portable archive."""
+def import_dataset_cmd(archive: Path = typer.Argument(help="Schema-2 dataset bundle")) -> None:
+    """Validate and import a detached dataset bundle without overwriting local data."""
+
     from aec_bench.dataset.porter import import_dataset
 
-    if not archive.exists():
+    if not archive.is_file():
         print_error(f"archive not found: {archive}")
         raise typer.Exit(1)
-
-    tasks_root = resolve_path("tasks_root")
-    datasets_root = resolve_path("datasets_root")
-
     try:
-        manifest = import_dataset(
+        imported = import_dataset(
             archive_path=archive,
-            tasks_root=tasks_root,
-            datasets_root=datasets_root,
+            tasks_root=resolve_path("tasks_root"),
+            datasets_root=resolve_path("datasets_root"),
         )
-    except (ValueError, FileExistsError) as e:
-        print_error(str(e))
-        raise typer.Exit(1) from e
-
-    print_success(f"Imported {manifest.name}@{manifest.version} ({manifest.description.task_count} tasks)")
+    except (FileExistsError, ValueError) as error:
+        print_error(str(error))
+        raise typer.Exit(1) from error
+    print_success(f"Imported {imported.manifest.dataset_id} ({len(imported.manifest.tasks)} tasks)")
 
 
 @app.command("validate")
-def validate_dataset(
-    reference: str = typer.Argument(help="Dataset name or name@version"),
-) -> None:
-    """Verify dataset integrity. Exits 0 if clean, 1 if drifted or missing.
-
-    Returns: verified, total, drifted (list), missing (list), is_clean.
-
-    Examples:
-      aec-bench dataset validate electrical-only@1.0.0
-      aec-bench --json dataset validate electrical-only | jq '.data.is_clean'
-    """
-    import time
+def validate_dataset(reference: str = typer.Argument(help="Dataset ID or ID@label")) -> None:
+    """Verify exact source identity and current task materialisation."""
 
     from aec_bench.config import load_config
-    from aec_bench.dataset.integrity import verify_dataset_integrity
-    from aec_bench.dataset.storage import resolve_dataset
+    from aec_bench.dataset.publication import resolve_dataset, verify_resolved_dataset
 
     start = time.monotonic()
-    datasets_root = resolve_path("datasets_root")
-    manifest = resolve_dataset(datasets_root, reference)
-    if manifest is None:
-        emit(
-            "dataset validate",
-            data=None,
-            errors=[f"dataset not found: {reference}"],
-            start_time=start,
-        )
+    config = load_config()
+    resolved = resolve_dataset(
+        datasets_root=config.datasets_root,
+        selector=reference,
+        project_root=config.project_root,
+    )
+    if resolved is None:
+        emit("dataset validate", None, errors=[f"dataset publication not found: {reference}"], start_time=start)
         return
-
-    project_root = load_config().project_root
-    result = verify_dataset_integrity(manifest.tasks, project_root=project_root)
-
-    result_dict: dict[str, object] = {
+    result = verify_resolved_dataset(
+        resolved,
+        datasets_root=config.datasets_root,
+        project_root=config.project_root,
+    )
+    data = {
         "verified": result.verified,
-        "total": len(manifest.tasks),
-        "drifted": list(result.drifted),
+        "total": len(resolved.manifest.tasks),
         "missing": list(result.missing),
+        "modified": list(result.modified),
+        "unexpected": list(result.unexpected),
         "is_clean": result.is_clean,
     }
+    emit(
+        "dataset validate",
+        data,
+        errors=None if result.is_clean else ["dataset materialisation failed integrity verification"],
+        start_time=start,
+        human_renderer=lambda item: print_success(f"{item['verified']}/{item['total']} tasks verified — clean")
+        if item["is_clean"]
+        else print_error("Dataset materialisation is not clean"),
+    )
 
-    def _render_success(data: dict[str, Any]) -> None:
-        print_success(f"{data['verified']}/{data['total']} tasks verified — clean")
 
-    def _render_failure(data: dict[str, Any]) -> None:
-        if data["drifted"]:
-            print_error(f"Drifted tasks: {', '.join(data['drifted'])}")
-        if data["missing"]:
-            print_error(f"Missing tasks: {', '.join(data['missing'])}")
+@app.command("migrate-v1")
+def migrate_v1_dataset_cmd(
+    manifest: Path = typer.Argument(help="Schema-1 manifest.json"),
+    label: str = typer.Option(..., "--label", help="Label for the new immutable publication"),
+) -> None:
+    """Verify and republish one schema-1 dataset as a schema-2 bundle."""
 
-    if result.is_clean:
-        emit(
-            "dataset validate",
-            result_dict,
-            start_time=start,
-            human_renderer=_render_success,
+    from aec_bench.config import load_config
+    from aec_bench.dataset.legacy import migrate_v1_dataset
+
+    config = load_config()
+    try:
+        publication = migrate_v1_dataset(
+            manifest,
+            project_root=config.project_root,
+            datasets_root=config.datasets_root,
+            label=label,
         )
-    else:
-        errors_summary: list[str] = []
-        parts: list[str] = []
-        if result.drifted:
-            parts.append(f"{len(result.drifted)} drifted")
-        if result.missing:
-            parts.append(f"{len(result.missing)} missing")
-        errors_summary.append(", ".join(parts))
-
-        emit(
-            "dataset validate",
-            result_dict,
-            errors=errors_summary,
-            start_time=start,
-            human_renderer=_render_failure,
-        )
+    except (FileExistsError, ValueError) as error:
+        print_error(str(error))
+        raise typer.Exit(1) from error
+    print_success(f"Migrated {publication.dataset_ref.dataset_id}@{publication.label} as a verified immutable bundle")
 
 
 @app.command("results")
-def dataset_results_cmd(
-    reference: str = typer.Argument(help="Dataset name or name@version"),
-) -> None:
-    """Show experiment results for all trials that used this dataset.
+def dataset_results_cmd(reference: str = typer.Argument(help="Dataset ID or ID@label")) -> None:
+    """Show trial results pinned to the resolved immutable dataset reference."""
 
-    Returns: dataset_id, summary (total_trials, mean_reward, passed, failed,
-    total_tokens), trials list (task_id, model, reward, tokens_in, turns
-    per trial).
-
-    Examples:
-      aec-bench dataset results electrical-only@1.0.0
-      aec-bench --json dataset results electrical-only | jq '.data.summary'
-    """
-    import time
-
-    from aec_bench.dataset.storage import resolve_dataset
+    from aec_bench.config import load_config
+    from aec_bench.contracts.dataset import dataset_reference_key
+    from aec_bench.dataset.publication import resolve_dataset
     from aec_bench.ledger.reader import query_trial_records
 
     start = time.monotonic()
-    datasets_root = resolve_path("datasets_root")
-    manifest = resolve_dataset(datasets_root, reference)
-    if manifest is None:
-        emit(
-            "dataset results",
-            data=None,
-            errors=[f"Dataset {reference} not found"],
-            start_time=start,
-        )
+    config = load_config()
+    resolved = resolve_dataset(
+        datasets_root=config.datasets_root,
+        selector=reference,
+        project_root=config.project_root,
+    )
+    if resolved is None:
+        emit("dataset results", None, errors=[f"dataset publication not found: {reference}"], start_time=start)
         return
-
-    dataset_id = f"{manifest.name}@{manifest.version}"
-    ledger_root = resolve_path("ledger_root")
-    records = query_trial_records(ledger_root, dataset_id=dataset_id)
-
-    if not records:
-        empty_data: dict[str, object] = {
-            "dataset_id": dataset_id,
-            "trials": [],
-            "summary": {
-                "total_trials": 0,
-                "mean_reward": 0.0,
-                "passed": 0,
-                "failed": 0,
-                "total_tokens": 0,
-            },
-        }
-
-        def _render_empty(data: dict[str, Any]) -> None:
-            console.print(f"[dim]No trial results found for dataset {data['dataset_id']}[/dim]")
-            console.print("[dim]Run an experiment referencing this dataset first.[/dim]")
-
-        emit("dataset results", empty_data, start_time=start, human_renderer=_render_empty)
-        return
-
-    # Summary stats
-    rewards = [r.evaluation.reward for r in records]
-    mean_reward = sum(rewards) / len(rewards) if rewards else 0.0
-    passed = sum(1 for r in rewards if r >= 1.0)
-    failed = sum(1 for r in rewards if r == 0.0)
-    total_tokens = sum(record.cost.tokens_in or 0 for record in records if record.cost is not None)
-
-    # Per-task results
-    trials_list: list[dict[str, object]] = []
-    for record in sorted(records, key=lambda r: r.task.task_id):
-        agent_result = record.outputs.agent_result or {}
-        trials_list.append(
-            {
-                "task_id": record.task.task_id,
-                "model": record.agent.model,
-                "reward": record.evaluation.reward,
-                "tokens_in": record.cost.tokens_in if record.cost else None,
-                "turns": agent_result.get("turns_used"),
-            }
-        )
-
-    results_data: dict[str, object] = {
-        "dataset_id": dataset_id,
-        "trials": trials_list,
+    identity = dataset_reference_key(resolved.reference)
+    records = query_trial_records(config.ledger_root, dataset_id=identity)
+    rewards = [record.evaluation.reward for record in records]
+    data = {
+        "dataset_id": resolved.manifest.dataset_id,
+        "reference_kind": resolved.reference.kind,
         "summary": {
             "total_trials": len(records),
-            "mean_reward": mean_reward,
-            "passed": passed,
-            "failed": failed,
-            "total_tokens": total_tokens,
+            "mean_reward": sum(rewards) / len(rewards) if rewards else 0.0,
+            "passed": sum(reward >= 1.0 for reward in rewards),
+            "failed": sum(reward == 0.0 for reward in rewards),
         },
     }
+    emit("dataset results", data, start_time=start)
 
-    def _render(data: dict[str, Any]) -> None:
-        from rich.table import Table
 
-        summary = data["summary"]
-        console.print(f"\n[bold]{data['dataset_id']}[/bold] — {summary['total_trials']} trials")
-        console.print(
-            f"  Mean reward: [bold]{summary['mean_reward']:.3f}[/bold]  "
-            f"Pass: [green]{summary['passed']}[/green]  "
-            f"Fail: [red]{summary['failed']}[/red]  "
-            f"Tokens: {summary['total_tokens']:,}"
-        )
+def _parse_difficulties(values: list[str] | None) -> list[Difficulty]:
+    parsed: list[Difficulty] = []
+    for value in values or []:
+        try:
+            parsed.append(Difficulty(value))
+        except ValueError as error:
+            print_error(f"unknown difficulty: {value}. Available: {', '.join(item.value for item in Difficulty)}")
+            raise typer.Exit(1) from error
+    return parsed
 
-        table = Table(title="Results by Task")
-        table.add_column("Task")
-        table.add_column("Agent")
-        table.add_column("Reward", justify="right")
-        table.add_column("Tokens In", justify="right")
-        table.add_column("Turns", justify="right")
 
-        for trial in data["trials"]:
-            reward = trial["reward"]
-            reward_color = "green" if reward >= 1.0 else "red" if reward == 0.0 else "yellow"
-            tokens_in = f"{trial['tokens_in']:,}" if trial["tokens_in"] is not None else "\u2014"
-            turns = str(trial["turns"]) if trial["turns"] is not None else "\u2014"
+def _load_suite_output_manifest(path: Path) -> SuiteOutput:
+    from aec_bench.generation.dataset import SuiteOutput
 
-            table.add_row(
-                trial["task_id"],
-                trial["model"],
-                f"[{reward_color}]{reward:.3f}[/]",
-                tokens_in,
-                turns,
-            )
+    if not path.is_file():
+        print_error(f"suite output not found: {path}")
+        raise typer.Exit(1)
+    try:
+        return SuiteOutput.model_validate_json(path.read_text(encoding="utf-8"))
+    except Exception as error:
+        print_error(f"failed to read suite output: {error}")
+        raise typer.Exit(1) from error
 
-        console.print(table)
 
-    emit("dataset results", results_data, start_time=start, human_renderer=_render)
+def _load_tasks_from_suite_output(path: Path, tasks_root: Path, manifest: SuiteOutput) -> list[TaskDefinition]:
+    from aec_bench.tasks.loader import load_task_definition
+
+    suite_root = path.resolve().parent
+    root = tasks_root.resolve()
+    tasks: list[TaskDefinition] = []
+    for entry in manifest.instances:
+        task_directory = (suite_root / entry.path).resolve()
+        if not task_directory.is_dir():
+            print_error(f"suite output references missing task directory: {task_directory}")
+            raise typer.Exit(1)
+        try:
+            task_directory.relative_to(root)
+        except ValueError as error:
+            print_error(f"suite output task is outside tasks root: {task_directory}")
+            raise typer.Exit(1) from error
+        tasks.append(load_task_definition(task_directory, root))
+    return tasks

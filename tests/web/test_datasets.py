@@ -1,55 +1,46 @@
-# ABOUTME: Tests for the datasets API endpoints showing versioned benchmark datasets.
-# ABOUTME: Verifies list view, detail view with tabs, and 404 handling via JSON API.
+# ABOUTME: Tests Web API dataset views over semantic manifests and labelled exact references.
+# ABOUTME: Ensures routine responses omit legacy versions and hashes while integrity stays fail closed.
 
-import json
-from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from aec_bench.contracts.dataset import DatasetManifest, DatasetTaskEntry
+from aec_bench.dataset.publication import publish_dataset
+from aec_bench.dataset.storage import write_manifest
 from aec_bench.web.app import create_app
 
 
 def _make_client_with_dataset(tmp_path: Path) -> TestClient:
-    """Create a client with a minimal dataset in storage."""
     ledger = tmp_path / "ledger"
     ledger.mkdir()
     tasks = tmp_path / "tasks"
-    tasks.mkdir()
-    datasets = tmp_path / "datasets" / "test-ds" / "1.0.0"
-    datasets.mkdir(parents=True)
-    manifest = {
-        "name": "test-ds",
-        "version": "1.0.0",
-        "content_hash": "abc123",
-        "description": {
-            "summary": "A test dataset",
-            "purpose": "testing",
-            "standards": ["AS3008"],
-            "domains": ["electrical"],
-            "difficulty_distribution": {"medium": 1},
-            "template_count": 1,
-            "task_count": 1,
-        },
-        "created_at": datetime(2026, 1, 1, tzinfo=UTC).isoformat(),
-        "tasks": [
-            {
-                "task_id": "electrical/voltage-drop/inst-0",
-                "task_path": "tasks/electrical/voltage-drop/inst-0",
-                "content_hash": "hash-0001",
-                "domain": "electrical",
-                "difficulty": "medium",
-                "tags": ["voltage"],
-            }
+    task = tasks / "electrical/voltage-drop/inst-0"
+    task.mkdir(parents=True)
+    (task / "task.toml").write_text("[metadata]\n", encoding="utf-8")
+    datasets = tmp_path / "datasets"
+    manifest = DatasetManifest(
+        dataset_id="test-ds",
+        description="A test dataset",
+        tasks=[
+            DatasetTaskEntry(
+                task_id="electrical/voltage-drop/inst-0",
+                path="tasks/electrical/voltage-drop/inst-0",
+                task_kind="artifact",
+            )
         ],
-        "source": {"method": "manual"},
-    }
-    (datasets / "manifest.json").write_text(json.dumps(manifest))
-    return TestClient(create_app(ledger_root=ledger, tasks_root=tasks, datasets_root=tmp_path / "datasets"))
+    )
+    write_manifest(datasets, manifest)
+    publish_dataset(
+        manifest=manifest,
+        datasets_root=datasets,
+        project_root=tmp_path,
+        label="public-2026",
+    )
+    return TestClient(create_app(ledger_root=ledger, tasks_root=tasks, datasets_root=datasets))
 
 
 def _make_client_empty(tmp_path: Path) -> TestClient:
-    """Create a client with no datasets."""
     ledger = tmp_path / "ledger"
     ledger.mkdir()
     tasks = tmp_path / "tasks"
@@ -59,141 +50,69 @@ def _make_client_empty(tmp_path: Path) -> TestClient:
     return TestClient(create_app(ledger_root=ledger, tasks_root=tasks, datasets_root=datasets))
 
 
-# ---------------------------------------------------------------------------
-# API: list endpoint
-# ---------------------------------------------------------------------------
+def test_datasets_list_api_uses_stable_identity_and_labels(tmp_path: Path) -> None:
+    response = _make_client_with_dataset(tmp_path).get("/api/datasets")
 
-
-def test_datasets_list_api_returns_json(tmp_path: Path) -> None:
-    """GET /api/datasets should return JSON with expected keys."""
-    client = _make_client_with_dataset(tmp_path)
-    resp = client.get("/api/datasets")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "datasets" in data
-    assert "total_datasets" in data
-    assert "total_tasks" in data
-
-
-def test_datasets_list_api_includes_dataset(tmp_path: Path) -> None:
-    """Datasets list should include the test dataset."""
-    client = _make_client_with_dataset(tmp_path)
-    resp = client.get("/api/datasets")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["total_datasets"] == 1
-    assert data["datasets"][0]["name"] == "test-ds"
-    assert data["datasets"][0]["version"] == "1.0.0"
+    assert response.status_code == 200
+    assert response.json() == {
+        "datasets": [
+            {
+                "dataset_id": "test-ds",
+                "description": "A test dataset",
+                "task_count": 1,
+                "labels": ["public-2026"],
+            }
+        ],
+        "total_datasets": 1,
+        "total_tasks": 1,
+    }
 
 
 def test_datasets_list_api_empty(tmp_path: Path) -> None:
-    """Empty datasets directory should return zero counts."""
-    client = _make_client_empty(tmp_path)
-    resp = client.get("/api/datasets")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["total_datasets"] == 0
-    assert data["total_tasks"] == 0
+    response = _make_client_empty(tmp_path).get("/api/datasets")
+
+    assert response.status_code == 200
+    assert response.json() == {"datasets": [], "total_datasets": 0, "total_tasks": 0}
 
 
-def test_datasets_api_shows_summary(tmp_path: Path) -> None:
-    """Dataset entry should include the summary description."""
+def test_dataset_detail_api_resolves_label_to_exact_reference(tmp_path: Path) -> None:
+    response = _make_client_with_dataset(tmp_path).get("/api/datasets/test-ds/public-2026")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["dataset_id"] == "test-ds"
+    assert data["label"] == "public-2026"
+    assert data["reference_kind"] == "bundle"
+    assert data["tasks"] == [
+        {
+            "task_id": "electrical/voltage-drop/inst-0",
+            "path": "tasks/electrical/voltage-drop/inst-0",
+            "task_kind": "artifact",
+        }
+    ]
+    assert not ({"version", "content_hash", "created_at"} & data.keys())
+
+
+def test_dataset_detail_api_unknown_label_returns_404(tmp_path: Path) -> None:
+    response = _make_client_with_dataset(tmp_path).get("/api/datasets/test-ds/nope")
+
+    assert response.status_code == 404
+
+
+def test_dataset_detail_api_reports_reference_integrity(tmp_path: Path) -> None:
+    response = _make_client_with_dataset(tmp_path).get("/api/datasets/test-ds/public-2026?tab=integrity")
+
+    assert response.status_code == 200
+    assert response.json()["integrity_results"] == [{"task_id": "electrical/voltage-drop/inst-0", "status": "verified"}]
+    assert response.json()["integrity_unexpected"] == []
+
+
+def test_dataset_detail_api_reports_unexpected_material(tmp_path: Path) -> None:
     client = _make_client_with_dataset(tmp_path)
-    resp = client.get("/api/datasets")
-    assert resp.status_code == 200
-    data = resp.json()
-    ds = data["datasets"][0]
-    assert ds["summary"] == "A test dataset"
+    extra = tmp_path / "tasks/electrical/voltage-drop/inst-0/extra.txt"
+    extra.write_text("not in the published bundle", encoding="utf-8")
 
+    response = client.get("/api/datasets/test-ds/public-2026?tab=integrity")
 
-def test_datasets_api_shows_domain(tmp_path: Path) -> None:
-    """Dataset entry should include domain information."""
-    client = _make_client_with_dataset(tmp_path)
-    resp = client.get("/api/datasets")
-    assert resp.status_code == 200
-    data = resp.json()
-    ds = data["datasets"][0]
-    assert "electrical" in ds["domains"]
-
-
-def test_datasets_api_shows_task_count(tmp_path: Path) -> None:
-    """Dataset entry should include task count."""
-    client = _make_client_with_dataset(tmp_path)
-    resp = client.get("/api/datasets")
-    assert resp.status_code == 200
-    data = resp.json()
-    ds = data["datasets"][0]
-    assert ds["task_count"] >= 1
-
-
-# ---------------------------------------------------------------------------
-# API: detail endpoint
-# ---------------------------------------------------------------------------
-
-
-def test_dataset_detail_api_returns_json(tmp_path: Path) -> None:
-    """GET /api/datasets/{name}/{version} should return JSON with expected keys."""
-    client = _make_client_with_dataset(tmp_path)
-    resp = client.get("/api/datasets/test-ds/1.0.0")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "name" in data
-    assert "version" in data
-    assert "tasks" in data
-    assert "experiment_results" in data
-    assert "integrity_results" in data
-
-
-def test_dataset_detail_api_correct_name(tmp_path: Path) -> None:
-    """Detail endpoint should return the correct dataset name and version."""
-    client = _make_client_with_dataset(tmp_path)
-    resp = client.get("/api/datasets/test-ds/1.0.0")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["name"] == "test-ds"
-    assert data["version"] == "1.0.0"
-
-
-def test_dataset_detail_api_shows_task_id(tmp_path: Path) -> None:
-    """Detail endpoint should include task_id values from the manifest."""
-    client = _make_client_with_dataset(tmp_path)
-    resp = client.get("/api/datasets/test-ds/1.0.0")
-    assert resp.status_code == 200
-    data = resp.json()
-    task_ids = [t["task_id"] for t in data["tasks"]]
-    assert any("voltage-drop" in tid for tid in task_ids)
-
-
-def test_dataset_detail_api_shows_difficulty(tmp_path: Path) -> None:
-    """Detail endpoint should include difficulty for each task."""
-    client = _make_client_with_dataset(tmp_path)
-    resp = client.get("/api/datasets/test-ds/1.0.0")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["tasks"][0]["difficulty"] == "medium"
-
-
-def test_dataset_detail_api_shows_domain(tmp_path: Path) -> None:
-    """Detail endpoint should include domain for each task."""
-    client = _make_client_with_dataset(tmp_path)
-    resp = client.get("/api/datasets/test-ds/1.0.0")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["tasks"][0]["domain"] == "electrical"
-
-
-def test_dataset_detail_api_unknown_returns_404(tmp_path: Path) -> None:
-    """Detail endpoint should return 404 for a non-existent dataset."""
-    client = _make_client_with_dataset(tmp_path)
-    resp = client.get("/api/datasets/nope/9.9.9")
-    assert resp.status_code == 404
-
-
-def test_dataset_detail_api_integrity_results(tmp_path: Path) -> None:
-    """Integrity results should be present in the detail response."""
-    client = _make_client_with_dataset(tmp_path)
-    resp = client.get("/api/datasets/test-ds/1.0.0")
-    assert resp.status_code == 200
-    data = resp.json()
-    # integrity_results should be a list of per-task integrity entries
-    assert isinstance(data["integrity_results"], list)
+    assert response.status_code == 200
+    assert response.json()["integrity_unexpected"] == ["tasks/electrical/voltage-drop/inst-0/extra.txt"]

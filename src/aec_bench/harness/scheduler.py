@@ -14,18 +14,37 @@ def select_manifest_tasks(
     manifest: ExperimentManifest,
     *,
     datasets_root: Path | None = None,
+    project_root: Path | None = None,
 ) -> list[TaskDefinition]:
     selector = manifest.tasks
 
     if selector.dataset is not None:
         from aec_bench.config import load_config
-        from aec_bench.dataset.storage import resolve_dataset
+        from aec_bench.dataset.publication import resolve_dataset, verify_resolved_dataset
 
-        resolved_root = datasets_root or load_config().datasets_root
-        dataset_manifest = resolve_dataset(resolved_root, selector.dataset)
-        if dataset_manifest is not None:
-            dataset_task_ids = {t.task_id for t in dataset_manifest.tasks}
-            tasks = [t for t in tasks if t.task_id in dataset_task_ids]
+        config = load_config(project_root)
+        resolved_root = datasets_root or config.datasets_root
+        resolved_project = project_root or config.project_root
+        resolved = resolve_dataset(
+            datasets_root=resolved_root,
+            selector=selector.dataset,
+            project_root=resolved_project,
+        )
+        if resolved is None:
+            raise ValueError("resolved dataset reference is not available")
+        integrity = verify_resolved_dataset(
+            resolved,
+            datasets_root=resolved_root,
+            project_root=resolved_project,
+        )
+        if not integrity.is_clean:
+            raise ValueError("resolved dataset task materialisation failed integrity verification")
+        dataset_task_ids = {task.task_id for task in resolved.manifest.tasks}
+        available_task_ids = {task.task_id for task in tasks}
+        missing_task_ids = sorted(dataset_task_ids - available_task_ids)
+        if missing_task_ids:
+            raise ValueError(f"resolved dataset tasks are not registered: {', '.join(missing_task_ids)}")
+        tasks = [task for task in tasks if task.task_id in dataset_task_ids]
 
     return select_tasks(
         tasks,

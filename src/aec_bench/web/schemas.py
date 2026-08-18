@@ -242,11 +242,10 @@ class ScorecardRowSchema(BaseModel):
 class DatasetSummarySchema(BaseModel):
     """Summary of a dataset for leaderboard context."""
 
-    name: str
-    version: str
-    summary: str
+    dataset_id: str
+    label: str
+    description: str
     task_count: int
-    domains: list[str]
 
 
 class LeaderboardResponse(BaseModel):
@@ -267,12 +266,10 @@ class LeaderboardResponse(BaseModel):
 class DatasetListItemSchema(BaseModel):
     """One dataset card in the datasets list."""
 
-    name: str
-    version: str
-    summary: str
+    dataset_id: str
+    description: str
     task_count: int
-    domains: list[str]
-    content_hash: str
+    labels: list[str]
 
 
 class DatasetsListResponse(BaseModel):
@@ -298,30 +295,28 @@ class IntegrityResultSchema(BaseModel):
 
     task_id: str
     status: str
-    expected_hash: str
 
 
 class DatasetTaskEntrySchema(BaseModel):
     """One task entry in a dataset's task list."""
 
     task_id: str
-    domain: str
-    difficulty: str
-    tags: list[str]
+    path: str
+    task_kind: str
 
 
 class DatasetDetailResponse(BaseModel):
     """Response for the dataset detail endpoint."""
 
-    name: str
-    version: str
-    summary: str
-    content_hash: str
+    dataset_id: str
+    label: str
+    description: str
+    reference_kind: str
     task_count: int
-    domains: list[str]
     tasks: list[DatasetTaskEntrySchema]
     experiment_results: list[ExperimentResultSchema]
     integrity_results: list[IntegrityResultSchema]
+    integrity_unexpected: list[str]
 
 
 # ---------------------------------------------------------------------------

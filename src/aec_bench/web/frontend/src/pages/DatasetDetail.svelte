@@ -1,9 +1,9 @@
-<!-- ABOUTME: Dataset detail page with tabbed view for Tasks, Results, and Integrity data. -->
-<!-- ABOUTME: Fetches from /api/datasets/{name}/{version}; integrity data loads lazily on tab switch. -->
+<!-- ABOUTME: Shows one labelled immutable dataset publication and its task materialisation. -->
+<!-- ABOUTME: Loads exact-reference integrity data only when the integrity tab opens. -->
 <script lang="ts">
   import { onMount } from "svelte";
   import { fetchDatasetDetail } from "../lib/api";
-  import type { DatasetDetailData, DatasetTaskEntry, ExperimentResult, IntegrityResult } from "../lib/types";
+  import type { DatasetDetailData } from "../lib/types";
   import Card from "../lib/components/Card.svelte";
   import Badge from "../lib/components/Badge.svelte";
   import RewardBadge from "../lib/components/RewardBadge.svelte";
@@ -11,25 +11,25 @@
   import DetailShell from "../lib/components/DetailShell.svelte";
 
   interface Props {
-    name: string;
-    version: string;
+    datasetId: string;
+    label: string;
   }
 
-  let { name, version }: Props = $props();
+  let { datasetId, label }: Props = $props();
 
   let data: DatasetDetailData | null = $state(null);
   let activeTab: "tasks" | "results" | "integrity" = $state("tasks");
   let integrityLoaded: boolean = $state(false);
 
   onMount(async () => {
-    data = await fetchDatasetDetail(name, version);
+    data = await fetchDatasetDetail(datasetId, label);
   });
 
   async function switchTab(tab: "tasks" | "results" | "integrity") {
     activeTab = tab;
     if (tab === "integrity" && !integrityLoaded && data) {
       // Reload with integrity tab param to get full integrity data
-      const updated = await fetchDatasetDetail(name, version, { tab: "integrity" });
+      const updated = await fetchDatasetDetail(datasetId, label, { tab: "integrity" });
       data = updated;
       integrityLoaded = true;
     }
@@ -48,13 +48,13 @@
 
   function integrityStatusClass(status: string): string {
     if (status === "verified") return "status-ok";
-    if (status === "drifted") return "status-warn";
+    if (status === "modified") return "status-warn";
     return "status-error";
   }
 
   function integrityIcon(status: string): string {
     if (status === "verified") return "✓";
-    if (status === "drifted") return "~";
+    if (status === "modified") return "~";
     return "✗";
   }
 </script>
@@ -70,22 +70,16 @@
   <DetailShell
     backHref="/datasets"
     backLabel="Datasets"
-    title={dataset.name}
-    subtitle={dataset.summary || undefined}
+    title={dataset.dataset_id}
+    subtitle={dataset.description || undefined}
   >
     {#snippet actions()}
-      <span class="version-badge">v{dataset.version}</span>
+      <span class="label-badge">{dataset.label}</span>
     {/snippet}
 
     <div class="meta-row">
       <span class="task-count">{dataset.task_count} tasks</span>
-      {#each dataset.domains as domain (domain)}
-        <Badge text={domain} />
-      {/each}
-    </div>
-    <div class="hash-row">
-      <span class="hash-label">Content hash</span>
-      <code class="hash-value">{dataset.content_hash}</code>
+      <Badge text={dataset.reference_kind} />
     </div>
 
     <!-- Tab bar -->
@@ -131,24 +125,16 @@
             <thead>
               <tr>
                 <th>Task ID</th>
-                <th>Domain</th>
-                <th>Difficulty</th>
-                <th>Tags</th>
+                <th>Kind</th>
+                <th>Path</th>
               </tr>
             </thead>
             <tbody>
               {#each dataset.tasks as task (task.task_id)}
                 <tr>
                   <td class="task-id-cell">{task.task_id}</td>
-                  <td><Badge text={task.domain} /></td>
-                  <td><Badge text={task.difficulty} /></td>
-                  <td>
-                    <div class="tag-row">
-                      {#each task.tags as tag (tag)}
-                        <Badge text={tag} />
-                      {/each}
-                    </div>
-                  </td>
+                  <td><Badge text={task.task_kind} /></td>
+                  <td class="task-id-cell">{task.path}</td>
                 </tr>
               {/each}
             </tbody>
@@ -195,18 +181,27 @@
       {/if}
 
     {:else if activeTab === "integrity"}
-      {#if dataset.integrity_results.length === 0}
+      {#if dataset.integrity_results.length === 0 && dataset.integrity_unexpected.length === 0}
         <Card>
           <div class="empty-state"><p>No integrity data available.</p></div>
         </Card>
       {:else}
+        {#if dataset.integrity_unexpected.length > 0}
+          <Card>
+            <div class="unexpected-files">
+              <strong>Unexpected material</strong>
+              {#each dataset.integrity_unexpected as path (path)}
+                <span class="task-id-cell">{path}</span>
+              {/each}
+            </div>
+          </Card>
+        {/if}
         <Card padding="0">
           <table class="integrity-table">
             <thead>
               <tr>
                 <th>Status</th>
                 <th>Task ID</th>
-                <th>Expected Hash</th>
               </tr>
             </thead>
             <tbody>
@@ -219,7 +214,6 @@
                     <span class="status-label {integrityStatusClass(result.status)}">{result.status}</span>
                   </td>
                   <td class="task-id-cell">{result.task_id}</td>
-                  <td class="hash-cell">{result.expected_hash.slice(0, 16)}…</td>
                 </tr>
               {/each}
             </tbody>
@@ -237,7 +231,7 @@
     gap: var(--space-md);
   }
 
-  .version-badge {
+  .label-badge {
     font-family: var(--font-mono);
     font-size: 0.85rem;
     color: var(--text-3);
@@ -255,31 +249,18 @@
     margin-bottom: var(--space-sm);
   }
 
+  .unexpected-files {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    color: var(--danger);
+  }
+
   .task-count {
     font-family: var(--font-mono);
     font-size: 0.875rem;
     font-weight: 700;
     color: var(--forest);
-  }
-
-  .hash-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-  }
-
-  .hash-label {
-    font-size: 0.72rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-3);
-  }
-
-  .hash-value {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--text-3);
   }
 
   /* Tab bar */

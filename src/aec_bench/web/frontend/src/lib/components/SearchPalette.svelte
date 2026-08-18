@@ -61,9 +61,13 @@
       items.push({ kind: "Template", label: `${disc}/${id}`, href: `/library/${disc}/${id}` });
     }
     for (const r of results.dataset_results) {
-      const name = (r as any).name ?? "unknown";
-      const ver = (r as any).version ?? "unknown";
-      items.push({ kind: "Dataset", label: `${name} v${ver}`, href: `/datasets/${name}/${ver}` });
+      const datasetId = r.dataset_id;
+      const label = r.labels[0];
+      items.push({
+        kind: "Dataset",
+        label: label ? `${datasetId}@${label}` : `${datasetId} (draft)`,
+        href: label ? `/datasets/${datasetId}/${label}` : "/datasets",
+      });
     }
     for (const r of (results.experiment_results ?? []) as ExperimentSearchResult[]) {
       items.push({

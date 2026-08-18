@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import Field, PositiveInt, field_validator, model_validator
 
+from aec_bench.contracts.dataset import DatasetRef
 from aec_bench.contracts.task_definition import Difficulty, Lifecycle
 from aec_bench.contracts.validators import (
     NonEmptyStr,
@@ -15,7 +16,7 @@ from aec_bench.contracts.validators import (
 
 
 class TaskSelector(StrictModel):
-    dataset: str | None = None  # "name" or "name@version"
+    dataset: DatasetRef | None = None
     include_patterns: list[str] = Field(default_factory=list)
     exclude_patterns: list[str] = Field(default_factory=list)
     domains: list[str] = Field(default_factory=list)

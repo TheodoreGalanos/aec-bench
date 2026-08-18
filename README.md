@@ -617,57 +617,67 @@ suite makes no hosted calls.
 
 ### Datasets
 
-Datasets are versioned, immutable benchmark snapshots — the formal "this IS the benchmark" artifact. They sit between template generation and experiment execution.
+Datasets separate semantic task selection from immutable byte identity. A
+schema-2 manifest names the selected tasks. Publication then binds that
+manifest to either a full Git commit or one verified detached bundle.
 
 ```bash
 # Create a dataset from electrical tasks only
-uv run aec-bench dataset create --name "electrical-v1" --version 1.0.0 --domain electrical
+uv run aec-bench dataset create electrical-core --domain electrical
 
 # Create from all tasks
-uv run aec-bench dataset create --name "full-bench" --version 1.0.0
+uv run aec-bench dataset create full-bench
 
 # Create from a suite.toml (records provenance)
-uv run aec-bench dataset create --name "generated-bench" --version 1.0.0 --config suite.toml
+uv run aec-bench dataset create generated-bench --config suite.toml
+
+# Publish an immutable detached bundle under a human label
+uv run aec-bench dataset publish electrical-core --label public-2026
 
 # List datasets
 uv run aec-bench dataset list
 
 # Show dataset details and integrity status
-uv run aec-bench dataset info electrical-v1
+uv run aec-bench dataset info electrical-core@public-2026
 
 # Generate an experiment config from a dataset
-uv run aec-bench dataset config electrical-v1 --model "<model-id>" -o experiment.yaml
+uv run aec-bench dataset config electrical-core@public-2026 --model "<model-id>" -o experiment.yaml
 
 # Verify integrity (for CI — exits 0 if clean, 1 if drifted)
-uv run aec-bench dataset validate electrical-v1@1.0.0
+uv run aec-bench dataset validate electrical-core@public-2026
 
 # Export for sharing
-uv run aec-bench dataset export electrical-v1 -o electrical-v1.tar.gz
+uv run aec-bench dataset export electrical-core@public-2026 -o electrical-core.tar.gz
 
 # Import a shared dataset
-uv run aec-bench dataset import electrical-v1.tar.gz
+uv run aec-bench dataset import electrical-core.tar.gz
 ```
 
 The typical workflow:
 
 ```bash
 # 1. Create a dataset
-uv run aec-bench dataset create --name electrical-v1 --version 1.0.0 --domain electrical
+uv run aec-bench dataset create electrical-core --domain electrical
 
-# 2. Generate experiment config
-uv run aec-bench dataset config electrical-v1 --model "<model-id>" -o experiment.yaml
+# 2. Publish and resolve an immutable reference into the experiment config
+uv run aec-bench dataset publish electrical-core --label public-2026
+uv run aec-bench dataset config electrical-core@public-2026 --model "<model-id>" -o experiment.yaml
 
 # 3. Run it
 uv run aec-bench run --config experiment.yaml
 ```
 
-Reference a dataset in an experiment config manually:
+The CLI can resolve a human label in an input config:
 
 ```yaml
 tasks:
-  dataset: "electrical-v1@1.0.0"
+  dataset: "electrical-core@public-2026"
   difficulties: ["medium", "hard"]  # optional filter on top
 ```
+
+Before planning, `aec-bench run` replaces that selector with the exact
+`RepositoryDatasetRef` or `BundleDatasetRef`. Generated experiment configs
+already contain that exact object. `latest` is rejected and is never persisted.
 
 ### Import Harbor Jobs
 

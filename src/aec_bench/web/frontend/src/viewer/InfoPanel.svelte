@@ -38,7 +38,7 @@
     };
   });
 
-  // dataset_id format: "name@version" or null for inline runs
+  // dataset_id is an immutable transitional reference key or null for inline runs.
   const datasetParts = $derived.by(() => {
     if (!trial.dataset_id) return { name: "", version: "", href: null };
     const at = trial.dataset_id.indexOf("@");

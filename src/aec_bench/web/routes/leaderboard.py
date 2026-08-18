@@ -12,8 +12,9 @@ from aec_bench.communication.standalone import (
     build_internal_leaderboard_artifact,
     build_public_leaderboard_artifact,
 )
-from aec_bench.contracts.dataset import DatasetManifest
-from aec_bench.dataset.storage import list_datasets, resolve_dataset
+from aec_bench.contracts.dataset import dataset_reference_key
+from aec_bench.dataset.publication import ResolvedDataset, resolve_dataset
+from aec_bench.dataset.storage import list_publications
 from aec_bench.ledger.reader import query_trial_records
 from aec_bench.web.dependencies import get_web_settings, require_internal_access
 from aec_bench.web.schemas import (
@@ -101,19 +102,18 @@ def _build_model_rows(
 
 def _build_scorecard(
     settings_ledger_root: Any,
-    manifests: list[DatasetManifest],
+    datasets: list[tuple[str, ResolvedDataset]],
 ) -> list[ScorecardRow]:
     """Build a cross-dataset scorecard: rows = models, columns = datasets."""
     # Collect per-dataset, per-model aggregations
     dataset_model_rewards: dict[str, dict[tuple[str, str], list[float]]] = {}
-    for manifest in manifests:
-        ds_id = f"{manifest.name}@{manifest.version}"
-        records = query_trial_records(settings_ledger_root, dataset_id=ds_id)
+    for alias, resolved in datasets:
+        records = query_trial_records(settings_ledger_root, dataset_id=dataset_reference_key(resolved.reference))
         groups: dict[tuple[str, str], list[float]] = {}
         for record in records:
             key = (record.agent.adapter, record.agent.model)
             groups.setdefault(key, []).append(record.evaluation.reward)
-        dataset_model_rewards[ds_id] = groups
+        dataset_model_rewards[alias] = groups
 
     # Collect all model keys
     all_models: set[tuple[str, str]] = set()
@@ -124,15 +124,14 @@ def _build_scorecard(
     for adapter, model in sorted(all_models):
         cells: dict[str, ScorecardCell] = {}
         all_means: list[float] = []
-        for manifest in manifests:
-            ds_id = f"{manifest.name}@{manifest.version}"
-            rewards = dataset_model_rewards.get(ds_id, {}).get((adapter, model), [])
+        for alias, _ in datasets:
+            rewards = dataset_model_rewards.get(alias, {}).get((adapter, model), [])
             if rewards:
                 mean_r = sum(rewards) / len(rewards)
-                cells[ds_id] = ScorecardCell(mean_reward=round(mean_r, 4), trials=len(rewards))
+                cells[alias] = ScorecardCell(mean_reward=round(mean_r, 4), trials=len(rewards))
                 all_means.append(mean_r)
             else:
-                cells[ds_id] = ScorecardCell(mean_reward=None, trials=0)
+                cells[alias] = ScorecardCell(mean_reward=None, trials=0)
 
         overall = round(sum(all_means) / len(all_means), 4) if all_means else None
         rows.append(ScorecardRow(adapter=adapter, model=model, cells=cells, overall=overall))
@@ -166,35 +165,42 @@ def leaderboard_api(
     """Return leaderboard model rows and scorecard data as JSON."""
     settings = get_web_settings(request)
 
-    manifests = list_datasets(settings.datasets_root)
+    published_datasets: list[tuple[str, ResolvedDataset]] = []
+    for publication in list_publications(settings.datasets_root):
+        alias = f"{publication.dataset_ref.dataset_id}@{publication.label}"
+        resolved = resolve_dataset(
+            datasets_root=settings.datasets_root,
+            selector=publication.dataset_ref,
+            project_root=settings.tasks_root.parent,
+        )
+        if resolved is not None:
+            published_datasets.append((alias, resolved))
     is_scorecard = view == "scorecard"
 
-    selected_manifest: DatasetManifest | None = None
+    selected: tuple[str, ResolvedDataset] | None = None
     model_rows: list[ModelRow] = []
 
     if not is_scorecard:
         if dataset:
-            selected_manifest = resolve_dataset(settings.datasets_root, dataset)
-        if selected_manifest is None and manifests:
-            selected_manifest = manifests[0]
+            selected = next((item for item in published_datasets if item[0] == dataset), None)
+        if selected is None and published_datasets:
+            selected = published_datasets[0]
 
-        if selected_manifest is not None:
-            ds_id = f"{selected_manifest.name}@{selected_manifest.version}"
-            model_rows = _build_model_rows(settings.ledger_root, ds_id)
+        if selected is not None:
+            model_rows = _build_model_rows(settings.ledger_root, dataset_reference_key(selected[1].reference))
 
     scorecard_rows: list[ScorecardRow] = []
     if is_scorecard:
-        scorecard_rows = _build_scorecard(settings.ledger_root, manifests)
+        scorecard_rows = _build_scorecard(settings.ledger_root, published_datasets)
 
     datasets_schema = [
         DatasetSummarySchema(
-            name=m.name,
-            version=m.version,
-            summary=m.description.summary,
-            task_count=len(m.tasks),
-            domains=m.description.domains,
+            dataset_id=resolved.manifest.dataset_id,
+            label=alias.split("@", maxsplit=1)[1],
+            description=resolved.manifest.description,
+            task_count=len(resolved.manifest.tasks),
         )
-        for m in manifests
+        for alias, resolved in published_datasets
     ]
 
     model_rows_schema = [
@@ -226,9 +232,7 @@ def leaderboard_api(
         for r in scorecard_rows
     ]
 
-    selected_dataset = (
-        f"{selected_manifest.name}@{selected_manifest.version}" if selected_manifest is not None else None
-    )
+    selected_dataset = selected[0] if selected is not None else None
 
     return LeaderboardResponse(
         model_rows=model_rows_schema,
