@@ -48,6 +48,8 @@ def test_template_genome_yaml_round_trips() -> None:
     payload = yaml.safe_load(template_genome_to_yaml(manifest))
 
     assert payload["task_id"] == "mechanical/pump-head-calculation"
+    assert "source_task_path" not in payload
+    assert "status" not in payload
     assert payload["output_contract"]["required_fields"] == [
         "static_head_m",
         "pressure_head_differential_m",

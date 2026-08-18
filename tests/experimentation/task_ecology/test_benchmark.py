@@ -14,6 +14,7 @@ from aec_bench.experimentation.task_ecology.benchmark import (
     TemplateEntry,
     build_arm_config,
     load_pressure_task_patterns,
+    load_template_entries,
     materialise_suite,
     scaffold_workspace,
     select_benchmark_templates,
@@ -28,52 +29,52 @@ def _entries() -> list[TemplateEntry]:
         TemplateEntry(
             task_id="civil/bund-volume-calculation",
             domain="civil",
-            source_task_path="src/aec_bench/templates/builtin/civil/bund_volume_calculation",
+            template_path="src/aec_bench/templates/builtin/civil/bund_volume_calculation",
         ),
         TemplateEntry(
             task_id="civil/orifice-outlet-design",
             domain="civil",
-            source_task_path="src/aec_bench/templates/builtin/civil/orifice_outlet_design",
+            template_path="src/aec_bench/templates/builtin/civil/orifice_outlet_design",
         ),
         TemplateEntry(
             task_id="electrical/voltage-drop",
             domain="electrical",
-            source_task_path="src/aec_bench/templates/builtin/electrical/voltage_drop",
+            template_path="src/aec_bench/templates/builtin/electrical/voltage_drop",
         ),
         TemplateEntry(
             task_id="electrical/grid-resistance",
             domain="electrical",
-            source_task_path="src/aec_bench/templates/builtin/electrical/grid_resistance",
+            template_path="src/aec_bench/templates/builtin/electrical/grid_resistance",
         ),
         TemplateEntry(
             task_id="ground/consolidation-settlement",
             domain="ground",
-            source_task_path="src/aec_bench/templates/builtin/ground/consolidation_settlement",
+            template_path="src/aec_bench/templates/builtin/ground/consolidation_settlement",
         ),
         TemplateEntry(
             task_id="ground/wall-overturning",
             domain="ground",
-            source_task_path="src/aec_bench/templates/builtin/ground/wall_overturning",
+            template_path="src/aec_bench/templates/builtin/ground/wall_overturning",
         ),
         TemplateEntry(
             task_id="mechanical/npsh-available",
             domain="mechanical",
-            source_task_path="src/aec_bench/templates/builtin/mechanical/npsh_available",
+            template_path="src/aec_bench/templates/builtin/mechanical/npsh_available",
         ),
         TemplateEntry(
             task_id="mechanical/wave-speed-calculation",
             domain="mechanical",
-            source_task_path="src/aec_bench/templates/builtin/mechanical/wave_speed_calculation",
+            template_path="src/aec_bench/templates/builtin/mechanical/wave_speed_calculation",
         ),
         TemplateEntry(
             task_id="structural/gravity-base-stability",
             domain="structural",
-            source_task_path="src/aec_bench/templates/builtin/structural/gravity_base_stability",
+            template_path="src/aec_bench/templates/builtin/structural/gravity_base_stability",
         ),
         TemplateEntry(
             task_id="structural/thermal-movement-calc",
             domain="structural",
-            source_task_path="src/aec_bench/templates/builtin/structural/thermal_movement_calc",
+            template_path="src/aec_bench/templates/builtin/structural/thermal_movement_calc",
         ),
     ]
 
@@ -94,6 +95,36 @@ def test_select_benchmark_templates_keeps_anchors_out_of_population() -> None:
     assert len(selection.population) == 5
 
 
+def test_template_catalogue_owns_template_source_location(tmp_path: Path) -> None:
+    genome_path = tmp_path / "civil" / "bund-volume-calculation.yaml"
+    genome_path.parent.mkdir()
+    genome_path.write_text("task_id: civil/bund-volume-calculation\n", encoding="utf-8")
+    index_path = tmp_path / "index.yaml"
+    index_path.write_text(
+        yaml.safe_dump(
+            {
+                "entries": [
+                    {
+                        "task_id": "civil/bund-volume-calculation",
+                        "domain": "civil",
+                        "path": "civil/bund-volume-calculation.yaml",
+                        "template_path": "src/aec_bench/templates/builtin/civil/bund_volume_calculation",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert load_template_entries(index_path) == [
+        TemplateEntry(
+            task_id="civil/bund-volume-calculation",
+            domain="civil",
+            template_path="src/aec_bench/templates/builtin/civil/bund_volume_calculation",
+        )
+    ]
+
+
 def test_default_max_cycles_covers_population_once_at_default_batch_size() -> None:
     assert DEFAULT_DIFFICULTIES == ("easy", "medium", "hard")
     assert DEFAULT_MAX_CYCLES == 6
@@ -112,7 +143,7 @@ def test_materialise_suite_writes_one_replay_sidecar(tmp_path: Path) -> None:
             TemplateEntry(
                 task_id="civil/bund-volume-calculation",
                 domain="civil",
-                source_task_path=template.relative_to(tmp_path).as_posix(),
+                template_path=template.relative_to(tmp_path).as_posix(),
             )
         ],
         output_root=tmp_path / "generated",

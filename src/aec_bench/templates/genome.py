@@ -16,7 +16,6 @@ from aec_bench.contracts.task_genome import (
     InputBundle,
     OutputContract,
     PressurePoint,
-    ProvenanceRef,
     Scenario,
     TaskGenomeManifest,
     VerifierContract,
@@ -45,8 +44,6 @@ def extract_template_genome(template_dir: Path, repo_root: Path) -> TaskGenomeMa
 
     return TaskGenomeManifest(
         task_id=task_id,
-        source_task_path=_relative_to_repo(template_dir, repo_root),
-        status="extracted",
         domain_frame=DomainFrame(
             discipline=discipline,
             subdomain=str(meta.get("category", name)),
@@ -211,7 +208,6 @@ def _extract_template_pressure_points(
                 id="unit_conversion",
                 type="unit_conversion",
                 description=("Solver must apply explicit unit conversions from the template instructions."),
-                provenance=[ProvenanceRef(file="instruction.md", section="Constraints")],
                 confidence="medium",
             )
         )
@@ -223,7 +219,6 @@ def _extract_template_pressure_points(
                 id="explicit_range_check",
                 type="threshold_decision",
                 description=("Solver must calculate margins or pass/fail flags against explicit criteria."),
-                provenance=[ProvenanceRef(file="params.toml", section="outputs")],
                 confidence="high",
             )
         )
@@ -242,7 +237,6 @@ def _extract_template_pressure_points(
                 id="infer_hidden_parameters",
                 type="context_inference",
                 description=("Harder variants require inferring hidden parameters from scenario context."),
-                provenance=[ProvenanceRef(file="params.toml", section="difficulty.hidden_params")],
                 confidence="high",
             )
         )
@@ -253,7 +247,6 @@ def _extract_template_pressure_points(
                 id="constraint_satisfaction",
                 type="input_constraint",
                 description="Generated instances must satisfy template constraint expressions.",
-                provenance=[ProvenanceRef(file="params.toml", section="constraints")],
                 confidence="high",
             )
         )
@@ -264,7 +257,6 @@ def _extract_template_pressure_points(
                 id="parameterised_calculation",
                 type="calculation",
                 description=("Solver must map supplied parameters to the template calculation outputs."),
-                provenance=[ProvenanceRef(file="params.toml", section="params")],
                 confidence="medium",
             )
         )

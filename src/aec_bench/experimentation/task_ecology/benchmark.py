@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 import yaml
 
+from aec_bench.contracts.validators import ensure_relative_path
 from aec_bench.evolution.config_loader import load_evolution_config
 from aec_bench.evolution.report_data import list_runs
 from aec_bench.generation.contracts import SampledInstance
@@ -47,7 +48,7 @@ DEFAULT_SEED = 20260514
 class TemplateEntry:
     task_id: str
     domain: str
-    source_task_path: str
+    template_path: str
 
 
 @dataclass(frozen=True)
@@ -71,13 +72,14 @@ def load_template_entries(index_path: Path) -> list[TemplateEntry]:
     root = index_path.parent
     entries: list[TemplateEntry] = []
     for entry in index.get("entries", []):
-        genome_path = root / entry["path"]
-        genome = yaml.safe_load(genome_path.read_text(encoding="utf-8"))
+        genome_path = root / ensure_relative_path(str(entry["path"]))
+        if not genome_path.is_file():
+            raise ValueError(f"template genome does not exist: {entry['path']}")
         entries.append(
             TemplateEntry(
                 task_id=entry["task_id"],
                 domain=entry["domain"],
-                source_task_path=genome["source_task_path"],
+                template_path=ensure_relative_path(str(entry["template_path"])),
             )
         )
     return entries
@@ -132,7 +134,7 @@ def materialise_suite(
     suite_root.mkdir(parents=True, exist_ok=True)
     require_available_sidecar_paths(suite_root)
 
-    loaded_entries = [(entry, load_template(repo_root / entry.source_task_path)) for entry in entries]
+    loaded_entries = [(entry, load_template(repo_root / entry.template_path)) for entry in entries]
     prepared_source = prepare_template_source(tuple(template for _, template in loaded_entries), suite_root)
 
     materialised: list[MaterialisedInstance] = []

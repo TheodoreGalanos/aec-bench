@@ -4,15 +4,17 @@
 import pytest
 from pydantic import ValidationError
 
+from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.task_genome import (
     DomainFrame,
     ExtractionSummary,
     InputBundle,
     OutputContract,
     PressurePoint,
-    ProvenanceRef,
     Scenario,
+    SourceSpan,
     TaskGenomeManifest,
+    TaskGenomeReview,
     VerifierContract,
 )
 
@@ -20,8 +22,6 @@ from aec_bench.contracts.task_genome import (
 def build_manifest(**overrides: object) -> TaskGenomeManifest:
     payload = {
         "task_id": "electrical/voltage-drop",
-        "source_task_path": "tasks/electrical/voltage-drop",
-        "status": "extracted",
         "domain_frame": DomainFrame(
             discipline="electrical",
             subdomain="voltage-drop",
@@ -40,9 +40,7 @@ def build_manifest(**overrides: object) -> TaskGenomeManifest:
                 id="include_reactance_term",
                 type="omitted_term",
                 description="Use impedance method rather than resistance-only approximation.",
-                provenance=[ProvenanceRef(file="instruction.md", section="Constraints", signal=None)],
                 confidence="high",
-                reviewed_by="deterministic_extractor",
             )
         ],
         "output_contract": OutputContract(
@@ -72,12 +70,19 @@ def test_task_genome_manifest_accepts_valid_payload() -> None:
 
     assert manifest.task_id == "electrical/voltage-drop"
     assert manifest.domain_frame.discipline == "electrical"
-    assert manifest.pressure_points[0].provenance[0].file == "instruction.md"
+    assert manifest.pressure_points[0].confidence == "high"
 
 
-def test_task_genome_manifest_rejects_absolute_source_task_path() -> None:
+def test_source_span_rejects_absolute_path() -> None:
     with pytest.raises(ValidationError):
-        build_manifest(source_task_path="/tmp/tasks/electrical/voltage-drop")
+        SourceSpan(path="/tmp/tasks/electrical/voltage-drop", start_line=1, end_line=2)
+
+
+def test_source_span_requires_a_complete_ordered_line_range() -> None:
+    with pytest.raises(ValidationError, match="both start_line and end_line"):
+        SourceSpan(path="instruction.md", start_line=1)
+    with pytest.raises(ValidationError, match="must not precede"):
+        SourceSpan(path="instruction.md", start_line=3, end_line=2)
 
 
 def test_pressure_point_rejects_blank_description() -> None:
@@ -86,7 +91,41 @@ def test_pressure_point_rejects_blank_description() -> None:
             id="bad",
             type="omitted_term",
             description=" ",
-            provenance=[],
             confidence="low",
-            reviewed_by="deterministic_extractor",
         )
+
+
+def test_task_genome_review_staleness_depends_only_on_task_snapshot() -> None:
+    snapshot = _snapshot()
+    review = TaskGenomeReview(
+        task=snapshot,
+        status="extracted",
+        extractor="deterministic-task-genome",
+        genome=build_manifest(),
+        evidence={"instructions": [SourceSpan(path="instruction.md", start_line=1, end_line=2)]},
+    )
+
+    changed_review = review.model_copy(update={"reviewer": "theo", "status": "needs_review"})
+
+    assert not changed_review.is_stale(snapshot)
+    assert changed_review.is_stale(snapshot.model_copy(update={"package_sha256": "3" * 64}))
+    assert changed_review.task == review.task
+
+
+def test_reviewed_task_genome_requires_a_reviewer() -> None:
+    with pytest.raises(ValidationError, match="identify its reviewer"):
+        TaskGenomeReview(
+            task=_snapshot(),
+            status="reviewed",
+            extractor="deterministic-task-genome",
+            genome=build_manifest(),
+            evidence={"instructions": [SourceSpan(path="instruction.md", start_line=1, end_line=2)]},
+        )
+
+
+def _snapshot() -> TaskSnapshotRef:
+    return TaskSnapshotRef(
+        task_id="electrical/voltage-drop",
+        definition_sha256="1" * 64,
+        package_sha256="2" * 64,
+    )

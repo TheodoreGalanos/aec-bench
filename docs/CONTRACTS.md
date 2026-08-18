@@ -30,6 +30,7 @@ readable.
 | --- | --- | --- | --- | --- | --- |
 | Task specification | Task authoring and loading | Repository or imported task material becomes runnable input | Protected where task packages are published; otherwise internal | [`TaskDefinition`](../src/aec_bench/contracts/task_definition.py) and task loaders | Persisted task package |
 | Task instance and revision identity | Generation and harness | Selected task bytes become one exact execution identity | Protected when recorded in a dataset or trial | [`ResolvedTaskInstance`](../src/aec_bench/tasks/instance.py), `TaskReference`, and `DatasetTaskEntry` | Internal resolution; persisted references |
+| Task genome review | Tasks and feedback | A derived genome and its source spans become review evidence for one exact task snapshot | Internal; independently retained reviews use current-format artifacts | [`TaskGenomeReview`](../src/aec_bench/contracts/task_genome.py), `TaskSnapshotRef`, and `ArtifactRef` | Regenerable review; optional persisted artifact |
 | Generated-task replay | Task generation | Template sources and sampling inputs become optional reproducibility data | Schema 1 sidecar; not a runtime task contract | [`GenerationManifest`](../src/aec_bench/generation/replay.py) and the `generate replay` command | Optional persisted sidecar |
 | Finite lifecycle execution | Lifecycle task and host | Stage-specific task evidence and actor results become one bounded host-controlled progression | Internal package and runtime contract; persisted accepted evidence is current-format only | [`EvidenceLifecycleSpec`](../src/aec_bench/contracts/evidence_lifecycle.py) and the [staged evidence protocol](protocols/staged-evidence-and-publication.md) | Packaged task, runtime state, and persisted accepted evidence |
 | Experiment manifest | Experiment orchestration | User configuration becomes an executable plan | Internal, except documented CLI/config behavior | [`ExperimentManifest`](../src/aec_bench/contracts/experiment_manifest.py) | Persisted configuration |
@@ -56,6 +57,23 @@ remain task-owned; the global contract does not attempt to model every output.
 Executable interactive worlds use their registered world definition and
 profile instead of pretending to be a static `TaskDefinition`. Both families
 can still enter the same experiment, trial, evaluation, and reporting layers.
+
+## Task genome reviews
+
+`TaskGenomeReview` is derived review evidence, not a task definition or a task
+identity. It binds one `TaskGenomeManifest` and a map of relative `SourceSpan`
+values to one exact `TaskSnapshotRef`. A span can identify stable line numbers,
+a named section, and a short extracted signal. It does not contain source bytes
+or a separate digest.
+
+The selected snapshot resolves all source spans. A review is stale when that
+snapshot changes. Changes to confidence, reviewer, notes, span presentation,
+or the genome decomposition do not change the task or dataset identity.
+
+An independently retained review is stored as one canonical model artifact
+and receives one `ArtifactRef`. Durable review history records its reviewer,
+event time, and review artifact reference separately. It does not modify the
+runnable task package.
 
 ## Public library catalogue
 
