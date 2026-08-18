@@ -20,8 +20,9 @@ from aec_bench.contracts.continual_world import (
     ContinualWorldActorRequest,
     ContinualWorldControlRequest,
 )
-from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.contracts.world_interface import WorldActorActionRequest, WorldControlRequest
+from aec_bench.ledger.reader import read_trial_record
+from aec_bench.ledger.writer import write_trial_record_at
 from aec_bench.worlds.catalogue import default_interactive_world_catalogue
 from aec_bench.worlds.runtime.rollout_control import ContinualRolloutControl
 from aec_bench.worlds.stewardship.wastewater_pump_station.continual_rollout_adapter import (
@@ -434,11 +435,7 @@ def import_harbor_trial_command(
         repo_root=repo_root,
         evidence_loader=load_pump_station_import_evidence,
     )
-    record_path.parent.mkdir(parents=True, exist_ok=True)
-    record_path.write_text(
-        record.model_dump_json(indent=2) + "\n",
-        encoding="utf-8",
-    )
+    write_trial_record_at(path=record_path, record=record)
     stewardship = record.evaluation.stewardship
     emit(
         "task pump-station-world import-harbor-trial",
@@ -466,7 +463,7 @@ def reload_trial_record_command(
     """Reload one imported TrialRecord through the strict contract."""
 
     started = time.monotonic()
-    record = TrialRecord.model_validate_json(record_path.read_text(encoding="utf-8"))
+    record = read_trial_record(record_path)
     stewardship = record.evaluation.stewardship
     emit(
         "task pump-station-world reload-trial-record",

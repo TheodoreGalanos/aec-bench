@@ -8,6 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
+from aec_bench.contracts.authority_evidence import (
+    ACTOR_INVOCATION_EVIDENCE_PROTOCOL,
+    AuthorityEvidenceKind,
+    AuthorityEvidenceRef,
+)
 from aec_bench.contracts.evaluation_result import (
     EvaluationResult,
     StewardshipEvaluation,
@@ -21,6 +26,7 @@ from aec_bench.harness.harbor_importing.artifact_io import (
 )
 from aec_bench.harness.harbor_importing.contracts import (
     HarborImportError,
+    ImportedAuthorityEvidence,
     ImportEvidenceContext,
     ImportEvidenceIntent,
     execution_kind_from_context,
@@ -55,6 +61,7 @@ class PumpStationHarborImportEvidence:
     episode_artifact: ArtifactReference
     artifacts: tuple[ArtifactReference, ...]
     evaluation: StewardshipEvaluation
+    authority_evidence: tuple[ImportedAuthorityEvidence, ...] = ()
 
     @property
     def execution_kind(self) -> str:
@@ -156,6 +163,7 @@ def _load_pump_station_evidence(
         episode_artifact=episode_artifact,
         artifacts=artifacts,
         evaluation=evaluation,
+        authority_evidence=_actor_authority_evidence(run_dir, artifacts),
     )
 
 
@@ -253,6 +261,48 @@ def _artifact_evidence(
         )
     )
     return tuple(artifacts), inventory_reference
+
+
+def _actor_authority_evidence(
+    run_dir: Path,
+    artifacts: tuple[ArtifactReference, ...],
+) -> tuple[ImportedAuthorityEvidence, ...]:
+    agent_result_path = run_dir / "agent-result.json"
+    if not agent_result_path.is_file():
+        return ()
+    payload = json.loads(agent_result_path.read_text(encoding="utf-8"))
+    result = _mapping(payload, "world-session agent result")
+    configuration = _mapping(result.get("configuration_record"), "world-session adapter configuration")
+    authority = _mapping(configuration.get("actor_invocation_authority"), "actor invocation authority")
+    close = _mapping(authority.get("close"), "actor invocation authority close")
+    if (
+        close.get("quiescent") is not True
+        or close.get("complete") is not True
+        or close.get("unsettled_request_ids") != []
+        or close.get("unknown_outcome_request_ids") != []
+    ):
+        raise HarborImportError("actor invocation authority did not close quiescently")
+    try:
+        reference = AuthorityEvidenceRef.model_validate(authority.get("evidence_ref"))
+    except (TypeError, ValueError) as error:
+        raise HarborImportError("actor invocation authority evidence reference is invalid") from error
+    if (
+        reference.authority_kind is not AuthorityEvidenceKind.ACTOR_INVOCATION
+        or reference.protocol != ACTOR_INVOCATION_EVIDENCE_PROTOCOL
+    ):
+        raise HarborImportError("actor invocation authority evidence identity is invalid")
+    path = run_dir / reference.artifact.artifact_id
+    if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(run_dir.resolve()):
+        raise HarborImportError("actor invocation authority evidence bytes are unavailable")
+    payload_bytes = path.read_bytes()
+    matching = next((artifact for artifact in artifacts if Path(artifact.path).resolve() == path.resolve()), None)
+    if (
+        matching is None
+        or matching.sha256 != reference.artifact.sha256
+        or len(payload_bytes) != reference.artifact.size_bytes
+    ):
+        raise HarborImportError("actor invocation authority evidence differs from its final reference")
+    return (ImportedAuthorityEvidence(reference=reference, path=path),)
 
 
 def _read_trial_json(

@@ -13,7 +13,6 @@ from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.trial_record import (
     AdaptationProvenance,
-    Completeness,
     DerivationStepRecord,
 )
 from aec_bench.harness.trial_record_builder import build_trial_record
@@ -32,7 +31,13 @@ def test_build_trial_record_uses_adapter_configuration_record() -> None:
     result = AdapterResult(
         adapter_name="tool_loop",
         resolved_model="gpt-5.4-mini",
-        configuration_record={"model": "gpt-5.4-mini", "max_turns": 4},
+        configuration_record={
+            "model": "gpt-5.4-mini",
+            "max_turns": 4,
+            "manifest_path": "/host/deepseek-evidence.json",
+            "evidence_manifest_sha256": "a" * 64,
+            "sdk_version": "0.1.0",
+        },
         agent_output=AgentOutput(
             status=AgentOutputStatus.COMPLETED,
             output_path="/workspace/output.jsonl",
@@ -73,7 +78,6 @@ def test_build_trial_record_uses_adapter_configuration_record() -> None:
         compute_backend="modal",
         adapter_revision="git-sha-adapter",
         tool_versions={"codes_search": "abc123"},
-        completeness=Completeness.PARTIAL,
     )
 
     assert record.agent.configuration == {"model": "gpt-5.4-mini", "max_turns": 4}
@@ -142,7 +146,6 @@ def test_build_trial_record_preserves_output_commit_attestation() -> None:
         total_seconds=12.5,
         runtime_image="ghcr.io/example/task-image:latest",
         compute_backend="morph",
-        completeness=Completeness.PARTIAL,
     )
 
     assert record.outputs.agent_result is not None
@@ -192,7 +195,6 @@ def test_build_trial_record_preserves_failure_kind() -> None:
         total_seconds=3.0,
         runtime_image="ghcr.io/example/task-image:latest",
         compute_backend="modal",
-        completeness=Completeness.PARTIAL,
     )
 
     assert record.outputs.agent_result is not None
@@ -237,20 +239,21 @@ def test_build_trial_record_preserves_adaptation_provenance() -> None:
         total_seconds=5.0,
         runtime_image="ghcr.io/example/task-image:latest",
         compute_backend="modal",
-        adaptation=AdaptationProvenance(
-            family_id="heat-load-audit",
-            seed_task_id="mechanical/heat-load/audit-office-building/sydney-8rm",
-            variation_key="city=perth",
-            variation={"city": "perth"},
-            derivation_lineage=[
-                DerivationStepRecord(
-                    axis="city",
-                    parent_value="sydney",
-                    value="perth",
-                )
-            ],
-        ),
-        completeness=Completeness.PARTIAL,
+        extensions={
+            "adaptation": AdaptationProvenance(
+                family_id="heat-load-audit",
+                seed_task_id="mechanical/heat-load/audit-office-building/sydney-8rm",
+                variation_key="city=perth",
+                variation={"city": "perth"},
+                derivation_lineage=[
+                    DerivationStepRecord(
+                        axis="city",
+                        parent_value="sydney",
+                        value="perth",
+                    )
+                ],
+            )
+        },
     )
 
     assert record.adaptation is not None
@@ -296,7 +299,6 @@ def test_build_trial_record_passes_trajectory_path_to_output_record() -> None:
         runtime_image="ghcr.io/example/task-image:latest",
         compute_backend="modal",
         trajectory_path="/artifacts/trial-004-trajectory.jsonl",
-        completeness=Completeness.PARTIAL,
     )
 
     assert record.outputs.trajectory_path == "/artifacts/trial-004-trajectory.jsonl"
@@ -340,7 +342,6 @@ def test_build_trial_record_trajectory_path_defaults_to_none() -> None:
         total_seconds=2.0,
         runtime_image="ghcr.io/example/task-image:latest",
         compute_backend="modal",
-        completeness=Completeness.PARTIAL,
     )
 
     assert record.outputs.trajectory_path is None

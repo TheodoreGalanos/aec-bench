@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from aec_bench.contracts.trial_record import Completeness, TrialRecord
+from aec_bench.contracts.trial_record import EvaluationStatus, EvidenceStatus, ExecutionStatus, TrialRecord
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerError,
@@ -32,12 +32,12 @@ from aec_bench.experimentation.proposals.proposal_trial_importing.contracts impo
     ProposalTrialImportReceipt,
 )
 from aec_bench.experimentation.proposals.proposal_trial_importing.persistence import (
-    load_repository_bytes,
     load_repository_model,
     open_host_artifacts_repository,
     verify_artifact,
 )
 from aec_bench.ledger.immutable_artifact_store import EvidenceRepository
+from aec_bench.ledger.reader import read_trial_record
 
 
 @dataclass(frozen=True)
@@ -141,21 +141,19 @@ def _replay_scored_artifacts(
         result.record_artifact,
         repository=repository,
     )
-    record = TrialRecord.model_validate_json(
-        load_repository_bytes(
-            repository=repository,
-            path=result.record_path,
-            label="persisted proposal TrialRecord",
-        )
+    record = read_trial_record(
+        result.record_path,
+        ledger_root=result.record_path.parents[1],
     )
-    if record != result.record or record.completeness is not Completeness.COMPLETE:
+    if (
+        record.model_dump(mode="python") != result.record.model_dump(mode="python")
+        or record.run_manifest != result.record.run_manifest
+        or record.execution_status is not ExecutionStatus.COMPLETED
+        or record.evaluation_status is not EvaluationStatus.COMPLETED
+        or record.evidence_status not in {EvidenceStatus.NOT_REQUIRED, EvidenceStatus.VERIFIED}
+    ):
         raise ProposalTrialImportError(
             "persisted proposal TrialRecord differs from the finalized record",
-        )
-    for artifact in record.outputs.artifacts or ():
-        verify_artifact(
-            artifact,
-            repository=repository,
         )
     verify_artifact(
         result.import_receipt_artifact,

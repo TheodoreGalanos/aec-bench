@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from aec_bench.contracts.trial_record import TrialRecord
+from aec_bench.contracts.authority_evidence import AuthorityEvidenceKind
 from aec_bench.harness.harbor_importing.contracts import HarborImportError
 from aec_bench.harness.harbor_importing.core import import_harbor_trial
 from aec_bench.harness.pump_station_harbor.export import (
@@ -22,6 +22,8 @@ from aec_bench.harness.pump_station_harbor.session import (
     CompletedPumpStationReferenceSession,
     run_pump_station_reference_session,
 )
+from aec_bench.ledger.reader import read_trial_record
+from aec_bench.ledger.writer import write_trial_record
 from aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition import (
     pump_station_continual_world_definition,
 )
@@ -137,18 +139,20 @@ def test_verified_world_session_imports_and_reloads_exact_trial_record(
         repo_root=repo_root,
         evidence_loader=load_pump_station_import_evidence,
     )
-    reloaded = TrialRecord.model_validate_json(record.model_dump_json())
+    record_path = write_trial_record(ledger_root=repo_root / "ledger", record=record)
+    reloaded = read_trial_record(record_path)
 
-    assert reloaded == record
-    assert record.agent.adapter == "tool_loop"
-    assert record.episode_artifact is not None
-    assert record.episode_artifact.kind == "world-session-inventory"
-    assert record.episode_artifact.path.endswith("world-session/artifact-inventory.json")
-    assert record.outputs.artifacts is not None
-    assert record.episode_artifact in record.outputs.artifacts
-    assert "world_session" not in record.agent.configuration
-    assert "world_session_evidence" not in record.agent.configuration
-    assert record.agent.configuration["execution_kind"] == ("stewardship_world_session")
+    assert reloaded.trial_id == record.trial_id
+    assert reloaded.agent.adapter == "tool_loop"
+    assert reloaded.episode_artifact is not None
+    world_evidence = next(
+        item for item in reloaded.authority_evidence if item.authority_kind is AuthorityEvidenceKind.WORLD
+    )
+    assert reloaded.episode_artifact == world_evidence.artifact
+    assert all(item.artifact != reloaded.episode_artifact for item in reloaded.outputs.artifacts)
+    assert "world_session" not in reloaded.agent.configuration
+    assert "world_session_evidence" not in reloaded.agent.configuration
+    assert reloaded.agent.configuration["execution_kind"] == "stewardship_world_session"
     assert exported.manifest_path.exists()
 
 
@@ -182,13 +186,14 @@ def test_registered_world_session_imports_through_the_current_run(
         repo_root=repo_root,
         evidence_loader=load_pump_station_import_evidence,
     )
-    reloaded = TrialRecord.model_validate_json(record.model_dump_json())
+    record_path = write_trial_record(ledger_root=repo_root / "ledger", record=record)
+    reloaded = read_trial_record(record_path)
 
-    assert reloaded == record
-    assert record.episode_artifact is not None
-    assert record.episode_artifact in (record.outputs.artifacts or [])
-    assert record.evaluation.stewardship is not None
-    assert record.evaluation.stewardship.valid
+    assert reloaded.trial_id == record.trial_id
+    assert reloaded.episode_artifact is not None
+    assert all(item.artifact != reloaded.episode_artifact for item in reloaded.outputs.artifacts)
+    assert reloaded.evaluation.stewardship is not None
+    assert reloaded.evaluation.stewardship.valid
     assert exported.manifest_path.exists()
 
 

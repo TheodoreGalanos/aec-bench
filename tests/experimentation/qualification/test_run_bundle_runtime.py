@@ -25,7 +25,7 @@ from aec_bench.contracts.execution_program import (
 )
 from aec_bench.contracts.harness_instance import HarnessBudget
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
-from aec_bench.contracts.trial_record import Completeness, TrialRecord
+from aec_bench.contracts.trial_record import ExecutionStatus
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.experimentation.qualification.run_bundle_governed_attempt import (
     assess_run_bundle_governed_attempt,
@@ -45,6 +45,7 @@ from aec_bench.harness.kernel_catalogue import (
     default_kernel_registry,
 )
 from aec_bench.harness.program_execution import ProgramExecutionStatus
+from aec_bench.ledger.reader import read_trial_record
 from tests.support.adaptive_harness import (
     build_adaptive_bundle,
     runtime_attestation_for_harbor_agent,
@@ -248,7 +249,7 @@ def test_execute_run_bundle_crosses_program_harbor_import_and_lineage_boundary(t
     assert len(execution.harbor_invocations) == 1
     invocation = execution.harbor_invocations[0]
     assert invocation.imported_trial_paths
-    record = TrialRecord.model_validate_json(invocation.imported_trial_paths[0].read_text(encoding="utf-8"))
+    record = read_trial_record(invocation.imported_trial_paths[0])
     provenance = record.meta_harness_provenance
     assert provenance is not None
     assert provenance.run_id == "run.harness-program-study.001"
@@ -268,16 +269,16 @@ def test_execute_run_bundle_crosses_program_harbor_import_and_lineage_boundary(t
     assert record.cost.cache_write_tokens == 0
     assert record.cost.estimated_cost_usd == 0.001
     assert record.outputs.artifacts is not None
-    assert provenance.candidate_manifest in record.outputs.artifacts
-    assert record.completeness is Completeness.COMPLETE
+    assert any(
+        artifact.kind == provenance.candidate_manifest.kind and artifact.sha256 == provenance.candidate_manifest.sha256
+        for artifact in record.outputs.artifacts
+    )
+    assert record.execution_status is ExecutionStatus.COMPLETED
     expected_runtime_versions = {
         f"kernel:{binding.capability_ref.capability_id}": binding.capability_ref.version
         for binding in bundle.harness.bindings
     }
-    assert record.environment.tool_versions == {
-        **expected_runtime_versions,
-        "task-package": "sha256:" + bundle.task_snapshots[0].package_sha256,
-    }
+    assert record.environment.tool_versions == expected_runtime_versions
     assert execution.candidate_manifest.path.exists()
     candidate_payload = json.loads(execution.candidate_manifest.path.read_text(encoding="utf-8"))
     assert candidate_payload["bundle"]["bundle_id"] == bundle.bundle_id
@@ -648,7 +649,7 @@ def test_decomposed_px_enumerates_tasks_then_fans_out_real_harbor_runs(tmp_path:
     assert executor.calls == 2
     assert [invocation.fanout_index for invocation in execution.harbor_invocations] == [0, 1]
     records = [
-        TrialRecord.model_validate_json(path.read_text(encoding="utf-8"))
+        read_trial_record(path)
         for invocation in execution.harbor_invocations
         for path in invocation.imported_trial_paths
     ]

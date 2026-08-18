@@ -23,9 +23,15 @@ import aec_bench.experimentation.lifecycle_studies.experiment as experiment_runt
 import aec_bench.experimentation.lifecycle_studies.transfer as transfer_runtime
 import aec_bench.experimentation.lifecycle_studies.trial_record as trial_record_runtime
 import aec_bench.ledger.writer as ledger_writer
+from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.experiment_manifest import AgentConfig
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.contracts.trial_record import ArtifactReference, Completeness, TrialRecord
+from aec_bench.contracts.trial_record import (
+    EvidenceStatus,
+    ExecutionStatus,
+    TrialArtifactRef,
+    UnresolvedSourceRef,
+)
 from aec_bench.experimentation.lifecycle_studies.ablation import (
     LifecycleAblationCondition,
     LifecycleAblationLimits,
@@ -62,6 +68,7 @@ from aec_bench.harness.lifecycle_local import (
     LifecycleVisibilityPolicy,
     run_local_evidence_lifecycle_fresh_context,
 )
+from aec_bench.ledger.reader import read_trial_record
 from aec_bench.ledger.writer import DuplicateTrialRecordError
 from aec_bench.lifecycles.catalogue import (
     lifecycle_verifier,
@@ -560,16 +567,14 @@ def test_build_lifecycle_trial_record_maps_validated_working_provenance(tmp_path
     assert record.task.visibility is Visibility.PUBLIC
     assert record.agent.adapter == trial.agent.adapter
     assert record.agent.model == trial.agent.model
-    assert record.agent.adapter_revision
+    assert record.agent.adapter_revision is None
+    assert isinstance(record.run_manifest.source, UnresolvedSourceRef)
     assert record.agent.configuration["variant_id"] == trial.variant_id
     assert record.agent.configuration["execution_mode"] == trial.execution_mode.value
     assert record.agent.configuration["memory_visibility_policy"] == trial.memory_visibility_policy.value
     assert record.agent.configuration["plan_sha256"] == build_lifecycle_ablation_plan(manifest).plan_sha256
     assert record.environment.tool_versions
-    assert record.inputs.input_files
-    assert {item.path for item in record.inputs.input_files} == set(
-        json.loads((run_dir / "experiment-manifest.json").read_text())["lifecycle"]["package_files"]
-    )
+    assert any(role.startswith("input:lifecycle_package:") for role in record.pending_artifacts)
     assert record.outputs.agent_output is not None
     assert record.outputs.agent_result is not None
     assert record.evaluation.reward == 1.0
@@ -583,7 +588,7 @@ def test_build_lifecycle_trial_record_maps_validated_working_provenance(tmp_path
     assert record.lifecycle_provenance.runtime_provider == trial.runtime_provenance.provider
     assert record.lifecycle_provenance.runtime_distributions == trial.runtime_provenance.distributions
     assert record.lifecycle_provenance.runtime_dependency_sha256 == trial.runtime_provenance.dependency_inventory_sha256
-    assert record.completeness is Completeness.PARTIAL
+    assert record.evidence_status is EvidenceStatus.PENDING
     task_verifier = lifecycle_verifier(TEMPLATE_ID)
     assert record.lifecycle_provenance.verifier_qualified_name == (
         f"{task_verifier.__module__}.{task_verifier.__qualname__}"
@@ -602,24 +607,25 @@ def test_finalize_lifecycle_trial_record_snapshots_artifacts_and_writes_once(tmp
         run_dir=run_dir,
     )
     original_record = record_path.read_bytes()
-    record = TrialRecord.model_validate_json(original_record)
+    record = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
 
     assert record.lifecycle_provenance is not None
-    assert record.completeness is (
-        Completeness.PARTIAL if record.lifecycle_provenance.repository_dirty else Completeness.COMPLETE
-    )
+    assert record.evidence_status is EvidenceStatus.VERIFIED
     assert record.outputs.artifacts
-    assert record.lifecycle_provenance.invocation_manifest in record.outputs.artifacts
+    assert len(record.authority_evidence) == 1
+    artifact_root = Path(manifest.ledger_root) / "_artifacts"
     for artifact in record.outputs.artifacts:
-        snapshotted = Path(manifest.ledger_root) / artifact.path
+        snapshotted = artifact_root / artifact.artifact.artifact_id
         assert snapshotted.is_file()
         assert _sha256(snapshotted) == artifact.sha256
 
     shutil.rmtree(run_dir)
     shutil.rmtree(package)
-    assert TrialRecord.model_validate_json(record_path.read_bytes()) == record
+    restored = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
+    assert restored.model_dump(mode="json") == record.model_dump(mode="json")
+    assert restored.run_manifest == record.run_manifest
     for artifact in record.outputs.artifacts:
-        assert (Path(manifest.ledger_root) / artifact.path).is_file()
+        assert (artifact_root / artifact.artifact.artifact_id).is_file()
 
     with pytest.raises(DuplicateTrialRecordError):
         finalize_lifecycle_trial_record(
@@ -670,7 +676,7 @@ def test_conditional_evidence_transactions_are_declared_and_snapshot_validated(
         package_dir=package,
         run_dir=run_dir,
     )
-    record = TrialRecord.model_validate_json(record_path.read_bytes())
+    record = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
     validate_historical_lifecycle_ablation_record(
         record,
         manifest,
@@ -698,18 +704,19 @@ def test_conditional_evidence_transactions_are_declared_and_snapshot_validated(
     assert marker
     extra_content = b"not bound to an action\n"
     extra_path = f"{snapshot_prefix}/run/workspace/inbox/initial_review/requests/untracked/evidence.txt"
-    extra_reference = ArtifactReference(
-        kind="requested_evidence_projection",
-        path=extra_path,
-        sha256=hashlib.sha256(extra_content).hexdigest(),
-        media_type="text/plain",
+    extra_sha256 = hashlib.sha256(extra_content).hexdigest()
+    extra_reference = TrialArtifactRef(
+        role="requested_evidence_projection",
+        artifact=ArtifactRef(
+            artifact_id=f"artifacts/sha256/{extra_sha256[:2]}/{extra_sha256}",
+            sha256=extra_sha256,
+            size_bytes=len(extra_content),
+            media_type="text/plain",
+        ),
+        logical_path=extra_path,
     )
     record_with_extra_projection = record.model_copy(
-        update={
-            "outputs": record.outputs.model_copy(
-                update={"artifacts": [*(record.outputs.artifacts or ()), extra_reference]}
-            )
-        }
+        update={"output": record.outputs.model_copy(update={"artifacts": [*record.outputs.artifacts, extra_reference]})}
     )
     artifacts_with_extra_projection = dict(loaded_artifacts.content_by_path)
     artifacts_with_extra_projection[extra_path] = extra_content
@@ -721,9 +728,9 @@ def test_conditional_evidence_transactions_are_declared_and_snapshot_validated(
     requested_reference = next(
         artifact for artifact in record.outputs.artifacts or () if artifact.kind == "requested_evidence"
     )
-    requested_snapshot = Path(manifest.ledger_root) / requested_reference.path
+    requested_snapshot = Path(manifest.ledger_root) / "_artifacts" / requested_reference.artifact.artifact_id
     requested_snapshot.write_text("tampered\n", encoding="utf-8")
-    assert transfer_runtime._load_record(reference).reasons == ("artifact_sha256_mismatch",)
+    assert transfer_runtime._load_record(reference).reasons == ("record_invalid",)
 
 
 def test_historical_lifecycle_record_without_visibility_still_validates_but_is_not_backfilled(
@@ -737,15 +744,15 @@ def test_historical_lifecycle_record_without_visibility_still_validates_but_is_n
         run_dir=run_dir,
     )
     payload = json.loads(record_path.read_text(encoding="utf-8"))
-    payload["task"].pop("visibility")
+    payload["input"].pop("visibility")
     record_path.write_text(json.dumps(payload), encoding="utf-8")
-    historical = TrialRecord.model_validate_json(record_path.read_text(encoding="utf-8"))
+    historical = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
     plan = build_lifecycle_ablation_plan(manifest)
 
     validate_historical_lifecycle_ablation_record(historical, manifest, plan, trial)
 
     assert historical.task.visibility is None
-    assert "visibility" not in historical.task.model_fields_set
+    assert "visibility" not in historical.input.model_fields_set
     target_path = Path(manifest.ledger_root) / "holdout" / "target-001.json"
     target_reference = LifecycleTransferRecordReference(
         experiment_id="holdout",
@@ -796,7 +803,7 @@ def test_finalize_lifecycle_trial_record_recovers_snapshot_left_before_record_wr
         run_dir=run_dir,
     )
     original_record = record_path.read_bytes()
-    record = TrialRecord.model_validate_json(original_record)
+    record = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
     assert record.outputs.artifacts
     original_artifacts = {
         artifact.path: (Path(manifest.ledger_root) / artifact.path).read_bytes()
@@ -898,7 +905,7 @@ def test_finalize_lifecycle_trial_record_recovers_after_atomic_record_publish_fa
     )
 
     assert recovered == record_path
-    TrialRecord.model_validate_json(recovered.read_text(encoding="utf-8"))
+    read_trial_record(recovered, ledger_root=Path(manifest.ledger_root))
 
 
 def test_finalize_lifecycle_trial_record_rejects_declared_session_artifact_tamper(tmp_path: Path) -> None:
@@ -932,7 +939,7 @@ def test_finalize_lifecycle_trial_record_uses_canonical_manifest_not_mutable_ali
         package_dir=package,
         run_dir=run_dir,
     )
-    record = TrialRecord.model_validate_json(record_path.read_text(encoding="utf-8"))
+    record = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
 
     assert record.lifecycle_provenance is not None
     assert record.lifecycle_provenance.repository_commit == canonical["repository"]["commit"]
@@ -947,16 +954,14 @@ def test_finalized_trial_contains_no_mutable_working_run_references(tmp_path: Pa
         package_dir=package,
         run_dir=run_dir,
     )
-    record = TrialRecord.model_validate_json(record_path.read_text(encoding="utf-8"))
+    record = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
     assert record.outputs.agent_result is not None
 
     referenced_paths = [
         record.outputs.agent_result["verification_path"],
         record.outputs.agent_result["metrics_path"],
         record.outputs.agent_result["manifest_path"],
-        *record.outputs.agent_result["trajectories"],
-        *record.outputs.agent_result["conversations"],
-        *record.outputs.agent_result["raw_outputs"],
+        *(artifact.path for artifact in record.outputs.artifacts),
     ]
     shutil.rmtree(run_dir)
     shutil.rmtree(package)
@@ -1129,11 +1134,9 @@ def test_run_lifecycle_ablation_executes_real_in_process_trial_and_skips_complet
     assert Path(first.summary_path).is_file()
     record_path = Path(first.record_paths[0])
     record_bytes = record_path.read_bytes()
-    record = TrialRecord.model_validate_json(record_bytes)
+    record = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
     assert record.lifecycle_provenance is not None
-    assert record.completeness is (
-        Completeness.PARTIAL if record.lifecycle_provenance.repository_dirty else Completeness.COMPLETE
-    )
+    assert record.evidence_status is EvidenceStatus.VERIFIED
     assert record.lifecycle_execution is not None
     assert len(record.lifecycle_execution.sessions) == 3
     assert all(session.artifacts for session in record.lifecycle_execution.sessions)
@@ -1161,13 +1164,7 @@ def test_run_lifecycle_ablation_rejects_forged_existing_record_before_skip(tmp_p
     )
     record_path = Path(first.record_paths[0])
     forged = json.loads(record_path.read_text(encoding="utf-8"))
-    forged["agent"]["adapter"] = "pydantic_ai"
-    forged["agent"]["configuration"]["requested_model"] = "forged-model"
-    forged["agent"]["configuration"]["plan_sha256"] = "0" * 64
-    forged["lifecycle_execution"] = None
-    forged["lifecycle_provenance"] = None
-    forged["completeness"] = "partial"
-    TrialRecord.model_validate(forged)
+    forged["input"]["task_revision"] = "forged-task-revision"
     record_path.write_text(json.dumps(forged), encoding="utf-8")
 
     with pytest.raises(ValueError, match="existing TrialRecord does not match"):
@@ -1187,8 +1184,7 @@ def test_lifecycle_ablation_evaluation_rejects_forged_planned_record(tmp_path: P
     )
     record_path = Path(result.record_paths[0])
     forged = json.loads(record_path.read_text(encoding="utf-8"))
-    forged["experiment_id"] = manifest.experiment_id
-    forged["agent"]["configuration"]["requested_model"] = "forged-model"
+    forged["input"]["task_revision"] = "forged-task-revision"
     record_path.write_text(json.dumps(forged), encoding="utf-8")
 
     with pytest.raises(ValueError, match="TrialRecord does not match"):
@@ -1231,7 +1227,7 @@ def test_run_lifecycle_ablation_recovers_missing_shared_index_from_canonical_sea
     repaired = [json.loads(line) for line in index_path.read_text(encoding="utf-8").splitlines()]
     assert len(repaired) == 1
     assert repaired[0]["sweep"]["planned_trial_id"] == trial.trial_id
-    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    record = read_trial_record(Path(result.record_paths[0]))
     assert record.outputs.artifacts is not None
     assert any(artifact.kind == "lifecycle_invocation_seal" for artifact in record.outputs.artifacts)
 
@@ -1359,7 +1355,7 @@ def test_run_lifecycle_ablation_records_actual_adapter_mismatch_as_zero_reward_f
     )
 
     assert result.failed_trials == 1
-    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    record = read_trial_record(Path(result.record_paths[0]))
     assert record.evaluation.reward == 0.0
     assert record.agent.adapter == "pydantic_ai"
     assert record.agent.configuration["requested_adapter"] == "tool_loop"
@@ -1388,7 +1384,7 @@ def test_run_lifecycle_ablation_dispatches_persistent_condition_to_one_session(t
         registry_factory=lambda _trial, package, run: _GoldPersistentRegistry(package, run),
     )
 
-    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    record = read_trial_record(Path(result.record_paths[0]))
     assert record.lifecycle_execution is not None
     assert record.lifecycle_execution.execution_mode == "persistent_context"
     assert record.lifecycle_execution.memory_visibility_policy == "persistent_context"
@@ -1421,7 +1417,7 @@ def test_run_lifecycle_ablation_recovers_terminal_persistent_session_crash_witho
 
     assert result.imported_orphans == 1
     assert result.failed_trials == 1
-    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    record = read_trial_record(Path(result.record_paths[0]))
     assert record.evaluation.reward == 0.0
     assert record.agent.model == "unresolved"
     assert record.agent.adapter == "unresolved"
@@ -1450,7 +1446,7 @@ def test_run_lifecycle_ablation_quarantines_torn_terminal_agent_result(
         ),
     )
 
-    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    record = read_trial_record(Path(result.record_paths[0]))
     assert record.evaluation.reward == 0.0
     assert record.outputs.artifacts is not None
     assert any(artifact.kind == "corrupt_agent_result" for artifact in record.outputs.artifacts)
@@ -1480,7 +1476,7 @@ def test_run_lifecycle_ablation_records_provider_failure_after_terminal_submissi
     )
 
     assert result.failed_trials == 1
-    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    record = read_trial_record(Path(result.record_paths[0]))
     assert record.evaluation.reward == 0.0
     assert record.evaluation.validity.verifier_completed is False
     assert record.lifecycle_execution is not None
@@ -1648,7 +1644,7 @@ def test_run_lifecycle_ablation_seals_interrupted_attempt_before_resume(tmp_path
 
     assert result.executed_trials == 1
     assert result.failed_trials == 1
-    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    record = read_trial_record(Path(result.record_paths[0]))
     assert record.lifecycle_execution is not None
     sessions = {session.session_id: session for session in record.lifecycle_execution.sessions}
     assert sessions[interrupted_session].status == "failed"
@@ -1696,7 +1692,7 @@ def test_run_lifecycle_ablation_seals_interrupted_persistent_session_before_resu
     )
 
     assert result.failed_trials == 1
-    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    record = read_trial_record(Path(result.record_paths[0]))
     assert record.lifecycle_execution is not None
     sessions = {session.session_id: session for session in record.lifecycle_execution.sessions}
     assert sessions["session-001"].failure_kind == "interrupted"
@@ -1714,11 +1710,10 @@ def test_run_lifecycle_ablation_records_provider_failure_as_immutable_trial(tmp_
 
     assert result.executed_trials == 1
     assert result.failed_trials == 1
-    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    record = read_trial_record(Path(result.record_paths[0]))
     assert record.lifecycle_provenance is not None
-    assert record.completeness is (
-        Completeness.PARTIAL if record.lifecycle_provenance.repository_dirty else Completeness.COMPLETE
-    )
+    assert record.execution_status is ExecutionStatus.FAILED
+    assert record.evidence_status is EvidenceStatus.VERIFIED
     assert record.lifecycle_execution is not None
     assert record.lifecycle_execution.status == "failed"
     assert record.lifecycle_execution.sessions[0].failure_kind == "provider_error"
@@ -1749,7 +1744,7 @@ def test_run_lifecycle_ablation_preserves_turn_limit_usage_without_provider_fail
 
     assert result.executed_trials == 1
     assert result.failed_trials == 1
-    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    record = read_trial_record(Path(result.record_paths[0]))
     assert record.lifecycle_execution is not None
     session = record.lifecycle_execution.sessions[0]
     assert session.failure_kind == "turn_limit_reached"
@@ -1808,7 +1803,7 @@ def test_provider_failure_before_later_conditional_checkpoint_preserves_pending_
     assert result.executed_trials == 1
     assert result.failed_trials == 1
     record_path = Path(result.record_paths[0])
-    record = TrialRecord.model_validate_json(record_path.read_bytes())
+    record = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
     assert not any(
         artifact.path.endswith("/run/workspace/checkpoints/response_review/evidence-requests.json")
         for artifact in record.outputs.artifacts or ()
@@ -1864,7 +1859,7 @@ def test_run_lifecycle_ablation_normalizes_empty_agent_output_as_failed(tmp_path
     )
 
     assert result.failed_trials == 1
-    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    record = read_trial_record(Path(result.record_paths[0]))
     assert record.outputs.agent_output is not None
     assert record.outputs.agent_output.status.value == "failed"
     assert record.lifecycle_execution is not None
@@ -1884,7 +1879,7 @@ def test_run_lifecycle_ablation_does_not_claim_schema_validity_after_verifier_ex
     )
 
     assert result.failed_trials == 1
-    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    record = read_trial_record(Path(result.record_paths[0]))
     assert record.evaluation.validity.output_parseable is True
     assert record.evaluation.validity.schema_valid is False
     assert record.evaluation.validity.verifier_completed is False
@@ -1915,7 +1910,7 @@ def test_run_lifecycle_ablation_finalizes_persistent_execution_failures(
     )
 
     assert result.failed_trials == 1
-    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    record = read_trial_record(Path(result.record_paths[0]))
     assert record.lifecycle_execution is not None
     assert record.lifecycle_execution.status == "failed"
     assert record.lifecycle_execution.sessions[0].status == "failed"
@@ -2056,14 +2051,14 @@ def test_lifecycle_ablation_evaluation_uses_snapshotted_runtime_environment(
         manifest,
         registry_factory=lambda _trial, package, _run: _GoldFreshRegistry(package),
     )
-    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    record = read_trial_record(Path(result.record_paths[0]))
     original_environment = record.environment
     monkeypatch.setattr(platform, "python_version", lambda: "99.99.99")
 
     evaluation = build_lifecycle_ablation_evaluation(manifest)
 
     assert evaluation.summary["invocation_records"] == 1
-    persisted = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    persisted = read_trial_record(Path(result.record_paths[0]))
     assert persisted.environment == original_environment
 
 
@@ -2076,7 +2071,7 @@ def test_lifecycle_ablation_evaluation_uses_snapshotted_historical_plan(
         manifest,
         registry_factory=lambda _trial, package, _run: _GoldFreshRegistry(package),
     )
-    record = TrialRecord.model_validate_json(Path(result.record_paths[0]).read_text(encoding="utf-8"))
+    record = read_trial_record(Path(result.record_paths[0]))
     assert record.lifecycle_provenance is not None
     assert record.lifecycle_provenance.ablation_plan is not None
     baseline = build_lifecycle_ablation_plan(manifest)

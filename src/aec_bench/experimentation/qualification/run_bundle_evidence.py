@@ -34,7 +34,7 @@ from aec_bench.contracts.harness_kernel import (
 )
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.run_bundle import RunBundle
-from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
+from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
@@ -50,6 +50,7 @@ from aec_bench.harness.program_execution import (
     ProgramExecutionResult,
 )
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
+from aec_bench.ledger.reader import read_trial_record
 
 
 class MetaHarnessStudyContext(FrozenStrictModel):
@@ -328,7 +329,7 @@ def record_scored_import_authority(
     trial_bases: list[StoredBasis] = []
     for index, trial_path in enumerate(imported_trial_paths):
         encoded = Path(trial_path).read_bytes()
-        record = TrialRecord.model_validate_json(encoded)
+        record = read_trial_record(Path(trial_path))
         trial_bases.append(
             ledger.observe_basis(
                 kind=BasisKind.EVIDENCE,

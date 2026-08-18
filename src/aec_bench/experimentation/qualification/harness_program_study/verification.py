@@ -12,6 +12,7 @@ from aec_bench.experimentation.qualification.harness_program_study.analysis impo
     HarnessProgramOutcome,
     analyse_harness_program_study,
 )
+from aec_bench.ledger.reader import read_trial_record
 
 from .artifact_io import _load_path_bytes, _read_json_object, _verify_artifact
 from .contracts import (
@@ -170,12 +171,9 @@ def _load_trial_record(
         )
     _verify_artifact(artifact)
     try:
-        record = TrialRecord.model_validate_json(
-            _load_path_bytes(
-                Path(artifact.path),
-                label="harness-program-study TrialRecord artifact",
-            ),
-        )
+        path = Path(artifact.path)
+        _load_path_bytes(path, label="harness-program-study TrialRecord artifact")
+        record = read_trial_record(path)
     except Exception as error:
         raise ValueError(
             f"invalid harness-program-study TrialRecord artifact: {artifact.path}",

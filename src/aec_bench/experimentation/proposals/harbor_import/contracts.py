@@ -10,6 +10,7 @@ from typing import Any, Protocol
 from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.proposal_execution.session import ProposalSessionReceipt
 from aec_bench.contracts.trial_record import ArtifactReference
+from aec_bench.harness.harbor_importing.contracts import ImportedAuthorityEvidence
 
 PROPOSAL_EXECUTION_KIND = "proposal_session"
 
@@ -76,6 +77,12 @@ class ProposalHarborImportEvidence:
         """Proposal sessions do not produce a task-owned episode artifact."""
 
         return None
+
+    @property
+    def authority_evidence(self) -> tuple[ImportedAuthorityEvidence, ...]:
+        """Proposal sessions do not publish World or actor authority evidence."""
+
+        return ()
 
 
 class ProposalCleanupReceipt(Protocol):

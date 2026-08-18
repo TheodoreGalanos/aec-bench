@@ -34,7 +34,7 @@ readable.
 | Generated-task replay | Task generation | Template sources and sampling inputs become optional reproducibility data | Schema 1 sidecar; not a runtime task contract | [`GenerationManifest`](../src/aec_bench/generation/replay.py) and the `generate replay` command | Optional persisted sidecar |
 | Finite lifecycle execution | Lifecycle task and host | Stage-specific task evidence and actor results become one bounded host-controlled progression | Internal package and runtime contract; persisted accepted evidence is current-format only | [`EvidenceLifecycleSpec`](../src/aec_bench/contracts/evidence_lifecycle.py) and the [staged evidence protocol](protocols/staged-evidence-and-publication.md) | Packaged task, runtime state, and persisted accepted evidence |
 | Experiment manifest | Experiment orchestration | User configuration becomes an executable plan | Internal, except documented CLI/config behavior | [`ExperimentManifest`](../src/aec_bench/contracts/experiment_manifest.py) | Persisted configuration |
-| Trial and episode record | Harness and ledger | Execution, verifier, and artifact evidence becomes reportable benchmark evidence | Current persisted record; no retained historical reader | [`TrialRecord`](../src/aec_bench/contracts/trial_record.py) plus the owning episode or world protocol | Persisted and exportable |
+| Trial and episode record | Harness and ledger | Execution, verifier, and authority evidence becomes reportable benchmark evidence | Protected schema 2; no historical reader | [`RunManifest` and `TrialRecord`](../src/aec_bench/contracts/trial_record.py) plus the owning episode or world protocol | Persisted and exportable |
 | Evaluation result | Evaluation | Verifier output and review evidence become reward, validity, and diagnostics | Protected as part of a persisted trial or published result | [`EvaluationResult`](../src/aec_bench/contracts/evaluation_result.py) | Persisted and externally reported |
 | Lifecycle verification | Lifecycle verification and evaluation | Canonical accepted lifecycle evidence becomes gates and optional semantic diagnostics | Internal until carried by a protected trial or published result | [`LifecycleVerificationResult`](../src/aec_bench/contracts/lifecycle_evaluation.py) | Internal result; persisted when referenced by trial evidence |
 | Dataset manifest and identity | Dataset generation and storage | A semantic task selection resolves to one exact Git source or detached bundle | Protected schema 2 and immutable references | [`DatasetManifest`, `RepositoryDatasetRef`, and `BundleDatasetRef`](../src/aec_bench/contracts/dataset.py) | Persisted and publishable |
@@ -179,20 +179,30 @@ host implementation policy for this subtype, not finite-lifecycle meaning.
 
 ## Trial and episode records
 
-`TrialRecord` is the canonical reportable trial envelope. It binds task, agent,
-environment, inputs, outputs, evaluation, timing, cost, completeness, and
-optional execution-family provenance. `OutputRecord` distinguishes ordinary
-termination from host truncation and records the exact current completion,
-stop, or failure reason when one exists. `CostRecord` is the sole aggregate
-usage and cost authority.
+The current `RunManifest` records shared run identity once: source, dataset,
+agent configuration, execution environment, provider route, evaluation
+regime, and expected evidence authorities. Each `TrialRecord`
+references that manifest by `run_id`. It records execution, evaluation, and
+evidence status separately. It does not persist a generic completeness flag.
+Publication eligibility is derived from these statuses, required evidence,
+task kind, dataset identity, source reconstruction, and the selected policy.
+
+`TrialOutput` distinguishes ordinary termination from host truncation and
+records the current completion, stop, or failure reason when one exists.
+`CostRecord` is the aggregate usage and cost authority. Optional forensic
+material uses `TrialExtensionRef`; its absence does not change a structurally
+valid execution from `completed` to partial.
 
 Lifecycle episode requests/results and world-session records are operational
 protocol records. They do not replace `TrialRecord`. Finalization validates and
-references their durable artifacts from the canonical trial evidence. A
-task-owned episode is represented by one verified `episode_artifact` reference;
-the shared trial record does not copy its snapshots, transitions, temporal
-facts, or replay model. Lifecycle request and run-state readers accept only the
-current shapes and do not migrate prior local run directories.
+references their durable artifacts from the canonical trial evidence. Actor
+invocation evidence is one `AuthorityEvidenceRef` published only after
+quiescent close. World or lifecycle causal evidence uses a separate authority
+reference. The shared trial record does not copy requests, correlation maps,
+snapshots, transitions, temporal facts, or replay models. DeepSeek evidence is
+one provider-manifest `ArtifactRef`; provider-specific claims stay in that
+manifest. Lifecycle request and run-state readers accept only the current
+shapes and do not migrate prior local run directories.
 
 A finite lifecycle uses `lifecycle_id` and checkpoint identity. It does not use
 `world_id`. A harness-program study groups exact task snapshots with
@@ -201,6 +211,9 @@ world.
 
 Trial records are append-only evidence once accepted. Internal builders and
 temporary run directories remain replaceable implementation.
+
+The reader requires `schema_version = 2`. It rejects missing or unsupported
+versions. It does not guess the shape of historical records.
 
 The current trajectory is entry-only JSONL. The writer does not emit a format
 header, and the reader does not select or decode historical versions. Ordinary
@@ -519,11 +532,10 @@ self-addressed JSON must use the explicit legacy base until its owner migrates
 the format. The legacy reader validates the old digest and returns a plain
 migrated model without that field.
 
-The protected `TrialRecord` still uses `ArtifactReference`, which binds kind,
-path, media type, and SHA-256 for trial evidence. That current reference does
-not gain the new repository read guarantees until its owning format migration.
-Other domains use narrower references when they need extra identity, lineage,
-visibility, or authority fields.
+`TrialRecord` uses `ArtifactRef` for retained input, output, provider,
+authority, and extension bytes. The ledger verifies every reference before it
+returns a resolved record. Some current lifecycle and study-specific extension
+contracts still use `ArtifactReference` until their owners adopt `ArtifactRef`.
 
 `AuthorityEvidenceRef` adds the authority kind and evidence protocol to one
 `ArtifactRef`. A quiescent `ActorInvocationAuthority` close returns one such

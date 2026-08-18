@@ -21,7 +21,7 @@ from aec_bench.contracts.output_completion import (
     evaluate_output_completion,
 )
 from aec_bench.contracts.run_bundle import RunBundle, TaskSnapshotRef
-from aec_bench.contracts.trial_record import Completeness, TrialRecord
+from aec_bench.contracts.trial_record import EvaluationStatus, EvidenceStatus, ExecutionStatus, TrialRecord
 from aec_bench.evolution.paired_repair import RepairTrialOutcome
 from aec_bench.evolution.repair_lifecycle import (
     CompiledRepairCandidate,
@@ -436,7 +436,11 @@ def _interpret_trial_record(
 ) -> tuple[RepairTrialEvidence, RepairRunObservation, tuple[str, ...]]:
     validity = record.evaluation.validity
     valid = validity.output_parseable and validity.schema_valid and validity.verifier_completed
-    complete = record.completeness is Completeness.COMPLETE
+    complete = (
+        record.execution_status is ExecutionStatus.COMPLETED
+        and record.evaluation_status is EvaluationStatus.COMPLETED
+        and record.evidence_status in {EvidenceStatus.NOT_REQUIRED, EvidenceStatus.VERIFIED}
+    )
     agent_evidence = _repair_agent_evidence(
         record,
         repo_root=repo_root,

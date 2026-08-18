@@ -139,31 +139,16 @@ def _build_back_url(from_page: str | None, query_params: dict[str, str]) -> str:
     return base
 
 
-def _load_symbolic_state(traj_path_str: str | None) -> dict[str, Any]:
-    """Load symbolic_state.json from the same directory as the trajectory file."""
-    if not traj_path_str:
+def _load_json_output_artifact(record: TrialRecord, role: str) -> dict[str, Any]:
+    """Load one explicitly retained JSON output artifact."""
+    if record.output is None:
         return {}
-    ss_path = Path(traj_path_str).parent / "symbolic_state.json"
-    if not ss_path.exists():
+    path_str = record.output.artifact_path(role)
+    if path_str is None:
         return {}
+    path = Path(path_str)
     try:
-        data: object = json.loads(ss_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    return {str(key): value for key, value in data.items()}
-
-
-def _load_scratchpad(traj_path_str: str | None) -> dict[str, Any]:
-    """Load .scratchpad.json from the same directory as the trajectory file."""
-    if not traj_path_str:
-        return {}
-    sp_path = Path(traj_path_str).parent / ".scratchpad.json"
-    if not sp_path.exists():
-        return {}
-    try:
-        data: object = json.loads(sp_path.read_text(encoding="utf-8"))
+        data: object = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
     if not isinstance(data, dict):
@@ -283,6 +268,9 @@ def viewer_api_meta(
         task_id=record.task.task_id,
         model=record.agent.model,
         adapter=record.agent.adapter,
+        execution_status=record.execution_status.value,
+        evaluation_status=record.evaluation_status.value,
+        evidence_status=record.evidence_status.value,
         compute_backend=record.environment.compute_backend,
         reward=record.evaluation.reward,
         reward_class=reward_css_class(record.evaluation.reward),
@@ -340,8 +328,8 @@ def viewer_api_state(
     record, _ = _load_trial(settings.ledger_root, experiment_id, trial_id)
 
     traj_path_str = record.outputs.trajectory_path
-    symbolic_state = _load_symbolic_state(traj_path_str)
-    scratchpad_data = _load_scratchpad(traj_path_str)
+    symbolic_state = _load_json_output_artifact(record, "symbolic_state")
+    scratchpad_data = _load_json_output_artifact(record, "scratchpad")
     plan_state = _load_plan_state(traj_path_str)
 
     return ViewerStateResponse(

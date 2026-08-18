@@ -1057,7 +1057,10 @@ class TrialViewerScreen(Screen[None]):
                 f"  Image:    {record.environment.runtime_image}",
                 f"  Backend:  {record.environment.compute_backend}",
                 "",
-                f"[bold]Completeness[/]: {record.completeness.value}",
+                "[bold]Statuses[/]: "
+                f"execution={record.execution_status.value}, "
+                f"evaluation={record.evaluation_status.value}, "
+                f"evidence={record.evidence_status.value}",
             ]
         )
 

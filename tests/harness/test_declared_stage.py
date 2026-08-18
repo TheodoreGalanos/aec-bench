@@ -22,7 +22,6 @@ from aec_bench.contracts.execution_program import (
     StopOutcome,
 )
 from aec_bench.contracts.stage_execution import KernelInstructionOverride, StageContextManifest
-from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.experimentation.qualification.run_bundle_runtime import (
     MetaHarnessStudyContext,
     execute_run_bundle,
@@ -32,6 +31,7 @@ from aec_bench.harness.compilation import compile_execution_program, compile_run
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.harness.kernel_catalogue import default_kernel_registry
 from aec_bench.harness.program_execution import ProgramExecutionStatus
+from aec_bench.ledger.reader import read_trial_record
 from tests.support.adaptive_harness import (
     build_adaptive_bundle,
     runtime_attestation_for_harbor_agent,
@@ -188,7 +188,7 @@ def test_declared_stage_program_runs_isolated_stages_then_one_scored_finalizatio
         len(
             tuple(
                 root.glob(
-                    "governed-attempt/claims/terminal/*/claim.json",
+                    "governed-attempt/records/terminal/*/record.json",
                 )
             )
         )
@@ -215,7 +215,7 @@ def test_declared_stage_program_runs_isolated_stages_then_one_scored_finalizatio
     }
 
     final_trial_path = execution.harbor_invocations[0].imported_trial_paths[0]
-    final_trial = TrialRecord.model_validate_json(final_trial_path.read_text(encoding="utf-8"))
+    final_trial = read_trial_record(final_trial_path)
     assert final_trial.task.task_id == task_id
     assert list((tmp_path / "ledger").rglob("trial-*.json")) == [final_trial_path]
 

@@ -5,7 +5,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from aec_bench.contracts.dataset import dataset_reference_key
 from aec_bench.contracts.experiment_manifest import AgentConfig, ExperimentManifest
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.contracts.trial_record import TrialRecord
@@ -61,7 +60,7 @@ class HarborImportExperimentRunner:
             job_dir=job_dir,
             repo_root=self.repo_root,
             experiment_id=manifest.experiment_id,
-            dataset_id=(dataset_reference_key(manifest.tasks.dataset) if manifest.tasks.dataset is not None else None),
+            dataset=manifest.tasks.dataset,
         )
         records = [
             TrialRecord.model_validate(record if record_transform is None else record_transform(record))

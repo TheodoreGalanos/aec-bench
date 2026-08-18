@@ -14,7 +14,7 @@ import pytest
 import yaml  # type: ignore[import-untyped]
 
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
-from aec_bench.contracts.trial_record import Completeness
+from aec_bench.contracts.trial_record import ExecutionStatus
 from aec_bench.experimentation.qualification.harness_program_study.candidates import (
     HarnessProgramCandidateRequest,
     MaterializedHarnessProgramCandidateSet,
@@ -185,9 +185,12 @@ def test_execute_harness_program_study_runs_williams_plan_once_per_seeded_trial(
         assert provenance.bundle_sha256 == canonical_json_sha256(expected.bundle.model_dump(mode="json"))
         assert provenance.program_sha256 == canonical_json_sha256(expected.bundle.program.model_dump(mode="json"))
         assert provenance.motif_ids == ("motif.alpha", "motif.beta")
-        assert record.completeness is Completeness.COMPLETE
+        assert record.execution_status is ExecutionStatus.COMPLETED
         assert record.outputs.artifacts is not None
-        assert result.plan_artifact.reference in record.outputs.artifacts
+        assert any(
+            artifact.kind == "harness-program-plan" and artifact.sha256 == result.plan_artifact.reference.sha256
+            for artifact in record.outputs.artifacts
+        )
 
     assert result.plan_artifact.path.parent.name == result.plan_artifact.reference.sha256
     assert result.plan_artifact.execution_seeds == request.seeds
@@ -206,12 +209,10 @@ def test_execute_harness_program_study_runs_williams_plan_once_per_seeded_trial(
     first_candidate = candidate_by_cell[first.trial.cell]
     first_record = first.records[0]
     assert first_record.meta_harness_provenance is not None
-    tampered_record = first_record.model_copy(
-        update={
-            "meta_harness_provenance": first_record.meta_harness_provenance.model_copy(
-                update={"program_id": "program.tampered"}
-            )
-        }
+    tampered_record = type(first_record).model_validate(first_record.model_dump(mode="python"))
+    tampered_record.bind_run_manifest(first_record.run_manifest).attach_extension(
+        "meta_harness_provenance",
+        first_record.meta_harness_provenance.model_copy(update={"program_id": "program.tampered"}),
     )
     with pytest.raises(ValueError, match="lineage does not match"):
         validate_harness_program_record_lineage(

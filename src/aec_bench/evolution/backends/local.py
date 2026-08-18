@@ -18,15 +18,19 @@ from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityChec
 from aec_bench.contracts.evolution import WorkspaceSnapshot
 from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.contracts.trial_record import (
-    AgentReference,
-    Completeness,
+    AgentConfiguration,
     CostRecord,
-    EnvironmentSnapshot,
-    InputRecord,
-    OutputRecord,
-    TaskReference,
+    EvaluationStatus,
+    EvidenceStatus,
+    ExecutionEnvironmentRef,
+    ExecutionStatus,
+    ProviderRoute,
+    RunManifest,
     TimingRecord,
+    TrialInput,
+    TrialOutput,
     TrialRecord,
+    UnresolvedSourceRef,
 )
 from aec_bench.evolution.snapshot import serialise_snapshot
 
@@ -170,24 +174,44 @@ def collect_local_trial_record(
             advisor_output_tokens=advisor_output_tokens,
         )
 
-    return TrialRecord(
+    started_at = datetime.now(tz=UTC)
+    run_id = f"{experiment_id}:{adapter}:{model}:local"
+    completed = agent_result is not None and agent_result.get("status") in {"ok", "completed"}
+    output = TrialOutput(
+        agent_result=None if agent_result is None else {"status": agent_result.get("status")},
+        terminated=completed,
+    ).bind_runtime_paths(
+        raw_output_path=None,
+        conversation_path=conversation_path_val,
+        trajectory_path=trajectory_path_val,
+    )
+    record = TrialRecord(
         trial_id=trial_id,
-        experiment_id=experiment_id,
-        timestamp=datetime.now(tz=UTC),
-        task=TaskReference(task_id=task_id, task_revision="local"),
-        agent=AgentReference(adapter=adapter, model=model),
-        environment=EnvironmentSnapshot(runtime_image="local", compute_backend="local"),
-        inputs=InputRecord(instruction=instruction, system_prompt=system_prompt),
-        outputs=OutputRecord(
-            conversation_path=conversation_path_val,
-            trajectory_path=trajectory_path_val,
-            agent_result=None if agent_result is None else {"status": agent_result.get("status")},
-            terminated=agent_result is not None and agent_result.get("status") in {"ok", "completed"},
-        ),
+        run_id=run_id,
+        task_id=task_id,
+        execution_status=ExecutionStatus.COMPLETED if completed else ExecutionStatus.FAILED,
+        evaluation_status=EvaluationStatus.COMPLETED,
+        evidence_status=EvidenceStatus.NOT_REQUIRED,
+        started_at=started_at,
+        completed_at=started_at,
+        input=TrialInput(instruction=instruction, task_revision="local", system_prompt=system_prompt),
+        output=output,
         evaluation=evaluation,
         timing=TimingRecord(total_seconds=0.0),
         cost=cost,
-        completeness=Completeness.PARTIAL,
+    )
+    for role, value in (("conversation", conversation_path_val), ("trajectory", trajectory_path_val)):
+        if value is not None:
+            record.attach_artifact(role, Path(value), media_type="application/x-ndjson")
+    return record.bind_run_manifest(
+        RunManifest(
+            run_id=run_id,
+            experiment_id=experiment_id,
+            source=UnresolvedSourceRef(reason="evolution workspace source is not retained"),
+            agent=AgentConfiguration(adapter=adapter, model=model),
+            execution_environment=ExecutionEnvironmentRef(runtime_image="local", compute_backend="local"),
+            provider_route=ProviderRoute(provider=adapter, route="local"),
+        )
     )
 
 

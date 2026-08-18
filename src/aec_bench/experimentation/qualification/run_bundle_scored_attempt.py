@@ -107,6 +107,7 @@ from aec_bench.harness.program_execution import (
     OperationHandlerFailure,
 )
 from aec_bench.harness.scheduler import build_trial_plan
+from aec_bench.ledger.reader import read_trial_record
 
 
 class RunBundleScoredAttemptError(RuntimeError):
@@ -872,7 +873,7 @@ def _validate_import(workflow_result: HarborWorkflowResult) -> None:
 
 
 def _load_records(paths: tuple[Path, ...]) -> tuple[TrialRecord, ...]:
-    return tuple(TrialRecord.model_validate_json(path.read_bytes()) for path in paths)
+    return tuple(read_trial_record(path) for path in paths)
 
 
 def _monitor_report_bytes(

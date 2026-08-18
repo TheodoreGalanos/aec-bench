@@ -8,6 +8,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol
 
+from aec_bench.contracts.authority_evidence import AuthorityEvidenceRef
 from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.harness.harbor_contract import HarborTrialResult
@@ -34,6 +35,14 @@ class ImportEvidenceContext:
     harbor_result: HarborTrialResult
 
 
+@dataclass(frozen=True)
+class ImportedAuthorityEvidence:
+    """One final authority reference and the retained bytes that it identifies."""
+
+    reference: AuthorityEvidenceRef
+    path: Path
+
+
 class HarborImportEvidence(Protocol):
     """Portable evidence that one bounded execution adds to a Harbor import."""
 
@@ -45,6 +54,9 @@ class HarborImportEvidence(Protocol):
 
     @property
     def episode_artifact(self) -> ArtifactReference | None: ...
+
+    @property
+    def authority_evidence(self) -> tuple[ImportedAuthorityEvidence, ...]: ...
 
     def sanitize_agent_configuration(
         self,

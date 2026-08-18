@@ -3,30 +3,34 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import subprocess
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
+from aec_bench.contracts.authority_evidence import AuthorityEvidenceKind
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.jsonl import write_jsonl
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import (
-    AgentReference,
-    ArtifactReference,
-    Completeness,
+    AgentConfiguration,
+    AuthorityExpectation,
     CostRecord,
-    EnvironmentSnapshot,
-    InputRecord,
-    OutputRecord,
-    TaskReference,
+    EvaluationStatus,
+    EvidenceStatus,
+    ExecutionEnvironmentRef,
+    ExecutionStatus,
+    ProviderRoute,
+    RunManifest,
     TimingRecord,
+    TrialInput,
+    TrialOutput,
     TrialRecord,
+    UnresolvedSourceRef,
 )
 from aec_bench.ledger.writer import DuplicateTrialRecordError, write_trial_record
 
@@ -155,16 +159,6 @@ def _build_record(
     error_message = str(error.get("error_chain_str") or error_name)
     has_error = bool(error_name)
     status, terminated, truncated, final_reason = _outcome(sample, has_error, error_message)
-    artifact_sources = [
-        (conversation_path, "prime_conversation"),
-        (sample_path, "prime_sample"),
-    ]
-    if output_path is not None:
-        artifact_sources.append((output_path, "agent_output"))
-    artifact_references = [
-        _artifact_reference(path=path, ledger_root=ledger_root, kind=kind) for path, kind in artifact_sources
-    ]
-
     agent_result = {
         "source": "prime-eval-samples",
         "prime_evaluation_id": _evaluation_id(evaluation),
@@ -178,76 +172,93 @@ def _build_record(
         "validity_basis": "provider_score_present" if reward_present else "provider_score_absent",
     }
 
-    return (
-        TrialRecord(
-            trial_id=trial_id,
-            experiment_id=experiment_id,
-            dataset_id=_dataset_id(info),
-            timestamp=_timestamp(sample),
-            task=TaskReference(
-                task_id=_task_id(sample, info),
-                task_revision=str(info.get("task_revision") or "unresolved"),
-                visibility=_visibility(info),
-            ),
-            agent=AgentReference(
-                adapter="prime-hosted",
-                model=_model_name(evaluation),
-                configuration={
-                    "source": "prime-eval-samples",
-                    "evaluation_id": _evaluation_id(evaluation),
-                    "evaluation_name": evaluation.get("name"),
-                    "viewer_url": evaluation.get("viewer_url"),
-                    "eval_config": evaluation.get("eval_config"),
-                },
-            ),
-            environment=EnvironmentSnapshot(
-                runtime_image="prime-hosted",
-                compute_backend="prime-hosted",
-            ),
-            inputs=InputRecord(
-                instruction=_instruction(sample, info),
-                system_prompt=None,
-                input_files=None,
-            ),
-            outputs=OutputRecord(
-                agent_output=AgentOutput(
-                    status=status,
-                    output_path=(
-                        output_path.relative_to(artifact_dir).as_posix() if output_path is not None else "output.md"
-                    ),
-                    output_format="markdown",
-                    error_message=error_message if has_error else None,
-                ),
-                raw_output_path=str(output_path) if output_path is not None else None,
-                conversation_path=str(conversation_path),
-                trajectory_path=None,
-                agent_result=agent_result,
-                artifacts=artifact_references,
-                terminated=terminated,
-                truncated=truncated,
-                final_reason=final_reason,
-            ),
-            evaluation=EvaluationResult(
-                reward=reward,
-                validity=ValidityCheck(
-                    output_parseable=reward_present,
-                    schema_valid=reward_present,
-                    verifier_completed=reward_present,
-                    errors=[error_message] if has_error else [],
-                ),
-                breakdown=metrics,
-            ),
-            timing=TimingRecord(
-                total_seconds=_total_seconds(sample, timing),
-                agent_seconds=_duration_seconds(timing.get("generation")),
-                verification_seconds=_duration_seconds(timing.get("scoring")),
-            ),
-            cost=CostRecord(
-                tokens_in=_optional_int(token_usage.get("input_tokens")),
-                tokens_out=_optional_int(token_usage.get("output_tokens")),
-            ),
-            completeness=Completeness.PARTIAL,
+    started_at = _timestamp(sample)
+    total_seconds = _total_seconds(sample, timing)
+    model_name = _model_name(evaluation)
+    run_id = f"{experiment_id}:prime-hosted:{model_name}"
+    manifest = RunManifest(
+        run_id=run_id,
+        experiment_id=experiment_id,
+        source=UnresolvedSourceRef(reason="Prime sample does not retain an AEC-Bench source snapshot"),
+        agent=AgentConfiguration(
+            adapter="prime-hosted",
+            model=model_name,
+            configuration={
+                "source": "prime-eval-samples",
+                "evaluation_id": _evaluation_id(evaluation),
+                "evaluation_name": evaluation.get("name"),
+                "viewer_url": evaluation.get("viewer_url"),
+                "eval_config": evaluation.get("eval_config"),
+            },
         ),
+        execution_environment=ExecutionEnvironmentRef(
+            runtime_image="prime-hosted",
+            compute_backend="prime-hosted",
+        ),
+        provider_route=ProviderRoute(provider="prime", route="hosted-evaluation"),
+        expected_authorities=(
+            AuthorityExpectation(
+                authority_kind=AuthorityEvidenceKind.PROVIDER,
+                protocol="prime-eval-sample/1",
+            ),
+        ),
+    )
+    record = TrialRecord(
+        trial_id=trial_id,
+        run_id=run_id,
+        task_id=_task_id(sample, info),
+        execution_status=(
+            ExecutionStatus.COMPLETED if status is AgentOutputStatus.COMPLETED else ExecutionStatus.FAILED
+        ),
+        evaluation_status=(EvaluationStatus.COMPLETED if reward_present else EvaluationStatus.INVALID),
+        evidence_status=EvidenceStatus.PENDING,
+        started_at=started_at,
+        completed_at=started_at + timedelta(seconds=total_seconds),
+        input=TrialInput(
+            instruction=_instruction(sample, info),
+            task_revision=str(info.get("task_revision") or "unresolved"),
+            visibility=_visibility(info),
+        ),
+        output=TrialOutput(
+            agent_output=AgentOutput(
+                status=status,
+                output_path=(
+                    output_path.relative_to(artifact_dir).as_posix() if output_path is not None else "output.md"
+                ),
+                output_format="markdown",
+                error_message=error_message if has_error else None,
+            ),
+            agent_result=agent_result,
+            terminated=terminated,
+            truncated=truncated,
+            final_reason=final_reason,
+        ),
+        evaluation=EvaluationResult(
+            reward=reward,
+            validity=ValidityCheck(
+                output_parseable=reward_present,
+                schema_valid=reward_present,
+                verifier_completed=reward_present,
+                errors=[error_message] if has_error else [],
+            ),
+            breakdown=metrics,
+        ),
+        timing=TimingRecord(
+            total_seconds=total_seconds,
+            agent_seconds=_duration_seconds(timing.get("generation")),
+            verification_seconds=_duration_seconds(timing.get("scoring")),
+        ),
+        cost=CostRecord(
+            tokens_in=_optional_int(token_usage.get("input_tokens")),
+            tokens_out=_optional_int(token_usage.get("output_tokens")),
+        ),
+    )
+    record.attach_artifact("provider_evidence", sample_path, media_type="application/json")
+    record.attach_artifact("conversation", conversation_path, media_type="application/x-ndjson")
+    if output_path is not None:
+        record.attach_artifact("raw_output", output_path, media_type="text/markdown")
+    return (
+        record.bind_run_manifest(manifest),
         artifacts,
     )
 
@@ -363,15 +374,6 @@ def _instruction(sample: dict[str, Any], info: dict[str, Any]) -> str:
     return "Prime hosted evaluation sample"
 
 
-def _dataset_id(info: dict[str, Any]) -> str | None:
-    dataset = _dict(info.get("dataset"))
-    name = dataset.get("name")
-    version = dataset.get("version")
-    if name and version:
-        return f"{name}@{version}"
-    return None
-
-
 def _visibility(info: dict[str, Any]) -> Visibility | None:
     raw = info.get("visibility")
     if raw is None:
@@ -431,22 +433,6 @@ def _duration_seconds(value: object) -> float | None:
     if not isinstance(duration, str | int | float) or isinstance(duration, bool):
         return None
     return float(duration)
-
-
-def _artifact_reference(*, path: Path, ledger_root: Path, kind: str) -> ArtifactReference:
-    media_type = "application/jsonl" if path.suffix == ".jsonl" else "application/json"
-    if path.suffix in {".md", ".txt"}:
-        media_type = "text/markdown" if path.suffix == ".md" else "text/plain"
-    return ArtifactReference(
-        kind=kind,
-        path=_ledger_path(path, ledger_root),
-        sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
-        media_type=media_type,
-    )
-
-
-def _ledger_path(path: Path, ledger_root: Path) -> str:
-    return path.relative_to(ledger_root).as_posix()
 
 
 def _optional_int(value: object) -> int | None:

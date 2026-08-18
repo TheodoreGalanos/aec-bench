@@ -97,6 +97,7 @@ _EXCEPTION_TARGET_KEYS = {"duplicate_of", "exception_scope"}
 _EXCEPTION_KEYS = _EXCEPTION_REQUIRED_KEYS | _EXCEPTION_TARGET_KEYS
 _ALL_FIELD_KEYS = _COMMON_FIELD_KEYS | set().union(*_CATEGORY_KEYS.values()) | _EXCEPTION_KEYS
 _MANIFEST_KEYS = {"contract", "sink"}
+_LEGACY_RELOCATION_KEYS = {"from_prefix", "to_prefix"}
 _PERSISTENCE_CALL_PARTS = {
     "dump",
     "dumps",
@@ -201,6 +202,14 @@ class RegistryManifest:
 
 
 @dataclass(frozen=True)
+class RegistryLegacyRelocation:
+    """One reviewed module-prefix move for fields already in the legacy baseline."""
+
+    from_prefix: str
+    to_prefix: str
+
+
+@dataclass(frozen=True)
 class RegistryField:
     symbol: str
     aliases: tuple[str, ...]
@@ -218,6 +227,7 @@ class RegistryField:
 @dataclass(frozen=True)
 class Registry:
     manifests: tuple[RegistryManifest, ...]
+    legacy_relocations: tuple[RegistryLegacyRelocation, ...]
     fields: tuple[RegistryField, ...]
 
     @property
@@ -1496,7 +1506,7 @@ def load_registry(path: Path) -> Registry:
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise ProvenanceInputError(f"Cannot load provenance registry {registry_path}: {error}") from error
 
-    unknown_top_level = sorted(set(raw) - {"schema_version", "manifest", "field"})
+    unknown_top_level = sorted(set(raw) - {"schema_version", "manifest", "legacy_relocation", "field"})
     if unknown_top_level:
         raise ProvenanceInputError(f"Provenance registry has unknown top-level keys: {', '.join(unknown_top_level)}")
     if raw.get("schema_version") != REGISTRY_SCHEMA:
@@ -1518,6 +1528,35 @@ def load_registry(path: Path) -> Registry:
             raise ProvenanceInputError(f"Duplicate manifest declaration: {contract} at {sink}")
         manifest_identities.add(identity)
         manifests.append(RegistryManifest(contract=contract, sink=sink))
+
+    legacy_relocations: list[RegistryLegacyRelocation] = []
+    previous_relocation: tuple[str, str] | None = None
+    for index, item in enumerate(
+        _require_table_list(raw.get("legacy_relocation"), "legacy_relocation"),
+        start=1,
+    ):
+        unknown = sorted(set(item) - _LEGACY_RELOCATION_KEYS)
+        if unknown:
+            raise ProvenanceInputError(f"legacy_relocation #{index} has unknown keys: {', '.join(unknown)}")
+        missing = sorted(_LEGACY_RELOCATION_KEYS - set(item))
+        if missing:
+            raise ProvenanceInputError(f"legacy_relocation #{index} is missing keys: {', '.join(missing)}")
+        from_prefix = _require_nonempty_string(item["from_prefix"], f"legacy_relocation #{index}.from_prefix")
+        to_prefix = _require_nonempty_string(item["to_prefix"], f"legacy_relocation #{index}.to_prefix")
+        if not from_prefix.endswith(".") or not to_prefix.endswith("."):
+            raise ProvenanceInputError("legacy relocation prefixes must end with a dot")
+        if from_prefix == to_prefix:
+            raise ProvenanceInputError("legacy relocation prefixes must differ")
+        identity = (to_prefix, from_prefix)
+        if previous_relocation is not None and identity <= previous_relocation:
+            raise ProvenanceInputError("legacy relocation entries must be sorted and unique by to_prefix")
+        if any(
+            to_prefix.startswith(existing.to_prefix) or existing.to_prefix.startswith(to_prefix)
+            for existing in legacy_relocations
+        ):
+            raise ProvenanceInputError("legacy relocation destination prefixes must not overlap")
+        previous_relocation = identity
+        legacy_relocations.append(RegistryLegacyRelocation(from_prefix=from_prefix, to_prefix=to_prefix))
 
     fields: list[RegistryField] = []
     all_locators: dict[str, str] = {}
@@ -1630,7 +1669,11 @@ def load_registry(path: Path) -> Registry:
 
         metadata = {key: value for key, value in item.items() if key not in {"symbol", "aliases"}}
         fields.append(RegistryField(symbol=symbol, aliases=aliases, metadata=metadata))
-    return Registry(tuple(sorted(manifests, key=lambda item: (item.contract, item.sink))), tuple(fields))
+    return Registry(
+        tuple(sorted(manifests, key=lambda item: (item.contract, item.sink))),
+        tuple(legacy_relocations),
+        tuple(fields),
+    )
 
 
 def _baseline_from_mapping(raw: object, label: str) -> Baseline:
@@ -2233,6 +2276,25 @@ def _deduplicate_violations(violations: Iterable[Violation]) -> tuple[Violation,
     return tuple(sorted(result.values(), key=lambda item: (item.code, item.symbols, item.message)))
 
 
+def _relocated_legacy_symbols(
+    discovered_symbols: Iterable[str],
+    baseline_symbols: set[str],
+    registry: Registry,
+) -> dict[str, str]:
+    """Map current moved symbols to their exact pre-move baseline symbols."""
+
+    relocated: dict[str, str] = {}
+    for symbol in discovered_symbols:
+        for move in registry.legacy_relocations:
+            if not symbol.startswith(move.to_prefix):
+                continue
+            previous = move.from_prefix + symbol.removeprefix(move.to_prefix)
+            if previous in baseline_symbols:
+                relocated[symbol] = previous
+            break
+    return relocated
+
+
 def build_audit(
     repository_root: Path,
     registry_path: Path,
@@ -2253,6 +2315,8 @@ def build_audit(
     baseline_symbols = set(baseline.symbols)
     registry_by_locator = registry.by_locator
     registered_discovered = _registered_candidate_symbols(discovery.candidates, registry)
+    relocated_legacy = _relocated_legacy_symbols(discovered_symbols, baseline_symbols, registry)
+    effective_legacy_symbols = baseline_symbols | set(relocated_legacy)
 
     findings: list[Finding] = []
     for candidate in discovery.candidates:
@@ -2261,7 +2325,7 @@ def build_audit(
             state = "current"
             registry_symbol = registry_item.symbol
             metadata = registry_item.metadata
-        elif candidate.symbol in baseline_symbols:
+        elif candidate.symbol in effective_legacy_symbols:
             state = "legacy"
             registry_symbol = None
             metadata = {}
@@ -2272,7 +2336,7 @@ def build_audit(
         findings.append(Finding(candidate, state, registry_symbol, metadata))
 
     violations: list[Violation] = []
-    for symbol in sorted(discovered_symbols - registered_discovered - baseline_symbols):
+    for symbol in sorted(discovered_symbols - registered_discovered - effective_legacy_symbols):
         candidate = candidates[symbol]
         violations.append(
             Violation(
@@ -2286,7 +2350,8 @@ def build_audit(
                 occurrences=candidate.occurrences,
             )
         )
-    for symbol in sorted(baseline_symbols - discovered_symbols):
+    represented_baseline_symbols = discovered_symbols | set(relocated_legacy.values())
+    for symbol in sorted(baseline_symbols - represented_baseline_symbols):
         violations.append(
             Violation(
                 code="PROV003",
@@ -2324,7 +2389,7 @@ def build_audit(
         )
 
     violations.extend(_registry_drift_violations(candidates, registry))
-    violations.extend(_semantic_violations(discovery, registry, baseline_symbols))
+    violations.extend(_semantic_violations(discovery, registry, effective_legacy_symbols))
     resolved_base: str | None = None
     if base_revision is not None:
         resolved_base = _resolve_git_revision(root, base_revision)
@@ -2463,23 +2528,27 @@ def update_baseline(repository_root: Path, registry_path: Path, baseline_path: P
         registry.manifests,
         frozenset(registry.by_locator),
     )
-    desired = tuple(
-        sorted(candidate.symbol for candidate in discovery.candidates if candidate.symbol not in registry.by_locator)
-    )
+    unregistered = {
+        candidate.symbol for candidate in discovery.candidates if candidate.symbol not in registry.by_locator
+    }
     path = Path(baseline_path)
     if not path.exists():
+        desired = tuple(sorted(unregistered))
         _write_baseline(path, Baseline(source_ref=_head_revision(root), symbols=desired))
         return desired
 
     current = load_baseline(path)
-    additions = sorted(set(desired) - set(current.symbols))
+    current_symbols = set(current.symbols)
+    relocated = _relocated_legacy_symbols(unregistered, current_symbols, registry)
+    additions = sorted(unregistered - set(relocated) - current_symbols)
     if additions:
         raise ProvenanceBaselineGrowthError(
             "Deletion-only baseline update rejected new symbols: "
             + ", ".join(additions)
             + ". Register or remove them instead."
         )
-    retained = tuple(symbol for symbol in current.symbols if symbol in set(desired))
+    represented = unregistered | set(relocated.values())
+    retained = tuple(symbol for symbol in current.symbols if symbol in represented)
     _write_baseline(path, Baseline(source_ref=current.source_ref, symbols=retained))
     return retained
 

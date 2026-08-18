@@ -730,6 +730,48 @@ def test_baseline_update_rejects_new_symbols(tmp_path: Path) -> None:
         )
 
 
+def test_legacy_relocation_preserves_existing_debt_but_rejects_added_fields(tmp_path: Path) -> None:
+    _write_source(
+        tmp_path,
+        "src/aec_bench/contracts/legacy_records.py",
+        """
+        from pydantic import BaseModel
+
+
+        class LegacyModel(BaseModel):
+            content_hash: str
+            source_revision: str
+        """,
+    )
+    _write_registry(
+        tmp_path,
+        """
+        [[legacy_relocation]]
+        from_prefix = "aec_bench.contracts.records."
+        to_prefix = "aec_bench.contracts.legacy_records."
+        """,
+    )
+    previous_symbol = "aec_bench.contracts.records.LegacyModel.content_hash"
+    moved_symbol = "aec_bench.contracts.legacy_records.LegacyModel.content_hash"
+    added_symbol = "aec_bench.contracts.legacy_records.LegacyModel.source_revision"
+    baseline_path = _write_baseline(tmp_path, [previous_symbol])
+
+    report = provenance.build_audit(
+        tmp_path,
+        tmp_path / "provenance-registry.toml",
+        baseline_path,
+    )
+
+    findings = {item["symbol"]: item for item in report["findings"]}
+    assert findings[moved_symbol]["state"] == "legacy"
+    assert any(
+        violation["code"] == "PROV001" and violation["symbol"] == added_symbol for violation in report["violations"]
+    )
+    with pytest.raises(provenance.ProvenanceBaselineGrowthError, match="source_revision"):
+        provenance.update_baseline(tmp_path, tmp_path / "provenance-registry.toml", baseline_path)
+    assert provenance.load_baseline(baseline_path).symbols == (previous_symbol,)
+
+
 def test_text_and_json_reports_are_deterministic(tmp_path: Path) -> None:
     _write_source(
         tmp_path,

@@ -32,6 +32,9 @@ export interface TrialRow {
   task_id: string;
   model: string;
   adapter: string;
+  execution_status: string;
+  evaluation_status: string;
+  evidence_status: string;
   compute_backend?: string;
   discipline: string;
   reward: number;

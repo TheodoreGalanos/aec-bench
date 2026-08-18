@@ -8,7 +8,7 @@ from pathlib import Path
 
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.contracts.trial_record import Completeness, TimingRecord, TrialRecord
+from aec_bench.contracts.trial_record import EvidenceStatus, ExecutionStatus, TimingRecord, TrialRecord
 from aec_bench.harness.local_import import (
     ARTIFACT_FILENAMES,
     build_trial_record,
@@ -161,7 +161,8 @@ def test_build_trial_record_constructs_valid_record(tmp_path: Path) -> None:
     assert record.cost is not None
     assert record.cost.tokens_in == 100
     assert record.cost.tokens_out == 50
-    assert record.completeness == Completeness.PARTIAL
+    assert record.execution_status is ExecutionStatus.COMPLETED
+    assert record.evidence_status is EvidenceStatus.NOT_REQUIRED
 
 
 # ---------------------------------------------------------------------------
@@ -236,8 +237,8 @@ def test_build_trial_record_from_workspace_with_verifier(tmp_path: Path) -> None
     assert record.cost.tokens_in == 200
     assert record.cost.tokens_out == 80
 
-    # Completeness — PARTIAL because we lack adapter_revision etc.
-    assert record.completeness == Completeness.PARTIAL
+    assert record.execution_status is ExecutionStatus.COMPLETED
+    assert record.evidence_status is EvidenceStatus.NOT_REQUIRED
 
     # Artifacts
     assert record.outputs.conversation_path is not None
@@ -323,8 +324,7 @@ def test_build_trial_record_from_workspace_without_verifier(tmp_path: Path) -> N
     # Default timing
     assert record.timing.total_seconds == 0.0
 
-    # Completeness
-    assert record.completeness == Completeness.PARTIAL
+    assert record.evidence_status is EvidenceStatus.NOT_REQUIRED
 
     # No optional artifacts
     assert record.outputs.conversation_path is None

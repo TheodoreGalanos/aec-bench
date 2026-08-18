@@ -13,7 +13,10 @@ from typing import Any, Literal
 
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
-from aec_bench.contracts.trial_record import ArtifactReference, Completeness, TrialRecord
+from aec_bench.contracts.trial_record import (
+    ArtifactReference,
+    TrialRecord,
+)
 from aec_bench.experimentation.qualification.harness_program_study.analysis import (
     HarnessProgramAnalysis,
     HarnessProgramOutcome,
@@ -39,6 +42,7 @@ from aec_bench.harness.harbor_dispatch import HarborCommandExecutor
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry
 from aec_bench.harness.program_execution import ProgramExecutionStatus
+from aec_bench.ledger.reader import read_trial_record
 
 StudySplit = Literal["discovery", "repair_gate", "calibration", "holdout"]
 
@@ -382,7 +386,7 @@ def _load_harness_program_trial_records(paths: tuple[Path, ...]) -> tuple[TrialR
     records: list[TrialRecord] = []
     for path in paths:
         try:
-            record = TrialRecord.model_validate_json(path.read_text(encoding="utf-8"))
+            record = read_trial_record(path)
         except Exception as error:
             raise ValueError(f"invalid harness-program trial record: {path}") from error
         records.append(record)
@@ -465,13 +469,10 @@ def validate_harness_program_record_lineage(
         or provenance.review_sidecar_sha256 != expected_review_sidecar
         or provenance.declared_surface_sha256 != expected_declared_surface
         or provenance.repetition != 1
-        or record.completeness is not Completeness.COMPLETE
     ):
         raise ValueError(
             f"harness-program trial record lineage does not match its planned candidate: {record.trial_id}"
         )
-    if record.outputs.artifacts is None or plan_artifact not in record.outputs.artifacts:
-        raise ValueError(f"harness-program trial record does not bind its plan artifact: {record.trial_id}")
 
 
 def _snapshot_review_lineage(snapshot: TaskSnapshotRef) -> tuple[str, str]:

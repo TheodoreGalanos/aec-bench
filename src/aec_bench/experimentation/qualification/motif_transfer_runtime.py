@@ -73,6 +73,7 @@ from aec_bench.experimentation.qualification.motif_learning import (
 from aec_bench.harness.harbor_dispatch import HarborCommandExecutor
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry
+from aec_bench.ledger.reader import read_trial_record
 from aec_bench.tasks.registry import TaskRegistry
 
 
@@ -622,7 +623,7 @@ def _load_verified_transfer_records(
     for artifact in trial.trial_records:
         _verify_artifact(artifact)
         try:
-            records.append(TrialRecord.model_validate_json(Path(artifact.path).read_text(encoding="utf-8")))
+            records.append(read_trial_record(Path(artifact.path)))
         except Exception as error:
             raise ValueError(f"invalid transfer TrialRecord artifact: {artifact.path}") from error
     if tuple(record.trial_id for record in records) != trial.trial_record_ids:

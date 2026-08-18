@@ -15,19 +15,27 @@ from aec_bench.contracts.agent_output import (
     AgentOutput,
     AgentOutputStatus,
 )
+from aec_bench.contracts.authority_evidence import ACTOR_INVOCATION_EVIDENCE_PROTOCOL, AuthorityEvidenceKind
+from aec_bench.contracts.dataset import DatasetRef, RepositoryDatasetRef
 from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.pricing import estimate_cost_usd
 from aec_bench.contracts.trial_record import (
-    AgentReference,
-    Completeness,
+    AgentConfiguration,
+    AuthorityExpectation,
     CostRecord,
-    EnvironmentSnapshot,
-    FileReference,
-    InputRecord,
-    OutputRecord,
-    TaskReference,
+    EvaluationStatus,
+    EvidenceStatus,
+    ExecutionEnvironmentRef,
+    ExecutionStatus,
+    GitSourceRef,
+    ProviderRoute,
+    RunManifest,
     TimingRecord,
+    TrialInput,
+    TrialOutput,
     TrialRecord,
+    TrialTaskKind,
+    UnresolvedSourceRef,
 )
 from aec_bench.contracts.validators import (
     infer_output_format,
@@ -53,6 +61,7 @@ from aec_bench.harness.harbor_importing.contracts import (
 from aec_bench.harness.harbor_importing.output_commit import (
     verify_output_commit,
 )
+from aec_bench.harness.trial_record_builder import portable_agent_configuration
 from aec_bench.harness.verifier_artifacts import (
     read_verifier_artifacts,
 )
@@ -99,7 +108,7 @@ def import_harbor_job(
     job_dir: Path,
     repo_root: Path,
     experiment_id: str | None = None,
-    dataset_id: str | None = None,
+    dataset: DatasetRef | None = None,
     evidence_loader: HarborImportEvidenceLoader | None = None,
 ) -> list[TrialRecord]:
     """Import every canonical trial directory beneath one Harbor job."""
@@ -114,7 +123,7 @@ def import_harbor_job(
             trial_dir=trial_dir,
             repo_root=repo_root,
             experiment_id=experiment_id,
-            dataset_id=dataset_id,
+            dataset=dataset,
             evidence_loader=evidence_loader,
         )
         for trial_dir in trial_dirs
@@ -153,7 +162,7 @@ def import_harbor_trial(
     trial_dir: Path,
     repo_root: Path,
     experiment_id: str | None = None,
-    dataset_id: str | None = None,
+    dataset: DatasetRef | None = None,
     evidence_loader: HarborImportEvidenceLoader | None = None,
 ) -> TrialRecord:
     """Import one Harbor trial and any selected execution-kind evidence."""
@@ -197,53 +206,68 @@ def import_harbor_trial(
     )
     if import_evidence is not None:
         evaluation = import_evidence.augment_evaluation(evaluation)
-    task_relative_path = harbor_result.config.task.path
-    return TrialRecord(
-        trial_id=harbor_result.trial_name,
+    resolved_adapter = _resolved_record_adapter(
+        harbor_result=harbor_result,
+        execution_result=agent.execution_result,
+        import_evidence=import_evidence,
+    )
+    configuration = _agent_configuration_record(
+        config=harbor_result.config.model_dump(mode="json"),
+        resolved_model=agent.resolved_model,
+        import_path=harbor_result.config.agent.import_path,
+        execution_result=agent.execution_result,
+        import_evidence=import_evidence,
+    )
+    compute_backend = _compute_backend(harbor_result.config.environment)
+    run_id = ":".join(
+        (experiment_id or harbor_result.config.job_id, resolved_adapter, agent.resolved_model, compute_backend)
+    )
+    task_kind: TrialTaskKind = (
+        "world" if import_evidence is not None and import_evidence.episode_artifact is not None else "artifact"
+    )
+    expected_authorities = _expected_authorities(
+        task_kind=task_kind,
+        adapter=resolved_adapter,
+    )
+    manifest = RunManifest(
+        run_id=run_id,
         experiment_id=(experiment_id or harbor_result.config.job_id),
-        dataset_id=dataset_id,
-        timestamp=harbor_result.started_at.astimezone(UTC),
-        task=TaskReference(
-            task_id=task.task_id,
-            task_revision=harbor_result.task_checksum,
-            visibility=task.visibility,
-        ),
-        agent=AgentReference(
-            adapter=_resolved_record_adapter(
-                harbor_result=harbor_result,
-                execution_result=agent.execution_result,
-                import_evidence=import_evidence,
-            ),
+        dataset=dataset,
+        source=_run_source(dataset),
+        agent=AgentConfiguration(
+            adapter=resolved_adapter,
             model=agent.resolved_model,
             adapter_revision=harbor_result.agent_info.version,
-            configuration=_agent_configuration_record(
-                config=harbor_result.config.model_dump(mode="json"),
-                resolved_model=agent.resolved_model,
-                import_path=harbor_result.config.agent.import_path,
-                execution_result=agent.execution_result,
-                import_evidence=import_evidence,
-            ),
+            configuration=portable_agent_configuration(configuration),
         ),
-        environment=EnvironmentSnapshot(
-            runtime_image=_runtime_image(
-                task_relative_path=task_relative_path,
-            ),
-            compute_backend=_compute_backend(
-                harbor_result.config.environment,
-            ),
+        execution_environment=ExecutionEnvironmentRef(
+            runtime_image=_runtime_image(harbor_result.config.environment),
+            compute_backend=compute_backend,
             tool_versions=None,
         ),
-        inputs=InputRecord(
-            instruction=task.instruction,
-            system_prompt=system_prompt,
-            input_files=_input_files(
-                repo_root=context.repo_root,
-                task_instance_dir=context.task_instance_dir,
-                system_prompt=system_prompt,
-                manifest_relative_path=task.environment.manifest,
-            ),
+        provider_route=_provider_route(configuration, resolved_adapter),
+        expected_authorities=expected_authorities,
+    )
+    timing = _timing_record(harbor_result)
+    record = TrialRecord(
+        trial_id=harbor_result.trial_name,
+        run_id=run_id,
+        task_id=task.task_id,
+        execution_status=(
+            ExecutionStatus.COMPLETED if agent.status is AgentOutputStatus.COMPLETED else ExecutionStatus.FAILED
         ),
-        outputs=_output_record(
+        evaluation_status=EvaluationStatus.COMPLETED,
+        evidence_status=(EvidenceStatus.PENDING if expected_authorities else EvidenceStatus.NOT_REQUIRED),
+        started_at=harbor_result.started_at.astimezone(UTC),
+        completed_at=harbor_result.finished_at.astimezone(UTC),
+        input=TrialInput(
+            instruction=task.instruction,
+            task_revision=harbor_result.task_checksum,
+            task_kind=task_kind,
+            visibility=task.visibility,
+            system_prompt=system_prompt,
+        ),
+        output=_output_record(
             context=context,
             artifacts=artifacts,
             agent=agent,
@@ -251,11 +275,34 @@ def import_harbor_trial(
             import_evidence=import_evidence,
         ),
         evaluation=evaluation,
-        timing=_timing_record(harbor_result),
+        timing=timing,
         cost=_cost_record(agent),
-        episode_artifact=(None if import_evidence is None else import_evidence.episode_artifact),
-        completeness=Completeness.PARTIAL,
     )
+    for index, (path, source) in enumerate(
+        _input_file_paths(
+            task_instance_dir=context.task_instance_dir,
+            system_prompt=system_prompt,
+            manifest_relative_path=task.environment.manifest,
+        )
+    ):
+        record.attach_artifact(f"input:{source}:{index}", path, media_type=_media_type(path))
+    for role, artifact_path, media_type in (
+        ("raw_output", artifacts.output_path, _media_type(artifacts.output_path)),
+        ("conversation", artifacts.conversation_path, "application/x-ndjson"),
+        ("trajectory", artifacts.trajectory_path, "application/x-ndjson"),
+    ):
+        if artifact_path is not None:
+            record.attach_artifact(role, artifact_path, media_type=media_type)
+    _attach_import_evidence(record, import_evidence, context.repo_root)
+    manifest_path = configuration.get("manifest_path")
+    if isinstance(manifest_path, str) and Path(manifest_path).is_file():
+        provider_manifest = Path(manifest_path)
+        actual_manifest_sha256 = hashlib.sha256(provider_manifest.read_bytes()).hexdigest()
+        declared_manifest_sha256 = configuration.get("evidence_manifest_sha256")
+        if isinstance(declared_manifest_sha256, str) and declared_manifest_sha256 != actual_manifest_sha256:
+            raise HarborImportError("provider evidence manifest does not match its declared SHA-256")
+        record.attach_artifact("provider_evidence", provider_manifest, media_type="application/json")
+    return record.bind_run_manifest(manifest)
 
 
 def _load_import_evidence(
@@ -502,7 +549,7 @@ def _output_record(
     agent: _PreparedAgentEvidence,
     expected_output_path: str,
     import_evidence: HarborImportEvidence | None,
-) -> OutputRecord:
+) -> TrialOutput:
     execution_result = agent.execution_result
     payload = agent.payload
     terminated, truncated, final_reason = _terminal_state(
@@ -510,24 +557,12 @@ def _output_record(
         payload=payload,
         status=agent.status,
     )
-    return OutputRecord(
+    return TrialOutput(
         agent_output=AgentOutput(
             status=agent.status,
             output_path=expected_output_path,
             output_format=infer_output_format(expected_output_path),
             error_message=agent.output_error,
-        ),
-        raw_output_path=normalize_artifact_path(
-            artifacts.output_path,
-            context.repo_root,
-        ),
-        conversation_path=normalize_artifact_path(
-            artifacts.conversation_path,
-            context.repo_root,
-        ),
-        trajectory_path=normalize_artifact_path(
-            artifacts.trajectory_path,
-            context.repo_root,
         ),
         agent_result={
             "failure_kind": (
@@ -570,10 +605,13 @@ def _output_record(
             "lifecycle_status": payload.get("lifecycle_status"),
             "reward_owner": payload.get("reward_owner"),
         },
-        artifacts=(None if import_evidence is None else list(import_evidence.artifacts)),
         terminated=terminated,
         truncated=truncated,
         final_reason=final_reason,
+    ).bind_runtime_paths(
+        raw_output_path=normalize_artifact_path(artifacts.output_path, context.repo_root),
+        conversation_path=normalize_artifact_path(artifacts.conversation_path, context.repo_root),
+        trajectory_path=normalize_artifact_path(artifacts.trajectory_path, context.repo_root),
     )
 
 
@@ -649,13 +687,12 @@ def _cost_record(agent: _PreparedAgentEvidence) -> CostRecord:
     )
 
 
-def _input_files(
+def _input_file_paths(
     *,
-    repo_root: Path,
     task_instance_dir: Path,
     system_prompt: str | None,
     manifest_relative_path: str | None,
-) -> list[FileReference] | None:
+) -> tuple[tuple[Path, str], ...]:
     candidate_paths = [
         (task_instance_dir / "instruction.md", "task"),
         (task_instance_dir / "task.toml", "task"),
@@ -679,16 +716,91 @@ def _input_files(
                 "manifest",
             )
         )
-    file_references = [
-        FileReference(
-            path=path.relative_to(repo_root).as_posix(),
-            hash=_sha256(path),
-            source=source,
+    return tuple((path, source) for path, source in candidate_paths if path.is_file())
+
+
+def _run_source(dataset: DatasetRef | None) -> GitSourceRef | UnresolvedSourceRef:
+    if isinstance(dataset, RepositoryDatasetRef):
+        return GitSourceRef(revision=dataset.source_revision)
+    return UnresolvedSourceRef(reason="Harbor import has no retained Harness source snapshot or clean Git revision")
+
+
+def _provider_route(configuration: dict[str, Any], adapter: str) -> ProviderRoute:
+    provider = configuration.get("provider") or configuration.get("provider_name") or adapter
+    route = configuration.get("provider_route") or configuration.get("route") or adapter
+    return ProviderRoute(provider=str(provider), route=str(route))
+
+
+def _expected_authorities(*, task_kind: str, adapter: str) -> tuple[AuthorityExpectation, ...]:
+    expected: list[AuthorityExpectation] = []
+    if task_kind == "world":
+        expected.extend(
+            (
+                AuthorityExpectation(
+                    authority_kind=AuthorityEvidenceKind.ACTOR_INVOCATION,
+                    protocol=ACTOR_INVOCATION_EVIDENCE_PROTOCOL,
+                ),
+                AuthorityExpectation(
+                    authority_kind=AuthorityEvidenceKind.WORLD,
+                    protocol="aec-bench/world-evidence/1",
+                ),
+            )
         )
-        for path, source in candidate_paths
-        if path.exists()
-    ]
-    return file_references or None
+    if "deepseek" in adapter.casefold():
+        expected.append(
+            AuthorityExpectation(
+                authority_kind=AuthorityEvidenceKind.PROVIDER,
+                protocol="aec-bench/deepseek-evidence/2",
+            )
+        )
+    return tuple(expected)
+
+
+def _attach_import_evidence(
+    record: TrialRecord,
+    evidence: HarborImportEvidence | None,
+    repo_root: Path,
+) -> None:
+    if evidence is None:
+        return
+    authority_sha256 = {item.reference.artifact.sha256 for item in evidence.authority_evidence}
+    if evidence.episode_artifact is not None:
+        authority_sha256.add(evidence.episode_artifact.sha256)
+    for index, artifact in enumerate(evidence.artifacts):
+        path = Path(artifact.path)
+        if not path.is_absolute():
+            path = repo_root / path
+        if artifact.sha256 in authority_sha256:
+            continue
+        role = f"output:{artifact.kind}:{index}"
+        record.attach_artifact(role, path, media_type=artifact.media_type)
+    for authority in evidence.authority_evidence:
+        record.attach_artifact(
+            f"authority:{authority.reference.authority_kind.value}:{authority.reference.protocol}",
+            authority.path,
+            media_type=authority.reference.artifact.media_type,
+        )
+    if evidence.episode_artifact is not None:
+        episode_path = Path(evidence.episode_artifact.path)
+        if not episode_path.is_absolute():
+            episode_path = repo_root / episode_path
+        record.attach_artifact(
+            f"authority:{AuthorityEvidenceKind.WORLD.value}:aec-bench/world-evidence/1",
+            episode_path,
+            media_type=evidence.episode_artifact.media_type,
+        )
+
+
+def _media_type(path: Path | None) -> str:
+    if path is None:
+        return "application/octet-stream"
+    if path.suffix == ".json":
+        return "application/json"
+    if path.suffix == ".jsonl":
+        return "application/x-ndjson"
+    if path.suffix == ".md":
+        return "text/markdown"
+    return "application/octet-stream"
 
 
 def _evaluation_record(
@@ -807,8 +919,11 @@ def _resolved_adapter(
     return harbor_result.agent_info.name
 
 
-def _runtime_image(*, task_relative_path: str) -> str:
-    return f"harbor-dockerfile:{task_relative_path}/environment/Dockerfile"
+def _runtime_image(environment: HarborEnvironmentConfig) -> str:
+    configured_image = environment.kwargs.get("image")
+    if isinstance(configured_image, str) and configured_image:
+        return configured_image
+    return f"harbor:{_compute_backend(environment)}"
 
 
 def _compute_backend(
@@ -868,10 +983,6 @@ def _read_text_or_none(path: Path | None) -> str | None:
     if path is None:
         return None
     return path.read_text(encoding="utf-8")
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _total_input_tokens(

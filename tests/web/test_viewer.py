@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from aec_bench.contracts.dataset import RepositoryDatasetRef, dataset_reference_key
 from aec_bench.contracts.trajectory import TrajectoryEntry
 from aec_bench.evaluation.trajectory_reader import (
     detect_adapter_type,
@@ -128,7 +129,7 @@ def _make_client_with_rlm_trial(tmp_path: Path, *, write_symbolic_state: bool = 
         ],
     )
 
-    # Optionally write symbolic_state.json alongside the trajectory
+    symbolic_path: Path | None = None
     if write_symbolic_state:
         symbolic_path = traj_dir / "symbolic_state.json"
         symbolic_path.write_text(
@@ -151,6 +152,14 @@ def _make_client_with_rlm_trial(tmp_path: Path, *, write_symbolic_state: bool = 
             trajectory_path=str(traj_path),
         ),
     )
+    record.attach_artifact("trajectory", traj_path, media_type="application/x-ndjson")
+    if symbolic_path is not None:
+        record.attach_artifact(
+            "symbolic_state",
+            symbolic_path,
+            media_type="application/json",
+            logical_path="symbolic_state.json",
+        )
     write_trial_record(ledger_root=ledger, record=record)
 
     return TestClient(create_app(ledger_root=ledger, tasks_root=tasks))
@@ -316,6 +325,7 @@ def test_viewer_api_meta_returns_json(tmp_path: Path) -> None:
             trajectory_path=str(traj_path),
         ),
     )
+    record.attach_artifact("trajectory", traj_path, media_type="application/x-ndjson")
     write_trial_record(ledger_root=ledger, record=record)
 
     client = TestClient(create_app(ledger_root=ledger, tasks_root=tasks))
@@ -499,10 +509,15 @@ def test_viewer_meta_includes_dataset_id_when_present(tmp_path: Path) -> None:
     tasks = tmp_path / "tasks"
     ledger.mkdir()
     tasks.mkdir()
+    dataset = RepositoryDatasetRef(
+        dataset_id="voltage-drop-core",
+        source_revision="a" * 40,
+        manifest_path="datasets/voltage-drop-core/dataset.json",
+    )
     record = make_trial_record(
         trial_id="trial-001",
         experiment_id="exp-a",
-        dataset_id="voltage-drop-core@1",
+        dataset=dataset,
     )
     write_trial_record(ledger_root=ledger, record=record)
 
@@ -511,7 +526,7 @@ def test_viewer_meta_includes_dataset_id_when_present(tmp_path: Path) -> None:
     resp = client.get("/api/viewer/exp-a/trial-001")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["dataset_id"] == "voltage-drop-core@1"
+    assert data["dataset_id"] == dataset_reference_key(dataset)
 
 
 def test_viewer_meta_dataset_id_is_null_for_inline_trial(tmp_path: Path) -> None:
@@ -523,7 +538,6 @@ def test_viewer_meta_dataset_id_is_null_for_inline_trial(tmp_path: Path) -> None
     record = make_trial_record(
         trial_id="trial-002",
         experiment_id="exp-b",
-        dataset_id=None,
     )
     write_trial_record(ledger_root=ledger, record=record)
 

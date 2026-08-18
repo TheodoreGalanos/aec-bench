@@ -159,7 +159,8 @@ def test_import_prime_eval_samples_writes_ledger_record_and_conversation(tmp_pat
     assert len(records) == 1
     record = records[0]
     assert record.trial_id == "prime-eval-123-hosted-7"
-    assert record.dataset_id == "prime-50-suite@0.1.0"
+    # The provider label is not an exact repository or bundle reference.
+    assert record.dataset_id is None
     assert record.agent.adapter == "prime-hosted"
     assert record.agent.model == "Qwen/Qwen3.5-4B:adapter-123"
     assert record.task.task_revision == "task-sha256"
@@ -182,15 +183,11 @@ def test_import_prime_eval_samples_writes_ledger_record_and_conversation(tmp_pat
     assert record.outputs.agent_result["validity_basis"] == "provider_score_present"
     assert "submit_answer_calls" not in record.outputs.agent_result
     assert record.outputs.artifacts is not None
-    assert {artifact.kind for artifact in record.outputs.artifacts} == {
-        "agent_output",
-        "prime_conversation",
-        "prime_sample",
-    }
-    for artifact in record.outputs.artifacts:
-        artifact_path = tmp_path / artifact.path
-        assert artifact_path.exists()
-        assert hashlib.sha256(artifact_path.read_bytes()).hexdigest() == artifact.sha256
+    assert {artifact.kind for artifact in record.outputs.artifacts} == {"conversation", "raw_output"}
+    assert record.provider_evidence is not None
+    provider_path = tmp_path / "_artifacts" / record.provider_evidence.artifact_id
+    assert provider_path.exists()
+    assert hashlib.sha256(provider_path.read_bytes()).hexdigest() == record.provider_evidence.sha256
 
     conversation_path = Path(record.outputs.conversation_path)
     assert conversation_path.exists()

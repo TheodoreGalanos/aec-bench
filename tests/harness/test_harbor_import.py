@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import aec_bench.harness.harbor_importing.core as harbor_import_core
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import (
@@ -19,7 +20,7 @@ from aec_bench.contracts.output_completion import (
 )
 from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.contracts.trial_record import Completeness
+from aec_bench.contracts.trial_record import EvidenceStatus, ExecutionStatus
 from aec_bench.experimentation.proposals.harbor_import.api import (
     import_proposal_harbor_trial,
     load_proposal_harbor_candidate_failure_evidence,
@@ -47,6 +48,8 @@ from aec_bench.harness.harbor_importing.core import (
     import_harbor_trial,
     iter_harbor_trial_dirs,
 )
+from aec_bench.ledger.reader import read_trial_record
+from aec_bench.ledger.writer import write_trial_record
 from tests.experimentation.proposals.test_session import (
     _compiled_rlm_commit_bundle,
     _evaluation_coordinate,
@@ -83,7 +86,7 @@ def test_import_harbor_trial_maps_real_successful_trial() -> None:
         "tasks/mechanical/heat-load/audit-office-building/brisbane-8rm/environment/Dockerfile"
     )
     assert record.inputs.system_prompt is not None
-    assert record.inputs.input_files is not None
+    assert any(role.startswith("input:") for role in record.pending_artifacts)
     assert record.outputs.agent_output is not None
     assert record.outputs.agent_output.status is AgentOutputStatus.COMPLETED
     assert record.outputs.raw_output_path is not None
@@ -106,7 +109,8 @@ def test_import_harbor_trial_maps_real_successful_trial() -> None:
     assert record.cost.cache_read_tokens == 50835
     assert record.cost.cache_write_tokens == 14707
     assert record.cost.estimated_cost_usd == pytest.approx(0.25379475)
-    assert record.completeness is Completeness.PARTIAL
+    assert record.execution_status is ExecutionStatus.COMPLETED
+    assert record.evidence_status is EvidenceStatus.NOT_REQUIRED
 
 
 def test_import_current_entrypoint_result_uses_nested_failed_status_despite_nonempty_output(
@@ -301,13 +305,32 @@ def test_import_includes_task_output_completion_contract_as_hashed_input(tmp_pat
     contract_path.write_bytes(contract_bytes)
 
     record = import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
+    record_path = write_trial_record(ledger_root=tmp_path / "ledger", record=record)
+    record = read_trial_record(record_path, ledger_root=tmp_path / "ledger")
 
     assert record.inputs.input_files is not None
-    reference = next(
-        item for item in record.inputs.input_files if item.path.endswith("environment/output_contract.json")
-    )
+    reference = next(item for item in record.inputs.input_files if item.source == "output_completion_contract")
     assert reference.source == "output_completion_contract"
     assert reference.hash == hashlib.sha256(contract_bytes).hexdigest()
+
+
+def test_import_rejects_provider_evidence_digest_mismatch(tmp_path: Path, monkeypatch) -> None:
+    repo_root, trial_dir = _write_current_entrypoint_trial(tmp_path)
+    provider_manifest = tmp_path / "provider-evidence.json"
+    provider_manifest.write_text('{"schema":"provider-evidence/1"}\n', encoding="utf-8")
+    original = harbor_import_core._agent_configuration_record
+
+    def mismatched_configuration(**kwargs):  # noqa: ANN003, ANN202
+        return {
+            **original(**kwargs),
+            "manifest_path": str(provider_manifest),
+            "evidence_manifest_sha256": "0" * 64,
+        }
+
+    monkeypatch.setattr(harbor_import_core, "_agent_configuration_record", mismatched_configuration)
+
+    with pytest.raises(HarborImportError, match="provider evidence manifest does not match"):
+        import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
 
 
 def test_import_current_entrypoint_result_preserves_typed_stop_and_turn_evidence(tmp_path: Path) -> None:
@@ -540,6 +563,8 @@ def test_import_proposal_session_requires_complete_isolation_evidence(
     repo_root, trial_dir, expected = _write_proposal_harbor_trial(tmp_path)
 
     record = import_proposal_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
+    record_path = write_trial_record(ledger_root=tmp_path / "ledger", record=record)
+    record = read_trial_record(record_path, ledger_root=tmp_path / "ledger")
     evidence = load_proposal_harbor_import_evidence(
         trial_dir=trial_dir,
         repo_root=repo_root,

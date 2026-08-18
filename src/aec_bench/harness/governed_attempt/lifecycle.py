@@ -443,7 +443,8 @@ class GovernedAttemptEngine:
             )
         except Exception as error:
             raise GovernedAttemptDispatchUncertainError(
-                "governed attempt backend receipt is uncertain after durable dispatch intent",
+                "governed attempt backend receipt is uncertain after durable dispatch intent: "
+                f"{str(error).strip() or type(error).__name__}",
             ) from error
 
     def _reconcile_backend_receipt(

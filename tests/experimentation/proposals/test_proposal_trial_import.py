@@ -15,7 +15,7 @@ from aec_bench.contracts.authority import AuthorityAction, AuthorityEvent
 from aec_bench.contracts.commitments import canonical_json_sha256
 from aec_bench.contracts.program_proposal.types import OptimizationSplit, ProgramCandidateKind
 from aec_bench.contracts.proposal_execution.session import ProposalSessionReceipt
-from aec_bench.contracts.trial_record import Completeness, TrialRecord
+from aec_bench.contracts.trial_record import ExecutionStatus
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.experimentation.proposals.harbor_import.api import (
     load_proposal_harbor_import_evidence,
@@ -43,6 +43,7 @@ from aec_bench.experimentation.proposals.proposal_trial_importing.validation imp
     sole_trial_dir,
     validate_exact_evidence,
 )
+from aec_bench.ledger.reader import read_trial_record
 from tests.experimentation.proposals.test_proposal_dispatch_governance import (
     _authorize,
     _dispatch_fixture,
@@ -110,7 +111,7 @@ def test_finalizes_exact_authorized_proposal_trial_with_complete_nested_provenan
     )
 
     assert isinstance(result, GovernedProposalTrialImport)
-    assert result.record.completeness is Completeness.COMPLETE
+    assert result.record.execution_status is ExecutionStatus.COMPLETED
     provenance = result.record.meta_harness_provenance
     assert provenance is not None
     assert provenance.run_id == authorization.dispatch.dispatch_id
@@ -146,12 +147,14 @@ def test_finalizes_exact_authorized_proposal_trial_with_complete_nested_provenan
     }.issubset(artifact_kinds)
     assert "proposal-evaluation-plan" not in artifact_kinds
     assert "proposal-structural-split" not in artifact_kinds
+    artifact_root = result.record_path.parents[1] / "_artifacts"
     for artifact in result.record.outputs.artifacts or ():
-        path = Path(artifact.path)
+        path = artifact_root / artifact.artifact.artifact_id
         assert path.is_file()
         assert hashlib.sha256(path.read_bytes()).hexdigest() == artifact.sha256
-    persisted = TrialRecord.model_validate_json(result.record_path.read_bytes())
-    assert persisted == result.record
+    persisted = read_trial_record(result.record_path, ledger_root=result.record_path.parents[1])
+    assert persisted.model_dump(mode="json") == result.record.model_dump(mode="json")
+    assert persisted.run_manifest == result.record.run_manifest
     assert len(tuple(result.record_path.parent.glob("*.json"))) == 1
 
     provider_origin = result.authority.provider_dispatch_authority.origin
@@ -314,7 +317,7 @@ def test_same_execution_has_one_ledger_global_scored_import_across_roots(
         )
         is None
     )
-    assert len(tuple((first_root / "proposal-trial-records").rglob("*.json"))) == 1
+    assert len(tuple((first_root / "proposal-trial-records").glob("*/*.json"))) == 1
 
 
 def test_scored_import_resumes_after_trial_record_persistence_before_authority(
@@ -342,7 +345,7 @@ def test_scored_import_resumes_after_trial_record_persistence_before_authority(
                 record_authority=_crash_before_authority,
             ),
         )
-    assert len(tuple((first_root / "proposal-trial-records").rglob("*.json"))) == 1
+    assert len(tuple((first_root / "proposal-trial-records").glob("*/*.json"))) == 1
 
     second_root = tmp_path / "host-artifacts.crash-second-root"
     recovered = finalize_governed_proposal_trial_import(
@@ -360,7 +363,7 @@ def test_scored_import_resumes_after_trial_record_persistence_before_authority(
     assert recovered.authority.authority_event.event.event_id == "authority.scored-proposal-import.crash-recovery.first"
     assert recovered.terminal_record.outcome == "scored"
     assert not second_root.exists()
-    assert len(tuple((first_root / "proposal-trial-records").rglob("*.json"))) == 1
+    assert len(tuple((first_root / "proposal-trial-records").glob("*/*.json"))) == 1
 
 
 def test_scored_import_resumes_after_authority_before_terminal_index(
@@ -414,7 +417,7 @@ def test_scored_import_resumes_after_authority_before_terminal_index(
         )
         is None
     )
-    assert len(tuple((first_root / "proposal-trial-records").rglob("*.json"))) == 1
+    assert len(tuple((first_root / "proposal-trial-records").glob("*/*.json"))) == 1
 
 
 def test_candidate_failure_preserves_evidence_without_trial_or_import_authority(

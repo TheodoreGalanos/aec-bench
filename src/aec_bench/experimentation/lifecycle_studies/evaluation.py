@@ -26,6 +26,7 @@ from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
 from aec_bench.experimentation.lifecycle_studies.trial_record import (
     validate_historical_lifecycle_ablation_record,
 )
+from aec_bench.ledger.reader import read_trial_record
 
 
 def build_lifecycle_ablation_evaluation(
@@ -34,7 +35,7 @@ def build_lifecycle_ablation_evaluation(
     """Build one deterministic summary from the experiment's core ledger records."""
     paths = _trial_record_paths(manifest)
     if paths:
-        first = TrialRecord.model_validate_json(paths[0].read_text(encoding="utf-8"))
+        first = read_trial_record(paths[0], ledger_root=Path(manifest.ledger_root))
         historical_manifest, plan = _load_historical_sweep_contract(manifest, first)
     else:
         historical_manifest = manifest
@@ -198,7 +199,7 @@ def _read_validated_records(
     records: list[TrialRecord] = []
     seen: set[str] = set()
     for path in paths:
-        record = TrialRecord.model_validate_json(path.read_text(encoding="utf-8"))
+        record = read_trial_record(path, ledger_root=Path(manifest.ledger_root))
         trial = planned.get(record.trial_id)
         if trial is None:
             raise ValueError(f"ledger contains trial outside the ablation plan: {record.trial_id}")
