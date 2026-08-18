@@ -1,10 +1,8 @@
-# ABOUTME: Pydantic contract for the public library catalogue export artefact.
-# ABOUTME: Public boundary to aec-bench site repo (schema v1). NOTE: OutputField/InputField
-# ABOUTME: collide with aec_bench.contracts.repl — do not re-export from contracts/__init__.py.
+# ABOUTME: Defines the deterministic public library catalogue content contract.
+# ABOUTME: Keeps deployment metadata and derived counts out of canonical catalogue bytes.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Literal
 
 from pydantic import Field
@@ -66,22 +64,9 @@ class SeedEntry(LibraryEntryBase):
     complexity: Literal["low", "medium", "high"] | None = None
 
 
-class CatalogueCounts(StrictModel):
-    """Derived aggregate counts so the site can render headers without reiterating."""
-
-    total_templates: int
-    total_seeds: int
-    by_discipline: dict[str, dict[str, int]]
-    # Inner dict is {"templates": N, "seeds": N}.
-
-
 class LibraryCatalogue(StrictModel):
-    """Top-level envelope — the full export artefact consumed by the aec-bench site."""
+    """Deterministic catalogue content consumed by public clients."""
 
-    schema_version: Literal[1] = 1
-    generated_at: datetime
-    library_version: str
-    library_commit: str | None = None
+    schema_version: Literal[2] = 2
     templates: list[TemplateEntry]
     seeds: list[SeedEntry]
-    counts: CatalogueCounts

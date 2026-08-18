@@ -720,6 +720,27 @@ compatibility_behavior = "reject unsupported authority evidence protocols"
 compatibility_kind = "protocol"
 
 [[field]]
+symbol = "aec_bench.contracts.library_catalogue.LibraryCatalogue.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "task_library"
+authority = "library_catalogue_writer"
+authoritative = true
+exposure = "public"
+status = "current"
+payload_contract = "public library catalogue schema 2"
+canonicalization = "fixed integer literal 2"
+consumer = "public library catalogue clients"
+validation_behavior = "LibraryCatalogue rejects any schema_version other than 2; transition readers must select schema 1 or schema 2 before validation"
+mismatch_behavior = "reject_unsupported_catalogue"
+retention = "public_catalogue_schema_lifetime"
+rationale = "Independent public clients must select the catalogue document shape without using deployment metadata."
+duplication = "unique"
+compatibility_behavior = "current writers emit schema 2; external migration readers can accept schema 1 until no served catalogue uses it"
+compatibility_kind = "external_schema"
+
+[[field]]
 symbol = "aec_bench.contracts.output_completion.OutputCommitAttestation.completion_contract_sha256"
 surface = "pydantic_model"
 wire_name = "completion_contract_sha256"

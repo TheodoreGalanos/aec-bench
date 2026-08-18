@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from aec_bench.contracts.library_catalogue import (
     InputField,
+    LibraryCatalogue,
     LibraryEntryBase,
     OutputField,
     SeedEntry,
@@ -34,7 +35,7 @@ def test_input_field_fully_specified() -> None:
 
 def test_input_field_rejects_unknown_type() -> None:
     with pytest.raises(ValidationError):
-        InputField(name="x", type="complex")
+        InputField(name="x", type="complex")  # type: ignore[arg-type]
 
 
 def test_output_field_tolerance_optional() -> None:
@@ -64,7 +65,7 @@ def test_library_entry_base_rejects_unknown_discipline() -> None:
     with pytest.raises(ValidationError):
         LibraryEntryBase(
             task_id="x",
-            discipline="hvac",  # not in the 5-discipline literal
+            discipline="hvac",  # type: ignore[arg-type]
             category="x",
         )
 
@@ -107,7 +108,7 @@ def test_template_entry_rejects_wrong_status() -> None:
             task_id="x",
             discipline="electrical",
             category="x",
-            status="proposed",  # type: ignore[arg-type] — must be "built"
+            status="proposed",  # type: ignore[arg-type]
             task_name="x",
             description="x",
             tool_mode="with-tool",
@@ -150,7 +151,7 @@ def test_seed_entry_rejects_wrong_status() -> None:
             task_id="x",
             discipline="electrical",
             category="x",
-            status="built",  # type: ignore[arg-type] — must be "proposed"
+            status="built",  # type: ignore[arg-type]
             task_name="x",
             description="x",
         )
@@ -167,46 +168,18 @@ def test_seed_entry_complexity_is_optional() -> None:
     assert s.complexity is None
 
 
-def test_catalogue_counts_basic() -> None:
-    from aec_bench.contracts.library_catalogue import CatalogueCounts
-
-    c = CatalogueCounts(
-        total_templates=79,
-        total_seeds=393,
-        by_discipline={
-            "electrical": {"templates": 14, "seeds": 75},
-            "civil": {"templates": 72, "seeds": 88},
-        },
-    )
-    assert c.total_templates == 79
-    assert c.by_discipline["electrical"]["templates"] == 14
-
-
-def test_library_catalogue_schema_version_is_pinned_to_1() -> None:
-    from datetime import UTC, datetime
-
-    from aec_bench.contracts.library_catalogue import CatalogueCounts, LibraryCatalogue
-
+def test_library_catalogue_schema_version_is_pinned_to_2() -> None:
+    assert LibraryCatalogue(templates=[], seeds=[]).schema_version == 2
     with pytest.raises(ValidationError):
         LibraryCatalogue(
-            schema_version=2,  # type: ignore[arg-type] — pinned to 1
-            generated_at=datetime(2026, 4, 19, 12, 0, tzinfo=UTC),
-            library_version="0.1.0",
+            schema_version=1,  # type: ignore[arg-type]
             templates=[],
             seeds=[],
-            counts=CatalogueCounts(total_templates=0, total_seeds=0, by_discipline={}),
         )
 
 
 def test_library_catalogue_round_trip() -> None:
-    from datetime import UTC, datetime
-
-    from aec_bench.contracts.library_catalogue import CatalogueCounts, LibraryCatalogue
-
     cat = LibraryCatalogue(
-        generated_at=datetime(2026, 4, 19, 12, 0, tzinfo=UTC),
-        library_version="0.1.0",
-        library_commit="abc1234",
         templates=[
             TemplateEntry(
                 task_id="voltage-drop",
@@ -220,11 +193,6 @@ def test_library_catalogue_round_trip() -> None:
             )
         ],
         seeds=[],
-        counts=CatalogueCounts(
-            total_templates=1,
-            total_seeds=0,
-            by_discipline={"electrical": {"templates": 1, "seeds": 0}},
-        ),
     )
     # Round-trip through JSON — the site consumes this shape.
     serialised = cat.model_dump_json()
@@ -232,37 +200,26 @@ def test_library_catalogue_round_trip() -> None:
     assert reparsed == cat
 
 
-def test_library_catalogue_library_commit_optional() -> None:
-    from datetime import UTC, datetime
+def test_library_catalogue_contains_only_content_fields() -> None:
+    cat = LibraryCatalogue(templates=[], seeds=[])
 
-    from aec_bench.contracts.library_catalogue import CatalogueCounts, LibraryCatalogue
+    assert set(cat.model_dump()) == {"schema_version", "templates", "seeds"}
 
-    cat = LibraryCatalogue(
-        generated_at=datetime(2026, 4, 19, 12, 0, tzinfo=UTC),
-        library_version="0.1.0",
-        templates=[],
-        seeds=[],
-        counts=CatalogueCounts(total_templates=0, total_seeds=0, by_discipline={}),
-    )
-    assert cat.library_commit is None
-    assert cat.schema_version == 1
+    for removed_field in ("generated_at", "library_version", "library_commit", "counts"):
+        with pytest.raises(ValidationError):
+            LibraryCatalogue.model_validate(
+                {"schema_version": 2, "templates": [], "seeds": [], removed_field: "removed"}
+            )
 
 
 def test_golden_fixture_parses_cleanly() -> None:
     """Lock the public shape — if this breaks, the site repo contract has changed."""
-    from datetime import datetime
     from pathlib import Path
-
-    from aec_bench.contracts.library_catalogue import LibraryCatalogue
 
     fixture_path = Path(__file__).parent / "fixtures" / "library_catalogue_golden.json"
     raw = fixture_path.read_text(encoding="utf-8")
     cat = LibraryCatalogue.model_validate_json(raw)
-    # Smoke-check every top-level field the site depends on.
-    assert cat.schema_version == 1
-    assert cat.library_version
-    assert isinstance(cat.generated_at, datetime)
+    assert cat.schema_version == 2
+    assert set(cat.model_dump()) == {"schema_version", "templates", "seeds"}
     assert len(cat.templates) >= 1
     assert len(cat.seeds) >= 1
-    assert cat.counts.total_templates == len(cat.templates)
-    assert cat.counts.total_seeds == len(cat.seeds)

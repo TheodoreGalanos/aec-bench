@@ -36,6 +36,7 @@ readable.
 | Evaluation result | Evaluation | Verifier output and review evidence become reward, validity, and diagnostics | Protected as part of a persisted trial or published result | [`EvaluationResult`](../src/aec_bench/contracts/evaluation_result.py) | Persisted and externally reported |
 | Lifecycle verification | Lifecycle verification and evaluation | Canonical accepted lifecycle evidence becomes gates and optional semantic diagnostics | Internal until carried by a protected trial or published result | [`LifecycleVerificationResult`](../src/aec_bench/contracts/lifecycle_evaluation.py) | Internal result; persisted when referenced by trial evidence |
 | Dataset manifest and identity | Dataset generation and storage | A set of task bytes becomes a named benchmark snapshot | Protected when published; content identity is authoritative | [`DatasetManifest`](../src/aec_bench/contracts/dataset.py) and dataset hashing/storage | Persisted and publishable |
+| Public library catalogue | Templates and tasks | Public template and seed source becomes one site-facing content document | Protected schema; the current writer emits schema 2 | [`LibraryCatalogue`](../src/aec_bench/contracts/library_catalogue.py) and [`library_export.py`](../src/aec_bench/tasks/library_export.py) | Public JSON export |
 | Adapter and Harbor execution | Adapters and harness | Harness input crosses into local model execution or the supported Harbor workflow and returns untrusted output | Internal adapter values; Harbor result documents are lenient ingestion boundaries | [`AdapterRequest` and `AdapterResult`](../src/aec_bench/adapters/base.py), the [Harbor workflow](../src/aec_bench/harness/harbor_workflow.py), and [Harbor ingestion models](../src/aec_bench/harness/harbor_contract.py) | Internal, cross-process, and external |
 | Output completion and explicit commit | Adapter infrastructure and task contract | A fixed candidate artifact becomes structurally complete and, when required, bound by exact bytes | Versioned when persisted in trial evidence; adapter integration is internal | [`OutputCompletionContract` and `OutputCommitAttestation`](../src/aec_bench/contracts/output_completion.py) plus the shared [commit authority](../src/aec_bench/adapters/output_commit.py) | Request configuration, adapter result, and persisted attestation |
 | Prime package and evaluation integration | Prime integration | Current public task or lifecycle material becomes an independently installed package; hosted samples return as untrusted provider evidence | Public command and external package behavior; samples normalize into current records | [`exporter.py`](../src/aec_bench/prime_lab/exporter.py), [`lifecycle_exporter.py`](../src/aec_bench/prime_lab/lifecycle_exporter.py), and [`eval_import.py`](../src/aec_bench/prime_lab/eval_import.py) | External package and provider ingestion |
@@ -54,6 +55,25 @@ remain task-owned; the global contract does not attempt to model every output.
 Executable interactive worlds use their registered world definition and
 profile instead of pretending to be a static `TaskDefinition`. Both families
 can still enter the same experiment, trial, evaluation, and reporting layers.
+
+## Public library catalogue
+
+`LibraryCatalogue` schema 2 is the deterministic public projection of current
+templates and seeds. The canonical document contains only `schema_version`,
+`templates`, and `seeds`. Entries use stable identity ordering; set-like
+metadata is sorted; JSON keys are sorted; and each compact or pretty export is
+UTF-8 with one final newline.
+
+Catalogue bytes do not contain build time, package version, Git revision, local
+paths, or derived counts. A client derives counts from the two entry arrays.
+Release and deployment systems own software identity separately.
+
+The repository writer emits only schema 2. During the transition, the external
+public site must accept existing schema 1 documents and new schema 2 documents.
+Schema 1 reader support can be removed after the public site is deployed with a
+schema 2 catalogue and no served catalogue still uses schema 1. This repository
+does not retain a second writer or internal schema-specific model for that
+external read transition.
 
 ## Interactive World execution
 
